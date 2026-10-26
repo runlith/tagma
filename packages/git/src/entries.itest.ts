@@ -51,7 +51,7 @@ test('a blob is read byte for byte, and a path the revision does not hold is abs
   const failed = await onGit((service) => treeEntriesAt(failingOn(service, 1), root, 'HEAD', null));
   expect(failed.entries.size).toBe(0);
   expect(failed.unread.get('')).toContain('nothing spawned');
-}, 6_000);
+});
 
 test('a blob read as bytes keeps bytes no text decode survives, from a revision and from the index, and a missing one is absent', async () => {
   const root = await tempRepo('git-blob-bytes-');
@@ -70,7 +70,7 @@ test('a blob read as bytes keeps bytes no text decode survives, from a revision 
   expect(atHead).toEqual(committed);
   expect(atIndex).toEqual(staged);
   expect(missing).toBeNull();
-}, 6_000);
+});
 
 test('a blob prefix answers the first bytes asked of a blob longer than them, and a missing blob is absent', async () => {
   const root = await tempRepo('git-blob-prefix-');
@@ -84,7 +84,7 @@ test('a blob prefix answers the first bytes asked of a blob longer than them, an
 
   expect(prefix).toEqual(long.subarray(0, 8_000));
   expect(missing).toBeNull();
-}, 6_000);
+});
 
 test('a path list past one argv batch answers every path, and a failed batch answers unread for its own', async () => {
   const root = await tempRepo('git-batched-');
@@ -112,7 +112,7 @@ test('a path list past one argv batch answers every path, and a failed batch ans
   expect(among.entries.size).toBe(200);
   expect([...among.unread.keys()]).toEqual(['f7.txt']);
   expect(among.unread.get('f7.txt')).toContain('f7 refused');
-}, 10_000);
+});
 
 test('a path is read as the name it is, and one outside the repository is unread without git being asked', async () => {
   const root = await tempRepo('git-literal-');
@@ -128,7 +128,7 @@ test('a path is read as the name it is, and one outside the repository is unread
   expect(read.unread.has(magic)).toBe(false);
   expect([...read.unread.keys()]).toEqual([outside]);
   expect(read.unread.get(outside)).toBe(`${outside} is outside the repository at ${root}`);
-}, 8_000);
+});
 
 test('a tracked name opening with two dots is inside the repository', async () => {
   const root = await tempRepo('git-dotdot-');
@@ -140,7 +140,7 @@ test('a tracked name opening with two dots is inside the repository', async () =
 
   expect([...read.entries.keys()]).toEqual(['..hidden']);
   expect([...read.unread.keys()]).toEqual([]);
-}, 6_000);
+});
 
 test('a path outside the repository is unreadable, never an absent file', async () => {
   const root = await tempRepo('git-blob-outside-');
@@ -152,7 +152,7 @@ test('a path outside the repository is unreadable, never an absent file', async 
   const read = await onGit((service) => Effect.result(blobAt(service, root, 'HEAD', outside)));
   expect(read._tag).toBe('Failure');
   expect(await onGit((service) => blobAt(service, root, 'HEAD', 'never-born.txt'))).toBeNull();
-}, 6_000);
+});
 
 test('a revision opening with a dash is the revision it names, never a flag git runs', async () => {
   const root = await tempRepo('git-revision-dash-');
@@ -174,7 +174,7 @@ test('a revision opening with a dash is the revision it names, never a flag git 
   expect(staged).toBe('dash\n');
   expect(existsSync(`${spilled}:kept.txt`)).toBe(false);
   expect(obeyed).toBeNull();
-}, 8_000);
+});
 
 test('one cat-file session answers the texts of two trees, a path a tree lacks as absent and bytes that are not UTF-8 as unread', async () => {
   const root = await tempRepo('git-blobs-');
@@ -232,7 +232,7 @@ test('one cat-file session answers the texts of two trees, a path a tree lacks a
     'unread',
     'unread',
   ]);
-}, 8_000);
+});
 
 test('texts of many paths answer what blobAt answers each, from two sessions and a re-run only for what the batch cannot read', async () => {
   const root = await tempRepo('git-texts-');
@@ -271,7 +271,7 @@ test('texts of many paths answer what blobAt answers each, from two sessions and
   expect(texts.map(shown)).toEqual(alone.map(shown).map((one, at) => (paths[at] === 'src' ? null : one)));
   expect(texts.slice(0, 2).map(shown)).toEqual([`export const at = 'src/f0.ts';\n`, `export const at = 'src/f1.ts';\n`]);
   expect(texts.slice(names.length).map(shown)).toEqual(['\uFEFFmarked\n', 'caf\uFFFD\n', 'GitAnswerInvalid', null, null, 'GitUnreadable']);
-}, 8_000);
+});
 
 test('the ignored paths among those asked are the ones answered, and none ignored is not a failure', async () => {
   const root = await tempRepo('git-ignored-');
@@ -285,7 +285,7 @@ test('the ignored paths among those asked are the ones answered, and none ignore
 
   expect([...ignored]).toEqual(['build/out.js']);
   expect([...none]).toEqual([]);
-}, 6_000);
+});
 
 test('a place answers what git tracks under it, and what it does not ignore where a caller asks for those', async () => {
   const root = await tempRepo('git-under-');
@@ -303,7 +303,7 @@ test('a place answers what git tracks under it, and what it does not ignore wher
 
   expect(cached).toEqual(['src/tracked.ts']);
   expect([...withOthers].sort()).toEqual(['src/tracked.ts', 'src/untracked.ts']);
-}, 6_000);
+});
 
 test('a commit names its parent and says which paths two commits differ in', async () => {
   const root = await tempRepo('git-history-');
@@ -324,4 +324,4 @@ test('a commit names its parent and says which paths two commits differ in', asy
   expect(parent).toBe(first);
   expect(born).toBeNull();
   expect(between).toEqual(['two.txt']);
-}, 6_000);
+});

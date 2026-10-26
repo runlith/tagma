@@ -37,7 +37,7 @@ test('a push moves the remote ref it names, and a push onto a moved remote refus
   expect(refused._tag).toBe('GitRefused');
   expect(refused._tag === 'GitRefused' && refused.message).not.toBe('');
   expect(await git(bare, ['rev-parse', 'refs/heads/main'])).toBe(theirs);
-}, 12_000);
+});
 
 test('an abort ends the operation in progress, and a tree holding none refuses in git’s words', async () => {
   const root = await tempRepo('git-abort-');
@@ -63,7 +63,7 @@ test('an abort ends the operation in progress, and a tree holding none refuses i
   const refused = await onGit((service) => Effect.flip(abortAt(service, root, 'merge')));
   expect(refused._tag).toBe('GitRefused');
   expect(refused.command).toContain('--abort');
-}, 8_000);
+});
 
 async function cloneOf(bare: string, prefix: string): Promise<string> {
   const copy = join(tempRoot(prefix), 'copy');
@@ -104,7 +104,7 @@ test('a fetch brings the upstream in, and a pull fast-forwards a branch only beh
     conflicts: [],
     merge: null,
   });
-}, 12_000);
+});
 
 test('a pull over diverged work answers the merged tree without touching the checkout whatever pull.ff says, and one that conflicts stops in the checkout with its conflicted paths', async () => {
   const root = await tempRepo('git-pull-merge-');
@@ -150,7 +150,7 @@ test('a pull over diverged work answers the merged tree without touching the che
 
   const again = await onGit((service) => Effect.flip(pullAt(service, root)));
   expect(again._tag).toBe('GitRefused');
-}, 15_000);
+});
 
 test('a pull a local change would be overwritten by refuses and leaves the change in the tree, autostash or not', async () => {
   const root = await tempRepo('git-pull-dirty-');
@@ -171,7 +171,7 @@ test('a pull a local change would be overwritten by refuses and leaves the chang
   expect(refused._tag).toBe('GitRefused');
   expect(await git(root, ['stash', 'list'])).toBe('');
   expect(await git(root, ['diff', '--name-only'])).toBe('f.txt');
-}, 12_000);
+});
 
 test('a pull with no upstream to read from refuses in git’s words and starts no merge', async () => {
   const root = await tempRepo('git-pull-none-');
@@ -180,7 +180,7 @@ test('a pull with no upstream to read from refuses in git’s words and starts n
 
   expect(refused._tag).toBe('GitRefused');
   expect(await gitExit(root, ['rev-parse', '-q', '--verify', 'MERGE_HEAD'])).not.toBe(0);
-}, 8_000);
+});
 
 test('a branch publishes where its push remote, then the push default, names a remote that exists — else the only remote, else origin', async () => {
   const root = await tempRepo('git-publish-');
@@ -209,4 +209,4 @@ test('a branch publishes where its push remote, then the push default, names a r
   const pushOnly = await tempRepo('git-publish-pushurl-');
   await git(pushOnly, ['config', 'remote.mirror.pushurl', join(tempRoot('git-publish-mirror-'), 'mirror.git')]);
   expect(await onGit((service) => publishRemoteAt(service, pushOnly, 'main'))).toBe('mirror');
-}, 8_000);
+});

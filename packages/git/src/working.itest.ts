@@ -62,7 +62,7 @@ test('files of a commit answer in the form git checks them out, an export rewrit
   expect(shown(large)).toEqual(['é\r\n'.repeat(100_000), 'one\r\ntwo\r\n', '\uFEFFmarked\r\n']);
   expect(shown(alone)).toEqual(['one\r\ntwo\r\n', null]);
   expect(shown(staged)).toEqual(['one\r\nthree\r\n', null, 'lines.txt']);
-}, 8_000);
+});
 
 test('git normalizes line endings where text or eol says so, and otherwise where core.autocrlf asks', async () => {
   const root = await tempRepo('git-normalized-');
@@ -75,4 +75,4 @@ test('git normalizes line endings where text or eol says so, and otherwise where
 
   expect([...kept].sort()).toEqual(['note.txt', 'unix.lf']);
   expect([...converted].sort()).toEqual(['note.txt', 'plain.ts', 'unix.lf']);
-}, 8_000);
+});

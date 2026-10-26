@@ -58,7 +58,7 @@ test('a linked worktree names its own git directory, its checkout root and the b
     paths: [join(main, '.git', 'worktrees', 'side', 'index'), join(main, '.git', 'worktrees', 'side', 'MERGE_HEAD')],
   });
   expect(standing.head.ref).toBe('refs/heads/side');
-}, 4_000);
+});
 
 test('a bare repository, a detached HEAD and a branch with no commit are each named', async () => {
   const main = await tempRepo('git-states-');
@@ -81,7 +81,7 @@ test('a bare repository, a detached HEAD and a branch with no commit are each na
   expect(empty.head.ref).toBe('refs/heads/trunk');
   expect(empty.head.commit).toBe(null);
   expect(empty.bare).toBe(false);
-}, 6_000);
+});
 
 test('the store reads inside its own common directory, where the checkout probes refuse', async () => {
   const main = await tempRepo('git-store-');
@@ -118,14 +118,14 @@ test('the store reads inside its own common directory, where the checkout probes
   expect(await onGit((service) => Effect.flip(pathsAt(service, outside, ['--git-common-dir', '--git-dir'], undefined)))).toEqual(
     await onGit((service) => Effect.flip(pathAt(service, outside, ['--git-common-dir'], undefined))),
   );
-}, 6_000);
+});
 
 test('a place git will not read as a repository refuses, and is never an empty worktree list', async () => {
   const outside = tempRoot('git-outside-');
 
   expect(await failedWith((service) => worktreesOf(service, outside))).toBe('GitRefused');
   expect(await failedWith((service) => repositoryAt(service, outside))).toBe('GitRefused');
-}, 4_000);
+});
 
 test('the worktree list holds a path with a newline in it, and names a registration git would prune', async () => {
   const main = await tempRepo('git-unusual-');
@@ -146,7 +146,7 @@ test('the worktree list holds a path with a newline in it, and names a registrat
 
   expect(stale.map((worktree) => worktree.path)).toEqual([main, odd]);
   expect(stale[1]?.prunable).not.toBe(null);
-}, 4_000);
+});
 
 test('the places of a repository come back spelled as they stand, newline and spaces included', async () => {
   const home = tempRoot('git-framing-');
@@ -172,14 +172,14 @@ test('the places of a repository come back spelled as they stand, newline and sp
     store: { commonDir: join(root, '.git'), bare: false },
     head: null,
   });
-}, 4_000);
+});
 
 test('a HEAD probe git refuses is carried out as the refusal, never as a detached or unborn head', async () => {
   const root = await tempRepo('git-head-');
   writeFileSync(join(root, '.git', 'HEAD'), 'ref: refs/heads/../../escape\n');
 
   expect(await failedWith((service) => repositoryAt(service, root))).toBe('GitRefused');
-}, 4_000);
+});
 
 test('a record whose required field arrives empty or missing is unreadable, never a list one row short', async () => {
   const nameless = answering(() => ({ stdout: 'worktree /a\0HEAD 0000\0\0HEAD abcdef\0detached\0\0' }));
@@ -204,7 +204,7 @@ test('a revision this repository does not hold answers none, where an unreadable
   expect(await failedWith((service) => commitOf(service, tempRoot('git-commit-outside-'), 'HEAD'))).toBe('GitRefused');
   rmSync(join(main, '.git', 'objects', head.slice(0, 2), head.slice(2)));
   expect(await failedWith((service) => commitOf(service, common, 'HEAD'))).toBe('GitRefused');
-}, 6_000);
+});
 
 test('a refusal whose words passed the declared capture is still a refusal, and says they were cut', async () => {
   const root = await tempRepo('git-refusal-cut-');
@@ -220,10 +220,10 @@ test('a refusal whose words passed the declared capture is still a refusal, and 
   expect(whole._tag === 'GitRefused' && whole.message).toHaveLength(4096);
   expect(troubleOf(bounded).startsWith('xxx')).toBe(true);
   expect(troubleOf(bounded).includes('(cut;')).toBe(true);
-}, 6_000);
+});
 
 test('a capture smaller than the listing answers incomplete rather than a shorter list', async () => {
   const main = await tempRepo('git-bounded-');
 
   expect(await failedWith((service) => worktreesOf(service, main, { capture: 8 }))).toBe('GitAnswerInvalid');
-}, 4_000);
+});

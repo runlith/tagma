@@ -30,4 +30,4 @@ test('a tree blob answers its bytes and mode, a link its target, and an absent p
   expect(await read('absent.jsonc')).toBeNull();
   expect(await read('module.jsonc')).toBeNull();
   expect(await read('folder.jsonc')).toBeNull();
-}, 6_000);
+});

@@ -46,7 +46,7 @@ test('every area names its paths as they stand, a rename carries both names, and
   expect(seen.entries.unstaged[0]?.status).toBe('modified');
   expect(await onGit((service) => sequencerAt(service, root))).toBe('none');
   expect(seen.branch.ref).toBe('main');
-}, 6_000);
+});
 
 test('the answer speaks for the coverage the options declared, and for no more of the tree', async () => {
   const root = await tempRepo('git-status-covered-');
@@ -65,7 +65,7 @@ test('the answer speaks for the coverage the options declared, and for no more o
   const tracked = await onGit((service) => statusAt(service, root, { untracked: 'no' }));
   expect(tracked.entries.untracked).toEqual([]);
   expect(tracked.coverage).toEqual({ untracked: 'no', paths: null });
-}, 6_000);
+});
 
 test('a merge answers its unmerged entry and its operation, and a linked worktree answers its own', async () => {
   const main = await tempRepo('git-status-merge-');
@@ -95,7 +95,7 @@ test('a merge answers its unmerged entry and its operation, and a linked worktre
   const here = await onGit((service) => statusAt(service, linked, { untracked: 'no' }));
   expect(await onGit((service) => sequencerAt(service, linked))).toBe('merge');
   expect(named(here.entries.unmerged)).toEqual(['f.txt']);
-}, 10_000);
+});
 
 test('a stopped revert and a stopped am each name themselves, where none and rebase would both be lies', async () => {
   const reverting = await tempRepo('git-status-revert-');
@@ -129,7 +129,7 @@ test('a stopped revert and a stopped am each name themselves, where none and reb
   await onGit((service) => service.run(['-C', applying, 'am', patch]));
 
   expect(await onGit((service) => sequencerAt(service, applying))).toBe('am');
-}, 10_000);
+});
 
 test('the branch header names the commit, the branch and the distance to its upstream', async () => {
   const unborn = tempRoot('git-status-unborn-');
@@ -169,7 +169,7 @@ test('the branch header names the commit, the branch and the distance to its ups
   expect(loose.branch.ahead).toBe(null);
   expect(loose.branch.behind).toBe(null);
   expect(await onGit((service) => refreshBranch(service, copy, gone.branch))).toEqual(loose.branch);
-}, 10_000);
+});
 
 test('a repository whose path holds a newline still answers the operation standing in it', async () => {
   const home = tempRoot('git-status-odd-home-');
@@ -194,7 +194,7 @@ test('a repository whose path holds a newline still answers the operation standi
   expect(await onGit((service) => sequencerAt(service, root))).toBe('merge');
   expect(named(seen.entries.unmerged)).toEqual(['f.txt']);
   expect(seen.branch.ref).toBe('main');
-}, 10_000);
+});
 
 test('a capture smaller than the listing answers incomplete rather than a listing one entry short', async () => {
   const root = await tempRepo('git-status-bounded-');
@@ -203,7 +203,7 @@ test('a capture smaller than the listing answers incomplete rather than a listin
   const failure = await onGit((service) => Effect.flip(statusAt(service, root, { untracked: 'all', capture: 8 })));
 
   expect(failure._tag).toBe('GitAnswerInvalid');
-}, 4_000);
+});
 
 test('a record with fewer fields than v2 prints is unreadable, never an entry missing from the list', async () => {
   const short = answering('1 M. N... 100644 100644 100644 abcabc\0');

@@ -29,7 +29,7 @@ test('a hook that fails after writing files answers nonzero over a checkout that
   expect(here.worktree).toBe(path);
   expect(here.commonDir).toBe(join(main, '.git'));
   expect(await git(main, ['rev-parse', 'refs/heads/side'])).toBe(await git(main, ['rev-parse', 'HEAD']));
-}, 6_000);
+});
 
 test('each plan checks out what it names, and a branch already checked out refuses before any effect', async () => {
   const main = await tempRepo('git-add-plans-');
@@ -62,7 +62,7 @@ test('each plan checks out what it names, and a branch already checked out refus
 
   expect(moved.status).toBe(0);
   expect(await git(join(home, 'moved'), ['symbolic-ref', 'HEAD'])).toBe('refs/heads/side');
-}, 10_000);
+});
 
 test('a checkout missing promisor objects refuses without fetching them', async () => {
   const source = await tempRepo('git-promisor-');
@@ -99,7 +99,7 @@ test('a checkout missing promisor objects refuses without fetching them', async 
     if (held === undefined) delete process.env.GIT_NO_LAZY_FETCH;
     else process.env.GIT_NO_LAZY_FETCH = held;
   }
-}, 20_000);
+});
 
 test('a git that cannot be started is its own failure, told apart from a run that was lost', async () => {
   const main = await tempRepo('git-unstarted-');
@@ -117,7 +117,7 @@ test('a git that cannot be started is its own failure, told apart from a run tha
 
   expect(failure._tag).toBe('GitUnavailable');
   expect(existsSync(path)).toBe(false);
-}, 6_000);
+});
 
 test('a bare store creates, and a destination opening on a dash is the path it is', async () => {
   const main = await tempRepo('git-add-odd-');
@@ -151,4 +151,4 @@ test('a bare store creates, and a destination opening on a dash is the path it i
   const here = await onGit((service) => locationsAt(service, join(home, 'from-bare')));
   expect(here.commonDir).toBe(bare);
   expect(here.worktree).toBe(join(home, 'from-bare'));
-}, 10_000);
+});

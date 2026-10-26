@@ -27,7 +27,7 @@ test('one path of three stages by name, and a path holding a newline is the path
   expect(acted).toEqual([odd]);
   expect(named(seen.entries.staged)).toEqual([odd]);
   expect(named(seen.entries.unstaged)).toEqual(['three.txt', 'two.txt']);
-}, 6_000);
+});
 
 test('a bracket in a name stages that name and not the neighbour a glob would match', async () => {
   const root = await tempRepo('git-stage-glob-');
@@ -42,7 +42,7 @@ test('a bracket in a name stages that name and not the neighbour a glob would ma
   expect(acted).toEqual(['a[b].txt']);
   expect(named(seen.entries.staged)).toEqual(['a[b].txt']);
   expect(named(seen.entries.unstaged)).toEqual(['ab.txt']);
-}, 6_000);
+});
 
 test('unstaging a staged deletion brings the index entry back and leaves the file gone', async () => {
   const root = await tempRepo('git-unstage-');
@@ -59,7 +59,7 @@ test('unstaging a staged deletion brings the index entry back and leaves the fil
   expect(named(seen.entries.unstaged)).toEqual(['gone.txt']);
   expect(seen.entries.unstaged[0]?.status).toBe('deleted');
   expect(existsSync(join(root, 'gone.txt'))).toBe(false);
-}, 6_000);
+});
 
 test('a discard writes a tracked path back from the index and deletes an untracked one, and touches no neighbour', async () => {
   const root = await tempRepo('git-discard-');
@@ -79,7 +79,7 @@ test('a discard writes a tracked path back from the index and deletes an untrack
   expect(existsSync(join(root, 'new.txt'))).toBe(false);
   expect(readFileSync(join(root, 'neighbour.txt'), 'utf8')).toBe('edited by hand\n');
   expect(existsSync(join(root, 'kept.txt'))).toBe(true);
-}, 6_000);
+});
 
 test('unstaging a newly added path returns it to untracked and leaves the file where it stands', async () => {
   const root = await tempRepo('git-unstage-added-');
@@ -93,7 +93,7 @@ test('unstaging a newly added path returns it to untracked and leaves the file w
   expect(seen.entries.staged).toEqual([]);
   expect(named(seen.entries.untracked)).toEqual(['new.txt']);
   expect(readFileSync(join(root, 'new.txt'), 'utf8')).toBe('never committed\n');
-}, 6_000);
+});
 
 test('a discard deletes the path it was named and not the neighbours its name would match as a glob', async () => {
   const root = await tempRepo('git-discard-glob-');
@@ -105,7 +105,7 @@ test('a discard deletes the path it was named and not the neighbours its name wo
   expect(acted).toEqual(['a[b].txt']);
   expect(existsSync(join(root, 'a[b].txt'))).toBe(false);
   expect(readFileSync(join(root, 'ab.txt'), 'utf8')).toBe('the one a glob would take\n');
-}, 6_000);
+});
 
 test('a pathspec matching nothing refuses with git own words and stages nothing beside it', async () => {
   const root = await tempRepo('git-stage-refused-');
@@ -118,4 +118,4 @@ test('a pathspec matching nothing refuses with git own words and stages nothing 
   expect(failure._tag === 'GitRefused' && failure.message).not.toBe('');
   expect(seen.entries.staged).toEqual([]);
   expect(named(seen.entries.untracked)).toEqual(['real.txt']);
-}, 6_000);
+});

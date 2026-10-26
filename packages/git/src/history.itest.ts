@@ -40,7 +40,7 @@ test('the line counts come back per path, a pairing names both of its paths, and
 
   const narrowed = await onGit((service) => numstatAt(service, root, { cached: true, paths: ['blob.bin'] }));
   expect(narrowed.map((stat) => stat.path)).toEqual(['blob.bin']);
-}, 8_000);
+});
 
 test('the working tree reading weighs what a diff weighs, and the index it read stands untouched', async () => {
   const root = await tempRepo('git-numstat-index-');
@@ -67,7 +67,7 @@ test('the working tree reading weighs what a diff weighs, and the index it read 
   expect(weighed.find((stat) => stat.path === 'blob.bin')?.lines).toBe('binary');
   expect(weighed.some((stat) => stat.path === 'clean.txt')).toBe(false);
   expect([after.ino, after.mtimeMs]).toEqual([before.ino, before.mtimeMs]);
-}, 8_000);
+});
 
 test('a comparison is measured from the base the two revisions share, and two roots answer no merge base', async () => {
   const root = await tempRepo('git-compare-');
@@ -106,7 +106,7 @@ test('a comparison is measured from the base the two revisions share, and two ro
   const apart = await onGit((service) => compareAt(service, root, 'main', 'lonely'));
 
   expect(apart.outcome).toBe('no-merge-base');
-}, 10_000);
+});
 
 test('the log answers no more than the max it was given, and every field of a record survives its framing', async () => {
   const root = await tempRepo('git-log-');
@@ -127,7 +127,7 @@ test('the log answers no more than the max it was given, and every field of a re
   expect(whole[0]?.date.startsWith('20')).toBe(true);
   expect(whole[1]?.subject).toBe(`weird${String.fromCharCode(0x1f)}subject`);
   expect(whole[2]?.parents).toEqual([]);
-}, 6_000);
+});
 
 test('a subject exclusion judges the subject alone: a body line matching it keeps the commit, in the log and in the unpushed count', async () => {
   const root = await tempRepo('git-log-subject-');
@@ -144,7 +144,7 @@ test('a subject exclusion judges the subject alone: a body line matching it keep
   const log = await onGit((service) => logAt(service, root, { range: `${base}..HEAD`, max: 1, excludeSubject: pattern }));
   expect(log.map((commit) => commit.subject)).toEqual(['user work']);
   expect(await onGit((service) => unpushedAt(service, root, 'HEAD', [base], { excludeSubject: pattern }))).toBe(1);
-}, 6_000);
+});
 
 test('a path narrows the log to the commits that touched it, and a name git would quote survives', async () => {
   const root = await tempRepo('git-log-path-');
@@ -169,7 +169,7 @@ test('a path narrows the log to the commits that touched it, and a name git woul
 
   const never = await onGit((service) => logAt(service, root, { range: 'HEAD', max: 10, paths: ['absent.txt'] }));
   expect(never).toEqual([]);
-}, 8_000);
+});
 
 test("a commit's files are read from its first parent, a root commit against nothing, and a rename is paired", async () => {
   const root = await tempRepo('git-commit-files-');
@@ -210,7 +210,7 @@ test("a commit's files are read from its first parent, a root commit against not
   const parents = merge.get(joined)?.parents ?? [];
   const third = await onGit((service) => commitFilesAt(service, root, { sha: joined, parents }));
   expect(third.entries.map((entry) => entry.path)).toEqual(['side.txt']);
-}, 10_000);
+});
 
 test('commits are read by id with the author email, an id git does not hold is absent, and ancestry answers both ways', async () => {
   const root = await tempRepo('git-commits-');
@@ -231,7 +231,7 @@ test('commits are read by id with the author email, an id git does not hold is a
 
   expect(await onGit((service) => ancestorAt(service, root, amended, 'HEAD'))).toBe(true);
   expect(await onGit((service) => ancestorAt(service, root, second, 'HEAD'))).toBe(false);
-}, 8_000);
+});
 
 test('divergence counts what each side holds that the other lacks', async () => {
   const root = await tempRepo('git-divergence-');
@@ -252,7 +252,7 @@ test('divergence counts what each side holds that the other lacks', async () => 
 
   expect(await onGit((service) => divergenceAt(service, root, base, 'side'))).toEqual({ ahead: 2, behind: 1 });
   expect(await onGit((service) => divergenceAt(service, root, start, start))).toEqual({ ahead: 0, behind: 0 });
-}, 8_000);
+});
 
 test('a numstat record this reader cannot frame is unreadable, never a path weighing nothing', async () => {
   const halved = answering('3\tkeep.txt\0');

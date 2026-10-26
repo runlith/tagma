@@ -20,7 +20,7 @@ test('git drains stdout and stderr larger than the process pipe while it waits f
   const loud = await onGit((git) => git.run(['-c', `alias.loud=!head -c ${payload.length} /dev/zero >&2; exit 7`, 'loud']));
   expect(loud.status).toBe(7);
   expect(loud.stderr).toHaveLength(payload.length);
-}, 4_000);
+});
 
 test('a declared capture answers overflow rather than an answer that reads whole', async () => {
   const repo = await tempRepo('git-capture-');
@@ -47,7 +47,7 @@ test('a declared capture answers overflow rather than an answer that reads whole
   expect(noisy.status).toBe(5);
   expect(noisy.stderr).toBe('y'.repeat(32));
   expect(noisy.overflow).toBe(false);
-}, 4_000);
+});
 
 test('interrupting git terminates the child process group', async () => {
   const repo = await tempRepo('git-interrupt-');
@@ -61,13 +61,13 @@ test('interrupting git terminates the child process group', async () => {
         while (!existsSync(marker)) yield* Effect.sleep('5 millis');
         yield* Fiber.interrupt(child);
       }),
-    ).pipe(Effect.timeout('2 seconds')),
+    ),
   );
 
   const pid = Number(readFileSync(marker, 'utf8').trim());
   expect(Number.isInteger(pid)).toBe(true);
   expect(() => process.kill(pid, 0)).toThrow();
-}, 5_000);
+});
 
 test('a child of git that ignores the terminate signal is dead once the interrupt returns', async () => {
   const repo = await tempRepo('git-stubborn-');
@@ -81,7 +81,7 @@ test('a child of git that ignores the terminate signal is dead once the interrup
         while (!existsSync(marker) || readFileSync(marker, 'utf8').trim() === '') yield* Effect.sleep('5 millis');
         yield* Fiber.interrupt(child);
       }),
-    ).pipe(Effect.timeout('4 seconds')),
+    ),
   );
 
   const pid = Number(readFileSync(marker, 'utf8').trim());
@@ -94,7 +94,6 @@ test('a child of git that ignores the terminate signal is dead once the interrup
       return true;
     }
   };
-  const deadline = Date.now() + 2_000;
-  while (!reaped() && Date.now() < deadline) await Bun.sleep(5);
+  while (!reaped()) await Bun.sleep(5);
   expect(reaped()).toBe(true);
-}, 6_000);
+});

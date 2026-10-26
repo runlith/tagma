@@ -59,7 +59,7 @@ const repo = Layer.effect(
   ),
 );
 
-layer(Layer.merge(observedGit, repo), { excludeTestServices: true, timeout: '30 seconds' })('Git raw object reads', (it) => {
+layer(Layer.merge(observedGit, repo), { excludeTestServices: true })('Git raw object reads', (it) => {
   it.effect('one session reads a thousand distinct objects with constant process count and isolates absence and capture failures', () =>
     Effect.gen(function* () {
       const root = yield* Repo;
