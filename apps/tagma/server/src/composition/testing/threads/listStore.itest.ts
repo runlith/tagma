@@ -283,17 +283,18 @@ it.live(
     const demo = yield* threadStoreFixture;
     const { store, threads, ids } = yield* project(demo, 1);
     const [root] = ids as [string];
-    const [inherited, orphaned] = yield* demo.units
-      .write('ThreadStore', (unit) =>
+    const [inherited, orphaned] = yield* Effect.acquireRelease(
+      demo.units.write('ThreadStore', (unit) =>
         Effect.gen(function* () {
           const born = yield* store.insertChild(root, { ownerId: 'operator', agentId: 'tagma' }, unit);
           const answered = yield* threads.rows.inheritFacet({ threadId: born.id, fromThreadId: root, agentId: 'tagma' }, unit);
           const nobody = yield* store.insert({ ownerId: 'operator', agentId: 'tagma' }, unit);
           const none = yield* threads.rows.inheritFacet({ threadId: nobody.id, fromThreadId: nobody.id, agentId: 'tagma' }, unit);
-          return [answered, none] as const;
+          return [answered, none, nobody.id] as const;
         }),
-      )
-      .pipe(Effect.orDie);
+      ),
+      ([, , threadId]) => store.delete([threadId]).pipe(Effect.orDie),
+    ).pipe(Effect.orDie);
     expect(inherited).toBe(demo.projectId);
     expect(orphaned).toBeUndefined();
   }),
