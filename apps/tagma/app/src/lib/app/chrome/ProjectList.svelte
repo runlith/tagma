@@ -24,6 +24,7 @@
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import { spellChord, spellKey } from '$lib/shared/chordSpelling.js';
   import { cn } from '$lib/shared/utils.js';
   import MatchText from '$lib/shared/MatchText.svelte';
@@ -33,6 +34,7 @@
 
   const SEARCH_FROM = 8;
   const RECENT = 4;
+  const TEAM_TIP = 'Team: the graph ships with the repository';
 
   const workspace = Workspace.use();
   const shell = shellActs(ShellOps.use(), Notices.use());
@@ -92,7 +94,6 @@
 </script>
 
 {#snippet row(project: Project, hint: string | null, positions: readonly number[] = [])}
-  {@const storage = STORAGE[project.storage]}
   <DropdownMenu.Item
     onSelect={(event) => open(project, event)}
     onkeydown={pressed}
@@ -104,7 +105,6 @@
       )}
     onpointerenter={() => prefetch.hover(project)}
     onpointerleave={() => prefetch.leave()}
-    title={`${storage.label} — ${storage.note}`}
     textValue={labelOf(project)}
   >
     {#snippet lead()}
@@ -141,7 +141,13 @@
         {/if}
       </span>
     {/snippet}
-    <MatchText text={labelOf(project)} {positions} />
+    <span class="flex min-w-0 items-center gap-1.5">
+      <FadeText class="min-w-0"><MatchText text={labelOf(project)} {positions} /></FadeText>
+      {#if project.storage === 'team'}
+        {@const Team = STORAGE.team.icon}
+        <Tooltip text={TEAM_TIP}><Team class="size-3 shrink-0 text-muted-foreground" /></Tooltip>
+      {/if}
+    </span>
   </DropdownMenu.Item>
 {/snippet}
 
@@ -163,30 +169,29 @@
   </div>
 {/if}
 
-{#if needle !== ''}
-  {#each found as { item: project, hit }, place (project.id)}
-    {@render row(project, place === 0 ? spellKey('Enter', host.apple) : null, hit.positions)}
-  {:else}
-    <DropdownMenu.Note>No project matches</DropdownMenu.Note>
-  {/each}
-{:else}
-  {#if shared !== null}
-    {@render row(shared, null)}
-    {#if projects.length > 0}<DropdownMenu.Separator />{/if}
-  {/if}
-  {#if searching}
-    {#if current !== null}{@render row(current, null)}{/if}
-    {#if recent.length > 0}
-      <DropdownMenu.Label>Recent</DropdownMenu.Label>
-      {#each recent as project (project.id)}{@render row(project, null)}{/each}
-      {#if rest.length > 0}<DropdownMenu.Label>All</DropdownMenu.Label>{/if}
+{#if needle !== '' || projects.length > 0}
+  <div class="-mx-1 max-h-96 overflow-y-auto px-1">
+    {#if needle !== ''}
+      {#each found as { item: project, hit }, place (project.id)}
+        {@render row(project, place === 0 ? spellKey('Enter', host.apple) : null, hit.positions)}
+      {:else}
+        <DropdownMenu.Note>No project matches</DropdownMenu.Note>
+      {/each}
+    {:else if searching}
+      {#if current !== null}{@render row(current, null)}{/if}
+      {#if recent.length > 0}
+        <DropdownMenu.Label>Recent</DropdownMenu.Label>
+        {#each recent as project (project.id)}{@render row(project, null)}{/each}
+        {#if rest.length > 0}<DropdownMenu.Label>All</DropdownMenu.Label>{/if}
+      {/if}
+      {#each rest as project (project.id)}{@render row(project, null)}{/each}
+    {:else}
+      {#each projects as project (project.id)}{@render row(project, null)}{/each}
     {/if}
-    {#each rest as project (project.id)}{@render row(project, null)}{/each}
-  {:else}
-    {#each projects as project (project.id)}{@render row(project, null)}{/each}
-  {/if}
+  </div>
+  <DropdownMenu.Separator />
 {/if}
-{#if workspace.projects.length > 0}<DropdownMenu.Separator />{/if}
+{#if shared !== null && needle === ''}{@render row(shared, null)}{/if}
 <DropdownMenu.Item icon={Plus} onSelect={() => (creation.open = true)}>New project</DropdownMenu.Item>
 {#if current !== null}
   <DropdownMenu.Separator />
