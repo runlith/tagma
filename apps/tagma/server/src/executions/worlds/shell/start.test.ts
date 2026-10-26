@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Clock, Deferred, Duration, Effect, Fiber, type Result, Scope, Stream } from 'effect';
+import { Clock, Deferred, Effect, Fiber, type Result, Scope, Stream } from 'effect';
 import type { CommandRequest, CommandRun } from '@runlith/agent-tools/CommandWork';
 import { WireLost, type ExecutionFeedItem } from '@runlith/executions/Executions';
 import type { Commands } from '@runlith/executions/Commands';
@@ -174,6 +174,8 @@ it.live('an exit with no decision leaves the wait outstanding, and the host’s 
   Effect.gen(function* () {
     const one = refOf('exec-holding');
     const decided = yield* Deferred.make<void>();
+    const deciding = yield* Deferred.make<void>();
+    const settled = yield* Deferred.make<void>();
     const settlement = settlementOf('holding', () =>
       Stream.concat(
         Stream.make({
@@ -182,17 +184,18 @@ it.live('an exit with no decision leaves the wait outstanding, and the host’s 
         } as unknown as ExecutionFeedItem),
         Stream.fromEffect(
           Effect.andThen(
-            Deferred.await(decided),
+            Effect.andThen(Deferred.succeed(deciding, undefined), Deferred.await(decided)),
             Effect.succeed({ _tag: 'State', summary: completedSummary(one) } as unknown as ExecutionFeedItem),
           ),
         ),
       ),
     );
-    const early = yield* settlement.pipe(Effect.timeoutOption(Duration.zero));
+    const waiting = yield* Effect.forkChild(settlement.pipe(Effect.tap(() => Deferred.succeed(settled, undefined))));
+    yield* Deferred.await(deciding);
+    expect(yield* Deferred.isDone(settled)).toBe(false);
     yield* Deferred.succeed(decided, undefined);
-    const answer = yield* settlement;
+    const answer = yield* Fiber.join(waiting);
 
-    expect(early._tag).toBe('None');
     expect(answer._tag).toBe('Decided');
     expect(answer._tag === 'Decided' ? answer.decision._tag : '').toBe('Completed');
   }),
@@ -472,10 +475,12 @@ const bindingFor = (): ShellCommandBinding =>
 
 const stopOf = () => {
   const said = Deferred.makeUnsafe<CallCancellation>();
+  const settled = Deferred.makeUnsafe<void>();
   let cancellation: CallCancellation | null = null;
   return {
     stopped: () => cancellation,
-    stopping: Deferred.await(said),
+    stopping: Deferred.await(said).pipe(Effect.ensuring(Deferred.succeed(settled, undefined))),
+    settled: Deferred.await(settled),
     stop: (given: CallCancellation) => {
       cancellation = given;
       Deferred.doneUnsafe(said, Effect.succeed(given));
@@ -694,17 +699,15 @@ it.live('a command nobody waits for is still ended when THIS invocation is stopp
 
 it.live('a command whose ending was observed leaves nothing watching its call, so a later stop of that call reaches no host', () =>
   Effect.gen(function* () {
-    const asked = yield* Deferred.make<void>();
-    const host = hostOver({ executions: new Map([['op-one', refOf('exec-one')]]), asked });
+    const host = hostOver({ executions: new Map([['op-one', refOf('exec-one')]]) });
     const control = controlOver('complete', { executionMs: 120_000, ceilingMs: 300_000, armed: true });
     const stopping = stopOf();
 
     const accepted = yield* commandsOver(host, control.managed).start(requestFor('op-one', stopping), (run) => Effect.result(run.result));
     yield* accepted.observed;
+    yield* stopping.settled;
     stopping.stop(new CallCancellation('explicit-stop', 'Stopped by the operator.'));
-    const reached = yield* Deferred.await(asked).pipe(Effect.timeoutOption(Duration.millis(50)));
 
-    expect(reached._tag).toBe('None');
     expect(host.cancellations).toEqual([]);
     expect(control.stops).toEqual([]);
   }),

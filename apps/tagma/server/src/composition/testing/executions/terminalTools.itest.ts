@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { Clock, Context, Effect, Fiber, Layer, Stream } from 'effect';
+import { Clock, Context, Deferred, Effect, Fiber, Layer, Stream } from 'effect';
 import { ToolAnswer, toolConfirmation, toolExecute, toolPrepare, type Tool } from '@runlith/agent/tool';
 import type { PermissionSubject } from '@runlith/agent/permissions';
 import { THREAD_AUTHORITY_DEFAULT } from '@runlith/agent/thread/rows';
@@ -864,10 +864,11 @@ layer(Layer.provideMerge(Layer.effect(Fixture, seeded), environment), { excludeT
         const { projectId } = yield* Fixture;
         const ref = execution('exec-lane-interrupted');
         let inputs = 0;
+        const entered = yield* Deferred.make<void>();
         const host = laneHost(ref, {
           input: () =>
             inputs++ === 0
-              ? Effect.never
+              ? Effect.andThen(Deferred.succeed(entered, undefined), Effect.never)
               : Effect.succeed({
                   _tag: 'InputAdmitted',
                   receipt: { execution: ref, sequence: 0, cause: 'raw', bytes: 3, acceptedThrough: ByteOffset.make('3') },
@@ -887,7 +888,7 @@ layer(Layer.provideMerge(Layer.effect(Fixture, seeded), environment), { excludeT
         const write = { _tag: 'Write', bytes: new TextEncoder().encode('ls\n') } as const;
 
         const typing = yield* Effect.forkChild(over.terminals.agentInput(keyFor('op-lane-interrupted-1'), 'run-interrupted', write, 'raw'));
-        for (let i = 0; i < 200 && host.asked().input !== 1; i++) yield* Effect.sleep(5);
+        yield* Deferred.await(entered);
         expect(host.asked().input).toBe(1);
         yield* Fiber.interrupt(typing);
         expect((yield* keyOf('op-lane-interrupted-1'))._tag).toBe('Uncertain');

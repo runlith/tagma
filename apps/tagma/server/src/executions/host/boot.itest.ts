@@ -69,7 +69,7 @@ afterAll(() => rmSync(launchRoot, { recursive: true, force: true }));
 const STAYING_HOLDER = [
   '#!/bin/sh',
   'printf \'%s\\n\' "$2" "$3" "$4" > "$1/argv"',
-  'i=0; while [ ! -e "$1/released" ] && [ $i -lt 600 ]; do sleep 0.05; i=$((i + 1)); done',
+  'while [ ! -e "$1/released" ]; do sleep 0.05; done',
   '',
 ].join('\n');
 

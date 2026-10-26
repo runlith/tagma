@@ -105,69 +105,63 @@ const alive = (pid: number) =>
   );
 
 describe.skipIf(!existsSync(LIBRARY))('the program road over a live execution host', () => {
-  layer(fixture, { excludeTestServices: true, timeout: '60 seconds' })('host', (it) => {
-    it.effect(
-      'a program runs as the calling thread, reads its input on stdin, and stands in the command inventory under that thread',
-      () =>
-        Effect.gen(function* () {
-          const { reader, checkout, projectId, thread, road } = yield* Fixture;
-          const ending = yield* road.run({
-            projectId,
-            actor: { _tag: 'Thread', threadId: thread, projectId },
-            argv: ['/bin/sh', '-c', 'cat; echo judged >&2'],
-            cwd: checkout,
-            stdin: '{"contract":1}',
-            operation: `inspection/stest/${crypto.randomUUID()}`,
-            subject: 'the inspection program under test',
-          });
-          expect(ending).toEqual({ _tag: 'Exited', exitCode: 0, stdout: '{"contract":1}', stderr: 'judged\n', cut: false });
-          const listing = yield* reader.page(projectId, {
-            limit: 20,
-            owner: { _tag: 'Thread', thread },
-          });
-          const row = listing.readings.find(
-            (reading) => reading.command.commandLine?.includes("exec /bin/sh -c 'cat; echo judged >&2' <") === true,
-          );
-          expect(row?.command.owner).toEqual({ _tag: 'Thread', thread });
-          const input = row?.command.commandLine?.split('< ')[1] ?? '';
-          expect(input.endsWith('input.json')).toBe(true);
-          expect(yield* (yield* FileSystem.FileSystem).exists(input)).toBe(false);
-        }),
-      60_000,
+  layer(fixture, { excludeTestServices: true })('host', (it) => {
+    it.effect('a program runs as the calling thread, reads its input on stdin, and stands in the command inventory under that thread', () =>
+      Effect.gen(function* () {
+        const { reader, checkout, projectId, thread, road } = yield* Fixture;
+        const ending = yield* road.run({
+          projectId,
+          actor: { _tag: 'Thread', threadId: thread, projectId },
+          argv: ['/bin/sh', '-c', 'cat; echo judged >&2'],
+          cwd: checkout,
+          stdin: '{"contract":1}',
+          operation: `inspection/stest/${crypto.randomUUID()}`,
+          subject: 'the inspection program under test',
+        });
+        expect(ending).toEqual({ _tag: 'Exited', exitCode: 0, stdout: '{"contract":1}', stderr: 'judged\n', cut: false });
+        const listing = yield* reader.page(projectId, {
+          limit: 20,
+          owner: { _tag: 'Thread', thread },
+        });
+        const row = listing.readings.find(
+          (reading) => reading.command.commandLine?.includes("exec /bin/sh -c 'cat; echo judged >&2' <") === true,
+        );
+        expect(row?.command.owner).toEqual({ _tag: 'Thread', thread });
+        const input = row?.command.commandLine?.split('< ')[1] ?? '';
+        expect(input.endsWith('input.json')).toBe(true);
+        expect(yield* (yield* FileSystem.FileSystem).exists(input)).toBe(false);
+      }),
     );
 
-    it.effect(
-      'a program judging another project runs as the calling thread in its home, in that project’s checkout',
-      () =>
-        Effect.gen(function* () {
-          const { checkout, context, store, projectId, thread, road } = yield* Fixture;
-          const files = yield* FileSystem.FileSystem;
-          const elsewhere = join(yield* files.makeTempDirectoryScoped({ prefix: 'program-elsewhere-' }), 'checkout');
-          yield* files.copy(checkout, elsewhere);
-          const row = yield* store.db
-            .insert(project())
-            .values({
-              name: 'program-elsewhere',
-              repoKey: elsewhere,
-              rootPath: elsewhere,
-              createdAt: new Date(yield* Clock.currentTimeMillis),
-            })
-            .returning({ id: project().id })
-            .get();
-          const other = row!.id;
-          yield* Context.get(context, Coverage).cover(other);
-          const ending = yield* road.run({
-            projectId: other,
-            actor: { _tag: 'Thread', threadId: thread, projectId },
-            argv: ['/bin/sh', '-c', 'pwd -P'],
-            cwd: elsewhere,
-            stdin: '',
-            operation: `inspection/stest/${crypto.randomUUID()}`,
-            subject: 'a checker of another project',
-          });
-          expect(ending).toMatchObject({ _tag: 'Exited', exitCode: 0, stdout: `${yield* files.realPath(elsewhere)}\n` });
-        }),
-      60_000,
+    it.effect('a program judging another project runs as the calling thread in its home, in that project’s checkout', () =>
+      Effect.gen(function* () {
+        const { checkout, context, store, projectId, thread, road } = yield* Fixture;
+        const files = yield* FileSystem.FileSystem;
+        const elsewhere = join(yield* files.makeTempDirectoryScoped({ prefix: 'program-elsewhere-' }), 'checkout');
+        yield* files.copy(checkout, elsewhere);
+        const row = yield* store.db
+          .insert(project())
+          .values({
+            name: 'program-elsewhere',
+            repoKey: elsewhere,
+            rootPath: elsewhere,
+            createdAt: new Date(yield* Clock.currentTimeMillis),
+          })
+          .returning({ id: project().id })
+          .get();
+        const other = row!.id;
+        yield* Context.get(context, Coverage).cover(other);
+        const ending = yield* road.run({
+          projectId: other,
+          actor: { _tag: 'Thread', threadId: thread, projectId },
+          argv: ['/bin/sh', '-c', 'pwd -P'],
+          cwd: elsewhere,
+          stdin: '',
+          operation: `inspection/stest/${crypto.randomUUID()}`,
+          subject: 'a checker of another project',
+        });
+        expect(ending).toMatchObject({ _tag: 'Exited', exitCode: 0, stdout: `${yield* files.realPath(elsewhere)}\n` });
+      }),
     );
 
     it.effect(
@@ -198,69 +192,57 @@ describe.skipIf(!existsSync(LIBRARY))('the program road over a live execution ho
           });
           expect(exited).toMatchObject({ _tag: 'Exited', exitCode: 127 });
         }),
-      60_000,
     );
 
-    it.effect(
-      'a program whose caller is interrupted is stopped with its children before the call returns',
-      () =>
-        Effect.gen(function* () {
-          const { checkout, projectId, thread, road } = yield* Fixture;
-          const files = yield* FileSystem.FileSystem;
-          const pidfile = join(checkout, 'step.pid');
-          const fiber = yield* Effect.forkScoped(
-            road.run({
-              projectId,
-              actor: { _tag: 'Thread', threadId: thread, projectId },
-              argv: ['/bin/sh', '-c', `sleep 60 & echo $! > ${pidfile}; wait`],
-              cwd: checkout,
-              stdin: '',
-              operation: `commit-step/stest/${crypto.randomUUID()}`,
-              tool: 'commit-step',
-              subject: 'the commit step under test',
-            }),
-          );
-          yield* Effect.raceFirst(
-            Effect.repeat(files.exists(pidfile), { until: (written) => written, schedule: Schedule.spaced('20 millis') }),
-            Fiber.join(fiber).pipe(
-              Effect.flatMap((ended) => Effect.die(new Error(`the program ended before publishing its child: ${JSON.stringify(ended)}`))),
-            ),
-          );
-          const child = Number((yield* files.readFileString(pidfile)).trim());
-          yield* Fiber.interrupt(fiber);
-          expect(yield* Effect.repeat(alive(child), { until: (standing) => !standing, schedule: Schedule.spaced('20 millis') })).toBe(
-            false,
-          );
-        }),
-      60_000,
-    );
-
-    it.effect(
-      'operands far past the call envelope reach one program whole and in order, and its own exit code is the answer',
-      () =>
-        Effect.gen(function* () {
-          const { checkout, projectId, thread, road } = yield* Fixture;
-          const paths = Array.from(
-            { length: 4_000 },
-            (_, at) => `src/a directory/with a long enough name ${String(at).padStart(5, '0')}.ts`,
-          );
-          const ending = yield* road.run({
+    it.effect('a program whose caller is interrupted is stopped with its children before the call returns', () =>
+      Effect.gen(function* () {
+        const { checkout, projectId, thread, road } = yield* Fixture;
+        const files = yield* FileSystem.FileSystem;
+        const pidfile = join(checkout, 'step.pid');
+        const fiber = yield* Effect.forkScoped(
+          road.run({
             projectId,
             actor: { _tag: 'Thread', threadId: thread, projectId },
-            argv: ['/bin/sh', '-c', 'printf "%s\\n" "$@"; exit 3', 'operands'],
-            operands: paths,
+            argv: ['/bin/sh', '-c', `sleep 60 & echo $! > ${pidfile}; wait`],
             cwd: checkout,
             stdin: '',
             operation: `commit-step/stest/${crypto.randomUUID()}`,
             tool: 'commit-step',
-            subject: 'the operands under test',
-          });
-          expect(ending._tag).toBe('Exited');
-          if (ending._tag !== 'Exited') return;
-          expect(ending.exitCode).toBe(3);
-          expect(ending.stdout.split('\n').filter((line) => line !== '')).toEqual(paths);
-        }),
-      60_000,
+            subject: 'the commit step under test',
+          }),
+        );
+        yield* Effect.raceFirst(
+          Effect.repeat(files.exists(pidfile), { until: (written) => written, schedule: Schedule.spaced('20 millis') }),
+          Fiber.join(fiber).pipe(
+            Effect.flatMap((ended) => Effect.die(new Error(`the program ended before publishing its child: ${JSON.stringify(ended)}`))),
+          ),
+        );
+        const child = Number((yield* files.readFileString(pidfile)).trim());
+        yield* Fiber.interrupt(fiber);
+        expect(yield* Effect.repeat(alive(child), { until: (standing) => !standing, schedule: Schedule.spaced('20 millis') })).toBe(false);
+      }),
+    );
+
+    it.effect('operands far past the call envelope reach one program whole and in order, and its own exit code is the answer', () =>
+      Effect.gen(function* () {
+        const { checkout, projectId, thread, road } = yield* Fixture;
+        const paths = Array.from({ length: 4_000 }, (_, at) => `src/a directory/with a long enough name ${String(at).padStart(5, '0')}.ts`);
+        const ending = yield* road.run({
+          projectId,
+          actor: { _tag: 'Thread', threadId: thread, projectId },
+          argv: ['/bin/sh', '-c', 'printf "%s\\n" "$@"; exit 3', 'operands'],
+          operands: paths,
+          cwd: checkout,
+          stdin: '',
+          operation: `commit-step/stest/${crypto.randomUUID()}`,
+          tool: 'commit-step',
+          subject: 'the operands under test',
+        });
+        expect(ending._tag).toBe('Exited');
+        if (ending._tag !== 'Exited') return;
+        expect(ending.exitCode).toBe(3);
+        expect(ending.stdout.split('\n').filter((line) => line !== '')).toEqual(paths);
+      }),
     );
 
     it.effect(
@@ -294,7 +276,6 @@ describe.skipIf(!existsSync(LIBRARY))('the program road over a live execution ho
           expect(ending.late).toBe(true);
           expect(ending.stderr).toContain('started');
         }),
-      60_000,
     );
   });
 });

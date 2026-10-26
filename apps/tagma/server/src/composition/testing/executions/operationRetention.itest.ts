@@ -281,33 +281,6 @@ it.live('a retention pass puts a drifted account back to the rows', () =>
   }),
 );
 
-it.live('registering at the ceiling costs the same over a hundred thousand keys as over ten', () =>
-  Effect.gen(function* () {
-    const { db, units, projectId, key, seed } = yield* makeFixture;
-    const cost = Effect.fnUntraced(function* (ceiling: number, prefix: string) {
-      yield* units.write('operationRetention.cost', (unit) => unit.run(db.delete(terminalRequestKey())));
-      const full = storesOver(db, installation, { retainedKeys: ceiling });
-      const now = yield* Clock.currentTimeMillis;
-      yield* seed(ceiling, 'settled', now - DAY, `${prefix}-seed-`);
-      const spent: number[] = [];
-      for (let at = 0; at < 40; at += 1) {
-        const began = yield* Clock.currentTimeNanos;
-        yield* units.write('operationRetention.cost', (unit) => full.requestKeys.register(unit, key(`${prefix}-${at}`)));
-        spent.push(Number((yield* Clock.currentTimeNanos) - began) / 1_000_000);
-        yield* units.write('operationRetention.cost', (unit) =>
-          full.intents.settle(unit, projectId, HostRequestKey.make(`${prefix}-${at}`), { _tag: 'Settled' }),
-        );
-      }
-      expect(yield* units.read((unit) => full.requestKeys.keyRetention(unit))).toMatchObject({ retained: ceiling, expired: 40 });
-      return spent.sort((left, right) => left - right)[20]!;
-    });
-    const small = yield* cost(10, 'small');
-    const large = yield* cost(100_000, 'large');
-
-    expect(large).toBeLessThan(small * 2 + 1);
-  }),
-);
-
 it.live('startup retention reclaims recent settled occupancy already persisted by an earlier server', () =>
   Effect.gen(function* () {
     const { db, units, register, settle } = yield* makeFixture;

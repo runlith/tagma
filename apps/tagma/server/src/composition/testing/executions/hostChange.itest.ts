@@ -179,70 +179,67 @@ const counted = (text: string): readonly number[] =>
     .map((line) => Number(line.slice(1)));
 
 describe.skipIf(!existsSync(LIBRARY))('host activation after the server door', () => {
-  layer(fixture, { excludeTestServices: true, timeout: '60 seconds' })('host', (it) => {
-    it.effect(
-      'defers host migration and consumers until the door opens, and releases consumers after a failed take-over',
-      () =>
-        Effect.gen(function* () {
-          const { boot, leave, closures, files, home, projectId } = yield* Fixture;
-          const first = yield* boot(closures.before);
-          const counter = yield* started(first, projectId, 'counter', 'i=0; while :; do echo n$i; i=$((i+1)); sleep 0.02; done');
-          const prior = yield* until(output(first, counter), (read) => counted(read.text).length > 5, 'the counter');
-          const state = Context.get(first, HostManagement).connection.address.state;
-          const pids = yield* hostsUnder(home);
-          const readManifest = () =>
-            files.readFileString(join(state, 'bundle', ARTIFACT_FILE)).pipe(Effect.flatMap(Schema.decodeUnknownEffect(manifestJson)));
-          const digest = (yield* readManifest()).identity.digest;
-          const ledger = yield* hostMigrations(state);
-          expect(ledger).not.toContain(EXTRA_MIGRATION);
-          yield* leave(first);
+  layer(fixture, { excludeTestServices: true })('host', (it) => {
+    it.effect('defers host migration and consumers until the door opens, and releases consumers after a failed take-over', () =>
+      Effect.gen(function* () {
+        const { boot, leave, closures, files, home, projectId } = yield* Fixture;
+        const first = yield* boot(closures.before);
+        const counter = yield* started(first, projectId, 'counter', 'i=0; while :; do echo n$i; i=$((i+1)); sleep 0.02; done');
+        const prior = yield* until(output(first, counter), (read) => counted(read.text).length > 5, 'the counter');
+        const state = Context.get(first, HostManagement).connection.address.state;
+        const pids = yield* hostsUnder(home);
+        const readManifest = () =>
+          files.readFileString(join(state, 'bundle', ARTIFACT_FILE)).pipe(Effect.flatMap(Schema.decodeUnknownEffect(manifestJson)));
+        const digest = (yield* readManifest()).identity.digest;
+        const ledger = yield* hostMigrations(state);
+        expect(ledger).not.toContain(EXTRA_MIGRATION);
+        yield* leave(first);
 
-          const opened = yield* Deferred.make<void>();
-          const successor = yield* boot(closures.after, Deferred.await(opened));
-          expect(yield* hostsUnder(home)).toEqual(pids);
-          expect((yield* readManifest()).identity.digest).toBe(digest);
-          expect(yield* hostMigrations(state)).toEqual(ledger);
-          const terminals = Context.get(successor, Terminals);
-          const host = Context.get(successor, HostManagement);
-          const early = yield* Effect.forkChild(started(successor, projectId, 'before-door', 'echo before-door'));
-          const read = yield* Effect.forkChild(terminals.state(counter));
-          const world = yield* Effect.forkChild(host.connection.port.state(counter));
-          yield* Effect.sleep('300 millis');
-          expect(early.pollUnsafe()).toBeUndefined();
-          expect(read.pollUnsafe()).toBeUndefined();
-          expect(world.pollUnsafe()).toBeUndefined();
-          yield* Deferred.succeed(opened, undefined);
-          expect((yield* Fiber.join(read))?.state.phase).toBe('running');
-          expect((yield* Fiber.join(world))?.state.phase).toBe('running');
-          const echo = yield* Fiber.join(early);
-          expect((yield* until(output(successor, echo), (read) => read.text.includes('before-door'), 'the early echo')).text).toContain(
-            'before-door',
-          );
-          yield* until(host.standing, (standing) => standing.custodian, 'custody after the door');
-          expect(yield* hostMigrations(state)).toEqual([...ledger, EXTRA_MIGRATION]);
-          expect((yield* readManifest()).identity.digest).not.toBe(digest);
-          yield* until(output(successor, counter, prior.through), (read) => counted(read.text).length > 5, 'the counter after taking over');
-          const whole = counted((yield* output(successor, counter)).text);
-          expect(whole).toEqual(whole.map((_, index) => index));
-          yield* leave(successor);
+        const opened = yield* Deferred.make<void>();
+        const successor = yield* boot(closures.after, Deferred.await(opened));
+        expect(yield* hostsUnder(home)).toEqual(pids);
+        expect((yield* readManifest()).identity.digest).toBe(digest);
+        expect(yield* hostMigrations(state)).toEqual(ledger);
+        const terminals = Context.get(successor, Terminals);
+        const host = Context.get(successor, HostManagement);
+        const early = yield* Effect.forkChild(started(successor, projectId, 'before-door', 'echo before-door'));
+        const read = yield* Effect.forkChild(terminals.state(counter));
+        const world = yield* Effect.forkChild(host.connection.port.state(counter));
+        yield* Effect.sleep('300 millis');
+        expect(early.pollUnsafe()).toBeUndefined();
+        expect(read.pollUnsafe()).toBeUndefined();
+        expect(world.pollUnsafe()).toBeUndefined();
+        yield* Deferred.succeed(opened, undefined);
+        expect((yield* Fiber.join(read))?.state.phase).toBe('running');
+        expect((yield* Fiber.join(world))?.state.phase).toBe('running');
+        const echo = yield* Fiber.join(early);
+        expect((yield* until(output(successor, echo), (read) => read.text.includes('before-door'), 'the early echo')).text).toContain(
+          'before-door',
+        );
+        yield* until(host.standing, (standing) => standing.custodian, 'custody after the door');
+        expect(yield* hostMigrations(state)).toEqual([...ledger, EXTRA_MIGRATION]);
+        expect((yield* readManifest()).identity.digest).not.toBe(digest);
+        yield* until(output(successor, counter, prior.through), (read) => counted(read.text).length > 5, 'the counter after taking over');
+        const whole = counted((yield* output(successor, counter)).text);
+        expect(whole).toEqual(whole.map((_, index) => index));
+        yield* leave(successor);
 
-          const door = yield* Deferred.make<void>();
-          const failing = yield* boot(closures.before, Effect.andThen(Deferred.await(door), Effect.die(new Error('the take-over broke'))));
-          const failedHost = Context.get(failing, HostManagement);
-          const pending = yield* Effect.forkChild(Effect.result(failedHost.connection.port.state(counter)));
-          yield* Effect.sleep('300 millis');
-          expect(pending.pollUnsafe()).toBeUndefined();
-          yield* Deferred.succeed(door, undefined);
-          expect((yield* Fiber.join(pending))._tag).toBe('Failure');
-          const standing = yield* until(
-            failedHost.standing,
-            (now) => now.detail.includes('the take-over broke'),
-            'the failed take-over named',
-          );
-          expect(standing.custodian).toBe(false);
-          yield* leave(failing);
-        }),
-      60_000,
+        const door = yield* Deferred.make<void>();
+        const failing = yield* boot(closures.before, Effect.andThen(Deferred.await(door), Effect.die(new Error('the take-over broke'))));
+        const failedHost = Context.get(failing, HostManagement);
+        const pending = yield* Effect.forkChild(Effect.result(failedHost.connection.port.state(counter)));
+        yield* Effect.sleep('300 millis');
+        expect(pending.pollUnsafe()).toBeUndefined();
+        yield* Deferred.succeed(door, undefined);
+        expect((yield* Fiber.join(pending))._tag).toBe('Failure');
+        const standing = yield* until(
+          failedHost.standing,
+          (now) => now.detail.includes('the take-over broke'),
+          'the failed take-over named',
+        );
+        expect(standing.custodian).toBe(false);
+        yield* leave(failing);
+      }),
     );
   });
 });

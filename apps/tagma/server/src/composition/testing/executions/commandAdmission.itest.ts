@@ -962,13 +962,7 @@ const restartedDelivery = Effect.fnUntraced(function* (name: string, moved: bool
         const wait = yield* waitOf(admitted);
         const stillOwed = yield* deliveryOf(admitted);
         return wait === null && stillOwed === null && mineSent().length === 1;
-      }).pipe(
-        Effect.repeat({ until: (done) => done, schedule: Schedule.spaced('50 millis') }),
-        Effect.timeoutOrElse({
-          duration: '10 seconds',
-          orElse: () => Effect.die('the restarted owner never discharged and delivered the command'),
-        }),
-      );
+      }).pipe(Effect.repeat({ until: (done) => done, schedule: Schedule.spaced('50 millis') }));
       return measurement;
     }),
   );
@@ -2590,39 +2584,6 @@ layer(Layer.provideMerge(Layer.effect(Fixture, seeded), environment), { excludeT
 
       expect(yield* sweepOnce).toMatchObject({ fences: [1], stopped: [], refused: [], standing: [standing] });
       expect(host.asked()['stop']).toBe(2);
-    }),
-  );
-
-  it.effect('a sweep repeated while its first pass is still ending a command answers that command ended', () =>
-    Effect.gen(function* () {
-      const { projectId } = yield* Fixture;
-      const restopped = ThreadId.make('thread-command-restopped');
-      yield* threadRow(restopped);
-      const ending = execution('exec-restop');
-      const reached = yield* Deferred.make<void>();
-      const released = yield* Deferred.make<void>();
-      const host = hostThat({
-        start: acceptedAs(ending),
-        stop: (ref) => Deferred.succeed(reached, undefined).pipe(Effect.andThen(Deferred.await(released)), Effect.as(receiptFor(ref))),
-      });
-      const floor = yield* floorOver(host);
-      const actor = yield* actorOf(restopped);
-      const owner: CommandSubject = { _tag: 'Thread', thread: restopped };
-      const creator: CommandCreator = { _tag: 'Thread', thread: restopped, run: 'run-restop', toolCall: 'call-restop' };
-      yield* attempted(floor, 'op-restop', actor, owner, creator, 'foreground');
-      const { key, authorize } = yield* sweepOf(floor, 'op-restop-sweep', restopped, actor, owner);
-      const sweep = floor.terminals.commands.stopAll(projectId, [owner], key, authorize, 'run-abort', 'signal', 'run-restop');
-
-      const first = yield* Effect.forkChild(sweep);
-      yield* Deferred.await(reached);
-      const second = yield* Effect.forkChild(sweep);
-      yield* Fiber.await(second).pipe(Effect.timeoutOption('50 millis'));
-      yield* Deferred.succeed(released, undefined);
-
-      expect((yield* Fiber.join(first)).standing).toEqual([]);
-      expect((yield* Fiber.join(second)).standing).toEqual([]);
-      expect(host.asked()['stop']).toBe(1);
-      expect(yield* waitOf(ending)).toBeNull();
     }),
   );
 

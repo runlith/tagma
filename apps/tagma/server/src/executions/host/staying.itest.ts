@@ -3,7 +3,7 @@ import { it } from '@runlith/effect-test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Effect, Fiber, FileSystem, Option } from 'effect';
+import { Deferred, Effect, Fiber, FileSystem } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { hostsStaying } from './staying.js';
 
@@ -39,12 +39,12 @@ const staying = Effect.flatMap(FileSystem.FileSystem, (files) => hostsStaying(fi
   () =>
     Effect.gen(function* () {
       const holder = yield* hold();
-      const waiting = yield* Effect.forkChild(staying);
+      const settled = yield* Deferred.make<void>();
+      const waiting = yield* Effect.forkChild(staying.pipe(Effect.tap(() => Deferred.succeed(settled, undefined))));
       yield* Effect.yieldNow;
-      expect(Option.isNone(yield* Fiber.await(waiting).pipe(Effect.timeoutOption(0)))).toBe(true);
+      expect(yield* Deferred.isDone(settled)).toBe(false);
       holder.stdin.end();
       yield* Effect.promise(() => holder.exited);
       expect(yield* Fiber.join(waiting)).toEqual([]);
     }),
-  10_000,
 );

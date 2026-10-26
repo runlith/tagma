@@ -97,12 +97,11 @@ const reader = Effect.fnUntraced(function* (inventory: TerminalInventory) {
 const at = (revision: number) => (update: InventoryFeedItem) => update._tag === 'Moved' && update.revision === revision;
 
 const cellRead = Effect.fnUntraced(function* (inventory: TerminalInventory) {
-  for (let round = 0; round < 100; round += 1) {
+  for (;;) {
     const cell = yield* inventory.of(1);
     if (!cell.stale) return cell;
     yield* Effect.sleep(1);
   }
-  return yield* inventory.of(1);
 });
 
 const following = Effect.fnUntraced(function* (inventory: TerminalInventory) {

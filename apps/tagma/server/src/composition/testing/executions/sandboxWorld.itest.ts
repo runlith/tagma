@@ -363,192 +363,186 @@ const makeDoor = Effect.map(operationCatalog, (catalog) => ({
 }));
 const shown = (seen: Request[], afterTurn: number): string => JSON.stringify(seen[afterTurn]?.messages ?? []);
 dockerSuite('sandbox worlds', () => {
-  layer(fixture(), { excludeTestServices: true, timeout: '60 seconds' })('docker', (it) => {
-    it.effect(
-      'a code run meets one tree at the commit named, without the graph, and reaches nothing of this machine',
-      () =>
-        Effect.gen(function* () {
-          const seen: Request[] = [];
-          const { worlds, checkout, projectId, hostSentinel, sandboxes, backend } = yield* Fixture;
-          const { catalog, door } = yield* makeDoor;
-          const row = yield* boundThread();
-          const thread = view(row);
-          const runner = yield* scriptedRunner((turn) => {
-            switch (turn) {
-              case 1:
-                return call(turn, 'read', { path: 'src/answer.txt' });
-              case 2:
-                return call(turn, 'ls', { path: '.' });
-              case 3:
-                return call(turn, 'read', { path: hostSentinel });
-              case 4:
-                return call(turn, 'bash', {
-                  command: `cat ${hostSentinel} 2>&1; echo "exit=$?"`,
-                  description: 'reach the host sentinel',
-                });
-              case 5:
-                return call(turn, 'bash', {
-                  command: 'uname -s; id -u; ls -a /work | tr "\\n" " "; test -d /work/.git && echo git || echo no-git',
-                  description: 'the guest facts',
-                });
-              default:
-                return answer(turn, 'Looked around.');
-            }
-          }, seen);
-          const registered = composeAgent(
-            ruleRegistry,
-            tree,
-            yield* servedCapabilities(),
-            runner,
-            {} as ThreadParts['rows'],
-            {} as ThreadParts['mandate'],
-            teamLess,
-            (view, use) =>
-              Effect.map(
-                worlds.of({
+  layer(fixture(), { excludeTestServices: true })('docker', (it) => {
+    it.effect('a code run meets one tree at the commit named, without the graph, and reaches nothing of this machine', () =>
+      Effect.gen(function* () {
+        const seen: Request[] = [];
+        const { worlds, checkout, projectId, hostSentinel, sandboxes, backend } = yield* Fixture;
+        const { catalog, door } = yield* makeDoor;
+        const row = yield* boundThread();
+        const thread = view(row);
+        const runner = yield* scriptedRunner((turn) => {
+          switch (turn) {
+            case 1:
+              return call(turn, 'read', { path: 'src/answer.txt' });
+            case 2:
+              return call(turn, 'ls', { path: '.' });
+            case 3:
+              return call(turn, 'read', { path: hostSentinel });
+            case 4:
+              return call(turn, 'bash', {
+                command: `cat ${hostSentinel} 2>&1; echo "exit=$?"`,
+                description: 'reach the host sentinel',
+              });
+            case 5:
+              return call(turn, 'bash', {
+                command: 'uname -s; id -u; ls -a /work | tr "\\n" " "; test -d /work/.git && echo git || echo no-git',
+                description: 'the guest facts',
+              });
+            default:
+              return answer(turn, 'Looked around.');
+          }
+        }, seen);
+        const registered = composeAgent(
+          ruleRegistry,
+          tree,
+          yield* servedCapabilities(),
+          runner,
+          {} as ThreadParts['rows'],
+          {} as ThreadParts['mandate'],
+          teamLess,
+          (view, use) =>
+            Effect.map(
+              worlds.of({
+                thread: view,
+                at: {
+                  threadId: view.id,
+                  runId: use.runId ?? view.id,
+                  generation: WorkspaceGeneration.make(use.context?.generation ?? 0),
+                },
+                root: checkout,
+              }),
+              (acquired) =>
+                asThreadContext({
                   thread: view,
-                  at: {
-                    threadId: view.id,
-                    runId: use.runId ?? view.id,
-                    generation: WorkspaceGeneration.make(use.context?.generation ?? 0),
-                  },
-                  root: checkout,
+                  world: acquired.world,
+                  projectId,
+                  projectRoot: checkout,
+                  origin: null,
+                  comments: () => commentPolicy().fallback,
+                  vocabulary: () => tagIndex([], BEHAVIOUR_REGISTRY),
+                  identity: sessionIdentity,
+                  commandTimes: unruledTimes,
+                  grants: testGrantSigner,
+                  project: { id: projectId, name: 'tree' },
+                  caller: { actor: { kind: 'operator' } },
+                  workingRoot: checkout,
+                  graph: Effect.succeed(Context.make(Git, {} as Git['Service'])),
+                  machine: {} as never,
+                  mcpServers: {} as never,
+                  servingGit: {} as never,
+                  rows: {} as never,
+                  graphRefused: {} as never,
+                  execution: door,
+                  offers: nativeOffers(catalog),
                 }),
-                (acquired) =>
-                  asThreadContext({
-                    thread: view,
-                    world: acquired.world,
-                    projectId,
-                    projectRoot: checkout,
-                    origin: null,
-                    comments: () => commentPolicy().fallback,
-                    vocabulary: () => tagIndex([], BEHAVIOUR_REGISTRY),
-                    identity: sessionIdentity,
-                    commandTimes: unruledTimes,
-                    grants: testGrantSigner,
-                    project: { id: projectId, name: 'tree' },
-                    caller: { actor: { kind: 'operator' } },
-                    workingRoot: checkout,
-                    graph: Effect.succeed(Context.make(Git, {} as Git['Service'])),
-                    machine: {} as never,
-                    mcpServers: {} as never,
-                    servingGit: {} as never,
-                    rows: {} as never,
-                    graphRefused: {} as never,
-                    execution: door,
-                    offers: nativeOffers(catalog),
-                  }),
-              ),
-            SECTIONS,
-          );
-          const run = yield* launch(registered, input(thread, 'look', [Message.user('Look around.')]));
-          yield* run.output.response;
-          expect(seen.length).toBe(6);
-          expect(seen[0]?.tools).toEqual(['bash', 'delete', 'edit', 'glob', 'grep', 'ls', 'read', 'rename', 'tool_search', 'write']);
-          expect(shown(seen, 1)).toContain('the committed tree');
-          const listing = shown(seen, 2);
-          expect(listing).toContain('src');
-          expect(listing).not.toContain('.tagma');
-          expect(listing).not.toContain('uncommitted');
-          expect(shown(seen, 3)).not.toContain('this machine');
-          const viaShell = shown(seen, 4);
-          expect(viaShell).not.toContain('this machine');
-          expect(viaShell).toMatch(/No such file|not found|cannot|exit=[1-9]/);
-          const facts = shown(seen, 5);
-          expect(facts).toContain('Linux');
-          expect(facts).toContain('65534');
-          expect(facts).toContain('no-git');
-        }),
-      60_000,
+            ),
+          SECTIONS,
+        );
+        const run = yield* launch(registered, input(thread, 'look', [Message.user('Look around.')]));
+        yield* run.output.response;
+        expect(seen.length).toBe(6);
+        expect(seen[0]?.tools).toEqual(['bash', 'delete', 'edit', 'glob', 'grep', 'ls', 'read', 'rename', 'tool_search', 'write']);
+        expect(shown(seen, 1)).toContain('the committed tree');
+        const listing = shown(seen, 2);
+        expect(listing).toContain('src');
+        expect(listing).not.toContain('.tagma');
+        expect(listing).not.toContain('uncommitted');
+        expect(shown(seen, 3)).not.toContain('this machine');
+        const viaShell = shown(seen, 4);
+        expect(viaShell).not.toContain('this machine');
+        expect(viaShell).toMatch(/No such file|not found|cannot|exit=[1-9]/);
+        const facts = shown(seen, 5);
+        expect(facts).toContain('Linux');
+        expect(facts).toContain('65534');
+        expect(facts).toContain('no-git');
+      }),
     );
-    it.effect(
-      'a stop takes the guest, and a resumed run finds the sentinel where the first run left it',
-      () =>
-        Effect.gen(function* () {
-          const seen: Request[] = [];
-          const { worlds, checkout, projectId, hostSentinel, sandboxes, backend } = yield* Fixture;
-          const { catalog, door } = yield* makeDoor;
-          const row = yield* boundThread();
-          const thread = view(row);
-          const sentinel = `left here ${Math.random().toString(36).slice(2)}`;
-          const runner = yield* scriptedRunner((turn) => {
-            switch (turn) {
-              case 1:
-                return call(turn, 'write', {
-                  path: 'src/sentinel.txt',
-                  content: `${sentinel}\n`,
-                });
-              case 2:
-                return answer(turn, 'Written.');
-              case 3:
-                return call(turn, 'read', { path: 'src/sentinel.txt' });
-              default:
-                return answer(turn, 'Read.');
-            }
-          }, seen);
-          const registered = composeAgent(
-            ruleRegistry,
-            tree,
-            yield* servedCapabilities(),
-            runner,
-            {} as ThreadParts['rows'],
-            {} as ThreadParts['mandate'],
-            teamLess,
-            (view, use) =>
-              Effect.map(
-                worlds.of({
+    it.effect('a stop takes the guest, and a resumed run finds the sentinel where the first run left it', () =>
+      Effect.gen(function* () {
+        const seen: Request[] = [];
+        const { worlds, checkout, projectId, hostSentinel, sandboxes, backend } = yield* Fixture;
+        const { catalog, door } = yield* makeDoor;
+        const row = yield* boundThread();
+        const thread = view(row);
+        const sentinel = `left here ${Math.random().toString(36).slice(2)}`;
+        const runner = yield* scriptedRunner((turn) => {
+          switch (turn) {
+            case 1:
+              return call(turn, 'write', {
+                path: 'src/sentinel.txt',
+                content: `${sentinel}\n`,
+              });
+            case 2:
+              return answer(turn, 'Written.');
+            case 3:
+              return call(turn, 'read', { path: 'src/sentinel.txt' });
+            default:
+              return answer(turn, 'Read.');
+          }
+        }, seen);
+        const registered = composeAgent(
+          ruleRegistry,
+          tree,
+          yield* servedCapabilities(),
+          runner,
+          {} as ThreadParts['rows'],
+          {} as ThreadParts['mandate'],
+          teamLess,
+          (view, use) =>
+            Effect.map(
+              worlds.of({
+                thread: view,
+                at: {
+                  threadId: view.id,
+                  runId: use.runId ?? view.id,
+                  generation: WorkspaceGeneration.make(use.context?.generation ?? 0),
+                },
+                root: checkout,
+              }),
+              (acquired) =>
+                asThreadContext({
                   thread: view,
-                  at: {
-                    threadId: view.id,
-                    runId: use.runId ?? view.id,
-                    generation: WorkspaceGeneration.make(use.context?.generation ?? 0),
-                  },
-                  root: checkout,
+                  world: acquired.world,
+                  projectId,
+                  projectRoot: checkout,
+                  origin: null,
+                  comments: () => commentPolicy().fallback,
+                  vocabulary: () => tagIndex([], BEHAVIOUR_REGISTRY),
+                  identity: sessionIdentity,
+                  commandTimes: unruledTimes,
+                  grants: testGrantSigner,
+                  project: { id: projectId, name: 'tree' },
+                  caller: { actor: { kind: 'operator' } },
+                  workingRoot: checkout,
+                  graph: Effect.succeed(Context.make(Git, {} as Git['Service'])),
+                  machine: {} as never,
+                  mcpServers: {} as never,
+                  servingGit: {} as never,
+                  rows: {} as never,
+                  graphRefused: {} as never,
+                  execution: door,
+                  offers: nativeOffers(catalog),
                 }),
-                (acquired) =>
-                  asThreadContext({
-                    thread: view,
-                    world: acquired.world,
-                    projectId,
-                    projectRoot: checkout,
-                    origin: null,
-                    comments: () => commentPolicy().fallback,
-                    vocabulary: () => tagIndex([], BEHAVIOUR_REGISTRY),
-                    identity: sessionIdentity,
-                    commandTimes: unruledTimes,
-                    grants: testGrantSigner,
-                    project: { id: projectId, name: 'tree' },
-                    caller: { actor: { kind: 'operator' } },
-                    workingRoot: checkout,
-                    graph: Effect.succeed(Context.make(Git, {} as Git['Service'])),
-                    machine: {} as never,
-                    mcpServers: {} as never,
-                    servingGit: {} as never,
-                    rows: {} as never,
-                    graphRefused: {} as never,
-                    execution: door,
-                    offers: nativeOffers(catalog),
-                  }),
-              ),
-            SECTIONS,
-          );
-          const first = yield* launch(registered, input(thread, 'write', [Message.user('Leave a sentinel.')]));
-          yield* first.output.response;
-          expect(seen.length).toBe(2);
-          const frozen = seen[0]?.instructions;
-          const record = yield* sandboxes.ofThread(row.id);
-          expect(record).not.toBeNull();
-          yield* backend.stop(record!.runtime);
-          yield* sandboxes.ready(row);
-          const second = yield* launch(
-            registered,
-            input(thread, 'read', [Message.user('Leave a sentinel.'), Message.user('Read it back.')], frozen),
-          );
-          yield* second.output.response;
-          expect(seen.length).toBe(4);
-          expect(shown(seen, 3)).toContain(sentinel);
-        }),
-      60_000,
+            ),
+          SECTIONS,
+        );
+        const first = yield* launch(registered, input(thread, 'write', [Message.user('Leave a sentinel.')]));
+        yield* first.output.response;
+        expect(seen.length).toBe(2);
+        const frozen = seen[0]?.instructions;
+        const record = yield* sandboxes.ofThread(row.id);
+        expect(record).not.toBeNull();
+        yield* backend.stop(record!.runtime);
+        yield* sandboxes.ready(row);
+        const second = yield* launch(
+          registered,
+          input(thread, 'read', [Message.user('Leave a sentinel.'), Message.user('Read it back.')], frozen),
+        );
+        yield* second.output.response;
+        expect(seen.length).toBe(4);
+        expect(shown(seen, 3)).toContain(sentinel);
+      }),
     );
   });
 });

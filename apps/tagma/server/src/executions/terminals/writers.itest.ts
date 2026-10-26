@@ -75,9 +75,8 @@ const world = Effect.fnUntraced(function* () {
     stored,
     others: (writers: TerminalWriters, reader: Principal) => Effect.orDie(writers.others(record.execution, reader)),
     until: Effect.fnUntraced(function* (done: (rows: Effect.Success<typeof stored>) => boolean) {
-      const deadline = (yield* Clock.currentTimeMillis) + 5_000;
       let value = yield* stored;
-      while (!done(value) && (yield* Clock.currentTimeMillis) < deadline) {
+      while (!done(value)) {
         yield* Effect.sleep(10);
         value = yield* stored;
       }

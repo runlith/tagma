@@ -139,6 +139,7 @@ it.live('two acts of one lane enter the gate in arrival order, whatever the firs
   Effect.gen(function* () {
     const entered: number[] = [];
     const firstFree = Deferred.makeUnsafe<void>();
+    const preparing = yield* Deferred.make<void>();
     let prepared = 0;
     const admitted = (request: InputRequest): InputAnswer => ({
       _tag: 'InputAdmitted',
@@ -162,7 +163,10 @@ it.live('two acts of one lane enter the gate in arrival order, whatever the firs
       access: {
         prepare: Effect.fnUntraced(function* () {
           prepared += 1;
-          if (prepared === 1) yield* Deferred.await(firstFree);
+          if (prepared === 1) {
+            yield* Deferred.succeed(preparing, undefined);
+            yield* Deferred.await(firstFree);
+          }
           return {
             grant: {
               projectId: 1,
@@ -207,8 +211,7 @@ it.live('two acts of one lane enter the gate in arrival order, whatever the firs
         yield* Effect.yieldNow;
         const first = yield* Effect.forkChild(write(0));
         const second = yield* Effect.forkChild(write(1));
-        for (let round = 0; round < 50 && prepared < 1; round += 1) yield* Effect.yieldNow;
-        for (let round = 0; round < 10; round += 1) yield* Effect.yieldNow;
+        yield* Deferred.await(preparing);
         expect(entered).toEqual([]);
         expect(prepared).toBe(1);
         Deferred.doneUnsafe(firstFree, Exit.void);
