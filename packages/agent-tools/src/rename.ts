@@ -156,13 +156,13 @@ export function createRenameTool(options: ToolFactoryOptions): Tool {
         : runToolEffect(
             'rename',
             files,
-            betweenPermits(
-              cwd,
-              call.prepared?.from.target ?? params.from,
-              call.prepared?.to.target ?? params.to,
-              inTurns(
-                resolved.at(call.caller),
-                [call.prepared?.from.target ?? params.from, call.prepared?.to.target ?? params.to],
+            inTurns(
+              resolved.at(call.caller),
+              [call.prepared?.from.target ?? params.from, call.prepared?.to.target ?? params.to],
+              betweenPermits(
+                cwd,
+                call.prepared?.from.target ?? params.from,
+                call.prepared?.to.target ?? params.to,
                 run(resolved.at(call.caller), params, call.prepared),
               ),
             ),

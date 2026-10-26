@@ -1,7 +1,6 @@
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import { Duration, Effect, FileSystem, type PlatformError } from 'effect';
+import { Duration, Effect, FileSystem, Option, type PlatformError } from 'effect';
 import { declare, type Held } from '@runlith/held/Held';
-import type { HoldCut, HoldStalled } from '@runlith/held/failures';
 import type { PermissionSubject } from '@runlith/agent/permissions';
 import { pathSubject } from '@runlith/agent/permissions/pathSubject';
 import { type Claim, ToolFailed } from '@runlith/agent/tool';
@@ -159,63 +158,57 @@ export const pathPreparation = Effect.fn('pathPreparation')(function* (
   return { subjects: [subject] as readonly PermissionSubject[], prepared: path };
 });
 
-const fileWriters: Held<string> = declare<string>({
+const fileWriters: Held<string, never> = declare<string>({
   name: 'agent-tools-file-writer',
   owner: 'agent-tools',
   rank: 261,
   key: (key) => key,
   concurrency: 1,
   threshold: Duration.seconds(10),
-  ceilings: {
-    hold: Duration.seconds(60),
-    wait: Duration.seconds(60),
-    leaves: 'the file may have changed; read its bytes before retrying',
-  },
+  ceilings: 'none',
   external: 'none',
 });
 
-const directories: Held<string> = declare<string>({
+const directories: Held<string, never> = declare<string>({
   name: 'agent-tools-directory',
   owner: 'agent-tools',
   rank: 260,
   key: (key) => key,
   concurrency: 1,
   threshold: Duration.seconds(10),
-  ceilings: {
-    hold: Duration.seconds(60),
-    wait: Duration.seconds(60),
-    leaves: 'the named entry may have changed; inspect it before retrying',
-  },
+  ceilings: 'none',
   external: 'none',
+});
+
+export const entryKey = Effect.fn('entryKey')(function* (root: string, path: string) {
+  const spelled = workspaceKey(root, path);
+  return join(yield* realParent(spelled), basename(spelled));
 });
 
 export function withFileWriteLock<A, E, R>(
   root: string,
   path: string,
   work: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | HoldStalled | HoldCut, R> {
-  return fileWriters.hold(workspaceKey(root, path), work);
+): Effect.Effect<A, E | PlatformError.PlatformError, R | FileSystem.FileSystem> {
+  return Effect.flatMap(entryKey(root, path), (key) => fileWriters.hold(key, work));
 }
 
 export function withFileWriteLocks<A, E, R>(
   root: string,
   paths: readonly string[],
   work: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | HoldStalled | HoldCut, R> {
-  return fileWriters.holdAll(
-    paths.map((path) => workspaceKey(root, path)),
-    work,
+): Effect.Effect<A, E | PlatformError.PlatformError, R | FileSystem.FileSystem> {
+  return Effect.flatMap(
+    Effect.forEach(paths, (path) => entryKey(root, path)),
+    (keys) => fileWriters.holdAll(keys, work),
   );
 }
 
-export function withDirectoryLock<A, E, R>(parent: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E | HoldStalled | HoldCut, R> {
+export function withDirectoryLock<A, E, R>(parent: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
   return directories.hold(parent, work);
 }
 
-export function withDirectoryLocks<A, E, R>(
-  parents: readonly string[],
-  work: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | HoldStalled | HoldCut, R> {
+export function withDirectoryLocks<A, E, R>(parents: readonly string[], work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
   return directories.holdAll([...parents], work);
 }
 
@@ -223,10 +216,32 @@ export function withNamedEntry<A, E, R>(
   root: string,
   path: string,
   work: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | HoldStalled | HoldCut | PlatformError.PlatformError, R | FileSystem.FileSystem> {
-  return Effect.flatMap(realParent(workspaceKey(root, path)), (parent) =>
-    directories.hold(parent, fileWriters.hold(workspaceKey(root, path), work)),
-  );
+): Effect.Effect<A, E | PlatformError.PlatformError, R | FileSystem.FileSystem> {
+  return Effect.flatMap(entryKey(root, path), (key) => directories.hold(dirname(key), fileWriters.hold(key, work)));
+}
+
+const standsAt = (path: string) =>
+  Effect.flatMap(FileSystem.FileSystem, (fs) => Effect.map(orAbsent(fs.stat(path)), (info) => info !== undefined));
+
+export function withEntryWrite<A, E, R>(
+  root: string,
+  path: string,
+  work: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E | PlatformError.PlatformError, R | FileSystem.FileSystem> {
+  return Effect.flatMap(entryKey(root, path), (key) => {
+    const named = directories.hold(dirname(key), fileWriters.hold(key, work));
+    return Effect.flatMap(standsAt(key), (stands) =>
+      stands
+        ? Effect.flatMap(
+            fileWriters.hold(
+              key,
+              Effect.flatMap(standsAt(key), (still) => (still ? Effect.asSome(work) : Effect.succeedNone)),
+            ),
+            (written) => (Option.isSome(written) ? Effect.succeed(written.value) : named),
+          )
+        : named,
+    );
+  });
 }
 
 export type PathAdmission = { readonly allowMissing?: boolean; readonly entry?: true };

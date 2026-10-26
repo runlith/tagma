@@ -2,7 +2,7 @@ import { lstatSync, mkdirSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { Effect } from 'effect';
 import { type Standing, replaced } from '@runlith/files/replace';
-import { withNamedEntry } from '@runlith/agent-tools/workspace/runtime';
+import { withEntryWrite, withNamedEntry } from '@runlith/agent-tools/workspace/runtime';
 import type { LineReplacement, LineWrites } from '../change-record/contract/service/lineWrites.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 
@@ -51,7 +51,7 @@ const replaceBytes = Effect.fnUntraced(function* (input: LineReplacement) {
 
 export const lineWrites: LineWrites['Service'] = {
   replace: (input, approved) =>
-    withNamedEntry(
+    (input.before === null || input.after === null ? withNamedEntry : withEntryWrite)(
       input.root,
       resolve(input.root, input.path),
       Effect.gen(function* () {
@@ -66,12 +66,8 @@ export const lineWrites: LineWrites['Service'] = {
         );
       }),
     ).pipe(
-      Effect.catchTags({
-        HoldCut: (cause) =>
-          Effect.fail(new GateRefusal('file-write-failed', cause.message, ['read the file and its record before retrying'])),
-        HoldStalled: (cause) => Effect.fail(new GateRefusal('file-write-failed', cause.message, ['retry once the file writer settles'])),
-        PlatformError: (cause) =>
-          Effect.fail(new GateRefusal('file-write-failed', cause.message, ['read the file and its parent before retrying'])),
-      }),
+      Effect.catchTag('PlatformError', (cause) =>
+        Effect.fail(new GateRefusal('file-write-failed', cause.message, ['read the file and its parent before retrying'])),
+      ),
     ),
 };

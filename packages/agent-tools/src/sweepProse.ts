@@ -1,11 +1,10 @@
 import { Effect, FileSystem } from 'effect';
-import type { HoldCut, HoldStalled } from '@runlith/held/failures';
 import { readComments, stripProse } from '@runlith/source-comments';
 import { inTurn, recording } from './changed';
 import { contentAt } from './importFile';
 import { unboundTool, type ToolEdgeFailure } from './ToolEdge';
 import type { ResolvedToolOptions, ToolFactoryOptions } from './workspace';
-import { resolveToolOptions, resolveWorkspacePath, withNamedEntry } from './workspace/runtime';
+import { resolveToolOptions, resolveWorkspacePath, withEntryWrite } from './workspace/runtime';
 
 export type SweptFile =
   | { readonly path: string; readonly swept: 'stripped'; readonly dropped: number }
@@ -14,10 +13,7 @@ export type SweptFile =
   | { readonly path: string; readonly swept: 'exempt' }
   | { readonly path: string; readonly swept: 'unlexable'; readonly reason: string };
 
-export function sweepProse(
-  options: ToolFactoryOptions,
-  files: readonly string[],
-): Effect.Effect<readonly SweptFile[], ToolEdgeFailure | HoldStalled | HoldCut> {
+export function sweepProse(options: ToolFactoryOptions, files: readonly string[]): Effect.Effect<readonly SweptFile[], ToolEdgeFailure> {
   const resolved = resolveToolOptions(options);
   const bound = resolved.world.files;
   if (bound === undefined) return unboundTool('strip comments', 'filesystem');
@@ -29,14 +25,7 @@ export function sweepProse(
 
 const swept = Effect.fn('sweepProse.file')(function* (resolved: ResolvedToolOptions, file: string) {
   const target = yield* resolveWorkspacePath(resolved, file);
-  return yield* withNamedEntry(resolved.cwd, target, standing(resolved, target));
-});
-
-const standing = Effect.fn('sweepProse.standing')(function* (
-  resolved: ResolvedToolOptions,
-  target: string,
-): Effect.fn.Return<SweptFile, ToolEdgeFailure, FileSystem.FileSystem> {
-  return yield* inTurn(resolved, target, sweptFile(resolved, target));
+  return yield* inTurn(resolved, target, withEntryWrite(resolved.cwd, target, sweptFile(resolved, target)));
 });
 
 const sweptFile = Effect.fn('sweepProse.swept')(function* (

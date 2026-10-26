@@ -918,7 +918,7 @@ it.live('a relative path and an absolute one take the same write permit', () =>
           yield* Deferred.await(release);
           yield* host.writeFile(join(dir, 'alpha.ts'), 'const a = 2;\n');
         }),
-      ),
+      ).pipe(Effect.provide(machineWorld.files)),
     );
     yield* Deferred.await(opened);
 

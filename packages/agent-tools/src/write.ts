@@ -5,7 +5,7 @@ import { Tool } from '@runlith/agent/tool';
 import { prepareToolEffect, runToolEffect, unboundTool } from './ToolEdge';
 import { ToolFailed } from '@runlith/agent/tool';
 import type { PreparedPath, ToolFactoryOptions } from './workspace';
-import { admitPreparedPath, namedPath, pathClaims, preparedPath, resolveToolOptions, withNamedEntry } from './workspace/runtime';
+import { admitPreparedPath, namedPath, pathClaims, preparedPath, resolveToolOptions, withEntryWrite } from './workspace/runtime';
 import { binaryFile, fileCode, displayPath, filePatch } from './display';
 import { aliasRefusal, entryIdentity, orAbsent, storedOf } from './namespace';
 import { inTurn, recordedSentence, recording, recordingBytes } from './changed';
@@ -169,11 +169,11 @@ export function createWriteTool(options: ToolFactoryOptions): Tool {
         : runToolEffect(
             'write',
             files,
-            withNamedEntry(
-              cwd,
+            inTurn(
+              resolved.at(call.caller),
               call.prepared?.file.resource?.path ?? call.prepared?.file.target ?? params.path,
-              inTurn(
-                resolved.at(call.caller),
+              withEntryWrite(
+                cwd,
                 call.prepared?.file.resource?.path ?? call.prepared?.file.target ?? params.path,
                 run(resolved.at(call.caller), params, call.prepared),
               ),

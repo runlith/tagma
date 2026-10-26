@@ -1,6 +1,7 @@
 import { it } from '@runlith/effect-test';
 import { expect, test } from 'bun:test';
 import { Cause, Deferred, Effect, Exit, Fiber } from 'effect';
+import { TestClock } from 'effect/testing';
 import { HoldCut, HoldStalled, LockOrderViolated, ResourceInvalid } from './failures.js';
 import { declare, type ResourceDeclaration } from './Held.js';
 import { HeldFor, type StallRecord, StallRecords } from './holding.js';
@@ -303,4 +304,34 @@ it.live('a sized hold without a finite nonnegative size, or past 15 minutes, is 
     }
     expect(section.standing()).toEqual([]);
   }),
+);
+
+it.effect(
+  'an uncut resource keeps its waiter queued and its holder whole however long the hold lasts, and admits the waiter on release',
+  () =>
+    Effect.gen(function* () {
+      const files = declare<string>({
+        name: 'files',
+        owner: 'test',
+        rank: 261,
+        key: (key) => key,
+        concurrency: 1,
+        threshold: 200,
+        ceilings: 'none',
+        external: 'none',
+      });
+      const exit = yield* run(
+        Effect.gen(function* () {
+          const release = yield* Deferred.make<void>();
+          const holding = yield* Effect.forkChild(files.hold('a', Effect.as(Deferred.await(release), 'held')), { startImmediately: true });
+          const waiting = yield* Effect.forkChild(files.hold('a', Effect.succeed('waited')), { startImmediately: true });
+          yield* TestClock.adjust('16 minutes');
+          const queued = files.standing('a');
+          yield* Deferred.succeed(release, undefined);
+          return { queued, ended: [yield* Fiber.join(holding), yield* Fiber.join(waiting)] };
+        }),
+      );
+      expect(exit).toEqual(Exit.succeed({ queued: [{ key: 'a', holders: 1, waiters: 1 }], ended: ['held', 'waited'] }));
+      expect(files.standing()).toEqual([]);
+    }),
 );

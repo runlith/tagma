@@ -1,6 +1,5 @@
 import { dirname } from 'node:path';
 import { Data, Effect, FileSystem, type PlatformError } from 'effect';
-import type { HoldCut, HoldStalled } from '@runlith/held/failures';
 import { inTurn, recording } from './changed';
 import type { Standing } from '@runlith/files/replace';
 import { aliasRefusal, entryIdentity, storedOf } from './namespace';
@@ -42,14 +41,7 @@ export class ImportRefused extends Data.TaggedError('ImportRefused')<{
   }
 }
 
-export type ImportFailure =
-  | ImportRefused
-  | ImportSourceRefused
-  | ToolFailed
-  | WorkspaceRefused
-  | PlatformError.PlatformError
-  | HoldStalled
-  | HoldCut;
+export type ImportFailure = ImportRefused | ImportSourceRefused | ToolFailed | WorkspaceRefused | PlatformError.PlatformError;
 
 export function importFile(
   options: ToolFactoryOptions,
@@ -59,48 +51,49 @@ export function importFile(
   const resolved = resolveToolOptions(options);
   const files = resolved.world.files;
   if (files === undefined) return unboundTool('import', 'filesystem');
-  return Effect.provide(withNamedEntry(resolved.cwd, request.to, run(resolved, imports, request)), files);
+  return Effect.provide(
+    Effect.flatMap(resolveWorkspacePath(resolved, request.to, { allowMissing: true }), (destination) =>
+      inTurn(resolved, destination, withNamedEntry(resolved.cwd, destination, run(resolved, imports, request, destination))),
+    ),
+    files,
+  );
 }
 
 const run = Effect.fn('importFile.run')(function* (
   resolved: ReturnType<typeof resolveToolOptions>,
   imports: WorkspaceImports,
   request: ImportRequest,
+  destination: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const destination = yield* resolveWorkspacePath(resolved, request.to, { allowMissing: true });
   const identity = yield* entryIdentity(destination);
   if (identity.kind === 'alias' || identity.kind === 'taken') {
     return yield* refused('aliased', aliasRefusal(resolved.cwd, destination, storedOf(identity)));
   }
   yield* based(request, yield* textAt(fs, destination), destination);
-  return yield* inTurn(
-    resolved,
-    destination,
-    Effect.scoped(
-      Effect.gen(function* () {
-        const source = yield* imports.open(request.source, request.from);
-        const standing = yield* contentAt(fs, destination);
-        const before = standing?.text;
-        yield* based(request, before, destination);
-        yield* fs.makeDirectory(dirname(destination), { recursive: true });
-        const landing = yield* withoutAddedProse(resolved, destination, before ?? '', source.text);
-        const kept = yield* recording(resolved, 'write', destination, {
-          standing: standingOf(standing),
-          before: before ?? '',
-          after: landing.text,
-        });
-        return {
-          path: destination,
-          created: before === undefined,
-          digest: contentDigest(landing.text),
-          lines: landing.text === '' ? 0 : landing.text.split('\n').length,
-          from: source.from,
-          comments: landing.sentence.trim(),
-          recorded: kept.kept,
-        } satisfies ImportLanded;
-      }),
-    ),
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const source = yield* imports.open(request.source, request.from);
+      const standing = yield* contentAt(fs, destination);
+      const before = standing?.text;
+      yield* based(request, before, destination);
+      yield* fs.makeDirectory(dirname(destination), { recursive: true });
+      const landing = yield* withoutAddedProse(resolved, destination, before ?? '', source.text);
+      const kept = yield* recording(resolved, 'write', destination, {
+        standing: standingOf(standing),
+        before: before ?? '',
+        after: landing.text,
+      });
+      return {
+        path: destination,
+        created: before === undefined,
+        digest: contentDigest(landing.text),
+        lines: landing.text === '' ? 0 : landing.text.split('\n').length,
+        from: source.from,
+        comments: landing.sentence.trim(),
+        recorded: kept.kept,
+      } satisfies ImportLanded;
+    }),
   );
 });
 

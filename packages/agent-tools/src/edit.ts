@@ -4,7 +4,7 @@ import { Tool } from '@runlith/agent/tool';
 import { ToolFailed } from '@runlith/agent/tool';
 import { foreignCause, runToolEffect, unboundTool } from './ToolEdge';
 import type { PreparedPath, ToolFactoryOptions } from './workspace';
-import { admitPreparedPath, namedPath, pathClaims, pathPreparation, resolveToolOptions, withNamedEntry } from './workspace/runtime';
+import { admitPreparedPath, namedPath, pathClaims, pathPreparation, resolveToolOptions, withEntryWrite } from './workspace/runtime';
 import { fileCode, displayPath, filePatch } from './display';
 import { aliasRefusal, entryIdentity, orAbsent, storedOf } from './namespace';
 import { inTurn, recording, recordedSentence } from './changed';
@@ -361,11 +361,11 @@ export function createEditTool(options: ToolFactoryOptions): Tool {
         : runToolEffect(
             'edit',
             world.files,
-            withNamedEntry(
-              cwd,
+            inTurn(
+              resolved.at(call.caller),
               call.prepared?.resource?.path ?? call.prepared?.target ?? params.path,
-              inTurn(
-                resolved.at(call.caller),
+              withEntryWrite(
+                cwd,
                 call.prepared?.resource?.path ?? call.prepared?.target ?? params.path,
                 run(resolved.at(call.caller), params, call.prepared),
               ),

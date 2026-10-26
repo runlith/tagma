@@ -192,7 +192,7 @@ export const removeTarget = Effect.fn('DeleteTool.removeTarget')(function* (
     const recorded = target.entry.kind === 'directory' ? false : yield* recordsAt(resolved, path);
     return yield* removal(resolved, path, target.entry, recorded, single, stage, committed);
   });
-  return yield* withNamedEntry(resolved.cwd, path, inTurn(resolved, path, work, 'entry'));
+  return yield* inTurn(resolved, path, withNamedEntry(resolved.cwd, path, work), 'entry');
 });
 
 export const admitRoot = Effect.fn('DeleteTool.admitRoot')(function* (
@@ -233,5 +233,6 @@ export const removeWalked = Effect.fn('DeleteTool.removeWalked')(function* (
     });
   const recorded = entry.kind === 'directory' ? false : yield* recordsAt(resolved, path);
   const act = Effect.andThen(parent, removal(resolved, path, entry, recorded, false, stage, committed));
-  return yield* withDirectoryLock(directory, withFileWriteLock(resolved.cwd, path, recorded ? inTurn(resolved, path, act, 'entry') : act));
+  const locked = withDirectoryLock(directory, withFileWriteLock(resolved.cwd, path, act));
+  return yield* recorded ? inTurn(resolved, path, locked, 'entry') : locked;
 });

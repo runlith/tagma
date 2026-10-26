@@ -573,20 +573,12 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
         return fileDefinition({ ...file, path, directory, origin: input.scope });
       }),
     ).pipe(
-      Effect.catchTags({
-        HoldStalled: (failure) =>
-          Effect.fail(
-            new GateRefusal('agent-file-io', `${path}: the file writer remained busy for ${failure.waitedMs} ms`, [
-              'retry once the file writer settles',
-            ]),
-          ),
-        HoldCut: (failure) =>
-          Effect.fail(
-            new GateRefusal('agent-file-io', `${path}: the file write was cut after ${failure.heldMs} ms; ${failure.leaves}`, [
-              'read the definition and its change record before retrying',
-            ]),
-          ),
-      }),
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.catchTag('PlatformError', (cause) =>
+        Effect.fail(
+          new GateRefusal('agent-file-io', `${directory}: ${cause.message}`, ['Read the agent library again and save once more.']),
+        ),
+      ),
     );
     if (changes?.turn === undefined) return yield* saving;
     return yield* changes
