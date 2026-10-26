@@ -42,7 +42,7 @@ const documentOf = (result: McpSdkCallResult) =>
   );
 const failed = (result: McpSdkCallResult): boolean => 'content' in result && result.isError === true;
 
-layer(Layer.effect(Bridges, setup), { excludeTestServices: true, timeout: 60_000 })('MCP CLI', (it) => {
+layer(Layer.effect(Bridges, setup), { excludeTestServices: true })('MCP CLI', (it) => {
   it.effect('a deferring CLI is offered the callable operation catalog', () =>
     Effect.gen(function* () {
       const { direct, call } = yield* Bridges;
@@ -188,52 +188,49 @@ layer(Layer.effect(Bridges, setup), { excludeTestServices: true, timeout: 60_000
     }),
   );
 
-  it.effect(
-    'the bridge ends when its client closes stdio, leaving no process behind',
-    () =>
-      Effect.gen(function* () {
-        const { project, environment } = yield* Bridges;
-        const command = ['bun', join(import.meta.dir, '../../entries/cli.ts'), 'mcp-serve', '--harness', 'claude-code'];
-        const child = yield* Effect.acquireRelease(
-          Effect.try({
-            try: () =>
-              Bun.spawn(command, {
-                cwd: project.root,
-                env: environment({ [MCP_KEY_VARIABLE]: 'itest-ending-key' }),
-                stdin: 'pipe',
-                stdout: 'pipe',
-                stderr: 'pipe',
-              }),
-            catch: (cause) => new SpawnRefused({ command, cause }),
-          }),
-          (child) =>
-            Effect.promise(async () => {
-              if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-              await child.exited;
+  it.effect('the bridge ends when its client closes stdio, leaving no process behind', () =>
+    Effect.gen(function* () {
+      const { project, environment } = yield* Bridges;
+      const command = ['bun', join(import.meta.dir, '../../entries/cli.ts'), 'mcp-serve', '--harness', 'claude-code'];
+      const child = yield* Effect.acquireRelease(
+        Effect.try({
+          try: () =>
+            Bun.spawn(command, {
+              cwd: project.root,
+              env: environment({ [MCP_KEY_VARIABLE]: 'itest-ending-key' }),
+              stdin: 'pipe',
+              stdout: 'pipe',
+              stderr: 'pipe',
             }),
-        );
-        const initialize = {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'itest', version: '0' } },
-        };
-        child.stdin.write(`${JSON.stringify(initialize)}\n`);
-        yield* Effect.promise(async () => {
-          await child.stdin.flush();
-        });
-        const reader = yield* Effect.acquireRelease(
-          Effect.sync(() => child.stdout.getReader()),
-          (reader) => Effect.sync(() => reader.releaseLock()),
-        );
-        const answered = yield* Effect.promise(() => reader.read());
-        expect(answered.done).toBe(false);
-        yield* Effect.promise(async () => {
-          await child.stdin.end();
-        });
-        expect(yield* Effect.promise(() => child.exited)).toBe(0);
-        expect(child.signalCode).toBeNull();
-      }),
-    20_000,
+          catch: (cause) => new SpawnRefused({ command, cause }),
+        }),
+        (child) =>
+          Effect.promise(async () => {
+            if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+            await child.exited;
+          }),
+      );
+      const initialize = {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'itest', version: '0' } },
+      };
+      child.stdin.write(`${JSON.stringify(initialize)}\n`);
+      yield* Effect.promise(async () => {
+        await child.stdin.flush();
+      });
+      const reader = yield* Effect.acquireRelease(
+        Effect.sync(() => child.stdout.getReader()),
+        (reader) => Effect.sync(() => reader.releaseLock()),
+      );
+      const answered = yield* Effect.promise(() => reader.read());
+      expect(answered.done).toBe(false);
+      yield* Effect.promise(async () => {
+        await child.stdin.end();
+      });
+      expect(yield* Effect.promise(() => child.exited)).toBe(0);
+      expect(child.signalCode).toBeNull();
+    }),
   );
 });

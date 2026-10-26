@@ -41,8 +41,6 @@ class Terminal extends Context.Service<Terminal, Effect.Success<typeof setup>>()
 
 layer(Layer.effect(Terminal, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 60_000,
 })('cli worktree', (it) => {
   it.effect('an operator prepares, creates and reads one worktree by its operation id', () =>
     Effect.gen(function* () {

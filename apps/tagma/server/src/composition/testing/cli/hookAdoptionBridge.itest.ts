@@ -1,14 +1,14 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { DateTime, Effect } from 'effect';
-import { AdoptionRig, HOOK_SPAWN_BUDGET_MS, SESSION, adoptionLayer } from './hookAdoptionRig.js';
+import { AdoptionRig, SESSION, adoptionLayer } from './hookAdoptionRig.js';
 import { mintShellKey, shellDigest } from '../../../platform/credentials/grants.js';
 import { TERMINAL_HEADER, TERMINAL_VARIABLE } from '../../../platform/contract/service/credentials.js';
 import { MCP_SESSION_HEADER } from '../../../platform/contract/wire/session.js';
 import { terminal } from '../../../executions/testing/doubles.js';
 import { sessionFor } from '../../../external-harnesses/testing/sessions.js';
 
-layer(adoptionLayer, { excludeTestServices: true, testTimeout: 30_000, timeout: HOOK_SPAWN_BUDGET_MS })('hook adoption bridge', (it) => {
+layer(adoptionLayer, { excludeTestServices: true })('hook adoption bridge', (it) => {
   it.effect(
     'a bridge in a Tagma shell signs as the thread whose adopted session is its own CLI session there, and as a foreign session otherwise',
     () =>

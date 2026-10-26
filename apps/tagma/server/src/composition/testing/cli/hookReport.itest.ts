@@ -23,8 +23,6 @@ class Reports extends Context.Service<Reports, Effect.Success<typeof setup>>()('
 
 layer(Layer.effect(Reports, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: 30_000,
 })('hook reports', (it) => {
   it.effect('the granted CLI binds its server facet and receives a private checkout law without truncation', () =>
     Effect.gen(function* () {

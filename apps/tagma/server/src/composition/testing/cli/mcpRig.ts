@@ -37,7 +37,7 @@ export const makeMcpWorld = Effect.fnUntraced(function* () {
       ),
       (connection) => mcpClose(connection, call.timeout),
     );
-    yield* mcpConnect(connection, { timeout: 30_000 }).pipe(Effect.tapError(() => Effect.logError(stderr.join(''))));
+    yield* mcpConnect(connection, call).pipe(Effect.tapError(() => Effect.logError(stderr.join(''))));
     return connection;
   });
   return { world, project, call, environment, bridge };

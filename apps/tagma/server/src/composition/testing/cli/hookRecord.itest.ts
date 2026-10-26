@@ -21,8 +21,6 @@ import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
 import { makeTerminalWorld } from '../fixture.js';
 import { suiteGit } from '../suiteGit.js';
 
-const HOOK_SPAWN_BUDGET_MS = 30_000;
-
 const setup = Effect.gen(function* () {
   const world = yield* makeTerminalWorld();
   const shared = yield* world.checkout();
@@ -142,8 +140,6 @@ const initialFile = Effect.fnUntraced(function* (file: string) {
 
 layer(Layer.effect(Records, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: HOOK_SPAWN_BUDGET_MS,
 })('hook records', (it) => {
   it.effect('a Devin edit under a grant leaves one typed row with both hunk sides on the path', () =>
     Effect.gen(function* () {
@@ -265,7 +261,6 @@ layer(Layer.effect(Records, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
         const pending = (yield* files.exists(pendingDir)) ? yield* files.readDirectory(pendingDir) : [];
         expect(pending.filter((name) => name.endsWith('.json'))).toEqual([]);
       }),
-    HOOK_SPAWN_BUDGET_MS,
   );
 
   it.effect('two concurrent post-tool-use events of one session record both files once', () =>

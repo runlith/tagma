@@ -11,7 +11,6 @@ import { HARNESSES } from '../../../external-harnesses/contract/service/table.js
 import type { ExternalSession } from '../../../threads/contract/wire/harness/externalSession.js';
 import { makeTerminalWorld } from '../fixture.js';
 
-export const HOOK_SPAWN_BUDGET_MS = 30_000;
 export const SESSION = '01a0d600-0000-7000-8000-00000000ad01';
 
 type Heard = {

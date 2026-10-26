@@ -44,8 +44,6 @@ const posted = Effect.fnUntraced(function* (key: string, id: string, event: Reco
 
 layer(Layer.effect(First, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: 30_000,
 })('the first hook on a cold server', (it) => {
   it.effect(
     'the first Claude Grep a server ever hears for a project brings the rule of what it found and a pointer to its note, and the next Read brings the note',

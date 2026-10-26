@@ -114,27 +114,22 @@ const seeded = setup.pipe(
 
 layer(Layer.effect(Signature, seeded).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 30_000,
 })('native signature', (it) => {
-  it.effect(
-    'a Tagma-owned command keeps its proven identity inside a foreign harness',
-    () =>
-      Effect.gen(function* () {
-        const { project, url } = yield* Signature;
-        const signed = yield* submit(project, { ...unsigned(url), ...grantEnvironment(signer, sessionIdentity) });
-        expect(signed.err).not.toContain('refused[no-record]');
-        expect(signed.code).toBe(0);
+  it.effect('a Tagma-owned command keeps its proven identity inside a foreign harness', () =>
+    Effect.gen(function* () {
+      const { project, url } = yield* Signature;
+      const signed = yield* submit(project, { ...unsigned(url), ...grantEnvironment(signer, sessionIdentity) });
+      expect(signed.err).not.toContain('refused[no-record]');
+      expect(signed.code).toBe(0);
 
-        const foreign = yield* submitSpawned(project, {
-          ...unsigned(url),
-          ...grantEnvironment(signer, sessionIdentity),
-          CLAUDE_CODE_SESSION_ID: 'cc-transcript',
-        });
-        expect(foreign.code).toBe(0);
-        expect(foreign.err).not.toContain('refused[no-record]');
-      }),
-    30_000,
+      const foreign = yield* submitSpawned(project, {
+        ...unsigned(url),
+        ...grantEnvironment(signer, sessionIdentity),
+        CLAUDE_CODE_SESSION_ID: 'cc-transcript',
+      });
+      expect(foreign.code).toBe(0);
+      expect(foreign.err).not.toContain('refused[no-record]');
+    }),
   );
 
   it.effect('the door answers the session a grant was minted for, and refuses a caller with none', () =>

@@ -28,7 +28,7 @@ const append = (threadId: string, toolCallId: string, target: string) => {
   return { threadId, agentId: 'tagma', toolCallId, name: 'bash', input, arguments: JSON.stringify(input) };
 };
 
-layer(fixture, { excludeTestServices: true, testTimeout: 60_000, timeout: 60_000 })('hosted native calls', (it) => {
+layer(fixture, { excludeTestServices: true })('hosted native calls', (it) => {
   it.effect('hosted calls keep their recorded result and foreign mutations wait for delivered law', () =>
     Effect.gen(function* () {
       const { world, thread } = yield* Hosted;

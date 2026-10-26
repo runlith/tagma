@@ -4,7 +4,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { sql } from 'drizzle-orm';
-import { AdoptionRig, HOOK_SPAWN_BUDGET_MS, SESSION, adoptionLayer } from './hookAdoptionRig.js';
+import { AdoptionRig, SESSION, adoptionLayer } from './hookAdoptionRig.js';
 import { mintShellKey, shellDigest } from '../../../platform/credentials/grants.js';
 import { grantFor } from '../../../platform/testing/grants.js';
 import { TERMINAL_VARIABLE } from '../../../platform/contract/service/credentials.js';
@@ -20,8 +20,6 @@ import { fixtureMigrations } from '../migrations.js';
 
 layer(adoptionLayer.pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: HOOK_SPAWN_BUDGET_MS,
 })('hook adoption', (it) => {
   it.effect(
     'an ungranted hook in a Tagma shell asks to be adopted naming its CLI by the flag, then reports as the thread it was answered',

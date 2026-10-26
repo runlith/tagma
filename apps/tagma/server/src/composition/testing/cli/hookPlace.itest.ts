@@ -125,8 +125,6 @@ const post = Effect.fnUntraced(function* (url: string, headers: Record<string, s
 
 layer(Layer.effect(HookPlace, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: 30_000,
 })('hook place', (it) => {
   it.effect('a terminal hook records the foreign checkout under the thread’s home and keeps its full law beside the home snapshot', () =>
     Effect.gen(function* () {
