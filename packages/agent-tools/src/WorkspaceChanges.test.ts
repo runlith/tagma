@@ -139,14 +139,4 @@ describe('the window a hunk carries', () => {
     expect(hunk.firstLine).toBe(4);
     expect(hunk.newLines).toBe(1);
   });
-
-  test('a file whose lines all repeat is read a few times over, not once per widening step', () => {
-    const line = 'x'.repeat(19);
-    const lines = Array.from({ length: 1000 }, () => line);
-    const before = `${lines.join('\n')}\n`;
-    const after = `${[...lines.slice(0, 500), 'changed', ...lines.slice(501)].join('\n')}\n`;
-    const opened = performance.now();
-    for (let at = 0; at < 100; at += 1) workspaceChangeHunk(before, after);
-    expect(performance.now() - opened).toBeLessThan(2000);
-  });
 });

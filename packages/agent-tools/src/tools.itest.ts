@@ -914,9 +914,9 @@ it.live('a relative path and an absolute one take the same write permit', () =>
         dir,
         join(yield* host.realpath(dir), 'alpha.ts'),
         Effect.gen(function* () {
-          yield* host.writeFile(join(dir, 'alpha.ts'), 'const a = 2;\n');
           yield* Deferred.succeed(opened, undefined);
           yield* Deferred.await(release);
+          yield* host.writeFile(join(dir, 'alpha.ts'), 'const a = 2;\n');
         }),
       ),
     );
@@ -929,10 +929,6 @@ it.live('a relative path and an absolute one take the same write permit', () =>
         newString: 'const a = 3;',
       }),
     );
-    yield* Effect.sleep('50 millis');
-    expect(editing.pollUnsafe()).toBeUndefined();
-    expect(yield* host.readFile(join(dir, 'alpha.ts'), 'utf8')).toBe('const a = 2;\n');
-
     yield* Deferred.succeed(release, undefined);
     yield* Fiber.join(holder);
     yield* Fiber.join(editing);

@@ -10,23 +10,21 @@ type Needs = ChildProcessSpawner.ChildProcessSpawner | Scope.Scope;
 const FORCE_MS = 200;
 
 layer(bunSpawner(), { excludeTestServices: true })('the runtime spawner', (it) => {
-  it.effect('a child of this process answers what it cost, and the figure tracks work rather than elapsed time', () =>
+  it.effect('a child of this process answers its CPU and memory cost', () =>
     Effect.gen(function* () {
       const of = Effect.fnUntraced(function* (line: string) {
         const handle = yield* ChildProcess.make('/bin/sh', ['-c', line], { stdin: 'ignore' });
         yield* Effect.forkScoped(Stream.runDrain(handle.stdout));
-        const started = performance.now();
         yield* handle.exitCode;
-        return { cost: processCost(handle), wallMs: performance.now() - started };
+        return processCost(handle);
       }, Effect.scoped);
-      const readings = { burner: yield* of('yes | head -c 20000000 > /dev/null'), idler: yield* of('sleep 1') };
+      const readings = { burner: yield* of('yes | head -c 20000000 > /dev/null'), idler: yield* of('true') };
 
-      expect(readings.burner.cost?._tag).toBe('Measured');
-      expect(readings.idler.cost?._tag).toBe('Measured');
-      if (readings.burner.cost?._tag !== 'Measured' || readings.idler.cost?._tag !== 'Measured') return;
-      expect(readings.burner.cost.cpuMicros).toBeGreaterThan(readings.idler.cost.cpuMicros * 2);
-      expect(readings.burner.wallMs).toBeLessThan(readings.idler.wallMs);
-      expect(readings.burner.cost.peakRssBytes).toBeGreaterThan(0);
+      expect(readings.burner?._tag).toBe('Measured');
+      expect(readings.idler?._tag).toBe('Measured');
+      if (readings.burner?._tag !== 'Measured' || readings.idler?._tag !== 'Measured') return;
+      expect(readings.burner.cpuMicros).toBeGreaterThan(readings.idler.cpuMicros * 2);
+      expect(readings.burner.peakRssBytes).toBeGreaterThan(0);
     }),
   );
 

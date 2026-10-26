@@ -61,10 +61,6 @@ const checkout = () => {
 
 const names = (reading: Reading): readonly string[] => [...(readable(reading)?.keys() ?? [])];
 
-const settle = Effect.gen(function* () {
-  for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
-});
-
 const run = <A>(spawner: ChildProcessSpawner.ChildProcessSpawner['Service'], body: Effect.Effect<A, never, FileSystem.FileSystem | Git>) =>
   body.pipe(
     Effect.provide(gitLayer),
@@ -91,9 +87,8 @@ describe('measurement flights of one checkout', () => {
           Effect.gen(function* () {
             const first = yield* Effect.forkChild(measure);
             yield* Deferred.await(m1.started);
-            const second = yield* Effect.forkChild(measure);
-            const third = yield* Effect.forkChild(measure);
-            yield* settle;
+            const second = yield* Effect.forkChild(measure, { startImmediately: true });
+            const third = yield* Effect.forkChild(measure, { startImmediately: true });
             const queuedStartedEarly = Deferred.isDoneUnsafe(m2.started);
             yield* Deferred.succeed(m1.release, undefined);
             const firstReading = yield* Fiber.join(first);
@@ -128,9 +123,8 @@ describe('measurement flights of one checkout', () => {
         Effect.gen(function* () {
           const starter = yield* Effect.forkChild(measure);
           yield* Deferred.await(m1.started);
-          const leaving = yield* Effect.forkChild(measure);
-          const staying = yield* Effect.forkChild(measure);
-          yield* settle;
+          const leaving = yield* Effect.forkChild(measure, { startImmediately: true });
+          const staying = yield* Effect.forkChild(measure, { startImmediately: true });
           yield* Fiber.interrupt(leaving);
           yield* Deferred.succeed(m1.release, undefined);
           yield* Deferred.await(m2.started);
@@ -143,7 +137,7 @@ describe('measurement flights of one checkout', () => {
     }),
   );
 
-  it.live('stops a measurement nobody waits for any more, so a hung reading does not hold the checkout for later asks', () =>
+  it.effect('stops a measurement nobody waits for any more, so a hung reading does not hold the checkout for later asks', () =>
     Effect.gen(function* () {
       const { measurements, spawner } = checkout();
       const [m1, m2] = measurements as [Measurement, Measurement];
@@ -156,12 +150,12 @@ describe('measurement flights of one checkout', () => {
           yield* Deferred.await(m1.started);
           yield* Fiber.interrupt(abandoned);
           const later = yield* Effect.forkChild(measure);
-          const started = yield* Deferred.await(m2.started).pipe(Effect.timeoutOption('500 millis'));
+          yield* Deferred.await(m2.started);
           yield* Deferred.succeed(m2.release, undefined);
-          return started._tag === 'None' ? null : yield* Fiber.join(later);
+          return yield* Fiber.join(later);
         }),
       );
-      expect(reading === null ? null : names(reading)).toEqual(['m2']);
+      expect(names(reading)).toEqual(['m2']);
     }),
   );
 });

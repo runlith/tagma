@@ -244,57 +244,51 @@ it.live("a command carries what its own call adds, and a later call's addition r
   }),
 );
 
-it.live(
-  'bash retains only the bounded tail of oversized stdout and stderr',
-  () =>
-    Effect.gen(function* () {
-      const root = yield* createTempDir();
-      const tools = createTools(options({ cwd: root }));
-      const count = TOOL_OUTPUT_MAX_LINES + 500;
-      const body = 'x'.repeat(80);
-      const ran = yield* answer(tools.bash, {
-        command: `i=0; while [ "$i" -lt ${count} ]; do printf 'line-%04d-${body}\\n' "$i"; i=$((i+1)); done; printf 'stderr-verdict\\n' >&2`,
-        description: 'Print oversized output',
-      });
-      const value = String(ran.value);
+it.live('bash retains only the bounded tail of oversized stdout and stderr', () =>
+  Effect.gen(function* () {
+    const root = yield* createTempDir();
+    const tools = createTools(options({ cwd: root }));
+    const count = TOOL_OUTPUT_MAX_LINES + 500;
+    const body = 'x'.repeat(80);
+    const ran = yield* answer(tools.bash, {
+      command: `i=0; while [ "$i" -lt ${count} ]; do printf 'line-%04d-${body}\\n' "$i"; i=$((i+1)); done; printf 'stderr-verdict\\n' >&2`,
+      description: 'Print oversized output',
+    });
+    const value = String(ran.value);
 
-      expect(Buffer.byteLength(value, 'utf8')).toBeLessThanOrEqual(TOOL_OUTPUT_MAX_BYTES);
-      expect(value.split('\n').length).toBeLessThanOrEqual(TOOL_OUTPUT_MAX_LINES);
-      expect(value.endsWith('stderr-verdict\n')).toBe(true);
-      if (ran.display?.form !== 'command') return yield* Effect.die(new Error('bash must answer a command'));
-      expect(Buffer.byteLength(ran.display.output ?? '', 'utf8')).toBeLessThanOrEqual(TOOL_OUTPUT_MAX_BYTES);
-      expect((ran.display.output ?? '').split('\n').length).toBeLessThanOrEqual(TOOL_OUTPUT_MAX_LINES);
-    }),
-  10_000,
+    expect(Buffer.byteLength(value, 'utf8')).toBeLessThanOrEqual(TOOL_OUTPUT_MAX_BYTES);
+    expect(value.split('\n').length).toBeLessThanOrEqual(TOOL_OUTPUT_MAX_LINES);
+    expect(value.endsWith('stderr-verdict\n')).toBe(true);
+    if (ran.display?.form !== 'command') return yield* Effect.die(new Error('bash must answer a command'));
+    expect(Buffer.byteLength(ran.display.output ?? '', 'utf8')).toBeLessThanOrEqual(TOOL_OUTPUT_MAX_BYTES);
+    expect((ran.display.output ?? '').split('\n').length).toBeLessThanOrEqual(TOOL_OUTPUT_MAX_LINES);
+  }),
 );
 
-it.live(
-  'interrupting a call takes the whole tree the command started down the ladder, a background job that ignores Ctrl-C included',
-  () =>
-    Effect.gen(function* () {
-      const root = yield* createTempDir();
-      const grandchild = yield* connectedCommand(true);
+it.live('interrupting a call takes the whole tree the command started down the ladder, a background job that ignores Ctrl-C included', () =>
+  Effect.gen(function* () {
+    const root = yield* createTempDir();
+    const grandchild = yield* connectedCommand(true);
 
-      const tools = createTools(options({ cwd: root }));
-      const execute = toolExecute(tools.bash);
-      if (!execute) return yield* Effect.die(new Error('This world binds a filesystem and a spawner, so it has a shell.'));
-      const running = yield* Effect.forkChild(
-        execute(
-          {
-            command: `${grandchild.command} & wait`,
-            description: 'Background a grandchild then wait',
-          },
-          { toolCallId: 'call-tree', caller: unthreadedCaller, messages: [] },
-        ) as Effect.Effect<unknown, ToolFailed>,
-      );
-      yield* grandchild.connected;
-      yield* Fiber.interrupt(running);
-      const ended = yield* Fiber.await(running);
-      yield* grandchild.disconnected;
+    const tools = createTools(options({ cwd: root }));
+    const execute = toolExecute(tools.bash);
+    if (!execute) return yield* Effect.die(new Error('This world binds a filesystem and a spawner, so it has a shell.'));
+    const running = yield* Effect.forkChild(
+      execute(
+        {
+          command: `${grandchild.command} & wait`,
+          description: 'Background a grandchild then wait',
+        },
+        { toolCallId: 'call-tree', caller: unthreadedCaller, messages: [] },
+      ) as Effect.Effect<unknown, ToolFailed>,
+    );
+    yield* grandchild.connected;
+    yield* Fiber.interrupt(running);
+    const ended = yield* Fiber.await(running);
+    yield* grandchild.disconnected;
 
-      expect(Exit.isFailure(ended) && Cause.hasInterruptsOnly(ended.cause)).toBe(true);
-    }),
-  20_000,
+    expect(Exit.isFailure(ended) && Cause.hasInterruptsOnly(ended.cause)).toBe(true);
+  }),
 );
 
 it.live('a command that outlives its life is killed and told apart from a user abort', () =>
