@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect, Fiber, Option } from 'effect';
+import { Effect, Fiber } from 'effect';
 import { TestClock } from 'effect/testing';
 import { HttpClientError, HttpClientRequest } from 'effect/http';
 import type { Startup, StartupState } from '../contract/wire/restart.js';
@@ -62,7 +62,7 @@ it.effect('a live start remains pending through a minute of silence and ends whe
       ),
     );
     yield* TestClock.adjust('1 minute');
-    expect(Option.isNone(yield* Fiber.await(waiting).pipe(Effect.timeoutOption(0)))).toBe(true);
+    expect(waiting.pollUnsafe()).toBeUndefined();
     answer = 'up';
     yield* TestClock.adjust('100 millis');
     expect(yield* Fiber.join(waiting)).toEqual({ _tag: 'Answered', answered: 'up', raised: true });
@@ -102,7 +102,7 @@ it.effect('a held directory is adopted after the spawned process exits even when
       ),
     );
     yield* TestClock.adjust('1 minute');
-    expect(Option.isNone(yield* Fiber.await(waiting).pipe(Effect.timeoutOption(0)))).toBe(true);
+    expect(waiting.pollUnsafe()).toBeUndefined();
     answer = 'winner';
     yield* TestClock.adjust('100 millis');
     expect(yield* Fiber.join(waiting)).toEqual({ _tag: 'Answered', answered: 'winner', raised: false });
@@ -122,7 +122,7 @@ it.effect('a live restart participant bridges the gap between a spawned predeces
       ),
     );
     yield* TestClock.adjust('1 minute');
-    expect(Option.isNone(yield* Fiber.await(waiting).pipe(Effect.timeoutOption(0)))).toBe(true);
+    expect(waiting.pollUnsafe()).toBeUndefined();
     answer = 'successor';
     yield* TestClock.adjust('100 millis');
     expect(yield* Fiber.join(waiting)).toEqual({ _tag: 'Answered', answered: 'successor', raised: false });
@@ -142,7 +142,7 @@ it.effect('a restart can succeed without an observed interval of silence', () =>
       ),
     );
     yield* TestClock.adjust('1 minute');
-    expect(Option.isNone(yield* Fiber.await(waiting).pipe(Effect.timeoutOption(0)))).toBe(true);
+    expect(waiting.pollUnsafe()).toBeUndefined();
     saved = serving;
     yield* TestClock.adjust('100 millis');
     expect(yield* Fiber.join(waiting)).toEqual({ _tag: 'Answered', answered: 'answer' });
@@ -162,7 +162,7 @@ it.effect('a silent restart remains pending while a process holds the directory 
       ),
     );
     yield* TestClock.adjust('1 minute');
-    expect(Option.isNone(yield* Fiber.await(waiting).pipe(Effect.timeoutOption(0)))).toBe(true);
+    expect(waiting.pollUnsafe()).toBeUndefined();
     answer = 'new';
     yield* TestClock.adjust('100 millis');
     expect(yield* Fiber.join(waiting)).toEqual({ _tag: 'Answered', answered: 'new' });
@@ -182,7 +182,7 @@ it.effect('a live restart participant keeps the wait pending even while the dire
       ),
     );
     yield* TestClock.adjust('1 minute');
-    expect(Option.isNone(yield* Fiber.await(waiting).pipe(Effect.timeoutOption(0)))).toBe(true);
+    expect(waiting.pollUnsafe()).toBeUndefined();
     answer = 'new';
     yield* TestClock.adjust('100 millis');
     expect(yield* Fiber.join(waiting)).toEqual({ _tag: 'Answered', answered: 'new' });
@@ -235,7 +235,7 @@ it.effect('an unnamed flock holder is waited on until the desired successor answ
       ),
     );
     yield* TestClock.adjust('1 minute');
-    expect(Option.isNone(yield* Fiber.await(waiting).pipe(Effect.timeoutOption(0)))).toBe(true);
+    expect(waiting.pollUnsafe()).toBeUndefined();
     answer = 'new';
     yield* TestClock.adjust('100 millis');
     expect(yield* Fiber.join(waiting)).toEqual({ _tag: 'Answered', answered: 'new' });
@@ -274,7 +274,7 @@ it.effect('unknown remote liveness is waited on until the answering process chan
       ),
     );
     yield* TestClock.adjust('1 minute');
-    expect(Option.isNone(yield* Fiber.await(waiting).pipe(Effect.timeoutOption(0)))).toBe(true);
+    expect(waiting.pollUnsafe()).toBeUndefined();
     answer = 'new';
     yield* TestClock.adjust('100 millis');
     expect(yield* Fiber.join(waiting)).toEqual({ _tag: 'Answered', answered: 'new' });
