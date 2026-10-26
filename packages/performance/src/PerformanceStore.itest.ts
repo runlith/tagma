@@ -294,85 +294,79 @@ it.live('stable paging survives a restart, and a report names the inherited base
   }),
 );
 
-it.live(
-  'eviction takes a whole segment, so the trace inside it goes with every child',
-  () =>
-    Effect.gen(function* () {
-      const directory = yield* scratchDirectory('performance-evict-trace-');
-      const path = join(directory, 'performance.sqlite');
-      const maxStoredBytes = 700_000;
-      yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        const reports = yield* PerformanceReports;
-        store.openGroup('gone');
-        store.submit(largeSpanSubmission('gone-parent', 1, 'gone'));
-        yield* store.flush;
-        const children = yield* fillSegment(maxStoredBytes, path, {
-          tag: 'gone-child',
-          traceId: 'gone',
-          from: 2,
-          parentId: 'gone-parent',
-        });
-        store.submit(vitalSubmission('kept-vital', 500, 6));
-        yield* store.flush;
-        store.closeGroup('gone');
+it.live('eviction takes a whole segment, so the trace inside it goes with every child', () =>
+  Effect.gen(function* () {
+    const directory = yield* scratchDirectory('performance-evict-trace-');
+    const path = join(directory, 'performance.sqlite');
+    const maxStoredBytes = 700_000;
+    yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      const reports = yield* PerformanceReports;
+      store.openGroup('gone');
+      store.submit(largeSpanSubmission('gone-parent', 1, 'gone'));
+      yield* store.flush;
+      const children = yield* fillSegment(maxStoredBytes, path, {
+        tag: 'gone-child',
+        traceId: 'gone',
+        from: 2,
+        parentId: 'gone-parent',
+      });
+      store.submit(vitalSubmission('kept-vital', 500, 6));
+      yield* store.flush;
+      store.closeGroup('gone');
 
-        yield* traceGone('gone');
-        const trace = yield* reports.read({ type: 'trace', traceId: 'gone', limit: 100 });
-        const vitals = yield* reports.read({ type: 'vitals', limit: 10 });
-        const entries = yield* evictions();
-        if (trace.type !== 'trace' || vitals.type !== 'vitals') return yield* Effect.die('unexpected report');
-        expect(trace.totalSpans).toBe(0);
-        expect(trace.segments).toEqual([]);
-        expect(vitals.vitals.map((record) => record.id)).toEqual(['kept-vital']);
-        expect(kindsIn(entries)).toEqual({ span: children + 1 });
-        expect(Math.min(...entries.map((entry) => entry.payload.range?.from ?? 0))).toBe(1);
-        expect(Math.max(...entries.map((entry) => entry.payload.range?.to ?? 0))).toBe(children + 1);
-      }).pipe(Effect.provide(performanceLayer(maintaining(path, maxStoredBytes))));
-    }),
-  30_000,
+      yield* traceGone('gone');
+      const trace = yield* reports.read({ type: 'trace', traceId: 'gone', limit: 100 });
+      const vitals = yield* reports.read({ type: 'vitals', limit: 10 });
+      const entries = yield* evictions();
+      if (trace.type !== 'trace' || vitals.type !== 'vitals') return yield* Effect.die('unexpected report');
+      expect(trace.totalSpans).toBe(0);
+      expect(trace.segments).toEqual([]);
+      expect(vitals.vitals.map((record) => record.id)).toEqual(['kept-vital']);
+      expect(kindsIn(entries)).toEqual({ span: children + 1 });
+      expect(Math.min(...entries.map((entry) => entry.payload.range?.from ?? 0))).toBe(1);
+      expect(Math.max(...entries.map((entry) => entry.payload.range?.to ?? 0))).toBe(children + 1);
+    }).pipe(Effect.provide(performanceLayer(maintaining(path, maxStoredBytes))));
+  }),
 );
 
-it.live(
-  'an open retention group holds its segment against the tick until its producer closes',
-  () =>
-    Effect.gen(function* () {
-      const directory = yield* scratchDirectory('performance-active-group-');
-      const path = join(directory, 'performance.sqlite');
-      const maxStoredBytes = 700_000;
-      yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        const reports = yield* PerformanceReports;
-        store.openGroup('older');
-        const older = yield* fillSegment(maxStoredBytes, path, { tag: 'older', traceId: 'older', from: 1 });
-        store.openGroup('held');
-        store.openGroup('held');
-        expect(store.diagnostics().activeGroups).toBe(2);
-        const held = yield* fillSegment(maxStoredBytes, path, { tag: 'held', traceId: 'held', from: 100 });
-        store.submit(vitalSubmission('kept-vital', 500, 6));
-        yield* store.flush;
-        store.closeGroup('older');
+it.live('an open retention group holds its segment against the tick until its producer closes', () =>
+  Effect.gen(function* () {
+    const directory = yield* scratchDirectory('performance-active-group-');
+    const path = join(directory, 'performance.sqlite');
+    const maxStoredBytes = 700_000;
+    yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      const reports = yield* PerformanceReports;
+      store.openGroup('older');
+      const older = yield* fillSegment(maxStoredBytes, path, { tag: 'older', traceId: 'older', from: 1 });
+      store.openGroup('held');
+      store.openGroup('held');
+      expect(store.diagnostics().activeGroups).toBe(2);
+      const held = yield* fillSegment(maxStoredBytes, path, { tag: 'held', traceId: 'held', from: 100 });
+      store.submit(vitalSubmission('kept-vital', 500, 6));
+      yield* store.flush;
+      store.closeGroup('older');
 
-        yield* traceGone('older');
-        const spared = yield* reports.read({ type: 'trace', traceId: 'held', limit: 100 });
-        if (spared.type !== 'trace') return yield* Effect.die('unexpected report');
-        expect(spared.totalSpans).toBe(held);
-        expect(yield* ringBytes).toBeGreaterThan(maxStoredBytes);
-        expect(spansIn(yield* evictions())).toBe(older);
+      yield* traceGone('older');
+      const spared = yield* reports.read({ type: 'trace', traceId: 'held', limit: 100 });
+      if (spared.type !== 'trace') return yield* Effect.die('unexpected report');
+      expect(spared.totalSpans).toBe(held);
+      expect(yield* ringBytes).toBeGreaterThan(maxStoredBytes);
+      expect(spansIn(yield* evictions())).toBe(older);
 
-        store.closeGroup('held');
-        expect(store.diagnostics().activeGroups).toBe(1);
-        store.closeGroup('held');
-        expect(store.diagnostics().activeGroups).toBe(0);
+      store.closeGroup('held');
+      expect(store.diagnostics().activeGroups).toBe(1);
+      store.closeGroup('held');
+      expect(store.diagnostics().activeGroups).toBe(0);
 
-        yield* traceGone('held');
-        const vitals = yield* reports.read({ type: 'vitals', limit: 10 });
-        if (vitals.type !== 'vitals') return yield* Effect.die('unexpected report');
-        expect(spansIn(yield* evictions())).toBe(older + held);
-        expect(vitals.vitals.map((record) => record.id)).toEqual(['kept-vital']);
-      }).pipe(Effect.provide(performanceLayer(maintaining(path, maxStoredBytes))));
-    }),
-  30_000,
+      yield* traceGone('held');
+      const vitals = yield* reports.read({ type: 'vitals', limit: 10 });
+      if (vitals.type !== 'vitals') return yield* Effect.die('unexpected report');
+      expect(spansIn(yield* evictions())).toBe(older + held);
+      expect(vitals.vitals.map((record) => record.id)).toEqual(['kept-vital']);
+    }).pipe(Effect.provide(performanceLayer(maintaining(path, maxStoredBytes))));
+  }),
 );
 
 it.live('a locked performance database cannot stop unrelated work on the observed event loop', () =>
@@ -466,212 +460,200 @@ it.live('pressure counts this process, and only its own reading rotates the inte
   }),
 );
 
-it.live(
-  'eviction takes the oldest segment whatever kinds it held, and counts every one of them',
-  () =>
-    Effect.gen(function* () {
-      const directory = yield* scratchDirectory('performance-evict-kinds-');
-      const path = join(directory, 'performance.sqlite');
-      const maxStoredBytes = 700_000;
-      yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        const reports = yield* PerformanceReports;
-        store.openGroup('old');
-        store.submit(stallSubmission('old-stall', 1, 1_000));
-        store.submit(vitalSubmission('old-vital', 1, 1_000));
-        yield* store.flush;
-        const spans = yield* fillSegment(maxStoredBytes, path, { tag: 'old-span', traceId: 'old', from: 2 });
-        store.submit(stallSubmission('new-stall', 500, 1_000));
-        store.submit(vitalSubmission('new-vital', 500, 1_000));
-        store.submit(largeSpanSubmission('new-span', 500, 'new'));
-        yield* store.flush;
-        store.closeGroup('old');
+it.live('eviction takes the oldest segment whatever kinds it held, and counts every one of them', () =>
+  Effect.gen(function* () {
+    const directory = yield* scratchDirectory('performance-evict-kinds-');
+    const path = join(directory, 'performance.sqlite');
+    const maxStoredBytes = 700_000;
+    yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      const reports = yield* PerformanceReports;
+      store.openGroup('old');
+      store.submit(stallSubmission('old-stall', 1, 1_000));
+      store.submit(vitalSubmission('old-vital', 1, 1_000));
+      yield* store.flush;
+      const spans = yield* fillSegment(maxStoredBytes, path, { tag: 'old-span', traceId: 'old', from: 2 });
+      store.submit(stallSubmission('new-stall', 500, 1_000));
+      store.submit(vitalSubmission('new-vital', 500, 1_000));
+      store.submit(largeSpanSubmission('new-span', 500, 'new'));
+      yield* store.flush;
+      store.closeGroup('old');
 
-        yield* traceGone('old');
-        const stalls = yield* reports.read({ type: 'stalls', limit: 10 });
-        const vitals = yield* reports.read({ type: 'vitals', limit: 10 });
-        const fresh = yield* reports.read({ type: 'trace', traceId: 'new', limit: 10 });
-        const entries = yield* evictions();
-        if (stalls.type !== 'stalls' || vitals.type !== 'vitals' || fresh.type !== 'trace') {
-          return yield* Effect.die('unexpected report');
-        }
-        expect(fresh.totalSpans).toBe(1);
-        expect(stalls.stalls.map((row) => row.stall.id)).toEqual(['new-stall']);
-        expect(vitals.vitals.map((record) => record.id)).toEqual(['new-vital']);
-        expect(kindsIn(entries)).toEqual({ span: spans, stall: 1, vital: 1 });
-        expect(Math.min(...entries.map((entry) => entry.payload.range?.from ?? 0))).toBe(1);
-        expect(Math.max(...entries.map((entry) => entry.payload.range?.to ?? 0))).toBe(spans + 1);
-        for (const entry of entries) expect(entry.payload.peakPendingBytes).toBeUndefined();
-      }).pipe(Effect.provide(performanceLayer(maintaining(path, maxStoredBytes))));
-    }),
-  30_000,
+      yield* traceGone('old');
+      const stalls = yield* reports.read({ type: 'stalls', limit: 10 });
+      const vitals = yield* reports.read({ type: 'vitals', limit: 10 });
+      const fresh = yield* reports.read({ type: 'trace', traceId: 'new', limit: 10 });
+      const entries = yield* evictions();
+      if (stalls.type !== 'stalls' || vitals.type !== 'vitals' || fresh.type !== 'trace') {
+        return yield* Effect.die('unexpected report');
+      }
+      expect(fresh.totalSpans).toBe(1);
+      expect(stalls.stalls.map((row) => row.stall.id)).toEqual(['new-stall']);
+      expect(vitals.vitals.map((record) => record.id)).toEqual(['new-vital']);
+      expect(kindsIn(entries)).toEqual({ span: spans, stall: 1, vital: 1 });
+      expect(Math.min(...entries.map((entry) => entry.payload.range?.from ?? 0))).toBe(1);
+      expect(Math.max(...entries.map((entry) => entry.payload.range?.to ?? 0))).toBe(spans + 1);
+      for (const entry of entries) expect(entry.payload.peakPendingBytes).toBeUndefined();
+    }).pipe(Effect.provide(performanceLayer(maintaining(path, maxStoredBytes))));
+  }),
 );
 
-it.live(
-  'each evicted segment leaves one dated loss entry that later evictions cannot take',
-  () =>
-    Effect.gen(function* () {
-      const directory = yield* scratchDirectory('performance-loss-entries-');
-      const path = join(directory, 'performance.sqlite');
-      const maxStoredBytes = 700_000;
-      const startedAt = yield* Clock.currentTimeMillis;
-      yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        const reports = yield* PerformanceReports;
-        store.openGroup('first');
-        const first = yield* fillSegment(maxStoredBytes, path, { tag: 'first', traceId: 'first', from: 1 });
-        store.submit(vitalSubmission('second-vital', 999, 6));
-        yield* store.flush;
-        store.openGroup('second');
-        const second = yield* fillSegment(maxStoredBytes, path, { tag: 'second', traceId: 'second', from: 1_000 });
-        store.submit(vitalSubmission('third-vital', 2_000, 6));
-        yield* store.flush;
+it.live('each evicted segment leaves one dated loss entry that later evictions cannot take', () =>
+  Effect.gen(function* () {
+    const directory = yield* scratchDirectory('performance-loss-entries-');
+    const path = join(directory, 'performance.sqlite');
+    const maxStoredBytes = 700_000;
+    const startedAt = yield* Clock.currentTimeMillis;
+    yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      const reports = yield* PerformanceReports;
+      store.openGroup('first');
+      const first = yield* fillSegment(maxStoredBytes, path, { tag: 'first', traceId: 'first', from: 1 });
+      store.submit(vitalSubmission('second-vital', 999, 6));
+      yield* store.flush;
+      store.openGroup('second');
+      const second = yield* fillSegment(maxStoredBytes, path, { tag: 'second', traceId: 'second', from: 1_000 });
+      store.submit(vitalSubmission('third-vital', 2_000, 6));
+      yield* store.flush;
 
-        const standing = segmentFiles(path).length;
-        store.closeGroup('first');
-        yield* traceGone('first');
-        const early = yield* evictions();
-        expect(early.length).toBe(standing - segmentFiles(path).length);
-        expect(kindsIn(early)).toEqual({ span: first });
-        expect(Math.min(...early.map((entry) => entry.payload.range?.from ?? 0))).toBe(1);
-        expect(Math.max(...early.map((entry) => entry.payload.range?.to ?? 0))).toBe(first);
-        for (const entry of early) {
-          expect(entry.wallTime).toBeGreaterThanOrEqual(startedAt);
-          expect(entry.payload.range?.to ?? 0).toBeLessThan(startedAt);
-          expect(entry.instanceId).toBe('process');
-        }
+      const standing = segmentFiles(path).length;
+      store.closeGroup('first');
+      yield* traceGone('first');
+      const early = yield* evictions();
+      expect(early.length).toBe(standing - segmentFiles(path).length);
+      expect(kindsIn(early)).toEqual({ span: first });
+      expect(Math.min(...early.map((entry) => entry.payload.range?.from ?? 0))).toBe(1);
+      expect(Math.max(...early.map((entry) => entry.payload.range?.to ?? 0))).toBe(first);
+      for (const entry of early) {
+        expect(entry.wallTime).toBeGreaterThanOrEqual(startedAt);
+        expect(entry.payload.range?.to ?? 0).toBeLessThan(startedAt);
+        expect(entry.instanceId).toBe('process');
+      }
 
-        store.closeGroup('second');
-        yield* traceGone('second');
+      store.closeGroup('second');
+      yield* traceGone('second');
 
-        const entries = yield* evictions();
-        const vitals = yield* reports.read({ type: 'vitals', limit: 10 });
-        if (vitals.type !== 'vitals') return yield* Effect.die('unexpected report');
-        expect(entries.map((entry) => entry.id)).toEqual(expect.arrayContaining(early.map((entry) => entry.id)));
-        expect(kindsIn(entries)).toEqual({ span: first + second, vital: 1 });
-        expect(Math.max(...entries.map((entry) => entry.payload.range?.to ?? 0))).toBe(1_000 + second - 1);
-        expect(vitals.vitals.map((record) => record.id)).toEqual(['third-vital']);
-      }).pipe(Effect.provide(performanceLayer(maintaining(path, maxStoredBytes))));
+      const entries = yield* evictions();
+      const vitals = yield* reports.read({ type: 'vitals', limit: 10 });
+      if (vitals.type !== 'vitals') return yield* Effect.die('unexpected report');
+      expect(entries.map((entry) => entry.id)).toEqual(expect.arrayContaining(early.map((entry) => entry.id)));
+      expect(kindsIn(entries)).toEqual({ span: first + second, vital: 1 });
+      expect(Math.max(...entries.map((entry) => entry.payload.range?.to ?? 0))).toBe(1_000 + second - 1);
+      expect(vitals.vitals.map((record) => record.id)).toEqual(['third-vital']);
+    }).pipe(Effect.provide(performanceLayer(maintaining(path, maxStoredBytes))));
 
-      yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        const reports = yield* PerformanceReports;
-        for (let index = 0; index < 4; index += 1) {
-          store.submit(largeSpanSubmission(`shed-${index}`, 3_000 + index, 'shed'));
-        }
-        expect(store.diagnostics().dropCount).toBeGreaterThan(0);
-        yield* store.flush;
+    yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      const reports = yield* PerformanceReports;
+      for (let index = 0; index < 4; index += 1) {
+        store.submit(largeSpanSubmission(`shed-${index}`, 3_000 + index, 'shed'));
+      }
+      expect(store.diagnostics().dropCount).toBeGreaterThan(0);
+      yield* store.flush;
 
-        const walked = yield* pageLosses;
-        const whole = yield* reports.read({ type: 'losses', limit: 50 });
-        if (whole.type !== 'losses') return yield* Effect.die('unexpected report');
-        expect(walked.map((entry) => entry.id)).toEqual(whole.losses.map((entry) => entry.id));
-        expect(whole.next).toBeNull();
-        expect(walked.filter((entry) => entry.payload.reason === 'stored-limit').length).toBeGreaterThan(0);
-        expect(walked.filter((entry) => entry.payload.reason === 'pending-limit').length).toBeGreaterThan(0);
-        expect(new Set(walked.map((entry) => entry.id)).size).toBe(walked.length);
-        expect(walked.map((entry) => entry.wallTime)).toEqual([...walked.map((entry) => entry.wallTime)].sort((a, b) => a - b));
-      }).pipe(Effect.provide(performanceLayer(options(path, 300_000, 100_000_000))));
-    }),
-  30_000,
+      const walked = yield* pageLosses;
+      const whole = yield* reports.read({ type: 'losses', limit: 50 });
+      if (whole.type !== 'losses') return yield* Effect.die('unexpected report');
+      expect(walked.map((entry) => entry.id)).toEqual(whole.losses.map((entry) => entry.id));
+      expect(whole.next).toBeNull();
+      expect(walked.filter((entry) => entry.payload.reason === 'stored-limit').length).toBeGreaterThan(0);
+      expect(walked.filter((entry) => entry.payload.reason === 'pending-limit').length).toBeGreaterThan(0);
+      expect(new Set(walked.map((entry) => entry.id)).size).toBe(walked.length);
+      expect(walked.map((entry) => entry.wallTime)).toEqual([...walked.map((entry) => entry.wallTime)].sort((a, b) => a - b));
+    }).pipe(Effect.provide(performanceLayer(options(path, 300_000, 100_000_000))));
+  }),
 );
 
-it.live(
-  'the stored bound is a high-water mark and eviction cuts to the low-water mark',
-  () =>
-    Effect.gen(function* () {
-      const directory = yield* scratchDirectory('performance-water-marks-');
-      const overRoot = yield* scratchDirectory('performance-over-bound-');
-      const path = join(directory, 'performance.sqlite');
-      const overPath = join(overRoot, 'performance.sqlite');
-      const overBound = 500_000;
-      const cutBound = 2_500_000;
-      const held = yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        const reports = yield* PerformanceReports;
-        store.openGroup('older');
-        yield* fillSegment(overBound, overPath, { tag: 'older', traceId: 'older', from: 1 });
-        for (let index = 0; index < 6; index += 1) {
-          store.submit(largeSpanSubmission(`open-${index}`, 100 + index, 'open'));
-        }
-        yield* store.flush;
-        store.closeGroup('older');
+it.live('the stored bound is a high-water mark and eviction cuts to the low-water mark', () =>
+  Effect.gen(function* () {
+    const directory = yield* scratchDirectory('performance-water-marks-');
+    const overRoot = yield* scratchDirectory('performance-over-bound-');
+    const path = join(directory, 'performance.sqlite');
+    const overPath = join(overRoot, 'performance.sqlite');
+    const overBound = 500_000;
+    const cutBound = 2_500_000;
+    const held = yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      const reports = yield* PerformanceReports;
+      store.openGroup('older');
+      yield* fillSegment(overBound, overPath, { tag: 'older', traceId: 'older', from: 1 });
+      for (let index = 0; index < 6; index += 1) {
+        store.submit(largeSpanSubmission(`open-${index}`, 100 + index, 'open'));
+      }
+      yield* store.flush;
+      store.closeGroup('older');
 
-        yield* traceGone('older');
-        const open = yield* reports.read({ type: 'trace', traceId: 'open', limit: 10 });
-        if (open.type !== 'trace') return yield* Effect.die('unexpected report');
-        expect(open.totalSpans).toBe(6);
-        return yield* ringBytes;
-      }).pipe(Effect.provide(performanceLayer(maintaining(overPath, overBound))));
-      expect(held).toBeGreaterThan(overBound);
+      yield* traceGone('older');
+      const open = yield* reports.read({ type: 'trace', traceId: 'open', limit: 10 });
+      if (open.type !== 'trace') return yield* Effect.die('unexpected report');
+      expect(open.totalSpans).toBe(6);
+      return yield* ringBytes;
+    }).pipe(Effect.provide(performanceLayer(maintaining(overPath, overBound))));
+    expect(held).toBeGreaterThan(overBound);
 
-      yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        const reports = yield* PerformanceReports;
-        for (const tag of ['first', 'second', 'third'] as const) {
-          store.openGroup(tag);
-          yield* fillSegment(cutBound, path, { tag, traceId: tag, from: 1 });
-        }
-        store.submit(vitalSubmission('kept-vital', 500, 6));
-        yield* store.flush;
-        expect(yield* ringBytes).toBeGreaterThan(cutBound);
-        for (const tag of ['first', 'second', 'third'] as const) store.closeGroup(tag);
+    yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      const reports = yield* PerformanceReports;
+      for (const tag of ['first', 'second', 'third'] as const) {
+        store.openGroup(tag);
+        yield* fillSegment(cutBound, path, { tag, traceId: tag, from: 1 });
+      }
+      store.submit(vitalSubmission('kept-vital', 500, 6));
+      yield* store.flush;
+      expect(yield* ringBytes).toBeGreaterThan(cutBound);
+      for (const tag of ['first', 'second', 'third'] as const) store.closeGroup(tag);
 
-        const lowWater = cutBound - segmentBytesFor(cutBound);
-        yield* waitUntil('the ring cut back to its low-water mark', ringBytes.pipe(Effect.map((bytes) => bytes <= lowWater)));
-        const third = yield* reports.read({ type: 'trace', traceId: 'third', limit: 100 });
-        if (third.type !== 'trace') return yield* Effect.die('unexpected report');
-        expect(third.totalSpans).toBeGreaterThan(0);
-        expect((yield* evictions()).length).toBeGreaterThan(0);
-      }).pipe(Effect.provide(performanceLayer(maintaining(path, cutBound))));
-    }),
-  30_000,
+      const lowWater = cutBound - segmentBytesFor(cutBound);
+      yield* waitUntil('the ring cut back to its low-water mark', ringBytes.pipe(Effect.map((bytes) => bytes <= lowWater)));
+      const third = yield* reports.read({ type: 'trace', traceId: 'third', limit: 100 });
+      if (third.type !== 'trace') return yield* Effect.die('unexpected report');
+      expect(third.totalSpans).toBeGreaterThan(0);
+      expect((yield* evictions()).length).toBeGreaterThan(0);
+    }).pipe(Effect.provide(performanceLayer(maintaining(path, cutBound))));
+  }),
 );
 
-it.live(
-  'what eviction took is inherited whole by the next store over the same ring',
-  () =>
-    Effect.gen(function* () {
-      const directory = yield* scratchDirectory('performance-drop-total-');
-      const path = join(directory, 'performance.sqlite');
-      const maxStoredBytes = 700_000;
-      const taken = yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        store.openGroup('first');
-        const first = yield* fillSegment(maxStoredBytes, path, { tag: 'first', traceId: 'first', from: 1 });
-        store.openGroup('second');
-        const second = yield* fillSegment(maxStoredBytes, path, { tag: 'second', traceId: 'second', from: 1_000 });
-        store.submit(vitalSubmission('kept-vital', 2_000, 6));
-        yield* store.flush;
-        store.closeGroup('first');
-        store.closeGroup('second');
-        yield* traceGone('first');
-        yield* traceGone('second');
-        const entries = yield* evictions();
-        expect(spansIn(entries)).toBe(first + second);
-        expect(store.diagnostics().evictedSegments).toBe(entries.length);
-        expect(store.diagnostics().dropCount).toBe(first + second);
-        return { taken: first + second, entries: entries.length };
-      }).pipe(Effect.provide(performanceLayer(maintaining(path, maxStoredBytes))));
-      expect(taken.taken).toBeGreaterThan(1);
+it.live('what eviction took is inherited whole by the next store over the same ring', () =>
+  Effect.gen(function* () {
+    const directory = yield* scratchDirectory('performance-drop-total-');
+    const path = join(directory, 'performance.sqlite');
+    const maxStoredBytes = 700_000;
+    const taken = yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      store.openGroup('first');
+      const first = yield* fillSegment(maxStoredBytes, path, { tag: 'first', traceId: 'first', from: 1 });
+      store.openGroup('second');
+      const second = yield* fillSegment(maxStoredBytes, path, { tag: 'second', traceId: 'second', from: 1_000 });
+      store.submit(vitalSubmission('kept-vital', 2_000, 6));
+      yield* store.flush;
+      store.closeGroup('first');
+      store.closeGroup('second');
+      yield* traceGone('first');
+      yield* traceGone('second');
+      const entries = yield* evictions();
+      expect(spansIn(entries)).toBe(first + second);
+      expect(store.diagnostics().evictedSegments).toBe(entries.length);
+      expect(store.diagnostics().dropCount).toBe(first + second);
+      return { taken: first + second, entries: entries.length };
+    }).pipe(Effect.provide(performanceLayer(maintaining(path, maxStoredBytes))));
+    expect(taken.taken).toBeGreaterThan(1);
 
-      const inherited = yield* Effect.gen(function* () {
-        const reports = yield* PerformanceReports;
-        const report = yield* reports.read({ type: 'losses', limit: 20 });
-        if (report.type !== 'losses') return yield* Effect.die('unexpected report');
-        return {
-          drops: report.inheritedDrops,
-          spans: report.inheritedDroppedKinds?.span ?? 0,
-          entries: report.losses.filter((record) => record.payload.reason === 'stored-limit').length,
-          session: report.sessionDrops,
-        };
-      }).pipe(Effect.provide(performanceLayer(options(path, 2_000_000, 100_000_000))));
-      expect(inherited.drops).toBe(taken.taken);
-      expect(inherited.spans).toBe(taken.taken);
-      expect(inherited.entries).toBe(taken.entries);
-      expect(inherited.session).toBe(0);
-    }),
-  30_000,
+    const inherited = yield* Effect.gen(function* () {
+      const reports = yield* PerformanceReports;
+      const report = yield* reports.read({ type: 'losses', limit: 20 });
+      if (report.type !== 'losses') return yield* Effect.die('unexpected report');
+      return {
+        drops: report.inheritedDrops,
+        spans: report.inheritedDroppedKinds?.span ?? 0,
+        entries: report.losses.filter((record) => record.payload.reason === 'stored-limit').length,
+        session: report.sessionDrops,
+      };
+    }).pipe(Effect.provide(performanceLayer(options(path, 2_000_000, 100_000_000))));
+    expect(inherited.drops).toBe(taken.taken);
+    expect(inherited.spans).toBe(taken.taken);
+    expect(inherited.entries).toBe(taken.entries);
+    expect(inherited.session).toBe(0);
+  }),
 );
 
 it.live('one vitals page carries a record written without the store section beside one that has it', () =>
@@ -695,11 +677,7 @@ it.live('one vitals page carries a record written without the store section besi
 );
 
 const waitFor = Effect.fnUntraced(function* (settled: () => boolean) {
-  for (let attempt = 0; attempt < 400; attempt += 1) {
-    if (settled()) return;
-    yield* Effect.sleep(5);
-  }
-  return yield* Effect.die('the store never reached the state this test waited for');
+  while (!settled()) yield* Effect.sleep(5);
 });
 
 const waitUntil = Effect.fnUntraced(

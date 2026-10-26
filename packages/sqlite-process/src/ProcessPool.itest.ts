@@ -234,9 +234,7 @@ it.live('independent in-memory stores do not share a transaction fence', () =>
     );
     yield* Deferred.await(entered);
     const second = yield* Effect.result(
-      b
-        .withTransaction(b`INSERT INTO item VALUES (2)`)
-        .pipe(Effect.timeout('2 seconds'), Effect.ensuring(Deferred.succeed(release, undefined))),
+      b.withTransaction(b`INSERT INTO item VALUES (2)`).pipe(Effect.ensuring(Deferred.succeed(release, undefined))),
     );
     yield* Fiber.join(first);
     expect(second._tag).toBe('Success');

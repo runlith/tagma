@@ -86,19 +86,19 @@ it.live('an implicit read cursor blocks the writer probe without losing the stor
     checkpoints.failed(filename, blocked);
     expect(losses).toEqual([]);
     cursor.return?.();
-    const copied = yield* Deferred.await(completed).pipe(Effect.timeout('5 seconds'));
+    const copied = yield* Deferred.await(completed);
     expect(copied.log).toBeGreaterThan(0);
     expect(copied.copied).toBe(copied.log);
     db.run('PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE');
     checkpoints.changed(filename);
-    const busy = yield* Deferred.await(rejected).pipe(Effect.timeout('5 seconds'));
+    const busy = yield* Deferred.await(rejected);
     expect(busy.thrown.code).toBe('SQLITE_BUSY');
     expect((busy.thrown.errno ?? 0) & 0xff).toBe(5);
     expect(losses).toEqual([]);
     db.run('ROLLBACK');
     db.close();
     open = false;
-    const finished = yield* Deferred.await(recovered).pipe(Effect.timeout('5 seconds'));
+    const finished = yield* Deferred.await(recovered);
     expect(finished.copied).toBe(finished.log);
     expect(losses).toEqual([]);
     const reopened = yield* Effect.acquireRelease(

@@ -374,7 +374,7 @@ describe('the pool says on the statement what it made that statement wait for', 
               while: () => spanNamed(spans, 'sqlite.reader.wait') === undefined,
               body: () => Effect.yieldNow,
               step: () => {},
-            }).pipe(Effect.timeout('1 second'));
+            });
             const waited = spanNamed(spans, 'sqlite.reader.wait')!;
             expect(waited.status._tag).toBe('Started');
 

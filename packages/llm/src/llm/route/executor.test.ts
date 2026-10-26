@@ -708,7 +708,7 @@ it.live('a request opened inside a stream is aborted by closing the caller’s s
     expect(signal.aborted).toBe(false);
 
     yield* Scope.close(scope, Exit.void);
-    yield* aborting(signal).pipe(Effect.timeout('1 second'));
+    yield* aborting(signal);
 
     expect(signal.aborted).toBe(true);
   }),

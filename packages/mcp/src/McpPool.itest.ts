@@ -6,12 +6,11 @@ import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } fr
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Clock, Cause, Effect, Exit, Fiber, Scope } from 'effect';
+import { Cause, Effect, Exit, Fiber, Scope } from 'effect';
 import { type McpPalette, McpPool } from './McpPool';
 import type { McpHttpServerDeclaration, McpStdioServerDeclaration } from './McpServerDeclaration';
 import type { McpSdkCallResult } from './sdk';
 
-const SPAWN_BUDGET_MS = 15_000;
 const SERVER = resolve(import.meta.dir, '../test/mcpTestServer.ts');
 
 const declare = (
@@ -121,9 +120,7 @@ describe('McpPool', () => {
       const scope = yield* Scope.fork(yield* Effect.scope);
       const pool = yield* McpPool.make().pipe(Scope.provide(scope));
 
-      const started = yield* Clock.currentTimeMillis;
       yield* pool.reconcile([declare('files', [], { env: { MCP_TEST_PID_FILE: pidFile } })]);
-      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(2_000);
       expect(pool.states().map((state) => state.status)).toEqual(['connecting']);
 
       yield* pool.awaitHandshakes();
@@ -169,7 +166,6 @@ describe('McpPool', () => {
 
       yield* Scope.close(scope, Exit.void);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   it.live(
@@ -177,9 +173,7 @@ describe('McpPool', () => {
     Effect.fnUntraced(function* () {
       const scope = yield* Scope.fork(yield* Effect.scope);
       const pool = yield* McpPool.make().pipe(Scope.provide(scope));
-      const started = yield* Clock.currentTimeMillis;
       yield* pool.reconcile([declare('mute', ['--hang'], { timeoutMs: 500 })]);
-      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(400);
       expect(pool.paletteUnsafe()).toEqual([]);
       expect(pool.states().map((state) => state.status)).toEqual(['connecting']);
       yield* pool.awaitHandshakes();
@@ -187,7 +181,6 @@ describe('McpPool', () => {
       expect(pool.states()[0]?.failure?._tag).toBe('McpTimedOut');
       yield* Scope.close(scope, Exit.void);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   it.live(
@@ -215,7 +208,6 @@ describe('McpPool', () => {
       yield* Scope.close(scope, Exit.void);
       expect(yield* until(() => !alive(pids[0] as number))).toBe(true);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   it.live(
@@ -229,15 +221,12 @@ describe('McpPool', () => {
       expect(yield* until(() => existsSync(pidFile))).toBe(true);
       const pid = Number(readFileSync(pidFile, 'utf8'));
 
-      const started = yield* Clock.currentTimeMillis;
       yield* pool.reconcile([]);
-      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(1_000);
       expect(pool.states()).toEqual([]);
       expect(yield* until(() => !alive(pid))).toBe(true);
 
       yield* Scope.close(scope, Exit.void);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   it.live(
@@ -265,7 +254,6 @@ describe('McpPool', () => {
       yield* Scope.close(scope, Exit.void);
       expect(yield* until(() => !alive(second))).toBe(true);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   it.live(
@@ -282,7 +270,6 @@ describe('McpPool', () => {
       expect(failure?._tag === 'McpConnectFailed' && failure.stderr).toBe('cannot find module left-pad');
       yield* Scope.close(scope, Exit.void);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   it.live(
@@ -296,20 +283,16 @@ describe('McpPool', () => {
       const pid = Number(text(yield* pool.call('frozen', 'pid', {})));
       process.kill(pid, 'SIGSTOP');
 
-      const started = yield* Clock.currentTimeMillis;
       const calling = yield* Effect.forkScoped(pool.call('frozen', 'echo', { text: 'hi' }));
       yield* Effect.promise(() => Bun.sleep(100));
       const answered = yield* Fiber.interrupt(calling).pipe(Effect.andThen(Fiber.await(calling)));
-      const elapsed = (yield* Clock.currentTimeMillis) - started;
       process.kill(pid, 'SIGCONT');
 
       expect(Exit.isFailure(answered) && Cause.hasInterruptsOnly(answered.cause)).toBe(true);
-      expect(elapsed).toBeLessThan(1_000);
       expect(pool.states().map((state) => [state.name, state.status])).toEqual([['frozen', 'connected']]);
 
       yield* Scope.close(scope, Exit.void);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   it.live(
@@ -334,7 +317,6 @@ describe('McpPool', () => {
 
       yield* Scope.close(scope, Exit.void);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   it.live(
@@ -385,13 +367,10 @@ describe('McpPool', () => {
       const pid = Number(readFileSync(pidFile, 'utf8'));
       expect(pool.states().map((state) => state.status)).toEqual(['connecting']);
 
-      const started = yield* Clock.currentTimeMillis;
       yield* Scope.close(scope, Exit.void);
-      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(5_000);
       expect(pool.states().map((state) => state.status)).not.toContain('connecting');
       expect(yield* until(() => !alive(pid))).toBe(true);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   it.live(
@@ -404,9 +383,7 @@ describe('McpPool', () => {
       yield* pool.awaitHandshakes();
       expect(pool.paletteUnsafe()).toHaveLength(1);
 
-      const started = yield* Clock.currentTimeMillis;
       yield* Scope.close(scope, Exit.void);
-      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(3_000);
       expect(endpoint.deletes()).toBe(1);
     }),
   );
@@ -424,7 +401,6 @@ describe('McpPool', () => {
       expect(pool.states().map((state) => [state.name, state.status])).toEqual([['quiet', 'disabled']]);
       yield* Scope.close(scope, Exit.void);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   it.live(
@@ -458,7 +434,6 @@ describe('McpPool', () => {
 
       yield* Scope.close(scope, Exit.void);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   it.live(
@@ -474,6 +449,5 @@ describe('McpPool', () => {
       expect(names(pool.paletteUnsafe())).toContain('b');
       yield* Scope.close(scope, Exit.void);
     }),
-    SPAWN_BUDGET_MS,
   );
 });

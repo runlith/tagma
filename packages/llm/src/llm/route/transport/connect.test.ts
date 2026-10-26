@@ -260,7 +260,7 @@ it.live('closing the caller lifetime aborts a Connect request whose body stopped
       const done = () => resume(Effect.void);
       if (signal.aborted) done();
       else signal.addEventListener('abort', done, { once: true });
-    }).pipe(Effect.timeout('1 second'));
+    });
     expect(signal.aborted).toBe(true);
   }),
 );

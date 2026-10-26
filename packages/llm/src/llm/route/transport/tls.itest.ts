@@ -83,7 +83,7 @@ it.live('TLS verifies certificates, accepts an explicit CA, and traverses an aut
       const client = yield* HttpClient.HttpClient;
       const response = yield* client.get(`https://localhost:${server.port}`);
       return yield* response.json;
-    }).pipe(Effect.provide(layer), Effect.timeout('2 seconds'));
+    }).pipe(Effect.provide(layer));
 
     const rejected = yield* call.pipe(Effect.provideService(RequestOptions, { family: 4 }), Effect.result);
     expect(rejected).toMatchObject({ _tag: 'Failure', failure: { reason: { _tag: 'TransportError' } } });

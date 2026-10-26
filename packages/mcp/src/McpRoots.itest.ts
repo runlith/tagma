@@ -105,7 +105,7 @@ it.live('a rejected release notification preserves the completed tool result and
       },
     );
     const reply = yield* session.call('echo', {}, { roots: ['/workspace'] });
-    yield* Deferred.await(rejected).pipe(Effect.timeout('2 seconds'));
+    yield* Deferred.await(rejected);
     expect('content' in reply ? reply.content : []).toEqual([{ type: 'text', text: 'written' }]);
     failing = false;
     const recovered = yield* session.call('echo', {}, { roots: ['/workspace'] });

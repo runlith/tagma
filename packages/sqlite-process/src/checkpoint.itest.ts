@@ -27,10 +27,7 @@ const preparedPool = Effect.acquireRelease(
 const within = <E>(limit: Effect.Effect<boolean, E>) =>
   Effect.suspend(function standing(): Effect.Effect<boolean, E> {
     return Effect.flatMap(limit, (met) => (met ? Effect.succeed(true) : Effect.andThen(Effect.sleep('10 millis'), standing)));
-  }).pipe(
-    Effect.timeoutOption('5 seconds'),
-    Effect.map((outcome) => outcome._tag === 'Some'),
-  );
+  });
 
 it.live('the supplied engine checkpoints committed WAL outside the writer and preserves schema and snapshots', () =>
   Effect.gen(function* () {

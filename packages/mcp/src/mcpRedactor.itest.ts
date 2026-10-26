@@ -12,7 +12,6 @@ import { mcpRedactor } from './mcpRedactor';
 
 const SECRET = 'mcp-secret-probe-7f91';
 const redact = mcpRedactor([SECRET]);
-const SPAWN_BUDGET_MS = 10_000;
 const SERVER = resolve(import.meta.dir, '../test/mcpTestServer.ts');
 
 const failed = <A>(effect: Effect.Effect<A, McpFailure, never>) =>
@@ -66,7 +65,6 @@ describe('mcpRedactor', () => {
       expect(failure?._tag === 'McpConnectFailed' && failure.stderr).toContain('auth failed for');
       expect(said(failure)).not.toContain(SECRET);
     }),
-    SPAWN_BUDGET_MS,
   );
 
   test('takes it out of what a server answers, text and structure alike', () => {

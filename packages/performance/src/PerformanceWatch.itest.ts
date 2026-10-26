@@ -12,66 +12,60 @@ import { PerformanceStore, performanceStoreLayer, performanceStoreWatchLayer } f
 import { PerformanceReports, performanceReportsLayer } from './PerformanceReports.js';
 import { ringRoot } from './SegmentRing.js';
 
-it.live(
-  'a watch reads what a live store keeps as it keeps it, and lets its open segment seal',
-  () =>
-    Effect.gen(function* () {
-      const directory = yield* scratchDirectory('performance-watch-');
-      const path = join(directory, 'performance.sqlite');
-      yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        store.submit(vital('first', 1));
-        yield* store.flush;
+it.live('a watch reads what a live store keeps as it keeps it, and lets its open segment seal', () =>
+  Effect.gen(function* () {
+    const directory = yield* scratchDirectory('performance-watch-');
+    const path = join(directory, 'performance.sqlite');
+    yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      store.submit(vital('first', 1));
+      yield* store.flush;
 
-        const watched = yield* Layer.build(performanceReportsLayer.pipe(Layer.provide(performanceStoreWatchLayer({ path }))));
-        const reports = Context.get(watched, PerformanceReports);
-        const before = yield* reports.read({ type: 'vitals', limit: 10 });
-        if (before.type !== 'vitals') return yield* Effect.die('unexpected report');
-        expect(before.vitals.map((record) => record.id)).toEqual(['first']);
+      const watched = yield* Layer.build(performanceReportsLayer.pipe(Layer.provide(performanceStoreWatchLayer({ path }))));
+      const reports = Context.get(watched, PerformanceReports);
+      const before = yield* reports.read({ type: 'vitals', limit: 10 });
+      if (before.type !== 'vitals') return yield* Effect.die('unexpected report');
+      expect(before.vitals.map((record) => record.id)).toEqual(['first']);
 
-        for (let index = 0; index < 12; index += 1) store.submit(filler(index));
-        yield* store.flush;
-        store.submit(vital('after-roll', 2));
-        yield* store.flush;
-        expect(store.diagnostics().state).toBe('ready');
-        expect(store.diagnostics().restarts).toBe(0);
-        expect(readdirSync(join(ringRoot(path), 'segments')).filter((name) => name.endsWith('.sqlite')).length).toBe(2);
+      for (let index = 0; index < 12; index += 1) store.submit(filler(index));
+      yield* store.flush;
+      store.submit(vital('after-roll', 2));
+      yield* store.flush;
+      expect(store.diagnostics().state).toBe('ready');
+      expect(store.diagnostics().restarts).toBe(0);
+      expect(readdirSync(join(ringRoot(path), 'segments')).filter((name) => name.endsWith('.sqlite')).length).toBe(2);
 
-        const after = yield* reports.read({ type: 'vitals', limit: 10 });
-        if (after.type !== 'vitals') return yield* Effect.die('unexpected report');
-        expect(after.vitals.map((record) => record.id)).toEqual(['first', 'after-roll']);
+      const after = yield* reports.read({ type: 'vitals', limit: 10 });
+      if (after.type !== 'vitals') return yield* Effect.die('unexpected report');
+      expect(after.vitals.map((record) => record.id)).toEqual(['first', 'after-roll']);
 
-        const memory = yield* reports.read({ type: 'memory' }).pipe(Effect.flip);
-        expect(memory).toBeInstanceOf(PerformanceStoreUnavailable);
-      }).pipe(
-        Effect.scoped,
-        Effect.provide(
-          performanceStoreLayer({
-            path,
-            instanceId: 'writer',
-            maxPendingBytes: () => 64_000_000,
-            maxStoredBytes: () => 16_000_000,
-          }),
-        ),
-      );
-    }),
-  30_000,
+      const memory = yield* reports.read({ type: 'memory' }).pipe(Effect.flip);
+      expect(memory).toBeInstanceOf(PerformanceStoreUnavailable);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        performanceStoreLayer({
+          path,
+          instanceId: 'writer',
+          maxPendingBytes: () => 64_000_000,
+          maxStoredBytes: () => 16_000_000,
+        }),
+      ),
+    );
+  }),
 );
 
-it.live(
-  'a watch over a path no ring stands at answers unavailable and creates nothing there',
-  () =>
-    Effect.gen(function* () {
-      const directory = yield* scratchDirectory('performance-watch-none-');
-      const path = join(directory, 'performance.sqlite');
-      const failure = yield* PerformanceReports.use((reports) => reports.read({ type: 'vitals', limit: 1 })).pipe(
-        Effect.flip,
-        Effect.provide(performanceReportsLayer.pipe(Layer.provide(performanceStoreWatchLayer({ path })))),
-      );
-      expect(failure).toBeInstanceOf(PerformanceStoreUnavailable);
-      expect(existsSync(ringRoot(path))).toBe(false);
-    }),
-  30_000,
+it.live('a watch over a path no ring stands at answers unavailable and creates nothing there', () =>
+  Effect.gen(function* () {
+    const directory = yield* scratchDirectory('performance-watch-none-');
+    const path = join(directory, 'performance.sqlite');
+    const failure = yield* PerformanceReports.use((reports) => reports.read({ type: 'vitals', limit: 1 })).pipe(
+      Effect.flip,
+      Effect.provide(performanceReportsLayer.pipe(Layer.provide(performanceStoreWatchLayer({ path })))),
+    );
+    expect(failure).toBeInstanceOf(PerformanceStoreUnavailable);
+    expect(existsSync(ringRoot(path))).toBe(false);
+  }),
 );
 
 it.live('a watch unavailable at its first read recovers in the same reader when a writer creates the ring', () =>
@@ -98,10 +92,7 @@ it.live('a watch unavailable at its first read recovers in the same reader when 
     yield* store.flush;
     const read = yield* reports
       .read({ type: 'vitals', limit: 1 })
-      .pipe(
-        Effect.retry({ while: (failure) => failure._tag === 'PerformanceStoreUnavailable', schedule: Schedule.spaced('20 millis') }),
-        Effect.timeout('3 seconds'),
-      );
+      .pipe(Effect.retry({ while: (failure) => failure._tag === 'PerformanceStoreUnavailable', schedule: Schedule.spaced('20 millis') }));
     expect(read.type === 'vitals' ? read.vitals.map((record) => record.id) : null).toEqual(['recovered']);
   }),
 );

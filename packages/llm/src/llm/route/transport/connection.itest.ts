@@ -52,9 +52,9 @@ it.live('closing a request scope interrupts a response that stopped sending byte
       const response = yield* client.get(`http://127.0.0.1:${port}`).pipe(Effect.provideService(Scope.Scope, scope));
       yield* Scope.close(scope, Exit.void);
       return yield* Effect.result(response.text);
-    }).pipe(Effect.provide(layer), Effect.timeout('2 seconds'));
+    }).pipe(Effect.provide(layer));
     expect(result).toMatchObject({ _tag: 'Failure', failure: { reason: { _tag: 'DecodeError' } } });
-    yield* Deferred.await(disconnected).pipe(Effect.timeout('1 second'));
+    yield* Deferred.await(disconnected);
   }),
 );
 
@@ -79,9 +79,7 @@ it.live('socket timeout and Effect cancellation both release requests waiting fo
         return yield* client.get(`http://127.0.0.1:${port}`);
       }).pipe(Effect.provide(layer));
       const result = yield* (
-        timeout === 'socket'
-          ? call.pipe(Effect.provideService(RequestOptions, { timeout: 25 }), Effect.timeout('2 seconds'))
-          : call.pipe(Effect.timeout('25 millis'))
+        timeout === 'socket' ? call.pipe(Effect.provideService(RequestOptions, { timeout: 25 })) : call.pipe(Effect.timeout('25 millis'))
       ).pipe(Effect.result);
       expect(result).toMatchObject(
         timeout === 'socket'
@@ -89,7 +87,7 @@ it.live('socket timeout and Effect cancellation both release requests waiting fo
           : { _tag: 'Failure', failure: { _tag: 'TimeoutError' } },
       );
     }
-    yield* Deferred.await(released).pipe(Effect.timeout('1 second'));
+    yield* Deferred.await(released);
     expect(sockets.size).toBe(0);
   }),
 );
@@ -124,7 +122,7 @@ it.live('slow response consumers bound buffering and then receive every byte', (
         }),
       );
       return read;
-    }).pipe(Effect.provide(layer), Effect.timeout('3 seconds'));
+    }).pipe(Effect.provide(layer));
     expect(bytes).toBe(total);
   }),
 );
@@ -154,7 +152,7 @@ it.live('a slow upload receiver bounds producer demand and cancellation releases
     yield* Deferred.await(arrived);
     expect(result).toMatchObject({ _tag: 'Failure', failure: { _tag: 'TimeoutError' } });
     expect(produced).toBeLessThan(1024);
-    yield* Deferred.await(released).pipe(Effect.timeout('1 second'));
+    yield* Deferred.await(released);
   }),
 );
 
@@ -181,7 +179,7 @@ it.live('an agent routes through an authenticated proxy and honors NO_PROXY', ()
       const first = yield* proxied.json;
       const bypassed = yield* client.get(`http://127.0.0.1:${direct.port}`);
       return [first, yield* bypassed.json];
-    }).pipe(Effect.provide(layer), Effect.provideService(RequestOptions, { agent }), Effect.timeout('2 seconds'));
+    }).pipe(Effect.provide(layer), Effect.provideService(RequestOptions, { agent }));
     expect(answers).toEqual([{ target: 'http://localhost:1/v1/token?test=1', auth: `Basic ${btoa('reader:secret')}` }, { direct: true }]);
   }),
 );
@@ -203,9 +201,9 @@ it.live('completed requests reuse the connection and layer disposal closes its p
         const response = yield* client.get(`http://127.0.0.1:${port}`);
         expect(yield* response.text).toBe('ok');
       }
-    }).pipe(Effect.provide(layer), Effect.timeout('2 seconds'));
+    }).pipe(Effect.provide(layer));
     expect(connections).toBe(1);
-    yield* Deferred.await(disconnected).pipe(Effect.timeout('1 second'));
+    yield* Deferred.await(disconnected);
   }),
 );
 
@@ -223,7 +221,7 @@ it.live('default pools read proxy environment and bypass settings', () =>
       const first = yield* proxied.text;
       const bypassed = yield* client.get('http://127.0.0.1:${direct.port}');
       return [first, yield* bypassed.text];
-    }).pipe(Effect.provide(layer), Effect.timeout('2 seconds')));
+    }).pipe(Effect.provide(layer)));
     console.log(JSON.stringify(answer));
   `;
     for (const name of ['HTTP_PROXY', 'ALL_PROXY']) {

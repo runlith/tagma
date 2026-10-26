@@ -154,10 +154,7 @@ it.live('a statement asked after the connection is let go fails instead of waiti
     const sql = Context.get(context, SqlClient);
     yield* sql`CREATE TABLE t (id INTEGER PRIMARY KEY)`;
     yield* Scope.close(scope, Exit.void);
-    const outcome = yield* sql`SELECT 1`.pipe(
-      Effect.timeout('3 seconds'),
-      Effect.match({ onFailure: (failure) => failure._tag, onSuccess: () => 'answered' }),
-    );
+    const outcome = yield* sql`SELECT 1`.pipe(Effect.match({ onFailure: (failure) => failure._tag, onSuccess: () => 'answered' }));
     expect(outcome).toBe('SqlError');
   }),
 );
@@ -210,7 +207,6 @@ it.live('the loss is published before the statements it explains fail', () =>
       Effect.gen(function* () {
         const running = yield* Effect.forkChild(
           sql`${sql.literal(burn(200_000_000))}`.pipe(
-            Effect.timeout('20 seconds'),
             Effect.match({
               onFailure: (failure) => ({ lost: [...lost], outcome: failure._tag }),
               onSuccess: () => ({ lost: [], outcome: 'answered' }),
@@ -219,7 +215,7 @@ it.live('the loss is published before the statements it explains fail', () =>
         );
         process.kill(yield* connectionPid, 'SIGKILL');
         const atFailure = yield* Fiber.join(running);
-        const afterwards = yield* answeredOrFailure(sql`SELECT 1`.pipe(Effect.timeout('3 seconds')));
+        const afterwards = yield* answeredOrFailure(sql`SELECT 1`);
         return { atFailure: atFailure.lost, outcome: atFailure.outcome, afterwards, lost: [...lost] };
       }),
     );
@@ -256,10 +252,10 @@ it.live('a handler that throws leaves no waiter on the wire and does not un-anno
       }),
     );
     const sql = Context.get(context, SqlClient);
-    const running = yield* Effect.forkChild(answeredOrFailure(sql`${sql.literal(burn(200_000_000))}`.pipe(Effect.timeout('20 seconds'))));
+    const running = yield* Effect.forkChild(answeredOrFailure(sql`${sql.literal(burn(200_000_000))}`));
     process.kill(yield* connectionPid, 'SIGKILL');
     const outcome = yield* Fiber.join(running);
-    const afterwards = yield* answeredOrFailure(sql`SELECT 1`.pipe(Effect.timeout('3 seconds')));
+    const afterwards = yield* answeredOrFailure(sql`SELECT 1`);
     expect(outcome).toBe('SqlError');
     expect(afterwards).toBe('SqlError');
     expect(calls).toEqual(['told']);
@@ -329,7 +325,7 @@ it.live('a statement the connection is still busy with is questioned and left to
       const askedWhileHeld = yield* Effect.gen(function* () {
         yield* TestClock.adjust('1 day');
         expect(said.filter((line) => line.startsWith('[sqlite]'))).toEqual([]);
-        yield* TestClock.withLive(Deferred.await(questioned).pipe(Effect.timeout('7 seconds')));
+        yield* TestClock.withLive(Deferred.await(questioned));
         return said.filter((line) => line.startsWith('[sqlite]'));
       }).pipe(Effect.ensuring(Effect.sync(() => holder.run('COMMIT'))));
       yield* Fiber.join(waiting);
@@ -358,7 +354,7 @@ const poolReaches = (pool: Effect.Effect<PoolState | undefined>, reached: (state
   const look: Effect.Effect<void> = Effect.flatMap(pool, (state) =>
     state !== undefined && reached(state) ? Effect.void : Effect.flatMap(Effect.yieldNow, () => look),
   );
-  return Effect.timeout(look, Duration.seconds(10));
+  return look;
 };
 
 it.live('an explained statement leaves later reads seeing subsequent commits', () =>
@@ -395,7 +391,7 @@ it.live('a declared read answers the last committed row while a transaction hold
           ),
         );
         yield* opened.await;
-        const during = yield* readOnly(sql<{ v: string }>`SELECT v FROM t WHERE id = 1`).pipe(Effect.timeout(Duration.seconds(10)));
+        const during = yield* readOnly(sql<{ v: string }>`SELECT v FROM t WHERE id = 1`);
         yield* holding.open;
         yield* Fiber.join(writing);
         const after = yield* sql<{ v: string }>`SELECT v FROM t WHERE id = 1`;
@@ -463,7 +459,6 @@ it.live('a reader that died sends its own statement nowhere, and the next read o
         yield* opened.await;
         const during = yield* readOnly(sql<{ v: string }>`SELECT v FROM t WHERE id = 1`).pipe(
           Effect.retry({ while: (failure: SqlError) => failure._tag === 'SqlError' }),
-          Effect.timeout(Duration.seconds(3)),
         );
         yield* holding.open;
         yield* Fiber.join(writing);
@@ -493,13 +488,9 @@ it.live('a read its caller leaves mid-statement frees its lane at once, and ever
 
     const reading = yield* Effect.forkChild(readOnly(left.sql`${left.sql.literal(burn(200_000_000))}`));
     yield* poolReaches(left.pool, (state) => state.idle === 0);
-    yield* Fiber.interrupt(reading).pipe(Effect.timeout(Duration.seconds(3)));
+    yield* Fiber.interrupt(reading);
 
-    const count = (sql: SqlClient) =>
-      readOnly(sql<{ n: number }>`SELECT count(*) AS n FROM t`).pipe(
-        Effect.timeout(Duration.seconds(3)),
-        Effect.map((rows) => rows[0]?.n),
-      );
+    const count = (sql: SqlClient) => readOnly(sql<{ n: number }>`SELECT count(*) AS n FROM t`).pipe(Effect.map((rows) => rows[0]?.n));
     const seen = { left: yield* count(left.sql), right: yield* count(right.sql), lost: (yield* left.pool)?.lost };
     expect(seen).toEqual({ left: 0, right: 0, lost: 1 });
   }),

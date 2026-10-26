@@ -49,7 +49,6 @@ it.live('multipart edits deliver repeated binary files and read a delayed JSON a
     });
     const answer = yield* OneShotTransport.post({ baseURL: `http://127.0.0.1:${server.port}` }, { path: '/images/edits', form }).pipe(
       Effect.provide(wireExecutorLayer),
-      Effect.timeout('2 seconds'),
     );
     expect(answer).toEqual({ accepted: true });
     const actual = yield* Deferred.await(received);
@@ -89,7 +88,7 @@ it.live('raw Web bodies preserve bytes and their content types', () =>
           HttpClientRequest.post(`http://127.0.0.1:${server.port}`).pipe(HttpClientRequest.setBody(HttpBody.raw(item.body))),
         );
         return yield* response.json;
-      }).pipe(Effect.provide(layer), Effect.timeout('2 seconds'));
+      }).pipe(Effect.provide(layer));
       expect(answer).toEqual({ bytes: [...item.bytes], type: item.type });
     }
   }),
@@ -122,7 +121,7 @@ for (const length of [undefined, 6]) {
           ),
         );
         return yield* response.json;
-      }).pipe(Effect.provide(layer), Effect.timeout('2 seconds'));
+      }).pipe(Effect.provide(layer));
       expect(answer).toEqual({ text: 'onetwo', length: length === undefined ? null : '6' });
     }),
   );
@@ -143,9 +142,9 @@ it.live('an early HTTP refusal releases a stalled upload producer', () =>
       const text = yield* response.text;
       yield* Deferred.await(released);
       return { status: response.status, text };
-    }).pipe(Effect.provide(layer), Effect.timeout('2 seconds'));
+    }).pipe(Effect.provide(layer));
     expect(answer).toEqual({ status: 413, text: 'Too large' });
-    yield* Deferred.await(released).pipe(Effect.timeout('1 second'));
+    yield* Deferred.await(released);
   }),
 );
 
@@ -161,7 +160,7 @@ it.live('upload producer errors remain typed failures and release the request', 
     const result = yield* Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
       return yield* client.execute(HttpClientRequest.post(`http://127.0.0.1:${server.port}`).pipe(HttpClientRequest.bodyStream(body)));
-    }).pipe(Effect.provide(layer), Effect.timeout('2 seconds'), Effect.result);
+    }).pipe(Effect.provide(layer), Effect.result);
     expect(result).toMatchObject({ _tag: 'Failure', failure: { reason: { _tag: 'EncodeError' } } });
   }),
 );

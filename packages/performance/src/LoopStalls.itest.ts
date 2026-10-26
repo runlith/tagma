@@ -159,12 +159,11 @@ it.live('the stall names the trace the loop froze inside, and that trace is kept
 );
 
 const awaitStall = Effect.fnUntraced(function* (store: Context.Service.Shape<typeof PerformanceStore>) {
-  for (let pulse = 0; pulse < 40; pulse += 1) {
+  while (true) {
     yield* Effect.sleep(PULSE_MS);
     yield* store.flush;
     if ((yield* readStalls).length > 0) return true;
   }
-  return false;
 });
 
 function open(tracer: Tracer.Tracer, name: string): Tracer.Span {

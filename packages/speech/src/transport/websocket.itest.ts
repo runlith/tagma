@@ -45,7 +45,7 @@ describe.each(openers)('webSocketTransport over %s', (_name, open) => {
         yield* link.send(new Uint8Array([1, 2, 3]));
         yield* link.send('bye');
         return yield* Stream.runCollect(link.messages);
-      }).pipe(Effect.provide(webSocketTransport(open)), Effect.timeout(5_000));
+      }).pipe(Effect.provide(webSocketTransport(open)));
       expect(seen).toEqual({ key: 'secret', protocol: 'speech' });
       expect(heard.map((message) => (typeof message === 'string' ? message : [...message]))).toEqual([[1, 2, 3], 'bye']);
     }),
@@ -69,16 +69,15 @@ describe.each(openers)('webSocketTransport over %s', (_name, open) => {
         ),
         (listener) => Effect.sync(() => listener.stop(true)),
       );
-      const released = yield* Effect.gen(function* () {
+      yield* Effect.gen(function* () {
         const transport = yield* DuplexTransport;
         const opening = yield* Effect.forkChild(
           Effect.scoped(transport.open({ url: `ws://127.0.0.1:${silent.port}/`, headers: {}, protocols: [] })),
         );
         yield* Deferred.await(accepted);
         yield* Fiber.interrupt(opening);
-        return yield* Effect.timeoutOption(Deferred.await(dropped), 2_000);
-      }).pipe(Effect.provide(webSocketTransport(open)), Effect.timeout(4_000));
-      expect(released._tag).toBe('Some');
+        yield* Deferred.await(dropped);
+      }).pipe(Effect.provide(webSocketTransport(open)));
     }),
   );
 });

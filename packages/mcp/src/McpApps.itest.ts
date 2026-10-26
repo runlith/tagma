@@ -96,7 +96,6 @@ it.live(
     const rejected = yield* Effect.result(Effect.scoped(session.subscribeResource('app://missing')));
     expect(rejected._tag === 'Failure' && rejected.failure.method).toBe('resources/subscribe');
   }),
-  10_000,
 );
 
 it.live(
@@ -155,7 +154,6 @@ it.live(
     expect((yield* Effect.flip(pool.appCall(view, 'refresh', {})))._tag).toBe('McpServerReplaced');
     expect((yield* Effect.flip(pool.appRead(view, uri)))._tag).toBe('McpServerReplaced');
   }),
-  10_000,
 );
 
 it.live(
@@ -180,7 +178,6 @@ it.live(
     expect((yield* session.appDocument(uri)).html).toContain('Dashboard');
     expect(yield* reads).toBe('3');
   }),
-  10_000,
 );
 
 it.live(
@@ -202,7 +199,6 @@ it.live(
     expect(text(yield* session.readResource('app://subscriptions'))).toBe('[]');
     expect(JSON.parse(text(yield* session.readResource('app://callers'))).unsubscribe).toEqual(as(2).caller);
   }),
-  10_000,
 );
 
 it.live(
@@ -221,5 +217,4 @@ it.live(
     const released = yield* Effect.exit(Scope.close(reader, Exit.void));
     expect(released._tag).toBe('Success');
   }),
-  10_000,
 );

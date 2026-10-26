@@ -668,53 +668,50 @@ it.live('breakdown keeps a wide parent bounded and preserves phase totals across
   }).pipe(Effect.provide(performanceLayer(storeOptions(':memory:')))),
 );
 
-it.live(
-  'breakdown never turns an evicted child into complete exclusive time',
-  () =>
-    Effect.gen(function* () {
-      const directory = yield* scratchDirectory('performance-reports-breakdown-evicted-');
-      const path = join(directory, 'performance.sqlite');
-      const maxStoredBytes = 700_000;
-      yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        const reports = yield* PerformanceReports;
-        store.openGroup('child');
-        store.submit(submission(spanRecord('child', 'process', 1, 10, 90, 'trace', 'parent', 'child'), 'child'));
-        yield* store.flush;
-        yield* fillToRoll(path, 'breakdown-roll');
-        store.submit(submission(spanRecord('parent', 'process', 2, 0, 100, 'trace', null, 'parent'), 'parent'));
-        yield* store.flush;
+it.live('breakdown never turns an evicted child into complete exclusive time', () =>
+  Effect.gen(function* () {
+    const directory = yield* scratchDirectory('performance-reports-breakdown-evicted-');
+    const path = join(directory, 'performance.sqlite');
+    const maxStoredBytes = 700_000;
+    yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      const reports = yield* PerformanceReports;
+      store.openGroup('child');
+      store.submit(submission(spanRecord('child', 'process', 1, 10, 90, 'trace', 'parent', 'child'), 'child'));
+      yield* store.flush;
+      yield* fillToRoll(path, 'breakdown-roll');
+      store.submit(submission(spanRecord('parent', 'process', 2, 0, 100, 'trace', null, 'parent'), 'parent'));
+      yield* store.flush;
 
-        const before = yield* reports.read({ type: 'breakdown', id: 'parent', limit: 1 });
-        if (before.type !== 'breakdown') return yield* Effect.die('unexpected report');
-        expect([before.coveredMs, before.selfMs, before.totalChildren, before.evidence]).toEqual([80, 20, 1, 'retained-only']);
+      const before = yield* reports.read({ type: 'breakdown', id: 'parent', limit: 1 });
+      if (before.type !== 'breakdown') return yield* Effect.die('unexpected report');
+      expect([before.coveredMs, before.selfMs, before.totalChildren, before.evidence]).toEqual([80, 20, 1, 'retained-only']);
 
-        store.closeGroup('child');
-        yield* waitUntil(
-          'the file holding the child unlinked',
-          Effect.gen(function* () {
-            const page = yield* reports.read({ type: 'breakdown', id: 'parent', limit: 1 });
-            if (page.type !== 'breakdown') return yield* Effect.die('unexpected report');
-            return page.totalChildren === 0;
-          }),
-        );
-        const after = yield* reports.read({ type: 'breakdown', id: 'parent', limit: 1 });
-        if (after.type !== 'breakdown') return yield* Effect.die('unexpected report');
-        expect([after.coveredMs, after.selfMs, after.totalChildren, after.evidence]).toEqual([0, 100, 0, 'retained-only']);
-        expect(after.children).toEqual([]);
-      }).pipe(
-        Effect.provide(
-          performanceLayer({
-            path,
-            instanceId: 'process',
-            maxPendingBytes: () => 4_000_000,
-            maxStoredBytes: () => maxStoredBytes,
-            maintainIntervalMs: 20,
-          }),
-        ),
+      store.closeGroup('child');
+      yield* waitUntil(
+        'the file holding the child unlinked',
+        Effect.gen(function* () {
+          const page = yield* reports.read({ type: 'breakdown', id: 'parent', limit: 1 });
+          if (page.type !== 'breakdown') return yield* Effect.die('unexpected report');
+          return page.totalChildren === 0;
+        }),
       );
-    }),
-  30_000,
+      const after = yield* reports.read({ type: 'breakdown', id: 'parent', limit: 1 });
+      if (after.type !== 'breakdown') return yield* Effect.die('unexpected report');
+      expect([after.coveredMs, after.selfMs, after.totalChildren, after.evidence]).toEqual([0, 100, 0, 'retained-only']);
+      expect(after.children).toEqual([]);
+    }).pipe(
+      Effect.provide(
+        performanceLayer({
+          path,
+          instanceId: 'process',
+          maxPendingBytes: () => 4_000_000,
+          maxStoredBytes: () => maxStoredBytes,
+          maintainIntervalMs: 20,
+        }),
+      ),
+    );
+  }),
 );
 
 it.live('trace forests and stall overlap stay inside one process instance', () =>
@@ -921,62 +918,56 @@ it.live('two snapshots of one instance in the same millisecond keep the order th
   }),
 );
 
-it.live(
-  'a metric hour subtracts the predecessor the roll left in an older segment',
-  () =>
-    Effect.gen(function* () {
-      const directory = yield* scratchDirectory('performance-reports-metric-roll-');
-      const path = join(directory, 'performance.sqlite');
-      yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        const reports = yield* PerformanceReports;
-        store.submit(submission(metricRecord('base', 'process', 1_000, 'rolled', [10], [1, 0], 0, 5)));
-        yield* store.flush;
-        yield* fillToRoll(path, 'metric-roll');
-        store.submit(submission(metricRecord('after', 'process', 2_000, 'rolled', [10], [1, 1], 0, 20)));
-        yield* store.flush;
-        expect(segmentsOf(path).length).toBeGreaterThan(1);
+it.live('a metric hour subtracts the predecessor the roll left in an older segment', () =>
+  Effect.gen(function* () {
+    const directory = yield* scratchDirectory('performance-reports-metric-roll-');
+    const path = join(directory, 'performance.sqlite');
+    yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      const reports = yield* PerformanceReports;
+      store.submit(submission(metricRecord('base', 'process', 1_000, 'rolled', [10], [1, 0], 0, 5)));
+      yield* store.flush;
+      yield* fillToRoll(path, 'metric-roll');
+      store.submit(submission(metricRecord('after', 'process', 2_000, 'rolled', [10], [1, 1], 0, 20)));
+      yield* store.flush;
+      expect(segmentsOf(path).length).toBeGreaterThan(1);
 
-        const hour = yield* reports.read({ type: 'metrics', name: 'rolled', since: 1_500, limit: 10 });
-        if (hour.type !== 'metrics') return yield* Effect.die('unexpected report');
-        expect(hour.hours).toHaveLength(1);
-        expect(hour.hours[0]).toMatchObject({ count: 1, sumMs: 15, partial: true });
-      }).pipe(Effect.provide(performanceLayer(rollingOptions(path))));
-    }),
-  30_000,
+      const hour = yield* reports.read({ type: 'metrics', name: 'rolled', since: 1_500, limit: 10 });
+      if (hour.type !== 'metrics') return yield* Effect.die('unexpected report');
+      expect(hour.hours).toHaveLength(1);
+      expect(hour.hours[0]).toMatchObject({ count: 1, sumMs: 15, partial: true });
+    }).pipe(Effect.provide(performanceLayer(rollingOptions(path))));
+  }),
 );
 
-it.live(
-  'the slow page reaches back into older segments as its cursor descends',
-  () =>
-    Effect.gen(function* () {
-      const directory = yield* scratchDirectory('performance-reports-slow-roll-');
-      const path = join(directory, 'performance.sqlite');
-      yield* Effect.gen(function* () {
-        const store = yield* PerformanceStore;
-        const reports = yield* PerformanceReports;
-        store.submit(submission(spanRecord('short-a', 'process', 1, 0, 1, 'slow', null, 'measured')));
-        store.submit(submission(spanRecord('short-b', 'process', 2, 0, 2, 'slow', null, 'measured')));
-        yield* store.flush;
-        yield* fillToRoll(path, 'slow-roll');
-        store.submit(submission(spanRecord('long-a', 'process', 1_000, 0, 30, 'slow', null, 'measured')));
-        store.submit(submission(spanRecord('long-b', 'process', 1_001, 0, 20, 'slow', null, 'measured')));
-        yield* store.flush;
-        expect(segmentsOf(path).length).toBeGreaterThan(1);
+it.live('the slow page reaches back into older segments as its cursor descends', () =>
+  Effect.gen(function* () {
+    const directory = yield* scratchDirectory('performance-reports-slow-roll-');
+    const path = join(directory, 'performance.sqlite');
+    yield* Effect.gen(function* () {
+      const store = yield* PerformanceStore;
+      const reports = yield* PerformanceReports;
+      store.submit(submission(spanRecord('short-a', 'process', 1, 0, 1, 'slow', null, 'measured')));
+      store.submit(submission(spanRecord('short-b', 'process', 2, 0, 2, 'slow', null, 'measured')));
+      yield* store.flush;
+      yield* fillToRoll(path, 'slow-roll');
+      store.submit(submission(spanRecord('long-a', 'process', 1_000, 0, 30, 'slow', null, 'measured')));
+      store.submit(submission(spanRecord('long-b', 'process', 1_001, 0, 20, 'slow', null, 'measured')));
+      yield* store.flush;
+      expect(segmentsOf(path).length).toBeGreaterThan(1);
 
-        const first = yield* reports.read({ type: 'slow', name: 'measured', limit: 2 });
-        if (first.type !== 'slow') return yield* Effect.die('unexpected report');
-        expect(first.spans.map((span) => span.id)).toEqual(['long-a', 'long-b']);
-        expect(first.next).not.toBeNull();
-        expect(first.next!.wallTime).toBeGreaterThan(2);
+      const first = yield* reports.read({ type: 'slow', name: 'measured', limit: 2 });
+      if (first.type !== 'slow') return yield* Effect.die('unexpected report');
+      expect(first.spans.map((span) => span.id)).toEqual(['long-a', 'long-b']);
+      expect(first.next).not.toBeNull();
+      expect(first.next!.wallTime).toBeGreaterThan(2);
 
-        const second = yield* reports.read({ type: 'slow', name: 'measured', limit: 2, after: first.next! });
-        if (second.type !== 'slow') return yield* Effect.die('unexpected report');
-        expect(second.spans.map((span) => span.id)).toEqual(['short-b', 'short-a']);
-        expect(second.next).toBeNull();
-      }).pipe(Effect.provide(performanceLayer(rollingOptions(path))));
-    }),
-  30_000,
+      const second = yield* reports.read({ type: 'slow', name: 'measured', limit: 2, after: first.next! });
+      if (second.type !== 'slow') return yield* Effect.die('unexpected report');
+      expect(second.spans.map((span) => span.id)).toEqual(['short-b', 'short-a']);
+      expect(second.next).toBeNull();
+    }).pipe(Effect.provide(performanceLayer(rollingOptions(path))));
+  }),
 );
 
 it.live('profile point reads rank merged frames, gate the raw artifact and keep typed not-found', () =>
