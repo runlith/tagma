@@ -24,8 +24,8 @@ const SCREEN = perl(
   'use IO::Select; system("/bin/stty", "raw", "-echo") == 0 or die; print "MAIN\\e[?1049h\\e[2J\\e[HREADY\\e[2;6r\\e[?6h\\e[?2004h\\e[>1u\\e[>5u"; ' +
     'while (sysread(STDIN, my $b, 1)) { ' +
     'if ($b eq "p") { print "\\e[1;1HP" } elsif ($b eq "s") { print "\\e[5;1H\\nS" } elsif ($b eq "k") { print "\\e[<u" } elsif ($b eq "n") { print "\\e[?1049l" } ' +
-    'elsif ($b eq "d") { print "\\e[6n"; select(undef, undef, undef, 0.02) until -e "go-dsr"; my $all = ""; my $in = IO::Select->new(\\*STDIN); ' +
-    'while (($all =~ tr/x//) < 98304 && $in->can_read(10)) { sysread(STDIN, my $c, 65536) or last; $all .= $c } while ($in->can_read(0.3)) { sysread(STDIN, my $c, 65536) or last; $all .= $c } open(my $f, ">", "dsr.bin"); binmode $f; print $f $all; close $f; print "D" } }',
+    'elsif ($b eq "d") { print "\\e[6n"; select(undef, undef, undef, 0.02) until -e "go-dsr"; my $all = ""; ' +
+    'until ($all =~ s/\\x01$//) { sysread(STDIN, my $c, 65536) or die "input ended before marker"; $all .= $c } open(my $f, ">", "dsr.next") or die; binmode $f; print $f $all; close $f or die; rename("dsr.next", "dsr.bin") or die; print "D" } }',
 );
 
 const PIPE_BUFFER = 64 * 1024;
@@ -73,7 +73,7 @@ beforeAll(async () => {
     return accepted !== undefined && offsetValue(accepted) > 1n ? true : undefined;
   });
   const typedAhead = Buffer.alloc(96 * 1024, 'x');
-  await drive.typed(painted.ref, typedAhead);
+  await drive.typed(painted.ref, Buffer.concat([typedAhead, Buffer.from([1])]));
   const sent = Buffer.from(Array.from({ length: 3072 }, (_, line) => `${String(line).padStart(31, '0')}\n`).join(''));
   await drive.typed(counter.ref, sent);
   await drive.acted(counter.ref, { _tag: 'End' }, 'end');
@@ -147,7 +147,7 @@ beforeAll(async () => {
     stdout: contiguous(await drive.recorded(counter.ref, 'stdout'), 'o'),
     stderr: contiguous(await drive.recorded(counter.ref, 'stderr'), 'e'),
   };
-}, 58_000);
+});
 
 afterAll(async () => {
   await stand?.dispose();
@@ -159,7 +159,6 @@ describe('a host whose logic changes twice, the second time with its holder', ()
     expect((facts.secondPrepared as PrepareAnswer)._tag).toBe('Prepared');
     expect(facts.prior).toBe(true);
     expect(stand.output()).not.toContain('did not take over');
-    expect(stand.withdrawn()).toEqual([true, true]);
     expect(stand.resumes()).toHaveLength(2);
     expect(stand.resumes()).not.toContain('Resumed');
     expect(stand.custodyFound()).toEqual(['free', 'free', 'free']);

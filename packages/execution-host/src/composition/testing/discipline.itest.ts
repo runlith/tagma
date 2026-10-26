@@ -16,7 +16,7 @@ layer(heldPosix(), { excludeTestServices: true })('POSIX line discipline', (it) 
           expect((yield* terminalFacts(child)).sid).toBe(child.pid);
         }),
       );
-    }).pipe(Effect.timeout(9_000)),
+    }),
   );
 
   it.effect('refuses a POSIX interrupt with ISIG disabled and leaves ordinary input usable', () =>
@@ -37,6 +37,6 @@ layer(heldPosix(), { excludeTestServices: true })('POSIX line discipline', (it) 
           yield* finished(child);
         }),
       );
-    }).pipe(Effect.timeout(9_000)),
+    }),
   );
 });

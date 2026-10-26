@@ -31,12 +31,7 @@ const admissionOf = (): CommandAdmission => ({
 const commandOf = (cwd: string, release: string): LaunchRequest => ({
   command: {
     program: '/bin/sh',
-    args: [
-      '-c',
-      '(n=0; while [ ! -f "$1" ] && [ "$n" -lt 3000 ]; do sleep 0.01; n=$((n+1)); done) </dev/null >/dev/null 2>&1 &',
-      'compiler',
-      release,
-    ],
+    args: ['-c', '(while [ ! -f "$1" ]; do sleep 0.01; done) </dev/null >/dev/null 2>&1 &', 'compiler', release],
     environment: [{ name: 'PATH', value: '/usr/bin:/bin' }],
     cwd,
   },

@@ -111,9 +111,13 @@ const candidate = Effect.fn('posix.succession.candidate')(function* (
 ) {
   const files = yield* FileSystem.FileSystem;
   if (holder === 'hanging') {
-    yield* files.writeFileString(yield* part(HOLDER_PART), `#!/bin/sh\nprintf ready > ${join(state, VERIFYING)}\nexec /bin/sleep 600\n`, {
-      mode: 0o755,
-    });
+    yield* files.writeFileString(
+      yield* part(HOLDER_PART),
+      `#!/bin/sh\nprintf ready > ${join(state, VERIFYING)}\nexec /usr/bin/perl -e 'sleep while 1'\n`,
+      {
+        mode: 0o755,
+      },
+    );
   } else if (holder === 'misstarting') {
     const misstart = `if [ $# -eq 6 ]; then exec ${STANDING_HOLDER} "$1" "$2" "$3" "$4" "$5" "$6/absent"; fi\nexec ${STANDING_HOLDER} "$@"\n`;
     yield* files.writeFileString(yield* part(HOLDER_PART), `#!/bin/sh\n${misstart}`, { mode: 0o755 });

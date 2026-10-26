@@ -139,21 +139,24 @@ describe('EvidenceScans', () => {
 
   it.effect('gives a hung reading its place back when that reading gives up', () =>
     Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>();
+      const released = yield* Deferred.make<void>();
       const wedged: EvidenceProbe = {
         scope,
         processes: (request) =>
           request._tag === 'Pids' && request.pids[0] === 1
-            ? Effect.never.pipe(
-                Effect.timeout(50),
-                Effect.catchTag('TimeoutError', () =>
-                  Effect.map(Clock.currentTimeMillis, (observedAt) => ({
-                    observedAt,
-                    completeness: 'unavailable' as const,
-                    unmeasured: [{ region: 'the processes 1', reason: 'timeout' as const, detail: 'no answer inside 50 ms' }],
-                    found: [],
-                  })),
-                ),
-              )
+            ? Effect.gen(function* () {
+                yield* Deferred.succeed(entered, undefined);
+                yield* Deferred.await(released);
+                return {
+                  observedAt: yield* Clock.currentTimeMillis,
+                  completeness: 'unavailable' as const,
+                  unmeasured: [
+                    { region: 'the processes 1', reason: 'timeout' as const, detail: 'the probe gave up waiting for its source' },
+                  ],
+                  found: [],
+                };
+              })
             : Effect.map(Clock.currentTimeMillis, (observedAt) => ({
                 observedAt,
                 completeness: 'complete' as const,
@@ -164,7 +167,8 @@ describe('EvidenceScans', () => {
       };
       const scans = yield* makeEvidenceScans({ limits: { ...LIMITS, concurrency: 1 } }).pipe(Effect.provideService(EvidenceReader, wedged));
       const hung = yield* Effect.forkChild(scans.processes({ _tag: 'Pids', pids: [1] }));
-      yield* TestClock.adjust(Duration.millis(51));
+      yield* Deferred.await(entered);
+      yield* Deferred.succeed(released, undefined);
       const given = yield* Fiber.join(hung);
       expect(given.completeness).toBe('unavailable');
       const after = yield* scans.processes({ _tag: 'Pids', pids: [2] });

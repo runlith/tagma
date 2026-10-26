@@ -406,64 +406,60 @@ const descendantsOf = (table: ReadonlyArray<ProcessRow>, root: number): number[]
   return found.slice(1);
 };
 
-it.live(
-  'a setsid escapee a round proved is ended through the set after its leader is gone',
-  () =>
-    Effect.gen(function* () {
-      const library = yield* loadLibrary(ARTIFACT);
-      const reader = yield* processReader(library);
-      const leader = yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          Bun.spawn(['/bin/sh', '-c', 'perl -e "use POSIX; POSIX::setsid(); exec(q{sleep}, q{13731})" & sleep 20'], {
-            stdout: 'ignore',
-            stderr: 'ignore',
-            detached: true,
-          }),
-        ),
-        (child) =>
-          Effect.andThen(
-            Effect.sync(() => killed(-child.pid)),
-            Effect.promise(() => child.exited),
-          ),
-      );
-      let escapee: number | undefined;
-      let strays: number[] = [];
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          killed(escapee);
-          for (const pid of strays) killed(pid);
+it.live('a setsid escapee a round proved is ended through the set after its leader is gone', () =>
+  Effect.gen(function* () {
+    const library = yield* loadLibrary(ARTIFACT);
+    const reader = yield* processReader(library);
+    const leader = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        Bun.spawn(['/bin/sh', '-c', 'perl -e "use POSIX; POSIX::setsid(); exec(q{sleep}, q{13731})" & sleep 20'], {
+          stdout: 'ignore',
+          stderr: 'ignore',
+          detached: true,
         }),
+      ),
+      (child) =>
+        Effect.andThen(
+          Effect.sync(() => killed(-child.pid)),
+          Effect.promise(() => child.exited),
+        ),
+    );
+    let escapee: number | undefined;
+    let strays: number[] = [];
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        killed(escapee);
+        for (const pid of strays) killed(pid);
+      }),
+    );
+    const identity = reader.identity(leader.pid);
+    if (identity._tag !== 'Read') return yield* Effect.die(new Error('the leader birth could not be read'));
+    const tables = yield* makeProcessTables({ gapMs: 0 }).pipe(Effect.provideService(Processes, reader));
+    const set = yield* makeProvenSet({ tables, leader: leader.pid, birth: identity.birth, work: undefined });
+    yield* Effect.gen(function* () {
+      const reading = yield* Effect.orDie(tables.read());
+      strays = descendantsOf(reading.rows, leader.pid);
+      yield* set.grow(reading);
+      const due = yield* set.due();
+      yield* set.refresh(
+        due.map(([pid]) => pid),
+        0,
       );
-      const identity = reader.identity(leader.pid);
-      if (identity._tag !== 'Read') return yield* Effect.die(new Error('the leader birth could not be read'));
-      const tables = yield* makeProcessTables({ gapMs: 0 }).pipe(Effect.provideService(Processes, reader));
-      const set = yield* makeProvenSet({ tables, leader: leader.pid, birth: identity.birth, work: undefined });
-      yield* Effect.gen(function* () {
-        const reading = yield* Effect.orDie(tables.read());
-        strays = descendantsOf(reading.rows, leader.pid);
-        yield* set.grow(reading);
-        const due = yield* set.due();
-        yield* set.refresh(
-          due.map(([pid]) => pid),
-          0,
-        );
-        const members = yield* set.members;
-        escapee = members.find(
-          (member) =>
-            member.facts?.args._tag === 'Read' && member.facts.args.value.join(' ') === 'sleep 13731' && member.work === member.pid,
-        )?.pid;
-        return escapee;
-      }).pipe(Effect.repeat({ schedule: Schedule.spaced(50), times: 59, until: (pid) => pid !== undefined }));
-      expect(escapee).toBeDefined();
-      leader.kill('SIGKILL');
-      yield* Effect.promise(() => leader.exited);
-      const ladder = set.ladder(killStray(processControl(reader)));
-      const climbed = yield* climb('interrupt', [ladder.aim]);
-      const swept = yield* ladder.left;
-      expect(yield* pidStanding(escapee ?? 0)).toBe('gone');
-      expect(climbed.steps[0]).toBe('interrupt');
-      expect(swept.residual).toEqual([]);
-      expect(swept.measured).toBe(true);
-    }).pipe(Effect.provide(BunFileSystem.layer)),
-  25_000,
+      const members = yield* set.members;
+      escapee = members.find(
+        (member) => member.facts?.args._tag === 'Read' && member.facts.args.value.join(' ') === 'sleep 13731' && member.work === member.pid,
+      )?.pid;
+      return escapee;
+    }).pipe(Effect.repeat({ schedule: Schedule.spaced(50), until: (pid) => pid !== undefined }));
+    expect(escapee).toBeDefined();
+    leader.kill('SIGKILL');
+    yield* Effect.promise(() => leader.exited);
+    const ladder = set.ladder(killStray(processControl(reader)));
+    const climbed = yield* climb('interrupt', [ladder.aim]);
+    const swept = yield* ladder.left;
+    expect(yield* pidStanding(escapee ?? 0)).toBe('gone');
+    expect(climbed.steps[0]).toBe('interrupt');
+    expect(swept.residual).toEqual([]);
+    expect(swept.measured).toBe(true);
+  }).pipe(Effect.provide(BunFileSystem.layer)),
 );

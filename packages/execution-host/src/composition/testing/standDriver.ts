@@ -18,8 +18,8 @@ const ENVIRONMENT = [
 ];
 
 export const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect);
-export const sleep = (ms: number) => new Promise((resume) => setTimeout(resume, ms));
-export const perl = (script: string): Program => ({ program: '/usr/bin/perl', args: ['-e', `$|=1; alarm 50; ${script}`] });
+export const sleep = (ms: number) => run(Effect.sleep(ms));
+export const perl = (script: string): Program => ({ program: '/usr/bin/perl', args: ['-e', `$|=1; ${script}`] });
 
 export const until = async <A>(_what: string, probe: () => Promise<A | undefined>): Promise<A> => {
   for (;;) {

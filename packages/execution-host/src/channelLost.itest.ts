@@ -53,7 +53,7 @@ describe('a logic whose channel to its holder broke', () => {
           const lifecycle = yield* HostLifecycle;
           yield* Effect.forkScoped(lifecycle.orphaned);
           yield* Deferred.succeed(broke, { reason: 'broken', detail: 'the holder sent a frame this logic cannot read' } as const);
-          return yield* lifecycle.departed.pipe(Effect.timeout(10_000));
+          return yield* lifecycle.departed;
         }).pipe(Effect.provide(host(directories.open(), broke))),
       );
       expect(permitted).toBe(false);

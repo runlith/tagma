@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { Effect, Exit, Fiber, FileSystem, Layer, Option, Path, Schema, Scope } from 'effect';
+import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Path, Schema, Scope } from 'effect';
 import { CapabilityProfile, ceilingsOf } from '@runlith/executions/protocol/capacity';
 import { ExecutionRef } from '@runlith/executions/protocol/execution';
 import { byteOffset } from '@runlith/executions/protocol/record';
@@ -75,14 +75,20 @@ const flowing = Effect.gen(function* () {
   yield* record.append('stdout', new Uint8Array(16).fill(0x42));
   return { record, readers: yield* makeRecordReaders({ record }) };
 });
-const pending = <A, E>(fiber: Fiber.Fiber<A, E>) => Effect.timeoutOption(Fiber.join(fiber), '20 millis');
+const pending = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
+  const finished = yield* Deferred.make<void>();
+  const fiber = yield* Effect.forkScoped(effect.pipe(Effect.onExit(() => Deferred.succeed(finished, undefined))), {
+    startImmediately: true,
+  });
+  expect(yield* Deferred.isDone(finished)).toBe(false);
+  return fiber;
+});
 
 layer(shared, { excludeTestServices: true })('RecordReaders', (it) => {
   it.effect('streaming retention waits for the first reader and only releases bytes that reader has taken', () =>
     Effect.gen(function* () {
       const { record, readers } = yield* flowing;
-      const writing = yield* Effect.forkScoped(record.append('stdout', new Uint8Array(16).fill(0x43)));
-      expect(Option.isNone(yield* pending(writing))).toBe(true);
+      const writing = yield* pending(record.append('stdout', new Uint8Array(16).fill(0x43)));
       expect(yield* record.positions('stdout')).toMatchObject({ retainedFrom: byteOffset(0n), durableThrough: byteOffset(32n) });
       const reader = yield* readers.open('stdout', byteOffset(0n));
       yield* readers.grant(reader, 16);
@@ -104,8 +110,7 @@ layer(shared, { excludeTestServices: true })('RecordReaders', (it) => {
       yield* readers.open('stdout', byteOffset(0n)).pipe(Scope.provide(slowScope));
       yield* readers.grant(fast, 16);
       yield* readers.pull(fast);
-      const writing = yield* Effect.forkScoped(record.append('stdout', new Uint8Array(16).fill(0x43)));
-      expect(Option.isNone(yield* pending(writing))).toBe(true);
+      const writing = yield* pending(record.append('stdout', new Uint8Array(16).fill(0x43)));
       expect((yield* readers.position(fast)).offset).toBe(byteOffset(16n));
       yield* Scope.close(slowScope, Exit.void);
       expect(yield* Fiber.join(writing)).toBe(byteOffset(48n));
@@ -120,12 +125,10 @@ layer(shared, { excludeTestServices: true })('RecordReaders', (it) => {
   it.effect('a pressured append is interruptible, and sealing wakes another with a typed refusal', () =>
     Effect.gen(function* () {
       const { record } = yield* flowing;
-      const writing = yield* Effect.forkScoped(record.append('stdout', new Uint8Array(16).fill(0x43)));
-      expect(Option.isNone(yield* pending(writing))).toBe(true);
+      const writing = yield* pending(record.append('stdout', new Uint8Array(16).fill(0x43)));
       yield* Fiber.interrupt(writing);
       expect(Exit.isFailure(yield* Fiber.await(writing))).toBe(true);
-      const sealed = yield* Effect.forkScoped(Effect.result(record.append('stdout', new Uint8Array(16).fill(0x44))));
-      expect(Option.isNone(yield* pending(sealed))).toBe(true);
+      const sealed = yield* pending(Effect.result(record.append('stdout', new Uint8Array(16).fill(0x44))));
       yield* record.seal();
       const refused = yield* Fiber.join(sealed);
       expect(refused._tag === 'Failure' ? refused.failure : undefined).toMatchObject({ _tag: 'RecordRefused', reason: { _tag: 'Sealed' } });
@@ -137,8 +140,7 @@ layer(shared, { excludeTestServices: true })('RecordReaders', (it) => {
       const { record, readers } = yield* flowing;
       const readerScope = yield* Scope.fork(yield* Effect.scope);
       yield* readers.open('stdout', byteOffset(0n)).pipe(Scope.provide(readerScope));
-      const writing = yield* Effect.forkScoped(record.append('stdout', new Uint8Array(16).fill(0x43)));
-      expect(Option.isNone(yield* pending(writing))).toBe(true);
+      const writing = yield* pending(record.append('stdout', new Uint8Array(16).fill(0x43)));
       yield* Scope.close(readerScope, Exit.void);
       expect(yield* Fiber.join(writing)).toBe(byteOffset(48n));
       const late = yield* readers.open('stdout', byteOffset(0n));
@@ -153,8 +155,7 @@ layer(shared, { excludeTestServices: true })('RecordReaders', (it) => {
   it.effect('ending a pressured stream wakes its writer with the typed Ended refusal', () =>
     Effect.gen(function* () {
       const { record } = yield* flowing;
-      const writing = yield* Effect.forkScoped(Effect.result(record.append('stdout', new Uint8Array(16).fill(0x43))));
-      expect(Option.isNone(yield* pending(writing))).toBe(true);
+      const writing = yield* pending(Effect.result(record.append('stdout', new Uint8Array(16).fill(0x43))));
       yield* record.endStream('stdout', 'eof');
       const refused = yield* Fiber.join(writing);
       expect(refused._tag === 'Failure' ? refused.failure : undefined).toMatchObject({ _tag: 'RecordRefused', reason: { _tag: 'Ended' } });
@@ -256,7 +257,6 @@ layer(shared, { excludeTestServices: true })('RecordReaders', (it) => {
 
   it.effect('a reader at the frontier is woken by a resize and handed its grid with no bytes, and waits again until something moves', () =>
     Effect.gen(function* () {
-      const quiet = <A, E>(effect: Effect.Effect<A, E>) => Effect.map(Effect.timeoutOption(effect, '40 millis'), Option.isSome);
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const capacity = yield* ExecutionCapacity;
@@ -274,16 +274,15 @@ layer(shared, { excludeTestServices: true })('RecordReaders', (it) => {
       const readers = yield* makeRecordReaders({ record });
       const reader = yield* readers.open('pty', byteOffset(8n));
       yield* readers.grant(reader, 16);
-      const joined = yield* quiet(readers.awaitMore(reader));
+      yield* readers.awaitMore(reader);
       const born = yield* readers.pull(reader);
-      const idle = yield* quiet(readers.awaitMore(reader));
+      const waiting = yield* pending(readers.awaitMore(reader));
       yield* record.regrid({ rows: 20, columns: 60 });
-      const woken = yield* quiet(readers.awaitMore(reader));
+      yield* Fiber.join(waiting);
       const resized = yield* readers.pull(reader);
       yield* record.append('pty', new Uint8Array(4).fill(0x42));
-      const typed = yield* quiet(readers.awaitMore(reader));
+      yield* readers.awaitMore(reader);
       const bytes = yield* readers.pull(reader);
-      expect([joined, idle, woken, typed]).toEqual([true, false, true, true]);
       expect([born.bytes.length, born.regridded, born.range.grid]).toEqual([0, true, { rows: 24, columns: 80 }]);
       expect([resized.bytes.length, resized.regridded, resized.range.grid]).toEqual([0, true, { rows: 20, columns: 60 }]);
       expect([bytes.bytes.length, bytes.regridded, bytes.range.grid]).toEqual([4, false, { rows: 20, columns: 60 }]);

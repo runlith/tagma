@@ -37,19 +37,14 @@ export const machineLoadContract = Effect.fnUntraced(function* (host: Host['Serv
 
 export const servingContracts = (adapter: HostAdapter, expected: Served) =>
   layer(adapter.layer, { excludeTestServices: true })(`${adapter.name} host capability contract`, (it) => {
-    it.effect(
-      'announces exactly the capabilities its adapter supports',
-      () =>
-        Effect.gen(function* () {
-          const host = yield* Host;
-          const served = yield* host.client.served();
-          expect([...served].sort()).toEqual([...expected].sort());
-        }),
-      9_000,
+    it.effect('announces exactly the capabilities its adapter supports', () =>
+      Effect.gen(function* () {
+        const host = yield* Host;
+        const served = yield* host.client.served();
+        expect([...served].sort()).toEqual([...expected].sort());
+      }),
     );
-    it.effect(
-      'delivers live machine and installation readings or refuses the unsupported capability',
-      () => Effect.flatMap(Host, machineLoadContract),
-      9_000,
+    it.effect('delivers live machine and installation readings or refuses the unsupported capability', () =>
+      Effect.flatMap(Host, machineLoadContract),
     );
   });

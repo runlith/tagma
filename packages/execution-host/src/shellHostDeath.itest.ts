@@ -10,7 +10,7 @@ import { toolOptions } from '@runlith/agent-tools/testing/options';
 import { type Tool, toolExecute } from '@runlith/agent/tool';
 import { type World } from '@runlith/agent-tools/world';
 import { machineWorld } from '@runlith/agent-tools/world/machine';
-import { Deferred, Effect, Exit, FileSystem, Fiber, Layer, Option, Schema, Scope } from 'effect';
+import { Deferred, Effect, Exit, FileSystem, Fiber, Layer, Schema, Scope } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import type { CommandEnvironment } from '@runlith/executions/CommandEnvironment';
 import type { Executions } from '@runlith/executions/Executions';
@@ -24,7 +24,7 @@ import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import type { Registration } from '@runlith/executions/protocol/registration';
 import { type WireLimits } from '@runlith/executions/protocol/wire';
 import { HostBoot } from '@runlith/executions/protocol/boot';
-import { hostPolicy, hostShare, hostWireLimits, registrationOf, stateDirectories } from './hostFixture';
+import { hostPolicy, hostShare, hostWireLimits, registrationOf, serving, stateDirectories } from './hostFixture';
 
 const LIBRARY = join(import.meta.dir, '..', 'native', 'target', 'release', 'libexecution_platform.dylib');
 const ENTRY = join(import.meta.dir, 'main.ts');
@@ -45,23 +45,6 @@ type Host = {
   readonly address: HostAddress;
   readonly child: Bun.Subprocess<'pipe', 'pipe', 'pipe'>;
   readonly logic: number;
-};
-
-const serving = async (child: Bun.Subprocess<'pipe', 'pipe', 'pipe'>, mark: string): Promise<void> => {
-  let held = '';
-  const watch = async (stream: ReadableStream<Uint8Array>) => {
-    const decoder = new TextDecoder();
-    for await (const chunk of stream) held += decoder.decode(chunk);
-  };
-  void watch(child.stdout);
-  void watch(child.stderr);
-  const listening = (async () => {
-    while (!held.includes(mark)) await Bun.sleep(10);
-  })();
-  const patience = new Promise<'over'>((resume) => setTimeout(() => resume('over'), 15_000));
-  if ((await Promise.race([listening.then(() => 'up' as const), patience])) === 'over') {
-    throw new Error(`the host did not report itself serving; it printed: ${held}`);
-  }
 };
 
 const startHost = async (): Promise<Host> => {
@@ -135,7 +118,7 @@ const openRig = Effect.gen(function* () {
       for (const pid of orphaned) killGroup(pid);
     }),
   );
-  const port = yield* ExecutionClient.make({ address: standing.address, role: 'custodian', limits, budget: { handshakeMs: 10_000 } });
+  const port = yield* ExecutionClient.make({ address: standing.address, role: 'custodian', limits });
   const first = yield* port.take({ installation: standing.registration.installation, operation: readOperation('shell-take') }, 0);
   if (first._tag === 'Stale') {
     yield* port.take(
@@ -180,95 +163,76 @@ const answer = (tool: Tool, input: unknown) => {
   return execute(input, { toolCallId: 'shell-call', messages: [], caller: { agentId: 'shell-tester', ownerId: 'tester', thread: null } });
 };
 
-const waitForCommand = Effect.fnUntraced(
-  function* (port: Executions['Service']) {
-    for (;;) {
-      const page = yield* port.list({ limit: 32 });
-      const found = page.executions.find((execution) => execution.state.purpose === 'command' && execution.state.phase === 'running');
-      if (found !== undefined) return found.state.ref;
-      yield* Effect.sleep('20 millis');
-    }
-  },
-  Effect.timeoutOrElse({ duration: '10 seconds', orElse: () => Effect.die('no command execution appeared on the host') }),
-  Effect.orDie,
-);
-
-const HUNG = '5 seconds';
+const waitForCommand = Effect.fnUntraced(function* (port: Executions['Service']) {
+  for (;;) {
+    const page = yield* port.list({ limit: 32 });
+    const found = page.executions.find((execution) => execution.state.purpose === 'command' && execution.state.phase === 'running');
+    if (found !== undefined) return found.state.ref;
+    yield* Effect.sleep('20 millis');
+  }
+}, Effect.orDie);
 
 layer(services, { excludeTestServices: true })('a managed call whose host dies', (it) => {
-  it.effect(
-    'a shell command over a dying host answers unavailable instead of hanging',
-    () =>
-      Effect.gen(function* () {
-        const rig = yield* openRig;
-        const pending = yield* Effect.forkChild(
-          answer(shellOf(rig.world, rig.root), { command: 'sleep 20', description: 'Outlast its host', waitMs: 30_000, lifeMs: 30_000 }),
-        );
-        yield* waitForCommand(rig.executions);
-        yield* rig.killHost;
-        const outcome = yield* Fiber.join(pending).pipe(Effect.timeoutOption(HUNG));
-        expect(Option.isSome(outcome)).toBe(true);
-        expect(Option.getOrUndefined(outcome)).toMatchObject({ verdict: { kind: 'unknown' } });
-      }),
-    60_000,
+  it.effect('a shell command over a dying host answers unavailable instead of hanging', () =>
+    Effect.gen(function* () {
+      const rig = yield* openRig;
+      const pending = yield* Effect.forkChild(
+        answer(shellOf(rig.world, rig.root), { command: 'sleep 20', description: 'Outlast its host', waitMs: 30_000, lifeMs: 30_000 }),
+      );
+      yield* waitForCommand(rig.executions);
+      yield* rig.killHost;
+      const outcome = yield* Fiber.join(pending);
+      expect(outcome).toMatchObject({ verdict: { kind: 'unknown' } });
+    }),
   );
 
-  it.effect(
-    'the companion result settles instead of waiting forever',
-    () =>
-      Effect.gen(function* () {
-        const rig = yield* openRig;
-        const spawned = yield* Deferred.make<void>();
-        const pending = yield* Effect.forkChild(
-          Effect.gen(function* () {
-            const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-            const handle = yield* spawner.spawn(ChildProcess.make('/bin/sh', ['-c', 'sleep 20'])).pipe(
-              Effect.provideService(SpawnAnnotation, {
-                purpose: 'command',
-                correlation: 'death-result',
-                budget: { timeoutMs: 30_000 },
-              }),
-            );
-            const call = managedCall(handle);
-            if (call === undefined) return yield* Effect.die('a managed spawn must carry its companion');
-            yield* Deferred.succeed(spawned, undefined);
-            return yield* Effect.result(call.result);
-          }).pipe(Effect.scoped, Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, rig.spawner)),
-        );
-        yield* Deferred.await(spawned);
-        yield* rig.killHost;
-        const outcome = yield* Fiber.join(pending).pipe(Effect.timeoutOption(HUNG));
-        expect(Option.isSome(outcome)).toBe(true);
-        if (Option.isNone(outcome)) return;
-        expect(outcome.value._tag).toBe('Failure');
-        if (outcome.value._tag === 'Failure')
-          expect(outcome.value.failure).toMatchObject({ _tag: 'PlatformError', reason: { _tag: 'BadResource', method: 'result' } });
-      }),
-    60_000,
-  );
-
-  it.effect(
-    'closing a managed scope finishes after the host dies',
-    () =>
-      Effect.gen(function* () {
-        const rig = yield* openRig;
-        const gate = yield* Scope.make();
-        yield* Effect.gen(function* () {
+  it.effect('the companion result settles instead of waiting forever', () =>
+    Effect.gen(function* () {
+      const rig = yield* openRig;
+      const spawned = yield* Deferred.make<void>();
+      const pending = yield* Effect.forkChild(
+        Effect.gen(function* () {
           const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-          yield* spawner.spawn(ChildProcess.make('/bin/sh', ['-c', 'sleep 20'])).pipe(
+          const handle = yield* spawner.spawn(ChildProcess.make('/bin/sh', ['-c', 'sleep 20'])).pipe(
             Effect.provideService(SpawnAnnotation, {
               purpose: 'command',
-              correlation: 'death-scope',
+              correlation: 'death-result',
               budget: { timeoutMs: 30_000 },
             }),
           );
-        }).pipe(Scope.provide(gate), Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, rig.spawner));
-        yield* waitForCommand(rig.executions);
-        yield* rig.killHost;
-        const closing = yield* Effect.forkChild(Scope.close(gate, Exit.void));
-        const outcome = yield* Fiber.join(closing).pipe(Effect.timeoutOption(HUNG));
-        expect(Option.isSome(outcome)).toBe(true);
-      }),
-    60_000,
+          const call = managedCall(handle);
+          if (call === undefined) return yield* Effect.die('a managed spawn must carry its companion');
+          yield* Deferred.succeed(spawned, undefined);
+          return yield* Effect.result(call.result);
+        }).pipe(Effect.scoped, Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, rig.spawner)),
+      );
+      yield* Deferred.await(spawned);
+      yield* rig.killHost;
+      const outcome = yield* Fiber.join(pending);
+      expect(outcome._tag).toBe('Failure');
+      if (outcome._tag === 'Failure')
+        expect(outcome.failure).toMatchObject({ _tag: 'PlatformError', reason: { _tag: 'BadResource', method: 'result' } });
+    }),
+  );
+
+  it.effect('closing a managed scope finishes after the host dies', () =>
+    Effect.gen(function* () {
+      const rig = yield* openRig;
+      const gate = yield* Scope.make();
+      yield* Effect.gen(function* () {
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        yield* spawner.spawn(ChildProcess.make('/bin/sh', ['-c', 'sleep 20'])).pipe(
+          Effect.provideService(SpawnAnnotation, {
+            purpose: 'command',
+            correlation: 'death-scope',
+            budget: { timeoutMs: 30_000 },
+          }),
+        );
+      }).pipe(Scope.provide(gate), Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, rig.spawner));
+      yield* waitForCommand(rig.executions);
+      yield* rig.killHost;
+      const closing = yield* Effect.forkChild(Scope.close(gate, Exit.void));
+      yield* Fiber.join(closing);
+    }),
   );
 });

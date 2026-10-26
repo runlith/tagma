@@ -6,5 +6,5 @@ import { Host } from './session';
 import { machineLoadContract } from './serving';
 
 layer(hosted('POSIX', posix()).layer, { excludeTestServices: true })('POSIX load capability', (it) => {
-  it.effect('refuses live machine load when no usage policy was declared', () => Effect.flatMap(Host, machineLoadContract), 9_000);
+  it.effect('refuses live machine load when no usage policy was declared', () => Effect.flatMap(Host, machineLoadContract));
 });

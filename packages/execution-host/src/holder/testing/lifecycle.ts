@@ -38,7 +38,7 @@ export const lifecycleContracts = (name: string, services: Layer.Layer<Adapter |
                 expect((yield* finished(child)).exit).toEqual({ _tag: 'Code', code: 0 });
               }),
             );
-          }).pipe(Effect.timeout(9_000)),
+          }),
       );
     }
 
@@ -64,7 +64,7 @@ export const lifecycleContracts = (name: string, services: Layer.Layer<Adapter |
             expect(yield* adapter.standing(child.pid)).toBe('gone');
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('answers a preparation and an activation by whether the holder replaces itself', () =>
@@ -82,7 +82,7 @@ export const lifecycleContracts = (name: string, services: Layer.Layer<Adapter |
           act: 'activate',
           reason: replaces ? 'invalid' : 'unsupported',
         });
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('answers an action on a work whose exited, unreaped leader is its last member as gone', () =>
@@ -104,7 +104,7 @@ export const lifecycleContracts = (name: string, services: Layer.Layer<Adapter |
             expect((yield* child.reap).exit).toEqual({ _tag: 'Code', code: 37 });
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('refuses to reap a running child and leaves it running', () =>
@@ -124,7 +124,7 @@ export const lifecycleContracts = (name: string, services: Layer.Layer<Adapter |
             expect(yield* adapter.standing(child.pid)).toBe('running');
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('measures actual child CPU and peak memory when reaped', () =>
@@ -153,7 +153,7 @@ export const lifecycleContracts = (name: string, services: Layer.Layer<Adapter |
         expect(burned.cpuMicros).toBeGreaterThan(idle.cpuMicros * 5);
         expect(idle.cpuMicros).toBeLessThan(200_000);
         expect(burned.peakRssBytes).toBeGreaterThan(256 * 1024);
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('rejects actions after reap and closes all terminal operations on release', () =>
@@ -187,7 +187,7 @@ export const lifecycleContracts = (name: string, services: Layer.Layer<Adapter |
           _tag: 'HolderRefused',
           reason: holder.capabilities.has('named-signals') ? 'unknown' : 'unsupported',
         });
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('refuses a duplicate live identity without replacing its child', () =>
@@ -208,7 +208,7 @@ export const lifecycleContracts = (name: string, services: Layer.Layer<Adapter |
             expect(yield* adapter.standing(child.pid)).toBe('running');
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('delivers a named signal or returns its typed unsupported refusal', () =>
@@ -234,6 +234,6 @@ export const lifecycleContracts = (name: string, services: Layer.Layer<Adapter |
             }
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
   });

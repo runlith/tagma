@@ -30,7 +30,7 @@ const through = Effect.fnUntraced(function* (host: Host['Service'], from: ByteCu
   return { cursor, bytes: Buffer.concat(chunks) };
 });
 
-export type Forgetting = (directory: string, execution: string, what: 'start' | 'departure') => void;
+export type Forgetting = (directory: string, execution: string, what: 'start' | 'departure') => Effect.Effect<void, unknown>;
 
 export const restartContracts = (adapter: HostAdapter, forgetStart: Forgetting) =>
   layer(adapter.layer, { excludeTestServices: true })(`${adapter.name} host logic replacement contracts`, (it) => {
@@ -86,7 +86,7 @@ export const restartContracts = (adapter: HostAdapter, forgetStart: Forgetting) 
         const before = yield* through(host, first.cursor, 'before\n');
         expect(before.bytes.toString()).toBe('before\n');
         const incarnation = yield* host.client.generation();
-        forgetStart(platform.directory, unknown.execution.execution, 'start');
+        yield* forgetStart(platform.directory, unknown.execution.execution, 'start');
         yield* host.control.restartLogic;
 
         expect(yield* host.client.generation()).toBe(incarnation);
@@ -118,7 +118,7 @@ export const restartContracts = (adapter: HostAdapter, forgetStart: Forgetting) 
             }),
           ),
         );
-        forgetStart(platform.directory, unrecorded.execution.execution, 'departure');
+        yield* forgetStart(platform.directory, unrecorded.execution.execution, 'departure');
         yield* host.control.yieldLogic;
         expect((yield* host.client.status()).unadopted).toContainEqual(
           expect.objectContaining({
@@ -128,6 +128,6 @@ export const restartContracts = (adapter: HostAdapter, forgetStart: Forgetting) 
         );
         expect(yield* platform.standing(unrecorded.native.pid)).toBe('running');
         expect((yield* host.client.state(child.execution))?.native.pid).toBe(child.native.pid);
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
   });

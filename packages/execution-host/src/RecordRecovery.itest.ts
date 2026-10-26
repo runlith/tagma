@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { Data, Effect, Fiber, FileSystem, Layer, Option, Path, Schema } from 'effect';
+import { Data, Deferred, Effect, Fiber, FileSystem, Layer, Path, Schema } from 'effect';
 import { RecordFiles } from '@runlith/executions/RecordFiles';
 import { ExecutionLimits } from '@runlith/executions/protocol/capacity';
 import { ExecutionRef } from '@runlith/executions/protocol/execution';
@@ -217,8 +217,12 @@ layer(shared, { excludeTestServices: true })('record recovery', (it) => {
           }),
         );
         const record = yield* makeSegmentRecord({ mode: 'reopen', records: root, ref, transport: 'pipes', limits });
-        const writing = yield* Effect.forkScoped(record.append('stdout', new TextEncoder().encode('qrstuvwx')));
-        expect(Option.isNone(yield* Fiber.join(writing).pipe(Effect.timeoutOption('20 millis')))).toBe(true);
+        const finished = yield* Deferred.make<void>();
+        const writing = yield* Effect.forkScoped(
+          record.append('stdout', new TextEncoder().encode('qrstuvwx')).pipe(Effect.onExit(() => Deferred.succeed(finished, undefined))),
+          { startImmediately: true },
+        );
+        expect(yield* Deferred.isDone(finished)).toBe(false);
         const drain = yield* record.follow('stdout', byteOffset(0n));
         const first = yield* record.read(at(0n, 'stdout'), 8);
         expect(new TextDecoder().decode(first.bytes)).toBe('abcdefgh');

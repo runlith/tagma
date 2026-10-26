@@ -30,7 +30,7 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
               expect((yield* finished(child)).exit).toEqual({ _tag: 'Code', code: 0 });
             }),
           );
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: passes the named environment exactly without substituting SHELL`, () =>
@@ -51,7 +51,7 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
               yield* finished(child);
             }),
           );
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: runs in the explicit cwd`, () =>
@@ -66,7 +66,7 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
               yield* finished(child);
             }),
           );
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: uses only the supplied HOME when cwd is omitted`, () =>
@@ -85,7 +85,7 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
               yield* finished(child);
             }),
           );
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: uses the OS user home when cwd and HOME are omitted`, () =>
@@ -112,7 +112,7 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
               yield* finished(child);
             }),
           );
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: refuses a cwd that is a file even with valid HOME`, () =>
@@ -123,14 +123,14 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
             cwd: adapter.file,
             env: [{ name: 'HOME', value: adapter.home }],
           });
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: refuses a relative cwd`, () =>
         Effect.gen(function* () {
           const adapter = yield* Adapter;
           yield* refusal(yield* Holder, { ...request(adapter, adapter.cwd, transport), cwd: '.' });
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: resolves a bare program by the supplied relative PATH at cwd`, () =>
@@ -148,14 +148,14 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
               yield* finished(child);
             }),
           );
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: refuses a bare program without PATH instead of inheriting the host PATH`, () =>
         Effect.gen(function* () {
           const adapter = yield* Adapter;
           yield* refusal(yield* Holder, request(adapter, { path: adapter.pathName, args: [] }, transport));
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: refuses a NUL in an environment value`, () =>
@@ -165,7 +165,7 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
             ...request(adapter, adapter.environment, transport),
             env: [{ name: 'A', value: 'x\u0000B=y' }],
           });
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: refuses an environment name containing equals`, () =>
@@ -175,7 +175,7 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
             ...request(adapter, adapter.environment, transport),
             env: [{ name: 'A=B', value: 'x' }],
           });
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       for (const pace of ['full', 'low', 'lowest'] as const) {
@@ -184,7 +184,7 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
             const adapter = yield* Adapter;
             const failed = yield* refusal(yield* Holder, { ...request(adapter, { path: adapter.missing, args: [] }, transport), pace });
             expect(failed?.reason).toBe('not-found');
-          }).pipe(Effect.timeout(9_000)),
+          }),
         );
       }
 
@@ -195,7 +195,7 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
           const before = yield* adapter.descriptors(holder.pid);
           yield* refusal(holder, request(adapter, { path: adapter.missing, args: [] }, transport));
           expect(yield* adapter.descriptors(holder.pid)).toEqual(before);
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: gives the child no unrelated descriptors`, () =>
@@ -208,7 +208,7 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
               expect((yield* finished(child)).exit).toEqual({ _tag: 'Code', code: 0 });
             }),
           );
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${tag}: inherits the launcher soft limits rather than the holder descriptor reserve`, () =>
@@ -223,7 +223,7 @@ export const launchContracts = (name: string, services: Layer.Layer<Adapter | Ho
               expect((yield* finished(child)).exit).toEqual({ _tag: 'Code', code: 0 });
             }),
           );
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
     }
   });

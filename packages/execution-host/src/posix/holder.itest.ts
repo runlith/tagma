@@ -89,7 +89,7 @@ beforeAll(async () => {
         .split('\n')
         .map((line) => JSON.parse(line) as Fact)
     : [];
-}, 9_000);
+});
 
 afterAll(() => {
   if (alive(holderPid)) process.kill(holderPid, 'SIGKILL');

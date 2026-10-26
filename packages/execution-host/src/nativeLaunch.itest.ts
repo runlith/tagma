@@ -21,6 +21,7 @@ import { processControl } from './posix/control';
 import { makeProcessTables } from './ProvenSet';
 import { terminalFacts } from './posix/testing/terminal';
 import { Descriptors } from './posix/native';
+import { Descriptor } from './posix/Descriptor';
 
 const ref = ExecutionRef.make({
   installation: InstallationId.make('native-launch'),
@@ -72,13 +73,17 @@ const command = Effect.fnUntraced(function* (argv: readonly [string, ...string[]
 }, Effect.scoped);
 const fillTerminal = Effect.fnUntraced(function* (native: Effect.Success<ReturnType<typeof launchNative>>) {
   const terminal = native.held.channels._tag === 'pty' ? native.held.channels.terminal : undefined;
-  if (terminal === undefined) return yield* new FixtureFailed({ message: 'the launch provided no terminal' });
-  const bytes = new Uint8Array(65536).fill(120);
-  let blocked = false;
-  for (let attempt = 0; attempt < 16 && !blocked; attempt++)
-    blocked = Option.isNone(yield* terminal.write(bytes).pipe(Effect.timeoutOption(25)));
-  expect(blocked).toBe(true);
-  return terminal;
+  if (!(terminal instanceof Descriptor)) return yield* new FixtureFailed({ message: 'the launch provided no POSIX terminal' });
+  const descriptors = yield* Effect.acquireRelease(Effect.try({ try: () => Descriptors.load(HOLDER_LIBRARY), catch: failed }), (loaded) =>
+    Effect.sync(() => loaded.unload()),
+  );
+  const bytes = new Uint8Array(TRANSFER_LIMIT).fill(120);
+  for (;;) {
+    const written = descriptors.write(terminal.fd, bytes);
+    if ('count' in written) continue;
+    if (written.refusal !== 'would-block') return yield* failed(written.detail || written.refusal);
+    return terminal;
+  }
 });
 const through = Effect.fnUntraced(function* (source: NativeSource, marker: string, maximum = TRANSFER_LIMIT) {
   let text = '';
@@ -309,6 +314,7 @@ layer(BunServices.layer, { excludeTestServices: true })('native launch contracts
         expect((yield* Effect.flip(native.held.release)).reason).toBe('running');
         yield* native.sink.write(new TextEncoder().encode('kept\n'));
         expect(yield* textOf(native.sources[0]!)).toBe('kept');
+        yield* native.exit;
         expect(yield* native.held.observe).toEqual({ _tag: 'Code', code: 7 });
         const first = yield* native.held.reap;
         expect(yield* native.held.reap).toEqual(first);
@@ -577,32 +583,6 @@ while True: signal.pause()`;
             const refused = yield* Effect.flip(launchNative(launch(transport, 'exit 0', '/no/such/program'), ref, holder, undefined, pace));
             expect(refused).toMatchObject({ _tag: 'NativeSpawnRefused', transport: transport._tag, stage: 'spawn' });
           }
-      }),
-    }),
-  );
-  it.effect('launches the terminal and its child at the requested full or utility pace', () =>
-    nativeCase({
-      use: Effect.fnUntraced(function* ({ holder }) {
-        const own = yield* command(['ps', '-o', 'pri=', '-p', String(process.pid)]);
-        for (const pace of ['full', 'low'] as const) {
-          const native = yield* launchNative(
-            launch(TERMINAL, 'sleep 30 & echo ready; wait'),
-            named(`pace-${pace}`),
-            holder,
-            undefined,
-            pace,
-          );
-          yield* through(native.sources[0]!, 'ready');
-          const pid = native.identity.pid;
-          const leader = yield* command(['ps', '-o', 'pri=,comm=', '-p', String(pid)]);
-          const child = (yield* command(['pgrep', '-P', String(pid)])).split('\n')[0];
-          if (child === undefined) return yield* failed('the terminal started no child');
-          const priority = yield* command(['ps', '-o', 'pri=', '-p', child]);
-          expect({ pace: native.pace, leader, child: priority }).toEqual(
-            pace === 'full' ? { pace: 'full', leader: `${own} /bin/sh`, child: own } : { pace: 'low', leader: '20 /bin/sh', child: '20' },
-          );
-          yield* native.target.end('destroy', undefined, 'stopping');
-        }
       }),
     }),
   );

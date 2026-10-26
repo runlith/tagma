@@ -57,12 +57,9 @@ afterEach(() => {
   for (const listener of listeners.splice(0)) listener.stop(true);
 });
 
-const listening = (
-  path: string,
-  greet: (socket: { write: (bytes: Uint8Array) => number; end: () => void }) => void,
-  ended?: () => void,
-  heard?: (socket: { end: () => void }) => void,
-) =>
+type Peer = { write: (bytes: Uint8Array) => number; end: () => void };
+
+const listening = (path: string, greet: (socket: Peer) => void, ended?: () => void, heard?: (socket: Peer) => void) =>
   Effect.sync(() => {
     const listener = Bun.listen({
       unix: path,
@@ -77,7 +74,7 @@ const listening = (
   });
 
 const handshake = (address: { state: string; installation: string }) =>
-  Effect.match(wireSession(address as never, 'custodian', limits, { handshakeMs: 2_000 }), {
+  Effect.match(wireSession(address as never, 'custodian', limits, {}), {
     onFailure: (failure): SessionFailure | 'welcomed' => failure,
     onSuccess: (): SessionFailure | 'welcomed' => 'welcomed',
   });
@@ -224,10 +221,15 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
       Effect.gen(function* () {
         for (const version of [WIRE_RANGE.min - 1, WIRE_VERSION + 1]) {
           const { registration, address } = yield* registered;
-          yield* listening(registration.endpoint.path, (socket) => {
-            socket.write(frame({ _tag: 'Event', body: { _tag: 'Ended', subscription: 1, ending: 'closed' } }, version));
-            setTimeout(() => socket.end(), 20);
-          });
+          yield* listening(
+            registration.endpoint.path,
+            () => {},
+            undefined,
+            (socket) => {
+              socket.write(frame({ _tag: 'Event', body: { _tag: 'Ended', subscription: 1, ending: 'closed' } }, version));
+              socket.end();
+            },
+          );
           const met = yield* handshake(address);
           expect(met).not.toBe('welcomed');
           if (met === 'welcomed') continue;
@@ -249,10 +251,15 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
       });
       return Effect.gen(function* () {
         const { registration, address } = yield* registered;
-        yield* listening(registration.endpoint.path, (socket) => {
-          socket.write(frame({ _tag: 'Event', body: { _tag: 'Ended', subscription: 1, ending: 'closed' } }));
-          setTimeout(() => socket.end(), 20);
-        });
+        yield* listening(
+          registration.endpoint.path,
+          () => {},
+          undefined,
+          (socket) => {
+            socket.write(frame({ _tag: 'Event', body: { _tag: 'Ended', subscription: 1, ending: 'closed' } }));
+            socket.end();
+          },
+        );
         yield* handshake(address);
         expect(named).toContain('wire.read.dispatch.Event.Ended');
       }).pipe(Effect.withTracer(tracer));
@@ -261,10 +268,15 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
     it.effect('a fault sent before the welcome is the fault, not silence', () =>
       Effect.gen(function* () {
         const { registration, address } = yield* registered;
-        yield* listening(registration.endpoint.path, (socket) => {
-          socket.write(frame({ _tag: 'Fault', fault: { kind: 'malformed', detail: 'v: expected 1' } }));
-          setTimeout(() => socket.end(), 20);
-        });
+        yield* listening(
+          registration.endpoint.path,
+          () => {},
+          undefined,
+          (socket) => {
+            socket.write(frame({ _tag: 'Fault', fault: { kind: 'malformed', detail: 'v: expected 1' } }));
+            socket.end();
+          },
+        );
         const met = yield* handshake(address);
         expect(met).not.toBe('welcomed');
         if (met === 'welcomed') return;
@@ -319,8 +331,7 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
         const connecting = yield* Effect.forkChild(client.status());
         yield* Deferred.await(accepted);
         yield* Fiber.interrupt(connecting);
-        const closed = yield* Effect.timeoutOption(Deferred.await(gone), '2 seconds');
-        expect(closed._tag).toBe('Some');
+        yield* Deferred.await(gone);
       }),
     );
   });
@@ -350,7 +361,7 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
         }
         return { _tag: 'Refused', refusal: { _tag: 'HostUnavailable', reason: 'recorded' } };
       });
-      const client = yield* ExecutionClient.make({ address, role: 'custodian', limits, budget: { handshakeMs: 2_000 } });
+      const client = yield* ExecutionClient.make({ address, role: 'custodian', limits });
       const delivered = yield* Effect.result(client.start(operation, launch));
       const oversized = yield* Effect.result(
         client.start(operation, {
@@ -382,7 +393,7 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
           previousWelcome,
           answering,
         );
-        const client = yield* ExecutionClient.make({ address, role: 'custodian', limits, budget: { handshakeMs: 2_000 } });
+        const client = yield* ExecutionClient.make({ address, role: 'custodian', limits });
         const status = yield* Effect.result(client.status());
         expect(status).toMatchObject({ _tag: 'Failure', failure: { _tag: 'WireFailed', fault: { kind: 'unsupported-version' } } });
         expect(seen).toEqual([]);
@@ -396,7 +407,7 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
         const silent = JSON.stringify(welcome);
         const { registration, address } = yield* registered;
         const seen = serving(registration.endpoint.path, WIRE_RANGE, silent, answering);
-        const client = yield* ExecutionClient.make({ address, role: 'custodian', limits, budget: { handshakeMs: 2_000 } });
+        const client = yield* ExecutionClient.make({ address, role: 'custodian', limits });
         const load = yield* Effect.result(Effect.scoped(client.load(42)));
         const residual = yield* Effect.result(client.endResidual(origin, 4242));
         const status = yield* Effect.result(client.status());
@@ -416,7 +427,7 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
         const announced = JSON.stringify(welcome);
         const { registration, address } = yield* registered;
         const seen = serving(registration.endpoint.path, WIRE_RANGE, announced, answering);
-        const client = yield* ExecutionClient.make({ address, role: 'custodian', limits, budget: { handshakeMs: 2_000 } });
+        const client = yield* ExecutionClient.make({ address, role: 'custodian', limits });
         const residual = yield* Effect.result(client.endResidual(origin, 4242));
         const load = yield* Effect.result(Effect.scoped(client.load(42)));
         expect(refusalOf(residual)?.refusal).toMatchObject({ _tag: 'UnsupportedCapability', capability: 'end-residual' });

@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { Deferred, Effect, Fiber } from 'effect';
+import { Deferred, Effect, Fiber, Schedule } from 'effect';
 import { ChildProcess } from 'effect/process';
 import { executionSpawner } from '@runlith/executions/executionSpawner';
 import { ExecutionClient } from '@runlith/executions/ExecutionClient';
@@ -43,7 +43,9 @@ const spawn = Effect.gen(function* () {
 });
 
 const settled = Effect.fnUntraced(function* (host: Host['Service'], call: ManagedCall) {
-  const answer = yield* host.client.callResult(call.operation, { waitMs: 5_000 });
+  const answer = yield* host.client
+    .callResult(call.operation, { waitMs: 100 })
+    .pipe(Effect.repeat({ until: (answer) => answer._tag === 'Settled', schedule: Schedule.spaced(10) }));
   expect(answer._tag).toBe('Settled');
   if (answer._tag !== 'Settled') return yield* Effect.die(new Error('the scope ending must settle its call'));
   expect(answer.result._tag).toBe('Decided');
@@ -65,7 +67,7 @@ export const scopeContracts = (adapter: HostAdapter) =>
         expect(yield* platform.standing(child.descendant)).not.toBe('running');
         const state = yield* host.client.state(child.call.execution);
         expect(state).toBeUndefined();
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('releases the child and the fork when the public handle scope is interrupted', () =>
@@ -89,6 +91,6 @@ export const scopeContracts = (adapter: HostAdapter) =>
         expect(yield* platform.standing(child.descendant)).not.toBe('running');
         const state = yield* host.client.state(child.call.execution);
         expect(state).toBeUndefined();
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
   });

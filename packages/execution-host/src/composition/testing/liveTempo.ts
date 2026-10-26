@@ -42,7 +42,7 @@ export const liveTempoContracts = (adapter: HostAdapter) =>
                 expect(yield* platform.background(descendant)).toBe(remains);
               }),
             );
-          }).pipe(Effect.timeout(9_000)),
+          }),
         );
       }
     }

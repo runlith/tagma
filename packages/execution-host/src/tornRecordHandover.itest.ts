@@ -122,59 +122,50 @@ const handedOver = Effect.fnUntraced(function* (
   }).pipe(Effect.provide(registryOver(directory, Context.add(platform, Holder, { ...real, held: [child] }))));
 });
 
-it.live(
-  'the next logic does not continue a stream from a payload its predecessor could neither cut back nor journal',
-  () =>
-    Effect.gen(function* () {
-      const after = yield* handedOver(
-        'torn-handover-',
-        PRINTS,
-        [torn, { whenPathHas: JOURNAL_FILE, onCall: 2, fails: true }],
-        Effect.fnUntraced(function* (execution) {
-          const executions = yield* Executions;
-          for (;;) {
-            const change = yield* Effect.exit(executions.changed(execution));
-            if ((yield* executions.summary(execution))?.state.streams.stdout === 'error') return;
-            if (Exit.isFailure(change)) return yield* Effect.die(new Error('the execution left before its stdout ended'));
-            yield* change.value;
-          }
-        }),
-      );
-      expect(after).toEqual({ text: '', durable: byteOffset(0n), stdout: 'error' });
-    }).pipe(Effect.provide(BunServices.layer)),
-  30_000,
+it.live('the next logic does not continue a stream from a payload its predecessor could neither cut back nor journal', () =>
+  Effect.gen(function* () {
+    const after = yield* handedOver(
+      'torn-handover-',
+      PRINTS,
+      [torn, { whenPathHas: JOURNAL_FILE, onCall: 2, fails: true }],
+      Effect.fnUntraced(function* (execution) {
+        const executions = yield* Executions;
+        for (;;) {
+          const change = yield* Effect.exit(executions.changed(execution));
+          if ((yield* executions.summary(execution))?.state.streams.stdout === 'error') return;
+          if (Exit.isFailure(change)) return yield* Effect.die(new Error('the execution left before its stdout ended'));
+          yield* change.value;
+        }
+      }),
+    );
+    expect(after).toEqual({ text: '', durable: byteOffset(0n), stdout: 'error' });
+  }).pipe(Effect.provide(BunServices.layer)),
 );
 
-it.live(
-  'a stream ending its pipeline never got to the store reaches the next logic through the departure',
-  () =>
-    Effect.gen(function* () {
-      const held = yield* Deferred.make<void>();
-      const entered = yield* Deferred.make<void>();
-      const after = yield* handedOver(
-        'torn-race-',
-        `exec 2>&-; ${PRINTS}`,
-        [torn, { whenPathHas: JOURNAL_FILE, onCall: 3, held, entered, heldThroughInterrupt: true }],
-        () => Deferred.await(entered),
-      ).pipe(Effect.ensuring(Deferred.succeed(held, undefined)));
-      expect(after).toEqual({ text: '', durable: byteOffset(0n), stdout: 'error' });
-    }).pipe(Effect.provide(BunServices.layer)),
-  30_000,
+it.live('a stream ending its pipeline never got to the store reaches the next logic through the departure', () =>
+  Effect.gen(function* () {
+    const held = yield* Deferred.make<void>();
+    const entered = yield* Deferred.make<void>();
+    const after = yield* handedOver(
+      'torn-race-',
+      `exec 2>&-; ${PRINTS}`,
+      [torn, { whenPathHas: JOURNAL_FILE, onCall: 3, held, entered, heldThroughInterrupt: true }],
+      () => Deferred.await(entered),
+    ).pipe(Effect.ensuring(Deferred.succeed(held, undefined)));
+    expect(after).toEqual({ text: '', durable: byteOffset(0n), stdout: 'error' });
+  }).pipe(Effect.provide(BunServices.layer)),
 );
 
-it.live(
-  'a departure gives up on a capture whose write ignores interruption, and the next logic reads what was confirmed',
-  () =>
-    Effect.gen(function* () {
-      const held = yield* Deferred.make<void>();
-      const entered = yield* Deferred.make<void>();
-      const after = yield* handedOver(
-        'masked-write-',
-        PRINTS,
-        [{ whenPathHas: join('stdout', segmentFile(0n)), onCall: 3, held, entered, heldThroughInterrupt: true, fails: true }],
-        () => Deferred.await(entered),
-      ).pipe(Effect.ensuring(Deferred.succeed(held, undefined)));
-      expect(after).toMatchObject({ text: 'first', durable: byteOffset(5n) });
-    }).pipe(Effect.provide(BunServices.layer)),
-  30_000,
+it.live('a departure gives up on a capture whose write ignores interruption, and the next logic reads what was confirmed', () =>
+  Effect.gen(function* () {
+    const held = yield* Deferred.make<void>();
+    const entered = yield* Deferred.make<void>();
+    const after = yield* handedOver(
+      'masked-write-',
+      PRINTS,
+      [{ whenPathHas: join('stdout', segmentFile(0n)), onCall: 3, held, entered, heldThroughInterrupt: true, fails: true }],
+      () => Deferred.await(entered),
+    ).pipe(Effect.ensuring(Deferred.succeed(held, undefined)));
+    expect(after).toMatchObject({ text: 'first', durable: byteOffset(5n) });
+  }).pipe(Effect.provide(BunServices.layer)),
 );

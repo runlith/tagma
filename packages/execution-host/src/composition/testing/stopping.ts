@@ -28,7 +28,7 @@ export const stopContracts = (adapter: HostAdapter) =>
             expect((yield* monotonicMs) - began).toBeLessThan(STOP_LADDER.terminateAtMs);
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('interrupts unexeced pipe work and retains the cleanup it prints', () =>
@@ -52,7 +52,7 @@ export const stopContracts = (adapter: HostAdapter) =>
             expect((yield* monotonicMs) - began).toBeLessThan(STOP_LADDER.terminateAtMs);
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('delivers terminate as the second pipe stopping step', () =>
@@ -79,7 +79,7 @@ export const stopContracts = (adapter: HostAdapter) =>
             expect(elapsed).toBeLessThan(STOP_LADDER.killAtMs);
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('kills pipe work that ignores interrupt and terminate at the last ladder step', () =>
@@ -106,7 +106,7 @@ export const stopContracts = (adapter: HostAdapter) =>
             expect(elapsed).toBeLessThan(STOP_LADDER.killAtMs + STOP_LADDER.reapMs);
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('destroys the work its leader forked and leaves no running proven member', () =>
@@ -127,7 +127,7 @@ export const stopContracts = (adapter: HostAdapter) =>
             expect(yield* platform.standing(descendant)).not.toBe('running');
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('begins stopping after leader exit at terminate and preserves that original exit', () =>
@@ -160,6 +160,6 @@ export const stopContracts = (adapter: HostAdapter) =>
             expect(yield* platform.standing(descendant)).not.toBe('running');
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
   });

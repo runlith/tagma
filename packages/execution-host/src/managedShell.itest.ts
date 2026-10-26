@@ -10,7 +10,7 @@ import type { ToolVerdict } from '@runlith/agent/tool';
 import { toolOptions } from '@runlith/agent-tools/testing/options';
 import { type FinishedCommand, type World } from '@runlith/agent-tools/world';
 import { machineWorld } from '@runlith/agent-tools/world/machine';
-import { Context, Deferred, Effect, FileSystem, Fiber, Layer, Option, Schema } from 'effect';
+import { Context, Deferred, Effect, FileSystem, Fiber, Layer, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import type { CommandEnvironment } from '@runlith/executions/CommandEnvironment';
 import type { Executions } from '@runlith/executions/Executions';
@@ -25,7 +25,7 @@ import { HostRequestKey, type ExecutionRef } from '@runlith/executions/protocol/
 import type { Registration } from '@runlith/executions/protocol/registration';
 import { type WireLimits } from '@runlith/executions/protocol/wire';
 import { HostBoot } from '@runlith/executions/protocol/boot';
-import { hostPolicy, hostShare, hostWireLimits, registrationOf, stateDirectories } from './hostFixture';
+import { hostPolicy, hostShare, hostWireLimits, registrationOf, serving, stateDirectories } from './hostFixture';
 
 const LIBRARY = join(import.meta.dir, '..', 'native', 'target', 'release', 'libexecution_platform.dylib');
 const ENTRY = join(import.meta.dir, 'main.ts');
@@ -46,24 +46,6 @@ type Host = {
   readonly address: HostAddress;
   readonly child: Bun.Subprocess<'pipe', 'pipe', 'pipe'>;
   readonly said: () => string;
-};
-
-const serving = async (child: Bun.Subprocess<'pipe', 'pipe', 'pipe'>, mark: string): Promise<() => string> => {
-  let held = '';
-  const watch = async (stream: ReadableStream<Uint8Array>) => {
-    const decoder = new TextDecoder();
-    for await (const chunk of stream) held += decoder.decode(chunk);
-  };
-  void watch(child.stdout);
-  void watch(child.stderr);
-  const listening = (async () => {
-    while (!held.includes(mark)) await Bun.sleep(10);
-  })();
-  const patience = new Promise<'over'>((resume) => setTimeout(() => resume('over'), 15_000));
-  if ((await Promise.race([listening.then(() => 'up' as const), patience])) === 'over') {
-    throw new Error(`the host did not report itself serving; it printed: ${held}`);
-  }
-  return () => held;
 };
 
 const startHost = async (): Promise<Host> => {
@@ -130,7 +112,7 @@ const shellRig = Layer.effect(
         await standing.child.exited;
       }),
     );
-    const port = yield* ExecutionClient.make({ address: host.address, role: 'custodian', limits, budget: { handshakeMs: 10_000 } });
+    const port = yield* ExecutionClient.make({ address: host.address, role: 'custodian', limits });
     const first = yield* port.take({ installation: host.registration.installation, operation: readOperation('shell-take') }, 0);
     if (first._tag === 'Stale') {
       yield* port.take(
@@ -216,217 +198,182 @@ const openedWorld = Effect.fnUntraced(function* (shell: Shell['Service']) {
 });
 
 layer(shellRig, { excludeTestServices: true })('bash over a managed execution host', (it) => {
-  it.effect(
-    'a command whose life ran out and then exited zero is answered as killed at its life, not a success',
-    () =>
-      Effect.gen(function* () {
-        const { world, root } = yield* Shell;
-        const ran = yield* answer(shellOf(world, root), {
-          command: `trap 'exit 0' INT TERM; sleep 30`,
-          description: 'Handle the signal and exit zero',
-          lifeMs: 400,
-        });
+  it.effect('a command whose life ran out and then exited zero is answered as killed at its life, not a success', () =>
+    Effect.gen(function* () {
+      const { world, root } = yield* Shell;
+      const ran = yield* answer(shellOf(world, root), {
+        command: `trap 'exit 0' INT TERM; sleep 30`,
+        description: 'Handle the signal and exit zero',
+        lifeMs: 400,
+      });
 
-        expect(fact(ran.display)).toEqual({ label: 'ended', value: 'life ran out' });
-        expect(ran.verdict).toMatchObject({ kind: 'failed' });
-      }),
-    30_000,
+      expect(fact(ran.display)).toEqual({ label: 'ended', value: 'life ran out' });
+      expect(ran.verdict).toMatchObject({ kind: 'failed' });
+    }),
   );
 
-  it.effect(
-    'a foreign signal early in a long deadline is the native fact, never a timeout',
-    () =>
-      Effect.gen(function* () {
-        const { world, root } = yield* Shell;
-        const ran = yield* answer(shellOf(world, root), {
-          command: 'kill -QUIT $$',
-          description: 'Die by a signal',
+  it.effect('a foreign signal early in a long deadline is the native fact, never a timeout', () =>
+    Effect.gen(function* () {
+      const { world, root } = yield* Shell;
+      const ran = yield* answer(shellOf(world, root), {
+        command: 'kill -QUIT $$',
+        description: 'Die by a signal',
+        lifeMs: 30_000,
+      });
+
+      expect(fact(ran.display)).toEqual({ label: 'ended', value: 'killed' });
+      expect(ran.text).toContain('SIGQUIT');
+    }),
+  );
+
+  it.effect('a run stopped mid-command takes its execution down for the cause it was stopped for, not a life that ran out', () =>
+    Effect.gen(function* () {
+      const shell = yield* Shell;
+      const { port } = shell;
+      const ready = yield* openedWorld(shell);
+      const execute = shellOf(ready.world, shell.root).execute;
+      if (execute === undefined) return yield* Effect.die('bash declares no execute');
+      const running = yield* Effect.forkChild(
+        execute({ command: 'sleep 20', description: 'Wait to be stopped', lifeMs: 30_000 }, { toolCallId: 'shell-call', messages: [] }),
+      );
+      const target = yield* ready.opened;
+      const interrupting = yield* Effect.forkChild(Fiber.interrupt(running));
+      const decided = yield* Effect.gen(function* () {
+        for (;;) {
+          const summary = yield* port.state(target);
+          if (summary?.decision !== undefined) return summary;
+          yield* Effect.sleep('20 millis');
+        }
+      }).pipe(Effect.orDie);
+      yield* Fiber.join(interrupting);
+
+      expect(decided.decision).toMatchObject({ _tag: 'Cancelled', cause: 'scope-closed' });
+    }),
+  );
+
+  it.effect('a stop nobody in this run asked for is stopped with its own cause, not the user’s', () =>
+    Effect.gen(function* () {
+      const shell = yield* Shell;
+      const { port, host } = shell;
+      const ready = yield* openedWorld(shell);
+      const running = yield* Effect.forkChild(
+        answer(shellOf(ready.world, shell.root), {
+          command: 'sleep 20',
+          description: 'Wait to be stopped by another holder',
           lifeMs: 30_000,
-        });
+        }),
+      );
+      const target = yield* ready.opened;
+      yield* port
+        .stop({ installation: host.registration.installation, operation: readOperation('outside-stop') }, target, 'explicit-stop', 'signal')
+        .pipe(Effect.orDie);
+      const ran = yield* Fiber.join(running);
 
-        expect(fact(ran.display)).toEqual({ label: 'ended', value: 'killed' });
-        expect(ran.text).toContain('SIGQUIT');
-      }),
-    30_000,
+      expect(fact(ran.display)).toEqual({ label: 'ended', value: 'stopped' });
+      expect(ran.text).toContain('explicit-stop');
+      expect(ran.text).not.toContain('User aborted the command');
+    }),
   );
 
-  it.effect(
-    'a run stopped mid-command takes its execution down for the cause it was stopped for, not a life that ran out',
-    () =>
-      Effect.gen(function* () {
-        const shell = yield* Shell;
-        const { port } = shell;
-        const ready = yield* openedWorld(shell);
-        const execute = shellOf(ready.world, shell.root).execute;
-        if (execute === undefined) return yield* Effect.die('bash declares no execute');
-        const running = yield* Effect.forkChild(
-          execute({ command: 'sleep 20', description: 'Wait to be stopped', lifeMs: 30_000 }, { toolCallId: 'shell-call', messages: [] }),
+  it.effect('a running bash command is one execution of the host, declared as a command', () =>
+    Effect.gen(function* () {
+      const shell = yield* Shell;
+      const { port } = shell;
+      const ready = yield* openedWorld(shell);
+      const running = yield* Effect.forkChild(
+        answer(shellOf(ready.world, shell.root), { command: 'sleep 3', description: 'Be visible', lifeMs: 30_000 }),
+      );
+      const target = yield* ready.opened;
+
+      const summary = yield* port.state(target).pipe(Effect.orDie);
+      expect(summary?.state.purpose).toBe('command');
+      expect(summary?.state.lifetime).toBe('call');
+      expect(Number(summary?.native.pid ?? 0)).toBeGreaterThan(0);
+
+      const ran = yield* Fiber.join(running);
+      expect(fact(ran.display)).toEqual({ label: 'exit', value: '0' });
+    }),
+  );
+
+  it.effect('an unannotated spawn keeps the binding it was built with, and an annotated one replaces it', () =>
+    Effect.gen(function* () {
+      const { spawner, port } = yield* Shell;
+      const purposes = yield* Effect.gen(function* () {
+        const plain = yield* executionOf(yield* spawner.spawn(ChildProcess.make('/bin/sleep', ['2'])));
+        const noted = yield* executionOf(
+          yield* spawner
+            .spawn(ChildProcess.make('/bin/sleep', ['2']))
+            .pipe(Effect.provideService(SpawnAnnotation, { purpose: 'command', correlation: 'annotated' })),
         );
-        const target = yield* ready.opened;
-        const interrupting = yield* Effect.forkChild(Fiber.interrupt(running));
-        const decided = yield* Effect.gen(function* () {
-          for (;;) {
-            const summary = yield* port.state(target);
-            if (summary?.decision !== undefined) return summary;
-            yield* Effect.sleep('20 millis');
-          }
-        }).pipe(Effect.timeoutOption('10 seconds'), Effect.orDie);
-        yield* Fiber.join(interrupting);
+        const read = (ref: typeof plain) => Effect.map(port.state(ref), (summary) => summary?.state.purpose);
+        return { plain: yield* read(plain), noted: yield* read(noted) };
+      }).pipe(Effect.scoped, Effect.orDie);
 
-        expect(Option.getOrUndefined(decided)?.decision).toMatchObject({ _tag: 'Cancelled', cause: 'scope-closed' });
-      }),
-    30_000,
+      expect(purposes.plain).toBe('internal');
+      expect(purposes.noted).toBe('command');
+    }),
   );
 
-  it.effect(
-    'a stop nobody in this run asked for is stopped with its own cause, not the user’s',
-    () =>
-      Effect.gen(function* () {
-        const shell = yield* Shell;
-        const { port, host } = shell;
-        const ready = yield* openedWorld(shell);
-        const running = yield* Effect.forkChild(
-          answer(shellOf(ready.world, shell.root), {
-            command: 'sleep 20',
-            description: 'Wait to be stopped by another holder',
-            lifeMs: 30_000,
-          }),
-        );
-        const target = yield* ready.opened;
-        yield* port
-          .stop(
-            { installation: host.registration.installation, operation: readOperation('outside-stop') },
-            target,
-            'explicit-stop',
-            'signal',
-          )
-          .pipe(Effect.orDie);
-        const ran = yield* Fiber.join(running);
+  it.effect('a child bound to this process is refused, and one that outlives it is not', () =>
+    Effect.gen(function* () {
+      const { spawner } = yield* Shell;
+      const outcome = yield* Effect.gen(function* () {
+        const bad = yield* Effect.result(spawner.spawn(ChildProcess.make('/bin/echo', ['x'], { detached: false })));
+        const good = yield* Effect.result(spawner.spawn(ChildProcess.make('/bin/echo', ['x'], { detached: true })));
+        return {
+          refused: bad._tag === 'Failure' ? bad.failure.reason.description : null,
+          accepted: good._tag === 'Success',
+        };
+      }).pipe(Effect.scoped);
 
-        expect(fact(ran.display)).toEqual({ label: 'ended', value: 'stopped' });
-        expect(ran.text).toContain('explicit-stop');
-        expect(ran.text).not.toContain('User aborted the command');
-      }),
-    30_000,
+      expect(outcome.accepted).toBe(true);
+      expect(outcome.refused).toContain('detached: false');
+    }),
   );
 
-  it.effect(
-    'a running bash command is one execution of the host, declared as a command',
-    () =>
-      Effect.gen(function* () {
-        const shell = yield* Shell;
-        const { port } = shell;
-        const ready = yield* openedWorld(shell);
-        const running = yield* Effect.forkChild(
-          answer(shellOf(ready.world, shell.root), { command: 'sleep 3', description: 'Be visible', lifeMs: 30_000 }),
-        );
-        const target = yield* ready.opened;
+  it.effect('a finished managed command is recorded once with native cost', () =>
+    Effect.gen(function* () {
+      const { world, root } = yield* Shell;
+      const recorded: Array<FinishedCommand> = [];
+      const shell = shellOf(
+        {
+          ...world,
+          commands: { finished: (command) => Effect.sync(() => void recorded.push(command)) },
+        },
+        root,
+      );
+      yield* answer(shell, { command: 'printf measured', description: 'Print a word', lifeMs: 30_000 });
 
-        const summary = yield* port.state(target).pipe(Effect.orDie);
-        expect(summary?.state.purpose).toBe('command');
-        expect(summary?.state.lifetime).toBe('call');
-        expect(Number(summary?.native.pid ?? 0)).toBeGreaterThan(0);
-
-        const ran = yield* Fiber.join(running);
-        expect(fact(ran.display)).toEqual({ label: 'exit', value: '0' });
-      }),
-    30_000,
+      expect(recorded.map(({ exit, cost }) => ({ exit, cost }))).toEqual([
+        { exit: { _tag: 'Code', code: 0 }, cost: expect.objectContaining({ _tag: 'Measured' }) },
+      ]);
+    }),
   );
 
-  it.effect(
-    'an unannotated spawn keeps the binding it was built with, and an annotated one replaces it',
-    () =>
-      Effect.gen(function* () {
-        const { spawner, port } = yield* Shell;
-        const purposes = yield* Effect.gen(function* () {
-          const plain = yield* executionOf(yield* spawner.spawn(ChildProcess.make('/bin/sleep', ['2'])));
-          const noted = yield* executionOf(
-            yield* spawner
-              .spawn(ChildProcess.make('/bin/sleep', ['2']))
-              .pipe(Effect.provideService(SpawnAnnotation, { purpose: 'command', correlation: 'annotated' })),
-          );
-          const read = (ref: typeof plain) => Effect.map(port.state(ref), (summary) => summary?.state.purpose);
-          return { plain: yield* read(plain), noted: yield* read(noted) };
-        }).pipe(Effect.scoped, Effect.orDie);
+  it.effect('a command that simply succeeds answers its exit and its output', () =>
+    Effect.gen(function* () {
+      const { world, root } = yield* Shell;
+      const ran = yield* answer(shellOf(world, root), { command: 'printf hello', description: 'Print a word' });
 
-        expect(purposes.plain).toBe('internal');
-        expect(purposes.noted).toBe('command');
-      }),
-    30_000,
-  );
-
-  it.effect(
-    'a child bound to this process is refused, and one that outlives it is not',
-    () =>
-      Effect.gen(function* () {
-        const { spawner } = yield* Shell;
-        const outcome = yield* Effect.gen(function* () {
-          const bad = yield* Effect.result(spawner.spawn(ChildProcess.make('/bin/echo', ['x'], { detached: false })));
-          const good = yield* Effect.result(spawner.spawn(ChildProcess.make('/bin/echo', ['x'], { detached: true })));
-          return {
-            refused: bad._tag === 'Failure' ? bad.failure.reason.description : null,
-            accepted: good._tag === 'Success',
-          };
-        }).pipe(Effect.scoped);
-
-        expect(outcome.accepted).toBe(true);
-        expect(outcome.refused).toContain('detached: false');
-      }),
-    30_000,
-  );
-
-  it.effect(
-    'a finished managed command is recorded once with native cost',
-    () =>
-      Effect.gen(function* () {
-        const { world, root } = yield* Shell;
-        const recorded: Array<FinishedCommand> = [];
-        const shell = shellOf(
-          {
-            ...world,
-            commands: { finished: (command) => Effect.sync(() => void recorded.push(command)) },
-          },
-          root,
-        );
-        yield* answer(shell, { command: 'printf measured', description: 'Print a word', lifeMs: 30_000 });
-
-        expect(recorded.map(({ exit, cost }) => ({ exit, cost }))).toEqual([
-          { exit: { _tag: 'Code', code: 0 }, cost: expect.objectContaining({ _tag: 'Measured' }) },
-        ]);
-      }),
-    30_000,
-  );
-
-  it.effect(
-    'a command that simply succeeds answers its exit and its output',
-    () =>
-      Effect.gen(function* () {
-        const { world, root } = yield* Shell;
-        const ran = yield* answer(shellOf(world, root), { command: 'printf hello', description: 'Print a word' });
-
-        expect(ran.text).toContain('hello');
-        expect(fact(ran.display)).toEqual({ label: 'exit', value: '0' });
-        expect(ran.verdict).toEqual({ kind: 'answered' });
-      }),
-    30_000,
+      expect(ran.text).toContain('hello');
+      expect(fact(ran.display)).toEqual({ label: 'exit', value: '0' });
+      expect(ran.verdict).toEqual({ kind: 'answered' });
+    }),
   );
 });
 
 describe('bash over the ordinary platform world', () => {
-  it.live(
-    'a generic catalog runs commands and kills them at their life with no host in sight',
-    () =>
-      Effect.gen(function* () {
-        const files = yield* FileSystem.FileSystem;
-        const root = yield* files.makeTempDirectoryScoped({ prefix: 'platform-shell-' });
-        const shell = shellOf(machineWorld, root);
-        const ok = yield* answer(shell, { command: 'printf plain', description: 'Print a word' });
-        expect(ok.text).toContain('plain');
-        expect(fact(ok.display)).toEqual({ label: 'exit', value: '0' });
+  it.live('a generic catalog runs commands and kills them at their life with no host in sight', () =>
+    Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.makeTempDirectoryScoped({ prefix: 'platform-shell-' });
+      const shell = shellOf(machineWorld, root);
+      const ok = yield* answer(shell, { command: 'printf plain', description: 'Print a word' });
+      expect(ok.text).toContain('plain');
+      expect(fact(ok.display)).toEqual({ label: 'exit', value: '0' });
 
-        const late = yield* answer(shell, { command: 'sleep 20', description: 'Outlast its life', lifeMs: 300 });
-        expect(fact(late.display)).toEqual({ label: 'ended', value: 'life ran out' });
-      }).pipe(Effect.provide(BunServices.layer)),
-    30_000,
+      const late = yield* answer(shell, { command: 'sleep 20', description: 'Outlast its life', lifeMs: 300 });
+      expect(fact(late.display)).toEqual({ label: 'ended', value: 'life ran out' });
+    }).pipe(Effect.provide(BunServices.layer)),
   );
 });

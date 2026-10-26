@@ -12,7 +12,7 @@ import { bundledStand, type Stand } from './bundled';
 import { driving, run, type Started } from './standDriver';
 
 let directory: string;
-const QUIET = { program: '/bin/sleep', args: ['50'] };
+const QUIET = { program: '/bin/cat', args: [] };
 
 let stand: Stand;
 const facts: Record<string, unknown> = {};
@@ -71,7 +71,7 @@ beforeAll(async () => {
   };
   await stand.offer({ build: 'ahead', logic: 'store-ahead' });
   facts.offeredAgain = await stand.prepare();
-}, 58_000);
+});
 
 afterAll(async () => {
   await stand?.dispose();

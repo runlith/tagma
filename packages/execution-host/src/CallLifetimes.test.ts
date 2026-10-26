@@ -28,6 +28,7 @@ type Sleeper = { readonly target: bigint; readonly wake: Deferred.Deferred<void>
 
 type Time = {
   readonly clock: Clock.Clock;
+  readonly sleeping: Effect.Effect<bigint>;
   readonly stepWall: (ms: number) => Effect.Effect<void>;
   readonly stepMono: (ns: bigint) => Effect.Effect<void>;
   readonly fireEarly: (ns: bigint) => Effect.Effect<void>;
@@ -56,6 +57,13 @@ const manualClock: Effect.Effect<Time> = Effect.gen(function* () {
   };
   return {
     clock,
+    sleeping: Effect.gen(function* () {
+      for (;;) {
+        const sleeper = (yield* Ref.get(sleepers))[0];
+        if (sleeper !== undefined) return sleeper.target;
+        yield* Effect.yieldNow;
+      }
+    }),
     stepWall: (ms: number) =>
       Effect.sync(() => {
         wallMs += ms;
@@ -94,12 +102,11 @@ const openArmed = Effect.fnUntraced(function* (calls: CallLifetimes, name: strin
 });
 
 const timerDecision = Effect.fnUntraced(function* (calls: CallLifetimes, operation: HostRequestRef) {
-  for (let attempt = 0; attempt < 25; attempt += 1) {
+  for (;;) {
     const decision = yield* calls.decision(operation);
     if (decision !== undefined) return decision;
     yield* Effect.yieldNow;
   }
-  return yield* calls.decision(operation);
 });
 
 const exitZeroSources = Effect.fnUntraced(function* (calls: CallLifetimes, operation: HostRequestRef) {
@@ -145,7 +152,7 @@ describe('CallLifetimes over injected time', () => {
       const decision = yield* withCalls((calls, time) =>
         Effect.gen(function* () {
           const { operation } = yield* openArmed(calls, 'timer-alone', BUDGET_MS);
-          yield* Effect.yieldNow;
+          yield* time.sleeping;
           yield* time.stepMono(BUDGET_NS);
           return yield* timerDecision(calls, operation);
         }),
@@ -161,9 +168,10 @@ describe('CallLifetimes over injected time', () => {
       const answer = yield* withCalls((calls, time) =>
         Effect.gen(function* () {
           const { operation } = yield* openArmed(calls, 'woke-short', BUDGET_MS);
-          yield* Effect.yieldNow;
+          yield* time.sleeping;
           yield* time.fireEarly(BUDGET_NS - SHORT_NS);
-          const early = yield* timerDecision(calls, operation);
+          expect(yield* time.sleeping).toBe(BUDGET_NS);
+          const early = yield* calls.decision(operation);
           yield* time.stepMono(SHORT_NS);
           return { early, reached: yield* timerDecision(calls, operation) };
         }),

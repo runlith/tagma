@@ -124,12 +124,11 @@ const untilMeasured = Effect.fnUntraced(function* (
   hostExecutions: Executions['Service'],
   execution: Parameters<Executions['Service']['summary']>[0],
 ) {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
+  for (;;) {
     const summary = yield* hostExecutions.summary(execution);
     if (summary !== undefined && summary.state.phase === 'ended' && summary.state.cleanup !== 'pending') return summary;
     yield* Effect.sleep(20);
   }
-  return yield* hostExecutions.summary(execution);
 });
 
 describe('what an ended terminal holds', () => {

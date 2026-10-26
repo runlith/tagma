@@ -107,7 +107,7 @@ const command = Effect.fnUntraced(function* ({ program, args, cwd }: CommandInpu
   return { stdout, stderr, code };
 }, Effect.scoped);
 
-layer(fixture, { excludeTestServices: true, timeout: '30 seconds' })('a bundle this repository produces', (it) => {
+layer(fixture, { excludeTestServices: true })('a bundle this repository produces', (it) => {
   it.effect('carries and verifies the complete relocated closure with its declared platform and wire contracts', () =>
     Effect.gen(function* () {
       const built = yield* BuiltBundle;

@@ -99,7 +99,7 @@ describe('the input queue answers for what it owes', () => {
           yield* admit(input, write(0, 'before'));
           yield* Deferred.await(child.taking);
           const request: InputRequest = { sequence: 1, cause: 'interrupt', act: { _tag: 'Interrupt' } };
-          const first = yield* admit(input, request).pipe(Effect.timeout(500));
+          const first = yield* admit(input, request);
           expect(first._tag).toBe('InputAdmitted');
           expect(yield* admit(input, request)).toEqual(first);
           expect(

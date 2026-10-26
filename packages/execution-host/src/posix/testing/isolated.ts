@@ -110,22 +110,28 @@ export const isolatedProcess = Effect.fn('posix.testing.isolatedProcess')(
     const failure = Effect.gen(function* () {
       if (yield* files.exists(errors)) return yield* unavailable(yield* files.readFileString(errors));
     });
+    let connected: number | undefined;
+    const disconnect = Effect.sync(() => {
+      if (connected === undefined) return;
+      sockets.symbols.close(connected);
+      connected = undefined;
+    });
     const fd = yield* Effect.acquireRelease(
       Effect.gen(function* () {
         yield* failure;
         const accepted = sockets.symbols.accept(listener, null, null);
         if (accepted >= 0) {
-          if (nonblocking(accepted)) return accepted;
+          if (nonblocking(accepted)) {
+            connected = accepted;
+            return accepted;
+          }
           sockets.symbols.close(accepted);
           return yield* unavailable(`the isolated holder socket could not become nonblocking: ${errno()}`);
         }
         if (errno() !== constants.errno.EAGAIN && errno() !== constants.errno.EINTR) return yield* unavailable(`accept: ${errno()}`);
         return undefined;
       }).pipe(Effect.repeat({ while: (fd) => fd === undefined, schedule: Schedule.spaced(5) })),
-      (fd) =>
-        Effect.sync(() => {
-          if (fd !== undefined) sockets.symbols.close(fd);
-        }),
+      () => disconnect,
     );
     if (fd === undefined) return yield* unavailable('the isolated holder connected without a descriptor');
     yield* files.exists(pidfile).pipe(Effect.repeat({ while: (exists) => !exists, schedule: Schedule.spaced(5) }));
@@ -147,8 +153,9 @@ export const isolatedProcess = Effect.fn('posix.testing.isolatedProcess')(
         return yield* unavailable(`the isolated holder could not be ended: ${errno()}`);
     });
     yield* Effect.addFinalizer(() => Effect.andThen(kill, exited).pipe(Effect.orDie));
-    const process: FixtureProcess & { readonly fd: number } = {
+    const process: FixtureProcess & { readonly fd: number; readonly disconnect: Effect.Effect<void> } = {
       fd,
+      disconnect,
       exited: exited.pipe(Effect.mapError(failed)),
       exitCode: () => exitCode,
       kill: kill.pipe(Effect.mapError(failed)),

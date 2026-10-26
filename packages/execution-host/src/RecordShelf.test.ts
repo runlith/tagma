@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Deferred, Duration, Effect, Fiber, FileSystem, Path } from 'effect';
+import { Deferred, Effect, Fiber, FileSystem, Path } from 'effect';
 import { ExecutionId, InstallationId } from '@runlith/executions/protocol/execution';
 import { makeRecordShelf } from './RecordShelf';
 import { ExecutionStore } from './store/ExecutionStore';
@@ -47,6 +47,6 @@ it.live(
     );
     yield* Deferred.await(fencing);
     yield* Fiber.interrupt(release);
-    expect(yield* shelf.sealed(execution).pipe(Effect.timeout(Duration.millis(20)))).toBe(false);
+    expect(yield* shelf.sealed(execution)).toBe(false);
   }),
 );

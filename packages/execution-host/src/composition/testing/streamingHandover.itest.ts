@@ -76,7 +76,7 @@ layer(hosted('POSIX', posix()).layer, { excludeTestServices: true })('POSIX stre
       const full = yield* host.client.read(cursor, 1).pipe(
         Effect.repeat({
           while: (read) => offsetValue(read.range.durableThrough) < BigInt(limits.retainedBytes),
-          schedule: Schedule.upTo(Schedule.spaced('5 millis'), { duration: '2 seconds' }),
+          schedule: Schedule.spaced('5 millis'),
         }),
       );
       expect(full.range.durableThrough).toBe(byteOffset(BigInt(limits.retainedBytes)));
@@ -94,7 +94,7 @@ layer(hosted('POSIX', posix()).layer, { excludeTestServices: true })('POSIX stre
       );
       expect(Option.getOrUndefined(ended)).toMatchObject({ _tag: 'State', summary: { state: { streams: { stdout: 'eof' } } } });
       yield* host.client.retire(yield* operation(host), started.execution);
-    }).pipe(Effect.timeout(9_000)),
+    }),
   );
 
   it.effect('a source parked without a reader remains explicitly stoppable and its scope can be retired', () =>
@@ -121,7 +121,7 @@ layer(hosted('POSIX', posix()).layer, { excludeTestServices: true })('POSIX stre
       const full = yield* host.client.read(cursor, 1).pipe(
         Effect.repeat({
           while: (read) => offsetValue(read.range.durableThrough) < BigInt(limits.retainedBytes),
-          schedule: Schedule.upTo(Schedule.spaced('5 millis'), { duration: '2 seconds' }),
+          schedule: Schedule.spaced('5 millis'),
         }),
       );
       expect(full.range.durableThrough).toBe(byteOffset(BigInt(limits.retainedBytes)));
@@ -129,6 +129,6 @@ layer(hosted('POSIX', posix()).layer, { excludeTestServices: true })('POSIX stre
       expect(stopped.confirmed.some((resource) => resource.relation === 'leader' && resource.exit._tag === 'Signal')).toBe(true);
       yield* host.client.retire(yield* operation(host), started.execution);
       expect(yield* host.client.state(started.execution)).toBeUndefined();
-    }).pipe(Effect.timeout(9_000)),
+    }),
   );
 });

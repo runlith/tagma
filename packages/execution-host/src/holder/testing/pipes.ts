@@ -22,7 +22,7 @@ export const pipeContracts = (name: string, services: Layer.Layer<Adapter | Hold
             expect((yield* finished(child)).exit).toEqual({ _tag: 'Code', code: 0 });
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('preserves a write beyond both pipe buffers against a slow reader', () =>
@@ -50,7 +50,7 @@ export const pipeContracts = (name: string, services: Layer.Layer<Adapter | Hold
             yield* finished(child);
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('gives ignored stdin EOF without exposing an input pipe', () =>
@@ -67,7 +67,7 @@ export const pipeContracts = (name: string, services: Layer.Layer<Adapter | Hold
             expect((yield* finished(child)).exit).toEqual({ _tag: 'Code', code: 0 });
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('reports a typed write failure for closed stdin and keeps the child observable', () =>
@@ -89,7 +89,7 @@ export const pipeContracts = (name: string, services: Layer.Layer<Adapter | Hold
             expect((yield* finished(child)).exit).toEqual(adapter.exits.kill);
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('drains stdout and stderr separately after exit', () =>
@@ -106,7 +106,7 @@ export const pipeContracts = (name: string, services: Layer.Layer<Adapter | Hold
             yield* child.reap;
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('preserves separately backpressured stdout and stderr', () =>
@@ -124,7 +124,7 @@ export const pipeContracts = (name: string, services: Layer.Layer<Adapter | Hold
             expect((yield* finished(child)).exit).toEqual({ _tag: 'Code', code: 3 });
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('observes a quiet exit without acquiring an output reader', () =>
@@ -137,7 +137,7 @@ export const pipeContracts = (name: string, services: Layer.Layer<Adapter | Hold
             yield* child.reap;
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('stops work while output remains unread', () =>
@@ -165,7 +165,7 @@ export const pipeContracts = (name: string, services: Layer.Layer<Adapter | Hold
             expect(yield* adapter.standing(child.pid)).toBe('gone');
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('interrupts a program beneath a parent that did not exec it', () =>
@@ -191,7 +191,7 @@ export const pipeContracts = (name: string, services: Layer.Layer<Adapter | Hold
             yield* child.reap;
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('accepts pipe input after the leader exits until the descendant closes it', () =>
@@ -211,7 +211,7 @@ export const pipeContracts = (name: string, services: Layer.Layer<Adapter | Hold
             yield* child.reap;
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('keeps a descendant running after leader-only action and ends it by work action before reap', () =>
@@ -253,6 +253,6 @@ export const pipeContracts = (name: string, services: Layer.Layer<Adapter | Hold
             expect(after._tag === 'Failure' ? after.failure : undefined).toMatchObject({ _tag: 'HolderRefused', reason: 'reaped' });
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
   });

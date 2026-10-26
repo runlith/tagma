@@ -53,10 +53,7 @@ export const holderLossContracts = (adapter: HostAdapter) =>
         yield* host.control.loseHolder;
         const status = yield* host.client
           .status()
-          .pipe(
-            Effect.repeat({ while: (status) => status.holder._tag === 'Standing', schedule: Schedule.spaced(10) }),
-            Effect.timeout(1_000),
-          );
+          .pipe(Effect.repeat({ while: (status) => status.holder._tag === 'Standing', schedule: Schedule.spaced(10) }));
         expect(status.holder).toMatchObject({ _tag: 'Lost', loss: { reason: 'gone' } });
         const refused = yield* host.client.start(yield* operation(host), {
           command: { program: platform.cwd.path, args: platform.cwd.args, environment: [], cwd: platform.directory },
@@ -86,6 +83,6 @@ export const holderLossContracts = (adapter: HostAdapter) =>
           expect(stopped.steps.length).toBeGreaterThan(0);
           expect(yield* platform.standing(child.native.pid!)).toBe('gone');
         }
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
   });

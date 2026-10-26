@@ -374,42 +374,39 @@ layer(platform, { excludeTestServices: true })('the execution wire, over a real 
     }),
   );
 
-  it.effect(
-    'a reader granted exactly one frame receives delivery after delivery, one at a time',
-    () =>
-      Effect.gen(function* () {
-        const directory = directories.open();
-        const payload = new Uint8Array(3000).fill(7);
-        const outcome = yield* over(directory, (registration, connections) =>
-          Effect.gen(function* () {
-            const pushed = yield* Ref.make(0);
-            yield* answering(connections, (admitted) =>
-              Effect.gen(function* () {
-                if (admitted.body._tag !== 'Subscribe') {
-                  return yield* admitted.reply({ _tag: 'Status', status: status(registration) });
-                }
-                const subscription = yield* admitted.subscribe(admitted.body.credits);
-                if (subscription === undefined) return;
-                for (let index = 0; index < 3; index += 1) {
-                  const ok = yield* subscription.bytes(range(registration, 'held', 0n, 3000n), payload);
-                  if (!ok) return;
-                  yield* Ref.update(pushed, (held) => held + 1);
-                }
-                yield* subscription.end('completed');
-              }),
-            );
-            const executions = yield* client(registration, 'custodian');
-            const delivered = yield* Stream.runCollect(
-              Stream.take(executions.subscribe({ _tag: 'Bytes', cursor: cursorAt(registration, 'held', 0n) }, limits.frameBytes), 3),
-            );
-            return { pushed: yield* Ref.get(pushed), delivered: delivered.length };
-          }),
-        );
+  it.effect('a reader granted exactly one frame receives delivery after delivery, one at a time', () =>
+    Effect.gen(function* () {
+      const directory = directories.open();
+      const payload = new Uint8Array(3000).fill(7);
+      const outcome = yield* over(directory, (registration, connections) =>
+        Effect.gen(function* () {
+          const pushed = yield* Ref.make(0);
+          yield* answering(connections, (admitted) =>
+            Effect.gen(function* () {
+              if (admitted.body._tag !== 'Subscribe') {
+                return yield* admitted.reply({ _tag: 'Status', status: status(registration) });
+              }
+              const subscription = yield* admitted.subscribe(admitted.body.credits);
+              if (subscription === undefined) return;
+              for (let index = 0; index < 3; index += 1) {
+                const ok = yield* subscription.bytes(range(registration, 'held', 0n, 3000n), payload);
+                if (!ok) return;
+                yield* Ref.update(pushed, (held) => held + 1);
+              }
+              yield* subscription.end('completed');
+            }),
+          );
+          const executions = yield* client(registration, 'custodian');
+          const delivered = yield* Stream.runCollect(
+            Stream.take(executions.subscribe({ _tag: 'Bytes', cursor: cursorAt(registration, 'held', 0n) }, limits.frameBytes), 3),
+          );
+          return { pushed: yield* Ref.get(pushed), delivered: delivered.length };
+        }),
+      );
 
-        expect(outcome.pushed).toBe(3);
-        expect(outcome.delivered).toBe(3);
-      }),
-    10_000,
+      expect(outcome.pushed).toBe(3);
+      expect(outcome.delivered).toBe(3);
+    }),
   );
 
   it.effect('a connection past the endpoint count is told and closed, and the ones holding seats keep working', () =>
@@ -464,7 +461,7 @@ layer(platform, { excludeTestServices: true })('the execution wire, over a real 
               }),
             );
             let standing = yield* custodian.current();
-            for (let polls = 0; polls < 100 && (standing._tag !== 'Settled' || standing.custody.holder !== undefined); polls += 1) {
+            while (standing._tag !== 'Settled' || standing.custody.holder !== undefined) {
               yield* Effect.sleep('20 millis');
               standing = yield* custodian.current();
             }
@@ -526,7 +523,7 @@ const converse = (path: string, sent: ReadonlyArray<string>, expected: number) =
       ended = true;
       connection?.terminate();
     });
-  }).pipe(Effect.timeout(3_000));
+  });
 
 layer(platform, { excludeTestServices: true })('the execution wire', (it) => {
   it.effect('a client of this release is welcomed in this wire with the capabilities the host serves', () =>

@@ -92,7 +92,7 @@ const arrive = Effect.gen(function* () {
     const group = yield* holder.launch({
       id: 'group',
       path: '/bin/sh',
-      argv: ['sh', '-c', 'sleep 30 & echo $!; read x; exit 7'],
+      argv: ['sh', '-c', "/usr/bin/perl -e 'sleep while 1' & echo $!; read x; exit 7"],
       env,
       cwd: state,
       transport: { _tag: 'pipes', stdin: 'pipe' },
@@ -178,7 +178,7 @@ const arrive = Effect.gen(function* () {
   )).member;
   const memberBefore = yield* alive(member);
   yield* group.act('work', 'terminate');
-  const memberAfter = yield* alive(member).pipe(Effect.repeat({ while: (alive) => alive, times: 200, schedule: Schedule.spaced(10) }));
+  const memberAfter = yield* alive(member).pipe(Effect.repeat({ while: (alive) => alive, schedule: Schedule.spaced(10) }));
   const groupReap = yield* group.reap;
   const afterReap = yield* Effect.result(group.act('work', 'terminate'));
   yield* group.release;

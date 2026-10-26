@@ -335,54 +335,51 @@ describe('the live execution runtime', () => {
     }),
   );
 
-  it.live(
-    'takes repeated input over pipes and closes the child stdin only on the act that asks for it',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(({ hostExecutions, lanes, byteRecords, bindings, claim }) =>
-          Effect.gen(function* () {
-            const held = yield* authority(bindings, claim, 'stdin');
-            const started = yield* hostExecutions.start(
-              claim,
-              keyOf('stdin-1'),
-              launchOf('/bin/sh', ['-c', 'cat; echo done; sleep 30'], 'principal-stdin'),
-            );
-            if (started._tag !== 'Started') return yield* Effect.die(new Error(`stdin child: ${started._tag}`));
-            const ref = started.execution;
-            const typing = { binding: held.binding.id, principal: held.principal, connection: held.connection, epoch: held.epoch };
-            const typed = (sequence: number, text: string) =>
-              lanes.admit(ref.execution, typing, {
-                sequence,
-                cause: 'typed',
-                act: { _tag: 'Write', bytes: new TextEncoder().encode(text) },
-              });
-            const first = yield* typed(0, 'first\n');
-            const repeated = yield* typed(0, 'first\n');
-            const conflicting = yield* typed(0, 'other\n');
-            const second = yield* typed(1, 'second\n');
-            const ended = yield* lanes.admit(ref.execution, typing, {
-              sequence: 2,
-              cause: 'end',
-              act: { _tag: 'End' },
+  it.live('takes repeated input over pipes and closes the child stdin only on the act that asks for it', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(({ hostExecutions, lanes, byteRecords, bindings, claim }) =>
+        Effect.gen(function* () {
+          const held = yield* authority(bindings, claim, 'stdin');
+          const started = yield* hostExecutions.start(
+            claim,
+            keyOf('stdin-1'),
+            launchOf('/bin/sh', ['-c', 'cat; echo done; sleep 30'], 'principal-stdin'),
+          );
+          if (started._tag !== 'Started') return yield* Effect.die(new Error(`stdin child: ${started._tag}`));
+          const ref = started.execution;
+          const typing = { binding: held.binding.id, principal: held.principal, connection: held.connection, epoch: held.epoch };
+          const typed = (sequence: number, text: string) =>
+            lanes.admit(ref.execution, typing, {
+              sequence,
+              cause: 'typed',
+              act: { _tag: 'Write', bytes: new TextEncoder().encode(text) },
             });
-            const written = yield* outputWhen(byteRecords, ref, (text) => text.includes('done'));
-            const afterwards = yield* typed(3, 'late\n');
-            const phase = (yield* hostExecutions.summary(ref.execution))?.state.phase;
-            return { first, repeated, conflicting, second, ended, written, afterwards, phase };
-          }),
-        );
+          const first = yield* typed(0, 'first\n');
+          const repeated = yield* typed(0, 'first\n');
+          const conflicting = yield* typed(0, 'other\n');
+          const second = yield* typed(1, 'second\n');
+          const ended = yield* lanes.admit(ref.execution, typing, {
+            sequence: 2,
+            cause: 'end',
+            act: { _tag: 'End' },
+          });
+          const written = yield* outputWhen(byteRecords, ref, (text) => text.includes('done'));
+          const afterwards = yield* typed(3, 'late\n');
+          const phase = (yield* hostExecutions.summary(ref.execution))?.state.phase;
+          return { first, repeated, conflicting, second, ended, written, afterwards, phase };
+        }),
+      );
 
-        expect(outcome.first._tag).toBe('InputAdmitted');
-        if (outcome.first._tag === 'InputAdmitted') expect(String(outcome.first.receipt.acceptedThrough)).toBe('6');
-        expect(outcome.repeated).toEqual(outcome.first);
-        expect(outcome.conflicting._tag).toBe('InputConflict');
-        expect(outcome.second._tag).toBe('InputAdmitted');
-        expect(outcome.ended._tag).toBe('InputAdmitted');
-        expect(outcome.written).toBe('first\nsecond\ndone\n');
-        expect(outcome.afterwards).toEqual({ _tag: 'InputEnded' });
-        expect(outcome.phase).toBe('running');
-      }),
-    15_000,
+      expect(outcome.first._tag).toBe('InputAdmitted');
+      if (outcome.first._tag === 'InputAdmitted') expect(String(outcome.first.receipt.acceptedThrough)).toBe('6');
+      expect(outcome.repeated).toEqual(outcome.first);
+      expect(outcome.conflicting._tag).toBe('InputConflict');
+      expect(outcome.second._tag).toBe('InputAdmitted');
+      expect(outcome.ended._tag).toBe('InputAdmitted');
+      expect(outcome.written).toBe('first\nsecond\ndone\n');
+      expect(outcome.afterwards).toEqual({ _tag: 'InputEnded' });
+      expect(outcome.phase).toBe('running');
+    }),
   );
 
   it.live('refuses an interrupt on a transport that has no line discipline, without ending the child', () =>
@@ -433,149 +430,137 @@ describe('the live execution runtime', () => {
     }),
   );
 
-  it.live(
-    'stops a forking child as its group and reports the group it measured, never the leader alone',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(({ hostExecutions, stops, byteRecords, claim }) =>
-          Effect.gen(function* () {
-            const started = yield* hostExecutions.start(
-              claim,
-              keyOf('stop-group-1'),
-              launchOf('/bin/sh', ['-c', 'trap "exit 7" TERM; sleep 30 & printf "%s\\n" "$!"; wait'], 'agent'),
-            );
-            if (started._tag !== 'Started') return yield* Effect.die(new Error(`group child: ${started._tag}`));
-            yield* outputWhen(byteRecords, started.execution, (text) => text.includes('\n'));
-            const receipt = yield* stops.stop(claim, keyOf('stop-group-op-1'), started.execution.execution, 'explicit-stop', 'signal');
-            return { receipt };
-          }),
-        );
-        expect(outcome.receipt.confirmed.map((ending) => ending.relation)).toEqual(['leader', 'work']);
-        expect(outcome.receipt.relation).toBe('covered');
-        expect(outcome.receipt.residual).toEqual([]);
-        expect(outcome.receipt.cleanup).toBe('complete');
-        expect(outcome.receipt.steps).toEqual(['interrupt', 'terminate']);
-        expect(outcome.receipt.confirmed.find((ending) => ending.relation === 'work')?.step).toBe('terminate');
-      }),
-    20_000,
+  it.live('stops a forking child as its group and reports the group it measured, never the leader alone', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(({ hostExecutions, stops, byteRecords, claim }) =>
+        Effect.gen(function* () {
+          const started = yield* hostExecutions.start(
+            claim,
+            keyOf('stop-group-1'),
+            launchOf('/bin/sh', ['-c', 'trap "" INT; trap "exit 7" TERM; sleep 30 & printf "%s\\n" "$!"; wait'], 'agent'),
+          );
+          if (started._tag !== 'Started') return yield* Effect.die(new Error(`group child: ${started._tag}`));
+          yield* outputWhen(byteRecords, started.execution, (text) => text.includes('\n'));
+          const receipt = yield* stops.stop(claim, keyOf('stop-group-op-1'), started.execution.execution, 'explicit-stop', 'signal');
+          return { receipt };
+        }),
+      );
+      expect(outcome.receipt.confirmed.map((ending) => ending.relation)).toEqual(['leader', 'work']);
+      expect(outcome.receipt.relation).toBe('covered');
+      expect(outcome.receipt.residual).toEqual([]);
+      expect(outcome.receipt.cleanup).toBe('complete');
+      expect(outcome.receipt.steps).toEqual(['interrupt', 'terminate']);
+      expect(outcome.receipt.confirmed.find((ending) => ending.relation === 'work')?.step).toBe('terminate');
+    }),
   );
 
-  it.live(
-    'destroys a forking child as its group, so the fork does not outlive the destruction',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(({ hostExecutions, stops, byteRecords, claim }) =>
+  it.live('destroys a forking child as its group, so the fork does not outlive the destruction', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(({ hostExecutions, stops, byteRecords, claim }) =>
+        Effect.gen(function* () {
+          const started = yield* hostExecutions.start(
+            claim,
+            keyOf('destroy-group-1'),
+            launchOf('/bin/sh', ['-c', 'trap "exit 7" TERM; sleep 30 & printf "%s\\n" "$!"; wait'], 'agent'),
+          );
+          if (started._tag !== 'Started') return yield* Effect.die(new Error(`destroy child: ${started._tag}`));
+          const announced = yield* outputWhen(byteRecords, started.execution, (text) => text.includes('\n'));
+          const forked = Number(announced.trim());
+          const receipt = yield* stops.stop(claim, keyOf('destroy-group-op-1'), started.execution.execution, 'explicit-stop', 'destroy');
+          const standing = yield* pidStanding(forked);
+          return { receipt, forked, standing };
+        }),
+      );
+      expect(outcome.forked).toBeDefined();
+      expect(outcome.standing).toBe('gone');
+      expect(outcome.receipt.confirmed.map((ending) => ending.relation)).toEqual(['leader', 'work']);
+      expect(outcome.receipt.relation).toBe('covered');
+      expect(outcome.receipt.residual).toEqual([]);
+      expect(outcome.receipt.cleanup).toBe('complete');
+    }),
+  );
+
+  it.live('ends the descendant that left the group, and claims that population only because it read it', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(
+        ({ hostExecutions, stops, byteRecords, claim }) =>
           Effect.gen(function* () {
             const started = yield* hostExecutions.start(
               claim,
-              keyOf('destroy-group-1'),
-              launchOf('/bin/sh', ['-c', 'trap "exit 7" TERM; sleep 30 & printf "%s\\n" "$!"; wait'], 'agent'),
+              keyOf('stop-ancestry-1'),
+              launchOf(
+                '/bin/sh',
+                ['-c', "perl -e 'use POSIX; POSIX::setsid(); $|=1; print qq{$$\\n}; exec(q{sleep}, q{30})' & wait"],
+                'agent',
+              ),
             );
-            if (started._tag !== 'Started') return yield* Effect.die(new Error(`destroy child: ${started._tag}`));
+            if (started._tag !== 'Started') return yield* Effect.die(new Error(`ancestry child: ${started._tag}`));
             const announced = yield* outputWhen(byteRecords, started.execution, (text) => text.includes('\n'));
-            const forked = Number(announced.trim());
-            const receipt = yield* stops.stop(claim, keyOf('destroy-group-op-1'), started.execution.execution, 'explicit-stop', 'destroy');
-            const standing = yield* pidStanding(forked);
-            return { receipt, forked, standing };
+            const found = Number(announced.trim());
+            const receipt = yield* stops.stop(claim, keyOf('stop-ancestry-op-1'), started.execution.execution, 'explicit-stop', 'signal');
+            return { receipt, found, standing: yield* pidStanding(found) };
           }),
-        );
-        expect(outcome.forked).toBeDefined();
-        expect(outcome.standing).toBe('gone');
-        expect(outcome.receipt.confirmed.map((ending) => ending.relation)).toEqual(['leader', 'work']);
-        expect(outcome.receipt.relation).toBe('covered');
-        expect(outcome.receipt.residual).toEqual([]);
-        expect(outcome.receipt.cleanup).toBe('complete');
-      }),
-    20_000,
+        { library: true },
+      );
+      expect(outcome.found).toBeDefined();
+      expect(outcome.standing).toBe('gone');
+      expect(outcome.receipt.coverage).toEqual(['leader', 'work', 'ancestry']);
+      expect(outcome.receipt.relation).toBe('covered');
+      expect(outcome.receipt.residual).toEqual([]);
+      expect(outcome.receipt.unverifiable).toEqual([]);
+      expect(outcome.receipt.cleanup).toBe('complete');
+    }),
   );
 
-  it.live(
-    'ends the descendant that left the group, and claims that population only because it read it',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(
-          ({ hostExecutions, stops, byteRecords, claim }) =>
-            Effect.gen(function* () {
-              const started = yield* hostExecutions.start(
-                claim,
-                keyOf('stop-ancestry-1'),
-                launchOf(
-                  '/bin/sh',
-                  ['-c', "perl -e 'use POSIX; POSIX::setsid(); $|=1; print qq{$$\\n}; exec(q{sleep}, q{30})' & wait"],
-                  'agent',
-                ),
-              );
-              if (started._tag !== 'Started') return yield* Effect.die(new Error(`ancestry child: ${started._tag}`));
-              const announced = yield* outputWhen(byteRecords, started.execution, (text) => text.includes('\n'));
-              const found = Number(announced.trim());
-              const receipt = yield* stops.stop(claim, keyOf('stop-ancestry-op-1'), started.execution.execution, 'explicit-stop', 'signal');
-              return { receipt, found, standing: yield* pidStanding(found) };
-            }),
-          { library: true },
-        );
-        expect(outcome.found).toBeDefined();
-        expect(outcome.standing).toBe('gone');
-        expect(outcome.receipt.coverage).toEqual(['leader', 'work', 'ancestry']);
-        expect(outcome.receipt.relation).toBe('covered');
-        expect(outcome.receipt.residual).toEqual([]);
-        expect(outcome.receipt.unverifiable).toEqual([]);
-        expect(outcome.receipt.cleanup).toBe('complete');
-      }),
-    20_000,
-  );
-
-  it.live(
-    'stops a child flooding past retention and still measures what it covered, byte-exact',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(({ hostExecutions, stops, byteRecords, claim }) =>
-          Effect.gen(function* () {
-            const lines = 400000;
-            const started = yield* hostExecutions.start(
-              claim,
-              keyOf('stop-flood-1'),
-              launchOf('/bin/sh', ['-c', `awk 'BEGIN{for(i=0;i<${lines};i++) printf "%050d\\n", i}'`], 'agent'),
-            );
-            if (started._tag !== 'Started') return yield* Effect.die(new Error(`flood child: ${started._tag}`));
-            const ref = started.execution;
-            yield* bytesPast(byteRecords, ref, 65536n);
-            const receipt = yield* stops.stop(claim, keyOf('stop-flood-op-1'), ref.execution, 'explicit-stop', 'signal');
-            const summary = yield* summaryWhen(hostExecutions, ref.execution, (summary) =>
-              summary.streams.some((stream) => stream.stream === 'stdout' && stream.ending !== 'open'),
-            );
-            const stdout = summary?.streams.find((positions) => positions.stream === 'stdout');
-            let offset = offsetValue(stdout!.retainedFrom);
-            let held = '';
-            for (;;) {
-              const read = yield* byteRecords.read({ ref, stream: 'stdout', offset: byteOffset(offset) }, 65536);
-              held += Buffer.from(read.bytes).toString();
-              if (!read.range.gap && offsetValue(read.range.next) >= offsetValue(stdout!.durableThrough)) break;
-              if (offsetValue(read.range.next) <= offset) break;
-              offset = offsetValue(read.range.next);
-            }
-            return { receipt, stdout, held, lines };
-          }),
-        );
-        expect(outcome.receipt.cause).toBe('explicit-stop');
-        expect(outcome.receipt.confirmed.map((ending) => ending.relation)).toEqual(['leader', 'work']);
-        expect(outcome.receipt.relation).toBe('covered');
-        expect(outcome.receipt.residual).toEqual([]);
-        expect(outcome.receipt.unverifiable).toEqual([]);
-        expect(outcome.receipt.cleanup).toBe('complete');
-        expect(offsetValue(outcome.stdout!.durableThrough)).toBeGreaterThan(65536n);
-        expect(offsetValue(outcome.stdout!.retainedFrom)).toBeGreaterThan(0n);
-        const fragments = outcome.held.split('\n');
-        if (fragments[fragments.length - 1] === '') fragments.pop();
-        else fragments.pop();
-        if (offsetValue(outcome.stdout!.retainedFrom) > 0n) fragments.shift();
-        const numbers = fragments.map((line) => Number(line));
-        expect(numbers.length).toBeGreaterThan(0);
-        expect(numbers.every((n) => Number.isInteger(n))).toBe(true);
-        expect(numbers.every((n, i) => i === 0 || n === numbers[i - 1]! + 1)).toBe(true);
-        expect(numbers[numbers.length - 1]).toBeLessThan(outcome.lines);
-        if (offsetValue(outcome.stdout!.retainedFrom) === 0n) expect(numbers[0]).toBe(0);
-      }),
-    30_000,
+  it.live('stops a child flooding past retention and still measures what it covered, byte-exact', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(({ hostExecutions, stops, byteRecords, claim }) =>
+        Effect.gen(function* () {
+          const lines = 400000;
+          const started = yield* hostExecutions.start(
+            claim,
+            keyOf('stop-flood-1'),
+            launchOf('/bin/sh', ['-c', `awk 'BEGIN{for(i=0;i<${lines};i++) printf "%050d\\n", i}'`], 'agent'),
+          );
+          if (started._tag !== 'Started') return yield* Effect.die(new Error(`flood child: ${started._tag}`));
+          const ref = started.execution;
+          yield* bytesPast(byteRecords, ref, 65536n);
+          const receipt = yield* stops.stop(claim, keyOf('stop-flood-op-1'), ref.execution, 'explicit-stop', 'signal');
+          const summary = yield* summaryWhen(hostExecutions, ref.execution, (summary) =>
+            summary.streams.some((stream) => stream.stream === 'stdout' && stream.ending !== 'open'),
+          );
+          const stdout = summary?.streams.find((positions) => positions.stream === 'stdout');
+          let offset = offsetValue(stdout!.retainedFrom);
+          let held = '';
+          for (;;) {
+            const read = yield* byteRecords.read({ ref, stream: 'stdout', offset: byteOffset(offset) }, 65536);
+            held += Buffer.from(read.bytes).toString();
+            if (!read.range.gap && offsetValue(read.range.next) >= offsetValue(stdout!.durableThrough)) break;
+            if (offsetValue(read.range.next) <= offset) break;
+            offset = offsetValue(read.range.next);
+          }
+          return { receipt, stdout, held, lines };
+        }),
+      );
+      expect(outcome.receipt.cause).toBe('explicit-stop');
+      expect(outcome.receipt.confirmed.map((ending) => ending.relation)).toEqual(['leader', 'work']);
+      expect(outcome.receipt.relation).toBe('covered');
+      expect(outcome.receipt.residual).toEqual([]);
+      expect(outcome.receipt.unverifiable).toEqual([]);
+      expect(outcome.receipt.cleanup).toBe('complete');
+      expect(offsetValue(outcome.stdout!.durableThrough)).toBeGreaterThan(65536n);
+      expect(offsetValue(outcome.stdout!.retainedFrom)).toBeGreaterThan(0n);
+      const fragments = outcome.held.split('\n');
+      if (fragments[fragments.length - 1] === '') fragments.pop();
+      else fragments.pop();
+      if (offsetValue(outcome.stdout!.retainedFrom) > 0n) fragments.shift();
+      const numbers = fragments.map((line) => Number(line));
+      expect(numbers.length).toBeGreaterThan(0);
+      expect(numbers.every((n) => Number.isInteger(n))).toBe(true);
+      expect(numbers.every((n, i) => i === 0 || n === numbers[i - 1]! + 1)).toBe(true);
+      expect(numbers[numbers.length - 1]).toBeLessThan(outcome.lines);
+      if (offsetValue(outcome.stdout!.retainedFrom) === 0n) expect(numbers[0]).toBe(0);
+    }),
   );
 
   it.live("holds an execution's record until it is forgotten, not until its process exits", () =>
@@ -649,457 +634,424 @@ describe('the live execution runtime', () => {
     }),
   );
 
-  it.live(
-    'ends the child when a call deadline expires, and the decision says timeout',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(({ hostExecutions, requests, claim }) =>
+  it.live('ends the child when a call deadline expires, and the decision says timeout', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(({ hostExecutions, requests, claim }) =>
+        Effect.gen(function* () {
+          const started = yield* hostExecutions.start(claim, keyOf('deadline-1'), {
+            ...launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'),
+            lifetime: 'call',
+            budget: { timeoutMs: 50 },
+          });
+          if (started._tag !== 'Started') return yield* Effect.die(new Error(`deadline child: ${started._tag}`));
+          const ref = started.execution;
+          const summary = yield* summaryWhen(hostExecutions, ref.execution, (summary) => summary.state.phase === 'ended');
+          return {
+            answer: yield* requests.callResult(keyOf('deadline-1')),
+            phase: summary?.state.phase,
+            exit: summary?.state.nativeExit,
+          };
+        }),
+      );
+      expect(outcome.answer._tag).toBe('Settled');
+      if (outcome.answer._tag === 'Settled' && outcome.answer.result._tag === 'Decided') {
+        const decision = outcome.answer.result.decision;
+        expect(decision._tag).toBe('Cancelled');
+        if (decision._tag === 'Cancelled') expect(decision.cause).toBe('timeout');
+      }
+      expect(outcome.phase).toBe('ended');
+      expect(outcome.exit).toBeDefined();
+    }),
+  );
+
+  it.live('decides a stopped call by the cause its requester named, not by the exit the signal produced', () =>
+    Effect.gen(function* () {
+      const gate = Deferred.makeUnsafe<void>();
+      const reached = Deferred.makeUnsafe<void>();
+      const outcome = yield* withHost(
+        ({ hostExecutions, requests, stops, retirement, capacity, claim }) =>
           Effect.gen(function* () {
-            const started = yield* hostExecutions.start(claim, keyOf('deadline-1'), {
+            const started = yield* hostExecutions.start(claim, keyOf('cause-1'), {
               ...launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'),
               lifetime: 'call',
-              budget: { timeoutMs: 50 },
+              budget: {},
             });
-            if (started._tag !== 'Started') return yield* Effect.die(new Error(`deadline child: ${started._tag}`));
+            if (started._tag !== 'Started') return yield* Effect.die(new Error(`cause child: ${started._tag}`));
             const ref = started.execution;
-            const summary = yield* summaryWhen(hostExecutions, ref.execution, (summary) => summary.state.phase === 'ended');
-            return {
-              answer: yield* requests.callResult(keyOf('deadline-1')),
-              phase: summary?.state.phase,
-              exit: summary?.state.nativeExit,
-            };
-          }),
-        );
-        expect(outcome.answer._tag).toBe('Settled');
-        if (outcome.answer._tag === 'Settled' && outcome.answer.result._tag === 'Decided') {
-          const decision = outcome.answer.result.decision;
-          expect(decision._tag).toBe('Cancelled');
-          if (decision._tag === 'Cancelled') expect(decision.cause).toBe('timeout');
-        }
-        expect(outcome.phase).toBe('ended');
-        expect(outcome.exit).toBeDefined();
-      }),
-    15_000,
-  );
-
-  it.live(
-    'decides a stopped call by the cause its requester named, not by the exit the signal produced',
-    () =>
-      Effect.gen(function* () {
-        const gate = Deferred.makeUnsafe<void>();
-        const reached = Deferred.makeUnsafe<void>();
-        const outcome = yield* withHost(
-          ({ hostExecutions, requests, stops, retirement, capacity, claim }) =>
-            Effect.gen(function* () {
-              const started = yield* hostExecutions.start(claim, keyOf('cause-1'), {
-                ...launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'),
-                lifetime: 'call',
-                budget: {},
-              });
-              if (started._tag !== 'Started') return yield* Effect.die(new Error(`cause child: ${started._tag}`));
-              const ref = started.execution;
-              const receipt = yield* stops.stop(claim, keyOf('cause-stop'), ref.execution, 'explicit-stop', 'destroy');
-              yield* Deferred.await(reached);
-              const answer = yield* requests.callResult(keyOf('cause-1'));
-              yield* Deferred.succeed(gate, undefined);
-              yield* summaryWhen(
-                hostExecutions,
-                ref.execution,
-                (summary) => summary.state.phase === 'ended' && summary.state.cleanup !== 'pending',
-              );
-              const ledger = yield* capacity.ledger();
-              const next = yield* hostExecutions.start(claim, keyOf('cause-next'), {
-                ...launchOf('/bin/echo', ['next'], 'agent'),
-                lifetime: 'call',
-              });
-              const forgotten = yield* retirement.retire(claim, keyOf('cause-retire'), ref.execution);
-              const again = yield* Effect.result(retirement.retire(claim, keyOf('cause-retire'), ref.execution));
-              const afterForget = yield* requests.callResult(keyOf('cause-1'));
-              return { receipt, answer, ledger, next, forgotten, again, afterForget };
-            }).pipe(Effect.ensuring(Deferred.succeed(gate, undefined))),
-          { holdOutput: { held: gate, entered: reached } },
-        );
-
-        expect(outcome.ledger.executions).toBe(0);
-        expect(outcome.ledger.reserved).toBe(0);
-        expect(outcome.next._tag).toBe('Started');
-        expect(outcome.answer._tag).toBe('Settled');
-        if (outcome.answer._tag === 'Settled' && outcome.answer.result._tag === 'Decided') {
-          expect(outcome.answer.result.decision._tag).toBe('Cancelled');
-          if (outcome.answer.result.decision._tag === 'Cancelled') {
-            expect(outcome.answer.result.decision.cause).toBe('explicit-stop');
-          }
-          expect(outcome.answer.result.nativeExit).toBeDefined();
-          expect(outcome.answer.result.cleanup).toBe(outcome.receipt.cleanup);
-          expect(outcome.answer.result.retention).toBe(outcome.receipt.retention);
-          expect(outcome.answer.result.sources.stdout.completed).toBe(true);
-          expect(outcome.answer.result.sources.stderr.completed).toBe(true);
-        }
-        expect(outcome.receipt.cause).toBe('explicit-stop');
-        expect([outcome.receipt.cleanup, ...outcome.receipt.unverifiable.map((resource) => resource.reason)]).toEqual(['complete']);
-        expect(outcome.forgotten._tag === 'ForgetRefused' ? outcome.forgotten.detail : outcome.forgotten._tag).toBe('Forgotten');
-        expect(outcome.again._tag === 'Failure' ? outcome.again.failure._tag : outcome.again.success._tag).toBe('Forgotten');
-        expect(outcome.afterForget._tag).toBe('Settled');
-        if (outcome.afterForget._tag === 'Settled' && outcome.afterForget.result._tag === 'Decided') {
-          expect(outcome.afterForget.result.decision._tag).toBe('Cancelled');
-          expect(outcome.afterForget.result.cleanup).toBe(outcome.receipt.cleanup);
-          expect(outcome.afterForget.result.retention).toBe('lost');
-          expect(outcome.afterForget.result.nativeExit).toBeDefined();
-        }
-      }),
-    15_000,
-  );
-
-  it.live(
-    'answers a completed call when retirement interrupts its output release',
-    () =>
-      Effect.gen(function* () {
-        const gate = Deferred.makeUnsafe<void>();
-        const reached = Deferred.makeUnsafe<void>();
-        const outcome = yield* withHost(
-          ({ hostExecutions, requests, retirement, capacity, claim }) =>
-            Effect.gen(function* () {
-              const started = yield* hostExecutions.start(claim, keyOf('retiring-call'), {
-                ...launchOf('/bin/echo', ['finished'], 'agent'),
-                lifetime: 'call',
-              });
-              if (started._tag !== 'Started') return yield* Effect.die(new Error('the retirement test could not start its child'));
-              yield* Deferred.await(reached);
-              const answered = yield* Deferred.make<void>();
-              const waiting = yield* Effect.forkChild(
-                requests.callResult(keyOf('retiring-call')).pipe(Effect.tap(() => Deferred.succeed(answered, undefined))),
-                { startImmediately: true },
-              );
-              const before = yield* Deferred.isDone(answered);
-              const retired = yield* retirement.retire(claim, keyOf('retiring-retire'), started.execution.execution);
-              const answer = yield* Fiber.join(waiting);
-              return { before, retired, answer, ledger: yield* capacity.ledger() };
-            }).pipe(Effect.ensuring(Deferred.succeed(gate, undefined))),
-          { holdOutput: { held: gate, entered: reached } },
-        );
-
-        expect(outcome.before).toBe(false);
-        expect(outcome.retired._tag).toBe('Forgotten');
-        expect(outcome.answer._tag).toBe('Settled');
-        if (outcome.answer._tag === 'Settled' && outcome.answer.result._tag === 'Decided') {
-          expect(outcome.answer.result.decision._tag).toBe('Completed');
-        }
-        expect(outcome.ledger.executions).toBe(0);
-        expect(outcome.ledger.reserved).toBe(0);
-      }),
-    15_000,
-  );
-
-  it.live(
-    'runs a second command on a one-slot host once the first has been retired',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(({ hostExecutions, requests, stops, retirement, claim, capacity }) =>
-          Effect.gen(function* () {
-            const first = yield* hostExecutions.start(claim, keyOf('slot-1'), {
-              ...launchOf('/bin/echo', ['first'], 'agent'),
-              lifetime: 'call',
-            });
-            if (first._tag !== 'Started') return yield* Effect.die(new Error(`slot child: ${first._tag}`));
-            const decided = yield* waitFor(
-              hostExecutions,
-              first.execution.execution,
-              requests.callResult(keyOf('slot-1')),
-              (answer) => answer._tag === 'Settled',
-            );
-            const receipt = yield* stops.stop(claim, keyOf('slot-stop'), first.execution.execution, 'explicit-stop', 'signal');
-            const retired = yield* retirement.retire(claim, keyOf('slot-retire'), first.execution.execution);
-            const held = yield* capacity.account();
-            const second = yield* hostExecutions.start(claim, keyOf('slot-2'), {
-              ...launchOf('/bin/echo', ['second'], 'agent'),
-              lifetime: 'call',
-            });
-            return { decided, receipt, retired, reservations: held.reservations.size, second };
-          }),
-        );
-
-        expect(outcome.decided._tag).toBe('Settled');
-        if (outcome.decided._tag === 'Settled' && outcome.decided.result._tag === 'Decided') {
-          expect(outcome.decided.result.decision._tag).toBe('Completed');
-        }
-        expect(outcome.receipt.cleanup).toBe('complete');
-        expect(outcome.receipt.confirmed).toContainEqual({
-          pid: expect.any(Number),
-          relation: 'leader',
-          exit: { _tag: 'Code', code: 0 },
-          step: 'unsignalled',
-        });
-        expect(outcome.receipt.unverifiable).toEqual([]);
-        expect(outcome.receipt.abandonedOutput).toBe(false);
-        expect(outcome.retired._tag).toBe('Forgotten');
-        expect(outcome.reservations).toBe(0);
-        expect(outcome.second._tag).toBe('Started');
-      }),
-    15_000,
-  );
-
-  it.live(
-    'admits a start beside a live execution once the other child has exited, with nothing retired',
-    () =>
-      Effect.gen(function* () {
-        const gate = Deferred.makeUnsafe<void>();
-        const reached = Deferred.makeUnsafe<void>();
-        const outcome = yield* withHost(
-          ({ hostExecutions, requests, claim, capacity }) =>
-            Effect.gen(function* () {
-              yield* capacity.regrant(1);
-              const live = yield* hostExecutions.start(claim, keyOf('exit-live'), launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'));
-              const ended = yield* hostExecutions.start(claim, keyOf('exit-1'), {
-                ...launchOf('/bin/echo', ['first'], 'agent'),
-                lifetime: 'call',
-              });
-              if (live._tag !== 'Started' || ended._tag !== 'Started')
-                return yield* Effect.die(new Error('the capacity test could not start its children'));
-              yield* Deferred.await(reached);
-              const answered = yield* Deferred.make<void>();
-              const waiting = yield* Effect.forkChild(
-                requests.callResult(keyOf('exit-1')).pipe(Effect.tap(() => Deferred.succeed(answered, undefined))),
-                { startImmediately: true },
-              );
-              const beforeRelease = yield* Deferred.isDone(answered);
-              const during = yield* capacity.ledger();
-              yield* Deferred.succeed(gate, undefined);
-              const decided = yield* Fiber.join(waiting);
-              const ledger = yield* capacity.ledger();
-              const account = yield* capacity.account();
-              const listed = yield* hostExecutions.list(undefined, 10);
-              const next = yield* hostExecutions.start(claim, keyOf('exit-2'), {
-                ...launchOf('/bin/echo', ['second'], 'agent'),
-                lifetime: 'call',
-              });
-              return { beforeRelease, during, decided, ledger, held: account.reservations.size, next, listed: listed.executions.length };
-            }).pipe(Effect.ensuring(Deferred.succeed(gate, undefined))),
-          { executions: 2, holdOutput: { held: gate, entered: reached } },
-        );
-
-        expect(outcome.beforeRelease).toBe(false);
-        expect(outcome.during.executions).toBe(2);
-        expect(outcome.decided._tag).toBe('Settled');
-        if (outcome.decided._tag === 'Settled' && outcome.decided.result._tag === 'Decided') {
-          expect(outcome.decided.result.decision._tag).toBe('Completed');
-        }
-        expect(outcome.ledger.executions).toBe(1);
-        expect(outcome.ledger.reserved).toBe(reserveOf(runtimeProfile({ executions: 2, transports: ['pipes'] }).execution, 'pipes'));
-        expect(outcome.held).toBe(2);
-        expect(outcome.listed).toBe(2);
-        expect(outcome.next._tag).toBe('Started');
-      }),
-    15_000,
-  );
-
-  it.live(
-    'answers a completed call with the cost its own ending measured, on the first read',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(({ hostExecutions, requests, stops, claim }) =>
-          Effect.gen(function* () {
-            const started = yield* hostExecutions.start(claim, keyOf('cost-1'), {
-              ...launchOf('/bin/sh', ['-c', 'yes | head -c 4000000 > /dev/null'], 'agent'),
-              lifetime: 'call',
-            });
-            if (started._tag !== 'Started') return yield* Effect.die(new Error(`cost child: ${started._tag}`));
-            const decided = yield* waitFor(
-              hostExecutions,
-              started.execution.execution,
-              requests.callResult(keyOf('cost-1')),
-              (answer) => answer._tag === 'Settled',
-            );
-            return { decided, ending: yield* stops.ending(started.execution.execution) };
-          }),
-        );
-
-        expect(outcome.decided._tag).toBe('Settled');
-        if (outcome.decided._tag === 'Settled' && outcome.decided.result._tag === 'Decided') {
-          expect(outcome.decided.result.decision._tag).toBe('Completed');
-          if (outcome.ending === undefined) return yield* Effect.die(new Error('the completed call has no ending'));
-          expect(outcome.decided.result.cost).toEqual(outcome.ending.cost);
-          expect(outcome.decided.result.cost._tag).toBe('Measured');
-          if (outcome.decided.result.cost._tag === 'Measured') {
-            expect(outcome.decided.result.cost.cpuMicros).toBeGreaterThan(0);
-            expect(outcome.decided.result.cost.peakRssBytes).toBeGreaterThan(0);
-          }
-        }
-      }),
-    15_000,
-  );
-
-  it.live(
-    'answers a page with the cursor that continues it, so nothing is skipped between two pages',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(
-          ({ hostExecutions, claim }) =>
-            Effect.gen(function* () {
-              const first = yield* hostExecutions.start(claim, keyOf('page-1'), launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'));
-              const second = yield* hostExecutions.start(claim, keyOf('page-2'), launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'));
-              if (first._tag !== 'Started' || second._tag !== 'Started')
-                return yield* Effect.die(new Error('the page children did not start'));
-              const opening = yield* hostExecutions.list(undefined, 1);
-              const following = yield* hostExecutions.list(opening.after?.execution, 1);
-              const ending = yield* hostExecutions.list(following.executions[following.executions.length - 1]?.state.ref.execution, 1);
-              const whole = yield* hostExecutions.list(undefined, 10);
-              return { opening, following, ending, whole };
-            }),
-          { executions: 2 },
-        );
-
-        expect(outcome.opening.executions.length).toBe(1);
-        expect(outcome.opening.after).toBeDefined();
-        expect(outcome.following.executions.length).toBe(1);
-        const paged = [...outcome.opening.executions, ...outcome.following.executions].map((row) => row.state.ref.execution);
-        expect(new Set(paged).size).toBe(2);
-        expect(paged.sort()).toEqual(outcome.whole.executions.map((row) => row.state.ref.execution).sort());
-        expect(outcome.following.after).toBeUndefined();
-        expect(outcome.ending.executions.length).toBe(0);
-      }),
-    15_000,
-  );
-
-  it.live(
-    'keeps taking pipe output past its retained budget and reports the gap instead of losing it silently',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(({ hostExecutions, byteRecords, claim }) =>
-          Effect.gen(function* () {
-            const started = yield* hostExecutions.start(
-              claim,
-              keyOf('retain-1'),
-              launchOf('/bin/sh', ['-c', 'awk \'BEGIN{for(i=0;i<4000;i++) printf "%050d\\n", i}\''], 'agent'),
-            );
-            if (started._tag !== 'Started') return yield* Effect.die(new Error(`retention child: ${started._tag}`));
-            const ref = started.execution;
-            const summary = yield* summaryWhen(hostExecutions, ref.execution, (summary) =>
-              summary.streams.some((stream) => stream.stream === 'stdout' && stream.ending !== 'open'),
-            );
-            const stdout = summary?.streams.find((positions) => positions.stream === 'stdout');
-            const behind = yield* byteRecords.read({ ref, stream: 'stdout', offset: byteOffset(0n) }, 4096);
-            return { stdout, behind };
-          }),
-        );
-        expect(offsetValue(outcome.stdout!.durableThrough)).toBe(204000n);
-        expect(outcome.stdout!.ending).toBe('eof');
-        expect(offsetValue(outcome.stdout!.retainedFrom)).toBeGreaterThan(0n);
-        expect(outcome.behind.range.gap).toBe(true);
-        expect(outcome.behind.range.next).toBe(outcome.stdout!.retainedFrom);
-      }),
-    20_000,
-  );
-
-  it.live(
-    'wakes a waiting reader when bytes land, and tells it when the stream is over',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(({ hostExecutions, lanes, bindings, byteRecords, claim }) =>
-          Effect.gen(function* () {
-            const held = yield* authority(bindings, claim, 'reader');
-            const typing = { binding: held.binding.id, principal: held.principal, connection: held.connection, epoch: held.epoch };
-            const started = yield* hostExecutions.start(claim, keyOf('await-1'), launchOf('/bin/cat', [], 'principal-reader'));
-            if (started._tag !== 'Started') return yield* Effect.die(new Error(`wake child: ${started._tag}`));
-            const ref = started.execution;
-            return yield* Effect.scoped(
-              Effect.gen(function* () {
-                const reader = yield* byteRecords.openReader(ref.execution, 'stdout', byteOffset(0n));
-                const waiting = yield* Effect.forkChild(byteRecords.awaitBytes(ref.execution, reader), { startImmediately: true });
-                yield* lanes.admit(ref.execution, typing, {
-                  sequence: 0,
-                  cause: 'typed',
-                  act: { _tag: 'Write', bytes: new TextEncoder().encode('spoke') },
-                });
-                yield* lanes.admit(ref.execution, typing, { sequence: 1, cause: 'end', act: { _tag: 'End' } });
-                const woke = yield* Fiber.join(waiting);
-                yield* byteRecords.grant(ref.execution, reader, 64);
-                const pulled = yield* byteRecords.pull(ref.execution, reader);
-                const ended = yield* byteRecords.awaitBytes(ref.execution, reader);
-                return { woke, pulled, ended };
-              }),
-            );
-          }),
-        );
-        expect(outcome.woke).toBe(true);
-        expect(new TextDecoder().decode(outcome.pulled.bytes)).toBe('spoke');
-        expect(outcome.ended).toBe(false);
-      }),
-    20_000,
-  );
-
-  it.live(
-    'wakes a watcher when a child ends on its own, and measures what that ending left with no stop involved',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(({ hostExecutions, requests, stops, claim }) =>
-          Effect.gen(function* () {
-            const started = yield* hostExecutions.start(claim, keyOf('wake-1'), {
-              ...launchOf('/bin/echo', ['managed'], 'agent'),
-              lifetime: 'call',
-            });
-            if (started._tag !== 'Started') return yield* Effect.die(new Error(`natural ending child: ${started._tag}`));
-            const ref = started.execution;
+            const receipt = yield* stops.stop(claim, keyOf('cause-stop'), ref.execution, 'explicit-stop', 'destroy');
+            yield* Deferred.await(reached);
+            const answer = yield* requests.callResult(keyOf('cause-1'));
+            yield* Deferred.succeed(gate, undefined);
             yield* summaryWhen(
               hostExecutions,
               ref.execution,
-              (summary) => summary.state.phase === 'ended' && summary.state.nativeExit !== undefined,
+              (summary) => summary.state.phase === 'ended' && summary.state.cleanup !== 'pending',
             );
-            const ending = yield* waitFor(hostExecutions, ref.execution, stops.ending(ref.execution), (ending) => ending !== undefined);
-            return {
-              ref,
-              summary: yield* hostExecutions.summary(ref.execution),
-              answer: yield* requests.callResult(keyOf('wake-1')),
-              ending,
-            };
-          }),
-        );
-        expect(outcome.summary?.state.phase).toBe('ended');
-        expect(outcome.summary?.state.nativeExit).toEqual({ _tag: 'Code', code: 0 });
-        expect(outcome.answer._tag).toBe('Settled');
-        expect(outcome.ending?.execution).toEqual(outcome.ref);
-        expect(outcome.ending?.cleanup).toBe('complete');
-        expect(outcome.ending?.confirmed).toContainEqual({
-          pid: expect.any(Number),
-          relation: 'leader',
-          exit: { _tag: 'Code', code: 0 },
-          step: 'unsignalled',
-        });
-        expect(outcome.ending?.residual).toEqual([]);
-        expect(outcome.ending?.unverifiable).toEqual([]);
-        expect(outcome.ending?.nativeExit).toEqual({ _tag: 'Code', code: 0 });
-        if (outcome.answer._tag === 'Settled' && outcome.answer.result._tag === 'Decided') {
-          expect(outcome.answer.result.decision._tag).toBe('Completed');
-          expect(outcome.answer.result.cleanup).toBe('complete');
+            const ledger = yield* capacity.ledger();
+            const next = yield* hostExecutions.start(claim, keyOf('cause-next'), {
+              ...launchOf('/bin/echo', ['next'], 'agent'),
+              lifetime: 'call',
+            });
+            const forgotten = yield* retirement.retire(claim, keyOf('cause-retire'), ref.execution);
+            const again = yield* Effect.result(retirement.retire(claim, keyOf('cause-retire'), ref.execution));
+            const afterForget = yield* requests.callResult(keyOf('cause-1'));
+            return { receipt, answer, ledger, next, forgotten, again, afterForget };
+          }).pipe(Effect.ensuring(Deferred.succeed(gate, undefined))),
+        { holdOutput: { held: gate, entered: reached } },
+      );
+
+      expect(outcome.ledger.executions).toBe(0);
+      expect(outcome.ledger.reserved).toBe(0);
+      expect(outcome.next._tag).toBe('Started');
+      expect(outcome.answer._tag).toBe('Settled');
+      if (outcome.answer._tag === 'Settled' && outcome.answer.result._tag === 'Decided') {
+        expect(outcome.answer.result.decision._tag).toBe('Cancelled');
+        if (outcome.answer.result.decision._tag === 'Cancelled') {
+          expect(outcome.answer.result.decision.cause).toBe('explicit-stop');
         }
-      }),
-    15_000,
+        expect(outcome.answer.result.nativeExit).toBeDefined();
+        expect(outcome.answer.result.cleanup).toBe(outcome.receipt.cleanup);
+        expect(outcome.answer.result.retention).toBe(outcome.receipt.retention);
+        expect(outcome.answer.result.sources.stdout.completed).toBe(true);
+        expect(outcome.answer.result.sources.stderr.completed).toBe(true);
+      }
+      expect(outcome.receipt.cause).toBe('explicit-stop');
+      expect([outcome.receipt.cleanup, ...outcome.receipt.unverifiable.map((resource) => resource.reason)]).toEqual(['complete']);
+      expect(outcome.forgotten._tag === 'ForgetRefused' ? outcome.forgotten.detail : outcome.forgotten._tag).toBe('Forgotten');
+      expect(outcome.again._tag === 'Failure' ? outcome.again.failure._tag : outcome.again.success._tag).toBe('Forgotten');
+      expect(outcome.afterForget._tag).toBe('Settled');
+      if (outcome.afterForget._tag === 'Settled' && outcome.afterForget.result._tag === 'Decided') {
+        expect(outcome.afterForget.result.decision._tag).toBe('Cancelled');
+        expect(outcome.afterForget.result.cleanup).toBe(outcome.receipt.cleanup);
+        expect(outcome.afterForget.result.retention).toBe('lost');
+        expect(outcome.afterForget.result.nativeExit).toBeDefined();
+      }
+    }),
   );
 
-  it.live(
-    'lets recovery stop and shut down a host whose custodian is gone, and start nothing',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(({ hostExecutions, stops, lifecycle, custodian, claim }) =>
+  it.live('answers a completed call when retirement interrupts its output release', () =>
+    Effect.gen(function* () {
+      const gate = Deferred.makeUnsafe<void>();
+      const reached = Deferred.makeUnsafe<void>();
+      const outcome = yield* withHost(
+        ({ hostExecutions, requests, retirement, capacity, claim }) =>
           Effect.gen(function* () {
-            const started = yield* hostExecutions.start(claim, keyOf('recover-1'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
-            if (started._tag !== 'Started') return yield* Effect.die(new Error(`recovery child: ${started._tag}`));
-            const standing = yield* custodian.current();
-            const revision = standing._tag === 'Settled' ? standing.custody.revision : standing.last.revision;
-            const recovery = { connection: connectionOf('connection-recovery'), epoch: CustodianEpoch.make(0), role: 'recovery' as const };
-            yield* custodian.fence(keyOf('recover-fence'), revision, recovery.connection, 'recovery');
-            const receipt = yield* stops.stop(recovery, keyOf('recover-stop'), started.execution.execution, 'explicit-stop', 'signal');
-            const refused = yield* hostExecutions.start(recovery, keyOf('recover-2'), launchOf('/bin/sh', ['-c', 'sleep 1'], 'agent'));
-            const shutdown = yield* lifecycle.shutdown(recovery, keyOf('recover-shutdown'));
-            return { receipt, refused, shutdown };
+            const started = yield* hostExecutions.start(claim, keyOf('retiring-call'), {
+              ...launchOf('/bin/echo', ['finished'], 'agent'),
+              lifetime: 'call',
+            });
+            if (started._tag !== 'Started') return yield* Effect.die(new Error('the retirement test could not start its child'));
+            yield* Deferred.await(reached);
+            const answered = yield* Deferred.make<void>();
+            const waiting = yield* Effect.forkChild(
+              requests.callResult(keyOf('retiring-call')).pipe(Effect.tap(() => Deferred.succeed(answered, undefined))),
+              { startImmediately: true },
+            );
+            const before = yield* Deferred.isDone(answered);
+            const retired = yield* retirement.retire(claim, keyOf('retiring-retire'), started.execution.execution);
+            const answer = yield* Fiber.join(waiting);
+            return { before, retired, answer, ledger: yield* capacity.ledger() };
+          }).pipe(Effect.ensuring(Deferred.succeed(gate, undefined))),
+        { holdOutput: { held: gate, entered: reached } },
+      );
+
+      expect(outcome.before).toBe(false);
+      expect(outcome.retired._tag).toBe('Forgotten');
+      expect(outcome.answer._tag).toBe('Settled');
+      if (outcome.answer._tag === 'Settled' && outcome.answer.result._tag === 'Decided') {
+        expect(outcome.answer.result.decision._tag).toBe('Completed');
+      }
+      expect(outcome.ledger.executions).toBe(0);
+      expect(outcome.ledger.reserved).toBe(0);
+    }),
+  );
+
+  it.live('runs a second command on a one-slot host once the first has been retired', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(({ hostExecutions, requests, stops, retirement, claim, capacity }) =>
+        Effect.gen(function* () {
+          const first = yield* hostExecutions.start(claim, keyOf('slot-1'), {
+            ...launchOf('/bin/echo', ['first'], 'agent'),
+            lifetime: 'call',
+          });
+          if (first._tag !== 'Started') return yield* Effect.die(new Error(`slot child: ${first._tag}`));
+          const decided = yield* waitFor(
+            hostExecutions,
+            first.execution.execution,
+            requests.callResult(keyOf('slot-1')),
+            (answer) => answer._tag === 'Settled',
+          );
+          const receipt = yield* stops.stop(claim, keyOf('slot-stop'), first.execution.execution, 'explicit-stop', 'signal');
+          const retired = yield* retirement.retire(claim, keyOf('slot-retire'), first.execution.execution);
+          const held = yield* capacity.account();
+          const second = yield* hostExecutions.start(claim, keyOf('slot-2'), {
+            ...launchOf('/bin/echo', ['second'], 'agent'),
+            lifetime: 'call',
+          });
+          return { decided, receipt, retired, reservations: held.reservations.size, second };
+        }),
+      );
+
+      expect(outcome.decided._tag).toBe('Settled');
+      if (outcome.decided._tag === 'Settled' && outcome.decided.result._tag === 'Decided') {
+        expect(outcome.decided.result.decision._tag).toBe('Completed');
+      }
+      expect(outcome.receipt.cleanup).toBe('complete');
+      expect(outcome.receipt.confirmed).toContainEqual({
+        pid: expect.any(Number),
+        relation: 'leader',
+        exit: { _tag: 'Code', code: 0 },
+        step: 'unsignalled',
+      });
+      expect(outcome.receipt.unverifiable).toEqual([]);
+      expect(outcome.receipt.abandonedOutput).toBe(false);
+      expect(outcome.retired._tag).toBe('Forgotten');
+      expect(outcome.reservations).toBe(0);
+      expect(outcome.second._tag).toBe('Started');
+    }),
+  );
+
+  it.live('admits a start beside a live execution once the other child has exited, with nothing retired', () =>
+    Effect.gen(function* () {
+      const gate = Deferred.makeUnsafe<void>();
+      const reached = Deferred.makeUnsafe<void>();
+      const outcome = yield* withHost(
+        ({ hostExecutions, requests, claim, capacity }) =>
+          Effect.gen(function* () {
+            yield* capacity.regrant(1);
+            const live = yield* hostExecutions.start(claim, keyOf('exit-live'), launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'));
+            const ended = yield* hostExecutions.start(claim, keyOf('exit-1'), {
+              ...launchOf('/bin/echo', ['first'], 'agent'),
+              lifetime: 'call',
+            });
+            if (live._tag !== 'Started' || ended._tag !== 'Started')
+              return yield* Effect.die(new Error('the capacity test could not start its children'));
+            yield* Deferred.await(reached);
+            const answered = yield* Deferred.make<void>();
+            const waiting = yield* Effect.forkChild(
+              requests.callResult(keyOf('exit-1')).pipe(Effect.tap(() => Deferred.succeed(answered, undefined))),
+              { startImmediately: true },
+            );
+            const beforeRelease = yield* Deferred.isDone(answered);
+            const during = yield* capacity.ledger();
+            yield* Deferred.succeed(gate, undefined);
+            const decided = yield* Fiber.join(waiting);
+            const ledger = yield* capacity.ledger();
+            const account = yield* capacity.account();
+            const listed = yield* hostExecutions.list(undefined, 10);
+            const next = yield* hostExecutions.start(claim, keyOf('exit-2'), {
+              ...launchOf('/bin/echo', ['second'], 'agent'),
+              lifetime: 'call',
+            });
+            return { beforeRelease, during, decided, ledger, held: account.reservations.size, next, listed: listed.executions.length };
+          }).pipe(Effect.ensuring(Deferred.succeed(gate, undefined))),
+        { executions: 2, holdOutput: { held: gate, entered: reached } },
+      );
+
+      expect(outcome.beforeRelease).toBe(false);
+      expect(outcome.during.executions).toBe(2);
+      expect(outcome.decided._tag).toBe('Settled');
+      if (outcome.decided._tag === 'Settled' && outcome.decided.result._tag === 'Decided') {
+        expect(outcome.decided.result.decision._tag).toBe('Completed');
+      }
+      expect(outcome.ledger.executions).toBe(1);
+      expect(outcome.ledger.reserved).toBe(reserveOf(runtimeProfile({ executions: 2, transports: ['pipes'] }).execution, 'pipes'));
+      expect(outcome.held).toBe(2);
+      expect(outcome.listed).toBe(2);
+      expect(outcome.next._tag).toBe('Started');
+    }),
+  );
+
+  it.live('answers a completed call with the cost its own ending measured, on the first read', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(({ hostExecutions, requests, stops, claim }) =>
+        Effect.gen(function* () {
+          const started = yield* hostExecutions.start(claim, keyOf('cost-1'), {
+            ...launchOf('/bin/sh', ['-c', 'yes | head -c 4000000 > /dev/null'], 'agent'),
+            lifetime: 'call',
+          });
+          if (started._tag !== 'Started') return yield* Effect.die(new Error(`cost child: ${started._tag}`));
+          const decided = yield* waitFor(
+            hostExecutions,
+            started.execution.execution,
+            requests.callResult(keyOf('cost-1')),
+            (answer) => answer._tag === 'Settled',
+          );
+          return { decided, ending: yield* stops.ending(started.execution.execution) };
+        }),
+      );
+
+      expect(outcome.decided._tag).toBe('Settled');
+      if (outcome.decided._tag === 'Settled' && outcome.decided.result._tag === 'Decided') {
+        expect(outcome.decided.result.decision._tag).toBe('Completed');
+        if (outcome.ending === undefined) return yield* Effect.die(new Error('the completed call has no ending'));
+        expect(outcome.decided.result.cost).toEqual(outcome.ending.cost);
+        expect(outcome.decided.result.cost._tag).toBe('Measured');
+        if (outcome.decided.result.cost._tag === 'Measured') {
+          expect(outcome.decided.result.cost.cpuMicros).toBeGreaterThan(0);
+          expect(outcome.decided.result.cost.peakRssBytes).toBeGreaterThan(0);
+        }
+      }
+    }),
+  );
+
+  it.live('answers a page with the cursor that continues it, so nothing is skipped between two pages', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(
+        ({ hostExecutions, claim }) =>
+          Effect.gen(function* () {
+            const first = yield* hostExecutions.start(claim, keyOf('page-1'), launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'));
+            const second = yield* hostExecutions.start(claim, keyOf('page-2'), launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'));
+            if (first._tag !== 'Started' || second._tag !== 'Started')
+              return yield* Effect.die(new Error('the page children did not start'));
+            const opening = yield* hostExecutions.list(undefined, 1);
+            const following = yield* hostExecutions.list(opening.after?.execution, 1);
+            const ending = yield* hostExecutions.list(following.executions[following.executions.length - 1]?.state.ref.execution, 1);
+            const whole = yield* hostExecutions.list(undefined, 10);
+            return { opening, following, ending, whole };
           }),
-        );
-        expect(outcome.receipt.confirmed.map((ending) => ending.relation)).toEqual(['leader', 'work']);
-        expect(outcome.receipt.relation).toBe('covered');
-        expect(outcome.refused._tag).toBe('Refused');
-        if (outcome.refused._tag === 'Refused') expect(outcome.refused.refusal._tag).toBe('Unauthorized');
-        expect(outcome.shutdown._tag).toBe('ShutdownComplete');
-      }),
-    15_000,
+        { executions: 2 },
+      );
+
+      expect(outcome.opening.executions.length).toBe(1);
+      expect(outcome.opening.after).toBeDefined();
+      expect(outcome.following.executions.length).toBe(1);
+      const paged = [...outcome.opening.executions, ...outcome.following.executions].map((row) => row.state.ref.execution);
+      expect(new Set(paged).size).toBe(2);
+      expect(paged.sort()).toEqual(outcome.whole.executions.map((row) => row.state.ref.execution).sort());
+      expect(outcome.following.after).toBeUndefined();
+      expect(outcome.ending.executions.length).toBe(0);
+    }),
+  );
+
+  it.live('keeps taking pipe output past its retained budget and reports the gap instead of losing it silently', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(({ hostExecutions, byteRecords, claim }) =>
+        Effect.gen(function* () {
+          const started = yield* hostExecutions.start(
+            claim,
+            keyOf('retain-1'),
+            launchOf('/bin/sh', ['-c', 'awk \'BEGIN{for(i=0;i<4000;i++) printf "%050d\\n", i}\''], 'agent'),
+          );
+          if (started._tag !== 'Started') return yield* Effect.die(new Error(`retention child: ${started._tag}`));
+          const ref = started.execution;
+          const summary = yield* summaryWhen(hostExecutions, ref.execution, (summary) =>
+            summary.streams.some((stream) => stream.stream === 'stdout' && stream.ending !== 'open'),
+          );
+          const stdout = summary?.streams.find((positions) => positions.stream === 'stdout');
+          const behind = yield* byteRecords.read({ ref, stream: 'stdout', offset: byteOffset(0n) }, 4096);
+          return { stdout, behind };
+        }),
+      );
+      expect(offsetValue(outcome.stdout!.durableThrough)).toBe(204000n);
+      expect(outcome.stdout!.ending).toBe('eof');
+      expect(offsetValue(outcome.stdout!.retainedFrom)).toBeGreaterThan(0n);
+      expect(outcome.behind.range.gap).toBe(true);
+      expect(outcome.behind.range.next).toBe(outcome.stdout!.retainedFrom);
+    }),
+  );
+
+  it.live('wakes a waiting reader when bytes land, and tells it when the stream is over', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(({ hostExecutions, lanes, bindings, byteRecords, claim }) =>
+        Effect.gen(function* () {
+          const held = yield* authority(bindings, claim, 'reader');
+          const typing = { binding: held.binding.id, principal: held.principal, connection: held.connection, epoch: held.epoch };
+          const started = yield* hostExecutions.start(claim, keyOf('await-1'), launchOf('/bin/cat', [], 'principal-reader'));
+          if (started._tag !== 'Started') return yield* Effect.die(new Error(`wake child: ${started._tag}`));
+          const ref = started.execution;
+          return yield* Effect.scoped(
+            Effect.gen(function* () {
+              const reader = yield* byteRecords.openReader(ref.execution, 'stdout', byteOffset(0n));
+              const waiting = yield* Effect.forkChild(byteRecords.awaitBytes(ref.execution, reader), { startImmediately: true });
+              yield* lanes.admit(ref.execution, typing, {
+                sequence: 0,
+                cause: 'typed',
+                act: { _tag: 'Write', bytes: new TextEncoder().encode('spoke') },
+              });
+              yield* lanes.admit(ref.execution, typing, { sequence: 1, cause: 'end', act: { _tag: 'End' } });
+              const woke = yield* Fiber.join(waiting);
+              yield* byteRecords.grant(ref.execution, reader, 64);
+              const pulled = yield* byteRecords.pull(ref.execution, reader);
+              const ended = yield* byteRecords.awaitBytes(ref.execution, reader);
+              return { woke, pulled, ended };
+            }),
+          );
+        }),
+      );
+      expect(outcome.woke).toBe(true);
+      expect(new TextDecoder().decode(outcome.pulled.bytes)).toBe('spoke');
+      expect(outcome.ended).toBe(false);
+    }),
+  );
+
+  it.live('wakes a watcher when a child ends on its own, and measures what that ending left with no stop involved', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(({ hostExecutions, requests, stops, claim }) =>
+        Effect.gen(function* () {
+          const started = yield* hostExecutions.start(claim, keyOf('wake-1'), {
+            ...launchOf('/bin/echo', ['managed'], 'agent'),
+            lifetime: 'call',
+          });
+          if (started._tag !== 'Started') return yield* Effect.die(new Error(`natural ending child: ${started._tag}`));
+          const ref = started.execution;
+          yield* summaryWhen(
+            hostExecutions,
+            ref.execution,
+            (summary) => summary.state.phase === 'ended' && summary.state.nativeExit !== undefined,
+          );
+          const ending = yield* waitFor(hostExecutions, ref.execution, stops.ending(ref.execution), (ending) => ending !== undefined);
+          return {
+            ref,
+            summary: yield* hostExecutions.summary(ref.execution),
+            answer: yield* requests.callResult(keyOf('wake-1')),
+            ending,
+          };
+        }),
+      );
+      expect(outcome.summary?.state.phase).toBe('ended');
+      expect(outcome.summary?.state.nativeExit).toEqual({ _tag: 'Code', code: 0 });
+      expect(outcome.answer._tag).toBe('Settled');
+      expect(outcome.ending?.execution).toEqual(outcome.ref);
+      expect(outcome.ending?.cleanup).toBe('complete');
+      expect(outcome.ending?.confirmed).toContainEqual({
+        pid: expect.any(Number),
+        relation: 'leader',
+        exit: { _tag: 'Code', code: 0 },
+        step: 'unsignalled',
+      });
+      expect(outcome.ending?.residual).toEqual([]);
+      expect(outcome.ending?.unverifiable).toEqual([]);
+      expect(outcome.ending?.nativeExit).toEqual({ _tag: 'Code', code: 0 });
+      if (outcome.answer._tag === 'Settled' && outcome.answer.result._tag === 'Decided') {
+        expect(outcome.answer.result.decision._tag).toBe('Completed');
+        expect(outcome.answer.result.cleanup).toBe('complete');
+      }
+    }),
+  );
+
+  it.live('lets recovery stop and shut down a host whose custodian is gone, and start nothing', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(({ hostExecutions, stops, lifecycle, custodian, claim }) =>
+        Effect.gen(function* () {
+          const started = yield* hostExecutions.start(claim, keyOf('recover-1'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
+          if (started._tag !== 'Started') return yield* Effect.die(new Error(`recovery child: ${started._tag}`));
+          const standing = yield* custodian.current();
+          const revision = standing._tag === 'Settled' ? standing.custody.revision : standing.last.revision;
+          const recovery = { connection: connectionOf('connection-recovery'), epoch: CustodianEpoch.make(0), role: 'recovery' as const };
+          yield* custodian.fence(keyOf('recover-fence'), revision, recovery.connection, 'recovery');
+          const receipt = yield* stops.stop(recovery, keyOf('recover-stop'), started.execution.execution, 'explicit-stop', 'signal');
+          const refused = yield* hostExecutions.start(recovery, keyOf('recover-2'), launchOf('/bin/sh', ['-c', 'sleep 1'], 'agent'));
+          const shutdown = yield* lifecycle.shutdown(recovery, keyOf('recover-shutdown'));
+          return { receipt, refused, shutdown };
+        }),
+      );
+      expect(outcome.receipt.confirmed.map((ending) => ending.relation)).toEqual(['leader', 'work']);
+      expect(outcome.receipt.relation).toBe('covered');
+      expect(outcome.refused._tag).toBe('Refused');
+      if (outcome.refused._tag === 'Refused') expect(outcome.refused.refusal._tag).toBe('Unauthorized');
+      expect(outcome.shutdown._tag).toBe('ShutdownComplete');
+    }),
   );
 
   it.live('refuses to start work for a custodian that has been fenced', () =>
@@ -1145,285 +1097,261 @@ describe('the live execution runtime', () => {
     }),
   );
 
-  it.live(
-    'stops several live commands together while each one holds its output release',
-    () =>
-      Effect.gen(function* () {
-        const held = yield* Deferred.make<void>();
-        const entered = yield* Deferred.make<void>();
-        const outcome = yield* withHost(
-          ({ hostExecutions, lifecycle, byteRecords, claim }) =>
-            Effect.gen(function* () {
-              const started = yield* Effect.forEach(['a', 'b'], (name) =>
-                hostExecutions.start(
-                  claim,
-                  keyOf(`deaf-${name}`),
-                  launchOf('/bin/sh', ['-c', 'trap "" INT; printf armed; sleep 30'], 'agent'),
-                ),
-              );
-              if (started.some((answer) => answer._tag !== 'Started')) return yield* Effect.die(new Error('the children did not start'));
-              for (const answer of started) {
-                if (answer._tag !== 'Started') return yield* Effect.die(new Error('a deaf child was refused'));
-                yield* bytesPast(byteRecords, answer.execution, 4n);
-              }
-              const sweeping = yield* Effect.forkScoped(lifecycle.shutdown(claim, keyOf('deaf-shutdown')));
-              yield* Deferred.await(entered);
-              yield* Deferred.succeed(held, undefined);
-              return { shutdown: yield* Fiber.join(sweeping) };
-            }).pipe(Effect.ensuring(Deferred.succeed(held, undefined))),
-          { executions: 2, holdOutput: { held, entered, arrivals: 2 } },
-        );
-        expect(outcome.shutdown._tag).toBe('ShutdownComplete');
-        const swept = outcome.shutdown._tag === 'ShutdownComplete' ? outcome.shutdown.executions : [];
-        expect(swept.map((receipt) => receipt.steps)).toEqual([
-          ['interrupt', 'terminate'],
-          ['interrupt', 'terminate'],
-        ]);
-      }),
-    30_000,
-  );
-
-  it.live(
-    'names the live children it never reached when the bound is spent before the sweep begins',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(
-          ({ hostExecutions, stops, lifecycle, claim }) =>
-            Effect.gen(function* () {
-              const first = yield* hostExecutions.start(claim, keyOf('unswept-1'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
-              const second = yield* hostExecutions.start(claim, keyOf('unswept-2'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
-              if (first._tag !== 'Started' || second._tag !== 'Started') return yield* Effect.die(new Error('the children did not start'));
-              const shutdown = yield* lifecycle.shutdown(claim, keyOf('unswept-shutdown'));
-              const refused = yield* hostExecutions.start(claim, keyOf('unswept-3'), launchOf('/bin/sh', ['-c', 'sleep 1'], 'agent'));
-              yield* stops.stop(claim, keyOf('unswept-stop-1'), first.execution.execution, 'explicit-stop', 'destroy');
-              yield* stops.stop(claim, keyOf('unswept-stop-2'), second.execution.execution, 'explicit-stop', 'destroy');
-              return {
-                first: first.execution.execution,
-                second: second.execution.execution,
-                shutdown,
-                refused,
-              };
-            }),
-          { executions: 4, shutdownMs: 1 },
-        );
-        expect(outcome.shutdown._tag).toBe('ShutdownIncomplete');
-        if (outcome.shutdown._tag !== 'ShutdownIncomplete')
-          return yield* Effect.die(new Error(`expected Incomplete, got ${outcome.shutdown._tag}`));
-        const unreached = outcome.shutdown.unverifiable.map((row) => row.detail);
-        const stopped = outcome.shutdown.executions.map((receipt) => String(receipt.execution.execution));
-        expect([...unreached, ...stopped]).toContain(outcome.first);
-        expect([...unreached, ...stopped]).toContain(outcome.second);
-        expect(unreached.length).toBeGreaterThan(0);
-        expect(outcome.refused._tag).toBe('Refused');
-      }),
-    15_000,
-  );
-
-  it.live(
-    'a shutdown retry cannot complete while the first execution finalization is still held',
-    () =>
-      Effect.gen(function* () {
-        const held = Deferred.makeUnsafe<void>();
-        const entered = Deferred.makeUnsafe<void>();
-        const outcome = yield* withHost(
-          ({ hostExecutions, lifecycle, stops, claim }) =>
-            Effect.gen(function* () {
-              const started = yield* hostExecutions.start(claim, keyOf('seal-held-start'), launchOf('/bin/echo', ['finished'], 'agent'));
-              if (started._tag !== 'Started') return yield* Effect.die(new Error(`the retained execution did not start: ${started._tag}`));
-              yield* stops.stop(claim, keyOf('seal-held-stop'), started.execution.execution, 'explicit-stop', 'signal');
-              const operation = keyOf('seal-held-shutdown');
-              const sweeping = yield* Effect.forkScoped(lifecycle.shutdown(claim, operation));
-              yield* Deferred.await(entered);
-              const first = yield* Fiber.join(sweeping);
-              const second = yield* lifecycle.shutdown(claim, operation);
-              const during = yield* lifecycle.status();
-              yield* Deferred.succeed(held, undefined);
-              const third = yield* lifecycle.shutdown(claim, keyOf('seal-released-shutdown'));
-              return { first, second, third, during, execution: started.execution.execution };
-            }).pipe(Effect.ensuring(Deferred.succeed(held, undefined))),
-          { shutdownMs: 300, holdSeal: { held, entered } },
-        );
-        expect(outcome.first._tag).toBe('ShutdownIncomplete');
-        expect(outcome.second._tag).toBe('ShutdownIncomplete');
-        if (outcome.second._tag !== 'ShutdownIncomplete')
-          return yield* Effect.die(new Error(`the retry reported ${outcome.second._tag} before finalization ended`));
-        expect(outcome.second.unverifiable.map((row) => row.detail)).toContain(outcome.execution);
-        expect(outcome.during.phase).toBe('stopping');
-        expect(outcome.third._tag).toBe('ShutdownComplete');
-      }),
-    10_000,
-  );
-
-  it.live(
-    'a holder that does not answer vacate cannot outlive the shutdown budget',
-    () =>
-      Effect.gen(function* () {
-        const held = Deferred.makeUnsafe<void>();
-        const entered = Deferred.makeUnsafe<void>();
-        const outcome = yield* withHost(
-          ({ lifecycle, claim }) =>
-            Effect.gen(function* () {
-              const sweeping = yield* Effect.forkScoped(lifecycle.shutdown(claim, keyOf('vacate-held-shutdown')));
-              yield* Deferred.await(entered).pipe(TestClock.withLive);
-              yield* TestClock.adjust(200);
-              const incomplete = yield* Fiber.join(sweeping);
-              const during = yield* lifecycle.status();
-              yield* Deferred.succeed(held, undefined);
-              const complete = yield* lifecycle.shutdown(claim, keyOf('vacate-released-shutdown'));
-              return { incomplete, complete, during };
-            }).pipe(Effect.ensuring(Deferred.succeed(held, undefined)), Effect.provide(TestClock.layer())),
-          { shutdownMs: 200, holdVacate: { held, entered } },
-        );
-        expect(outcome.incomplete._tag).toBe('ShutdownIncomplete');
-        if (outcome.incomplete._tag !== 'ShutdownIncomplete')
-          return yield* Effect.die(new Error(`the held holder reported ${outcome.incomplete._tag}`));
-        expect(outcome.incomplete.unverifiable).toHaveLength(1);
-        expect(outcome.incomplete.unverifiable[0]?.kind).toBe('process');
-        expect(outcome.during.phase).toBe('stopping');
-        expect(outcome.complete._tag).toBe('ShutdownComplete');
-      }),
-    10_000,
-  );
-
-  it.live(
-    'ends finished records together, answering each from its own measurement',
-    () =>
-      Effect.gen(function* () {
-        const N = 2;
-        const outcome = yield* withHost(
-          ({ hostExecutions, lifecycle, claim }) =>
-            Effect.gen(function* () {
-              for (let i = 0; i < N; i++) {
-                const started = yield* hostExecutions.start(claim, keyOf(`ended-${i}`), {
-                  ...launchOf('/bin/sh', ['-c', 'exit 0'], 'agent'),
-                  lifetime: 'call',
-                });
-                if (started._tag !== 'Started') return yield* Effect.die(new Error(`start ${i} did not start: ${started._tag}`));
-              }
-              for (;;) {
-                const changed = yield* hostExecutions.inventoryChanged();
-                const page = yield* hostExecutions.list(undefined, N + 1);
-                if (
-                  page.executions.length === N &&
-                  page.executions.every((row) => row.state.phase === 'ended' && row.state.cleanup !== 'pending')
-                )
-                  break;
-                yield* changed;
-              }
-              return yield* lifecycle.shutdown(claim, keyOf('ended-shutdown'));
-            }),
-          { executions: N + 10, shutdownMs: 2500 },
-        );
-        expect(outcome._tag).toBe('ShutdownComplete');
-        if (outcome._tag !== 'ShutdownComplete') return yield* Effect.die(new Error(`expected Complete, got ${outcome._tag}`));
-        expect(outcome.executions.length).toBe(N);
-        expect(outcome.executions.every((receipt) => receipt.requested === 'destroy' && receipt.cleanup === 'complete')).toBe(true);
-      }),
-    60_000,
-  );
-
-  it.live(
-    'names what is still moving when the bound runs out, instead of hanging or folding silence',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(
-          ({ hostExecutions, lifecycle, byteRecords, claim }) =>
-            Effect.gen(function* () {
-              const started = yield* hostExecutions.start(
+  it.live('stops several live commands together while each one holds its output release', () =>
+    Effect.gen(function* () {
+      const held = yield* Deferred.make<void>();
+      const entered = yield* Deferred.make<void>();
+      const outcome = yield* withHost(
+        ({ hostExecutions, lifecycle, byteRecords, claim }) =>
+          Effect.gen(function* () {
+            const started = yield* Effect.forEach(['a', 'b'], (name) =>
+              hostExecutions.start(
                 claim,
-                keyOf('wedge-1'),
-                launchOf('/bin/sh', ['-c', 'trap "" INT TERM; printf armed; exec sleep 30'], 'agent'),
-              );
-              if (started._tag !== 'Started') return yield* Effect.die(new Error(`the wedge did not start: ${started._tag}`));
-              yield* outputWhen(byteRecords, started.execution, (text) => text === 'armed');
-              const shutdown = yield* lifecycle.shutdown(claim, keyOf('wedge-shutdown'));
-              yield* summaryWhen(
-                hostExecutions,
-                started.execution.execution,
-                (summary) => summary.state.phase === 'ended' && summary.state.cleanup !== 'pending',
-              );
-              const retried = yield* lifecycle.shutdown(claim, keyOf('wedge-shutdown'));
-              const fresh = yield* lifecycle.shutdown(claim, keyOf('wedge-shutdown-2'));
-              return { ref: started.execution, shutdown, retried, fresh };
-            }),
-          { shutdownMs: 400 },
-        );
-        expect(outcome.shutdown._tag).toBe('ShutdownIncomplete');
-        if (outcome.shutdown._tag !== 'ShutdownIncomplete')
-          return yield* Effect.die(new Error(`expected Incomplete, got ${outcome.shutdown._tag}`));
-        expect(outcome.shutdown.reason).toContain('did not finish within 400ms');
-        expect(outcome.shutdown.reason).toContain('stopping executions');
-        expect(outcome.shutdown.reason).toContain('1 stop unfinished');
-        const named = outcome.shutdown.unverifiable.find((row) => row.detail === outcome.ref.execution);
-        if (named === undefined) return yield* Effect.die(new Error('the still-moving execution was not named'));
-        expect(named.reason).toContain('held: its stop did not finish within the shutdown budget');
-        expect(outcome.retried._tag).toBe('ShutdownComplete');
-        expect(outcome.fresh).toEqual({ _tag: 'ShutdownComplete', operation: keyOf('wedge-shutdown-2'), executions: [] });
-      }),
-    30_000,
+                keyOf(`deaf-${name}`),
+                launchOf('/bin/sh', ['-c', 'trap "" INT; printf armed; sleep 30'], 'agent'),
+              ),
+            );
+            if (started.some((answer) => answer._tag !== 'Started')) return yield* Effect.die(new Error('the children did not start'));
+            for (const answer of started) {
+              if (answer._tag !== 'Started') return yield* Effect.die(new Error('a deaf child was refused'));
+              yield* bytesPast(byteRecords, answer.execution, 4n);
+            }
+            const sweeping = yield* Effect.forkScoped(lifecycle.shutdown(claim, keyOf('deaf-shutdown')));
+            yield* Deferred.await(entered);
+            yield* Deferred.succeed(held, undefined);
+            return { shutdown: yield* Fiber.join(sweeping) };
+          }).pipe(Effect.ensuring(Deferred.succeed(held, undefined))),
+        { executions: 2, holdOutput: { held, entered, arrivals: 2 } },
+      );
+      expect(outcome.shutdown._tag).toBe('ShutdownComplete');
+      const swept = outcome.shutdown._tag === 'ShutdownComplete' ? outcome.shutdown.executions : [];
+      expect(swept.map((receipt) => receipt.steps)).toEqual([
+        ['interrupt', 'terminate'],
+        ['interrupt', 'terminate'],
+      ]);
+    }),
   );
 
-  it.live(
-    'answers a same-key retry from the one sweep, never starting a second beside it',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(
-          ({ hostExecutions, lifecycle, store, claim }) =>
-            Effect.gen(function* () {
-              const started = yield* hostExecutions.start(
-                claim,
-                keyOf('join-1'),
-                launchOf('/bin/sh', ['-c', 'trap "" TERM; exec sleep 30'], 'agent'),
-              );
-              if (started._tag !== 'Started') return yield* Effect.die(new Error(`the joiner did not start: ${started._tag}`));
-              const key = keyOf('join-shutdown');
-              const fiber = yield* Effect.forkScoped(lifecycle.shutdown(claim, key));
-              const first = yield* lifecycle.shutdown(claim, key);
-              const second = yield* Fiber.join(fiber);
-              const fresh = yield* lifecycle.shutdown(claim, keyOf('already-closed'));
-              const third = yield* lifecycle.shutdown(claim, key);
-              const intents = yield* store.stopRequestsOf(started.execution.execution);
-              return { first, second, third, fresh, intents };
-            }),
-          { shutdownMs: 5000 },
-        );
-        expect(outcome.first._tag).toBe('ShutdownComplete');
-        expect(outcome.second).toEqual(outcome.first);
-        expect(outcome.third).toEqual(outcome.first);
-        expect(outcome.fresh).toEqual({ _tag: 'ShutdownComplete', operation: keyOf('already-closed'), executions: [] });
-        expect(outcome.intents.length).toBe(1);
-        expect(outcome.intents[0]?.operation.operation).toBe(keyOf('join-shutdown').operation);
-      }),
-    15_000,
+  it.live('names the live children it never reached when the bound is spent before the sweep begins', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(
+        ({ hostExecutions, stops, lifecycle, claim }) =>
+          Effect.gen(function* () {
+            const first = yield* hostExecutions.start(claim, keyOf('unswept-1'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
+            const second = yield* hostExecutions.start(claim, keyOf('unswept-2'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
+            if (first._tag !== 'Started' || second._tag !== 'Started') return yield* Effect.die(new Error('the children did not start'));
+            const shutdown = yield* lifecycle.shutdown(claim, keyOf('unswept-shutdown'));
+            const refused = yield* hostExecutions.start(claim, keyOf('unswept-3'), launchOf('/bin/sh', ['-c', 'sleep 1'], 'agent'));
+            yield* stops.stop(claim, keyOf('unswept-stop-1'), first.execution.execution, 'explicit-stop', 'destroy');
+            yield* stops.stop(claim, keyOf('unswept-stop-2'), second.execution.execution, 'explicit-stop', 'destroy');
+            return {
+              first: first.execution.execution,
+              second: second.execution.execution,
+              shutdown,
+              refused,
+            };
+          }),
+        { executions: 4, shutdownMs: 1 },
+      );
+      expect(outcome.shutdown._tag).toBe('ShutdownIncomplete');
+      if (outcome.shutdown._tag !== 'ShutdownIncomplete')
+        return yield* Effect.die(new Error(`expected Incomplete, got ${outcome.shutdown._tag}`));
+      const unreached = outcome.shutdown.unverifiable.map((row) => row.detail);
+      const stopped = outcome.shutdown.executions.map((receipt) => String(receipt.execution.execution));
+      expect([...unreached, ...stopped]).toContain(outcome.first);
+      expect([...unreached, ...stopped]).toContain(outcome.second);
+      expect(unreached.length).toBeGreaterThan(0);
+      expect(outcome.refused._tag).toBe('Refused');
+    }),
   );
 
-  it.live(
-    'sweeps once per key when two different keys arrive together',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* withHost(
-          ({ hostExecutions, lifecycle, store, claim }) =>
-            Effect.gen(function* () {
-              const started = yield* hostExecutions.start(
-                claim,
-                keyOf('keys-1'),
-                launchOf('/bin/sh', ['-c', 'trap "" TERM; exec sleep 30'], 'agent'),
-              );
-              if (started._tag !== 'Started') return yield* Effect.die(new Error(`the keyed one did not start: ${started._tag}`));
-              const fiber = yield* Effect.forkScoped(lifecycle.shutdown(claim, keyOf('keys-shutdown-a')));
-              const first = yield* lifecycle.shutdown(claim, keyOf('keys-shutdown-b'));
-              const second = yield* Fiber.join(fiber);
-              const intents = yield* store.stopRequestsOf(started.execution.execution);
-              return { first, second, intents };
-            }),
-          { shutdownMs: 5000 },
-        );
-        expect(outcome.first._tag).toBe('ShutdownComplete');
-        expect(outcome.second._tag).toBe('ShutdownComplete');
-        expect(outcome.intents.length).toBe(2);
-        expect(outcome.intents.map((intent) => String(intent.operation.operation)).sort()).toEqual(['keys-shutdown-a', 'keys-shutdown-b']);
-      }),
-    15_000,
+  it.live('a shutdown retry cannot complete while the first execution finalization is still held', () =>
+    Effect.gen(function* () {
+      const held = Deferred.makeUnsafe<void>();
+      const entered = Deferred.makeUnsafe<void>();
+      const outcome = yield* withHost(
+        ({ hostExecutions, lifecycle, stops, claim }) =>
+          Effect.gen(function* () {
+            const started = yield* hostExecutions.start(claim, keyOf('seal-held-start'), launchOf('/bin/echo', ['finished'], 'agent'));
+            if (started._tag !== 'Started') return yield* Effect.die(new Error(`the retained execution did not start: ${started._tag}`));
+            yield* stops.stop(claim, keyOf('seal-held-stop'), started.execution.execution, 'explicit-stop', 'signal');
+            const operation = keyOf('seal-held-shutdown');
+            const sweeping = yield* Effect.forkScoped(lifecycle.shutdown(claim, operation));
+            yield* Deferred.await(entered);
+            const first = yield* Fiber.join(sweeping);
+            const second = yield* lifecycle.shutdown(claim, operation);
+            const during = yield* lifecycle.status();
+            yield* Deferred.succeed(held, undefined);
+            const third = yield* lifecycle.shutdown(claim, keyOf('seal-released-shutdown'));
+            return { first, second, third, during, execution: started.execution.execution };
+          }).pipe(Effect.ensuring(Deferred.succeed(held, undefined))),
+        { shutdownMs: 300, holdSeal: { held, entered } },
+      );
+      expect(outcome.first._tag).toBe('ShutdownIncomplete');
+      expect(outcome.second._tag).toBe('ShutdownIncomplete');
+      if (outcome.second._tag !== 'ShutdownIncomplete')
+        return yield* Effect.die(new Error(`the retry reported ${outcome.second._tag} before finalization ended`));
+      expect(outcome.second.unverifiable.map((row) => row.detail)).toContain(outcome.execution);
+      expect(outcome.during.phase).toBe('stopping');
+      expect(outcome.third._tag).toBe('ShutdownComplete');
+    }),
+  );
+
+  it.live('a holder that does not answer vacate cannot outlive the shutdown budget', () =>
+    Effect.gen(function* () {
+      const held = Deferred.makeUnsafe<void>();
+      const entered = Deferred.makeUnsafe<void>();
+      const outcome = yield* withHost(
+        ({ lifecycle, claim }) =>
+          Effect.gen(function* () {
+            const sweeping = yield* Effect.forkScoped(lifecycle.shutdown(claim, keyOf('vacate-held-shutdown')));
+            yield* Deferred.await(entered).pipe(TestClock.withLive);
+            yield* TestClock.adjust(200);
+            const incomplete = yield* Fiber.join(sweeping);
+            const during = yield* lifecycle.status();
+            yield* Deferred.succeed(held, undefined);
+            const complete = yield* lifecycle.shutdown(claim, keyOf('vacate-released-shutdown'));
+            return { incomplete, complete, during };
+          }).pipe(Effect.ensuring(Deferred.succeed(held, undefined)), Effect.provide(TestClock.layer())),
+        { shutdownMs: 200, holdVacate: { held, entered } },
+      );
+      expect(outcome.incomplete._tag).toBe('ShutdownIncomplete');
+      if (outcome.incomplete._tag !== 'ShutdownIncomplete')
+        return yield* Effect.die(new Error(`the held holder reported ${outcome.incomplete._tag}`));
+      expect(outcome.incomplete.unverifiable).toHaveLength(1);
+      expect(outcome.incomplete.unverifiable[0]?.kind).toBe('process');
+      expect(outcome.during.phase).toBe('stopping');
+      expect(outcome.complete._tag).toBe('ShutdownComplete');
+    }),
+  );
+
+  it.live('ends finished records together, answering each from its own measurement', () =>
+    Effect.gen(function* () {
+      const N = 2;
+      const outcome = yield* withHost(
+        ({ hostExecutions, lifecycle, claim }) =>
+          Effect.gen(function* () {
+            for (let i = 0; i < N; i++) {
+              const started = yield* hostExecutions.start(claim, keyOf(`ended-${i}`), {
+                ...launchOf('/bin/sh', ['-c', 'exit 0'], 'agent'),
+                lifetime: 'call',
+              });
+              if (started._tag !== 'Started') return yield* Effect.die(new Error(`start ${i} did not start: ${started._tag}`));
+            }
+            for (;;) {
+              const changed = yield* hostExecutions.inventoryChanged();
+              const page = yield* hostExecutions.list(undefined, N + 1);
+              if (
+                page.executions.length === N &&
+                page.executions.every((row) => row.state.phase === 'ended' && row.state.cleanup !== 'pending')
+              )
+                break;
+              yield* changed;
+            }
+            return yield* lifecycle.shutdown(claim, keyOf('ended-shutdown'));
+          }),
+        { executions: N + 10, shutdownMs: 2500 },
+      );
+      expect(outcome._tag).toBe('ShutdownComplete');
+      if (outcome._tag !== 'ShutdownComplete') return yield* Effect.die(new Error(`expected Complete, got ${outcome._tag}`));
+      expect(outcome.executions.length).toBe(N);
+      expect(outcome.executions.every((receipt) => receipt.requested === 'destroy' && receipt.cleanup === 'complete')).toBe(true);
+    }),
+  );
+
+  it.live('names what is still moving when the bound runs out, instead of hanging or folding silence', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(
+        ({ hostExecutions, lifecycle, byteRecords, claim }) =>
+          Effect.gen(function* () {
+            const started = yield* hostExecutions.start(
+              claim,
+              keyOf('wedge-1'),
+              launchOf('/bin/sh', ['-c', 'trap "" INT TERM; printf armed; exec sleep 30'], 'agent'),
+            );
+            if (started._tag !== 'Started') return yield* Effect.die(new Error(`the wedge did not start: ${started._tag}`));
+            yield* outputWhen(byteRecords, started.execution, (text) => text === 'armed');
+            const shutdown = yield* lifecycle.shutdown(claim, keyOf('wedge-shutdown'));
+            yield* summaryWhen(
+              hostExecutions,
+              started.execution.execution,
+              (summary) => summary.state.phase === 'ended' && summary.state.cleanup !== 'pending',
+            );
+            const retried = yield* lifecycle.shutdown(claim, keyOf('wedge-shutdown'));
+            const fresh = yield* lifecycle.shutdown(claim, keyOf('wedge-shutdown-2'));
+            return { ref: started.execution, shutdown, retried, fresh };
+          }),
+        { shutdownMs: 400 },
+      );
+      expect(outcome.shutdown._tag).toBe('ShutdownIncomplete');
+      if (outcome.shutdown._tag !== 'ShutdownIncomplete')
+        return yield* Effect.die(new Error(`expected Incomplete, got ${outcome.shutdown._tag}`));
+      expect(outcome.shutdown.reason).toContain('did not finish within 400ms');
+      expect(outcome.shutdown.reason).toContain('stopping executions');
+      expect(outcome.shutdown.reason).toContain('1 stop unfinished');
+      const named = outcome.shutdown.unverifiable.find((row) => row.detail === outcome.ref.execution);
+      if (named === undefined) return yield* Effect.die(new Error('the still-moving execution was not named'));
+      expect(named.reason).toContain('held: its stop did not finish within the shutdown budget');
+      expect(outcome.retried._tag).toBe('ShutdownComplete');
+      expect(outcome.fresh).toEqual({ _tag: 'ShutdownComplete', operation: keyOf('wedge-shutdown-2'), executions: [] });
+    }),
+  );
+
+  it.live('answers a same-key retry from the one sweep, never starting a second beside it', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(
+        ({ hostExecutions, lifecycle, store, claim }) =>
+          Effect.gen(function* () {
+            const started = yield* hostExecutions.start(
+              claim,
+              keyOf('join-1'),
+              launchOf('/bin/sh', ['-c', 'trap "" TERM; exec sleep 30'], 'agent'),
+            );
+            if (started._tag !== 'Started') return yield* Effect.die(new Error(`the joiner did not start: ${started._tag}`));
+            const key = keyOf('join-shutdown');
+            const fiber = yield* Effect.forkScoped(lifecycle.shutdown(claim, key));
+            const first = yield* lifecycle.shutdown(claim, key);
+            const second = yield* Fiber.join(fiber);
+            const fresh = yield* lifecycle.shutdown(claim, keyOf('already-closed'));
+            const third = yield* lifecycle.shutdown(claim, key);
+            const intents = yield* store.stopRequestsOf(started.execution.execution);
+            return { first, second, third, fresh, intents };
+          }),
+        { shutdownMs: 5000 },
+      );
+      expect(outcome.first._tag).toBe('ShutdownComplete');
+      expect(outcome.second).toEqual(outcome.first);
+      expect(outcome.third).toEqual(outcome.first);
+      expect(outcome.fresh).toEqual({ _tag: 'ShutdownComplete', operation: keyOf('already-closed'), executions: [] });
+      expect(outcome.intents.length).toBe(1);
+      expect(outcome.intents[0]?.operation.operation).toBe(keyOf('join-shutdown').operation);
+    }),
+  );
+
+  it.live('sweeps once per key when two different keys arrive together', () =>
+    Effect.gen(function* () {
+      const outcome = yield* withHost(
+        ({ hostExecutions, lifecycle, store, claim }) =>
+          Effect.gen(function* () {
+            const started = yield* hostExecutions.start(
+              claim,
+              keyOf('keys-1'),
+              launchOf('/bin/sh', ['-c', 'trap "" TERM; exec sleep 30'], 'agent'),
+            );
+            if (started._tag !== 'Started') return yield* Effect.die(new Error(`the keyed one did not start: ${started._tag}`));
+            const fiber = yield* Effect.forkScoped(lifecycle.shutdown(claim, keyOf('keys-shutdown-a')));
+            const first = yield* lifecycle.shutdown(claim, keyOf('keys-shutdown-b'));
+            const second = yield* Fiber.join(fiber);
+            const intents = yield* store.stopRequestsOf(started.execution.execution);
+            return { first, second, intents };
+          }),
+        { shutdownMs: 5000 },
+      );
+      expect(outcome.first._tag).toBe('ShutdownComplete');
+      expect(outcome.second._tag).toBe('ShutdownComplete');
+      expect(outcome.intents.length).toBe(2);
+      expect(outcome.intents.map((intent) => String(intent.operation.operation)).sort()).toEqual(['keys-shutdown-a', 'keys-shutdown-b']);
+    }),
   );
 
   it.live('keeps two bindings on one connection distinct at the input gate, and a closed one cannot spend the other', () =>

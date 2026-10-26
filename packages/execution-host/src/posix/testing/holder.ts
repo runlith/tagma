@@ -20,8 +20,6 @@ const RELEASE = resolve(import.meta.dir, '../../../native/target/release');
 export const HOLDER_BINARY = join(RELEASE, 'execution-holder');
 export const HOLDER_LIBRARY = join(RELEASE, 'libexecution_platform.dylib');
 const RELAY = join(RELEASE, 'execution-holder-relay');
-const EXIT_PATIENCE_MS = 2_000;
-const HAND_PATIENCE_MS = 5_000;
 
 export const heldHost = (entry: string, boot: string): Array<string> => [HOLDER_BINARY, dirname(boot), process.execPath, entry, boot];
 
@@ -74,26 +72,28 @@ export const testHolder = (
               catch: (error) => unavailable(`could not start the holder: ${String(error)}`),
             })
           : Effect.succeed(detached);
+      let connected = false;
       const child = yield* Effect.acquireRelease(launching, (spawned) =>
-        Effect.interruptible(spawned.exited).pipe(
-          Effect.timeoutOrElse({
-            duration: EXIT_PATIENCE_MS,
-            orElse: () => Effect.andThen(spawned.kill, spawned.exited),
-          }),
-          Effect.orDie,
-        ),
+        Effect.gen(function* () {
+          if (!connected) yield* spawned.kill;
+          yield* spawned.exited;
+        }).pipe(Effect.orDie),
       );
       yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          if (pair.owned.delete(mine)) native.close(mine);
-        }),
+        detached === undefined
+          ? Effect.sync(() => {
+              if (pair.owned.delete(mine)) native.close(mine);
+            })
+          : detached.disconnect,
       );
       const landing = new Uint8Array(1);
       const handles = new Int32Array(1);
       const reception = Effect.sync(() => native.receive(mine, landing, handles));
       const received = yield* reception.pipe(
         Effect.repeat({ while: (answer) => 'refusal' in answer && answer.refusal === 'would-block', schedule: Schedule.spaced(5) }),
-        Effect.timeoutOrElse({ duration: HAND_PATIENCE_MS, orElse: () => reception }),
+        Effect.raceFirst(
+          Effect.flatMap(child.exited, (code) => unavailable(`the holder exited ${code} before handing its control descriptor`)),
+        ),
       );
       const control = 'fds' in received ? received.fds[0] : undefined;
       if (control === undefined) {
@@ -106,6 +106,7 @@ export const testHolder = (
       yield* Effect.addFinalizer(() =>
         Effect.flatMap(Effect.exit(holder.vacate), (vacated) => (Exit.isFailure(vacated) ? child.kill : Effect.void)).pipe(Effect.orDie),
       );
+      connected = true;
       return holder;
     }),
   );

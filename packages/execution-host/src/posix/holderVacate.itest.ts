@@ -9,7 +9,6 @@ const HOLDER = join(RELEASE, 'execution-holder');
 const LIBRARY = join(RELEASE, 'libexecution_platform.dylib');
 const LOGIC = join(import.meta.dir, 'testing/vacating.ts');
 const state = join(homedir(), '.tagma-tests', `holder-vacate-${randomUUID()}`);
-const LEAVE_MS = 5_000;
 
 type Fact = { readonly leader?: number; readonly member?: number; readonly relaunched?: number; readonly failed?: string };
 
@@ -50,7 +49,7 @@ test.skipIf(!existsSync(LIBRARY))(
       stderr: 'inherit',
     });
     started.push(holder.pid);
-    const exit = await Promise.race([holder.exited, Bun.sleep(LEAVE_MS).then(() => 'stayed' as const)]);
+    const exit = await holder.exited;
     const reported = facts();
     const held = reported.find((fact) => fact.leader !== undefined);
     if (held?.leader !== undefined) started.push(held.leader, held.member ?? held.leader);
@@ -58,5 +57,4 @@ test.skipIf(!existsSync(LIBRARY))(
     expect(exit).toBe(0);
     expect([held?.leader, held?.member].map((pid) => pid !== undefined && alive(pid))).toEqual([false, false]);
   },
-  10_000,
 );

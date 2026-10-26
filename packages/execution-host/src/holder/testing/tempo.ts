@@ -28,7 +28,7 @@ export const launchTempoContracts = (name: string, services: Layer.Layer<Adapter
                 }
               }),
             );
-          }).pipe(Effect.timeout(9_000)),
+          }),
         );
       }
     }
@@ -54,6 +54,6 @@ export const launchTempoContracts = (name: string, services: Layer.Layer<Adapter
             );
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
   });

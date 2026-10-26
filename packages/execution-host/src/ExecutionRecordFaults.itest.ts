@@ -130,157 +130,143 @@ layer(shared, { excludeTestServices: true })('a record over storage that fails',
     }),
   );
 
-  it.effect(
-    'a stream cannot end while its append is inside a write that never answers',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* Effect.gen(function* () {
-          const real = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          const root = path.join(yield* real.makeTempDirectoryScoped({ prefix: 'record-wedge-' }), 'state');
-          const execution = ref('wedged');
-          const held = yield* Deferred.make<void>();
-          const entered = yield* Deferred.make<void>();
-          const fs = faulty(real, { whenPathHas: segmentFile(0n), onCall: 2, held, entered });
-          return yield* Effect.scoped(
-            Effect.gen(function* () {
-              const record = yield* makeSegmentRecord({
-                mode: 'create',
-                records: root,
-                ref: execution,
-                transport: 'pty',
-                limits,
-                grid: { rows: 24, columns: 80 },
-              }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-              const appending = yield* Effect.forkChild(record.append('pty', new Uint8Array(8).fill(0x41)), {
-                startImmediately: true,
-              });
-              yield* Deferred.await(entered);
+  it.effect('a stream cannot end while its append is inside a write that never answers', () =>
+    Effect.gen(function* () {
+      const outcome = yield* Effect.gen(function* () {
+        const real = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = path.join(yield* real.makeTempDirectoryScoped({ prefix: 'record-wedge-' }), 'state');
+        const execution = ref('wedged');
+        const held = yield* Deferred.make<void>();
+        const entered = yield* Deferred.make<void>();
+        const fs = faulty(real, { whenPathHas: segmentFile(0n), onCall: 2, held, entered });
+        return yield* Effect.scoped(
+          Effect.gen(function* () {
+            const record = yield* makeSegmentRecord({
+              mode: 'create',
+              records: root,
+              ref: execution,
+              transport: 'pty',
+              limits,
+              grid: { rows: 24, columns: 80 },
+            }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+            const appending = yield* Effect.forkChild(record.append('pty', new Uint8Array(8).fill(0x41)), {
+              startImmediately: true,
+            });
+            yield* Deferred.await(entered);
 
-              const ended = yield* Deferred.make<void>();
-              yield* Effect.forkChild(Effect.andThen(record.endStream('pty', 'eof'), Deferred.succeed(ended, undefined)), {
-                startImmediately: true,
-              });
-              for (let step = 0; step < 200; step += 1) yield* Effect.yieldNow;
-              const endedWhileWriting = yield* Deferred.isDone(ended);
+            const ended = yield* Deferred.make<void>();
+            yield* Effect.forkChild(Effect.andThen(record.endStream('pty', 'eof'), Deferred.succeed(ended, undefined)), {
+              startImmediately: true,
+            });
+            for (let step = 0; step < 200; step += 1) yield* Effect.yieldNow;
+            const endedWhileWriting = yield* Deferred.isDone(ended);
 
-              yield* Deferred.succeed(held, undefined);
-              const durable = yield* Fiber.join(appending);
-              const finished = yield* Effect.timeoutOption(Deferred.await(ended), '5 seconds');
-              return {
-                endedWhileWriting,
-                durable,
-                finished: finished._tag,
-                positions: yield* record.positions('pty'),
-              };
-            }),
-          );
-        });
+            yield* Deferred.succeed(held, undefined);
+            const durable = yield* Fiber.join(appending);
+            yield* Deferred.await(ended);
+            return {
+              endedWhileWriting,
+              durable,
+              positions: yield* record.positions('pty'),
+            };
+          }),
+        );
+      });
 
-        expect(outcome.endedWhileWriting).toBe(false);
-        expect(outcome.durable).toBe(byteOffset(8n));
-        expect(outcome.finished).toBe('Some');
-        expect(outcome.positions.durableThrough).toBe(byteOffset(8n));
-      }),
-    20_000,
+      expect(outcome.endedWhileWriting).toBe(false);
+      expect(outcome.durable).toBe(byteOffset(8n));
+      expect(outcome.positions.durableThrough).toBe(byteOffset(8n));
+    }),
   );
 
-  it.effect(
-    'a timeout around the ending cannot cut it while the write is outstanding',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* Effect.gen(function* () {
-          const real = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          const root = path.join(yield* real.makeTempDirectoryScoped({ prefix: 'record-uncut-' }), 'state');
-          const execution = ref('uncut');
-          const held = yield* Deferred.make<void>();
-          const entered = yield* Deferred.make<void>();
-          const fs = faulty(real, { whenPathHas: segmentFile(0n), onCall: 2, held, entered });
-          return yield* Effect.scoped(
-            Effect.gen(function* () {
-              const record = yield* makeSegmentRecord({
-                mode: 'create',
-                records: root,
-                ref: execution,
-                transport: 'pty',
-                limits,
-                grid: { rows: 24, columns: 80 },
-              }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-              const appending = yield* Effect.forkChild(record.append('pty', new Uint8Array(8).fill(0x41)), {
-                startImmediately: true,
-              });
-              yield* Deferred.await(entered);
+  it.effect('a timeout around the ending cannot cut it while the write is outstanding', () =>
+    Effect.gen(function* () {
+      const outcome = yield* Effect.gen(function* () {
+        const real = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = path.join(yield* real.makeTempDirectoryScoped({ prefix: 'record-uncut-' }), 'state');
+        const execution = ref('uncut');
+        const held = yield* Deferred.make<void>();
+        const entered = yield* Deferred.make<void>();
+        const fs = faulty(real, { whenPathHas: segmentFile(0n), onCall: 2, held, entered });
+        return yield* Effect.scoped(
+          Effect.gen(function* () {
+            const record = yield* makeSegmentRecord({
+              mode: 'create',
+              records: root,
+              ref: execution,
+              transport: 'pty',
+              limits,
+              grid: { rows: 24, columns: 80 },
+            }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+            const appending = yield* Effect.forkChild(record.append('pty', new Uint8Array(8).fill(0x41)), {
+              startImmediately: true,
+            });
+            yield* Deferred.await(entered);
 
-              const cut = yield* Deferred.make<void>();
-              yield* Effect.forkChild(
-                Effect.andThen(Effect.timeoutOption(record.endStream('pty', 'eof'), '0 millis'), Deferred.succeed(cut, undefined)),
-                { startImmediately: true },
-              );
-              for (let step = 0; step < 200; step += 1) yield* Effect.yieldNow;
-              const cutWhileWriting = yield* Deferred.isDone(cut);
+            const cut = yield* Deferred.make<void>();
+            yield* Effect.forkChild(
+              Effect.andThen(Effect.timeoutOption(record.endStream('pty', 'eof'), '0 millis'), Deferred.succeed(cut, undefined)),
+              { startImmediately: true },
+            );
+            for (let step = 0; step < 200; step += 1) yield* Effect.yieldNow;
+            const cutWhileWriting = yield* Deferred.isDone(cut);
 
-              yield* Deferred.succeed(held, undefined);
-              const durable = yield* Fiber.join(appending);
-              const after = yield* Effect.timeoutOption(Deferred.await(cut), '5 seconds');
-              return { cutWhileWriting, durable, after: after._tag, positions: yield* record.positions('pty') };
-            }),
-          );
-        });
+            yield* Deferred.succeed(held, undefined);
+            const durable = yield* Fiber.join(appending);
+            yield* Deferred.await(cut);
+            return { cutWhileWriting, durable, positions: yield* record.positions('pty') };
+          }),
+        );
+      });
 
-        expect(outcome.cutWhileWriting).toBe(false);
-        expect(outcome.after).toBe('Some');
-        expect(outcome.durable).toBe(byteOffset(8n));
-        expect(outcome.positions.durableThrough).toBe(byteOffset(8n));
-      }),
-    20_000,
+      expect(outcome.cutWhileWriting).toBe(false);
+      expect(outcome.durable).toBe(byteOffset(8n));
+      expect(outcome.positions.durableThrough).toBe(byteOffset(8n));
+    }),
   );
 
-  it.effect(
-    'a carrier that never answers ends the write, so the stream still ends and claims no bytes',
-    () =>
-      Effect.gen(function* () {
-        const outcome = yield* Effect.gen(function* () {
-          const real = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          const root = path.join(yield* real.makeTempDirectoryScoped({ prefix: 'record-bound-' }), 'state');
-          const execution = ref('bounded');
-          const held = yield* Deferred.make<void>();
-          const entered = yield* Deferred.make<void>();
-          const fs = faulty(real, { whenPathHas: segmentFile(0n), onCall: 2, held, entered });
-          return yield* Effect.scoped(
-            Effect.gen(function* () {
-              const record = yield* makeSegmentRecord({
-                mode: 'create',
-                records: root,
-                ref: execution,
-                transport: 'pty',
-                limits,
-                actMs: 25,
-                grid: { rows: 24, columns: 80 },
-              }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-              const appending = yield* Effect.forkChild(Effect.result(record.append('pty', new Uint8Array(8).fill(0x41))), {
-                startImmediately: true,
-              });
-              yield* Deferred.await(entered);
-              const finished = yield* Effect.timeoutOption(record.endStream('pty', 'eof'), '5 seconds');
-              return {
-                finished: finished._tag,
-                wrote: yield* Fiber.join(appending),
-                positions: yield* record.positions('pty'),
-              };
-            }),
-          );
-        });
+  it.effect('a carrier that never answers ends the write, so the stream still ends and claims no bytes', () =>
+    Effect.gen(function* () {
+      const outcome = yield* Effect.gen(function* () {
+        const real = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = path.join(yield* real.makeTempDirectoryScoped({ prefix: 'record-bound-' }), 'state');
+        const execution = ref('bounded');
+        const held = yield* Deferred.make<void>();
+        const entered = yield* Deferred.make<void>();
+        const fs = faulty(real, { whenPathHas: segmentFile(0n), onCall: 2, held, entered });
+        return yield* Effect.scoped(
+          Effect.gen(function* () {
+            const record = yield* makeSegmentRecord({
+              mode: 'create',
+              records: root,
+              ref: execution,
+              transport: 'pty',
+              limits,
+              actMs: 25,
+              grid: { rows: 24, columns: 80 },
+            }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+            const appending = yield* Effect.forkChild(Effect.result(record.append('pty', new Uint8Array(8).fill(0x41))), {
+              startImmediately: true,
+            });
+            yield* Deferred.await(entered);
+            yield* record.endStream('pty', 'eof');
+            return {
+              wrote: yield* Fiber.join(appending),
+              positions: yield* record.positions('pty'),
+            };
+          }),
+        );
+      });
 
-        expect(outcome.finished).toBe('Some');
-        expect(Result.isFailure(outcome.wrote)).toBe(true);
-        const refusal = Result.isFailure(outcome.wrote) ? outcome.wrote.failure : undefined;
-        expect(refusal?._tag).toBe('RecordWriteFailed');
-        expect(refusal?._tag === 'RecordWriteFailed' && refusal.act).toBe('append');
-        expect(outcome.positions.durableThrough).toBe(byteOffset(0n));
-      }),
-    20_000,
+      expect(Result.isFailure(outcome.wrote)).toBe(true);
+      const refusal = Result.isFailure(outcome.wrote) ? outcome.wrote.failure : undefined;
+      expect(refusal?._tag).toBe('RecordWriteFailed');
+      expect(refusal?._tag === 'RecordWriteFailed' && refusal.act).toBe('append');
+      expect(outcome.positions.durableThrough).toBe(byteOffset(0n));
+    }),
   );
 
   it.effect('a capture whose carrier answers its append after the deadline lands the chunk and goes on capturing', () =>

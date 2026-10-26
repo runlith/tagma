@@ -104,10 +104,6 @@ const makeHost = Effect.fn('host.contracts.open')(function* (options: Options) {
       ),
     ),
     Effect.raceFirst(Deferred.await(unreadable)),
-    Effect.timeoutOrElse({
-      duration: 5_000,
-      orElse: () => failed(`the host did not serve: ${output}`),
-    }),
   );
   yield* wait(initial);
   const scope = yield* Scope.fork(yield* Effect.scope);
@@ -116,7 +112,7 @@ const makeHost = Effect.fn('host.contracts.open')(function* (options: Options) {
       address: { state: directory, installation: registration.installation },
       role: 'custodian',
       limits,
-      budget: { handshakeMs: 5_000 },
+      budget: {},
     }),
     scope,
   );
@@ -174,7 +170,7 @@ const makeHost = Effect.fn('host.contracts.open')(function* (options: Options) {
   });
   yield* Effect.addFinalizer(() =>
     Effect.gen(function* () {
-      if (holding()) yield* client.shutdown(yield* operation(host)).pipe(Effect.timeout(5_000));
+      if (holding()) yield* client.shutdown(yield* operation(host));
     }).pipe(
       Effect.ensuring(
         Effect.gen(function* () {

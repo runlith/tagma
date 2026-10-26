@@ -24,6 +24,22 @@ import { readerDescriptors } from './ExecutionRecord';
 
 export const INSTALLATION = 'installation-1';
 
+export const serving = async (child: Bun.Subprocess<'pipe', 'pipe', 'pipe'>, mark: string): Promise<() => string> => {
+  let held = '';
+  await new Promise<void>((resolve, reject) => {
+    const watch = async (stream: ReadableStream<Uint8Array>) => {
+      const decoder = new TextDecoder();
+      for await (const chunk of stream) {
+        held += decoder.decode(chunk, { stream: true });
+        if (held.includes(mark)) resolve();
+      }
+    };
+    Promise.all([watch(child.stdout), watch(child.stderr)]).catch(reject);
+    child.exited.then((code) => reject(new Error(`the host exited ${code} before reporting itself serving; it printed: ${held}`)), reject);
+  });
+  return () => held;
+};
+
 export const fixtureHolder = (bound?: number) =>
   Layer.effect(
     Holder,

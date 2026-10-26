@@ -14,7 +14,7 @@ const arrive = Effect.gen(function* () {
   const held = yield* holder.launch({
     id: 'held',
     path: '/bin/sh',
-    argv: ['sh', '-c', 'sleep 600 & echo $!; wait'],
+    argv: ['sh', '-c', "/usr/bin/perl -e 'sleep while 1' & echo $!; wait"],
     env: [{ name: 'PATH', value: '/usr/bin:/bin' }],
     cwd: state,
     transport: { _tag: 'pipes', stdin: 'ignore' },

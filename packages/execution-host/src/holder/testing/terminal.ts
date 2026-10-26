@@ -30,7 +30,7 @@ export const terminalContracts = (name: string, services: Layer.Layer<Adapter | 
               });
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('preserves UTF-8 and a paste beyond one write while the reader is slow', () =>
@@ -57,7 +57,7 @@ export const terminalContracts = (name: string, services: Layer.Layer<Adapter | 
             expect((yield* finished(child)).exit).toEqual({ _tag: 'Code', code: 0 });
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('drains a backpressured output byte-exact and in order', () =>
@@ -76,7 +76,7 @@ export const terminalContracts = (name: string, services: Layer.Layer<Adapter | 
             expect((yield* finished(child)).exit).toEqual({ _tag: 'Code', code: 0 });
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('delivers interrupt to a shell foreground job and keeps its shell alive', () =>
@@ -98,7 +98,7 @@ export const terminalContracts = (name: string, services: Layer.Layer<Adapter | 
             expect((yield* finished(child)).exit).toEqual({ _tag: 'Code', code: 0 });
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('delivers resize to the child and the channel geometry', () =>
@@ -115,7 +115,7 @@ export const terminalContracts = (name: string, services: Layer.Layer<Adapter | 
             expect(yield* channel.size).toEqual({ rows: 43, cols: 132 });
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('closes terminal input by hanging up the child', () =>
@@ -133,7 +133,7 @@ export const terminalContracts = (name: string, services: Layer.Layer<Adapter | 
             yield* child.reap;
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('drains every terminal tail byte while observing and reaping the child exit', () =>
@@ -150,7 +150,7 @@ export const terminalContracts = (name: string, services: Layer.Layer<Adapter | 
             expect(output).toEqual(Buffer.from('y\n'.repeat(512)));
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('refuses terminal input as closed after its session leader exits with a live descendant', () =>
@@ -171,7 +171,7 @@ export const terminalContracts = (name: string, services: Layer.Layer<Adapter | 
             );
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('preserves alternate-screen entry and return in terminal output', () =>
@@ -188,7 +188,7 @@ export const terminalContracts = (name: string, services: Layer.Layer<Adapter | 
             yield* finished(child);
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     it.effect('stops terminal work while its output has no consumer', () =>
@@ -205,6 +205,6 @@ export const terminalContracts = (name: string, services: Layer.Layer<Adapter | 
             expect(yield* adapter.standing(child.pid)).toBe('gone');
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
   });

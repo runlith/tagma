@@ -44,7 +44,7 @@ export const presentationContracts = (adapter: HostAdapter) =>
             expect(restored.rows.map((row) => row.text).join('\n')).toContain('MAIN');
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
 
     for (const transport of [PTY, PIPES]) {
@@ -96,7 +96,7 @@ export const presentationContracts = (adapter: HostAdapter) =>
               expect(yield* bytes(host, child.execution, stream)).toEqual(Buffer.concat([Buffer.from('READY\n'), sent]));
             }),
           );
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
 
       it.effect(`${transport._tag}: applies the input lifetime contract after the leader exits`, () =>
@@ -137,7 +137,7 @@ export const presentationContracts = (adapter: HostAdapter) =>
               }
             }),
           );
-        }).pipe(Effect.timeout(9_000)),
+        }),
       );
     }
 
@@ -162,6 +162,6 @@ export const presentationContracts = (adapter: HostAdapter) =>
             expect((yield* host.client.state(child.execution))?.state.phase).toBe('running');
           }),
         );
-      }).pipe(Effect.timeout(9_000)),
+      }),
     );
   });

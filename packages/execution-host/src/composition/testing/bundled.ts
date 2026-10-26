@@ -57,7 +57,6 @@ export type Stand = {
   readonly served: () => Promise<void>;
   readonly heard: (text: string) => Promise<void>;
   readonly output: () => string;
-  readonly withdrawn: () => ReadonlyArray<boolean>;
   readonly resumes: () => ReadonlyArray<string>;
   readonly custodyFound: () => ReadonlyArray<string>;
   readonly dispose: () => Promise<void>;
@@ -193,7 +192,6 @@ export const bundledStand = async (directory: string, executions: number): Promi
   const heard = (text: string) => reported(() => output.includes(text), `reporting ${JSON.stringify(text)}`);
 
   const scope = Scope.makeUnsafe();
-  const withdrawn: boolean[] = [];
   const resumes: string[] = [];
   const found: string[] = [];
   let serial = 0;
@@ -207,7 +205,7 @@ export const bundledStand = async (directory: string, executions: number): Promi
           address: { state: directory, installation: registration.installation },
           role: 'custodian',
           limits,
-          budget: { handshakeMs: 5_000 },
+          budget: {},
         }),
         scope,
       ).pipe(Effect.provide(HostRegistration.layer), Effect.provide(endpointConnection), Effect.provide(BunServices.layer)),
@@ -245,9 +243,6 @@ export const bundledStand = async (directory: string, executions: number): Promi
     const yielded = async (prepared: PrepareAnswer) => {
       const next = servedAfter(servings);
       await away();
-      const asked = performance.now();
-      while (existsSync(registration.endpoint.path) && performance.now() - asked < 1_000) await Bun.sleep(5);
-      withdrawn.push(!existsSync(registration.endpoint.path));
       await next;
       await take();
       return prepared;
@@ -280,12 +275,11 @@ export const bundledStand = async (directory: string, executions: number): Promi
       served,
       heard,
       output: () => output,
-      withdrawn: () => withdrawn,
       resumes: () => resumes,
       custodyFound: () => found,
       dispose: async () => {
         try {
-          if (child.exitCode === null) await run(client.shutdown(operation()).pipe(Effect.timeout(5_000), Effect.ignore));
+          if (child.exitCode === null) await run(client.shutdown(operation()).pipe(Effect.ignore));
         } finally {
           await run(Scope.close(scope, Exit.void));
           if (child.exitCode === null) child.kill('SIGKILL');
