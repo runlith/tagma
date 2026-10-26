@@ -11,7 +11,7 @@ import { heldPool } from '@runlith/sqlite-process/testing/pool';
 import { spawnedEffect } from '../../platform/testing/spawn.js';
 import { FixtureScope } from '../../platform/testing/scope.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Clock, Context, Duration, Effect, FileSystem, Layer, type Scope } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, type Scope } from 'effect';
 import { HttpEffect, HttpMiddleware, HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import type { AccountQuotaProvider } from '../../providers/quota/ledger.js';
 import type { ModelAccess } from '../../providers/contract/service/access.js';
@@ -49,8 +49,6 @@ export const WORLD_SOURCE = {
   startedAt: '2026-01-01T00:00:00.000Z',
   revision: { head: 'wor1dcut', dirty: false },
 } as const satisfies ProcessProvenance;
-
-const CLEANUP_BUDGET = Duration.seconds(10);
 
 type DoorParams = {
   readonly hostSourcePath?: string;
@@ -145,7 +143,7 @@ const lending = () => {
 const built = Effect.fnUntraced(
   function* (options: DoorParams, root: string, processes?: ProcessPool) {
     const { seams, lend } = lending();
-    const fixture = yield* FixtureScope.acquire(root, CLEANUP_BUDGET);
+    const fixture = yield* FixtureScope.acquire(root);
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
         const report = yield* fixture.close();

@@ -5,7 +5,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { FixtureScope } from '../../../platform/testing/scope.js';
 import { digestOf } from '@runlith/executions/hostArtifacts';
-import { Context, Data, Duration, Effect, FileSystem, Layer, Schedule } from 'effect';
+import { Context, Data, Effect, FileSystem, Layer, Schedule } from 'effect';
 import { openVersion, swapCurrent } from '../../../installation/testing/doubles.js';
 import { writeInstallation } from '../../../installation/testing/doubles.js';
 import { type InstallationPart, type InstallationRole, REQUIRED_ROLES } from '../../../installation/contract/wire/manifest.js';
@@ -16,8 +16,6 @@ import { junctionDirectory } from '../../../installation/contract/wire/junction.
 import { takeActive } from '../../../installation/setup/active.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { capturedEffect } from '../captured.js';
-
-const CLEANUP_BUDGET = Duration.seconds(20);
 
 const ENTRY = join(import.meta.dir, '../../entries/cli.ts');
 
@@ -49,7 +47,7 @@ const untilGone = (pid: number) =>
 
 const setup = Effect.fnUntraced(function* (root: string) {
   const files = yield* FileSystem.FileSystem;
-  const fixture = yield* FixtureScope.acquire(root, CLEANUP_BUDGET);
+  const fixture = yield* FixtureScope.acquire(root);
   const under = Effect.map(spawnedEffect(['pgrep', '-f', root], { stdin: 'ignore' }), (found) =>
     found.stdout
       .toString()

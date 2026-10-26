@@ -1,13 +1,10 @@
 import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, FileSystem, Layer, Ref, Result } from 'effect';
-import { TestClock } from 'effect/testing';
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Ref, Result } from 'effect';
 import { join } from 'node:path';
 import { fixtureHome } from './roots.js';
 import { FixtureScope } from './scope.js';
-
-const BUDGET = Duration.seconds(5);
 
 const home = Effect.fnUntraced(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -87,7 +84,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
       const { root, sentinel } = yield* home();
       const inner = yield* Ref.make('');
 
-      const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) =>
+      const outcome = yield* FixtureScope.use(root, (fixture) =>
         Effect.gen(function* () {
           yield* Ref.set(inner, yield* fixture.directory('workspace/inner'));
           return yield* Effect.fail('startup failed after allocating');
@@ -106,7 +103,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
     Effect.gen(function* () {
       const { root } = yield* home();
 
-      const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) =>
+      const outcome = yield* FixtureScope.use(root, (fixture) =>
         Effect.andThen(fixture.directory('work'), Effect.die(new Error('the body crashed after allocating'))),
       );
 
@@ -121,7 +118,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
     Effect.gen(function* () {
       const { root } = yield* home();
 
-      const outcome = yield* FixtureScope.use(root, BUDGET, (): Effect.Effect<never> => {
+      const outcome = yield* FixtureScope.use(root, (): Effect.Effect<never> => {
         throw new Error('the fixture body could not be built');
       });
 
@@ -135,7 +132,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
     Effect.gen(function* () {
       const { root, sentinel } = yield* home();
 
-      const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) =>
+      const outcome = yield* FixtureScope.use(root, (fixture) =>
         Effect.gen(function* () {
           yield* fixture.directory('one');
           yield* fixture.producer('watcher', Effect.fail('the watcher would not stop'));
@@ -156,34 +153,21 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
     }),
   );
 
-  it.effect('cuts a stop that runs past the supplied cleanup budget and calls the result unknown', () =>
+  it.effect('keeps its paths until the producer confirms it stopped', () =>
     Effect.gen(function* () {
       const { root } = yield* home();
       const started = yield* Deferred.make<void>();
-
+      const stopped = yield* Deferred.make<void>();
       const closing = yield* Effect.forkChild(
-        FixtureScope.use(root, BUDGET, (fixture) =>
-          fixture.producer('runner', Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never))),
+        FixtureScope.use(root, (fixture) =>
+          fixture.producer('runner', Effect.andThen(Deferred.succeed(started, undefined), Deferred.await(stopped))),
         ),
       );
       yield* Deferred.await(started);
-      yield* TestClock.adjust(BUDGET);
+      expect(yield* standing(root)).toBe(true);
+      yield* Deferred.succeed(stopped, undefined);
       const outcome = yield* Fiber.join(closing);
-
-      expect(outcome.release.state).toBe('unknown');
-      expect(outcome.release.failures.map((failure) => failure.name)).toEqual(['runner']);
-      expect(outcome.release.failures[0]?.reason).toContain('did not answer within');
-      expect(outcome.release.remaining).toEqual([root]);
-    }),
-  );
-
-  it.effect('refuses a cleanup budget that is not finite', () =>
-    Effect.gen(function* () {
-      const { root } = yield* home();
-
-      const refused = yield* Effect.result(FixtureScope.use(root, Duration.infinity, () => Effect.void));
-
-      expect(Result.isFailure(refused) && refused.failure._tag).toBe('CleanupDeadlineInvalid');
+      expect(outcome.release).toEqual({ state: 'released', failures: [], remaining: [] });
       expect(yield* standing(root)).toBe(false);
     }),
   );
@@ -193,7 +177,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
       const { root } = yield* home();
       const stops = yield* Ref.make(0);
 
-      const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) =>
+      const outcome = yield* FixtureScope.use(root, (fixture) =>
         Effect.gen(function* () {
           const started = yield* Deferred.make<void>();
           const gate = yield* Deferred.make<void>();
@@ -231,7 +215,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
       const asked = yield* Ref.make<readonly string[]>([]);
       const note = (word: string) => Ref.update(asked, (words) => [...words, word]);
 
-      const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) =>
+      const outcome = yield* FixtureScope.use(root, (fixture) =>
         Effect.gen(function* () {
           const acquiring = yield* Effect.forkChild(fixture.directory('late'));
           yield* Deferred.await(reached);
@@ -271,7 +255,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
       const delivered = yield* Ref.make('nothing reached the caller');
 
       const using = yield* Effect.forkChild(
-        FixtureScope.use(root, BUDGET, (fixture) =>
+        FixtureScope.use(root, (fixture) =>
           Effect.gen(function* () {
             yield* fixture.directory('work');
             yield* Deferred.succeed(working, undefined);
@@ -299,7 +283,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
       const reached = yield* Deferred.make<void>();
       const gate = yield* Deferred.make<void>();
 
-      const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) =>
+      const outcome = yield* FixtureScope.use(root, (fixture) =>
         Effect.gen(function* () {
           const holding = yield* Effect.forkChild(fixture.directory('first'));
           yield* Deferred.await(reached);
@@ -329,7 +313,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
       const asked = yield* Ref.make<readonly string[]>([]);
       const note = (word: string) => Ref.update(asked, (words) => [...words, word]);
 
-      const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) =>
+      const outcome = yield* FixtureScope.use(root, (fixture) =>
         Effect.gen(function* () {
           const acquiring = yield* Effect.forkChild(fixture.directory('late'));
           yield* Deferred.await(issued);
@@ -374,7 +358,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
 
       const [fixture, made] = yield* Effect.scoped(
         Effect.gen(function* () {
-          const held = yield* FixtureScope.acquire(root, BUDGET);
+          const held = yield* FixtureScope.acquire(root);
           return [held, yield* held.directory('work')] as const;
         }),
       );
@@ -402,7 +386,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
 
       const report = yield* Effect.scoped(
         Effect.gen(function* () {
-          const held = yield* FixtureScope.acquire(root, BUDGET);
+          const held = yield* FixtureScope.acquire(root);
           yield* held.directory('work');
           const answered = yield* held.close();
           yield* fileSystem.makeDirectory(root, { recursive: true });
@@ -424,7 +408,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
       yield* fileSystem.makeDirectory(root, { recursive: true });
       yield* fileSystem.writeFileString(peer, 'a peer made this root');
 
-      const refused = yield* Effect.scoped(Effect.result(FixtureScope.acquire(root, BUDGET)));
+      const refused = yield* Effect.scoped(Effect.result(FixtureScope.acquire(root)));
 
       expect(Result.isFailure(refused) && refused.failure._tag).toBe('FixtureRootConflict');
       expect(yield* standing(peer)).toBe(true);
@@ -438,7 +422,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
       const lands = yield* Deferred.make<void>();
 
       const acquiring = yield* Effect.forkChild(
-        Effect.scoped(Effect.flatMap(FixtureScope.acquire(root, BUDGET), (held) => held.directory('work'))).pipe(
+        Effect.scoped(Effect.flatMap(FixtureScope.acquire(root), (held) => held.directory('work'))).pipe(
           Effect.provide(
             hostAnswering((real) => ({
               makeDirectory: (path, options) =>
@@ -468,7 +452,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
     Effect.gen(function* () {
       const { root } = yield* home();
 
-      const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) =>
+      const outcome = yield* FixtureScope.use(root, (fixture) =>
         Effect.gen(function* () {
           yield* fixture.close();
           return [yield* Effect.result(fixture.directory('late')), yield* Effect.result(fixture.producer('late', Effect.void))] as const;
@@ -491,7 +475,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
       yield* fileSystem.makeDirectory(root, { recursive: true });
       yield* fileSystem.writeFileString(peer, 'a peer made this root');
 
-      const refused = yield* Effect.result(FixtureScope.use(root, BUDGET, () => Effect.void));
+      const refused = yield* Effect.result(FixtureScope.use(root, () => Effect.void));
 
       expect(Result.isFailure(refused) && refused.failure._tag).toBe('FixtureRootConflict');
       expect(yield* standing(peer)).toBe(true);
@@ -505,7 +489,7 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
       const { root } = yield* home();
       const blocked = join(root, 'blocked');
 
-      const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) =>
+      const outcome = yield* FixtureScope.use(root, (fixture) =>
         Effect.gen(function* () {
           yield* fixture.directory('blocked');
           yield* fixture.directory('blocked/inner');
@@ -520,65 +504,59 @@ layer(BunFileSystem.layer)('fixture lifetime', (it) => {
     }),
   );
 
-  it.effect(
-    'reports released when its own producer is confirmed stopped',
-    () =>
-      Effect.gen(function* () {
-        const { root, sentinel } = yield* home();
+  it.effect('reports released when its own producer is confirmed stopped', () =>
+    Effect.gen(function* () {
+      const { root, sentinel } = yield* home();
 
-        const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) =>
-          Effect.gen(function* () {
-            const child = yield* owned(['sh', '-c', 'exec sleep 30'], 'ignore');
-            yield* fixture.directory('work');
-            yield* fixture.producer('child', stop(child));
-          }),
-        );
+      const outcome = yield* FixtureScope.use(root, (fixture) =>
+        Effect.gen(function* () {
+          const child = yield* owned(['tail', '-f', '/dev/null'], 'ignore');
+          yield* fixture.directory('work');
+          yield* fixture.producer('child', stop(child));
+        }),
+      );
 
-        expect(outcome.release.state).toBe('released');
-        expect(outcome.release.failures).toEqual([]);
-        expect(yield* standing(root)).toBe(false);
-        expect(yield* standing(sentinel)).toBe(true);
-      }),
-    15_000,
+      expect(outcome.release.state).toBe('released');
+      expect(outcome.release.failures).toEqual([]);
+      expect(yield* standing(root)).toBe(false);
+      expect(yield* standing(sentinel)).toBe(true);
+    }),
   );
 
-  it.effect(
-    'leaves cleanup unknown when a grandchild holding the stdout pipe outlives the stop',
-    () =>
-      Effect.gen(function* () {
-        const { root, sentinel } = yield* home();
-        const parent = yield* owned(['sh', '-c', 'sleep 30 & echo $!; wait'], 'pipe');
-        const grandchild = yield* Effect.promise(() => announcedPid(parent.stdout as ReadableStream<Uint8Array>));
-        yield* Effect.addFinalizer(() => Effect.sync(() => end(grandchild)));
+  it.effect('leaves cleanup unknown when a grandchild holding the stdout pipe outlives the stop', () =>
+    Effect.gen(function* () {
+      const { root, sentinel } = yield* home();
+      const parent = yield* owned(['sh', '-c', 'tail -f /dev/null & echo $!; wait'], 'pipe');
+      const grandchild = yield* Effect.promise(() => announcedPid(parent.stdout as ReadableStream<Uint8Array>));
+      yield* Effect.addFinalizer(() => Effect.sync(() => end(grandchild)));
 
-        const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) =>
-          fixture.producer(
-            'runner',
-            Effect.promise(async () => {
-              parent.kill('SIGTERM');
-              await parent.exited;
-            }).pipe(
-              Effect.flatMap(() =>
-                alive(grandchild) ? Effect.fail(`a descendant of the runner still holds its stdout pipe (pid ${grandchild})`) : Effect.void,
-              ),
+      const outcome = yield* FixtureScope.use(root, (fixture) =>
+        fixture.producer(
+          'runner',
+          Effect.promise(async () => {
+            parent.kill('SIGTERM');
+            await parent.exited;
+          }).pipe(
+            Effect.flatMap(() =>
+              alive(grandchild) ? Effect.fail(`a descendant of the runner still holds its stdout pipe (pid ${grandchild})`) : Effect.void,
             ),
           ),
-        );
+        ),
+      );
 
-        expect(outcome.release.state).toBe('unknown');
-        expect(outcome.release.failures.map((failure) => failure.name)).toEqual(['runner']);
-        expect(outcome.release.failures[0]?.reason).toContain('stdout pipe');
-        expect(outcome.release.remaining).toEqual([root]);
-        expect(yield* standing(sentinel)).toBe(true);
-      }),
-    15_000,
+      expect(outcome.release.state).toBe('unknown');
+      expect(outcome.release.failures.map((failure) => failure.name)).toEqual(['runner']);
+      expect(outcome.release.failures[0]?.reason).toContain('stdout pipe');
+      expect(outcome.release.remaining).toEqual([root]);
+      expect(yield* standing(sentinel)).toBe(true);
+    }),
   );
 
   it.effect('refuses a child name that would climb out of the fixture', () =>
     Effect.gen(function* () {
       const { root } = yield* home();
 
-      const outcome = yield* FixtureScope.use(root, BUDGET, (fixture) => fixture.directory('../escaped'));
+      const outcome = yield* FixtureScope.use(root, (fixture) => fixture.directory('../escaped'));
 
       expect(failedWith(outcome.outcome)?._tag).toBe('FixtureNameInvalid');
     }),

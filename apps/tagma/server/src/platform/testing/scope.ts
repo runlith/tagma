@@ -1,4 +1,4 @@
-import { Cause, Data, Deferred, Duration, Effect, Exit, FileSystem, Inspectable, Result, Scope } from 'effect';
+import { Cause, Data, Deferred, Effect, Exit, FileSystem, Inspectable, Result, Scope } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
 import { dirname, join } from 'node:path';
 
@@ -28,8 +28,6 @@ export class FixtureRootConflict extends Data.TaggedError('FixtureRootConflict')
 
 export class FixtureRefused extends Data.TaggedError('FixtureRefused')<{ readonly root: string; readonly name: string }> {}
 
-export class CleanupDeadlineInvalid extends Data.TaggedError('CleanupDeadlineInvalid')<{ readonly root: string }> {}
-
 export type FixtureOutcome<A, E> = {
   readonly outcome: Exit.Exit<A, E>;
   readonly release: ReleaseReport;
@@ -47,7 +45,6 @@ export class FixtureScope {
   private constructor(
     readonly root: string,
     private readonly fileSystem: FileSystem.FileSystem,
-    private readonly cleanupDeadline: Duration.Duration,
   ) {
     this.owned.push({ name: 'root', path: root });
   }
@@ -89,27 +86,18 @@ export class FixtureScope {
   }
 
   private closeOnce(): Effect.Effect<ReleaseReport> {
-    return FixtureScope.release(this.producers, this.owned, this.fileSystem, this.cleanupDeadline);
+    return FixtureScope.release(this.producers, this.owned, this.fileSystem);
   }
 
   private static readonly release = Effect.fnUntraced(function* (
     producers: readonly FixtureScope['producers'][number][],
     owned: readonly FixtureScope['owned'][number][],
     fileSystem: FileSystem.FileSystem,
-    cleanupDeadline: Duration.Duration,
   ) {
     const failures: ReleaseFailure[] = [];
     let unconfirmed = false;
     for (const held of [...producers].reverse()) {
-      const failure = yield* Effect.timeoutOrElse(held.stopped, {
-        duration: cleanupDeadline,
-        orElse: () =>
-          Effect.succeed({
-            name: held.name,
-            path: null,
-            reason: `the stop did not answer within ${Duration.format(cleanupDeadline)}`,
-          } satisfies ReleaseFailure),
-      });
+      const failure = yield* held.stopped;
       if (failure !== undefined) {
         unconfirmed = true;
         failures.push(failure);
@@ -149,28 +137,20 @@ export class FixtureScope {
     return join(this.root, ...segments);
   }
 
-  private static readonly open = Effect.fnUntraced(function* (root: string, cleanupDeadline: Duration.Duration) {
-    if (!Duration.isFinite(cleanupDeadline)) return yield* new CleanupDeadlineInvalid({ root });
+  private static readonly open = Effect.fnUntraced(function* (root: string) {
     const fileSystem = yield* FileSystem.FileSystem;
     yield* fileSystem.makeDirectory(dirname(root), { recursive: true });
     yield* Effect.catchIf(fileSystem.makeDirectory(root), pathOccupied, () => Effect.fail(new FixtureRootConflict({ root })));
-    return new FixtureScope(root, fileSystem, cleanupDeadline);
+    return new FixtureScope(root, fileSystem);
   });
 
-  static acquire(
-    root: string,
-    cleanupDeadline: Duration.Duration,
-  ): Effect.Effect<FixtureScope, CleanupDeadlineInvalid | FixtureRootConflict | PlatformError, Scope.Scope | FileSystem.FileSystem> {
-    return Effect.acquireRelease(FixtureScope.open(root, cleanupDeadline), (held) => Effect.asVoid(held.close()));
+  static acquire(root: string): Effect.Effect<FixtureScope, FixtureRootConflict | PlatformError, Scope.Scope | FileSystem.FileSystem> {
+    return Effect.acquireRelease(FixtureScope.open(root), (held) => Effect.asVoid(held.close()));
   }
 
-  static readonly use = Effect.fnUntraced(function* <A, E, R>(
-    root: string,
-    cleanupDeadline: Duration.Duration,
-    body: (fixture: FixtureScope) => Effect.Effect<A, E, R>,
-  ) {
+  static readonly use = Effect.fnUntraced(function* <A, E, R>(root: string, body: (fixture: FixtureScope) => Effect.Effect<A, E, R>) {
     const [fixture, outcome] = yield* Effect.acquireUseRelease(
-      FixtureScope.open(root, cleanupDeadline),
+      FixtureScope.open(root),
       (held) => Effect.map(Effect.exit(Effect.suspend(() => body(held))), (ended) => [held, ended] as const),
       (held) => Effect.asVoid(held.close()),
     );

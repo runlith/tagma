@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
 import { FixtureScope, type ReleaseReport } from '../../platform/testing/scope.js';
-import { type Clock, Context, Duration, Effect, FileSystem, Layer } from 'effect';
+import { type Clock, Context, Effect, FileSystem, Layer } from 'effect';
 import { HttpRouter, HttpServer } from 'effect/http';
 import { doorLayer } from '../http/door.js';
 import { doorServing } from './doorServices.js';
@@ -24,8 +24,6 @@ import { testGrantSigner } from '../../platform/testing/grants.js';
 import { SpawnRefused } from '../../platform/testing/spawn.js';
 import { endHosts } from '../../executions/testing/doubles.js';
 import { hostBundleRoot } from './hostBundle.js';
-
-const CLEANUP_BUDGET = Duration.seconds(5);
 
 export type Call = {
   readonly cwd?: string;
@@ -47,7 +45,7 @@ const makeWorld = Effect.fnUntraced(
     processes?: ProcessPool,
   ) {
     const files = yield* FileSystem.FileSystem;
-    const fixture = yield* FixtureScope.acquire(root, CLEANUP_BUDGET);
+    const fixture = yield* FixtureScope.acquire(root);
     yield* Effect.addFinalizer(() => Effect.flatMap(fixture.close(), released));
     yield* fixture.producer(
       'execution hosts',

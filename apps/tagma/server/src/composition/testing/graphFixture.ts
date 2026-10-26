@@ -9,7 +9,7 @@ import { spawnedEffect } from '../../platform/testing/spawn.js';
 import { FixtureScope, type ReleaseReport } from '../../platform/testing/scope.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Cause, Context, Data, Duration, Effect, Exit, FileSystem, Layer, Scope, Semaphore } from 'effect';
+import { Cause, Context, Data, Effect, Exit, FileSystem, Layer, Scope, Semaphore } from 'effect';
 import { GraphStore, MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits, GraphUnits } from '../../platform/contract/service/units.js';
 import { unitsLayer } from '../../platform/store/units.js';
@@ -68,8 +68,6 @@ export type DemoServices =
   | ProjectLaw
   | Capacity
   | HolderStandings;
-
-const CLEANUP_BUDGET = Duration.seconds(5);
 
 const fixtureRoot = () => fixtureRootAt('tagma-graph-fixture', randomUUID());
 
@@ -257,7 +255,7 @@ function lifetime() {
     const scope = yield* Scope.make();
     const held = { scope, fixture: undefined as FixtureScope | undefined };
     standing = held;
-    const fixture = yield* Scope.provide(FixtureScope.acquire(root, CLEANUP_BUDGET), scope);
+    const fixture = yield* Scope.provide(FixtureScope.acquire(root), scope);
     held.fixture = fixture;
     return { fixture, scope };
   });

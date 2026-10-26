@@ -5,7 +5,7 @@ import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
 import { kind, own } from '@runlith/testbed/worlds';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { basename, join } from 'node:path';
-import { Context, Deferred, Duration, Effect, Exit, Fiber, FileSystem, Layer, Scope, Stream } from 'effect';
+import { Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Scope, Stream } from 'effect';
 import { HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { RpcClient } from 'effect/rpc';
 import { Socket } from 'effect/socket';
@@ -71,9 +71,7 @@ const REEXPORTS = { builtin: 'reexports', params: { base: '', allows: [], files:
 type Place = { readonly database: string; readonly source: string };
 
 class RestartHome extends Context.Service<RestartHome, FixtureScope>()('testing/IdleCopies') {}
-const restartHome = kind(RestartHome, (_params: null, root) =>
-  FixtureScope.acquire(root, Duration.seconds(10)).pipe(Effect.provide(BunFileSystem.layer)),
-);
+const restartHome = kind(RestartHome, (_params: null, root) => FixtureScope.acquire(root).pipe(Effect.provide(BunFileSystem.layer)));
 
 const booted = Effect.fnUntraced(function* (place: Place) {
   const data = join(place.database, '..');
