@@ -335,7 +335,7 @@ layer(storage, { excludeTestServices: true })('account quota', (it) => {
     }).pipe(Effect.provide(TestClock.layer())),
   );
 
-  it.effect('an account is read again just after its window resets, before the next quarter-hour pass', () =>
+  it.effect('an account is read again just after its window resets, even when the table moves before the read', () =>
     Effect.gen(function* () {
       yield* clearReadings;
       const tokens = testTokens(join(mkdtempSync(join(tmpdir(), 'account-quota-reset-')), 'tokens.json'));
@@ -367,10 +367,11 @@ layer(storage, { excludeTestServices: true })('account quota', (it) => {
 
       const subscriber = yield* Effect.forkChild(Stream.runDrain(quota.changes));
       yield* Effect.yieldNow;
-      yield* TestClock.adjust('5 minutes');
+      yield* TestClock.adjust('303 seconds');
+      yield* quota.fail(OPENAI_OAUTH_PROVIDER, account, { _tag: 'server', status: 500 });
       yield* Effect.yieldNow;
       expect(Option.isNone(yield* Queue.poll(reads))).toBe(true);
-      yield* TestClock.adjust('10 seconds');
+      yield* TestClock.adjust('7 seconds');
       expect(yield* Queue.take(reads)).toBe(2);
       yield* Fiber.interrupt(subscriber);
     }).pipe(Effect.provide(TestClock.layer())),

@@ -107,6 +107,7 @@
           closeOnSelect={false}
           disabled={asking}
           aria-label={REFRESH_WORDS}
+          textValue={REFRESH_WORDS}
           onSelect={() => void refresh()}
           data-usage-refresh
         >

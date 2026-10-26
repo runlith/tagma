@@ -59,12 +59,12 @@ const withMerged = (observation: QuotaObservation, merged: readonly QuotaWindow[
 const resetBetween = (quota: QuotaObservation, after: number, until: number): boolean =>
   quota.windows.some((window) => window.resetsAt !== undefined && window.resetsAt * 1000 > after && window.resetsAt * 1000 <= until);
 
-const nextReset = (table: QuotaTable, now: number): { readonly at: number; readonly due: readonly AccountQuotaRow[] } | null => {
+const nextReset = (table: QuotaTable, handled: number): { readonly at: number; readonly due: readonly AccountQuotaRow[] } | null => {
   let at: number | null = null;
   let due: AccountQuotaRow[] = [];
   for (const row of table) {
     for (const window of row.quota?.windows ?? []) {
-      if (window.resetsAt === undefined || window.resetsAt * 1000 <= now) continue;
+      if (window.resetsAt === undefined || window.resetsAt * 1000 <= handled) continue;
       const reset = window.resetsAt * 1000;
       if (at === null || reset < at) {
         at = reset;
@@ -413,14 +413,20 @@ export const accountQuotaLayer = (
         });
       });
 
-      const atReset = Effect.gen(function* () {
+      const atReset = Effect.fnUntraced(function* (handled: number | null) {
         const now = yield* Clock.currentTimeMillis;
-        const next = nextReset(yield* SubscriptionRef.get(tableRef), now);
+        const since = handled ?? now;
+        const next = nextReset(yield* SubscriptionRef.get(tableRef), since);
         const changed = Effect.asVoid(Stream.runHead(Stream.drop(SubscriptionRef.changes(tableRef), 1)));
-        if (next === null) return yield* changed;
-        const reached = yield* Effect.raceFirst(Effect.as(Effect.sleep(next.at + AFTER_RESET_MS - now), true), Effect.as(changed, false));
-        if (!reached) return;
+        if (next === null) {
+          yield* changed;
+          return since;
+        }
+        const wait = Math.max(0, next.at + AFTER_RESET_MS - now);
+        const reached = yield* Effect.raceFirst(Effect.as(Effect.sleep(wait), true), Effect.as(changed, false));
+        if (!reached) return since;
         yield* Effect.forEach(next.due, (row) => refresh(row.provider, row.account), { concurrency: 'unbounded', discard: true });
+        return next.at;
       });
 
       yield* syncRows();

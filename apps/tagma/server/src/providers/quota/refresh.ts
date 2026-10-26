@@ -19,13 +19,24 @@ const background = (name: string, work: Effect.Effect<void>): Effect.Effect<void
     ),
   );
 
-export const quotaRefresh = Effect.fnUntraced(function* (refresh: Effect.Effect<void>, atReset: Effect.Effect<void>) {
+export const quotaRefresh = Effect.fnUntraced(function* (
+  refresh: Effect.Effect<void>,
+  atReset: (handled: number | null) => Effect.Effect<number>,
+) {
   const scheduled = yield* FiberMap.make<string, void>();
   const subscribersGate = Semaphore.makeUnsafe(1);
   const cycle = Effect.forever(
     Effect.sleep(USAGE_REFRESH_INTERVAL).pipe(Effect.andThen(refresh), (work) => background('scheduled refresh', work)),
   );
-  const resets = Effect.forever(background('reset refresh', atReset));
+  const resets = Effect.suspend(() => {
+    let handled: number | null = null;
+    const pass = Effect.suspend(() => atReset(handled)).pipe(
+      Effect.map((next) => {
+        handled = next;
+      }),
+    );
+    return Effect.forever(background('reset refresh', pass));
+  });
   let subscribers = 0;
   yield* FiberMap.run(scheduled, BOOT_KEY, { onlyIfMissing: true, startImmediately: true })(background('boot refresh', refresh));
   return {
