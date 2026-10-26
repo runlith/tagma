@@ -22,13 +22,13 @@
 
   $effect(() => {
     const active = workspace.active;
-    if (active) workspace.remember(active.name);
+    if (active) workspace.remember(active);
   });
 
   $effect(() => {
-    const project = workspace.active?.name;
+    const project = workspace.active;
     const surface = surfaces.of(router.routeId);
-    if (project === undefined) return;
+    if (project === null) return;
     visits.remember(project, surface, currentPlace(router), currentBranch(router));
   });
 

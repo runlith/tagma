@@ -26,6 +26,11 @@ export const ProjectsRepo = Repo.define(
         (await door.perform('remove_project', { ref: String(projectId) }, {}, { signal })).project,
     }),
 
+    rename: mutation({
+      mutator: async (input: { projectId: number; name: string }, { signal }, door) =>
+        (await door.perform('update_project', { ref: String(input.projectId), name: input.name }, {}, { signal })).project,
+    }),
+
     roots: keyed({
       loader: async ({ key, signal }: KeyedLoaderContext<number>, door) =>
         (await door.perform('list_root_blocks', {}, { project: String(key) }, { signal })).blocks,

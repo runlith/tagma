@@ -77,7 +77,7 @@ async function stand(stored: Record<string, string> = {}) {
   const go = async (projectId: number, branch: string | null = null): Promise<void> => {
     at.active = projectId;
     mounted.place({ projectId, branch });
-    visits.remember(`p${projectId}`, mounted.app.resolve(SurfaceRegistry).home, null, branch);
+    visits.remember(project(projectId), mounted.app.resolve(SurfaceRegistry).home, null, branch);
     await flush();
   };
   mounted.draw(WarmHolds);

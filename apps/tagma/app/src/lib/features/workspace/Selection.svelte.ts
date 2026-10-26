@@ -1,13 +1,14 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { Failure } from '@runlith/layer/Failure';
 import { Platform } from '@runlith/layer/Platform';
-import { Router } from '@runlith/layer/Router';
+import { asRoutePathname, Router } from '@runlith/layer/Router';
 import { Service } from '@runlith/layer/key';
+import { renamedHref } from './address.js';
 import { type Entry, EntryProject } from './EntryProject.js';
 import { ProjectsRepo } from './ProjectsRepo.js';
 import { Refusal } from '$lib/wire/refusal.js';
 
-const LAST_PROJECT_KEY = 'tagma.lastProject';
+const LAST_PROJECT_KEY = 'tagma.lastProjectId';
 
 type Projects = ReturnType<typeof ProjectsRepo.use>;
 
@@ -58,7 +59,7 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   entryProject(): Project | null {
     return (
       this.named() ??
-      this.projects.find((project) => project.name === this.remembered) ??
+      this.projects.find((project) => String(project.id) === this.remembered) ??
       this.projects.find((project) => !project.global) ??
       this.projects[0] ??
       null
@@ -74,9 +75,11 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
     return entry === undefined ? undefined : this.projects.find((project) => project.name === entry.project);
   }
 
-  remember(name: string): void {
-    this.remembered = name;
-    this.platform.storage.local.setItem(LAST_PROJECT_KEY, name);
+  remember(project: Project): void {
+    const id = String(project.id);
+    if (this.remembered === id) return;
+    this.remembered = id;
+    this.platform.storage.local.setItem(LAST_PROJECT_KEY, id);
   }
 
   find(id: number): Project | null {
@@ -122,7 +125,7 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   refreshProjects(): Promise<void> {
     if (this.refreshing !== null) return this.refreshing;
     const reading = this.repo.list.refresh({ throwOnError: true }).then((projects) => {
-      if (projects !== undefined) this.projects = projects;
+      if (projects !== undefined) this.adopt(projects);
     });
     this.refreshing = reading;
     return reading.finally(() => {
@@ -133,9 +136,22 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   private async read(): Promise<void> {
     try {
       const projects = await this.repo.list.loadOrThrow();
-      if (projects !== undefined) this.projects = projects;
+      if (projects !== undefined) this.adopt(projects);
     } finally {
       this.loaded = true;
     }
+  }
+
+  private adopt(projects: readonly Project[]): void {
+    const before = this.byId;
+    this.projects = projects;
+    const renamed = new Map(
+      projects.flatMap((project) => {
+        const was = before.get(project.id)?.name;
+        return was === undefined || was === project.name ? [] : [[was, project.name] as const];
+      }),
+    );
+    const href = renamed.size === 0 ? null : renamedHref(this.router, renamed);
+    if (href !== null) this.router.replace(asRoutePathname(href)).catch((error: unknown) => this.failure.report(error));
   }
 }

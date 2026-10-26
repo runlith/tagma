@@ -224,7 +224,7 @@ it.live('the mobile shell opens a thread beside in its one slot and has no side 
 it.live('a project opens at its last place in every shell, the main window’s own included, after its rungs are prepared', () =>
   Effect.gen(function* () {
     const { desktop, mobile, window, visits, went, prepared, revealed } = world();
-    visits.remember('orbit', 'notes', 'alpha', 'feature');
+    visits.remember({ id: 2, name: 'orbit' } as never, 'notes', 'alpha', 'feature');
 
     yield* Effect.result(desktop.openProject(2, 'strip'));
     yield* Effect.result(mobile.openProject(2, 'palette'));

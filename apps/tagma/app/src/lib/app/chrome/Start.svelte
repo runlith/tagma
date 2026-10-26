@@ -15,7 +15,7 @@
   $effect(() => {
     if (workspace.empty) return;
     const entry = workspace.entryProject();
-    if (entry !== null) void router.goto(visits.resume(entry.name), { replaceState: true });
+    if (entry !== null) void router.goto(visits.resume(entry), { replaceState: true });
   });
 </script>
 

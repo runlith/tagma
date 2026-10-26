@@ -3,6 +3,18 @@ import type { Router } from '@runlith/layer/Router';
 
 export const currentProject = (router: Router): string => router.params.project as string;
 
+export function renamedHref(router: Router, renamed: ReadonlyMap<string, string>): string | null {
+  const url = new URL(router.url);
+  const at = router.routeId?.split('/').indexOf('[project]') ?? -1;
+  const segments = url.pathname.split('/');
+  const named = at < 0 ? undefined : renamed.get(router.params.project ?? '');
+  if (named !== undefined) segments[at] = encodeURIComponent(named);
+  const aimed = renamed.get(url.searchParams.get('project') ?? '');
+  if (aimed !== undefined) url.searchParams.set('project', aimed);
+  if (named === undefined && aimed === undefined) return null;
+  return `${segments.join('/')}${url.search}${url.hash}`;
+}
+
 export const projectOpen = (router: Router): boolean => typeof router.params.project === 'string' && router.params.project !== '';
 
 export function currentBranch(router: Router): string | null {

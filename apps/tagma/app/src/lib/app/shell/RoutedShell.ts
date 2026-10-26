@@ -50,7 +50,7 @@ export abstract class RoutedShell implements ShellPort {
       ),
       Effect.flatMap((project) => {
         const clear = markProjectSwitch(project.id, entry);
-        return this.route(this.visits.resume(project.name)).pipe(Effect.ensuring(Effect.sync(clear)));
+        return this.route(this.visits.resume(project)).pipe(Effect.ensuring(Effect.sync(clear)));
       }),
     );
   }
@@ -63,7 +63,7 @@ export abstract class RoutedShell implements ShellPort {
     }
     const project = this.workspace.contextProject;
     if (project === null) return yield* new ProjectUnknown({ projectId: null, message: 'No project is open to show a section of.' });
-    yield* this.route(this.visits.href(project.name, surface));
+    yield* this.route(this.visits.href(project, surface));
   });
 
   protected route(href: string): Effect.Effect<void, NavigationFailed> {

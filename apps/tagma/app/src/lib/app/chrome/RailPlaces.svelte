@@ -54,7 +54,7 @@
         icon: entry.icon,
         iconUrl: entry.iconUrl,
         current: standing === entry.surface,
-        reach: { href: visits.href(project.name, entry.surface) },
+        reach: { href: visits.href(project, entry.surface) },
       } satisfies RailPlace,
     }));
     const launches = launchesOf(sets.sets, project).map((launch): RailPlace => ({

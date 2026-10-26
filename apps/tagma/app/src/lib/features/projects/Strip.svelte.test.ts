@@ -131,8 +131,8 @@ test('what another window changes in the strip shows in this one at once, and th
 
 test('the first strip holds the projects that have a remembered place, in registry order, and the current one', () => {
   const visits = new Visits(makeStorage(), surfaces);
-  visits.remember('gamma', surfaces.home, null, null);
-  visits.remember('alpha', surfaces.home, null, null);
+  visits.remember(REGISTRY[2]!, surfaces.home, null, null);
+  visits.remember(REGISTRY[0]!, surfaces.home, null, null);
 
   const { strip } = window(makeStorage(), 2, visits);
 

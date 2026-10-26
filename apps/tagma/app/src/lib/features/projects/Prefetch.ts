@@ -29,7 +29,7 @@ export class ProjectPrefetch extends Service<ProjectPrefetch>()('ProjectPrefetch
   of(project: Project): Promise<void> {
     const projectId = project.id;
     const own = this.prepare(ProjectRung, { projectId });
-    const graph = this.prepare(GraphRung, { projectId, branch: this.visits.branchOf(project.name) }).catch((error: unknown) => {
+    const graph = this.prepare(GraphRung, { projectId, branch: this.visits.branchOf(project) }).catch((error: unknown) => {
       if (error instanceof RungClosedError) return;
       throw error;
     });

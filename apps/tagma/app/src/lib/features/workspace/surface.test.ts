@@ -1,3 +1,4 @@
+import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { RegistryClash } from '@runlith/chat-ui/RegistryClash';
 import { makeStorage } from '@runlith/layer/testing';
 import { expect, test } from 'vitest';
@@ -5,6 +6,20 @@ import { type SurfaceDeclaration, SurfaceRegistry } from './surface.js';
 import { Visits } from './Visits.svelte.js';
 
 const icon = (() => undefined) as unknown as SurfaceDeclaration['icon'];
+
+const project: Project = {
+  id: 1,
+  name: 'demo',
+  repoKey: 'demo',
+  rootPath: '/projects/demo',
+  strictProvenance: false,
+  private: false,
+  global: false,
+  storage: 'stealth',
+  graphRemote: null,
+  servesFrom: 'rows',
+  createdAt: '2026-09-05T00:00:00Z',
+};
 
 const declared = (surface: string, over: Partial<SurfaceDeclaration> = {}): SurfaceDeclaration => ({
   surface,
@@ -88,10 +103,11 @@ test('a section registered on the fly joins the rail and answers its route until
 test('a visit remembers a place only on the surfaces that declared it', () => {
   const surfaces = new SurfaceRegistry([declared('home', { route: '', remembers: false, home: true, rail: 1 }), declared('mail')]);
   const visits = new Visits(makeStorage(), surfaces);
+  const five = { ...project, id: 5, name: '5' };
 
-  visits.remember('5', 'home', 'ignored', null);
-  visits.remember('5', 'mail', 'thread-1', 'main');
+  visits.remember(five, 'home', 'ignored', null);
+  visits.remember(five, 'mail', 'thread-1', 'main');
 
-  expect(visits.placeOf('5', 'home')).toBeNull();
-  expect(visits.href('5', 'mail')).toBe('/5/mail/thread-1?branch=main');
+  expect(visits.placeOf(five, 'home')).toBeNull();
+  expect(visits.href(five, 'mail')).toBe('/5/mail/thread-1?branch=main');
 });

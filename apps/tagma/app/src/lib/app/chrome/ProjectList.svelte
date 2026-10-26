@@ -4,6 +4,7 @@
   import Check from '@lucide/svelte/icons/check';
   import FolderMinus from '@lucide/svelte/icons/folder-minus';
   import Network from '@lucide/svelte/icons/network';
+  import PencilLine from '@lucide/svelte/icons/pencil-line';
   import Plus from '@lucide/svelte/icons/plus';
   import Search from '@lucide/svelte/icons/search';
   import { Host } from '@runlith/layer/Host';
@@ -14,6 +15,7 @@
   import { ProjectPrefetch } from '$lib/features/projects/Prefetch.js';
   import PulseMarks from '$lib/features/projects/PulseMarks.svelte';
   import { ProjectRemoval } from '$lib/features/projects/Removal.svelte.js';
+  import { ProjectRenaming } from '$lib/features/projects/Renaming.svelte.js';
   import { ProjectStrip } from '$lib/features/projects/Strip.svelte.js';
   import Swatch from '$lib/features/workspace/Swatch.svelte';
   import { mentionOf } from '$lib/features/projects/mention.js';
@@ -43,6 +45,7 @@
   const visits = Visits.use();
   const strip = ProjectStrip.use();
   const removal = ProjectRemoval.use();
+  const renaming = ProjectRenaming.use();
   const menu = Menu.use();
   const drops = MentionDrops.use();
   const host = Host.use();
@@ -67,7 +70,7 @@
 
   function open(project: Project, event: Event): void {
     if (windows !== undefined && event.target instanceof Element && event.target.closest('[data-new-window]') !== null)
-      windows.openProject(visits.resume(project.name));
+      windows.openProject(visits.resume(project));
     else go(project);
   }
 
@@ -87,7 +90,7 @@
     const first = found[0]?.item;
     if (event.key !== 'Enter' || event.isComposing || first === undefined) return;
     event.preventDefault();
-    if (windows !== undefined && (event.metaKey || event.ctrlKey)) windows.openProject(visits.resume(first.name));
+    if (windows !== undefined && (event.metaKey || event.ctrlKey)) windows.openProject(visits.resume(first));
     else go(first);
     menu.close();
   }
@@ -195,6 +198,7 @@
 <DropdownMenu.Item icon={Plus} onSelect={() => (creation.open = true)}>New project</DropdownMenu.Item>
 {#if current !== null}
   <DropdownMenu.Separator />
+  <DropdownMenu.Item icon={PencilLine} onSelect={() => renaming.ask(current)}>Rename “{labelOf(current)}”…</DropdownMenu.Item>
   <DropdownMenu.Item variant="destructive" icon={FolderMinus} onSelect={() => removal.ask(current)}>
     Remove “{labelOf(current)}” from Tagma…
   </DropdownMenu.Item>

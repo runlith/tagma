@@ -14,7 +14,7 @@
     const here = graphAim();
     return strip.visited
       .slice(0, WARM)
-      .map((project) => (here?.projectId === project.id ? here : { projectId: project.id, branch: visits.branchOf(project.name) }));
+      .map((project) => (here?.projectId === project.id ? here : { projectId: project.id, branch: visits.branchOf(project) }));
   });
 </script>
 

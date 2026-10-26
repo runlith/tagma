@@ -134,7 +134,7 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
   }
 
   private seed(): readonly number[] {
-    return this.workspace.projects.filter((project) => this.visits.knows(project.name)).map((project) => project.id);
+    return this.workspace.projects.filter((project) => this.visits.knows(project)).map((project) => project.id);
   }
 
   private known(order: readonly number[]): readonly Project[] {

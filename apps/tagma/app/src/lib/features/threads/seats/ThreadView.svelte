@@ -43,8 +43,8 @@
 
   const framed = untrack(() => {
     if (home === null) return framing()?.branch ?? null;
-    const name = workspace.find(home)?.name;
-    return name === undefined ? null : visits.branchOf(name);
+    const project = workspace.find(home);
+    return project === null ? null : visits.branchOf(project);
   });
   const branch = $derived.by(() => {
     const id = host.activeId;

@@ -26,7 +26,7 @@ export class MainWindowShell implements ShellPort {
   ) {}
 
   openProject(projectId: number, _entry: ProjectEntry): Effect.Effect<void, ShellRefusal> {
-    return Effect.map(registered(this.workspace, projectId), (project) => this.desktop.reveal(this.visits.resume(project.name)));
+    return Effect.map(registered(this.workspace, projectId), (project) => this.desktop.reveal(this.visits.resume(project)));
   }
 
   besideOffer(): BesideOffer {

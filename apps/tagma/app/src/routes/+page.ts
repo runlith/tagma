@@ -11,7 +11,7 @@ export const load = App.load(runtime, function* () {
   const visits = yield* Visits;
   return workspace.ready.then(async () => {
     const entry = workspace.resumed();
-    if (entry !== null) redirect(307, visits.resume(entry.name));
+    if (entry !== null) redirect(307, visits.resume(entry));
     return { Page: (await import('$lib/app/chrome/Start.svelte')).default };
   });
 });

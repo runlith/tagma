@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { Failure } from '@runlith/layer/Failure';
-import { makePlatform, makeRefusingStorage, makeRouter, makeStorage } from '@runlith/layer/testing';
+import { makePlatform, makeRefusingStorage, makeRouter, makeRouterWithLog, makeStorage } from '@runlith/layer/testing';
 import { stubSingle } from '@runlith/query/testing';
 import { expect, test } from 'vitest';
 import { waitUntil } from '@runlith/testing/flush';
@@ -26,7 +26,7 @@ test.each(['refused', 'older'] as const)('the remembered project survives %s sto
     mode === 'refused'
       ? makeRefusingStorage()
       : {
-          ...makeStorage({ 'tagma.lastProject': 'first' }),
+          ...makeStorage({ 'tagma.lastProjectId': '1' }),
           setItem: () => undefined,
         };
   const route = { params: { project: 'second' } as Record<string, string> };
@@ -41,7 +41,7 @@ test.each(['refused', 'older'] as const)('the remembered project survives %s sto
   );
   await waitUntil(() => workspace.loaded);
   expect(workspace.contextProject?.name).toBe('second');
-  workspace.remember('second');
+  workspace.remember(projects[1]!);
   route.params = {};
   expect(workspace.contextProject?.name).toBe('second');
   expect(workspace.entryProject()?.name).toBe('second');
@@ -66,6 +66,30 @@ test('the project the composition names is resumed even when only global project
   await waitUntil(() => named.loaded && bare.loaded);
   expect(named.resumed()?.name).toBe('global');
   expect(bare.resumed()).toBeNull();
+});
+
+test.each([
+  [
+    '/first/graph/alpha?branch=feature',
+    '/[project]/graph/[[id]]',
+    { project: 'first', id: 'alpha' },
+    '/renamed/graph/alpha?branch=feature',
+  ],
+  ['/settings?project=first&section=graph', '/settings', {}, '/settings?project=renamed&section=graph'],
+] as const)('a window standing at %s moves to the new name when the registry renames its project', async (at, routeId, params, moved) => {
+  const { router, visited } = makeRouterWithLog({ url: new URL(at, 'http://localhost'), routeId, params: { ...params } });
+  const renamed = projects.map((project) => (project.id === 1 ? { ...project, name: 'renamed' } : project));
+  const workspace = new Workspace(
+    { list: stubSingle({ loadOrThrow: async () => projects, refresh: async () => renamed }) } as never,
+    router,
+    makePlatform({ local: makeStorage() }),
+    new Failure((error) => {
+      throw error;
+    }),
+  );
+  await waitUntil(() => workspace.loaded);
+  await workspace.refreshProjects();
+  expect(visited).toEqual([{ href: moved, replaced: true }]);
 });
 
 test('a project registered after the registry was read is found by one re-read, however many readers ask for it', async () => {

@@ -129,16 +129,16 @@
   $effect(() => {
     if (aside) return;
     const name = blockName;
-    const project = untrack(() => router.params.project);
+    const project = untrack(() => workspace.active);
     const branch = untrack(() => currentBranch(router));
-    if (project === undefined) return;
+    if (project === null) return;
     if (name === undefined) {
       visits.remember(project, 'outline', null, branch);
       return;
     }
     const projectId = readProject;
     if (projectId === undefined) return;
-    if (projectId === untrack(() => workspace.activeId)) {
+    if (projectId === project.id) {
       visits.remember(project, 'outline', name, branch);
       return;
     }
@@ -147,8 +147,7 @@
       .nameOf(projectId)
       .then(async (owner) => {
         if (disposed) return;
-        if (owner === project) visits.remember(project, 'outline', name, branch);
-        else await router.goto(addresses.block(name, { project: owner }), { replaceState: true });
+        await router.goto(addresses.block(name, { project: owner }), { replaceState: true });
       })
       .catch((error: unknown) => {
         if (!disposed) notices.refusal(error);
