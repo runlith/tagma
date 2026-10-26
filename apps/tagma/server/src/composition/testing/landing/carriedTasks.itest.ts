@@ -76,5 +76,4 @@ it.live(
         },
       });
     }).pipe(Effect.provide(BunFileSystem.layer)),
-  60_000,
 );

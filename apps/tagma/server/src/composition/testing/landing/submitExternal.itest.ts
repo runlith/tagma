@@ -43,5 +43,4 @@ it.live(
       for (const op of ['submit_work', 'check_rules'])
         expect((yield* world.op(op, {}, at, OUTSIDE)).body).toMatchObject({ code: 'no-record' });
     }).pipe(Effect.provide(BunFileSystem.layer)),
-  60_000,
 );

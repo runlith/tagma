@@ -108,5 +108,4 @@ it.live(
       ).toMatchObject({ body: { submitted: { status: 'landed', committed: ['named.txt'] } } });
       expect(yield* tree(root)).toBe('base.txt\nedited.txt\npeer.txt\n');
     }).pipe(Effect.provide(BunFileSystem.layer)),
-  60_000,
 );

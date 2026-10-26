@@ -35,7 +35,6 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           expect(readFileSync(join(project, 'feature.txt'), 'utf8')).toBe('hooked\n');
         }),
       ),
-    30_000,
   );
 
   it.effect(
@@ -66,6 +65,5 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           expect(yield* shEffect(project, ['show', 'HEAD:.env'])).toBe('tracked');
         }),
       ),
-    30_000,
   );
 });

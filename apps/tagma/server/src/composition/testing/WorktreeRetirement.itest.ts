@@ -88,6 +88,5 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           for (const useId of held) expect(yield* releasedUse(useId)).toBe(true);
         }),
       ),
-    120_000,
   );
 });

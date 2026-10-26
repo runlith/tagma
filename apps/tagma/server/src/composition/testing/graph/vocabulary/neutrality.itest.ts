@@ -86,36 +86,33 @@ const projects = Layer.effect(
 ).pipe(Layer.provideMerge(doorFixture()));
 
 layer(projects, { excludeTestServices: true })('vocabulary neutrality', (it) => {
-  it.effect(
-    'contradictory catalog workflows retain their own lifecycles on one shipped engine',
-    () =>
-      Effect.gen(function* () {
-        const world = yield* DoorFixture;
-        const project = (yield* NeutralProjects).workflow;
-        yield* Effect.addFinalizer(() => world.runtime.pool.releaseProject(project));
-        yield* declareWorkflow(project, 'strict-code', true);
-        yield* declareWorkflow(project, 'free-writing', false);
-        const served = yield* world.runtime.pool.resolve({ projectId: project });
-        expect((yield* Context.get(served.context, Tags).of(project)).bindsCode()).toBe(true);
-        expect(yield* codeInstructions(project)).toBe(true);
-        const strict = yield* create(project, { tags: ['strict-code'], title: 'Ship a verified change' });
-        const free = yield* create(project, { tags: ['free-writing'], title: 'Publish a draft' });
-        expect(strict.fields.phase).toBe('open');
-        expect(free.fields.phase).toBe('done');
-        expect(new Set((yield* ready(project)).tasks.map((task) => task.name))).toEqual(new Set([strict.name, free.name]));
-        yield* refuse(project, 'finish_block', { blockId: strict.name }, 'illegal-transition');
-        const published = yield* Schema.decodeUnknownEffect(blockAnswer)(yield* success(project, 'finish_block', { blockId: free.name }));
-        expect(yield* success(project, 'read_block', { blockIds: [free.name] })).toMatchObject({
-          reads: [{ name: free.name, fields: { phase: 'open' } }],
-        });
-        expect(published.block.fields.phase).toBe('open');
-        expect((yield* ready(project)).tasks.map((task) => task.name)).toEqual([strict.name]);
-        const claimed = yield* Schema.decodeUnknownEffect(blockAnswer)(yield* success(project, 'claim_block', { blockId: strict.name }));
-        expect(claimed.block.fields.phase).toBe('writing');
-        const shipped = yield* Schema.decodeUnknownEffect(blockAnswer)(yield* success(project, 'finish_block', { blockId: strict.name }));
-        expect(shipped.block.fields.phase).toBe('done');
-        expect((yield* ready(project)).total).toBe(0);
-      }),
-    10_000,
+  it.effect('contradictory catalog workflows retain their own lifecycles on one shipped engine', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const project = (yield* NeutralProjects).workflow;
+      yield* Effect.addFinalizer(() => world.runtime.pool.releaseProject(project));
+      yield* declareWorkflow(project, 'strict-code', true);
+      yield* declareWorkflow(project, 'free-writing', false);
+      const served = yield* world.runtime.pool.resolve({ projectId: project });
+      expect((yield* Context.get(served.context, Tags).of(project)).bindsCode()).toBe(true);
+      expect(yield* codeInstructions(project)).toBe(true);
+      const strict = yield* create(project, { tags: ['strict-code'], title: 'Ship a verified change' });
+      const free = yield* create(project, { tags: ['free-writing'], title: 'Publish a draft' });
+      expect(strict.fields.phase).toBe('open');
+      expect(free.fields.phase).toBe('done');
+      expect(new Set((yield* ready(project)).tasks.map((task) => task.name))).toEqual(new Set([strict.name, free.name]));
+      yield* refuse(project, 'finish_block', { blockId: strict.name }, 'illegal-transition');
+      const published = yield* Schema.decodeUnknownEffect(blockAnswer)(yield* success(project, 'finish_block', { blockId: free.name }));
+      expect(yield* success(project, 'read_block', { blockIds: [free.name] })).toMatchObject({
+        reads: [{ name: free.name, fields: { phase: 'open' } }],
+      });
+      expect(published.block.fields.phase).toBe('open');
+      expect((yield* ready(project)).tasks.map((task) => task.name)).toEqual([strict.name]);
+      const claimed = yield* Schema.decodeUnknownEffect(blockAnswer)(yield* success(project, 'claim_block', { blockId: strict.name }));
+      expect(claimed.block.fields.phase).toBe('writing');
+      const shipped = yield* Schema.decodeUnknownEffect(blockAnswer)(yield* success(project, 'finish_block', { blockId: strict.name }));
+      expect(shipped.block.fields.phase).toBe('done');
+      expect((yield* ready(project)).total).toBe(0);
+    }),
   );
 });

@@ -60,28 +60,24 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
           expect(existsSync(join(world.root, '.git/MERGE_HEAD'))).toBe(false);
         })(),
       ),
-    30000,
   );
-  it.effect(
-    'a landing beside a conflicted merge a peer holds leaves its conflicts standing for that peer',
-    () =>
-      withCheckout((checkout) =>
-        Effect.fnUntraced(function* () {
-          const world = checkout;
-          const { head, tip, before } = yield* opened(world, true);
-          yield* world.record(THEIRS, before, readFileSync(world.file, 'utf8'));
-          writeFileSync(join(world.root, 'src/b.ts'), 'const b = 1;\n');
-          yield* world.record(MINE, '', 'const b = 1;\n', { path: 'src/b.ts', origin: 'write' });
-          const beside = yield* world.submit(MINE);
-          expect(beside.status).toBe('landed');
-          if (beside.status !== 'landed') return;
-          expect(yield* world.run(['rev-list', '--parents', '-1', 'HEAD'])).toBe(`${beside.commit} ${head}`);
-          expect(yield* world.run(['show', 'HEAD:src/b.ts'])).toBe('const b = 1;');
-          expect(yield* world.run(['rev-parse', 'MERGE_HEAD'])).toBe(tip);
-          expect(yield* world.run(['diff', '--name-only', '--diff-filter=U'])).toBe('src/a.ts');
-          yield* world.run(['merge', '--abort']);
-        })(),
-      ),
-    30000,
+  it.effect('a landing beside a conflicted merge a peer holds leaves its conflicts standing for that peer', () =>
+    withCheckout((checkout) =>
+      Effect.fnUntraced(function* () {
+        const world = checkout;
+        const { head, tip, before } = yield* opened(world, true);
+        yield* world.record(THEIRS, before, readFileSync(world.file, 'utf8'));
+        writeFileSync(join(world.root, 'src/b.ts'), 'const b = 1;\n');
+        yield* world.record(MINE, '', 'const b = 1;\n', { path: 'src/b.ts', origin: 'write' });
+        const beside = yield* world.submit(MINE);
+        expect(beside.status).toBe('landed');
+        if (beside.status !== 'landed') return;
+        expect(yield* world.run(['rev-list', '--parents', '-1', 'HEAD'])).toBe(`${beside.commit} ${head}`);
+        expect(yield* world.run(['show', 'HEAD:src/b.ts'])).toBe('const b = 1;');
+        expect(yield* world.run(['rev-parse', 'MERGE_HEAD'])).toBe(tip);
+        expect(yield* world.run(['diff', '--name-only', '--diff-filter=U'])).toBe('src/a.ts');
+        yield* world.run(['merge', '--abort']);
+      })(),
+    ),
   );
 });

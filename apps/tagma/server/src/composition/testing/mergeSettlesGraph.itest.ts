@@ -93,6 +93,5 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           ]);
         }),
       ),
-    120_000,
   );
 });

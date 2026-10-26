@@ -258,149 +258,127 @@ class PlaceFixture extends Context.Service<PlaceFixture, Effect.Success<typeof m
 layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
 })('landing places', (it) => {
-  it.effect(
-    'foreign landing uses its law, tasks and steps, keeps peer ownership, and splits checkouts explicitly',
-    () =>
-      Effect.gen(function* () {
-        const {
-          world,
-          files,
-          home,
-          target,
-          actor,
-          peer,
-          rule,
-          ruleRevision,
-          task,
-          actorPrincipal,
-          op,
-          native,
-          catalogAt,
-          write,
-          held,
-          out,
-        } = yield* PlaceFixture;
-        const homeHead = yield* out(home.root, ['rev-parse', 'HEAD']);
-        const targetHead = yield* out(target.root, ['rev-parse', 'HEAD']);
-        const bad = BASE.replace('export const n0 = 0;', "export * from './value';");
-        yield* write(target.root, bad);
-        const visiting = { ...actor, native: yield* catalogAt(actor, home.id, target.id, target.root, actorPrincipal) };
-        expect(yield* native('check_rules', { over: 'change' }, visiting)).toMatchObject({ refuses: true, violations: [{ rule }] });
-        expect(yield* native('check_rules', { over: 'change', inspection: MARKED }, visiting)).toMatchObject({
-          violations: [{ file: 'shared.ts', line: 1 }],
-        });
-        expect(yield* native('submit_work', { subject: 'blocked foreign work' })).toMatchObject({
-          status: 'refused',
-          code: 'rule-violated',
-          reason: expect.stringContaining(rule),
-        });
-        expect(yield* out(home.root, ['rev-parse', 'HEAD'])).toBe(homeHead);
-        expect(yield* out(target.root, ['rev-parse', 'HEAD'])).toBe(targetHead);
-        const mine = BASE.replace('export const n0 = 0;', 'export const n0 = 100;   ');
-        yield* write(target.root, mine);
-        const peerText = mine.replace('export const n5 = 5;', 'export const n5 = 500;');
-        yield* write(target.root, peerText, peer);
-        const both = peerText.replace('export const n10 = 10;', 'export const n10 = 1000;');
-        expect(
-          (yield* op('write_document', { path: 'shared.ts', text: both, base: contentDigest(peerText), write: 'operator-write' })).status,
-        ).toBe(200);
-        const landed = yield* native('submit_work', { subject: 'foreign work', paths: ['shared.ts'] });
-        expect(landed).toMatchObject({ submitted: { status: 'landed', committed: ['shared.ts'], carried: [] } });
-        expect(yield* out(target.root, ['show', 'HEAD:shared.ts'])).toBe(mine.trimEnd().replace('100;   ', '100;'));
-        expect(yield* files.readFileString(join(target.root, 'shared.ts'))).toBe(both.replace('100;   ', '100;'));
-        expect(yield* out(target.root, ['log', '-1', '--format=%s'])).toBe(`foreign work (${task})`);
-        expect(yield* out(home.root, ['rev-parse', 'HEAD'])).toBe(homeHead);
-        const view = yield* held(target.root);
-        const hands = view.paths.find((one) => one.path === 'shared.ts')?.verdict;
-        expect(hands?.verdict === 'proven' ? hands.hands.map((hand) => hand.holder) : null).toEqual(
-          expect.arrayContaining([{ kind: 'operator' }, { kind: 'thread', thread: peer.threadId }]),
-        );
-        expect(hands?.verdict === 'proven' ? hands.hands.length : null).toBe(2);
+  it.effect('foreign landing uses its law, tasks and steps, keeps peer ownership, and splits checkouts explicitly', () =>
+    Effect.gen(function* () {
+      const { world, files, home, target, actor, peer, rule, ruleRevision, task, actorPrincipal, op, native, catalogAt, write, held, out } =
+        yield* PlaceFixture;
+      const homeHead = yield* out(home.root, ['rev-parse', 'HEAD']);
+      const targetHead = yield* out(target.root, ['rev-parse', 'HEAD']);
+      const bad = BASE.replace('export const n0 = 0;', "export * from './value';");
+      yield* write(target.root, bad);
+      const visiting = { ...actor, native: yield* catalogAt(actor, home.id, target.id, target.root, actorPrincipal) };
+      expect(yield* native('check_rules', { over: 'change' }, visiting)).toMatchObject({ refuses: true, violations: [{ rule }] });
+      expect(yield* native('check_rules', { over: 'change', inspection: MARKED }, visiting)).toMatchObject({
+        violations: [{ file: 'shared.ts', line: 1 }],
+      });
+      expect(yield* native('submit_work', { subject: 'blocked foreign work' })).toMatchObject({
+        status: 'refused',
+        code: 'rule-violated',
+        reason: expect.stringContaining(rule),
+      });
+      expect(yield* out(home.root, ['rev-parse', 'HEAD'])).toBe(homeHead);
+      expect(yield* out(target.root, ['rev-parse', 'HEAD'])).toBe(targetHead);
+      const mine = BASE.replace('export const n0 = 0;', 'export const n0 = 100;   ');
+      yield* write(target.root, mine);
+      const peerText = mine.replace('export const n5 = 5;', 'export const n5 = 500;');
+      yield* write(target.root, peerText, peer);
+      const both = peerText.replace('export const n10 = 10;', 'export const n10 = 1000;');
+      expect(
+        (yield* op('write_document', { path: 'shared.ts', text: both, base: contentDigest(peerText), write: 'operator-write' })).status,
+      ).toBe(200);
+      const landed = yield* native('submit_work', { subject: 'foreign work', paths: ['shared.ts'] });
+      expect(landed).toMatchObject({ submitted: { status: 'landed', committed: ['shared.ts'], carried: [] } });
+      expect(yield* out(target.root, ['show', 'HEAD:shared.ts'])).toBe(mine.trimEnd().replace('100;   ', '100;'));
+      expect(yield* files.readFileString(join(target.root, 'shared.ts'))).toBe(both.replace('100;   ', '100;'));
+      expect(yield* out(target.root, ['log', '-1', '--format=%s'])).toBe(`foreign work (${task})`);
+      expect(yield* out(home.root, ['rev-parse', 'HEAD'])).toBe(homeHead);
+      const view = yield* held(target.root);
+      const hands = view.paths.find((one) => one.path === 'shared.ts')?.verdict;
+      expect(hands?.verdict === 'proven' ? hands.hands.map((hand) => hand.holder) : null).toEqual(
+        expect.arrayContaining([{ kind: 'operator' }, { kind: 'thread', thread: peer.threadId }]),
+      );
+      expect(hands?.verdict === 'proven' ? hands.hands.length : null).toBe(2);
 
-        const side = yield* world.directory('side');
-        yield* git(target.root, 'worktree', 'add', '-q', '-b', 'side', side);
-        yield* Context.get(world.runtime.workspace, Coverage).adopt(target.id, side);
-        const sideLaw = yield* op(
-          'enforce_rule',
-          {
-            blockId: rule,
-            base: ruleRevision,
-            strictness: 'watch',
-            inspection: INSPECTION,
-            on: [{ op: 'submit_work', phase: 'before' }],
-          },
-          target.id,
-          undefined,
-          side,
-        );
-        expect(sideLaw).toMatchObject({ status: 200 });
-        yield* write(target.root, both.replace('100;   ', '101;'));
-        yield* write(side, bad);
-        expect(yield* native('submit_work', { paths: ['shared.ts'] }).pipe(Effect.flip)).toMatchObject({ code: 'multiple-checkouts' });
-        expect(yield* native('submit_work', { project: home.id, checkout: side }).pipe(Effect.flip)).toMatchObject({
-          code: 'place-mismatch',
-        });
-        expect(yield* native('submit_work', { checkout: side, subject: 'side work' })).toMatchObject({
-          submitted: { status: 'landed', watched: [{ rule }] },
-        });
-        expect(yield* out(side, ['show', 'HEAD:shared.ts'])).toBe(bad.trim());
-        expect(yield* out(target.root, ['show', 'HEAD:shared.ts'])).toBe(mine.trimEnd().replace('100;   ', '100;'));
-        const mainText = both.replace('100;   ', '101;');
-        yield* write(target.root, mainText.replace('export const n0 = 101;', "export * from './value';"));
-        expect(yield* native('submit_work', { project: target.id })).toMatchObject({
-          status: 'refused',
-          code: 'rule-violated',
-          reason: expect.stringContaining(rule),
-        });
-        yield* write(target.root, mainText);
-        expect(
-          yield* native('submit_work', { project: target.id, subject: 'taken work', taking: [peer.threadId, 'operator'] }),
-        ).toMatchObject({
-          submitted: { status: 'landed', committed: ['shared.ts'] },
-        });
-        expect((yield* held(target.root)).totals.held).toBe(0);
-        expect(yield* out(home.root, ['rev-parse', 'HEAD'])).toBe(homeHead);
-      }),
-    60_000,
+      const side = yield* world.directory('side');
+      yield* git(target.root, 'worktree', 'add', '-q', '-b', 'side', side);
+      yield* Context.get(world.runtime.workspace, Coverage).adopt(target.id, side);
+      const sideLaw = yield* op(
+        'enforce_rule',
+        {
+          blockId: rule,
+          base: ruleRevision,
+          strictness: 'watch',
+          inspection: INSPECTION,
+          on: [{ op: 'submit_work', phase: 'before' }],
+        },
+        target.id,
+        undefined,
+        side,
+      );
+      expect(sideLaw).toMatchObject({ status: 200 });
+      yield* write(target.root, both.replace('100;   ', '101;'));
+      yield* write(side, bad);
+      expect(yield* native('submit_work', { paths: ['shared.ts'] }).pipe(Effect.flip)).toMatchObject({ code: 'multiple-checkouts' });
+      expect(yield* native('submit_work', { project: home.id, checkout: side }).pipe(Effect.flip)).toMatchObject({
+        code: 'place-mismatch',
+      });
+      expect(yield* native('submit_work', { checkout: side, subject: 'side work' })).toMatchObject({
+        submitted: { status: 'landed', watched: [{ rule }] },
+      });
+      expect(yield* out(side, ['show', 'HEAD:shared.ts'])).toBe(bad.trim());
+      expect(yield* out(target.root, ['show', 'HEAD:shared.ts'])).toBe(mine.trimEnd().replace('100;   ', '100;'));
+      const mainText = both.replace('100;   ', '101;');
+      yield* write(target.root, mainText.replace('export const n0 = 101;', "export * from './value';"));
+      expect(yield* native('submit_work', { project: target.id })).toMatchObject({
+        status: 'refused',
+        code: 'rule-violated',
+        reason: expect.stringContaining(rule),
+      });
+      yield* write(target.root, mainText);
+      expect(
+        yield* native('submit_work', { project: target.id, subject: 'taken work', taking: [peer.threadId, 'operator'] }),
+      ).toMatchObject({
+        submitted: { status: 'landed', committed: ['shared.ts'] },
+      });
+      expect((yield* held(target.root)).totals.held).toBe(0);
+      expect(yield* out(home.root, ['rev-parse', 'HEAD'])).toBe(homeHead);
+    }),
   );
 
-  it.effect(
-    'the checkout graph gates new merge-resolution violations through submit_work, even when the caller holds no lines',
-    () =>
-      Effect.gen(function* () {
-        const { files, target, rule, native, out } = yield* PlaceFixture;
-        yield* git(target.root, 'checkout', '-qb', 'incoming');
-        yield* files.writeFileString(join(target.root, 'incoming.ts'), 'export const incoming = 1;\n');
-        yield* git(target.root, 'add', '--', 'incoming.ts');
-        yield* git(target.root, 'commit', '-qm', 'incoming file');
-        const tip = yield* out(target.root, ['rev-parse', 'HEAD']);
-        yield* git(target.root, 'checkout', '-q', 'main');
-        yield* files.writeFileString(join(target.root, 'local.ts'), 'export const local = 1;\n');
-        yield* git(target.root, 'add', '--', 'local.ts');
-        yield* git(target.root, 'commit', '-qm', 'local change');
-        const head = yield* out(target.root, ['rev-parse', 'HEAD']);
-        yield* git(target.root, 'merge', '--no-commit', '--no-ff', 'incoming');
-        yield* files.writeFileString(join(target.root, 'incoming.ts'), "export * from './value';\n");
-        yield* git(target.root, 'add', '--', 'incoming.ts');
+  it.effect('the checkout graph gates new merge-resolution violations through submit_work, even when the caller holds no lines', () =>
+    Effect.gen(function* () {
+      const { files, target, rule, native, out } = yield* PlaceFixture;
+      yield* git(target.root, 'checkout', '-qb', 'incoming');
+      yield* files.writeFileString(join(target.root, 'incoming.ts'), 'export const incoming = 1;\n');
+      yield* git(target.root, 'add', '--', 'incoming.ts');
+      yield* git(target.root, 'commit', '-qm', 'incoming file');
+      const tip = yield* out(target.root, ['rev-parse', 'HEAD']);
+      yield* git(target.root, 'checkout', '-q', 'main');
+      yield* files.writeFileString(join(target.root, 'local.ts'), 'export const local = 1;\n');
+      yield* git(target.root, 'add', '--', 'local.ts');
+      yield* git(target.root, 'commit', '-qm', 'local change');
+      const head = yield* out(target.root, ['rev-parse', 'HEAD']);
+      yield* git(target.root, 'merge', '--no-commit', '--no-ff', 'incoming');
+      yield* files.writeFileString(join(target.root, 'incoming.ts'), "export * from './value';\n");
+      yield* git(target.root, 'add', '--', 'incoming.ts');
 
-        expect(yield* native('submit_work', { checkout: target.root, subject: 'merge incoming' })).toMatchObject({
-          status: 'refused',
-          code: 'rule-violated',
-          reason: expect.stringContaining(rule),
-        });
-        expect(yield* out(target.root, ['rev-parse', 'HEAD'])).toBe(head);
-        expect(yield* out(target.root, ['rev-parse', 'MERGE_HEAD'])).toBe(tip);
-        yield* files.writeFileString(join(target.root, 'incoming.ts'), 'export const incoming = 1;\n');
-        yield* git(target.root, 'add', '--', 'incoming.ts');
-        expect(yield* native('submit_work', { checkout: target.root, subject: 'merge incoming' })).toMatchObject({
-          submitted: { status: 'landed', committed: ['incoming.ts'] },
-        });
-        const commit = yield* out(target.root, ['rev-parse', 'HEAD']);
-        expect(yield* out(target.root, ['rev-list', '--parents', '-1', 'HEAD'])).toBe(`${commit} ${head} ${tip}`);
-        expect(yield* files.exists(join(target.root, '.git/MERGE_HEAD'))).toBe(false);
-        expect(yield* out(target.root, ['diff', '--cached', '--name-only'])).toBe('');
-      }),
-    60_000,
+      expect(yield* native('submit_work', { checkout: target.root, subject: 'merge incoming' })).toMatchObject({
+        status: 'refused',
+        code: 'rule-violated',
+        reason: expect.stringContaining(rule),
+      });
+      expect(yield* out(target.root, ['rev-parse', 'HEAD'])).toBe(head);
+      expect(yield* out(target.root, ['rev-parse', 'MERGE_HEAD'])).toBe(tip);
+      yield* files.writeFileString(join(target.root, 'incoming.ts'), 'export const incoming = 1;\n');
+      yield* git(target.root, 'add', '--', 'incoming.ts');
+      expect(yield* native('submit_work', { checkout: target.root, subject: 'merge incoming' })).toMatchObject({
+        submitted: { status: 'landed', committed: ['incoming.ts'] },
+      });
+      const commit = yield* out(target.root, ['rev-parse', 'HEAD']);
+      expect(yield* out(target.root, ['rev-list', '--parents', '-1', 'HEAD'])).toBe(`${commit} ${head} ${tip}`);
+      expect(yield* files.exists(join(target.root, '.git/MERGE_HEAD'))).toBe(false);
+      expect(yield* out(target.root, ['diff', '--cached', '--name-only'])).toBe('');
+    }),
   );
 
   it.effect(
@@ -467,7 +445,6 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
         expect(yield* out(side, ['rev-parse', 'HEAD'])).toBe(sideHead);
         expect((yield* held(root)).totals.held).toBe(0);
       }),
-    60_000,
   );
 
   it.effect(
@@ -532,6 +509,5 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
         yield* write(root, BASE, actor, home.id);
         yield* held(root);
       }),
-    60_000,
   );
 });
