@@ -71,7 +71,7 @@ const git = Effect.fnUntraced(function* (...args: string[]) {
   return ran.stdout.toString().trim();
 });
 
-layer(doorFixture(), { excludeTestServices: true, testTimeout: 30_000, timeout: 60_000 })('reflections HTTP door', (it) => {
+layer(doorFixture(), { excludeTestServices: true })('reflections HTTP door', (it) => {
   it.effect('a foreign reflection preserves provenance and sightings, and task or commit answers can be tracked and withdrawn', () =>
     Effect.gen(function* () {
       const filing = {

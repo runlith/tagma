@@ -152,98 +152,90 @@ const rested = Effect.fnUntraced(function* (threadId: string) {
   yield* Deferred.await(ended);
 });
 
-layer(Layer.effect(Place, setup), { excludeTestServices: true, testTimeout: 60_000, timeout: '30 seconds' })(
-  'collaboration HTTP door',
-  (it) => {
-    it.effect('a CLI grant carries messages, reports, core refusals, named server operations and subscriptions', () =>
-      Effect.gen(function* () {
-        const { world, projectId, archived } = yield* Place;
-        const { lead, cli } = yield* team();
-        const [spawned] = yield* openRequests(cli);
-        expect(spawned).toMatchObject({ sender: { kind: 'thread', threadId: lead }, deliveredToRunId: expect.any(String) });
-        const [heard] = deliveriesOf(yield* asThread(cli, 'send_message', { to: [lead], message: 'Half the floor stands.' }));
-        expect(heard).toMatchObject({ intent: 'message', recipient: { threadId: lead } });
-        expect(yield* receipt(heard!.envelopeId)).toMatchObject({
-          threadId: lead,
-          sender: { kind: 'thread', threadId: cli },
-          body: { intent: 'message', text: 'Half the floor stands.' },
-        });
-        const final = yield* asThread(cli, 'send_message', { to: [lead], message: 'The floor is built.', final: true });
-        expect(deliveriesOf(final)).toMatchObject([{ intent: 'report', closed: [spawned!.id] }]);
-        expect(yield* openRequests(cli)).toEqual([]);
-        yield* Context.get(world.runtime.owners, HarnessReports).reported(cli, {
-          event: { hook_event_name: 'Stop', session_id: 'cli-session' },
-          capturedAt: DateTime.formatIso(yield* DateTime.now),
-        });
-        expect(yield* reportsTo(lead)).toEqual([{ inReplyTo: spawned!.id, text: 'The floor is built.' }]);
-        yield* rested(lead);
-        const child = yield* asThread(
+layer(Layer.effect(Place, setup), { excludeTestServices: true })('collaboration HTTP door', (it) => {
+  it.effect('a CLI grant carries messages, reports, core refusals, named server operations and subscriptions', () =>
+    Effect.gen(function* () {
+      const { world, projectId, archived } = yield* Place;
+      const { lead, cli } = yield* team();
+      const [spawned] = yield* openRequests(cli);
+      expect(spawned).toMatchObject({ sender: { kind: 'thread', threadId: lead }, deliveredToRunId: expect.any(String) });
+      const [heard] = deliveriesOf(yield* asThread(cli, 'send_message', { to: [lead], message: 'Half the floor stands.' }));
+      expect(heard).toMatchObject({ intent: 'message', recipient: { threadId: lead } });
+      expect(yield* receipt(heard!.envelopeId)).toMatchObject({
+        threadId: lead,
+        sender: { kind: 'thread', threadId: cli },
+        body: { intent: 'message', text: 'Half the floor stands.' },
+      });
+      const final = yield* asThread(cli, 'send_message', { to: [lead], message: 'The floor is built.', final: true });
+      expect(deliveriesOf(final)).toMatchObject([{ intent: 'report', closed: [spawned!.id] }]);
+      expect(yield* openRequests(cli)).toEqual([]);
+      yield* Context.get(world.runtime.owners, HarnessReports).reported(cli, {
+        event: { hook_event_name: 'Stop', session_id: 'cli-session' },
+        capturedAt: DateTime.formatIso(yield* DateTime.now),
+      });
+      expect(yield* reportsTo(lead)).toEqual([{ inReplyTo: spawned!.id, text: 'The floor is built.' }]);
+      yield* rested(lead);
+      const child = yield* asThread(cli, 'spawn_agent', { agentId: 'harness:devin', task: 'Keep the ledger.', name: 'sweeper' }, 'sweeper');
+      expect(child).toMatchObject({ status: 'started' });
+      expect(
+        (yield* asThread(cli, 'set_thread_title', { threadId: 'sweeper', title: 'Beams ledger' }, 'rename-sweeper')).code,
+      ).toBeUndefined();
+      expect((yield* Context.get(world.runtime.owners, ThreadRecords).facts(child.threadId as string))?.title).toBe('Beams ledger');
+      yield* rested(lead);
+      const refused = yield* world.op('send_message', { to: [lead], message: 'From nobody.' }, `project=${projectId}`);
+      expect(refused.body).toMatchObject({ code: 'thread-required' });
+      expect(
+        yield* asThread(
           cli,
           'spawn_agent',
-          { agentId: 'harness:devin', task: 'Keep the ledger.', name: 'sweeper' },
-          'sweeper',
-        );
-        expect(child).toMatchObject({ status: 'started' });
-        expect(
-          (yield* asThread(cli, 'set_thread_title', { threadId: 'sweeper', title: 'Beams ledger' }, 'rename-sweeper')).code,
-        ).toBeUndefined();
-        expect((yield* Context.get(world.runtime.owners, ThreadRecords).facts(child.threadId as string))?.title).toBe('Beams ledger');
-        yield* rested(lead);
-        const refused = yield* world.op('send_message', { to: [lead], message: 'From nobody.' }, `project=${projectId}`);
-        expect(refused.body).toMatchObject({ code: 'thread-required' });
-        expect(
-          yield* asThread(
-            cli,
-            'spawn_agent',
-            { agentId: 'harness:devin', task: 'Check the beams.', worktree: 'no-such-tree' },
-            'beams-nowhere',
-          ),
-        ).toMatchObject({ code: 'worktree-unknown', unblock: expect.any(Array) });
-        const watched = child.threadId as string;
-        const followed = (answer: Answer) =>
-          (answer.threads as readonly { threadId: string; wakes: readonly string[] }[])
-            .map(({ threadId, wakes }) => ({ threadId, wakes }))
-            .sort((left, right) => left.threadId.localeCompare(right.threadId));
-        const both = [lead, watched].sort().map((threadId) => ({ threadId, wakes: ['failed', 'awaiting'] }));
-        yield* turnsOf(world.runtime.owners).send(lead, projectId, 'Say where the floor stands.', undefined, { key: 'say-floor' });
-        yield* rested(lead);
-        const subscribed = yield* asThread(cli, 'subscribe_threads', { threads: [lead, watched], wakes: ['awaiting', 'failed'] }, 'follow');
-        expect(subscribed.status).toBe('subscribed');
-        expect(followed(subscribed)).toEqual(both);
-        expect(
-          (subscribed.threads as readonly { threadId: string; now: unknown }[]).find((row) => row.threadId === lead)?.now,
-        ).toMatchObject({
+          { agentId: 'harness:devin', task: 'Check the beams.', worktree: 'no-such-tree' },
+          'beams-nowhere',
+        ),
+      ).toMatchObject({ code: 'worktree-unknown', unblock: expect.any(Array) });
+      const watched = child.threadId as string;
+      const followed = (answer: Answer) =>
+        (answer.threads as readonly { threadId: string; wakes: readonly string[] }[])
+          .map(({ threadId, wakes }) => ({ threadId, wakes }))
+          .sort((left, right) => left.threadId.localeCompare(right.threadId));
+      const both = [lead, watched].sort().map((threadId) => ({ threadId, wakes: ['failed', 'awaiting'] }));
+      yield* turnsOf(world.runtime.owners).send(lead, projectId, 'Say where the floor stands.', undefined, { key: 'say-floor' });
+      yield* rested(lead);
+      const subscribed = yield* asThread(cli, 'subscribe_threads', { threads: [lead, watched], wakes: ['awaiting', 'failed'] }, 'follow');
+      expect(subscribed.status).toBe('subscribed');
+      expect(followed(subscribed)).toEqual(both);
+      expect((subscribed.threads as readonly { threadId: string; now: unknown }[]).find((row) => row.threadId === lead)?.now).toMatchObject(
+        {
           title: 'lead',
           life: 'idle',
           asks: null,
           failed: null,
           movedAt: expect.any(String),
           said: 'The floor stands.',
-        });
-        const read = yield* asThread(cli, 'read_subscriptions', { limit: 2 });
-        expect(followed(read)).toEqual(both);
-        expect((read.threads as readonly { threadId: string; now: unknown }[]).find((row) => row.threadId === lead)?.now).toMatchObject({
-          title: 'lead',
-          life: 'idle',
-          asks: null,
-          failed: null,
-          movedAt: expect.any(String),
-          said: 'The floor stands.',
-        });
-        expect(yield* asThread(cli, 'unsubscribe_threads', { threads: [lead, cli] }, 'unfollow')).toMatchObject({
-          status: 'unsubscribed',
-          unsubscribed: [{ threadId: lead }],
-          unheld: [{ threadId: cli }],
-        });
-        expect(followed(yield* asThread(cli, 'read_subscriptions', { limit: 2 }))).toEqual([
-          { threadId: watched, wakes: ['failed', 'awaiting'] },
-        ]);
-        expect(yield* asThread(cli, 'subscribe_threads', { threads: [cli] }, 'follow-self')).toMatchObject({ code: 'subscribe-self' });
-        yield* turnsOf(world.runtime.owners).send(lead, projectId, ARCHIVE, undefined, { key: 'archive-sweeper' });
-        yield* Deferred.await(archived);
-        expect((yield* Context.get(world.runtime.owners, ThreadRecords).facts(watched))?.archivedAt).toBeInstanceOf(Date);
-        expect(yield* asThread(cli, 'read_subscriptions', { limit: 2 })).toMatchObject({ threads: [], total: 0 });
-      }),
-    );
-  },
-);
+        },
+      );
+      const read = yield* asThread(cli, 'read_subscriptions', { limit: 2 });
+      expect(followed(read)).toEqual(both);
+      expect((read.threads as readonly { threadId: string; now: unknown }[]).find((row) => row.threadId === lead)?.now).toMatchObject({
+        title: 'lead',
+        life: 'idle',
+        asks: null,
+        failed: null,
+        movedAt: expect.any(String),
+        said: 'The floor stands.',
+      });
+      expect(yield* asThread(cli, 'unsubscribe_threads', { threads: [lead, cli] }, 'unfollow')).toMatchObject({
+        status: 'unsubscribed',
+        unsubscribed: [{ threadId: lead }],
+        unheld: [{ threadId: cli }],
+      });
+      expect(followed(yield* asThread(cli, 'read_subscriptions', { limit: 2 }))).toEqual([
+        { threadId: watched, wakes: ['failed', 'awaiting'] },
+      ]);
+      expect(yield* asThread(cli, 'subscribe_threads', { threads: [cli] }, 'follow-self')).toMatchObject({ code: 'subscribe-self' });
+      yield* turnsOf(world.runtime.owners).send(lead, projectId, ARCHIVE, undefined, { key: 'archive-sweeper' });
+      yield* Deferred.await(archived);
+      expect((yield* Context.get(world.runtime.owners, ThreadRecords).facts(watched))?.archivedAt).toBeInstanceOf(Date);
+      expect(yield* asThread(cli, 'read_subscriptions', { limit: 2 })).toMatchObject({ threads: [], total: 0 });
+    }),
+  );
+});

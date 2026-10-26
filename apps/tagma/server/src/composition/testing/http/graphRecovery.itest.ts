@@ -80,8 +80,6 @@ class Place extends Context.Service<Place, Effect.Success<typeof setup>>()('test
 
 layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: '60 seconds',
 })('graph recovery', (it) => {
   it.effect(
     'the notification action starts a project recovery thread, its graph tool reads the incident, and retry reuses the thread',

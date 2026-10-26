@@ -59,7 +59,7 @@ const createThreadAs = Effect.fnUntraced(function* (threadId: string, act: strin
 const createAs = (threadId: string, act: string | null, body: unknown) =>
   Effect.map(createThreadAs(threadId, act, body), (thread) => thread.bornOf ?? null);
 
-layer(Layer.effect(Place, setup), { excludeTestServices: true, testTimeout: 30_000, timeout: 60_000 })('act HTTP door', (it) => {
+layer(Layer.effect(Place, setup), { excludeTestServices: true })('act HTTP door', (it) => {
   it.effect("a root an agent's shell creates records the calling run and step, and two calls of one step share it", () =>
     Effect.gen(function* () {
       const lead = yield* operatorRoot('the lead');

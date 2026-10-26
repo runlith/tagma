@@ -57,8 +57,6 @@ const staged = Effect.fnUntraced(function* (projectId: number, rootId: RootId) {
 describe.skipIf(!existsSync(LIBRARY))('commit steps over a live execution host', () => {
   layer(Layer.merge(doorFixture(), BunFileSystem.layer), {
     excludeTestServices: true,
-    testTimeout: 60_000,
-    timeout: '600 seconds',
   })('a live host', (it) => {
     it.effect(
       'commit_checkout shapes the index version by the declared steps through the real program road, and the working file takes the same form',
@@ -75,7 +73,6 @@ describe.skipIf(!existsSync(LIBRARY))('commit steps over a live execution host',
           expect(yield* files.readFileString(join(root, 'kept.txt'))).toBe('two\n');
           expect(yield* staged(projectId, rootId)).toBe(0);
         }),
-      120_000,
     );
   });
 });

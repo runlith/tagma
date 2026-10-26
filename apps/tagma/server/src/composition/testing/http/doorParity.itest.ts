@@ -19,7 +19,7 @@ class Place extends Context.Service<Place, Effect.Success<typeof setup>>()('test
 const answerOf = (outcome: Outcome) =>
   outcome.class === 'answer' ? Effect.succeed(outcome.value) : Effect.die(new Error(`the door refused: ${JSON.stringify(outcome)}`));
 
-layer(Layer.effect(Place, setup), { excludeTestServices: true, testTimeout: 60_000, timeout: 60_000 })('door parity', (it) => {
+layer(Layer.effect(Place, setup), { excludeTestServices: true })('door parity', (it) => {
   it.effect('HTTP and native calls carry the same caller, answer and typed refusals', () =>
     Effect.gen(function* () {
       const { world, project, calls, doors } = yield* Place;

@@ -9,8 +9,6 @@ import { suiteGit } from '../suiteGit.js';
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  timeout: '60 seconds',
-  testTimeout: '60 seconds',
 })('graph sync', (it) => {
   it.effect('sync_graph creates the root commit of an unborn team repository and settles its index', () =>
     Effect.gen(function* () {

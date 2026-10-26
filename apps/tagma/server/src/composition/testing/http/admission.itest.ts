@@ -11,8 +11,6 @@ import { socketDoorLayer } from '../socketDoor.js';
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: 60_000,
 })('graph admission', (it) => {
   it.effect('a cold conflicted graph leaves stop and chat operations available while graph reads retain their refusal', () =>
     Effect.gen(function* () {

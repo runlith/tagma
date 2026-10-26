@@ -64,7 +64,7 @@ const answered = Effect.fnUntraced(function* (id: string, input: unknown, projec
   return { status: response.status, body };
 });
 
-layer(Layer.effect(Place, setup), { excludeTestServices: true, testTimeout: 30_000, timeout: 60_000 })('operation HTTP door', (it) => {
+layer(Layer.effect(Place, setup), { excludeTestServices: true })('operation HTTP door', (it) => {
   it.effect('a session standing in no project performs a machine operation and is refused only where a project is needed', () =>
     Effect.gen(function* () {
       const headers = { [MCP_SESSION_HEADER]: 'claude-code:projectless' };

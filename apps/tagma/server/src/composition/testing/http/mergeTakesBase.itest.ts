@@ -44,8 +44,6 @@ const committed = Effect.fnUntraced(function* (checkout: string, message: string
 
 layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: '60 seconds',
 })('merge takes base', (it) => {
   it.effect('a merge whose base changed the graph takes the base into the branch first and is judged by the merged graph', () =>
     Effect.gen(function* () {
@@ -63,15 +61,16 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       expect(gated.status).toBe(200);
       const repository = ((yield* op('read_repositories', {})).body as CoveredRepositoriesAnswer).repositories[0]!.binding;
       const destination = join(yield* files.realPath(yield* world.directory('worktrees')), 'side');
+      const operationId = world.uniqueName();
       expect(
         (yield* op('prepare_worktree', {
-          operationId: 'side',
+          operationId,
           repository,
           destination,
           mode: { kind: 'new-branch', branch: 'side', start: 'HEAD' },
         })).status,
       ).toBe(200);
-      const created = yield* op('create_worktree', { operationId: 'side' });
+      const created = yield* op('create_worktree', { operationId });
       expect(created.status).toBe(200);
       const rootId = (created.body as { operation: { rootId: string } }).operation.rootId;
       const watched = yield* op(

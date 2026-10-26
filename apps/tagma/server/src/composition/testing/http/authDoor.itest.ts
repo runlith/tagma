@@ -123,7 +123,7 @@ const consoleRows = (provider: string) =>
     (accounts as { provider: string; account: string; default: boolean }[]).filter((row) => row.provider === provider),
   );
 
-layer(Layer.effect(Auth, setup), { excludeTestServices: true, testTimeout: 30_000, timeout: 60_000 })('auth HTTP door', (it) => {
+layer(Layer.effect(Auth, setup), { excludeTestServices: true })('auth HTTP door', (it) => {
   it.effect('the auth door completes a loopback sign-in through its owned listener', () =>
     Effect.gen(function* () {
       const { authorize } = yield* Auth;
@@ -148,7 +148,7 @@ layer(Layer.effect(Auth, setup), { excludeTestServices: true, testTimeout: 30_00
           (answer) => (answer.body as { status: string }).status !== 'pending',
           () => new SignInPending({ message: 'the sign-in is still pending' }),
         ),
-        Effect.retry({ schedule: Schedule.spaced('5 millis'), times: 1_000 }),
+        Effect.retry({ schedule: Schedule.spaced('5 millis') }),
       );
       expect(completed.status).toBe(200);
       expect((completed.body as { account: unknown }).account).toMatchObject({

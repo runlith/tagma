@@ -47,8 +47,6 @@ const reading = (projectId: number, rootId: RootId, query: Record<string, string
 
 layer(Layer.effect(Commit, setup).pipe(Layer.provide(doorFixture()), Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 60_000,
 })('commit HTTP door', (it) => {
   it.effect("the door reads one commit's paths from its first parent with renames paired, and pages them on the sha it pinned", () =>
     Effect.gen(function* () {

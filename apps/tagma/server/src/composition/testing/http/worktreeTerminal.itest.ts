@@ -12,8 +12,6 @@ import { suiteGit } from '../suiteGit.js';
 
 layer(Layer.merge(doorFixture(), BunFileSystem.layer), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: 60_000,
 })('worktree beneath a terminal', (it) => {
   it.effect('delete_worktree removes a worktree beneath the folder a terminal stands in, and leaves that terminal running', () =>
     Effect.gen(function* () {

@@ -36,7 +36,7 @@ const bornWith = Effect.fnUntraced(function* (label: string, catalogs?: readonly
   return (created.body as Born).project.id;
 });
 
-layer(doorFixture(), { excludeTestServices: true, testTimeout: 60_000, timeout: 60_000 })('project catalogs', (it) => {
+layer(doorFixture(), { excludeTestServices: true })('project catalogs', (it) => {
   it.effect('a project is born with the catalogs its creator chose, and keeps them once the machine default would add more', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;

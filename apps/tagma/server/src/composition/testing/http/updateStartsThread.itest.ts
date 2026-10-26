@@ -10,8 +10,6 @@ import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: '60 seconds',
 })('worktree update', (it) => {
   it.effect('an update of a worktree no thread stands in starts one there, and that thread takes the next update', () =>
     Effect.gen(function* () {
@@ -29,15 +27,16 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       yield* Context.get(world.runtime.workspace, Coverage).cover(project);
       const repository = ((yield* op('read_repositories', {})).body as CoveredRepositoriesAnswer).repositories[0]!.binding;
       const destination = join(yield* files.realPath(yield* world.directory('worktrees')), 'side');
+      const operationId = world.uniqueName();
       expect(
         (yield* op('prepare_worktree', {
-          operationId: 'side',
+          operationId,
           repository,
           destination,
           mode: { kind: 'new-branch', branch: 'side', start: 'HEAD' },
         })).status,
       ).toBe(200);
-      const rootId = ((yield* op('create_worktree', { operationId: 'side' })).body as { operation: { rootId: string } }).operation.rootId;
+      const rootId = ((yield* op('create_worktree', { operationId })).body as { operation: { rootId: string } }).operation.rootId;
 
       const first = yield* op('update_worktree', { rootId });
       expect(first).toMatchObject({ status: 200, body: { status: 'handed', rootId, base: 'main' } });

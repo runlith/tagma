@@ -62,7 +62,7 @@ it.live('a pending migration is visible while health and operations refuse, then
       ),
     );
     yield* Effect.gen(function* () {
-      yield* Deferred.await(entered).pipe(Effect.timeout('5 seconds'));
+      yield* Deferred.await(entered);
       const status = yield* get('/startup').pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(startupStateSchema)));
       expect(status.startup).toMatchObject({ status: 'starting', step: { name, index: 1, total: 1 }, failure: null });
       const health = yield* get('/health');

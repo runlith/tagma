@@ -58,8 +58,6 @@ const rowsOf = (path: string) =>
 
 layer(Layer.effect(Place, setup).pipe(Layer.provide(doorFixture()), Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 60_000,
 })('change record door', (it) => {
   it.effect('a write recorded under a session grant is that session own typed row, and its commit carries the hunk', () =>
     Effect.gen(function* () {

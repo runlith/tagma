@@ -54,8 +54,6 @@ const previewAs = (threadId: string | null) =>
 
 layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 60_000,
 })('agent world HTTP door', (it) => {
   it.effect('a declaration file is read for a caller whose world is this checkout, and refused for one whose world is not', () =>
     Effect.gen(function* () {

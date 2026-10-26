@@ -106,6 +106,5 @@ describe.skipIf(!existsSync(LIBRARY))('the adopt door over HTTP', () => {
         expect(yield* keyed(foreign).pipe(Effect.provide(world.runtime.graph))).toEqual([]);
         expect(asked).toEqual([project, other]);
       }).pipe(Effect.provide(BunFileSystem.layer)),
-    300_000,
   );
 });

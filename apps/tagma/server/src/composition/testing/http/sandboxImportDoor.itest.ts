@@ -28,7 +28,7 @@ const importing = Effect.fnUntraced(function* (headers: Record<string, string>) 
   return (yield* Effect.promise(() => response.json())) as { code?: string };
 });
 
-layer(Layer.effect(Place, setup), { excludeTestServices: true, testTimeout: 30_000, timeout: 60_000 })('sandbox import HTTP door', (it) => {
+layer(Layer.effect(Place, setup), { excludeTestServices: true })('sandbox import HTTP door', (it) => {
   it.effect('an import by a caller this server records no session for lands nothing, however it arrived', () =>
     Effect.gen(function* () {
       const unplaceable = grantEnvironment('thread-this-server-never-had', testSessionIdentity)[GRANT_VARIABLE] as string;

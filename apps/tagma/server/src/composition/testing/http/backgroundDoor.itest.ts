@@ -127,13 +127,11 @@ const reached = Effect.fnUntraced(
     if ((yield* noticed(runId, toolCallId)) !== undefined) return;
     return yield* new NoticePending({ message: `no notice for ${runId} ${toolCallId}` });
   },
-  (effect) => Effect.retry(effect, { schedule: Schedule.spaced('10 millis'), times: 1_000 }),
+  (effect) => Effect.retry(effect, { schedule: Schedule.spaced('10 millis') }),
 );
 
 layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 60_000,
 })('background operations', (it) => {
   it.effect(
     'an operation asked `background: true` answers the same receipt at the native tool and at /api/op, and each ending reaches the thread once',

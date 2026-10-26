@@ -54,8 +54,6 @@ const answered = (outcome: Outcome) =>
 
 layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: '60 seconds',
 })('reflections from a worktree', (it) => {
   it.effect('thread credentials keep rules local and file, read and answer reflections in main at both doors', () =>
     Effect.gen(function* () {

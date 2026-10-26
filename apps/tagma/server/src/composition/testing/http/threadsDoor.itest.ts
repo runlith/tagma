@@ -68,7 +68,7 @@ type ThreadBody = {
 };
 const thread = (answer: { body: unknown }) => (answer.body as ThreadBody).snapshot.thread;
 
-layer(Layer.effect(Place, setup), { excludeTestServices: true, testTimeout: 60_000, timeout: '30 seconds' })('threads HTTP door', (it) => {
+layer(Layer.effect(Place, setup), { excludeTestServices: true })('threads HTTP door', (it) => {
   it.effect('token ingress adds one catalog subscription account and refuses anything else', () =>
     Effect.gen(function* () {
       const { world } = yield* Place;

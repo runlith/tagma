@@ -100,8 +100,6 @@ const named = Effect.fnUntraced(function* (input: unknown, cwd?: string) {
 
 layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: 60_000,
 })('worktree graph', (it) => {
   it.effect(
     'a thread placed in a worktree is told the law of that worktree’s graph copy and verifies its claims against that worktree’s files',

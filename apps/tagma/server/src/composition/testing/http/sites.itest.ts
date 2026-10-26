@@ -57,8 +57,6 @@ const asked = Effect.fnUntraced(function* (url: string) {
 
 layer(Layer.merge(Layer.effect(Sites, setup), HttpPlatform.layer).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 60_000,
 })('local plugin origins', (it) => {
   it.effect('the local door names each plugin an origin of its own, and only that origin serves the plugin’s views', () =>
     Effect.gen(function* () {
