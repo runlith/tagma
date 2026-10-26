@@ -1,10 +1,10 @@
 import { rename, rm } from 'node:fs/promises';
 import { Data, Effect } from 'effect';
-import { and, asc, eq, gt, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gt } from 'drizzle-orm';
 import { MachineStore, type StoreDb } from '../../platform/contract/service/store.js';
 import type { ThreadEventPayloadValue } from '@runlith/agent/thread/storage/eventLog';
 import { threadBase, threadEvent } from '../store/journal.js';
-import { eventsOf } from './base.js';
+import { type BaseLayer, byPosition, eventArmsOf } from './base.js';
 import { threadResource } from '../store/tables.js';
 import { foldedEntryId, restoredFact } from './foldedFacts.js';
 import { frozen, type Row, type RolloutParts, threadRolloutMeta } from './rolloutMeta.js';
@@ -24,21 +24,24 @@ const PAGE = 128;
 const factsOfThread = Effect.fnUntraced(function* (
   db: StoreDb<'machine'>,
   threadId: string,
-  within: SQL | undefined,
+  layers: readonly BaseLayer[],
+  after: number,
   parts: RolloutParts,
   limit?: number,
 ) {
-  const ordered = db
-    .select({
-      threadId: threadEvent.threadId,
-      position: threadEvent.position,
-      id: threadEvent.id,
-      kind: threadEvent.kind,
-      payload: threadEvent.payload,
-    })
-    .from(threadEvent)
-    .where(within)
-    .orderBy(asc(threadEvent.position));
+  const ordered = byPosition(eventArmsOf(threadId, layers), (where) =>
+    db
+      .select({
+        threadId: threadEvent.threadId,
+        position: threadEvent.position,
+        id: threadEvent.id,
+        kind: threadEvent.kind,
+        payload: threadEvent.payload,
+      })
+      .from(threadEvent)
+      .where(and(where, gt(threadEvent.position, after)))
+      .$dynamic(),
+  );
   const facts = yield* limit === undefined ? ordered : ordered.limit(limit);
   const folded = facts.flatMap((fact) => foldedEntryId(fact.payload) ?? []);
   const bodies = new Map(yield* parts.native.folds.bodies(threadId, folded));
@@ -82,12 +85,7 @@ export const appendThreadRollout = Effect.fnUntraced(function* (input: {
   readonly parts: RolloutParts;
 }) {
   const { db } = yield* MachineStore;
-  const events = yield* factsOfThread(
-    db,
-    input.threadId,
-    and(eq(threadEvent.threadId, input.threadId), gt(threadEvent.position, input.after)),
-    input.parts,
-  );
+  const events = yield* factsOfThread(db, input.threadId, [], input.after, input.parts);
   const rows = yield* Effect.forEach(events, wholeFact);
   if (rows.length > 0) yield* appendRolloutItems(input.path, eventRecords(rows));
   return { records: events.length, through: events.at(-1)?.fact.position ?? input.after };
@@ -143,13 +141,7 @@ const writtenWhole = Effect.fnUntraced(function* (
       ? yield* db.select().from(threadBase).where(eq(threadBase.threadId, input.threadId)).orderBy(asc(threadBase.depth))
       : [];
   while (true) {
-    const events = yield* factsOfThread(
-      db,
-      input.threadId,
-      and(eventsOf(input.threadId, layers), gt(threadEvent.position, through)),
-      input.parts,
-      PAGE,
-    );
+    const events = yield* factsOfThread(db, input.threadId, layers, through, input.parts, PAGE);
     const rows = yield* Effect.forEach(events, wholeFact);
     records += yield* appendRolloutItems(partial, eventRecords(rows)).pipe(Effect.uninterruptible);
     through = events.at(-1)?.fact.position ?? through;

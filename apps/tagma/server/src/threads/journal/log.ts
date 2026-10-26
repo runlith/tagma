@@ -20,7 +20,7 @@ import { RolloutWriterFailed, RolloutWriting } from './rolloutWriter.js';
 import { RestedRollouts } from '../contract/service/rested.js';
 import { conversationAppended } from './conversationIndex.js';
 import { type StoredFailure, stored } from '../../platform/store/crossing.js';
-import { type BaseLayer, eventsOf, journalHead, journalOf, layersOf } from './base.js';
+import { byPosition, type EventArm, eventArmsOf, journalHead, layersOf, merged } from './base.js';
 
 export type JournalRange = { readonly rows: readonly ThreadEventRow[]; readonly through: number; readonly missing: boolean };
 
@@ -38,8 +38,8 @@ const present = <A>(threadId: string, file: A | null): Effect.Effect<A, ThreadSt
 
 const keptKinds = (window: ThreadRecordWindow) => (window.kinds === undefined ? undefined : inArray(threadEvent.kind, [...window.kinds]));
 
-const within = (threadId: string, layers: readonly BaseLayer[], window: ThreadRecordWindow) =>
-  and(eventsOf(threadId, layers), gt(threadEvent.position, window.afterPosition), lte(threadEvent.position, window.head));
+const within = (window: ThreadRecordWindow) =>
+  and(gt(threadEvent.position, window.afterPosition), lte(threadEvent.position, window.head), keptKinds(window));
 
 const whole = <Row extends { readonly payload: ThreadEventPayloadValue; readonly body: ThreadTranscriptEntry | null }>(
   rows: readonly Row[],
@@ -186,10 +186,11 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
       Effect.flatMap(layersOf(db, unit, threadId), (layers) =>
         Effect.map(
           unit.run(
-            facts()
-              .where(and(within(threadId, layers, { ...window, afterPosition: from }), keptKinds(window)))
-              .orderBy(asc(threadEvent.position))
-              .limit(window.limit),
+            byPosition(eventArmsOf(threadId, layers), (where) =>
+              facts()
+                .where(and(where, within({ ...window, afterPosition: from })))
+                .$dynamic(),
+            ).limit(window.limit),
           ),
           (rows) => whole(rows).map((row) => ({ ...row, threadId })),
         ),
@@ -200,13 +201,13 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
       Effect.flatMap(layersOf(db, unit, threadId), (layers) =>
         Effect.map(
           unit.run(
-            db
-              .select({ low: sql<number | null>`min(${threadEvent.position})` })
-              .from(threadEvent)
-              .where(eventsOf(threadId, layers))
+            byPosition(eventArmsOf(threadId, layers), (where) =>
+              db.select({ position: threadEvent.position }).from(threadEvent).where(where).$dynamic(),
+            )
+              .limit(1)
               .get(),
           ),
-          (span) => span?.low ?? null,
+          (first) => first?.position ?? null,
         ),
       ),
     );
@@ -284,10 +285,11 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
         Effect.flatMap(layersOf(db, unit, threadId), (layers) =>
           Effect.map(
             unit.run(
-              facts()
-                .where(and(eventsOf(threadId, layers), gt(threadEvent.position, afterPosition)))
-                .orderBy(asc(threadEvent.position))
-                .limit(limit),
+              byPosition(eventArmsOf(threadId, layers), (where) =>
+                facts()
+                  .where(and(where, gt(threadEvent.position, afterPosition)))
+                  .$dynamic(),
+              ).limit(limit),
             ),
             (rows) => whole(rows).map((row) => ({ ...row, threadId })),
           ),
@@ -310,39 +312,34 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
 
     revisionsAsOf: (threadId: string, window: ThreadRecordWindow, tx?: Unit<'machine'>) => {
       const identity = threadEventIdentity(threadEvent.payload);
-      const latest = (layers: readonly BaseLayer[]) =>
-        db
-          .select({
-            threadId: threadEvent.threadId,
-            position: threadEvent.position,
-            id: threadEvent.id,
-            kind: threadEvent.kind,
-            payload: threadEvent.payload,
-            body: threadEntry.entry,
-            identity: sql<string>`${identity}`.as('identity'),
-          })
-          .from(threadEvent)
-          .leftJoin(threadEntry, foldedBody)
-          .where(
-            and(
-              within(threadId, layers, window),
-              keptKinds(window),
-              sql`${payloadField(threadEvent.payload, 'entry.id')} is not null`,
-              sql`not exists (
+      const lastIn = (arm: EventArm) => sql`not exists (
             select 1 from ${threadEvent} as later
-             where ${journalOf(sql`later.thread_id`, sql`later.position`, threadId, layers)}
+             where ${arm.on(sql`later.thread_id`, sql`later.position`)}
                and later.position > ${threadEvent.position}
                and later.position <= ${window.head}
                and ${payloadField(sql`later.payload`, 'entry.id')} is not null
                and ${threadEventIdentity(sql`later.payload`)} = ${identity}
-          )`,
-            ),
-          )
-          .orderBy(asc(threadEvent.position))
-          .limit(window.limit);
+          )`;
+      const latest = (arms: readonly [EventArm, ...EventArm[]]) =>
+        byPosition(arms, (where) =>
+          db
+            .select({
+              threadId: threadEvent.threadId,
+              position: threadEvent.position,
+              id: threadEvent.id,
+              kind: threadEvent.kind,
+              payload: threadEvent.payload,
+              body: threadEntry.entry,
+              identity: sql<string>`${identity}`.as('identity'),
+            })
+            .from(threadEvent)
+            .leftJoin(threadEntry, foldedBody)
+            .where(and(where, within(window), sql`${payloadField(threadEvent.payload, 'entry.id')} is not null`, ...arms.map(lastIn)))
+            .$dynamic(),
+        ).limit(window.limit);
       const work = (unit: Unit<'machine'>): Effect.Effect<readonly ThreadEventRevision[], StoreFailure> =>
         Effect.flatMap(layersOf(db, unit, threadId), (layers) =>
-          Effect.map(unit.run(latest(layers)), (rows) => whole(rows).map((row) => ({ ...row, threadId }))),
+          Effect.map(unit.run(latest(eventArmsOf(threadId, layers))), (rows) => whole(rows).map((row) => ({ ...row, threadId }))),
         );
       return filed(
         threadId,
@@ -357,16 +354,23 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
         Effect.flatMap(layersOf(db, unit, threadId), (layers) =>
           Effect.map(
             unit.run(
-              db
-                .select({ position: threadEvent.position })
-                .from(threadEvent)
-                .where(
-                  and(
-                    eventsOf(threadId, layers),
-                    sql`(${threadEvent.id} = ${recordId} or ${payloadField(threadEvent.payload, 'entry.id')} = ${recordId} or ${threadEventIdentity(threadEvent.payload)} = ${recordId})`,
-                  ),
-                )
-                .orderBy(desc(sql`case when ${threadEvent.id} = ${recordId} then 1 else 0 end`), desc(threadEvent.position))
+              merged(eventArmsOf(threadId, layers), (where) =>
+                db
+                  .select({
+                    position: threadEvent.position,
+                    named: sql<number>`case when ${threadEvent.id} = ${recordId} then 1 else 0 end`.as('named'),
+                  })
+                  .from(threadEvent)
+                  .where(
+                    and(
+                      where,
+                      sql`(${threadEvent.id} = ${recordId} or ${payloadField(threadEvent.payload, 'entry.id')} = ${recordId} or ${threadEventIdentity(threadEvent.payload)} = ${recordId})`,
+                    ),
+                  )
+                  .$dynamic(),
+              )
+                .orderBy(desc(sql`named`), desc(threadEvent.position))
+                .limit(1)
                 .get(),
             ),
             (row) => row?.position ?? null,

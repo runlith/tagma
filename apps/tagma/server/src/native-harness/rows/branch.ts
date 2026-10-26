@@ -7,7 +7,7 @@ import type { WriteUnit } from '../../platform/contract/service/units.js';
 import { threadEntry } from '../../threads/store/kernel.js';
 import { threadBase, threadEvent, threadRolloutForm } from '../../threads/store/journal.js';
 import { conversationBehind, conversationInherited } from '../../threads/journal/conversationIndex.js';
-import { armsOf, type BaseLayer, eventsOf, journalHead, layersOf, referrersOf } from '../../threads/journal/base.js';
+import { armsOf, type BaseLayer, eventArmsOf, journalHead, layersOf, referrersOf } from '../../threads/journal/base.js';
 import { foldedBody } from '../../threads/journal/foldedFacts.js';
 import { restStamps } from '../../threads/rest.js';
 import { failedAs } from '../../threads/contract/service/failure.js';
@@ -110,16 +110,17 @@ export const makeThreadBranching = Effect.fnUntraced(function* ({ folds }: { rea
           on conflict do nothing`),
       );
     }
-    yield* unit.run(
-      db.run(sql`insert into ${threadEvent} (thread_id, position, id, kind, payload)
-        select ${layer.threadId}, ${threadEvent.position}, ${`${layer.threadId}:`} || ${threadEvent.position}, ${threadEvent.kind},
-          case when ${threadEntry.entry} is null then ${threadEvent.payload}
-            else json_set(json_remove(${threadEvent.payload}, '$.bodyInFold'), '$.entry', json(${threadEntry.entry})) end
-          from ${threadEvent} left join ${threadEntry} on ${foldedBody}
-         where ${threadEvent.threadId} = ${layer.sourceId}
-           and ${threadEvent.position} > ${layer.afterPosition} and ${threadEvent.position} <= ${layer.throughPosition}
-           and ${eventsOf(layer.threadId, layers)}`),
-    );
+    const events = eventArmsOf(layer.threadId, layers).find((candidate) => candidate.layer?.depth === layer.depth);
+    if (events !== undefined) {
+      yield* unit.run(
+        db.run(sql`insert into ${threadEvent} (thread_id, position, id, kind, payload)
+          select ${layer.threadId}, ${threadEvent.position}, ${`${layer.threadId}:`} || ${threadEvent.position}, ${threadEvent.kind},
+            case when ${threadEntry.entry} is null then ${threadEvent.payload}
+              else json_set(json_remove(${threadEvent.payload}, '$.bodyInFold'), '$.entry', json(${threadEntry.entry})) end
+            from ${threadEvent} left join ${threadEntry} on ${foldedBody}
+           where ${events.where}`),
+      );
+    }
     yield* heard(unit, layer, first);
     yield* unit.run(
       db

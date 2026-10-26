@@ -2,7 +2,7 @@ import { describe, expect } from 'bun:test';
 import type { Test } from '@runlith/effect-test';
 import { Data, Effect, type Scope } from 'effect';
 import { ThreadStorageFailed } from '../../persisted';
-import { decodeThreadEventPayload } from '../../events';
+import { decodeThreadEventPayload, threadBranchEvent } from '../../events';
 import { threadEntryIdentity } from '../../ThreadQuery';
 import type { ThreadStorageFactory } from '../storagePort';
 import { INSTANCE, OWNER, SCOPE, appendEvent, folding, settlePatch, started, startInput } from './support';
@@ -125,6 +125,47 @@ export function describeThreadEventLogPort<TTx, TWrite extends TTx = TTx, R = ne
           kinds: ['tool'],
         });
         expect(tools.map((row) => row.id)).toEqual([opening.id, settled.id]);
+      }),
+    );
+    test(
+      'a branch`s revision reading spans its source`s prefix and its own tail, where its own revision supersedes the inherited one',
+      Effect.fnUntraced(function* () {
+        const harness = yield* open();
+        const source = yield* harness.createThread({ ownerId: OWNER, scope: SCOPE });
+        const call = (threadId: string, toolCallId: string, state: string, id: string) => ({
+          threadId,
+          id,
+          kind: 'tool',
+          payload: { entry: { type: 'tool', id: `tool:${toolCallId}`, runId: 'run-1', toolName: 'read', toolCallId, toolState: state } },
+        });
+        yield* appendEvent(harness, call(source.id, 'one', 'input-available', 'one-opened'));
+        yield* appendEvent(harness, {
+          threadId: source.id,
+          id: 'said',
+          kind: 'message',
+          payload: { entry: { type: 'message', id: 'message-1', runId: 'run-1', role: 'user', text: 'go' } },
+        });
+        yield* appendEvent(harness, call(source.id, 'two', 'input-available', 'two-opened'));
+        const child = yield* harness.createThread({ ownerId: OWNER, scope: SCOPE });
+        yield* harness.transitions.writeAt(
+          source.id,
+          Effect.fnUntraced(function* (at) {
+            const base = yield* harness.aggregate.branch(
+              { sourceId: source.id, childId: child.id, entries: { kind: 'all' }, prompts: 'kept' },
+              at.tx,
+            );
+            const cut = threadBranchEvent({ hidden: [], prompts: 'kept', from: base.from, cuts: [] });
+            yield* harness.eventLog.append({ threadId: child.id, id: `${child.id}:birth`, kind: cut.kind, payload: cut.payload }, at.tx);
+          }),
+        );
+        const born = yield* harness.eventLog.headPosition(child.id);
+        const settled = yield* appendEvent(harness, call(child.id, 'one', 'output-available', 'one-settled'));
+        const latest = (head: number) =>
+          Effect.map(harness.eventLog.revisionsAsOf(child.id, { head, afterPosition: 0, limit: 100 }), (rows) =>
+            rows.map((row) => row.identity),
+          );
+        expect(yield* latest(born)).toEqual(['tool:run-1:one', 'message-1', 'tool:run-1:two']);
+        expect(yield* latest(settled.position)).toEqual(['message-1', 'tool:run-1:two', 'tool:run-1:one']);
       }),
     );
     test(

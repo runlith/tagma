@@ -1,5 +1,6 @@
 import { Data, Effect } from 'effect';
 import { and, asc, between, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { MachineStore, type StoreDb, type StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits, type Unit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
@@ -177,27 +178,49 @@ export class ThreadFilesReferenced extends Data.TaggedError('ThreadFilesReferenc
   }
 }
 
-export const journalOf = (thread: SQL, position: SQL, threadId: string, layers: readonly BaseLayer[]): SQL =>
-  layers.length === 0
-    ? sql`${thread} = ${threadId}`
-    : sql`(${thread} = ${threadId} or ${sql.join(
-        layers.map(
-          (layer, at) =>
-            sql`(${thread} = ${layer.sourceId} and ${position} > ${layer.afterPosition} and ${position} <= ${layer.throughPosition}
-              and not exists (select 1 from ${threadEvent} as o where o.thread_id = ${threadId} and o.position = ${position})${sql.join(
-                layers.slice(at + 1).map(
-                  (upper) =>
-                    sql` and not exists (select 1 from ${threadEvent} as o where o.thread_id = ${upper.sourceId} and o.position = ${position}
-                        and o.position > ${upper.afterPosition} and o.position <= ${upper.throughPosition})`,
-                ),
-                sql``,
-              )})`,
-        ),
-        sql` or `,
-      )})`;
+type Place = AnySQLiteColumn | SQL;
 
-export const eventsOf = (threadId: string, layers: readonly BaseLayer[]): SQL =>
-  journalOf(sql`${threadEvent.threadId}`, sql`${threadEvent.position}`, threadId, layers);
+export type EventArm = Arm & { readonly on: (thread: Place, position: Place) => SQL };
+
+const eventArm = (layer: BaseLayer | null, on: EventArm['on']): EventArm => ({
+  layer,
+  on,
+  where: on(threadEvent.threadId, threadEvent.position),
+});
+
+export const eventArmsOf = (threadId: string, layers: readonly BaseLayer[]): readonly [EventArm, ...EventArm[]] => {
+  const carrying = layers.filter((layer) => layer.afterPosition < layer.throughPosition);
+  return [
+    eventArm(null, (thread) => sql`${thread} = ${threadId}`),
+    ...carrying.map((layer, at) =>
+      eventArm(
+        layer,
+        (thread, position) =>
+          sql`${thread} = ${layer.sourceId} and ${position} > ${layer.afterPosition} and ${position} <= ${layer.throughPosition}
+            and not exists (select 1 from ${threadEvent} as o where o.thread_id = ${threadId} and o.position = ${position})${sql.join(
+              carrying.slice(at + 1).map(
+                (upper) =>
+                  sql` and not exists (select 1 from ${threadEvent} as o where o.thread_id = ${upper.sourceId} and o.position = ${position}
+                      and o.position > ${upper.afterPosition} and o.position <= ${upper.throughPosition})`,
+              ),
+              sql``,
+            )}`,
+      ),
+    ),
+  ];
+};
+
+type Mergeable<Q> = { readonly unionAll: (arm: Q) => Q };
+
+type Ordered<Q> = Mergeable<Q> & { readonly orderBy: (order: SQL) => Q };
+
+export const merged = <Q extends Mergeable<Q>>(arms: readonly [EventArm, ...EventArm[]], select: (where: SQL) => Q): Q => {
+  const [own, ...inherited] = arms;
+  return inherited.reduce((union, arm) => union.unionAll(select(arm.where)), select(own.where));
+};
+
+export const byPosition = <Q extends Ordered<Q>>(arms: readonly [EventArm, ...EventArm[]], select: (where: SQL) => Q): Q =>
+  merged(arms, select).orderBy(asc(threadEvent.position));
 
 export const journalHead = (threadId: SQL): SQL => sql`max(
   coalesce((select max(${threadEvent.position}) from ${threadEvent} where ${threadEvent.threadId} = ${threadId}), 0),
