@@ -84,7 +84,10 @@ const prepare = async (): Promise<Bed> => {
   bed.install();
   confineHome();
   const real = { ...runner };
-  mock.module('bun:test', () => ({ ...real, ...Object.fromEntries(REGISTERS.map((name) => [name, registering(real[name])])) }));
+  const wrapped = Object.fromEntries(REGISTERS.map((name) => [name, registering(real[name])]));
+  const required = createRequire(import.meta.url)('bun:test') as typeof runner;
+  Object.assign(required, wrapped);
+  mock.module('bun:test', () => ({ ...real, ...wrapped }));
   return carry(bed);
 };
 

@@ -1,9 +1,12 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { FileRow, WorldRow } from './core/ledger.ts';
+import type { FileVerdict } from './report.ts';
 
 const PRELOAD = join(import.meta.dir, 'bun.ts');
 const WORLDS = join(import.meta.dir, 'worlds.ts');
+const CLI = join(import.meta.dir, 'cli.ts');
 const LAYERS = join(import.meta.dir, '../../effect-test/src/testing.ts');
 const EFFECT = Bun.resolveSync('effect', import.meta.dir);
 
@@ -101,6 +104,61 @@ const alive = (pid: number): boolean => {
     .trim();
   return state !== '' && !state.startsWith('Z');
 };
+
+test('a later file owns the world and processes its layer hook builds before its first test', async () => {
+  const root = join(process.env['TMPDIR']!, `handoff-${crypto.randomUUID()}`);
+  mkdirSync(root);
+  writeFileSync(join(root, 'kinds.ts'), KINDS);
+  writeFileSync(join(root, 'builds'), '');
+  writeFileSync(
+    join(root, 'first.itest.ts'),
+    `import { expect } from 'bun:test';
+import { layer } from ${JSON.stringify(LAYERS)};
+import { Effect, Layer } from ${JSON.stringify(EFFECT)};
+layer(Layer.empty)('first', (it) => {
+  it.effect('warms the layer helper', () => Effect.sync(() => expect(2 + 2).toBe(4)));
+});
+`,
+  );
+  writeFileSync(
+    join(root, 'second.itest.ts'),
+    `import { expect } from 'bun:test';
+import { layer } from ${JSON.stringify(LAYERS)};
+import { Effect } from ${JSON.stringify(EFFECT)};
+import { world } from ${JSON.stringify(WORLDS)};
+import { Sleeper, sleeper } from './kinds.ts';
+layer(world(sleeper, null, { own: 'it owns the sleeper' }), { excludeTestServices: true })('second', (it) => {
+  it.effect('uses the process its own setup built', () => Effect.map(Sleeper, ({ pid }) => expect(process.kill(pid, 0)).toBe(true)));
+});
+`,
+  );
+  const report = join(root, 'report.jsonl');
+  const child = Bun.spawn(['bun', CLI, 'bun', 'test', '--no-isolate', '--parallel=1', './first.itest.ts', './second.itest.ts'], {
+    cwd: root,
+    env: { ...process.env, WORLD_BUILDS: join(root, 'builds'), RUNLITH_TEST_REPORT: report },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  const output = stdout + stderr;
+  expect(code, output).toBe(0);
+  const rows = readFileSync(report, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as FileRow | WorldRow | FileVerdict);
+  const worlds = rows.filter((row): row is WorldRow => row.type === 'world');
+  const files = rows.filter((row): row is FileRow => row.type === 'file');
+  expect(worlds.map((row) => [row.file.split('/').at(-1), row.own])).toEqual([['second.itest.ts', 'it owns the sleeper']]);
+  expect(files.map((row) => [row.file.split('/').at(-1), row.residue, row.children.other.count])).toEqual([
+    ['first.itest.ts', 0, 0],
+    ['second.itest.ts', 0, 1],
+  ]);
+  expect(files[1]!.world.cpu).toBeGreaterThanOrEqual(worlds[0]!.cost.cpu - 0.1);
+  expect(rows.filter((row) => row.type === 'file-verdict').map((row) => [row.file.split('/').at(-1), row.outcome])).toEqual([
+    ['first.itest.ts', 'pass'],
+    ['second.itest.ts', 'pass'],
+  ]);
+});
 
 test('an isolated file that rebuilds a shared world builds it in a home of its own', async () => {
   const root = join(process.env['TMPDIR']!, `isolated-${crypto.randomUUID()}`);
