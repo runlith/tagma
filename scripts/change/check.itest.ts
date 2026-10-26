@@ -1,5 +1,16 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Graph, type Module } from './graph.ts';
@@ -145,6 +156,7 @@ it.live('reads shared and own worlds and the canonical confined home', () => Eff
     writeFileSync(join(external, 'direct'), 'direct');
     writeFileSync(join(external, 'dot'), 'dot');
     writeFileSync(join(external, 'opened'), 'opened');
+    writeFileSync(join(external, 'served'), 'served');
     writeFileSync(
       join(checkout, 'outside.itest.ts'),
       `import { expect, test } from 'bun:test';
@@ -157,6 +169,7 @@ test('external targets and failed reads retain their dependency and error channe
   const handle = await open(join(external, 'opened'), 'r');
   expect(await handle.readFile('utf8')).toBe('opened');
   await handle.close();
+  expect(await new Response(Bun.file(join(external, 'served'))).text()).toBe('served');
   symlinkSync(join(external, 'direct'), join(root, 'outside'));
   expect(readFileSync(join(root, 'outside'), 'utf8')).toBe('direct');
   symlinkSync(join(external, 'nested'), join(root, 'parent'));
@@ -184,11 +197,12 @@ test('external targets and failed reads retain their dependency and error channe
         files: { file: string; action: string }[];
         reports: string;
       };
-      const audit = readFileSync(join(result.reports, '0.audit.jsonl'), 'utf8')
-        .trim()
-        .split('\n')
+      const audit = readdirSync(result.reports)
+        .filter((name) => name.endsWith('.audit.jsonl'))
+        .flatMap((name) => readFileSync(join(result.reports, name), 'utf8').trim().split('\n'))
+        .filter(Boolean)
         .map((line) => JSON.parse(line) as { file: string; reason: string });
-      for (const name of ['opened', 'direct', 'dot', 'missing', 'loop'])
+      for (const name of ['opened', 'served', 'direct', 'dot', 'missing', 'loop'])
         expect(
           audit.some((row) => row.file === 'outside.itest.ts' && row.reason.endsWith(`/${name}`)),
           JSON.stringify({ name, audit, output }),

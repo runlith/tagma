@@ -89,19 +89,10 @@ if (configPath !== undefined) {
   wrap(trace, fs.promises as unknown as Record<string, unknown>, ['readFile', 'open', 'readdir', 'readlink']);
   if (!trace.ours.has(Bun.file)) {
     const file = Bun.file;
-    const tracked = (target: ReturnType<typeof Bun.file>, path: unknown): ReturnType<typeof Bun.file> =>
-      new Proxy(target, {
-        get(target, key) {
-          const value = Reflect.get(target, key, target);
-          if (typeof value !== 'function') return value;
-          return (...args: unknown[]) => {
-            if (['text', 'json', 'arrayBuffer', 'bytes', 'stream'].includes(String(key))) trace.check(path);
-            const result = Reflect.apply(value, target, args);
-            return key === 'slice' ? tracked(result as ReturnType<typeof Bun.file>, path) : result;
-          };
-        },
-      });
-    const traced = ((...args: Parameters<typeof Bun.file>) => tracked(file(...args), args[0])) as typeof Bun.file;
+    const traced = ((...args: Parameters<typeof Bun.file>) => {
+      trace.check(args[0]);
+      return file(...args);
+    }) as typeof Bun.file;
     trace.ours.add(traced);
     Bun.file = traced;
   }
