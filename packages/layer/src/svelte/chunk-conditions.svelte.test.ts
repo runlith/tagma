@@ -1,4 +1,4 @@
-import { flush } from '@runlith/testing/flush';
+import { flush, waitFor } from '@runlith/testing/flush';
 import { flushSync } from 'svelte';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -28,7 +28,7 @@ describe('a condition that arrives inside a chunk', () => {
       { ladder: [Visitor], at: { visitor: Visitor.guest() }, data: 'lazy' },
     );
 
-    await expect.poll(() => trace).toEqual(['start']);
+    await waitFor(() => expect(trace).toEqual(['start']));
     expect(rt.get(Vendor).report()).toBe('reported');
     await rt.unmount();
   });
@@ -77,7 +77,7 @@ describe('a condition that arrives inside a chunk', () => {
       { ladder: [Visitor], at: { visitor: Visitor.user('1') }, data: 'lazy' },
     );
 
-    await expect.poll(() => trace).toEqual(expect.arrayContaining(['start', 'user-start']));
+    await waitFor(() => expect(trace).toEqual(expect.arrayContaining(['start', 'user-start'])));
     expect(rt.get(UserVendor)).toBeInstanceOf(UserVendor);
     await rt.unmount();
   });
@@ -183,7 +183,7 @@ describe('a layer behind Visitor.present("user")', () => {
 
     rt.place('visitor', Visitor.user('1'));
     flushSync();
-    await expect.poll(() => trace).toEqual(['user-start']);
+    await waitFor(() => expect(trace).toEqual(['user-start']));
     expect(loads).toBe(1);
     expect(rt.get(UserVendor)).toBeInstanceOf(UserVendor);
 

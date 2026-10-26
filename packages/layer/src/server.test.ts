@@ -111,13 +111,19 @@ describe('the request app', () => {
 
   it('two requests in flight never see each other', async () => {
     const ids: string[] = [];
-    const request = (id: string, delay: number) =>
-      withRequestApp(id, open(), async () => {
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        ids.push(currentRequestApp()?.id ?? 'none');
-      });
-
-    await Promise.all([request('slow', 20), request('fast', 1)]);
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const slow = withRequestApp('slow', open(), async () => {
+      await released;
+      ids.push(currentRequestApp()?.id ?? 'none');
+    });
+    await withRequestApp('fast', open(), async () => {
+      ids.push(currentRequestApp()?.id ?? 'none');
+    });
+    release();
+    await slow;
 
     expect(ids).toEqual(['fast', 'slow']);
   });

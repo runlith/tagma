@@ -1,5 +1,6 @@
 import { QueryClient, focusManager, notifyManager, onlineManager } from '@tanstack/query-core';
 import { Scope } from '@runlith/layer/Scope';
+import { waitFor } from '@runlith/testing/flush';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AutoAttachProbe from './test-utils/AutoAttachProbe.svelte';
@@ -193,13 +194,13 @@ describe('keyed', () => {
     const r1 = repo.key(1);
     const stop = observe(() => r1.data);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(r1.watch()).toBe('ok-1');
     });
 
     expect(observersCount(queryClient, ['Test', 1])).toBe(1);
     stop();
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['Test', 1])).toBe(0);
     });
   });
@@ -214,7 +215,7 @@ describe('keyed', () => {
 
     const reader = observeDerived(() => repo.key(1).data);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(reader.latest()).toBe('ok-1');
     });
     reader.stop();
@@ -246,11 +247,11 @@ describe('keyed', () => {
       },
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['Test', 1])).toBe(1);
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(r1.watch()).toBe('ok');
     });
 
@@ -260,7 +261,7 @@ describe('keyed', () => {
     unmount(app);
     target.remove();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['Test', 1])).toBe(0);
     });
   });
@@ -310,7 +311,7 @@ describe('keyed', () => {
 
     const first = mountProbe();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(r1.watch()).toBe('ok-1');
     });
     expect(loader).toHaveBeenCalledTimes(1);
@@ -318,18 +319,16 @@ describe('keyed', () => {
     unmount(first.app);
     first.target.remove();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['Test', 1])).toBe(0);
     });
 
-    await new Promise((r) => setTimeout(r, 5));
-
     const second = mountProbe();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(loader).toHaveBeenCalledTimes(2);
     });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(r1.watch()).toBe('ok-2');
     });
 
@@ -662,7 +661,7 @@ describe('keyed', () => {
     const inf = repo.key(1).inf();
     const stop = observe(() => inf.data);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(inf.watch()?.pages.length).toBe(1);
     });
 
@@ -735,7 +734,7 @@ describe('keyed', () => {
     const inf = repo.key(1).inf();
     const stop = observe(() => inf.data);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(inf.watch()?.pages.length).toBe(1);
     });
 
@@ -775,7 +774,7 @@ describe('keyed', () => {
     const stopFirst = observe(() => r1.data);
     const stopSecond = observe(() => r2.data);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(r1.watch()).toBeDefined();
       expect(r2.watch()).toBeDefined();
     });
@@ -785,7 +784,7 @@ describe('keyed', () => {
 
     await repo.all().invalidate({ refetchType: 'all' });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(r1.watch()).not.toBe(before1);
       expect(r2.watch()).not.toBe(before2);
     });
@@ -811,11 +810,11 @@ describe('keyed', () => {
     });
     const queries = [1, 2, 3].map((key) => repo.key(key));
     const stops = queries.map((query) => observe(() => query.data));
-    await vi.waitFor(() => expect(queries.every((query) => query.watch() !== undefined)).toBe(true));
+    await waitFor(() => expect(queries.every((query) => query.watch() !== undefined)).toBe(true));
 
     await repo.where((key) => key !== 2).invalidate();
 
-    await vi.waitFor(() => expect(asked.slice(3).toSorted()).toEqual([1, 3]));
+    await waitFor(() => expect(asked.slice(3).toSorted()).toEqual([1, 3]));
     expect(queries[1]?.watch()).toBe(`2:${asked.indexOf(2) + 1}`);
     expect(queries[1]?.isStale).toBe(false);
     for (const stop of stops) stop();

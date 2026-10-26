@@ -1,6 +1,6 @@
 import { flush } from '@runlith/testing/flush';
 import { flushSync } from 'svelte';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Clock } from '../clock.js';
 import { UnknownServiceError } from '../Graph.js';
@@ -28,8 +28,13 @@ function flip(gate: Gate, on: boolean): void {
   flushSync();
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('a service its condition takes back', () => {
   it('ends its whole lifetime: its timer stops, its signal aborts, its finalizers run', async () => {
+    vi.useFakeTimers();
     const seen = { ticks: 0, aborted: false, finalized: false };
     class Poller extends Service<Poller>()('Lifetime.Poller', { tier: 'app', eager: true }) {
       static *make() {
@@ -45,12 +50,12 @@ describe('a service its condition takes back', () => {
       Layer.when(Gate, (g) => g.on, Poller),
       gate,
     );
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await vi.advanceTimersByTimeAsync(5);
     expect(seen.ticks).toBeGreaterThan(0);
 
     flip(gate, false);
     const atEnd = seen.ticks;
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    await vi.advanceTimersByTimeAsync(10);
 
     expect(seen).toEqual({ ticks: atEnd, aborted: true, finalized: true });
     await rt.unmount();

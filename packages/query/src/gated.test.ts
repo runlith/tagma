@@ -1,5 +1,6 @@
 import { QueryClient, focusManager, notifyManager, onlineManager } from '@tanstack/query-core';
 import { Scope } from '@runlith/layer/Scope';
+import { waitFor } from '@runlith/testing/flush';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { flushSync, mount, unmount } from 'svelte';
@@ -97,11 +98,11 @@ describe('gated', () => {
     enabled.set(true);
     flushSync();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['Test'])).toBe(1);
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(gate.data).toBe('ok');
     });
 
@@ -112,7 +113,7 @@ describe('gated', () => {
     enabled.set(false);
     flushSync();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['Test'])).toBe(0);
     });
 
@@ -163,7 +164,7 @@ describe('gated', () => {
     const probe = mountProbe(gate);
     flushSync();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(gate.data?.pages).toEqual([['p1']]);
     });
 
@@ -172,7 +173,7 @@ describe('gated', () => {
 
     await gate.fetchNextPage();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(gate.data?.pages).toEqual([['p1'], ['p2']]);
     });
 
@@ -196,7 +197,7 @@ describe('gated', () => {
     const probe = mountProbe(gate);
     flushSync();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(gate.data).toBe('v1');
     });
 
@@ -205,14 +206,14 @@ describe('gated', () => {
     id.set(2);
     flushSync();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(gate.data).toBe('v2');
     });
 
     expect(loader).toHaveBeenCalledTimes(2);
     expect(firstQuery).toBe(family.key({ id: 1 }));
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['TestKeyed', { id: 1 }])).toBe(0);
     });
 

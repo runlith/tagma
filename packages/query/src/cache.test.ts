@@ -6,7 +6,7 @@ import { Snapshot } from '@runlith/layer/Snapshot';
 import { Visitor, makePlatform } from '@runlith/layer/testing';
 import { test as mountApp } from '@runlith/layer/svelte/test.svelte';
 import { worldHooks } from '@runlith/layer/svelte/App.svelte';
-import { flush } from '@runlith/testing/flush';
+import { flush, waitFor } from '@runlith/testing/flush';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Cache, Repo } from './repo.js';
@@ -33,7 +33,7 @@ describe('Cache.of', () => {
 
     const loader = vi.fn(async () => 'resumed');
     const pending = client.fetchQuery({ queryKey: ['lease'], queryFn: loader });
-    await vi.waitFor(() => expect(client.getQueryState(['lease'])?.fetchStatus).toBe('paused'));
+    await waitFor(() => expect(client.getQueryState(['lease'])?.fetchStatus).toBe('paused'));
 
     onlineManager.setOnline(true);
     await expect(pending).resolves.toBe('resumed');

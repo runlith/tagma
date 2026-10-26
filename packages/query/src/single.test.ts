@@ -1,5 +1,6 @@
 import { QueryClient, focusManager, notifyManager, onlineManager } from '@tanstack/query-core';
 import { Scope } from '@runlith/layer/Scope';
+import { flush, waitFor } from '@runlith/testing/flush';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AutoAttachProbe from './test-utils/AutoAttachProbe.svelte';
@@ -41,6 +42,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   focusManager.setFocused(true);
   onlineManager.setOnline(true);
 });
@@ -216,14 +218,14 @@ describe('single', () => {
 
     const stop = observe(() => query.data);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(query.watch()).toBe('ok');
     });
 
     expect(observersCount(queryClient, ['Test'])).toBe(1);
 
     stop();
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['Test'])).toBe(0);
     });
   });
@@ -252,11 +254,11 @@ describe('single', () => {
       },
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['Test'])).toBe(1);
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(query.watch()).toBe('ok');
     });
 
@@ -266,7 +268,7 @@ describe('single', () => {
     unmount(app);
     target.remove();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['Test'])).toBe(0);
     });
   });
@@ -314,7 +316,7 @@ describe('single', () => {
 
     const first = mountProbe();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(query.watch()).toBe('ok-1');
     });
     expect(loader).toHaveBeenCalledTimes(1);
@@ -322,18 +324,16 @@ describe('single', () => {
     unmount(first.app);
     first.target.remove();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['Test'])).toBe(0);
     });
 
-    await new Promise((r) => setTimeout(r, 5));
-
     const second = mountProbe();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(loader).toHaveBeenCalledTimes(2);
     });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(query.watch()).toBe('ok-2');
     });
 
@@ -381,7 +381,7 @@ describe('single', () => {
       },
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(loader).toHaveBeenCalledTimes(1);
     });
 
@@ -393,7 +393,7 @@ describe('single', () => {
 
     deferredLoad.resolve('ok');
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(query.watch()).toBe('ok');
     });
 
@@ -443,7 +443,7 @@ describe('single', () => {
       },
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(loader).toHaveBeenCalledTimes(1);
     });
 
@@ -455,7 +455,7 @@ describe('single', () => {
 
     deferredLoad.resolve({ id: 1 });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(inf.watch()?.pages).toEqual([{ id: 1 }]);
     });
 
@@ -509,7 +509,7 @@ describe('single', () => {
       route.set('lobby');
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(loader).toHaveBeenCalledTimes(1);
     });
 
@@ -517,7 +517,7 @@ describe('single', () => {
 
     deferredLoad.resolve('ok');
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(query.watch()).toBe('ok');
     });
 
@@ -527,11 +527,11 @@ describe('single', () => {
       route.set('lobby');
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['Test'])).toBe(1);
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const el = target.querySelector('[data-testid="auto-attach"]');
       expect(el?.textContent).toBe('ok');
     });
@@ -544,21 +544,15 @@ describe('single', () => {
     const queryClient = createQueryClient();
 
     const signals: AbortSignal[] = [];
+    const reply = deferred<string>();
 
     const loader = vi.fn(async ({ signal }: SingleLoaderContext) => {
       signals.push(signal);
       signal.throwIfAborted();
 
       return await new Promise<string>((resolve, reject) => {
-        const timer = setTimeout(() => resolve('ok'), 50);
-        signal.addEventListener(
-          'abort',
-          () => {
-            clearTimeout(timer);
-            reject(new DOMException('Aborted', 'AbortError'));
-          },
-          { once: true },
-        );
+        signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+        reply.promise.then(resolve, reject);
       });
     });
 
@@ -579,16 +573,16 @@ describe('single', () => {
       },
     });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(loader).toHaveBeenCalledTimes(1);
     });
 
-    await new Promise((r) => setTimeout(r, 25));
-
+    await waitFor(() => expect(target.querySelector('[data-testid="loading"]')).not.toBeNull());
     expect(loader).toHaveBeenCalledTimes(1);
     expect(signals[0]?.aborted).toBe(false);
 
-    await vi.waitFor(() => {
+    reply.resolve('ok');
+    await waitFor(() => {
       expect(query.watch()).toBe('ok');
     });
 
@@ -880,7 +874,7 @@ describe('single', () => {
     const inf = query.inf();
     const stop = observe(() => inf.data);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(inf.watch()?.pages.length).toBe(1);
     });
 
@@ -910,7 +904,7 @@ describe('single', () => {
 
     const stop = observe(() => query.data);
 
-    await new Promise((r) => setTimeout(r, 50));
+    await flush();
     expect(loader).toHaveBeenCalledTimes(0);
     expect(query.watch()).toBeUndefined();
 
@@ -918,6 +912,7 @@ describe('single', () => {
   });
 
   it('refetchInterval refetches periodically', async () => {
+    vi.useFakeTimers();
     const queryClient = createQueryClient();
     let counter = 0;
     const loader = vi.fn(async () => {
@@ -939,13 +934,11 @@ describe('single', () => {
 
     const stop = observe(() => query.data);
 
-    await vi.waitFor(() => {
-      expect(query.watch()).toBeDefined();
-    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(query.watch()).toBe(1);
 
-    await new Promise((r) => setTimeout(r, 120));
-
-    expect(loader.mock.calls.length).toBeGreaterThan(1);
+    await vi.advanceTimersByTimeAsync(25);
+    expect(query.watch()).toBe(2);
     stop();
   });
 
@@ -971,14 +964,14 @@ describe('single', () => {
 
     const stop = observe(() => query.data);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(query.watch()).toBe(1);
     });
 
     focusManager.setFocused(false);
     focusManager.setFocused(true);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(query.watch()).toBe(2);
     });
 
@@ -1007,14 +1000,14 @@ describe('single', () => {
 
     const stop = observe(() => query.data);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(query.watch()).toBe(1);
     });
 
     onlineManager.setOnline(false);
     onlineManager.setOnline(true);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(query.watch()).toBe(2);
     });
 
@@ -1045,7 +1038,7 @@ describe('single', () => {
     const inf = query.inf();
     const stop = observe(() => inf.data);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(inf.watch()?.pages.length).toBe(1);
     });
 
@@ -1172,7 +1165,7 @@ describe('query lifecycle regressions', () => {
     onlineManager.setOnline(false);
     const promise = query.loadOrThrow();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(queryClient.getQueryState(['OfflineLoad'])?.fetchStatus).toBe('paused');
     });
     expect(loader).not.toHaveBeenCalled();
@@ -1197,7 +1190,7 @@ describe('query lifecycle regressions', () => {
     onlineManager.setOnline(false);
     const promise = query.loadOrThrow();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(queryClient.getQueryState(['OfflineInfiniteLoad', 'inf', null, 1])?.fetchStatus).toBe('paused');
     });
     expect(loader).not.toHaveBeenCalled();
@@ -1225,7 +1218,7 @@ describe('query lifecycle regressions', () => {
     onlineManager.setOnline(false);
     const stopBase = observe(() => base.data);
     const stopInf = observe(() => inf.data);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(queryClient.getQueryState(['DetachedPaused'])?.fetchStatus).toBe('paused');
       expect(queryClient.getQueryState(['DetachedPausedInf', 'inf', null, 1])?.fetchStatus).toBe('paused');
     });
@@ -1235,14 +1228,14 @@ describe('query lifecycle regressions', () => {
 
     onlineManager.setOnline(true);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(base.watch()).toBe('static-online');
       expect(inf.watch()?.pages).toEqual(['infinite-online']);
     });
     expect(staticLoader).toHaveBeenCalledTimes(1);
     expect(infiniteLoader).toHaveBeenCalledTimes(1);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(observersCount(queryClient, ['DetachedPaused'])).toBe(0);
       expect(observersCount(queryClient, ['DetachedPausedInf', 'inf', null, 1])).toBe(0);
     });
@@ -1273,21 +1266,21 @@ describe('query lifecycle regressions', () => {
 
     const firstStop = observe(() => staticQuery.data);
     const firstInfStop = observe(() => infiniteQuery.data);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(staticQuery.watch()).toBe('v1');
       expect(infiniteQuery.watch()?.pages).toEqual(['v1']);
     });
     firstStop();
     firstInfStop();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(queryClient.getQueryState(['StaticGc'])).toBeUndefined();
       expect(queryClient.getQueryState(['InfiniteGc', 'inf', null, 1])).toBeUndefined();
     });
 
     const secondStop = observe(() => staticQuery.data);
     const secondInfStop = observe(() => infiniteQuery.data);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(staticQuery.watch()).toBe('v2');
       expect(infiniteQuery.watch()?.pages).toEqual(['v2']);
     });
@@ -1325,7 +1318,7 @@ describe('query lifecycle regressions', () => {
 
     const stopBase = observe(() => base.data);
     const stopInf = observe(() => inf.data);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(base.watch()).toBe('s1');
       expect(inf.watch()?.pages).toEqual(['i1']);
     });
@@ -1333,7 +1326,7 @@ describe('query lifecycle regressions', () => {
     queryClient.removeQueries({ queryKey: ['ActiveRebind'], exact: true });
     queryClient.removeQueries({ queryKey: ['ActiveInfRebind', 'inf', null, 1], exact: true });
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(base.watch()).toBe('s2');
       expect(inf.watch()?.pages).toEqual(['i2']);
     });

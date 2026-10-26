@@ -1,5 +1,6 @@
 import { QueryClient, notifyManager } from '@tanstack/query-core';
 import { Scope } from '@runlith/layer/Scope';
+import { waitFor } from '@runlith/testing/flush';
 import { describe, expect, it, vi } from 'vitest';
 
 import { observe } from './test-utils/observe.svelte.js';
@@ -264,7 +265,7 @@ describe('inf: live', () => {
       live: true,
     }).inf();
 
-    await vi.waitFor(() => expect(feed.watch()?.pages).toEqual([{ page: 1 }]));
+    await waitFor(() => expect(feed.watch()?.pages).toEqual([{ page: 1 }]));
     await scope.close();
   });
 });

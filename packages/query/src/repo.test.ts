@@ -4,7 +4,7 @@ import { Service } from '@runlith/layer/key';
 import { Scope } from '@runlith/layer/Scope';
 import { Visitor } from '@runlith/layer/testing';
 import { test as mountApp } from '@runlith/layer/svelte/test.svelte';
-import { flush } from '@runlith/testing/flush';
+import { flush, waitFor } from '@runlith/testing/flush';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Cache, Repo } from './repo.js';
@@ -156,12 +156,12 @@ describe('an operation taken into a scope', () => {
     const take = repo.takeReload.in(frame);
 
     const first = take.run({ note: 'held' });
-    await vi.waitFor(() => expect(sent).toEqual(['held']));
+    await waitFor(() => expect(sent).toEqual(['held']));
     expect(await take.run({ note: 'next' })).toEqual({ taken: 'next' });
     expect(await first).toBeUndefined();
 
     const flying = take.run({ note: 'held' });
-    await vi.waitFor(() => expect(sent).toHaveLength(3));
+    await waitFor(() => expect(sent).toHaveLength(3));
     expect(await repo.takeReload.in(Scope.make('other')).run({ note: 'beside' })).toEqual({ taken: 'beside' });
     expect(take.pending).toBe(true);
 

@@ -1,4 +1,4 @@
-import { flush } from '@runlith/testing/flush';
+import { flush, waitFor } from '@runlith/testing/flush';
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, expect, it } from 'vitest';
 
@@ -37,7 +37,7 @@ describe('deferred service in a real component tree', () => {
 
     app.state.open = true;
     flushSync();
-    await expect.poll(() => app.found()).toHaveLength(2);
+    await waitFor(() => expect(app.found()).toHaveLength(2));
     const [one, two] = app.found();
     expect(one).toMatch(/^hit:book#\d+$/);
     expect(one).toBe(two);
@@ -50,14 +50,14 @@ describe('deferred service in a real component tree', () => {
     const app = makeApp({ open: true, session: Visitor.user('1') });
     flushSync();
     expect(app.target.querySelector('[data-testid="pending"]')).not.toBeNull();
-    await expect.poll(() => app.found()).toHaveLength(1);
+    await waitFor(() => expect(app.found()).toHaveLength(1));
     expect(app.found()[0]).toMatch(/^hit:book#\d+$/);
     await app.unmount();
   });
 
   it('a session recycle drops the instance but never refetches the chunk', async () => {
     const app = makeApp({ open: true, session: Visitor.user('1') });
-    await expect.poll(() => app.found()).toHaveLength(1);
+    await waitFor(() => expect(app.found()).toHaveLength(1));
     const first = app.found()[0];
     const loadsAfterFirst = probe.loaded;
 
@@ -68,7 +68,7 @@ describe('deferred service in a real component tree', () => {
 
     app.state.open = true;
     flushSync();
-    await expect.poll(() => app.found()).toHaveLength(1);
+    await waitFor(() => expect(app.found()).toHaveLength(1));
     expect(app.found()[0]).not.toBe(first);
     expect(probe.loaded).toBe(loadsAfterFirst);
     await app.unmount();

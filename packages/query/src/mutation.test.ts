@@ -1,5 +1,6 @@
 import { QueryClient, notifyManager, onlineManager } from '@tanstack/query-core';
 import { Scope } from '@runlith/layer/Scope';
+import { waitFor } from '@runlith/testing/flush';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { mutation } from './mutation.svelte.js';
@@ -86,7 +87,7 @@ describe('mutation', () => {
     onlineManager.setOnline(false);
     const resultPromise = m.run();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const cachedMutation = queryClient.getMutationCache().getAll()[0];
       expect(cachedMutation?.state.status).toBe('pending');
       expect(cachedMutation?.state.isPaused).toBe(true);
@@ -303,7 +304,7 @@ describe('mutation', () => {
 
     const p1 = m.run('slow');
     const p2 = m.run('fast');
-    await vi.waitFor(() => expect(started).toEqual(['slow', 'fast']));
+    await waitFor(() => expect(started).toEqual(['slow', 'fast']));
     fast.resolve('fast-ok');
     await expect(p2).resolves.toBe('fast-ok');
     expect(m.pending).toBe(true);

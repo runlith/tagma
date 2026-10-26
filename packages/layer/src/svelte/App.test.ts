@@ -1,5 +1,6 @@
 import { flush } from '@runlith/testing/flush';
-import { describe, expect, it } from 'vitest';
+import { flushSync } from 'svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Clock } from '../clock.js';
 import {
@@ -91,6 +92,10 @@ class Data extends Service<Data>()('Data', { tier: 'user' }) {
 
 const Manifest = Layer.mergeAll(Repo, Profile, Teaser, Behaviour, Data);
 const boot = Layer.of(Boot, new Boot('acme'));
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('App', () => {
   it('observes only existing rung scopes under their parent without opening them', async () => {
@@ -232,6 +237,7 @@ describe('App', () => {
   });
 
   it('starts eager behaviour at session open and ends it with the session', async () => {
+    vi.useFakeTimers();
     built.length = 0;
     const rt = mountApp(Manifest, boot, { ladder: [Visitor], at: { visitor: Visitor.user('1') }, data: 'lazy' });
     expect(built).toEqual(['behaviour:visitor:user:1']);
@@ -239,23 +245,25 @@ describe('App', () => {
     const userScope = rt.app.scopeOf('visitor');
 
     rt.place('visitor', Visitor.guest());
-    await flush();
+    flushSync();
+    await rt.app.adopt();
     expect(userScope.closed).toBe(true);
     expect(userScope.signal.aborted).toBe(true);
     expect(built).toContain('behaviour-finalizer:true');
 
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await vi.advanceTimersByTimeAsync(50);
     expect(behaviour.ticks).toEqual([]);
     expect(rt.app.scopeOf('visitor').kind).toBe('guest');
     await rt.unmount();
   });
 
   it('a session timer fires while the session is open', async () => {
+    vi.useFakeTimers();
     built.length = 0;
     const rt = mountApp(Manifest, boot, { ladder: [Visitor], at: { visitor: Visitor.user('1') }, data: 'lazy' });
     const behaviour = rt.get(Behaviour);
 
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await vi.advanceTimersByTimeAsync(50);
     expect(behaviour.ticks).toHaveLength(1);
     await rt.unmount();
   });

@@ -1,4 +1,4 @@
-import { flush } from '@runlith/testing/flush';
+import { flush, waitFor } from '@runlith/testing/flush';
 import { flushSync, mount, unmount } from 'svelte';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -39,7 +39,7 @@ describe('a feature behind a flag that arrives with boot', () => {
 
     app.boot.data = { feature: true };
     flushSync();
-    await expect.poll(() => trace).toEqual(['start']);
+    await waitFor(() => expect(trace).toEqual(['start']));
     expect(app.flag()).toBe('on');
 
     await app.unmount();
@@ -47,7 +47,7 @@ describe('a feature behind a flag that arrives with boot', () => {
 
   it('turning the flag off closes what the layer built, and turning it on again reuses the chunk', async () => {
     const app = makeApp(true);
-    await expect.poll(() => trace).toEqual(['start']);
+    await waitFor(() => expect(trace).toEqual(['start']));
     const loadsAfterFirst = chunkLoads.count;
 
     app.boot.data = { feature: false };
@@ -57,7 +57,7 @@ describe('a feature behind a flag that arrives with boot', () => {
 
     app.boot.data = { feature: true };
     flushSync();
-    await expect.poll(() => trace).toEqual(['start', 'stop', 'start']);
+    await waitFor(() => expect(trace).toEqual(['start', 'stop', 'start']));
     expect(chunkLoads.count).toBe(loadsAfterFirst);
 
     await app.unmount();
@@ -65,7 +65,7 @@ describe('a feature behind a flag that arrives with boot', () => {
 
   it('unmounting stops the feature exactly once', async () => {
     const app = makeApp(true);
-    await expect.poll(() => trace).toEqual(['start']);
+    await waitFor(() => expect(trace).toEqual(['start']));
 
     await app.unmount();
     await flush();
