@@ -7,7 +7,7 @@ import { CapacityBusy, HoldStalled } from '@runlith/held/failures';
 import { Capacity } from '../../platform/contract/service/capacity.js';
 import { CheckoutRows } from '../../workspace/contract/service/checkouts.js';
 import { OPEN_FOR_CALL, OPEN_IN_BACKGROUND } from '../contract/service/lanes.js';
-import { type Copies, type Copy, CopyKeeping, makeCopies } from './copies.js';
+import { type Copies, type Copy, CopyKeeping, makeCopies, sameRegistration } from './copies.js';
 import { makePlaces, type Placed } from './places.js';
 import { MachineStore, GraphStore } from '../../platform/contract/service/store.js';
 import { meta } from '../store/tables.js';
@@ -175,9 +175,7 @@ export const makeGraphPool = Effect.gen(function* () {
     copies.current(copy) &&
     copy.graph.projectId === placed.row.id &&
     copy.detachedAt === placed.detachedAt &&
-    copy.graph.project.repoKey === placed.row.repoKey &&
-    copy.graph.project.rootPath === placed.row.rootPath &&
-    copy.graph.project.storage === placed.row.storage;
+    sameRegistration(copy.graph.project, placed.row);
 
   const viewOf = (copy: Copy, placed: Placed): ServedGraph =>
     placed.readOnly !== undefined && copy.detachedAt === null
@@ -282,7 +280,14 @@ export const makeGraphPool = Effect.gen(function* () {
       const generation = copies.generation(aim.projectId);
       const epoch = places.epoch(aim.projectId);
       const placed = yield* place(aim);
-      const admitted = yield* copies.admitted(placed.row.id);
+      const admitted = yield* copies.admitted(placed.row.id, placed.row);
+      if (admitted === null) {
+        yield* copies.exclusive(
+          placed.row.id,
+          Effect.suspend(() => (copies.outlived(placed.row.id, placed.row) ? dropAll(placed.row.id) : Effect.void)),
+        );
+        continue;
+      }
       if (admitted.generation !== generation) {
         admitted.done();
         continue;

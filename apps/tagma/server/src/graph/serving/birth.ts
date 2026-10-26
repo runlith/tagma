@@ -311,7 +311,7 @@ export const projectsLayer = (
         Context.add(GraphScopes, graphScopes({ db, reads, git, projects, blockRows, blockNames, byId })),
         Context.add(
           ProjectPolicy,
-          servedPolicy({ db, reads, act, blockRows, servesFrom, resolveRef: rows.resolveRef, changed, policyChanged, subscribe }),
+          servedPolicy({ db, reads, act, servesFrom, resolveRef: rows.resolveRef, changed, policyChanged, subscribe }),
         ),
       );
     }),

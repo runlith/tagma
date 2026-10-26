@@ -27,11 +27,16 @@ export type Copy = {
   waking: boolean;
 };
 
+type Registration = HeldGraph['project'];
+
 type Project = {
   generation: number;
   changing: Deferred.Deferred<void> | null;
-  readonly openings: Set<Deferred.Deferred<void>>;
+  readonly openings: Map<Deferred.Deferred<void>, Registration>;
 };
+
+export const sameRegistration = (left: Registration, right: Registration): boolean =>
+  left.repoKey === right.repoKey && left.rootPath === right.rootPath && left.storage === right.storage;
 
 export type Opening = { readonly generation: number; readonly done: () => void };
 
@@ -61,7 +66,7 @@ export const makeCopies = (input: {
   const projectOf = (projectId: number): Project => {
     const known = projects.get(projectId);
     if (known !== undefined) return known;
-    const made: Project = { generation: 0, changing: null, openings: new Set() };
+    const made: Project = { generation: 0, changing: null, openings: new Map() };
     projects.set(projectId, made);
     return made;
   };
@@ -136,11 +141,16 @@ export const makeCopies = (input: {
   const current = (copy: Copy): boolean =>
     standing.get(copy.treeRoot) === copy && projectOf(copy.graph.projectId).generation === copy.generation;
 
-  const admitted = Effect.fnUntraced(function* (projectId: number) {
+  const outlived = (projectId: number, registration: Registration): boolean =>
+    [...projectOf(projectId).openings.values()].some((opening) => !sameRegistration(opening, registration)) ||
+    [...standing.values()].some((copy) => copy.graph.projectId === projectId && !sameRegistration(copy.graph.project, registration));
+
+  const admitted = Effect.fnUntraced(function* (projectId: number, registration: Registration) {
     const project = projectOf(projectId);
     while (project.changing !== null) yield* Deferred.await(project.changing);
+    if (outlived(projectId, registration)) return null;
     const done = Deferred.makeUnsafe<void>();
-    project.openings.add(done);
+    project.openings.set(done, registration);
     const opening: Opening = {
       generation: project.generation,
       done: () => {
@@ -159,7 +169,7 @@ export const makeCopies = (input: {
         const mark = Deferred.makeUnsafe<void>();
         project.changing = mark;
         return yield* Effect.gen(function* () {
-          for (const opening of [...project.openings]) yield* restore(Deferred.await(opening));
+          for (const opening of [...project.openings.keys()]) yield* restore(Deferred.await(opening));
           return yield* restore(act);
         }).pipe(
           Effect.ensuring(
@@ -193,6 +203,7 @@ export const makeCopies = (input: {
     generation: (projectId: number): number => projectOf(projectId).generation,
     changing: (projectId: number): boolean => projectOf(projectId).changing !== null,
     current,
+    outlived,
     lapsed,
     use,
     hold,

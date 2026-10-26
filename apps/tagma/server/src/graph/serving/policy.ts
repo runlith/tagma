@@ -10,7 +10,6 @@ import type { Projects } from '../../projects/contract/service/registry.js';
 import type { ProjectChanges } from '../../projects/contract/service/changes.js';
 import { ProjectPolicy, type ProjectPolicyChanged } from '../contract/service/serving.js';
 import type { Act } from '../contract/service/acts.js';
-import type { BlockRows } from '../acts/rows.js';
 import { transactionUnit } from '../acts/state.js';
 import { GateRefusal, type OpenRefusal } from '../../platform/contract/wire/refusal.js';
 import type { readsOf } from '../acts/reads.js';
@@ -78,14 +77,13 @@ export const servedPolicy = (input: {
   readonly db: StoreDb<'graph'>;
   readonly reads: ReturnType<typeof readsOf>;
   readonly act: Act['Service'];
-  readonly blockRows: BlockRows['Service'];
   readonly servesFrom: ProjectPolicy['Service']['servesFrom'];
   readonly resolveRef: ReturnType<typeof policyRows>['resolveRef'];
   readonly changed: ReturnType<typeof policyChangesOf>['changed'];
   readonly policyChanged: ReturnType<typeof policyChangesOf>['policyChanged'];
   readonly subscribe: ReturnType<typeof policyChangesOf>['subscribe'];
 }) => {
-  const { db, reads, act, blockRows, resolveRef, changed, policyChanged } = input;
+  const { db, reads, act, resolveRef, changed, policyChanged } = input;
   return ProjectPolicy.of({
     subscribe: input.subscribe,
     read: reads(
@@ -103,7 +101,7 @@ export const servedPolicy = (input: {
         Effect.gen(function* () {
           yield* writePolicy(db, current.id, { [input.field]: input.value });
           const row: ProjectPolicyRow = { ...current, [input.field]: input.value };
-          yield* act.record('project_set', (yield* blockRows.rootBlockOf(current.id)).id, {
+          yield* act.record('project_set', null, {
             projectId: current.id,
             field: input.field,
             from: current[input.field],
