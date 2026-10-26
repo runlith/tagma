@@ -16,7 +16,7 @@ const git = gitLayer.pipe(Layer.provide(host));
 test('non-UTF-8 selected source refuses the program producer before a checker can judge it', async () => {
   const root = mkdtempSync(join(tmpdir(), 'law-input-'));
   const command = (args: readonly string[], input?: string | Uint8Array) => {
-    const result = spawnSync('git', ['-C', root, ...args], { input, timeout: 10_000 });
+    const result = spawnSync('git', ['-C', root, ...args], { input });
     if (result.error !== undefined) throw result.error;
     if (result.status !== 0) throw new Error(result.stderr.toString());
     return result.stdout.toString().trim();

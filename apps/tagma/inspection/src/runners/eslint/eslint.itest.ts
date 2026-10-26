@@ -79,7 +79,6 @@ const lint = (
     cwd,
     input: plan.success.stdin,
     encoding: 'utf8',
-    timeout: 30_000,
   });
   return readEslint(input, sides, plan.success, { exitCode: ending.status ?? -1, stdout: ending.stdout });
 };

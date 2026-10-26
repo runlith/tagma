@@ -93,4 +93,4 @@ test('the runner judges effect-style and migrations of the programs module in on
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-}, 30_000);
+});

@@ -70,7 +70,7 @@ const lint = (
     ...Object.fromEntries(plan.success.sources.map((file) => [file.path, file.text])),
     [plan.success.config.path]: plan.success.config.text,
   });
-  const ending = spawnSync('bun', ['--no-install', cli, ...plan.success.args], { cwd, encoding: 'utf8', timeout: 30_000 });
+  const ending = spawnSync('bun', ['--no-install', cli, ...plan.success.args], { cwd, encoding: 'utf8' });
   return readOxlint(input, sides, plan.success, { exitCode: ending.status ?? -1, stdout: ending.stdout });
 };
 
@@ -135,7 +135,7 @@ test('one oxlint process reads both sides, keyed by check and file with the coun
 });
 
 test('every rule oxlint lists is bound by the id it reports, and an alias it would rename is refused naming that id', () => {
-  const listed = spawnSync('bun', ['--no-install', cli, '--rules', '--format=json'], { encoding: 'utf8', timeout: 30_000 });
+  const listed = spawnSync('bun', ['--no-install', cli, '--rules', '--format=json'], { encoding: 'utf8' });
   const shown: Readonly<Record<string, string>> = { jsx_a11y: 'jsx-a11y', react_perf: 'react-perf', nextjs: 'next' };
   const ids = (JSON.parse(listed.stdout) as { scope: string; value: string }[])
     .filter((rule) => rule.scope !== 'import')
