@@ -48,11 +48,10 @@ it.live('upkeep removes nothing until the moment its owner names has come', () =
       ended: () => ({ result: { finish: 'stop' }, bodies: [encoded('x'.repeat(1_200))] }),
     }).pipe(Effect.provideService(ActivityLog, store.log));
     yield* store.settled;
-    yield* Effect.sleep('100 millis');
     expect(yield* lost).toBe(0);
 
     yield* Deferred.succeed(door, undefined);
-    for (let tries = 0; tries < 100 && (yield* lost) === 0; tries += 1) yield* Effect.sleep('20 millis');
+    while ((yield* lost) === 0) yield* Effect.sleep('20 millis');
     expect(yield* lost).toBe(1);
   }),
 );

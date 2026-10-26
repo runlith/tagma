@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { it } from '@runlith/effect-test';
 import { heldPool } from '@runlith/sqlite-process/testing/pool';
-import { Duration, Effect, Layer } from 'effect';
+import { Deferred, Duration, Effect, Layer } from 'effect';
 import { TestClock } from 'effect/testing';
 import { activity, note } from '../Activity';
 import { activityKind } from '../fact';
@@ -23,7 +23,12 @@ const place = Effect.acquireRelease(
   (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true })),
 );
 
-const storeAt = (root: string, keeping: Keeping = { hours: 24, bodiesMaxBytes: 24 * 1024 }, pendingMax?: number) =>
+const storeAt = (
+  root: string,
+  keeping: Keeping = { hours: 24, bodiesMaxBytes: 24 * 1024 },
+  pendingMax?: number,
+  upkeepAfter?: Effect.Effect<void>,
+) =>
   Layer.unwrap(
     Effect.map(heldPool, (processes) =>
       Layer.orDie(
@@ -32,6 +37,7 @@ const storeAt = (root: string, keeping: Keeping = { hours: 24, bodiesMaxBytes: 2
           bodies: join(root, 'bodies'),
           migrations: MIGRATIONS,
           pendingMax,
+          upkeepAfter,
           keeping: () => keeping,
           processes,
           projectsOf: (threads) => Effect.succeed(new Map(threads.map((thread) => [thread, thread === 'thread-a' ? 7 : null]))),
@@ -40,7 +46,8 @@ const storeAt = (root: string, keeping: Keeping = { hours: 24, bodiesMaxBytes: 2
     ),
   );
 
-const store = (keeping?: Keeping, pendingMax?: number) => Layer.unwrap(Effect.map(place, (root) => storeAt(root, keeping, pendingMax)));
+const store = (keeping?: Keeping, pendingMax?: number, upkeepAfter?: Effect.Effect<void>) =>
+  Layer.unwrap(Effect.map(place, (root) => storeAt(root, keeping, pendingMax, upkeepAfter)));
 
 const pause = (ms: number) => TestClock.withLive(Effect.sleep(ms));
 
@@ -285,38 +292,33 @@ it.live('an activity left open by an earlier process is ended orphaned when its 
   }),
 );
 
-it.live('a retained request keeps its required base when the retention cutoff crosses the middle of its hour', () =>
-  Effect.gen(function* () {
+it.live('a retained request keeps its required base when the retention cutoff crosses the middle of its hour', () => {
+  const upkeep = Deferred.makeUnsafe<void>();
+  return Effect.gen(function* () {
     yield* asked(['base'], 'old');
     yield* TestClock.adjust(Duration.minutes(30));
     yield* asked(['base', 'retained'], 'kept');
     const latest = yield* rows({ paths: ['id'], order: { by: 'openedAt', dir: 'desc' }, limit: 1 });
     const id = String(latest.rows[0]!.values.id);
     yield* TestClock.adjust(Duration.minutes(50));
-    for (let turn = 0; turn < 20; turn += 1) {
-      const page = yield* rows({ paths: ['id'] });
-      if (page.total === 1) break;
-      yield* TestClock.adjust(Duration.minutes(5));
-      yield* pause(10);
-    }
+    yield* Deferred.succeed(upkeep, undefined);
+    while ((yield* rows({ paths: ['id'] })).total !== 1) yield* pause(10);
     const page = yield* rows({ paths: ['id'] });
     expect(page.rows.map((row) => row.values.id)).toEqual([id]);
     const request = yield* Effect.flatMap(ActivityRecord, (record) => record.body(id, 1, 1 << 20));
     expect(JSON.parse(request.text).messages).toEqual(['base', 'retained']);
-  }).pipe(Effect.provide(store({ hours: 1, bodiesMaxBytes: 4000 }))),
-);
+  }).pipe(Effect.provide(store({ hours: 1, bodiesMaxBytes: 4000 }, undefined, Deferred.await(upkeep))));
+});
 
-it.live('a write racing bucket eviction is either readable or explicitly evicted, never written with a missing file', () =>
-  Effect.gen(function* () {
+it.live('a write racing bucket eviction is either readable or explicitly evicted, never written with a missing file', () => {
+  const upkeep = Deferred.makeUnsafe<void>();
+  return Effect.gen(function* () {
     yield* asked(['first'], 'x'.repeat(300));
     yield* asked(['first', 'second'], 'x'.repeat(300));
-    yield* Effect.andThen(TestClock.adjust(Duration.minutes(5)), asked(['first', 'second', 'third'], 'x'.repeat(300)));
-    for (let turn = 0; turn < 20; turn += 1) {
-      const page = yield* rows({ paths: ['id', 'bodies'], order: { by: 'openedAt', dir: 'desc' } });
-      if (page.lost.some((loss) => loss.cause === 'ceiling')) break;
-      yield* TestClock.adjust(Duration.minutes(5));
-      yield* pause(10);
-    }
+    yield* TestClock.adjust(Duration.minutes(5));
+    yield* Deferred.succeed(upkeep, undefined);
+    yield* asked(['first', 'second', 'third'], 'x'.repeat(300));
+    while (!(yield* rows({ paths: ['id', 'bodies'] })).lost.some((loss) => loss.cause === 'ceiling')) yield* pause(10);
     const page = yield* rows({ paths: ['id', 'bodies'] });
     expect(page.lost.some((loss) => loss.cause === 'ceiling')).toBe(true);
     for (const row of page.rows) {
@@ -330,53 +332,36 @@ it.live('a write racing bucket eviction is either readable or explicitly evicted
         }
       }
     }
-  }).pipe(Effect.provide(store({ hours: 1, bodiesMaxBytes: 1200 }))),
-);
+  }).pipe(Effect.provide(store({ hours: 1, bodiesMaxBytes: 1200 }, undefined, Deferred.await(upkeep))));
+});
 
-it.live(
-  'upkeep evicts the oldest body hour past the budget with a loss, a request after it is kept whole, and rows past their hours go',
-  () =>
-    Effect.gen(function* () {
-      const record = <A>(read: (record: ActivityRecord['Service']) => Effect.Effect<A, unknown>) => Effect.flatMap(ActivityRecord, read);
-      const everything = { threads: ['thread-a'], through: EVER, where: [] } as const;
-      const until = Effect.fnUntraced(function* (check: Effect.Effect<boolean, unknown, ActivityRecord>) {
-        for (let tries = 0; tries < 100; tries += 1) {
-          if (yield* check) return;
-          yield* TestClock.adjust(Duration.minutes(5));
-          yield* pause(20);
-        }
-        return yield* Effect.die('The store did not reach the expected state.');
-      });
-      yield* asked(['a'.repeat(500)], 'x'.repeat(1_500));
-      const first = (yield* record((held) => held.rows({ ...everything, paths: ['id'], limit: 1 }))).rows[0]!.values.id;
-      yield* until(
-        Effect.map(
-          record((held) => held.groups({ ...everything, group: [], count: true, sum: [], offset: 0, limit: 1 })),
-          (read) => read.lost.length > 0,
-        ),
-      );
-      const evicted = yield* record((held) => held.groups({ ...everything, group: [], count: true, sum: [], offset: 0, limit: 1 }));
-      expect(evicted.lost).toEqual([{ scope: 'global', unknown: false, cause: 'ceiling', facts: 0, bodies: 2, bytes: expect.any(Number) }]);
+it.live('upkeep evicts the oldest body hour past the budget with a loss, and a request after it is kept whole', () => {
+  const upkeep = Deferred.makeUnsafe<void>();
+  return Effect.gen(function* () {
+    const record = <A>(read: (record: ActivityRecord['Service']) => Effect.Effect<A, unknown>) => Effect.flatMap(ActivityRecord, read);
+    const everything = { threads: ['thread-a'], through: EVER, where: [] } as const;
+    yield* asked(['a'.repeat(500)], 'x'.repeat(1_500));
+    const first = (yield* record((held) => held.rows({ ...everything, paths: ['id'], limit: 1 }))).rows[0]!.values.id;
+    yield* Deferred.succeed(upkeep, undefined);
+    while (
+      (yield* record((held) => held.groups({ ...everything, group: [], count: true, sum: [], offset: 0, limit: 1 }))).lost.length === 0
+    )
+      yield* pause(20);
+    const evicted = yield* record((held) => held.groups({ ...everything, group: [], count: true, sum: [], offset: 0, limit: 1 }));
+    expect(evicted.lost).toEqual([{ scope: 'global', unknown: false, cause: 'ceiling', facts: 0, bodies: 2, bytes: expect.any(Number) }]);
 
-      yield* asked(['a'.repeat(500), 'c'], 'c');
-      const last = (yield* record((held) => held.rows({ ...everything, paths: ['id'], limit: 2 }))).rows.find(
-        (row) => row.values.id !== first,
-      )!;
-      const request = yield* record((held) => held.body(String(last.values.id), 1, 1 << 20));
-      expect(JSON.parse(request.text).messages).toEqual(['a'.repeat(500), 'c']);
+    yield* asked(['a'.repeat(500), 'c'], 'c');
+    const last = (yield* record((held) => held.rows({ ...everything, paths: ['id'], limit: 2 }))).rows.find(
+      (row) => row.values.id !== first,
+    )!;
+    const request = yield* record((held) => held.body(String(last.values.id), 1, 1 << 20));
+    expect(JSON.parse(request.text).messages).toEqual(['a'.repeat(500), 'c']);
+  }).pipe(Effect.provide(store({ hours: 1, bodiesMaxBytes: 2_000 }, undefined, Deferred.await(upkeep))));
+});
 
-      yield* TestClock.adjust(Duration.hours(3));
-      yield* until(
-        Effect.map(
-          record((held) => held.rows({ ...everything, paths: ['id'], limit: 1 })),
-          (read) => read.rows.length === 0,
-        ),
-      );
-    }).pipe(Effect.provide(store({ hours: 1, bodiesMaxBytes: 2_000 }))),
-);
-
-it.live('a continued reading the store has let go refuses instead of reopening over what remains', () =>
-  Effect.gen(function* () {
+it.live('a continued reading the store has let go refuses instead of reopening over what remains', () => {
+  const upkeep = Deferred.makeUnsafe<void>();
+  return Effect.gen(function* () {
     const page = (query: Partial<ActivityRowsQuery>) =>
       Effect.flatMap(ActivityRecord, (record) =>
         record.rows({ threads: ['thread-a'], through: EVER, where: [], paths: ['id'], limit: 1, ...query }),
@@ -386,12 +371,9 @@ it.live('a continued reading the store has let go refuses instead of reopening o
     const first = yield* page({ reading: 'held' });
     expect(first.more).toBe(true);
     yield* TestClock.adjust(Duration.hours(3));
-    for (let tries = 0; (yield* page({})).total > 0; tries += 1) {
-      if (tries > 100) return yield* Effect.die('The store did not let the hour go.');
-      yield* TestClock.adjust(Duration.minutes(5));
-      yield* pause(20);
-    }
+    yield* Deferred.succeed(upkeep, undefined);
+    while ((yield* page({})).total > 0) yield* pause(20);
     const continued = yield* Effect.flip(page({ reading: 'held', resumed: true, offset: first.next }));
     expect(continued).toMatchObject({ _tag: 'ActivityUnreadable', reason: expect.stringContaining('expired') });
-  }).pipe(Effect.provide(store({ hours: 1, bodiesMaxBytes: 24 * 1024 }))),
-);
+  }).pipe(Effect.provide(store({ hours: 1, bodiesMaxBytes: 24 * 1024 }, undefined, Deferred.await(upkeep))));
+});

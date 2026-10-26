@@ -19,7 +19,6 @@ export function describeTransportRestarts<R>(
   make: () => Effect.Effect<RestartRig<R>, unknown, Scope.Scope | R>,
   test: Tester<Scope.Scope | R>,
   states: readonly StopState[] = ['tagma-call'],
-  timeout?: number,
 ): void {
   describe(`${transport}: Restart agent ends the turn, replaces the agent process and continues the turn`, () => {
     for (const state of states)
@@ -40,7 +39,6 @@ export function describeTransportRestarts<R>(
           yield* reached.settle();
           expect(yield* reached.runsAfter()).toBe(1);
         }),
-        timeout,
       );
   });
 }

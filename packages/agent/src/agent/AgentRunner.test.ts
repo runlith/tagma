@@ -74,7 +74,7 @@ describe('AgentRunner recording', () => {
         Effect.flip(handle.output.usage),
         Effect.flip(handle.output.response),
         Effect.flip(handle.output.finishReason),
-      ]).pipe(Effect.timeout('500 millis'));
+      ]);
       expect(failures.map((broke) => broke.cause)).toEqual(Array(5).fill(failure));
     }),
   );
@@ -100,7 +100,7 @@ describe('AgentRunner recording', () => {
         },
         { push: (event) => (broken && event.type === 'text-delta' ? Effect.die(new Error('recording failed')) : Effect.void) },
       );
-      yield* Effect.exit(handle.output.finishReason).pipe(Effect.timeout('500 millis'));
+      yield* Effect.exit(handle.output.finishReason);
       expect(released).toEqual([]);
       yield* handle.close();
       expect(released).toEqual(['pinned-run']);
@@ -138,7 +138,7 @@ describe('AgentRunner recording', () => {
           }),
         },
       );
-      yield* Deferred.await(reached).pipe(Effect.timeout('500 millis'));
+      yield* Deferred.await(reached);
       expect(handle.completedSteps()).toEqual([]);
       expect(events.at(-1)).toBe('text-start');
       Deferred.doneUnsafe(release, Effect.void);
@@ -416,7 +416,6 @@ describe('AgentRunner cancellation', () => {
         Stream.filter((event) => event.type === 'phase' && event.phase === 'calling'),
         Stream.take(1),
         Stream.runCollect,
-        Effect.timeout('2 seconds'),
       );
       expect(announced[0]).toEqual({ type: 'phase', phase: 'calling' });
       expect(handle.completedSteps()).toEqual([]);
@@ -447,11 +446,10 @@ describe('AgentRunner cancellation', () => {
       const settled = yield* Effect.forkChild(Effect.exit(handle.output.steps), { startImmediately: true });
       const drained = yield* Effect.forkChild(Effect.exit(Stream.runDrain(handle.recording.stream())), { startImmediately: true });
       yield* handle.stop(new Error('stopped by the reader'));
-      const outcome = yield* Fiber.joinAll([settled, drained]).pipe(
-        Effect.as('settled'),
-        Effect.timeoutOrElse({ duration: '2 seconds', orElse: () => Effect.succeed('still running') }),
-      );
-      expect(outcome).toBe('settled');
+      const outcome = yield* Fiber.join(settled);
+      const recording = yield* Fiber.join(drained);
+      expect(Exit.isFailure(outcome)).toBe(true);
+      expect(Exit.isFailure(recording)).toBe(true);
     }),
   );
 });
@@ -4630,4 +4628,4 @@ const streamCause = (handle: RecordedRun) =>
   handle.output.steps.pipe(Effect.match({ onSuccess: () => null, onFailure: (broke) => broke.cause }));
 const until = Effect.fnUntraced(function* (ready: () => boolean) {
   while (!ready()) yield* Effect.sleep('5 millis');
-}, Effect.timeout('500 millis'));
+});

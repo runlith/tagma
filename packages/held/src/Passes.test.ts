@@ -38,7 +38,7 @@ it.live('a trigger during a run earns exactly one more run of that key, and an i
           const during = scheduler.standing();
           yield* Deferred.succeed(gate, undefined);
           yield* Deferred.await(done);
-          yield* Effect.sleep(1);
+          while (scheduler.standing().length > 0) yield* Effect.yieldNow;
           return { during, after: scheduler.standing(), last: scheduler.lastRuns() };
         }),
       ),

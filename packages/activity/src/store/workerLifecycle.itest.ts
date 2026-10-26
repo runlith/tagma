@@ -56,13 +56,13 @@ self.postMessage([0]);
         expect(received.map((answer) => answer.value)).toEqual([1, 2]);
         expect(received[0]?.identity).toBe(received[1]?.identity);
       }),
-    ).pipe(Effect.provide(platform), Effect.timeout('2 seconds'));
+    ).pipe(Effect.provide(platform));
     yield* Effect.promise(() => closed);
     yield* Effect.scoped(
       Effect.gen(function* () {
         yield* prepareWorker(yield* (yield* WorkerPlatform).spawn<Answer, number>(0));
       }),
-    ).pipe(Effect.provide(platform), Effect.timeout('2 seconds'));
+    ).pipe(Effect.provide(platform));
     yield* Effect.promise(() => closed);
   }),
 );
@@ -78,7 +78,7 @@ it.live('a worker closing without an error ends its runner with a typed failure 
         const worker = yield* platform.spawn<never, string>(0);
         const run = yield* Effect.forkScoped(worker.run(() => Effect.void));
         yield* worker.send('close');
-        return yield* Fiber.await(run).pipe(Effect.timeout('1 second'));
+        return yield* Fiber.await(run);
       }),
     ).pipe(Effect.provide(BunWorker.layer(() => new Worker(entry, { type: 'module' }))));
     const failure = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();

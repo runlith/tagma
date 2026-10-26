@@ -1,12 +1,11 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { Deferred, Effect, Fiber, Option } from 'effect';
-import { TestClock } from 'effect/testing';
+import { Deferred, Effect, Exit, Fiber } from 'effect';
 import { ThreadChanges, threadChangesLayer } from './ThreadChanges';
-const timesOut = Effect.fnUntraced(function* (work: Effect.Effect<unknown>) {
-  const fiber = yield* work.pipe(Effect.timeoutOption(1), Effect.forkScoped);
-  yield* TestClock.adjust(1);
-  return Option.isNone(yield* Fiber.join(fiber));
+const pending = Effect.fnUntraced(function* (work: Effect.Effect<unknown>) {
+  const fiber = yield* Effect.forkScoped(work, { startImmediately: true });
+  yield* Fiber.interrupt(fiber);
+  return Exit.hasInterrupts(yield* Fiber.await(fiber));
 });
 layer(threadChangesLayer)('ThreadChanges registrations', (it) => {
   it.effect(
@@ -15,7 +14,7 @@ layer(threadChangesLayer)('ThreadChanges registrations', (it) => {
       const changes = yield* ThreadChanges;
       const changed = yield* changes.watch(['recipient', 'target']);
       yield* changes.publish('target');
-      expect(yield* timesOut(changed)).toBe(false);
+      expect(yield* changed).toEqual(['target']);
     }),
   );
   it.effect(
@@ -24,7 +23,7 @@ layer(threadChangesLayer)('ThreadChanges registrations', (it) => {
       const changes = yield* ThreadChanges;
       const changed = yield* changes.watch(['target']);
       yield* changes.publish('unrelated');
-      expect(yield* timesOut(changed)).toBe(true);
+      expect(yield* pending(changed)).toBe(true);
     }),
   );
   it.effect(
@@ -33,7 +32,7 @@ layer(threadChangesLayer)('ThreadChanges registrations', (it) => {
       const changes = yield* ThreadChanges;
       const changed = yield* Effect.scoped(changes.watch(['target']));
       yield* changes.publish('target');
-      expect(yield* timesOut(changed)).toBe(true);
+      expect(yield* pending(changed)).toBe(true);
     }),
   );
   it.effect(
@@ -52,8 +51,8 @@ layer(threadChangesLayer)('ThreadChanges registrations', (it) => {
       const standing = yield* changes.watch(['target']);
       yield* Fiber.interrupt(child);
       yield* changes.publish('target');
-      expect(yield* timesOut(cancelled)).toBe(true);
-      expect(yield* timesOut(standing)).toBe(false);
+      expect(yield* pending(cancelled)).toBe(true);
+      expect(yield* standing).toEqual(['target']);
     }),
   );
 });

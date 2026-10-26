@@ -111,8 +111,7 @@ it.live('a waiter past the wait ceiling is withdrawn unstarted with outcome none
     stalls.length = 0;
     const exit = yield* run(
       Effect.gen(function* () {
-        const holding = yield* Effect.forkChild(tree.hold('a', Effect.sleep(200)));
-        yield* Effect.sleep(5);
+        const holding = yield* Effect.forkChild(tree.hold('a', Effect.never), { startImmediately: true });
         const waited = yield* Effect.exit(tree.hold('a', Effect.void));
         yield* Fiber.interrupt(holding);
         return waited;

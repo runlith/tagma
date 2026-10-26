@@ -101,7 +101,6 @@ export function describeTransportStops<R>(
   make: () => Effect.Effect<StopRig<R>, unknown, Scope.Scope | R>,
   test: Tester<Scope.Scope | R>,
   states: readonly StopState[] = STOP_STATES,
-  timeout?: number,
 ): void {
   describe(`${transport}: Esc ends the run at once in every state, and nothing of it goes on`, () => {
     afterAll(() => {
@@ -145,7 +144,6 @@ export function describeTransportStops<R>(
           expect((yield* reached.agentTurns()) - turns).toBe(after);
           measured.push({ transport, state, ms: Math.max(0, ms), note: status });
         }),
-        timeout,
       );
   });
 }

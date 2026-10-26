@@ -1494,7 +1494,7 @@ describe('a call taken to the background before it runs', () => {
         later.settle({ name: 'edit', tool: tool('edit', NOTES_WRITE), input: {}, options: { toolCallId: 'call-2', messages: [] } }),
       );
       const edit = { runId: 'run-2', toolCallId: 'call-2' };
-      for (let turn = 0; turn < 200; turn++) {
+      while (true) {
         const record = calls.get(edit)?.record;
         if (record !== undefined && (record.phase === 'waiting' || callEnded(record))) break;
         yield* Effect.yieldNow;

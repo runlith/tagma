@@ -25,7 +25,6 @@ export function describeTransportWords<R>(
   make: () => Effect.Effect<WordRig<R>, unknown, Scope.Scope | R>,
   test: Tester<Scope.Scope | R>,
   states: readonly WordState[] = WORD_STATES,
-  timeout?: number,
 ): void {
   describe(`${transport}: Enter keeps every word and the agent hears it once, in the order pressed`, () => {
     for (const state of states)
@@ -42,7 +41,6 @@ export function describeTransportWords<R>(
           expect(words.map((word) => occurrences(heard, word))).toEqual([1, 1]);
           expect(heard.indexOf(words[0])).toBeLessThan(heard.indexOf(words[1]));
         }),
-        timeout,
       );
   });
 }

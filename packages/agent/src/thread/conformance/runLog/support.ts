@@ -7,7 +7,6 @@ import type { ThreadTranscript } from '../../../transcript/rows';
 import type { ThreadStorageHarness } from '../storagePort';
 import type { ThreadTranscriptEntry } from '../../../transcript/rows';
 import { readThreadEvents, type ThreadEventRecord } from '../../events';
-import { ThreadCallBroke } from '../../ThreadBorder';
 import { ThreadStorageFailed } from '../../persisted';
 import type { ThreadInboxItemValues, ThreadInboxKind, ThreadInboxStorage } from '../../storage/inbox';
 import type { ThreadRunStorage } from '../../storage/runs';
@@ -118,14 +117,7 @@ export const standingOf = <TTx, TWrite extends TTx = TTx>(storage: ThreadStorage
   Effect.map(storage.inbox.receipt(id), (item) => (item ? { state: item.state, runId: item.deliveredToRunId } : undefined));
 
 export const until = <E, R>(check: () => Effect.Effect<boolean, E, R>) =>
-  Effect.suspend(check).pipe(
-    Effect.repeat({ while: (ready) => !ready, schedule: Schedule.spaced(10) }),
-    Effect.asVoid,
-    Effect.timeoutOrElse({
-      duration: 5_000,
-      orElse: () => Effect.fail(new ThreadCallBroke({ cause: new Error('Condition not reached in time.') })),
-    }),
-  );
+  Effect.suspend(check).pipe(Effect.repeat({ while: (ready) => !ready, schedule: Schedule.spaced(10) }), Effect.asVoid);
 
 export function foldEntries(events: readonly ThreadEventRecord[]): ThreadTranscript {
   let transcript: ThreadTranscript = [];

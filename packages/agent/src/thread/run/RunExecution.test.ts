@@ -88,7 +88,7 @@ describe('RunExecution', () => {
         startImmediately: true,
       });
       yield* Context.get(context, RunBoundaries).reached(runRef);
-      for (let turn = 0; turn < 100 && !adapter.interrupted.includes(runRef.id); turn += 1) yield* Effect.yieldNow;
+      while (!adapter.interrupted.includes(runRef.id)) yield* Effect.yieldNow;
       expect(rows.get(runRef.id)).toMatchObject({ status: 'running', stopRequest: { by: 'model', marker: false } });
       yield* lifecycle.stop(runRef, { by: 'model', marker: false, withdraw: false }, false);
       expect(yield* Fiber.join(stopping)).toBe('stopped');

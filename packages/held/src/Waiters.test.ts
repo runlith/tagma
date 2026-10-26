@@ -36,17 +36,19 @@ it.live('an interrupted waiter or a failed start leaves no entry, and an interru
     const left = yield* Effect.scoped(
       Effect.gen(function* () {
         const table = yield* waiters<string, void, never>(replies);
-        const timedOut = yield* Effect.exit(table.wait('a').pipe(Effect.timeoutOption(1)));
+        const waiter = yield* Effect.forkChild(table.wait('a'), { startImmediately: true });
+        yield* Fiber.interrupt(waiter);
+        const interrupted = yield* Fiber.await(waiter);
         const refused = yield* Effect.exit(table.wait('b', Effect.fail('unsent')));
         const changed = yield* table.watch(['c', 'd']);
         const watching = table.standing();
         const watcher = yield* Effect.forkChild(changed);
         yield* Effect.yieldNow;
         yield* Fiber.interrupt(watcher);
-        return { timedOut, refused, watching, standing: table.standing(), woken: table.complete('c', Exit.void) };
+        return { interrupted, refused, watching, standing: table.standing(), woken: table.complete('c', Exit.void) };
       }),
     );
-    expect(Exit.isSuccess(left.timedOut)).toBe(true);
+    expect(Exit.hasInterrupts(left.interrupted)).toBe(true);
     expect(left.refused).toEqual(Exit.fail('unsent'));
     expect(left.watching).toEqual([
       { key: 'c', waiters: 1 },
