@@ -7,6 +7,7 @@ import { CATALOG_FEED } from './contract/wire/catalog.js';
 import { AccountQuota } from './contract/service/quota.js';
 import { ProviderRegistry } from './contract/service/registry.js';
 import type { AccountsLive } from './contract/service/live.js';
+import { adaptersCapability } from './contract/wire/capability.js';
 
 const FEEDS = [ACCOUNTS_FEED, CATALOG_FEED] as const;
 
@@ -26,6 +27,7 @@ const live: AccountsLive = liveOf(FEEDS, (door) => ({
 export const providers = manifest({
   ...declaration,
   verbs: providersVerbs,
+  capabilities: [adaptersCapability],
   snapshots: async (home) => (await import('./credentials/snapshot.js')).credentialParticipant(home.credentials),
   bodies: async () => Object.values((await import('./operations.js')).PROVIDER_PAIRS),
   live,

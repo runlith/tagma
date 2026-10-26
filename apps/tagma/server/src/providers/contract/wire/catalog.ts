@@ -135,15 +135,24 @@ export type AdapterState = typeof adapterStateSchema.Type;
 export const settingValuesSchema = Schema.Record(Schema.String, Schema.Unknown);
 export type SettingValues = typeof settingValuesSchema.Type;
 
-export const servedSettingsSchema = Schema.Struct({
+export const settingsDeclarationSchema = Schema.Struct({
   adapter: Schema.String,
   title: Schema.String,
   instance: Schema.String,
   name: Schema.String,
   fields: Schema.Array(settingFieldSchema),
   discovers: Schema.Boolean,
-  instances: Schema.Array(Schema.Struct({ id: Schema.String, values: settingValuesSchema, revision: Schema.optional(Schema.String) })),
 });
+export type SettingsDeclaration = typeof settingsDeclarationSchema.Type;
+
+export const servedInstanceSchema = Schema.Struct({
+  id: Schema.String,
+  values: settingValuesSchema,
+  revision: Schema.optional(Schema.String),
+});
+export type ServedInstance = typeof servedInstanceSchema.Type;
+
+export const servedSettingsSchema = Schema.Struct({ ...settingsDeclarationSchema.fields, instances: Schema.Array(servedInstanceSchema) });
 export type ServedSettings = typeof servedSettingsSchema.Type;
 
 export const accountSectionSchema = Schema.Struct({

@@ -4,12 +4,14 @@ import { AdapterInstances } from '../contract/service/instances.js';
 import { ProviderRegistry } from '../contract/service/registry.js';
 import { normalize, publicValues, settingsValues } from './settingValues.js';
 
+export const unsettled = (adapter: string) =>
+  new GateRefusal('unknown-adapter', `No installed adapter "${adapter}" declares settings.`, [
+    'name an adapter whose read_adapters row carries settings',
+  ]);
+
 const settingsOf = Effect.fnUntraced(function* (adapter: string) {
   const settings = (yield* (yield* ProviderRegistry).catalog).settings.get(adapter);
-  if (settings === undefined)
-    return yield* new GateRefusal('unknown-adapter', `No installed adapter "${adapter}" declares settings.`, [
-      'name an adapter that declares settings',
-    ]);
+  if (settings === undefined) return yield* unsettled(adapter);
   return settings;
 });
 

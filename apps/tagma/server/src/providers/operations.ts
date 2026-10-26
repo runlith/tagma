@@ -16,6 +16,7 @@ import { PROVIDER_OPERATIONS as OPS, type ProviderOperationId } from './contract
 import { credentialRefusal, isTokenFault } from './credentials/refusal.js';
 import { cacheLifetimes } from './quota/cacheLifetimes.js';
 import { listModels, removeInstance, saveInstance } from './adapters/instanceActs.js';
+import { readAdapters, readSettings } from './adapters/reads.js';
 import { ModelCatalogs } from './catalogs.js';
 
 const declared =
@@ -231,6 +232,18 @@ export const PROVIDER_PAIRS = {
             }),
           ),
         ),
+    }),
+  ),
+  read_adapters: pair(
+    OPS.read_adapters,
+    body(OPS.read_adapters, {
+      execute: (input) => Effect.map(readAdapters(input), (read) => ({ status: 'read' as const, ...read })),
+    }),
+  ),
+  read_adapter_settings: pair(
+    OPS.read_adapter_settings,
+    body(OPS.read_adapter_settings, {
+      execute: (input) => Effect.map(readSettings(input.adapter, input), (read) => ({ status: 'read' as const, ...read })),
     }),
   ),
   install_adapter: pair(

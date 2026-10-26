@@ -30,7 +30,9 @@ const refused = (source: string) => (error: unknown) =>
   ]);
 
 const unknown = (id: string) =>
-  new GateRefusal('unknown-adapter', `No adapter ${id} is installed on this machine.`, ['name an adapter the provider catalog lists']);
+  new GateRefusal('unknown-adapter', `No adapter ${id} is installed on this machine.`, [
+    'name an adapter of origin machine that read_adapters lists',
+  ]);
 
 const homelessRefusal = new GateRefusal('adapter-install', 'This server keeps no machine directory, so it installs no adapters.', [
   'install the adapter through a server that runs on a database file',

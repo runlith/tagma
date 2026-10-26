@@ -3,7 +3,16 @@ import { Schema } from 'effect';
 import { ExecutionRef } from '@runlith/executions/protocol/execution';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { accountsFrameSchema, cacheLifetimesSchema } from './accounts.js';
-import { adapterStateSchema, settingValuesSchema, servedCatalogSchema } from './catalog.js';
+import {
+  adapterStateSchema,
+  servedCatalogSchema,
+  servedInstanceSchema,
+  settingsDeclarationSchema,
+  settingValuesSchema,
+} from './catalog.js';
+import { ADAPTER_ROWS, adapterRowSchema, INSTANCE_ROWS } from './adapterRows.js';
+import { PAGE_CURSOR } from '@runlith/paging';
+import { limitOf } from '../../../platform/contract/wire/pageFamily.js';
 import {
   accountRemovedSchema,
   accountStatusSchema,
@@ -15,12 +24,23 @@ import {
   signInStatusSchema,
 } from './signIns.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
+import { adaptersCapability } from './capability.js';
 
 const CREDENTIAL_REFUSALS = ['token-store', 'credential-reconnect', 'credential-origin', 'unknown-account'] as const;
 
 const operatorOnly = {
   doors: { http: 'perform' },
   callers: 'operator',
+  subject: 'none',
+  place: 'machine',
+  graph: 'none',
+  waits: [],
+  lifetimes: [],
+} as const;
+const adapterActs = {
+  doors: { http: 'perform' },
+  tool: { capability: adaptersCapability.id },
+  callers: 'any',
   subject: 'none',
   place: 'machine',
   graph: 'none',
@@ -289,9 +309,55 @@ export const PROVIDER_OPERATIONS = {
     confirmLabel: 'Remove console key',
     presentation: { running: 'Removing the console key', done: 'Removed the console key' },
   }),
+  read_adapters: operation('read_adapters', {
+    approval: ASKS_NEVER,
+    ...adapterActs,
+    meaning:
+      'Read the model provider adapters on this machine, each with its origin, version, the source it was installed from, whether it loaded, failed or is disabled, and the title and instance count of the settings it declares.',
+    grammar:
+      'A page of rows by id with the total; `next` continues the walk, null on the last page. Only an adapter of origin `machine` is updated, switched or removed; a `builtin` or `release` one comes with this server. read_adapter_settings reads the settings of one adapter.',
+    input: Schema.Struct({ limit: limitOf(ADAPTER_ROWS), cursor: PAGE_CURSOR }),
+    answer: arms({
+      read: { adapters: Schema.Array(adapterRowSchema), shown: Schema.Int, total: Schema.Int, next: Schema.NullOr(Schema.String) },
+    }),
+    refusals: ['bad-cursor', 'cursor-stale'],
+    page: ADAPTER_ROWS,
+    effect: 'read',
+    identity: 'none',
+    subjects: nobody,
+    confirmation: () => ({ summary: 'Read the adapters?' }),
+    confirmLabel: 'Read adapters',
+    presentation: { running: 'Reading the adapters', done: 'Read the adapters' },
+  }),
+  read_adapter_settings: operation('read_adapter_settings', {
+    approval: ASKS_NEVER,
+    ...adapterActs,
+    meaning:
+      'Read the settings an adapter declares — its fields, whether it lists its server’s models — and its saved instances with their values and revisions.',
+    grammar:
+      'Instances come a page at a time by id with the total; `next` continues the walk, null on the last page. Secret fields are never answered. save_adapter_instance takes an instance’s revision as read here.',
+    input: Schema.Struct({ adapter: Schema.String.check(Schema.isMinLength(1)), limit: limitOf(INSTANCE_ROWS), cursor: PAGE_CURSOR }),
+    answer: arms({
+      read: {
+        settings: settingsDeclarationSchema,
+        instances: Schema.Array(servedInstanceSchema),
+        shown: Schema.Int,
+        total: Schema.Int,
+        next: Schema.NullOr(Schema.String),
+      },
+    }),
+    refusals: ['unknown-adapter', 'bad-cursor', 'cursor-stale'],
+    page: INSTANCE_ROWS,
+    effect: 'read',
+    identity: 'none',
+    subjects: nobody,
+    confirmation: (input) => ({ summary: `Read the ${input.adapter} settings?` }),
+    confirmLabel: 'Read settings',
+    presentation: { running: 'Reading the adapter settings', done: 'Read the adapter settings' },
+  }),
   install_adapter: operation('install_adapter', {
     approval: ASKS_IN_REVIEW,
-    ...operatorOnly,
+    ...adapterActs,
     meaning:
       'Install a model provider adapter on this machine from an npm package, a GitHub repository or a local directory; installing an id again puts its new version in place for the next run, without a restart.',
     input: Schema.Struct({ source: Schema.String.check(Schema.isMinLength(1)) }),
@@ -306,7 +372,7 @@ export const PROVIDER_OPERATIONS = {
   }),
   update_adapter: operation('update_adapter', {
     approval: ASKS_IN_REVIEW,
-    ...operatorOnly,
+    ...adapterActs,
     meaning: 'Install an installed adapter again from the source it was installed from; its new version serves from the next run.',
     input: Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1)) }),
     answer: arms({ updated: { adapter: adapterStateSchema } }),
@@ -320,7 +386,7 @@ export const PROVIDER_OPERATIONS = {
   }),
   remove_adapter: operation('remove_adapter', {
     approval: ASKS_IN_REVIEW,
-    ...operatorOnly,
+    ...adapterActs,
     meaning: 'Remove an installed adapter from this machine; the credentials of its providers stay.',
     input: Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1)) }),
     answer: arms({ removed: { id: Schema.String } }),
@@ -337,7 +403,7 @@ export const PROVIDER_OPERATIONS = {
   }),
   disable_adapter: operation('disable_adapter', {
     approval: ASKS_IN_REVIEW,
-    ...operatorOnly,
+    ...adapterActs,
     meaning:
       'Stop loading an installed adapter without removing it: its providers read provider-not-installed from the next run and the credentials of its providers stay.',
     input: Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1)) }),
@@ -352,7 +418,7 @@ export const PROVIDER_OPERATIONS = {
   }),
   enable_adapter: operation('enable_adapter', {
     approval: ASKS_IN_REVIEW,
-    ...operatorOnly,
+    ...adapterActs,
     meaning: 'Load a disabled adapter again; its providers serve from the next run with the credentials they kept.',
     input: Schema.Struct({ id: Schema.String.check(Schema.isMinLength(1)) }),
     answer: arms({ enabled: { adapter: adapterStateSchema } }),
@@ -366,7 +432,7 @@ export const PROVIDER_OPERATIONS = {
   }),
   save_adapter_instance: operation('save_adapter_instance', {
     approval: ASKS_IN_REVIEW,
-    ...operatorOnly,
+    ...adapterActs,
     meaning:
       "Keep one instance of an adapter's settings, creating it when no id is given or replacing the named one; its providers serve from the next run. Secret fields are kept next to credentials under their own names and never returned.",
     grammar:
@@ -388,7 +454,7 @@ export const PROVIDER_OPERATIONS = {
   }),
   remove_adapter_instance: operation('remove_adapter_instance', {
     approval: ASKS_IN_REVIEW,
-    ...operatorOnly,
+    ...adapterActs,
     meaning: "Remove one instance of an adapter's settings together with its secret settings.",
     input: Schema.Struct({ adapter: Schema.String.check(Schema.isMinLength(1)), id: Schema.String.check(Schema.isMinLength(1)) }),
     answer: arms({ removed: { id: Schema.String } }),
@@ -405,7 +471,7 @@ export const PROVIDER_OPERATIONS = {
   }),
   discover_adapter_models: operation('discover_adapter_models', {
     approval: ASKS_IN_REVIEW,
-    ...operatorOnly,
+    ...adapterActs,
     meaning:
       "Ask an adapter's server which models it lists, from the settings as filled in; its public rows come back as candidates and nothing is kept. Omitted secret fields use the named instance's stored values.",
     input: Schema.Struct({
