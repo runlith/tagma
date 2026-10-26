@@ -3,7 +3,8 @@ import { it } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { Context, Effect, Fiber, Layer } from 'effect';
+import { Clock, Context, Effect, Fiber, Layer } from 'effect';
+import { TestClock } from 'effect/testing';
 import { graphFixture, tempRootEffect } from '../composition/testing/graphFixture.js';
 import { watchProcessLayer } from '../composition/testing/fileWatcher.js';
 import { FileWatcher } from '../platform/contract/service/watch.js';
@@ -117,10 +118,12 @@ it.live('an installed plugin routes its audiences, survives a refused edit and a
 
 it.live('an edit drains the serving call before replacing its process, and concurrent callers reach the new generation', () =>
   Effect.gen(function* () {
-    const { plugins, projectId, root, home, said, revision, journal, agentTools, row } = yield* setup;
+    const productClock = yield* TestClock.make();
+    const product = Effect.provideService(Clock.Clock, productClock);
+    const { plugins, projectId, root, home, said, revision, journal, agentTools, row } = yield* setup.pipe(product);
     yield* Effect.promise(() => writeFile(join(root, '.gitignore'), '*.log\n'));
-    yield* plugins.install({ projectId, id: 'fixture', enabled: true });
-    const first = yield* said('pid');
+    yield* plugins.install({ projectId, id: 'fixture', enabled: true }).pipe(product);
+    const first = yield* said('pid').pipe(product);
     const before = yield* revision();
     yield* Effect.promise(async () => {
       await mkdir(join(root, 'ui'), { recursive: true });
@@ -128,13 +131,13 @@ it.live('an edit drains the serving call before replacing its process, and concu
       await writeFile(join(root, 'process.log'), 'written by the process');
     });
     expect(yield* revision()).toBe(before);
-    const serving = yield* Effect.forkScoped(said('hold'));
+    const serving = yield* Effect.forkScoped(said('hold').pipe(product));
     yield* Effect.promise(() =>
       writeFile(join(root, 'plugin.json'), manifest({ tools: [...TOOLS.tools, { name: 'pid', audience: 'agents' }] })),
     );
-    const restarted = yield* Effect.forkScoped(plugins.install({ projectId, id: 'fixture', enabled: true }));
+    const restarted = yield* Effect.forkScoped(plugins.install({ projectId, id: 'fixture', enabled: true }).pipe(product));
     yield* until(() => Effect.map(row(), (row) => row?.tools === 0));
-    const meanwhile = yield* Effect.forkScoped(said('pid'));
+    const meanwhile = yield* Effect.forkScoped(said('pid').pipe(product));
     yield* Effect.yieldNow;
     expect(serving.pollUnsafe()).toBeUndefined();
     expect(meanwhile.pollUnsafe()).toBeUndefined();

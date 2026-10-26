@@ -104,22 +104,21 @@ layer(browserWorld({ host: Layer.empty, adapters: [desktopAdapter], home }), { e
         const page = (yield* Fiber.join(opening)).id;
         expect(pages.live(page)?.loading).toBe(true);
 
-        const heard = yield* Queue.unbounded<string>();
-        yield* host.pages.events.pipe(
-          Effect.flatMap((events) => Stream.runForEach(events, (event) => Queue.offer(heard, event.kind))),
-          Effect.forkScoped,
+        const heard = yield* Queue.unbounded<string | undefined>();
+        const events = yield* host.pages.events;
+        yield* Effect.forkScoped(
+          Stream.runForEach(events, (event) => (event.kind === 'changed' ? Queue.offer(heard, event.change.title) : Effect.void)),
         );
         const going = yield* Effect.forkChild(host.pages.navigate(page, { kind: 'url', url: 'https://example.com/next' }));
         const navigate = yield* fake.called;
         const answerSeq = fake.next();
-        fake.sent({ kind: 'event', seq: fake.next(), event: { kind: 'changed', page, change: { title: 'Next' } } });
-        yield* Effect.yieldNow;
-        expect(going.pollUnsafe()).toBeUndefined();
-        expect(yield* Queue.poll(heard)).toEqual(Option.none());
+        const firstEventSeq = fake.next();
+        fake.sent({ kind: 'event', seq: fake.next(), event: { kind: 'changed', page, change: { title: 'Last' } } });
+        fake.sent({ kind: 'event', seq: firstEventSeq, event: { kind: 'changed', page, change: { title: 'Next' } } });
         const title = `${'a'.repeat(PART_CHARS - 1)}😀`;
         fake.sent({ kind: 'answer', seq: answerSeq, id: navigate.id, value: { url: 'https://example.com/next', title, loading: true } });
         expect(yield* Fiber.join(going)).toEqual({ url: 'https://example.com/next', title, loading: true });
-        expect(yield* Queue.take(heard)).toBe('changed');
+        expect([yield* Queue.take(heard), yield* Queue.take(heard)]).toEqual(['Next', 'Last']);
       }),
   );
 
