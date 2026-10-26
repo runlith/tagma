@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { FileVerdict } from './report.ts';
+import type { FileVerdict, SlowRow } from './report.ts';
 
 const PRELOAD = join(import.meta.dir, 'bun.ts');
 const CLI = join(import.meta.dir, 'cli.ts');
@@ -87,6 +87,46 @@ describe('outer', () => {
     .filter((row) => row.type === 'outcome')
     .map((row) => row.name);
   expect(names.sort()).toEqual(['outer > inner > leaf', 'outer > top']);
+}, 30_000);
+
+test('a unit test slower than its kind is not failed for it, and the report names it slow with what it waited on', async () => {
+  const dir = join(process.env['TMPDIR']!, `slow-${crypto.randomUUID()}`);
+  mkdirSync(dir);
+  writeFileSync(join(dir, 'bunfig.toml'), `[test]\npreload = [${JSON.stringify(PRELOAD)}]\n`);
+  writeFileSync(
+    join(dir, 'slow.test.ts'),
+    `import { expect, test } from 'bun:test';
+test('waits past a second', async () => {
+  await new Promise((done) => setTimeout(done, 1_300));
+  expect(2 + 2).toBe(4);
+});
+`,
+  );
+  const report = join(dir, 'report.jsonl');
+  const run = Bun.spawn(['bun', CLI, 'bun', 'test', './slow.test.ts'], {
+    cwd: dir,
+    env: { ...process.env, RUNLITH_TEST_REPORT: report },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
+  expect(code, stdout + stderr).toBe(0);
+  const slow = readFileSync(report, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as SlowRow)
+    .filter((row) => row.type === 'slow');
+  expect(slow, stdout + stderr).toEqual([
+    expect.objectContaining({
+      name: 'waits past a second',
+      outcome: 'pass',
+      over: 1_000,
+      wall: expect.any(Number),
+      cpu: expect.any(Number),
+    }),
+  ]);
+  expect(slow[0]!.wall - slow[0]!.cpu).toBeGreaterThan(1_000);
+  expect(stderr).toContain('slow tests, over 1.0 s unit or 10.0 s integration: 1');
 }, 30_000);
 
 test('the report distinguishes a passing file from a body failure and a cleanup failure in the same run', async () => {

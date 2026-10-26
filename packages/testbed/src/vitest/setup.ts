@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from 'vitest';
 import { carried, carry, makeBed, type Bed } from '../core/bed.ts';
+import { HANG_MS } from '../core/files.ts';
 import type { Meter } from '../core/ledger.ts';
 import { openProcesses } from '../core/processes.ts';
 import { openRun } from '../core/run.ts';
@@ -55,6 +56,7 @@ const prepare = async (): Promise<Bed> => {
 };
 
 const bed = carried() ?? (await prepare());
+vi.setConfig({ testTimeout: HANG_MS, hookTimeout: HANG_MS });
 bed.install();
 if (typeof Bun === 'undefined')
   (createRequire(import.meta.url)('node:module') as { syncBuiltinESMExports: () => void }).syncBuiltinESMExports();

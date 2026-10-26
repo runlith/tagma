@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, mock, setDefaultTimeout } f
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { carried, carry, diskContinuity, makeBed, type Bed } from './core/bed.ts';
-import { kindOf, TIMEOUT_MS } from './core/files.ts';
+import { HANG_MS, kindOf } from './core/files.ts';
 import type { Meter } from './core/ledger.ts';
 import { ORIGINAL } from './core/pristine.ts';
 import { openProcesses, type Processes } from './core/processes.ts';
@@ -29,8 +29,7 @@ let claimed: string | undefined;
 const claim = (): void => {
   if (claimed === Bun.main) return;
   claimed = Bun.main;
-  setDefaultTimeout(TIMEOUT_MS[kindOf(Bun.main)]);
-  beforeAll(handoff, 30_000);
+  beforeAll(handoff, HANG_MS);
 };
 
 const registering = <F extends object>(fn: F, owner?: object): F =>
@@ -89,7 +88,7 @@ const prepare = async (): Promise<Bed> => {
 };
 
 const bed = carried() ?? (await prepare());
-setDefaultTimeout(TIMEOUT_MS[kindOf(main)]);
+setDefaultTimeout(HANG_MS);
 bed.pend(STARTED, meter());
 
 let engineSelected = kindOf(main) === 'resource';
@@ -112,7 +111,7 @@ const residues: string[] = [];
 beforeAll(async () => {
   if (bed.file === undefined) await enter(Bun.main);
   bed.ready();
-}, 30_000);
+}, HANG_MS);
 
 async function handoff(): Promise<void> {
   if (bed.file !== Bun.main) {
@@ -139,4 +138,4 @@ afterAll(async () => {
   const residue = await bed.leave();
   if (residue !== undefined) residues.push(residue);
   if (residues.length > 0) throw new Error(residues.splice(0).join('\n'));
-}, 30_000);
+}, HANG_MS);

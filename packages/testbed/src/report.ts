@@ -1,5 +1,6 @@
 import { relative, resolve } from 'node:path';
 import { CHILD_KINDS, type ByKind } from './core/children.ts';
+import { kindOf, SLOW_MS } from './core/files.ts';
 import type { Cost, FileRow, Spawned, TestRow, WorldRow } from './core/ledger.ts';
 
 export const ITEMS = ['load', 'world', 'tenant', 'body', 'guard'] as const;
@@ -155,6 +156,57 @@ export const outcomesOf = (
   return { rows, unmatched };
 };
 
+export type SlowRow = {
+  readonly type: 'slow';
+  readonly run: string;
+  readonly file: string;
+  readonly test: number;
+  readonly name: string | undefined;
+  readonly outcome: Case['outcome'] | undefined;
+  readonly over: number;
+  readonly wall: number;
+  readonly cpu: number;
+  readonly world: number;
+  readonly tenant: number;
+  readonly fileChildren: ByKind<Spawned>;
+};
+
+export const slowOf = (tests: readonly TestRow[], outcomes: readonly OutcomeRow[], files: readonly FileRow[]): SlowRow[] => {
+  const named = new Map(outcomes.map((row) => [`${row.worker}\0${row.file}\0${row.test}`, row]));
+  const byFile = new Map(files.map((file) => [`${file.worker}\0${file.file}`, file]));
+  return tests.flatMap((test) => {
+    const wall = test.body.wall + test.tenant.wall + test.world.wall;
+    const over = SLOW_MS[kindOf(test.file)];
+    if (wall <= over) return [];
+    const outcome = named.get(`${test.worker}\0${test.file}\0${test.test}`);
+    const file = byFile.get(`${test.worker}\0${test.file}`);
+    return [
+      {
+        type: 'slow' as const,
+        run: test.run,
+        file: test.file,
+        test: test.test,
+        name: outcome?.name ?? test.name,
+        outcome: outcome?.outcome,
+        over,
+        wall: Math.round(wall),
+        cpu: Math.round(test.body.cpu + test.tenant.cpu + test.world.cpu),
+        world: Math.round(test.world.wall),
+        tenant: Math.round(test.tenant.wall),
+        fileChildren:
+          file?.children ?? (Object.fromEntries(CHILD_KINDS.map((kind) => [kind, { count: 0, cpu: 0, unmeasured: 0 }])) as ByKind<Spawned>),
+      },
+    ];
+  });
+};
+
+export const slowLine = (row: SlowRow): string => {
+  const spawned = CHILD_KINDS.filter((kind) => row.fileChildren[kind].count > 0)
+    .map((kind) => `${kind} ${row.fileChildren[kind].count} (${seconds(row.fileChildren[kind].cpu)})`)
+    .join(', ');
+  return `${seconds(row.wall)} over ${seconds(row.over)}: ${row.file}${row.name === undefined ? ` #${row.test}` : ` > ${row.name}`} — cpu ${seconds(row.cpu)}, waiting ${seconds(Math.max(0, row.wall - row.cpu))}${row.world > 0 ? `, world ${seconds(row.world)}` : ''}${row.tenant > 0 ? `, tenant ${seconds(row.tenant)}` : ''}${spawned === '' ? '' : `; its file spawned ${spawned}`}`;
+};
+
 export type OwnWorld = { readonly file: string; readonly kind: string; readonly own: string };
 
 export type WorldSummary = {
@@ -255,7 +307,7 @@ export const runOf = (facts: RunFacts, files: readonly FileRow[], tests: number,
 
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 
-export const summary = (run: RunRow, files: readonly FileRow[], unmatched: number, report: string): string => {
+export const summary = (run: RunRow, files: readonly FileRow[], slow: readonly SlowRow[], unmatched: number, report: string): string => {
   const { worlds } = run;
   const lines = [
     `testbed: ${run.files} files, ${run.tests} tests, wall ${seconds(run.wall)}, cpu ${seconds(run.cpu)} (${run.cpuPerFile} ms per file; target ${TARGET_CPU_PER_FILE_MS.join('–')} ms)`,
@@ -282,6 +334,10 @@ export const summary = (run: RunRow, files: readonly FileRow[], unmatched: numbe
   for (const file of costly) {
     const parts = ITEMS.map((item) => `${item} ${seconds(file[item].cpu)}`).join(', ');
     lines.push(`    ${seconds(file.total.cpu)} ${file.file} (${parts}; children ${seconds(childCost(file))} of it)`);
+  }
+  if (slow.length > 0) {
+    lines.push(`  slow tests, over ${seconds(SLOW_MS.unit)} unit or ${seconds(SLOW_MS.resource)} integration: ${slow.length}`);
+    for (const row of [...slow].sort((left, right) => right.wall - left.wall).slice(0, 10)) lines.push(`    ${slowLine(row)}`);
   }
   if (unmatched > 0) lines.push(`  ${unmatched} test rows kept no name: the junit report and the run disagreed on their files`);
   lines.push(`  report: ${report}`);

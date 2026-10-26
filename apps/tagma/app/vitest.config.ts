@@ -38,8 +38,6 @@ export default defineConfig({
           include: ['src/**/*.itest.ts'],
           environment: 'jsdom',
           isolate: false,
-          testTimeout: 10_000,
-          hookTimeout: 60_000,
         },
       },
     ],

@@ -9,7 +9,7 @@ import { Hashes, type Inputs, type Variant } from './inputs.ts';
 import { Records } from './records.ts';
 import { budgetOf, coresOf } from '@runlith/testbed/budget';
 import type { FileRow, Row } from '@runlith/testbed/ledger';
-import type { FileVerdict, RunRow } from '@runlith/testbed/report';
+import { slowLine, type FileVerdict, type RunRow, type SlowRow } from '@runlith/testbed/report';
 import { runJobs } from '@runlith/testbed/schedule';
 
 const started = performance.now();
@@ -322,6 +322,13 @@ for (const [at, suite] of suites.entries()) {
     );
   }
 }
+const slow = [...outcomes.values()]
+  .flatMap((outcome) => outcome.rows.filter((row): row is SlowRow => row.type === 'slow'))
+  .sort((left, right) => right.wall - left.wall);
+if (slow.length > 0) {
+  console.log(`check:change: ${slow.length} slow tests; the cause is each test's own cost:`);
+  for (const row of slow) console.log(`  slow ${slowLine(row)}`);
+}
 const spent = process.cpuUsage(ownCpu);
 cpu += (spent.user + spent.system) / 1000;
 const result = {
@@ -335,6 +342,7 @@ const result = {
   seed: variant.seed,
   adapter: variant.adapter,
   files: output,
+  slow,
   reports: run,
 };
 const report = value('--report');

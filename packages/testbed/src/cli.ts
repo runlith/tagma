@@ -6,7 +6,7 @@ import type { FileRow, Row, TestRow, WorldRow } from './core/ledger.ts';
 import { openProcesses } from './core/processes.ts';
 import { openRun, REPORT_ENV, ROOT_ENV, sweepRuns } from './core/run.ts';
 import { acquireUnits, ADMITTED_ENV, budgetOf, budgetRoot, coresOf, NICE, SLOT_ENV } from './slots.ts';
-import { junitOf, outcomesOf, runOf, summary, verdictsOf, workersOf, worldsOf } from './report.ts';
+import { junitOf, outcomesOf, runOf, slowOf, summary, verdictsOf, workersOf, worldsOf } from './report.ts';
 
 const REPO = resolve(import.meta.dir, '../../..');
 const TIMINGS = '.bun-test-timings.json';
@@ -149,6 +149,7 @@ const worlds = worldsOf(rows.filter((row): row is WorldRow => row.type === 'worl
 const reported = runner === 'bun' && existsSync(junit) ? junitOf(readFileSync(junit, 'utf8'), process.cwd(), REPO) : undefined;
 const outcomes = reported === undefined ? { rows: [], unmatched: 0 } : outcomesOf(tests, reported.cases);
 const verdicts = reported === undefined ? [] : verdictsOf(files, reported);
+const slow = slowOf(tests, outcomes.rows, files);
 const runRow = runOf(
   { root: run.root, runner, command, cwd: process.cwd(), repo: REPO, seed, wall, cpu, queued: units?.queued ?? 0, code: code ?? 1 },
   files,
@@ -157,8 +158,8 @@ const runRow = runOf(
 );
 appendFileSync(
   run.report,
-  `${[...outcomes.rows, ...verdicts, ...workersOf(files).map((worker) => ({ ...worker, run: run.root })), runRow].map((row) => JSON.stringify(row)).join('\n')}\n`,
+  `${[...outcomes.rows, ...verdicts, ...slow, ...workersOf(files).map((worker) => ({ ...worker, run: run.root })), runRow].map((row) => JSON.stringify(row)).join('\n')}\n`,
 );
-console.error(summary(runRow, files, outcomes.unmatched, run.report));
+console.error(summary(runRow, files, slow, outcomes.unmatched, run.report));
 if (seed !== undefined) console.error(`  seed: ${seed}`);
 process.exit(code ?? 1);
