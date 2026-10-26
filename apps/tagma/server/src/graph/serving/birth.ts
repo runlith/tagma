@@ -15,7 +15,7 @@ import { rootChecked } from '../../projects/registration.js';
 import type { AdmittedProject, ProjectPolicyRow } from '../contract/wire/serving.js';
 import { ProjectIdentification, Projects } from '../../projects/contract/service/registry.js';
 import { ProjectChanges } from '../../projects/contract/service/changes.js';
-import { GraphScopes, ProjectLifecycle, ProjectPolicy } from '../contract/service/serving.js';
+import { GraphScopes, ProjectLifecycle, ProjectPolicy, type ProjectUpdate } from '../contract/service/serving.js';
 import { Act, BlockNames, BlockProjection, BlockReferences } from '../contract/service/acts.js';
 import { BlockRows } from '../acts/rows.js';
 import { Tags } from '../contract/service/vocabulary.js';
@@ -56,6 +56,7 @@ const chosenCatalogs = Effect.fn('Projects.chosenCatalogs')(function* (shipped: 
   return [...new Set([...(shipped.byId(CORE_LIBRARY) === null ? [] : [CORE_LIBRARY]), ...asked])];
 });
 const moving = writes('ProjectLifecycle.move', []);
+const updating = writes('ProjectLifecycle.update', []);
 
 export const ensureVocabulary = Effect.fn('Projects.ensureVocabulary')(function* (role: GraphRole) {
   const { db } = yield* GraphStore;
@@ -210,6 +211,7 @@ export const projectsLayer = (
 
       const { takeBack, remove } = projectRemoval({ db, machine, act, vocabulary, projects, projectChanges, rows });
       if (role === 'machine') yield* ensureGlobal.pipe(Effect.orDie);
+      const policy = servedPolicy({ db, reads, act, servesFrom, resolveRef: rows.resolveRef, changed, policyChanged, subscribe });
 
       const lifecycle = ProjectLifecycle.of({
         create: Effect.fn('ProjectLifecycle.create')(function* (
@@ -304,15 +306,29 @@ export const projectsLayer = (
             ),
           );
         }),
+        update: Effect.fn('ProjectLifecycle.update')(function* (input: ProjectUpdate) {
+          const current = yield* rows.resolveRef(input.ref);
+          if (input.name === undefined || input.name === current.name)
+            return yield* policy.set({ ref: input.ref, settings: input.settings });
+          const name = input.name;
+          return yield* machine.transaction(writes('project.update', [project, projectPolicy]), (unit) =>
+            act.unit(
+              updating,
+              Effect.gen(function* () {
+                yield* projects.rename(unit, current, name);
+                yield* act.record('project_set', null, { projectId: current.id, field: 'name', from: current.name, to: name });
+                yield* policy.set({ ref: String(current.id), settings: input.settings });
+                return yield* byId(current.id);
+              }),
+            ),
+          );
+        }),
         remove,
       });
 
       return Context.make(ProjectLifecycle, lifecycle).pipe(
         Context.add(GraphScopes, graphScopes({ db, reads, git, projects, blockRows, blockNames, byId })),
-        Context.add(
-          ProjectPolicy,
-          servedPolicy({ db, reads, act, servesFrom, resolveRef: rows.resolveRef, changed, policyChanged, subscribe }),
-        ),
+        Context.add(ProjectPolicy, policy),
       );
     }),
   );

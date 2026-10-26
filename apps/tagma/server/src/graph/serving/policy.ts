@@ -1,6 +1,6 @@
 import { Context, Effect } from 'effect';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
-import type { ProjectSetting } from '../contract/wire/storage.js';
+import { PROJECT_SETTINGS, type ProjectSetting, type ProjectSettings } from '../contract/wire/storage.js';
 import type { GraphStore, StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
 import { project } from '../../projects/store/table.js';
 import { projectPolicy, projectsWithPolicy, writePolicy } from '../store/policy.js';
@@ -94,22 +94,24 @@ export const servedPolicy = (input: {
     ),
     servesFrom: reads(input.servesFrom),
 
-    set: Effect.fn('Projects.set')(function* (input: { ref: string; field: ProjectSetting; value: boolean }) {
+    set: Effect.fn('Projects.set')(function* (input: { ref: string; settings: ProjectSettings }) {
       const current = yield* resolveRef(input.ref);
+      const moved = PROJECT_SETTINGS.flatMap((field) => {
+        const value = input.settings[field];
+        return value === undefined || value === current[field] ? [] : [{ field, value }];
+      });
+      if (moved.length === 0) return current;
       return yield* act.unit(
         policySetting,
         Effect.gen(function* () {
-          yield* writePolicy(db, current.id, { [input.field]: input.value });
-          const row: ProjectPolicyRow = { ...current, [input.field]: input.value };
-          yield* act.record('project_set', null, {
-            projectId: current.id,
-            field: input.field,
-            from: current[input.field],
-            to: input.value,
-          });
+          const fields: { [Field in ProjectSetting]?: boolean } = {};
+          for (const { field, value } of moved) fields[field] = value;
+          yield* writePolicy(db, current.id, fields);
+          for (const { field, value } of moved)
+            yield* act.record('project_set', null, { projectId: current.id, field, from: current[field], to: value });
           yield* changed;
-          yield* policyChanged({ projectId: current.id, field: input.field });
-          return row;
+          for (const { field } of moved) yield* policyChanged({ projectId: current.id, field });
+          return { ...current, ...fields } satisfies ProjectPolicyRow;
         }),
       );
     }),

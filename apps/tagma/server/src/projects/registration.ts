@@ -150,6 +150,38 @@ const identityFree = (existing: Holder | undefined, exceptId?: number) => {
   ]).saying(PROJECT_WORDS.folderTaken(existing.name));
 };
 
+const nameChecked = Effect.fn('Projects.nameChecked')(function* (
+  store: MachineStore['Service'],
+  unit: Unit<'machine'>,
+  reserved: ReadonlySet<string>,
+  name: string,
+  exceptId?: number,
+) {
+  if (name === GLOBAL_PROJECT.name) {
+    return yield* new GateRefusal('reserved-project', `"${GLOBAL_PROJECT.name}" is the cross-project graph, which always exists`, [
+      'name this project something else',
+      `name project ${GLOBAL_PROJECT.name} in a read to reach the graph that already holds that name`,
+    ]).saying(PROJECT_WORDS.nameRefused(name));
+  }
+  if (reserved.has(name.toLowerCase())) {
+    return yield* new GateRefusal('reserved-project', `"${name}" names a server route, so it cannot name a project`, [
+      'choose another project name',
+    ]).saying(PROJECT_WORDS.nameRefused(name));
+  }
+  if (name.trim() === '' || /[/\\]/.test(name) || name.includes('..')) {
+    return yield* new GateRefusal('project-name', `"${name}" cannot name a project: the name becomes the first segment of its address`, [
+      'choose a name without path separators or ..',
+    ]).saying(PROJECT_WORDS.nameRefused(name));
+  }
+  const taken = yield* holderOfName(store, unit, name);
+  if (taken !== undefined && taken.id !== exceptId) {
+    return yield* new GateRefusal('duplicate-name', `a project named "${name}" is already registered`, [
+      'the registry names what is registered',
+      'choose another name',
+    ]).saying(PROJECT_WORDS.nameTaken(name));
+  }
+});
+
 const refuseUnmaking = (row: ProjectRow, what: string) =>
   row.global
     ? new GateRefusal('global-permanent', `"${row.name}" is the cross-project graph: it cannot be ${what}`, [
@@ -268,12 +300,19 @@ export const projectsLayer = Layer.effectContext(
         const { identity } = input;
         const { holder, own, moved } = yield* placeOf(store, unit, identity, canonical);
         if (holder !== undefined && !holder.global && (holder.removedAt !== null || moved)) {
+          const kept = holder.removedAt === null || (yield* holderOfName(store, unit, holder.name)) === undefined;
+          if (!kept) yield* nameChecked(store, unit, reserved, input.name, holder.id);
           const repoKey = keyOf(identity, own, holder);
           yield* markedAt(identity, repoKey);
           const row = yield* unit.run(
             db
               .update(project)
-              .set({ repoKey, rootPath: moved ? identity.rootPath : holder.rootPath, removedAt: null })
+              .set({
+                repoKey,
+                rootPath: moved ? identity.rootPath : holder.rootPath,
+                removedAt: null,
+                name: kept ? holder.name : input.name,
+              })
               .where(eq(project.id, holder.id))
               .returning(registration)
               .get(),
@@ -282,40 +321,13 @@ export const projectsLayer = Layer.effectContext(
           yield* unit.afterCommit(events.changed.publish());
           return { project: row, returned: true };
         }
-        if (input.name === GLOBAL_PROJECT.name || holder?.global === true) {
+        if (holder?.global === true) {
           return yield* new GateRefusal('reserved-project', `"${GLOBAL_PROJECT.name}" is the cross-project graph, which always exists`, [
             'name this project something else',
             `name project ${GLOBAL_PROJECT.name} in a read to reach the graph that already holds that name`,
           ]).saying(PROJECT_WORDS.nameRefused(input.name));
         }
-        if (reserved.has(input.name.toLowerCase())) {
-          return yield* new GateRefusal('reserved-project', `"${input.name}" names a server route, so it cannot name a project`, [
-            'choose another project name',
-          ]).saying(PROJECT_WORDS.nameRefused(input.name));
-        }
-        if (input.name.trim() === '' || /[/\\]/.test(input.name) || input.name.includes('..')) {
-          return yield* new GateRefusal(
-            'project-name',
-            `"${input.name}" cannot name a project: the name becomes a filesystem path segment`,
-            ['choose a name without path separators or ..'],
-          ).saying(PROJECT_WORDS.nameRefused(input.name));
-        }
-        const taken = yield* holderOfName(store, unit, input.name);
-        if (taken !== undefined) {
-          return yield* taken.removedAt === null
-            ? new GateRefusal('duplicate-name', `a project named "${input.name}" is already registered`, [
-                'the registry names what is registered',
-                'choose another name',
-              ]).saying(PROJECT_WORDS.nameTaken(input.name))
-            : new GateRefusal(
-                'duplicate-name',
-                `"${input.name}" names a project removed from Tagma, whose graph is stored under that name`,
-                [
-                  `add_project with the root ${taken.rootPath} — "${input.name}" comes back with its graph and threads`,
-                  'choose another name',
-                ],
-              ).saying(PROJECT_WORDS.nameRemembered(input.name));
-        }
+        yield* nameChecked(store, unit, reserved, input.name);
         yield* identityFree(holder);
         const repoKey = keyOf(identity, own);
         yield* markedAt(identity, repoKey);
@@ -339,6 +351,15 @@ export const projectsLayer = Layer.effectContext(
         const row = yield* unit.run(
           db.update(project).set({ repoKey, rootPath: identity.rootPath }).where(eq(project.id, current.id)).returning(registration).get(),
         );
+        if (row === undefined) return yield* Effect.die('project update returned no row');
+        yield* unit.afterCommit(events.changed.publish());
+        return row;
+      }),
+      rename: Effect.fn('Projects.rename')(function* (unit, current, name) {
+        yield* refuseUnmaking(current, 'renamed');
+        if (name === current.name) return current;
+        yield* nameChecked(store, unit, reserved, name, current.id);
+        const row = yield* unit.run(db.update(project).set({ name }).where(eq(project.id, current.id)).returning(registration).get());
         if (row === undefined) return yield* Effect.die('project update returned no row');
         yield* unit.afterCommit(events.changed.publish());
         return row;

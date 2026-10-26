@@ -160,11 +160,15 @@ export const REGISTRY_PAIRS = {
     }),
   ),
 
-  set_project_policy: pair(
-    OPS.set_project_policy,
-    body(OPS.set_project_policy, {
-      execute: Effect.fnUntraced(function* (input: In<'set_project_policy'>) {
-        const row = yield* (yield* ProjectPolicy).set({ ref: input.ref, field: input.field, value: input.value });
+  update_project: pair(
+    OPS.update_project,
+    body(OPS.update_project, {
+      execute: Effect.fnUntraced(function* (input: In<'update_project'>) {
+        const row = yield* (yield* ProjectLifecycle).update({
+          ref: input.ref,
+          name: input.name,
+          settings: { private: input.private, strictProvenance: input.strictProvenance },
+        });
         return { status: 'ok' as const, project: yield* wiredOne(row) };
       }),
     }),
@@ -189,7 +193,7 @@ export const REGISTRY_PAIRS = {
       }),
       execute: Effect.fnUntraced(function* (input: In<'set_project_storage'>, consents: readonly Raised[]) {
         const row = yield* resolved(input.ref);
-        if (consents.length > 0) yield* (yield* ProjectPolicy).set({ ref: input.ref, field: 'private', value: false });
+        if (consents.length > 0) yield* (yield* ProjectPolicy).set({ ref: input.ref, settings: { private: false } });
         const pool = yield* RoutedGraphs;
         if (pool === null) {
           return yield* new GateRefusal('no-pool', 'this door serves no graphs, so none can be moved', [

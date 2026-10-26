@@ -4,7 +4,7 @@ export const project = sqliteTable(
   'project',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    name: text('name').notNull().unique(),
+    name: text('name').notNull(),
     repoKey: text('repo_key').notNull(),
     rootPath: text('root_path').notNull(),
     global: integer('global', { mode: 'boolean' }).notNull().default(false),

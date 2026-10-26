@@ -272,36 +272,39 @@ layer(demoGraphLayer({ repos: ['repo'] }).pipe(Layer.provideMerge(BunFileSystem.
       ),
     );
 
-    it.effect('a removed project keeps its name and comes back at its root with its knowledge and settings', () =>
-      withDemo(({ graph, fixture, refusal }) =>
-        Effect.gen(function* () {
-          const root = yield* fixture.directory('spare');
-          const spare = yield* graph.projectLifecycle.create({ name: 'spare-settings', rootPath: root });
-          const kept = yield* graph.blocks.create({ projectId: spare.id, tags: ['idea'], title: 'kept' });
-          yield* signedBy(null)(
-            graph.settings.write({
-              scope: 'project',
-              projectId: spare.id,
-              key: mapBudget.id,
-              value: mapBudget.fallback + 1,
-            }),
-          );
-          expect((yield* graph.projectLifecycle.remove({ ref: String(spare.id) })).name).toBe('spare-settings');
-          expect((yield* refusal(graph.projects.resolve('spare-settings'))).code).toBe('unknown-project');
-          expect((yield* graph.projects.list()).map((row) => row.id)).not.toContain(spare.id);
-          const elsewhere = yield* fixture.directory('elsewhere');
-          expect((yield* refusal(graph.projectLifecycle.create({ name: 'spare-settings', rootPath: elsewhere }))).code).toBe(
-            'duplicate-name',
-          );
+    it.effect(
+      'a removed project frees its name and comes back at its root with its knowledge and settings, named as asked once its name is taken',
+      () =>
+        withDemo(({ graph, fixture, refusal }) =>
+          Effect.gen(function* () {
+            const root = yield* fixture.directory('spare');
+            const spare = yield* graph.projectLifecycle.create({ name: 'spare-settings', rootPath: root });
+            const kept = yield* graph.blocks.create({ projectId: spare.id, tags: ['idea'], title: 'kept' });
+            yield* signedBy(null)(
+              graph.settings.write({
+                scope: 'project',
+                projectId: spare.id,
+                key: mapBudget.id,
+                value: mapBudget.fallback + 1,
+              }),
+            );
+            expect((yield* graph.projectLifecycle.remove({ ref: String(spare.id) })).name).toBe('spare-settings');
+            expect((yield* refusal(graph.projects.resolve('spare-settings'))).code).toBe('unknown-project');
+            expect((yield* graph.projects.list()).map((row) => row.id)).not.toContain(spare.id);
+            const elsewhere = yield* fixture.directory('elsewhere');
+            expect(yield* graph.projectLifecycle.create({ name: 'spare-settings', rootPath: elsewhere })).toMatchObject({
+              name: 'spare-settings',
+              returned: false,
+            });
 
-          const back = yield* graph.projectLifecycle.create({ name: 'renamed', rootPath: root, storage: 'team' });
-          expect(back).toMatchObject({ id: spare.id, name: 'spare-settings', storage: spare.storage, returned: true });
-          expect((yield* graph.settings.read(mapBudget, spare.id)).from).toBe('project');
-          expect(yield* graph.graphStore.db.select({ title: block.title }).from(block).where(eq(block.id, kept.id))).toEqual([
-            { title: 'kept' },
-          ]);
-        }),
-      ),
+            const back = yield* graph.projectLifecycle.create({ name: 'renamed', rootPath: root, storage: 'team' });
+            expect(back).toMatchObject({ id: spare.id, name: 'renamed', storage: spare.storage, returned: true });
+            expect((yield* graph.settings.read(mapBudget, spare.id)).from).toBe('project');
+            expect(yield* graph.graphStore.db.select({ title: block.title }).from(block).where(eq(block.id, kept.id))).toEqual([
+              { title: 'kept' },
+            ]);
+          }),
+        ),
     );
 
     it.effect('a folder added before its first commit comes back as the same project once it has commits', () =>

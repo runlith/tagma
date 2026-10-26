@@ -68,6 +68,7 @@ const projects = Layer.succeed(
     removed: unused,
     register: unused,
     setRoot: unused,
+    rename: unused,
     remove: unused,
     forget: unused,
     registryVersion: unused(),

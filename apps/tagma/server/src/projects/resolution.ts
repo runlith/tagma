@@ -20,7 +20,13 @@ const holding = { ...registration, removedAt: project.removedAt };
 const standing = isNull(project.removedAt);
 
 export const holderOfName = (store: MachineStore['Service'], unit: Unit<'machine'>, name: string) =>
-  unit.run(store.db.select(holding).from(project).where(eq(project.name, name)).get());
+  unit.run(
+    store.db
+      .select(registration)
+      .from(project)
+      .where(and(eq(project.name, name), standing))
+      .get(),
+  );
 
 export const holderOfRepository = (store: MachineStore['Service'], unit: Unit<'machine'>, repoKey: string) =>
   unit.run(store.db.select(holding).from(project).where(eq(project.repoKey, repoKey)).get());

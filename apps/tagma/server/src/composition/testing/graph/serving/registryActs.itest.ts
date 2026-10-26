@@ -29,18 +29,18 @@ const rootOf = (served: ServedGraph, projectId: number) =>
   );
 
 layer(servingLayer, { excludeTestServices: true })('registry acts on a project served from files', (it) => {
-  it.effect('a policy of a project whose blocks are served from files switches and answers the project', () =>
+  it.effect('one update of a project whose blocks are served from files renames it, switches a policy and answers the project', () =>
     withServing((serving) =>
       Effect.gen(function* () {
         const door = machineDoor(serving);
         const answer = yield* door(
-          REGISTRY_PAIRS.set_project_policy.body.execute(
-            { ref: String(serving.projectId), field: 'private', value: true },
+          REGISTRY_PAIRS.update_project.body.execute(
+            { ref: String(serving.projectId), name: 'renamed-served', private: true },
             undefined,
             operator,
           ),
         );
-        expect(answer.project).toMatchObject({ id: serving.projectId, private: true, servesFrom: 'files' });
+        expect(answer.project).toMatchObject({ id: serving.projectId, name: 'renamed-served', private: true, servesFrom: 'files' });
       }),
     ),
   );

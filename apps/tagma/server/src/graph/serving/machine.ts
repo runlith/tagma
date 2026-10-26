@@ -80,6 +80,7 @@ export const machineGraphOf = <R>(
       ProjectLifecycle.of({
         create: (input, birth) => within(lifecycle.create(input, birth)),
         move: (projectId, root) => within(lifecycle.move(projectId, root)),
+        update: (input) => within(lifecycle.update(input)),
         remove: (input) => within(lifecycle.remove(input)),
       }),
     ),

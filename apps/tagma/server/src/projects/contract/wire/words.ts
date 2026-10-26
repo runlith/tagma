@@ -6,7 +6,4 @@ export const PROJECT_WORDS = {
   folderUnwritable: { text: 'Tagma cannot write into this folder’s repository. Make it writable and try again.' },
   nameRefused: (name: string): Words => ({ text: `“${name}” cannot be a project name. Choose another name.` }),
   nameTaken: (name: string): Words => ({ text: `There is already a project named “${name}”. Choose another name.` }),
-  nameRemembered: (name: string): Words => ({
-    text: `“${name}” is the name of a project removed from Tagma. Add its folder to bring it back, or choose another name.`,
-  }),
 } as const;

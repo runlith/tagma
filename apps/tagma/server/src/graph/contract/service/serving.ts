@@ -14,7 +14,7 @@ import type { ProjectCall } from '../wire/call.js';
 import type { ProjectIdentification } from '../../../projects/contract/service/registry.js';
 import type { ProjectRefusal, ProjectRootFailure } from '../../../projects/contract/wire/project.js';
 import type { ProjectRow, StorageMode } from '../../../projects/contract/wire/project.js';
-import type { ProjectSetting } from '../wire/storage.js';
+import type { ProjectSetting, ProjectSettings } from '../wire/storage.js';
 import type { ServesFrom } from '../wire/storage.js';
 import type { BlockRow, TreeGuard, TreeProjection } from './acts.js';
 import type { Tags } from './vocabulary.js';
@@ -114,8 +114,7 @@ export class ProjectPolicy extends Context.Service<
     read(ids: readonly number[]): Effect.Effect<ReadonlyMap<number, ProjectPolicyRow>, StoreFailure>;
     set(input: {
       ref: string;
-      field: ProjectSetting;
-      value: boolean;
+      settings: ProjectSettings;
     }): Effect.Effect<ProjectPolicyRow, StoreFailure | GateRefusal<ProjectRefusal | FloorRefusal | 'no-root'>>;
     setStorage(input: {
       id: number;
@@ -163,9 +162,18 @@ export class ProjectLifecycle extends Context.Service<
       | GateRefusal<ProjectRootFailure | FloorRefusal | GitRefusal | 'not-found' | 'no-root' | 'global-permanent' | 'duplicate-root'>,
       ProjectIdentification
     >;
+    update(
+      input: ProjectUpdate,
+    ): Effect.Effect<
+      ProjectPolicyRow,
+      | StoreFailure
+      | GateRefusal<ProjectRefusal | FloorRefusal | 'no-root' | 'global-permanent' | 'reserved-project' | 'project-name' | 'duplicate-name'>
+    >;
     remove(input: { ref: string }): Effect.Effect<ProjectPolicyRow, StoreFailure | GateRefusal>;
   }
 >()('tagma/graph/ProjectLifecycle') {}
+
+export type ProjectUpdate = { readonly ref: string; readonly name?: string; readonly settings: ProjectSettings };
 
 export const MeasuredCheckout = Context.Reference<{
   readonly projectId: number;

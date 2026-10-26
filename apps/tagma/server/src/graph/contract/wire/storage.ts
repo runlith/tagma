@@ -21,6 +21,7 @@ export type FormatMarker = typeof formatMarkerSchema.Type;
 
 export const PROJECT_SETTINGS = ['strictProvenance', 'private'] as const;
 export type ProjectSetting = (typeof PROJECT_SETTINGS)[number];
+export type ProjectSettings = { readonly [Field in ProjectSetting]?: boolean };
 
 export const TREE_ORIGINS = 'tagma-checkouts';
 export const TREE_SERVED = 'tagma-served';

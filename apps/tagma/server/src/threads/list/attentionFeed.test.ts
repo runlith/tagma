@@ -81,6 +81,7 @@ function rig(rows: readonly ThreadSummary[], window: number) {
     removed: unused,
     register: unused,
     setRoot: unused,
+    rename: unused,
     remove: unused,
     forget: unused,
   };

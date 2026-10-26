@@ -95,7 +95,7 @@ const RETIRED: readonly Retired[] = [
   ['GET', '/api/projects/current', 'read_project'],
   ['GET', '/api/projects/:ref', 'read_project'],
   ['PATCH', '/api/projects/:ref/root', 'set_project_root'],
-  ['PATCH', '/api/projects/:ref/setting', 'set_project_policy'],
+  ['PATCH', '/api/projects/:ref/setting', 'update_project'],
   ['PATCH', '/api/projects/:ref/storage', 'set_project_storage'],
   ['DELETE', '/api/projects/:ref', 'remove_project'],
   ['GET', '/api/projects/:ref/branches', 'list_branches'],

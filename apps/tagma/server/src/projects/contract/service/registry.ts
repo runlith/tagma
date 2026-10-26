@@ -36,6 +36,11 @@ export class Projects extends Context.Service<
       row: ProjectRow,
       identity: ProjectIdentity,
     ): Effect.Effect<ProjectRow, StoreFailure | GateRefusal<GitRefusal | 'unwritable-root' | 'global-permanent' | 'duplicate-root'>>;
+    rename(
+      unit: WriteUnit<'machine'>,
+      row: ProjectRow,
+      name: string,
+    ): Effect.Effect<ProjectRow, StoreFailure | GateRefusal<'global-permanent' | 'reserved-project' | 'project-name' | 'duplicate-name'>>;
     remove(unit: WriteUnit<'machine'>, project: ProjectRow): Effect.Effect<void, StoreFailure | GateRefusal<'global-permanent'>>;
     forget(unit: WriteUnit<'machine'>, project: ProjectRow): Effect.Effect<void, StoreFailure>;
     readonly registryVersion: Effect.Effect<number>;

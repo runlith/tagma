@@ -60,7 +60,7 @@ try {
   const note = await run(graph.blocks.create({ projectId, title: 'Unrelated note' }));
   await run(graph.blocks.update({ id: note.id, body: 'Ordinary graph write.' }));
   await sample('instructions after unrelated write', () => graph.orientation.instructions({ projectId, audience: 'graph' }));
-  await run(graph.projectPolicy.set({ ref: String(projectId), field: 'strictProvenance', value: true }));
+  await run(graph.projectPolicy.set({ ref: String(projectId), settings: { strictProvenance: true } }));
   await sample('instructions after policy write', () => graph.orientation.instructions({ projectId, audience: 'graph' }));
 } finally {
   await Effect.runPromise(world.releaseEffect);

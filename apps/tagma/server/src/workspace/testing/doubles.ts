@@ -255,6 +255,7 @@ export const fixedCheckoutPaths = (projectId: number, checkouts: readonly FixedC
     removed: () => Effect.succeed([]),
     register: () => Effect.die('a fixed registry does not register projects'),
     setRoot: () => Effect.die('a fixed registry does not move projects'),
+    rename: () => Effect.die('a fixed registry does not rename projects'),
     remove: () => Effect.die('a fixed registry does not remove projects'),
     forget: () => Effect.die('a fixed registry does not forget projects'),
     registryVersion: Effect.succeed(0),

@@ -36,8 +36,8 @@ export const policy = ({ perform, here, render }: PolicyCli) => {
     ({ json, ref, setting, value }) =>
       Effect.gen(function* () {
         const { project: row } = yield* perform(
-          REGISTRY_OPERATIONS.set_project_policy,
-          { ref, field: setting, value: value === 'true' },
+          REGISTRY_OPERATIONS.update_project,
+          { ref, [setting]: value === 'true' },
           here(yield* CurrentInvocation),
         );
         if (json) return yield* print(row, true);

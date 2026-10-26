@@ -4,7 +4,6 @@ import { ASKS_IN_REVIEW } from '../../../../platform/contract/wire/conditions.js
 import { operation } from '../../../../platform/contract/wire/operation.js';
 import { graphArms as arms } from '../answers.js';
 import { blockSchema, projectBranchSchema, projectSchema } from '../rows.js';
-import { PROJECT_SETTINGS } from '../storage.js';
 import { STORAGE_MODES } from '../../../../projects/contract/wire/project.js';
 import { pointingSchema } from '../far.js';
 import { graphRemoteSchema } from '../remote.js';
@@ -66,7 +65,7 @@ export const REGISTRY_OPERATIONS = {
     ...act('Register this project?', 'Register', 'Registered a project'),
     meaning: 'Register a checkout as a project: its graph is born and the commit gate is installed in it.',
     grammar:
-      'A folder that is a removed project — the same folder, or its repository moved elsewhere — brings that project back with its id, name, policy, storage, graph and threads and answers `returned`, as does a registered repository added at the place it moved to; the name, storage, policy and catalogs asked for apply only to a project born here. Another clone or a copy of a registered repository is a project of its own, and a worktree belongs to its repository’s project.',
+      'A folder that is a removed project — the same folder, or its repository moved elsewhere — brings that project back with its id, name, policy, storage, graph and threads and answers `returned`, as does a registered repository added at the place it moved to; a removed project whose name another project took comes back under the name asked for. Otherwise the name, storage, policy and catalogs asked for apply only to a project born here. Another clone or a copy of a registered repository is a project of its own, and a worktree belongs to its repository’s project.',
     input: Schema.Struct({
       name: Schema.String.check(Schema.isMinLength(1)),
       rootPath: root,
@@ -106,7 +105,7 @@ export const REGISTRY_OPERATIONS = {
     meaning:
       'Take a project out of this machine’s list: its agents stop and the commit gate leaves its checkout, while its repository, graph, threads and settings stay — add_project with its folder brings it back.',
     grammar:
-      'Edges other projects of this machine hold into its graph stay as they are, read as not on this machine, unless `unlink` removes each one by an unlink act in the graph holding it. The project leaves first: an unlink that refuses answers after the removal, and the edges left stand as not on this machine. The removed project keeps its name: no other project registers under it.',
+      'Edges other projects of this machine hold into its graph stay as they are, read as not on this machine, unless `unlink` removes each one by an unlink act in the graph holding it. The project leaves first: an unlink that refuses answers after the removal, and the edges left stand as not on this machine. Its name is free for another project to take.',
     input: Schema.Struct({
       ref,
       unlink: Schema.optional(Schema.Boolean).annotate({
@@ -117,14 +116,29 @@ export const REGISTRY_OPERATIONS = {
     refusals: ['not-found', 'global-permanent', 'no-edge', 'operation-only', 'graph-pool'],
   }),
 
-  set_project_policy: operation('set_project_policy', {
+  update_project: operation('update_project', {
     ...SURFACE_ACT,
     place: 'machine',
-    ...act('Change this project’s policy?', 'Set', 'Set a project policy'),
-    meaning: 'Switch one project policy on or off.',
-    input: Schema.Struct({ ref, field: Schema.Literals(PROJECT_SETTINGS), value: Schema.Boolean }),
+    ...act('Change this project?', 'Change', 'Changed a project'),
+    meaning: 'Rename a registered project or switch its policies; what is not named stays as it is.',
+    grammar:
+      'A new name passes the checks a registration does and becomes the first segment of the project’s addresses; its graph, worktree copies, mirrors, graph remote and threads stay where they are, because Tagma keeps them by the project’s id. The cross-project graph keeps its name.',
+    input: Schema.Struct({
+      ref,
+      name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      private: Schema.optional(Schema.Boolean),
+      strictProvenance: Schema.optional(Schema.Boolean),
+    }),
     answer: arms({ ok: { project: projectSchema } }),
-    refusals: ['not-found'],
+    refusals: [
+      'not-found',
+      'unknown-project',
+      'ambiguous-project',
+      'global-permanent',
+      'reserved-project',
+      'project-name',
+      'duplicate-name',
+    ],
   }),
 
   set_project_storage: operation('set_project_storage', {
