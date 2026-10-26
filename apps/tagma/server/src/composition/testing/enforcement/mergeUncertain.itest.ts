@@ -36,6 +36,5 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           expect(seen.merged).toEqual([]);
         }),
       ),
-    30_000,
   );
 });

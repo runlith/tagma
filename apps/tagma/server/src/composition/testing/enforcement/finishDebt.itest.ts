@@ -25,8 +25,6 @@ const answered = (outcome: Outcome): Record<string, unknown> => {
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: '60 seconds',
 })('finishing landed debt', (it) => {
   it.effect('a foreign thread lands a debt fix and immediately finishes its owner without reporting the removed entry', () =>
     Effect.gen(function* () {

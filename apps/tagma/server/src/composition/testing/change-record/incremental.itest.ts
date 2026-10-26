@@ -53,7 +53,7 @@ layer(layers, { excludeTestServices: true })('incremental holdings', (it) => {
       yield* Effect.addFinalizer(() => Effect.sync(unlisten));
       yield* world.files.writeFileString(`${world.root}/${pathAt(0)}`, `${heldAt(0)}external\n`);
       yield* world.judges.moved(world.rootId, [pathAt(0)]).pipe(Effect.withTracer(tracer));
-      yield* Deferred.await(published).pipe(Effect.timeout('2 seconds'));
+      yield* Deferred.await(published);
       const after = yield* world.judges.read(world.rootId);
       expect(after.paths.find((holding) => holding.path === pathAt(0))?.lines).toEqual({ added: 2, removed: 1 });
       expect(changes).toHaveLength(1);

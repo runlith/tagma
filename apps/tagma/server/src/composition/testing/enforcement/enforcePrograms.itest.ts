@@ -12,7 +12,7 @@ import type { Unbased } from '../../../enforcement/testing/based.js';
 import { bodies, enforceFixture, operator, withEnforcement } from './enforceFixture.js';
 import { LAYERED_KEY } from '../../../enforcement/testing/layered.js';
 
-layer(enforceFixture(), { excludeTestServices: true, testTimeout: 60_000, timeout: 60_000 })('bound enforcement', (it) => {
+layer(enforceFixture(), { excludeTestServices: true })('bound enforcement', (it) => {
   it.effect('keeps a measurement across graph and foreign-source commits, but refuses changes inside the rule reach', () =>
     withEnforcement((fx) =>
       Effect.fnUntraced(function* () {

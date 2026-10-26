@@ -63,8 +63,6 @@ const answered = (outcome: Outcome): Record<string, unknown> => {
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: '60 seconds',
 })('uncommitted inspection descriptions', (it) => {
   it.effect('a thread previews the whole tightened reach, lands its warnings and reads their commit as escape origin', () =>
     Effect.gen(function* () {

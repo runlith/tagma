@@ -9,40 +9,37 @@ import { commitEffect, composed, refusal, shEffect } from '../finishingFixture.j
 import { makeMachineWorld } from '../../../executions/testing/doubles.js';
 
 layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices: true })('merge recovery', (it) => {
-  it.effect(
-    'a merge cut after it published finishes its own request at the next recovery: checkout, deletion and receipt, once',
-    () =>
-      withDemo((demo) =>
-        Effect.gen(function* () {
-          const { finishing, make, project, projectId, seen, records, units } = yield* composed(
-            demo,
-            makeMachineWorld(() => null),
-            { cutAfterPublishing: true },
-          );
-          const side = yield* make('cut');
-          yield* commitEffect(side.path, 'feature.txt', 'feature\n', 'the work of the worktree');
-          const cut = yield* shEffect(project, ['rev-parse', 'HEAD']);
-          expect(Exit.hasDies(yield* Effect.exit(finishing.merge(projectId, side.rootId, { after: 'delete' })))).toBe(true);
-          const head = yield* shEffect(project, ['rev-parse', 'HEAD']);
-          expect(head).not.toBe(cut);
-          expect(existsSync(join(project, 'feature.txt'))).toBe(false);
-          expect(seen.merged).toEqual([]);
-          writeFileSync(join(project, 'peer.txt'), 'peer\n');
-          const recovered = yield* finishing.recover();
-          expect(recovered).toMatchObject({
-            published: [{ path: project, commit: head, unsynced: [], reason: null }],
-            uncertain: [],
-            unread: [],
-          });
-          expect(readFileSync(join(project, 'feature.txt'), 'utf8')).toBe('feature\n');
-          expect(yield* shEffect(project, ['status', '--porcelain'])).toBe('?? peer.txt');
-          expect(seen.merged).toEqual([[side.rootId, 'merge', head]]);
-          expect(yield* units.read((unit) => records.byRoot(side.rootId, unit))).toBeNull();
-          expect(existsSync(side.path)).toBe(false);
-          expect(yield* finishing.recover()).toMatchObject({ published: [], uncertain: [], unread: [] });
-        }),
-      ),
-    30_000,
+  it.effect('a merge cut after it published finishes its own request at the next recovery: checkout, deletion and receipt, once', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const { finishing, make, project, projectId, seen, records, units } = yield* composed(
+          demo,
+          makeMachineWorld(() => null),
+          { cutAfterPublishing: true },
+        );
+        const side = yield* make('cut');
+        yield* commitEffect(side.path, 'feature.txt', 'feature\n', 'the work of the worktree');
+        const cut = yield* shEffect(project, ['rev-parse', 'HEAD']);
+        expect(Exit.hasDies(yield* Effect.exit(finishing.merge(projectId, side.rootId, { after: 'delete' })))).toBe(true);
+        const head = yield* shEffect(project, ['rev-parse', 'HEAD']);
+        expect(head).not.toBe(cut);
+        expect(existsSync(join(project, 'feature.txt'))).toBe(false);
+        expect(seen.merged).toEqual([]);
+        writeFileSync(join(project, 'peer.txt'), 'peer\n');
+        const recovered = yield* finishing.recover();
+        expect(recovered).toMatchObject({
+          published: [{ path: project, commit: head, unsynced: [], reason: null }],
+          uncertain: [],
+          unread: [],
+        });
+        expect(readFileSync(join(project, 'feature.txt'), 'utf8')).toBe('feature\n');
+        expect(yield* shEffect(project, ['status', '--porcelain'])).toBe('?? peer.txt');
+        expect(seen.merged).toEqual([[side.rootId, 'merge', head]]);
+        expect(yield* units.read((unit) => records.byRoot(side.rootId, unit))).toBeNull();
+        expect(existsSync(side.path)).toBe(false);
+        expect(yield* finishing.recover()).toMatchObject({ published: [], uncertain: [], unread: [] });
+      }),
+    ),
   );
 
   it.effect(
@@ -88,6 +85,5 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           expect(yield* finishing.recover()).toMatchObject({ published: [], uncertain: [], unread: [] });
         }),
       ),
-    30_000,
   );
 });

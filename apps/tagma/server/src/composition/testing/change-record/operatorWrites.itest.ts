@@ -108,7 +108,7 @@ layer(layers, { excludeTestServices: true })('the operator as a holder of lines'
       yield* world.files.symlink(world.paths.join(world.root, 'dir'), world.paths.join(world.root, 'alias'));
       const spellings = [world.paths.join(world.root, 'dir', 'kept.txt'), world.paths.join(world.root, 'alias', 'kept.txt')];
 
-      expect(yield* world.intake.turn(PROJECT, spellings, Effect.succeed('ran'), 'entry').pipe(Effect.timeout('5 seconds'))).toBe('ran');
+      expect(yield* world.intake.turn(PROJECT, spellings, Effect.succeed('ran'), 'entry')).toBe('ran');
     }),
   );
 

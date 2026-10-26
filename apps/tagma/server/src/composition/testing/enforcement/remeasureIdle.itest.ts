@@ -325,86 +325,79 @@ const crossingAtOpening = Effect.fnUntraced(function* (fixture: EnforcementFixtu
 });
 
 layer(enforceFixture(), { excludeTestServices: true })('remeasurement of idle copies', (it) => {
-  it.effect(
-    'startup measures and watches the main checkout alone; a copy is measured and watched from its opening to its closing',
-    () =>
-      withEnforcement((fixture) =>
-        Effect.gen(function* () {
-          const { demo } = fixture;
-          const files = yield* FileSystem.FileSystem;
-          yield* enforced(fixture);
-          const one = yield* worktreeAt(fixture, 'one');
-          const two = yield* worktreeAt(fixture, 'two');
-          const memory = join(yield* demo.fixture.directory('remembered'), 'enforced.json');
-          yield* files.writeFileString(
-            memory,
-            JSON.stringify([demo.demoRoot, one, two].map((root) => ({ projectId: demo.projectId, root }))),
-          );
-          const world = yield* copies(fixture, { worktrees: [one, two], memory });
+  it.effect('startup measures and watches the main checkout alone; a copy is measured and watched from its opening to its closing', () =>
+    withEnforcement((fixture) =>
+      Effect.gen(function* () {
+        const { demo } = fixture;
+        const files = yield* FileSystem.FileSystem;
+        yield* enforced(fixture);
+        const one = yield* worktreeAt(fixture, 'one');
+        const two = yield* worktreeAt(fixture, 'two');
+        const memory = join(yield* demo.fixture.directory('remembered'), 'enforced.json');
+        yield* files.writeFileString(
+          memory,
+          JSON.stringify([demo.demoRoot, one, two].map((root) => ({ projectId: demo.projectId, root }))),
+        );
+        const world = yield* copies(fixture, { worktrees: [one, two], memory });
 
-          expect(yield* Queue.take(world.opens)).toBe(demo.demoRoot);
-          yield* world.driver.ready(world.projectId, demo.demoRoot);
-          world.opened(one);
-          yield* world.driver.ready(world.projectId, one);
-          expect([yield* Queue.take(world.watches), yield* Queue.take(world.watches)].sort()).toEqual([demo.demoRoot, one].sort());
+        expect(yield* Queue.take(world.opens)).toBe(demo.demoRoot);
+        yield* world.driver.ready(world.projectId, demo.demoRoot);
+        world.opened(one);
+        yield* world.driver.ready(world.projectId, one);
+        expect([yield* Queue.take(world.watches), yield* Queue.take(world.watches)].sort()).toEqual([demo.demoRoot, one].sort());
 
-          world.closed(one);
-          expect(yield* Queue.take(world.unwatches)).toBe(one);
-          expect([...world.watching]).toEqual([demo.demoRoot]);
-          expect([...world.touched].sort()).toEqual([demo.demoRoot, one].sort());
-        }),
-      ),
-    30_000,
+        world.closed(one);
+        expect(yield* Queue.take(world.unwatches)).toBe(one);
+        expect([...world.watching]).toEqual([demo.demoRoot]);
+        expect([...world.touched].sort()).toEqual([demo.demoRoot, one].sort());
+      }),
+    ),
   );
 
-  it.effect(
-    'closing an inspecting copy cancels its work, releases the measurement lane and preserves unmeasured landings',
-    () =>
-      withEnforcement((fixture) =>
-        Effect.gen(function* () {
-          const { demo } = fixture;
-          const { workers } = yield* Enforcements;
-          const rule = yield* enforced(fixture);
-          const one = yield* worktreeAt(fixture, 'inspecting');
-          const two = yield* worktreeAt(fixture, 'next');
-          const entered = yield* Deferred.make<void>();
-          const stopped = yield* Deferred.make<boolean>();
-          const lanes: Lanes = {
-            ...workers,
-            reach: (ask, priority) =>
-              ask.root === one
-                ? Deferred.succeed(entered, undefined).pipe(
-                    Effect.andThen(Effect.never),
-                    Effect.onExit((exit) => Deferred.succeed(stopped, Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause))),
-                  )
-                : workers.reach(ask, priority),
-          };
-          const journal = journalOver(demo.graph.store.db, demo.graph.units);
-          const world = yield* copies(fixture, { worktrees: [one, two], lanes, journal });
-          world.opened(one);
-          yield* Deferred.await(entered);
-          yield* world.driver.landed('submit_work', {
-            kind: 'tree',
-            projectId: world.projectId,
-            root: one,
-            commit: yield* rev(one, 'HEAD'),
-            paths: ['src/core/view.ts'],
-          });
-          world.closed(one);
-          yield* world.driver.ready(world.projectId, two);
-          expect(yield* Deferred.await(stopped)).toBe(true);
-          expect(yield* journal.page(null, 10)).toHaveLength(1);
-          expect((yield* fixture.documentOf(rule))?.debt.map((one) => one.fingerprint)).toEqual([VIEW_DEBT]);
-        }),
-      ),
-    30_000,
+  it.effect('closing an inspecting copy cancels its work, releases the measurement lane and preserves unmeasured landings', () =>
+    withEnforcement((fixture) =>
+      Effect.gen(function* () {
+        const { demo } = fixture;
+        const { workers } = yield* Enforcements;
+        const rule = yield* enforced(fixture);
+        const one = yield* worktreeAt(fixture, 'inspecting');
+        const two = yield* worktreeAt(fixture, 'next');
+        const entered = yield* Deferred.make<void>();
+        const stopped = yield* Deferred.make<boolean>();
+        const lanes: Lanes = {
+          ...workers,
+          reach: (ask, priority) =>
+            ask.root === one
+              ? Deferred.succeed(entered, undefined).pipe(
+                  Effect.andThen(Effect.never),
+                  Effect.onExit((exit) => Deferred.succeed(stopped, Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause))),
+                )
+              : workers.reach(ask, priority),
+        };
+        const journal = journalOver(demo.graph.store.db, demo.graph.units);
+        const world = yield* copies(fixture, { worktrees: [one, two], lanes, journal });
+        world.opened(one);
+        yield* Deferred.await(entered);
+        yield* world.driver.landed('submit_work', {
+          kind: 'tree',
+          projectId: world.projectId,
+          root: one,
+          commit: yield* rev(one, 'HEAD'),
+          paths: ['src/core/view.ts'],
+        });
+        world.closed(one);
+        yield* world.driver.ready(world.projectId, two);
+        expect(yield* Deferred.await(stopped)).toBe(true);
+        expect(yield* journal.page(null, 10)).toHaveLength(1);
+        expect((yield* fixture.documentOf(rule))?.debt.map((one) => one.fingerprint)).toEqual([VIEW_DEBT]);
+      }),
+    ),
   );
 
   for (const operation of ['submit_work', 'check_rules'] as const)
     it.effect(
       `${operation} waits for the opened copy's measurement before maintenance opens and rejects a fingerprint retired while it idled`,
       () => withEnforcement((fixture) => crossingAtOpening(fixture, operation)),
-      30_000,
     );
 
   it.effect(
@@ -447,6 +440,5 @@ layer(enforceFixture(), { excludeTestServices: true })('remeasurement of idle co
           ]);
         }),
       ),
-    30_000,
   );
 });

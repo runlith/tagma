@@ -21,8 +21,6 @@ const CROSSING = 'export const first = 1;\nexport const second = 2;\n';
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: '60 seconds',
 })('checkout debt', (it) => {
   it.effect('an immediate native merge delivers worktree debt with a history step and preserves the changed base graph', () =>
     Effect.gen(function* () {

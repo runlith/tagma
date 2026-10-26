@@ -51,7 +51,6 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           expect(yield* shEffect(project, ['status', '--porcelain'])).toBe('');
         }),
       ),
-    30000,
   );
   it.effect(
     'a merge whose checkout cannot be brought to it after it published answers landed and unsynced, and the file in its way stays as it was',
@@ -75,6 +74,5 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           expect(readFileSync(join(project, 'feature.txt'), 'utf8')).toBe('peer\n');
         }),
       ),
-    30000,
   );
 });

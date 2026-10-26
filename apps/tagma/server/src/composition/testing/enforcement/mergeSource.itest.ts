@@ -32,7 +32,6 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           expect(yield* finishing.recover()).toMatchObject({ published: [], uncertain: [], unread: [] });
         }),
       ),
-    30_000,
   );
 
   it.effect(
@@ -59,6 +58,5 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           expect(existsSync(join(side.path, 'trunk.txt'))).toBe(false);
         }),
       ),
-    30_000,
   );
 });

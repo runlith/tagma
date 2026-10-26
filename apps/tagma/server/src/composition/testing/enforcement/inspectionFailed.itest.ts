@@ -79,22 +79,19 @@ const remembering = <A, E>(
     ),
   );
 layer(landingFixture(), { excludeTestServices: true })('landing enforcement', (it) => {
-  it.effect(
-    'a worker that cannot answer refuses inspection-failed at gate and lands at watch, named in watched',
-    () =>
-      withLanding((gate) =>
-        Effect.fnUntraced(function* () {
-          const dead = yield* deadFaces(gate);
-          yield* gate.wrote(MINE, 'src/core/boot.ts', "import { model } from './model';\nexport const boot = model;\n");
-          const refusal = yield* gate.refused(MINE, { faces: dead });
-          expect(refusal.code).toBe('inspection-failed');
-          expect(refusal.reason).toContain(gate.rule);
-          yield* gate.enforcedAt('watch');
-          const receipt = gate.landed(yield* gate.submit(MINE, { faces: dead }));
-          expect(receipt.watched).toEqual([{ rule: gate.rule, cause: 'worker', failed: expect.any(String) }]);
-        })(),
-      ),
-    30000,
+  it.effect('a worker that cannot answer refuses inspection-failed at gate and lands at watch, named in watched', () =>
+    withLanding((gate) =>
+      Effect.fnUntraced(function* () {
+        const dead = yield* deadFaces(gate);
+        yield* gate.wrote(MINE, 'src/core/boot.ts', "import { model } from './model';\nexport const boot = model;\n");
+        const refusal = yield* gate.refused(MINE, { faces: dead });
+        expect(refusal.code).toBe('inspection-failed');
+        expect(refusal.reason).toContain(gate.rule);
+        yield* gate.enforcedAt('watch');
+        const receipt = gate.landed(yield* gate.submit(MINE, { faces: dead }));
+        expect(receipt.watched).toEqual([{ rule: gate.rule, cause: 'worker', failed: expect.any(String) }]);
+      })(),
+    ),
   );
 
   it.effect(

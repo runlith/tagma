@@ -12,7 +12,7 @@ const standingDuplicate = Effect.fnUntraced(function* (gate: ProgramFixture, tex
   yield* gate.enforcedAt('gate', { [SEEDED]: gate.owner(), [fp(`src/dup.ts × ${DUP}`)]: gate.owner() });
 });
 
-layer(programFixture(), { excludeTestServices: true, testTimeout: 60_000, timeout: 60_000 })('counted program judgement', (it) => {
+layer(programFixture(), { excludeTestServices: true })('counted program judgement', (it) => {
   it.effect('an excess occurrence added beside a peer edit is judged in the session’s selected tree and in explicit whole', () =>
     withProgram((gate) =>
       Effect.gen(function* () {

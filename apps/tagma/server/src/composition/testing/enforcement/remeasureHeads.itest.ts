@@ -88,14 +88,14 @@ layer(Layer.mergeAll(demoGraphLayer(), BunFileSystem.layer, Path.layer), { exclu
         yield* gitEffect(root, ['add', '.']);
         yield* gitEffect(root, ['-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'escape']);
         const commit = yield* commitOf(demo.graph.git, root, 'HEAD');
-        yield* Queue.take(changed).pipe(Effect.timeout('5 seconds'));
+        yield* Queue.take(changed);
         const recorded = yield* Schema.decodeUnknownEffect(lawEnforcementSchema)(
           (yield* demo.graph.blocks.blockById(rule.id)).fields.enforcement,
         );
         expect(recorded.escaped).toMatchObject([{ fingerprint: 'model.ts', path: 'src/model.ts', commit }]);
         expect(recorded.escaped[0]?.holder).toBeUndefined();
         yield* gitEffect(root, ['update-ref', 'refs/heads/main', enforced.head!]);
-        yield* Queue.take(changed).pipe(Effect.timeout('5 seconds'));
+        yield* Queue.take(changed);
         expect((yield* demo.graph.blocks.blockById(rule.id)).fields.enforcement).toMatchObject({ escaped: [] });
       }),
     ),

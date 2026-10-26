@@ -5,7 +5,8 @@ import { Clock, Effect, FileSystem, Layer } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { contentDigest } from '@runlith/files/content';
 import type { CommandFacts, CommandMove } from '@runlith/agent-tools/WorkspaceChanges';
-import { changeRecordOf, commandLives, commandRig, journalOf, lessonsOf } from '../../../change-record/testing/doubles.js';
+import { changeRecordOf, commandRig, journalOf, lessonsOf } from '../../../change-record/testing/doubles.js';
+import { Lives, WRITE_GAP_MS } from '../../../change-record/record/lives.js';
 import { recoverCommands } from '../../../change-record/record/recovery.js';
 import { READER_RUNS, WRITER_HITS } from '../../../change-record/record/lessons.js';
 import { CommandWalks, commandWalksLayer } from './commandWorld.js';
@@ -19,7 +20,8 @@ const line = (...parts: ReturnType<typeof part>[]): CommandFacts => ({ readsOnly
 const server = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof makeCheckout>>) {
   const walks = yield* CommandWalks;
   const paths = gitCheckoutPaths('repo-root', w.projectId);
-  const lives = commandLives();
+  let at = yield* Clock.currentTimeMillis;
+  const lives = new Lives(() => at);
   const lessons = yield* lessonsOf(w.store, w.units, 'repo');
   const { commands, intake } = yield* commandRig({ store: w.store, units: w.units, git: w.git, walks, lives, paths, lessons });
   const record = yield* changeRecordOf(w.store, w.units, paths, intake, commands, walks);
@@ -31,12 +33,11 @@ const server = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof 
     if (life === null || life === undefined) return yield* Effect.die('the checkout opened no command window');
     const windows = yield* journal.windows();
     const role = windows[windows.length - 1]?.role;
-    const from = yield* Clock.currentTimeMillis;
+    const from = at;
     life.opened();
-    yield* Effect.sleep(30);
+    at++;
     const moves: CommandMove[] = [];
     if (write !== null) {
-      const at = yield* Clock.currentTimeMillis;
       writeFileSync(w.file, write);
       moves.push({
         name: 'src/a.ts',
@@ -50,11 +51,13 @@ const server = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof 
         mode: 0o100644,
       });
     }
-    yield* Effect.sleep(30);
+    at++;
     life.ended();
-    yield* life.settle({ base: null, window: { from, to: yield* Clock.currentTimeMillis }, moves });
+    yield* life.settle({ base: null, window: { from, to: at }, moves });
     life.close();
-    yield* Effect.sleep(30);
+    yield* lessons.ready;
+    yield* commands.decided({ projectId: w.projectId, threadId: MINE });
+    at += WRITE_GAP_MS + 1;
     return role;
   });
   const roleOpened = (facts: CommandFacts) => run(facts, null);

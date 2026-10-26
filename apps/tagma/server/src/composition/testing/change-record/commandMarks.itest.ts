@@ -1,11 +1,12 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { statSync, writeFileSync } from 'node:fs';
-import { Clock, Effect } from 'effect';
+import { Clock, Deferred, Effect, Fiber } from 'effect';
 import { contentDigest } from '@runlith/files/content';
 import { FILE, MINE, THEIRS } from '../checkoutFixture.js';
 import { commandLayer, commandWorld } from './commandWorld.js';
 import { naming } from '../../../change-record/testing/doubles.js';
+import { WRITE_GAP_MS } from '../../../change-record/record/lives.js';
 
 const base = `${FILE.join('\n')}\n`;
 
@@ -83,25 +84,32 @@ layer(commandLayer, { excludeTestServices: true })('command marks', (it) => {
       const s = yield* commandWorld();
       const { life, from } = yield* commandOf(s, THEIRS);
       const text = 'export const typed = 1;\n';
-      const landed = yield* s.record.land(
-        { work: { projectId: s.w.projectId, threadId: MINE } },
-        [
-          {
-            origin: 'write',
-            path: s.w.file,
-            at: new Date(yield* Clock.currentTimeMillis),
-            before: contentDigest(base),
-            after: contentDigest(text),
-          },
-        ],
-        Effect.andThen(
-          Effect.sleep(60),
-          Effect.sync(() => {
+      const started = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const intendedAt = from - WRITE_GAP_MS - 1;
+      const writing = yield* Effect.forkScoped(
+        s.record.land(
+          { work: { projectId: s.w.projectId, threadId: MINE } },
+          [
+            {
+              origin: 'write',
+              path: s.w.file,
+              at: new Date(intendedAt),
+              before: contentDigest(base),
+              after: contentDigest(text),
+            },
+          ],
+          Effect.gen(function* () {
+            yield* Deferred.succeed(started, undefined);
+            yield* Deferred.await(release);
             writeFileSync(s.w.file, text);
             return true;
           }),
         ),
       );
+      yield* Deferred.await(started);
+      yield* Deferred.succeed(release, undefined);
+      const landed = yield* Fiber.join(writing);
       const writtenAt = statSync(s.w.file).mtimeMs;
       life.ended();
       const verdicts = yield* life.settle({

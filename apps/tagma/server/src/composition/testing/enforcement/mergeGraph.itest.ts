@@ -136,5 +136,4 @@ it.live(
         expect(yield* shEffect(project, ['show', 'HEAD:src/extra/extra.ts'])).toBe('export const extra = 1;');
       }).pipe(Effect.provide(base.context));
     }).pipe(Effect.provide(BunFileSystem.layer)),
-  60_000,
 );

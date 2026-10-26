@@ -72,7 +72,7 @@ layer(retirementFixture, { excludeTestServices: true })('retirement leases', (it
             return carrying;
           }),
         );
-        yield* Deferred.await(released).pipe(Effect.timeout('2 seconds'));
+        yield* Deferred.await(released);
         expect(yield* s.rowsOf(MINE)).toEqual([{ state: 'committed', commit: carrying, reason: null }]);
         yield* rig.close;
       }),
@@ -101,7 +101,7 @@ layer(retirementFixture, { excludeTestServices: true })('retirement leases', (it
           ),
         );
         expect(Exit.isFailure(interrupted) && Cause.hasInterruptsOnly(interrupted.cause)).toBe(true);
-        yield* Deferred.await(released).pipe(Effect.timeout('2 seconds'));
+        yield* Deferred.await(released);
         expect(yield* s.rowsOf(MINE)).toEqual([{ state: 'committed', commit: carrying, reason: null }]);
         yield* rig.close;
       }),

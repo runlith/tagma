@@ -245,62 +245,59 @@ it.live('retired typed edits stay visible to the record of their path', () =>
   }).pipe(Effect.provide(machineLayers)),
 );
 
-it.live(
-  'a neighbour editing during a read-only command leaves the reading session with no record',
-  () =>
-    Effect.gen(function* () {
-      const files = yield* FileSystem.FileSystem;
-      const dir = yield* files.makeTempDirectoryScoped({ prefix: 'tagma-changes-' });
-      yield* gitEffect(dir, ['init', '-q']);
-      yield* gitEffect(dir, ['config', 'user.email', 'a@b.c']);
-      yield* gitEffect(dir, ['config', 'user.name', 'test']);
-      yield* files.makeDirectory(join(dir, 'packages', 'reader'), { recursive: true });
-      yield* files.makeDirectory(join(dir, 'packages', 'writer'), { recursive: true });
-      yield* files.writeFileString(join(dir, 'packages', 'reader', 'source.ts'), 'const a = 3;\n');
-      yield* files.writeFileString(join(dir, 'packages', 'writer', 'alpha.ts'), 'const a = 1;\n');
-      yield* gitEffect(dir, ['add', 'packages']);
-      yield* gitEffect(dir, ['commit', '-qm', 'first']);
+it.live('a neighbour editing during a read-only command leaves the reading session with no record', () =>
+  Effect.gen(function* () {
+    const files = yield* FileSystem.FileSystem;
+    const dir = yield* files.makeTempDirectoryScoped({ prefix: 'tagma-changes-' });
+    yield* gitEffect(dir, ['init', '-q']);
+    yield* gitEffect(dir, ['config', 'user.email', 'a@b.c']);
+    yield* gitEffect(dir, ['config', 'user.name', 'test']);
+    yield* files.makeDirectory(join(dir, 'packages', 'reader'), { recursive: true });
+    yield* files.makeDirectory(join(dir, 'packages', 'writer'), { recursive: true });
+    yield* files.writeFileString(join(dir, 'packages', 'reader', 'source.ts'), 'const a = 3;\n');
+    yield* files.writeFileString(join(dir, 'packages', 'writer', 'alpha.ts'), 'const a = 1;\n');
+    yield* gitEffect(dir, ['add', 'packages']);
+    yield* gitEffect(dir, ['commit', '-qm', 'first']);
 
-      const store = yield* MachineStore;
-      const units = yield* MachineUnits;
-      yield* store.db.insert(project).values({ id: 1, name: 'runlith', repoKey: dir, rootPath: dir, createdAt: new Date(0) });
+    const store = yield* MachineStore;
+    const units = yield* MachineUnits;
+    yield* store.db.insert(project).values({ id: 1, name: 'runlith', repoKey: dir, rootPath: dir, createdAt: new Date(0) });
 
-      const reader = createTools({
-        cwd: dir,
-        world: makeMachineWorld(() => null),
-        commandTimes: unruledTimes,
-        searchMs: LONGEST_ACT_MS,
-        changes: (yield* recorder(units, store, 1, dir, 'thread-reader')).port,
-      });
-      const writer = createTools({
-        cwd: dir,
-        world: makeMachineWorld(() => null),
-        commandTimes: unruledTimes,
-        searchMs: LONGEST_ACT_MS,
-        changes: (yield* recorder(units, store, 1, dir, 'thread-writer')).port,
-      });
+    const reader = createTools({
+      cwd: dir,
+      world: makeMachineWorld(() => null),
+      commandTimes: unruledTimes,
+      searchMs: LONGEST_ACT_MS,
+      changes: (yield* recorder(units, store, 1, dir, 'thread-reader')).port,
+    });
+    const writer = createTools({
+      cwd: dir,
+      world: makeMachineWorld(() => null),
+      commandTimes: unruledTimes,
+      searchMs: LONGEST_ACT_MS,
+      changes: (yield* recorder(units, store, 1, dir, 'thread-writer')).port,
+    });
 
-      yield* call(reader.bash, { command: 'true', workdir: 'packages/reader', description: 'Start the catalog' });
-      yield* call(writer.edit, {
-        path: 'packages/writer/alpha.ts',
-        oldString: 'const a = 1;',
-        newString: 'const a = 2;',
-      });
-      expect(
-        yield* call(reader.bash, {
-          command: 'cat ../writer/alpha.ts',
-          workdir: 'packages/reader',
-          description: 'Read another package file',
-        }),
-      ).toContain('const a = 2;');
+    yield* call(reader.bash, { command: 'true', workdir: 'packages/reader', description: 'Start the catalog' });
+    yield* call(writer.edit, {
+      path: 'packages/writer/alpha.ts',
+      oldString: 'const a = 1;',
+      newString: 'const a = 2;',
+    });
+    expect(
+      yield* call(reader.bash, {
+        command: 'cat ../writer/alpha.ts',
+        workdir: 'packages/reader',
+        description: 'Read another package file',
+      }),
+    ).toContain('const a = 2;');
 
-      expect((yield* turnsOf(units, store, 1, 'thread-reader', 20)).rows).toEqual([]);
-      const held = yield* heldOfThread(units, store, 1, 'thread-writer');
-      expect(held.map((row) => `${row.origin} ${row.path}`)).toEqual(['edit packages/writer/alpha.ts']);
-      const holders = yield* evidenceOfPath(units, store, spelled('packages/writer/alpha.ts'));
-      expect(holders.map((row) => row.threadId)).toEqual(['thread-writer']);
-    }).pipe(Effect.provide(machineLayers)),
-  30_000,
+    expect((yield* turnsOf(units, store, 1, 'thread-reader', 20)).rows).toEqual([]);
+    const held = yield* heldOfThread(units, store, 1, 'thread-writer');
+    expect(held.map((row) => `${row.origin} ${row.path}`)).toEqual(['edit packages/writer/alpha.ts']);
+    const holders = yield* evidenceOfPath(units, store, spelled('packages/writer/alpha.ts'));
+    expect(holders.map((row) => row.threadId)).toEqual(['thread-writer']);
+  }).pipe(Effect.provide(machineLayers)),
 );
 
 const call = Effect.fnUntraced(function* (tool: Tool, input: unknown) {

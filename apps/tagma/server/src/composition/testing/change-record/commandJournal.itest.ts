@@ -196,9 +196,7 @@ layer(Layer.mergeAll(commandWalksLayer, BunFileSystem.layer, checkoutFixture), {
             before.commands.unowned('repo-root', 'src/a.ts', contentDigest(after), start + 1);
             life.ended();
             const journal = yield* journalOf(w.store, w.units, yield* CommandWalks);
-            yield* Effect.gen(function* () {
-              while ((yield* journal.unownedSince(0)).length === 0) yield* Effect.sleep(10);
-            }).pipe(Effect.timeout('5 seconds'));
+            while ((yield* journal.unownedSince(0)).length === 0) yield* Effect.sleep(10);
             const window = (yield* journal.windows())[0];
             if (window === undefined) return yield* Effect.die('no window was journaled');
             const move = {

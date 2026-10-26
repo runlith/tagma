@@ -264,7 +264,7 @@ layer(retirementFixture, { excludeTestServices: true })('retirement proofs', (it
         yield* rig.retirement.pass(CHECKOUT);
         yield* journal.closed(['window']);
 
-        yield* Deferred.await(released).pipe(Effect.timeout('2 seconds'));
+        yield* Deferred.await(released);
 
         expect(yield* s.rowsOf(MINE)).toEqual([{ state: 'committed', commit: carrying, reason: null }]);
       }),

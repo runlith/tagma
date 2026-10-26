@@ -223,211 +223,194 @@ const withCase = <A, E, R>(body: (scene: Case) => Effect.Effect<A, E, R>) =>
   withEnforcement((fixture) => Effect.flatMap(makeCase(fixture), body));
 
 layer(enforceFixture(), { excludeTestServices: true })('remeasurement', (it) => {
-  it.effect(
-    'a live peer’s carried crossing is journaled, recorded as escaped and delivered to its home project',
-    () =>
-      withCase((scene) =>
-        Effect.gen(function* () {
-          const { demo } = scene;
-          yield* scene.put('src/core/shared.ts', 'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n');
-          yield* scene.committed('shared source');
-          const { id } = yield* scene.enforced('gate');
-          const foreignRoot = yield* demo.fixture.directory('holder-home');
-          const holderHome = yield* demo.graph.projectLifecycle.create({ name: 'holder-home', rootPath: foreignRoot });
-          const before = yield* scene.files.readFileString(scene.at('src/core/shared.ts'));
-          const after = "export const a = 1;\nimport { main } from '../app/main';\nexport const b = main;\nexport const c = 3;\n";
-          const intake = yield* intakeOf(
-            demo.graph.store,
-            demo.graph.units,
-            demo.graph.git,
-            gitCheckoutPaths(TEST_CHECKOUT, demo.projectId),
-          );
-          expect(
-            yield* intake.land(
-              { projectId: holderHome.id, holder: { kind: 'thread', thread: THEIRS } },
-              [
-                {
-                  path: scene.at('src/core/shared.ts'),
-                  origin: 'edit',
-                  before: contentDigest(before),
-                  after: contentDigest(after),
-                  beforeText: before,
-                  afterText: after,
-                  hunk: workspaceChangeHunk(before, after),
-                  at: new Date(yield* Clock.currentTimeMillis),
-                },
-              ],
-              lineWrites.replace({ root: demo.demoRoot, path: 'src/core/shared.ts', before, after }, Effect.succeed(true)),
-            ),
-          ).toEqual({ _tag: 'written', kept: true });
-          yield* scene.wrote(MINE, 'src/core/shared.ts', after.replace('b = main;', 'b = main + 1;'));
-          const receipt = yield* scene.submit(MINE, true);
-          expect(receipt.carriedViolations?.map(({ fingerprint, holders }) => ({ fingerprint, holders }))).toEqual([
-            { fingerprint: 'app order core/shared.ts -> app/', holders: [THEIRS] },
-          ]);
-          const release = yield* Deferred.make<void>();
-          const paused: Lanes = {
-            ...scene.workers,
-            reach: (ask) => Deferred.await(release).pipe(Effect.andThen(scene.workers.reach(ask))),
-          };
-          const drive = yield* scene.driven({ lanes: paused });
-          yield* drive.landed(receipt);
-          expect(yield* drive.journal.page(null, 10)).toHaveLength(1);
-          yield* Deferred.succeed(release, undefined);
-          const notice = yield* drive.notice;
-          yield* drive.settled;
-          const document = yield* scene.documentOf(id);
-          expect(document?.escaped).toEqual([
-            {
-              fingerprint: 'app order core/shared.ts -> app/',
-              path: 'src/core/shared.ts',
-              line: 2,
-              said: expect.stringContaining('imports `../app/main`'),
-              fix: expect.stringContaining('set_module'),
-              commit: receipt.commit,
-              holder: THEIRS,
-            },
-          ]);
-          expect(yield* drive.journal.page(null, 10)).toEqual([]);
-          expect(document?.debt.map((one) => one.fingerprint)).toEqual(['app order core/view.ts -> ui/']);
-          expect(document?.strictness).toBe('gate');
-          expect({ threadId: notice.threadId, projectId: notice.projectId }).toEqual({ threadId: THEIRS, projectId: holderHome.id });
-          expect(notice.text).toContain('src/core/shared.ts:2');
-          expect(yield* scene.entries(id)).toHaveLength(1);
-        }),
-      ),
-    30_000,
-  );
-
-  it.effect(
-    'the driver retires a debt entry and an escape after their last imports land away',
-    () =>
-      withCase((scene) =>
-        Effect.gen(function* () {
-          const { id } = yield* scene.enforced('watch');
-          const drive = yield* scene.driven();
-          yield* scene.put('src/core/boot.ts', UPWARD);
-          const first = yield* scene.commitTree(['src/core/boot.ts'], 'a crossing lands');
-          yield* drive.driver.landed('submit_work', first);
-          yield* drive.settled;
-          expect((yield* scene.documentOf(id))?.escaped).toEqual([
-            {
-              fingerprint: 'app order core/boot.ts -> app/',
-              path: 'src/core/boot.ts',
-              line: 1,
-              said: expect.any(String),
-              fix: expect.any(String),
-              commit: first.commit,
-            },
-          ]);
-          yield* scene.put('src/core/view.ts', "import { model } from './model';\nexport const view = model;\n");
-          yield* scene.files.remove(scene.at('src/core/boot.ts'));
-          const removed = yield* scene.commitTree(['src/core/boot.ts', 'src/core/view.ts'], 'the crossings leave');
-          yield* drive.driver.landed('submit_work', removed);
-          yield* drive.settled;
-          const cleared = yield* scene.documentOf(id);
-          expect(cleared?.debt).toEqual([]);
-          expect(cleared?.escaped).toEqual([]);
-          expect(cleared?.strictness).toBe('watch');
-          expect(yield* scene.entries(id)).toHaveLength(2);
-        }),
-      ),
-    30_000,
-  );
-
-  it.effect(
-    'a carried crossing removed before remeasurement names no holder while another crossing stands',
-    () =>
-      withCase((scene) =>
-        Effect.gen(function* () {
-          const { id, rule } = yield* scene.enforced('watch');
-          const drive = yield* scene.driven();
-          yield* scene.wrote(
-            THEIRS,
-            'src/core/shared.ts',
-            "export const a = 1;\nimport { main } from '../app/main';\nexport const b = main;\n",
-          );
-          yield* scene.put('src/core/boot.ts', UPWARD);
-          const receipt: LandedTree = {
-            ...(yield* scene.commitTree(['src/core/shared.ts', 'src/core/boot.ts'], 'a carried crossing lands')),
-            carried: [
+  it.effect('a live peer’s carried crossing is journaled, recorded as escaped and delivered to its home project', () =>
+    withCase((scene) =>
+      Effect.gen(function* () {
+        const { demo } = scene;
+        yield* scene.put('src/core/shared.ts', 'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n');
+        yield* scene.committed('shared source');
+        const { id } = yield* scene.enforced('gate');
+        const foreignRoot = yield* demo.fixture.directory('holder-home');
+        const holderHome = yield* demo.graph.projectLifecycle.create({ name: 'holder-home', rootPath: foreignRoot });
+        const before = yield* scene.files.readFileString(scene.at('src/core/shared.ts'));
+        const after = "export const a = 1;\nimport { main } from '../app/main';\nexport const b = main;\nexport const c = 3;\n";
+        const intake = yield* intakeOf(demo.graph.store, demo.graph.units, demo.graph.git, gitCheckoutPaths(TEST_CHECKOUT, demo.projectId));
+        expect(
+          yield* intake.land(
+            { projectId: holderHome.id, holder: { kind: 'thread', thread: THEIRS } },
+            [
               {
-                rule,
-                title: 'Import only downward',
-                strictness: 'watch',
-                fingerprint: 'app order core/shared.ts -> app/',
-                file: 'src/core/shared.ts',
-                line: 2,
-                specifier: '../app/main',
-                message: 'imports `../app/main`',
-                generalFix: 'Move the import downward.',
-                holders: [THEIRS],
+                path: scene.at('src/core/shared.ts'),
+                origin: 'edit',
+                before: contentDigest(before),
+                after: contentDigest(after),
+                beforeText: before,
+                afterText: after,
+                hunk: workspaceChangeHunk(before, after),
+                at: new Date(yield* Clock.currentTimeMillis),
               },
             ],
-          };
-          yield* scene.put('src/core/shared.ts', 'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n');
-          yield* scene.committed('the peer takes its import back outside Tagma');
-          yield* drive.driver.landed('submit_work', receipt);
-          yield* drive.settled;
-          expect((yield* scene.documentOf(id))?.escaped).toEqual([
-            {
-              fingerprint: 'app order core/boot.ts -> app/',
-              path: 'src/core/boot.ts',
-              line: 1,
-              said: expect.any(String),
-              fix: expect.any(String),
-              commit: receipt.commit,
-            },
-          ]);
-          expect(drive.told).toEqual([]);
-        }),
-      ),
-    30_000,
+            lineWrites.replace({ root: demo.demoRoot, path: 'src/core/shared.ts', before, after }, Effect.succeed(true)),
+          ),
+        ).toEqual({ _tag: 'written', kept: true });
+        yield* scene.wrote(MINE, 'src/core/shared.ts', after.replace('b = main;', 'b = main + 1;'));
+        const receipt = yield* scene.submit(MINE, true);
+        expect(receipt.carriedViolations?.map(({ fingerprint, holders }) => ({ fingerprint, holders }))).toEqual([
+          { fingerprint: 'app order core/shared.ts -> app/', holders: [THEIRS] },
+        ]);
+        const release = yield* Deferred.make<void>();
+        const paused: Lanes = {
+          ...scene.workers,
+          reach: (ask) => Deferred.await(release).pipe(Effect.andThen(scene.workers.reach(ask))),
+        };
+        const drive = yield* scene.driven({ lanes: paused });
+        yield* drive.landed(receipt);
+        expect(yield* drive.journal.page(null, 10)).toHaveLength(1);
+        yield* Deferred.succeed(release, undefined);
+        const notice = yield* drive.notice;
+        yield* drive.settled;
+        const document = yield* scene.documentOf(id);
+        expect(document?.escaped).toEqual([
+          {
+            fingerprint: 'app order core/shared.ts -> app/',
+            path: 'src/core/shared.ts',
+            line: 2,
+            said: expect.stringContaining('imports `../app/main`'),
+            fix: expect.stringContaining('set_module'),
+            commit: receipt.commit,
+            holder: THEIRS,
+          },
+        ]);
+        expect(yield* drive.journal.page(null, 10)).toEqual([]);
+        expect(document?.debt.map((one) => one.fingerprint)).toEqual(['app order core/view.ts -> ui/']);
+        expect(document?.strictness).toBe('gate');
+        expect({ threadId: notice.threadId, projectId: notice.projectId }).toEqual({ threadId: THEIRS, projectId: holderHome.id });
+        expect(notice.text).toContain('src/core/shared.ts:2');
+        expect(yield* scene.entries(id)).toHaveLength(1);
+      }),
+    ),
   );
 
-  it.effect(
-    'only a matching merge on the measured branch records the merge rule’s escape',
-    () =>
-      withCase((scene) =>
-        Effect.gen(function* () {
-          const { demo } = scene;
-          const { id } = yield* scene.enforced('gate', { on: TRIGGERS.merge });
-          const drive = yield* scene.driven();
-          yield* scene.put('src/core/boot.ts', UPWARD);
-          yield* scene.committed('a crossing made outside Tagma');
-          const landing: LandedTree = {
-            kind: 'tree',
-            projectId: demo.projectId,
-            root: demo.demoRoot,
-            commit: yield* scene.head(),
-            paths: ['src/core/boot.ts'],
-          };
-          yield* drive.driver.landed('submit_work', landing);
-          yield* drive.settled;
-          expect((yield* scene.documentOf(id))?.escaped).toEqual([]);
-          yield* gitEffect(demo.demoRoot, ['switch', '-q', '-c', 'aside']);
-          yield* scene.put('src/core/aside.ts', UPWARD);
-          yield* scene.committed('a commit on another branch');
-          const aside = yield* scene.head();
-          yield* gitEffect(demo.demoRoot, ['switch', '-q', 'main']);
-          yield* drive.driver.landed('merge_worktree', { ...landing, commit: aside, paths: ['src/core/aside.ts'] });
-          yield* drive.settled;
-          expect((yield* scene.documentOf(id))?.escaped).toEqual([]);
-          yield* drive.driver.landed('merge_worktree', landing);
-          yield* drive.settled;
-          expect((yield* scene.documentOf(id))?.escaped).toEqual([
+  it.effect('the driver retires a debt entry and an escape after their last imports land away', () =>
+    withCase((scene) =>
+      Effect.gen(function* () {
+        const { id } = yield* scene.enforced('watch');
+        const drive = yield* scene.driven();
+        yield* scene.put('src/core/boot.ts', UPWARD);
+        const first = yield* scene.commitTree(['src/core/boot.ts'], 'a crossing lands');
+        yield* drive.driver.landed('submit_work', first);
+        yield* drive.settled;
+        expect((yield* scene.documentOf(id))?.escaped).toEqual([
+          {
+            fingerprint: 'app order core/boot.ts -> app/',
+            path: 'src/core/boot.ts',
+            line: 1,
+            said: expect.any(String),
+            fix: expect.any(String),
+            commit: first.commit,
+          },
+        ]);
+        yield* scene.put('src/core/view.ts', "import { model } from './model';\nexport const view = model;\n");
+        yield* scene.files.remove(scene.at('src/core/boot.ts'));
+        const removed = yield* scene.commitTree(['src/core/boot.ts', 'src/core/view.ts'], 'the crossings leave');
+        yield* drive.driver.landed('submit_work', removed);
+        yield* drive.settled;
+        const cleared = yield* scene.documentOf(id);
+        expect(cleared?.debt).toEqual([]);
+        expect(cleared?.escaped).toEqual([]);
+        expect(cleared?.strictness).toBe('watch');
+        expect(yield* scene.entries(id)).toHaveLength(2);
+      }),
+    ),
+  );
+
+  it.effect('a carried crossing removed before remeasurement names no holder while another crossing stands', () =>
+    withCase((scene) =>
+      Effect.gen(function* () {
+        const { id, rule } = yield* scene.enforced('watch');
+        const drive = yield* scene.driven();
+        yield* scene.wrote(
+          THEIRS,
+          'src/core/shared.ts',
+          "export const a = 1;\nimport { main } from '../app/main';\nexport const b = main;\n",
+        );
+        yield* scene.put('src/core/boot.ts', UPWARD);
+        const receipt: LandedTree = {
+          ...(yield* scene.commitTree(['src/core/shared.ts', 'src/core/boot.ts'], 'a carried crossing lands')),
+          carried: [
             {
-              fingerprint: 'app order core/boot.ts -> app/',
-              path: 'src/core/boot.ts',
-              line: 1,
-              said: expect.any(String),
-              fix: expect.any(String),
-              commit: landing.commit,
+              rule,
+              title: 'Import only downward',
+              strictness: 'watch',
+              fingerprint: 'app order core/shared.ts -> app/',
+              file: 'src/core/shared.ts',
+              line: 2,
+              specifier: '../app/main',
+              message: 'imports `../app/main`',
+              generalFix: 'Move the import downward.',
+              holders: [THEIRS],
             },
-          ]);
-        }),
-      ),
-    30_000,
+          ],
+        };
+        yield* scene.put('src/core/shared.ts', 'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n');
+        yield* scene.committed('the peer takes its import back outside Tagma');
+        yield* drive.driver.landed('submit_work', receipt);
+        yield* drive.settled;
+        expect((yield* scene.documentOf(id))?.escaped).toEqual([
+          {
+            fingerprint: 'app order core/boot.ts -> app/',
+            path: 'src/core/boot.ts',
+            line: 1,
+            said: expect.any(String),
+            fix: expect.any(String),
+            commit: receipt.commit,
+          },
+        ]);
+        expect(drive.told).toEqual([]);
+      }),
+    ),
+  );
+
+  it.effect('only a matching merge on the measured branch records the merge rule’s escape', () =>
+    withCase((scene) =>
+      Effect.gen(function* () {
+        const { demo } = scene;
+        const { id } = yield* scene.enforced('gate', { on: TRIGGERS.merge });
+        const drive = yield* scene.driven();
+        yield* scene.put('src/core/boot.ts', UPWARD);
+        yield* scene.committed('a crossing made outside Tagma');
+        const landing: LandedTree = {
+          kind: 'tree',
+          projectId: demo.projectId,
+          root: demo.demoRoot,
+          commit: yield* scene.head(),
+          paths: ['src/core/boot.ts'],
+        };
+        yield* drive.driver.landed('submit_work', landing);
+        yield* drive.settled;
+        expect((yield* scene.documentOf(id))?.escaped).toEqual([]);
+        yield* gitEffect(demo.demoRoot, ['switch', '-q', '-c', 'aside']);
+        yield* scene.put('src/core/aside.ts', UPWARD);
+        yield* scene.committed('a commit on another branch');
+        const aside = yield* scene.head();
+        yield* gitEffect(demo.demoRoot, ['switch', '-q', 'main']);
+        yield* drive.driver.landed('merge_worktree', { ...landing, commit: aside, paths: ['src/core/aside.ts'] });
+        yield* drive.settled;
+        expect((yield* scene.documentOf(id))?.escaped).toEqual([]);
+        yield* drive.driver.landed('merge_worktree', landing);
+        yield* drive.settled;
+        expect((yield* scene.documentOf(id))?.escaped).toEqual([
+          {
+            fingerprint: 'app order core/boot.ts -> app/',
+            path: 'src/core/boot.ts',
+            line: 1,
+            said: expect.any(String),
+            fix: expect.any(String),
+            commit: landing.commit,
+          },
+        ]);
+      }),
+    ),
   );
 
   it.effect(
@@ -461,6 +444,5 @@ layer(enforceFixture(), { excludeTestServices: true })('remeasurement', (it) => 
           ]);
         }),
       ),
-    30_000,
   );
 });

@@ -75,19 +75,15 @@ layer(commandLayer, { excludeTestServices: true })('team command landing', (it) 
         });
         expect(yield* s.w.run(['show', 'HEAD:src/a.ts'])).toBe(text.trimEnd());
       }),
-    20_000,
   );
-  it.effect(
-    'a team path another session’s command also met stays out of the root’s landing without paths',
-    () =>
-      Effect.gen(function* () {
-        const { s } = yield* teamWrite();
-        const at = yield* Clock.currentTimeMillis;
-        s.commands.remembered([
-          { projectId: s.w.projectId, threadId: THEIRS, checkout: 'repo-root', path: 'src/a.ts', reason: OVERLAP_REASON, team: null, at },
-        ]);
-        expect(yield* s.w.submit(ROOT, { commands: s.commands, taking: takingLeft })).toMatchObject({ status: 'nothing' });
-      }),
-    20_000,
+  it.effect('a team path another session’s command also met stays out of the root’s landing without paths', () =>
+    Effect.gen(function* () {
+      const { s } = yield* teamWrite();
+      const at = yield* Clock.currentTimeMillis;
+      s.commands.remembered([
+        { projectId: s.w.projectId, threadId: THEIRS, checkout: 'repo-root', path: 'src/a.ts', reason: OVERLAP_REASON, team: null, at },
+      ]);
+      expect(yield* s.w.submit(ROOT, { commands: s.commands, taking: takingLeft })).toMatchObject({ status: 'nothing' });
+    }),
   );
 });

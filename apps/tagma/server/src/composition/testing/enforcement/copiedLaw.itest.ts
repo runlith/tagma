@@ -84,8 +84,6 @@ const fixture = doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer));
 
 layer(Layer.effect(Copied, setup).pipe(Layer.provideMerge(fixture)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 60_000,
 })('copied law', (it) => {
   it.effect('a thread on the main checkout reads the same enforced rules its landing gate judges', () =>
     Effect.gen(function* () {

@@ -217,157 +217,144 @@ layer(Layer.mergeAll(worldLayer, BunFileSystem.layer, workersLayer), { excludeTe
           yield* unconfirmed.close;
         }),
       ),
-    30_000,
   );
 
-  it.effect(
-    'a declaration changed during inspection rejects the stale result without overwriting the accepted measurement',
-    () =>
-      withCase(
-        (scene) =>
-          Effect.gen(function* () {
-            const { demo, workers, files } = scene;
-            const gate = yield* Deferred.make<void>();
-            const entered = yield* Deferred.make<void>();
-            yield* seed(scene);
-            const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Files stay small' });
-            yield* applied(scene, rule.id);
-            const memory = join(demo.fixture.root, 'enforcing.json');
-            yield* files.writeFileString(memory, JSON.stringify([{ projectId: demo.projectId, root: demo.demoRoot }]));
-            const paused: Lanes = {
-              ...workers,
-              code: 'changed-inspection',
-              reach: (ask, priority) =>
-                Deferred.succeed(entered, undefined).pipe(
-                  Effect.andThen(Deferred.await(gate)),
-                  Effect.andThen(workers.reach(ask, priority)),
-                ),
-            };
-            const changing = yield* boot(scene, { lanes: paused, memory, completed: 'Stale' });
-            yield* Effect.gen(function* () {
-              yield* Deferred.await(entered);
-              yield* applied(scene, rule.id, 5);
-              const measured = join(demo.demoRoot, '.git/tagma/measured', `${rule.uuid}.json`);
-              const accepted = yield* files.readFileString(measured);
-              yield* Deferred.succeed(gate, undefined);
-              expect(tagsOf(yield* changing.done)).toEqual(['Stale']);
-              expect(yield* files.readFileString(measured)).toBe(accepted);
-              yield* changing.close;
-            }).pipe(Effect.ensuring(Deferred.succeed(gate, undefined)));
-          }),
-        'stale',
-      ),
-    30_000,
-  );
-
-  it.effect(
-    'journal entries for one commit preserve different operations and paths until each is settled',
-    () =>
-      withCase(
-        (scene) =>
-          Effect.gen(function* () {
-            const { demo, workers, files } = scene;
-            yield* seed(scene);
-            const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Files stay small' });
-            const measured = yield* applied(scene, rule.id, 10, 'merge_worktree');
-            const journal = journalOver(demo.graph.store.db, demo.graph.units);
-            const memory = join(demo.fixture.root, 'enforcing.json');
-            yield* files.writeFileString(memory, '[]');
-            const gate = yield* Deferred.make<void>();
-            const settled = yield* Queue.unbounded<void>();
-            const observed: LandingJournal = {
-              ...journal,
-              remove: (key) => journal.remove(key).pipe(Effect.tap(() => Queue.offer(settled, undefined))),
-            };
-            const drive = yield* boot(scene, {
-              lanes: workers,
-              memory,
-              completed: 'Measured',
-              journal: observed,
-              barrier: Deferred.await(gate),
-            });
-            yield* Effect.gen(function* () {
-              const landing = {
-                kind: 'tree' as const,
-                projectId: demo.projectId,
-                root: demo.demoRoot,
-                commit: measured.head!,
-                paths: ['README.md'],
-              };
-              yield* drive.driver.landed('merge_worktree', landing);
-              yield* drive.driver.landed('merge_worktree', { ...landing, paths: ['src/model.ts'] });
-              yield* drive.driver.landed('submit_work', { ...landing, paths: ['src/model.ts'] });
-              expect((yield* journal.page(null, 10)).map((row) => `${row.landing?.op}:${row.landing?.paths.join(',')}`).sort()).toEqual([
-                'merge_worktree:README.md',
-                'merge_worktree:src/model.ts',
-                'submit_work:src/model.ts',
-              ]);
-              yield* Deferred.succeed(gate, undefined);
-              expect(tagsOf(yield* drive.done)).toContain('Measured');
-              for (let index = 0; index < 3; index += 1) yield* Queue.take(settled);
-              expect(yield* journal.page(null, 10)).toEqual([]);
-              yield* drive.close;
-            }).pipe(Effect.ensuring(Deferred.succeed(gate, undefined)));
-          }),
-        'journal',
-      ),
-    30_000,
-  );
-
-  it.effect(
-    'a failed and interrupted landing preserves its last measurement and is replayed from the journal',
-    () =>
-      withCase(
-        (scene) =>
-          Effect.gen(function* () {
-            const { demo, workers, files } = scene;
-            yield* seed(scene);
-            const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Files stay small' });
-            const planned = yield* applied(scene, rule.id);
+  it.effect('a declaration changed during inspection rejects the stale result without overwriting the accepted measurement', () =>
+    withCase(
+      (scene) =>
+        Effect.gen(function* () {
+          const { demo, workers, files } = scene;
+          const gate = yield* Deferred.make<void>();
+          const entered = yield* Deferred.make<void>();
+          yield* seed(scene);
+          const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Files stay small' });
+          yield* applied(scene, rule.id);
+          const memory = join(demo.fixture.root, 'enforcing.json');
+          yield* files.writeFileString(memory, JSON.stringify([{ projectId: demo.projectId, root: demo.demoRoot }]));
+          const paused: Lanes = {
+            ...workers,
+            code: 'changed-inspection',
+            reach: (ask, priority) =>
+              Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(gate)), Effect.andThen(workers.reach(ask, priority))),
+          };
+          const changing = yield* boot(scene, { lanes: paused, memory, completed: 'Stale' });
+          yield* Effect.gen(function* () {
+            yield* Deferred.await(entered);
+            yield* applied(scene, rule.id, 5);
             const measured = join(demo.demoRoot, '.git/tagma/measured', `${rule.uuid}.json`);
-            const prior = yield* files.readFileString(measured);
-            const memory = join(demo.fixture.root, 'enforcing.json');
-            yield* files.writeFileString(memory, '[]');
-            const journal = journalOver(demo.graph.store.db, demo.graph.units);
-            const entered = yield* Deferred.make<void>();
-            let attempts = 0;
-            const failing: Lanes = {
-              ...workers,
-              reach: (ask, priority) =>
-                Effect.suspend(() => {
-                  attempts += 1;
-                  return attempts === 1
-                    ? workers.reach({ ...ask, commit: '0'.repeat(40) }, priority)
-                    : Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never));
-                }),
-            };
-            const cut = yield* boot(scene, { lanes: failing, memory, completed: 2, journal });
-            yield* cut.driver.landed('submit_work', {
-              kind: 'tree',
+            const accepted = yield* files.readFileString(measured);
+            yield* Deferred.succeed(gate, undefined);
+            expect(tagsOf(yield* changing.done)).toEqual(['Stale']);
+            expect(yield* files.readFileString(measured)).toBe(accepted);
+            yield* changing.close;
+          }).pipe(Effect.ensuring(Deferred.succeed(gate, undefined)));
+        }),
+      'stale',
+    ),
+  );
+
+  it.effect('journal entries for one commit preserve different operations and paths until each is settled', () =>
+    withCase(
+      (scene) =>
+        Effect.gen(function* () {
+          const { demo, workers, files } = scene;
+          yield* seed(scene);
+          const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Files stay small' });
+          const measured = yield* applied(scene, rule.id, 10, 'merge_worktree');
+          const journal = journalOver(demo.graph.store.db, demo.graph.units);
+          const memory = join(demo.fixture.root, 'enforcing.json');
+          yield* files.writeFileString(memory, '[]');
+          const gate = yield* Deferred.make<void>();
+          const settled = yield* Queue.unbounded<void>();
+          const observed: LandingJournal = {
+            ...journal,
+            remove: (key) => journal.remove(key).pipe(Effect.tap(() => Queue.offer(settled, undefined))),
+          };
+          const drive = yield* boot(scene, {
+            lanes: workers,
+            memory,
+            completed: 'Measured',
+            journal: observed,
+            barrier: Deferred.await(gate),
+          });
+          yield* Effect.gen(function* () {
+            const landing = {
+              kind: 'tree' as const,
               projectId: demo.projectId,
               root: demo.demoRoot,
-              commit: planned.head!,
-              paths: ['src/model.ts'],
-            });
-            yield* Deferred.await(entered);
-            yield* cut.close;
-            expect(yield* files.readFileString(measured)).toBe(prior);
-            expect(yield* journal.page(null, 10)).toHaveLength(1);
-            const removed = yield* Deferred.make<void>();
-            const observed: LandingJournal = {
-              ...journal,
-              remove: (key) => journal.remove(key).pipe(Effect.tap(() => Deferred.succeed(removed, undefined))),
+              commit: measured.head!,
+              paths: ['README.md'],
             };
-            const replay = yield* boot(scene, { lanes: workers, memory, completed: 'Measured', journal: observed });
-            expect(tagsOf(yield* replay.done)).toContain('Measured');
-            expect(replay.counts().maximum).toBe(1);
-            expect(yield* files.readFileString(measured)).not.toBe(prior);
-            yield* Deferred.await(removed);
-            yield* replay.close;
+            yield* drive.driver.landed('merge_worktree', landing);
+            yield* drive.driver.landed('merge_worktree', { ...landing, paths: ['src/model.ts'] });
+            yield* drive.driver.landed('submit_work', { ...landing, paths: ['src/model.ts'] });
+            expect((yield* journal.page(null, 10)).map((row) => `${row.landing?.op}:${row.landing?.paths.join(',')}`).sort()).toEqual([
+              'merge_worktree:README.md',
+              'merge_worktree:src/model.ts',
+              'submit_work:src/model.ts',
+            ]);
+            yield* Deferred.succeed(gate, undefined);
+            expect(tagsOf(yield* drive.done)).toContain('Measured');
+            for (let index = 0; index < 3; index += 1) yield* Queue.take(settled);
             expect(yield* journal.page(null, 10)).toEqual([]);
-          }),
-        'interrupted',
-      ),
-    30_000,
+            yield* drive.close;
+          }).pipe(Effect.ensuring(Deferred.succeed(gate, undefined)));
+        }),
+      'journal',
+    ),
+  );
+
+  it.effect('a failed and interrupted landing preserves its last measurement and is replayed from the journal', () =>
+    withCase(
+      (scene) =>
+        Effect.gen(function* () {
+          const { demo, workers, files } = scene;
+          yield* seed(scene);
+          const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Files stay small' });
+          const planned = yield* applied(scene, rule.id);
+          const measured = join(demo.demoRoot, '.git/tagma/measured', `${rule.uuid}.json`);
+          const prior = yield* files.readFileString(measured);
+          const memory = join(demo.fixture.root, 'enforcing.json');
+          yield* files.writeFileString(memory, '[]');
+          const journal = journalOver(demo.graph.store.db, demo.graph.units);
+          const entered = yield* Deferred.make<void>();
+          let attempts = 0;
+          const failing: Lanes = {
+            ...workers,
+            reach: (ask, priority) =>
+              Effect.suspend(() => {
+                attempts += 1;
+                return attempts === 1
+                  ? workers.reach({ ...ask, commit: '0'.repeat(40) }, priority)
+                  : Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never));
+              }),
+          };
+          const cut = yield* boot(scene, { lanes: failing, memory, completed: 2, journal });
+          yield* cut.driver.landed('submit_work', {
+            kind: 'tree',
+            projectId: demo.projectId,
+            root: demo.demoRoot,
+            commit: planned.head!,
+            paths: ['src/model.ts'],
+          });
+          yield* Deferred.await(entered);
+          yield* cut.close;
+          expect(yield* files.readFileString(measured)).toBe(prior);
+          expect(yield* journal.page(null, 10)).toHaveLength(1);
+          const removed = yield* Deferred.make<void>();
+          const observed: LandingJournal = {
+            ...journal,
+            remove: (key) => journal.remove(key).pipe(Effect.tap(() => Deferred.succeed(removed, undefined))),
+          };
+          const replay = yield* boot(scene, { lanes: workers, memory, completed: 'Measured', journal: observed });
+          expect(tagsOf(yield* replay.done)).toContain('Measured');
+          expect(replay.counts().maximum).toBe(1);
+          expect(yield* files.readFileString(measured)).not.toBe(prior);
+          yield* Deferred.await(removed);
+          yield* replay.close;
+          expect(yield* journal.page(null, 10)).toEqual([]);
+        }),
+      'interrupted',
+    ),
   );
 });
