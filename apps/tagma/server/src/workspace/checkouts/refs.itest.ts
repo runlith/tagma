@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { Effect, Fiber, Queue, Stream } from 'effect';
 import type { CheckoutShift, PathMove } from '../contract/service/watch.js';
-import { fixture, run, rowTests, WATCH_BUDGET } from '../testing/rowsFixture.js';
+import { fixture, run, rowTests } from '../testing/rowsFixture.js';
 
 rowTests('checkouts/refs.itest.ts', (it) => {
   it.effect('sequencer-only movement preserves source inputs while accompanying tree, index and HEAD movements refresh them', () =>
@@ -20,9 +20,7 @@ rowTests('checkouts/refs.itest.ts', (it) => {
       yield* files.writeFileString(paths.join(root, 'alone.txt'), 'x\ny\n');
       yield* files.writeFileString(marker, `${head}\n`);
       yield* Queue.offer(shifts, { movements: ['operation'], paths: new Map(), rescan: null });
-      const opened = yield* Stream.runHead(stream.pipe(Stream.filter((row) => row.operation === 'merge'))).pipe(
-        Effect.timeout(WATCH_BUDGET),
-      );
+      const opened = yield* Stream.runHead(stream.pipe(Stream.filter((row) => row.operation === 'merge')));
       if (opened._tag === 'None') return yield* Effect.die('the merge state was missing');
       expect(opened.value.entries).toEqual(initial.value.entries);
       expect(notifications).toEqual([]);
@@ -32,18 +30,14 @@ rowTests('checkouts/refs.itest.ts', (it) => {
         paths: new Map<string, PathMove>([['alone.txt', 'change']]),
         rescan: null,
       });
-      const closed = yield* Stream.runHead(stream.pipe(Stream.filter((row) => row.operation === 'none'))).pipe(
-        Effect.timeout(WATCH_BUDGET),
-      );
+      const closed = yield* Stream.runHead(stream.pipe(Stream.filter((row) => row.operation === 'none')));
       if (closed._tag === 'None') return yield* Effect.die('the concluded merge state was missing');
       expect(closed.value.entries.untracked.entries.find((entry) => entry.path === 'alone.txt')?.lines).toEqual({ added: 2, removed: 0 });
       expect(notifications).toEqual([[rootId, ['alone.txt']]]);
       yield* run(door.faces, root, ['add', 'alone.txt']);
       yield* files.writeFileString(marker, `${head}\n`);
       yield* Queue.offer(shifts, { movements: ['operation', 'index'], paths: new Map(), rescan: null });
-      const staged = yield* Stream.runHead(stream.pipe(Stream.filter((row) => row.operation === 'merge'))).pipe(
-        Effect.timeout(WATCH_BUDGET),
-      );
+      const staged = yield* Stream.runHead(stream.pipe(Stream.filter((row) => row.operation === 'merge')));
       if (staged._tag === 'None') return yield* Effect.die('the staged merge state was missing');
       expect(staged.value.entries.staged.entries.map((entry) => entry.path)).toEqual(['alone.txt', 'held.txt']);
       expect(notifications).toEqual([
@@ -53,9 +47,7 @@ rowTests('checkouts/refs.itest.ts', (it) => {
       yield* files.remove(marker);
       yield* run(door.faces, root, ['update-ref', 'refs/heads/main', mergeBase]);
       yield* Queue.offer(shifts, { movements: ['operation', 'head'], paths: new Map(), rescan: null });
-      const moved = yield* Stream.runHead(stream.pipe(Stream.filter((row) => row.operation === 'none' && row.head === mergeBase))).pipe(
-        Effect.timeout(WATCH_BUDGET),
-      );
+      const moved = yield* Stream.runHead(stream.pipe(Stream.filter((row) => row.operation === 'none' && row.head === mergeBase)));
       if (moved._tag === 'None') return yield* Effect.die('the moved HEAD was missing');
       expect(moved.value.entries.staged.entries.map((entry) => entry.path)).toEqual(['alone.txt', 'held.txt', 'kept.txt']);
       expect(notifications).toEqual([
@@ -81,7 +73,7 @@ rowTests('checkouts/refs.itest.ts', (it) => {
       yield* run(door.faces, root, ['update-ref', 'refs/heads/base', head]);
       const next = yield* Effect.forkChild(Stream.runHead(stream.pipe(Stream.filter((row) => row.revision > initial.value.revision))));
       yield* status.mark(rootId, 'refs');
-      const updated = yield* Fiber.join(next).pipe(Effect.timeout(WATCH_BUDGET));
+      const updated = yield* Fiber.join(next);
       if (updated._tag === 'None') return yield* Effect.die('the refreshed checkout row was missing');
       expect(updated.value.head).toBe(initial.value.head);
       expect(updated.value.ahead).toBe(0);
@@ -109,7 +101,7 @@ rowTests('checkouts/refs.itest.ts', (it) => {
       yield* run(door.faces, root, ['update-ref', 'refs/heads/main', mergeBase]);
       const next = yield* Effect.forkChild(Stream.runHead(stream.pipe(Stream.filter((row) => row.revision > initial.value.revision))));
       yield* status.mark(rootId, 'refs');
-      const updated = yield* Fiber.join(next).pipe(Effect.timeout(WATCH_BUDGET));
+      const updated = yield* Fiber.join(next);
       if (updated._tag === 'None') return yield* Effect.die('the refreshed checkout row was missing');
       expect(updated.value.head).toBe(mergeBase);
       expect(updated.value.entries.staged.entries.map((entry) => entry.path)).toEqual(['held.txt', 'kept.txt']);
@@ -139,7 +131,7 @@ rowTests('checkouts/refs.itest.ts', (it) => {
         Effect.forkChild(Stream.runHead(stream.pipe(Stream.filter((row) => row.revision > before[at]!.revision)))),
       );
       yield* status.mark(rootId, 'refs');
-      const updated = yield* Effect.forEach(next, Fiber.join).pipe(Effect.timeout(WATCH_BUDGET));
+      const updated = yield* Effect.forEach(next, Fiber.join);
       expect(updated.map((row) => (row._tag === 'Some' ? row.value.head : null))).toEqual([mergeBase, mergeBase]);
       expect(door.counts.readings).toBe(1);
       expect(notifications).toEqual([[rootId, undefined]]);
@@ -159,7 +151,7 @@ rowTests('checkouts/refs.itest.ts', (it) => {
       yield* files.writeFileString(paths.join(root, 'unnamed.txt'), 'x\n');
       const next = yield* Effect.forkChild(Stream.runHead(stream.pipe(Stream.filter((row) => row.revision > initial.value.revision))));
       yield* Queue.offer(shifts, { movements: ['refs'], paths: new Map(), rescan: 'unnamed' });
-      const updated = yield* Fiber.join(next).pipe(Effect.timeout(WATCH_BUDGET));
+      const updated = yield* Fiber.join(next);
       if (updated._tag === 'None') return yield* Effect.die('the refreshed checkout row was missing');
       expect(updated.value.entries.untracked.entries.map((entry) => entry.path)).toContain('unnamed.txt');
       expect(updated.value.stale).toBe(false);
@@ -177,7 +169,7 @@ rowTests('checkouts/refs.itest.ts', (it) => {
       yield* files.writeFileString(headPath, 'unreadable HEAD\n');
       const failed = yield* Effect.forkChild(Stream.runHead(stream.pipe(Stream.filter((row) => row.stale))));
       yield* status.mark(rootId, 'refs');
-      const stale = yield* Fiber.join(failed).pipe(Effect.timeout(WATCH_BUDGET));
+      const stale = yield* Fiber.join(failed);
       if (stale._tag === 'None') return yield* Effect.die('the stale checkout row was missing');
       expect(stale.value.entries).toEqual(initial.value.entries);
       yield* files.writeFileString(headPath, head);
@@ -187,7 +179,7 @@ rowTests('checkouts/refs.itest.ts', (it) => {
         Stream.runHead(stream.pipe(Stream.filter((row) => row.revision > stale.value.revision && !row.stale))),
       );
       yield* status.mark(rootId, 'refs');
-      const updated = yield* Fiber.join(next).pipe(Effect.timeout(WATCH_BUDGET));
+      const updated = yield* Fiber.join(next);
       if (updated._tag === 'None') return yield* Effect.die('the recovered checkout row was missing');
       expect(updated.value.entries.untracked.entries.map((entry) => entry.path)).toContain('recovered.txt');
       expect(door.counts.readings).toBe(1);

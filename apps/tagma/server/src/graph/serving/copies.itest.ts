@@ -65,7 +65,6 @@ const kept = <A, E>(keeping: Keeping, wanted: readonly Tree[], body: (world: Kep
 
 layer(demoGraphLayer({ repos: ['alpha'] }).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 40_000,
 })('pool copies', (it) => {
   it.effect(
     'a copy an act holds through a detached checkout stays past the idle budget and its keeping time, and once let go closes before any copy opens on its tree again from its standing mirror',

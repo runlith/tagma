@@ -20,8 +20,6 @@ import { machineGraphOf } from './machine.js';
 import { graphPool } from '../testing/doubles.js';
 import { treeGateKey } from './permits.js';
 
-const READ_DEADLINE_MS = 2_000;
-
 layer(demoGraphLayer({ repos: ['drill'] }).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
   'graph concurrency',
   (it) => {
@@ -63,7 +61,7 @@ layer(demoGraphLayer({ repos: ['drill'] }).pipe(Layer.provideMerge(BunFileSystem
               const read = Effect.gen(function* () {
                 yield* served.fresh();
                 return yield* Context.get(served.context, BlockReads).show(target.id, 0);
-              }).pipe(Effect.provide(served.context), Effect.timeout(READ_DEADLINE_MS));
+              }).pipe(Effect.provide(served.context));
               const row = yield* store.db.select({ path: block.path }).from(block).where(eq(block.id, target.id)).get();
               if (row?.path == null) return yield* Effect.die('the read target has no projected path');
               const file = join(served.layout.treeRoot, row.path);
@@ -89,7 +87,7 @@ layer(demoGraphLayer({ repos: ['drill'] }).pipe(Layer.provideMerge(BunFileSystem
                   yield* Fiber.join(holder);
                 }),
               );
-              yield* Deferred.await(changed).pipe(Effect.timeout('10 seconds'));
+              yield* Deferred.await(changed);
               expect((yield* store.db.select().from(block).where(eq(block.id, target.id)).get())?.title).toBe('Edited By Hand');
 
               yield* Effect.scoped(
@@ -127,14 +125,14 @@ layer(demoGraphLayer({ repos: ['drill'] }).pipe(Layer.provideMerge(BunFileSystem
               holding = true;
               const first = yield* create('First');
               yield* Deferred.await(open);
-              const born = yield* Effect.forEach(['Left', 'Right'], create, { concurrency: 2 }).pipe(Effect.timeout(READ_DEADLINE_MS));
+              const born = yield* Effect.forEach(['Left', 'Right'], create, { concurrency: 2 });
               const ids = [first, ...born];
               const reads = yield* Effect.forEach(
                 ids,
                 (row) =>
                   Effect.andThen(again.fresh(), Context.get(again.context, BlockReads).show(row.id, 0)).pipe(Effect.provide(again.context)),
                 { concurrency: 2 },
-              ).pipe(Effect.timeout(READ_DEADLINE_MS));
+              );
               expect(reads.map((row) => [row.uuid, row.body])).toEqual(ids.map((row) => [row.uuid, row.title]));
               yield* Deferred.succeed(release, undefined);
               yield* pool.release(again);

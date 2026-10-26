@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { Deferred, Effect, Fiber, Stream } from 'effect';
 import type { CheckoutState } from '../contract/wire/checkout.js';
 import { RootUnavailable } from '../contract/wire/roots.js';
-import { fixture, namespaceId, pause, rowTests, WATCH_BUDGET } from '../testing/rowsFixture.js';
+import { fixture, namespaceId, pause, rowTests } from '../testing/rowsFixture.js';
 
 rowTests('checkout reading recovery', (it) => {
   it.effect('an explicit refresh reads before watch delivery, completes when unchanged and refuses a failed reading', () =>
@@ -56,10 +56,7 @@ rowTests('checkout reading recovery', (it) => {
       yield* Deferred.await(stale).pipe(Effect.ensuring(Effect.sync(() => (console.error = error))));
       door.breakListing(false);
       yield* status.mark(rootId);
-      yield* Effect.timeoutOrElse(Deferred.await(fresh), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die(`no fresh row followed the broken cycle within ${WATCH_BUDGET}`),
-      });
+      yield* Deferred.await(fresh);
       expect(rows.at(-1)?.stale).toBe(false);
     }),
   );
@@ -91,10 +88,7 @@ rowTests('checkout reading recovery', (it) => {
         follow: (asked) => new RootUnavailable({ namespaceId, rootId: asked, reason: 'filesystem', message: 'no descriptor left' }),
       });
       const followed = yield* Effect.exit(Stream.runHead(status.subscribe(rootId)));
-      const row = yield* Effect.timeoutOrElse(status.read(rootId), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die(`the root answered no reading within ${WATCH_BUDGET} after its watch failed`),
-      });
+      const row = yield* status.read(rootId);
       expect(followed._tag).toBe('Failure');
       expect(row.stale).toBe(false);
       expect(row.entries.untracked.entries.map((entry) => entry.path)).toEqual(['alone.txt', 'fresh.txt']);

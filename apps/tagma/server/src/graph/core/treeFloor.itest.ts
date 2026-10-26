@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { type Context, Deferred, Duration, Effect, Exit, Fiber } from 'effect';
+import { type Context, Deferred, Effect, Exit, Fiber } from 'effect';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { block } from '../store/tables.js';
@@ -15,7 +15,7 @@ const lens = ({ graph, projectId }: EffectDemo) => {
   const probeWrite = (table: string) =>
     graph.units
       .write('treeFloor.probeWrite', (unit) => unit.run(graph.graphStore.db.run(sql.raw(`create table ${table} (id integer primary key)`))))
-      .pipe(Effect.timeout(Duration.seconds(10)), Effect.exit);
+      .pipe(Effect.exit);
   const acting = (floor: Floor, title: string) =>
     Effect.forkChild(
       graph.act.unit(testActing, graph.blocks.create({ projectId, tags: ['idea'], title })).pipe(Effect.provideService(TreeGuard, floor)),

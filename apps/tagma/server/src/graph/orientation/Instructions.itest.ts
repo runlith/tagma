@@ -38,9 +38,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('instructions', (it) => {
           ),
         );
         yield* Deferred.await(entered);
-        const during = yield* graph.orientation
-          .instructions(input)
-          .pipe(Effect.timeout('1 second'), Effect.ensuring(Deferred.succeed(release, undefined)));
+        const during = yield* graph.orientation.instructions(input).pipe(Effect.ensuring(Deferred.succeed(release, undefined)));
         yield* Fiber.join(writer);
         expect(lawOf(during).map((entry) => entry.source)).toEqual([name]);
         expect(lawOf(yield* graph.orientation.instructions(input))).toEqual([]);
@@ -100,9 +98,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('instructions', (it) => {
           ),
         );
         yield* Deferred.await(committed);
-        const during = yield* graph.orientation
-          .instructions(input)
-          .pipe(Effect.timeout('1 second'), Effect.ensuring(Deferred.succeed(release, undefined)));
+        const during = yield* graph.orientation.instructions(input).pipe(Effect.ensuring(Deferred.succeed(release, undefined)));
         yield* Fiber.join(writer);
         expect(instructionChanges(during, before).pending.map((entry) => entry.source)).toEqual(['#memo']);
         const prior = new Map(before.entries.map((entry) => [entry.source, entry.revision]));

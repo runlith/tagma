@@ -14,7 +14,6 @@ import { type HeadWatches, makeHeadWatches } from './heads.js';
 
 const host = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 const layers = Layer.mergeAll(BunFileSystem.layer, Path.layer, gitLayer.pipe(Layer.provide(host)), watchProcessLayer);
-const WAIT = '3 seconds';
 const identity = { GIT_AUTHOR_NAME: 'test', GIT_AUTHOR_EMAIL: 'test@tagma', GIT_COMMITTER_NAME: 'test', GIT_COMMITTER_EMAIL: 'test@tagma' };
 
 const fixture = Effect.fnUntraced(function* () {
@@ -46,7 +45,7 @@ const following = Effect.fnUntraced(function* (watches: HeadWatches, checkout: s
 });
 
 const head = (events: Queue.Queue<HeadMoved>, expected: string) =>
-  Stream.runHead(Stream.filter(Stream.fromQueue(events), (event) => event.head === expected)).pipe(Effect.timeout(WAIT));
+  Stream.runHead(Stream.filter(Stream.fromQueue(events), (event) => event.head === expected));
 
 const granting = (tickets: WatchTickets['Service'], ready: Deferred.Deferred<void>, available: () => boolean) =>
   WatchTickets.of({
@@ -156,7 +155,7 @@ it.live(
           yield* state.files.rename(missing, gitDir);
           yield* TestClock.adjust(60000);
           expect(tickets.standing().active).toBe(0);
-          const returned = yield* Stream.runHead(watches.moved(state.root)).pipe(Effect.timeout(WAIT));
+          const returned = yield* Stream.runHead(watches.moved(state.root));
           expect(returned._tag === 'Some' && returned.value.head).toBe(state.first);
           expect(tickets.standing().active).toBe(0);
           yield* Scope.close(scope, Exit.void);

@@ -3,7 +3,7 @@ import { statSync } from 'node:fs';
 import { Deferred, Effect, Fiber, Stream } from 'effect';
 import type { CheckoutState } from '../contract/wire/checkout.js';
 import { RootId } from '../contract/wire/ids.js';
-import { fixture, pause, provenance, run, rowTests, WATCH_BUDGET } from '../testing/rowsFixture.js';
+import { fixture, pause, provenance, run, rowTests } from '../testing/rowsFixture.js';
 
 rowTests('checkouts/rows.itest.ts', (it) => {
   it.effect('one reading answers each area with its own weight, and the upstream comparison beside it', () =>
@@ -166,10 +166,7 @@ rowTests('checkouts/rows.itest.ts', (it) => {
       yield* Deferred.await(seen);
       yield* files.writeFileString(paths.join(root, '.gitignore'), '*.log\n');
       yield* status.mark(rootId, 'written', ['.gitignore']);
-      const read = yield* Effect.timeoutOrElse(Fiber.join(rows), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die(`no row dropped the newly ignored file within ${WATCH_BUDGET}`),
-      });
+      const read = yield* Fiber.join(rows);
       const seenPaths = read.map(listed);
       expect(seenPaths.at(0)).toContain('build.log');
       expect(seenPaths.at(-1)).not.toContain('build.log');
@@ -189,10 +186,7 @@ rowTests('checkouts/rows.itest.ts', (it) => {
       );
       yield* Deferred.await(seen);
       yield* files.writeFileString(paths.join(root, 'typed.txt'), 'y\n');
-      const [before, after] = yield* Effect.timeoutOrElse(Fiber.join(rows), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die(`the tree watch delivered no second row within ${WATCH_BUDGET}`),
-      });
+      const [before, after] = yield* Fiber.join(rows);
       expect(before?.unwatched).toBe(false);
       expect(after?.entries.untracked.entries.map((entry) => entry.path)).toEqual(['alone.txt', 'fresh.txt', 'typed.txt']);
       expect(after?.unwatched).toBe(false);
@@ -243,14 +237,8 @@ rowTests('checkouts/rows.itest.ts', (it) => {
       );
       yield* Effect.all([Deferred.await(ready.upstream), Deferred.await(ready.born)]);
       yield* files.writeFileString(paths.join(root, 'typed.txt'), 'y\n');
-      const [, afterUpstream] = yield* Effect.timeoutOrElse(Fiber.join(upstream), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die(`the upstream reading delivered no second row within ${WATCH_BUDGET}`),
-      });
-      const [, afterBorn] = yield* Effect.timeoutOrElse(Fiber.join(born), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die(`the based reading delivered no second row within ${WATCH_BUDGET}`),
-      });
+      const [, afterUpstream] = yield* Fiber.join(upstream);
+      const [, afterBorn] = yield* Fiber.join(born);
       expect(afterUpstream?.compare?.base).toBe('base');
       expect(afterBorn?.compare?.base).toBe('HEAD~1');
       for (const row of [afterUpstream, afterBorn]) {
@@ -274,10 +262,7 @@ rowTests('checkouts/rows.itest.ts', (it) => {
       door.counts.spawns = 0;
       door.counts.readings = 0;
       yield* files.writeFileString(paths.join(root, 'typed.txt'), 'y\n');
-      yield* Effect.timeoutOrElse(Fiber.join(rows), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die(`the tree watch delivered no second row within ${WATCH_BUDGET}`),
-      });
+      yield* Fiber.join(rows);
       expect(door.counts.readings).toBeGreaterThan(0);
       expect(door.counts.spawns).toBeLessThanOrEqual(door.counts.readings * 5);
     }),
@@ -301,10 +286,7 @@ rowTests('checkouts/rows.itest.ts', (it) => {
       );
       yield* Deferred.await(seen);
       yield* run(git, linked, ['add', 'kept.txt']);
-      const [before, after] = yield* Effect.timeoutOrElse(Fiber.join(rows), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die(`the linked worktree's git places delivered no second row within ${WATCH_BUDGET}`),
-      });
+      const [before, after] = yield* Fiber.join(rows);
       expect(before?.unwatched).toBe(false);
       expect(before?.entries.unstaged.entries.map((entry) => entry.path)).toEqual(['kept.txt']);
       expect(after?.entries.staged.entries.map((entry) => entry.path)).toEqual(['kept.txt']);
@@ -391,10 +373,7 @@ rowTests('checkouts/rows.itest.ts', (it) => {
       const marked = yield* Deferred.make<void>();
       const detach = status.onMark(() => Effect.asVoid(Deferred.succeed(marked, undefined)));
       yield* files.writeFileString(paths.join(root, 'typed.txt'), 'y\n');
-      yield* Effect.timeoutOrElse(Deferred.await(marked), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die(`the watch marked nothing within ${WATCH_BUDGET}`),
-      });
+      yield* Deferred.await(marked);
       detach();
       const row = yield* status.read(rootId);
       expect(row.entries.untracked.entries.map((entry) => entry.path)).toContain('typed.txt');
@@ -412,16 +391,12 @@ rowTests('checkouts/rows.itest.ts', (it) => {
           return (yield* roots.register({ path: at, provenance })).rootId;
         }),
       );
-      const gate = yield* Deferred.make<void>();
-      door.holdEvery(gate);
+      const held = yield* pause;
+      door.holdEvery(held, 3);
       const readers = yield* Effect.forkChild(Effect.forEach([rootId, ...more], (id) => status.read(id), { concurrency: 'unbounded' }));
-      yield* Effect.timeoutOrElse(Effect.repeat(Effect.sleep('10 millis'), { until: () => door.counts.running >= 3 }), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die('three readings never started'),
-      });
-      yield* Effect.sleep('100 millis');
+      yield* Deferred.await(held.arrived);
       const crowded = door.counts.running;
-      yield* Deferred.succeed(gate, undefined);
+      yield* Deferred.succeed(held.gate, undefined);
       const rows = yield* Fiber.join(readers);
       expect(crowded).toBe(3);
       expect(door.counts.peak).toBe(3);
@@ -441,22 +416,18 @@ rowTests('checkouts/rows.itest.ts', (it) => {
         }),
       );
       const checkouts = [{ at: root, rootId }, ...more];
-      const gate = yield* Deferred.make<void>();
-      door.holdEvery(gate);
+      const held = yield* pause;
+      door.holdEvery(held, 3);
       const readers = yield* Effect.forkChild(Effect.forEach(checkouts, (one) => status.read(one.rootId), { concurrency: 'unbounded' }));
-      yield* Effect.timeoutOrElse(Effect.repeat(Effect.sleep('10 millis'), { until: () => door.counts.running >= 3 }), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die('three readings never started'),
-      });
+      yield* Deferred.await(held.arrived);
       const listed = (at: string) => door.commands.filter((args) => args.includes('--porcelain=v2') && args.includes(at)).length;
       const waiting = checkouts.find((one) => listed(one.at) === 0);
       if (waiting === undefined) return yield* Effect.die('every reading had started');
       yield* files.writeFileString(paths.join(waiting.at, 'queued.txt'), 'x\n');
       yield* status.mark(waiting.rootId);
       yield* status.mark(waiting.rootId);
-      yield* Deferred.succeed(gate, undefined);
+      yield* Deferred.succeed(held.gate, undefined);
       const rows = yield* Fiber.join(readers);
-      yield* Effect.sleep('100 millis');
       expect(listed(waiting.at)).toBe(1);
       expect(rows[checkouts.indexOf(waiting)]?.entries.untracked.entries.map((entry) => entry.path)).toContain('queued.txt');
     }),
@@ -471,10 +442,7 @@ rowTests('checkouts/rows.itest.ts', (it) => {
       const next = yield* Effect.forkChild(Stream.runHead(stream.pipe(Stream.filter((row) => row.revision > initial.value.revision))));
       const named = Array.from({ length: 100 }, (_, n) => `deep/${'segment/'.repeat(24)}${n}.txt`);
       yield* status.mark(rootId, 'tree', named);
-      const row = yield* Effect.timeoutOrElse(Fiber.join(next), {
-        duration: WATCH_BUDGET,
-        orElse: () => Effect.die(`no row followed the wide mark within ${WATCH_BUDGET}`),
-      });
+      const row = yield* Fiber.join(next);
       expect(row._tag === 'Some' && row.value.stale).toBe(false);
       expect(row._tag === 'Some' ? row.value.entries.untracked.entries.map((entry) => entry.path) : []).toEqual([
         'alone.txt',

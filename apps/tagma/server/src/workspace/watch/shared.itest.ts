@@ -38,7 +38,6 @@ const layers = Layer.mergeAll(
   reservations,
   watchProcessLayer,
 );
-const WAIT = '10 seconds';
 
 const fixture = Effect.fnUntraced(function* (options: CheckoutWatchOptions = {}, dieOnce = false) {
   const files = yield* FileSystem.FileSystem;
@@ -83,7 +82,7 @@ it.live('every follower of a checkout shares one watcher and each is told the pa
         expect(tickets.standing().active).toBe(held);
         yield* files.writeFileString(paths.join(root, 'seen.txt'), 'x\n');
         for (const following of [first, second]) {
-          const told = yield* Stream.runHead(Stream.filter(following.shifts, naming('seen.txt'))).pipe(Effect.timeout(WAIT));
+          const told = yield* Stream.runHead(Stream.filter(following.shifts, naming('seen.txt')));
           expect(told._tag === 'Some' && told.value.movements.includes('tree')).toBe(true);
         }
         first.release();
@@ -101,10 +100,8 @@ it.live('a follower that has not read since a burst gets the folded paths, and p
       const slow = yield* watches.follow(rootId);
       const names = ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt'];
       for (const name of names) yield* files.writeFileString(paths.join(root, name), 'x\n');
-      yield* Stream.runDrain(Stream.takeUntil(probe.shifts, (shift) => shift.rescan === 'overflow' || shift.paths.has('e.txt'))).pipe(
-        Effect.timeout(WAIT),
-      );
-      const folded = yield* Stream.runHead(slow.shifts).pipe(Effect.timeout(WAIT));
+      yield* Stream.runDrain(Stream.takeUntil(probe.shifts, (shift) => shift.rescan === 'overflow' || shift.paths.has('e.txt')));
+      const folded = yield* Stream.runHead(slow.shifts);
       expect(folded._tag === 'Some' && folded.value.rescan).toBe('overflow');
       expect(folded._tag === 'Some' && folded.value.paths.size).toBe(0);
     }),
@@ -123,15 +120,14 @@ it.live('a watcher the machine could not grant is retried by its owner and its f
       yield* Effect.gen(function* () {
         const following = yield* watches.follow(rootId);
         expect(following.watching()).toBe(false);
-        const lost = yield* Stream.runHead(following.shifts).pipe(Effect.timeout(WAIT));
+        const lost = yield* Stream.runHead(following.shifts);
         expect(lost._tag === 'Some' && lost.value.rescan).not.toBeNull();
         yield* Stream.runDrain(Stream.takeUntil(following.shifts, () => following.watching())).pipe(
           Effect.when(Effect.sync(() => !following.watching())),
-          Effect.timeout(WAIT),
         );
         expect(following.watching()).toBe(true);
         yield* files.writeFileString(paths.join(root, 'again.txt'), 'x\n');
-        const told = yield* Stream.runHead(Stream.filter(following.shifts, naming('again.txt'))).pipe(Effect.timeout(WAIT));
+        const told = yield* Stream.runHead(Stream.filter(following.shifts, naming('again.txt')));
         expect(told._tag).toBe('Some');
       }).pipe(Effect.provideService(WatchTickets, tickets));
     }),
@@ -151,14 +147,13 @@ it.live('a killed watch process tells the follower to rescan, its watch reopens 
         yield* Effect.promise(async () => {
           if (Bun.spawnSync(['pkill', '-KILL', '-f', socket]).exitCode !== 0) throw new Error('no watch process to kill');
         });
-        const lost = yield* Stream.runHead(Stream.filter(following.shifts, (shift) => shift.rescan !== null)).pipe(Effect.timeout(WAIT));
+        const lost = yield* Stream.runHead(Stream.filter(following.shifts, (shift) => shift.rescan !== null));
         expect(lost._tag === 'Some' && lost.value.rescan).toBe('error');
         yield* Stream.runDrain(Stream.takeUntil(following.shifts, () => following.watching())).pipe(
           Effect.when(Effect.sync(() => !following.watching())),
-          Effect.timeout(WAIT),
         );
         yield* files.writeFileString(paths.join(root, 'after.txt'), 'x\n');
-        const told = yield* Stream.runHead(Stream.filter(following.shifts, naming('after.txt'))).pipe(Effect.timeout(WAIT));
+        const told = yield* Stream.runHead(Stream.filter(following.shifts, naming('after.txt')));
         expect(told._tag).toBe('Some');
         following.release();
       }).pipe(Effect.provideService(FileWatcher, watcher));
@@ -195,9 +190,7 @@ it.live('the HEAD observer filters named index replacements and ref locks while 
       );
       heard.length = 0;
       const arrived = (name: string) =>
-        Stream.runDrain(Stream.takeUntil(Stream.fromQueue(events), (event) => event.paths?.includes(name) === true)).pipe(
-          Effect.timeout(WAIT),
-        );
+        Stream.runDrain(Stream.takeUntil(Stream.fromQueue(events), (event) => event.paths?.includes(name) === true));
       yield* files.writeFileString(paths.join(root, '.git', 'index.next'), 'unrelated\n');
       yield* files.rename(paths.join(root, '.git', 'index.next'), paths.join(root, '.git', 'index'));
       for (const name of ['HEAD', 'packed-refs']) {
@@ -253,12 +246,11 @@ it.live('a root relocated during watcher recovery is followed at its current loc
         yield* roots.register({ path: relocated, provenance: { kind: 'adoption', id: 'operator' } });
         const second = yield* watches.follow(rootId);
         yield* Deferred.succeed(resume, undefined);
-        yield* Stream.runDrain(Stream.takeUntil(second.shifts, () => second.watching())).pipe(
-          Effect.when(Effect.sync(() => !second.watching())),
-          Effect.timeout(WAIT),
-        );
+        for (const following of [first, second]) {
+          yield* Stream.runDrain(Stream.takeUntil(following.shifts, () => following.watching()));
+        }
         yield* files.writeFileString(paths.join(relocated, 'moved.txt'), 'now here\n');
-        const heard = yield* Stream.runHead(Stream.filter(first.shifts, naming('moved.txt'))).pipe(Effect.timeout(WAIT));
+        const heard = yield* Stream.runHead(Stream.filter(first.shifts, naming('moved.txt')));
         expect(heard._tag).toBe('Some');
         first.release();
         second.release();

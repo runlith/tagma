@@ -22,7 +22,6 @@ import { machineGraphOf } from './machine.js';
 
 layer(demoGraphLayer({ repos: [] }).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: '1 minute',
 })('folder graphs', (it) => {
   it.effect('the global folder carries files and law, then follows git worktrees without exporting branch law', () =>
     withDemo(({ graph, context, demoRoot, projectId, fixture, as }) =>

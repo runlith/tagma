@@ -1,4 +1,4 @@
-import { Deferred, Duration, Effect, Fiber } from 'effect';
+import { Deferred, Effect, Fiber } from 'effect';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture.js';
@@ -47,7 +47,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('declared reads', (it) =>
           ),
         );
         const heldId = yield* Deferred.await(opened);
-        const seen = yield* graph.selection.records([standing.id, heldId]).pipe(Effect.timeout(Duration.seconds(10)));
+        const seen = yield* graph.selection.records([standing.id, heldId]);
         yield* Deferred.succeed(letGo, undefined);
         yield* Fiber.join(writing);
         expect(seen.map((row) => row.title)).toEqual(['standing']);

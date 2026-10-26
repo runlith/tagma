@@ -71,7 +71,7 @@ layer(stores, { excludeTestServices: true })('block names', (it) => {
         expect(yield* names.idsOfNames([blockName(before)])).toEqual(new Map([[blockName(before), id]]));
         expect(yield* names.namesOf([id])).toEqual(new Map([[id, blockName(before)]]));
         expect(yield* names.uuidOf(id)).toBe(before);
-      }).pipe(Effect.timeout('1 second'), Effect.ensuring(Deferred.succeed(release, undefined)));
+      }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)));
       yield* Fiber.join(writing);
       expect(yield* names.nameOf(id)).toBe(blockName(after));
       const collision = (after[0] === '0' ? '1' : '0') + after.slice(1);

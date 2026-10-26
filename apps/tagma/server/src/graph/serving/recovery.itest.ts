@@ -85,7 +85,7 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
       yield* Effect.yieldNow;
       expect(feed.pollUnsafe()).toBeUndefined();
       yield* Fiber.interrupt(feed);
-    }).pipe(Effect.timeout('1 second')),
+    }),
   );
 
   it.effect('team resolution validates before staging and preserves code conflicts and staged code', () =>
@@ -226,6 +226,6 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
       expect(yield* next((notice) => notice.unreadable.length === 0)).toEqual({ recovery: null, total: 0, unreadable: [] });
       yield* policy.service.setStorage({ id: row.id, mode: 'team' });
       expect(yield* Queue.take(notices)).toEqual({ recovery: null, total: 0, unreadable: [] });
-    }).pipe(Effect.timeout('10 seconds'), Effect.provide(watchProcessLayer)),
+    }).pipe(Effect.provide(watchProcessLayer)),
   );
 });

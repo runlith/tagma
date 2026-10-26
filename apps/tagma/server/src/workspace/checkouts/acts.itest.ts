@@ -191,7 +191,7 @@ it.live('staging waits for index settlement and preserves both the settled entry
       expect(yield* run(git, root, ['show', ':kept.txt'])).toBe('one');
       expect(yield* run(git, root, ['show', ':fresh.txt'])).toBe('a');
       expect(yield* files.readFileString(paths.join(root, 'kept.txt'))).toBe('one\ntwo\n');
-    }).pipe(Effect.timeout('5 seconds')),
+    }),
   ),
 );
 
@@ -219,7 +219,7 @@ it.live('cancelling index settlement releases its lock and temporary files befor
       expect((yield* files.readDirectory(paths.dirname(index))).filter((name) => name.startsWith('index.tagma-'))).toEqual([]);
       yield* acts.stage(here(rootId), ['fresh.txt']);
       expect(yield* run(git, root, ['show', ':fresh.txt'])).toBe('a');
-    }).pipe(Effect.timeout('5 seconds')),
+    }),
   ),
 );
 
@@ -274,7 +274,7 @@ it.live('a linked worktree stages independently, and cancelling a queued stage p
       expect((yield* checkouts.read(rootId)).entries.untracked.entries.map((entry) => entry.path)).toEqual(['fresh.txt']);
       yield* acts.stage(here(rootId), ['fresh.txt']);
       expect(yield* run(git, root, ['show', ':fresh.txt'])).toBe('a');
-    }).pipe(Effect.timeout('5 seconds')),
+    }),
   ),
 );
 

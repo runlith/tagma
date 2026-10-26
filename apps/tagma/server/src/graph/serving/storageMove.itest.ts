@@ -21,7 +21,6 @@ import { graphPool } from '../testing/doubles.js';
 
 layer(demoGraphLayer({ repos: ['travel'] }).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: '1 minute',
 })('graph storage moves', (it) => {
   it.effect('a cross-device move stays asynchronous and preserves handles, writes, unrelated files and refused targets', () =>
     withDemo(({ graph, context, project, demoRoot, as, refusal }) =>

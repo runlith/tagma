@@ -41,6 +41,7 @@ export const run = (git: Git['Service'], cwd: string, args: readonly string[]): 
   );
 
 type Pause = { readonly gate: Deferred.Deferred<void>; readonly arrived: Deferred.Deferred<void> };
+type Crowd = Pause & { readonly count: number };
 
 export const pause: Effect.Effect<Pause> = Effect.all({ gate: Deferred.make<void>(), arrived: Deferred.make<void>() });
 
@@ -48,7 +49,7 @@ const watched = (git: Git['Service']) => {
   const counts = { spawns: 0, readings: 0, running: 0, peak: 0 };
   const commands: (readonly string[])[] = [];
   let paused: Pause | null = null;
-  let crowd: Deferred.Deferred<void> | null = null;
+  let crowd: Crowd | null = null;
   let refuse = false;
   let broken = false;
   const faces: Git['Service'] = {
@@ -63,7 +64,10 @@ const watched = (git: Git['Service']) => {
       counts.peak = Math.max(counts.peak, counts.running);
       return yield* Effect.gen(function* () {
         const answer = yield* git.run(args, options);
-        if (crowd !== null) yield* Deferred.await(crowd);
+        if (crowd !== null) {
+          if (counts.running >= crowd.count) yield* Deferred.succeed(crowd.arrived, undefined);
+          yield* Deferred.await(crowd.gate);
+        }
         const held = paused;
         if (held === null) return answer;
         paused = null;
@@ -86,8 +90,8 @@ const watched = (git: Git['Service']) => {
     hold: (held: Pause) => {
       paused = held;
     },
-    holdEvery: (gate: Deferred.Deferred<void>) => {
-      crowd = gate;
+    holdEvery: (held: Pause, count: number) => {
+      crowd = { ...held, count };
     },
     refuseListing: () => {
       refuse = true;
@@ -166,5 +170,3 @@ export const fixture = Effect.gen(function* () {
     rootId: registered.rootId,
   };
 });
-
-export const WATCH_BUDGET = '3 seconds';

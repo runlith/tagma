@@ -78,7 +78,6 @@ const heldOpens = Effect.fnUntraced(function* (context: Context.Context<GraphSte
 
 layer(demoGraphLayer({ repos: ['alpha'] }).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 40_000,
 })('opening lane', (it) => {
   it.effect('a worktree opening held in its format step leaves the main copy answering, and opens never outrun the lane', () =>
     withDemo(({ graph, context, project, demoRoot, fixture }) =>
