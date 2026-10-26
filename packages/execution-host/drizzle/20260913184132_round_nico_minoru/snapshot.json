@@ -1,0 +1,1387 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "73f61d1e-08a0-4f0b-b96e-f23d9367035c",
+  "prevIds": [
+    "bb650728-9fef-48c2-ade1-dee632bfd319"
+  ],
+  "ddl": [
+    {
+      "name": "call",
+      "entityType": "tables"
+    },
+    {
+      "name": "call_decision",
+      "entityType": "tables"
+    },
+    {
+      "name": "command_revision",
+      "entityType": "tables"
+    },
+    {
+      "name": "custody",
+      "entityType": "tables"
+    },
+    {
+      "name": "execution",
+      "entityType": "tables"
+    },
+    {
+      "name": "execution_dependency",
+      "entityType": "tables"
+    },
+    {
+      "name": "final_facts",
+      "entityType": "tables"
+    },
+    {
+      "name": "host_custody",
+      "entityType": "tables"
+    },
+    {
+      "name": "incarnation",
+      "entityType": "tables"
+    },
+    {
+      "name": "operation",
+      "entityType": "tables"
+    },
+    {
+      "name": "stop_intent",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "installation",
+      "entityType": "columns",
+      "table": "call"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "operation_id",
+      "entityType": "columns",
+      "table": "call"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "execution_id",
+      "entityType": "columns",
+      "table": "call"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "budget",
+      "entityType": "columns",
+      "table": "call"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "started",
+      "entityType": "columns",
+      "table": "call"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sources",
+      "entityType": "columns",
+      "table": "call"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "retention",
+      "entityType": "columns",
+      "table": "call"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "call"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "call"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "installation",
+      "entityType": "columns",
+      "table": "call_decision"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "operation_id",
+      "entityType": "columns",
+      "table": "call_decision"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "decision",
+      "entityType": "columns",
+      "table": "call_decision"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "decided_at",
+      "entityType": "columns",
+      "table": "call_decision"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "execution_id",
+      "entityType": "columns",
+      "table": "command_revision"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "installation",
+      "entityType": "columns",
+      "table": "command_revision"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "incarnation",
+      "entityType": "columns",
+      "table": "command_revision"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revision",
+      "entityType": "columns",
+      "table": "command_revision"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "operation_id",
+      "entityType": "columns",
+      "table": "command_revision"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "execution_ms",
+      "entityType": "columns",
+      "table": "command_revision"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ceiling_ms",
+      "entityType": "columns",
+      "table": "command_revision"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "actor",
+      "entityType": "columns",
+      "table": "command_revision"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cause",
+      "entityType": "columns",
+      "table": "command_revision"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "accepted_at",
+      "entityType": "columns",
+      "table": "command_revision"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "execution_id",
+      "entityType": "columns",
+      "table": "custody"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revision",
+      "entityType": "columns",
+      "table": "custody"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "holder",
+      "entityType": "columns",
+      "table": "custody"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "controller_principal",
+      "entityType": "columns",
+      "table": "custody"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "controller_binding",
+      "entityType": "columns",
+      "table": "custody"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "controller_generation",
+      "entityType": "columns",
+      "table": "custody"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "generation",
+      "entityType": "columns",
+      "table": "custody"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "origin",
+      "entityType": "columns",
+      "table": "custody"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "custody"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "execution_id",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "installation",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "incarnation",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "transport",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lifetime",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "purpose",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "phase",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "native_exit",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "stdout",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "stderr",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "pty",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cleanup",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "record_availability",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "command",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "target_environment",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "target_namespace",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "target_cwd",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "pid",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "tty",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "execution"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "execution_id",
+      "entityType": "columns",
+      "table": "execution_dependency"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "position",
+      "entityType": "columns",
+      "table": "execution_dependency"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "receipt",
+      "entityType": "columns",
+      "table": "execution_dependency"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "execution_id",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "installation",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "incarnation",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "native_exit",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sources",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cleanup",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "retention",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "confirmed",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "residual",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "unverifiable",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "streams",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "relation",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "coverage",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "abandoned_output",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "unacquired",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "recorded_at",
+      "entityType": "columns",
+      "table": "final_facts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "installation",
+      "entityType": "columns",
+      "table": "host_custody"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revision",
+      "entityType": "columns",
+      "table": "host_custody"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "epoch",
+      "entityType": "columns",
+      "table": "host_custody"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "holder_connection",
+      "entityType": "columns",
+      "table": "host_custody"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "holder_incarnation",
+      "entityType": "columns",
+      "table": "host_custody"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "operation_id",
+      "entityType": "columns",
+      "table": "host_custody"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "host_custody"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "incarnation",
+      "entityType": "columns",
+      "table": "incarnation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "installation",
+      "entityType": "columns",
+      "table": "incarnation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "registration",
+      "entityType": "columns",
+      "table": "incarnation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "phase",
+      "entityType": "columns",
+      "table": "incarnation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "current",
+      "entityType": "columns",
+      "table": "incarnation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "entered_at",
+      "entityType": "columns",
+      "table": "incarnation"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "retired_at",
+      "entityType": "columns",
+      "table": "incarnation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "installation",
+      "entityType": "columns",
+      "table": "operation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "operation_id",
+      "entityType": "columns",
+      "table": "operation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "operation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "fingerprint",
+      "entityType": "columns",
+      "table": "operation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "receipt",
+      "entityType": "columns",
+      "table": "operation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "execution_id",
+      "entityType": "columns",
+      "table": "operation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "operation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "execution_id",
+      "entityType": "columns",
+      "table": "stop_intent"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "installation",
+      "entityType": "columns",
+      "table": "stop_intent"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "operation_id",
+      "entityType": "columns",
+      "table": "stop_intent"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "incarnation",
+      "entityType": "columns",
+      "table": "stop_intent"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cause",
+      "entityType": "columns",
+      "table": "stop_intent"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "policy",
+      "entityType": "columns",
+      "table": "stop_intent"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "coverage",
+      "entityType": "columns",
+      "table": "stop_intent"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requested",
+      "entityType": "columns",
+      "table": "stop_intent"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "joined",
+      "entityType": "columns",
+      "table": "stop_intent"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "requested_at",
+      "entityType": "columns",
+      "table": "stop_intent"
+    },
+    {
+      "columns": [
+        "execution_id"
+      ],
+      "tableTo": "execution",
+      "columnsTo": [
+        "execution_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_command_revision_execution_id_execution_execution_id_fk",
+      "entityType": "fks",
+      "table": "command_revision"
+    },
+    {
+      "columns": [
+        "execution_id"
+      ],
+      "tableTo": "execution",
+      "columnsTo": [
+        "execution_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_custody_execution_id_execution_execution_id_fk",
+      "entityType": "fks",
+      "table": "custody"
+    },
+    {
+      "columns": [
+        "incarnation"
+      ],
+      "tableTo": "incarnation",
+      "columnsTo": [
+        "incarnation"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_execution_incarnation_incarnation_incarnation_fk",
+      "entityType": "fks",
+      "table": "execution"
+    },
+    {
+      "columns": [
+        "execution_id"
+      ],
+      "tableTo": "execution",
+      "columnsTo": [
+        "execution_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_execution_dependency_execution_id_execution_execution_id_fk",
+      "entityType": "fks",
+      "table": "execution_dependency"
+    },
+    {
+      "columns": [
+        "execution_id"
+      ],
+      "tableTo": "execution",
+      "columnsTo": [
+        "execution_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_final_facts_execution_id_execution_execution_id_fk",
+      "entityType": "fks",
+      "table": "final_facts"
+    },
+    {
+      "columns": [
+        "execution_id"
+      ],
+      "tableTo": "execution",
+      "columnsTo": [
+        "execution_id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_stop_intent_execution_id_execution_execution_id_fk",
+      "entityType": "fks",
+      "table": "stop_intent"
+    },
+    {
+      "columns": [
+        "installation",
+        "operation_id"
+      ],
+      "nameExplicit": false,
+      "name": "call_pk",
+      "entityType": "pks",
+      "table": "call"
+    },
+    {
+      "columns": [
+        "installation",
+        "operation_id"
+      ],
+      "nameExplicit": false,
+      "name": "call_decision_pk",
+      "entityType": "pks",
+      "table": "call_decision"
+    },
+    {
+      "columns": [
+        "execution_id",
+        "revision"
+      ],
+      "nameExplicit": false,
+      "name": "command_revision_pk",
+      "entityType": "pks",
+      "table": "command_revision"
+    },
+    {
+      "columns": [
+        "execution_id",
+        "position"
+      ],
+      "nameExplicit": false,
+      "name": "execution_dependency_pk",
+      "entityType": "pks",
+      "table": "execution_dependency"
+    },
+    {
+      "columns": [
+        "installation",
+        "operation_id"
+      ],
+      "nameExplicit": false,
+      "name": "operation_pk",
+      "entityType": "pks",
+      "table": "operation"
+    },
+    {
+      "columns": [
+        "execution_id",
+        "installation",
+        "operation_id"
+      ],
+      "nameExplicit": false,
+      "name": "stop_intent_pk",
+      "entityType": "pks",
+      "table": "stop_intent"
+    },
+    {
+      "columns": [
+        "execution_id"
+      ],
+      "nameExplicit": false,
+      "name": "custody_pk",
+      "table": "custody",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "execution_id"
+      ],
+      "nameExplicit": false,
+      "name": "execution_pk",
+      "table": "execution",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "execution_id"
+      ],
+      "nameExplicit": false,
+      "name": "final_facts_pk",
+      "table": "final_facts",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "installation"
+      ],
+      "nameExplicit": false,
+      "name": "host_custody_pk",
+      "table": "host_custody",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "incarnation"
+      ],
+      "nameExplicit": false,
+      "name": "incarnation_pk",
+      "table": "incarnation",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "installation",
+          "isExpression": false
+        },
+        {
+          "value": "operation_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "command_revision_operation_idx",
+      "entityType": "indexes",
+      "table": "command_revision"
+    },
+    {
+      "columns": [
+        {
+          "value": "incarnation",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "execution_incarnation_idx",
+      "entityType": "indexes",
+      "table": "execution"
+    },
+    {
+      "columns": [
+        {
+          "value": "phase",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "execution_phase_idx",
+      "entityType": "indexes",
+      "table": "execution"
+    },
+    {
+      "columns": [
+        {
+          "value": "current",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": "\"incarnation\".\"current\" = 1",
+      "origin": "manual",
+      "name": "incarnation_current_unique",
+      "entityType": "indexes",
+      "table": "incarnation"
+    },
+    {
+      "columns": [
+        {
+          "value": "execution_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "operation_execution_idx",
+      "entityType": "indexes",
+      "table": "operation"
+    },
+    {
+      "columns": [
+        {
+          "value": "execution_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "stop_intent_execution_idx",
+      "entityType": "indexes",
+      "table": "stop_intent"
+    },
+    {
+      "columns": [
+        {
+          "value": "installation",
+          "isExpression": false
+        },
+        {
+          "value": "operation_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "stop_intent_operation_idx",
+      "entityType": "indexes",
+      "table": "stop_intent"
+    }
+  ],
+  "renames": []
+}

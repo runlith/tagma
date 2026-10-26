@@ -1,0 +1,65 @@
+{
+  "name": "@runlith/desktop-input",
+  "version": "0.1.0",
+  "private": true,
+  "description": "macOS global keyboard-hook and focused-app text-insertion boundary for Runlith desktop products.",
+  "bin": {
+    "runlith-desktop-input": "./bin/runlith-desktop-input"
+  },
+  "files": [
+    "src/**/*",
+    "dist/**/*",
+    "bin/**/*",
+    "native/**/*",
+    "scripts/**/*",
+    "README.md"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64",
+    "x64"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    "./contract/types": {
+      "types": "./src/contract/types.ts",
+      "bun": "./src/contract/types.ts",
+      "default": "./dist/contract/types.js"
+    },
+    "./DesktopInputHost": {
+      "types": "./src/DesktopInputHost.ts",
+      "bun": "./src/DesktopInputHost.ts",
+      "node": "./dist/DesktopInputHost.js",
+      "default": "./dist/DesktopInputHost.js"
+    },
+    "./preflight": {
+      "types": "./src/preflight.ts",
+      "bun": "./src/preflight.ts",
+      "default": "./dist/preflight.js"
+    }
+  },
+  "scripts": {
+    "build": "bun run native:build && bun run build:js",
+    "build:runtime": "bun ./scripts/build-native.mjs --single-arch && bun run build:js",
+    "build:js": "bun ./scripts/build-runtime-js.mjs",
+    "native:build": "bun ./scripts/build-native.mjs",
+    "prepack": "bun ./scripts/build-native.mjs --require-darwin && bun run build:js",
+    "test": "testbed bun test --no-isolate --pass-with-no-tests",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/utils": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "esbuild": "catalog:"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `thread_rollout_form` ADD `step` text;

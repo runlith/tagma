@@ -1,0 +1,49 @@
+{
+  "name": "@runlith/adapter-stepfun",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The built-in StepFun model provider adapter of Tagma.",
+  "type": "module",
+  "exports": {
+    "./adapter": {
+      "types": "./src/adapter.ts",
+      "bun": "./src/adapter.ts",
+      "default": "./src/adapter.ts"
+    },
+    "./icon": {
+      "types": "./src/icon.ts",
+      "browser": "./src/icon.ts",
+      "node": "./src/icon.ts",
+      "default": "./src/icon.ts"
+    },
+    "./models/stepfun": {
+      "types": "./src/models/stepfun.ts",
+      "browser": "./src/models/stepfun.ts",
+      "node": "./src/models/stepfun.ts",
+      "default": "./src/models/stepfun.ts"
+    },
+    "./profiles/stepfun": {
+      "types": "./src/profiles/stepfun.ts",
+      "default": "./src/profiles/stepfun.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/llm": "workspace:*",
+    "@runlith/tagma": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "host": {
+      "./models/stepfun": "shared",
+      "./profiles/stepfun": "shared"
+    }
+  }
+}

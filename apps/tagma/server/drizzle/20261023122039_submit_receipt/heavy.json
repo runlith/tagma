@@ -1,0 +1,1 @@
+{"reason":"Create the empty submit_receipt history table for call-correlated publication witnesses and completed submit_work answers. No existing table is read, rewritten or indexed; the new table has no prior rows. The installation estimates migration and snapshot bytes before replacing its predecessor."}

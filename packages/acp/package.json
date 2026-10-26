@@ -1,0 +1,54 @@
+{
+  "name": "@runlith/acp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Agent Client Protocol v1 subset Tagma speaks, as Effect Schema: a pure client machine whose state survives a restart, and the agent side that serves a client over stdio.",
+  "type": "module",
+  "exports": {
+    "./content": {
+      "types": "./src/content.ts",
+      "default": "./src/content.ts"
+    },
+    "./toolCalls": {
+      "types": "./src/toolCalls.ts",
+      "default": "./src/toolCalls.ts"
+    },
+    "./updates": {
+      "types": "./src/updates.ts",
+      "default": "./src/updates.ts"
+    },
+    "./methods": {
+      "types": "./src/methods.ts",
+      "default": "./src/methods.ts"
+    },
+    "./state": {
+      "types": "./src/state.ts",
+      "default": "./src/state.ts"
+    },
+    "./events": {
+      "types": "./src/events.ts",
+      "default": "./src/events.ts"
+    },
+    "./client": {
+      "types": "./src/client.ts",
+      "default": "./src/client.ts"
+    },
+    "./agent": {
+      "types": "./src/agent.ts",
+      "default": "./src/agent.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/ndjson-rpc": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

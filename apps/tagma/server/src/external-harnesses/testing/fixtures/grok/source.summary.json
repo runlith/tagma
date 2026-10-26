@@ -1,0 +1,25 @@
+{
+  "info": {
+    "id": "6cb5838c-d514-46d2-bd21-d8a34544062a",
+    "cwd": "/fixtures/grok/work"
+  },
+  "agent_id": "ag1.365e3c282d48416d9708e5dc80484751",
+  "attempt_id": "at1.63da54d92eb44e9695cb7d8a5520ffcc",
+  "session_summary": "Exact Neutral One Two Replies",
+  "created_at": "2026-10-25T13:03:46.502285Z",
+  "updated_at": "2026-10-25T13:04:29.057251Z",
+  "num_messages": 6,
+  "num_chat_messages": 9,
+  "current_model_id": "grok-4.5",
+  "next_trace_turn": 2,
+  "chat_format_version": 1,
+  "request_id": "02a1ed60-92ef-4539-a8dc-16d992e9843d",
+  "grok_home": "/fixtures/grok/state",
+  "last_active_at": "2026-10-25T13:04:25.527131Z",
+  "generated_title": "Exact Neutral One Two Replies",
+  "agent_name": "grok-build-plan-no-subagents",
+  "sandbox_profile": "off",
+  "reasoning_effort": "low",
+  "last_turn_summary": "Returned NEUTRAL_TWO exactly as instructed",
+  "last_turn_summary_prompt_id": "02a1ed60-92ef-4539-a8dc-16d992e9843d"
+}

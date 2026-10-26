@@ -1,0 +1,82 @@
+{
+  "name": "@runlith/code-facts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Facts read out of source texts and the trees that hold them, through one adapter per language: what a file imports, where an import lands, which imports cross a floor table, and what a file declares and exports.",
+  "type": "module",
+  "exports": {
+    "./adapter": {
+      "types": "./src/adapter.ts",
+      "default": "./src/adapter.ts"
+    },
+    "./blobs": {
+      "types": "./src/blobs.ts",
+      "default": "./src/blobs.ts"
+    },
+    "./floors": {
+      "types": "./src/floors.ts",
+      "default": "./src/floors.ts"
+    },
+    "./imports": {
+      "types": "./src/imports.ts",
+      "default": "./src/imports.ts"
+    },
+    "./runtime": {
+      "types": "./src/runtime.ts",
+      "browser": "./src/runtime.ts",
+      "node": "./src/runtime.ts",
+      "default": "./src/runtime.ts"
+    },
+    "./runtimes": {
+      "types": "./src/runtimes/index.ts",
+      "browser": "./src/runtimes/index.ts",
+      "node": "./src/runtimes/index.ts",
+      "default": "./src/runtimes/index.ts"
+    },
+    "./tree": {
+      "types": "./src/tree.ts",
+      "default": "./src/tree.ts"
+    },
+    "./languages": {
+      "types": "./src/languages/index.ts",
+      "browser": "./src/languages/index.ts",
+      "node": "./src/languages/index.ts",
+      "default": "./src/languages/index.ts"
+    },
+    "./adapters": {
+      "types": "./src/languages/adapters.ts",
+      "default": "./src/languages/adapters.ts"
+    },
+    "./js": {
+      "types": "./src/languages/js/index.ts",
+      "default": "./src/languages/js/index.ts"
+    },
+    "./js/config": {
+      "types": "./src/languages/js/config.ts",
+      "default": "./src/languages/js/config.ts"
+    },
+    "./js/imports": {
+      "types": "./src/languages/js/imports.ts",
+      "default": "./src/languages/js/imports.ts"
+    },
+    "./js/resolve": {
+      "types": "./src/languages/js/resolve.ts",
+      "default": "./src/languages/js/resolve.ts"
+    },
+    "./js/workspace": {
+      "types": "./src/languages/js/workspace.ts",
+      "default": "./src/languages/js/workspace.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "oxc-parser": "catalog:",
+    "typescript": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:"
+  }
+}

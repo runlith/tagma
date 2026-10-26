@@ -1,0 +1,30 @@
+{
+  "name": "@runlith/file-lock",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-process exclusion over a file: the kernel's advisory flock, which ends with the process that holds it, and the scoped hold built on it.",
+  "type": "module",
+  "exports": {
+    "./flock": {
+      "types": "./src/flock.ts",
+      "bun": "./src/flock.ts",
+      "default": "./src/flock.ts"
+    },
+    "./FileLock": {
+      "types": "./src/FileLock.ts",
+      "bun": "./src/FileLock.ts",
+      "default": "./src/FileLock.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

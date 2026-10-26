@@ -1,0 +1,52 @@
+{
+  "migration": "20261006225911_baseline",
+  "schema": "0ce2264b7ae246c7b5402d7ec92969ac1a1305edca5cc18a6d5543039fff1269",
+  "retiredTables": [],
+  "chain": [
+    {
+      "name": "20261006164642_activity_record",
+      "hash": "233b034bfb650e6fb9af6b35ce369b2efb3361b0d82fcfc3f3ff2c4c06a29450"
+    },
+    {
+      "name": "20261006182425_activity_reading",
+      "hash": "819d21da978e9224b01255f01d0ed7cee96b50e2677a3fb8c821c3a215411a29"
+    },
+    {
+      "name": "20261006192433_activity_readings",
+      "hash": "45596f0f65977c385e0f30d385096c30c0acb9cce02b94a8de46533010812f3a"
+    },
+    {
+      "name": "20261006192511_reading_identity",
+      "hash": "9953de4cbeaa454dacc1e3b649c6ebd9693fb0c161d49863e7917135e8061329"
+    },
+    {
+      "name": "20261006193311_activity_loss_intervals",
+      "hash": "6f4198fcb16b24a1da2009c24696ae38c1501f983e8671031fe4d64d15aa9565"
+    },
+    {
+      "name": "20261006195619_body_dependencies",
+      "hash": "494445a374188a07b104719b86ec36a1bef01426e192eae4637cafe8d1f083ac"
+    },
+    {
+      "name": "20261006210405_body_content",
+      "hash": "eeb3b364f2f357ce9a7afcdd0e7a45a2e96fc6ad8ac245048a0d1752ced73073"
+    },
+    {
+      "name": "20261006211152_folded_documents",
+      "hash": "5fc0f22031051bee3a0ae042b6440926b7b3918103c4266a50caea3fc260eebb"
+    },
+    {
+      "name": "20261006213658_reading_populations",
+      "hash": "1688725766d87c37d5df90a78feab958ab58e3c23457a79bcb0b7f04f35903f1"
+    },
+    {
+      "name": "20261006223111_retained_documents",
+      "hash": "e52ea14b66c3235ae29bb77077c48931b99793efcef29261b2a0a0a3dd4bb8b0"
+    },
+    {
+      "name": "20261006225911_reading_threads",
+      "hash": "118b09a200d8e46dfe1a3f79a364c934f413162693eade21ee3d4cd6161bd9a6"
+    }
+  ],
+  "tail": []
+}

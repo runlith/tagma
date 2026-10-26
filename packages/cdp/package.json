@@ -1,0 +1,70 @@
+{
+  "name": "@runlith/cdp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome DevTools Protocol client without a browser of its own: a session over any text transport with flattened child sessions and shared domains, protocol types, and the automation primitives built on it — accessibility snapshot, US key table, mouse input, element description, byte-bounded rings and a responsiveness probe; large payloads are read off the event loop.",
+  "type": "module",
+  "exports": {
+    "./wire": {
+      "types": "./src/wire.ts",
+      "default": "./src/wire.ts"
+    },
+    "./session": {
+      "types": "./src/session.ts",
+      "default": "./src/session.ts"
+    },
+    "./domains": {
+      "types": "./src/domains.ts",
+      "default": "./src/domains.ts"
+    },
+    "./pipe": {
+      "types": "./src/pipe.ts",
+      "default": "./src/pipe.ts"
+    },
+    "./payload": {
+      "types": "./src/payload.ts",
+      "default": "./src/payload.ts"
+    },
+    "./snapshot": {
+      "types": "./src/snapshot.ts",
+      "default": "./src/snapshot.ts"
+    },
+    "./keys": {
+      "types": "./src/keys.ts",
+      "default": "./src/keys.ts"
+    },
+    "./input": {
+      "types": "./src/input.ts",
+      "default": "./src/input.ts"
+    },
+    "./ring": {
+      "types": "./src/ring.ts",
+      "default": "./src/ring.ts"
+    },
+    "./describe": {
+      "types": "./src/describe.ts",
+      "default": "./src/describe.ts"
+    },
+    "./probe": {
+      "types": "./src/probe.ts",
+      "default": "./src/probe.ts"
+    },
+    "./screencast": {
+      "types": "./src/screencast.ts",
+      "default": "./src/screencast.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/utils": "workspace:*",
+    "devtools-protocol": "0.0.1720385",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@runlith/audio-darwin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "macOS audio helper, LaunchServices launcher and local socket channel.",
+  "type": "module",
+  "exports": {
+    "./channel": {
+      "types": "./src/channel.ts",
+      "default": "./src/channel.ts"
+    },
+    "./capabilities": {
+      "types": "./src/capabilities.ts",
+      "default": "./src/capabilities.ts"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build-native.mjs",
+    "test": "swift test --package-path native -j 3",
+    "test:integration": "testbed bun test --no-isolate ./src/conformance.itest.ts",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/audio": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

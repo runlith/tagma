@@ -1,0 +1,3 @@
+{
+  "reason": "Build partial indexes for open question projections in thread_entry and native_thread so approval rerouting scans only standing questions. Each CREATE INDEX reads its table once to evaluate the predicate, requiring O(n) scan work plus O(k log k) B-tree construction and O(k) extra storage for k open rows. Store.migrationLoad estimates each affected table with max(rowid) before the predecessor exits; these bounds are not row counts and elapsed time depends on the machine and history size. No table body or external file changes, so this migration alone snapshots no history payload or participant files (0 bytes); the migration ledger and index schema metadata are still captured."
+}

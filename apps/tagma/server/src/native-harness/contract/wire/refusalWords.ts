@@ -1,0 +1,24 @@
+import type { RefusalWords } from '../../../platform/contract/wire/manifest.js';
+
+export const REFUSAL_WORDS = {
+  'act-id-reused': 'Call key already used',
+  'agent-changed': 'Agent changed meanwhile',
+  'agent-file-io': 'Agent file could not be read or written',
+  'agent-name': 'Agent name invalid',
+  'agent-path': 'Agent path is a symbolic link',
+  'compaction-conflict': 'History changed during compaction',
+  'compaction-failed': 'Compaction failed',
+  'compaction-off': 'Compaction is off',
+  'harness-host': 'Agent runs locally only',
+  'harness-moved': 'Thread switched agent type meanwhile',
+  'journal-moved': 'Thread changed meanwhile',
+  'model-provider': 'Provider does not match the CLI',
+  'model-switch-unsupported': 'Model setting not offered',
+  'no-summarizer': 'No model to summarize',
+  'summary-failed': 'Summary failed',
+  'thread-project-missing': 'Thread has no project',
+  'unknown-invocation': 'Invocation not found',
+  'unknown-summarizer': 'Summarizer not available',
+  'workflow-arguments': 'Workflow arguments invalid',
+  'workflow-unknown': 'Workflow not found',
+} as const satisfies RefusalWords;

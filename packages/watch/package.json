@@ -1,0 +1,28 @@
+{
+  "name": "@runlith/watch",
+  "version": "0.1.0",
+  "private": true,
+  "description": "File watching in a process of its own over a Rust engine: one native stream per watched root, reached through a socket by any client.",
+  "type": "module",
+  "exports": {
+    "./client": {
+      "types": "./src/client.ts",
+      "bun": "./src/client.ts",
+      "default": "./src/client.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/file-lock": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

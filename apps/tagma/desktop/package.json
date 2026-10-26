@@ -1,0 +1,43 @@
+{
+  "name": "@tagma/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tagma's desktop host: one Electron window over the surface the local server hands out.",
+  "type": "module",
+  "main": "dist/app/main.mjs",
+  "exports": {
+    "./bridge": {
+      "types": "./src/bridge.ts",
+      "browser": "./src/bridge.ts",
+      "node": "./src/bridge.ts",
+      "default": "./src/bridge.ts"
+    }
+  },
+  "scripts": {
+    "build": "bun ./scripts/build-host.ts",
+    "dev": "bun ./scripts/dev.ts",
+    "icon": "bun ./scripts/icon.ts",
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "test:integration": "bun -e \"require('electron')\" && testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/desktop-host": "workspace:*",
+    "@runlith/desktop-input": "workspace:*",
+    "@runlith/window-behavior": "workspace:*",
+    "@tagma/server": "workspace:*"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@electron/get": "5.1.0",
+    "@runlith/bundle": "workspace:*",
+    "@runlith/codesign": "workspace:*",
+    "@runlith/dev-runner": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "electron": "catalog:",
+    "esbuild": "catalog:",
+    "typescript": "catalog:"
+  }
+}

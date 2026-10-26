@@ -1,0 +1,32 @@
+{
+  "name": "@runlith/bundle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bundles a Bun entry into one directory together with every module it starts beside itself — a worker, a child process — found in the bundle it produced.",
+  "type": "module",
+  "exports": {
+    "./bundle": {
+      "types": "./src/bundle.ts",
+      "bun": "./src/bundle.ts",
+      "default": "./src/bundle.ts"
+    },
+    "./maps": {
+      "types": "./src/maps.ts",
+      "bun": "./src/maps.ts",
+      "default": "./src/maps.ts"
+    }
+  },
+  "scripts": {
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/source-comments": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

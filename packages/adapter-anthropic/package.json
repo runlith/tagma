@@ -1,0 +1,51 @@
+{
+  "name": "@runlith/adapter-anthropic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The built-in Anthropic model provider adapter of Tagma.",
+  "type": "module",
+  "exports": {
+    "./adapter": {
+      "types": "./src/adapter.ts",
+      "bun": "./src/adapter.ts",
+      "default": "./src/adapter.ts"
+    },
+    "./icon": {
+      "types": "./src/icon.ts",
+      "browser": "./src/icon.ts",
+      "node": "./src/icon.ts",
+      "default": "./src/icon.ts"
+    },
+    "./models/anthropic": {
+      "types": "./src/models/anthropic.ts",
+      "browser": "./src/models/anthropic.ts",
+      "node": "./src/models/anthropic.ts",
+      "default": "./src/models/anthropic.ts"
+    },
+    "./profiles/anthropic": {
+      "types": "./src/profiles/anthropic.ts",
+      "default": "./src/profiles/anthropic.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/llm": "workspace:*",
+    "@runlith/tagma": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "host": {
+      "./icon": "shared",
+      "./models/anthropic": "shared",
+      "./profiles/anthropic": "shared"
+    }
+  }
+}

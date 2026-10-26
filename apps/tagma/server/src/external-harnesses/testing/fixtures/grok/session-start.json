@@ -1,0 +1,14 @@
+{
+  "hookEventName": "session_start",
+  "sessionId": "bfabafa4-6eb9-442f-a253-3652a944cf2e",
+  "cwd": "/fixtures/grok/work",
+  "workspaceRoot": "/fixtures/grok/work",
+  "timestamp": "2026-10-25T13:23:37.650940+00:00",
+  "transcriptPath": "/fixtures/grok/state/sessions/%2Ffixtures%2Fgrok%2Fwork/bfabafa4-6eb9-442f-a253-3652a944cf2e/updates.jsonl",
+  "permissionMode": "default",
+  "source": "load",
+  "hook_event_name": "SessionStart",
+  "session_id": "bfabafa4-6eb9-442f-a253-3652a944cf2e",
+  "transcript_path": "/fixtures/grok/state/sessions/%2Ffixtures%2Fgrok%2Fwork/bfabafa4-6eb9-442f-a253-3652a944cf2e/updates.jsonl",
+  "permission_mode": "default"
+}

@@ -1,0 +1,36 @@
+import { expect } from 'bun:test';
+import { layer } from '@runlith/effect-test';
+import { Effect } from 'effect';
+import { doorFixture, DoorFixture, projectLeaving } from '../doorFixture.js';
+
+type Catalog = { entries: { id: string; value: unknown; from: string }[] };
+const entry = (body: unknown, id: string) => (body as { settings: Catalog }).settings.entries.find((row) => row.id === id);
+
+layer(doorFixture(), { excludeTestServices: true })('settings door', (it) => {
+  it.effect('a setting written through either operation is read in its project, and a value equal to the default clears its layer', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const root = yield* world.directory('settings');
+      const project = yield* world.stealthProject(root);
+      yield* projectLeaving(world, project);
+      const at = `cwd=${encodeURIComponent(root)}`;
+      const key = 'agent.contextFiles.names';
+      const fresh = yield* world.op('read_settings', {}, at);
+      expect(fresh.status).toBe(200);
+      const inherited = entry(fresh.body, key);
+      expect(inherited).toMatchObject({ value: ['TAGMA.md', 'AGENTS.md', 'CLAUDE.md'], from: 'default' });
+
+      const written = yield* world.op('write_setting', { key, value: ['AGENTS.md'] }, at);
+      expect(written).toMatchObject({ status: 200, body: { key, value: ['AGENTS.md'], from: 'project' } });
+      const read = yield* world.op('read_settings', {}, at);
+      expect(read.status).toBe(200);
+      expect(entry(read.body, key)).toMatchObject({ value: ['AGENTS.md'], from: 'project' });
+
+      const restored = yield* world.op('write_setting_layer', { scope: 'project', key, value: inherited!.value }, at);
+      expect(restored.status).toBe(200);
+      expect(entry(restored.body, key)).toMatchObject({ value: inherited!.value, from: 'default' });
+      const refused = yield* world.op('write_setting_layer', { scope: 'project', key: 'agent.contextFiles.enabled', value: 'yes' }, at);
+      expect(refused).toMatchObject({ status: 409, body: { code: 'setting-value' } });
+    }),
+  );
+});

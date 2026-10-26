@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 140,
+  "singleQuote": true,
+  "svelte": true,
+  "ignorePatterns": [
+    ".tagma/**",
+    "patches/**",
+    "**/drizzle/**",
+    "**/*.generated.ts",
+    "**/*_pb.ts",
+    ".agents/**",
+    ".claude/**",
+    ".codex/**",
+    ".cursor/**",
+    ".devin/**",
+    ".gemini/**",
+    ".grok/**",
+    ".mcp.json"
+  ]
+}

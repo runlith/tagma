@@ -1,0 +1,1 @@
+ALTER TABLE `rule_refusal` ADD `fix` text;

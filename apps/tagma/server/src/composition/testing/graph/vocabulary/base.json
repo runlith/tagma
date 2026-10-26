@@ -1,0 +1,401 @@
+[
+  {
+    "id": "code-project",
+    "tags": [
+      {
+        "id": "module",
+        "fields": {
+          "kind": {
+            "type": "enum",
+            "values": ["kit", "product", "surface", "substrate"]
+          }
+        },
+        "edges": ["validates", "relates", "depends-on"],
+        "sources": ["dir"],
+        "gates": [
+          {
+            "gate": "source-required",
+            "kinds": ["dir"]
+          }
+        ],
+        "roles": {
+          "container": true
+        },
+        "body": {
+          "shape": "orientation"
+        },
+        "prompt": "A `#module` is a part of the product with a law of its own: its own directory, its own reason to exist, and its own list of what it may depend on. Its `depends-on` edges are declared, and an import that crosses one nobody declared is measured. A directory whose law is its parent’s is not a module — that is an `#area`."
+      },
+      {
+        "id": "area",
+        "fields": {},
+        "edges": ["validates", "relates"],
+        "sources": ["dir"],
+        "gates": [],
+        "roles": {
+          "container": true
+        },
+        "body": {
+          "shape": "orientation"
+        },
+        "prompt": "An `#area` is a lasting region of the product, drawn by the directories its `dir` sources name. Its body orients — what this region is and where its parts stand — and the material a reader may skip lives in the nodes under it. A part with a law of its own — its own list of what it may import from — is a `#module` instead."
+      },
+      {
+        "id": "spec",
+        "fields": {
+          "status": {
+            "type": "enum",
+            "values": ["open", "closed"]
+          }
+        },
+        "edges": ["validates", "relates"],
+        "sources": ["file", "dir", "symbol"],
+        "gates": [
+          {
+            "gate": "transition",
+            "field": "status",
+            "from": "open",
+            "to": "closed"
+          },
+          {
+            "gate": "open-children",
+            "tag": "task"
+          }
+        ],
+        "roles": {
+          "status": {
+            "field": "status",
+            "initial": "open",
+            "closed": "closed"
+          },
+          "spec": true
+        },
+        "body": {
+          "shape": "content"
+        },
+        "settlesInto": "claim",
+        "prompt": "A `#spec` is what must be, before it is built: the contract, the boundary and the alternative that was rejected with its reason. Work is aimed at it and never holds it. It ends by becoming the truth it specified or by being absorbed into the claims that already carry it."
+      },
+      {
+        "id": "task",
+        "fields": {
+          "status": {
+            "type": "enum",
+            "values": ["open", "in_work", "done", "closed"]
+          },
+          "holder": "session"
+        },
+        "edges": ["validates", "relates", "waits-on", "implements"],
+        "sources": ["file", "dir", "symbol"],
+        "gates": [
+          {
+            "gate": "transition",
+            "field": "status",
+            "from": "open",
+            "to": "in_work"
+          },
+          {
+            "gate": "transition",
+            "field": "status",
+            "from": "open",
+            "to": "done"
+          },
+          {
+            "gate": "transition",
+            "field": "status",
+            "from": "open",
+            "to": "closed"
+          },
+          {
+            "gate": "transition",
+            "field": "status",
+            "from": "in_work",
+            "to": "open"
+          },
+          {
+            "gate": "transition",
+            "field": "status",
+            "from": "in_work",
+            "to": "done"
+          },
+          {
+            "gate": "transition",
+            "field": "status",
+            "from": "in_work",
+            "to": "closed"
+          },
+          {
+            "gate": "open-children",
+            "tag": "task"
+          }
+        ],
+        "roles": {
+          "status": {
+            "field": "status",
+            "initial": "open",
+            "claimed": "in_work",
+            "done": "done",
+            "closed": "closed"
+          },
+          "holder": "holder",
+          "work": true
+        },
+        "body": {
+          "shape": "orientation"
+        },
+        "prompt": "A `#task` is one work session, resumable from its own body alone: what to do, why, and where to start. It is held by the session working it and given back when that session stops unfinished; it ends done when the work happened and closed when it was decided against. Larger work is a subtree of tasks, and what it waits for is an edge, never a sentence."
+      },
+      {
+        "id": "rule",
+        "fields": {
+          "enabled": "boolean"
+        },
+        "edges": ["validates", "relates"],
+        "sources": ["file", "dir", "symbol"],
+        "gates": [],
+        "roles": {
+          "law": "enabled"
+        },
+        "body": {
+          "shape": "orientation",
+          "cap": 750
+        },
+        "prompt": "A `#rule` is a standing constraint, and its body is injected whole into every thread that opens under it — which is why it is the one body with a hard cap. Write directives, one line each, with the reason on one line; explanation longer than that belongs in a node the rule names. A rule binds the subtree of whatever it hangs under, so where it stands IS its reach."
+      },
+      {
+        "id": "idea",
+        "fields": {
+          "status": {
+            "type": "enum",
+            "values": ["open", "closed"]
+          }
+        },
+        "edges": ["validates", "relates"],
+        "sources": ["file", "dir", "symbol"],
+        "gates": [
+          {
+            "gate": "transition",
+            "field": "status",
+            "from": "open",
+            "to": "closed"
+          }
+        ],
+        "roles": {
+          "status": {
+            "field": "status",
+            "initial": "open",
+            "closed": "closed"
+          }
+        },
+        "body": {
+          "shape": "content"
+        },
+        "prompt": "An `#idea` is the one node that is honestly NOT a spec: worth remembering, genuinely open. It may die freely. A half-made choice written as a `#spec` binds the next session as though it were settled, and this is where that material goes instead."
+      },
+      {
+        "id": "proposal",
+        "fields": {
+          "status": {
+            "type": "enum",
+            "values": ["open", "applied", "rejected", "upheld"]
+          },
+          "ops": {
+            "type": "schema",
+            "name": "amendmentOps"
+          }
+        },
+        "edges": ["validates", "relates"],
+        "sources": ["file", "dir", "symbol"],
+        "gates": [
+          {
+            "gate": "required",
+            "field": "ops"
+          },
+          {
+            "gate": "transition",
+            "field": "status",
+            "from": "open",
+            "to": "applied"
+          },
+          {
+            "gate": "transition",
+            "field": "status",
+            "from": "open",
+            "to": "rejected"
+          },
+          {
+            "gate": "transition",
+            "field": "status",
+            "from": "open",
+            "to": "upheld"
+          }
+        ],
+        "roles": {
+          "status": {
+            "field": "status",
+            "initial": "open"
+          },
+          "amendment": {
+            "field": "ops",
+            "run": "applied",
+            "declined": "rejected",
+            "answered": "upheld"
+          }
+        },
+        "body": {
+          "shape": "content"
+        },
+        "prompt": "A `#proposal` is a reviewed amendment of one node: the finding in its body, and the operations a verdict runs in its `ops`. A reviewer files it and never judges it. Its sources are the evidence in the code, pinned as it is filed, so the look it was written from is what a later reading is measured against."
+      },
+      {
+        "id": "reflection",
+        "fields": {
+          "command": {
+            "type": "schema",
+            "name": "line"
+          },
+          "expected": {
+            "type": "schema",
+            "name": "line"
+          },
+          "actual": {
+            "type": "schema",
+            "name": "line"
+          }
+        },
+        "edges": ["validates", "relates"],
+        "sources": ["file", "dir", "symbol"],
+        "gates": [
+          {
+            "gate": "required",
+            "field": "command"
+          },
+          {
+            "gate": "required",
+            "field": "expected"
+          },
+          {
+            "gate": "required",
+            "field": "actual"
+          }
+        ],
+        "roles": {
+          "observation": true
+        },
+        "body": {
+          "shape": "content"
+        },
+        "prompt": "A `#reflection` records friction with the instrument itself as three checkable facts — what you ran, what one act should have done, what happened instead — with the prose beneath them. A cost is a fact: four calls and a hand-computed position is a measurement, \"awkward\" is not. It reports no work of its own; what answers it is other work, with a status of its own."
+      },
+      {
+        "id": "research",
+        "fields": {
+          "source": {
+            "type": "schema",
+            "name": "researchSource"
+          }
+        },
+        "edges": ["validates", "relates"],
+        "gates": [
+          {
+            "gate": "required",
+            "field": "source"
+          }
+        ],
+        "roles": {},
+        "body": {
+          "shape": "content"
+        },
+        "prompt": "A `#research` node is a reading of a system that is NOT this project, and its `source` names what was read and which state of it — a checkout, a URL, a version — so staleness has an input somebody can check. It claims nothing about this code, so nothing here measures it. A reading of a whole system is a subtree, one question per node."
+      },
+      {
+        "id": "view",
+        "fields": {
+          "query": {
+            "type": "schema",
+            "name": "blockQuery"
+          },
+          "layout": {
+            "type": "schema",
+            "name": "viewLayout"
+          }
+        },
+        "edges": ["validates", "relates"],
+        "gates": [
+          {
+            "gate": "required",
+            "field": "query"
+          }
+        ],
+        "roles": {
+          "leaf": true
+        },
+        "body": {
+          "shape": "orientation"
+        },
+        "prompt": "A `#view` saves a selection worth returning to, and opening it RUNS that selection. What it answers is a page, so nothing stands under it and it watches no place in the code. A slice read once saves nothing."
+      }
+    ]
+  },
+  {
+    "id": "notes",
+    "tags": [
+      {
+        "id": "note",
+        "fields": {},
+        "edges": ["relates"],
+        "gates": [],
+        "roles": {},
+        "body": {
+          "shape": "content"
+        },
+        "prompt": "A `#note` is a titled body and nothing else: what you wanted to keep, as long as it needs to be. A note ABOUT something names it as a source — the page it read, the day it is about, the node it follows from — and that source is what a check measures it against."
+      },
+      {
+        "id": "person",
+        "fields": {},
+        "edges": ["relates"],
+        "gates": [],
+        "roles": {},
+        "body": {
+          "shape": "content"
+        },
+        "prompt": "A `#person` is somebody the notebook refers to; other nodes point at it rather than repeating the name."
+      },
+      {
+        "id": "meeting",
+        "fields": {
+          "held": "date",
+          "attendees": {
+            "type": "ref",
+            "tag": "person",
+            "many": true
+          }
+        },
+        "edges": ["relates"],
+        "gates": [
+          {
+            "gate": "required",
+            "field": "held"
+          }
+        ],
+        "roles": {},
+        "body": {
+          "shape": "content"
+        },
+        "prompt": "A `#meeting` is what was said and decided, on the day it was held, by the people it names."
+      },
+      {
+        "id": "recipe",
+        "fields": {},
+        "edges": ["relates"],
+        "gates": [],
+        "roles": {},
+        "body": {
+          "shape": "content"
+        },
+        "prompt": "A `#recipe` is the method, at whatever length the method takes; nothing measures how long it is."
+      }
+    ]
+  }
+]

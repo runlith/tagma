@@ -1,0 +1,27 @@
+{
+  "package": "@xterm/xterm@6.1.0-beta.303",
+  "hunks": {
+    "01-composition-transactions-and-sorted-list": {
+      "markers": [
+        "xterm-composition-transaction",
+        "compositionTransaction",
+        "_pendingComposition",
+        "_compositionHelper instanceof CompositionHelper",
+        "keypress",
+        "_imeKeydownAwaitingCommit",
+        "_canceledKey",
+        "_compositionRemainder",
+        "_compositionPreedit",
+        "_getRowRemainderText",
+        "_deleteAtKey",
+        "IThemeService",
+        "dynamicStorage",
+        "IDynamicStorageLimits"
+      ],
+      "tests": [
+        { "package": "apps/tagma/app", "file": "src/lib/features/executions/terminal/xtermPatch.test.ts" },
+        { "package": "apps/tagma/app", "file": "src/lib/features/executions/terminal/Retention.test.ts", "names": "accounts" }
+      ]
+    }
+  }
+}

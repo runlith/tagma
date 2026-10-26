@@ -1,0 +1,3 @@
+[workspace]
+members = ["packages/execution-host/native", "packages/execution-host/native/holder", "packages/watch/native"]
+resolver = "3"

@@ -1,0 +1,25 @@
+{
+  "name": "@runlith/github",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A typed GitHub CLI command runner for repository acts.",
+  "type": "module",
+  "exports": {
+    "./GitHubCli": {
+      "types": "./src/GitHubCli.ts",
+      "node": "./src/GitHubCli.ts",
+      "default": "./src/GitHubCli.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:"
+  }
+}

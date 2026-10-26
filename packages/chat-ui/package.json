@@ -1,0 +1,394 @@
+{
+  "name": "@runlith/chat-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The chat: the entry model every transcript renders, the fold that turns a run stream into it, the turn protocol a browser conducts one chat by, and the Svelte components that draw it — with the product's draft, words, markdown, catalogs and capabilities injected.",
+  "type": "module",
+  "exports": {
+    "./activity": {
+      "types": "./src/activity.ts",
+      "browser": "./src/activity.ts",
+      "svelte": "./src/activity.ts",
+      "default": "./src/activity.ts"
+    },
+    "./Callout.svelte": {
+      "types": "./src/Callout.svelte",
+      "browser": "./src/Callout.svelte",
+      "svelte": "./src/Callout.svelte",
+      "default": "./src/Callout.svelte"
+    },
+    "./FailureRow.svelte": {
+      "types": "./src/FailureRow.svelte",
+      "browser": "./src/FailureRow.svelte",
+      "svelte": "./src/FailureRow.svelte",
+      "default": "./src/FailureRow.svelte"
+    },
+    "./failureFacts": {
+      "types": "./src/failureFacts.ts",
+      "browser": "./src/failureFacts.ts",
+      "svelte": "./src/failureFacts.ts",
+      "default": "./src/failureFacts.ts"
+    },
+    "./ChatContextUsagePill.svelte": {
+      "types": "./src/ChatContextUsagePill.svelte",
+      "browser": "./src/ChatContextUsagePill.svelte",
+      "svelte": "./src/ChatContextUsagePill.svelte",
+      "default": "./src/ChatContextUsagePill.svelte"
+    },
+    "./ComposerContributions.svelte": {
+      "types": "./src/ComposerContributions.svelte.ts",
+      "browser": "./src/ComposerContributions.svelte.ts",
+      "svelte": "./src/ComposerContributions.svelte.ts",
+      "default": "./src/ComposerContributions.svelte.ts"
+    },
+    "./FeedRegions.svelte": {
+      "types": "./src/FeedRegions.svelte.ts",
+      "browser": "./src/FeedRegions.svelte.ts",
+      "svelte": "./src/FeedRegions.svelte.ts",
+      "default": "./src/FeedRegions.svelte.ts"
+    },
+    "./RegistryClash": {
+      "types": "./src/RegistryClash.ts",
+      "browser": "./src/RegistryClash.ts",
+      "svelte": "./src/RegistryClash.ts",
+      "default": "./src/RegistryClash.ts"
+    },
+    "./FeedMemory": {
+      "types": "./src/FeedMemory.ts",
+      "browser": "./src/FeedMemory.ts",
+      "svelte": "./src/FeedMemory.ts",
+      "default": "./src/FeedMemory.ts"
+    },
+    "./pictures": {
+      "types": "./src/pictures.ts",
+      "browser": "./src/pictures.ts",
+      "svelte": "./src/pictures.ts",
+      "default": "./src/pictures.ts"
+    },
+    "./ChatDraft": {
+      "types": "./src/ChatDraft.ts",
+      "browser": "./src/ChatDraft.ts",
+      "svelte": "./src/ChatDraft.ts",
+      "default": "./src/ChatDraft.ts"
+    },
+    "./ChatFold.svelte": {
+      "types": "./src/ChatFold.svelte.ts",
+      "browser": "./src/ChatFold.svelte.ts",
+      "svelte": "./src/ChatFold.svelte.ts",
+      "default": "./src/ChatFold.svelte.ts"
+    },
+    "./ChatSurface.svelte": {
+      "types": "./src/ChatSurface.svelte",
+      "browser": "./src/ChatSurface.svelte",
+      "svelte": "./src/ChatSurface.svelte",
+      "default": "./src/ChatSurface.svelte"
+    },
+    "./chatThreadPhase": {
+      "types": "./src/chatThreadPhase.ts",
+      "browser": "./src/chatThreadPhase.ts",
+      "svelte": "./src/chatThreadPhase.ts",
+      "default": "./src/chatThreadPhase.ts"
+    },
+    "./chatTime": {
+      "types": "./src/chatTime.ts",
+      "browser": "./src/chatTime.ts",
+      "svelte": "./src/chatTime.ts",
+      "default": "./src/chatTime.ts"
+    },
+    "./composer": {
+      "types": "./src/composer.ts",
+      "browser": "./src/composer.ts",
+      "svelte": "./src/composer.ts",
+      "default": "./src/composer.ts"
+    },
+    "./composerFrame": {
+      "types": "./src/composerFrame.ts",
+      "browser": "./src/composerFrame.ts",
+      "svelte": "./src/composerFrame.ts",
+      "default": "./src/composerFrame.ts"
+    },
+    "./ContextRing.svelte": {
+      "types": "./src/ContextRing.svelte",
+      "browser": "./src/ContextRing.svelte",
+      "svelte": "./src/ContextRing.svelte",
+      "default": "./src/ContextRing.svelte"
+    },
+    "./Waiting.svelte": {
+      "types": "./src/Waiting.svelte",
+      "browser": "./src/Waiting.svelte",
+      "svelte": "./src/Waiting.svelte",
+      "default": "./src/Waiting.svelte"
+    },
+    "./inStep": {
+      "types": "./src/inStep.ts",
+      "browser": "./src/inStep.ts",
+      "svelte": "./src/inStep.ts",
+      "default": "./src/inStep.ts"
+    },
+    "./clipFade": {
+      "types": "./src/clipFade.ts",
+      "browser": "./src/clipFade.ts",
+      "svelte": "./src/clipFade.ts",
+      "default": "./src/clipFade.ts"
+    },
+    "./contextUsage": {
+      "types": "./src/contextUsage.ts",
+      "browser": "./src/contextUsage.ts",
+      "svelte": "./src/contextUsage.ts",
+      "default": "./src/contextUsage.ts"
+    },
+    "./draftImages": {
+      "types": "./src/draftImages.ts",
+      "browser": "./src/draftImages.ts",
+      "svelte": "./src/draftImages.ts",
+      "default": "./src/draftImages.ts"
+    },
+    "./draftFiles": {
+      "types": "./src/draftFiles.ts",
+      "browser": "./src/draftFiles.ts",
+      "svelte": "./src/draftFiles.ts",
+      "default": "./src/draftFiles.ts"
+    },
+    "./DraftAttachmentStrip.svelte": {
+      "types": "./src/DraftAttachmentStrip.svelte",
+      "browser": "./src/DraftAttachmentStrip.svelte",
+      "svelte": "./src/DraftAttachmentStrip.svelte",
+      "default": "./src/DraftAttachmentStrip.svelte"
+    },
+    "./draftShelf.svelte": {
+      "types": "./src/draftShelf.svelte.ts",
+      "browser": "./src/draftShelf.svelte.ts",
+      "svelte": "./src/draftShelf.svelte.ts",
+      "default": "./src/draftShelf.svelte.ts"
+    },
+    "./EntryKinds.svelte": {
+      "types": "./src/EntryKinds.svelte.ts",
+      "browser": "./src/EntryKinds.svelte.ts",
+      "svelte": "./src/EntryKinds.svelte.ts",
+      "default": "./src/EntryKinds.svelte.ts"
+    },
+    "./entries": {
+      "types": "./src/entries.ts",
+      "browser": "./src/entries.ts",
+      "svelte": "./src/entries.ts",
+      "default": "./src/entries.ts"
+    },
+    "./entries/AttachmentStrip.svelte": {
+      "types": "./src/entries/AttachmentStrip.svelte",
+      "browser": "./src/entries/AttachmentStrip.svelte",
+      "svelte": "./src/entries/AttachmentStrip.svelte",
+      "default": "./src/entries/AttachmentStrip.svelte"
+    },
+    "./entries/ClampedText.svelte": {
+      "types": "./src/entries/ClampedText.svelte",
+      "browser": "./src/entries/ClampedText.svelte",
+      "svelte": "./src/entries/ClampedText.svelte",
+      "default": "./src/entries/ClampedText.svelte"
+    },
+    "./entries/diffPieces": {
+      "types": "./src/entries/diffPieces.ts",
+      "browser": "./src/entries/diffPieces.ts",
+      "svelte": "./src/entries/diffPieces.ts",
+      "default": "./src/entries/diffPieces.ts"
+    },
+    "./entries/EntryDisclosure.svelte": {
+      "types": "./src/entries/EntryDisclosure.svelte",
+      "browser": "./src/entries/EntryDisclosure.svelte",
+      "svelte": "./src/entries/EntryDisclosure.svelte",
+      "default": "./src/entries/EntryDisclosure.svelte"
+    },
+    "./entries/QuestionRow.svelte": {
+      "types": "./src/entries/QuestionRow.svelte",
+      "browser": "./src/entries/QuestionRow.svelte",
+      "svelte": "./src/entries/QuestionRow.svelte",
+      "default": "./src/entries/QuestionRow.svelte"
+    },
+    "./entries/ToolDiff.svelte": {
+      "types": "./src/entries/ToolDiff.svelte",
+      "browser": "./src/entries/ToolDiff.svelte",
+      "svelte": "./src/entries/ToolDiff.svelte",
+      "default": "./src/entries/ToolDiff.svelte"
+    },
+    "./entries/ToolRow.svelte": {
+      "types": "./src/entries/ToolRow.svelte",
+      "browser": "./src/entries/ToolRow.svelte",
+      "svelte": "./src/entries/ToolRow.svelte",
+      "default": "./src/entries/ToolRow.svelte"
+    },
+    "./entryProjection": {
+      "types": "./src/entryProjection.ts",
+      "browser": "./src/entryProjection.ts",
+      "svelte": "./src/entryProjection.ts",
+      "default": "./src/entryProjection.ts"
+    },
+    "./liveStatus": {
+      "types": "./src/liveStatus.ts",
+      "browser": "./src/liveStatus.ts",
+      "svelte": "./src/liveStatus.ts",
+      "default": "./src/liveStatus.ts"
+    },
+    "./PromptHandle.svelte": {
+      "types": "./src/PromptHandle.svelte.ts",
+      "browser": "./src/PromptHandle.svelte.ts",
+      "svelte": "./src/PromptHandle.svelte.ts",
+      "default": "./src/PromptHandle.svelte.ts"
+    },
+    "./notice": {
+      "types": "./src/notice.ts",
+      "browser": "./src/notice.ts",
+      "svelte": "./src/notice.ts",
+      "default": "./src/notice.ts"
+    },
+    "./PromptHistory": {
+      "types": "./src/PromptHistory.ts",
+      "browser": "./src/PromptHistory.ts",
+      "svelte": "./src/PromptHistory.ts",
+      "default": "./src/PromptHistory.ts"
+    },
+    "./renderers": {
+      "types": "./src/renderers.ts",
+      "browser": "./src/renderers.ts",
+      "svelte": "./src/renderers.ts",
+      "default": "./src/renderers.ts"
+    },
+    "./rowEstimate": {
+      "types": "./src/rowEstimate.ts",
+      "browser": "./src/rowEstimate.ts",
+      "svelte": "./src/rowEstimate.ts",
+      "default": "./src/rowEstimate.ts"
+    },
+    "./rewind": {
+      "types": "./src/rewind.ts",
+      "browser": "./src/rewind.ts",
+      "svelte": "./src/rewind.ts",
+      "default": "./src/rewind.ts"
+    },
+    "./RunEndingStrip.svelte": {
+      "types": "./src/RunEndingStrip.svelte",
+      "browser": "./src/RunEndingStrip.svelte",
+      "svelte": "./src/RunEndingStrip.svelte",
+      "default": "./src/RunEndingStrip.svelte"
+    },
+    "./strings": {
+      "types": "./src/strings.ts",
+      "browser": "./src/strings.ts",
+      "svelte": "./src/strings.ts",
+      "default": "./src/strings.ts"
+    },
+    "./surface": {
+      "types": "./src/surface.ts",
+      "browser": "./src/surface.ts",
+      "svelte": "./src/surface.ts",
+      "default": "./src/surface.ts"
+    },
+    "./session/DetachedSessions": {
+      "types": "./src/session/DetachedSessions.ts",
+      "browser": "./src/session/DetachedSessions.ts",
+      "svelte": "./src/session/DetachedSessions.ts",
+      "default": "./src/session/DetachedSessions.ts"
+    },
+    "./session/FeedReader": {
+      "types": "./src/session/FeedReader.ts",
+      "browser": "./src/session/FeedReader.ts",
+      "svelte": "./src/session/FeedReader.ts",
+      "default": "./src/session/FeedReader.ts"
+    },
+    "./session/FeedVerdicts": {
+      "types": "./src/session/FeedVerdicts.ts",
+      "browser": "./src/session/FeedVerdicts.ts",
+      "svelte": "./src/session/FeedVerdicts.ts",
+      "default": "./src/session/FeedVerdicts.ts"
+    },
+    "./session/PendingTurns": {
+      "types": "./src/session/PendingTurns.ts",
+      "browser": "./src/session/PendingTurns.ts",
+      "svelte": "./src/session/PendingTurns.ts",
+      "default": "./src/session/PendingTurns.ts"
+    },
+    "./session/ThreadOpening.svelte": {
+      "types": "./src/session/ThreadOpening.svelte.ts",
+      "browser": "./src/session/ThreadOpening.svelte.ts",
+      "svelte": "./src/session/ThreadOpening.svelte.ts",
+      "default": "./src/session/ThreadOpening.svelte.ts"
+    },
+    "./session/ThreadSession.svelte": {
+      "types": "./src/session/ThreadSession.svelte.ts",
+      "browser": "./src/session/ThreadSession.svelte.ts",
+      "svelte": "./src/session/ThreadSession.svelte.ts",
+      "default": "./src/session/ThreadSession.svelte.ts"
+    },
+    "./session/ThreadStops.svelte": {
+      "types": "./src/session/ThreadStops.svelte.ts",
+      "browser": "./src/session/ThreadStops.svelte.ts",
+      "svelte": "./src/session/ThreadStops.svelte.ts",
+      "default": "./src/session/ThreadStops.svelte.ts"
+    },
+    "./session/TurnCommands.svelte": {
+      "types": "./src/session/TurnCommands.svelte.ts",
+      "browser": "./src/session/TurnCommands.svelte.ts",
+      "svelte": "./src/session/TurnCommands.svelte.ts",
+      "default": "./src/session/TurnCommands.svelte.ts"
+    },
+    "./session/TurnShaping": {
+      "types": "./src/session/TurnShaping.ts",
+      "browser": "./src/session/TurnShaping.ts",
+      "svelte": "./src/session/TurnShaping.ts",
+      "default": "./src/session/TurnShaping.ts"
+    },
+    "./testing/chatConnection": {
+      "types": "./src/testing/chatConnection.ts",
+      "browser": "./src/testing/chatConnection.ts",
+      "svelte": "./src/testing/chatConnection.ts",
+      "default": "./src/testing/chatConnection.ts"
+    },
+    "./testing/pendingShelf": {
+      "types": "./src/testing/pendingShelf.ts",
+      "browser": "./src/testing/pendingShelf.ts",
+      "svelte": "./src/testing/pendingShelf.ts",
+      "default": "./src/testing/pendingShelf.ts"
+    },
+    "./theme.css": "./src/theme.css",
+    "./timeline": {
+      "types": "./src/timeline.ts",
+      "browser": "./src/timeline.ts",
+      "svelte": "./src/timeline.ts",
+      "default": "./src/timeline.ts"
+    },
+    "./wire/ChatConnection": {
+      "types": "./src/wire/ChatConnection.ts",
+      "browser": "./src/wire/ChatConnection.ts",
+      "svelte": "./src/wire/ChatConnection.ts",
+      "default": "./src/wire/ChatConnection.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@lucide/svelte": "1.16.0",
+    "@runlith/agent": "workspace:*",
+    "@runlith/error-boundary": "workspace:*",
+    "@runlith/scroll-follow": "workspace:*",
+    "@runlith/search-text": "workspace:*",
+    "@runlith/utils": "workspace:*",
+    "@tanstack/virtual-core": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/llm": "workspace:*",
+    "@runlith/testbed": "workspace:*",
+    "@runlith/testing": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "jsdom": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "svelte": "catalog:"
+  }
+}

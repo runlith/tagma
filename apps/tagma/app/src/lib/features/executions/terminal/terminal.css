@@ -1,0 +1,72 @@
+.pane-tree {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.pane {
+  --pane-foot-height: calc(var(--spacing) * 6);
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  background: var(--pane-fill, transparent);
+}
+
+.pane-chrome {
+  position: absolute;
+  inset: 0;
+}
+
+.xterm-container {
+  box-sizing: border-box;
+  position: relative;
+  width: calc(100% - var(--pane-padding-x, var(--spacing)));
+  height: calc(100% - var(--pane-padding-y, var(--spacing)));
+  margin-top: var(--pane-padding-y, var(--spacing));
+  margin-left: var(--pane-padding-x, var(--spacing));
+}
+
+.pane[data-has-title] .xterm-container {
+  margin-top: var(--pane-title-height);
+  height: calc(100% - var(--pane-title-height));
+}
+
+.pane[data-has-foot] .xterm-container {
+  height: calc(100% - var(--pane-padding-y, var(--spacing)) - var(--pane-foot-height));
+}
+
+.pane[data-has-title][data-has-foot] .xterm-container {
+  height: calc(100% - var(--pane-title-height) - var(--pane-foot-height));
+}
+
+.pane-tree *,
+.pane-tree *::before,
+.pane-tree *::after {
+  border-color: transparent;
+  outline: none;
+}
+
+.pane .xterm {
+  height: 100%;
+  width: 100%;
+}
+
+.pane .xterm-viewport {
+  overflow-y: scroll;
+}
+
+.xterm:not(.allow-transparency) .xterm-viewport {
+  background-color: transparent;
+}
+
+.xterm .xterm-scrollable-element > .xterm-scrollbar > .xterm-slider {
+  border-radius: var(--radius-sm);
+}
+
+.pane .xterm .xterm-helpers {
+  left: 0;
+}
+
+.pane .xterm .xterm-helper-textarea {
+  caret-color: transparent;
+}

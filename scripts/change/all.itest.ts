@@ -1,0 +1,259 @@
+import { expect, test } from 'bun:test';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { packagesOf } from './packages.ts';
+import { suitesOf } from './suites.ts';
+import { vitestConfigsOf } from './vitestConfigs.ts';
+
+test('combined Vitest follows new workspace packages and extra configs while preserving the app cwd', () => {
+  const files = new Map([
+    ['package.json', JSON.stringify({ workspaces: ['packages/*', 'apps/*'] })],
+    ['packages/one/package.json', JSON.stringify({ scripts: { test: 'vitest run && vitest run --config bench.ts' } })],
+    ['packages/one/vite.config.ts', ''],
+    ['packages/one/bench.ts', ''],
+    ['packages/two/package.json', JSON.stringify({ scripts: { test: 'vitest run' } })],
+    ['packages/two/vitest.config.ts', ''],
+    ['apps/client/package.json', JSON.stringify({ scripts: { test: 'vitest run' } })],
+  ]);
+  const paths = [...files.keys()];
+  const packages = packagesOf(paths, (path) => files.get(path)!);
+  expect(vitestConfigsOf(packages, paths).map((config) => config.file)).toEqual([
+    'packages/one/vite.config.ts',
+    'packages/one/bench.ts',
+    'packages/two/vitest.config.ts',
+  ]);
+  const plan = suitesOf(packages, paths, {
+    root: '/',
+    jobs: 1,
+    width: 1,
+    seed: undefined,
+    randomize: false,
+    reports: '/reports',
+    combineVitest: true,
+    history: undefined,
+  });
+  expect(plan.map((suite) => [suite.id, suite.directory])).toEqual([
+    ['packages:vitest:test', ''],
+    ['apps/client:test', 'apps/client'],
+  ]);
+});
+
+test('an earlier report splits a selected integration suite into explicit chunks that run every selected file once', () => {
+  const script = "testbed bun test --parallel=2 --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')";
+  const files = new Map([
+    ['package.json', JSON.stringify({ workspaces: ['packages/*'] })],
+    ['packages/w/package.json', JSON.stringify({ scripts: { 'test:integration': script } })],
+  ]);
+  const selected = ['./src/a.itest.ts', './src/b.itest.ts', './src/c.itest.ts', './src/new.itest.ts'];
+  const plan = suitesOf(
+    packagesOf([...files.keys()], (path) => files.get(path)!),
+    [...files.keys()],
+    {
+      root: '/',
+      jobs: 1,
+      width: 1,
+      seed: undefined,
+      randomize: false,
+      reports: '/reports',
+      combineVitest: false,
+      history: {
+        costs: {
+          files: new Map([
+            ['packages/w/src/a.itest.ts', { wallMs: 1000, worlds: ['Door'] }],
+            ['packages/w/src/b.itest.ts', { wallMs: 1000, worlds: ['Door'] }],
+            ['packages/w/src/c.itest.ts', { wallMs: 100, worlds: [] }],
+          ]),
+          worlds: new Map([['Door', { builds: 2, buildMs: 4000 }]]),
+        },
+        lifeMs: 4000,
+        select: (directory, selector) => (directory === 'packages/w' && selector.startsWith('find src') ? selected : []),
+      },
+    },
+  );
+  expect(plan.length).toBeGreaterThan(1);
+  expect(plan.every((suite) => suite.id === `packages/w:test:integration:${suite.shard}` && !/--shard|\$\(/.test(suite.command))).toBe(
+    true,
+  );
+  expect(plan.flatMap((suite) => suite.command.match(/'\.\/src\/[^']+'/g) ?? []).sort()).toEqual(selected.map((file) => `'${file}'`));
+});
+
+test('a cut native suite stays pending and its CPU survives a successful resume', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cut-suites-'));
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q', root]).exitCode).toBe(0);
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          test: `bun -e 'if (!process.env.RUNLITH_TEST_NATIVE_DONE) process.kill(process.pid, "SIGTERM")'`,
+        },
+      }),
+    );
+    const report = join(root, 'reading.json');
+    const invoke = async (complete: boolean) => {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          join(import.meta.dir, 'all.ts'),
+          '--root',
+          root,
+          '--jobs',
+          '1',
+          '--report',
+          report,
+          ...(complete ? ['--resume'] : []),
+        ],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env: { ...process.env, RUNLITH_TEST_NATIVE_DONE: complete ? '1' : '' },
+        },
+      );
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { code, output: stdout + stderr };
+    };
+    const first = await invoke(false);
+    expect(first.code, first.output).toBe(2);
+    const before = JSON.parse(readFileSync(report, 'utf8'));
+    expect(before.pending).toEqual(['.:test']);
+    expect(before.suites).toHaveLength(0);
+    expect(before.aborted).toHaveLength(1);
+    const second = await invoke(true);
+    expect(second.code, second.output).toBe(0);
+    const after = JSON.parse(readFileSync(report, 'utf8'));
+    expect(after.complete).toBe(true);
+    expect(after.aborted).toHaveLength(1);
+    expect(after.cpu).toBeGreaterThanOrEqual(after.aborted[0].cpu + after.suites[0].cpu);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('all suites resume without replay and report an unconfigured workspace failure by file', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'all-suites-'));
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q', root]).exitCode).toBe(0);
+    mkdirSync(join(root, 'pkg'));
+    mkdirSync(join(root, 'archive'));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['pkg', 'archive'] }));
+    writeFileSync(
+      join(root, 'pkg/package.json'),
+      JSON.stringify({ scripts: { test: 'bun test ./pass.test.ts', 'test:integration': "bun test $(find . -name '*.itest.ts')" } }),
+    );
+    writeFileSync(join(root, 'archive/package.json'), JSON.stringify({ scripts: { test: 'exit 42' } }));
+    const report = join(root, 'reading.json');
+    writeFileSync(join(root, 'pkg/pass.test.ts'), "import { expect, test } from 'bun:test'; test('sum', () => expect(2 + 2).toBe(4));");
+    writeFileSync(
+      join(root, 'pkg/red.itest.ts'),
+      "import { expect, test } from 'bun:test'; test('wrong sum', () => expect(2 + 2).toBe(5));",
+    );
+    const invoke = async (...args: string[]) => {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          join(import.meta.dir, 'all.ts'),
+          '--root',
+          root,
+          ...(args.includes('--jobs') ? [] : ['--jobs', '1']),
+          '--report',
+          report,
+          ...args,
+        ],
+        { stdout: 'pipe', stderr: 'pipe' },
+      );
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { code, output: stdout + stderr };
+    };
+    const first = await invoke('--max-suites', '1');
+    expect(first.code, first.output).toBe(2);
+    const before = JSON.parse(readFileSync(report, 'utf8'));
+    expect(before.suites.map((row: { id: string }) => row.id)).toEqual(['pkg:test']);
+    expect(before.pending).toEqual(['pkg:test:integration']);
+    expect(before.aborted).toEqual([]);
+    expect(before.suites[0].files).toBe(1);
+    expect(before.suites[0].cpu).toBeGreaterThan(0);
+    writeFileSync(
+      join(root, 'pkg/later.itest.ts'),
+      "import { test } from 'bun:test'; test('outside the saved plan', () => { throw new Error('new file'); });",
+    );
+    const second = await invoke('--resume');
+    expect(second.code, second.output).toBe(1);
+    const after = JSON.parse(readFileSync(report, 'utf8'));
+    expect(after.complete).toBe(true);
+    expect(after.suites[0]).toEqual(before.suites[0]);
+    expect(after.suites[1].failed).toEqual([expect.stringContaining('/pkg/red.itest.ts')]);
+    const refused = await invoke('--plan', '--jobs', '0');
+    expect(refused.code, refused.output).not.toBe(0);
+    expect(refused.output).toContain('--jobs must be a positive integer');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('suites run side by side while the machine budget has room, and one at a time under --jobs', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'side-suites-'));
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q', root]).exitCode).toBe(0);
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['one', 'two'] }));
+    for (const [name, other] of [
+      ['one', 'two'],
+      ['two', 'one'],
+    ] as const) {
+      mkdirSync(join(root, name));
+      writeFileSync(join(root, name, 'package.json'), JSON.stringify({ scripts: { test: 'bun test ./meet.itest.ts' } }));
+      writeFileSync(
+        join(root, name, 'meet.itest.ts'),
+        `import { expect, test } from 'bun:test';
+import { existsSync, writeFileSync } from 'node:fs';
+test('meets the other suite', async () => {
+  writeFileSync(${JSON.stringify(join(root, `${name}.started`))}, '');
+  const until = Date.now() + 4000;
+  while (!existsSync(${JSON.stringify(join(root, `${other}.started`))}) && Date.now() < until) await Bun.sleep(20);
+  const met = existsSync(${JSON.stringify(join(root, `${other}.started`))}) && !existsSync(${JSON.stringify(join(root, `${other}.ended`))});
+  await Bun.sleep(300);
+  writeFileSync(${JSON.stringify(join(root, `${name}.ended`))}, '');
+  expect(met).toBe(process.env.MEET === '1');
+}, 10_000);
+`,
+      );
+    }
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      TESTBED_CORES: '12',
+      TESTBED_BUDGET_ROOT: join(root, 'budget'),
+    };
+    delete env['RUNLITH_TEST_SLOT'];
+    const invoke = async (report: string, meet: boolean, ...args: string[]) => {
+      for (const name of ['one', 'two']) for (const mark of ['started', 'ended']) rmSync(join(root, `${name}.${mark}`), { force: true });
+      const child = Bun.spawn(
+        [process.execPath, join(import.meta.dir, 'all.ts'), '--root', root, '--report', join(root, report), ...args],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env: { ...env, MEET: meet ? '1' : '0' },
+        },
+      );
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { code, output: stdout + stderr };
+    };
+    const side = await invoke('side.json', true);
+    expect(side.code, side.output).toBe(0);
+    const alone = await invoke('alone.json', false, '--jobs', '1');
+    expect(alone.code, alone.output).toBe(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 30_000);

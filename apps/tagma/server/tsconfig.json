@@ -1,0 +1,20 @@
+{
+  "extends": "@runlith/tsconfig/bun.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "../../..",
+    "incremental": true,
+    "lib": ["ESNext"],
+    "types": ["bun"],
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.json",
+    "scripts/**/*.ts",
+    "drizzle.config.ts",
+    "../../../packages/tagma/kit/rules.ts",
+    "../../../packages/tagma/kit/declarations.ts",
+    "../../../packages/tagma/src/rules/sources.ts"
+  ]
+}

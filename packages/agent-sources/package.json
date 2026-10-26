@@ -1,0 +1,35 @@
+{
+  "name": "@runlith/agent-sources",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Discovery of what a workspace offers an agent: skills as SKILL.md directories, instruction files by name — every path handed in, none of it known here.",
+  "type": "module",
+  "exports": {
+    "./ContextFiles": {
+      "types": "./src/ContextFiles.ts",
+      "default": "./src/ContextFiles.ts"
+    },
+    "./SkillDirectories": {
+      "types": "./src/SkillDirectories.ts",
+      "default": "./src/SkillDirectories.ts"
+    },
+    "./WorkflowDirectories": {
+      "types": "./src/WorkflowDirectories.ts",
+      "default": "./src/WorkflowDirectories.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/agent": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

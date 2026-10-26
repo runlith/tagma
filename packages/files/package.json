@@ -1,0 +1,65 @@
+{
+  "name": "@runlith/files",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Filesystem namespace identity and provider-native resource addresses.",
+  "type": "module",
+  "exports": {
+    "./working": {
+      "types": "./src/working.ts",
+      "default": "./src/working.ts"
+    },
+    "./content": {
+      "types": "./src/content.ts",
+      "default": "./src/content.ts"
+    },
+    "./lines": {
+      "types": "./src/lines.ts",
+      "browser": "./src/lines.ts",
+      "node": "./src/lines.ts",
+      "default": "./src/lines.ts"
+    },
+    "./hunk": {
+      "types": "./src/hunk.ts",
+      "default": "./src/hunk.ts"
+    },
+    "./namespace": {
+      "types": "./src/namespace.ts",
+      "browser": "./src/namespace.ts",
+      "node": "./src/namespace.ts",
+      "default": "./src/namespace.ts"
+    },
+    "./resource": {
+      "types": "./src/resource.ts",
+      "browser": "./src/resource.ts",
+      "node": "./src/resource.ts",
+      "default": "./src/resource.ts"
+    },
+    "./witness": {
+      "types": "./src/witness.ts",
+      "browser": "./src/witness.ts",
+      "node": "./src/witness.ts",
+      "default": "./src/witness.ts"
+    },
+    "./replace": {
+      "types": "./src/replace.ts",
+      "default": "./src/replace.ts"
+    },
+    "./change": {
+      "types": "./src/change.ts",
+      "default": "./src/change.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

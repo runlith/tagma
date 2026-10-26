@@ -1,0 +1,37 @@
+let observer: ResizeObserver | null = null;
+
+function measure(element: Element): void {
+  element.toggleAttribute('data-clipped', element.scrollWidth > element.clientWidth);
+}
+
+export function clampFade(report: (clipped: boolean) => void): (element: HTMLElement) => () => void {
+  return (element) => {
+    const measure = () => {
+      const clipped = element.scrollHeight > element.clientHeight;
+      element.toggleAttribute('data-clipped', clipped);
+      report(clipped);
+    };
+    measure();
+    const sized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    sized?.observe(element);
+    return () => {
+      sized?.disconnect();
+      element.removeAttribute('data-clipped');
+    };
+  };
+}
+
+export function clipFade(element: HTMLElement): () => void {
+  measure(element);
+  if (typeof ResizeObserver === 'undefined') return () => undefined;
+  observer ??= new ResizeObserver((entries) => {
+    for (const entry of entries) measure(entry.target);
+  });
+  observer.observe(element);
+  const changes = typeof MutationObserver === 'undefined' ? null : new MutationObserver(() => measure(element));
+  changes?.observe(element, { childList: true, characterData: true, subtree: true });
+  return () => {
+    observer?.unobserve(element);
+    changes?.disconnect();
+  };
+}

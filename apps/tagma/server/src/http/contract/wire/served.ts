@@ -1,0 +1,7 @@
+export const API_PREFIX = '/api/';
+
+export const ARTIFACT_PREFIX = '/a/';
+
+export const RESOURCE_PREFIXES: readonly string[] = [API_PREFIX, ARTIFACT_PREFIX];
+
+export const servesResource = (pathname: string): boolean => RESOURCE_PREFIXES.some((prefix) => pathname.startsWith(prefix));

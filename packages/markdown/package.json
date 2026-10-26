@@ -1,0 +1,32 @@
+{
+  "name": "@runlith/markdown",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Safe markdown rendering core: Marked parsing, DOMPurify sanitization, code colouring through @runlith/highlight.",
+  "type": "module",
+  "exports": {
+    "./render": {
+      "types": "./src/render.ts",
+      "browser": "./src/render.ts",
+      "default": "./src/render.ts"
+    },
+    "./stream": {
+      "types": "./src/stream.ts",
+      "browser": "./src/stream.ts",
+      "node": "./src/stream.ts",
+      "default": "./src/stream.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate src",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/highlight": "workspace:*",
+    "@runlith/utils": "workspace:*",
+    "dompurify": "catalog:",
+    "marked": "catalog:",
+    "remend": "catalog:"
+  }
+}

@@ -1,0 +1,138 @@
+<script lang="ts">
+  import Ban from '@lucide/svelte/icons/ban';
+  import Power from '@lucide/svelte/icons/power';
+  import type { Snippet } from 'svelte';
+  import type { HTMLAnchorAttributes } from 'svelte/elements';
+  import type { ListedBlock } from '@tagma/server/graph/contract/wire/rows';
+  import TagIcon from '$lib/features/graph/TagIcon.svelte';
+  import StatusChip from '$lib/features/graph/StatusChip.svelte';
+  import WriterBadge from '$lib/features/graph/WriterBadge.svelte';
+  import { ReadState } from '$lib/features/graph/ReadState.svelte.js';
+  import { SessionRegistry } from '$lib/features/graph/SessionRegistry.svelte.js';
+  import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
+
+  import { timeAgo } from '$lib/shared/time.js';
+  import type { TreeScreen } from '$lib/features/graph/TreeScreen.svelte.js';
+  import { cn } from '$lib/shared/utils.js';
+  import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
+
+  const readState = ReadState.use();
+  const sessions = SessionRegistry.use();
+  const tags = TagCatalog.use();
+
+  let {
+    block,
+    href,
+    store,
+    subtree = 'none',
+    layout = 'line',
+    link = $bindable(null),
+    attributes,
+    class: className,
+    leading,
+    title,
+    trailing,
+  }: {
+    block: ListedBlock;
+    href: string;
+    store?: TreeScreen;
+    subtree?: 'none' | 'collapsed' | 'open';
+    layout?: 'line' | 'stacked' | 'compact';
+    link?: HTMLAnchorElement | null;
+    attributes?: HTMLAnchorAttributes;
+    class?: string;
+    leading?: Snippet;
+    title: Snippet;
+    trailing?: Snippet;
+  } = $props();
+
+  const off = $derived(tags.switchedOff(block));
+  const unread = $derived(readState.isUnread(block.name, block.updatedAt));
+  const holder = $derived(tags.holderOf(block));
+</script>
+
+<div
+  class={cn(
+    'block-row group/row relative -mx-2 flex rounded-md px-2 py-px transition-colors duration-100 ease-instrument hover:bg-hover',
+    layout === 'stacked' ? 'flex-col' : 'items-start',
+    className,
+  )}
+>
+  <a
+    bind:this={link}
+    {...attributes}
+    {href}
+    class="absolute inset-0 rounded-md"
+    aria-label={block.title.trim() || 'Untitled'}
+    data-block={block.name}
+  ></a>
+
+  <div class={cn('flex min-w-0', layout === 'compact' ? 'items-center' : 'items-start', layout === 'stacked' ? 'w-full' : 'flex-1')}>
+    {@render leading?.()}
+
+    <span
+      class={cn('pointer-events-none relative mr-1.5 grid size-4 shrink-0 place-items-center rounded-full', layout !== 'compact' && 'mt-1')}
+    >
+      {#if subtree === 'collapsed'}
+        <span class="absolute size-4 rounded-full bg-vein transition-colors group-hover/row:bg-vein-strong"></span>
+      {/if}
+      <span
+        class="relative size-2 rounded-full transition-transform duration-150 ease-instrument group-hover/row:scale-125"
+        style:background={tags.statusVar(block)}
+      ></span>
+    </span>
+
+    <TagIcon tag={tags.tagOf(block)} class={cn('mr-1.5 size-3.5 shrink-0 text-muted-foreground/70', layout !== 'compact' && 'mt-1')} />
+
+    {@render title()}
+  </div>
+
+  {#if layout === 'compact'}
+    {#if trailing}
+      <div class="relative ml-2 flex shrink-0 items-center gap-1.5 self-center">
+        {@render trailing()}
+      </div>
+    {/if}
+  {:else}
+    <div
+      class={cn(
+        'pointer-events-none flex shrink-0 items-center gap-1.5',
+        layout === 'stacked' ? 'pb-px pl-10' : 'ml-2 pt-1',
+        trailing && 'group-hover/row:fade-under group-has-[[data-state=open]]/row:fade-under',
+      )}
+    >
+      {#if block.blocked}
+        <Tooltip text="Blocked by another open task">
+          <span class="pointer-events-auto relative grid place-items-center">
+            <Ban class="size-3 text-severity-lie/80" />
+          </span>
+        </Tooltip>
+      {/if}
+      {#if off}
+        <Tooltip text="Switched off: this rule binds nobody until it is switched on">
+          <span class="pointer-events-auto relative grid place-items-center">
+            <Power class="size-3 text-muted-foreground/70" />
+          </span>
+        </Tooltip>
+      {/if}
+      <StatusChip {block} {store} triggerClass="pointer-events-auto relative" />
+      {#if tags.underway(block) && holder !== null}
+        <WriterBadge writer={sessions.writerOf(holder)} class="pointer-events-auto relative" />
+      {/if}
+
+      <span
+        class={cn(
+          'stamp tabular whitespace-nowrap transition-colors',
+          unread ? 'font-medium text-foreground/90' : 'text-muted-foreground/45',
+        )}
+      >
+        {timeAgo(block.updatedAt)}
+      </span>
+    </div>
+    {#if trailing}
+      <div class="absolute top-px right-1 flex items-center">
+        {@render trailing()}
+      </div>
+    {/if}
+  {/if}
+</div>

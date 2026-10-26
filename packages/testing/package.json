@@ -1,0 +1,44 @@
+{
+  "name": "@runlith/testing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "What a Svelte test of the kit stands on: the jsdom gaps patched once, a flush, a reactive probe, a store host, and overrides for doubles.",
+  "type": "module",
+  "exports": {
+    "./flush": {
+      "types": "./src/flush.ts",
+      "default": "./src/flush.ts"
+    },
+    "./mount-store": {
+      "types": "./src/mount-store.ts",
+      "svelte": "./src/mount-store.ts",
+      "default": "./src/mount-store.ts"
+    },
+    "./overrides": {
+      "types": "./src/overrides.ts",
+      "browser": "./src/overrides.ts",
+      "default": "./src/overrides.ts"
+    },
+    "./reactive": {
+      "types": "./src/reactive.svelte.ts",
+      "svelte": "./src/reactive.svelte.ts",
+      "default": "./src/reactive.svelte.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "svelte": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "vitest": "catalog:"
+  }
+}

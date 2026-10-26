@@ -1,0 +1,1 @@
+ALTER TABLE `terminal_request_key` ADD `stop_outcome` text;

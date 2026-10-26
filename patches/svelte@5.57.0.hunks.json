@@ -1,0 +1,34 @@
+{
+  "package": "svelte@5.57.0",
+  "hunks": {
+    "01-export": {
+      "markers": ["without_reactive_context"],
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/detached-root.svelte.test.ts" }]
+    },
+    "02-schedule": {
+      "markers": ["#roots.includes(e)", "The root queue is deduplicated"],
+      "tests": [],
+      "e2e": [{ "app": "shop/shop/apps/acme", "spec": "e2e/domains/game-page/game-page.mock.spec.ts", "names": "switches to real mode via signup" }]
+    },
+    "05-flushed": {
+      "markers": ["#flushed"],
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/time-travel.svelte.test.ts", "names": "pending" }]
+    },
+    "06-stale": {
+      "markers": ["note_stale", "#stale", "reverted_by"],
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/time-travel.svelte.test.ts", "names": "blocking" }]
+    },
+    "07-null-batch": {
+      "markers": ["Batch.ensure().schedule(effect)"],
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/effect-self-invalidation.svelte.test.ts" }]
+    },
+    "08-rebase-defers": {
+      "markers": ["issues/18895", "#scheduled"],
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/rebase.svelte.test.ts" }]
+    },
+    "09-carried-removal": {
+      "markers": ["#carried()", "#removed_by("],
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/branch-removal.svelte.test.ts" }]
+    }
+  }
+}

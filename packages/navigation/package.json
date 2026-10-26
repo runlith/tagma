@@ -1,0 +1,58 @@
+{
+  "name": "@runlith/navigation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Code navigation for agents: the question, a verdict for every text occurrence of a name, and the port a language adapter fills.",
+  "type": "module",
+  "exports": {
+    "./verdict": {
+      "types": "./src/verdict.ts",
+      "browser": "./src/verdict.ts",
+      "bun": "./src/verdict.ts",
+      "default": "./src/verdict.ts"
+    },
+    "./question": {
+      "types": "./src/question.ts",
+      "browser": "./src/question.ts",
+      "bun": "./src/question.ts",
+      "default": "./src/question.ts"
+    },
+    "./adapter": {
+      "types": "./src/adapter.ts",
+      "browser": "./src/adapter.ts",
+      "bun": "./src/adapter.ts",
+      "default": "./src/adapter.ts"
+    },
+    "./engine": {
+      "types": "./src/engine.ts",
+      "default": "./src/engine.ts"
+    },
+    "./answer": {
+      "types": "./src/answer.ts",
+      "browser": "./src/answer.ts",
+      "bun": "./src/answer.ts",
+      "default": "./src/answer.ts"
+    },
+    "./navigation": {
+      "types": "./src/navigation.ts",
+      "default": "./src/navigation.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "runlith-typecheck",
+    "test": "testbed bun test --no-isolate --pass-with-no-tests"
+  },
+  "dependencies": {
+    "@runlith/code-facts": "workspace:*",
+    "@runlith/paging": "workspace:*",
+    "@runlith/ripgrep": "workspace:*",
+    "@runlith/utils": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

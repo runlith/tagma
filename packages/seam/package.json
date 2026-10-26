@@ -1,0 +1,40 @@
+{
+  "name": "@runlith/seam",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The seam between two surfaces: the size a docked pane or a split is dragged to along one axis, and the handle that drags it.",
+  "type": "module",
+  "exports": {
+    "./Seam.svelte": {
+      "types": "./src/Seam.svelte.ts",
+      "browser": "./src/Seam.svelte.ts",
+      "svelte": "./src/Seam.svelte.ts",
+      "default": "./src/Seam.svelte.ts"
+    },
+    "./SeamHandle.svelte": {
+      "types": "./src/SeamHandle.svelte",
+      "browser": "./src/SeamHandle.svelte",
+      "svelte": "./src/SeamHandle.svelte",
+      "default": "./src/SeamHandle.svelte"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run src --project 'unit*'",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@runlith/testbed": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "jsdom": "catalog:",
+    "svelte": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "svelte": "catalog:"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@runlith/scroll-follow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A scroll container that rides its tail and yields to the reader: the follow state, the anchoring, and the marks that keep a programmatic scroll from reading as the reader's own.",
+  "type": "module",
+  "exports": {
+    "./FollowingViewport.svelte": {
+      "types": "./src/FollowingViewport.svelte.ts",
+      "browser": "./src/FollowingViewport.svelte.ts",
+      "svelte": "./src/FollowingViewport.svelte.ts",
+      "default": "./src/FollowingViewport.svelte.ts"
+    },
+    "./scrollFollow": {
+      "types": "./src/scrollFollow.ts",
+      "browser": "./src/scrollFollow.ts",
+      "svelte": "./src/scrollFollow.ts",
+      "default": "./src/scrollFollow.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run src",
+    "typecheck": "runlith-typecheck"
+  },
+  "devDependencies": {
+    "@runlith/testbed": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "jsdom": "catalog:",
+    "svelte": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "svelte": "catalog:"
+  }
+}

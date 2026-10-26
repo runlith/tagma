@@ -1,0 +1,14 @@
+{
+  "name": "@runlith/effect-lint",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "bun lint.ts",
+    "typecheck": "runlith-typecheck"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.53.0",
+    "@types/bun": "catalog:",
+    "typescript": "7.0.2"
+  }
+}

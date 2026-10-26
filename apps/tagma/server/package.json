@@ -1,0 +1,1309 @@
+{
+  "name": "@tagma/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tagma server: block graph, lifecycle gates, doctor, prime, HTTP and the tagma CLI.",
+  "bin": {
+    "tagma": "./src/composition/entries/cli.ts"
+  },
+  "type": "module",
+  "exports": {
+    "./providers/credentials/operator": {
+      "types": "./src/providers/credentials/operator.ts",
+      "default": "./src/providers/credentials/operator.ts"
+    },
+    "./native-harness/tools/vendorWeb": {
+      "types": "./src/native-harness/tools/vendorWeb.ts",
+      "default": "./src/native-harness/tools/vendorWeb.ts"
+    },
+    "./composition/testing/storageHarness": {
+      "types": "./src/composition/testing/storageHarness.ts",
+      "default": "./src/composition/testing/storageHarness.ts"
+    },
+    "./threads/testing/doubles": {
+      "types": "./src/threads/testing/doubles.ts",
+      "default": "./src/threads/testing/doubles.ts"
+    },
+    "./native-harness/testing/doubles": {
+      "types": "./src/native-harness/testing/doubles.ts",
+      "default": "./src/native-harness/testing/doubles.ts"
+    },
+    "./platform/contract/wire/conditions": {
+      "types": "./src/platform/contract/wire/conditions.ts",
+      "default": "./src/platform/contract/wire/conditions.ts"
+    },
+    "./providers/contract/wire/accounts": {
+      "types": "./src/providers/contract/wire/accounts.ts",
+      "browser": "./src/providers/contract/wire/accounts.ts",
+      "default": "./src/providers/contract/wire/accounts.ts"
+    },
+    "./projects/contract/wire/project": {
+      "types": "./src/projects/contract/wire/project.ts",
+      "browser": "./src/projects/contract/wire/project.ts",
+      "default": "./src/projects/contract/wire/project.ts"
+    },
+    "./projects/contract/wire/feed": {
+      "types": "./src/projects/contract/wire/feed.ts",
+      "browser": "./src/projects/contract/wire/feed.ts",
+      "default": "./src/projects/contract/wire/feed.ts"
+    },
+    "./projects/contract/wire/references": {
+      "types": "./src/projects/contract/wire/references.ts",
+      "browser": "./src/projects/contract/wire/references.ts",
+      "default": "./src/projects/contract/wire/references.ts"
+    },
+    "./threads/contract/wire/agentLibrary": {
+      "types": "./src/threads/contract/wire/agentLibrary.ts",
+      "browser": "./src/threads/contract/wire/agentLibrary.ts",
+      "default": "./src/threads/contract/wire/agentLibrary.ts"
+    },
+    "./threads/contract/wire/entryKinds": {
+      "types": "./src/threads/contract/wire/entryKinds.ts",
+      "browser": "./src/threads/contract/wire/entryKinds.ts",
+      "default": "./src/threads/contract/wire/entryKinds.ts"
+    },
+    "./threads/contract/wire/drops": {
+      "types": "./src/threads/contract/wire/drops.ts",
+      "browser": "./src/threads/contract/wire/drops.ts",
+      "default": "./src/threads/contract/wire/drops.ts"
+    },
+    "./native-harness/contract/wire/start": {
+      "types": "./src/native-harness/contract/wire/start.ts",
+      "browser": "./src/native-harness/contract/wire/start.ts",
+      "default": "./src/native-harness/contract/wire/start.ts"
+    },
+    "./worktrees/contract/wire/entryKinds": {
+      "types": "./src/worktrees/contract/wire/entryKinds.ts",
+      "browser": "./src/worktrees/contract/wire/entryKinds.ts",
+      "default": "./src/worktrees/contract/wire/entryKinds.ts"
+    },
+    "./threads/contract/wire/feedPairs/interruption.json": {
+      "types": "./src/threads/contract/wire/feedPairs/interruption.json",
+      "browser": "./src/threads/contract/wire/feedPairs/interruption.json",
+      "default": "./src/threads/contract/wire/feedPairs/interruption.json"
+    },
+    "./threads/contract/wire/feedPairs/reconnect.json": {
+      "types": "./src/threads/contract/wire/feedPairs/reconnect.json",
+      "browser": "./src/threads/contract/wire/feedPairs/reconnect.json",
+      "default": "./src/threads/contract/wire/feedPairs/reconnect.json"
+    },
+    "./threads/contract/wire/feedPairs/restore.json": {
+      "types": "./src/threads/contract/wire/feedPairs/restore.json",
+      "browser": "./src/threads/contract/wire/feedPairs/restore.json",
+      "default": "./src/threads/contract/wire/feedPairs/restore.json"
+    },
+    "./threads/contract/wire/feedPairs/rewind.json": {
+      "types": "./src/threads/contract/wire/feedPairs/rewind.json",
+      "browser": "./src/threads/contract/wire/feedPairs/rewind.json",
+      "default": "./src/threads/contract/wire/feedPairs/rewind.json"
+    },
+    "./threads/contract/wire/feedPairs/withdraw.json": {
+      "types": "./src/threads/contract/wire/feedPairs/withdraw.json",
+      "browser": "./src/threads/contract/wire/feedPairs/withdraw.json",
+      "default": "./src/threads/contract/wire/feedPairs/withdraw.json"
+    },
+    "./threads/contract/wire/feedPairs/bounded.json": {
+      "types": "./src/threads/contract/wire/feedPairs/bounded.json",
+      "browser": "./src/threads/contract/wire/feedPairs/bounded.json",
+      "default": "./src/threads/contract/wire/feedPairs/bounded.json"
+    },
+    "./threads/contract/wire/feedPairs/empty.json": {
+      "types": "./src/threads/contract/wire/feedPairs/empty.json",
+      "browser": "./src/threads/contract/wire/feedPairs/empty.json",
+      "default": "./src/threads/contract/wire/feedPairs/empty.json"
+    },
+    "./threads/contract/wire/feedPairs/pending.json": {
+      "types": "./src/threads/contract/wire/feedPairs/pending.json",
+      "browser": "./src/threads/contract/wire/feedPairs/pending.json",
+      "default": "./src/threads/contract/wire/feedPairs/pending.json"
+    },
+    "./threads/contract/wire/feedPairs/product.json": {
+      "types": "./src/threads/contract/wire/feedPairs/product.json",
+      "browser": "./src/threads/contract/wire/feedPairs/product.json",
+      "default": "./src/threads/contract/wire/feedPairs/product.json"
+    },
+    "./threads/contract/wire/feedPairs/refused.json": {
+      "types": "./src/threads/contract/wire/feedPairs/refused.json",
+      "browser": "./src/threads/contract/wire/feedPairs/refused.json",
+      "default": "./src/threads/contract/wire/feedPairs/refused.json"
+    },
+    "./threads/contract/wire/attention": {
+      "types": "./src/threads/contract/wire/attention.ts",
+      "browser": "./src/threads/contract/wire/attention.ts",
+      "default": "./src/threads/contract/wire/attention.ts"
+    },
+    "./threads/contract/wire/recap": {
+      "types": "./src/threads/contract/wire/recap.ts",
+      "browser": "./src/threads/contract/wire/recap.ts",
+      "default": "./src/threads/contract/wire/recap.ts"
+    },
+    "./threads/contract/wire/settings": {
+      "types": "./src/threads/contract/wire/settings.ts",
+      "browser": "./src/threads/contract/wire/settings.ts",
+      "default": "./src/threads/contract/wire/settings.ts"
+    },
+    "./graph/contract/wire/sources": {
+      "types": "./src/graph/contract/wire/sources.ts",
+      "browser": "./src/graph/contract/wire/sources.ts",
+      "default": "./src/graph/contract/wire/sources.ts"
+    },
+    "./change-record/contract/wire/authorship": {
+      "types": "./src/change-record/contract/wire/authorship.ts",
+      "browser": "./src/change-record/contract/wire/authorship.ts",
+      "default": "./src/change-record/contract/wire/authorship.ts"
+    },
+    "./graph/contract/wire/callRange": {
+      "types": "./src/graph/contract/wire/callRange.ts",
+      "browser": "./src/graph/contract/wire/callRange.ts",
+      "default": "./src/graph/contract/wire/callRange.ts"
+    },
+    "./graph/contract/wire/batch": {
+      "types": "./src/graph/contract/wire/batch.ts",
+      "browser": "./src/graph/contract/wire/batch.ts",
+      "default": "./src/graph/contract/wire/batch.ts"
+    },
+    "./native-harness/contract/wire/compactionChoices": {
+      "types": "./src/native-harness/contract/wire/compactionChoices.ts",
+      "default": "./src/native-harness/contract/wire/compactionChoices.ts"
+    },
+    "./executions/contract/wire/commands": {
+      "types": "./src/executions/contract/wire/commands.ts",
+      "browser": "./src/executions/contract/wire/commands.ts",
+      "default": "./src/executions/contract/wire/commands.ts"
+    },
+    "./executions/contract/wire/terminalAppearance": {
+      "types": "./src/executions/contract/wire/terminalAppearance.ts",
+      "browser": "./src/executions/contract/wire/terminalAppearance.ts",
+      "default": "./src/executions/contract/wire/terminalAppearance.ts"
+    },
+    "./executions/contract/wire/terminalBehavior": {
+      "types": "./src/executions/contract/wire/terminalBehavior.ts",
+      "browser": "./src/executions/contract/wire/terminalBehavior.ts",
+      "default": "./src/executions/contract/wire/terminalBehavior.ts"
+    },
+    "./executions/settings": {
+      "types": "./src/executions/settings.ts",
+      "browser": "./src/executions/settings.ts",
+      "default": "./src/executions/settings.ts"
+    },
+    "./executions/contract/wire/commandFeed": {
+      "types": "./src/executions/contract/wire/commandFeed.ts",
+      "browser": "./src/executions/contract/wire/commandFeed.ts",
+      "default": "./src/executions/contract/wire/commandFeed.ts"
+    },
+    "./executions/commands/feedDelta": {
+      "types": "./src/executions/commands/feedDelta.ts",
+      "browser": "./src/executions/commands/feedDelta.ts",
+      "default": "./src/executions/commands/feedDelta.ts"
+    },
+    "./executions/contract/wire/load": {
+      "types": "./src/executions/contract/wire/load.ts",
+      "browser": "./src/executions/contract/wire/load.ts",
+      "default": "./src/executions/contract/wire/load.ts"
+    },
+    "./executions/contract/wire/residuals": {
+      "types": "./src/executions/contract/wire/residuals.ts",
+      "browser": "./src/executions/contract/wire/residuals.ts",
+      "default": "./src/executions/contract/wire/residuals.ts"
+    },
+    "./worktrees/contract/wire/space": {
+      "types": "./src/worktrees/contract/wire/space.ts",
+      "browser": "./src/worktrees/contract/wire/space.ts",
+      "default": "./src/worktrees/contract/wire/space.ts"
+    },
+    "./composition/catalog": {
+      "types": "./src/composition/catalog.ts",
+      "browser": "./src/composition/catalog.ts",
+      "default": "./src/composition/catalog.ts"
+    },
+    "./composition/shipped": {
+      "types": "./src/composition/shipped.ts",
+      "bun": "./src/composition/shipped.ts",
+      "default": null
+    },
+    "./composition/catalogModules": {
+      "types": "./src/composition/developer/catalog.ts",
+      "release": "./src/composition/release/catalog.ts",
+      "browser": "./src/composition/developer/catalog.ts",
+      "bun": "./src/composition/developer/catalog.ts",
+      "default": "./src/composition/developer/catalog.ts"
+    },
+    "./composition/modules": {
+      "types": "./src/composition/developer/modules.ts",
+      "release": "./src/composition/release/modules.ts",
+      "bun": "./src/composition/developer/modules.ts",
+      "default": "./src/composition/developer/modules.ts"
+    },
+    "./composition/channel": {
+      "types": "./src/composition/developer/channel.ts",
+      "release": "./src/composition/release/channel.ts",
+      "node": "./src/composition/developer/channel.ts",
+      "bun": "./src/composition/developer/channel.ts",
+      "default": "./src/composition/developer/channel.ts"
+    },
+    "./composition/bindings": {
+      "types": "./src/composition/developer/bindings.ts",
+      "release": "./src/composition/release/bindings.ts",
+      "bun": "./src/composition/developer/bindings.ts",
+      "default": "./src/composition/developer/bindings.ts"
+    },
+    "./composition/verbBindings": {
+      "types": "./src/composition/developer/verbs.ts",
+      "release": "./src/composition/release/verbs.ts",
+      "bun": "./src/composition/developer/verbs.ts",
+      "default": "./src/composition/developer/verbs.ts"
+    },
+    "./threads/contract/wire/operations/catalog": {
+      "types": "./src/threads/contract/wire/operations/catalog.ts",
+      "browser": "./src/threads/contract/wire/operations/catalog.ts",
+      "default": "./src/threads/contract/wire/operations/catalog.ts"
+    },
+    "./graph/contract/wire/standing": {
+      "types": "./src/graph/contract/wire/standing.ts",
+      "browser": "./src/graph/contract/wire/standing.ts",
+      "default": "./src/graph/contract/wire/standing.ts"
+    },
+    "./workspace/contract/wire/history": {
+      "types": "./src/workspace/contract/wire/history.ts",
+      "browser": "./src/workspace/contract/wire/history.ts",
+      "default": "./src/workspace/contract/wire/history.ts"
+    },
+    "./checkout-files/contract/wire/directory": {
+      "types": "./src/checkout-files/contract/wire/directory.ts",
+      "browser": "./src/checkout-files/contract/wire/directory.ts",
+      "default": "./src/checkout-files/contract/wire/directory.ts"
+    },
+    "./checkout-files/contract/wire/document": {
+      "types": "./src/checkout-files/contract/wire/document.ts",
+      "browser": "./src/checkout-files/contract/wire/document.ts",
+      "default": "./src/checkout-files/contract/wire/document.ts"
+    },
+    "./checkout-files/contract/wire/settings": {
+      "types": "./src/checkout-files/contract/wire/settings.ts",
+      "browser": "./src/checkout-files/contract/wire/settings.ts",
+      "default": "./src/checkout-files/contract/wire/settings.ts"
+    },
+    "./checkout-files/contract/wire/search": {
+      "types": "./src/checkout-files/contract/wire/search.ts",
+      "browser": "./src/checkout-files/contract/wire/search.ts",
+      "default": "./src/checkout-files/contract/wire/search.ts"
+    },
+    "./checkout-files/contract/wire/paths": {
+      "types": "./src/checkout-files/contract/wire/paths.ts",
+      "browser": "./src/checkout-files/contract/wire/paths.ts",
+      "default": "./src/checkout-files/contract/wire/paths.ts"
+    },
+    "./checkout-files/contract/wire/place": {
+      "types": "./src/checkout-files/contract/wire/place.ts",
+      "browser": "./src/checkout-files/contract/wire/place.ts",
+      "default": "./src/checkout-files/contract/wire/place.ts"
+    },
+    "./change-record/contract/wire/changes": {
+      "types": "./src/change-record/contract/wire/changes.ts",
+      "browser": "./src/change-record/contract/wire/changes.ts",
+      "default": "./src/change-record/contract/wire/changes.ts"
+    },
+    "./change-record/contract/wire/holdings": {
+      "types": "./src/change-record/contract/wire/holdings.ts",
+      "browser": "./src/change-record/contract/wire/holdings.ts",
+      "default": "./src/change-record/contract/wire/holdings.ts"
+    },
+    "./change-record/contract/wire/threadChanges": {
+      "types": "./src/change-record/contract/wire/threadChanges.ts",
+      "browser": "./src/change-record/contract/wire/threadChanges.ts",
+      "default": "./src/change-record/contract/wire/threadChanges.ts"
+    },
+    "./artifacts/contract/wire/artifacts": {
+      "types": "./src/artifacts/contract/wire/artifacts.ts",
+      "browser": "./src/artifacts/contract/wire/artifacts.ts",
+      "default": "./src/artifacts/contract/wire/artifacts.ts"
+    },
+    "./artifacts/contract/wire/feed": {
+      "types": "./src/artifacts/contract/wire/feed.ts",
+      "browser": "./src/artifacts/contract/wire/feed.ts",
+      "default": "./src/artifacts/contract/wire/feed.ts"
+    },
+    "./artifacts/contract/wire/policy": {
+      "types": "./src/artifacts/contract/wire/policy.ts",
+      "browser": "./src/artifacts/contract/wire/policy.ts",
+      "default": "./src/artifacts/contract/wire/policy.ts"
+    },
+    "./artifacts/contract/wire/published": {
+      "types": "./src/artifacts/contract/wire/published.ts",
+      "browser": "./src/artifacts/contract/wire/published.ts",
+      "default": "./src/artifacts/contract/wire/published.ts"
+    },
+    "./artifacts/contract/wire/timeline": {
+      "types": "./src/artifacts/contract/wire/timeline.ts",
+      "browser": "./src/artifacts/contract/wire/timeline.ts",
+      "default": "./src/artifacts/contract/wire/timeline.ts"
+    },
+    "./workspace/contract/wire/checkout": {
+      "types": "./src/workspace/contract/wire/checkout.ts",
+      "browser": "./src/workspace/contract/wire/checkout.ts",
+      "default": "./src/workspace/contract/wire/checkout.ts"
+    },
+    "./workspace/contract/wire/settings": {
+      "types": "./src/workspace/contract/wire/settings.ts",
+      "browser": "./src/workspace/contract/wire/settings.ts",
+      "default": "./src/workspace/contract/wire/settings.ts"
+    },
+    "./enforcement/contract/wire/enforcement": {
+      "types": "./src/enforcement/contract/wire/enforcement.ts",
+      "browser": "./src/enforcement/contract/wire/enforcement.ts",
+      "default": "./src/enforcement/contract/wire/enforcement.ts"
+    },
+    "./enforcement/contract/wire/engines": {
+      "types": "./src/enforcement/contract/wire/engines.ts",
+      "browser": "./src/enforcement/contract/wire/engines.ts",
+      "default": "./src/enforcement/contract/wire/engines.ts"
+    },
+    "./enforcement/contract/wire/findings": {
+      "types": "./src/enforcement/contract/wire/findings.ts",
+      "browser": "./src/enforcement/contract/wire/findings.ts",
+      "default": "./src/enforcement/contract/wire/findings.ts"
+    },
+    "./graph/contract/wire/edges": {
+      "types": "./src/graph/contract/wire/edges.ts",
+      "browser": "./src/graph/contract/wire/edges.ts",
+      "default": "./src/graph/contract/wire/edges.ts"
+    },
+    "./graph/contract/wire/feed": {
+      "types": "./src/graph/contract/wire/feed.ts",
+      "browser": "./src/graph/contract/wire/feed.ts",
+      "default": "./src/graph/contract/wire/feed.ts"
+    },
+    "./graph/contract/wire/recovery": {
+      "types": "./src/graph/contract/wire/recovery.ts",
+      "browser": "./src/graph/contract/wire/recovery.ts",
+      "default": "./src/graph/contract/wire/recovery.ts"
+    },
+    "./graph/contract/wire/remote": {
+      "types": "./src/graph/contract/wire/remote.ts",
+      "browser": "./src/graph/contract/wire/remote.ts",
+      "default": "./src/graph/contract/wire/remote.ts"
+    },
+    "./threads/contract/wire/harness/names": {
+      "types": "./src/threads/contract/wire/harness/names.ts",
+      "browser": "./src/threads/contract/wire/harness/names.ts",
+      "default": "./src/threads/contract/wire/harness/names.ts"
+    },
+    "./threads/contract/wire/harness/transportEntry": {
+      "types": "./src/threads/contract/wire/harness/transportEntry.ts",
+      "browser": "./src/threads/contract/wire/harness/transportEntry.ts",
+      "default": "./src/threads/contract/wire/harness/transportEntry.ts"
+    },
+    "./threads/contract/wire/harness/externalSession": {
+      "types": "./src/threads/contract/wire/harness/externalSession.ts",
+      "browser": "./src/threads/contract/wire/harness/externalSession.ts",
+      "default": "./src/threads/contract/wire/harness/externalSession.ts"
+    },
+    "./installation/contract/wire/ports": {
+      "types": "./src/installation/contract/wire/ports.ts",
+      "default": "./src/installation/contract/wire/ports.ts"
+    },
+    "./installation/contract/wire/words": {
+      "types": "./src/installation/contract/wire/words.ts",
+      "browser": "./src/installation/contract/wire/words.ts",
+      "node": "./src/installation/contract/wire/words.ts",
+      "default": "./src/installation/contract/wire/words.ts"
+    },
+    "./installation/contract/wire/hostRefusal": {
+      "types": "./src/installation/contract/wire/hostRefusal.ts",
+      "node": "./src/installation/contract/wire/hostRefusal.ts"
+    },
+    "./installation/process/record": {
+      "types": "./src/installation/process/record.ts",
+      "node": "./src/installation/process/record.ts",
+      "bun": "./src/installation/process/record.ts"
+    },
+    "./installation/contract/wire/restart": {
+      "types": "./src/installation/contract/wire/restart.ts",
+      "browser": "./src/installation/contract/wire/restart.ts",
+      "node": "./src/installation/contract/wire/restart.ts",
+      "default": "./src/installation/contract/wire/restart.ts"
+    },
+    "./installation/setup/signing": {
+      "types": "./src/installation/setup/signing.ts",
+      "bun": "./src/installation/setup/signing.ts"
+    },
+    "./installation/contract/wire/channel": {
+      "types": "./src/installation/contract/wire/channel.ts",
+      "browser": "./src/installation/contract/wire/channel.ts",
+      "node": "./src/installation/contract/wire/channel.ts",
+      "default": "./src/installation/contract/wire/channel.ts"
+    },
+    "./installation/contract/wire/junction": {
+      "types": "./src/installation/contract/wire/junction.ts",
+      "node": "./src/installation/contract/wire/junction.ts",
+      "default": "./src/installation/contract/wire/junction.ts"
+    },
+    "./installation/contract/wire/layout": {
+      "types": "./src/installation/contract/wire/layout.ts",
+      "browser": "./src/installation/contract/wire/layout.ts",
+      "node": "./src/installation/contract/wire/layout.ts",
+      "default": "./src/installation/contract/wire/layout.ts"
+    },
+    "./installation/contract/wire/manifest": {
+      "types": "./src/installation/contract/wire/manifest.ts",
+      "node": "./src/installation/contract/wire/manifest.ts",
+      "default": "./src/installation/contract/wire/manifest.ts"
+    },
+    "./installation/closure/versions": {
+      "types": "./src/installation/closure/versions.ts",
+      "node": "./src/installation/closure/versions.ts",
+      "default": "./src/installation/closure/versions.ts"
+    },
+    "./installation/closure/attempt": {
+      "types": "./src/installation/closure/attempt.ts",
+      "node": "./src/installation/closure/attempt.ts",
+      "default": "./src/installation/closure/attempt.ts"
+    },
+    "./installation/contract/wire/attempt": {
+      "types": "./src/installation/contract/wire/attempt.ts",
+      "node": "./src/installation/contract/wire/attempt.ts",
+      "default": "./src/installation/contract/wire/attempt.ts"
+    },
+    "./installation/contract/wire/feed": {
+      "types": "./src/installation/contract/wire/feed.ts",
+      "node": "./src/installation/contract/wire/feed.ts",
+      "default": "./src/installation/contract/wire/feed.ts"
+    },
+    "./installation/contract/wire/archive": {
+      "types": "./src/installation/contract/wire/archive.ts",
+      "node": "./src/installation/contract/wire/archive.ts",
+      "default": "./src/installation/contract/wire/archive.ts"
+    },
+    "./installation/closure/manifests": {
+      "types": "./src/installation/closure/manifests.ts",
+      "node": "./src/installation/closure/manifests.ts",
+      "bun": "./src/installation/closure/manifests.ts"
+    },
+    "./mac-applications/placement": {
+      "types": "./src/mac-applications/placement.ts",
+      "node": "./src/mac-applications/placement.ts",
+      "bun": "./src/mac-applications/placement.ts"
+    },
+    "./graph/contract/wire/journal": {
+      "types": "./src/graph/contract/wire/journal.ts",
+      "browser": "./src/graph/contract/wire/journal.ts",
+      "default": "./src/graph/contract/wire/journal.ts"
+    },
+    "./graph/contract/wire/threadWork": {
+      "types": "./src/graph/contract/wire/threadWork.ts",
+      "browser": "./src/graph/contract/wire/threadWork.ts",
+      "default": "./src/graph/contract/wire/threadWork.ts"
+    },
+    "./graph/contract/wire/tags/roles": {
+      "types": "./src/graph/contract/wire/tags/roles.ts",
+      "browser": "./src/graph/contract/wire/tags/roles.ts",
+      "default": "./src/graph/contract/wire/tags/roles.ts"
+    },
+    "./graph/contract/wire/tags/declaration": {
+      "types": "./src/graph/contract/wire/tags/declaration.ts",
+      "browser": "./src/graph/contract/wire/tags/declaration.ts",
+      "default": "./src/graph/contract/wire/tags/declaration.ts"
+    },
+    "./graph/contract/wire/tags/table": {
+      "types": "./src/graph/contract/wire/tags/table.ts",
+      "browser": "./src/graph/contract/wire/tags/table.ts",
+      "default": "./src/graph/contract/wire/tags/table.ts"
+    },
+    "./graph/contract/wire/tags/reading": {
+      "types": "./src/graph/contract/wire/tags/reading.ts",
+      "browser": "./src/graph/contract/wire/tags/reading.ts",
+      "default": "./src/graph/contract/wire/tags/reading.ts"
+    },
+    "./graph/contract/wire/tags/served": {
+      "types": "./src/graph/contract/wire/tags/served.ts",
+      "browser": "./src/graph/contract/wire/tags/served.ts",
+      "default": "./src/graph/contract/wire/tags/served.ts"
+    },
+    "./graph/contract/wire/tags/actions": {
+      "types": "./src/graph/contract/wire/tags/actions.ts",
+      "browser": "./src/graph/contract/wire/tags/actions.ts",
+      "default": "./src/graph/contract/wire/tags/actions.ts"
+    },
+    "./graph/contract/wire/tags/behaviour": {
+      "types": "./src/graph/contract/wire/tags/behaviour.ts",
+      "browser": "./src/graph/contract/wire/tags/behaviour.ts",
+      "default": "./src/graph/contract/wire/tags/behaviour.ts"
+    },
+    "./graph/contract/wire/tags/lifecycle": {
+      "types": "./src/graph/contract/wire/tags/lifecycle.ts",
+      "browser": "./src/graph/contract/wire/tags/lifecycle.ts",
+      "default": "./src/graph/contract/wire/tags/lifecycle.ts"
+    },
+    "./graph/contract/wire/tags/work": {
+      "types": "./src/graph/contract/wire/tags/work.ts",
+      "browser": "./src/graph/contract/wire/tags/work.ts",
+      "default": "./src/graph/contract/wire/tags/work.ts"
+    },
+    "./graph/contract/wire/tags/holder": {
+      "types": "./src/graph/contract/wire/tags/holder.ts",
+      "browser": "./src/graph/contract/wire/tags/holder.ts",
+      "default": "./src/graph/contract/wire/tags/holder.ts"
+    },
+    "./graph/contract/wire/tags/spec": {
+      "types": "./src/graph/contract/wire/tags/spec.ts",
+      "browser": "./src/graph/contract/wire/tags/spec.ts",
+      "default": "./src/graph/contract/wire/tags/spec.ts"
+    },
+    "./graph/contract/wire/tags/amendment": {
+      "types": "./src/graph/contract/wire/tags/amendment.ts",
+      "browser": "./src/graph/contract/wire/tags/amendment.ts",
+      "default": "./src/graph/contract/wire/tags/amendment.ts"
+    },
+    "./graph/contract/wire/tags/observation": {
+      "types": "./src/graph/contract/wire/tags/observation.ts",
+      "browser": "./src/graph/contract/wire/tags/observation.ts",
+      "default": "./src/graph/contract/wire/tags/observation.ts"
+    },
+    "./graph/contract/wire/tags/reflection": {
+      "types": "./src/graph/contract/wire/tags/reflection.ts",
+      "browser": "./src/graph/contract/wire/tags/reflection.ts",
+      "default": "./src/graph/contract/wire/tags/reflection.ts"
+    },
+    "./graph/contract/wire/tags/leaf": {
+      "types": "./src/graph/contract/wire/tags/leaf.ts",
+      "browser": "./src/graph/contract/wire/tags/leaf.ts",
+      "default": "./src/graph/contract/wire/tags/leaf.ts"
+    },
+    "./graph/contract/wire/tags/lawContracts": {
+      "types": "./src/graph/contract/wire/tags/lawContracts.ts",
+      "browser": "./src/graph/contract/wire/tags/lawContracts.ts",
+      "default": "./src/graph/contract/wire/tags/lawContracts.ts"
+    },
+    "./graph/contract/wire/tags/law": {
+      "types": "./src/graph/contract/wire/tags/law.ts",
+      "browser": "./src/graph/contract/wire/tags/law.ts",
+      "default": "./src/graph/contract/wire/tags/law.ts"
+    },
+    "./catalogs/contract/wire/registry": {
+      "types": "./src/catalogs/contract/wire/registry.ts",
+      "browser": "./src/catalogs/contract/wire/registry.ts",
+      "default": "./src/catalogs/contract/wire/registry.ts"
+    },
+    "./catalogs/contract/wire/settings": {
+      "types": "./src/catalogs/contract/wire/settings.ts",
+      "browser": "./src/catalogs/contract/wire/settings.ts",
+      "default": "./src/catalogs/contract/wire/settings.ts"
+    },
+    "./graph/contract/wire/tags/identity": {
+      "types": "./src/graph/contract/wire/tags/identity.ts",
+      "browser": "./src/graph/contract/wire/tags/identity.ts",
+      "default": "./src/graph/contract/wire/tags/identity.ts"
+    },
+    "./installation/contract/wire/machine": {
+      "types": "./src/installation/contract/wire/machine.ts",
+      "browser": "./src/installation/contract/wire/machine.ts",
+      "default": "./src/installation/contract/wire/machine.ts"
+    },
+    "./installation/contract/wire/next": {
+      "types": "./src/installation/contract/wire/next.ts",
+      "browser": "./src/installation/contract/wire/next.ts",
+      "default": "./src/installation/contract/wire/next.ts"
+    },
+    "./mcp/contract/wire/servers": {
+      "types": "./src/mcp/contract/wire/servers.ts",
+      "browser": "./src/mcp/contract/wire/servers.ts",
+      "default": "./src/mcp/contract/wire/servers.ts"
+    },
+    "./mcp/contract/wire/feeds": {
+      "types": "./src/mcp/contract/wire/feeds.ts",
+      "browser": "./src/mcp/contract/wire/feeds.ts",
+      "default": "./src/mcp/contract/wire/feeds.ts"
+    },
+    "./views/contract/wire/feeds": {
+      "types": "./src/views/contract/wire/feeds.ts",
+      "browser": "./src/views/contract/wire/feeds.ts",
+      "default": "./src/views/contract/wire/feeds.ts"
+    },
+    "./views/contract/wire/sets": {
+      "types": "./src/views/contract/wire/sets.ts",
+      "browser": "./src/views/contract/wire/sets.ts",
+      "default": "./src/views/contract/wire/sets.ts"
+    },
+    "./views/contract/wire/points": {
+      "types": "./src/views/contract/wire/points.ts",
+      "browser": "./src/views/contract/wire/points.ts",
+      "default": "./src/views/contract/wire/points.ts"
+    },
+    "./plugin-secrets/contract/wire/rows": {
+      "types": "./src/plugin-secrets/contract/wire/rows.ts",
+      "browser": "./src/plugin-secrets/contract/wire/rows.ts",
+      "default": "./src/plugin-secrets/contract/wire/rows.ts"
+    },
+    "./graph/contract/wire/law": {
+      "types": "./src/graph/contract/wire/law.ts",
+      "browser": "./src/graph/contract/wire/law.ts",
+      "default": "./src/graph/contract/wire/law.ts"
+    },
+    "./native-harness/contract/wire/compactionSettings": {
+      "types": "./src/native-harness/contract/wire/compactionSettings.ts",
+      "browser": "./src/native-harness/contract/wire/compactionSettings.ts",
+      "default": "./src/native-harness/contract/wire/compactionSettings.ts"
+    },
+    "./native-harness/contract/wire/modelSelection": {
+      "types": "./src/native-harness/contract/wire/modelSelection.ts",
+      "browser": "./src/native-harness/contract/wire/modelSelection.ts",
+      "default": "./src/native-harness/contract/wire/modelSelection.ts"
+    },
+    "./threads/contract/wire/waiting": {
+      "types": "./src/threads/contract/wire/waiting.ts",
+      "browser": "./src/threads/contract/wire/waiting.ts",
+      "default": "./src/threads/contract/wire/waiting.ts"
+    },
+    "./threads/contract/wire/calls": {
+      "types": "./src/threads/contract/wire/calls.ts",
+      "browser": "./src/threads/contract/wire/calls.ts",
+      "default": "./src/threads/contract/wire/calls.ts"
+    },
+    "./power/contract/wire/power": {
+      "types": "./src/power/contract/wire/power.ts",
+      "browser": "./src/power/contract/wire/power.ts",
+      "default": "./src/power/contract/wire/power.ts"
+    },
+    "./remote/contract/wire/access": {
+      "types": "./src/remote/contract/wire/access.ts",
+      "browser": "./src/remote/contract/wire/access.ts",
+      "default": "./src/remote/contract/wire/access.ts"
+    },
+    "./notify/contract/wire/notification": {
+      "types": "./src/notify/contract/wire/notification.ts",
+      "browser": "./src/notify/contract/wire/notification.ts",
+      "default": "./src/notify/contract/wire/notification.ts"
+    },
+    "./activity/contract/wire/faults": {
+      "types": "./src/activity/contract/wire/faults.ts",
+      "browser": "./src/activity/contract/wire/faults.ts",
+      "default": "./src/activity/contract/wire/faults.ts"
+    },
+    "./push/contract/wire/push": {
+      "types": "./src/push/contract/wire/push.ts",
+      "browser": "./src/push/contract/wire/push.ts",
+      "default": "./src/push/contract/wire/push.ts"
+    },
+    "./graph/contract/wire/query": {
+      "types": "./src/graph/contract/wire/query.ts",
+      "browser": "./src/graph/contract/wire/query.ts",
+      "default": "./src/graph/contract/wire/query.ts"
+    },
+    "./graph/contract/wire/reads": {
+      "types": "./src/graph/contract/wire/reads.ts",
+      "browser": "./src/graph/contract/wire/reads.ts",
+      "default": "./src/graph/contract/wire/reads.ts"
+    },
+    "./graph/contract/wire/records": {
+      "types": "./src/graph/contract/wire/records.ts",
+      "browser": "./src/graph/contract/wire/records.ts",
+      "default": "./src/graph/contract/wire/records.ts"
+    },
+    "./executions/contract/wire/viewLeases": {
+      "types": "./src/executions/contract/wire/viewLeases.ts",
+      "browser": "./src/executions/contract/wire/viewLeases.ts",
+      "default": "./src/executions/contract/wire/viewLeases.ts"
+    },
+    "./graph/contract/wire/references": {
+      "types": "./src/graph/contract/wire/references.ts",
+      "browser": "./src/graph/contract/wire/references.ts",
+      "default": "./src/graph/contract/wire/references.ts"
+    },
+    "./platform/contract/wire/children": {
+      "types": "./src/platform/contract/wire/children.ts",
+      "browser": "./src/platform/contract/wire/children.ts",
+      "default": "./src/platform/contract/wire/children.ts"
+    },
+    "./platform/contract/wire/lock": {
+      "types": "./src/platform/contract/wire/lock.ts",
+      "default": "./src/platform/contract/wire/lock.ts"
+    },
+    "./platform/contract/wire/migrationLoad": {
+      "types": "./src/platform/contract/wire/migrationLoad.ts",
+      "browser": "./src/platform/contract/wire/migrationLoad.ts",
+      "default": "./src/platform/contract/wire/migrationLoad.ts"
+    },
+    "./platform/contract/wire/refusal": {
+      "types": "./src/platform/contract/wire/refusal.ts",
+      "browser": "./src/platform/contract/wire/refusal.ts",
+      "default": "./src/platform/contract/wire/refusal.ts"
+    },
+    "./platform/contract/wire/session": {
+      "types": "./src/platform/contract/wire/session.ts",
+      "browser": "./src/platform/contract/wire/session.ts",
+      "default": "./src/platform/contract/wire/session.ts"
+    },
+    "./platform/contract/wire/setting": {
+      "types": "./src/platform/contract/wire/setting.ts",
+      "browser": "./src/platform/contract/wire/setting.ts",
+      "default": "./src/platform/contract/wire/setting.ts"
+    },
+    "./thread-record/contract/wire/name": {
+      "types": "./src/thread-record/contract/wire/name.ts",
+      "browser": "./src/thread-record/contract/wire/name.ts",
+      "default": "./src/thread-record/contract/wire/name.ts"
+    },
+    "./thread-record/contract/wire/folder": {
+      "types": "./src/thread-record/contract/wire/folder.ts",
+      "browser": "./src/thread-record/contract/wire/folder.ts",
+      "default": "./src/thread-record/contract/wire/folder.ts"
+    },
+    "./platform/contract/wire/thread": {
+      "types": "./src/platform/contract/wire/thread.ts",
+      "browser": "./src/platform/contract/wire/thread.ts",
+      "default": "./src/platform/contract/wire/thread.ts"
+    },
+    "./invocation/contract/wire/headers": {
+      "types": "./src/invocation/contract/wire/headers.ts",
+      "browser": "./src/invocation/contract/wire/headers.ts",
+      "default": "./src/invocation/contract/wire/headers.ts"
+    },
+    "./graph/contract/wire/rows": {
+      "types": "./src/graph/contract/wire/rows.ts",
+      "browser": "./src/graph/contract/wire/rows.ts",
+      "default": "./src/graph/contract/wire/rows.ts"
+    },
+    "./graph/contract/wire/far": {
+      "types": "./src/graph/contract/wire/far.ts",
+      "browser": "./src/graph/contract/wire/far.ts",
+      "default": "./src/graph/contract/wire/far.ts"
+    },
+    "./worktrees/contract/wire/settings": {
+      "types": "./src/worktrees/contract/wire/settings.ts",
+      "browser": "./src/worktrees/contract/wire/settings.ts",
+      "default": "./src/worktrees/contract/wire/settings.ts"
+    },
+    "./settings/contract/wire/catalog": {
+      "types": "./src/settings/contract/wire/catalog.ts",
+      "browser": "./src/settings/contract/wire/catalog.ts",
+      "default": "./src/settings/contract/wire/catalog.ts"
+    },
+    "./settings/contract/wire/units": {
+      "types": "./src/settings/contract/wire/units.ts",
+      "browser": "./src/settings/contract/wire/units.ts",
+      "default": "./src/settings/contract/wire/units.ts"
+    },
+    "./executions/contract/wire/operationAnswers": {
+      "types": "./src/executions/contract/wire/operationAnswers.ts",
+      "browser": "./src/executions/contract/wire/operationAnswers.ts",
+      "default": "./src/executions/contract/wire/operationAnswers.ts"
+    },
+    "./editors/contract/wire/catalog": {
+      "types": "./src/editors/contract/wire/catalog.ts",
+      "browser": "./src/editors/contract/wire/catalog.ts",
+      "default": "./src/editors/contract/wire/catalog.ts"
+    },
+    "./graph/contract/wire/storage": {
+      "types": "./src/graph/contract/wire/storage.ts",
+      "browser": "./src/graph/contract/wire/storage.ts",
+      "default": "./src/graph/contract/wire/storage.ts"
+    },
+    "./executions/contract/wire/terminals": {
+      "types": "./src/executions/contract/wire/terminals.ts",
+      "browser": "./src/executions/contract/wire/terminals.ts",
+      "default": "./src/executions/contract/wire/terminals.ts"
+    },
+    "./native-harness/contract/wire/instructions": {
+      "types": "./src/native-harness/contract/wire/instructions.ts",
+      "default": "./src/native-harness/contract/wire/instructions.ts"
+    },
+    "./threads/contract/wire/titles": {
+      "types": "./src/threads/contract/wire/titles.ts",
+      "browser": "./src/threads/contract/wire/titles.ts",
+      "default": "./src/threads/contract/wire/titles.ts"
+    },
+    "./native-harness/contract/wire/toolResult": {
+      "types": "./src/native-harness/contract/wire/toolResult.ts",
+      "browser": "./src/native-harness/contract/wire/toolResult.ts",
+      "default": "./src/native-harness/contract/wire/toolResult.ts"
+    },
+    "./executions/contract/wire/rootExecutions": {
+      "types": "./src/executions/contract/wire/rootExecutions.ts",
+      "browser": "./src/executions/contract/wire/rootExecutions.ts",
+      "default": "./src/executions/contract/wire/rootExecutions.ts"
+    },
+    "./worktrees/contract/wire/creation": {
+      "types": "./src/worktrees/contract/wire/creation.ts",
+      "browser": "./src/worktrees/contract/wire/creation.ts",
+      "default": "./src/worktrees/contract/wire/creation.ts"
+    },
+    "./worktrees/contract/wire/cleanup": {
+      "types": "./src/worktrees/contract/wire/cleanup.ts",
+      "browser": "./src/worktrees/contract/wire/cleanup.ts",
+      "default": "./src/worktrees/contract/wire/cleanup.ts"
+    },
+    "./worktrees/contract/wire/entries": {
+      "types": "./src/worktrees/contract/wire/entries.ts",
+      "browser": "./src/worktrees/contract/wire/entries.ts",
+      "default": "./src/worktrees/contract/wire/entries.ts"
+    },
+    "./worktrees/contract/wire/failures": {
+      "types": "./src/worktrees/contract/wire/failures.ts",
+      "default": "./src/worktrees/contract/wire/failures.ts"
+    },
+    "./platform/contract/wire/ids": {
+      "types": "./src/platform/contract/wire/ids.ts",
+      "browser": "./src/platform/contract/wire/ids.ts",
+      "default": "./src/platform/contract/wire/ids.ts"
+    },
+    "./worktrees/contract/wire/mergeTypes": {
+      "types": "./src/worktrees/contract/wire/mergeTypes.ts",
+      "browser": "./src/worktrees/contract/wire/mergeTypes.ts",
+      "default": "./src/worktrees/contract/wire/mergeTypes.ts"
+    },
+    "./worktrees/contract/wire/retirement": {
+      "types": "./src/worktrees/contract/wire/retirement.ts",
+      "browser": "./src/worktrees/contract/wire/retirement.ts",
+      "default": "./src/worktrees/contract/wire/retirement.ts"
+    },
+    "./worktrees/contract/wire/rows": {
+      "types": "./src/worktrees/contract/wire/rows.ts",
+      "browser": "./src/worktrees/contract/wire/rows.ts",
+      "default": "./src/worktrees/contract/wire/rows.ts"
+    },
+    "./worktrees/contract/wire/subjects": {
+      "types": "./src/worktrees/contract/wire/subjects.ts",
+      "default": "./src/worktrees/contract/wire/subjects.ts"
+    },
+    "./workspace/contract/wire/repositories": {
+      "types": "./src/workspace/contract/wire/repositories.ts",
+      "browser": "./src/workspace/contract/wire/repositories.ts",
+      "default": "./src/workspace/contract/wire/repositories.ts"
+    },
+    "./graph/contract/wire/branchChanges": {
+      "types": "./src/graph/contract/wire/branchChanges.ts",
+      "default": "./src/graph/contract/wire/branchChanges.ts"
+    },
+    "./landing/contract/wire/merge": {
+      "types": "./src/landing/contract/wire/merge.ts",
+      "browser": "./src/landing/contract/wire/merge.ts",
+      "default": "./src/landing/contract/wire/merge.ts"
+    },
+    "./landing/contract/wire/receipt": {
+      "types": "./src/landing/contract/wire/receipt.ts",
+      "browser": "./src/landing/contract/wire/receipt.ts",
+      "default": "./src/landing/contract/wire/receipt.ts"
+    },
+    "./threads/contract/wire/target": {
+      "types": "./src/threads/contract/wire/target.ts",
+      "browser": "./src/threads/contract/wire/target.ts",
+      "default": "./src/threads/contract/wire/target.ts"
+    },
+    "./workspace/contract/wire/roots": {
+      "types": "./src/workspace/contract/wire/roots.ts",
+      "browser": "./src/workspace/contract/wire/roots.ts",
+      "default": "./src/workspace/contract/wire/roots.ts"
+    },
+    "./workspace/contract/wire/ids": {
+      "types": "./src/workspace/contract/wire/ids.ts",
+      "browser": "./src/workspace/contract/wire/ids.ts",
+      "default": "./src/workspace/contract/wire/ids.ts"
+    },
+    "./workspace/contract/wire/uses": {
+      "types": "./src/workspace/contract/wire/uses.ts",
+      "browser": "./src/workspace/contract/wire/uses.ts",
+      "default": "./src/workspace/contract/wire/uses.ts"
+    },
+    "./threads/contract/wire/tail": {
+      "types": "./src/threads/contract/wire/tail.ts",
+      "browser": "./src/threads/contract/wire/tail.ts",
+      "default": "./src/threads/contract/wire/tail.ts"
+    },
+    "./threads/contract/wire/presence": {
+      "types": "./src/threads/contract/wire/presence.ts",
+      "browser": "./src/threads/contract/wire/presence.ts",
+      "default": "./src/threads/contract/wire/presence.ts"
+    },
+    "./threads/contract/wire/list": {
+      "types": "./src/threads/contract/wire/list.ts",
+      "browser": "./src/threads/contract/wire/list.ts",
+      "default": "./src/threads/contract/wire/list.ts"
+    },
+    "./threads/contract/wire/snapshot": {
+      "types": "./src/threads/contract/wire/snapshot.ts",
+      "browser": "./src/threads/contract/wire/snapshot.ts",
+      "default": "./src/threads/contract/wire/snapshot.ts"
+    },
+    "./threads/contract/wire/birth": {
+      "types": "./src/threads/contract/wire/birth.ts",
+      "browser": "./src/threads/contract/wire/birth.ts",
+      "default": "./src/threads/contract/wire/birth.ts"
+    },
+    "./threads/contract/wire/evidence": {
+      "types": "./src/threads/contract/wire/evidence.ts",
+      "browser": "./src/threads/contract/wire/evidence.ts",
+      "default": "./src/threads/contract/wire/evidence.ts"
+    },
+    "./native-harness/tools/presentation": {
+      "types": "./src/native-harness/tools/presentation.ts",
+      "browser": "./src/native-harness/tools/presentation.ts",
+      "default": "./src/native-harness/tools/presentation.ts"
+    },
+    "./composition/rpc": {
+      "types": "./src/composition/rpc.ts",
+      "default": "./src/composition/rpc.ts"
+    },
+    "./graph/blocks/bodyDiff": {
+      "types": "./src/graph/blocks/bodyDiff.ts",
+      "browser": "./src/graph/blocks/bodyDiff.ts",
+      "default": "./src/graph/blocks/bodyDiff.ts"
+    },
+    "./graph/contract/wire/enforcement": {
+      "types": "./src/graph/contract/wire/enforcement.ts",
+      "browser": "./src/graph/contract/wire/enforcement.ts",
+      "default": "./src/graph/contract/wire/enforcement.ts"
+    },
+    "./settings/contract/wire/declarations": {
+      "types": "./src/settings/contract/wire/declarations.ts",
+      "browser": "./src/settings/contract/wire/declarations.ts",
+      "default": "./src/settings/contract/wire/declarations.ts"
+    },
+    "./socket/rpc": {
+      "types": "./src/socket/rpc.ts",
+      "browser": "./src/socket/rpc.ts",
+      "node": "./src/socket/rpc.ts",
+      "default": "./src/socket/rpc.ts"
+    },
+    "./settings/contract/wire/appearance": {
+      "types": "./src/settings/contract/wire/appearance.ts",
+      "browser": "./src/settings/contract/wire/appearance.ts",
+      "default": "./src/settings/contract/wire/appearance.ts"
+    },
+    "./settings/contract/wire/links": {
+      "types": "./src/settings/contract/wire/links.ts",
+      "browser": "./src/settings/contract/wire/links.ts",
+      "default": "./src/settings/contract/wire/links.ts"
+    },
+    "./platform/contract/wire/live": {
+      "types": "./src/platform/contract/wire/live.ts",
+      "browser": "./src/platform/contract/wire/live.ts",
+      "node": "./src/platform/contract/wire/live.ts",
+      "default": "./src/platform/contract/wire/live.ts"
+    },
+    "./worktrees/contract/wire/feed": {
+      "types": "./src/worktrees/contract/wire/feed.ts",
+      "browser": "./src/worktrees/contract/wire/feed.ts",
+      "default": "./src/worktrees/contract/wire/feed.ts"
+    },
+    "./native-harness/contract/wire/calls": {
+      "types": "./src/native-harness/contract/wire/calls.ts",
+      "browser": "./src/native-harness/contract/wire/calls.ts",
+      "default": "./src/native-harness/contract/wire/calls.ts"
+    },
+    "./native-harness/contract/wire/threadFeeds": {
+      "types": "./src/native-harness/contract/wire/threadFeeds.ts",
+      "browser": "./src/native-harness/contract/wire/threadFeeds.ts",
+      "default": "./src/native-harness/contract/wire/threadFeeds.ts"
+    },
+    "./threads/contract/wire/feeds": {
+      "types": "./src/threads/contract/wire/feeds.ts",
+      "browser": "./src/threads/contract/wire/feeds.ts",
+      "default": "./src/threads/contract/wire/feeds.ts"
+    },
+    "./executions/contract/wire/feeds": {
+      "types": "./src/executions/contract/wire/feeds.ts",
+      "browser": "./src/executions/contract/wire/feeds.ts",
+      "default": "./src/executions/contract/wire/feeds.ts"
+    },
+    "./executions/contract/wire/refusals": {
+      "types": "./src/executions/contract/wire/refusals.ts",
+      "browser": "./src/executions/contract/wire/refusals.ts",
+      "default": "./src/executions/contract/wire/refusals.ts"
+    },
+    "./browser/contract/wire/screencast": {
+      "types": "./src/browser/contract/wire/screencast.ts",
+      "browser": "./src/browser/contract/wire/screencast.ts",
+      "default": "./src/browser/contract/wire/screencast.ts"
+    },
+    "./browser/contract/wire/feeds": {
+      "types": "./src/browser/contract/wire/feeds.ts",
+      "browser": "./src/browser/contract/wire/feeds.ts",
+      "default": "./src/browser/contract/wire/feeds.ts"
+    },
+    "./browser/contract/wire/host": {
+      "types": "./src/browser/contract/wire/host.ts",
+      "node": "./src/browser/contract/wire/host.ts",
+      "default": "./src/browser/contract/wire/host.ts"
+    },
+    "./browser/contract/wire/ids": {
+      "types": "./src/browser/contract/wire/ids.ts",
+      "browser": "./src/browser/contract/wire/ids.ts",
+      "node": "./src/browser/contract/wire/ids.ts",
+      "default": "./src/browser/contract/wire/ids.ts"
+    },
+    "./browser/contract/wire/page": {
+      "types": "./src/browser/contract/wire/page.ts",
+      "node": "./src/browser/contract/wire/page.ts",
+      "default": "./src/browser/contract/wire/page.ts"
+    },
+    "./images/contract/wire/operations": {
+      "types": "./src/images/contract/wire/operations.ts",
+      "browser": "./src/images/contract/wire/operations.ts",
+      "node": "./src/images/contract/wire/operations.ts",
+      "default": "./src/images/contract/wire/operations.ts"
+    },
+    "./images/contract/wire/settings": {
+      "types": "./src/images/contract/wire/settings.ts",
+      "browser": "./src/images/contract/wire/settings.ts",
+      "default": "./src/images/contract/wire/settings.ts"
+    },
+    "./browser/contract/wire/pageOperations": {
+      "types": "./src/browser/contract/wire/pageOperations.ts",
+      "browser": "./src/browser/contract/wire/pageOperations.ts",
+      "node": "./src/browser/contract/wire/pageOperations.ts",
+      "default": "./src/browser/contract/wire/pageOperations.ts"
+    },
+    "./browser/contract/wire/pick": {
+      "types": "./src/browser/contract/wire/pick.ts",
+      "browser": "./src/browser/contract/wire/pick.ts",
+      "node": "./src/browser/contract/wire/pick.ts",
+      "default": "./src/browser/contract/wire/pick.ts"
+    },
+    "./browser/contract/wire/profile": {
+      "types": "./src/browser/contract/wire/profile.ts",
+      "browser": "./src/browser/contract/wire/profile.ts",
+      "node": "./src/browser/contract/wire/profile.ts",
+      "default": "./src/browser/contract/wire/profile.ts"
+    },
+    "./browser/contract/wire/settings": {
+      "types": "./src/browser/contract/wire/settings.ts",
+      "browser": "./src/browser/contract/wire/settings.ts",
+      "node": "./src/browser/contract/wire/settings.ts",
+      "default": "./src/browser/contract/wire/settings.ts"
+    },
+    "./desktop-browser/contract/wire/channel": {
+      "types": "./src/desktop-browser/contract/wire/channel.ts",
+      "browser": "./src/desktop-browser/contract/wire/channel.ts",
+      "node": "./src/desktop-browser/contract/wire/channel.ts",
+      "default": "./src/desktop-browser/contract/wire/channel.ts"
+    },
+    "./speech/contract/wire/feeds": {
+      "types": "./src/speech/contract/wire/feeds.ts",
+      "browser": "./src/speech/contract/wire/feeds.ts",
+      "default": "./src/speech/contract/wire/feeds.ts"
+    },
+    "./speech/contract/wire/listening": {
+      "types": "./src/speech/contract/wire/listening.ts",
+      "browser": "./src/speech/contract/wire/listening.ts",
+      "default": "./src/speech/contract/wire/listening.ts"
+    },
+    "./speech/contract/wire/search": {
+      "types": "./src/speech/contract/wire/search.ts",
+      "browser": "./src/speech/contract/wire/search.ts",
+      "default": "./src/speech/contract/wire/search.ts"
+    },
+    "./speech/contract/wire/speaking": {
+      "types": "./src/speech/contract/wire/speaking.ts",
+      "browser": "./src/speech/contract/wire/speaking.ts",
+      "default": "./src/speech/contract/wire/speaking.ts"
+    },
+    "./speech/contract/wire/view": {
+      "types": "./src/speech/contract/wire/view.ts",
+      "browser": "./src/speech/contract/wire/view.ts",
+      "default": "./src/speech/contract/wire/view.ts"
+    },
+    "./speech/contract/wire/status": {
+      "types": "./src/speech/contract/wire/status.ts",
+      "browser": "./src/speech/contract/wire/status.ts",
+      "default": "./src/speech/contract/wire/status.ts"
+    },
+    "./api": {
+      "types": "./src/http/contract/wire/Api.ts",
+      "browser": "./src/http/contract/wire/Api.ts",
+      "default": "./src/http/contract/wire/Api.ts"
+    },
+    "./graph/contract/wire/answers": {
+      "types": "./src/graph/contract/wire/answers.ts",
+      "browser": "./src/graph/contract/wire/answers.ts",
+      "default": "./src/graph/contract/wire/answers.ts"
+    },
+    "./platform/contract/wire/operation": {
+      "types": "./src/platform/contract/wire/operation.ts",
+      "browser": "./src/platform/contract/wire/operation.ts",
+      "default": "./src/platform/contract/wire/operation.ts"
+    },
+    "./providers/contract/wire/signIns": {
+      "types": "./src/providers/contract/wire/signIns.ts",
+      "browser": "./src/providers/contract/wire/signIns.ts",
+      "default": "./src/providers/contract/wire/signIns.ts"
+    },
+    "./providers/contract/wire/catalog": {
+      "types": "./src/providers/contract/wire/catalog.ts",
+      "browser": "./src/providers/contract/wire/catalog.ts",
+      "default": "./src/providers/contract/wire/catalog.ts"
+    },
+    "./http/contract/wire/health": {
+      "types": "./src/http/contract/wire/health.ts",
+      "default": "./src/http/contract/wire/health.ts"
+    },
+    "./http/contract/wire/served": {
+      "types": "./src/http/contract/wire/served.ts",
+      "browser": "./src/http/contract/wire/served.ts",
+      "node": "./src/http/contract/wire/served.ts",
+      "default": "./src/http/contract/wire/served.ts"
+    },
+    "./graph/voice/answers": {
+      "types": "./src/graph/voice/answers.ts",
+      "browser": "./src/graph/voice/answers.ts",
+      "default": "./src/graph/voice/answers.ts"
+    },
+    "./graph/contract/wire/toolAnswers": {
+      "types": "./src/graph/contract/wire/toolAnswers.ts",
+      "browser": "./src/graph/contract/wire/toolAnswers.ts",
+      "default": "./src/graph/contract/wire/toolAnswers.ts"
+    },
+    "./settings/voice": {
+      "types": "./src/settings/voice.ts",
+      "browser": "./src/settings/voice.ts",
+      "default": "./src/settings/voice.ts"
+    },
+    "./mcp/voice": {
+      "types": "./src/mcp/voice.ts",
+      "browser": "./src/mcp/voice.ts",
+      "default": "./src/mcp/voice.ts"
+    },
+    "./performance/voice": {
+      "types": "./src/performance/voice.ts",
+      "browser": "./src/performance/voice.ts",
+      "default": "./src/performance/voice.ts"
+    },
+    "./performance/contract/wire/performance": {
+      "types": "./src/performance/contract/wire/performance.ts",
+      "browser": "./src/performance/contract/wire/performance.ts",
+      "default": "./src/performance/contract/wire/performance.ts"
+    },
+    "./threads/voice/threadText": {
+      "types": "./src/threads/voice/threadText.ts",
+      "browser": "./src/threads/voice/threadText.ts",
+      "default": "./src/threads/voice/threadText.ts"
+    },
+    "./threads/voice/answers": {
+      "types": "./src/threads/voice/answers.ts",
+      "browser": "./src/threads/voice/answers.ts",
+      "default": "./src/threads/voice/answers.ts"
+    },
+    "./external-harnesses/settings": {
+      "types": "./src/external-harnesses/settings.ts",
+      "browser": "./src/external-harnesses/settings.ts",
+      "default": "./src/external-harnesses/settings.ts"
+    },
+    "./threads/contract/wire/harness/session": {
+      "types": "./src/threads/contract/wire/harness/session.ts",
+      "browser": "./src/threads/contract/wire/harness/session.ts",
+      "default": "./src/threads/contract/wire/harness/session.ts"
+    },
+    "./change-record/contract/wire/operations": {
+      "types": "./src/change-record/contract/wire/operations.ts",
+      "browser": "./src/change-record/contract/wire/operations.ts",
+      "default": "./src/change-record/contract/wire/operations.ts"
+    },
+    "./threads/contract/wire/conversation": {
+      "types": "./src/threads/contract/wire/conversation.ts",
+      "browser": "./src/threads/contract/wire/conversation.ts",
+      "default": "./src/threads/contract/wire/conversation.ts"
+    },
+    "./threads/contract/wire/selection": {
+      "types": "./src/threads/contract/wire/selection.ts",
+      "browser": "./src/threads/contract/wire/selection.ts",
+      "default": "./src/threads/contract/wire/selection.ts"
+    },
+    "./threads/contract/wire/references": {
+      "types": "./src/threads/contract/wire/references.ts",
+      "browser": "./src/threads/contract/wire/references.ts",
+      "default": "./src/threads/contract/wire/references.ts"
+    }
+  },
+  "scripts": {
+    "bench:turn-ack": "bun scripts/bench-turn-ack.ts",
+    "build": "bun src/composition/cut/build.ts",
+    "release": "bun src/composition/cut/release.ts",
+    "restart": "bun src/composition/cut/restart.ts",
+    "stack": "bun src/composition/cut/stack.ts",
+    "try": "bun src/composition/cut/try.ts",
+    "transition": "bun src/composition/cut/transition.ts",
+    "db:generate": "bun --bun drizzle-kit generate",
+    "start": "bun src/composition/server.ts",
+    "test": "testbed bun test src --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.292",
+    "@cursor/sdk": "1.0.40",
+    "@effect/platform-bun": "catalog:",
+    "@effect/sql-sqlite-bun": "catalog:",
+    "@opencode/client": "2.1.3",
+    "@opencode/plugin": "2.1.3",
+    "@runlith/acp": "workspace:*",
+    "@runlith/activity": "workspace:*",
+    "@runlith/adapter-anthropic": "workspace:*",
+    "@runlith/adapter-cursor": "workspace:*",
+    "@runlith/adapter-deepseek": "workspace:*",
+    "@runlith/adapter-devin": "workspace:*",
+    "@runlith/adapter-muse": "workspace:*",
+    "@runlith/adapter-openai": "workspace:*",
+    "@runlith/adapter-openai-compatible": "workspace:*",
+    "@runlith/adapter-opencode": "workspace:*",
+    "@runlith/adapter-opencode-go": "workspace:*",
+    "@runlith/adapter-openrouter": "workspace:*",
+    "@runlith/adapter-stepfun": "workspace:*",
+    "@runlith/adapter-xai": "workspace:*",
+    "@runlith/agent": "workspace:*",
+    "@runlith/agent-sources": "workspace:*",
+    "@runlith/agent-tools": "workspace:*",
+    "@runlith/audio": "workspace:*",
+    "@runlith/audio-darwin": "workspace:*",
+    "@runlith/audio-file": "workspace:*",
+    "@runlith/browser-cookies": "workspace:*",
+    "@runlith/bundle": "workspace:*",
+    "@runlith/cdp": "workspace:*",
+    "@runlith/code-facts": "workspace:*",
+    "@runlith/codesign": "workspace:*",
+    "@runlith/credential-file": "workspace:*",
+    "@runlith/echo": "workspace:*",
+    "@runlith/execution-host": "workspace:*",
+    "@runlith/executions": "workspace:*",
+    "@runlith/file-lock": "workspace:*",
+    "@runlith/files": "workspace:*",
+    "@runlith/git": "workspace:*",
+    "@runlith/github": "workspace:*",
+    "@runlith/held": "workspace:*",
+    "@runlith/llm": "workspace:*",
+    "@runlith/mcp": "workspace:*",
+    "@runlith/navigation": "workspace:*",
+    "@runlith/navigation-ts": "workspace:*",
+    "@runlith/ndjson-rpc": "workspace:*",
+    "@runlith/paging": "workspace:*",
+    "@runlith/performance": "workspace:*",
+    "@runlith/ripgrep": "workspace:*",
+    "@runlith/search-text": "workspace:*",
+    "@runlith/source-comments": "workspace:*",
+    "@runlith/speech": "workspace:*",
+    "@runlith/speech-openai": "workspace:*",
+    "@runlith/speech-soniox": "workspace:*",
+    "@runlith/speech-whisper": "workspace:*",
+    "@runlith/sqlite-process": "workspace:*",
+    "@runlith/tagma": "workspace:*",
+    "@runlith/utils": "workspace:*",
+    "@runlith/watch": "workspace:*",
+    "@sanity/diff-match-patch": "catalog:",
+    "@tagma/inspection": "workspace:*",
+    "devtools-protocol": "0.0.1720385",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "mediabunny": "1.62.1",
+    "uuidv7": "1.2.1",
+    "web-push": "3.6.7"
+  },
+  "devDependencies": {
+    "@runlith/builtin-catalog": "workspace:*",
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/testbed": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/web-push": "3.6.4",
+    "drizzle-kit": "1.0.0-rc.5-ab785fc",
+    "electron": "catalog:",
+    "esbuild": "catalog:",
+    "typescript": "catalog:"
+  }
+}

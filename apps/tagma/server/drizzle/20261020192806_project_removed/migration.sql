@@ -1,0 +1,1 @@
+ALTER TABLE `project` ADD `removed_at` integer;

@@ -1,0 +1,40 @@
+import { expect } from 'bun:test';
+import { it } from '@runlith/effect-test';
+import { Context, Effect } from 'effect';
+import { ExecutionId, InstallationId, type ExecutionRef } from '@runlith/executions/protocol/execution';
+import { Projects } from '../../projects/contract/service/registry.js';
+import { ManagedCommands } from '../contract/service/commands.js';
+import { LoadOwnerFacts } from '../contract/service/owners.js';
+import { Terminals } from '../contract/service/terminals.js';
+import type { TerminalRecord } from '../contract/wire/terminals.js';
+import { makeWorkNames } from './work.js';
+
+const ref: ExecutionRef = { installation: InstallationId.make('load'), execution: ExecutionId.make('dev-server'), incarnation: 1 };
+
+const server = {
+  projectId: 5,
+  execution: ref,
+  transport: 'pipes',
+  lifetime: 'held',
+  heldBy: '01a125fe-9260-7644-9a64-589c9bc19e19',
+  label: 'Tagma site dev server (5194)',
+  acceptedAt: 10,
+} as unknown as TerminalRecord;
+
+it.effect('a held terminal on pipes is named by its terminal record, so its stop goes to the terminal, and its transport stays pipes', () =>
+  Effect.gen(function* () {
+    const names = yield* makeWorkNames.pipe(
+      Effect.provide(
+        Context.make(ManagedCommands, { record: () => Effect.succeed(null) } as unknown as ManagedCommands['Service']).pipe(
+          Context.add(Terminals, {
+            recordsOf: () => Effect.succeed(new Map([[ref.execution, server]])),
+          } as unknown as Terminals['Service']),
+          Context.add(LoadOwnerFacts, { read: () => Effect.succeed(new Map()) } as unknown as LoadOwnerFacts['Service']),
+          Context.add(Projects, { byId: () => Effect.succeed({ id: 5, name: 'runlith' }) } as unknown as Projects['Service']),
+        ),
+      ),
+    );
+    const named = yield* names.read([ref], 0);
+    expect(named.work.get(ref.execution)).toMatchObject({ kind: 'terminal', transport: 'pipes', label: 'Tagma site dev server (5194)' });
+  }),
+);

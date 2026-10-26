@@ -1,0 +1,1 @@
+CREATE INDEX `stop_intent_operation_idx` ON `stop_intent` (`installation`,`operation_id`);

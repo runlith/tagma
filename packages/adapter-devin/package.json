@@ -1,0 +1,45 @@
+{
+  "name": "@runlith/adapter-devin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The built-in Devin model provider adapter of Tagma.",
+  "type": "module",
+  "exports": {
+    "./adapter": {
+      "types": "./src/adapter.ts",
+      "bun": "./src/adapter.ts",
+      "default": "./src/adapter.ts"
+    },
+    "./models/devin": {
+      "types": "./src/models/devin.ts",
+      "browser": "./src/models/devin.ts",
+      "node": "./src/models/devin.ts",
+      "default": "./src/models/devin.ts"
+    },
+    "./icon": {
+      "types": "./src/icon.ts",
+      "browser": "./src/icon.ts",
+      "node": "./src/icon.ts",
+      "default": "./src/icon.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/llm": "workspace:*",
+    "@runlith/tagma": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "host": {
+      "./models/devin": "shared",
+      "./icon": "shared"
+    }
+  }
+}

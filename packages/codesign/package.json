@@ -1,0 +1,22 @@
+{
+  "name": "@runlith/codesign",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Signing macOS code with /usr/bin/codesign: which files are Mach-O, and one signature with hardened runtime, entitlements and the timestamp a Developer ID release needs.",
+  "type": "module",
+  "exports": {
+    "./codesign": {
+      "types": "./src/codesign.ts",
+      "bun": "./src/codesign.ts",
+      "default": "./src/codesign.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "typecheck": "runlith-typecheck"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

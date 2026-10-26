@@ -1,0 +1,32 @@
+{
+  "name": "@runlith/ndjson-rpc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Newline-delimited JSON-RPC over abstract byte ports: envelope classification and framing in both directions, and a bounded request/response exchange.",
+  "type": "module",
+  "exports": {
+    "./exchange": {
+      "types": "./src/exchange.ts",
+      "node": "./src/exchange.ts",
+      "default": "./src/exchange.ts"
+    },
+    "./envelope": {
+      "types": "./src/envelope.ts",
+      "node": "./src/envelope.ts",
+      "default": "./src/envelope.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/utils": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

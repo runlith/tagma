@@ -1,0 +1,100 @@
+{
+  "name": "@runlith/query",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The data layer over the application graph: repositories as keys, TanStack query-core observers wrapped in runes, a cache leased to its scope, and answers named by the scope that asked.",
+  "type": "module",
+  "exports": {
+    "./builders/keyed": {
+      "types": "./src/builders/keyed.ts",
+      "browser": "./src/builders/keyed.ts",
+      "svelte": "./src/builders/keyed.ts",
+      "default": "./src/builders/keyed.ts"
+    },
+    "./builders/single": {
+      "types": "./src/builders/single.ts",
+      "browser": "./src/builders/single.ts",
+      "svelte": "./src/builders/single.ts",
+      "default": "./src/builders/single.ts"
+    },
+    "./gated.svelte": {
+      "types": "./src/gated.svelte.ts",
+      "browser": "./src/gated.svelte.ts",
+      "svelte": "./src/gated.svelte.ts",
+      "default": "./src/gated.svelte.ts"
+    },
+    "./hydration": {
+      "types": "./src/hydration.ts",
+      "browser": "./src/hydration.ts",
+      "ssr": "./src/hydration.ts",
+      "node": "./src/hydration.ts",
+      "svelte": "./src/hydration.ts",
+      "default": "./src/hydration.ts"
+    },
+    "./mutation.svelte": {
+      "types": "./src/mutation.svelte.ts",
+      "browser": "./src/mutation.svelte.ts",
+      "svelte": "./src/mutation.svelte.ts",
+      "default": "./src/mutation.svelte.ts"
+    },
+    "./query-data": {
+      "types": "./src/query-data.ts",
+      "browser": "./src/query-data.ts",
+      "ssr": "./src/query-data.ts",
+      "node": "./src/query-data.ts",
+      "svelte": "./src/query-data.ts",
+      "default": "./src/query-data.ts"
+    },
+    "./repo": {
+      "types": "./src/repo.ts",
+      "browser": "./src/repo.ts",
+      "ssr": "./src/repo.ts",
+      "svelte": "./src/repo.ts",
+      "default": "./src/repo.ts"
+    },
+    "./test-utils/observe.svelte": {
+      "types": "./src/test-utils/observe.svelte.ts",
+      "browser": "./src/test-utils/observe.svelte.ts",
+      "svelte": "./src/test-utils/observe.svelte.ts",
+      "default": "./src/test-utils/observe.svelte.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "browser": "./src/types.ts",
+      "node": "./src/types.ts",
+      "svelte": "./src/types.ts",
+      "default": "./src/types.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "browser": "./src/testing.ts",
+      "svelte": "./src/testing.ts",
+      "default": "./src/testing.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/layer": "workspace:*",
+    "@runlith/testing": "workspace:*",
+    "@tanstack/query-core": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/testbed": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@sveltejs/kit": "catalog:",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@types/node": "catalog:",
+    "jsdom": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "svelte": "catalog:"
+  }
+}

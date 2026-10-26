@@ -1,0 +1,1 @@
+ALTER TABLE `final_facts` ADD `unacquired` text;

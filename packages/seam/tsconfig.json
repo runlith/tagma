@@ -1,0 +1,12 @@
+{
+  "extends": "@runlith/tsconfig/bun.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "composite": true,
+    "incremental": true,
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["bun", "svelte"]
+  },
+  "include": ["src/**/*.ts"]
+}

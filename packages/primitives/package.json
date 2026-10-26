@@ -1,0 +1,199 @@
+{
+  "name": "@runlith/primitives",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Overlays over the application graph and the stack of open layers: an overlay declared in logic and bound in the manifest, the queue that shows one at a time, the dialog and launcher transports, and the depth, dismissal, placement and focus every layer over the page shares.",
+  "type": "module",
+  "exports": {
+    "./dialog-handle-context.svelte": {
+      "types": "./src/dialog-handle-context.svelte.ts",
+      "browser": "./src/dialog-handle-context.svelte.ts",
+      "svelte": "./src/dialog-handle-context.svelte.ts",
+      "default": "./src/dialog-handle-context.svelte.ts"
+    },
+    "./dialog": {
+      "types": "./src/dialog/index.ts",
+      "browser": "./src/dialog/index.ts",
+      "svelte": "./src/dialog/index.ts",
+      "default": "./src/dialog/index.ts"
+    },
+    "./dialog/context.svelte": {
+      "types": "./src/dialog/context.svelte.ts",
+      "browser": "./src/dialog/context.svelte.ts",
+      "svelte": "./src/dialog/context.svelte.ts",
+      "default": "./src/dialog/context.svelte.ts"
+    },
+    "./DialogHost.svelte": {
+      "types": "./src/DialogHost.svelte",
+      "browser": "./src/DialogHost.svelte",
+      "svelte": "./src/DialogHost.svelte",
+      "default": "./src/DialogHost.svelte"
+    },
+    "./DialogRegistry.svelte": {
+      "types": "./src/DialogRegistry.svelte.ts",
+      "browser": "./src/DialogRegistry.svelte.ts",
+      "svelte": "./src/DialogRegistry.svelte.ts",
+      "default": "./src/DialogRegistry.svelte.ts"
+    },
+    "./LauncherHost.svelte": {
+      "types": "./src/LauncherHost.svelte",
+      "browser": "./src/LauncherHost.svelte",
+      "svelte": "./src/LauncherHost.svelte",
+      "default": "./src/LauncherHost.svelte"
+    },
+    "./Launchers.svelte": {
+      "types": "./src/Launchers.svelte.ts",
+      "browser": "./src/Launchers.svelte.ts",
+      "svelte": "./src/Launchers.svelte.ts",
+      "default": "./src/Launchers.svelte.ts"
+    },
+    "./LazyOverlay.svelte": {
+      "types": "./src/LazyOverlay.svelte",
+      "browser": "./src/LazyOverlay.svelte",
+      "svelte": "./src/LazyOverlay.svelte",
+      "default": "./src/LazyOverlay.svelte"
+    },
+    "./overlay-plan": {
+      "types": "./src/overlay-plan.ts",
+      "browser": "./src/overlay-plan.ts",
+      "node": "./src/overlay-plan.ts",
+      "svelte": "./src/overlay-plan.ts",
+      "default": "./src/overlay-plan.ts"
+    },
+    "./overlay-policy": {
+      "types": "./src/overlay-policy.ts",
+      "browser": "./src/overlay-policy.ts",
+      "node": "./src/overlay-policy.ts",
+      "svelte": "./src/overlay-policy.ts",
+      "default": "./src/overlay-policy.ts"
+    },
+    "./overlay-signals": {
+      "types": "./src/overlay-signals.ts",
+      "browser": "./src/overlay-signals.ts",
+      "svelte": "./src/overlay-signals.ts",
+      "default": "./src/overlay-signals.ts"
+    },
+    "./Overlay.svelte": {
+      "types": "./src/Overlay.svelte.ts",
+      "browser": "./src/Overlay.svelte.ts",
+      "svelte": "./src/Overlay.svelte.ts",
+      "default": "./src/Overlay.svelte.ts"
+    },
+    "./OverlayLayers.svelte": {
+      "types": "./src/OverlayLayers.svelte.ts",
+      "browser": "./src/OverlayLayers.svelte.ts",
+      "svelte": "./src/OverlayLayers.svelte.ts",
+      "default": "./src/OverlayLayers.svelte.ts"
+    },
+    "./layer.svelte": {
+      "types": "./src/layer.svelte.ts",
+      "browser": "./src/layer.svelte.ts",
+      "svelte": "./src/layer.svelte.ts",
+      "default": "./src/layer.svelte.ts"
+    },
+    "./float.svelte": {
+      "types": "./src/float.svelte.ts",
+      "browser": "./src/float.svelte.ts",
+      "svelte": "./src/float.svelte.ts",
+      "default": "./src/float.svelte.ts"
+    },
+    "./tooltip.svelte": {
+      "types": "./src/tooltip.svelte.ts",
+      "browser": "./src/tooltip.svelte.ts",
+      "svelte": "./src/tooltip.svelte.ts",
+      "default": "./src/tooltip.svelte.ts"
+    },
+    "./collection.svelte": {
+      "types": "./src/collection.svelte.ts",
+      "browser": "./src/collection.svelte.ts",
+      "svelte": "./src/collection.svelte.ts",
+      "default": "./src/collection.svelte.ts"
+    },
+    "./menu.svelte": {
+      "types": "./src/menu.svelte.ts",
+      "browser": "./src/menu.svelte.ts",
+      "svelte": "./src/menu.svelte.ts",
+      "default": "./src/menu.svelte.ts"
+    },
+    "./place": {
+      "types": "./src/place.ts",
+      "browser": "./src/place.ts",
+      "node": "./src/place.ts",
+      "svelte": "./src/place.ts",
+      "default": "./src/place.ts"
+    },
+    "./focus": {
+      "types": "./src/focus.ts",
+      "browser": "./src/focus.ts",
+      "svelte": "./src/focus.ts",
+      "default": "./src/focus.ts"
+    },
+    "./popover.svelte": {
+      "types": "./src/popover.svelte.ts",
+      "browser": "./src/popover.svelte.ts",
+      "svelte": "./src/popover.svelte.ts",
+      "default": "./src/popover.svelte.ts"
+    },
+    "./select.svelte": {
+      "types": "./src/select.svelte.ts",
+      "browser": "./src/select.svelte.ts",
+      "svelte": "./src/select.svelte.ts",
+      "default": "./src/select.svelte.ts"
+    },
+    "./Portal.svelte": {
+      "types": "./src/Portal.svelte",
+      "browser": "./src/Portal.svelte",
+      "svelte": "./src/Portal.svelte",
+      "default": "./src/Portal.svelte"
+    },
+    "./OverlayQueue.svelte": {
+      "types": "./src/OverlayQueue.svelte.ts",
+      "browser": "./src/OverlayQueue.svelte.ts",
+      "svelte": "./src/OverlayQueue.svelte.ts",
+      "default": "./src/OverlayQueue.svelte.ts"
+    },
+    "./layers": {
+      "types": "./src/layers.ts",
+      "browser": "./src/layers.ts",
+      "svelte": "./src/layers.ts",
+      "default": "./src/layers.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "browser": "./src/types.ts",
+      "node": "./src/types.ts",
+      "svelte": "./src/types.ts",
+      "default": "./src/types.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "browser": "./src/testing.ts",
+      "svelte": "./src/testing.ts",
+      "default": "./src/testing.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run --project 'unit*'",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/error-boundary": "workspace:*",
+    "@runlith/layer": "workspace:*",
+    "@runlith/testing": "workspace:*"
+  },
+  "devDependencies": {
+    "@runlith/testbed": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@types/node": "catalog:",
+    "jsdom": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "svelte": "catalog:"
+  }
+}

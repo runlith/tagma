@@ -1,0 +1,3 @@
+ALTER TABLE `performance_group` ADD `span_only` integer DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE INDEX `performance_group_span_idx` ON `performance_group` (`span_only`,`ended_at`,`key`);--> statement-breakpoint
+CREATE INDEX `performance_record_caller_idx` ON `performance_record` (`instance_id`,`monotonic_start`,`monotonic_end`,`id`) WHERE "performance_record"."kind" = 'span' AND json_extract("performance_record"."payload", '$.attributes."run.id"') IS NOT NULL;

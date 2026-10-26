@@ -1,0 +1,404 @@
+{
+  "cut": {
+    "thread": {
+      "id": "01a17329-2ee4-7210-a54a-e21a99e9321d",
+      "environments": [{ "environmentId": "local", "cwd": "/workspace", "runtimeWorkspaceRoots": ["/workspace"] }],
+      "extra": null,
+      "sessionId": "01a17329-2ee4-7210-a54a-e21a99e9321d",
+      "forkedFromId": "01a17329-1ae3-78a3-af25-aba70cf0f88a",
+      "parentThreadId": null,
+      "preview": "",
+      "ephemeral": false,
+      "section": null,
+      "sectionEnteredAt": null,
+      "projectId": null,
+      "historyMode": "paginated",
+      "modelProvider": "openai",
+      "model": "gpt-6-luna",
+      "reasoningEffort": "low",
+      "createdAt": 1792933441,
+      "updatedAt": 1792933441,
+      "recencyAt": 1792933441,
+      "status": { "type": "idle" },
+      "path": "/home/fixture/.codex/sessions/2026/10/25/rollout-2026-10-25T14-04-01-01a17329-2ee4-7210-a54a-e21a99e9321d.jsonl",
+      "cwd": "/workspace",
+      "cliVersion": "0.162.0",
+      "originator": "neutral_cut_probe",
+      "source": "vscode",
+      "canAcceptDirectInput": true,
+      "threadSource": null,
+      "agentNickname": null,
+      "agentRole": null,
+      "gitInfo": null,
+      "name": null,
+      "daybreakEnabled": null,
+      "turns": [
+        {
+          "id": "01a17329-1b4c-7971-b242-453487dd1265",
+          "rootTurnId": "01a17329-1b4c-7971-b242-453487dd1265",
+          "items": [
+            {
+              "type": "userMessage",
+              "id": "01a17329-21d7-71d2-a9cb-c2bc4efe0624",
+              "clientId": null,
+              "content": [{ "type": "text", "text": "Reply exactly ALPHA.", "text_elements": [] }]
+            },
+            {
+              "type": "agentMessage",
+              "id": "msg_0cedc267e3f058cf016addfe3ee4148191adc8a0970db911ab",
+              "text": "ALPHA",
+              "phase": "final_answer",
+              "memoryCitation": null,
+              "delivery": null,
+              "questions": null
+            }
+          ],
+          "itemsView": "full",
+          "status": "completed",
+          "error": null,
+          "startedAt": 1792933436,
+          "completedAt": 1792933438,
+          "durationMs": 2693
+        }
+      ]
+    },
+    "model": "gpt-6-luna",
+    "modelProvider": "openai",
+    "serviceTier": null,
+    "disabledPluginIds": [],
+    "cwd": "/workspace",
+    "runtimeWorkspaceRoots": ["/workspace"],
+    "instructionSources": [],
+    "approvalPolicy": "never",
+    "approvalsReviewer": "user",
+    "sandbox": {
+      "type": "workspaceWrite",
+      "writableRoots": [],
+      "networkAccess": false,
+      "excludeTmpdirEnvVar": false,
+      "excludeSlashTmp": false
+    },
+    "activePermissionProfile": { "id": ":workspace", "extends": null },
+    "reasoningEffort": "low",
+    "multiAgentMode": "explicitRequestOnly"
+  },
+  "whole": {
+    "thread": {
+      "id": "01a17329-2f9f-75d0-a50f-4259ab03fca8",
+      "environments": [{ "environmentId": "local", "cwd": "/workspace", "runtimeWorkspaceRoots": ["/workspace"] }],
+      "extra": null,
+      "sessionId": "01a17329-2f9f-75d0-a50f-4259ab03fca8",
+      "forkedFromId": "01a17329-1ae3-78a3-af25-aba70cf0f88a",
+      "parentThreadId": null,
+      "preview": "",
+      "ephemeral": false,
+      "section": null,
+      "sectionEnteredAt": null,
+      "projectId": null,
+      "historyMode": "paginated",
+      "modelProvider": "openai",
+      "model": "gpt-6-luna",
+      "reasoningEffort": "low",
+      "createdAt": 1792933441,
+      "updatedAt": 1792933441,
+      "recencyAt": 1792933441,
+      "status": { "type": "idle" },
+      "path": "/home/fixture/.codex/sessions/2026/10/25/rollout-2026-10-25T14-04-01-01a17329-2f9f-75d0-a50f-4259ab03fca8.jsonl",
+      "cwd": "/workspace",
+      "cliVersion": "0.162.0",
+      "originator": "neutral_cut_probe",
+      "source": "vscode",
+      "canAcceptDirectInput": true,
+      "threadSource": null,
+      "agentNickname": null,
+      "agentRole": null,
+      "gitInfo": null,
+      "name": null,
+      "daybreakEnabled": null,
+      "turns": [
+        {
+          "id": "01a17329-1b4c-7971-b242-453487dd1265",
+          "rootTurnId": "01a17329-1b4c-7971-b242-453487dd1265",
+          "items": [
+            {
+              "type": "userMessage",
+              "id": "01a17329-21d7-71d2-a9cb-c2bc4efe0624",
+              "clientId": null,
+              "content": [{ "type": "text", "text": "Reply exactly ALPHA.", "text_elements": [] }]
+            },
+            {
+              "type": "agentMessage",
+              "id": "msg_0cedc267e3f058cf016addfe3ee4148191adc8a0970db911ab",
+              "text": "ALPHA",
+              "phase": "final_answer",
+              "memoryCitation": null,
+              "delivery": null,
+              "questions": null
+            }
+          ],
+          "itemsView": "full",
+          "status": "completed",
+          "error": null,
+          "startedAt": 1792933436,
+          "completedAt": 1792933438,
+          "durationMs": 2693
+        },
+        {
+          "id": "01a17329-25d7-7ac3-a0a8-23b0355703b3",
+          "rootTurnId": "01a17329-25d7-7ac3-a0a8-23b0355703b3",
+          "items": [
+            {
+              "type": "userMessage",
+              "id": "01a17329-25e1-7cd2-b188-eaa28805ccdc",
+              "clientId": null,
+              "content": [{ "type": "text", "text": "Reply exactly BRAVO.", "text_elements": [] }]
+            },
+            {
+              "type": "agentMessage",
+              "id": "msg_0cedc267e3f058cf016addfe3fecf08191a38b9fdb2e155f52",
+              "text": "BRAVO",
+              "phase": "final_answer",
+              "memoryCitation": null,
+              "delivery": null,
+              "questions": null
+            }
+          ],
+          "itemsView": "full",
+          "status": "completed",
+          "error": null,
+          "startedAt": 1792933438,
+          "completedAt": 1792933439,
+          "durationMs": 1021
+        },
+        {
+          "id": "01a17329-29d8-7c73-8ef0-dc5356c7dc76",
+          "rootTurnId": "01a17329-29d8-7c73-8ef0-dc5356c7dc76",
+          "items": [
+            {
+              "type": "userMessage",
+              "id": "01a17329-29e1-7860-9e1c-462c8e03c5ba",
+              "clientId": null,
+              "content": [{ "type": "text", "text": "Reply exactly CHARLIE.", "text_elements": [] }]
+            },
+            {
+              "type": "agentMessage",
+              "id": "msg_0cedc267e3f058cf016addfe411c8c8191882c7c7402075c7a",
+              "text": "CHARLIE",
+              "phase": "final_answer",
+              "memoryCitation": null,
+              "delivery": null,
+              "questions": null
+            }
+          ],
+          "itemsView": "full",
+          "status": "completed",
+          "error": null,
+          "startedAt": 1792933439,
+          "completedAt": 1792933441,
+          "durationMs": 1278
+        }
+      ]
+    },
+    "model": "gpt-6-luna",
+    "modelProvider": "openai",
+    "serviceTier": null,
+    "disabledPluginIds": [],
+    "cwd": "/workspace",
+    "runtimeWorkspaceRoots": ["/workspace"],
+    "instructionSources": [],
+    "approvalPolicy": "never",
+    "approvalsReviewer": "user",
+    "sandbox": {
+      "type": "workspaceWrite",
+      "writableRoots": [],
+      "networkAccess": false,
+      "excludeTmpdirEnvVar": false,
+      "excludeSlashTmp": false
+    },
+    "activePermissionProfile": { "id": ":workspace", "extends": null },
+    "reasoningEffort": "low",
+    "multiAgentMode": "explicitRequestOnly"
+  },
+  "cutRead": {
+    "thread": {
+      "id": "01a17329-2ee4-7210-a54a-e21a99e9321d",
+      "environments": [{ "environmentId": "local", "cwd": "/workspace", "runtimeWorkspaceRoots": ["/workspace"] }],
+      "extra": null,
+      "sessionId": "01a17329-2ee4-7210-a54a-e21a99e9321d",
+      "forkedFromId": "01a17329-1ae3-78a3-af25-aba70cf0f88a",
+      "parentThreadId": null,
+      "preview": "",
+      "ephemeral": false,
+      "section": null,
+      "sectionEnteredAt": null,
+      "projectId": null,
+      "historyMode": "paginated",
+      "modelProvider": "openai",
+      "model": "gpt-6-luna",
+      "reasoningEffort": "low",
+      "createdAt": 1792933441,
+      "updatedAt": 1792933441,
+      "recencyAt": 1792933441,
+      "status": { "type": "idle" },
+      "path": "/home/fixture/.codex/sessions/2026/10/25/rollout-2026-10-25T14-04-01-01a17329-2ee4-7210-a54a-e21a99e9321d.jsonl",
+      "cwd": "/workspace",
+      "cliVersion": "0.162.0",
+      "originator": "neutral_cut_probe",
+      "source": "vscode",
+      "canAcceptDirectInput": true,
+      "threadSource": null,
+      "agentNickname": null,
+      "agentRole": null,
+      "gitInfo": null,
+      "name": null,
+      "daybreakEnabled": null,
+      "turns": [
+        {
+          "id": "01a17329-1b4c-7971-b242-453487dd1265",
+          "rootTurnId": "01a17329-1b4c-7971-b242-453487dd1265",
+          "items": [
+            {
+              "type": "userMessage",
+              "id": "01a17329-21d7-71d2-a9cb-c2bc4efe0624",
+              "clientId": null,
+              "content": [{ "type": "text", "text": "Reply exactly ALPHA.", "text_elements": [] }]
+            },
+            {
+              "type": "agentMessage",
+              "id": "msg_0cedc267e3f058cf016addfe3ee4148191adc8a0970db911ab",
+              "text": "ALPHA",
+              "phase": "final_answer",
+              "memoryCitation": null,
+              "delivery": null,
+              "questions": null
+            }
+          ],
+          "itemsView": "full",
+          "status": "completed",
+          "error": null,
+          "startedAt": 1792933436,
+          "completedAt": 1792933438,
+          "durationMs": 2693
+        }
+      ]
+    }
+  },
+  "wholeRead": {
+    "thread": {
+      "id": "01a17329-2f9f-75d0-a50f-4259ab03fca8",
+      "environments": [{ "environmentId": "local", "cwd": "/workspace", "runtimeWorkspaceRoots": ["/workspace"] }],
+      "extra": null,
+      "sessionId": "01a17329-2f9f-75d0-a50f-4259ab03fca8",
+      "forkedFromId": "01a17329-1ae3-78a3-af25-aba70cf0f88a",
+      "parentThreadId": null,
+      "preview": "",
+      "ephemeral": false,
+      "section": null,
+      "sectionEnteredAt": null,
+      "projectId": null,
+      "historyMode": "paginated",
+      "modelProvider": "openai",
+      "model": "gpt-6-luna",
+      "reasoningEffort": "low",
+      "createdAt": 1792933441,
+      "updatedAt": 1792933441,
+      "recencyAt": 1792933441,
+      "status": { "type": "idle" },
+      "path": "/home/fixture/.codex/sessions/2026/10/25/rollout-2026-10-25T14-04-01-01a17329-2f9f-75d0-a50f-4259ab03fca8.jsonl",
+      "cwd": "/workspace",
+      "cliVersion": "0.162.0",
+      "originator": "neutral_cut_probe",
+      "source": "vscode",
+      "canAcceptDirectInput": true,
+      "threadSource": null,
+      "agentNickname": null,
+      "agentRole": null,
+      "gitInfo": null,
+      "name": null,
+      "daybreakEnabled": null,
+      "turns": [
+        {
+          "id": "01a17329-1b4c-7971-b242-453487dd1265",
+          "rootTurnId": "01a17329-1b4c-7971-b242-453487dd1265",
+          "items": [
+            {
+              "type": "userMessage",
+              "id": "01a17329-21d7-71d2-a9cb-c2bc4efe0624",
+              "clientId": null,
+              "content": [{ "type": "text", "text": "Reply exactly ALPHA.", "text_elements": [] }]
+            },
+            {
+              "type": "agentMessage",
+              "id": "msg_0cedc267e3f058cf016addfe3ee4148191adc8a0970db911ab",
+              "text": "ALPHA",
+              "phase": "final_answer",
+              "memoryCitation": null,
+              "delivery": null,
+              "questions": null
+            }
+          ],
+          "itemsView": "full",
+          "status": "completed",
+          "error": null,
+          "startedAt": 1792933436,
+          "completedAt": 1792933438,
+          "durationMs": 2693
+        },
+        {
+          "id": "01a17329-25d7-7ac3-a0a8-23b0355703b3",
+          "rootTurnId": "01a17329-25d7-7ac3-a0a8-23b0355703b3",
+          "items": [
+            {
+              "type": "userMessage",
+              "id": "01a17329-25e1-7cd2-b188-eaa28805ccdc",
+              "clientId": null,
+              "content": [{ "type": "text", "text": "Reply exactly BRAVO.", "text_elements": [] }]
+            },
+            {
+              "type": "agentMessage",
+              "id": "msg_0cedc267e3f058cf016addfe3fecf08191a38b9fdb2e155f52",
+              "text": "BRAVO",
+              "phase": "final_answer",
+              "memoryCitation": null,
+              "delivery": null,
+              "questions": null
+            }
+          ],
+          "itemsView": "full",
+          "status": "completed",
+          "error": null,
+          "startedAt": 1792933438,
+          "completedAt": 1792933439,
+          "durationMs": 1021
+        },
+        {
+          "id": "01a17329-29d8-7c73-8ef0-dc5356c7dc76",
+          "rootTurnId": "01a17329-29d8-7c73-8ef0-dc5356c7dc76",
+          "items": [
+            {
+              "type": "userMessage",
+              "id": "01a17329-29e1-7860-9e1c-462c8e03c5ba",
+              "clientId": null,
+              "content": [{ "type": "text", "text": "Reply exactly CHARLIE.", "text_elements": [] }]
+            },
+            {
+              "type": "agentMessage",
+              "id": "msg_0cedc267e3f058cf016addfe411c8c8191882c7c7402075c7a",
+              "text": "CHARLIE",
+              "phase": "final_answer",
+              "memoryCitation": null,
+              "delivery": null,
+              "questions": null
+            }
+          ],
+          "itemsView": "full",
+          "status": "completed",
+          "error": null,
+          "startedAt": 1792933439,
+          "completedAt": 1792933441,
+          "durationMs": 1278
+        }
+      ]
+    }
+  }
+}

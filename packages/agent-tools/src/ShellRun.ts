@@ -1,0 +1,584 @@
+import { dirname } from 'node:path';
+import { Effect, FileSystem, Fiber, Layer, Option, type Scope, Stream } from 'effect';
+import type { ChildProcessSpawner } from 'effect/process';
+import type { Git } from '@runlith/git/Git';
+import type { workingAt } from '@runlith/files/working';
+import { TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_LINES } from '@runlith/agent/ToolOutputSpool';
+import type { CallProgress } from '@runlith/agent/callProgress';
+import type { CallDecision, CallDecisionAnswer, CallRetention, SourceCompletion } from '@runlith/executions/protocol/call';
+import type { CommandClass, CommandExit } from '@runlith/executions/protocol/command';
+import type { Cleanup, NativeExit, ProcessCost } from '@runlith/executions/protocol/execution';
+import { CheckoutBaselines, headMove, type HeadMove, type Place } from './CheckoutBaselines';
+import { movedPaths, placeOf, readingNow, unkept, type Measured, type Reading, type Seen } from './checkoutState';
+import { cleanupWords, type CommandRun, type RuledAnswer } from './CommandWork';
+import type { ProcessRuling, RuleNamed } from '@runlith/executions/protocol/stop';
+import type {
+  CommandBase,
+  CommandContent,
+  CommandFacts,
+  CommandLife,
+  CommandMove,
+  CommandVerdict,
+  CommandWindow,
+} from './WorkspaceChanges';
+import type { ResolvedToolOptions } from './workspace';
+import type { ToolShown } from '@runlith/agent/tool';
+import { commandClass } from './commandClass';
+import { shellShown } from './shellShown';
+
+export class OutputTail {
+  private readonly bytes = new Uint8Array(TOOL_OUTPUT_MAX_BYTES);
+  private readonly encoder = new TextEncoder();
+  private start = 0;
+  private length = 0;
+  private newlines = 0;
+
+  append(chunk: Uint8Array): void {
+    for (const byte of chunk) {
+      if (this.length === this.bytes.length) this.drop();
+      this.bytes[(this.start + this.length) % this.bytes.length] = byte;
+      this.length += 1;
+      if (byte === 0x0a) this.newlines += 1;
+      while (this.newlines >= TOOL_OUTPUT_MAX_LINES) this.drop();
+    }
+  }
+
+  appendText(text: string): void {
+    this.append(this.encoder.encode(text));
+  }
+
+  text(): string {
+    const contiguous = new Uint8Array(this.length);
+    const first = Math.min(this.length, this.bytes.length - this.start);
+    contiguous.set(this.bytes.subarray(this.start, this.start + first));
+    if (first < this.length) contiguous.set(this.bytes.subarray(0, this.length - first), first);
+    let readable = 0;
+    while (readable < contiguous.length && ((contiguous[readable] as number) & 0xc0) === 0x80) readable += 1;
+    return new TextDecoder().decode(contiguous.subarray(readable));
+  }
+
+  private drop(): void {
+    if (this.length === 0) return;
+    if (this.bytes[this.start] === 0x0a) this.newlines -= 1;
+    this.start = (this.start + 1) % this.bytes.length;
+    this.length -= 1;
+  }
+}
+
+export const PLATFORM_COST: ProcessCost = {
+  _tag: 'Unmeasured',
+  reason: 'unsupported',
+  detail: 'a child of this process is spawned through a handle that reports no resource accounting',
+};
+
+export type EndingSource = 'local' | 'owner';
+
+export type Settled = {
+  readonly source: EndingSource;
+  readonly code: number | null;
+  readonly signalDeath: string | null;
+  readonly signalName: string | null;
+  readonly cost: ProcessCost;
+  readonly expired: boolean;
+  readonly aborted: boolean;
+  readonly stopped: string | null;
+  readonly notStarted: string | null;
+  readonly unconfirmed: string | null;
+  readonly disclosed: readonly string[];
+};
+
+export const localRunning: Settled = {
+  source: 'local',
+  code: null,
+  signalDeath: null,
+  signalName: null,
+  cost: PLATFORM_COST,
+  expired: false,
+  aborted: false,
+  stopped: null,
+  notStarted: null,
+  unconfirmed: null,
+  disclosed: [],
+};
+
+const ownedRunning: Settled = { ...localRunning, source: 'owner' };
+
+const decisionText = (decision: CallDecision): string =>
+  decision._tag === 'Completed' ? 'completed' : `cancelled (${decision.cause}: ${decision.trigger})`;
+
+export function settleManaged(result: RuledAnswer, timeoutSource: EndingSource): Settled {
+  const settled = settleCall(result, timeoutSource);
+  const ruled = result.ruled === undefined ? [] : rulingLines(result.ruled.rulings, result.ruled.omitted);
+  return ruled.length === 0 ? settled : { ...settled, disclosed: [...settled.disclosed, ...ruled] };
+}
+
+const limitSpoken = (ms: number): string =>
+  ms % 3_600_000 === 0
+    ? `${ms / 3_600_000} h`
+    : ms % 60_000 === 0
+      ? `${ms / 60_000} min`
+      : ms % 1_000 === 0
+        ? `${ms / 1_000} s`
+        : `${ms} ms`;
+
+const ruleSpoken = (rule: RuleNamed): string =>
+  `program rule ${rule.id} ("${rule.words.join(' ')}"${rule.folder === undefined ? '' : ` in ${rule.folder}`}, ${limitSpoken(rule.limitMs)})`;
+
+export const rulingLines = (rulings: ReadonlyArray<ProcessRuling>, omitted: number): string[] => [
+  ...rulings.map((ruling) => {
+    switch (ruling._tag) {
+      case 'Ending':
+        return `The ${ruleSpoken(ruling.rule)} ran out for ${ruling.process}, which was still being stopped when this was read.`;
+      case 'Ended':
+        return ruling.step === 'unsignalled'
+          ? `The ${ruleSpoken(ruling.rule)} ran out for ${ruling.process}, which was gone before any signal.`
+          : `The ${ruleSpoken(ruling.rule)} ran out and ended ${ruling.process} at ${ruling.step}.`;
+      case 'Survived':
+        return `The ${ruleSpoken(ruling.rule)} ran out and could not end ${ruling.process}: it survived ${ruling.steps.join(' then ')}.`;
+      case 'Unverifiable':
+        return `The ${ruleSpoken(ruling.rule)} ran out for ${ruling.process}, and whether it ended is not known: ${ruling.reason}.`;
+      case 'Unread':
+        return `${ruling.process} could not be read (${ruling.fields.join(', ')}), so no program rule could reach it.`;
+    }
+  }),
+  ...(omitted === 0 ? [] : [`${omitted} more process${omitted === 1 ? '' : 'es'} a program rule ended or could not read are not listed.`]),
+];
+
+function settleCall(result: CallDecisionAnswer, timeoutSource: EndingSource): Settled {
+  if (result._tag === 'Unavailable') {
+    const known = result.lastKnown === undefined ? '' : ` The last decision it holds is ${decisionText(result.lastKnown)}.`;
+    const where = result.execution === undefined ? '' : `, execution ${result.execution.execution}`;
+    return {
+      ...ownedRunning,
+      cost: { _tag: 'Unmeasured', reason: 'unknown', detail: `the execution host could not answer: ${result.reason}` },
+      unconfirmed: `The execution host could not answer for this command: ${result.reason}. Operation ${result.operation.operation}${where}.${known} Whether it finished, and with what, is not known — and it was not run again to find out.`,
+    };
+  }
+  const disclosed = disclosures(result.retention, result.cleanup);
+  if (result._tag === 'Undecided') {
+    return withExit({ ...ownedRunning, cost: result.cost, disclosed: [...disclosed, ...survivors(result.sources)] }, result.nativeExit);
+  }
+  const { decision } = result;
+  const measured = { ...ownedRunning, disclosed, cost: result.cost };
+  if (decision._tag === 'Cancelled') {
+    if (decision.cause === 'not-started') return { ...measured, notStarted: decision.trigger };
+    if (decision.cause === 'timeout') return { ...measured, source: timeoutSource, expired: true };
+    if (decision.cause === 'run-abort') return { ...measured, aborted: true };
+    return { ...measured, stopped: `${decision.cause}: ${decision.trigger}` };
+  }
+  if (result.nativeExit === undefined) {
+    return {
+      ...measured,
+      unconfirmed: `The execution host decided this command completed, but no exit status was ever read for it. Operation ${decision.operation.operation}, execution ${decision.execution.execution}.`,
+    };
+  }
+  return withExit(measured, result.nativeExit);
+}
+
+const disclosures = (retention: CallRetention, cleanup: Cleanup): string[] => [
+  ...(retention === 'retained'
+    ? []
+    : [
+        `Output was ${retention === 'lost' ? 'lost' : 'kept only in part'} by the execution record: what is printed above may not be everything the command wrote.`,
+      ]),
+  ...[cleanupWords(cleanup)].filter((words) => words !== null),
+];
+
+const survivors = (sources: SourceCompletion): string[] => {
+  const open = [...(sources.stdout.completed ? [] : ['stdout']), ...(sources.stderr.completed ? [] : ['stderr'])];
+  return open.length === 0
+    ? []
+    : [
+        `Something this command started outlived it and still holds its ${open.join(' and ')} open. The command's own leader exited with the status above, and that exit is the answer; the owner's record of the call closes only when those pipes do, and whatever the survivor writes is not in the output here.`,
+      ];
+};
+
+const withExit = (settled: Settled, exit: NativeExit): Settled =>
+  exit._tag === 'Code'
+    ? { ...settled, code: exit.code }
+    : {
+        ...settled,
+        signalName: exit.signal,
+        signalDeath: `Process interrupted due to receipt of signal: '${exit.signal}'`,
+      };
+
+export function endingOf(settled: Settled): CommandExit {
+  if (settled.signalName !== null) return { _tag: 'Signal', signal: settled.signalName };
+  if (settled.code !== null) return { _tag: 'Code', code: settled.code };
+  if (settled.signalDeath !== null) {
+    return { _tag: 'Unknown', detail: 'the child died by a signal this spawner does not name' };
+  }
+  if (settled.notStarted !== null) return { _tag: 'Unknown', detail: `it never started: ${settled.notStarted}` };
+  if (settled.expired) return { _tag: 'Unknown', detail: 'it was stopped when its wait or life ran out, and no exit was read' };
+  if (settled.aborted) return { _tag: 'Unknown', detail: 'the run was aborted and no exit was read' };
+  if (settled.stopped !== null) return { _tag: 'Unknown', detail: `ended by its owner: ${settled.stopped}` };
+  return { _tag: 'Unknown', detail: settled.unconfirmed ?? 'no ending was read for this command' };
+}
+
+export type ShellSettlement = {
+  readonly settled: Settled;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly outputUnavailable: string | null;
+  readonly moved: readonly string[];
+  readonly head: HeadMove | null;
+  readonly verdicts: readonly CommandVerdict[];
+  readonly unread: readonly string[];
+  readonly inspect: string | null;
+  readonly unmeasured: string | null;
+  readonly shown: readonly ToolShown[];
+  readonly unseen: string | null;
+};
+
+const UNSEEN: ReadonlySet<string> = new Set(['NotFound', 'PermissionDenied', 'BadResource', 'BadArgument']);
+
+const isFile = (fs: FileSystem.FileSystem) => (path: string) =>
+  fs.stat(path).pipe(
+    Effect.map((info) => info.type === 'File'),
+    Effect.catchIf(
+      (error) => UNSEEN.has(error.reason._tag),
+      () => Effect.succeed(false),
+    ),
+  );
+
+const inWindow = (window: CommandWindow, at: number | null): at is number => at !== null && at >= window.from && at <= window.to;
+
+const instantOf = (stamp: number | null | undefined): number | null =>
+  stamp === null || stamp === undefined || stamp % 1000 === 0 ? null : stamp;
+
+const parentWrites = Effect.fn('ShellRun.parentWrites')(function* (
+  root: string,
+  names: readonly string[],
+): Effect.fn.Return<ReadonlyMap<string, number | null>, never, FileSystem.FileSystem> {
+  const fs = yield* FileSystem.FileSystem;
+  const directories = [
+    ...new Set(
+      names.flatMap((name) => {
+        const file = placeOf(root, name);
+        return file === null ? [] : [dirname(file.place)];
+      }),
+    ),
+  ];
+  const stamped = new Map<string, number | null>();
+  yield* Effect.forEach(
+    directories,
+    (directory) =>
+      fs.stat(directory).pipe(
+        Effect.map((info) => Option.match(info.mtime, { onNone: () => null, onSome: (at) => at.getTime() })),
+        Effect.catchTag('PlatformError', () => Effect.succeed(null)),
+        Effect.map((at) => {
+          stamped.set(directory, at);
+        }),
+      ),
+    { concurrency: 3, discard: true },
+  );
+  return stamped;
+});
+
+const movesOf = Effect.fn('ShellRun.movesOf')(function* (
+  root: string,
+  before: Measured,
+  after: Measured,
+  moved: readonly string[],
+  working: typeof workingAt | undefined,
+): Effect.fn.Return<{ readonly moves: readonly CommandMove[]; readonly unread: readonly string[] }, never, FileSystem.FileSystem> {
+  const window: CommandWindow = { from: before.startedAt, to: after.endedAt };
+  const ran: CommandWindow = { from: before.startedAt, to: after.startedAt };
+  const unread: string[] = [];
+  const fs = yield* FileSystem.FileSystem;
+  const settled = new Map<string, { readonly digest: string; readonly present: boolean | null; readonly seen: Seen | null }>();
+  for (const name of moved) {
+    if (after.state.has(name)) continue;
+    const file = placeOf(root, name);
+    if (file !== null) settled.set(name, yield* readingNow(fs, file.place, working));
+  }
+  const digestOf = (name: string): string | undefined => after.state.get(name) ?? settled.get(name)?.digest;
+  const presenceOf = (name: string): boolean | null | undefined =>
+    after.state.has(name) ? after.presence.get(name) : settled.get(name)?.present;
+  const seenOf = (name: string): Seen | undefined => after.seen.get(name) ?? settled.get(name)?.seen ?? undefined;
+  const standing = moved.filter((name) => {
+    if (digestOf(name) === undefined) return false;
+    if (presenceOf(name) === null || before.presence.get(name) === null) {
+      unread.push(name);
+      return false;
+    }
+    return before.state.get(name) !== digestOf(name) || before.presence.get(name) !== presenceOf(name);
+  });
+  const unstamped = standing.filter((name) => presenceOf(name) !== true);
+  const parents = unstamped.length === 0 ? new Map<string, number | null>() : yield* parentWrites(root, unstamped);
+  const moves = standing.map((name): CommandMove => {
+    const seen = seenOf(name);
+    const own = instantOf(seen?.mtimeMs);
+    const changed = instantOf(seen?.changedMs);
+    const at = inWindow(window, own) ? own : inWindow(ran, changed) ? changed : null;
+    const file = placeOf(root, name);
+    const parent = file === null ? null : (parents.get(dirname(file.place)) ?? null);
+    const heard = after.heard.get(name);
+    const kept = own === null || own < window.from;
+    return {
+      name,
+      before: before.state.get(name) ?? null,
+      after: digestOf(name) as string,
+      present: presenceOf(name) === true,
+      existed: before.state.has(name) ? before.presence.get(name) === true : null,
+      written:
+        at !== null
+          ? { from: at, to: at }
+          : kept && heard !== undefined && heard.to >= window.from && heard.from <= window.to
+            ? { from: Math.max(heard.from, window.from), to: Math.min(heard.to, window.to) }
+            : inWindow(window, parent)
+              ? { from: window.from, to: parent }
+              : null,
+      bytes: seen?.bytes ?? null,
+      link: seen?.link ?? false,
+      mode: seen?.mode ?? null,
+    };
+  });
+  return { moves, unread };
+});
+
+const baseOf = (root: string, measured: Measured): CommandBase => {
+  const contents = new Map<string, CommandContent>();
+  for (const [name, digest] of measured.state) {
+    const seen = measured.seen.get(name);
+    if (measured.presence.get(name) !== true || seen?.link) continue;
+    if (seen?.bytes != null) contents.set(digest, { bytes: seen.bytes });
+    else if (!contents.has(digest)) {
+      const file = placeOf(root, name);
+      if (file !== null) contents.set(digest, { file: file.place });
+    }
+  }
+  return {
+    head: 'commit' in measured.head ? measured.head.commit : null,
+    at: measured.startedAt,
+    dirty: new Map([...measured.state].map(([name, digest]) => [name, { digest, present: measured.presence.get(name) ?? null }])),
+    contents,
+  };
+};
+
+export type ShellPlace = {
+  readonly place: Place | null;
+  readonly refused: string | null;
+  readonly measuring: boolean;
+  readonly facts: CommandFacts;
+  readonly elsewhere: string | null;
+};
+
+export class ShellRun {
+  private readonly out = new OutputTail();
+  private readonly errors = new OutputTail();
+  private tree: string | null = null;
+  private before: Reading | null = null;
+  private life: CommandLife | null = null;
+  private openedAt: number | null = null;
+  private release: (() => void) | null = null;
+  private inspection: string | null = null;
+  public elsewhere: string | null = null;
+
+  constructor(
+    private readonly resolved: ResolvedToolOptions,
+    private readonly baselines: CheckoutBaselines,
+    private readonly services: Layer.Layer<FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Git>,
+    private readonly workdir: string,
+    private readonly command: string,
+    private readonly progress?: CallProgress,
+  ) {
+    this.kind = commandClass(command);
+  }
+
+  private readonly kind: CommandClass;
+
+  readonly open = Effect.fn('ShellRun.open')(function* (
+    this: ShellRun,
+    where: ShellPlace,
+  ): Effect.fn.Return<void, never, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Git> {
+    this.elsewhere = where.elsewhere;
+    if (where.refused !== null) {
+      this.before = { unreadable: where.refused };
+      return;
+    }
+    if (!where.measuring || where.place === null || !where.place.ours || where.place.tree === null) return;
+    this.tree = where.place.tree;
+    const command = this.resolved.changes?.command;
+    const life = command === undefined ? null : yield* Effect.result(command(this.tree, where.facts));
+    if (life !== null && life._tag === 'Failure') {
+      this.before = { unreadable: `the change record could not open this command: ${life.failure.reason}` };
+      return;
+    }
+    this.life = life === null ? null : life.success;
+    this.release = yield* this.baselines.hold(this.tree);
+    this.progress?.stage('Measuring the checkout before the command');
+    const before = yield* this.baselines.measure(this.tree, this.resolved);
+    this.before = unkept(before);
+    if (this.life !== null && 'state' in before) yield* this.life.based(baseOf(this.tree, before));
+  });
+
+  readonly opened = (): void => {
+    this.openedAt = performance.now();
+    this.life?.opened();
+  };
+
+  readonly ended = (): void => {
+    this.life?.ended();
+  };
+
+  readonly close = (): void => {
+    this.life?.close();
+    const release = this.release;
+    this.release = null;
+    release?.();
+  };
+
+  readonly forget = (): void => {
+    this.life?.forget();
+    const release = this.release;
+    this.release = null;
+    release?.();
+  };
+
+  readonly collector = (
+    stdout: Stream.Stream<Uint8Array, unknown>,
+    stderr: Stream.Stream<Uint8Array, unknown>,
+  ): Effect.Effect<void, unknown> =>
+    Effect.all(
+      [
+        stdout.pipe(Stream.runForEach((bytes) => Effect.sync(() => this.out.append(bytes)))),
+        stderr.pipe(Stream.runForEach((bytes) => Effect.sync(() => this.errors.append(bytes)))),
+      ],
+      { concurrency: 'unbounded' },
+    ).pipe(Effect.asVoid);
+
+  readonly joinCollector = <A, E>(collector: Fiber.Fiber<A, E>, settled: Settled): Effect.Effect<Settled> =>
+    Effect.result(Fiber.join(collector)).pipe(
+      Effect.map((joined) =>
+        joined._tag === 'Failure' ? { ...settled, disclosed: [...settled.disclosed, partialOutput(joined.failure)] } : settled,
+      ),
+    );
+
+  readonly observe = Effect.fnUntraced(function* (this: ShellRun, run: CommandRun): Effect.fn.Return<ShellSettlement> {
+    return yield* this.watch(run).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => this.close())), Effect.provide(this.services));
+  });
+
+  private readonly watch = Effect.fnUntraced(function* (
+    this: ShellRun,
+    run: CommandRun,
+  ): Effect.fn.Return<ShellSettlement, never, Scope.Scope | FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Git> {
+    this.inspection = run.inspect;
+    const collector = yield* Effect.forkScoped(this.collector(run.stdout, run.stderr));
+    const answer = yield* Effect.result(run.result);
+    this.ended();
+    if (answer._tag === 'Failure') {
+      return yield* this.finish({
+        ...ownedRunning,
+        unconfirmed: `The decision for this command could not be read back: ${answer.failure.reason}. Whether it finished, and with what, is not known — and it was not run again to find out.`,
+      });
+    }
+    const decided = settleManaged(answer.success, 'owner');
+    const settled = decided.notStarted === null ? decided : { ...decided, notStarted: `${decided.notStarted}. ${run.inspect}` };
+    if (settled.code !== null || settled.signalDeath !== null) {
+      return yield* this.finish(yield* this.joinCollector(collector, settled));
+    }
+    return yield* this.finish(settled);
+  });
+
+  readonly finish = (
+    settled: Settled,
+  ): Effect.Effect<ShellSettlement, never, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Git> =>
+    this.settle(settled).pipe(Effect.ensuring(Effect.sync(() => this.close())));
+
+  private readonly settle = Effect.fn('ShellRun.finish')(function* (
+    this: ShellRun,
+    settled: Settled,
+  ): Effect.fn.Return<ShellSettlement, never, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Git> {
+    this.ended();
+    const commands = this.resolved.world.commands;
+    if (commands !== undefined && this.openedAt !== null) {
+      yield* commands.finished({
+        class: this.kind,
+        monotonicStart: this.openedAt,
+        monotonicEnd: performance.now(),
+        exit: endingOf(settled),
+        cost: settled.cost,
+      });
+    }
+    const before = this.before;
+    if (before !== null) this.progress?.stage('Measuring the checkout after the command');
+    const afterRead = before === null || this.tree === null ? null : yield* this.baselines.measure(this.tree, this.resolved);
+    const moved = movedPaths(before, afterRead);
+    const measured =
+      before !== null && afterRead !== null && 'state' in before && 'state' in afterRead ? { before, after: afterRead } : null;
+    const found =
+      measured === null
+        ? { moves: [], unread: [] }
+        : yield* movesOf(this.resolved.cwd, measured.before, measured.after, moved, this.resolved.world.working);
+    const changed = new Set([...found.moves.map((move) => move.name), ...found.unread]);
+    const life = this.life;
+    const verdicts =
+      life === null || measured === null
+        ? []
+        : yield* life.settle({
+            base: 'commit' in measured.before.head ? measured.before.head.commit : null,
+            window: { from: measured.before.startedAt, to: measured.after.endedAt },
+            moves: found.moves,
+          });
+    const stdout = this.out.text();
+    const stderr = this.errors.text();
+    const fs = yield* FileSystem.FileSystem;
+    const attributed = verdicts.flatMap((one) => {
+      const file = one.verdict === 'attributed' ? placeOf(this.resolved.cwd, one.name) : null;
+      return file === null ? [] : [{ path: file.place, as: 'wrote' as const }];
+    });
+    const sighted = yield* Effect.result(
+      shellShown({ command: this.command, output: `${stdout}\n${stderr}`, cwd: this.workdir, root: this.resolved.cwd }, isFile(fs)),
+    );
+    const unmeasured =
+      before !== null && 'unreadable' in before
+        ? before.unreadable
+        : afterRead !== null && 'unreadable' in afterRead
+          ? afterRead.unreadable
+          : null;
+    return {
+      settled,
+      stdout,
+      stderr,
+      outputUnavailable: null,
+      moved: moved.filter((name) => changed.has(name)),
+      head: headMove(before, afterRead),
+      verdicts,
+      unread: found.unread,
+      unmeasured,
+      inspect: this.inspection,
+      shown: sighted._tag === 'Success' ? [...sighted.success, ...attributed] : attributed,
+      unseen: sighted._tag === 'Success' ? null : sighted.failure.message,
+    };
+  });
+}
+
+const partialOutput = (error: unknown): string => {
+  const spoken = error as { readonly reason?: unknown; readonly message?: unknown };
+  const detail =
+    typeof spoken.reason === 'string' && spoken.reason !== ''
+      ? spoken.reason
+      : typeof spoken.message === 'string' && spoken.message !== ''
+        ? spoken.message
+        : 'the stream gave no reason';
+  return `What is printed above may not be everything the command wrote — ${detail}`;
+};
+
+export const observerLost = (reason: string): ShellSettlement => ({
+  settled: {
+    ...ownedRunning,
+    unconfirmed: `What was observing this command stopped being reachable: ${reason}. Whether it finished, and with what, is not known — and it was not run again to find out.`,
+  },
+  stdout: '',
+  stderr: '',
+  outputUnavailable: `The output of this command is unavailable: ${reason}.`,
+  moved: [],
+  head: null,
+  verdicts: [],
+  unread: [],
+  unmeasured: `the observation of this command was lost: ${reason}`,
+  inspect: null,
+  shown: [],
+  unseen: null,
+});

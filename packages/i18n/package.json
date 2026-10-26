@@ -1,0 +1,56 @@
+{
+  "name": "@runlith/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Translation as a key of the application graph: bundles per locale, lazy ones loaded on switch, ICU-style plurals and selects through Intl, and typed message keys by augmentation.",
+  "type": "module",
+  "exports": {
+    "./I18n.svelte": {
+      "types": "./src/I18n.svelte.ts",
+      "browser": "./src/I18n.svelte.ts",
+      "svelte": "./src/I18n.svelte.ts",
+      "default": "./src/I18n.svelte.ts"
+    },
+    "./locale": {
+      "types": "./src/locale.ts",
+      "browser": "./src/locale.ts",
+      "svelte": "./src/locale.ts",
+      "default": "./src/locale.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "browser": "./src/types.ts",
+      "svelte": "./src/types.ts",
+      "default": "./src/types.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "browser": "./src/testing.ts",
+      "svelte": "./src/testing.ts",
+      "default": "./src/testing.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/layer": "workspace:*"
+  },
+  "devDependencies": {
+    "@runlith/testbed": "workspace:*",
+    "@runlith/testing": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@types/node": "catalog:",
+    "jsdom": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "svelte": "catalog:"
+  }
+}

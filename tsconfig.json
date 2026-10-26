@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/utils"
+    },
+    {
+      "path": "./packages/window-behavior"
+    },
+    {
+      "path": "./packages/audio-darwin"
+    }
+  ]
+}

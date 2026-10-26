@@ -1,0 +1,26 @@
+diff --git a/dist/sql/Statement.js b/dist/sql/Statement.js
+index 857ebb1..59f7767 100644
+--- a/dist/sql/Statement.js
++++ b/dist/sql/Statement.js
+@@ -54,7 +54,7 @@ export const CurrentTransformer = /*#__PURE__*/Context.Reference("effect/sql/Cur
+  * @since 4.0.0
+  */
+ export const SpanPropagationEnabled = /*#__PURE__*/Context.Reference("effect/sql/SpanPropagationEnabled", {
+-  defaultValue: () => false
++  defaultValue: () => true
+ });
+ /**
+  * Returns `true` when a value is a SQL `Fragment`.
+diff --git a/src/sql/Statement.ts b/src/sql/Statement.ts
+index 70a0939..7071d83 100644
+--- a/src/sql/Statement.ts
++++ b/src/sql/Statement.ts
+@@ -122,7 +122,7 @@ export const CurrentTransformer = Context.Reference<Transformer | undefined>("ef
+  * @since 4.0.0
+  */
+ export const SpanPropagationEnabled = Context.Reference<boolean>("effect/sql/SpanPropagationEnabled", {
+-  defaultValue: () => false
++  defaultValue: () => true
+ })
+ 
+ /**

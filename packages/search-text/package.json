@@ -1,0 +1,53 @@
+{
+  "name": "@runlith/search-text",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Text for search: normalization, words, English and Russian stems, the trigram form, and ranking a typed query against names with missed letters and typos forgiven.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./words": {
+      "types": "./src/words.ts",
+      "browser": "./src/words.ts",
+      "node": "./src/words.ts",
+      "default": "./src/words.ts"
+    },
+    "./stem": {
+      "types": "./src/stem.ts",
+      "browser": "./src/stem.ts",
+      "node": "./src/stem.ts",
+      "default": "./src/stem.ts"
+    },
+    "./trigram": {
+      "types": "./src/trigram.ts",
+      "browser": "./src/trigram.ts",
+      "node": "./src/trigram.ts",
+      "default": "./src/trigram.ts"
+    },
+    "./highlight": {
+      "types": "./src/highlight.ts",
+      "browser": "./src/highlight.ts",
+      "node": "./src/highlight.ts",
+      "default": "./src/highlight.ts"
+    },
+    "./match": {
+      "types": "./src/match.ts",
+      "browser": "./src/match.ts",
+      "node": "./src/match.ts",
+      "default": "./src/match.ts"
+    },
+    "./fts": {
+      "types": "./src/fts.ts",
+      "node": "./src/fts.ts",
+      "default": "./src/fts.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate src",
+    "typecheck": "runlith-typecheck"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

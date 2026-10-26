@@ -1,0 +1,65 @@
+{
+  "name": "@runlith/code-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Code editing and diff reading on CodeMirror 6: a document that rebases foreign edits outside the operator's undo, the editor and diff views, holder gutters and the overview ruler.",
+  "type": "module",
+  "exports": {
+    "./document": {
+      "types": "./src/document.ts",
+      "browser": "./src/document.ts",
+      "svelte": "./src/document.ts",
+      "default": "./src/document.ts"
+    },
+    "./marks": {
+      "types": "./src/marks.ts",
+      "browser": "./src/marks.ts",
+      "svelte": "./src/marks.ts",
+      "default": "./src/marks.ts"
+    },
+    "./Editor.svelte": {
+      "types": "./src/Editor.svelte",
+      "browser": "./src/Editor.svelte",
+      "svelte": "./src/Editor.svelte",
+      "default": "./src/Editor.svelte"
+    },
+    "./Diff.svelte": {
+      "types": "./src/Diff.svelte",
+      "browser": "./src/Diff.svelte",
+      "svelte": "./src/Diff.svelte",
+      "default": "./src/Diff.svelte"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run src",
+    "typecheck": "runlith-typecheck",
+    "stand": "vite --config stand/vite.config.ts",
+    "bench": "bun stand/bench.ts"
+  },
+  "dependencies": {
+    "@codemirror/commands": "catalog:",
+    "@codemirror/language": "catalog:",
+    "@codemirror/search": "catalog:",
+    "@codemirror/state": "catalog:",
+    "@codemirror/view": "catalog:",
+    "@runlith/files": "workspace:*",
+    "@runlith/highlight": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/testbed": "workspace:*",
+    "@runlith/testing": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@types/bun": "catalog:",
+    "jsdom": "catalog:",
+    "playwright-core": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "svelte": "catalog:"
+  }
+}

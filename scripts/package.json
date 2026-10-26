@@ -1,0 +1,19 @@
+{
+  "name": "@runlith/change-check",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "runlith-typecheck",
+    "test": "testbed bun test ./change/chunking.test.ts",
+    "test:integration": "testbed bun test ./change/check.itest.ts ./change/all.itest.ts"
+  },
+  "dependencies": {
+    "@runlith/code-facts": "workspace:*",
+    "@runlith/tagma": "workspace:*",
+    "@runlith/testbed": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "name": "@runlith/performance",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The local performance backend: bounded worker persistence and typed process reports shared by server products.",
+  "type": "module",
+  "exports": {
+    "./CpuProfile": {
+      "types": "./src/CpuProfile.ts",
+      "browser": "./src/CpuProfile.ts",
+      "node": "./src/CpuProfile.ts",
+      "default": "./src/CpuProfile.ts"
+    },
+    "./CpuProfiler": {
+      "types": "./src/CpuProfiler.ts",
+      "default": "./src/CpuProfiler.ts"
+    },
+    "./CpuProfiles": {
+      "types": "./src/CpuProfiles.ts",
+      "default": "./src/CpuProfiles.ts"
+    },
+    "./HeapSnapshot": {
+      "types": "./src/HeapSnapshot.ts",
+      "browser": "./src/HeapSnapshot.ts",
+      "node": "./src/HeapSnapshot.ts",
+      "default": "./src/HeapSnapshot.ts"
+    },
+    "./HeapSnapshots": {
+      "types": "./src/HeapSnapshots.ts",
+      "default": "./src/HeapSnapshots.ts"
+    },
+    "./LoopStalls": {
+      "types": "./src/LoopStalls.ts",
+      "default": "./src/LoopStalls.ts"
+    },
+    "./MemoryCaptures": {
+      "types": "./src/MemoryCaptures.ts",
+      "default": "./src/MemoryCaptures.ts"
+    },
+    "./MetricSnapshots": {
+      "types": "./src/MetricSnapshots.ts",
+      "default": "./src/MetricSnapshots.ts"
+    },
+    "./PerformanceReports": {
+      "types": "./src/PerformanceReports.ts",
+      "default": "./src/PerformanceReports.ts"
+    },
+    "./PerformanceStore": {
+      "types": "./src/store/store.ts",
+      "default": "./src/store/store.ts"
+    },
+    "./store/records": {
+      "types": "./src/store/records.ts",
+      "default": "./src/store/records.ts"
+    },
+    "./store/wire": {
+      "types": "./src/store/wire.ts",
+      "default": "./src/store/wire.ts"
+    },
+    "./PerformanceTracer": {
+      "types": "./src/PerformanceTracer.ts",
+      "default": "./src/PerformanceTracer.ts"
+    },
+    "./ProcessVitals": {
+      "types": "./src/ProcessVitals.ts",
+      "default": "./src/ProcessVitals.ts"
+    },
+    "./protocol/records": {
+      "types": "./src/protocol/records.ts",
+      "browser": "./src/protocol/records.ts",
+      "node": "./src/protocol/records.ts",
+      "default": "./src/protocol/records.ts"
+    },
+    "./protocol/queries": {
+      "types": "./src/protocol/queries.ts",
+      "browser": "./src/protocol/queries.ts",
+      "node": "./src/protocol/queries.ts",
+      "default": "./src/protocol/queries.ts"
+    },
+    "./protocol/reports": {
+      "types": "./src/protocol/reports.ts",
+      "browser": "./src/protocol/reports.ts",
+      "node": "./src/protocol/reports.ts",
+      "default": "./src/protocol/reports.ts"
+    }
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/sql-sqlite-bun": "catalog:",
+    "@runlith/executions": "workspace:*",
+    "@runlith/held": "workspace:*",
+    "@runlith/utils": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:",
+    "drizzle-kit": "catalog:",
+    "typescript": "catalog:"
+  }
+}

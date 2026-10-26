@@ -1,0 +1,59 @@
+{
+  "name": "@runlith/builtin-catalog",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The built-in provider adapters taken together for tests: their descriptions and recorded registrations, and the core machinery checked against them.",
+  "type": "module",
+  "exports": {
+    "./descriptions": {
+      "types": "./src/descriptions.ts",
+      "browser": "./src/descriptions.ts",
+      "node": "./src/descriptions.ts",
+      "default": "./src/descriptions.ts"
+    },
+    "./registrations": {
+      "types": "./src/registrations.ts",
+      "default": "./src/registrations.ts"
+    },
+    "./subscription/description": {
+      "types": "./src/subscription/description.ts",
+      "browser": "./src/subscription/description.ts",
+      "node": "./src/subscription/description.ts",
+      "default": "./src/subscription/description.ts"
+    },
+    "./subscription/provider": {
+      "types": "./src/subscription/provider.ts",
+      "default": "./src/subscription/provider.ts"
+    },
+    "./subscription/adapter": {
+      "types": "./src/subscription/adapter.ts",
+      "bun": "./src/subscription/adapter.ts",
+      "default": "./src/subscription/adapter.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/adapter-anthropic": "workspace:*",
+    "@runlith/adapter-deepseek": "workspace:*",
+    "@runlith/adapter-devin": "workspace:*",
+    "@runlith/adapter-muse": "workspace:*",
+    "@runlith/adapter-openai": "workspace:*",
+    "@runlith/adapter-opencode-go": "workspace:*",
+    "@runlith/adapter-stepfun": "workspace:*",
+    "@runlith/adapter-xai": "workspace:*",
+    "@runlith/credential-file": "workspace:*",
+    "@runlith/file-lock": "workspace:*",
+    "@runlith/llm": "workspace:*",
+    "@runlith/tagma": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

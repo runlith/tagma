@@ -1,0 +1,384 @@
+import type { McpServerDeclaration } from '@runlith/mcp/declaration';
+import { type McpAppFailure, mcpAppResult, viewCsp } from '@runlith/mcp/apps';
+import { McpPool } from '@runlith/mcp/McpPool';
+import { mcpDeclarationFingerprint } from '@runlith/mcp/mcpDeclarationFingerprint';
+import { mcpRedactor } from '@runlith/mcp/mcpRedactor';
+import type { McpResourceEvent } from './contract/wire/feeds.js';
+import { Clock, Effect, Exit, Layer, Scope, Stream } from 'effect';
+import { flight } from '@runlith/held/Flight';
+import type { HoldStalled, ReentrantCall } from '@runlith/held/failures';
+import type { StoreFailure } from '../platform/contract/service/store.js';
+import type { SettableScope } from '../platform/contract/wire/setting.js';
+import { GateRefusal } from '../platform/contract/wire/refusal.js';
+import { mcpServers } from './contract/wire/settings.js';
+import { Settings } from '../settings/contract/service/values.js';
+import { ProjectChanges } from '../projects/contract/service/changes.js';
+import {
+  type McpMount,
+  McpServers,
+  type McpViewFailure,
+  type McpViewRefusal,
+  type McpReconcileRefusal,
+} from './contract/service/servers.js';
+import { mcpDeclared, mcpReachOf, rowOf, mcpMissingReferences, mcpResolvedValues, expandEnvReferences } from './declarations.js';
+
+function reached(declaration: McpServerDeclaration): string {
+  return declaration.transport === 'stdio' ? declaration.command : declaration.url;
+}
+
+type Pooled = {
+  readonly pool: McpPool;
+  readonly scope: Scope.Closeable;
+  readonly secrets: Set<string>;
+  readonly redaction: { of: (text: string) => string };
+  narrowed: Set<string> | null;
+  reached: Set<string> | null;
+};
+
+const whole = (pooled: Pooled): void => {
+  pooled.narrowed = null;
+};
+
+const kept = (): void => undefined;
+
+const stalledOpen = (stalled: HoldStalled) =>
+  Effect.fail(
+    new GateRefusal(
+      'mcp-reconcile-stalled',
+      `Any declaration change already made remains stored, but this project's MCP pool did not open within ${stalled.waitedMs} ms.`,
+      ['read_mcp_servers to inspect the stored declaration and current connection state', 'retry once the servers settle'],
+    ),
+  );
+
+const reentrantOpen = (reentrant: ReentrantCall) =>
+  Effect.fail(
+    new GateRefusal(
+      'mcp-reconcile-stalled',
+      `The MCP pool of this project is being opened by the call that asked for it again (${reentrant.key}), so it cannot wait on itself.`,
+      ['declare or change the server from outside that MCP server’s own call'],
+    ),
+  );
+
+const READ_SERVERS = 'read_mcp_servers names the server and its connection state';
+
+const servingRefusal = (failure: McpAppFailure): GateRefusal<McpViewRefusal> => {
+  switch (failure._tag) {
+    case 'McpToolUnoffered':
+      return new GateRefusal('mcp-tool-unoffered', failure.message, ['call a tool whose visibility includes app']);
+    case 'McpServerReplaced':
+      return new GateRefusal('mcp-server-replaced', failure.message, [
+        'open the view again from a call of the server as it is declared now',
+      ]);
+    case 'McpResourceFailed':
+      return new GateRefusal('mcp-resource-failed', failure.message, [READ_SERVERS]);
+    case 'McpCallFailed':
+    case 'McpTimedOut':
+      return new GateRefusal('mcp-call-failed', failure.message, [READ_SERVERS]);
+    default:
+      return new GateRefusal('mcp-server-unavailable', failure.message, [READ_SERVERS, 'enable_mcp_server to connect it again']);
+  }
+};
+
+const makeMcpServers = Effect.fnUntraced(function* ({
+  environment,
+}: {
+  readonly environment: Readonly<Record<string, string | undefined>>;
+}) {
+  const settings = yield* Settings;
+  const scope = yield* Effect.scope;
+  const opening = yield* flight<number, McpPool, never>({ name: 'mcp-pool-open', owner: 'mcp', key: String, ceiling: '30 seconds' });
+  const pools = new Map<number, Pooled>();
+
+  const list: McpServers['Service']['list'] = Effect.fn('McpServers.list')(function* (projectId) {
+    const resolved = mcpDeclared(yield* settings.read(mcpServers, projectId));
+    const measured = new Map((pools.get(projectId)?.pool.states() ?? []).map((state) => [state.name, state]));
+    const now = yield* Clock.currentTimeMillis;
+    return resolved.map((entry) => {
+      const missing = mcpMissingReferences(entry.declaration, environment);
+      if (missing.length > 0) {
+        return {
+          name: entry.declaration.name,
+          scope: entry.scope,
+          reach: mcpReachOf(entry.declaration),
+          capabilities: entry.declaration.capabilities,
+          enabled: entry.declaration.enabled,
+          identity: mcpDeclarationFingerprint(entry.declaration),
+          shadows: entry.shadows,
+          status: 'failed' as const,
+          tools: 0,
+          failure: `the environment holds no ${missing.join(', ')}`,
+          measuredAt: now,
+        };
+      }
+      return rowOf(entry, measured.get(entry.declaration.name), now, environment);
+    });
+  });
+
+  const add: McpServers['Service']['add'] = Effect.fn('McpServers.add')(function* (input) {
+    const declaration: McpServerDeclaration = { ...input.declaration, version: 1 };
+    const listing = list(input.projectId);
+    const reconciling = reaching(input.scope, input.projectId);
+
+    const missing = mcpMissingReferences(declaration, environment);
+    if (missing.length > 0) {
+      return yield* new GateRefusal(
+        'mcp-secret-missing',
+        `${declaration.name} reads ${missing.join(', ')}, which the environment this Tagma server runs in does not hold.`,
+        [
+          `export ${missing.join(', ')} where the server is started, then declare it again`,
+          'or write the value itself instead of a ${NAME} reference',
+        ],
+      );
+    }
+    yield* settings.amend(mcpServers, input.scope, input.projectId, (current) => {
+      const standing = current.find((entry) => entry.name === declaration.name);
+      if (standing === undefined) return Effect.succeed([...current, declaration]);
+      return Effect.fail(
+        new GateRefusal('mcp-server-exists', `${input.scope} scope already declares ${standing.name}, reached at ${reached(standing)}.`, [
+          `drop the standing one with remove_mcp_server naming ${standing.name}, then declare this one`,
+          'or declare this server under a name of its own',
+        ]),
+      );
+    });
+    yield* reconciling;
+    return yield* listing;
+  });
+
+  const remove: McpServers['Service']['remove'] = Effect.fn('McpServers.remove')(function* (input) {
+    const listing = list(input.projectId);
+    const reconciling = reaching(input.scope, input.projectId);
+
+    const elsewhere = mcpDeclared(yield* settings.read(mcpServers, input.projectId)).some((entry) => entry.declaration.name === input.name);
+    yield* settings.amend(mcpServers, input.scope, input.projectId, (current) => {
+      if (current.some((entry) => entry.name === input.name)) {
+        return Effect.succeed(current.filter((entry) => entry.name !== input.name));
+      }
+      return Effect.fail(
+        new GateRefusal(
+          'mcp-server-unknown',
+          `${input.scope} scope declares no server called ${input.name}.`,
+          elsewhere
+            ? [`${input.name} is declared in the other scope; name that scope to drop it there`]
+            : ['read_mcp_servers names every server this project resolves to'],
+        ),
+      );
+    });
+    yield* reconciling;
+    return yield* listing;
+  });
+
+  const setEnabled: McpServers['Service']['setEnabled'] = Effect.fn('McpServers.setEnabled')(function* (input) {
+    const listing = list(input.projectId);
+    const reconciling = reaching(input.scope, input.projectId);
+
+    const elsewhere = mcpDeclared(yield* settings.read(mcpServers, input.projectId)).some((entry) => entry.declaration.name === input.name);
+    yield* settings.amend(mcpServers, input.scope, input.projectId, (current) => {
+      if (!current.some((entry) => entry.name === input.name)) {
+        return Effect.fail(
+          new GateRefusal(
+            'mcp-server-unknown',
+            `${input.scope} scope declares no server called ${input.name}.`,
+            elsewhere
+              ? [`${input.name} is declared in the other scope; name that scope to switch it there`]
+              : ['read_mcp_servers names every server this project resolves to'],
+          ),
+        );
+      }
+      return Effect.succeed(current.map((entry) => (entry.name === input.name ? { ...entry, enabled: input.enabled } : entry)));
+    });
+    yield* reconciling;
+    return yield* listing;
+  });
+
+  const reconcile: McpServers['Service']['reconcile'] = Effect.fn('McpServers.reconcile')(function* (projectId) {
+    yield* settle(projectId, whole);
+    yield* pools.get(projectId)?.pool.awaitHandshakes() ?? Effect.void;
+  });
+
+  const settle = Effect.fn('McpServers.settle')(function* (
+    projectId: number,
+    widen: (pooled: Pooled) => void,
+  ): Effect.fn.Return<void, StoreFailure | GateRefusal<McpReconcileRefusal>> {
+    const pool = poolOf(projectId);
+
+    const standing = mcpDeclared(yield* settings.read(mcpServers, projectId))
+      .map((entry) => entry.declaration)
+      .filter((declaration) => mcpMissingReferences(declaration, environment).length === 0);
+    const opened = yield* pool.pipe(Effect.catchTags({ HoldStalled: stalledOpen, ReentrantCall: reentrantOpen }));
+    keep(
+      projectId,
+      standing.flatMap((declaration) => mcpResolvedValues(declaration, environment)),
+    );
+    const pooled = pools.get(projectId);
+    if (pooled !== undefined) widen(pooled);
+    const narrowed = pooled?.narrowed ?? null;
+    const wanted = narrowed === null ? null : [...narrowed];
+    const started = narrowed === null ? standing : standing.filter((declaration) => narrowed.has(declaration.name));
+    yield* opened.reconcile(started.map((declaration) => expandEnvReferences(declaration, environment))).pipe(
+      Effect.catchTags({
+        HoldStalled: (stalled) =>
+          Effect.fail(
+            new GateRefusal(
+              'mcp-reconcile-stalled',
+              `Any declaration change already made remains stored, but the MCP server list could not be reconciled: an earlier pass held the pool for ${stalled.waitedMs} ms.`,
+              [
+                'read_mcp_servers to inspect the stored declaration and current connection state',
+                'after the servers settle, use enable_mcp_server on a stored server to retry reconciliation; stop or restart one that remains stuck',
+              ],
+            ),
+          ),
+        HoldCut: (cut) =>
+          Effect.fail(
+            new GateRefusal(
+              'mcp-reconcile-stalled',
+              `Any declaration change already made remains stored, but the MCP server pass was cut after ${cut.heldMs} ms; ${cut.leaves}.`,
+              [
+                'read_mcp_servers to inspect the stored declaration and current connection state',
+                'stop or restart a stuck server with enable_mcp_server, then retry reconciliation once the servers settle',
+              ],
+            ),
+          ),
+      }),
+    );
+    if (pooled === undefined) return;
+    if (wanted === null) pooled.reached = null;
+    else for (const name of wanted) pooled.reached?.add(name);
+  });
+
+  const keep = (projectId: number, values: readonly string[]): void => {
+    const entry = pools.get(projectId);
+    if (entry === undefined) return;
+    const before = entry.secrets.size;
+    for (const value of values) entry.secrets.add(value);
+    if (entry.secrets.size !== before) entry.redaction.of = mcpRedactor([...entry.secrets]);
+  };
+
+  const reconcileAll: McpServers['Service']['reconcileAll'] = Effect.fn('McpServers.reconcileAll')(() =>
+    Effect.suspend(() => Effect.forEach([...pools.keys()], (projectId) => settle(projectId, kept))),
+  );
+
+  const reaching = (scope: SettableScope, projectId: number): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>> => {
+    if (scope === 'user') return reconcileAll();
+    return Effect.suspend(() => settle(projectId, pools.has(projectId) ? kept : whole));
+  };
+
+  const palette: McpServers['Service']['palette'] = (projectId) => pools.get(projectId)?.pool.paletteUnsafe() ?? [];
+
+  const caller: McpServers['Service']['caller'] = (projectId) => {
+    const pool = poolOf(projectId);
+    return {
+      call: (server, tool, args, options) => Effect.flatMap(pool, (opened) => opened.call(server, tool, args, options)),
+    };
+  };
+
+  const appView: McpServers['Service']['appView'] = Effect.fn('McpServers.appView')((mount, resource, tool) => {
+    return serving(mount, (pool) =>
+      Effect.map(pool.appView(mount, resource, tool), (view) => ({
+        ...view,
+        meta: { ...view.meta, csp: view.meta.csp === undefined ? undefined : viewCsp(view.meta.csp) },
+      })),
+    );
+  });
+
+  const appRead: McpServers['Service']['appRead'] = Effect.fn('McpServers.appRead')((mount, uri, caller) => {
+    return serving(mount, (pool) => pool.appRead(mount, uri, { caller }));
+  });
+
+  const appCall: McpServers['Service']['appCall'] = Effect.fn('McpServers.appCall')((mount, tool, args, caller) => {
+    return serving(mount, (pool) => Effect.map(pool.appCall(mount, tool, args, { caller }), mcpAppResult));
+  });
+
+  const appWatch: McpServers['Service']['appWatch'] = (mount, uri, caller) => {
+    const held = (opening: McpResourceEvent): Stream.Stream<McpResourceEvent, McpViewFailure> =>
+      Stream.unwrap(
+        serving(mount, (pool) =>
+          Effect.map(pool.appSubscribe(mount, uri, { caller }), (updates) =>
+            Stream.concat(
+              Stream.succeed(opening),
+              Stream.map(updates, (update): McpResourceEvent => ({ kind: 'updated', ...update })),
+            ),
+          ),
+        ),
+      );
+    const again = (): Stream.Stream<McpResourceEvent, McpViewFailure> =>
+      Stream.concat(
+        held({ kind: 'updated', uri }),
+        Stream.suspend(() => again()),
+      );
+    return Stream.concat(
+      held({ kind: 'subscribed' }),
+      Stream.suspend(() => again()),
+    );
+  };
+
+  const serving = <A, R>(
+    mount: McpMount,
+    work: (pool: McpPool) => Effect.Effect<A, McpAppFailure, R>,
+  ): Effect.Effect<A, McpViewFailure, R> => {
+    const opened = Effect.suspend(() => {
+      const held = pools.get(mount.projectId);
+      if (held !== undefined && (held.reached === null || held.reached.has(mount.server))) return Effect.succeed(held.pool);
+      const widened = settle(mount.projectId, (pooled) => pooled.narrowed?.add(mount.server));
+      return Effect.andThen(widened, poolOf(mount.projectId));
+    }).pipe(Effect.catchTags({ HoldStalled: stalledOpen, ReentrantCall: reentrantOpen }));
+    return Effect.flatMap(opened, (pool) => work(pool).pipe(Effect.mapError(servingRefusal)));
+  };
+
+  const release: McpServers['Service']['release'] = Effect.fn('McpServers.release')((projectId) => {
+    return Effect.suspend(() => {
+      const held = pools.get(projectId);
+      pools.delete(projectId);
+      return held === undefined ? Effect.void : Scope.close(held.scope, Exit.void);
+    });
+  });
+
+  const poolOf = Effect.fn('McpServers.poolOf')((projectId: number): Effect.Effect<McpPool, HoldStalled | ReentrantCall> => {
+    return Effect.suspend(() => {
+      const standing = pools.get(projectId);
+      if (standing !== undefined) return Effect.succeed(standing.pool);
+      return opening.join(
+        projectId,
+        Effect.suspend(() => {
+          const held = pools.get(projectId);
+          if (held !== undefined) return Effect.succeed(held.pool);
+          return Effect.flatMap(Scope.fork(scope), (own) => {
+            const secrets = new Set<string>();
+            const redaction = { of: (text: string) => text };
+            return Effect.map(Scope.provide(McpPool.make({ redact: (text) => redaction.of(text) }), own), (pool) => {
+              pools.set(projectId, { pool, scope: own, secrets, redaction, narrowed: new Set(), reached: new Set() });
+              return pool;
+            });
+          });
+        }),
+      );
+    });
+  });
+  return McpServers.of({
+    list,
+    add,
+    remove,
+    setEnabled,
+    reconcile,
+    reconcileAll,
+    palette,
+    caller,
+    appView,
+    appRead,
+    appCall,
+    appWatch,
+    release,
+  });
+});
+
+export const mcpServersLayer = (
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Layer.Layer<McpServers, never, Settings | ProjectChanges> =>
+  Layer.effect(
+    McpServers,
+    Effect.gen(function* () {
+      const servers = yield* makeMcpServers({ environment });
+      const unsubscribe = (yield* ProjectChanges).removed.subscribe(({ projectId }) => servers.release(projectId));
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+      return servers;
+    }),
+  );

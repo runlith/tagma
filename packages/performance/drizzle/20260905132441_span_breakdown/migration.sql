@@ -1,0 +1,1 @@
+CREATE INDEX `performance_record_parent_idx` ON `performance_record` (`parent_id`,`trace_id`,`instance_id`,`monotonic_start`,`id`,`monotonic_end`) WHERE "performance_record"."kind" = 'span' AND "performance_record"."parent_id" IS NOT NULL;

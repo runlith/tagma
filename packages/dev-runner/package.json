@@ -1,0 +1,24 @@
+{
+  "name": "@runlith/dev-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A development stack as one process tree: run the preparation steps, start the processes in order, wait until each answers before the next, and take the whole tree down together the moment any of them exits.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

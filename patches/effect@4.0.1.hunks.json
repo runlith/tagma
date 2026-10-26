@@ -1,0 +1,9 @@
+{
+  "package": "effect@4.0.1",
+  "hunks": {
+    "sql-parent-span": {
+      "markers": ["defaultValue: () => true"],
+      "tests": [{ "package": "packages/sqlite-process", "file": "./src/telemetry.itest.ts" }]
+    }
+  }
+}

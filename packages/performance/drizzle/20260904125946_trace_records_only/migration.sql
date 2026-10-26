@@ -1,0 +1,2 @@
+DROP INDEX `performance_record_trace_idx`;--> statement-breakpoint
+CREATE INDEX `performance_record_trace_idx` ON `performance_record` (`trace_id`,`instance_id`,`monotonic_start`,`id`) WHERE `trace_id` IS NOT NULL;

@@ -1,0 +1,28 @@
+import type { RefusalWords } from '../../../platform/contract/wire/manifest.js';
+
+export const REFUSAL_WORDS = {
+  'action-failed': 'Page action failed',
+  'action-shape': 'Action input not valid',
+  'adapter-unknown': 'Unknown browser host',
+  'body-unavailable': 'Response body no longer available',
+  'console-off': 'Console capture is off',
+  'devtools-open': 'Page is in DevTools',
+  'dialog-open': 'Dialog is open on the page',
+  'document-invalid': 'Profile settings not accepted',
+  'element-obscured': 'Element is covered',
+  'host-away': 'Browser host not connected',
+  'host-refused': 'Browser host declined',
+  'import-broken': 'Cookie import failed',
+  'key-refused': 'Browser key not available',
+  'navigation-failed': 'Navigation failed',
+  'no-dialog': 'No dialog is open',
+  'outcome-unknown': 'Outcome unknown',
+  'page-crashed': 'Page crashed',
+  'page-stayed': 'Page stayed open',
+  'page-unknown': 'Page not open',
+  'page-unresponsive': 'Page not responding',
+  'profile-unknown': 'Unknown browser profile',
+  'source-unknown': 'Unknown cookie source',
+  'stale-ref': 'Element reference is stale',
+  'wait-unmet': 'Wait condition not met',
+} as const satisfies RefusalWords;

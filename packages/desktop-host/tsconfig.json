@@ -1,0 +1,11 @@
+{
+  "extends": "@runlith/tsconfig/bun.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "composite": true,
+    "incremental": true,
+    "types": ["node"],
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

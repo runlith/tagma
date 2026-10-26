@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Window Behavior Example</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(180deg, #0f172a, #111827);
+        color: #e5e7eb;
+      }
+
+      .page {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .card {
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.72);
+        padding: 16px;
+        backdrop-filter: blur(8px);
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+      }
+
+      button,
+      input,
+      select {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(30, 41, 59, 0.9);
+        color: inherit;
+        padding: 10px 12px;
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .state {
+        white-space: pre-wrap;
+        font-family: ui-monospace, monospace;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="card">
+        <h1>Minimal headless capability example</h1>
+        <p>
+          This example exercises the shared desktop window-behavior capability without using any
+          product code or bundled package UI.
+        </p>
+      </div>
+
+      <div class="card controls">
+        <button type="button" id="always-on-top">Toggle always on top</button>
+        <button type="button" id="transparent">Toggle transparent mode</button>
+        <button type="button" id="background">Toggle overlay background</button>
+        <button type="button" id="pass-through">Toggle pass-through</button>
+        <button type="button" id="focus-policy">Toggle focus policy</button>
+        <button type="button" id="capture-protection">Toggle capture protection</button>
+      </div>
+
+      <div class="card controls">
+        <label>
+          Window opacity
+          <input id="window-opacity" type="range" min="25" max="100" step="5" />
+        </label>
+        <label>
+          Overlay background opacity
+          <input id="background-opacity" type="range" min="0" max="100" step="5" />
+        </label>
+      </div>
+
+      <div class="card">
+        <label>
+          Focus test input
+          <input id="focus-input" type="text" placeholder="Try with no-focus-steal enabled" />
+        </label>
+      </div>
+
+      <div class="card">
+        <div class="state" id="state"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      const api = window.windowBehaviorExample;
+      const stateEl = document.getElementById("state");
+      const windowOpacityInput = document.getElementById("window-opacity");
+      const backgroundOpacityInput = document.getElementById("background-opacity");
+      const focusInput = document.getElementById("focus-input");
+
+      let currentState = await api.getState();
+
+      function render() {
+        stateEl.textContent = JSON.stringify(currentState, null, 2);
+        windowOpacityInput.value = String(Math.round(currentState.windowOpacity * 100));
+        backgroundOpacityInput.value = String(Math.round(currentState.overlayBackgroundOpacity * 100));
+      }
+
+      document.getElementById("always-on-top").onclick = () =>
+        api.dispatch({ type: "set-always-on-top", value: !currentState.alwaysOnTop });
+      document.getElementById("transparent").onclick = () =>
+        api.dispatch({ type: "set-transparent", value: !currentState.transparent });
+      document.getElementById("background").onclick = () =>
+        api.dispatch({
+          type: "set-overlay-background-visible",
+          value: !currentState.overlayBackgroundVisible,
+        });
+      document.getElementById("pass-through").onclick = () =>
+        api.dispatch({ type: "set-pass-through", value: !currentState.passThrough });
+      document.getElementById("focus-policy").onclick = () =>
+        api.dispatch({
+          type: "set-focus-policy",
+          value: currentState.focusPolicy === "standard" ? "no-focus-steal" : "standard",
+        });
+      document.getElementById("capture-protection").onclick = () =>
+        api.dispatch({
+          type: "set-capture-protection",
+          value: !currentState.captureProtection,
+        });
+
+      windowOpacityInput.oninput = (event) =>
+        api.dispatch({
+          type: "set-window-opacity",
+          value: Number(event.currentTarget.value) / 100,
+        });
+      backgroundOpacityInput.oninput = (event) =>
+        api.dispatch({
+          type: "set-overlay-background-opacity",
+          value: Number(event.currentTarget.value) / 100,
+        });
+
+      focusInput.addEventListener("mousedown", async () => {
+        if (currentState.focusPolicy === "no-focus-steal") {
+          await api.requestInteractiveFocus();
+        }
+      });
+      focusInput.addEventListener("blur", async () => {
+        if (currentState.focusPolicy === "no-focus-steal") {
+          await api.releaseInteractiveFocus();
+        }
+      });
+
+      api.subscribe((state) => {
+        currentState = state;
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>

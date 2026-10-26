@@ -1,0 +1,67 @@
+{
+  "name": "@runlith/sqlite-process",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Effect SQL clients backed by isolated SQLite writers and a shared reader process pool.",
+  "type": "module",
+  "exports": {
+    "./testing/pool": "./src/testing/pool.ts",
+    "./engine": {
+      "types": "./src/engine.ts",
+      "bun": "./src/engine.ts"
+    },
+    "./artifact": {
+      "types": "./src/artifact.ts",
+      "bun": "./src/artifact.ts",
+      "default": "./src/artifact.ts"
+    },
+    "./channel": {
+      "types": "./src/channel.ts",
+      "bun": "./src/channel.ts",
+      "default": "./src/channel.ts"
+    },
+    "./connection": {
+      "types": "./src/connection.ts",
+      "bun": "./src/connection.ts",
+      "default": "./src/connection.ts"
+    },
+    "./ReaderPool": {
+      "types": "./src/ReaderPool.ts",
+      "bun": "./src/ReaderPool.ts",
+      "default": "./src/ReaderPool.ts"
+    },
+    "./children": {
+      "types": "./src/children.ts",
+      "bun": "./src/children.ts",
+      "default": "./src/children.ts"
+    },
+    "./ProcessPool": {
+      "types": "./src/ProcessPool.ts",
+      "bun": "./src/ProcessPool.ts",
+      "default": "./src/ProcessPool.ts"
+    },
+    "./SqliteProcess": {
+      "types": "./src/SqliteProcess.ts",
+      "bun": "./src/SqliteProcess.ts",
+      "default": "./src/SqliteProcess.ts"
+    }
+  },
+  "scripts": {
+    "build:native": "bun run src/artifact.ts",
+    "postinstall": "bun run src/artifact.ts",
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@effect/sql-sqlite-bun": "catalog:",
+    "@runlith/held": "workspace:*",
+    "@runlith/testbed": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

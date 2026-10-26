@@ -1,0 +1,2 @@
+CREATE INDEX `native_thread_open_question_idx` ON `native_thread` (`id`) WHERE json_extract("native_thread"."pending_interaction", '$.status') = 'open';--> statement-breakpoint
+CREATE INDEX `thread_entry_open_question_idx` ON `thread_entry` (`thread_id`) WHERE "thread_entry"."type" = 'question' and json_extract("thread_entry"."entry", '$.status') = 'open';

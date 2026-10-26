@@ -1,0 +1,84 @@
+diff --git a/dist/BunWorker.js b/dist/BunWorker.js
+index a6d7065..4c36d74 100644
+--- a/dist/BunWorker.js
++++ b/dist/BunWorker.js
+@@ -39,10 +39,20 @@ export const layerPlatform = /*#__PURE__*/Layer.succeed(Worker.WorkerPlatform)(/
+     worker
+   }) {
+     const closeDeferred = Deferred.makeUnsafe();
++    let listening = false;
++    worker.addEventListener("message", () => {
++      listening = true;
++    }, {
++      once: true
++    });
+     worker.addEventListener("close", () => {
+       Deferred.doneUnsafe(closeDeferred, Exit.void);
+     });
+     return Effect.as(Scope.addFinalizer(scope, Effect.suspend(() => {
++      if (!listening) {
++        worker.terminate();
++        return Effect.void;
++      }
+       worker.postMessage([1]);
+       return Deferred.await(closeDeferred);
+     }).pipe(Effect.interruptible, Effect.timeout(5000), Effect.catchCause(() => Effect.sync(() => worker.terminate())))), worker);
+@@ -67,2 +77,10 @@ export const layerPlatform = /*#__PURE__*/Layer.succeed(Worker.WorkerPlatform)(/
++    function onClose() {
++      Deferred.doneUnsafe(deferred, new WorkerError({
++        reason: new WorkerUnknownError({
++          message: "The worker closed"
++        })
++      }));
++    }
++    port.addEventListener("close", onClose);
+     port.addEventListener("message", onMessage);
+     port.addEventListener("error", onError);
+@@ -70,2 +88,3 @@ export const layerPlatform = /*#__PURE__*/Layer.succeed(Worker.WorkerPlatform)(/
++      port.removeEventListener("close", onClose);
+       port.removeEventListener("message", onMessage);
+       port.removeEventListener("error", onError);
+diff --git a/src/BunWorker.ts b/src/BunWorker.ts
+index 8121d59..6868213 100644
+--- a/src/BunWorker.ts
++++ b/src/BunWorker.ts
+@@ -45,6 +45,10 @@ export const layerPlatform = Layer.succeed(Worker.WorkerPlatform)(
+   Worker.makePlatform<globalThis.Worker>()({
+     setup({ scope, worker }) {
+       const closeDeferred = Deferred.makeUnsafe<void>()
++      let listening = false
++      worker.addEventListener("message", () => {
++        listening = true
++      }, { once: true })
+       worker.addEventListener("close", () => {
+         Deferred.doneUnsafe(closeDeferred, Exit.void)
+       })
+@@ -52,6 +56,10 @@ export const layerPlatform = Layer.succeed(Worker.WorkerPlatform)(
+         Scope.addFinalizer(
+           scope,
+           Effect.suspend(() => {
++            if (!listening) {
++              worker.terminate()
++              return Effect.void
++            }
+             worker.postMessage([1])
+             return Deferred.await(closeDeferred)
+           }).pipe(
+@@ -81,2 +89,13 @@ export const layerPlatform = Layer.succeed(Worker.WorkerPlatform)(
++      function onClose() {
++        Deferred.doneUnsafe(
++          deferred,
++          new WorkerError({
++            reason: new WorkerUnknownError({
++              message: "The worker closed"
++            })
++          })
++        )
++      }
++      port.addEventListener("close", onClose)
+       port.addEventListener("message", onMessage)
+       port.addEventListener("error", onError)
+@@ -86,2 +105,3 @@ export const layerPlatform = Layer.succeed(Worker.WorkerPlatform)(
++          port.removeEventListener("close", onClose)
+           port.removeEventListener("message", onMessage)
+           port.removeEventListener("error", onError)

@@ -1,0 +1,33 @@
+{
+  "name": "@runlith/credential-file",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A JSON document of credentials kept in a 0600 file: read under a stamp cache, replaced atomically under a cross-process lock, with an interrupted replacement recovered on the next read.",
+  "type": "module",
+  "exports": {
+    "./CredentialFile": {
+      "types": "./src/CredentialFile.ts",
+      "bun": "./src/CredentialFile.ts",
+      "default": "./src/CredentialFile.ts"
+    },
+    "./failure": {
+      "types": "./src/failure.ts",
+      "bun": "./src/failure.ts",
+      "default": "./src/failure.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/file-lock": "workspace:*",
+    "@runlith/held": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

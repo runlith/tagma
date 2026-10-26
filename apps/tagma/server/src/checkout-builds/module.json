@@ -1,0 +1,6 @@
+{
+  "tagma": {
+    "build": "developer",
+    "labels": ["tagma:build"]
+  }
+}

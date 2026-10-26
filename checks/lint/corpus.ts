@@ -1,0 +1,70 @@
+import type { Options } from './catalogTags';
+
+export const options: Options = {
+  base: 'src',
+  files: { extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.jsx'], exclude: ['**/*.test.ts'] },
+  uncovered: ['src/graph/later/'],
+  literals: [
+    {
+      region: ['graph/**'],
+      words: ['task', 'claim', "a')/𠀀"],
+      positions: ['compare', 'argument', 'property', 'lookup'],
+      allowIn: ['graph/catalog/**'],
+    },
+    { region: ['graph/**'], words: ['task'], positions: ['compare'], allowIn: [] },
+    { region: ['graph/**'], words: ['compareOnly'], positions: ['compare'], allowIn: [] },
+  ],
+};
+
+export const corpus: Readonly<Record<string, string>> = {
+  'src/graph/positions.ts': [
+    "row.tag === 'task';",
+    "'task' != row.tag;",
+    'row.tag !== `claim`;',
+    "row.tag == 'task';",
+    "switch (row.tag) { case 'task': break; case `claim`: break; }",
+    "byTag('task', ['claim', 'task'], [['task']], ...['task']);",
+    "row.tags.add('task');",
+    "const value = { tag: 'task', tags: ['task', `claim`], ['tag']: 'task' };",
+    "row.tags.get('task'); row.tags.has(['task', 'claim']); row.tags['task'];",
+    "tag['task']('claim');",
+    "byTag('task', byTag('task'));",
+    'row.tag === "a\')/𠀀";',
+  ].join('\n'),
+  'src/graph/inferred.ts': [
+    "choose('task', 'claim');",
+    'function choose(tag, unrelated) {}',
+    "const select = wrap((other, tagId = 'unconfigured') => null); select('task', ['claim', 'task']);",
+    "function nested() { function choose(unrelated, tag) {} choose('claim', 'task'); }",
+    "const plain = (tag_ids) => null; plain('claim');",
+    "const assigned = function (tag) {}; assigned('task');",
+    "choose(['task', ['task'], , ...['task']]);",
+  ].join('\n'),
+  'src/graph/negatives.ts': [
+    "const role = 'task'; role === 'claim'; hasRole('task'); table.get('task');",
+    "const prose = 'tag task'; const shape = { role: 'task', tagName: 'claim', stage: 'task' };",
+    "tagName('task'); stage('claim'); row.tag > 'task'; row.tag === 'other';",
+    "row.tag === `task${suffix}`; row.tag === ('task' as const);",
+    "const { tag = 'task' } = input; class Holder { tag = 'task'; method(tag) {} }",
+    "new ByTag('task');",
+    "({ tag: 'compareOnly' }); byTag('compareOnly'); tags.get('compareOnly');",
+    "tag === 'compareOnly';",
+  ].join('\n'),
+  'src/graph/wrappers.tsx': [
+    "row.tags?.has('task'); row.tags!.get(`claim`);",
+    "(row.tag) === ('task'); tag() === 'claim'; row['tag'] === 'task';",
+    'const view = <span tag="task">task</span>;',
+    "byTag(('task'), (['claim'])); byTag('task'); byTag(['task']);",
+    "const one = { tags: (['task']), tag: ('task') }; tags[('task')]; (tags.get)('task');",
+    "(choose)('task'); const choose = (tag) => null; const skip = ((tag) => null); skip('task');",
+    "const skipWrapped = wrap(((tag) => null)); skipWrapped('task');",
+    "const skipCall = (wrap((tag) => null)); skipCall('task');",
+    "const keepWrapped = wrap((tag) => null); keepWrapped('task');",
+  ].join('\n'),
+  'src/graph/catalog/allowed.ts': "tag === 'claim'; byTag('task'); tag === 'task';",
+  'src/graph/later/deferred.ts': "tag === 'task';",
+  'src/graph/excluded.test.ts': "tag === 'task';",
+  'src/http/outside.ts': "tag === 'task';",
+  'other/graph/outside.ts': "tag === 'task';",
+  'src/graph/plain.js': "const object = { tag: 'task' }; tag === 'claim';",
+};

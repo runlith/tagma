@@ -1,0 +1,52 @@
+{
+  "name": "@runlith/speech-whisper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The whisper.cpp engine as a child process: local Whisper recognition, the Silero speech detector and the model store.",
+  "type": "module",
+  "exports": {
+    "./Engine": {
+      "types": "./src/engine/Engine.ts",
+      "node": "./src/engine/Engine.ts",
+      "default": "./src/engine/Engine.ts"
+    },
+    "./models": {
+      "types": "./src/models/catalog.ts",
+      "node": "./src/models/catalog.ts",
+      "default": "./src/models/catalog.ts"
+    },
+    "./ModelStore": {
+      "types": "./src/models/ModelStore.ts",
+      "node": "./src/models/ModelStore.ts",
+      "default": "./src/models/ModelStore.ts"
+    },
+    "./provider": {
+      "types": "./src/provider.ts",
+      "node": "./src/provider.ts",
+      "default": "./src/provider.ts"
+    },
+    "./detector": {
+      "types": "./src/detector.ts",
+      "node": "./src/detector.ts",
+      "default": "./src/detector.ts"
+    }
+  },
+  "scripts": {
+    "build": "bun ./scripts/build.ts",
+    "smoke": "bun ./scripts/smoke.ts",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/speech": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/audio": "workspace:*",
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

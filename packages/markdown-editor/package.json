@@ -1,0 +1,80 @@
+{
+  "name": "@runlith/markdown-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The always-editable markdown surface: a TipTap document over a plain-markdown wire, the reconcile that keeps untouched source bytes intact across human edits, and the [[bracket-reference]] atom products resolve into live links.",
+  "type": "module",
+  "exports": {
+    "./bracketRef": {
+      "types": "./src/bracketRef.ts",
+      "browser": "./src/bracketRef.ts",
+      "svelte": "./src/bracketRef.ts",
+      "default": "./src/bracketRef.ts"
+    },
+    "./codeLinks": {
+      "types": "./src/codeLinks.ts",
+      "browser": "./src/codeLinks.ts",
+      "svelte": "./src/codeLinks.ts",
+      "default": "./src/codeLinks.ts"
+    },
+    "./codec": {
+      "types": "./src/codec.ts",
+      "browser": "./src/codec.ts",
+      "svelte": "./src/codec.ts",
+      "default": "./src/codec.ts"
+    },
+    "./extensions": {
+      "types": "./src/extensions.ts",
+      "browser": "./src/extensions.ts",
+      "svelte": "./src/extensions.ts",
+      "default": "./src/extensions.ts"
+    },
+    "./MarkdownEditor.svelte": {
+      "types": "./src/MarkdownEditor.svelte",
+      "browser": "./src/MarkdownEditor.svelte",
+      "svelte": "./src/MarkdownEditor.svelte",
+      "default": "./src/MarkdownEditor.svelte"
+    },
+    "./reconcile": {
+      "types": "./src/reconcile.ts",
+      "browser": "./src/reconcile.ts",
+      "node": "./src/reconcile.ts",
+      "svelte": "./src/reconcile.ts",
+      "default": "./src/reconcile.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@sanity/diff-match-patch": "catalog:",
+    "@tiptap/core": "catalog:",
+    "@tiptap/extension-code-block-lowlight": "catalog:",
+    "@tiptap/extension-link": "catalog:",
+    "@tiptap/extension-placeholder": "catalog:",
+    "@tiptap/extension-table": "catalog:",
+    "@tiptap/extension-table-cell": "catalog:",
+    "@tiptap/extension-table-header": "catalog:",
+    "@tiptap/extension-table-row": "catalog:",
+    "@tiptap/extension-task-item": "catalog:",
+    "@tiptap/extension-task-list": "catalog:",
+    "@tiptap/markdown": "catalog:",
+    "@tiptap/pm": "catalog:",
+    "@tiptap/starter-kit": "catalog:",
+    "lowlight": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/testbed": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "jsdom": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "svelte": "catalog:"
+  }
+}

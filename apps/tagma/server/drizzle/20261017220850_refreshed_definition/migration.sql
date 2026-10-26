@@ -1,0 +1,1 @@
+ALTER TABLE `native_thread` ADD `pending_definition` text;

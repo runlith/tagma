@@ -1,0 +1,22 @@
+{
+  "package": "@xterm/addon-serialize@0.15.0-beta.300",
+  "hunks": {
+    "01-osc8-and-intensity": {
+      "markers": [
+        "PATCH(orca)",
+        "_activeOscLinkId",
+        "_setOscLink",
+        "OscLinkData",
+        "contentCellCount",
+        "isNextRowFirstCharDoubleWidth ? this._nullCellCount <= 1",
+        "nextRowFirstCell",
+        "materializeEmptyCell",
+        "getActiveOscLinkSequence",
+        "]8;;"
+      ],
+      "tests": [
+        { "package": "apps/tagma/app", "file": "src/lib/features/executions/terminal/serializePatch.test.ts" }
+      ]
+    }
+  }
+}

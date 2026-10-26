@@ -1,0 +1,23 @@
+import type { RefusalWords } from '../../../platform/contract/wire/manifest.js';
+
+export const REFUSAL_WORDS = {
+  'disk-short': 'Not enough disk space',
+  'host-unprepared': 'Execution host not ready',
+  'install-restarting': 'Restart already under way',
+  'install-running': 'Install already running',
+  'no-file': 'No database file on disk',
+  'no-installation': 'No installation found',
+  'no-offer': 'Installation not offered',
+  'no-successor': 'No version to restart onto',
+  'nothing-installing': 'Nothing is installing',
+  'offer-unavailable': 'Installation unavailable',
+  offline: 'Release feed unreachable',
+  'path-unwritten': 'Path not writable',
+  'platform-unavailable': 'No update for this machine',
+  'queue-undrained': 'Commits still queued',
+  'restart-record-unwritable': 'Restart record not saved',
+  'restart-window-refused': 'Restart window not accepted',
+  'rollback-failed': 'Rollback failed',
+  'source-unreadable': 'Source could not be read',
+  'successor-left': 'New version did not start',
+} as const satisfies RefusalWords;

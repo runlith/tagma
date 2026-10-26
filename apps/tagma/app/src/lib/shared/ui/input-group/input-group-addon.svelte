@@ -1,0 +1,45 @@
+<script lang="ts" module>
+  const ALIGNS = {
+    'inline-start': 'pl-2 has-[>button]:-ml-1 has-[>kbd]:-ml-0.5 order-first',
+    'inline-end': 'pr-2 has-[>button]:-mr-1 has-[>kbd]:-mr-0.5 order-last',
+    'block-start': 'px-2 pt-2 group-has-[>input]/input-group:pt-2 [.border-b]:pb-2 order-first w-full justify-start',
+    'block-end': 'px-2 pb-2 group-has-[>input]/input-group:pb-2 [.border-t]:pt-2 order-last w-full justify-start',
+  } as const;
+
+  export type InputGroupAddonAlign = keyof typeof ALIGNS;
+</script>
+
+<script lang="ts">
+  import { cn, type WithElementRef } from '$lib/shared/utils.js';
+
+  const BASE =
+    "text-muted-foreground h-auto gap-2 py-1.5 text-ui font-medium group-data-[disabled=true]/input-group:opacity-50 [&>kbd]:rounded-sm [&>svg:not([class*='size-'])]:size-3.5 flex cursor-text items-center justify-center select-none";
+  import type { HTMLAttributes } from 'svelte/elements';
+
+  let {
+    ref = $bindable(null),
+    class: className,
+    children,
+    align = 'inline-start',
+    ...restProps
+  }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
+    align?: InputGroupAddonAlign;
+  } = $props();
+</script>
+
+<div
+  bind:this={ref}
+  role="group"
+  data-slot="input-group-addon"
+  data-align={align}
+  class={cn(BASE, ALIGNS[align], className)}
+  onclick={(e) => {
+    if ((e.target as HTMLElement).closest('button')) {
+      return;
+    }
+    e.currentTarget.parentElement?.querySelector('input')?.focus();
+  }}
+  {...restProps}
+>
+  {@render children?.()}
+</div>

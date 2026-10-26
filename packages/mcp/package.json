@@ -1,0 +1,91 @@
+{
+  "name": "@runlith/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP client sessions and tool catalogs over the agent kernel contract.",
+  "type": "module",
+  "exports": {
+    "./McpCapabilities": {
+      "types": "./src/McpCapabilities.ts",
+      "default": "./src/McpCapabilities.ts"
+    },
+    "./mcpDeclarationFingerprint": {
+      "types": "./src/mcpDeclarationFingerprint.ts",
+      "default": "./src/mcpDeclarationFingerprint.ts"
+    },
+    "./McpFailure": {
+      "types": "./src/McpFailure.ts",
+      "default": "./src/McpFailure.ts"
+    },
+    "./McpPool": {
+      "types": "./src/McpPool.ts",
+      "default": "./src/McpPool.ts"
+    },
+    "./mcpRedactor": {
+      "types": "./src/mcpRedactor.ts",
+      "default": "./src/mcpRedactor.ts"
+    },
+    "./McpSession": {
+      "types": "./src/McpSession.ts",
+      "default": "./src/McpSession.ts"
+    },
+    "./apps": {
+      "types": "./src/mcpApps.ts",
+      "browser": "./src/mcpApps.ts",
+      "node": "./src/mcpApps.ts",
+      "default": "./src/mcpApps.ts"
+    },
+    "./resources": {
+      "types": "./src/mcpResources.ts",
+      "browser": "./src/mcpResources.ts",
+      "node": "./src/mcpResources.ts",
+      "default": "./src/mcpResources.ts"
+    },
+    "./mcpToolCatalog": {
+      "types": "./src/mcpToolCatalog.ts",
+      "default": "./src/mcpToolCatalog.ts"
+    },
+    "./caller": {
+      "types": "./src/mcpCallerMeta.ts",
+      "browser": "./src/mcpCallerMeta.ts",
+      "node": "./src/mcpCallerMeta.ts",
+      "default": "./src/mcpCallerMeta.ts"
+    },
+    "./testing/sdk": {
+      "types": "./src/sdk.ts",
+      "default": "./src/sdk.ts"
+    },
+    "./server": {
+      "types": "./src/sdkServer.ts",
+      "default": "./src/sdkServer.ts"
+    },
+    "./declaration": {
+      "types": "./src/McpServerDeclaration.ts",
+      "browser": "./src/McpServerDeclaration.ts",
+      "node": "./src/McpServerDeclaration.ts",
+      "default": "./src/McpServerDeclaration.ts"
+    },
+    "./identity": {
+      "types": "./src/McpToolIdentity.ts",
+      "browser": "./src/McpToolIdentity.ts",
+      "node": "./src/McpToolIdentity.ts",
+      "default": "./src/McpToolIdentity.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@runlith/agent": "workspace:*",
+    "@runlith/held": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

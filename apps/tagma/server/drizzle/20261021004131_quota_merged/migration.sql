@@ -1,0 +1,1 @@
+ALTER TABLE `account_quota_reading` ADD `merged` text;

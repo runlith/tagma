@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1280" viewBox="0 0 1280 1280">
+  <rect width="1280" height="1280" fill="#f4f3ef" />
+  <g transform="translate(0 240) scale(2)">
+    <g fill="none" stroke="#8a8578" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M262 190 C 295 170, 345 170, 378 190" />
+      <path d="M362 176 L 380 191 L 358 199" />
+    </g>
+    <text x="320" y="330" text-anchor="middle" font-family="-apple-system, Helvetica Neue, sans-serif" font-size="15" fill="#5b574d">Drag Tagma to Applications</text>
+  </g>
+</svg>

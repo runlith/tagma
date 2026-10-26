@@ -1,0 +1,11 @@
+--- a/src/whisper.cpp
++++ b/src/whisper.cpp
+@@ -1288,8 +1288,6 @@
+ }
+ 
+ static ggml_backend_t whisper_backend_init_gpu(const whisper_context_params & params) {
+-    ggml_log_set(g_state.log_callback, g_state.log_callback_user_data);
+-
+     ggml_backend_dev_t dev = nullptr;
+ 
+     int cnt = 0;

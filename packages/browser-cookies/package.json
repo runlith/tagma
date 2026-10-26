@@ -1,0 +1,52 @@
+{
+  "name": "@runlith/browser-cookies",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cookies of installed browsers read into one model: Chromium-family databases with their Safe Storage key, Firefox moz_cookies, Safari binarycookies and cookie export files, read off the event loop, and the import policy that decides what crosses and which domains it replaces.",
+  "type": "module",
+  "exports": {
+    "./cookie": {
+      "types": "./src/cookie.ts",
+      "default": "./src/cookie.ts"
+    },
+    "./source": {
+      "types": "./src/source.ts",
+      "default": "./src/source.ts"
+    },
+    "./policy": {
+      "types": "./src/policy.ts",
+      "default": "./src/policy.ts"
+    },
+    "./file": {
+      "types": "./src/file/file.ts",
+      "default": "./src/file/file.ts"
+    },
+    "./chromium": {
+      "types": "./src/chromium/chromium.ts",
+      "default": "./src/chromium/chromium.ts"
+    },
+    "./firefox": {
+      "types": "./src/firefox/firefox.ts",
+      "default": "./src/firefox/firefox.ts"
+    },
+    "./safari": {
+      "types": "./src/safari/safari.ts",
+      "default": "./src/safari/safari.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/utils": "workspace:*",
+    "effect": "catalog:",
+    "tldts": "7.1.2"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

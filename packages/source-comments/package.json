@@ -1,0 +1,43 @@
+{
+  "name": "@runlith/source-comments",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Which ranges of a source file are comments, and which of those are prose, a directive or deliberately marked.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "browser": "./src/index.ts",
+      "node": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./classify": {
+      "types": "./src/classify.ts",
+      "browser": "./src/classify.ts",
+      "node": "./src/classify.ts",
+      "default": "./src/classify.ts"
+    },
+    "./language": {
+      "types": "./src/language.ts",
+      "browser": "./src/language.ts",
+      "node": "./src/language.ts",
+      "default": "./src/language.ts"
+    },
+    "./languages": {
+      "types": "./src/languages/index.ts",
+      "browser": "./src/languages/index.ts",
+      "node": "./src/languages/index.ts",
+      "default": "./src/languages/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "js-tokens": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:"
+  }
+}

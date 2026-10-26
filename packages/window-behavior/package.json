@@ -1,0 +1,121 @@
+{
+  "name": "@runlith/window-behavior",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Headless window-behavior capability for Runlith products.",
+  "bin": {
+    "window-behavior-native-install": "./bin/window-behavior-native-install.mjs"
+  },
+  "files": [
+    "dist",
+    "src",
+    "examples",
+    "native",
+    "bin",
+    "scripts",
+    "README.md"
+  ],
+  "type": "module",
+  "exports": {
+    "./contract/commands": {
+      "bun": "./src/contract/commands.ts",
+      "browser": "./dist/contract/commands.js",
+      "node": "./dist/contract/commands.js",
+      "default": "./dist/contract/commands.js"
+    },
+    "./contract/state": {
+      "bun": "./src/contract/state.ts",
+      "browser": "./dist/contract/state.js",
+      "node": "./dist/contract/state.js",
+      "default": "./dist/contract/state.js"
+    },
+    "./runtime-core/presentation": {
+      "bun": "./src/runtime-core/presentation.ts",
+      "browser": "./dist/runtime-core/presentation.js",
+      "node": "./dist/runtime-core/presentation.js",
+      "default": "./dist/runtime-core/presentation.js"
+    },
+    "./runtime-core/reduce": {
+      "bun": "./src/runtime-core/reduce.ts",
+      "browser": "./dist/runtime-core/reduce.js",
+      "node": "./dist/runtime-core/reduce.js",
+      "default": "./dist/runtime-core/reduce.js"
+    },
+    "./host-electron/bootstrap": {
+      "bun": "./src/host-electron/bootstrap.ts",
+      "node": "./dist/host-electron/bootstrap.js",
+      "default": "./dist/host-electron/bootstrap.js"
+    },
+    "./host-electron/createTransport": {
+      "bun": "./src/host-electron/createTransport.ts",
+      "node": "./dist/host-electron/createTransport.js",
+      "default": "./dist/host-electron/createTransport.js"
+    },
+    "./host-electron/electron-defaults": {
+      "bun": "./src/host-electron/electron-defaults.ts",
+      "node": "./dist/host-electron/electron-defaults.js",
+      "default": "./dist/host-electron/electron-defaults.js"
+    },
+    "./host-electron/ElectronNoFocusStealRuntime": {
+      "bun": "./src/host-electron/ElectronNoFocusStealRuntime.ts",
+      "node": "./dist/host-electron/ElectronNoFocusStealRuntime.js",
+      "default": "./dist/host-electron/ElectronNoFocusStealRuntime.js"
+    },
+    "./host-electron/ElectronPassThroughRuntime": {
+      "bun": "./src/host-electron/ElectronPassThroughRuntime.ts",
+      "node": "./dist/host-electron/ElectronPassThroughRuntime.js",
+      "default": "./dist/host-electron/ElectronPassThroughRuntime.js"
+    },
+    "./host-electron/ElectronWindowBehaviorHost": {
+      "bun": "./src/host-electron/ElectronWindowBehaviorHost.ts",
+      "node": "./dist/host-electron/ElectronWindowBehaviorHost.js",
+      "default": "./dist/host-electron/ElectronWindowBehaviorHost.js"
+    },
+    "./host-electron/types": {
+      "bun": "./src/host-electron/types.ts",
+      "node": "./dist/host-electron/types.js",
+      "default": "./dist/host-electron/types.js"
+    },
+    "./bindings/controller": {
+      "bun": "./src/bindings/controller.ts",
+      "browser": "./dist/bindings/controller.js",
+      "node": "./dist/bindings/controller.js",
+      "default": "./dist/bindings/controller.js"
+    },
+    "./native/addon-path": {
+      "bun": "./src/native/addon-path.ts",
+      "node": "./dist/native/addon-path.js",
+      "default": "./dist/native/addon-path.js"
+    },
+    "./native/no-focus-steal": {
+      "bun": "./src/native/no-focus-steal.ts",
+      "node": "./dist/native/no-focus-steal.js",
+      "default": "./dist/native/no-focus-steal.js"
+    }
+  },
+  "scripts": {
+    "postinstall": "bun run build",
+    "build": "tsc -p tsconfig.json",
+    "test": "testbed bun test --no-isolate --path-ignore-patterns='e2e/**'",
+    "test:e2e": "bun run build && bunx playwright test e2e/window-behavior.spec.mjs -c playwright.config.mjs",
+    "test:smoke:macos-native": "bun run native:install && bun run build && bunx playwright test e2e/macos-native-smoke.spec.mjs -c playwright.config.mjs",
+    "native:build": "bun ./scripts/native-install.mjs",
+    "native:install": "bun ./scripts/native-install.mjs",
+    "native:clean": "bun ./scripts/native-clean.mjs",
+    "example:minimal": "bun run build && electron ./examples/electron-minimal/main.mjs",
+    "example:overlay": "bun run build && electron ./examples/electron-overlay-playground/main.mjs"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.5.0",
+    "node-gyp": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "electron": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "electron": ">=41.0.0"
+  }
+}

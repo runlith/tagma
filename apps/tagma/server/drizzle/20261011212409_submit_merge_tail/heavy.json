@@ -1,0 +1,1 @@
+{"reason":"Index open landing intents by checkout so a retry repairs its own merge tail without scanning pending landings from every checkout. The update estimates the one-time landing_intent history scan before replacing the running installation."}

@@ -1,0 +1,1 @@
+{"reason":"Build root-use foreign-key indexes over command and terminal history so completed executions can release their bookkeeping without scanning that history on every deletion."}

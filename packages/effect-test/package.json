@@ -1,0 +1,28 @@
+{
+  "name": "@runlith/effect-test",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/testing.ts",
+      "bun": "./src/testing.ts"
+    },
+    "./vitest": {
+      "types": "./src/vitest.ts",
+      "default": "./src/vitest.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:vitest": "testbed vitest run --exclude '**/vitestFailures.fixture.ts' --no-file-parallelism",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "jsdom": "catalog:",
+    "vitest": "catalog:"
+  }
+}

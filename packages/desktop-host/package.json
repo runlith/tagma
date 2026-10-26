@@ -1,0 +1,38 @@
+{
+  "name": "@runlith/desktop-host",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron host mechanisms every desktop product needs: where a window sits between launches, and which links may leave it.",
+  "type": "module",
+  "exports": {
+    "./ExternalLinks": {
+      "types": "./src/ExternalLinks.ts",
+      "default": "./src/ExternalLinks.ts"
+    },
+    "./QuickHideShortcut": {
+      "types": "./src/QuickHideShortcut.ts",
+      "default": "./src/QuickHideShortcut.ts"
+    },
+    "./WindowPlacement": {
+      "types": "./src/WindowPlacement.ts",
+      "default": "./src/WindowPlacement.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run src --project 'unit*'",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@runlith/testbed": "workspace:*",
+    "@types/node": "catalog:",
+    "electron": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "electron": ">=41.0.0"
+  }
+}

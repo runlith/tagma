@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS `performance_record_metric_instance_idx`;--> statement-breakpoint
+CREATE INDEX `performance_record_metric_idx` ON `performance_record` (`kind`,`name`,`instance_id`,`wall_time`,`id`) WHERE "performance_record"."kind" = 'metric';

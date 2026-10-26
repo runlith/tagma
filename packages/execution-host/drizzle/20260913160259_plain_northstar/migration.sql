@@ -1,0 +1,1 @@
+ALTER TABLE `execution` ADD `command` text;

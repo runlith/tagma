@@ -1,0 +1,30 @@
+{
+  "name": "@runlith/navigation-ts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The TypeScript adapter of code navigation: the engine process around TypeScript 7 and the launcher the engine holder opens it with.",
+  "type": "module",
+  "exports": {
+    "./launcher": {
+      "types": "./src/launcher.ts",
+      "default": "./src/launcher.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "runlith-typecheck",
+    "test": "testbed bun test --no-isolate --pass-with-no-tests",
+    "test:integration": "testbed bun test --no-isolate ./src/launcher.itest.ts"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/navigation": "workspace:*",
+    "@runlith/ndjson-rpc": "workspace:*",
+    "effect": "catalog:",
+    "typescript7": "npm:typescript@7.1.0-beta"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

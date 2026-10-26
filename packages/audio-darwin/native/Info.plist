@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>__BUNDLE_ID__</string>
+  <key>CFBundleName</key><string>__NAME__</string>
+  <key>CFBundleDisplayName</key><string>__NAME__</string>
+  <key>CFBundleExecutable</key><string>audio-helper</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>LSUIElement</key><true/>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>NSMicrophoneUsageDescription</key><string>__MICROPHONE_USAGE__</string>
+  <key>NSAudioCaptureUsageDescription</key><string>__SYSTEM_AUDIO_USAGE__</string>
+</dict>
+</plist>

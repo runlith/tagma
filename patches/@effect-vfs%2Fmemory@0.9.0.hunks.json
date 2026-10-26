@@ -1,0 +1,15 @@
+{
+  "package": "@effect-vfs/memory@0.9.0",
+  "hunks": {
+    "memory-copy-merge": {
+      "markers": ["copyTree", "if (existing === \"overwrite\") yield* clearExisting(name, base);"],
+      "tests": [
+        {
+          "package": "packages/testbed",
+          "file": "./src/memory.test.ts",
+          "names": "recursive copies|copy creates"
+        }
+      ]
+    }
+  }
+}

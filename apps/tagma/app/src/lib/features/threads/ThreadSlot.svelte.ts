@@ -1,0 +1,338 @@
+import { Effect, type Exit } from 'effect';
+import type { WireThread } from '@tagma/server/threads/contract/wire/snapshot';
+import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
+import type { CompactionChoice } from '@tagma/server/native-harness/contract/wire/compactionChoices';
+import type { ChatContextSource } from '@runlith/chat-ui/contextUsage';
+import type { ChatNotice } from '@runlith/chat-ui/notice';
+import { type ComposerHandler, settled } from '@runlith/chat-ui/composer';
+import { PromptHistory } from '@runlith/chat-ui/PromptHistory';
+import type { ChatTurnFailure } from '@runlith/chat-ui/session/TurnCommands.svelte';
+import type { ThreadSession } from '@runlith/chat-ui/session/ThreadSession.svelte';
+import type { MountedApp } from '@runlith/layer/App';
+import { Platform } from '@runlith/layer/Platform';
+import { Process } from '@runlith/layer/process';
+import { Scope } from '@runlith/layer/Scope';
+import { SelectionRepo } from '$lib/features/graph/SelectionRepo.js';
+import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
+import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
+import { Notices } from '$lib/features/notices/Service.svelte.js';
+import { UsageAccounts } from '$lib/features/providers/usage/Accounts.svelte.js';
+import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
+import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
+import { ChatHold } from './ChatHold.svelte.js';
+import { AgentTypes } from './AgentTypes.svelte.js';
+import { ThreadBirth } from './birth/ThreadBirth.svelte.js';
+import { type Draft, ThreadDraft } from './Draft.svelte.js';
+import { ModelDefaults } from './ModelDefaults.svelte.js';
+import { Favorites } from './Favorites.svelte.js';
+import { AgentLibraryRepo } from './library/AgentLibraryRepo.js';
+import { type ThreadIdentity, ThreadList } from './List.svelte.js';
+import { ComposerFeeds } from './native/ComposerFeeds.svelte.js';
+import { DraftShelf } from './native/DraftShelf.svelte.js';
+import { feedRecord } from './native/feedRecords.js';
+import { pickedSummarizer } from './native/compactionWords.js';
+import { PromptStore } from './native/PromptStore.js';
+import { CallPieces } from './native/CallPieces.js';
+import { ThreadUploads, attachmentHandlers } from './native/ThreadUploads.js';
+import { Door } from '$lib/wire/Door.js';
+import { SkillCatalog } from './native/SkillCatalog.svelte.js';
+import { chatNotice } from './notices.js';
+import { type HarnessOpenAttempt, ThreadOpenWatch, type ThreadOpenAttempt } from './OpenWatch.js';
+import { Runner } from './Runner.js';
+import { SurfaceChoices, ThreadSurface } from './external/Surface.svelte.js';
+import { ModelPanelState } from './ModelPanelState.svelte.js';
+import { ShownThread } from './ShownThread.js';
+import { type SlotNavigation, ThreadWrites } from './ThreadWrites.js';
+import { ThreadViews } from './thread/ThreadViews.js';
+import { SlotSelection, type SlotContext, type SlotWriter } from './SlotSelection.svelte.js';
+import { ThreadsRepo } from './Repo.js';
+import { TeamRepo } from './team/TeamRepo.js';
+import { type ThreadChat, ThreadChats } from './ThreadChats.js';
+import { type AuthorityView, type DelegationPick } from './thread/authority.js';
+import { contextLabelsOf, type ContextLabels, type ModelView } from './thread/modelSettings.js';
+import { asHandler } from './thread/ThreadRefused.js';
+import { ThreadAuthority } from './thread/ThreadAuthority.svelte.js';
+import { ThreadCompaction } from './thread/ThreadCompaction.svelte.js';
+import { ThreadContext } from './thread/ThreadContext.svelte.js';
+import { ThreadFeed } from './thread/ThreadFeed.svelte.js';
+import { ThreadInstructions } from './thread/ThreadInstructions.js';
+import { ThreadLease } from './thread/ThreadLease.js';
+import { ThreadRecap } from './thread/ThreadRecap.svelte.js';
+import { ThreadSettings } from './thread/ThreadSettings.svelte.js';
+
+const NO_CONTEXT: SlotContext = { scopeName: () => null };
+
+export type SlotOptions = { readonly draft?: string };
+
+export type SlotArgs = SlotOptions & {
+  readonly app: MountedApp;
+  readonly writer: SlotWriter;
+  readonly context?: SlotContext;
+};
+
+export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') implements SlotNavigation {
+  readonly draft: ThreadDraft;
+  readonly chat: ChatHold;
+  readonly history: PromptHistory;
+  readonly surface: ThreadSurface;
+  readonly birth: ThreadBirth;
+  readonly feeds: ComposerFeeds;
+
+  readonly shown: ShownThread;
+  readonly views: ThreadViews;
+  readonly writes: ThreadWrites;
+  readonly panel = new ModelPanelState();
+
+  thread = $state.raw<ThreadLease | null>(null);
+  harnessOpen = $state<HarnessOpenAttempt | null>(null);
+
+  private readonly selection: SlotSelection;
+  private readonly writer: SlotWriter;
+  private readonly opens: ThreadOpenWatch;
+  private pendingType: string | null = null;
+
+  static override *make({ app, writer, context, ...options }: SlotArgs) {
+    const projectId = (yield* ProjectRung.Current).projectId;
+    const library = yield* AgentLibraryRepo;
+    const scope = yield* Scope;
+    const threads = yield* ThreadsRepo;
+    return new ThreadSlot(
+      projectId,
+      (yield* ThreadChats).of(projectId),
+      yield* DraftShelf,
+      threads,
+      yield* ThreadList,
+      yield* Worktrees,
+      yield* AgentTypes,
+      yield* ModelDefaults,
+      yield* UsageAccounts,
+      yield* Favorites,
+      yield* ProviderCatalog,
+      yield* SelectionRepo,
+      yield* TagCatalog,
+      yield* SettingsRepo,
+      yield* SurfaceChoices,
+      yield* TeamRepo,
+      yield* Notices,
+      new SkillCatalog(library.skills, projectId, scope),
+      yield* Door,
+      (yield* Platform).storage.local,
+      scope,
+      app,
+      new Runner(),
+      writer,
+      context ?? NO_CONTEXT,
+      options,
+    );
+  }
+
+  constructor(
+    readonly projectId: number,
+    chats: ThreadChat,
+    private readonly shelf: DraftShelf,
+    threads: ReturnType<typeof ThreadsRepo.use>,
+    private readonly list: ThreadList,
+    readonly places: Worktrees,
+    types: AgentTypes,
+    defaults: ModelDefaults,
+    accounts: UsageAccounts,
+    favorites: Favorites,
+    private readonly catalog: ProviderCatalog,
+    selection: ReturnType<typeof SelectionRepo.use>,
+    tags: TagCatalog,
+    settings: ReturnType<typeof SettingsRepo.use>,
+    choices: SurfaceChoices,
+    teams: ReturnType<typeof TeamRepo.use>,
+    notices: Notices,
+    readonly skills: SkillCatalog,
+    door: Door,
+    storage: ConstructorParameters<typeof PromptStore>[0],
+    private readonly scope: Scope,
+    private readonly app: MountedApp,
+    private readonly runner: Runner,
+    writer: SlotWriter,
+    context: SlotContext,
+    options: SlotOptions = {},
+  ) {
+    super();
+    this.selection = new SlotSelection(projectId, options.draft);
+    this.writer = writer;
+    this.opens = new ThreadOpenWatch(runner, (threadId) => this.showing(threadId));
+    this.draft = new ThreadDraft(
+      shelf,
+      new ThreadUploads(threads, door, projectId),
+      new CallPieces(threads, projectId),
+      () => new Set(list.threads.map((row) => row.title)),
+    );
+    this.draft.useKey(this.selection.draftKey(null));
+    this.history = new PromptHistory(new PromptStore(storage, projectId));
+    this.surface = new ThreadSurface(projectId, () => this.chat.session?.thread ?? null, choices);
+    this.feeds = new ComposerFeeds(this.draft, selection, tags, projectId, () => this.chat.commands.dismiss());
+    this.chat = new ChatHold(
+      chats,
+      runner,
+      this.draft,
+      (hold) =>
+        new ThreadBirth(
+          hold,
+          this.selection,
+          this.writer,
+          context,
+          scope,
+          this.draft,
+          shelf,
+          threads,
+          projectId,
+          list,
+          places,
+          types,
+          settings,
+          defaults,
+          accounts,
+          favorites,
+          catalog,
+          teams,
+          notices,
+          () => this.restart(),
+        ),
+      (failure) => this.noticeOf(failure),
+      this.history,
+      { ...attachmentHandlers(door, projectId), transcriptEntry: feedRecord },
+    );
+    this.birth = this.chat.birth;
+    this.shown = new ShownThread(
+      projectId,
+      () => this.selection.activeId,
+      () => this.thread,
+      () => this.identity,
+      () => this.row,
+    );
+    this.views = new ThreadViews(this.shown, this.birth);
+    this.writes = new ThreadWrites(this.shown, this.chat, chats.shaping, this.birth, this.views, skills, runner, this);
+    scope.defer(() => {
+      this.opens.abandon('closed');
+      this.thread?.release();
+      return runner.close();
+    });
+  }
+
+  get activeId(): string | null {
+    return this.selection.activeId;
+  }
+
+  activeThread = $derived.by<WireThread | null>(() => this.thread?.get(ThreadFeed).chatThread ?? null);
+  canSend = $derived.by(() => this.chat.commands.canSend);
+
+  row = $derived.by<ThreadListRow | null>(() => this.list.harnessRow(this.selection.activeId));
+
+  identity = $derived.by<ThreadIdentity | null>(() =>
+    this.list.identityOf(this.selection.activeId, this.thread?.get(ThreadFeed).session.thread ?? null),
+  );
+
+  forget(id: string): void {
+    this.shelf.forget(this.selection.draftKey(id));
+    if (this.selection.activeId === id) this.startDraft();
+  }
+
+  activateRoute(sessionId: string | null, projectId: number | null): void {
+    if (projectId !== this.projectId) return;
+    if (sessionId === this.selection.activeId) {
+      if (sessionId !== null) this.opens.standing();
+      return;
+    }
+    if (sessionId === null) {
+      this.resetDraft();
+      return;
+    }
+    this.select(sessionId);
+  }
+
+  open(id: string): void {
+    if (this.selection.activeId === id) {
+      this.opens.standing();
+      return;
+    }
+    this.writer.open(id);
+  }
+
+  startDraft(): void {
+    if (this.selection.activeId === null) this.resetDraft();
+    this.writer.navigate(null);
+  }
+
+  startDraftAs(type: string): void {
+    this.pendingType = type;
+    this.startDraft();
+  }
+
+  private restart(): void {
+    this.startDraft();
+    void this.writes.send();
+  }
+
+  private resetDraft(): void {
+    this.chat.commands.dismiss();
+    this.select(null);
+  }
+
+  private noticeOf(failure: ChatTurnFailure<Draft>): ChatNotice | null {
+    if (this.thread?.find(ThreadCompaction)?.absorbs(failure) === true) return null;
+    return chatNotice(failure);
+  }
+
+  private select(id: string | null): void {
+    this.opens.select(id);
+    this.harnessOpen = null;
+    this.panel.close();
+    this.bind(id);
+  }
+
+  private applyPendingType(id: string | null): void {
+    const type = this.pendingType;
+    this.pendingType = null;
+    if (id === null && type !== null) this.birth.applyType(type);
+  }
+
+  private lease(id: string | null): void {
+    if (id !== null && this.thread?.threadId === id) return;
+    this.thread?.release();
+    this.thread = id === null ? null : new ThreadLease(this.app, id, this.scope);
+    this.chat.show(this.thread === null ? null : this.thread.get(ThreadFeed).session);
+  }
+
+  private bind(id: string | null): void {
+    this.selection.select(id);
+    this.draft.useKey(this.selection.draftKey(id));
+    this.applyPendingType(id);
+    void this.draft.lostNotice().then((message) => {
+      if (message !== null && !this.scope.signal.aborted) this.chat.commands.say({ tone: 'error', message });
+    });
+    const attempt = this.opens.inFlight;
+    this.opens.subscribing(() => this.lease(id));
+    const session = this.chat.session;
+    if (session === null) return;
+    void this.chat.run(session.opened(), false).then((read) => this.opened(session, read, attempt));
+  }
+
+  private opened(session: ThreadSession<WireThread>, read: boolean, attempt: ThreadOpenAttempt | null): void {
+    if (this.chat.session !== session) return;
+    if (!read) {
+      if (attempt !== null && this.opens.inFlight === attempt) this.opens.abandon('unreadable');
+      return;
+    }
+    if (this.surface.kind === 'terminal') {
+      this.harnessOpen ??= this.opens.toHarness();
+      return;
+    }
+    this.harnessOpen = null;
+    const timed = this.opens.arrived(attempt);
+    if (timed !== null) this.opens.applied(timed, session.fold.entries.length);
+  }
+
+  private showing(threadId: string): boolean {
+    if (this.scope.signal.aborted || this.selection.activeId !== threadId) return false;
+    const session = this.chat.session;
+    return session?.threadId === threadId && session.threadPhase.kind === 'open';
+  }
+}

@@ -1,0 +1,15 @@
+[package]
+name = "execution-platform"
+version = "0.1.0"
+edition = "2024"
+license = "UNLICENSED"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "execution_platform"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+libc = "0.2"

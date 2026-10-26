@@ -1,0 +1,1 @@
+ALTER TABLE `command` ADD `measurement` text;

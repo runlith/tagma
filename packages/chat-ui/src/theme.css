@@ -1,0 +1,141 @@
+:root {
+  --chat-raised: var(--card);
+  --chat-chrome: var(--background);
+  --chat-field: var(--background);
+
+  --chat-skill: var(--primary);
+
+  --chat-live: var(--primary);
+  --chat-live-mark: var(--primary);
+
+  --chat-success: var(--primary);
+  --chat-success-mark: var(--primary);
+  --chat-success-label: var(--foreground);
+
+  --chat-failure: var(--destructive);
+  --chat-refused: var(--destructive);
+
+  --chat-mutation: color-mix(in oklch, var(--muted-foreground), transparent 50%);
+
+  --chat-diff-added: var(--primary);
+  --chat-diff-removed: var(--destructive);
+
+  --chat-guidance: var(--muted-foreground);
+
+  --chat-queued: var(--muted-foreground);
+  --chat-queued-label: var(--foreground);
+
+  --chat-interrupted: var(--muted-foreground);
+  --chat-interrupted-label: var(--foreground);
+
+  --chat-context-track: var(--border);
+  --chat-here: var(--primary);
+  --chat-aim: var(--primary);
+
+  --beat: 1.2s;
+
+  --chat-scrim: color-mix(in oklch, var(--background) 85%, transparent);
+
+  --hover: color-mix(in oklch, var(--foreground) 6%, transparent);
+  --selected: color-mix(in oklch, var(--foreground) 10%, transparent);
+  --hover-danger: color-mix(in oklch, var(--destructive) 12%, transparent);
+}
+
+[data-fade] {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+[data-fade][data-clipped] {
+  -webkit-mask-image: linear-gradient(90deg, var(--foreground) calc(100% - var(--spacing) * 6), transparent);
+  mask-image: linear-gradient(90deg, var(--foreground) calc(100% - var(--spacing) * 6), transparent);
+}
+
+[data-fade='start'] {
+  direction: rtl;
+}
+
+[data-fade='start'][data-clipped] {
+  -webkit-mask-image: linear-gradient(270deg, var(--foreground) calc(100% - var(--spacing) * 6), transparent);
+  mask-image: linear-gradient(270deg, var(--foreground) calc(100% - var(--spacing) * 6), transparent);
+}
+
+[data-clamp] {
+  overflow: hidden;
+}
+
+[data-clamp][data-clipped] {
+  -webkit-mask-image: linear-gradient(180deg, var(--foreground) calc(100% - var(--spacing) * 6), transparent);
+  mask-image: linear-gradient(180deg, var(--foreground) calc(100% - var(--spacing) * 6), transparent);
+}
+
+@theme inline {
+  --animate-breathe: breathe var(--beat) ease-in-out infinite;
+  --animate-march: march var(--beat) ease-in-out infinite;
+
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  @keyframes march {
+    0%,
+    40%,
+    100% {
+      opacity: var(--march-floor, 0.3);
+    }
+    12% {
+      opacity: 1;
+    }
+  }
+
+  --color-chat-raised: var(--chat-raised);
+  --color-chat-chrome: var(--chat-chrome);
+  --color-chat-field: var(--chat-field);
+  --color-chat-live: var(--chat-live);
+  --color-chat-live-mark: var(--chat-live-mark);
+  --color-chat-success: var(--chat-success);
+  --color-chat-success-mark: var(--chat-success-mark);
+  --color-chat-success-label: var(--chat-success-label);
+  --color-chat-failure: var(--chat-failure);
+  --color-chat-refused: var(--chat-refused);
+  --color-chat-mutation: var(--chat-mutation);
+  --color-chat-diff-added: var(--chat-diff-added);
+  --color-chat-diff-removed: var(--chat-diff-removed);
+  --color-chat-guidance: var(--chat-guidance);
+  --color-chat-queued: var(--chat-queued);
+  --color-chat-queued-label: var(--chat-queued-label);
+  --color-chat-interrupted: var(--chat-interrupted);
+  --color-chat-interrupted-label: var(--chat-interrupted-label);
+  --color-chat-scrim: var(--chat-scrim);
+  --color-chat-here: var(--chat-here);
+  --color-chat-aim: var(--chat-aim);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-hover-danger: var(--hover-danger);
+
+  --container-feed: min(96%, 78ch);
+
+  --text-meta: 0.6875rem;
+  --text-meta--line-height: 1rem;
+  --text-small: 0.75rem;
+  --text-small--line-height: 1rem;
+  --text-ui: 0.8125rem;
+  --text-ui--line-height: 1.25rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.375rem;
+  --text-page: 1.0625rem;
+  --text-page--line-height: 1.3;
+  --text-title: 1.375rem;
+  --text-title--line-height: 1.25;
+
+  --shadow-raised:
+    0 2px 4px color-mix(in oklch, var(--foreground) 5%, transparent), 0 8px 20px color-mix(in oklch, var(--foreground) 9%, transparent);
+  --shadow-float:
+    0 4px 10px color-mix(in oklch, var(--foreground) 8%, transparent), 0 18px 48px color-mix(in oklch, var(--foreground) 16%, transparent);
+}

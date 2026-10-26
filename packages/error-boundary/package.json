@@ -1,0 +1,68 @@
+{
+  "name": "@runlith/error-boundary",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Svelte error boundary with a policy, a reporter that deduplicates by fingerprint, and a config the host provides for its reporter and fallback.",
+  "type": "module",
+  "exports": {
+    "./error-boundary-config.svelte": {
+      "types": "./src/error-boundary-config.svelte.ts",
+      "browser": "./src/error-boundary-config.svelte.ts",
+      "svelte": "./src/error-boundary-config.svelte.ts",
+      "default": "./src/error-boundary-config.svelte.ts"
+    },
+    "./ErrorBoundary.svelte": {
+      "types": "./src/ErrorBoundary.svelte",
+      "browser": "./src/ErrorBoundary.svelte",
+      "svelte": "./src/ErrorBoundary.svelte",
+      "default": "./src/ErrorBoundary.svelte"
+    },
+    "./policy": {
+      "types": "./src/policy.ts",
+      "browser": "./src/policy.ts",
+      "node": "./src/policy.ts",
+      "svelte": "./src/policy.ts",
+      "default": "./src/policy.ts"
+    },
+    "./reporter": {
+      "types": "./src/reporter.ts",
+      "browser": "./src/reporter.ts",
+      "node": "./src/reporter.ts",
+      "svelte": "./src/reporter.ts",
+      "default": "./src/reporter.ts"
+    },
+    "./ThrowError.svelte": {
+      "types": "./src/ThrowError.svelte",
+      "svelte": "./src/ThrowError.svelte",
+      "default": "./src/ThrowError.svelte"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "browser": "./src/types.ts",
+      "node": "./src/types.ts",
+      "svelte": "./src/types.ts",
+      "default": "./src/types.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run",
+    "typecheck": "runlith-typecheck"
+  },
+  "devDependencies": {
+    "@runlith/testbed": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@sveltejs/kit": "catalog:",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@types/node": "catalog:",
+    "jsdom": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@sveltejs/kit": "catalog:",
+    "svelte": "catalog:"
+  }
+}

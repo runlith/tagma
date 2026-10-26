@@ -1,0 +1,78 @@
+{
+  "name": "@runlith/testbed",
+  "version": "0.1.0",
+  "private": true,
+  "description": "What every test file runs on: guards that keep unit files off real resources, a closed network, a confined home, a process watch that knows world processes, and the run report that prices each file.",
+  "bin": {
+    "testbed": "./src/cli.ts"
+  },
+  "type": "module",
+  "exports": {
+    "./bun": {
+      "types": "./src/bun.ts",
+      "bun": "./src/bun.ts"
+    },
+    "./vitest/setup": {
+      "types": "./src/vitest/setup.ts",
+      "default": "./src/vitest/setup.ts"
+    },
+    "./vitest/global": {
+      "types": "./src/vitest/global.ts",
+      "default": "./src/vitest/global.ts"
+    },
+    "./vitest/jsdom": {
+      "types": "./src/vitest/jsdom.ts",
+      "default": "./src/vitest/jsdom.ts"
+    },
+    "./fixture": {
+      "types": "./src/fixture.ts",
+      "default": "./src/fixture.ts"
+    },
+    "./worlds": {
+      "types": "./src/worlds.ts",
+      "default": "./src/worlds.ts"
+    },
+    "./ledger": {
+      "types": "./src/core/ledger.ts",
+      "default": "./src/core/ledger.ts"
+    },
+    "./report": {
+      "types": "./src/report.ts",
+      "default": "./src/report.ts"
+    },
+    "./budget": {
+      "types": "./src/slots.ts",
+      "default": "./src/slots.ts"
+    },
+    "./memory": {
+      "types": "./src/memory.ts",
+      "default": "./src/memory.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test",
+    "test:integration": "testbed bun test $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@effect-vfs/memory": "0.9.0",
+    "@effect/platform-node-shared": "catalog:",
+    "@runlith/file-lock": "workspace:*",
+    "@runlith/sqlite-process": "workspace:*",
+    "css.escape": "1.5.1",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/css.escape": "1.5.2",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "vitest": "catalog:"
+  }
+}

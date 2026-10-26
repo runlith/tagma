@@ -1,0 +1,31 @@
+{
+  "name": "@runlith/ripgrep",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ripgrep binary resolution, search runs and parsed output for Runlith packages.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./run": {
+      "types": "./src/run.ts",
+      "default": "./src/run.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "runlith-typecheck",
+    "test": "testbed bun test --no-isolate --pass-with-no-tests"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/executions": "workspace:*",
+    "@vscode/ripgrep": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

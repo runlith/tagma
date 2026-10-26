@@ -1,0 +1,27 @@
+{
+  "name": "@runlith/speech-openai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The OpenAI speech adapter: realtime transcription sessions as a pure protocol over the speech duplex executor, and /audio/speech synthesis.",
+  "type": "module",
+  "exports": {
+    "./provider": {
+      "types": "./src/provider.ts",
+      "default": "./src/provider.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/speech": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

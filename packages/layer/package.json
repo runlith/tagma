@@ -1,0 +1,206 @@
+{
+  "name": "@runlith/layer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The application graph without a runtime: keys with a tier, layers that provide and require, scopes with a lifetime, a manifest that closes at compile time, and the Svelte and SvelteKit bindings that mount it.",
+  "type": "module",
+  "exports": {
+    "./App": {
+      "types": "./src/App.ts",
+      "browser": "./src/App.ts",
+      "node": "./src/App.ts",
+      "default": "./src/App.ts"
+    },
+    "./clock": {
+      "types": "./src/clock.ts",
+      "browser": "./src/clock.ts",
+      "node": "./src/clock.ts",
+      "default": "./src/clock.ts"
+    },
+    "./condition": {
+      "types": "./src/condition.ts",
+      "browser": "./src/condition.ts",
+      "node": "./src/condition.ts",
+      "default": "./src/condition.ts"
+    },
+    "./config": {
+      "types": "./src/config.ts",
+      "browser": "./src/config.ts",
+      "node": "./src/config.ts",
+      "default": "./src/config.ts"
+    },
+    "./cookies": {
+      "types": "./src/cookies.ts",
+      "browser": "./src/cookies.ts",
+      "node": "./src/cookies.ts",
+      "default": "./src/cookies.ts"
+    },
+    "./door": {
+      "types": "./src/door.ts",
+      "browser": "./src/door.ts",
+      "node": "./src/door.ts",
+      "default": "./src/door.ts"
+    },
+    "./Failure": {
+      "types": "./src/Failure.ts",
+      "browser": "./src/Failure.ts",
+      "node": "./src/Failure.ts",
+      "default": "./src/Failure.ts"
+    },
+    "./Graph": {
+      "types": "./src/Graph.ts",
+      "browser": "./src/Graph.ts",
+      "node": "./src/Graph.ts",
+      "default": "./src/Graph.ts"
+    },
+    "./Handoff": {
+      "types": "./src/Handoff.ts",
+      "browser": "./src/Handoff.ts",
+      "node": "./src/Handoff.ts",
+      "default": "./src/Handoff.ts"
+    },
+    "./Host": {
+      "types": "./src/Host.ts",
+      "browser": "./src/Host.ts",
+      "node": "./src/Host.ts",
+      "default": "./src/Host.ts"
+    },
+    "./key": {
+      "types": "./src/key.ts",
+      "browser": "./src/key.ts",
+      "node": "./src/key.ts",
+      "default": "./src/key.ts"
+    },
+    "./Layer": {
+      "types": "./src/Layer.ts",
+      "browser": "./src/Layer.ts",
+      "node": "./src/Layer.ts",
+      "default": "./src/Layer.ts"
+    },
+    "./Mark": {
+      "types": "./src/Mark.ts",
+      "browser": "./src/Mark.ts",
+      "node": "./src/Mark.ts",
+      "default": "./src/Mark.ts"
+    },
+    "./Platform": {
+      "types": "./src/Platform.ts",
+      "browser": "./src/Platform.ts",
+      "ssr": "./src/Platform.ts",
+      "node": "./src/Platform.ts",
+      "default": "./src/Platform.ts"
+    },
+    "./Platform/browser": {
+      "types": "./src/Platform/browser.ts",
+      "browser": "./src/Platform/browser.ts",
+      "default": "./src/Platform/browser.ts"
+    },
+    "./Prepare": {
+      "types": "./src/Prepare.ts",
+      "browser": "./src/Prepare.ts",
+      "node": "./src/Prepare.ts",
+      "default": "./src/Prepare.ts"
+    },
+    "./process": {
+      "types": "./src/process.ts",
+      "browser": "./src/process.ts",
+      "node": "./src/process.ts",
+      "default": "./src/process.ts"
+    },
+    "./request/holder": {
+      "types": "./src/request/holder.ts",
+      "browser": "./src/request/holder.ts",
+      "node": "./src/request/holder.ts",
+      "default": "./src/request/holder.ts"
+    },
+    "./Router": {
+      "types": "./src/Router.ts",
+      "browser": "./src/Router.ts",
+      "node": "./src/Router.ts",
+      "default": "./src/Router.ts"
+    },
+    "./Rung": {
+      "types": "./src/Rung.ts",
+      "browser": "./src/Rung.ts",
+      "node": "./src/Rung.ts",
+      "default": "./src/Rung.ts"
+    },
+    "./Scope": {
+      "types": "./src/Scope.ts",
+      "browser": "./src/Scope.ts",
+      "node": "./src/Scope.ts",
+      "default": "./src/Scope.ts"
+    },
+    "./Snapshot": {
+      "types": "./src/Snapshot.ts",
+      "browser": "./src/Snapshot.ts",
+      "node": "./src/Snapshot.ts",
+      "default": "./src/Snapshot.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "browser": "./src/testing.ts",
+      "default": "./src/testing.ts"
+    },
+    "./testing/svelte": {
+      "types": "./src/testing.svelte.ts",
+      "browser": "./src/testing.svelte.ts",
+      "svelte": "./src/testing.svelte.ts",
+      "default": "./src/testing.svelte.ts"
+    },
+    "./svelte/App.svelte": {
+      "types": "./src/svelte/App.svelte.ts",
+      "browser": "./src/svelte/App.svelte.ts",
+      "svelte": "./src/svelte/App.svelte.ts",
+      "default": "./src/svelte/App.svelte.ts"
+    },
+    "./svelte/screen.svelte": {
+      "types": "./src/svelte/screen.svelte.ts",
+      "browser": "./src/svelte/screen.svelte.ts",
+      "svelte": "./src/svelte/screen.svelte.ts",
+      "default": "./src/svelte/screen.svelte.ts"
+    },
+    "./svelte/test.svelte": {
+      "types": "./src/svelte/test.svelte.ts",
+      "browser": "./src/svelte/test.svelte.ts",
+      "svelte": "./src/svelte/test.svelte.ts",
+      "default": "./src/svelte/test.svelte.ts"
+    },
+    "./sveltekit": {
+      "types": "./src/sveltekit/index.ts",
+      "browser": "./src/sveltekit/index.ts",
+      "ssr": "./src/sveltekit/index.ts",
+      "svelte": "./src/sveltekit/index.ts",
+      "default": "./src/sveltekit/index.ts"
+    },
+    "./sveltekit/server": {
+      "types": "./src/sveltekit/server.ts",
+      "ssr": "./src/sveltekit/server.ts",
+      "default": "./src/sveltekit/server.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run --project 'unit*'",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "esm-env": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/testbed": "workspace:*",
+    "@runlith/testing": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@sveltejs/kit": "catalog:",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@types/node": "catalog:",
+    "jsdom": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "svelte": "catalog:"
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `execution_pace` ADD `lowered` integer DEFAULT false NOT NULL;

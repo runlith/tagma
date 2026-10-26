@@ -1,0 +1,744 @@
+{
+  "events": [
+    {
+      "type": "snapshot",
+      "at": {
+        "position": 0,
+        "seq": 0
+      },
+      "payload": {
+        "status": "loaded",
+        "snapshot": {
+          "thread": {
+            "id": "thread",
+            "ownerId": "operator",
+            "agentId": "agent",
+            "parentThreadId": null,
+            "spawnedByRunId": null,
+            "bornOf": null,
+            "spawnRootId": "thread",
+            "name": null,
+            "authority": {
+              "mode": "trust",
+              "bypassFrom": null
+            },
+            "plain": false,
+            "profile": null,
+            "budgetTokens": null,
+            "hostKind": null,
+            "hostId": null,
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "transport": {
+              "adapter": "native",
+              "profile": null,
+              "agent": null
+            },
+            "capabilities": {
+              "messaging": true,
+              "judgedModel": true,
+              "steer": "step",
+              "withdraw": true,
+              "history": "journal",
+              "compaction": "core",
+              "modelMove": "live",
+              "openings": "core",
+              "pictures": true,
+              "web": "none",
+              "law": "every-call",
+              "touch": "reads-and-writes",
+              "authorship": "recorded",
+              "callEnvelopeMs": 1200000,
+              "screen": false,
+              "continue": true,
+              "feed": "full",
+              "usage": "measured",
+              "aside": "request"
+            },
+            "status": "running",
+            "failureReason": null,
+            "contextReading": null,
+            "createdBy": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "updatedAt": "2026-10-03T00:00:00.000Z",
+            "title": "thread",
+            "cacheWarmth": null,
+            "harness": null,
+            "cli": null,
+            "delegation": {
+              "own": null,
+              "allowed": true,
+              "setAt": null
+            },
+            "approving": {
+              "approver": null,
+              "why": "no-parent",
+              "takenOver": false,
+              "approves": {
+                "own": null,
+                "effective": [],
+                "origin": "setting",
+                "setAt": null
+              }
+            },
+            "spawnDepth": {
+              "current": 0,
+              "maximum": 0,
+              "remaining": 0
+            },
+            "place": null,
+            "recap": null,
+            "recapAttempt": null,
+            "pins": [],
+            "modes": []
+          },
+          "activeRun": {
+            "id": "run",
+            "threadId": "thread",
+            "status": "running",
+            "kind": "turn",
+            "ownerId": "operator",
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "progress": {
+              "stage": "streaming",
+              "message": null
+            },
+            "usage": null,
+            "failureReason": null,
+            "failure": null,
+            "settledBy": null,
+            "settledNotification": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "startedAt": "2026-10-03T00:00:00.000Z",
+            "heartbeatAt": "2026-10-03T00:00:00.000Z",
+            "finishedAt": null,
+            "updatedAt": "2026-10-03T00:00:00.000Z"
+          },
+          "latestRun": {
+            "id": "run",
+            "threadId": "thread",
+            "status": "running",
+            "kind": "turn",
+            "ownerId": "operator",
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "progress": {
+              "stage": "streaming",
+              "message": null
+            },
+            "usage": null,
+            "failureReason": null,
+            "failure": null,
+            "settledBy": null,
+            "settledNotification": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "startedAt": "2026-10-03T00:00:00.000Z",
+            "heartbeatAt": "2026-10-03T00:00:00.000Z",
+            "finishedAt": null,
+            "updatedAt": "2026-10-03T00:00:00.000Z"
+          },
+          "pendingInput": {
+            "queued": [],
+            "steers": []
+          },
+          "status": {
+            "threadId": "thread",
+            "runId": "run",
+            "life": "working",
+            "stage": null,
+            "openQuestions": [],
+            "since": "2026-10-03T00:00:00.000Z",
+            "ownership": "held",
+            "receipts": []
+          },
+          "now": "2026-10-03T00:00:00.000Z",
+          "contextLimit": null,
+          "transcript": [],
+          "before": null,
+          "open": [],
+          "progress": null
+        }
+      }
+    },
+    {
+      "type": "state",
+      "at": {
+        "position": 0,
+        "seq": 1
+      },
+      "payload": {
+        "records": [],
+        "snapshot": {
+          "thread": {
+            "id": "thread",
+            "ownerId": "operator",
+            "agentId": "agent",
+            "parentThreadId": null,
+            "spawnedByRunId": null,
+            "bornOf": null,
+            "spawnRootId": "thread",
+            "name": null,
+            "authority": {
+              "mode": "trust",
+              "bypassFrom": null
+            },
+            "plain": false,
+            "profile": null,
+            "budgetTokens": null,
+            "hostKind": null,
+            "hostId": null,
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "transport": {
+              "adapter": "native",
+              "profile": null,
+              "agent": null
+            },
+            "capabilities": {
+              "messaging": true,
+              "judgedModel": true,
+              "steer": "step",
+              "withdraw": true,
+              "history": "journal",
+              "compaction": "core",
+              "modelMove": "live",
+              "openings": "core",
+              "pictures": true,
+              "web": "none",
+              "law": "every-call",
+              "touch": "reads-and-writes",
+              "authorship": "recorded",
+              "callEnvelopeMs": 1200000,
+              "screen": false,
+              "continue": true,
+              "feed": "full",
+              "usage": "measured",
+              "aside": "request"
+            },
+            "status": "running",
+            "failureReason": null,
+            "contextReading": null,
+            "createdBy": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "updatedAt": "2026-10-03T00:00:00.000Z",
+            "title": "thread",
+            "cacheWarmth": null,
+            "harness": null,
+            "cli": null,
+            "delegation": {
+              "own": null,
+              "allowed": true,
+              "setAt": null
+            },
+            "approving": {
+              "approver": null,
+              "why": "no-parent",
+              "takenOver": false,
+              "approves": {
+                "own": null,
+                "effective": [],
+                "origin": "setting",
+                "setAt": null
+              }
+            },
+            "spawnDepth": {
+              "current": 0,
+              "maximum": 0,
+              "remaining": 0
+            },
+            "place": null,
+            "recap": null,
+            "recapAttempt": null,
+            "pins": [],
+            "modes": []
+          },
+          "activeRun": {
+            "id": "run",
+            "threadId": "thread",
+            "status": "running",
+            "kind": "turn",
+            "ownerId": "operator",
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "progress": {
+              "stage": "streaming",
+              "message": null
+            },
+            "usage": null,
+            "failureReason": null,
+            "failure": null,
+            "settledBy": null,
+            "settledNotification": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "startedAt": "2026-10-03T00:00:00.000Z",
+            "heartbeatAt": "2026-10-03T00:00:00.000Z",
+            "finishedAt": null,
+            "updatedAt": "2026-10-03T00:00:00.000Z"
+          },
+          "latestRun": {
+            "id": "run",
+            "threadId": "thread",
+            "status": "running",
+            "kind": "turn",
+            "ownerId": "operator",
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "progress": {
+              "stage": "streaming",
+              "message": null
+            },
+            "usage": null,
+            "failureReason": null,
+            "failure": null,
+            "settledBy": null,
+            "settledNotification": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "startedAt": "2026-10-03T00:00:00.000Z",
+            "heartbeatAt": "2026-10-03T00:00:00.000Z",
+            "finishedAt": null,
+            "updatedAt": "2026-10-03T00:00:00.000Z"
+          },
+          "pendingInput": {
+            "queued": [
+              {
+                "id": "turn-1",
+                "runId": "run-2",
+                "text": "Next, the docs.",
+                "occurredAt": "2026-10-03T00:00:01.000Z"
+              }
+            ],
+            "steers": [
+              {
+                "id": "steer-1",
+                "runId": "run",
+                "text": "Shorter, please.",
+                "occurredAt": "2026-10-03T00:00:02.000Z"
+              }
+            ]
+          },
+          "status": {
+            "threadId": "thread",
+            "runId": "run",
+            "life": "working",
+            "stage": null,
+            "openQuestions": [],
+            "since": "2026-10-03T00:00:00.000Z",
+            "ownership": "held",
+            "receipts": []
+          },
+          "now": "2026-10-03T00:00:00.000Z",
+          "contextLimit": null
+        }
+      }
+    },
+    {
+      "type": "state",
+      "at": {
+        "position": 0,
+        "seq": 2
+      },
+      "payload": {
+        "records": [],
+        "snapshot": {
+          "thread": {
+            "id": "thread",
+            "ownerId": "operator",
+            "agentId": "agent",
+            "parentThreadId": null,
+            "spawnedByRunId": null,
+            "bornOf": null,
+            "spawnRootId": "thread",
+            "name": null,
+            "authority": {
+              "mode": "trust",
+              "bypassFrom": null
+            },
+            "plain": false,
+            "profile": null,
+            "budgetTokens": null,
+            "hostKind": null,
+            "hostId": null,
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "transport": {
+              "adapter": "native",
+              "profile": null,
+              "agent": null
+            },
+            "capabilities": {
+              "messaging": true,
+              "judgedModel": true,
+              "steer": "step",
+              "withdraw": true,
+              "history": "journal",
+              "compaction": "core",
+              "modelMove": "live",
+              "openings": "core",
+              "pictures": true,
+              "web": "none",
+              "law": "every-call",
+              "touch": "reads-and-writes",
+              "authorship": "recorded",
+              "callEnvelopeMs": 1200000,
+              "screen": false,
+              "continue": true,
+              "feed": "full",
+              "usage": "measured",
+              "aside": "request"
+            },
+            "status": "running",
+            "failureReason": null,
+            "contextReading": null,
+            "createdBy": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "updatedAt": "2026-10-03T00:00:00.000Z",
+            "title": "thread",
+            "cacheWarmth": null,
+            "harness": null,
+            "cli": null,
+            "delegation": {
+              "own": null,
+              "allowed": true,
+              "setAt": null
+            },
+            "approving": {
+              "approver": null,
+              "why": "no-parent",
+              "takenOver": false,
+              "approves": {
+                "own": null,
+                "effective": [],
+                "origin": "setting",
+                "setAt": null
+              }
+            },
+            "spawnDepth": {
+              "current": 0,
+              "maximum": 0,
+              "remaining": 0
+            },
+            "place": null,
+            "recap": null,
+            "recapAttempt": null,
+            "pins": [],
+            "modes": []
+          },
+          "activeRun": {
+            "id": "run",
+            "threadId": "thread",
+            "status": "running",
+            "kind": "turn",
+            "ownerId": "operator",
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "progress": {
+              "stage": "streaming",
+              "message": null
+            },
+            "usage": null,
+            "failureReason": null,
+            "failure": null,
+            "settledBy": null,
+            "settledNotification": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "startedAt": "2026-10-03T00:00:00.000Z",
+            "heartbeatAt": "2026-10-03T00:00:00.000Z",
+            "finishedAt": null,
+            "updatedAt": "2026-10-03T00:00:00.000Z"
+          },
+          "latestRun": {
+            "id": "run",
+            "threadId": "thread",
+            "status": "running",
+            "kind": "turn",
+            "ownerId": "operator",
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "progress": {
+              "stage": "streaming",
+              "message": null
+            },
+            "usage": null,
+            "failureReason": null,
+            "failure": null,
+            "settledBy": null,
+            "settledNotification": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "startedAt": "2026-10-03T00:00:00.000Z",
+            "heartbeatAt": "2026-10-03T00:00:00.000Z",
+            "finishedAt": null,
+            "updatedAt": "2026-10-03T00:00:00.000Z"
+          },
+          "pendingInput": {
+            "queued": [
+              {
+                "id": "turn-1",
+                "runId": "run-2",
+                "text": "Next, the docs.",
+                "occurredAt": "2026-10-03T00:00:01.000Z"
+              }
+            ],
+            "steers": [],
+            "arrived": [
+              {
+                "type": "signal",
+                "id": "signal:steer-1",
+                "runId": "run",
+                "signalType": "user-message",
+                "addressee": "reader",
+                "text": "Shorter, please.",
+                "occurredAt": "2026-10-03T00:00:02.000Z"
+              }
+            ]
+          },
+          "status": {
+            "threadId": "thread",
+            "runId": "run",
+            "life": "working",
+            "stage": null,
+            "openQuestions": [],
+            "since": "2026-10-03T00:00:00.000Z",
+            "ownership": "held",
+            "receipts": []
+          },
+          "now": "2026-10-03T00:00:00.000Z",
+          "contextLimit": null
+        }
+      }
+    },
+    {
+      "type": "state",
+      "at": {
+        "position": 1,
+        "seq": 3
+      },
+      "payload": {
+        "records": [
+          {
+            "position": 1,
+            "kind": "signal",
+            "entry": {
+              "type": "signal",
+              "id": "signal:steer-1",
+              "runId": "run",
+              "signalType": "user-message",
+              "addressee": "reader",
+              "text": "Shorter, please.",
+              "occurredAt": "2026-10-03T00:00:02.000Z"
+            }
+          }
+        ],
+        "snapshot": {
+          "thread": {
+            "id": "thread",
+            "ownerId": "operator",
+            "agentId": "agent",
+            "parentThreadId": null,
+            "spawnedByRunId": null,
+            "bornOf": null,
+            "spawnRootId": "thread",
+            "name": null,
+            "authority": {
+              "mode": "trust",
+              "bypassFrom": null
+            },
+            "plain": false,
+            "profile": null,
+            "budgetTokens": null,
+            "hostKind": null,
+            "hostId": null,
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "transport": {
+              "adapter": "native",
+              "profile": null,
+              "agent": null
+            },
+            "capabilities": {
+              "messaging": true,
+              "judgedModel": true,
+              "steer": "step",
+              "withdraw": true,
+              "history": "journal",
+              "compaction": "core",
+              "modelMove": "live",
+              "openings": "core",
+              "pictures": true,
+              "web": "none",
+              "law": "every-call",
+              "touch": "reads-and-writes",
+              "authorship": "recorded",
+              "callEnvelopeMs": 1200000,
+              "screen": false,
+              "continue": true,
+              "feed": "full",
+              "usage": "measured",
+              "aside": "request"
+            },
+            "status": "running",
+            "failureReason": null,
+            "contextReading": null,
+            "createdBy": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "updatedAt": "2026-10-03T00:00:00.000Z",
+            "title": "thread",
+            "cacheWarmth": null,
+            "harness": null,
+            "cli": null,
+            "delegation": {
+              "own": null,
+              "allowed": true,
+              "setAt": null
+            },
+            "approving": {
+              "approver": null,
+              "why": "no-parent",
+              "takenOver": false,
+              "approves": {
+                "own": null,
+                "effective": [],
+                "origin": "setting",
+                "setAt": null
+              }
+            },
+            "spawnDepth": {
+              "current": 0,
+              "maximum": 0,
+              "remaining": 0
+            },
+            "place": null,
+            "recap": null,
+            "recapAttempt": null,
+            "pins": [],
+            "modes": []
+          },
+          "activeRun": {
+            "id": "run",
+            "threadId": "thread",
+            "status": "running",
+            "kind": "turn",
+            "ownerId": "operator",
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "progress": {
+              "stage": "streaming",
+              "message": null
+            },
+            "usage": null,
+            "failureReason": null,
+            "failure": null,
+            "settledBy": null,
+            "settledNotification": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "startedAt": "2026-10-03T00:00:00.000Z",
+            "heartbeatAt": "2026-10-03T00:00:00.000Z",
+            "finishedAt": null,
+            "updatedAt": "2026-10-03T00:00:00.000Z"
+          },
+          "latestRun": {
+            "id": "run",
+            "threadId": "thread",
+            "status": "running",
+            "kind": "turn",
+            "ownerId": "operator",
+            "account": null,
+            "provider": "openai-oauth",
+            "model": null,
+            "reasoning": null,
+            "switches": {},
+            "progress": {
+              "stage": "streaming",
+              "message": null
+            },
+            "usage": null,
+            "failureReason": null,
+            "failure": null,
+            "settledBy": null,
+            "settledNotification": null,
+            "createdAt": "2026-10-03T00:00:00.000Z",
+            "startedAt": "2026-10-03T00:00:00.000Z",
+            "heartbeatAt": "2026-10-03T00:00:00.000Z",
+            "finishedAt": null,
+            "updatedAt": "2026-10-03T00:00:00.000Z"
+          },
+          "pendingInput": {
+            "queued": [
+              {
+                "id": "turn-1",
+                "runId": "run-2",
+                "text": "Next, the docs.",
+                "occurredAt": "2026-10-03T00:00:01.000Z"
+              }
+            ],
+            "steers": []
+          },
+          "status": {
+            "threadId": "thread",
+            "runId": "run",
+            "life": "working",
+            "stage": null,
+            "openQuestions": [],
+            "since": "2026-10-03T00:00:00.000Z",
+            "ownership": "held",
+            "receipts": []
+          },
+          "now": "2026-10-03T00:00:00.000Z",
+          "contextLimit": null
+        }
+      }
+    }
+  ],
+  "folded": {
+    "at": {
+      "position": 1,
+      "seq": 3
+    },
+    "transcript": [
+      {
+        "type": "signal",
+        "id": "signal:steer-1",
+        "runId": "run",
+        "signalType": "user-message",
+        "addressee": "reader",
+        "text": "Shorter, please.",
+        "occurredAt": "2026-10-03T00:00:02.000Z"
+      }
+    ],
+    "open": [],
+    "progress": null
+  }
+}

@@ -1,0 +1,163 @@
+{
+  "name": "@runlith/utils",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared foundational helpers for Runlith packages.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./async": {
+      "types": "./src/async.ts",
+      "browser": "./src/async.ts",
+      "node": "./src/async.ts",
+      "default": "./src/async.ts"
+    },
+    "./codeLanguage": {
+      "types": "./src/codeLanguage.ts",
+      "browser": "./src/codeLanguage.ts",
+      "node": "./src/codeLanguage.ts",
+      "default": "./src/codeLanguage.ts"
+    },
+    "./codec": {
+      "types": "./src/codec.ts",
+      "browser": "./src/codec.ts",
+      "node": "./src/codec.ts",
+      "default": "./src/codec.ts"
+    },
+    "./printed": {
+      "types": "./src/printed.ts",
+      "browser": "./src/printed.ts",
+      "node": "./src/printed.ts",
+      "default": "./src/printed.ts"
+    },
+    "./collection": {
+      "types": "./src/collection.ts",
+      "browser": "./src/collection.ts",
+      "node": "./src/collection.ts",
+      "default": "./src/collection.ts"
+    },
+    "./concurrency": {
+      "types": "./src/concurrency.ts",
+      "browser": "./src/concurrency.ts",
+      "node": "./src/concurrency.ts",
+      "default": "./src/concurrency.ts"
+    },
+    "./error": {
+      "types": "./src/error.ts",
+      "browser": "./src/error.ts",
+      "node": "./src/error.ts",
+      "default": "./src/error.ts"
+    },
+    "./event": {
+      "types": "./src/event.ts",
+      "browser": "./src/event.ts",
+      "node": "./src/event.ts",
+      "default": "./src/event.ts"
+    },
+    "./json": {
+      "types": "./src/json.ts",
+      "browser": "./src/json.ts",
+      "node": "./src/json.ts",
+      "default": "./src/json.ts"
+    },
+    "./lineAlign": {
+      "types": "./src/lineAlign.ts",
+      "browser": "./src/lineAlign.ts",
+      "node": "./src/lineAlign.ts",
+      "default": "./src/lineAlign.ts"
+    },
+    "./LeaseRuntime": {
+      "types": "./src/LeaseRuntime.ts",
+      "browser": "./src/LeaseRuntime.ts",
+      "node": "./src/LeaseRuntime.ts",
+      "default": "./src/LeaseRuntime.ts"
+    },
+    "./number": {
+      "types": "./src/number.ts",
+      "browser": "./src/number.ts",
+      "node": "./src/number.ts",
+      "default": "./src/number.ts"
+    },
+    "./object": {
+      "types": "./src/object.ts",
+      "browser": "./src/object.ts",
+      "node": "./src/object.ts",
+      "default": "./src/object.ts"
+    },
+    "./patch": {
+      "types": "./src/patch.ts",
+      "browser": "./src/patch.ts",
+      "node": "./src/patch.ts",
+      "default": "./src/patch.ts"
+    },
+    "./process": {
+      "types": "./src/process.ts",
+      "node": "./src/process.ts",
+      "default": "./src/process.ts"
+    },
+    "./random": {
+      "types": "./src/random.ts",
+      "browser": "./src/random.ts",
+      "node": "./src/random.ts",
+      "default": "./src/random.ts"
+    },
+    "./sha256": {
+      "types": "./src/sha256.ts",
+      "browser": "./src/sha256.ts",
+      "bun": "./src/sha256.node.ts",
+      "node": "./src/sha256.node.ts",
+      "default": "./src/sha256.ts"
+    },
+    "./sequenceDiff": {
+      "types": "./src/sequenceDiff.ts",
+      "browser": "./src/sequenceDiff.ts",
+      "node": "./src/sequenceDiff.ts",
+      "default": "./src/sequenceDiff.ts"
+    },
+    "./stream": {
+      "types": "./src/stream.ts",
+      "browser": "./src/stream.ts",
+      "node": "./src/stream.ts",
+      "default": "./src/stream.ts"
+    },
+    "./text": {
+      "types": "./src/text.ts",
+      "browser": "./src/text.ts",
+      "node": "./src/text.ts",
+      "default": "./src/text.ts"
+    },
+    "./utf8": {
+      "types": "./src/utf8.ts",
+      "browser": "./src/utf8.ts",
+      "node": "./src/utf8.ts",
+      "default": "./src/utf8.ts"
+    },
+    "./uuid": {
+      "types": "./src/uuid.ts",
+      "browser": "./src/uuid.ts",
+      "node": "./src/uuid.ts",
+      "default": "./src/uuid.ts"
+    },
+    "./worker": {
+      "types": "./src/worker.ts",
+      "browser": "./src/worker.ts",
+      "node": "./src/worker.ts",
+      "default": "./src/worker.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "effect": "catalog:",
+    "uuid": "catalog:",
+    "uuidv7": "1.2.1"
+  },
+  "tagma": {
+    "host": {
+      "./object": "shared"
+    }
+  }
+}

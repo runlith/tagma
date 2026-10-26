@@ -1,0 +1,1 @@
+ALTER TABLE `listening` ADD `echo` integer DEFAULT false NOT NULL;

@@ -1,0 +1,1 @@
+ALTER TABLE `thread_run` ADD `withdrawn_words` text;

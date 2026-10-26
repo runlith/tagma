@@ -1,0 +1,21 @@
+{
+  "name": "@runlith/vite-browser-guard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Vite plugin that stops an app's client build when its bundle reaches a Node built-in, third-party files included, and names the chain back to the page.",
+  "type": "module",
+  "exports": {
+    "./browserGuard": {
+      "types": "./src/browserGuard.ts",
+      "default": "./src/browserGuard.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate src",
+    "typecheck": "runlith-typecheck"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

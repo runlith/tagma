@@ -1,0 +1,150 @@
+{
+  "name": "@runlith/executions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The neutral execution contract: browser-safe records of execution identity, lifecycle, custody, byte cursors, presentation and call policy.",
+  "type": "module",
+  "exports": {
+    "./CommandEnvironment": {
+      "types": "./src/CommandEnvironment.ts",
+      "default": "./src/CommandEnvironment.ts"
+    },
+    "./Executions": {
+      "types": "./src/Executions.ts",
+      "default": "./src/Executions.ts"
+    },
+    "./Commands": {
+      "types": "./src/Commands.ts",
+      "default": "./src/Commands.ts"
+    },
+    "./ExecutionRequest": {
+      "types": "./src/ExecutionRequest.ts",
+      "default": "./src/ExecutionRequest.ts"
+    },
+    "./ExecutionRecord": {
+      "types": "./src/ExecutionRecord.ts",
+      "default": "./src/ExecutionRecord.ts"
+    },
+    "./ExecutionFeed": {
+      "types": "./src/ExecutionFeed.ts",
+      "default": "./src/ExecutionFeed.ts"
+    },
+    "./TerminalScreen": {
+      "types": "./src/TerminalScreen.ts",
+      "default": "./src/TerminalScreen.ts"
+    },
+    "./TerminalInput": {
+      "types": "./src/TerminalInput.ts",
+      "default": "./src/TerminalInput.ts"
+    },
+    "./ExecutionCustody": {
+      "types": "./src/ExecutionCustody.ts",
+      "default": "./src/ExecutionCustody.ts"
+    },
+    "./ExecutionEvidence": {
+      "types": "./src/ExecutionEvidence.ts",
+      "default": "./src/ExecutionEvidence.ts"
+    },
+    "./HostAuthority": {
+      "types": "./src/HostAuthority.ts",
+      "default": "./src/HostAuthority.ts"
+    },
+    "./HostLifecycle": {
+      "types": "./src/HostLifecycle.ts",
+      "default": "./src/HostLifecycle.ts"
+    },
+    "./ExecutionClient": {
+      "types": "./src/ExecutionClient.ts",
+      "default": "./src/ExecutionClient.ts"
+    },
+    "./ManagedCall": {
+      "types": "./src/ManagedCall.ts",
+      "default": "./src/ManagedCall.ts"
+    },
+    "./executionSpawner": {
+      "types": "./src/executionSpawner.ts",
+      "default": "./src/executionSpawner.ts"
+    },
+    "./HostLauncher": {
+      "types": "./src/HostLauncher.ts",
+      "default": "./src/HostLauncher.ts"
+    },
+    "./hostArtifacts": {
+      "types": "./src/hostArtifacts.ts",
+      "default": "./src/hostArtifacts.ts"
+    },
+    "./RecoveryClient": {
+      "types": "./src/RecoveryClient.ts",
+      "default": "./src/RecoveryClient.ts"
+    },
+    "./hostAddress": {
+      "types": "./src/hostAddress.ts",
+      "default": "./src/hostAddress.ts"
+    },
+    "./EndpointConnection": {
+      "types": "./src/EndpointConnection.ts",
+      "default": "./src/EndpointConnection.ts"
+    },
+    "./posix/endpoint": {
+      "types": "./src/posix/endpoint.ts",
+      "default": "./src/posix/endpoint.ts"
+    },
+    "./HostRegistration": {
+      "types": "./src/HostRegistration.ts",
+      "default": "./src/HostRegistration.ts"
+    },
+    "./RecordFiles": {
+      "types": "./src/RecordFiles.ts",
+      "default": "./src/RecordFiles.ts"
+    },
+    "./recordFormat": {
+      "types": "./src/recordFormat.ts",
+      "default": "./src/recordFormat.ts"
+    },
+    "./runtimeCost": {
+      "types": "./src/runtimeCost.ts",
+      "default": "./src/runtimeCost.ts"
+    },
+    "./bunSpawner": {
+      "types": "./src/bunSpawner.ts",
+      "bun": "./src/bunSpawner.ts"
+    },
+    "./storedRules": {
+      "types": "./src/storedRules.ts",
+      "default": "./src/storedRules.ts"
+    },
+    "./stopLadder": {
+      "types": "./src/stopLadder.ts",
+      "default": "./src/stopLadder.ts"
+    },
+    "./protocol/*.test": null,
+    "./protocol/*": {
+      "types": "./src/protocol/*.ts",
+      "browser": "./src/protocol/*.ts",
+      "node": "./src/protocol/*.ts",
+      "default": "./src/protocol/*.ts"
+    },
+    "./conformance/*": {
+      "types": "./src/conformance/*.ts",
+      "default": "./src/conformance/*.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/held": "workspace:*",
+    "@runlith/utils": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node-shared": "catalog:",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

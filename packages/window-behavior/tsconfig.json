@@ -1,0 +1,11 @@
+{
+  "extends": "@runlith/tsconfig/library.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

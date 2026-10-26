@@ -1,0 +1,110 @@
+<script lang="ts">
+  import { NO_REVIEW, REVIEW_LENSES, REVIEW_SPLITS, REVIEWERS_MAX, type ReviewPolicy } from '@runlith/agent/collaboration/team';
+  import Copy from '@lucide/svelte/icons/copy';
+  import Dot from '@lucide/svelte/icons/dot';
+  import ScanEye from '@lucide/svelte/icons/scan-eye';
+  import Users from '@lucide/svelte/icons/users';
+  import ProviderMark from '$lib/features/providers/Mark.svelte';
+  import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
+  import type { ThreadWrites } from '../ThreadWrites.js';
+  import ProviderHeading from './ProviderHeading.svelte';
+  import RowLabel from './RowLabel.svelte';
+  import Stepper from './Stepper.svelte';
+  import type { TeamView } from './view.js';
+  import { pooled, poolRows, rowKey, withLens, withPooled } from './edits.js';
+  import { LENS_WORDS } from './words.js';
+
+  let { team, writes }: { team: TeamView; writes: ThreadWrites } = $props();
+
+  const rows = $derived(team.read?.team.models ?? []);
+  const policy = $derived(team.layer?.review ?? team.read?.team.review ?? NO_REVIEW);
+  const order = $derived(poolRows(policy, rows));
+  const groups = $derived(
+    [...new Set(rows.map((row) => row.provider))]
+      .map((provider) => ({ provider, rows: rows.filter((row) => row.provider === provider && !pooled(policy, row)) }))
+      .filter((group) => group.rows.length > 0),
+  );
+
+  function change(next: ReviewPolicy): void {
+    void writes.applyTeam(() => team.review(next));
+  }
+
+  function count(by: number): void {
+    const reviewers = Math.max(0, Math.min(REVIEWERS_MAX, policy.reviewers + by));
+    if (reviewers !== policy.reviewers) change({ ...policy, reviewers });
+  }
+
+  function step(event: KeyboardEvent): void {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    count(event.key === 'ArrowRight' ? 1 : -1);
+  }
+
+  function split(value: string): void {
+    const next = REVIEW_SPLITS.find((one) => one === value);
+    if (next !== undefined && next !== policy.split) change({ ...policy, split: next });
+  }
+</script>
+
+<DropdownMenu.Item icon={Users} closeOnSelect={false} textValue="Reviewers" onkeydown={step}>
+  Reviewers
+  {#snippet tail()}
+    <Stepper
+      label="Reviewers"
+      value={policy.reviewers}
+      minimum={0}
+      maximum={REVIEWERS_MAX}
+      tabindex={-1}
+      onchange={(reviewers) => change({ ...policy, reviewers })}
+    />
+  {/snippet}
+</DropdownMenu.Item>
+
+<DropdownMenu.Separator />
+<DropdownMenu.Label>Split</DropdownMenu.Label>
+<DropdownMenu.RadioGroup bind:value={() => policy.split, split}>
+  <DropdownMenu.RadioItem value="same" icon={Copy} closeOnSelect={false}>Same brief for each</DropdownMenu.RadioItem>
+  <DropdownMenu.RadioItem value="lenses" icon={ScanEye} closeOnSelect={false}>A lens for each</DropdownMenu.RadioItem>
+</DropdownMenu.RadioGroup>
+{#if policy.split === 'lenses'}
+  {#each REVIEW_LENSES as lens (lens)}
+    <DropdownMenu.CheckboxItem
+      icon={Dot}
+      closeOnSelect={false}
+      bind:checked={() => policy.lenses.includes(lens), () => change(withLens(policy, lens))}
+    >
+      {LENS_WORDS[lens]}
+    </DropdownMenu.CheckboxItem>
+  {/each}
+{/if}
+
+<DropdownMenu.Separator />
+{#if order.length > 0}
+  <DropdownMenu.Label>In order of preference</DropdownMenu.Label>
+  {#each order as row (rowKey(row))}
+    <DropdownMenu.CheckboxItem
+      closeOnSelect={false}
+      bind:checked={() => true, () => change(withPooled(policy, row))}
+      data-team-row={rowKey(row)}
+    >
+      {#snippet lead()}<ProviderMark provider={row.provider} titled={false} class="size-3.5" />{/snippet}
+      <RowLabel {row} named />
+    </DropdownMenu.CheckboxItem>
+  {/each}
+{/if}
+{#each groups as group (group.provider)}
+  <DropdownMenu.Label><ProviderHeading provider={group.provider} /></DropdownMenu.Label>
+  {#each group.rows as row (rowKey(row))}
+    <DropdownMenu.CheckboxItem
+      closeOnSelect={false}
+      bind:checked={() => false, () => change(withPooled(policy, row))}
+      data-team-row={rowKey(row)}
+    >
+      {#snippet lead()}<ProviderMark provider={row.provider} titled={false} class="size-3.5" />{/snippet}
+      <RowLabel {row} />
+    </DropdownMenu.CheckboxItem>
+  {/each}
+{/each}
+{#if rows.length === 0}
+  <DropdownMenu.Note text="No models are listed for sub-agents." />
+{/if}

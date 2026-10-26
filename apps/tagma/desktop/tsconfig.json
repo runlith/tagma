@@ -1,0 +1,11 @@
+{
+  "extends": "@runlith/tsconfig/bun.json",
+  "compilerOptions": {
+    "composite": true,
+    "incremental": true,
+    "lib": ["ESNext", "DOM"],
+    "types": ["bun", "node"],
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "scripts/**/*.mjs"]
+}

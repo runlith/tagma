@@ -1,0 +1,117 @@
+diff --git a/dist/MemoryFileSystem-B1zoh_1Q.js b/dist/MemoryFileSystem-B1zoh_1Q.js
+index 11e1af9ee1852e3a1691ac8690eacdd51cd6b88d..c6650f44ef32040f6820f8537530f6bae283aa70 100644
+--- a/dist/MemoryFileSystem-B1zoh_1Q.js
++++ b/dist/MemoryFileSystem-B1zoh_1Q.js
+@@ -27,8 +27,20 @@ const makeCopyOperations = (caller, limits) => {
+ 		mode,
+ 		finalMode: mode
+ 	});
+-	return {
+-		copy: Effect.fnUntraced(function* (source, destination, options) {
++	const parentOf = (path) => {
++		const trimmed = path.replace(/\/+$/, "") || "/";
++		const slash = trimmed.lastIndexOf("/");
++		return slash < 0 ? "." : slash === 0 ? "/" : trimmed.slice(0, slash);
++	};
++	const resolvePath = (base, path) => {
++		const parts = [];
++		for (const part of (path.startsWith("/") ? path : `${base}/${path}`).split("/")) {
++			if (part === "..") parts.pop();
++			else if (part && part !== ".") parts.push(part);
++		}
++		return `/${parts.join("/")}`;
++	};
++	const copyTree = Effect.fnUntraced(function* (source, destination, options) {
+ 			return yield* Effect.gen(function* () {
+ 				const sourceNode = yield* caller.stat(at(source, { followFinalSymlink: false }));
+ 				const existing = yield* Effect.result(caller.stat(at(destination, { followFinalSymlink: false })));
+@@ -37,22 +49,55 @@ const makeCopyOperations = (caller, limits) => {
+ 					code: "InvalidArgument",
+ 					operation: "copy"
+ 				});
+-				if (Result.isSuccess(existing) && !options?.overwrite) return yield* new VirtualFileSystem.VfsError({
+-					code: "AlreadyExists",
+-					operation: "copy"
+-				});
++				const parentPath = parentOf(destination);
++				let ancestor = parentPath;
++				const missing = [];
++				let parent;
++				while (true) {
++					const resolved = yield* Effect.result(caller.realPath(ancestor));
++					if (Result.isSuccess(resolved)) {
++						const base = yield* textPath(resolved.success, "copy");
++						parent = resolvePath(base, missing.reverse().join("/"));
++						break;
++					}
++					if (resolved.failure.code !== "NotFound") return yield* resolved.failure;
++					const trimmed = ancestor.replace(/\/+$/, "");
++					missing.push(trimmed.slice(trimmed.lastIndexOf("/") + 1));
++					ancestor = parentOf(ancestor);
++				}
+ 				if (sourceNode.kind === "directory") {
+ 					const canonicalSource = yield* textPath(yield* caller.realPath(source), "copy");
+-					const trimmed = destination.replace(/\/+$/, "") || "/";
+-					const slash = trimmed.lastIndexOf("/");
+-					const parentPath = slash <= 0 ? "/" : trimmed.slice(0, slash);
+-					const parent = yield* textPath(yield* caller.realPath(parentPath), "copy");
+ 					if (canonicalSource === "/" || parent === canonicalSource || parent.startsWith(`${canonicalSource}/`)) return yield* new VirtualFileSystem.VfsError({
+ 						code: "InvalidArgument",
+ 						operation: "copy"
+ 					});
+ 				}
+-				yield* Stream.run(fromCaller(caller, source, { limits: volumeLimits(limits) }), toCaller(caller, destination, {
++				if (missing.length > 0) yield* caller.mkdir(parentPath, { recursive: true });
++				if (Result.isSuccess(existing) && !options?.overwrite) {
++					if ((sourceNode.kind === "directory") !== (existing.success.kind === "directory")) {
++						return yield* new VirtualFileSystem.VfsError({
++							code: existing.success.kind === "directory" ? "IsDirectory" : "NotDirectory",
++							operation: "copy"
++						});
++					}
++					if (sourceNode.kind !== "directory") return;
++					for (const entry of (yield* caller.readDirectory(source)).value) {
++						const name = yield* textOf(entry.name, "copy");
++						yield* copyTree(`${source}/${name}`, `${destination}/${name}`, options);
++					}
++					return;
++				}
++				const entries = Stream.mapEffect(fromCaller(caller, source, { limits: volumeLimits(limits) }), Effect.fnUntraced(function* (entry) {
++					const origin = entry.path === "/" ? source : `${source}${entry.path}`;
++					if (entry.kind === "hardLink") {
++						return { kind: "file", path: entry.path, bytes: yield* caller.readFile(origin), metadata: yield* caller.stat(origin) };
++					}
++					if (entry.kind !== "symlink") return entry;
++					const cwd = yield* textPath(yield* caller.realPath("."), "copy");
++					const target = typeof entry.target === "string" ? entry.target : yield* textPath(entry.target, "copy");
++					return { ...entry, target: resolvePath(parentOf(resolvePath(cwd, origin)), target) };
++				}));
++				yield* Stream.run(entries, toCaller(caller, destination, {
+ 					existing: options?.overwrite ? "overwrite" : "reject",
+ 					times: options?.preserveTimestamps ? "all" : "none",
+ 					specialBits: true
+@@ -60,8 +105,10 @@ const makeCopyOperations = (caller, limits) => {
+ 					code: error.code === "LimitExceeded" ? "NoSpace" : "InvalidArgument",
+ 					operation: "copy"
+ 				}))));
+-			}).pipe(Effect.mapError((error) => toPlatformError(error, "copy", source)));
+-		}),
++			});
++		});
++	return {
++		copy: (source, destination, options) => copyTree(source, destination, options).pipe(Effect.mapError((error) => toPlatformError(error, "copy", source))),
+ 		copyFile: Effect.fnUntraced(function* (source, destination) {
+ 			return yield* Effect.gen(function* () {
+ 				const metadata = yield* caller.stat(source);
+diff --git a/dist/treeTransfer-DA08x8HG.js b/dist/treeTransfer-DA08x8HG.js
+index 6b978a08c32e87ea408a6217d524da2e90889959..9c0136ebec8075947b3155d364f93e4b4753fbec 100644
+--- a/dist/treeTransfer-DA08x8HG.js
++++ b/dist/treeTransfer-DA08x8HG.js
+@@ -786,6 +786,7 @@ const toCaller = (caller, destination, options) => sink("caller", options, Effec
+ 				}
+ 				case "file": {
+ 					const mode = modeOf(entry.metadata, 420);
++					if (existing === "overwrite") yield* clearExisting(name, base);
+ 					yield* caller.writeFile(at(name, { relativeTo: base }), entry.bytes, {
+ 						access: "write",
+ 						create,

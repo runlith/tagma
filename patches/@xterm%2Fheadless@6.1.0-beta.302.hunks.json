@@ -1,0 +1,12 @@
+{
+  "package": "@xterm/headless@6.1.0-beta.302",
+  "hunks": {
+    "01-storage-and-parse-state": {
+      "markers": ["dynamicStorage", "IDynamicStorageLimits", "trimHistory", "parseState", "IParseState"],
+      "tests": [
+        { "package": "packages/execution-host", "file": "src/Interpretation.test.ts", "names": "storage" },
+        { "package": "packages/execution-host", "file": "src/ScreenCheckpoint.test.ts" }
+      ]
+    }
+  }
+}

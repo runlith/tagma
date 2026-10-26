@@ -1,0 +1,28 @@
+{
+  "name": "@runlith/paging",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cursor-bound row pages and the family mechanism shared by readers.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/pages.ts",
+      "browser": "./src/pages.ts",
+      "node": "./src/pages.ts",
+      "default": "./src/pages.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate src/pages.test.ts",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/utils": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

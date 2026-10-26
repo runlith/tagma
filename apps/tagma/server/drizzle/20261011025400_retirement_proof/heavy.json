@@ -1,0 +1,1 @@
+{"reason":"Create an empty retirement_proof entity with a foreign key to workspace_change so guarded retirement retains its carrying commit without replaying history. Existing workspace_change rows are not rewritten or scanned; the new table and its indexes start empty. The declaration exposes the referenced history table to the pre-update max(rowid) and snapshot-size estimate."}

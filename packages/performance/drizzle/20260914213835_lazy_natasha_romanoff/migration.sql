@@ -1,0 +1,1 @@
+CREATE INDEX `performance_record_metric_instance_idx` ON `performance_record` (`kind`,`name`,`instance_id`,`wall_time`,`id`);

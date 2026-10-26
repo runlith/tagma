@@ -1,0 +1,81 @@
+{
+  "name": "@runlith/held",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Held resources, flights, capacity tickets, passes and keyed waiters: the mechanisms a declared resource order is built from.",
+  "type": "module",
+  "exports": {
+    "./holding": {
+      "types": "./src/holding.ts",
+      "node": "./src/holding.ts",
+      "default": "./src/holding.ts"
+    },
+    "./failures": {
+      "types": "./src/failures.ts",
+      "node": "./src/failures.ts",
+      "default": "./src/failures.ts"
+    },
+    "./Held": {
+      "types": "./src/Held.ts",
+      "node": "./src/Held.ts",
+      "default": "./src/Held.ts"
+    },
+    "./Flight": {
+      "types": "./src/Flight.ts",
+      "node": "./src/Flight.ts",
+      "default": "./src/Flight.ts"
+    },
+    "./Capacity": {
+      "types": "./src/Capacity.ts",
+      "node": "./src/Capacity.ts",
+      "default": "./src/Capacity.ts"
+    },
+    "./Permits": {
+      "types": "./src/Permits.ts",
+      "node": "./src/Permits.ts",
+      "default": "./src/Permits.ts"
+    },
+    "./Passes": {
+      "types": "./src/Passes.ts",
+      "node": "./src/Passes.ts",
+      "default": "./src/Passes.ts"
+    },
+    "./PreparedWorker": {
+      "types": "./src/PreparedWorker.ts",
+      "node": "./src/PreparedWorker.ts",
+      "default": "./src/PreparedWorker.ts"
+    },
+    "./Waiters": {
+      "types": "./src/Waiters.ts",
+      "node": "./src/Waiters.ts",
+      "default": "./src/Waiters.ts"
+    },
+    "./Lane": {
+      "types": "./src/Lane.ts",
+      "node": "./src/Lane.ts",
+      "default": "./src/Lane.ts"
+    },
+    "./Section": {
+      "types": "./src/Section.ts",
+      "node": "./src/Section.ts",
+      "default": "./src/Section.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "host": {
+      "./Held": "shared"
+    }
+  }
+}

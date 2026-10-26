@@ -1,0 +1,173 @@
+{
+  "name": "@runlith/agent-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The bodies of the built-in workspace tools — files, shell, search, web — over the kernel's tool contract.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./world": {
+      "types": "./src/world.ts",
+      "default": "./src/world.ts"
+    },
+    "./words": {
+      "types": "./src/words.ts",
+      "browser": "./src/words.ts",
+      "default": "./src/words.ts"
+    },
+    "./world/machine": {
+      "types": "./src/world/machine.ts",
+      "default": "./src/world/machine.ts"
+    },
+    "./bash": {
+      "types": "./src/bash/tool.ts",
+      "default": "./src/bash/tool.ts"
+    },
+    "./bash/witnessed": {
+      "types": "./src/bash/witnessed.ts",
+      "default": "./src/bash/witnessed.ts"
+    },
+    "./CheckoutFlights": {
+      "types": "./src/CheckoutFlights.ts",
+      "default": "./src/CheckoutFlights.ts"
+    },
+    "./changeSource": {
+      "types": "./src/changeSource.ts",
+      "default": "./src/changeSource.ts"
+    },
+    "./CommandWork": {
+      "types": "./src/CommandWork.ts",
+      "browser": "./src/CommandWork.ts",
+      "node": "./src/CommandWork.ts",
+      "default": "./src/CommandWork.ts"
+    },
+    "./delete": {
+      "types": "./src/delete.ts",
+      "default": "./src/delete.ts"
+    },
+    "./edit": {
+      "types": "./src/edit.ts",
+      "default": "./src/edit.ts"
+    },
+    "./glob": {
+      "types": "./src/glob.ts",
+      "default": "./src/glob.ts"
+    },
+    "./grep": {
+      "types": "./src/grep.ts",
+      "default": "./src/grep.ts"
+    },
+    "./importFile": {
+      "types": "./src/importFile.ts",
+      "default": "./src/importFile.ts"
+    },
+    "./ls": {
+      "types": "./src/ls.ts",
+      "default": "./src/ls.ts"
+    },
+    "./read": {
+      "types": "./src/read.ts",
+      "default": "./src/read.ts"
+    },
+    "./rename": {
+      "types": "./src/rename.ts",
+      "default": "./src/rename.ts"
+    },
+    "./testing/options": {
+      "types": "./src/testing/options.ts",
+      "default": "./src/testing/options.ts"
+    },
+    "./testing/changeSource": {
+      "types": "./src/testing/changeSource.ts",
+      "default": "./src/testing/changeSource.ts"
+    },
+    "./sweepProse": {
+      "types": "./src/sweepProse.ts",
+      "default": "./src/sweepProse.ts"
+    },
+    "./shellShown": {
+      "types": "./src/shellShown.ts",
+      "default": "./src/shellShown.ts"
+    },
+    "./webfetch": {
+      "types": "./src/webfetch.ts",
+      "default": "./src/webfetch.ts"
+    },
+    "./websearch": {
+      "types": "./src/websearch.ts",
+      "default": "./src/websearch.ts"
+    },
+    "./WebSearchSessions": {
+      "types": "./src/WebSearchSessions.ts",
+      "default": "./src/WebSearchSessions.ts"
+    },
+    "./webTools": {
+      "types": "./src/webTools.ts",
+      "default": "./src/webTools.ts"
+    },
+    "./workspace": {
+      "types": "./src/workspace.ts",
+      "browser": "./src/workspace.ts",
+      "node": "./src/workspace.ts",
+      "default": "./src/workspace.ts"
+    },
+    "./workspace/paths": {
+      "types": "./src/workspace/paths.ts",
+      "default": "./src/workspace/paths.ts"
+    },
+    "./workspace/runtime": {
+      "types": "./src/workspace/runtime.ts",
+      "default": "./src/workspace/runtime.ts"
+    },
+    "./WorkspaceChanges": {
+      "types": "./src/WorkspaceChanges.ts",
+      "default": "./src/WorkspaceChanges.ts"
+    },
+    "./changes/measure": {
+      "types": "./src/changes/measure.ts",
+      "default": "./src/changes/measure.ts"
+    },
+    "./WorkspaceImports": {
+      "types": "./src/WorkspaceImports.ts",
+      "default": "./src/WorkspaceImports.ts"
+    },
+    "./write": {
+      "types": "./src/write.ts",
+      "default": "./src/write.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@embedpdf/pdfium": "catalog:",
+    "@runlith/agent": "workspace:*",
+    "@runlith/executions": "workspace:*",
+    "@runlith/files": "workspace:*",
+    "@runlith/git": "workspace:*",
+    "@runlith/held": "workspace:*",
+    "@runlith/mcp": "workspace:*",
+    "@runlith/paging": "workspace:*",
+    "@runlith/ripgrep": "workspace:*",
+    "@runlith/source-comments": "workspace:*",
+    "@runlith/utils": "workspace:*",
+    "effect": "catalog:",
+    "htmlparser2": "catalog:",
+    "minimatch": "^10.2.6",
+    "sharp": "catalog:",
+    "turndown": "catalog:"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/testbed": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/turndown": "catalog:"
+  }
+}

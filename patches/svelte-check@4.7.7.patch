@@ -1,0 +1,181 @@
+diff --git a/dist/src/index.js b/dist/src/index.js
+index e9b5a33a750127e8e3c454d3a21ca82e55ea6001..a928bed3b150c8e19ae79ed73f973f19bc399fe9 100644
+--- a/dist/src/index.js
++++ b/dist/src/index.js
+@@ -134387,7 +134387,8 @@ const D_SVELTE_TS_EXTENSION = '.d.svelte.ts';
+ const D_SVELTE_TS_LENGTH = D_SVELTE_TS_EXTENSION.length;
+ const SVELTE_DTS_EXTENSION = '.svelte.d.ts';
+ class SvelteCheckTSGoDiagnosticsProvider {
+-    constructor(apiModule, tsAstModule, tsconfigPath, ambientTypesSource, createDocument) {
++    constructor(apiModule, tsAstModule, fsModule, tsconfigPath, ambientTypesSource, createDocument) {
++        this.fsModule = fsModule;
+         this.files = new fileCollection_1.FileMap();
+         this.virtualFiles = new fileCollection_1.FileMap();
+         this.pendingChanges = {
+@@ -134453,22 +134454,29 @@ class SvelteCheckTSGoDiagnosticsProvider {
+             await this.pendingConfigLoading;
+             this.pendingConfigLoading = undefined;
+         }
+-        const snapshot = this.api.updateSnapshot({
+-            openProject: this.virtualTsconfigPath,
+-            fileChanges: {
+-                created: Array.from(this.pendingChanges.created),
+-                changed: Array.from(this.pendingChanges.changed),
+-                deleted: Array.from(this.pendingChanges.deleted)
+-            }
+-        });
++        const fileNotifications = {
++            created: Array.from(this.pendingChanges.created),
++            changed: Array.from(this.pendingChanges.changed),
++            deleted: Array.from(this.pendingChanges.deleted)
++        };
++        if (!this.snapshot) {
++            this.snapshot = this.api.createSnapshot({
++                openProjects: [this.virtualTsconfigPath],
++                fileNotifications
++            });
++        }
++        else if (this.pendingChanges.created.size || this.pendingChanges.changed.size || this.pendingChanges.deleted.size) {
++            const previous = this.snapshot;
++            this.snapshot = previous.update({ fileNotifications });
++            if (this.snapshot !== previous) previous.dispose();
++        }
+         this.pendingChanges.created.clear();
+         this.pendingChanges.changed.clear();
+         this.pendingChanges.deleted.clear();
+-        const project = snapshot.getProject(this.virtualTsconfigPath);
+-        return project;
++        return this.snapshot.getConfiguredProject(this.virtualTsconfigPath);
+     }
+     getAllSvelteFiles() {
+-        return Array.from(this.files.keys()).filter(utils_3$1.isSvelteFilePath);
++        return Array.from(this.files.values()).filter((snapshot) => snapshot instanceof DocumentSnapshot_1$1.SvelteDocumentSnapshot).map((snapshot) => snapshot.filePath);
+     }
+     mapAndFilterDiagnostics(project, diagnostics) {
+         const byFile = new Map();
+@@ -134497,7 +134505,7 @@ class SvelteCheckTSGoDiagnosticsProvider {
+             if (tsDoc instanceof DocumentSnapshot_1$1.SvelteDocumentSnapshot) {
+                 const mappedDiags = mapAndFilterDiagnostics(this.tsAstModule, this.tsApiModule, project, diags, tsDoc.parent, tsDoc);
+                 result.push({
+-                    filePath: fileName,
++                    filePath: tsDoc.filePath,
+                     text: tsDoc.parent.getText(),
+                     diagnostics: mappedDiags
+                 });
+@@ -134517,7 +134525,7 @@ class SvelteCheckTSGoDiagnosticsProvider {
+                     };
+                 });
+                 result.push({
+-                    filePath: fileName,
++                    filePath: tsDoc.filePath,
+                     text: tsDoc.originalText,
+                     diagnostics: mappedDiags
+                 });
+@@ -134583,6 +134591,7 @@ class SvelteCheckTSGoDiagnosticsProvider {
+     }
+     createFsProxy() {
+         const service = this;
++        const { serverFS } = this.fsModule;
+         const kitFiles = {
+             serverHooksPath: 'src/hooks.client',
+             clientHooksPath: 'src/hooks.client',
+@@ -134590,6 +134599,11 @@ class SvelteCheckTSGoDiagnosticsProvider {
+             paramsPath: 'src/params'
+         };
+         return {
++            directoryExists: serverFS.useOS,
++            realpath: serverFS.useOS,
++            stat: serverFS.fakeStat,
++            writeFile: serverFS.useOS,
++            removeFile: serverFS.useOS,
+             getAccessibleEntries(directory) {
+                 const realFiles = [];
+                 const directories = [];
+@@ -134623,8 +134637,8 @@ class SvelteCheckTSGoDiagnosticsProvider {
+                     };
+                 }
+                 catch (error) {
+-                    logger_1$1.Logger.error(`Error reading directory ${directory}:`, error);
+-                    return undefined;
++                    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return serverFS.useOS;
++                    throw error;
+                 }
+             },
+             readFile(path) {
+@@ -134642,7 +134656,7 @@ class SvelteCheckTSGoDiagnosticsProvider {
+                     service.files.set(normalizedPath, snapshot);
+                     return snapshot.getFullText();
+                 }
+-                return undefined;
++                return serverFS.useOS;
+             },
+             fileExists(filePath) {
+                 const virtualFiles = service.virtualFiles;
+@@ -134667,7 +134681,7 @@ class SvelteCheckTSGoDiagnosticsProvider {
+                         return true;
+                     }
+                 }
+-                return undefined;
++                return serverFS.useOS;
+             }
+         };
+         function addFileEntry(fullPath, realFiles, resultFiles) {
+@@ -135302,11 +135316,11 @@ class SvelteCheck {
+         if (shouldRegister('js') || options.tsconfig) {
+             const workspaceUris = [(0, utils_3.pathToUrl)(workspacePath)];
+             if (options.experimental?.tsgo && options.tsconfig) {
+-                const { apiModule, astModule } = options.experimental.tsgo;
++                const { apiModule, astModule, fsModule } = options.experimental.tsgo;
+                 if (!apiModule.API || !('ScriptKind' in astModule)) {
+                     throw new Error('Unsupported typescript-go version');
+                 }
+-                this.tsGoDiagnosticsProvider = new DiagnosticsProvider_2.SvelteCheckTSGoDiagnosticsProvider(apiModule, astModule, options.tsconfig, 'svelte-check', (filePath, text) => this.docManager.openDocument({
++                this.tsGoDiagnosticsProvider = new DiagnosticsProvider_2.SvelteCheckTSGoDiagnosticsProvider(apiModule, astModule, fsModule, options.tsconfig, 'svelte-check', (filePath, text) => this.docManager.openDocument({
+                     text: text,
+                     uri: (0, utils_3.pathToUrl)(filePath)
+                 },
+@@ -135528,21 +135542,14 @@ class SvelteCheck {
+         if (!project) {
+             throw new Error('Expected to have api project');
+         }
+-        let allTsDiagnostics = Array.from(project.program.getConfigFileParsingDiagnostics());
+-        const configFileParsingDiagnosticsLength = allTsDiagnostics?.length ?? 0;
+-        allTsDiagnostics = allTsDiagnostics.concat(project.program.getSyntacticDiagnostics());
+-        if (allTsDiagnostics.length == configFileParsingDiagnosticsLength) {
+-            if ('getProgramDiagnostics' in project.program &&
+-                'getGlobalDiagnostics' in project.program) {
+-                const programOrGlobal = project.program
+-                    .getProgramDiagnostics()
+-                    .concat(project.program.getGlobalDiagnostics());
+-                allTsDiagnostics = allTsDiagnostics.concat(this.tsGoDiagnosticsProvider.deduplicateDiagnostics(programOrGlobal));
+-            }
+-            if (allTsDiagnostics.length == configFileParsingDiagnosticsLength) {
+-                allTsDiagnostics = allTsDiagnostics.concat(project.program.getSemanticDiagnostics());
+-            }
+-        }
++        const allTsDiagnostics = this.tsGoDiagnosticsProvider.deduplicateDiagnostics([
++            ...project.program.getConfigFileParsingDiagnostics(),
++            ...project.program.getSyntacticDiagnostics(),
++            ...project.program.getProgramDiagnostics(),
++            ...project.program.getGlobalDiagnostics(),
++            ...project.program.getSuggestionDiagnostics(),
++            ...project.program.getSemanticDiagnostics()
++        ]);
+         const result = this.tsGoDiagnosticsProvider.mapAndFilterDiagnostics(project, allTsDiagnostics);
+         const map = new Map();
+         for (const diag of result) {
+@@ -143283,11 +143290,12 @@ parseOptions(async (opts) => {
+             }
+             const apiModule = await tryLoadApi(opts.tsconfig, pkg);
+             const astModule = await tryLoadAst(opts.tsconfig, pkg);
+-            if (!apiModule || !astModule) {
++            const fsModule = await tryImport(pkg.moduleName + '/fs', opts.tsconfig);
++            if (!apiModule || !astModule || !fsModule) {
+                 throw new Error(`Unsupported ${pkg.pkgJsonName} version. Please ensure you have the latest version installed.` +
+                     'If the problem persists, please report an issue in https://github.com/sveltejs/language-tools/issues.');
+             }
+-            svelteCheckOptions.experimental = { tsgo: { apiModule, astModule } };
++            svelteCheckOptions.experimental = { tsgo: { apiModule, astModule, fsModule } };
+         }
+         const useVirtualFiles = opts.incremental || opts.tsgo;
+         if (useVirtualFiles && opts.watch) {

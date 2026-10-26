@@ -1,0 +1,43 @@
+{
+  "name": "@runlith/adapter-deepseek",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The built-in DeepSeek model provider adapter of Tagma.",
+  "type": "module",
+  "exports": {
+    "./adapter": {
+      "types": "./src/adapter.ts",
+      "bun": "./src/adapter.ts",
+      "default": "./src/adapter.ts"
+    },
+    "./models/deepseek": {
+      "types": "./src/models/deepseek.ts",
+      "browser": "./src/models/deepseek.ts",
+      "node": "./src/models/deepseek.ts",
+      "default": "./src/models/deepseek.ts"
+    },
+    "./profiles/deepseek": {
+      "types": "./src/profiles/deepseek.ts",
+      "default": "./src/profiles/deepseek.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/llm": "workspace:*",
+    "@runlith/tagma": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "host": {
+      "./models/deepseek": "shared",
+      "./profiles/deepseek": "shared"
+    }
+  }
+}

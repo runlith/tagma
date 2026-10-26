@@ -1,0 +1,1 @@
+CREATE INDEX `command_unattributed_place_idx` ON `command_unattributed` (`checkout`,`path`);

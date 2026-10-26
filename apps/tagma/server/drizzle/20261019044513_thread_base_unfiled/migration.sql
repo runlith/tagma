@@ -1,0 +1,1 @@
+ALTER TABLE `thread_base` ADD `unfiled` integer DEFAULT false NOT NULL;

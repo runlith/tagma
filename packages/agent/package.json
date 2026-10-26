@@ -1,0 +1,1100 @@
+{
+  "name": "@runlith/agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The agent kernel: the loop, the thread and its run algebra, the transcript forms and the wire over them — no vendor SDK, no filesystem, no database driver.",
+  "type": "module",
+  "exports": {
+    "./thread/conformance/fakeTransport": {
+      "types": "./src/thread/conformance/fakeTransport.ts",
+      "default": "./src/thread/conformance/fakeTransport.ts"
+    },
+    "./thread/storage/memory/units": {
+      "types": "./src/thread/storage/memory/units.ts",
+      "default": "./src/thread/storage/memory/units.ts"
+    },
+    "./Agent": {
+      "types": "./src/agent/Agent.ts",
+      "default": "./src/agent/Agent.ts"
+    },
+    "./spans": {
+      "types": "./src/agent/spans.ts",
+      "default": "./src/agent/spans.ts"
+    },
+    "./activities": {
+      "types": "./src/agent/activities.ts",
+      "default": "./src/agent/activities.ts"
+    },
+    "./AgentPhase": {
+      "types": "./src/agent/AgentPhase.ts",
+      "browser": "./src/agent/AgentPhase.ts",
+      "node": "./src/agent/AgentPhase.ts",
+      "default": "./src/agent/AgentPhase.ts"
+    },
+    "./AgentAside": {
+      "types": "./src/agent/AgentAside.ts",
+      "default": "./src/agent/AgentAside.ts"
+    },
+    "./AgentCallMeasurement": {
+      "types": "./src/agent/AgentCallMeasurement.ts",
+      "default": "./src/agent/AgentCallMeasurement.ts"
+    },
+    "./AgentCall": {
+      "types": "./src/agent/AgentCall.ts",
+      "default": "./src/agent/AgentCall.ts"
+    },
+    "./AgentCalls": {
+      "types": "./src/agent/AgentCalls.ts",
+      "default": "./src/agent/AgentCalls.ts"
+    },
+    "./AgentContext": {
+      "types": "./src/agent/AgentContext.ts",
+      "default": "./src/agent/AgentContext.ts"
+    },
+    "./AgentDeferredTools": {
+      "types": "./src/agent/AgentDeferredTools.ts",
+      "default": "./src/agent/AgentDeferredTools.ts"
+    },
+    "./AgentFailure": {
+      "types": "./src/agent/AgentFailure.ts",
+      "default": "./src/agent/AgentFailure.ts"
+    },
+    "./AgentGuidanceJournal": {
+      "types": "./src/agent/AgentGuidanceJournal.ts",
+      "default": "./src/agent/AgentGuidanceJournal.ts"
+    },
+    "./AgentRecovery": {
+      "types": "./src/agent/AgentRecovery.ts",
+      "default": "./src/agent/AgentRecovery.ts"
+    },
+    "./AgentRunner": {
+      "types": "./src/agent/AgentRunner.ts",
+      "default": "./src/agent/AgentRunner.ts"
+    },
+    "./AgentRunState": {
+      "types": "./src/agent/AgentRunState.ts",
+      "default": "./src/agent/AgentRunState.ts"
+    },
+    "./AgentRuntimePolicy": {
+      "types": "./src/agent/policy/AgentRuntimePolicy.ts",
+      "default": "./src/agent/policy/AgentRuntimePolicy.ts"
+    },
+    "./RunStop": {
+      "types": "./src/agent/RunStop.ts",
+      "default": "./src/agent/RunStop.ts"
+    },
+    "./AgentScope": {
+      "types": "./src/agent/AgentScope.ts",
+      "default": "./src/agent/AgentScope.ts"
+    },
+    "./AgentSignal": {
+      "types": "./src/agent/AgentSignal.ts",
+      "default": "./src/agent/AgentSignal.ts"
+    },
+    "./AgentSkill": {
+      "types": "./src/agent/AgentSkill.ts",
+      "default": "./src/agent/AgentSkill.ts"
+    },
+    "./skillWords": {
+      "types": "./src/agent/skillWords.ts",
+      "browser": "./src/agent/skillWords.ts",
+      "node": "./src/agent/skillWords.ts",
+      "default": "./src/agent/skillWords.ts"
+    },
+    "./agentSkillRequests": {
+      "types": "./src/agent/agentSkillRequests.ts",
+      "default": "./src/agent/agentSkillRequests.ts"
+    },
+    "./AgentStep": {
+      "types": "./src/agent/AgentStep.ts",
+      "default": "./src/agent/AgentStep.ts"
+    },
+    "./door/CallOrder": {
+      "types": "./src/agent/door/CallOrder.ts",
+      "default": "./src/agent/door/CallOrder.ts"
+    },
+    "./door/openToolDoor": {
+      "types": "./src/agent/door/openToolDoor.ts",
+      "default": "./src/agent/door/openToolDoor.ts"
+    },
+    "./door/types": {
+      "types": "./src/agent/door/types.ts",
+      "default": "./src/agent/door/types.ts"
+    },
+    "./door/outcomeText": {
+      "types": "./src/agent/door/outcomeText.ts",
+      "default": "./src/agent/door/outcomeText.ts"
+    },
+    "./callProgress": {
+      "types": "./src/agent/callProgress.ts",
+      "browser": "./src/agent/callProgress.ts",
+      "node": "./src/agent/callProgress.ts",
+      "default": "./src/agent/callProgress.ts"
+    },
+    "./contracts": {
+      "types": "./src/agent/contracts.ts",
+      "browser": "./src/agent/contracts.ts",
+      "node": "./src/agent/contracts.ts",
+      "default": "./src/agent/contracts.ts"
+    },
+    "./modelPort": {
+      "types": "./src/agent/modelPort.ts",
+      "default": "./src/agent/modelPort.ts"
+    },
+    "./ModelRequests": {
+      "types": "./src/agent/ModelRequests.ts",
+      "default": "./src/agent/ModelRequests.ts"
+    },
+    "./skillReferences": {
+      "types": "./src/agent/skillReferences.ts",
+      "browser": "./src/agent/skillReferences.ts",
+      "default": "./src/agent/skillReferences.ts"
+    },
+    "./ToolOutput": {
+      "types": "./src/agent/ToolOutput.ts",
+      "default": "./src/agent/ToolOutput.ts"
+    },
+    "./ToolOutputSpool": {
+      "types": "./src/agent/ToolOutputSpool.ts",
+      "browser": "./src/agent/ToolOutputSpool.ts",
+      "node": "./src/agent/ToolOutputSpool.ts",
+      "default": "./src/agent/ToolOutputSpool.ts"
+    },
+    "./ToolPage": {
+      "types": "./src/agent/ToolPage.ts",
+      "node": "./src/agent/ToolPage.ts",
+      "default": "./src/agent/ToolPage.ts"
+    },
+    "./turn/commit": {
+      "types": "./src/agent/turn/commit.ts",
+      "default": "./src/agent/turn/commit.ts"
+    },
+    "./WorldState": {
+      "types": "./src/agent/WorldState.ts",
+      "default": "./src/agent/WorldState.ts"
+    },
+    "./transcript/attachments": {
+      "types": "./src/transcript/attachments.ts",
+      "browser": "./src/transcript/attachments.ts",
+      "node": "./src/transcript/attachments.ts",
+      "default": "./src/transcript/attachments.ts"
+    },
+    "./transcript/entries": {
+      "types": "./src/transcript/entries.ts",
+      "browser": "./src/transcript/entries.ts",
+      "node": "./src/transcript/entries.ts",
+      "default": "./src/transcript/entries.ts"
+    },
+    "./transcript/kinds": {
+      "types": "./src/transcript/kinds.ts",
+      "browser": "./src/transcript/kinds.ts",
+      "node": "./src/transcript/kinds.ts",
+      "default": "./src/transcript/kinds.ts"
+    },
+    "./transcript/entryNames": {
+      "types": "./src/transcript/entryNames.ts",
+      "browser": "./src/transcript/entryNames.ts",
+      "node": "./src/transcript/entryNames.ts",
+      "default": "./src/transcript/entryNames.ts"
+    },
+    "./transcript/eventFold": {
+      "types": "./src/transcript/eventFold.ts",
+      "browser": "./src/transcript/eventFold.ts",
+      "node": "./src/transcript/eventFold.ts",
+      "default": "./src/transcript/eventFold.ts"
+    },
+    "./transcript/feedFold": {
+      "types": "./src/transcript/feedFold.ts",
+      "browser": "./src/transcript/feedFold.ts",
+      "node": "./src/transcript/feedFold.ts",
+      "default": "./src/transcript/feedFold.ts"
+    },
+    "./transcript/testing/feedView": {
+      "types": "./src/transcript/testing/feedView.ts",
+      "browser": "./src/transcript/testing/feedView.ts",
+      "node": "./src/transcript/testing/feedView.ts",
+      "default": "./src/transcript/testing/feedView.ts"
+    },
+    "./transcript/keepWarm": {
+      "types": "./src/transcript/keepWarm.ts",
+      "browser": "./src/transcript/keepWarm.ts",
+      "node": "./src/transcript/keepWarm.ts",
+      "default": "./src/transcript/keepWarm.ts"
+    },
+    "./transcript/live": {
+      "types": "./src/transcript/live.ts",
+      "browser": "./src/transcript/live.ts",
+      "node": "./src/transcript/live.ts",
+      "default": "./src/transcript/live.ts"
+    },
+    "./transcript/page": {
+      "types": "./src/transcript/page.ts",
+      "browser": "./src/transcript/page.ts",
+      "default": "./src/transcript/page.ts"
+    },
+    "./transcript/parts": {
+      "types": "./src/transcript/parts.ts",
+      "browser": "./src/transcript/parts.ts",
+      "node": "./src/transcript/parts.ts",
+      "default": "./src/transcript/parts.ts"
+    },
+    "./transcript/rows": {
+      "types": "./src/transcript/rows.ts",
+      "browser": "./src/transcript/rows.ts",
+      "default": "./src/transcript/rows.ts"
+    },
+    "./transcript/TranscriptFold": {
+      "types": "./src/transcript/TranscriptFold.ts",
+      "browser": "./src/transcript/TranscriptFold.ts",
+      "node": "./src/transcript/TranscriptFold.ts",
+      "default": "./src/transcript/TranscriptFold.ts"
+    },
+    "./protocol/cap": {
+      "types": "./src/transcript/cap.ts",
+      "browser": "./src/transcript/cap.ts",
+      "node": "./src/transcript/cap.ts",
+      "default": "./src/transcript/cap.ts"
+    },
+    "./protocol/http": {
+      "types": "./src/protocol/http.ts",
+      "browser": "./src/protocol/http.ts",
+      "node": "./src/protocol/http.ts",
+      "default": "./src/protocol/http.ts"
+    },
+    "./protocol/realtime": {
+      "types": "./src/protocol/realtime.ts",
+      "browser": "./src/protocol/realtime.ts",
+      "node": "./src/protocol/realtime.ts",
+      "default": "./src/protocol/realtime.ts"
+    },
+    "./protocol/threadQuery": {
+      "types": "./src/protocol/threadQuery.ts",
+      "browser": "./src/protocol/threadQuery.ts",
+      "node": "./src/protocol/threadQuery.ts",
+      "default": "./src/protocol/threadQuery.ts"
+    },
+    "./protocol/birth": {
+      "types": "./src/protocol/birth.ts",
+      "browser": "./src/protocol/birth.ts",
+      "node": "./src/protocol/birth.ts",
+      "default": "./src/protocol/birth.ts"
+    },
+    "./thread/storage/aggregate": {
+      "types": "./src/thread/storage/aggregate.ts",
+      "default": "./src/thread/storage/aggregate.ts"
+    },
+    "./thread/storage/cacheObservations": {
+      "types": "./src/thread/storage/cacheObservations.ts",
+      "default": "./src/thread/storage/cacheObservations.ts"
+    },
+    "./thread/storage/compaction": {
+      "types": "./src/thread/storage/compaction.ts",
+      "default": "./src/thread/storage/compaction.ts"
+    },
+    "./thread/storage/eventLog": {
+      "types": "./src/thread/storage/eventLog.ts",
+      "default": "./src/thread/storage/eventLog.ts"
+    },
+    "./thread/storage/inbox": {
+      "types": "./src/thread/storage/inbox.ts",
+      "browser": "./src/thread/storage/inbox.ts",
+      "node": "./src/thread/storage/inbox.ts",
+      "default": "./src/thread/storage/inbox.ts"
+    },
+    "./thread/storage/ownerSettings": {
+      "types": "./src/thread/storage/ownerSettings.ts",
+      "default": "./src/thread/storage/ownerSettings.ts"
+    },
+    "./thread/storage/resources": {
+      "types": "./src/thread/storage/resources.ts",
+      "default": "./src/thread/storage/resources.ts"
+    },
+    "./thread/storage/runs": {
+      "types": "./src/thread/storage/runs.ts",
+      "default": "./src/thread/storage/runs.ts"
+    },
+    "./thread/transport/contract": {
+      "types": "./src/thread/transport/contract.ts",
+      "default": "./src/thread/transport/contract.ts"
+    },
+    "./thread/transport/Transports": {
+      "types": "./src/thread/transport/Transports.ts",
+      "default": "./src/thread/transport/Transports.ts"
+    },
+    "./thread/run/lifecycle/RunReports": {
+      "types": "./src/thread/run/lifecycle/RunReports.ts",
+      "default": "./src/thread/run/lifecycle/RunReports.ts"
+    },
+    "./thread/run/requests": {
+      "types": "./src/thread/run/requests.ts",
+      "default": "./src/thread/run/requests.ts"
+    },
+    "./thread/conformance/border": {
+      "types": "./src/thread/conformance/border.ts",
+      "default": "./src/thread/conformance/border.ts"
+    },
+    "./thread/conformance/transportRuns": {
+      "types": "./src/thread/conformance/transportRuns.ts",
+      "default": "./src/thread/conformance/transportRuns.ts"
+    },
+    "./thread/conformance/transportRestarts": {
+      "types": "./src/thread/conformance/transportRestarts.ts",
+      "default": "./src/thread/conformance/transportRestarts.ts"
+    },
+    "./thread/conformance/transportStops": {
+      "types": "./src/thread/conformance/transportStops.ts",
+      "default": "./src/thread/conformance/transportStops.ts"
+    },
+    "./thread/conformance/transportWords": {
+      "types": "./src/thread/conformance/transportWords.ts",
+      "default": "./src/thread/conformance/transportWords.ts"
+    },
+    "./thread/conformance/runLog/launches": {
+      "types": "./src/thread/conformance/runLog/launches.ts",
+      "default": "./src/thread/conformance/runLog/launches.ts"
+    },
+    "./thread/storage/settlement": {
+      "types": "./src/thread/storage/settlement.ts",
+      "browser": "./src/thread/storage/settlement.ts",
+      "node": "./src/thread/storage/settlement.ts",
+      "default": "./src/thread/storage/settlement.ts"
+    },
+    "./protocol/compositionParts": {
+      "types": "./src/protocol/compositionParts.ts",
+      "browser": "./src/protocol/compositionParts.ts",
+      "node": "./src/protocol/compositionParts.ts",
+      "default": "./src/protocol/compositionParts.ts"
+    },
+    "./thread/compaction/calibration": {
+      "types": "./src/thread/compaction/calibration.ts",
+      "default": "./src/thread/compaction/calibration.ts"
+    },
+    "./thread/compaction/CompactionModels": {
+      "types": "./src/thread/compaction/CompactionModels.ts",
+      "default": "./src/thread/compaction/CompactionModels.ts"
+    },
+    "./thread/compaction/lookupModels": {
+      "types": "./src/thread/compaction/lookupModels.ts",
+      "default": "./src/thread/compaction/lookupModels.ts"
+    },
+    "./thread/compaction/corpus": {
+      "types": "./src/thread/compaction/corpus/index.ts",
+      "default": "./src/thread/compaction/corpus/index.ts"
+    },
+    "./thread/compaction/digestStrategy": {
+      "types": "./src/thread/compaction/digestStrategy.ts",
+      "default": "./src/thread/compaction/digestStrategy.ts"
+    },
+    "./thread/compaction/limit": {
+      "types": "./src/thread/compaction/limit.ts",
+      "browser": "./src/thread/compaction/limit.ts",
+      "node": "./src/thread/compaction/limit.ts",
+      "default": "./src/thread/compaction/limit.ts"
+    },
+    "./thread/compaction/measurement": {
+      "types": "./src/thread/compaction/measurement.ts",
+      "default": "./src/thread/compaction/measurement.ts"
+    },
+    "./thread/compaction/policy": {
+      "types": "./src/thread/compaction/policy.ts",
+      "default": "./src/thread/compaction/policy.ts"
+    },
+    "./thread/compaction/strategies": {
+      "types": "./src/thread/compaction/strategies.ts",
+      "default": "./src/thread/compaction/strategies.ts"
+    },
+    "./thread/compaction/strategy": {
+      "types": "./src/thread/compaction/strategy.ts",
+      "default": "./src/thread/compaction/strategy.ts"
+    },
+    "./thread/compaction/summarizer": {
+      "types": "./src/thread/compaction/summarizer.ts",
+      "default": "./src/thread/compaction/summarizer.ts"
+    },
+    "./thread/compaction/summaryStrategy": {
+      "types": "./src/thread/compaction/summaryStrategy.ts",
+      "default": "./src/thread/compaction/summaryStrategy.ts"
+    },
+    "./thread/compaction/text": {
+      "types": "./src/thread/compaction/text.ts",
+      "default": "./src/thread/compaction/text.ts"
+    },
+    "./thread/compaction/ThreadCompaction": {
+      "types": "./src/thread/run/ThreadCompaction.ts",
+      "default": "./src/thread/run/ThreadCompaction.ts"
+    },
+    "./thread/compaction/ThreadCompactionRuns": {
+      "types": "./src/thread/run/ThreadCompactionRuns.ts",
+      "default": "./src/thread/run/ThreadCompactionRuns.ts"
+    },
+    "./thread/compaction/ThreadRequestMeter": {
+      "types": "./src/thread/compaction/ThreadRequestMeter.ts",
+      "default": "./src/thread/compaction/ThreadRequestMeter.ts"
+    },
+    "./thread/conformance/compactionRequests": {
+      "types": "./src/thread/conformance/compactionRequests.ts",
+      "default": "./src/thread/conformance/compactionRequests.ts"
+    },
+    "./thread/conformance/inbox": {
+      "types": "./src/thread/conformance/inbox.ts",
+      "default": "./src/thread/conformance/inbox.ts"
+    },
+    "./thread/conformance/resources": {
+      "types": "./src/thread/conformance/resources.ts",
+      "default": "./src/thread/conformance/resources.ts"
+    },
+    "./thread/conformance/hosting": {
+      "types": "./src/thread/conformance/hosting.ts",
+      "default": "./src/thread/conformance/hosting.ts"
+    },
+    "./thread/conformance/hostedCalls": {
+      "types": "./src/thread/conformance/hostedCalls.ts",
+      "default": "./src/thread/conformance/hostedCalls.ts"
+    },
+    "./thread/conformance/hostedTools": {
+      "types": "./src/thread/conformance/hostedTools.ts",
+      "default": "./src/thread/conformance/hostedTools.ts"
+    },
+    "./thread/conformance/compactionPasses": {
+      "types": "./src/thread/conformance/compactionPasses.ts",
+      "default": "./src/thread/conformance/compactionPasses.ts"
+    },
+    "./thread/conformance/compactionWithdrawals": {
+      "types": "./src/thread/conformance/compactionWithdrawals.ts",
+      "default": "./src/thread/conformance/compactionWithdrawals.ts"
+    },
+    "./thread/conformance/compactionSummarizers": {
+      "types": "./src/thread/conformance/compactionSummarizers.ts",
+      "default": "./src/thread/conformance/compactionSummarizers.ts"
+    },
+    "./thread/conformance/compactionParent": {
+      "types": "./src/thread/conformance/compactionParent.ts",
+      "default": "./src/thread/conformance/compactionParent.ts"
+    },
+    "./thread/conformance/agents": {
+      "types": "./src/thread/conformance/agents.ts",
+      "default": "./src/thread/conformance/agents.ts"
+    },
+    "./thread/conformance/memoryStorage": {
+      "types": "./src/thread/conformance/memoryStorage.ts",
+      "default": "./src/thread/conformance/memoryStorage.ts"
+    },
+    "./thread/conformance/runLog/world": {
+      "types": "./src/thread/conformance/runLog/world.ts",
+      "default": "./src/thread/conformance/runLog/world.ts"
+    },
+    "./thread/conformance/runLog/toolScripts": {
+      "types": "./src/thread/conformance/runLog/toolScripts.ts",
+      "default": "./src/thread/conformance/runLog/toolScripts.ts"
+    },
+    "./thread/conformance/runLog/support": {
+      "types": "./src/thread/conformance/runLog/support.ts",
+      "default": "./src/thread/conformance/runLog/support.ts"
+    },
+    "./thread/conformance/runLog/scripts": {
+      "types": "./src/thread/conformance/runLog/scripts.ts",
+      "default": "./src/thread/conformance/runLog/scripts.ts"
+    },
+    "./thread/conformance/runLog/turns": {
+      "types": "./src/thread/conformance/runLog/turns.ts",
+      "default": "./src/thread/conformance/runLog/turns.ts"
+    },
+    "./thread/conformance/runLog/stops": {
+      "types": "./src/thread/conformance/runLog/stops.ts",
+      "default": "./src/thread/conformance/runLog/stops.ts"
+    },
+    "./thread/conformance/runLog/takenBack": {
+      "types": "./src/thread/conformance/runLog/takenBack.ts",
+      "default": "./src/thread/conformance/runLog/takenBack.ts"
+    },
+    "./thread/conformance/runLog/processes": {
+      "types": "./src/thread/conformance/runLog/processes.ts",
+      "default": "./src/thread/conformance/runLog/processes.ts"
+    },
+    "./thread/conformance/runLog/foreignStops": {
+      "types": "./src/thread/conformance/runLog/foreignStops.ts",
+      "default": "./src/thread/conformance/runLog/foreignStops.ts"
+    },
+    "./thread/conformance/runLog/continues": {
+      "types": "./src/thread/conformance/runLog/continues.ts",
+      "default": "./src/thread/conformance/runLog/continues.ts"
+    },
+    "./thread/conformance/modelSettings": {
+      "types": "./src/thread/conformance/modelSettings.ts",
+      "default": "./src/thread/conformance/modelSettings.ts"
+    },
+    "./thread/conformance/runLog/openingCost": {
+      "types": "./src/thread/conformance/runLog/openingCost.ts",
+      "default": "./src/thread/conformance/runLog/openingCost.ts"
+    },
+    "./thread/conformance/runLog/admission": {
+      "types": "./src/thread/conformance/runLog/admission.ts",
+      "default": "./src/thread/conformance/runLog/admission.ts"
+    },
+    "./thread/conformance/runLog/answers": {
+      "types": "./src/thread/conformance/runLog/answers.ts",
+      "default": "./src/thread/conformance/runLog/answers.ts"
+    },
+    "./thread/conformance/runLog/prompts": {
+      "types": "./src/thread/conformance/runLog/prompts.ts",
+      "default": "./src/thread/conformance/runLog/prompts.ts"
+    },
+    "./thread/conformance/runLog/contextChanges": {
+      "types": "./src/thread/conformance/runLog/contextChanges.ts",
+      "default": "./src/thread/conformance/runLog/contextChanges.ts"
+    },
+    "./thread/conformance/rewind": {
+      "types": "./src/thread/conformance/rewind.ts",
+      "default": "./src/thread/conformance/rewind.ts"
+    },
+    "./thread/conformance/runStop": {
+      "types": "./src/thread/conformance/runStop.ts",
+      "default": "./src/thread/conformance/runStop.ts"
+    },
+    "./thread/conformance/spawnBirth": {
+      "types": "./src/thread/conformance/spawnBirth.ts",
+      "default": "./src/thread/conformance/spawnBirth.ts"
+    },
+    "./thread/conformance/threadContext": {
+      "types": "./src/thread/conformance/threadContext.ts",
+      "default": "./src/thread/conformance/threadContext.ts"
+    },
+    "./thread/conformance/signals": {
+      "types": "./src/thread/conformance/signals.ts",
+      "default": "./src/thread/conformance/signals.ts"
+    },
+    "./thread/conformance/storagePort": {
+      "types": "./src/thread/conformance/storagePort.ts",
+      "default": "./src/thread/conformance/storagePort.ts"
+    },
+    "./thread/conformance/lifecycleWorld": {
+      "types": "./src/thread/conformance/lifecycleWorld.ts",
+      "default": "./src/thread/conformance/lifecycleWorld.ts"
+    },
+    "./thread/AgentHarness": {
+      "types": "./src/thread/AgentHarness.ts",
+      "default": "./src/thread/AgentHarness.ts"
+    },
+    "./thread/kernelPorts": {
+      "types": "./src/thread/kernelPorts.ts",
+      "default": "./src/thread/kernelPorts.ts"
+    },
+    "./catalog/resolveCatalog": {
+      "types": "./src/catalog/resolveCatalog.ts",
+      "default": "./src/catalog/resolveCatalog.ts"
+    },
+    "./collaboration/collaborationToolSources": {
+      "types": "./src/collaboration/collaborationToolSources.ts",
+      "default": "./src/collaboration/collaborationToolSources.ts"
+    },
+    "./thread/agents/supply": {
+      "types": "./src/thread/agents/supply.ts",
+      "default": "./src/thread/agents/supply.ts"
+    },
+    "./thread/agents/AgentRegistry": {
+      "types": "./src/thread/agents/AgentRegistry.ts",
+      "default": "./src/thread/agents/AgentRegistry.ts"
+    },
+    "./thread/agents/AgentProfile": {
+      "types": "./src/thread/agents/AgentProfile.ts",
+      "browser": "./src/thread/agents/AgentProfile.ts",
+      "node": "./src/thread/agents/AgentProfile.ts",
+      "default": "./src/thread/agents/AgentProfile.ts"
+    },
+    "./thread/agents/ThreadAgent": {
+      "types": "./src/thread/agents/ThreadAgent.ts",
+      "default": "./src/thread/agents/ThreadAgent.ts"
+    },
+    "./thread/agents/threadPrompt": {
+      "types": "./src/thread/agents/threadPrompt.ts",
+      "default": "./src/thread/agents/threadPrompt.ts"
+    },
+    "./thread/agents/ThreadTypeCatalog": {
+      "types": "./src/thread/agents/ThreadTypeCatalog.ts",
+      "default": "./src/thread/agents/ThreadTypeCatalog.ts"
+    },
+    "./thread/attachmentStorage": {
+      "types": "./src/thread/attachmentStorage.ts",
+      "default": "./src/thread/attachmentStorage.ts"
+    },
+    "./thread/cache/ThreadCacheCurve": {
+      "types": "./src/thread/cache/ThreadCacheCurve.ts",
+      "default": "./src/thread/cache/ThreadCacheCurve.ts"
+    },
+    "./thread/cache/ThreadCacheWarmth": {
+      "types": "./src/thread/cache/ThreadCacheWarmth.ts",
+      "browser": "./src/thread/cache/ThreadCacheWarmth.ts",
+      "node": "./src/thread/cache/ThreadCacheWarmth.ts",
+      "default": "./src/thread/cache/ThreadCacheWarmth.ts"
+    },
+    "./thread/composition/entry": {
+      "types": "./src/thread/composition/entry.ts",
+      "default": "./src/thread/composition/entry.ts"
+    },
+    "./thread/composition/requestComposition": {
+      "types": "./src/thread/composition/requestComposition.ts",
+      "default": "./src/thread/composition/requestComposition.ts"
+    },
+    "./thread/composition/ThreadComposition": {
+      "types": "./src/thread/run/ThreadComposition.ts",
+      "default": "./src/thread/run/ThreadComposition.ts"
+    },
+    "./thread/events": {
+      "types": "./src/thread/events.ts",
+      "default": "./src/thread/events.ts"
+    },
+    "./thread/HistoryFold": {
+      "types": "./src/thread/HistoryFold.ts",
+      "default": "./src/thread/HistoryFold.ts"
+    },
+    "./thread/inboxItems": {
+      "types": "./src/thread/inboxItems.ts",
+      "default": "./src/thread/inboxItems.ts"
+    },
+    "./thread/persisted": {
+      "types": "./src/thread/persisted.ts",
+      "browser": "./src/thread/persisted.ts",
+      "node": "./src/thread/persisted.ts",
+      "default": "./src/thread/persisted.ts"
+    },
+    "./thread/rewind": {
+      "types": "./src/thread/rewind.ts",
+      "browser": "./src/thread/rewind.ts",
+      "node": "./src/thread/rewind.ts",
+      "default": "./src/thread/rewind.ts"
+    },
+    "./thread/rows": {
+      "types": "./src/thread/rows.ts",
+      "default": "./src/thread/rows.ts"
+    },
+    "./thread/run/keepWarmRun": {
+      "types": "./src/thread/run/keepWarmRun.ts",
+      "default": "./src/thread/run/keepWarmRun.ts"
+    },
+    "./thread/run/runAdmission": {
+      "types": "./src/thread/run/runAdmission.ts",
+      "default": "./src/thread/run/runAdmission.ts"
+    },
+    "./thread/run/ThreadLiveFeed": {
+      "types": "./src/thread/run/ThreadLiveFeed.ts",
+      "default": "./src/thread/run/ThreadLiveFeed.ts"
+    },
+    "./thread/run/ThreadQuestion": {
+      "types": "./src/thread/run/ThreadQuestion.ts",
+      "default": "./src/thread/run/ThreadQuestion.ts"
+    },
+    "./thread/run/hostedReplay": {
+      "types": "./src/thread/run/hostedReplay.ts",
+      "default": "./src/thread/run/hostedReplay.ts"
+    },
+    "./thread/run/ThreadRunContexts": {
+      "types": "./src/thread/run/ThreadRunContexts.ts",
+      "default": "./src/thread/run/ThreadRunContexts.ts"
+    },
+    "./thread/run/ThreadRunLedger": {
+      "types": "./src/thread/run/ThreadRunLedger.ts",
+      "default": "./src/thread/run/ThreadRunLedger.ts"
+    },
+    "./thread/run/ThreadRunSettlements": {
+      "types": "./src/thread/run/ThreadRunSettlements.ts",
+      "default": "./src/thread/run/ThreadRunSettlements.ts"
+    },
+    "./thread/run/runCause": {
+      "types": "./src/thread/run/runCause.ts",
+      "default": "./src/thread/run/runCause.ts"
+    },
+    "./thread/run/ThreadRunReaper": {
+      "types": "./src/thread/run/ThreadRunReaper.ts",
+      "default": "./src/thread/run/ThreadRunReaper.ts"
+    },
+    "./thread/run/ThreadSettlementOutbox": {
+      "types": "./src/thread/run/ThreadSettlementOutbox.ts",
+      "default": "./src/thread/run/ThreadSettlementOutbox.ts"
+    },
+    "./thread/run/scheduler/compactions": {
+      "types": "./src/thread/run/scheduler/compactions.ts",
+      "default": "./src/thread/run/scheduler/compactions.ts"
+    },
+    "./thread/run/scheduler/inputs": {
+      "types": "./src/thread/run/scheduler/inputs.ts",
+      "default": "./src/thread/run/scheduler/inputs.ts"
+    },
+    "./thread/state": {
+      "types": "./src/thread/state.ts",
+      "default": "./src/thread/state.ts"
+    },
+    "./thread/ThreadAggregate": {
+      "types": "./src/thread/run/ThreadAggregate.ts",
+      "default": "./src/thread/run/ThreadAggregate.ts"
+    },
+    "./thread/ThreadAsides": {
+      "types": "./src/thread/ThreadAsides.ts",
+      "default": "./src/thread/ThreadAsides.ts"
+    },
+    "./thread/ThreadBorder": {
+      "types": "./src/thread/ThreadBorder.ts",
+      "default": "./src/thread/ThreadBorder.ts"
+    },
+    "./thread/ThreadBranch": {
+      "types": "./src/thread/run/ThreadBranch.ts",
+      "default": "./src/thread/run/ThreadBranch.ts"
+    },
+    "./thread/ThreadEventDoor": {
+      "types": "./src/thread/ThreadEventDoor.ts",
+      "default": "./src/thread/ThreadEventDoor.ts"
+    },
+    "./thread/ThreadFailure": {
+      "types": "./src/thread/ThreadFailure.ts",
+      "default": "./src/thread/ThreadFailure.ts"
+    },
+    "./thread/ThreadIntrospection": {
+      "types": "./src/thread/run/ThreadIntrospection.ts",
+      "default": "./src/thread/run/ThreadIntrospection.ts"
+    },
+    "./thread/ThreadPorts": {
+      "types": "./src/thread/ThreadPorts.ts",
+      "default": "./src/thread/ThreadPorts.ts"
+    },
+    "./thread/keyed": {
+      "types": "./src/thread/keyed.ts",
+      "default": "./src/thread/keyed.ts"
+    },
+    "./thread/conformance/transitions": {
+      "types": "./src/thread/conformance/transitions.ts",
+      "default": "./src/thread/conformance/transitions.ts"
+    },
+    "./thread/transition/port": {
+      "types": "./src/thread/transition/port.ts",
+      "default": "./src/thread/transition/port.ts"
+    },
+    "./thread/transition/kernel": {
+      "types": "./src/thread/transition/kernel.ts",
+      "default": "./src/thread/transition/kernel.ts"
+    },
+    "./thread/transition/lane": {
+      "types": "./src/thread/transition/lane.ts",
+      "default": "./src/thread/transition/lane.ts"
+    },
+    "./thread/transition/sequence": {
+      "types": "./src/thread/transition/sequence.ts",
+      "default": "./src/thread/transition/sequence.ts"
+    },
+    "./thread/record": {
+      "types": "./src/thread/record.ts",
+      "browser": "./src/thread/record.ts",
+      "node": "./src/thread/record.ts",
+      "default": "./src/thread/record.ts"
+    },
+    "./thread/Approvers": {
+      "types": "./src/thread/Approvers.ts",
+      "browser": "./src/thread/Approvers.ts",
+      "node": "./src/thread/Approvers.ts",
+      "default": "./src/thread/Approvers.ts"
+    },
+    "./thread/ending": {
+      "types": "./src/thread/ending.ts",
+      "default": "./src/thread/ending.ts"
+    },
+    "./thread/ThreadQuery": {
+      "types": "./src/thread/ThreadQuery.ts",
+      "default": "./src/thread/ThreadQuery.ts"
+    },
+    "./thread/ThreadStepObserver": {
+      "types": "./src/thread/ThreadStepObserver.ts",
+      "default": "./src/thread/ThreadStepObserver.ts"
+    },
+    "./thread/ThreadTail": {
+      "types": "./src/thread/run/ThreadTail.ts",
+      "default": "./src/thread/run/ThreadTail.ts"
+    },
+    "./thread/toolOutputs": {
+      "types": "./src/thread/toolOutputs.ts",
+      "default": "./src/thread/toolOutputs.ts"
+    },
+    "./collaboration/CollaborationConfig": {
+      "types": "./src/collaboration/CollaborationConfig.ts",
+      "browser": "./src/collaboration/CollaborationConfig.ts",
+      "node": "./src/collaboration/CollaborationConfig.ts",
+      "default": "./src/collaboration/CollaborationConfig.ts"
+    },
+    "./collaboration/team": {
+      "types": "./src/collaboration/team.ts",
+      "browser": "./src/collaboration/team.ts",
+      "node": "./src/collaboration/team.ts",
+      "default": "./src/collaboration/team.ts"
+    },
+    "./collaboration/collaborationReports": {
+      "types": "./src/collaboration/collaborationReports.ts",
+      "default": "./src/collaboration/collaborationReports.ts"
+    },
+    "./collaboration/collaborationResidency": {
+      "types": "./src/collaboration/collaborationResidency.ts",
+      "default": "./src/collaboration/collaborationResidency.ts"
+    },
+    "./collaboration/words": {
+      "types": "./src/collaboration/words.ts",
+      "browser": "./src/collaboration/words.ts",
+      "node": "./src/collaboration/words.ts",
+      "default": "./src/collaboration/words.ts"
+    },
+    "./collaboration/CollaborationTools": {
+      "types": "./src/collaboration/CollaborationTools.ts",
+      "default": "./src/collaboration/CollaborationTools.ts"
+    },
+    "./collaboration/collaborationVerbs": {
+      "types": "./src/collaboration/collaborationVerbs.ts",
+      "browser": "./src/collaboration/collaborationVerbs.ts",
+      "node": "./src/collaboration/collaborationVerbs.ts",
+      "default": "./src/collaboration/collaborationVerbs.ts"
+    },
+    "./collaboration/agentRoster": {
+      "types": "./src/collaboration/agentRoster.ts",
+      "default": "./src/collaboration/agentRoster.ts"
+    },
+    "./collaboration/refusals": {
+      "types": "./src/collaboration/refusals.ts",
+      "browser": "./src/collaboration/refusals.ts",
+      "node": "./src/collaboration/refusals.ts",
+      "default": "./src/collaboration/refusals.ts"
+    },
+    "./collaboration/wakeCost": {
+      "types": "./src/collaboration/wakeCost.ts",
+      "browser": "./src/collaboration/wakeCost.ts",
+      "node": "./src/collaboration/wakeCost.ts",
+      "default": "./src/collaboration/wakeCost.ts"
+    },
+    "./collaboration/planeRefusal": {
+      "types": "./src/collaboration/planeRefusal.ts",
+      "default": "./src/collaboration/planeRefusal.ts"
+    },
+    "./collaboration/CollaborationVoice": {
+      "types": "./src/collaboration/CollaborationVoice.ts",
+      "default": "./src/collaboration/CollaborationVoice.ts"
+    },
+    "./collaboration/collaborationWorkflowMembers": {
+      "types": "./src/collaboration/collaborationWorkflowMembers.ts",
+      "default": "./src/collaboration/collaborationWorkflowMembers.ts"
+    },
+    "./collaboration/ThreadDirectory": {
+      "types": "./src/collaboration/ThreadDirectory.ts",
+      "default": "./src/collaboration/ThreadDirectory.ts"
+    },
+    "./collaboration/ThreadEnvelopes": {
+      "types": "./src/collaboration/ThreadEnvelopes.ts",
+      "default": "./src/collaboration/ThreadEnvelopes.ts"
+    },
+    "./collaboration/ThreadPlaneAccess": {
+      "types": "./src/collaboration/ThreadPlaneAccess.ts",
+      "default": "./src/collaboration/ThreadPlaneAccess.ts"
+    },
+    "./collaboration/ThreadSpawnAccess": {
+      "types": "./src/collaboration/ThreadSpawnAccess.ts",
+      "default": "./src/collaboration/ThreadSpawnAccess.ts"
+    },
+    "./collaboration/ThreadSpawnTree": {
+      "types": "./src/collaboration/ThreadSpawnTree.ts",
+      "default": "./src/collaboration/ThreadSpawnTree.ts"
+    },
+    "./collaboration/threads": {
+      "types": "./src/collaboration/threads.ts",
+      "default": "./src/collaboration/threads.ts"
+    },
+    "./collaboration/runs": {
+      "types": "./src/collaboration/runs.ts",
+      "default": "./src/collaboration/runs.ts"
+    },
+    "./collaboration/compaction": {
+      "types": "./src/collaboration/compaction.ts",
+      "default": "./src/collaboration/compaction.ts"
+    },
+    "./collaboration/model": {
+      "types": "./src/collaboration/model.ts",
+      "default": "./src/collaboration/model.ts"
+    },
+    "./collaboration/modelChoice": {
+      "types": "./src/collaboration/modelChoice.ts",
+      "default": "./src/collaboration/modelChoice.ts"
+    },
+    "./collaboration/types": {
+      "types": "./src/collaboration/types.ts",
+      "default": "./src/collaboration/types.ts"
+    },
+    "./resources/ResourcesConfig": {
+      "types": "./src/resources/ResourcesConfig.ts",
+      "default": "./src/resources/ResourcesConfig.ts"
+    },
+    "./resources/resourcesToolSources": {
+      "types": "./src/resources/resourcesToolSources.ts",
+      "default": "./src/resources/resourcesToolSources.ts"
+    },
+    "./resources/threadResourceLedger": {
+      "types": "./src/resources/threadResourceLedger.ts",
+      "default": "./src/resources/threadResourceLedger.ts"
+    },
+    "./collaboration/label": {
+      "types": "./src/collaboration/agentLabel.ts",
+      "browser": "./src/collaboration/agentLabel.ts",
+      "node": "./src/collaboration/agentLabel.ts",
+      "default": "./src/collaboration/agentLabel.ts"
+    },
+    "./catalog": {
+      "types": "./src/agent/ToolCatalog.ts",
+      "browser": "./src/agent/ToolCatalog.ts",
+      "node": "./src/agent/ToolCatalog.ts",
+      "default": "./src/agent/ToolCatalog.ts"
+    },
+    "./events": {
+      "types": "./src/agent/AgentEvent.ts",
+      "browser": "./src/agent/AgentEvent.ts",
+      "default": "./src/agent/AgentEvent.ts"
+    },
+    "./tool": {
+      "types": "./src/agent/tool.ts",
+      "node": "./src/agent/tool.ts",
+      "default": "./src/agent/tool.ts"
+    },
+    "./tool/arguments": {
+      "types": "./src/agent/ToolArguments.ts",
+      "node": "./src/agent/ToolArguments.ts",
+      "default": "./src/agent/ToolArguments.ts"
+    },
+    "./tool/display": {
+      "types": "./src/tool/display.ts",
+      "browser": "./src/tool/display.ts",
+      "node": "./src/tool/display.ts",
+      "default": "./src/tool/display.ts"
+    },
+    "./tool/words": {
+      "types": "./src/tool/words.ts",
+      "browser": "./src/tool/words.ts",
+      "default": "./src/tool/words.ts"
+    },
+    "./tool/page": {
+      "types": "./src/tool/page.ts",
+      "browser": "./src/tool/page.ts",
+      "node": "./src/tool/page.ts",
+      "default": "./src/tool/page.ts"
+    },
+    "./tool/refusal": {
+      "types": "./src/tool/refusal.ts",
+      "browser": "./src/tool/refusal.ts",
+      "node": "./src/tool/refusal.ts",
+      "default": "./src/tool/refusal.ts"
+    },
+    "./permissions": {
+      "types": "./src/permissions/vocabulary.ts",
+      "browser": "./src/permissions/vocabulary.ts",
+      "node": "./src/permissions/vocabulary.ts",
+      "default": "./src/permissions/vocabulary.ts"
+    },
+    "./thread/agents/AgentDefinitions": {
+      "types": "./src/thread/agents/AgentDefinitions.ts",
+      "default": "./src/thread/agents/AgentDefinitions.ts"
+    },
+    "./modes/ApprovalMode": {
+      "types": "./src/modes/ApprovalMode.ts",
+      "browser": "./src/modes/ApprovalMode.ts",
+      "node": "./src/modes/ApprovalMode.ts",
+      "default": "./src/modes/ApprovalMode.ts"
+    },
+    "./modes/ModeLaw": {
+      "types": "./src/modes/ModeLaw.ts",
+      "bun": "./src/modes/ModeLaw.ts",
+      "default": "./src/modes/ModeLaw.ts"
+    },
+    "./modes/ApprovalModes": {
+      "types": "./src/modes/ApprovalModes.ts",
+      "bun": "./src/modes/ApprovalModes.ts",
+      "default": "./src/modes/ApprovalModes.ts"
+    },
+    "./modes/builtin": {
+      "types": "./src/modes/builtin.ts",
+      "browser": "./src/modes/builtin.ts",
+      "node": "./src/modes/builtin.ts",
+      "default": "./src/modes/builtin.ts"
+    },
+    "./tools/ReadyAnswers": {
+      "types": "./src/tools/ReadyAnswers.ts",
+      "default": "./src/tools/ReadyAnswers.ts"
+    },
+    "./tools/UserQuestion": {
+      "types": "./src/tools/UserQuestion.ts",
+      "default": "./src/tools/UserQuestion.ts"
+    },
+    "./workflow/author": {
+      "types": "./src/workflow/author.ts",
+      "default": "./src/workflow/author.ts"
+    },
+    "./workflow/compile": {
+      "types": "./src/workflow/compile.ts",
+      "default": "./src/workflow/compile.ts"
+    },
+    "./workflow/definition": {
+      "types": "./src/workflow/definition.ts",
+      "default": "./src/workflow/definition.ts"
+    },
+    "./workflow/engine": {
+      "types": "./src/workflow/engine.ts",
+      "default": "./src/workflow/engine.ts"
+    },
+    "./workflow/library": {
+      "types": "./src/workflow/library.ts",
+      "default": "./src/workflow/library.ts"
+    },
+    "./workflow/memory": {
+      "types": "./src/workflow/memory.ts",
+      "default": "./src/workflow/memory.ts"
+    },
+    "./workflow/plan": {
+      "types": "./src/workflow/plan.ts",
+      "default": "./src/workflow/plan.ts"
+    },
+    "./workflow/run": {
+      "types": "./src/workflow/run.ts",
+      "default": "./src/workflow/run.ts"
+    },
+    "./workflow/storage": {
+      "types": "./src/workflow/storage.ts",
+      "default": "./src/workflow/storage.ts"
+    },
+    "./workflow/WorkflowConfig": {
+      "types": "./src/workflow/WorkflowConfig.ts",
+      "default": "./src/workflow/WorkflowConfig.ts"
+    },
+    "./workflow/conformance": {
+      "types": "./src/workflow/conformance.ts",
+      "bun": "./src/workflow/conformance.ts"
+    },
+    "./permissions/threadSubject": {
+      "types": "./src/permissions/threadSubject.ts",
+      "browser": "./src/permissions/threadSubject.ts",
+      "node": "./src/permissions/threadSubject.ts",
+      "default": "./src/permissions/threadSubject.ts"
+    },
+    "./permissions/pathSubject": {
+      "types": "./src/permissions/pathSubject.ts",
+      "default": "./src/permissions/pathSubject.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/activity": "workspace:*",
+    "@runlith/builtin-catalog": "workspace:*",
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/executions": "workspace:*",
+    "@runlith/held": "workspace:*",
+    "@runlith/llm": "workspace:*",
+    "@runlith/paging": "workspace:*",
+    "@runlith/utils": "workspace:*",
+    "effect": "catalog:",
+    "uuidv7": "1.2.1"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@types/bun": "catalog:"
+  }
+}

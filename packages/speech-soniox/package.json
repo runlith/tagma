@@ -1,0 +1,27 @@
+{
+  "name": "@runlith/speech-soniox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Soniox speech adapter: real-time recognition and streaming synthesis as a pure protocol over the speech duplex executor, and async recognition of a recorded file over HTTP.",
+  "type": "module",
+  "exports": {
+    "./provider": {
+      "types": "./src/provider.ts",
+      "default": "./src/provider.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/speech": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

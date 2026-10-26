@@ -1,0 +1,97 @@
+{
+  "name": "@runlith/tagma",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The public contract of Tagma: rules a repository declares in tagma.config.ts and the adapter a model provider is written against.",
+  "bin": {
+    "create": "./kit/create.ts"
+  },
+  "type": "module",
+  "exports": {
+    "./rules": {
+      "types": "./src/rules/rules.ts",
+      "default": "./src/rules/rules.ts"
+    },
+    "./rules/effect": {
+      "types": "./src/rules/effect.ts",
+      "default": "./src/rules/effect.ts"
+    },
+    "./sources": {
+      "types": "./src/rules/sources.ts",
+      "bun": "./src/rules/sources.ts",
+      "default": null
+    },
+    "./adapter/provider": {
+      "types": "./src/adapter/provider.ts",
+      "bun": "./src/adapter/provider.ts",
+      "default": "./src/adapter/provider.ts"
+    },
+    "./adapter/settings": {
+      "types": "./src/adapter/settings.ts",
+      "browser": "./src/adapter/settings.ts",
+      "bun": "./src/adapter/settings.ts",
+      "default": "./src/adapter/settings.ts"
+    },
+    "./adapter/loader": {
+      "types": "./src/adapter/loader.ts",
+      "bun": "./src/adapter/loader.ts",
+      "default": null
+    },
+    "./adapter/declaration": {
+      "types": "./src/adapter/declaration.ts",
+      "default": "./src/adapter/declaration.ts"
+    },
+    "./adapter/conformance": {
+      "types": "./kit/conformance.ts",
+      "bun": "./kit/conformance.ts",
+      "default": null
+    },
+    "./adapter/create": {
+      "types": "./kit/create.ts",
+      "bun": "./kit/create.ts",
+      "default": null
+    },
+    "./adapter/host-modules": {
+      "types": "./src/adapter/hostModules.ts",
+      "bun": "./src/adapter/hostModules.ts",
+      "default": null
+    }
+  },
+  "scripts": {
+    "build": "bun kit/build.ts",
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "test:integration": "bun --no-install test --parallel=1 --no-isolate ./kit/distribution.itest.ts",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/adapter-anthropic": "workspace:*",
+    "@runlith/adapter-deepseek": "workspace:*",
+    "@runlith/adapter-devin": "workspace:*",
+    "@runlith/adapter-muse": "workspace:*",
+    "@runlith/adapter-openai": "workspace:*",
+    "@runlith/adapter-opencode-go": "workspace:*",
+    "@runlith/adapter-stepfun": "workspace:*",
+    "@runlith/adapter-xai": "workspace:*",
+    "@runlith/held": "workspace:*",
+    "@runlith/llm": "workspace:*",
+    "@runlith/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@tagma/inspection": "workspace:*",
+    "@types/bun": "catalog:",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.1"
+  },
+  "tagma": {
+    "host": {
+      "./adapter/provider": "shared",
+      "./adapter/settings": "shared",
+      "effect": "shared",
+      "effect/http": "shared"
+    }
+  }
+}

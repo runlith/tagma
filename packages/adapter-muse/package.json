@@ -1,0 +1,55 @@
+{
+  "name": "@runlith/adapter-muse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The built-in Muse model provider adapter of Tagma.",
+  "type": "module",
+  "exports": {
+    "./adapter": {
+      "types": "./src/adapter.ts",
+      "bun": "./src/adapter.ts",
+      "default": "./src/adapter.ts"
+    },
+    "./models/muse": {
+      "types": "./src/models/muse.ts",
+      "browser": "./src/models/muse.ts",
+      "node": "./src/models/muse.ts",
+      "default": "./src/models/muse.ts"
+    },
+    "./profiles/muse": {
+      "types": "./src/profiles/muse.ts",
+      "default": "./src/profiles/muse.ts"
+    },
+    "./icon": {
+      "types": "./src/icon.ts",
+      "browser": "./src/icon.ts",
+      "node": "./src/icon.ts",
+      "default": "./src/icon.ts"
+    },
+    "./profiles/museToolSchema": {
+      "types": "./src/profiles/museToolSchema.ts",
+      "default": "./src/profiles/museToolSchema.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/llm": "workspace:*",
+    "@runlith/tagma": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "host": {
+      "./models/muse": "shared",
+      "./profiles/muse": "shared",
+      "./icon": "shared",
+      "./profiles/museToolSchema": "shared"
+    }
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `thread_mandate` ADD `plain` integer DEFAULT false NOT NULL;

@@ -1,0 +1,32 @@
+import { chosenModelArgv, type HarnessModelArgv } from '../../contract/service/adapter.js';
+import type { AcpProfile } from '../../protocol/profile.js';
+
+export const devinAcp = (model: HarnessModelArgv): AcpProfile => ({
+  argv: (choice) => ['devin', 'acp', ...chosenModelArgv(model, choice)],
+  configure: (choice) => (choice === undefined ? [] : [{ configId: 'model', value: choice.model }]),
+  reportedModel: 'model',
+  hosts: null,
+  serves: model?.provider ?? null,
+  web: 'none',
+  mode: 'accept-edits',
+  proves: {
+    law: 'asked-calls',
+    touch: 'reads-and-writes',
+    authorship: 'recorded',
+    fork: false,
+    rewind: false,
+    compaction: false,
+    continue: false,
+    usage: 'none',
+    aside: 'none',
+  },
+  graceMs: 5_000,
+  callEnvelopeMs: null,
+  handshakeMs: 60_000,
+  login: { command: 'devin auth login', codes: [-32000] },
+  lockedCode: -32015,
+  otherMutates: true,
+  midTurn: 'after-turn',
+  sharedSessions: true,
+  extensions: [],
+});

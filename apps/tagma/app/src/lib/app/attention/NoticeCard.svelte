@@ -1,0 +1,112 @@
+<script lang="ts">
+  import X from '@lucide/svelte/icons/x';
+  import type { Notification } from '@tagma/server/notify/contract/wire/notification';
+  import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
+  import { timeCompact } from '$lib/shared/time.js';
+  import { cn } from '$lib/shared/utils.js';
+  import { Attention } from './Attention.svelte.js';
+
+  let { row, touch = false }: { row: Notification; touch?: boolean } = $props();
+
+  const attention = Attention.use();
+  const clock = WallClock.use();
+
+  let typed = $state('');
+
+  const question = $derived(row.question);
+  const reply = $derived(attention.noticeReplyOf(row));
+  const busy = $derived(reply?.state === 'sending');
+  const sender = $derived(row.sender.replace(/^plugin:/, ''));
+
+  const choice = $derived(cn('rounded-full font-medium disabled:opacity-60', touch ? 'min-h-9 px-4 text-ui' : 'h-6 px-2 text-small'));
+
+  function send(): void {
+    const value = typed.trim();
+    if (value !== '') void attention.answerNotice(row, value);
+  }
+</script>
+
+<div
+  class={cn(
+    'grid gap-2 rounded-md',
+    touch ? 'gap-3 rounded-lg border bg-raised px-4 py-3' : 'px-2 py-1.5',
+    touch && question !== null && 'border-status-open/30',
+  )}
+  data-notification-row={row.id}
+  data-notification-kind={question === null ? 'notice' : 'question'}
+>
+  <div class="flex min-w-0 items-start gap-2">
+    <span class={cn('mt-1.5 size-1.5 shrink-0 rounded-full', question === null ? 'bg-status-done' : 'bg-status-open')}></span>
+    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div class="flex items-baseline gap-2">
+        <span class={cn('min-w-0 flex-1 truncate font-medium', touch ? 'text-body' : 'text-ui')}>{row.title}</span>
+        <span class="shrink-0 tabular text-meta text-muted-foreground">{timeCompact(row.at, clock.now)}</span>
+      </div>
+      <span class="text-small text-muted-foreground">{sender}</span>
+      {#if row.body !== ''}<p class={cn('text-ui', touch ? 'line-clamp-4' : 'line-clamp-3')}>{row.body}</p>{/if}
+      {#if question !== null}<p class={cn(touch ? 'text-body' : 'text-ui', 'font-medium')}>{question.text}</p>{/if}
+    </div>
+    {#if question === null}
+      <button
+        type="button"
+        class={cn(
+          'grid shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground disabled:opacity-60',
+          touch ? 'size-11' : 'size-6',
+        )}
+        aria-label="Dismiss"
+        disabled={busy}
+        onclick={() => void attention.dismissNotice(row)}
+      >
+        <X class="size-3.5" />
+      </button>
+    {/if}
+  </div>
+  {#if question !== null}
+    <div class={cn('flex flex-wrap items-center gap-2', !touch && 'pl-4')}>
+      {#each question.options as option, index (option)}
+        <button
+          type="button"
+          class={cn(choice, index === 0 ? 'bg-primary text-primary-foreground' : 'bg-selected text-foreground')}
+          disabled={busy}
+          onclick={() => void attention.answerNotice(row, option)}
+        >
+          {option}
+        </button>
+      {:else}
+        <form
+          class="flex min-w-0 flex-1 items-center gap-2"
+          onsubmit={(event) => {
+            event.preventDefault();
+            send();
+          }}
+        >
+          <input
+            class={cn(
+              'min-w-0 flex-1 rounded-md border bg-sunken px-2 text-ui outline-none placeholder:text-muted-foreground focus-visible:border-ring',
+              touch ? 'h-9' : 'h-6',
+            )}
+            placeholder="Answer"
+            bind:value={typed}
+            disabled={busy}
+          />
+          <button type="submit" class={cn(choice, 'bg-primary text-primary-foreground')} disabled={busy || typed.trim() === ''}>Send</button
+          >
+        </form>
+      {/each}
+      <button
+        type="button"
+        class={cn(
+          'rounded-md text-muted-foreground hover:text-foreground disabled:opacity-60',
+          touch ? 'min-h-9 px-2 text-ui' : 'px-1 text-small',
+        )}
+        disabled={busy}
+        onclick={() => void attention.dismissNotice(row)}
+      >
+        Dismiss
+      </button>
+    </div>
+  {/if}
+  {#if reply?.state === 'refused'}
+    <p class={cn('text-small text-destructive', !touch && 'pl-4')} role="alert">{reply.reason}</p>
+  {/if}
+</div>

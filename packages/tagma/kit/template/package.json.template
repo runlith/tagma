@@ -1,0 +1,8 @@
+{
+  "name": "__NAME__-adapter",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": "./adapter.ts" },
+  "scripts": { "test": "bun --no-install contract.mjs", "typecheck": "bun check" },
+  "devDependencies": { "@runlith/tagma": "^0.1.0", "effect": "^4.0.1" }
+}

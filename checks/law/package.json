@@ -1,0 +1,22 @@
+{
+  "name": "@runlith/law",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "runlith-typecheck",
+    "test": "testbed bun test ./programs.itest.ts ./migrations.itest.ts ./input.itest.ts ./ui-tokens.test.ts ./environment.test.ts ./effect-style.test.ts"
+  },
+  "dependencies": {
+    "@runlith/code-facts": "workspace:*",
+    "@runlith/sqlite-process": "workspace:*",
+    "@runlith/tagma": "workspace:*",
+    "@tagma/inspection": "workspace:*",
+    "effect": "catalog:",
+    "svelte": "catalog:",
+    "typescript": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@types/bun": "catalog:"
+  }
+}

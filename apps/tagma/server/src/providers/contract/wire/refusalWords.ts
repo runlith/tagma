@@ -1,0 +1,28 @@
+import type { RefusalWords } from '../../../platform/contract/wire/manifest.js';
+
+export const REFUSAL_WORDS = {
+  'account-cli-failed': 'Account sign-in command failed',
+  'account-cli-uncertain': 'Account sign-in outcome unclear',
+  'account-kind': 'Provider has no CLI accounts',
+  'account-required': 'Account must be chosen',
+  'adapter-install': 'Adapter could not be installed',
+  'credential-origin': 'Account is managed in its own CLI',
+  'credential-reconnect': 'Sign in again',
+  'credential-shape': 'Credential not recognized',
+  'discovery-failed': 'Could not list models',
+  'empty-key': 'Key is empty',
+  'instance-invalid': 'Settings are invalid',
+  'login-unreadable': 'CLI sign-in status unreadable',
+  'mode-unavailable': 'Sign-in mode unavailable',
+  'no-sign-in': 'No sign-in in progress',
+  'provider-not-installed': 'Provider not installed',
+  'sign-in-failed': 'Sign-in failed',
+  'stale-instance': 'Settings changed meanwhile',
+  'stale-revision': 'Changed meanwhile',
+  'token-store': 'Credential store failed',
+  'unknown-account': 'Unknown account',
+  'unknown-adapter': 'Adapter not installed',
+  'unknown-instance': 'Settings instance not found',
+  'unknown-mode': 'Unknown sign-in mode',
+  'unknown-provider': 'Unknown provider',
+} as const satisfies RefusalWords;

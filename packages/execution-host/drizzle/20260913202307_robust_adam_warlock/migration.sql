@@ -1,0 +1,1 @@
+ALTER TABLE `command_revision` ADD `outcome` text DEFAULT 'pending' NOT NULL;

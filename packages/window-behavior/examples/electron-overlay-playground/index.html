@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Overlay Playground</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: transparent;
+        color: #e5e7eb;
+      }
+
+      .root {
+        min-height: 100vh;
+        display: grid;
+        grid-template-rows: 48px 1fr;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+      }
+
+      .content {
+        padding: 20px 24px;
+        display: grid;
+        gap: 20px;
+      }
+
+      .transcript {
+        max-width: 760px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .line {
+        padding: 10px 12px;
+        border-radius: 14px;
+        background: rgba(15, 23, 42, var(--overlay-background-opacity, 0.7));
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        backdrop-filter: blur(10px);
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      button,
+      input {
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(15, 23, 42, 0.7);
+        color: inherit;
+        padding: 8px 10px;
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .background-hidden .line {
+        background: transparent;
+        backdrop-filter: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="root" id="root">
+      <div class="header">
+        <div><strong>Overlay playground</strong></div>
+        <div class="controls">
+          <button type="button" id="transparent">Transparency</button>
+          <button type="button" id="background">Background</button>
+          <button type="button" id="pass-through">Click-through</button>
+          <button type="button" id="focus-policy">No-focus-steal</button>
+          <button type="button" id="always-on-top">Always on top</button>
+          <button type="button" id="capture-protection">Capture shield</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="transcript">
+          <div class="line">This playground mimics an overlay/presence-style surface.</div>
+          <div class="line">The package stays headless; this UI exists only as an example.</div>
+          <div class="line">Try transparency, background, click-through, and no-focus-steal together.</div>
+        </div>
+
+        <label>
+          Overlay background opacity
+          <input id="background-opacity" type="range" min="0" max="100" step="5" />
+        </label>
+      </div>
+    </div>
+
+    <script type="module">
+      const api = window.windowBehaviorOverlayExample;
+      const root = document.getElementById("root");
+      const backgroundOpacity = document.getElementById("background-opacity");
+
+      let currentState = await api.getState();
+
+      function render() {
+        root.style.setProperty(
+          "--overlay-background-opacity",
+          String(currentState.overlayBackgroundOpacity),
+        );
+        root.classList.toggle("background-hidden", !currentState.overlayBackgroundVisible);
+        backgroundOpacity.value = String(Math.round(currentState.overlayBackgroundOpacity * 100));
+      }
+
+      document.getElementById("transparent").onclick = () =>
+        api.dispatch({ type: "set-transparent", value: !currentState.transparent });
+      document.getElementById("background").onclick = () =>
+        api.dispatch({
+          type: "set-overlay-background-visible",
+          value: !currentState.overlayBackgroundVisible,
+        });
+      document.getElementById("pass-through").onclick = () =>
+        api.dispatch({ type: "set-pass-through", value: !currentState.passThrough });
+      document.getElementById("focus-policy").onclick = () =>
+        api.dispatch({
+          type: "set-focus-policy",
+          value: currentState.focusPolicy === "standard" ? "no-focus-steal" : "standard",
+        });
+      document.getElementById("always-on-top").onclick = () =>
+        api.dispatch({ type: "set-always-on-top", value: !currentState.alwaysOnTop });
+      document.getElementById("capture-protection").onclick = () =>
+        api.dispatch({
+          type: "set-capture-protection",
+          value: !currentState.captureProtection,
+        });
+
+      backgroundOpacity.oninput = (event) =>
+        api.dispatch({
+          type: "set-overlay-background-opacity",
+          value: Number(event.currentTarget.value) / 100,
+        });
+
+      api.subscribe((state) => {
+        currentState = state;
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>

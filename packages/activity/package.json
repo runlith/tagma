@@ -1,0 +1,89 @@
+{
+  "name": "@runlith/activity",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One record of everything the product does: the activity envelope, its log port and interrupt-safe combinator for producers, and the activity.sqlite store with hour-bucketed bodies for the server.",
+  "type": "module",
+  "exports": {
+    "./Activity": {
+      "types": "./src/Activity.ts",
+      "browser": "./src/Activity.ts",
+      "node": "./src/Activity.ts",
+      "default": "./src/Activity.ts"
+    },
+    "./cause": {
+      "types": "./src/cause.ts",
+      "browser": "./src/cause.ts",
+      "node": "./src/cause.ts",
+      "default": "./src/cause.ts"
+    },
+    "./fact": {
+      "types": "./src/fact.ts",
+      "browser": "./src/fact.ts",
+      "node": "./src/fact.ts",
+      "default": "./src/fact.ts"
+    },
+    "./fault": {
+      "types": "./src/fault.ts",
+      "browser": "./src/fault.ts",
+      "node": "./src/fault.ts",
+      "default": "./src/fault.ts"
+    },
+    "./log": {
+      "types": "./src/log.ts",
+      "browser": "./src/log.ts",
+      "node": "./src/log.ts",
+      "default": "./src/log.ts"
+    },
+    "./modelCall": {
+      "types": "./src/modelCall.ts",
+      "browser": "./src/modelCall.ts",
+      "node": "./src/modelCall.ts",
+      "default": "./src/modelCall.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "default": "./src/testing.ts"
+    },
+    "./store": {
+      "types": "./src/store/ActivityStore.ts",
+      "bun": "./src/store/ActivityStore.ts",
+      "default": "./src/store/ActivityStore.ts"
+    },
+    "./store/faults": {
+      "types": "./src/store/faults.ts",
+      "bun": "./src/store/faults.ts",
+      "default": "./src/store/faults.ts"
+    },
+    "./store/record": {
+      "types": "./src/store/record.ts",
+      "bun": "./src/store/record.ts",
+      "default": "./src/store/record.ts"
+    },
+    "./store/query": {
+      "types": "./src/store/query.ts",
+      "bun": "./src/store/query.ts",
+      "default": "./src/store/query.ts"
+    }
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/held": "workspace:*",
+    "@runlith/sqlite-process": "workspace:*",
+    "@runlith/utils": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:",
+    "drizzle-kit": "catalog:",
+    "typescript": "catalog:"
+  }
+}

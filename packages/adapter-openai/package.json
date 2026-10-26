@@ -1,0 +1,58 @@
+{
+  "name": "@runlith/adapter-openai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The built-in OpenAI model provider adapter of Tagma.",
+  "type": "module",
+  "exports": {
+    "./adapter": {
+      "types": "./src/adapter.ts",
+      "bun": "./src/adapter.ts",
+      "default": "./src/adapter.ts"
+    },
+    "./icon": {
+      "types": "./src/icon.ts",
+      "browser": "./src/icon.ts",
+      "node": "./src/icon.ts",
+      "default": "./src/icon.ts"
+    },
+    "./models/openai": {
+      "types": "./src/models/openai.ts",
+      "browser": "./src/models/openai.ts",
+      "node": "./src/models/openai.ts",
+      "default": "./src/models/openai.ts"
+    },
+    "./oauth/cli/codex": {
+      "types": "./src/oauth/cli/codex.ts",
+      "default": "./src/oauth/cli/codex.ts"
+    },
+    "./oauth/vendors/openai": {
+      "types": "./src/oauth/vendors/openai.ts",
+      "default": "./src/oauth/vendors/openai.ts"
+    },
+    "./profiles/openai": {
+      "types": "./src/profiles/openai.ts",
+      "default": "./src/profiles/openai.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/llm": "workspace:*",
+    "@runlith/tagma": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "host": {
+      "./models/openai": "shared",
+      "./profiles/openai": "shared"
+    }
+  }
+}

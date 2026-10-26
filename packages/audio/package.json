@@ -1,0 +1,47 @@
+{
+  "name": "@runlith/audio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sound and its time: PCM chunks, gaps and tracks, a streaming resampler, the audio devices port and the neutral native helper protocol with its client.",
+  "type": "module",
+  "exports": {
+    "./sound/*": {
+      "types": "./src/sound/*.ts",
+      "browser": "./src/sound/*.ts",
+      "node": "./src/sound/*.ts",
+      "default": "./src/sound/*.ts"
+    },
+    "./port/*": {
+      "types": "./src/port/*.ts",
+      "browser": "./src/port/*.ts",
+      "node": "./src/port/*.ts",
+      "default": "./src/port/*.ts"
+    },
+    "./helper/*": {
+      "types": "./src/helper/*.ts",
+      "default": "./src/helper/*.ts"
+    },
+    "./testing/*": {
+      "types": "./src/testing/*.ts",
+      "default": "./src/testing/*.ts"
+    },
+    "./conformance/*": {
+      "types": "./src/conformance/*.ts",
+      "default": "./src/conformance/*.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

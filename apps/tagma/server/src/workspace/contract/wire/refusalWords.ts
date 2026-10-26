@@ -1,0 +1,25 @@
+import type { RefusalWords } from '../../../platform/contract/wire/manifest.js';
+
+export const REFUSAL_WORDS = {
+  'coverage-foreign-namespace': 'Checkout is in another environment',
+  'coverage-moved': 'Project checkouts moved',
+  'coverage-registry': 'Checkout registry unavailable',
+  'coverage-unestablished': 'Project checkouts not known yet',
+  'graph-path': 'Path is part of the graph',
+  'no-operation': 'Nothing to abort',
+  'no-paths': 'No paths named',
+  'no-remote': 'No remote',
+  'record-unread': 'Change record unreadable',
+  'repository-inconclusive': 'Repository state unclear',
+  'repository-missing': 'Repository not registered',
+  'repository-moved': 'Repository moved',
+  'repository-replaced': 'Repository was replaced',
+  'repository-unavailable': 'Repository unavailable',
+  'repository-unborn': 'Repository has no commits',
+  'root-inconclusive': 'Checkout could not be identified',
+  'root-missing': 'Checkout folder missing',
+  'root-moved': 'Checkout moved since approval',
+  'root-replaced': 'Checkout was replaced',
+  'root-unavailable': 'Checkout unavailable',
+  'row-stale': 'Checkout state out of date',
+} as const satisfies RefusalWords;

@@ -1,0 +1,46 @@
+{
+  "name": "@runlith/speech",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One protocol of speech for every provider: the language of requests and events, model capabilities as data, the catalog and its choice, the adapter contract and the duplex executor, recognition and synthesis sessions, the Segmenter and the Speech service.",
+  "type": "module",
+  "exports": {
+    "./wire/*": {
+      "types": "./src/wire/*.ts",
+      "default": "./src/wire/*.ts"
+    },
+    "./protocol/*": {
+      "types": "./src/protocol/*.ts",
+      "default": "./src/protocol/*.ts"
+    },
+    "./engine/*": {
+      "types": "./src/engine/*.ts",
+      "default": "./src/engine/*.ts"
+    },
+    "./transport/*": {
+      "types": "./src/transport/*.ts",
+      "default": "./src/transport/*.ts"
+    },
+    "./testing/*": {
+      "types": "./src/testing/*.ts",
+      "default": "./src/testing/*.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/audio": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/ws": "catalog:",
+    "typescript": "catalog:",
+    "ws": "catalog:"
+  }
+}

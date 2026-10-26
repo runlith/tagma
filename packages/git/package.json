@@ -1,0 +1,103 @@
+{
+  "name": "@runlith/git",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One scoped git process over a supplied spawner, and the repository and worktree facts read through it.",
+  "type": "module",
+  "exports": {
+    "./apart": {
+      "types": "./src/apart.ts",
+      "node": "./src/apart.ts",
+      "default": "./src/apart.ts"
+    },
+    "./disk": {
+      "types": "./src/disk.ts",
+      "node": "./src/disk.ts",
+      "default": "./src/disk.ts"
+    },
+    "./entries": {
+      "types": "./src/entries.ts",
+      "node": "./src/entries.ts",
+      "default": "./src/entries.ts"
+    },
+    "./Git": {
+      "types": "./src/Git.ts",
+      "node": "./src/Git.ts",
+      "default": "./src/Git.ts"
+    },
+    "./history": {
+      "types": "./src/history.ts",
+      "node": "./src/history.ts",
+      "default": "./src/history.ts"
+    },
+    "./merge": {
+      "types": "./src/merge.ts",
+      "node": "./src/merge.ts",
+      "default": "./src/merge.ts"
+    },
+    "./porcelain": {
+      "types": "./src/porcelain.ts",
+      "node": "./src/porcelain.ts",
+      "default": "./src/porcelain.ts"
+    },
+    "./repository": {
+      "types": "./src/repository.ts",
+      "node": "./src/repository.ts",
+      "default": "./src/repository.ts"
+    },
+    "./stage": {
+      "types": "./src/stage.ts",
+      "node": "./src/stage.ts",
+      "default": "./src/stage.ts"
+    },
+    "./status": {
+      "types": "./src/status.ts",
+      "node": "./src/status.ts",
+      "default": "./src/status.ts"
+    },
+    "./trees": {
+      "types": "./src/trees.ts",
+      "node": "./src/trees.ts",
+      "default": "./src/trees.ts"
+    },
+    "./treePaths": {
+      "types": "./src/treePaths.ts",
+      "node": "./src/treePaths.ts",
+      "default": "./src/treePaths.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/fixture.ts",
+      "node": "./src/testing/fixture.ts",
+      "default": "./src/testing/fixture.ts"
+    },
+    "./worktree": {
+      "types": "./src/worktree.ts",
+      "node": "./src/worktree.ts",
+      "default": "./src/worktree.ts"
+    },
+    "./working": {
+      "types": "./src/working.ts",
+      "node": "./src/working.ts",
+      "default": "./src/working.ts"
+    },
+    "./vocabulary": {
+      "types": "./src/vocabulary.ts",
+      "browser": "./src/vocabulary.ts",
+      "node": "./src/vocabulary.ts",
+      "default": "./src/vocabulary.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

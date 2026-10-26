@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder}/packages/audio-darwin/native",
+      "name": "Debug audio-helper (packages/audio-darwin/native)",
+      "target": "audio-helper",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug audio-helper (packages/audio-darwin/native)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder}/packages/audio-darwin/native",
+      "name": "Release audio-helper (packages/audio-darwin/native)",
+      "target": "audio-helper",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release audio-helper (packages/audio-darwin/native)"
+    }
+  ]
+}

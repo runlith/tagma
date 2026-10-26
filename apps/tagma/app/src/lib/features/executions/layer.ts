@@ -1,0 +1,46 @@
+import { Layer } from '@runlith/layer/Layer';
+import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
+import { PlaceStanding } from '$lib/features/worktrees/PlaceStanding.js';
+import { placeStanding } from './worktrees/standing.js';
+import { ThreadNames } from '../../shared/threads/Names.svelte.js';
+import { CommandActivity } from './commands/Activity.svelte.js';
+import { TerminalAppearance } from './appearance/Settings.svelte.js';
+import { TerminalHolders } from './terminal/Holders.svelte.js';
+import { TerminalKeymap } from './terminal/Keymap.js';
+import { TerminalOutput } from './terminal/Output.js';
+import { Terminals } from './worktrees/Terminals.svelte.js';
+import { TerminalRenderPolicy } from './terminal/RenderPolicy.js';
+import { TerminalViews } from './terminal/Views.svelte.js';
+import { ExecutionsRepo } from './Repo.js';
+
+export const TerminalsLayer = Layer.mergeAll(
+  ExecutionsRepo,
+  SettingsRepo,
+  TerminalAppearance,
+  TerminalKeymap,
+  TerminalOutput,
+  TerminalRenderPolicy,
+  TerminalViews,
+  Terminals,
+  CommandActivity,
+  TerminalHolders,
+  Layer.provide(PlaceStanding, function* () {
+    const commands = yield* CommandActivity;
+    const repo = yield* ExecutionsRepo;
+    const names = yield* ThreadNames;
+    return new PlaceStanding(
+      placeStanding({
+        roster: () => commands.roster,
+        lines: () => commands.lines,
+        processes: async (address) => {
+          try {
+            return (await repo.processes.key(address).refresh({ throwOnError: true }))?.report;
+          } catch {
+            return undefined;
+          }
+        },
+        thread: (threadId) => names.of(threadId)?.label ?? threadId.slice(0, 8),
+      }),
+    );
+  }),
+);

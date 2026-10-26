@@ -1,0 +1,438 @@
+{
+  "name": "@runlith/llm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The wire to every model this monorepo calls: the language of a call, the protocols, the routes and transports, the profile contract, the catalog and the sign-in machinery, knowing no vendor.",
+  "type": "module",
+  "exports": {
+    "./cache-policy": {
+      "types": "./src/llm/cache-policy.ts",
+      "default": "./src/llm/cache-policy.ts"
+    },
+    "./call": {
+      "types": "./src/llm/call.ts",
+      "default": "./src/llm/call.ts"
+    },
+    "./decision": {
+      "types": "./src/llm/decision.ts",
+      "default": "./src/llm/decision.ts"
+    },
+    "./protocols/decisions": {
+      "types": "./src/llm/protocols/decisions.ts",
+      "default": "./src/llm/protocols/decisions.ts"
+    },
+    "./profiles/decisions": {
+      "types": "./src/profiles/decisions.ts",
+      "default": "./src/profiles/decisions.ts"
+    },
+    "./textDecision": {
+      "types": "./src/llm/textDecision.ts",
+      "default": "./src/llm/textDecision.ts"
+    },
+    "./protocols/anthropic-messages": {
+      "types": "./src/llm/protocols/anthropic-messages.ts",
+      "default": "./src/llm/protocols/anthropic-messages.ts"
+    },
+    "./protocols/gemini": {
+      "types": "./src/llm/protocols/gemini.ts",
+      "default": "./src/llm/protocols/gemini.ts"
+    },
+    "./protocols/devin/devin_pb": {
+      "types": "./src/llm/protocols/devin/devin_pb.ts",
+      "default": "./src/llm/protocols/devin/devin_pb.ts"
+    },
+    "./protocols/openai-responses": {
+      "types": "./src/llm/protocols/openai-responses.ts",
+      "default": "./src/llm/protocols/openai-responses.ts"
+    },
+    "./provider-error": {
+      "types": "./src/llm/provider-error.ts",
+      "default": "./src/llm/provider-error.ts"
+    },
+    "./route/auth": {
+      "types": "./src/llm/route/auth.ts",
+      "default": "./src/llm/route/auth.ts"
+    },
+    "./route/client": {
+      "types": "./src/llm/route/client.ts",
+      "default": "./src/llm/route/client.ts"
+    },
+    "./route/executor": {
+      "types": "./src/llm/route/executor.ts",
+      "default": "./src/llm/route/executor.ts"
+    },
+    "./route/endpoint": {
+      "types": "./src/llm/route/endpoint.ts",
+      "default": "./src/llm/route/endpoint.ts"
+    },
+    "./protocols/devin": {
+      "types": "./src/llm/protocols/devin.ts",
+      "default": "./src/llm/protocols/devin.ts"
+    },
+    "./vendorCall": {
+      "types": "./src/vendorCall.ts",
+      "default": "./src/vendorCall.ts"
+    },
+    "./profiles/quotaRead": {
+      "types": "./src/profiles/quotaRead.ts",
+      "default": "./src/profiles/quotaRead.ts"
+    },
+    "./route/framing": {
+      "types": "./src/llm/route/framing.ts",
+      "default": "./src/llm/route/framing.ts"
+    },
+    "./route/transport/http": {
+      "types": "./src/llm/route/transport/http.ts",
+      "default": "./src/llm/route/transport/http.ts"
+    },
+    "./utils/headers": {
+      "types": "./src/llm/utils/headers.ts",
+      "default": "./src/llm/utils/headers.ts"
+    },
+    "./utils/record": {
+      "types": "./src/llm/utils/record.ts",
+      "default": "./src/llm/utils/record.ts"
+    },
+    "./route/ModelPresentation": {
+      "types": "./src/llm/route/ModelPresentation.ts",
+      "default": "./src/llm/route/ModelPresentation.ts"
+    },
+    "./route/ModelRetryPolicy": {
+      "types": "./src/llm/route/ModelRetryPolicy.ts",
+      "default": "./src/llm/route/ModelRetryPolicy.ts"
+    },
+    "./route/refusal": {
+      "types": "./src/llm/route/refusal.ts",
+      "default": "./src/llm/route/refusal.ts"
+    },
+    "./route/transport/answering": {
+      "types": "./src/llm/route/transport/answering.ts",
+      "default": "./src/llm/route/transport/answering.ts"
+    },
+    "./route/transport/doorOf": {
+      "types": "./src/llm/route/transport/doorOf.ts",
+      "default": "./src/llm/route/transport/doorOf.ts"
+    },
+    "./route/transport/verbatim": {
+      "types": "./src/llm/route/transport/verbatim.ts",
+      "default": "./src/llm/route/transport/verbatim.ts"
+    },
+    "./schema/compaction": {
+      "types": "./src/llm/schema/compaction.ts",
+      "browser": "./src/llm/schema/compaction.ts",
+      "default": "./src/llm/schema/compaction.ts"
+    },
+    "./schema/errors": {
+      "types": "./src/llm/schema/errors.ts",
+      "browser": "./src/llm/schema/errors.ts",
+      "node": "./src/llm/schema/errors.ts",
+      "default": "./src/llm/schema/errors.ts"
+    },
+    "./schema/events": {
+      "types": "./src/llm/schema/events.ts",
+      "browser": "./src/llm/schema/events.ts",
+      "node": "./src/llm/schema/events.ts",
+      "default": "./src/llm/schema/events.ts"
+    },
+    "./schema/responseFold": {
+      "types": "./src/llm/schema/responseFold.ts",
+      "browser": "./src/llm/schema/responseFold.ts",
+      "node": "./src/llm/schema/responseFold.ts",
+      "default": "./src/llm/schema/responseFold.ts"
+    },
+    "./schema/ids": {
+      "types": "./src/llm/schema/ids.ts",
+      "browser": "./src/llm/schema/ids.ts",
+      "node": "./src/llm/schema/ids.ts",
+      "default": "./src/llm/schema/ids.ts"
+    },
+    "./schema/messages": {
+      "types": "./src/llm/schema/messages.ts",
+      "browser": "./src/llm/schema/messages.ts",
+      "node": "./src/llm/schema/messages.ts",
+      "default": "./src/llm/schema/messages.ts"
+    },
+    "./schema/options": {
+      "types": "./src/llm/schema/options.ts",
+      "browser": "./src/llm/schema/options.ts",
+      "node": "./src/llm/schema/options.ts",
+      "default": "./src/llm/schema/options.ts"
+    },
+    "./schema/quota": {
+      "types": "./src/llm/schema/quota.ts",
+      "browser": "./src/llm/schema/quota.ts",
+      "node": "./src/llm/schema/quota.ts",
+      "default": "./src/llm/schema/quota.ts"
+    },
+    "./schema/readJsonSchema": {
+      "types": "./src/llm/schema/readJsonSchema.ts",
+      "browser": "./src/llm/schema/readJsonSchema.ts",
+      "node": "./src/llm/schema/readJsonSchema.ts",
+      "default": "./src/llm/schema/readJsonSchema.ts"
+    },
+    "./schema/tool-content": {
+      "types": "./src/llm/schema/tool-content.ts",
+      "browser": "./src/llm/schema/tool-content.ts",
+      "bun": "./src/llm/schema/tool-content.ts",
+      "default": "./src/llm/schema/tool-content.ts"
+    },
+    "./models/authStatus": {
+      "types": "./src/models/authStatus.ts",
+      "browser": "./src/models/authStatus.ts",
+      "node": "./src/models/authStatus.ts",
+      "default": "./src/models/authStatus.ts"
+    },
+    "./models/cacheLifetime": {
+      "types": "./src/models/cacheLifetime.ts",
+      "browser": "./src/models/cacheLifetime.ts",
+      "node": "./src/models/cacheLifetime.ts",
+      "default": "./src/models/cacheLifetime.ts"
+    },
+    "./models/client": {
+      "types": "./src/models/client.ts",
+      "default": "./src/models/client.ts"
+    },
+    "./models/description": {
+      "types": "./src/models/description.ts",
+      "browser": "./src/models/description.ts",
+      "node": "./src/models/description.ts",
+      "default": "./src/models/description.ts"
+    },
+    "./models/imageTokens": {
+      "types": "./src/models/imageTokens.ts",
+      "browser": "./src/models/imageTokens.ts",
+      "node": "./src/models/imageTokens.ts",
+      "default": "./src/models/imageTokens.ts"
+    },
+    "./models/normalizeModelImage": {
+      "types": "./src/models/normalizeModelImage.ts",
+      "default": "./src/models/normalizeModelImage.ts"
+    },
+    "./models/resolve": {
+      "types": "./src/models/resolve.ts",
+      "browser": "./src/models/resolve.ts",
+      "node": "./src/models/resolve.ts",
+      "default": "./src/models/resolve.ts"
+    },
+    "./models/catalog": {
+      "types": "./src/models/catalog.ts",
+      "browser": "./src/models/catalog.ts",
+      "node": "./src/models/catalog.ts",
+      "default": "./src/models/catalog.ts"
+    },
+    "./oauth/accountKey": {
+      "types": "./src/oauth/accountKey.ts",
+      "default": "./src/oauth/accountKey.ts"
+    },
+    "./oauth/callback-server": {
+      "types": "./src/oauth/callback-server.ts",
+      "default": "./src/oauth/callback-server.ts"
+    },
+    "./oauth/credential": {
+      "types": "./src/oauth/credential.ts",
+      "default": "./src/oauth/credential.ts"
+    },
+    "./oauth/credentialDocument": {
+      "types": "./src/oauth/credentialDocument.ts",
+      "default": "./src/oauth/credentialDocument.ts"
+    },
+    "./oauth/FileTokenStore": {
+      "types": "./src/oauth/FileTokenStore.ts",
+      "default": "./src/oauth/FileTokenStore.ts"
+    },
+    "./oauth/flows/deviceGrant": {
+      "types": "./src/oauth/flows/deviceGrant.ts",
+      "default": "./src/oauth/flows/deviceGrant.ts"
+    },
+    "./oauth/flows/manual": {
+      "types": "./src/oauth/flows/manual.ts",
+      "default": "./src/oauth/flows/manual.ts"
+    },
+    "./oauth/flows/open-browser": {
+      "types": "./src/oauth/flows/open-browser.ts",
+      "default": "./src/oauth/flows/open-browser.ts"
+    },
+    "./oauth/flows/vendorPayload": {
+      "types": "./src/oauth/flows/vendorPayload.ts",
+      "default": "./src/oauth/flows/vendorPayload.ts"
+    },
+    "./oauth/pkce": {
+      "types": "./src/oauth/pkce.ts",
+      "default": "./src/oauth/pkce.ts"
+    },
+    "./oauth/ProviderSignIn": {
+      "types": "./src/oauth/ProviderSignIn.ts",
+      "default": "./src/oauth/ProviderSignIn.ts"
+    },
+    "./oauth/vendor": {
+      "types": "./src/oauth/vendor.ts",
+      "default": "./src/oauth/vendor.ts"
+    },
+    "./oauth/storeFailure": {
+      "types": "./src/oauth/storeFailure.ts",
+      "default": "./src/oauth/storeFailure.ts"
+    },
+    "./oauth/vendorCall": {
+      "types": "./src/oauth/vendorCall.ts",
+      "default": "./src/oauth/vendorCall.ts"
+    },
+    "./profiles/webCache": {
+      "types": "./src/profiles/webCache.ts",
+      "default": "./src/profiles/webCache.ts"
+    },
+    "./profiles/vendorWeb": {
+      "types": "./src/profiles/vendorWeb.ts",
+      "default": "./src/profiles/vendorWeb.ts"
+    },
+    "./profiles/images": {
+      "types": "./src/profiles/images.ts",
+      "default": "./src/profiles/images.ts"
+    },
+    "./protocols/openai-images": {
+      "types": "./src/llm/protocols/openai-images.ts",
+      "default": "./src/llm/protocols/openai-images.ts"
+    },
+    "./profiles/ModelCompactionPolicy": {
+      "types": "./src/profiles/ModelCompactionPolicy.ts",
+      "default": "./src/profiles/ModelCompactionPolicy.ts"
+    },
+    "./profiles/contract": {
+      "types": "./src/profiles/contract.ts",
+      "default": "./src/profiles/contract.ts"
+    },
+    "./profiles/recordedProduct": {
+      "types": "./src/profiles/recordedProduct.ts",
+      "default": "./src/profiles/recordedProduct.ts"
+    },
+    "./protocols/openai-chat": {
+      "types": "./src/llm/protocols/openai-chat.ts",
+      "default": "./src/llm/protocols/openai-chat.ts"
+    },
+    "./oauth/cliStore": {
+      "types": "./src/oauth/cliStore.ts",
+      "default": "./src/oauth/cliStore.ts"
+    },
+    "./models/grant": {
+      "types": "./src/models/grant.ts",
+      "browser": "./src/models/grant.ts",
+      "node": "./src/models/grant.ts",
+      "default": "./src/models/grant.ts"
+    },
+    "./protocols/openai-compatible-chat": {
+      "types": "./src/llm/protocols/openai-compatible-chat.ts",
+      "default": "./src/llm/protocols/openai-compatible-chat.ts"
+    },
+    "./profiles/clientSession": {
+      "types": "./src/profiles/clientSession.ts",
+      "default": "./src/profiles/clientSession.ts"
+    },
+    "./profiles/credential": {
+      "types": "./src/profiles/credential.ts",
+      "default": "./src/profiles/credential.ts"
+    },
+    "./profiles/reasoning": {
+      "types": "./src/profiles/reasoning.ts",
+      "default": "./src/profiles/reasoning.ts"
+    },
+    "./protocols/shared": {
+      "types": "./src/llm/protocols/shared.ts",
+      "default": "./src/llm/protocols/shared.ts"
+    },
+    "./protocols/utils/tool-schema": {
+      "types": "./src/llm/protocols/utils/tool-schema.ts",
+      "default": "./src/llm/protocols/utils/tool-schema.ts"
+    },
+    "./route/definition": {
+      "types": "./src/llm/route/definition.ts",
+      "default": "./src/llm/route/definition.ts"
+    },
+    "./route/notes": {
+      "types": "./src/llm/route/notes.ts",
+      "default": "./src/llm/route/notes.ts"
+    },
+    "./protocols/anthropic/stream": {
+      "types": "./src/llm/protocols/anthropic/stream.ts",
+      "default": "./src/llm/protocols/anthropic/stream.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.15.0",
+    "@effect/platform-bun": "catalog:",
+    "@runlith/activity": "workspace:*",
+    "@runlith/credential-file": "workspace:*",
+    "@runlith/file-lock": "workspace:*",
+    "@runlith/held": "workspace:*",
+    "@runlith/utils": "workspace:*",
+    "@smithy/eventstream-codec": "4.2.14",
+    "@smithy/util-utf8": "4.2.2",
+    "aws4fetch": "1.0.20",
+    "effect": "catalog:",
+    "sharp": "catalog:"
+  },
+  "devDependencies": {
+    "@bufbuild/protoc-gen-es": "2.15.0",
+    "@runlith/effect-test": "workspace:*",
+    "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "host": {
+      "./models/authStatus": "shared",
+      "./models/cacheLifetime": "shared",
+      "./models/description": "shared",
+      "./models/grant": "shared",
+      "./oauth/accountKey": "shared",
+      "./oauth/callback-server": "shared",
+      "./oauth/cliStore": "shared",
+      "./oauth/flows/deviceGrant": "shared",
+      "./oauth/flows/manual": "shared",
+      "./oauth/flows/open-browser": "shared",
+      "./oauth/flows/vendorPayload": "shared",
+      "./oauth/pkce": "shared",
+      "./oauth/vendor": "shared",
+      "./oauth/vendorCall": "shared",
+      "./profiles/ModelCompactionPolicy": "developer",
+      "./profiles/clientSession": "shared",
+      "./profiles/contract": "shared",
+      "./profiles/credential": "shared",
+      "./profiles/images": "shared",
+      "./profiles/quotaRead": "shared",
+      "./profiles/reasoning": "shared",
+      "./profiles/vendorWeb": "developer",
+      "./protocols/anthropic-messages": "shared",
+      "./protocols/anthropic/stream": "developer",
+      "./protocols/devin": "developer",
+      "./protocols/devin/devin_pb": "developer",
+      "./protocols/openai-compatible-chat": "shared",
+      "./protocols/openai-images": "shared",
+      "./protocols/openai-responses": "shared",
+      "./protocols/shared": "shared",
+      "./protocols/utils/tool-schema": "developer",
+      "./route/ModelPresentation": "developer",
+      "./route/ModelRetryPolicy": "developer",
+      "./route/auth": "shared",
+      "./route/definition": "developer",
+      "./route/executor": "developer",
+      "./route/framing": "developer",
+      "./route/notes": "developer",
+      "./route/refusal": "developer",
+      "./route/transport/verbatim": "developer",
+      "./schema/errors": "shared",
+      "./schema/events": "shared",
+      "./schema/ids": "shared",
+      "./schema/messages": "shared",
+      "./schema/options": "shared",
+      "./schema/quota": "shared",
+      "./schema/readJsonSchema": "developer",
+      "./schema/responseFold": "developer",
+      "./schema/tool-content": "shared",
+      "./utils/headers": "developer",
+      "./utils/record": "developer",
+      "./vendorCall": "shared"
+    }
+  }
+}

@@ -1,0 +1,52 @@
+import type { CommandFailure } from '@runlith/cdp/session';
+import { Effect } from 'effect';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import type { DriveRefusal } from '../contract/service/automation.js';
+import { outcomeUnknown } from '../contract/service/pages.js';
+import type { PageId } from '../contract/wire/ids.js';
+
+export const unknownPage = (page: PageId) =>
+  new GateRefusal('page-unknown', `page ${page} is no longer open`, ['list_pages — the open pages of this project']);
+
+export const unresponsive = (page: PageId) =>
+  new GateRefusal('page-unresponsive', `page ${page} does not answer: its renderer is busy or hung`, [
+    'navigate_page with go: reload',
+    'close_page',
+  ]);
+
+export const crashed = (page: PageId) =>
+  new GateRefusal('page-crashed', `the renderer of page ${page} crashed`, ['navigate_page with go: reload', 'close_page']);
+
+export const devtoolsOpen = (page: PageId) =>
+  new GateRefusal<DriveRefusal>('devtools-open', `page ${page} is in the operator's DevTools`, [
+    "the page is in the operator's DevTools; it continues once DevTools close",
+  ]);
+
+export const ended = (page: PageId, failure: CommandFailure): Effect.Effect<never, GateRefusal<DriveRefusal>> => {
+  switch (failure._tag) {
+    case 'SessionEnded':
+      if (failure.child !== undefined)
+        return Effect.fail(
+          new GateRefusal('action-failed', `a frame of page ${page} left while the engine waited on it`, [
+            'read the page again with snapshot_page and act on what it shows',
+          ]),
+        );
+      if (failure.end === 'detached') return Effect.fail(unknownPage(page));
+      if (failure.pending) return Effect.fail(outcomeUnknown(failure.message));
+      if (failure.end === 'taken') return Effect.fail(devtoolsOpen(page));
+      return Effect.fail(
+        new GateRefusal('host-away', `the browser host of page ${page} stopped answering: ${failure.message}`, ['make the call again']),
+      );
+    case 'CommandRefused':
+      return Effect.fail(
+        new GateRefusal('action-failed', `the browser refused ${failure.method}: ${failure.message}`, [
+          'read the page again with snapshot_page and act on what it shows',
+        ]),
+      );
+    case 'PayloadUnreadable':
+    case 'WorkerUnavailable':
+      return Effect.fail(
+        new GateRefusal('action-failed', `the answer of the browser could not be read: ${failure.message}`, ['make the call again']),
+      );
+  }
+};

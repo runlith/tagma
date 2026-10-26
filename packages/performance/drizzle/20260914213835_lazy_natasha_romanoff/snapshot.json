@@ -1,0 +1,479 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "c7e46577-c7fa-47a3-9a59-234b629d4273",
+  "prevIds": [
+    "4e288cf6-960e-4311-89ea-5907d34cfa5f"
+  ],
+  "ddl": [
+    {
+      "name": "performance_group",
+      "entityType": "tables"
+    },
+    {
+      "name": "performance_meta",
+      "entityType": "tables"
+    },
+    {
+      "name": "performance_record",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "performance_group"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "table": "performance_group"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ended_at",
+      "entityType": "columns",
+      "table": "performance_group"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "span_only",
+      "entityType": "columns",
+      "table": "performance_group"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "performance_meta"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "performance_meta"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "performance_record"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "performance_record"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "instance_id",
+      "entityType": "columns",
+      "table": "performance_record"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "wall_time",
+      "entityType": "columns",
+      "table": "performance_record"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "monotonic_start",
+      "entityType": "columns",
+      "table": "performance_record"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "monotonic_end",
+      "entityType": "columns",
+      "table": "performance_record"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "trace_id",
+      "entityType": "columns",
+      "table": "performance_record"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "parent_id",
+      "entityType": "columns",
+      "table": "performance_record"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "performance_record"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "retention_key",
+      "entityType": "columns",
+      "table": "performance_record"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "payload",
+      "entityType": "columns",
+      "table": "performance_record"
+    },
+    {
+      "columns": [
+        "retention_key"
+      ],
+      "tableTo": "performance_group",
+      "columnsTo": [
+        "key"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_performance_record_retention_key_performance_group_key_fk",
+      "entityType": "fks",
+      "table": "performance_record"
+    },
+    {
+      "columns": [
+        "key"
+      ],
+      "nameExplicit": false,
+      "name": "performance_group_pk",
+      "table": "performance_group",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "key"
+      ],
+      "nameExplicit": false,
+      "name": "performance_meta_pk",
+      "table": "performance_meta",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "performance_record_pk",
+      "table": "performance_record",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "ended_at",
+          "isExpression": false
+        },
+        {
+          "value": "key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "performance_group_retention_idx",
+      "entityType": "indexes",
+      "table": "performance_group"
+    },
+    {
+      "columns": [
+        {
+          "value": "span_only",
+          "isExpression": false
+        },
+        {
+          "value": "ended_at",
+          "isExpression": false
+        },
+        {
+          "value": "key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "performance_group_span_idx",
+      "entityType": "indexes",
+      "table": "performance_group"
+    },
+    {
+      "columns": [
+        {
+          "value": "wall_time",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "performance_record_time_idx",
+      "entityType": "indexes",
+      "table": "performance_record"
+    },
+    {
+      "columns": [
+        {
+          "value": "kind",
+          "isExpression": false
+        },
+        {
+          "value": "name",
+          "isExpression": false
+        },
+        {
+          "value": "wall_time",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "performance_record_kind_name_time_idx",
+      "entityType": "indexes",
+      "table": "performance_record"
+    },
+    {
+      "columns": [
+        {
+          "value": "kind",
+          "isExpression": false
+        },
+        {
+          "value": "name",
+          "isExpression": false
+        },
+        {
+          "value": "instance_id",
+          "isExpression": false
+        },
+        {
+          "value": "wall_time",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "performance_record_metric_instance_idx",
+      "entityType": "indexes",
+      "table": "performance_record"
+    },
+    {
+      "columns": [
+        {
+          "value": "trace_id",
+          "isExpression": false
+        },
+        {
+          "value": "instance_id",
+          "isExpression": false
+        },
+        {
+          "value": "monotonic_start",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"performance_record\".\"trace_id\" IS NOT NULL",
+      "origin": "manual",
+      "name": "performance_record_trace_idx",
+      "entityType": "indexes",
+      "table": "performance_record"
+    },
+    {
+      "columns": [
+        {
+          "value": "parent_id",
+          "isExpression": false
+        },
+        {
+          "value": "trace_id",
+          "isExpression": false
+        },
+        {
+          "value": "instance_id",
+          "isExpression": false
+        },
+        {
+          "value": "monotonic_start",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        },
+        {
+          "value": "monotonic_end",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"performance_record\".\"kind\" = 'span' AND \"performance_record\".\"parent_id\" IS NOT NULL",
+      "origin": "manual",
+      "name": "performance_record_parent_idx",
+      "entityType": "indexes",
+      "table": "performance_record"
+    },
+    {
+      "columns": [
+        {
+          "value": "instance_id",
+          "isExpression": false
+        },
+        {
+          "value": "kind",
+          "isExpression": false
+        },
+        {
+          "value": "monotonic_start",
+          "isExpression": false
+        },
+        {
+          "value": "monotonic_end",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "performance_record_overlap_idx",
+      "entityType": "indexes",
+      "table": "performance_record"
+    },
+    {
+      "columns": [
+        {
+          "value": "instance_id",
+          "isExpression": false
+        },
+        {
+          "value": "monotonic_start",
+          "isExpression": false
+        },
+        {
+          "value": "monotonic_end",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"performance_record\".\"kind\" = 'span' AND json_extract(\"performance_record\".\"payload\", '$.attributes.\"run.id\"') IS NOT NULL",
+      "origin": "manual",
+      "name": "performance_record_caller_idx",
+      "entityType": "indexes",
+      "table": "performance_record"
+    },
+    {
+      "columns": [
+        {
+          "value": "retention_key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "performance_record_group_idx",
+      "entityType": "indexes",
+      "table": "performance_record"
+    }
+  ],
+  "renames": []
+}
