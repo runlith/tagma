@@ -2,14 +2,13 @@ import { Effect, Schema } from 'effect';
 import { eq } from 'drizzle-orm';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { writes } from '../../platform/contract/service/writes.js';
+import { TREE_BASIS as BASIS } from '../contract/wire/storage.js';
 import { meta } from '../store/tables.js';
 import type { StoredBasis } from './freshness.js';
 
 const stamping = writes('Tree.stamp', [meta]);
 
 const HEAD = 'tree-head';
-
-const BASIS = 'tree-basis';
 
 const storedMark = Schema.NullOr(Schema.Struct({ position: Schema.String, slot: Schema.Literals([0, 1, 2]), filed: Schema.Boolean }));
 

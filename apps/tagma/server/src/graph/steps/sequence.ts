@@ -19,6 +19,7 @@ import { farEdges } from './farEdges.js';
 import { knowledgeNames } from './knowledgeNames.js';
 import { briefsLeave } from './briefsLeave.js';
 import { storageStealth } from './storageStealth.js';
+import { storageById } from './storageById.js';
 import { holdersProven } from './holdersProven.js';
 
 export const GRAPH_STEPS: readonly GraphStep[] = [
@@ -87,6 +88,6 @@ export const graphSteps = (
   });
 };
 
-export const shippedSteps = graphSteps(GRAPH_STEPS, GRAPH_BASE, storageStealth());
+export const shippedSteps = graphSteps(GRAPH_STEPS, GRAPH_BASE, Effect.andThen(storageStealth(), storageById()));
 
 export const graphStepsLayer = Layer.succeed(GraphSteps, shippedSteps);

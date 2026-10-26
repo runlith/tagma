@@ -32,7 +32,7 @@ export const makeGraphDelivery = Effect.gen(function* () {
       const layout = yield* refused(
         resolveStorageLayout({
           mode: row.storage,
-          projectName: row.name,
+          projectId: row.id,
           ...storageHomes(machine.path),
           worktree: checkout,
         }),

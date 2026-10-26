@@ -39,7 +39,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         const row = yield* demo.graph.projectPolicy.setStorage({ id: demo.projectId, mode: 'stealth' });
         const layout = yield* resolveStorageLayout({
           mode: 'stealth',
-          projectName: row.name,
+          projectId: row.id,
           ...storageHomes(demo.graph.store.path),
           worktree: row.rootPath,
         });

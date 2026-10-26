@@ -151,7 +151,7 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
       const checkout = join(root, 'topic-code');
       const layout = yield* resolveStorageLayout({
         mode: 'stealth',
-        projectName: row.name,
+        projectId: row.id,
         ...storageHomes(storePath),
         worktree: checkout,
       });

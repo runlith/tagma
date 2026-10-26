@@ -367,7 +367,7 @@ layer(demoGraphLayer({ repos: ['team'] }).pipe(Layer.provideMerge(BunFileSystem.
               const registered = yield* graph.projectLifecycle.create({ name: 'left-behind', rootPath: root, catalogs: [] });
               const layout = yield* resolveStorageLayout({
                 mode: 'stealth',
-                projectName: registered.name,
+                projectId: registered.id,
                 ...storageHomes(graph.store.path),
                 worktree: registered.rootPath,
               });

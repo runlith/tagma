@@ -31,7 +31,7 @@ export const servedTree = Effect.fnUntraced(function* (
   const row = yield* graph.projectPolicy.setStorage({ id: project('topology').id, mode: 'stealth' });
   const current = yield* resolveStorageLayout({
     mode: 'stealth',
-    projectName: row.name,
+    projectId: row.id,
     ...storageHomes(graph.store.path),
     worktree: checkout,
   });

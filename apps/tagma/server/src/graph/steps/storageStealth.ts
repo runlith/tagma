@@ -10,7 +10,8 @@ import { relocatedText } from '../../platform/contract/service/relocation.js';
 import { TREE_ORIGINS, TREE_SERVED, TREE_MERGES } from '../contract/wire/storage.js';
 import { projectPolicy } from '../store/policy.js';
 import { meta } from '../store/tables.js';
-import { graphHome, legacyHome, MIRROR_FILES, mirrorPath, resolveStorageLayout } from '../storage/layout.js';
+import { legacyHome, MIRROR_FILES } from '../storage/layout.js';
+import { namedStorage } from './namedStorage.js';
 
 const STEP = '20261021123000_storage_stealth';
 const marking = writes('GraphSteps.storageStealth', [projectPolicy, meta]);
@@ -36,8 +37,8 @@ export const storageStealth = Effect.fn('GraphSteps.storageStealth')(
       yield* files.rename(from, to);
     });
     const moveMirror = Effect.fnUntraced(function* (name: string, from: string, to: string) {
-      for (const ending of MIRROR_FILES)
-        yield* move(`${mirrorPath(appHome, name, from)}${ending}`, `${mirrorPath(appHome, name, to)}${ending}`);
+      const named = namedStorage(appHome, name);
+      for (const ending of MIRROR_FILES) yield* move(`${named.mirrorOf(from)}${ending}`, `${named.mirrorOf(to)}${ending}`);
     });
     const linkLegacy = Effect.fn('GraphSteps.storageGit')(function* (treeRoot: string, gitDir: string) {
       const marker = join(treeRoot, '.git');
@@ -89,9 +90,9 @@ export const storageStealth = Effect.fn('GraphSteps.storageStealth')(
     coalesce(g.storage, 'stealth') as storage from project p left join project_policy g on g.project_id = p.id`);
     for (const row of rows) {
       if (row.storage !== 'plain' && row.storage !== 'stealth') continue;
-      const home = graphHome(appHome, row.name);
-      const layout = yield* resolveStorageLayout({ mode: 'stealth', projectName: row.name, appHome, worktree: row.rootPath });
-      if (layout.mode !== 'stealth') return yield* Effect.die('stealth storage returned another layout');
+      const named = namedStorage(appHome, row.name);
+      const home = named.graph;
+      const layout = { treeRoot: named.treeRoot(row.rootPath), gitDir: named.gitDir };
       if (row.storage === 'plain') {
         const source = join(legacyHome(appHome), row.name);
         yield* move(source, layout.treeRoot);

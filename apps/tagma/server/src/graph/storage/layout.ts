@@ -23,7 +23,7 @@ export class StorageLayoutInvalid extends Data.TaggedError('StorageLayoutInvalid
 
 export type StorageLayoutInput = {
   readonly mode: StorageMode;
-  readonly projectName: string;
+  readonly projectId: number;
   readonly appHome: string;
   readonly worktree?: string;
 };
@@ -39,17 +39,25 @@ export const removeMirror = Effect.fn('Mirrors.remove')(function* (path: string)
   for (const ending of MIRROR_FILES) yield* files.remove(`${path}${ending}`, { recursive: true, force: true });
 }, Effect.uninterruptible);
 
-export const mirrorHome = (appHome: string, projectName: string): string => join(appHome, 'mirror', projectName);
+export const mirrorsHome = (appHome: string): string => join(appHome, 'mirror');
 
-export const mirrorPath = (appHome: string, projectName: string, treeRoot: string): string =>
-  join(mirrorHome(appHome, projectName), `${Bun.hash(treeRoot).toString(16)}.sqlite`);
+export const graphsHome = (appHome: string): string => join(appHome, 'graphs');
+
+export const mirrorHome = (appHome: string, projectId: number): string => join(mirrorsHome(appHome), String(projectId));
+
+export const mirrorFile = (home: string, treeRoot: string): string => join(home, `${Bun.hash(treeRoot).toString(16)}.sqlite`);
+
+export const mirrorPath = (appHome: string, projectId: number, treeRoot: string): string =>
+  mirrorFile(mirrorHome(appHome, projectId), treeRoot);
 
 export const stealthTreeName = (worktree: string): string => `${basename(worktree)}-${Bun.hash(worktree).toString(16)}`;
 
-export const graphHome = (appHome: string, projectName: string): string => join(appHome, 'graphs', projectName);
+export const graphHome = (appHome: string, projectId: number): string => join(graphsHome(appHome), String(projectId));
 
-export const setAsideHome = (appHome: string, projectName: string, at: Date): string =>
-  join(appHome, 'set-aside', `${projectName}-${at.toISOString().slice(0, 19).replaceAll(/[-:]/g, '').replace('T', '-')}`);
+const setAsideStamp = (at: Date): string => at.toISOString().slice(0, 19).replaceAll(/[-:]/g, '').replace('T', '-');
+
+export const setAsideHome = (appHome: string, projectId: number, at: Date): string =>
+  join(appHome, 'set-aside', `${projectId}-${setAsideStamp(at)}`);
 
 export const legacyHome = (appHome: string): string => {
   const name = basename(appHome);
@@ -65,15 +73,15 @@ export function resolveStorageLayout(input: StorageLayoutInput): Effect.Effect<S
     return Effect.succeed({
       mode: input.mode,
       treeRoot,
-      mirrorPath: mirrorPath(input.appHome, input.projectName, treeRoot),
+      mirrorPath: mirrorPath(input.appHome, input.projectId, treeRoot),
     });
   }
-  const home = graphHome(input.appHome, input.projectName);
+  const home = graphHome(input.appHome, input.projectId);
   const treeRoot = join(home, 'trees', stealthTreeName(input.worktree));
   return Effect.succeed({
     mode: input.mode,
     treeRoot,
     gitDir: join(home, 'graph.git'),
-    mirrorPath: mirrorPath(input.appHome, input.projectName, treeRoot),
+    mirrorPath: mirrorPath(input.appHome, input.projectId, treeRoot),
   });
 }

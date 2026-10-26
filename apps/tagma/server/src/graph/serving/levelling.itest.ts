@@ -54,7 +54,7 @@ layer(demoGraphLayer({ repos: ['levelling'] }).pipe(Layer.provideMerge(BunFileSy
             const checkout = project('levelling').root;
             const row = yield* graph.projectPolicy.setStorage({ id: project('levelling').id, mode: 'stealth' });
             const homes = storageHomes(graph.store.path);
-            const current = yield* resolveStorageLayout({ mode: 'stealth', projectName: row.name, ...homes, worktree: checkout });
+            const current = yield* resolveStorageLayout({ mode: 'stealth', projectId: row.id, ...homes, worktree: checkout });
             if (current.mode !== 'stealth') return yield* Effect.die('the fixture requires a stealth tree');
             const shadow = yield* ShadowGit.open(current.gitDir, graph.git, null);
             const git = (...args: string[]) => runGit(graph.git, 'test-levelling', args);
@@ -67,7 +67,7 @@ layer(demoGraphLayer({ repos: ['levelling'] }).pipe(Layer.provideMerge(BunFileSy
             yield* shadow.commitAct(current.treeRoot, 'graph before the steps');
             const branch = join(checkout, '..', 'feature');
             yield* git('-C', checkout, 'worktree', 'add', '-b', 'feature', branch);
-            const feature = yield* resolveStorageLayout({ mode: 'stealth', projectName: row.name, ...homes, worktree: branch });
+            const feature = yield* resolveStorageLayout({ mode: 'stealth', projectId: row.id, ...homes, worktree: branch });
             yield* shadow.branch('feature', main);
             yield* shadow.recordFork('feature', yield* git('-C', branch, 'rev-parse', 'HEAD'));
             yield* shadow.attach(feature.treeRoot, 'feature');

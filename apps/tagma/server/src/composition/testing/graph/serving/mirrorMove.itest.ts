@@ -34,7 +34,7 @@ layer(servingLayer, { excludeTestServices: true })('mirror moves', (it) => {
           const row = yield* demo.graph.projectLifecycle.create({ name: 'moved', rootPath: root, storage: 'stealth' });
           const layout = yield* resolveStorageLayout({
             mode: 'stealth',
-            projectName: row.name,
+            projectId: row.id,
             ...storageHomes(demo.graph.store.path),
             worktree: row.rootPath,
           });
@@ -91,7 +91,7 @@ layer(servingLayer, { excludeTestServices: true })('mirror moves', (it) => {
           );
           const layout = yield* resolveStorageLayout({
             mode: 'stealth',
-            projectName: row.name,
+            projectId: row.id,
             ...storageHomes(demo.graph.store.path),
             worktree: row.rootPath,
           });
@@ -126,7 +126,7 @@ layer(servingLayer, { excludeTestServices: true })('mirror moves', (it) => {
           const row = yield* demo.graph.projectLifecycle.create({ name: 'unread', rootPath: root, storage: 'stealth' });
           const layout = yield* resolveStorageLayout({
             mode: 'stealth',
-            projectName: row.name,
+            projectId: row.id,
             ...storageHomes(demo.graph.store.path),
             worktree: row.rootPath,
           });

@@ -19,7 +19,7 @@ layer(doorFixture(), { excludeTestServices: true })('projects door', (it) => {
       expect(served.layout.mode).toBe('stealth');
       const scan = yield* scanTree(served.layout.treeRoot);
       expect(scan.blocks.map((entry) => entry.frontmatter.title)).toContain(name);
-      expect(served.layout.treeRoot.startsWith(join(world.dataHome, 'graphs', name))).toBe(true);
+      expect(served.layout.treeRoot.startsWith(join(world.dataHome, 'graphs', String(projectId), 'trees'))).toBe(true);
       expect(existsSync(join(root, '.tagma'))).toBe(false);
       expect(existsSync(join(root, '.git'))).toBe(false);
       expect((yield* served.shadow!.log(served.layout.treeRoot)).length).toBeGreaterThan(0);

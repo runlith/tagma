@@ -35,7 +35,7 @@ export const makeForeignBlocks = (deps: {
     for (const row of rows.values()) {
       const project = { id: row.id, name: row.name };
       const layout = yield* Effect.result(
-        refused(resolveStorageLayout({ mode: row.storage, projectName: row.name, ...storageHomes(storePath), worktree: row.rootPath })),
+        refused(resolveStorageLayout({ mode: row.storage, projectId: row.id, ...storageHomes(storePath), worktree: row.rootPath })),
       );
       copies.push(
         Result.isFailure(layout)

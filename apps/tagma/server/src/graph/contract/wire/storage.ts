@@ -28,6 +28,7 @@ export const TREE_MERGES = 'tagma-merges';
 export const TREE_RETIRED = 'tagma-retired';
 
 export const MIRROR_IDENTITY = 'mirror-identity';
+export const TREE_BASIS = 'tree-basis';
 export const mirrorIdentitySchema = Schema.Struct({
   projectId: Schema.Int,
   treeRoot: Schema.NonEmptyString,

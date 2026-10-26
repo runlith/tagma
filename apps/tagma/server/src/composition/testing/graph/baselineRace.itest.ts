@@ -37,7 +37,7 @@ const mirror = Effect.fn('baselineFixture.mirror')(function* (demo: EffectDemo) 
   const { id, root } = demo.project('mirror');
   const store = demo.graph.store;
   const fs = yield* FileSystem.FileSystem;
-  const layout = yield* resolveStorageLayout({ mode: 'team', projectName: 'mirror', ...storageHomes(store.path), worktree: root });
+  const layout = yield* resolveStorageLayout({ mode: 'team', projectId: id, ...storageHomes(store.path), worktree: root });
   yield* projectToTree({ projectId: id, treeRoot: layout.treeRoot }).pipe(Effect.provide(demo.context));
   yield* fs.writeFileString(join(layout.treeRoot, FORMAT_FILE), markerText(shippedSteps.last));
   yield* fs.makeDirectory(dirname(layout.mirrorPath), { recursive: true });

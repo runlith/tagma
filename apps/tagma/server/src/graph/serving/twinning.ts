@@ -36,7 +36,7 @@ export const makeTwinning = Effect.fnUntraced(function* ({ gate, copies }: Twinn
     }
     const layout = yield* resolveStorageLayout({
       mode: row.storage,
-      projectName: row.name,
+      projectId: row.id,
       ...storageHomes(machineStore.path),
       worktree: checkout,
     }).pipe(Effect.mapError(unfollowed));

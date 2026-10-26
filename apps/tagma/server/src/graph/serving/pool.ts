@@ -192,7 +192,7 @@ export const makeGraphPool = Effect.gen(function* () {
     const layout = yield* refused(
       resolveStorageLayout({
         mode: served.row.storage,
-        projectName: served.row.name,
+        projectId: served.row.id,
         ...storageHomes(machineStore.path),
         worktree: served.checkout,
       }),
@@ -468,7 +468,7 @@ export const makeGraphPool = Effect.gen(function* () {
     for (const place of standingPlaces) {
       const layout = yield* Effect.result(
         refused(
-          resolveStorageLayout({ mode: row.storage, projectName: row.name, ...storageHomes(machineStore.path), worktree: place.checkout }),
+          resolveStorageLayout({ mode: row.storage, projectId: row.id, ...storageHomes(machineStore.path), worktree: place.checkout }),
         ),
       );
       if (layout._tag === 'Failure') {

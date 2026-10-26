@@ -86,7 +86,7 @@ export const makeServingSwitch = Effect.gen(function* () {
         const layout = yield* refused(
           resolveStorageLayout({
             mode: row.storage,
-            projectName: row.name,
+            projectId: row.id,
             ...storageHomes(machineStore.path),
             worktree: checkout,
           }),
@@ -100,7 +100,7 @@ export const makeServingSwitch = Effect.gen(function* () {
       const layout = yield* refused(
         resolveStorageLayout({
           mode: row.storage,
-          projectName: row.name,
+          projectId: row.id,
           ...storageHomes(machineStore.path),
           worktree: row.rootPath,
         }),
@@ -135,7 +135,7 @@ export const makeServingSwitch = Effect.gen(function* () {
         }
         const homes = storageHomes(machineStore.path);
         const layoutOf = (mode: StorageMode, worktree: string) =>
-          refused(resolveStorageLayout({ mode, projectName: row.name, ...homes, worktree }));
+          refused(resolveStorageLayout({ mode, projectId: row.id, ...homes, worktree }));
         const from = yield* layoutOf(row.storage, row.rootPath);
         const to = yield* layoutOf(input.mode, row.rootPath);
         const canonical = yield* canon(row.rootPath);

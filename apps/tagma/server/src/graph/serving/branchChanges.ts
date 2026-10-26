@@ -26,7 +26,7 @@ export const makeBranchChanges = Effect.fnUntraced(function* (graphs: ServedGrap
       const { row, checkout } = yield* servingSwitch.servedBy({ projectId: place.projectId, cwd: place.checkout });
       const layout = yield* resolveStorageLayout({
         mode: row.storage,
-        projectName: row.name,
+        projectId: row.id,
         ...storageHomes(machineStore.path),
         worktree: checkout,
       });

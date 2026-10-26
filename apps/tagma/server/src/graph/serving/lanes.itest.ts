@@ -38,7 +38,7 @@ const shippedTrees = Effect.fnUntraced(function* (
   for (const tree of trees) {
     const layout = yield* resolveStorageLayout({
       mode: 'stealth',
-      projectName: row.name,
+      projectId: row.id,
       ...storageHomes(Context.get(machine, MachineStore).path),
       worktree: tree,
     });

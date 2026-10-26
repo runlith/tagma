@@ -15,7 +15,7 @@ import { Blocks } from '../contract/service/blocks.js';
 import { Orientation } from '../contract/service/orientation.js';
 import { Sources } from '../contract/service/sources.js';
 import { block, event } from '../store/tables.js';
-import { legacyHome, mirrorPath, stealthTreeName, storageHomes } from '../storage/layout.js';
+import { legacyHome, mirrorFile, mirrorsHome, stealthTreeName, storageHomes } from '../storage/layout.js';
 import { shippedSteps } from '../steps/sequence.js';
 import { graphPool } from '../testing/doubles.js';
 import { machineGraphOf } from './machine.js';
@@ -132,13 +132,15 @@ layer(demoGraphLayer({ repos: [] }).pipe(Layer.provideMerge(BunFileSystem.layer)
           }
           const head = yield* runGit(graph.git, 'legacy-head', ['-C', source, 'rev-parse', 'HEAD']);
           yield* fs.remove(dirname(layout.gitDir), { recursive: true });
-          const oldMirror = mirrorPath(appHome, global.name, source);
+          const oldMirror = mirrorFile(join(mirrorsHome(appHome), global.name), source);
+          yield* fs.makeDirectory(dirname(oldMirror), { recursive: true });
           for (const suffix of ['', '-wal', '-shm'])
             if (yield* fs.exists(`${served.layout.mirrorPath}${suffix}`))
               yield* fs.rename(`${served.layout.mirrorPath}${suffix}`, `${oldMirror}${suffix}`);
+          yield* fs.remove(dirname(served.layout.mirrorPath), { recursive: true });
           yield* graph.store.db.run(sql`insert into project_policy (project_id, storage) values (${global.id}, ${storage})
         on conflict (project_id) do update set storage = ${storage}`);
-          yield* graph.store.db.run(sql`delete from meta where key = '20261021123000_storage_stealth'`);
+          yield* graph.store.db.run(sql`delete from meta where key in ('20261021123000_storage_stealth', '20261027000000_storage_by_id')`);
           yield* shippedSteps.prepareStorage.pipe(
             Effect.provideService(MachineStore, graph.store),
             Effect.provideService(FileSystem.FileSystem, fs),

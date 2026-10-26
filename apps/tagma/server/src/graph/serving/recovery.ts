@@ -31,7 +31,7 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
     const layout = yield* refused(
       resolveStorageLayout({
         mode: row.storage,
-        projectName: row.name,
+        projectId: row.id,
         ...storageHomes(storePath),
         worktree: checkout,
       }),

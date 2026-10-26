@@ -8,6 +8,7 @@ import { meta } from '../store/tables.js';
 import { treeBranch } from '../tree/batch.js';
 import type { StorageLayout } from './layout.js';
 import { SnapshotFailed } from '../../platform/contract/service/snapshots.js';
+import type { Relocated } from '../../platform/contract/service/relocation.js';
 import { askOnce } from '../tree/oneShot.js';
 import { eq } from 'drizzle-orm';
 
@@ -15,13 +16,20 @@ export type MirrorCopy = { readonly path: string; readonly identity: MirrorIdent
 export type UnreadMirror = { readonly path: string; readonly reason: string };
 export type MirrorInspection = { readonly copies: readonly MirrorCopy[]; readonly unread: readonly UnreadMirror[] };
 export type MirrorRename = { readonly projectId: number; readonly from: string; readonly to: string };
-export type IdentityRequest = { readonly baseline: string; readonly home?: string; readonly path?: string; readonly rename?: MirrorRename };
+export type IdentityRequest = {
+  readonly baseline: string | null;
+  readonly home?: string;
+  readonly path?: string;
+  readonly paths?: readonly string[];
+  readonly rename?: MirrorRename;
+  readonly relocate?: readonly Relocated[];
+};
 
 export const readMirrorIdentities = (request: IdentityRequest) =>
   askOnce<MirrorInspection, SnapshotFailed>(
     new URL('./identity.worker.ts', import.meta.url),
     request,
-    (reason) => new SnapshotFailed({ path: request.path ?? request.home ?? '', reason }),
+    (reason) => new SnapshotFailed({ path: request.path ?? request.home ?? request.paths?.[0] ?? '', reason }),
   );
 
 const marking = writes('Mirrors.identify', [meta]);

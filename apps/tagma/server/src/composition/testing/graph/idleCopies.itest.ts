@@ -21,7 +21,7 @@ import { ProjectLifecycle, ServedGraphs } from '../../../graph/contract/service/
 import { makeGraphDelivery } from '../../../graph/serving/delivery.js';
 import { makeGraphPool } from '../../../graph/serving/pool.js';
 import { GRAPH_STEPS } from '../../../graph/steps/sequence.js';
-import { mirrorPath, removeMirror, storageHomes } from '../../../graph/storage/layout.js';
+import { mirrorHome, mirrorPath, removeMirror, storageHomes } from '../../../graph/storage/layout.js';
 import { routedContext } from '../../../graph/testing/doubles.js';
 import { markerText, readMarker } from '../../../graph/tree/marker.js';
 import { catalogWriter } from '../../../graph/vocabulary/install.js';
@@ -205,8 +205,7 @@ it.live(
       };
       const root = yield* files.realPath(yield* fixture.directory('repository'));
       const trees = yield* files.realPath(yield* fixture.directory('worktrees'));
-      const home = join(storageHomes(place.database).appHome, 'mirror', NAME);
-      const mainMirror = mirrorPath(storageHomes(place.database).appHome, NAME, join(root, CHECKOUT_DIRECTORY));
+
       const parent = yield* Effect.scope;
 
       const memory = join(place.database, '..', 'enforcement', 'remeasured.json');
@@ -225,6 +224,9 @@ it.live(
       const project = yield* Context.get(machine, ProjectLifecycle)
         .create({ name: NAME, rootPath: root, storage: 'team', catalogs: [softwareDevelopment.id] })
         .pipe(Effect.provide(machine));
+      const { appHome } = storageHomes(place.database);
+      const home = mirrorHome(appHome, project.id);
+      const mainMirror = mirrorPath(appHome, project.id, join(root, CHECKOUT_DIRECTORY));
       const setupDoors = yield* Scope.provide(doors(born, yield* fixture.directory('doors-setup')), setup);
       const rule = yield* setupDoors.op('create_block', { tags: ['rule'], title: 'No module re-exports another' }, project.id);
       expect(rule.status).toBe(200);

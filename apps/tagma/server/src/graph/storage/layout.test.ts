@@ -3,15 +3,15 @@ import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import { resolveStorageLayout, StorageLayoutInvalid } from './layout.js';
 
-const base = { projectName: 'runlith', appHome: '/home/u/.tagma' };
+const base = { projectId: 5, appHome: '/home/u/.tagma' };
 
 describe('storage layout', () => {
-  it.effect('each storage mode places its tree and repository under the owning home', () =>
+  it.effect('each storage mode places its tree and repository under the home of the project id', () =>
     Effect.gen(function* () {
       const stealth = yield* resolveStorageLayout({ ...base, mode: 'stealth', worktree: '/w/repo' });
-      expect(stealth).toMatchObject({ mode: 'stealth', gitDir: '/home/u/.tagma/graphs/runlith/graph.git' });
-      expect(stealth.treeRoot.startsWith('/home/u/.tagma/graphs/runlith/trees/repo-')).toBe(true);
-      expect(stealth.mirrorPath.startsWith('/home/u/.tagma/mirror/runlith/')).toBe(true);
+      expect(stealth).toMatchObject({ mode: 'stealth', gitDir: '/home/u/.tagma/graphs/5/graph.git' });
+      expect(stealth.treeRoot.startsWith('/home/u/.tagma/graphs/5/trees/repo-')).toBe(true);
+      expect(stealth.mirrorPath.startsWith('/home/u/.tagma/mirror/5/')).toBe(true);
 
       const team = yield* resolveStorageLayout({ ...base, mode: 'team', worktree: '/w/repo' });
       expect(team).toMatchObject({ mode: 'team', treeRoot: '/w/repo/.tagma' });

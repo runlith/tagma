@@ -38,8 +38,8 @@ layer(demoGraphLayer({ repos: ['repository', 'removed'], source: 'repository' })
         const { appHome } = storageHomes(demo.graph.store.path);
         const gitDir = join(root, '.git');
         const baseline = chain(fixtureGraphMigrations)[0]!.name;
-        const saved = Effect.fnUntraced(function* (identity: MirrorIdentity | null, tree: string, name = 'repository') {
-          const path = mirrorPath(appHome, name, tree);
+        const saved = Effect.fnUntraced(function* (identity: MirrorIdentity | null, tree: string) {
+          const path = mirrorPath(appHome, id, tree);
           yield* files.makeDirectory(dirname(path), { recursive: true });
           yield* Effect.sync(() => {
             const db = new Database(path);
@@ -81,11 +81,10 @@ layer(demoGraphLayer({ repos: ['repository', 'removed'], source: 'repository' })
         const oldMirror = yield* saved(
           { projectId: old.id, treeRoot: oldTree, checkout: old.root, mode: 'team', branch: null, gitDir: null },
           oldTree,
-          'repository',
         );
         yield* demo.graph.projectLifecycle.remove({ ref: 'removed' });
         yield* files.remove(old.root, { recursive: true });
-        const stealth = yield* resolveStorageLayout({ mode: 'stealth', projectName: 'repository', appHome, worktree: root });
+        const stealth = yield* resolveStorageLayout({ mode: 'stealth', projectId: id, appHome, worktree: root });
         if (stealth.mode !== 'stealth') return yield* Effect.die('expected stealth layout');
         const shadow = yield* ShadowGit.open(stealth.gitDir, git, null);
         const stealthGone = join(dirname(stealth.treeRoot), 'retired');

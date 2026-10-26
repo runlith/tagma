@@ -10,10 +10,14 @@ import {
   relocatedText,
 } from '../../platform/contract/service/relocation.js';
 import { TREE_MERGES as MERGES, TREE_ORIGINS as ORIGINS, TREE_SERVED as SERVED } from '../contract/wire/storage.js';
-import { graphHome, MIRROR_FILES, mirrorPath, legacyHome, stealthTreeName } from './layout.js';
+import { graphsHome, MIRROR_FILES, mirrorFile, mirrorsHome, legacyHome, stealthTreeName } from './layout.js';
 
 const GRAPH_GIT = 'graph.git';
 const TREES = 'trees';
+
+type Homes = { readonly graph: string; readonly mirror: string };
+
+const homesOf = (data: string, key: string): Homes => ({ graph: join(graphsHome(data), key), mirror: join(mirrorsHome(data), key) });
 
 const keyOf = (root: string): string => Bun.hash(root).toString(16);
 
@@ -36,16 +40,17 @@ const rewrite = (path: string, places: readonly Relocated[]): void => {
 
 const treeMoved = (
   data: Relocated,
-  project: string,
+  key: string,
   tree: string,
   places: readonly Relocated[],
 ): { readonly root: string; readonly misses: readonly RelocationMiss[] } => {
-  const gitDir = join(graphHome(data.to, project), GRAPH_GIT);
-  const standing = join(graphHome(data.to, project), TREES, tree);
-  const former = join(graphHome(data.from, project), TREES, tree);
+  const homes = homesOf(data.to, key);
+  const gitDir = join(homes.graph, GRAPH_GIT);
+  const standing = join(homes.graph, TREES, tree);
+  const former = join(homesOf(data.from, key).graph, TREES, tree);
   const served = readText(join(gitDir, SERVED, keyOf(former)));
   const servedNow = served === null ? null : (relocatedPath(served, places) ?? served);
-  const root = servedNow === null || servedNow === served ? standing : join(graphHome(data.to, project), TREES, stealthTreeName(servedNow));
+  const root = servedNow === null || servedNow === served ? standing : join(homes.graph, TREES, stealthTreeName(servedNow));
   if (root !== standing && existsSync(root)) {
     return { root: standing, misses: [{ path: root, detail: `${standing} cannot take its name: it stands` }] };
   }
@@ -59,7 +64,7 @@ const treeMoved = (
     moveFile(merge, join(gitDir, MERGES, `${keyOf(root)}.json`));
   }
   for (const ending of MIRROR_FILES) {
-    moveFile(`${mirrorPath(data.to, project, former)}${ending}`, `${mirrorPath(data.to, project, root)}${ending}`);
+    moveFile(`${mirrorFile(homes.mirror, former)}${ending}`, `${mirrorFile(homes.mirror, root)}${ending}`);
   }
   if (root !== standing) renameSync(standing, root);
   for (const kind of [ORIGINS, SERVED]) {
@@ -75,13 +80,14 @@ const repaired = (gitDir: string, roots: readonly string[]): readonly Relocation
   return ran.exitCode === 0 ? [] : [{ path: gitDir, detail: `git worktree repair: ${ran.stderr.toString().trim()}` }];
 };
 
-const storageMoved = (data: Relocated, project: string, places: readonly Relocated[]): readonly RelocationMiss[] => {
-  const gitDir = join(graphHome(data.to, project), GRAPH_GIT);
+const storageMoved = (data: Relocated, key: string, places: readonly Relocated[]): readonly RelocationMiss[] => {
+  const home = homesOf(data.to, key).graph;
+  const gitDir = join(home, GRAPH_GIT);
   const misses: RelocationMiss[] = [];
   const roots: string[] = [];
-  for (const tree of entries(join(graphHome(data.to, project), TREES))) {
-    if (!statSync(join(graphHome(data.to, project), TREES, tree)).isDirectory()) continue;
-    const moved = treeMoved(data, project, tree, places);
+  for (const tree of entries(join(home, TREES))) {
+    if (!statSync(join(home, TREES, tree)).isDirectory()) continue;
+    const moved = treeMoved(data, key, tree, places);
     misses.push(...moved.misses);
     rewrite(join(moved.root, '.git'), places);
     roots.push(moved.root);
@@ -96,8 +102,9 @@ const legacyMoved = (data: Relocated): void => {
   const home = legacyHome(data.to);
   for (const project of entries(home)) {
     const former = join(legacyHome(data.from), project);
+    const mirrors = homesOf(data.to, project).mirror;
     for (const ending of MIRROR_FILES) {
-      moveFile(`${mirrorPath(data.to, project, former)}${ending}`, `${mirrorPath(data.to, project, join(home, project))}${ending}`);
+      moveFile(`${mirrorFile(mirrors, former)}${ending}`, `${mirrorFile(mirrors, join(home, project))}${ending}`);
     }
   }
 };
@@ -105,14 +112,14 @@ const legacyMoved = (data: Relocated): void => {
 export const graphRelocation: Relocation = {
   id: 'graph/storage',
   beside: (data) => [{ from: legacyHome(data.from), to: legacyHome(data.to) }],
-  carried: (data) => [legacyHome(data), join(data, 'graphs')],
+  carried: (data) => [legacyHome(data), graphsHome(data)],
   relocate: (data, places) =>
     Effect.try({
       try: () => {
         legacyMoved(data);
-        return entries(join(data.to, 'graphs'))
-          .filter((project) => existsSync(join(graphHome(data.to, project), GRAPH_GIT, 'HEAD')))
-          .flatMap((project) => storageMoved(data, project, places));
+        return entries(graphsHome(data.to))
+          .filter((key) => existsSync(join(homesOf(data.to, key).graph, GRAPH_GIT, 'HEAD')))
+          .flatMap((key) => storageMoved(data, key, places));
       },
       catch: (cause) => new RelocationFailed({ detail: String(cause) }),
     }),
