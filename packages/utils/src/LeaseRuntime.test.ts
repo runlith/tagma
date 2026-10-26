@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { LeaseRuntime, type RunningWork } from './LeaseRuntime.js';
 
 describe('LeaseRuntime', () => {
@@ -39,33 +39,53 @@ describe('LeaseRuntime', () => {
   });
 
   test('dispose aborts each in-flight work and clears heartbeats', async () => {
-    const lease = new LeaseRuntime<RunningWork>({ ownerIdPrefix: 'lease-test' });
-    const aborts: AbortSignal[] = [];
-    const heartbeatCalls = { count: 0 };
-    const make = (id: string): RunningWork => {
-      const abort = new AbortController();
-      aborts.push(abort.signal);
-      const heartbeat = setInterval(() => {
-        heartbeatCalls.count += 1;
-      }, 50);
-      const promise = new Promise<void>((resolve) => {
-        abort.signal.addEventListener('abort', () => resolve());
-      });
-      const work = { abort, promise, heartbeat };
-      lease.add(id, work);
-      return work;
+    const intervals = new Map<number, () => void>();
+    let nextInterval = 0;
+    const schedule = spyOn(globalThis, 'setInterval').mockImplementation(((callback: () => void) => {
+      const id = ++nextInterval;
+      intervals.set(id, callback);
+      return id as unknown as ReturnType<typeof setInterval>;
+    }) as typeof setInterval);
+    const cancel = spyOn(globalThis, 'clearInterval').mockImplementation((id) => {
+      intervals.delete(Number(id));
+    });
+    const pulse = () => {
+      for (const callback of intervals.values()) callback();
     };
-    make('a');
-    make('b');
+    try {
+      const lease = new LeaseRuntime<RunningWork>({ ownerIdPrefix: 'lease-test' });
+      const aborts: AbortSignal[] = [];
+      const heartbeatCalls = { count: 0 };
+      const make = (id: string): RunningWork => {
+        const abort = new AbortController();
+        aborts.push(abort.signal);
+        const heartbeat = setInterval(() => {
+          heartbeatCalls.count += 1;
+        }, 50);
+        const promise = new Promise<void>((resolve) => {
+          abort.signal.addEventListener('abort', () => resolve());
+        });
+        const work = { abort, promise, heartbeat };
+        lease.add(id, work);
+        return work;
+      };
+      make('a');
+      make('b');
+      pulse();
+      expect(heartbeatCalls.count).toBe(2);
 
-    await lease.dispose('shutdown');
+      await lease.dispose('shutdown');
 
-    expect(lease.disposed).toBe(true);
-    expect(lease.size()).toBe(0);
-    expect(aborts.every((signal) => signal.aborted)).toBe(true);
-    const after = heartbeatCalls.count;
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    expect(heartbeatCalls.count).toBe(after);
+      expect(lease.disposed).toBe(true);
+      expect(lease.size()).toBe(0);
+      expect(aborts.every((signal) => signal.aborted)).toBe(true);
+      const after = heartbeatCalls.count;
+      pulse();
+      expect(heartbeatCalls.count).toBe(after);
+    } finally {
+      cancel.mockRestore();
+      schedule.mockRestore();
+    }
   });
 
   test('dispose is idempotent', async () => {

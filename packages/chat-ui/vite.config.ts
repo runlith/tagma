@@ -9,6 +9,7 @@ const isolatedUnit = [
   'src/FeedRegions.svelte.test.ts',
   'src/PinnedRegion.svelte.test.ts',
   'src/TranscriptViewport.svelte.test.ts',
+  'src/TranscriptVirtualizer.svelte.test.ts',
   'src/entries/ToolDiff.svelte.test.ts',
 ];
 

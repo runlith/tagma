@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { ChatTimelineItem, RowModel } from './timeline';
 import { FeedMemory } from './FeedMemory';
 import { TranscriptVirtualizer } from './TranscriptVirtualizer.svelte';
@@ -7,7 +7,12 @@ import { TranscriptVirtualizer } from './TranscriptVirtualizer.svelte';
 const VIEWPORT_PX = 600;
 const ROW_ESTIMATE_PX = 60;
 
-afterEach(() => document.body.replaceChildren());
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  document.body.replaceChildren();
+});
 
 function container(scrollHeight?: number): HTMLElement {
   const element = document.createElement('div');
@@ -103,12 +108,14 @@ function screenTop(root: HTMLElement, key: string): number | undefined {
   return node?.getBoundingClientRect().top;
 }
 
-function frame(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 40));
+async function frame(): Promise<void> {
+  vi.advanceTimersToNextFrame();
+  vi.advanceTimersToNextFrame();
+  await Promise.resolve();
 }
 
-function settled(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 220));
+async function settled(): Promise<void> {
+  await vi.runOnlyPendingTimersAsync();
 }
 
 describe('where the mounted window opens', () => {
@@ -618,7 +625,7 @@ describe('what the first paint costs', () => {
     });
     const opening = virtualizer.rows.length;
 
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    await frame();
     expect(virtualizer.rows.length).toBeGreaterThan(opening);
     expect(mounted(virtualizer)).toContain('row-199');
     virtualizer.dispose();

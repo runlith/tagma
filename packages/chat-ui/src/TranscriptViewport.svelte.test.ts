@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { FeedMemory } from './FeedMemory';
 import { TranscriptViewport } from './TranscriptViewport.svelte';
 
@@ -22,8 +22,17 @@ function drift(element: HTMLElement, top: number): void {
   element.dispatchEvent(new Event('scroll'));
 }
 
-function frames(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 40));
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  document.body.replaceChildren();
+});
+
+async function frames(): Promise<void> {
+  vi.advanceTimersToNextFrame();
+  vi.advanceTimersToNextFrame();
+  await Promise.resolve();
 }
 
 function opened(input: { scrollHeight: number; clientHeight: number; scrollTop?: number }) {
@@ -104,7 +113,7 @@ describe('what a transcript does when it is opened', () => {
     await frames();
     expect(asks).toEqual([120]);
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await vi.advanceTimersByTimeAsync(300);
     root.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -1 }));
     await frames();
     expect(asks).toEqual([120, 0]);
@@ -150,7 +159,7 @@ describe('what a transcript does when it is opened', () => {
     root.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Home' }));
     drift(root, 0);
     await frames();
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await vi.advanceTimersByTimeAsync(300);
     root.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Home', repeat: true }));
     await frames();
     expect(asks).toEqual([0]);
@@ -315,7 +324,9 @@ describe('where a transcript rests while its rows are measured', () => {
   test('a new active run preserves a paused reading position', async () => {
     const { root, viewport } = opened({ scrollHeight: 4000, clientHeight: 600, scrollTop: 3400 });
     scroll(root, 1200);
-    await viewport.contentChanged(20, 'run-next');
+    const changed = viewport.contentChanged(20, 'run-next');
+    await vi.advanceTimersByTimeAsync(0);
+    await changed;
     await frames();
 
     expect(root.scrollTop).toBe(1200);
@@ -490,7 +501,9 @@ describe('where a message is looked for', () => {
       scrolled.push(options.top ?? -1);
     }) as HTMLElement['scrollTo'];
 
-    await holding.viewport.select('m1', 'auto');
+    const selected = holding.viewport.select('m1', 'auto');
+    await vi.advanceTimersByTimeAsync(0);
+    await selected;
 
     expect(scrolled).toHaveLength(1);
   });
