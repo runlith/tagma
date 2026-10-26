@@ -1,6 +1,7 @@
 <script lang="ts">
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import { untrack } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { fade } from 'svelte/transition';
   import { type ChatStepLine, chatStepLine, chatStepMark, liveMark } from './activity';
   import { clipFade } from './clipFade';
@@ -29,9 +30,8 @@
   const selection = $derived(new LivePeek(feed));
   let value = $state<LivePeekValue | null>(null);
   let button: HTMLButtonElement | undefined = $state();
-  let labelWidth: number | undefined = $state();
   let width: number | undefined = $state();
-  let measured: HTMLElement | null = null;
+  const labelWidths = new SvelteMap<string, number>();
 
   $effect(() => {
     const status = tail?.kind === 'status' ? tail.status : (tail?.clock ?? null);
@@ -63,6 +63,7 @@
     };
   });
   const marked = $derived(peek.mark !== null);
+  const labelWidth = $derived(labelWidths.get(peek.key));
 
   function fit(): void {
     const target = button;
@@ -86,16 +87,14 @@
   }
 
   function measureLabel(element: HTMLElement): () => void {
-    measured = element;
-    const read = () => {
-      if (measured === element) labelWidth = element.getBoundingClientRect().width;
-    };
+    const key = untrack(() => peek.key);
+    const read = () => labelWidths.set(key, element.getBoundingClientRect().width);
     read();
     const observer = new ResizeObserver(read);
     observer.observe(element);
     return () => {
       observer.disconnect();
-      if (measured === element) measured = null;
+      labelWidths.delete(key);
     };
   }
 
