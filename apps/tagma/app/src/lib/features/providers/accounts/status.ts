@@ -1,6 +1,7 @@
 import type { AccountQuotaRow } from '@tagma/server/providers/contract/wire/accounts';
 import type { ServedProvider } from '@tagma/server/providers/contract/wire/catalog';
 import { timeAgo } from '$lib/shared/time.js';
+import { NOT_INSTALLED } from '../served.js';
 import type { UsageTone } from '../usage/thresholds.js';
 import { resetText } from '../usage/windows.js';
 
@@ -80,7 +81,7 @@ export function usageStatus(row: AccountQuotaRow, served: ServedProvider | undef
         note: row.origin.kind === 'cli' ? 'Sign in with its CLI' : 'Sign in again',
       };
     return row.problem.kind === 'not-installed'
-      ? { word: 'Provider not installed', tone: 'warning', stale: false, note: 'no installed adapter provides this account' }
+      ? { word: NOT_INSTALLED, tone: 'warning', stale: false, note: 'no installed adapter provides this account' }
       : { word: 'Credential unreadable', tone: 'alarm', stale: false, note: row.problem.reason };
   }
   const failure = row.failure;

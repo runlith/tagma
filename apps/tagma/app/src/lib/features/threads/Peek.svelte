@@ -49,6 +49,7 @@
   import HarnessMark from './native/HarnessMark.svelte';
   import { UsageAccounts } from '$lib/features/providers/usage/Accounts.svelte.js';
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
+  import { NOT_INSTALLED } from '$lib/features/providers/served.js';
   import { CommandActivity, silenceOf, type CommandView } from '$lib/features/executions/commands/Activity.svelte.js';
   import WorktreeSwatch from '$lib/features/worktrees/WorktreeSwatch.svelte';
   import ProjectMark from '$lib/features/workspace/ProjectMark.svelte';
@@ -155,9 +156,11 @@
   const account = $derived(
     harness !== null
       ? null
-      : row.account === null
-        ? `${words.providerLabel} · default account`
-        : `${words.providerLabel} · ${accounts.rows.find((entry) => String(entry.account) === row.account)?.label ?? row.account}`,
+      : catalog.installed(words.provider) === false
+        ? `${words.providerLabel} · ${NOT_INSTALLED}`
+        : row.account === null
+          ? `${words.providerLabel} · default account`
+          : `${words.providerLabel} · ${accounts.rows.find((entry) => String(entry.account) === row.account)?.label ?? row.account}`,
   );
   const context = $derived.by(() => {
     if (row.contextShare === null) return null;

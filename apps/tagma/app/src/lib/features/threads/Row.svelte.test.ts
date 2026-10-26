@@ -8,6 +8,7 @@ import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
 import { mountShell, liveFeed, screen, type TestApp } from '$lib/app/testing.js';
 import { testProviders } from '$lib/features/providers/testing.js';
+import { NOT_INSTALLED } from '$lib/features/providers/served.js';
 import { makeStorage } from '@runlith/layer/testing';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
@@ -246,6 +247,13 @@ test('a child on its parent’s selection draws its plate faint, and one on anot
   expect(faint(draw(child({}), [], undefined, parent))).toBe(true);
   expect(faint(draw(child({ provider: 'openai-oauth', model: 'gpt-6-sol' }), [], undefined, parent))).toBe(false);
   expect(faint(draw(child({ reasoning: 'high' }), [], undefined, parent))).toBe(false);
+});
+
+test('a thread on a provider no installed adapter serves says so on its plate, and one on a served provider does not', () => {
+  const plate = (row: ThreadListRow) => draw(row).querySelector('[data-plate]')?.getAttribute('aria-label') ?? '';
+
+  expect(plate(entry({ provider: 'removed-adapter', model: 'its-model', reasoning: 'high' }))).toContain(NOT_INSTALLED);
+  expect(plate(entry())).not.toContain(NOT_INSTALLED);
 });
 
 test("a thread wears the load badge while its agent row carries live work, with that work's count and machine share, its own harness session uncounted, and the badge opens exactly that work", () => {

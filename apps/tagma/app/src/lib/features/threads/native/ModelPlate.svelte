@@ -3,6 +3,7 @@
   import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
   import ProviderMark from '$lib/features/providers/Mark.svelte';
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
+  import { NOT_INSTALLED } from '$lib/features/providers/served.js';
   import { harnessWords, modelIdentity, modelWords } from './modelWords.js';
   import MatchText from '$lib/shared/MatchText.svelte';
   import { STOWED, Stow } from '../squeeze.svelte.js';
@@ -23,7 +24,8 @@
       : { name: row.harness.name, terminal: row.harness.transport === 'terminal', ...harnessWords(catalog.models, row.harness) },
   );
   const words = $derived(modelWords(catalog.models, row));
-  const identity = $derived(`${modelIdentity(catalog.models, row)}${same ? ' — as its parent' : ''}`);
+  const absent = $derived(harness === null && catalog.installed(words.provider) === false);
+  const identity = $derived(`${modelIdentity(catalog.models, row)}${absent ? ` · ${NOT_INSTALLED}` : ''}${same ? ' — as its parent' : ''}`);
 
   const PLATE = 'inline-flex shrink-0 items-center gap-1 text-small leading-[14px] text-muted-foreground';
   const NAME = 'whitespace-nowrap';
@@ -56,9 +58,12 @@
 {:else}
   <span class={plate} aria-label={identity} data-plate data-plate-same={same || undefined} data-squeeze-piece={Stow.plate}>
     <ProviderMark provider={words.provider} class="size-3 shrink-0" titled={false} />
-    <span class={name} data-plate-name data-squeeze-piece={Stow.model}><MatchText text={words.model.short} {query} /></span>
+    <span class={[name, absent && 'opacity-60']} data-plate-name data-squeeze-piece={Stow.model}
+      ><MatchText text={words.model.short} {query} /></span
+    >
     {#if words.rung !== null}
-      <span class={effort} data-plate-effort data-squeeze-piece={Stow.effort}><MatchText text={words.rung.id.toLowerCase()} {query} /></span
+      <span class={[effort, absent && 'opacity-60']} data-plate-effort data-squeeze-piece={Stow.effort}
+        ><MatchText text={words.rung.id.toLowerCase()} {query} /></span
       >
     {/if}
   </span>

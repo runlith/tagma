@@ -12,13 +12,14 @@ export class ProviderCatalog extends Service<ProviderCatalog>()('ProviderCatalog
   }
 
   served = $state.raw<ServedCatalog>({ providers: [], adapters: [], settings: [], sections: [] });
+  received = $state(false);
 
   constructor(live: LiveConnection, scope: Scope, failure: Failure) {
     super();
     const held = live.hold(
       (client) => client['catalog.subscribe']({}),
       (frame) => {
-        this.served = frame;
+        this.adopt(frame);
       },
       (reason) => {
         if (reason.kind === 'subscription') failure.report(new Error(reason.message));
@@ -53,6 +54,11 @@ export class ProviderCatalog extends Service<ProviderCatalog>()('ProviderCatalog
 
   adopt(served: ServedCatalog): void {
     this.served = served;
+    this.received = true;
+  }
+
+  installed(id: string): boolean | null {
+    return this.received ? this.models.registered(id) : null;
   }
 
   section(id: string) {

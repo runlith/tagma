@@ -3,6 +3,8 @@ import type { ModelCatalog } from '@runlith/llm/models/catalog';
 
 export type ServedModels = ModelCatalog<ServedProvider>;
 
+export const NOT_INSTALLED = 'Provider not installed';
+
 export function providerName(models: ServedModels, provider: string): string {
   return models.registered(provider) ? (models.named(provider).accountsLabel ?? models.providerLabel(provider)) : provider;
 }
