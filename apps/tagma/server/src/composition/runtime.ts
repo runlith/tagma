@@ -396,7 +396,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Layer.provide(Layer.succeed(CredentialFiles, { tokensPath: options.tokensPath })),
     Layer.provide(Layer.succeed(KeyedProviders, { ids: KEYED_SPEECH })),
     Layer.provide(Layer.succeed(BuiltinAdapters, { sources: options.adapters ?? BUILTIN_ADAPTERS })),
-    Layer.provide(Layer.succeed(AdapterPlaces, adapterPlaces(dataPath, process.argv[1]))),
+    Layer.provide(Layer.succeed(AdapterPlaces, adapterPlaces(dataPath))),
     Layer.provide(
       options.quotaProviders === undefined ? Layer.empty : Layer.succeed(QuotaProviders, { providers: options.quotaProviders }),
     ),

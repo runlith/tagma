@@ -115,7 +115,7 @@ export const servedProviderSchema = Schema.Struct({
 });
 export type ServedProvider = typeof servedProviderSchema.Type;
 
-export const adapterOriginSchema = Schema.Literals(['builtin', 'release', 'machine']);
+export const adapterOriginSchema = Schema.Literals(['builtin', 'machine']);
 export type AdapterOrigin = typeof adapterOriginSchema.Type;
 
 const adapterFields = {

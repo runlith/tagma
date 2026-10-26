@@ -1,10 +1,10 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { afterAll, expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
 import { Effect, FileSystem } from 'effect';
-import { carryDeveloperAdapters, carryPackages, writeInstallationPackage } from './packages.js';
+import { carryPackages, writeInstallationPackage } from './packages.js';
 
 const tree = realpathSync(mkdtempSync('/tmp/cut-packages-'));
 afterAll(() => rmSync(tree, { recursive: true, force: true }));
@@ -53,32 +53,6 @@ it.live('a package link to an uncarried dependency refuses at the copy boundary'
     symlinkSync('../two/value.js', join(source, 'one/dependency.js'));
     const refused = yield* run(Effect.flip(carryPackages([{ name: 'one', from: join(source, 'one') }], join(tree, 'refused'))));
     expect(refused).toContain(join(source, 'two/value.js'));
-  }),
-);
-
-it.live('only an adapter its own manifest marks as a developer build is carried, without its tests', () =>
-  Effect.gen(function* () {
-    const packages = join(tree, 'workspace/packages');
-    wrote(
-      join(packages, 'marked/package.json'),
-      JSON.stringify({ name: 'marked', exports: { './adapter': './src/entry.ts' }, tagma: { build: 'developer' } }),
-    );
-    wrote(join(packages, 'marked/src/entry.ts'), 'export const entry = 1;');
-    wrote(join(packages, 'marked/src/entry.test.ts'), '');
-    wrote(
-      join(packages, 'instrument/package.json'),
-      JSON.stringify({ name: 'instrument', exports: { './record': './src/record.ts' }, tagma: { build: 'developer' } }),
-    );
-    wrote(join(packages, 'instrument/src/record.ts'), 'export const record = 3;');
-    wrote(join(packages, 'plain/package.json'), JSON.stringify({ name: 'plain' }));
-    wrote(join(packages, 'plain/src/entry.ts'), 'export const entry = 2;');
-    wrote(join(packages, 'plain/src/inner/module.json'), JSON.stringify({ tagma: { build: 'developer' } }));
-    const into = join(tree, 'workspace/adapters');
-    expect(yield* carryDeveloperAdapters(packages, into)).toEqual(['marked']);
-    expect(readFileSync(join(into, 'marked/src/entry.ts'), 'utf8')).toBe('export const entry = 1;');
-    expect(existsSync(join(into, 'marked/src/entry.test.ts'))).toBe(false);
-    expect(existsSync(join(into, 'plain'))).toBe(false);
-    expect(existsSync(join(into, 'instrument'))).toBe(false);
   }),
 );
 

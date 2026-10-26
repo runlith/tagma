@@ -1,7 +1,7 @@
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
-import { marksOf, workspaceManifests } from '../src/adapter/hostModules';
+import { hostSpecifiers, workspaceManifests } from '../src/adapter/hostModules';
 import { emitRules } from './rules';
 
 const packageRoot = resolve(import.meta.dir, '..');
@@ -15,12 +15,9 @@ const manifests = new Map(
     return [manifest.name as string, manifest];
   }),
 );
-const marks = marksOf(texts);
-const specifiers = [...marks.shared, ...marks.developer];
+const specifiers = hostSpecifiers(texts);
 const hostEntry = join(import.meta.dir, 'host.generated.ts');
-const hostMap = (name: string, specifiers: readonly string[]): string =>
-  `export const ${name} = {\n${specifiers.map((specifier) => `  ${JSON.stringify(specifier)}: () => import(${JSON.stringify(specifier)}),`).join('\n')}\n};\n`;
-const hostText = hostMap('shared', marks.shared) + hostMap('developer', marks.developer);
+const hostText = `export const host = {\n${specifiers.map((specifier) => `  ${JSON.stringify(specifier)}: () => import(${JSON.stringify(specifier)}),`).join('\n')}\n};\n`;
 const previousHost = await readFile(hostEntry, 'utf8').catch((error: NodeJS.ErrnoException) => {
   if (error.code === 'ENOENT') return null;
   throw error;

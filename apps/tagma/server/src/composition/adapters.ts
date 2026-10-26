@@ -1,13 +1,12 @@
 import { join } from 'node:path';
-import { ADAPTERS, CLI_ENTRY } from '../installation/contract/wire/layout.js';
+import { ADAPTERS } from '../installation/contract/wire/layout.js';
 import type { AdapterEntry } from '@runlith/tagma/adapter/loader';
 import type { AdapterPlaces, AdapterSource } from '../providers/contract/service/registry.js';
-import { BINDINGS } from '@tagma/server/composition/bindings';
+import { HOST_MODULES } from './hostModules.generated.js';
 
-export const adapterPlaces = (home: string | null, entry: string | undefined): AdapterPlaces['Service'] => ({
+export const adapterPlaces = (home: string | null): AdapterPlaces['Service'] => ({
   machine: home === null ? null : join(home, ADAPTERS),
-  release: entry?.endsWith(`/${CLI_ENTRY}`) ? join(entry.slice(0, -CLI_ENTRY.length), ADAPTERS) : null,
-  host: BINDINGS.hostModules,
+  host: HOST_MODULES,
 });
 
 const builtin = (id: string, load: () => Promise<AdapterEntry>): AdapterSource => ({ id, origin: 'builtin', version: null, load });

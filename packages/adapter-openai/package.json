@@ -50,9 +50,9 @@
     "@types/bun": "catalog:"
   },
   "tagma": {
-    "host": {
-      "./models/openai": "shared",
-      "./profiles/openai": "shared"
-    }
+    "host": [
+      "./models/openai",
+      "./profiles/openai"
+    ]
   }
 }

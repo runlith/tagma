@@ -315,7 +315,7 @@ export const PROVIDER_OPERATIONS = {
     meaning:
       'Read the model provider adapters on this machine, each with its origin, version, the source it was installed from, whether it loaded, failed or is disabled, and the title and instance count of the settings it declares.',
     grammar:
-      'A page of rows by id with the total; `next` continues the walk, null on the last page. Only an adapter of origin `machine` is updated, switched or removed; a `builtin` or `release` one comes with this server. read_adapter_settings reads the settings of one adapter.',
+      'A page of rows by id with the total; `next` continues the walk, null on the last page. Only an adapter of origin `machine` is updated, switched or removed; a `builtin` one comes with this server. read_adapter_settings reads the settings of one adapter.',
     input: Schema.Struct({ limit: limitOf(ADAPTER_ROWS), cursor: PAGE_CURSOR }),
     answer: arms({
       read: { adapters: Schema.Array(adapterRowSchema), shown: Schema.Int, total: Schema.Int, next: Schema.NullOr(Schema.String) },

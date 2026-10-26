@@ -4,7 +4,7 @@ import { Effect } from 'effect';
 import { keptComments } from '@runlith/bundle/bundle';
 import { developerMarks } from '@runlith/tagma/adapter/host-modules';
 import { entryPath, entryRefusal, EXECUTIONS_RUNTIME } from '../contract/wire/archive.js';
-import { ADAPTERS, INSTALL_FILE } from '../contract/wire/layout.js';
+import { INSTALL_FILE } from '../contract/wire/layout.js';
 import { type EntrySink, type TarEntry, walkTarball } from './tarball.js';
 
 export type Label = { readonly text: string; readonly by: string };
@@ -122,7 +122,6 @@ const entryTrouble = (entry: TarEntry, path: string, labels: readonly Pattern[])
   return [
     ...(named === null ? [] : [named]),
     ...(path === EXECUTIONS_RUNTIME ? [`${path} is carried, and install-from clones it from the release's own bun`] : []),
-    ...(path === ADAPTERS || path.startsWith(`${ADAPTERS}/`) ? [`${path} is a developer adapter`] : []),
     ...(entry.kind === 'file' && path.endsWith('.map') ? [`${path} is a source map`] : []),
     ...(entry.attributes.length === 0 ? [] : [`${path || entry.name} carries the extended attributes ${entry.attributes.join(', ')}`]),
     ...labels.flatMap((one) => (matched(name, one, true, 0) === 'found' ? [`the entry name ${path} carries ${one.said}`] : [])),

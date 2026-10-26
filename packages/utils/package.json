@@ -156,8 +156,8 @@
     "uuidv7": "1.2.1"
   },
   "tagma": {
-    "host": {
-      "./object": "shared"
-    }
+    "host": [
+      "./object"
+    ]
   }
 }

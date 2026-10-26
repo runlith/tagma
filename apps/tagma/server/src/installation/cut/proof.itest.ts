@@ -90,7 +90,7 @@ it.live(
 );
 
 it.live(
-  'the proof names each entry that carries a declared label as a whole token in any case or as the whole file, its own comment or module banner, a source map, an inline map, a path under the home of the machine that built it however escaped, a link out of the release, a developer adapter or the bun its host bundle clones, and an archive wrapped in a directory',
+  'the proof names each entry that carries a declared label as a whole token in any case or as the whole file, its own comment or module banner, a source map, an inline map, a path under the home of the machine that built it however escaped, a link out of the release or the bun its host bundle clones, and an archive wrapped in a directory',
   () =>
     Effect.gen(function* () {
       const scratch = yield* scratched;
@@ -106,7 +106,6 @@ it.live(
         'surface/inline.js': 'run();\n//# sourceMappingURL=data:application/json;base64,e30=\n',
         'surface/escaped.json': `{"from":"${unwanted.paths[0]!.replaceAll('/', '\\/')}\\/work"}`,
         'tools/engine': `\u0000\u0001${unwanted.paths[0]}/.cargo/registry/src/lib.rs\u0000`,
-        'adapters/masking.js': 'export {};\n',
         'desktop/app/main.mjs': 'const prompt = `You are a fixture agent.`;\n',
         'desktop/app/plain.txt': 'nothing to see\n',
         'node_modules/dep/bannered.js': 'run();\n// src/dep.ts\nrun();\n',
@@ -133,8 +132,6 @@ it.live(
           'surface/inline.js',
           'surface/escaped.json',
           'tools/engine',
-          'adapters',
-          'adapters/masking.js',
           'executions/bun',
           'desktop/app/main.mjs',
           './desktop/out',

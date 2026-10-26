@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { Schema } from 'effect';
 
 export const tagmaSection = Schema.Struct({
-  host: Schema.optional(Schema.Record(Schema.String, Schema.Literals(['shared', 'developer']))),
+  host: Schema.optional(Schema.Array(Schema.String)),
   build: Schema.optional(Schema.Literal('developer')),
   labels: Schema.optional(Schema.Array(Schema.NonEmptyString)),
 });
@@ -12,20 +12,13 @@ const manifestSchema = Schema.Struct({ name: Schema.String, tagma: Schema.option
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(manifestSchema));
 const decodeSection = Schema.decodeUnknownSync(Schema.Struct({ tagma: Schema.optional(tagmaSection) }));
 
-export type HostMarks = { readonly shared: readonly string[]; readonly developer: readonly string[] };
-
-export const marksOf = (manifests: readonly string[]): HostMarks => {
-  const shared: string[] = [];
-  const developer: string[] = [];
-  for (const text of manifests) {
-    const manifest = decode(text);
-    for (const [entry, surface] of Object.entries(manifest.tagma?.host ?? {})) {
-      const specifier = entry.startsWith('./') ? `${manifest.name}${entry.slice(1)}` : entry;
-      (surface === 'shared' ? shared : developer).push(specifier);
-    }
-  }
-  return { shared: shared.sort(), developer: developer.sort() };
-};
+export const hostSpecifiers = (manifests: readonly string[]): readonly string[] =>
+  manifests
+    .flatMap((text) => {
+      const manifest = decode(text);
+      return (manifest.tagma?.host ?? []).map((entry) => (entry.startsWith('./') ? `${manifest.name}${entry.slice(1)}` : entry));
+    })
+    .sort();
 
 const absent = (error: NodeJS.ErrnoException): null => {
   if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;

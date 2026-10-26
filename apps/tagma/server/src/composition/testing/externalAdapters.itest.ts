@@ -37,28 +37,15 @@ export const adapter = defineAdapter(() => [
 
 class Adapters extends Context.Service<Adapters, { readonly root: string }>()('testing/ExternalAdapters') {}
 
-const adapterPackage = Effect.fnUntraced(function* (
-  name: string,
-  version: string,
-  label: string,
-  inner: string,
-  extra = '',
-  innerImport = '',
-  developer = false,
-) {
+const adapterPackage = Effect.fnUntraced(function* (name: string, version: string, label: string, inner: string, extra = '') {
   const { root } = yield* Adapters;
   const files = yield* FileSystem.FileSystem;
   const at = join(root, name);
   yield* files.makeDirectory(at, { recursive: true });
-  const manifest = {
-    name: 'acme-adapter',
-    version,
-    exports: { '.': './adapter.ts' },
-    ...(developer ? { tagma: { build: 'developer' } } : {}),
-  };
+  const manifest = { name: 'acme-adapter', version, exports: { '.': './adapter.ts' } };
   yield* files.writeFileString(join(at, 'package.json'), JSON.stringify(manifest));
   yield* files.writeFileString(join(at, 'adapter.ts'), `${extra}${adapterText(label)}`);
-  yield* files.writeFileString(join(at, 'inner.ts'), `${innerImport}export const inner = ${JSON.stringify(inner)};\n`);
+  yield* files.writeFileString(join(at, 'inner.ts'), `export const inner = ${JSON.stringify(inner)};\n`);
   return at;
 });
 
@@ -133,21 +120,6 @@ layer(rooted.pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestService
           yield* probe(['--no-install'], machine, []);
           expect((yield* entries(machine)).filter((name) => !name.endsWith('.json'))).toEqual(['acme-adapter@3.0.0']);
         }),
-    );
-
-    it.effect('only an adapter marked as a developer adapter receives the developer host modules', () =>
-      Effect.gen(function* () {
-        const { root } = yield* Adapters;
-        const internal = "import '@runlith/llm/route/executor';\n";
-        const plain = yield* adapterPackage('plain-internal', '1.0.0', 'Acme plain', 'plain', '', internal);
-        const marked = yield* adapterPackage('marked-internal', '2.0.0', 'Acme marked', 'marked', '', internal, true);
-
-        const [refused, served] = yield* probe(['--no-install'], join(root, 'surface-machine'), [plain, marked]);
-
-        expect(refused.state).toMatchObject({ state: 'failed' });
-        expect(refused.state.reason).toContain('@runlith/llm/route/executor');
-        expect(served).toMatchObject({ state: { state: 'loaded' }, label: 'Acme marked' });
-      }),
     );
 
     it.effect('an update installs again from the recorded source, and a removed adapter stops serving and leaves no folder', () =>

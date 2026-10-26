@@ -41,9 +41,9 @@
     "@types/bun": "catalog:"
   },
   "tagma": {
-    "host": {
-      "./models/stepfun": "shared",
-      "./profiles/stepfun": "shared"
-    }
+    "host": [
+      "./models/stepfun",
+      "./profiles/stepfun"
+    ]
   }
 }

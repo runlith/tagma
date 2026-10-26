@@ -45,11 +45,11 @@
     "@types/bun": "catalog:"
   },
   "tagma": {
-    "host": {
-      "./models/muse": "shared",
-      "./profiles/muse": "shared",
-      "./icon": "shared",
-      "./profiles/museToolSchema": "shared"
-    }
+    "host": [
+      "./models/muse",
+      "./profiles/muse",
+      "./icon",
+      "./profiles/museToolSchema"
+    ]
   }
 }

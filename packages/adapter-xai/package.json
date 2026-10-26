@@ -41,10 +41,10 @@
     "@types/bun": "catalog:"
   },
   "tagma": {
-    "host": {
-      "./models/xai": "shared",
-      "./profiles/xai": "shared",
-      "./icon": "shared"
-    }
+    "host": [
+      "./models/xai",
+      "./profiles/xai",
+      "./icon"
+    ]
   }
 }

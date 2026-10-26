@@ -42,9 +42,9 @@
     "@types/bun": "catalog:"
   },
   "tagma": {
-    "host": {
-      "./models/opencodeGo": "shared",
-      "./profiles/opencodeGo": "shared"
-    }
+    "host": [
+      "./models/opencodeGo",
+      "./profiles/opencodeGo"
+    ]
   }
 }

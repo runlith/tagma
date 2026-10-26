@@ -94,7 +94,6 @@ const refusalOf = (where: ReturnType<typeof checkout>) =>
   Effect.flip(
     releaseInstallation(where.source, where.install, where.launcher, where.shell, {
       conditions: [],
-      developer: false,
       channel: CHANNELS.dev,
       applications: inert,
     }),

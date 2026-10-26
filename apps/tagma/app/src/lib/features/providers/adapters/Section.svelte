@@ -14,9 +14,9 @@
   const adapters = AdaptersRepo.use();
 
   const installed = $derived(catalog.served.adapters.filter((adapter) => adapter.origin === 'machine'));
-  const bundled = $derived(catalog.served.adapters.filter((adapter) => adapter.origin !== 'machine'));
-  const unwell = $derived(bundled.filter((adapter) => adapter.state === 'failed'));
-  const resting = $derived(bundled.filter((adapter) => adapter.state !== 'failed'));
+  const builtin = $derived(catalog.served.adapters.filter((adapter) => adapter.origin === 'builtin'));
+  const unwell = $derived(builtin.filter((adapter) => adapter.state === 'failed'));
+  const resting = $derived(builtin.filter((adapter) => adapter.state !== 'failed'));
 
   let source = $state('');
   let adding = $state(false);
@@ -84,7 +84,7 @@
       onclick={() => (showBundled = !showBundled)}
     >
       {#if showBundled}<ChevronDown class="size-3.5" />{:else}<ChevronRight class="size-3.5" />{/if}
-      Built in and shipped with this release ({resting.length})
+      Built in ({resting.length})
     </button>
     {#if showBundled}
       {#each resting as adapter (adapter.id)}

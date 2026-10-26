@@ -1,6 +1,5 @@
 import type { Layer } from 'effect';
 import type { HttpClient } from 'effect/http';
-import type { HostModules } from '@runlith/tagma/adapter/loader';
 import type { ProcessProvenance } from '../platform/contract/wire/provenance.js';
 import type { Installation } from '../installation/contract/wire/manifest.js';
 import type { NextInstallation } from '../installation/contract/service/next.js';
@@ -27,5 +26,4 @@ export type NextNeeds = Settings | HttpClient.HttpClient;
 
 export type Bindings = {
   readonly nextInstallation: (place: NextPlace) => Layer.Layer<NextInstallation, never, NextNeeds>;
-  readonly hostModules: HostModules;
 };

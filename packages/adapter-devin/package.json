@@ -37,9 +37,9 @@
     "@types/bun": "catalog:"
   },
   "tagma": {
-    "host": {
-      "./models/devin": "shared",
-      "./icon": "shared"
-    }
+    "host": [
+      "./models/devin",
+      "./icon"
+    ]
   }
 }

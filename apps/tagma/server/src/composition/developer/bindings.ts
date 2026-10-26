@@ -5,7 +5,6 @@ import { SourceChanges } from '../../checkout-builds/contract/service/changes.js
 import { buildPlaces } from '../../checkout-builds/places.js';
 import type { RunningRevision } from '../../checkout-builds/reading.js';
 import { labelRevision } from '../../installation/contract/wire/layout.js';
-import { DEVELOPER_HOST_MODULES, SHARED_HOST_MODULES } from '../hostModules.generated.js';
 import type { Bindings, NextPlace } from '../next.js';
 import { sourceChanges } from './sourceChanges.js';
 
@@ -32,7 +31,4 @@ const nextInstallation = (place: NextPlace) => {
   }).pipe(Layer.provide(Layer.succeed(SourceChanges, sourceChanges(place.roots, place.watch))));
 };
 
-export const BINDINGS: Bindings = {
-  nextInstallation,
-  hostModules: { shared: SHARED_HOST_MODULES, developer: DEVELOPER_HOST_MODULES },
-};
+export const BINDINGS: Bindings = { nextInstallation };

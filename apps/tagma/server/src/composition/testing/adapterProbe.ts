@@ -9,7 +9,7 @@ import { LlmClient, llmClientLayer } from '@runlith/llm/route/client';
 import { doorExecutorLayer } from '@runlith/llm/route/executor';
 import { LLMRequest, Message } from '@runlith/llm/schema/messages';
 import type { ModelCredentials } from '@runlith/llm/profiles/contract';
-import { DEVELOPER_HOST_MODULES, SHARED_HOST_MODULES } from '../hostModules.generated.js';
+import { HOST_MODULES } from '../hostModules.generated.js';
 import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { makeMachineAdapters } from '../../providers/adapters/installs.js';
 import { AdapterPlaces, BuiltinAdapters, ProviderRegistry } from '../../providers/contract/service/registry.js';
@@ -152,9 +152,7 @@ const program = Effect.gen(function* () {
 
 const layer = registryLayer.pipe(
   Layer.provide(Layer.succeed(BuiltinAdapters, { sources: [] })),
-  Layer.provide(
-    Layer.succeed(AdapterPlaces, { machine, release: null, host: { shared: SHARED_HOST_MODULES, developer: DEVELOPER_HOST_MODULES } }),
-  ),
+  Layer.provide(Layer.succeed(AdapterPlaces, { machine, host: HOST_MODULES })),
 );
 
 console.log(JSON.stringify(await Effect.runPromise(Effect.provide(program, layer))));

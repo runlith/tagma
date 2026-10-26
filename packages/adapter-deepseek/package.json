@@ -35,9 +35,9 @@
     "@types/bun": "catalog:"
   },
   "tagma": {
-    "host": {
-      "./models/deepseek": "shared",
-      "./profiles/deepseek": "shared"
-    }
+    "host": [
+      "./models/deepseek",
+      "./profiles/deepseek"
+    ]
   }
 }

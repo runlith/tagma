@@ -1,9 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { cp, mkdir, readdir } from 'node:fs/promises';
+import { cp, readdir } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { Effect, FileSystem, type PlatformError, Schema } from 'effect';
-import { developerMarks } from '@runlith/tagma/adapter/host-modules';
-import { adapterEntry, readManifest } from '@runlith/tagma/adapter/loader';
 import { NATIVE_MODULES } from '../contract/wire/manifest.js';
 import type { PlatformPackages } from './locked.js';
 
@@ -59,7 +57,6 @@ export const nativeCarried = Effect.fnUntraced(function* (server: string, llm: s
   return { packages: [...held].map(([name, from]) => ({ name, from })), opencode } satisfies Native;
 });
 
-const LEFT_BEHIND = /\.(test|itest|stest|bench)\.[cm]?[jt]sx?$|\.fixture\.[cm]?[jt]sx?$/;
 const SOURCE_MAP = /\.map$/;
 
 const InstallationPackage = Schema.Struct({
@@ -78,26 +75,6 @@ export const writeInstallationPackage = Effect.fn('Packages.writeManifest')(
   (effect, server) =>
     Effect.mapError(effect, (error): string => `${server} could not give the installation its manifest: ${String(error)}`),
 );
-
-export const carryDeveloperAdapters = (packages: string, into: string): Effect.Effect<readonly string[], string> =>
-  Effect.tryPromise({
-    try: async () => {
-      const carried: string[] = [];
-      const marked = developerMarks();
-      for (const name of (await readdir(packages)).sort()) {
-        const from = join(packages, name);
-        const mark = await marked(join(from, 'package.json'));
-        if (mark?.manifest !== join(from, 'package.json')) continue;
-        if (adapterEntry(await readManifest(from)) === null) continue;
-        await mkdir(join(into, name), { recursive: true });
-        await cp(join(from, 'package.json'), join(into, name, 'package.json'));
-        await cp(join(from, 'src'), join(into, name, 'src'), { recursive: true, filter: (path) => !LEFT_BEHIND.test(path) });
-        carried.push(name);
-      }
-      return carried;
-    },
-    catch: (error) => `the developer adapters could not be copied: ${String(error)}`,
-  });
 
 export const carryPackages = Effect.fn('Packages.carry')(
   function* (packages: readonly CarriedPackage[], root: string) {

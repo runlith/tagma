@@ -4,7 +4,6 @@ import { applications } from '../../mac-applications/placement.js';
 import { releasePlaces } from '../../release-channel/places.js';
 import { releaseChannelLayer } from '../../release-channel/runner.js';
 import { macPlatform } from '../../installation/setup/macos.js';
-import { SHARED_HOST_MODULES } from '../hostModules.generated.js';
 import type { Bindings, NextPlace } from '../next.js';
 
 const nextInstallation = (place: NextPlace) =>
@@ -22,7 +21,4 @@ const nextInstallation = (place: NextPlace) =>
     env: process.env,
   });
 
-export const BINDINGS: Bindings = {
-  nextInstallation,
-  hostModules: { shared: SHARED_HOST_MODULES, developer: null },
-};
+export const BINDINGS: Bindings = { nextInstallation };

@@ -87,11 +87,11 @@
     "effect": "^4.0.1"
   },
   "tagma": {
-    "host": {
-      "./adapter/provider": "shared",
-      "./adapter/settings": "shared",
-      "effect": "shared",
-      "effect/http": "shared"
-    }
+    "host": [
+      "./adapter/provider",
+      "./adapter/settings",
+      "effect",
+      "effect/http"
+    ]
   }
 }

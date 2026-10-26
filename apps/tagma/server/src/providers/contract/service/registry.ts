@@ -95,7 +95,6 @@ export class AdapterPlaces extends Context.Service<
   AdapterPlaces,
   {
     readonly machine: string | null;
-    readonly release: string | null;
     readonly host: HostModules;
   }
 >()('tagma/providers/AdapterPlaces') {}

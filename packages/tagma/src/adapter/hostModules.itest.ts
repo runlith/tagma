@@ -18,7 +18,7 @@ wrote(join(tree, 'server/package.json'), { name: 'server' });
 wrote(join(tree, 'server/src/core/file.ts'), '');
 wrote(join(tree, 'server/src/marked/module.json'), DEVELOPER);
 wrote(join(tree, 'server/src/marked/file.ts'), '');
-wrote(join(tree, 'server/src/marked/inner/module.json'), { tagma: { host: {} } });
+wrote(join(tree, 'server/src/marked/inner/module.json'), { tagma: { host: [] } });
 wrote(join(tree, 'server/src/marked/inner/file.ts'), '');
 wrote(join(tree, 'both/module.json'), DEVELOPER);
 wrote(join(tree, 'both/package.json'), DEVELOPER);

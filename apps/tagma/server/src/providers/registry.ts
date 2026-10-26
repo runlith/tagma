@@ -18,7 +18,7 @@ import {
   ProviderRegistry,
   type SignedProviders,
 } from './contract/service/registry.js';
-import { machineSources, releaseSources } from './adapters/external.js';
+import { machineSources } from './adapters/external.js';
 import { failed, type Loaded, load } from './adapters/judge.js';
 import { publicValues } from './adapters/settingValues.js';
 import { dirname, join } from 'node:path';
@@ -198,7 +198,7 @@ export const registryLayer = Layer.effect(
   Effect.gen(function* () {
     const { sources } = yield* BuiltinAdapters;
     const places = yield* Effect.serviceOption(AdapterPlaces);
-    const place = places._tag === 'Some' ? places.value : { machine: null, release: null, host: { shared: {}, developer: {} } };
+    const place = places._tag === 'Some' ? places.value : { machine: null, host: {} };
     const stored = yield* Effect.serviceOption(AdapterInstances);
     const files = yield* Effect.serviceOption(CredentialFiles);
     const cli = yield* Effect.serviceOption(AccountCli);
@@ -241,8 +241,7 @@ export const registryLayer = Layer.effect(
         ),
       );
       const { unreadable } = machine;
-      const release = yield* releaseSources(place.release, place.host, process.execArgv);
-      const loaded = yield* loadAll([...sources, ...release, ...machine.installed], hostOf, unreadable, previous);
+      const loaded = yield* loadAll([...sources, ...machine.installed], hostOf, unreadable, previous);
       const next = [...loaded, ...unreadable];
       const catalog = catalogOf(next, instances, yield* sectionsOf(next), snapshots);
       previousInstances = instances;

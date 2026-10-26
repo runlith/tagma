@@ -64,8 +64,8 @@
     <span class="text-ui text-muted-foreground">{word}</span>
     <span class="flex-1"></span>
     {#if !managed}
-      {#if adapter.origin !== 'machine'}
-        <span class="text-ui text-muted-foreground">{adapter.origin === 'builtin' ? 'Built in' : 'Part of this release'}</span>
+      {#if adapter.origin === 'builtin'}
+        <span class="text-ui text-muted-foreground">Built in</span>
       {/if}
     {:else}
       <Tooltip text="Install again from its source; runs that started keep the version they began with">

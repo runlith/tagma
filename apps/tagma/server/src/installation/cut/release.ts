@@ -14,7 +14,6 @@ import type { Channel } from '../contract/wire/channel.js';
 import {
   hostBinary,
   SURFACE_INDEX,
-  ADAPTERS,
   CLI_ENTRY,
   RUNTIME_PART,
   SIGNING_IDENTITY_ENV,
@@ -47,7 +46,7 @@ import { type SigningIdentity, signingIdentity, signingNotice } from '../setup/s
 import { HOST_REFUSAL_ENV, HostRefusal } from '../contract/wire/hostRefusal.js';
 import { type CommandUnavailable, output } from './command.js';
 import { carriedEngine, engineLayout } from './engine.js';
-import { carryDeveloperAdapters, carryNative, nativeCarried, nativeLoaded, writeInstallationPackage } from './packages.js';
+import { carryNative, nativeCarried, nativeLoaded, writeInstallationPackage } from './packages.js';
 import { currentVersion, nextVersion, openVersion, releasesNewestFirst, swapCurrent } from '../closure/versions.js';
 import { pruneReleases } from '../closure/leases.js';
 import { carrySkills, skillInputs } from './skills.js';
@@ -60,7 +59,6 @@ export const RELEASE_LOG = 'release.log';
 
 export type Composition = {
   readonly conditions: readonly string[];
-  readonly developer: boolean;
   readonly channel: Channel;
   readonly applications: Applications;
 };
@@ -475,7 +473,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
     (error) => String(error),
   );
 
-  const adapters = yield* step(
+  yield* step(
     'package',
     Effect.gen(function* () {
       yield* files.copy(`${sourcePath}/${MIGRATIONS}`, at(MIGRATIONS));
@@ -484,15 +482,12 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
       yield* files.copy(`${packages}/performance/${MIGRATIONS}`, at(EVIDENCE_MIGRATIONS));
       yield* files.copy(`${packages}/activity/${MIGRATIONS}`, at(ACTIVITY_MIGRATIONS));
       yield* carryNative(nativeModules, root);
-      const developers = composition.developer ? yield* carryDeveloperAdapters(packages, at(ADAPTERS)) : [];
-      yield* note(`developer adapters beside the installation: ${developers.join(', ') || 'none'}`);
       const asked = nativeLoaded(platformName);
       const probed = yield* output(runtime, ['-e', `for (const name of ${JSON.stringify(asked)}) require(name);`], at('bin/server'), {});
       yield* note(`${asked.join('\n')}\n${probed.text}`);
       if (probed.status !== 0) {
         return yield* Effect.fail(`a compiled module it carries does not load: ${probed.text.trim()}`);
       }
-      return developers.length === 0 ? [] : [['server', ADAPTERS] as const];
     }),
     (error) =>
       typeof error === 'string'
@@ -584,7 +579,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
   const manifest = yield* step(
     'manifest',
     Effect.gen(function* () {
-      const layout = [...programs, ...CLOSURE_LAYOUT, ...engineLayout(engine), ...adapters];
+      const layout = [...programs, ...CLOSURE_LAYOUT, ...engineLayout(engine)];
       const measured = yield* Effect.forEach(layout, ([role, place]) => partsAt(root, role, place));
       const carried = origin === undefined ? { checkout } : origin === null ? undefined : origin;
       return yield* writeInstallation(root, platform, build, measured.flat(), carried, tree, release?.irreversible);
