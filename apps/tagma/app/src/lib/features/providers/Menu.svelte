@@ -12,7 +12,6 @@
   import ProviderPanel from './Panel.svelte';
   import UsageRow from './usage/Row.svelte';
   import type { UsageProvider } from './usage/Accounts.svelte.js';
-  import type { RosterDensity } from './usage/Density.svelte.js';
   import { ProviderCatalog } from './Catalog.svelte.js';
   import { NEED_WORDS, usageNeed } from './accounts/status.js';
   import { toneText } from './accounts/tone.js';
@@ -22,7 +21,6 @@
 
   let {
     entry,
-    density,
     now,
     status,
     thread,
@@ -32,7 +30,6 @@
     onManage,
   }: {
     entry: UsageProvider;
-    density: RosterDensity;
     now: number;
     status: string | null;
     thread: { provider: string; account: string | null; pinned: boolean } | null;
@@ -103,7 +100,7 @@
 
 <DropdownMenu.Sub>
   <DropdownMenu.SubTrigger unstyled class={MENU_ROW} data-roster-row={entry.provider}>
-    <UsageRow {entry} {density} {now} {status} />
+    <UsageRow {entry} {now} {status} />
     <ChevronRight class="size-3.5 shrink-0 text-muted-foreground" />
   </DropdownMenu.SubTrigger>
   <DropdownMenu.SubContent

@@ -1,20 +1,19 @@
 <script lang="ts">
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
-  import Rows3 from '@lucide/svelte/icons/rows-3';
   import Settings from '@lucide/svelte/icons/settings';
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import type { Snippet } from 'svelte';
   import { Router } from '@runlith/layer/Router';
   import { settingsHref } from '$lib/features/workspace/address.js';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
+  import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { AccountsRepo } from '$lib/features/providers/AccountsRepo.js';
   import ProviderMenu from '../Menu.svelte';
   import UsageRow from './Row.svelte';
   import { UsageAccounts, type UsageProvider } from './Accounts.svelte.js';
   import { CountdownClock } from '../accounts/CountdownClock.svelte.js';
-  import { isRosterDensity, ROSTER_DENSITIES, UsageDensity } from './Density.svelte.js';
-  import { NEED_WORDS, readingAt, updatedAgo, usageAbsence, usageNeed, usageStatus } from '../accounts/status.js';
+  import { NEED_WORDS, usageAbsence, usageNeed, usageStatus } from '../accounts/status.js';
   import { MENU_ROW } from './usageMenu.js';
   import { tightestFigure, usageFigures } from './windows.js';
 
@@ -33,17 +32,14 @@
   const notices = Notices.use();
   const usageAccounts = UsageAccounts.use();
   const countdownClock = CountdownClock.use();
-  const density = UsageDensity.use();
   const accounts = AccountsRepo.use();
   const router = Router.use();
 
-  const DENSITY_LABELS = { detailed: 'Detailed', compact: 'Compact' } as const;
+  const REFRESH_WORDS = 'Read every account now';
 
   let open = $state(false);
 
   const now = $derived(countdownClock.now);
-  const newest = $derived(usageAccounts.rows.reduce<number | null>((seen, row) => Math.max(seen ?? 0, readingAt(row) ?? 0) || null, null));
-  const updated = $derived(newest === null ? 'not yet updated' : `updated ${updatedAgo(newest, now)}`);
   const roster = $derived([...usageAccounts.providers].sort((left, right) => worstOf(right) - worstOf(left)));
 
   function worstOf(entry: UsageProvider): number {
@@ -102,56 +98,35 @@
     collisionPadding={{ top: 8, bottom: 32, left: 8, right: 8 }}
     class="max-h-[75vh] w-90"
   >
+    <div class="flex items-center justify-between py-1 pr-1 pl-2">
+      <span class="text-ui font-semibold text-foreground">Usage</span>
+      <Tooltip text={REFRESH_WORDS}>
+        <DropdownMenu.Item
+          unstyled
+          class="grid size-6 cursor-default place-items-center rounded-md text-muted-foreground outline-hidden select-none data-disabled:pointer-events-none data-highlighted:bg-selected data-highlighted:text-foreground"
+          closeOnSelect={false}
+          disabled={asking}
+          aria-label={REFRESH_WORDS}
+          onSelect={() => void refresh()}
+          data-usage-refresh
+        >
+          {#if asking}<Waiting class="size-3.5" />{:else}<RefreshCw class="size-3.5" />{/if}
+        </DropdownMenu.Item>
+      </Tooltip>
+    </div>
+
     {#each roster as entry (entry.provider)}
       {@const need = usageNeed(entry.standing, entry.served)}
       {#if need !== null && usageFigures(entry.standing.quota).length === 0}
         <DropdownMenu.Item unstyled class={MENU_ROW} onSelect={manage} data-roster-row={entry.provider}>
-          <UsageRow {entry} density={density.density} {now} status={statusOf(entry)} action={NEED_WORDS[need]} />
+          <UsageRow {entry} {now} status={statusOf(entry)} action={NEED_WORDS[need]} />
         </DropdownMenu.Item>
       {:else}
-        <ProviderMenu
-          {entry}
-          density={density.density}
-          {now}
-          status={statusOf(entry)}
-          {thread}
-          {useInThread}
-          {followDefault}
-          onSignIn={manage}
-          onManage={manage}
-        />
+        <ProviderMenu {entry} {now} status={statusOf(entry)} {thread} {useInThread} {followDefault} onSignIn={manage} onManage={manage} />
       {/if}
     {/each}
 
     <DropdownMenu.Separator />
-    <DropdownMenu.Item
-      icon={asking ? Waiting : RefreshCw}
-      closeOnSelect={false}
-      disabled={asking}
-      title="Read every account’s usage now"
-      onSelect={() => void refresh()}
-    >
-      Refresh usage
-    </DropdownMenu.Item>
-    <DropdownMenu.Separator />
     <DropdownMenu.Item icon={Settings} onSelect={manage}>Manage accounts…</DropdownMenu.Item>
-    <DropdownMenu.Separator />
-    <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger icon={Rows3} current={DENSITY_LABELS[density.density]}>Density</DropdownMenu.SubTrigger>
-      <DropdownMenu.SubContent class="min-w-36">
-        <DropdownMenu.RadioGroup
-          value={density.density}
-          onValueChange={(value) => {
-            if (isRosterDensity(value)) density.set(value);
-          }}
-        >
-          {#each ROSTER_DENSITIES as form (form)}
-            <DropdownMenu.RadioItem value={form} closeOnSelect={false} data-density={form}>{DENSITY_LABELS[form]}</DropdownMenu.RadioItem>
-          {/each}
-        </DropdownMenu.RadioGroup>
-      </DropdownMenu.SubContent>
-    </DropdownMenu.Sub>
-    <DropdownMenu.Separator />
-    <DropdownMenu.Note text={`Usage ${updated}`} />
   </DropdownMenu.Content>
 </DropdownMenu.Root>

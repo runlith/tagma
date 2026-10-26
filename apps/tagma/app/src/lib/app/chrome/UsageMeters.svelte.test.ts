@@ -16,7 +16,6 @@ import { testProviderCatalog } from '$lib/features/providers/testing.js';
 
 const SHIPPED = testProviderCatalog();
 import { CountdownClock } from '$lib/features/providers/accounts/CountdownClock.svelte.js';
-import { UsageDensity } from '$lib/features/providers/usage/Density.svelte.js';
 import UsageMeters from './UsageMeters.svelte';
 
 const NOW = Date.parse('2026-09-02T12:00:00Z');
@@ -88,7 +87,7 @@ function gauge(provider: string): HTMLElement {
 function drawSegments(rows: readonly AccountQuotaRow[]): void {
   vi.useFakeTimers({ now: NOW });
   app = mountShell(
-    Layer.mergeAll(UsageDensity, CountdownClock, Notices),
+    Layer.mergeAll(CountdownClock, Notices),
     Layer.mergeAll(
       Layer.of(ThreadOnScreen, {
         host: { modelSettings: null, activeThread: null, applyAccount: vi.fn() },

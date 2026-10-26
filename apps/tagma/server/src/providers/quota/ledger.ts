@@ -1,6 +1,6 @@
 import type { AccountKey } from '@runlith/llm/models/authStatus';
 import type { ModelCredentials, ProviderQuota } from '@runlith/llm/profiles/contract';
-import { type QuotaFailure, QuotaObservation, type QuotaWindow } from '@runlith/llm/schema/quota';
+import { type QuotaFailure, QuotaObservation, QuotaWindow } from '@runlith/llm/schema/quota';
 import { Cause, Clock, Data, Effect, Exit, Fiber, FiberMap, Layer, Queue, Result, Semaphore, Stream, SubscriptionRef } from 'effect';
 import type { AccountRows, DefaultAccounts, StoredAccount } from '../contract/service/accounts.js';
 import { AccountQuota } from '../contract/service/quota.js';
@@ -43,12 +43,40 @@ const outside = (windows: readonly QuotaWindow[], taken: readonly QuotaWindow[])
   return windows.filter((window) => !keys.has(windowKey(window)));
 };
 
+const rolled = (window: QuotaWindow, at: number): QuotaWindow => {
+  if (window.resetsAt === undefined || window.resetsAt * 1000 > at) return window;
+  const span = window.windowMinutes === undefined || window.windowMinutes <= 0 ? null : window.windowMinutes * 60;
+  const resetsAt = span === null ? undefined : window.resetsAt + (Math.floor((at / 1000 - window.resetsAt) / span) + 1) * span;
+  return new QuotaWindow({ ...window, usedPercent: 0, resetsAt });
+};
+
 const withMerged = (observation: QuotaObservation, merged: readonly QuotaWindow[]): QuotaObservation => {
-  const kept = outside(merged, observation.windows);
+  const at = observation.observedAt.getTime();
+  const kept = outside(merged, observation.windows).map((window) => rolled(window, at));
   return kept.length === 0 ? observation : new QuotaObservation({ ...observation, windows: [...observation.windows, ...kept] });
 };
 
+const resetBetween = (quota: QuotaObservation, after: number, until: number): boolean =>
+  quota.windows.some((window) => window.resetsAt !== undefined && window.resetsAt * 1000 > after && window.resetsAt * 1000 <= until);
+
+const nextReset = (table: QuotaTable, now: number): { readonly at: number; readonly due: readonly AccountQuotaRow[] } | null => {
+  let at: number | null = null;
+  let due: AccountQuotaRow[] = [];
+  for (const row of table) {
+    for (const window of row.quota?.windows ?? []) {
+      if (window.resetsAt === undefined || window.resetsAt * 1000 <= now) continue;
+      const reset = window.resetsAt * 1000;
+      if (at === null || reset < at) {
+        at = reset;
+        due = [row];
+      } else if (reset === at && !due.includes(row)) due.push(row);
+    }
+  }
+  return at === null ? null : { at, due };
+};
+
 const REPLY_FRESH_MS = 300_000;
+const AFTER_RESET_MS = 10_000;
 const KEEP_RETRY = '10 seconds';
 
 const rowKey = (provider: string, account: AccountKey): string => `${provider}/${account}`;
@@ -77,7 +105,8 @@ const skipRefresh = (row: AccountQuotaRow, now: number): boolean => {
     !row.restored &&
     row.quota?.source === 'reply' &&
     now >= row.quota.observedAt.getTime() &&
-    now - row.quota.observedAt.getTime() < REPLY_FRESH_MS
+    now - row.quota.observedAt.getTime() < REPLY_FRESH_MS &&
+    !resetBetween(row.quota, row.quota.observedAt.getTime(), now)
   ) {
     return true;
   }
@@ -384,8 +413,21 @@ export const accountQuotaLayer = (
         });
       });
 
+      const atReset = Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        const next = nextReset(yield* SubscriptionRef.get(tableRef), now);
+        const changed = Effect.asVoid(Stream.runHead(Stream.drop(SubscriptionRef.changes(tableRef), 1)));
+        if (next === null) return yield* changed;
+        const reached = yield* Effect.raceFirst(Effect.as(Effect.sleep(next.at + AFTER_RESET_MS - now), true), Effect.as(changed, false));
+        if (!reached) return;
+        yield* Effect.forEach(next.due, (row) => refresh(row.provider, row.account), { concurrency: 'unbounded', discard: true });
+      });
+
       yield* syncRows();
-      const driver = yield* quotaRefresh(Effect.suspend(() => refresh()));
+      const driver = yield* quotaRefresh(
+        Effect.suspend(() => refresh()),
+        atReset,
+      );
 
       return {
         table: () => Effect.andThen(syncRows(), SubscriptionRef.get(tableRef)),

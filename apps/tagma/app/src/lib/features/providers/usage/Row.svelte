@@ -1,8 +1,8 @@
 <script lang="ts">
   import ProviderMark from '$lib/features/providers/Mark.svelte';
   import type { UsageProvider } from './Accounts.svelte.js';
-  import type { RosterDensity } from './Density.svelte.js';
   import { ProviderCatalog } from '../Catalog.svelte.js';
+  import { readingAt, updatedAgo, usageStatus } from '../accounts/status.js';
   import { figureTone } from './thresholds.js';
   import { toneFill, toneText } from '../accounts/tone.js';
   import Bar from '$lib/shared/ui/Bar.svelte';
@@ -11,13 +11,11 @@
 
   let {
     entry,
-    density,
     now,
     status,
     action = null,
   }: {
     entry: UsageProvider;
-    density: RosterDensity;
     now: number;
     status: string | null;
     action?: string | null;
@@ -26,13 +24,14 @@
   const catalog = ProviderCatalog.use();
   const figures = $derived(usageFigures(entry.standing.quota));
   const plan = $derived(planLabel(entry.standing.quota?.plan));
-  const tightest = $derived(density === 'compact' ? tightestFigure(figures) : null);
-  const reset = $derived(
-    figures.reduce<number | null>(
-      (soonest, figure) => (figure.resetsAt === null || (soonest !== null && soonest <= figure.resetsAt) ? soonest : figure.resetsAt),
-      null,
-    ),
-  );
+  const stale = $derived(usageStatus(entry.standing, entry.served, now).stale);
+  const read = $derived(readingAt(entry.standing));
+  const limit = $derived(tightestFigure(figures));
+  const state = $derived.by(() => {
+    if (stale) return read === null ? null : `updated ${updatedAgo(read, now)}`;
+    if (limit === null || limit.resetsAt === null) return null;
+    return `${limit.name ?? limit.kind} resets in ${resetText(limit.resetsAt, now)}`;
+  });
 
   function planLabel(plan: string | undefined): string | null {
     const words =
@@ -50,13 +49,11 @@
   }
 </script>
 
-{#snippet metric(figure: UsageFigure, bar: boolean)}
+{#snippet metric(figure: UsageFigure)}
   {@const tone = figureTone(figure, now)}
   <span class="flex shrink-0 items-center gap-1.5" data-usage-mini>
     <span class="text-meta text-muted-foreground">{figure.name ?? figure.kind}</span>
-    {#if bar}
-      <Bar used={figure.usedPercent} color={toneFill(tone)} class="h-1.25 w-7" />
-    {/if}
+    <Bar used={figure.usedPercent} color={toneFill(tone)} class="h-1.25 w-7" />
     <span class="text-meta tabular-nums {toneText(tone)}">{usagePercentText(figure.usedPercent)}</span>
   </span>
 {/snippet}
@@ -78,16 +75,14 @@
           {action}
         </span>
       {/if}
-    {:else if tightest !== null}
-      <span class="ml-auto">{@render metric(tightest, false)}</span>
-    {:else if reset !== null}
-      <span class="shrink-0 text-meta tabular-nums text-muted-foreground">Resets in {resetText(reset, now)}</span>
+    {:else if state !== null}
+      <span class="ml-auto shrink-0 text-meta tabular-nums text-muted-foreground" data-usage-state>{state}</span>
     {/if}
   </span>
-  {#if figures.length > 0 && density === 'detailed'}
-    <span class="flex flex-wrap items-center gap-x-3 gap-y-1 pl-8">
+  {#if figures.length > 0}
+    <span class={['flex flex-wrap items-center gap-x-3 gap-y-1 pl-8 transition-opacity', stale && 'opacity-45']}>
       {#each figures as figure (figure.kind + (figure.name ?? ''))}
-        {@render metric(figure, true)}
+        {@render metric(figure)}
       {/each}
     </span>
   {/if}

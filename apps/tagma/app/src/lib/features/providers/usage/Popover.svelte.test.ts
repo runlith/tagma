@@ -12,7 +12,6 @@ import { UsageAccounts } from './Accounts.svelte.js';
 import { ProviderCatalog } from '../Catalog.svelte.js';
 import { testProviderCatalog } from '../testing.js';
 import { CountdownClock } from '../accounts/CountdownClock.svelte.js';
-import { UsageDensity } from './Density.svelte.js';
 import UsagePopover from './Popover.svelte';
 
 const door = {
@@ -90,7 +89,7 @@ async function open(
   followDefault: (() => Promise<void>) | null = null,
 ): Promise<HTMLElement> {
   app = mountShell(
-    Layer.mergeAll(UsageDensity, CountdownClock, Notices),
+    Layer.mergeAll(CountdownClock, Notices),
     Layer.mergeAll(
       Layer.of(UsageAccounts, accounts),
       Layer.of(ProviderCatalog, catalog),

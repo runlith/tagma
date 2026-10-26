@@ -12,7 +12,8 @@ import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
 import { ThreadOnScreen } from '$lib/features/threads/OnScreen.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { AccountsRepo } from '$lib/features/providers/AccountsRepo.js';
-import { keyedBy, liveFeed, mountShell, testAim, testShellOps, type TestApp } from '$lib/app/testing.js';
+import { keyedBy, liveFeed, mountShell, testAim, testPlaces, testShellOps, type TestApp } from '$lib/app/testing.js';
+import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import { Holdings } from '$lib/features/checkout/Holdings.svelte.js';
 import { Checkout } from '$lib/features/checkout/Selection.svelte.js';
 import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
@@ -25,7 +26,6 @@ import { testProviderCatalog } from '$lib/features/providers/testing.js';
 
 const SHIPPED = testProviderCatalog();
 import { CountdownClock } from '$lib/features/providers/accounts/CountdownClock.svelte.js';
-import { UsageDensity } from '$lib/features/providers/usage/Density.svelte.js';
 import type { AwakeState } from '@tagma/server/power/contract/wire/power';
 import { Awake } from '$lib/features/power/Awake.svelte.js';
 import { ExecutionActs } from '$lib/features/executions/acts.svelte.js';
@@ -185,7 +185,7 @@ afterEach(() => {
 function draw(options: { at?: GraphAim | undefined } = {}): HTMLElement {
   vi.useFakeTimers({ now: NOW });
   app = mountShell(
-    Layer.mergeAll(UsageDensity, CountdownClock, WallClock, Notices, Checkout, Holdings, ReaderMarks, Readings, View, ExecutionActs),
+    Layer.mergeAll(CountdownClock, WallClock, Notices, Checkout, Holdings, ReaderMarks, Readings, View, ExecutionActs),
     Layer.mergeAll(
       Layer.of(Door, { ask: () => Promise.reject(new Error('this suite makes no call')) } as never),
       Layer.of(Workspace, { projects: [], contextProject: null } as never),
@@ -213,6 +213,7 @@ function draw(options: { at?: GraphAim | undefined } = {}): HTMLElement {
       Layer.of(AccountsRepo, { refresh: stubMutation(), useByDefault: stubMutation() } as never),
       Layer.of(Live, feed.live),
       Layer.of(ProjectsRepo, { branches: keyedBy(async () => []) } as never),
+      Layer.of(Worktrees, testPlaces() as never),
     ),
     {
       ...options,

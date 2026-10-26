@@ -2,6 +2,7 @@ import { Cause, Effect, FiberMap, Semaphore, type Scope } from 'effect';
 
 const USAGE_REFRESH_INTERVAL = '15 minutes';
 const SCHEDULE_KEY = 'usage-refresh';
+const RESET_KEY = 'reset-refresh';
 const BOOT_KEY = 'boot-refresh';
 
 export type QuotaRefreshDriver = {
@@ -18,12 +19,13 @@ const background = (name: string, work: Effect.Effect<void>): Effect.Effect<void
     ),
   );
 
-export const quotaRefresh = Effect.fnUntraced(function* (refresh: Effect.Effect<void>) {
+export const quotaRefresh = Effect.fnUntraced(function* (refresh: Effect.Effect<void>, atReset: Effect.Effect<void>) {
   const scheduled = yield* FiberMap.make<string, void>();
   const subscribersGate = Semaphore.makeUnsafe(1);
   const cycle = Effect.forever(
     Effect.sleep(USAGE_REFRESH_INTERVAL).pipe(Effect.andThen(refresh), (work) => background('scheduled refresh', work)),
   );
+  const resets = Effect.forever(background('reset refresh', atReset));
   let subscribers = 0;
   yield* FiberMap.run(scheduled, BOOT_KEY, { onlyIfMissing: true, startImmediately: true })(background('boot refresh', refresh));
   return {
@@ -32,12 +34,15 @@ export const quotaRefresh = Effect.fnUntraced(function* (refresh: Effect.Effect<
         subscribers += 1;
         if (subscribers !== 1) return;
         yield* FiberMap.run(scheduled, SCHEDULE_KEY, { onlyIfMissing: true, startImmediately: true })(cycle);
+        yield* FiberMap.run(scheduled, RESET_KEY, { onlyIfMissing: true, startImmediately: true })(resets);
       }),
     ),
     stopWatching: subscribersGate.withPermit(
       Effect.gen(function* () {
         subscribers = Math.max(0, subscribers - 1);
-        if (subscribers === 0) yield* FiberMap.remove(scheduled, SCHEDULE_KEY);
+        if (subscribers !== 0) return;
+        yield* FiberMap.remove(scheduled, SCHEDULE_KEY);
+        yield* FiberMap.remove(scheduled, RESET_KEY);
       }),
     ),
   };

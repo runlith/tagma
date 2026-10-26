@@ -335,6 +335,74 @@ layer(storage, { excludeTestServices: true })('account quota', (it) => {
     }).pipe(Effect.provide(TestClock.layer())),
   );
 
+  it.effect('an account is read again just after its window resets, before the next quarter-hour pass', () =>
+    Effect.gen(function* () {
+      yield* clearReadings;
+      const tokens = testTokens(join(mkdtempSync(join(tmpdir(), 'account-quota-reset-')), 'tokens.json'));
+      yield* tokens.add(OPENAI_OAUTH_PROVIDER, openaiCredential('access'));
+      const reads = yield* Queue.make<number>();
+      let ordinal = 0;
+      const provider: AccountQuotaProvider = {
+        id: OPENAI_OAUTH_PROVIDER,
+        quota: {
+          fromHeaders: () => null,
+          read: Effect.fnUntraced(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            yield* Queue.offer(reads, ++ordinal);
+            return new QuotaObservation({
+              observedAt: new Date(now),
+              source: 'usage',
+              windows: [new QuotaWindow({ kind: 'session', usedPercent: 40, resetsAt: (now + 5 * 60_000) / 1000 })],
+            });
+          }),
+        },
+      };
+      const { quota } = yield* buildQuota(
+        subscriptionAccounts(tokens),
+        () => [provider],
+        () => Effect.succeed({ account, revision: 0 }),
+      );
+      expect(yield* Queue.take(reads)).toBe(1);
+      yield* bootSettled(quota);
+
+      const subscriber = yield* Effect.forkChild(Stream.runDrain(quota.changes));
+      yield* Effect.yieldNow;
+      yield* TestClock.adjust('5 minutes');
+      yield* Effect.yieldNow;
+      expect(Option.isNone(yield* Queue.poll(reads))).toBe(true);
+      yield* TestClock.adjust('10 seconds');
+      expect(yield* Queue.take(reads)).toBe(2);
+      yield* Fiber.interrupt(subscriber);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect('a remembered window past its reset stands reset at the next reading', () =>
+    Effect.gen(function* () {
+      yield* clearReadings;
+      const { tokens } = yield* signedIn();
+      const held = yield* boot(subscriptionAccounts(tokens), () => Effect.succeed(observation('usage', 10)));
+      yield* bootSettled(held.quota);
+      const day = 24 * 3_600_000;
+      const at = yield* Clock.currentTimeMillis;
+      yield* held.quota.merge(
+        OPENAI_OAUTH_PROVIDER,
+        account,
+        new QuotaObservation({
+          observedAt: new Date(at - day),
+          source: 'reply',
+          windows: [
+            new QuotaWindow({ kind: 'bucket', label: 'images', usedPercent: 70, windowMinutes: 1440, resetsAt: (at - day / 2) / 1000 }),
+          ],
+        }),
+      );
+      yield* held.quota.observe(OPENAI_OAUTH_PROVIDER, account, observation('reply', 20));
+
+      const images = (yield* rowOf(held))?.quota?.windows.find((window) => window.label === 'images');
+      expect(images).toMatchObject({ usedPercent: 0, resetsAt: (at + day / 2) / 1000 });
+      yield* held.close;
+    }),
+  );
+
   it.effect('a failed usage read keeps the previous windows', () =>
     Effect.gen(function* () {
       yield* clearReadings;
