@@ -21,8 +21,9 @@ A weak answer means no test. Assert state, output or a typed failure through the
 ## Kind: unit or itest
 
 The suffix is the kind; testbed (`packages/testbed`) enforces it at the call site.
-- `*.test.ts` — unit. Guards refuse a process, a disk write, a socket (loopback too) and SQLite at the test process's builtins; external network is refused there for every file. Outside the guards: what a child process does, and, under Vitest on Bun, an external dependency importing a builtin as ESM ([[37f542a9]]). The default timeout is 1 s.
-- `*.itest.ts` — real git, SQLite, processes and disk; default timeout 10 s. It has two possible subjects: an adapter's conformance on its real resource, or one end-to-end path through the real door (a defect test per rule 571311f8). Every test file is one of the two, and both run on every check.
+- `*.test.ts` — unit. Guards refuse a process, a disk write, a socket (loopback too) and SQLite at the test process's builtins; external network is refused there for every file. Outside the guards: what a child process does, and, under Vitest on Bun, an external dependency importing a builtin as ESM ([[37f542a9]]). Over 1 s it is slow.
+- `*.itest.ts` — real git, SQLite, processes and disk; over 10 s it is slow. It has two possible subjects: an adapter's conformance on its real resource, or one end-to-end path through the real door (a defect test per rule 571311f8). Every test file is one of the two, and both run on every check.
+- A test fails only on its own fact, never on time or machine load. testbed's one deadline is a 3-minute hang guard on every test and hook, set in every file; a slow test passes, and the run report names it `slow` with its CPU and its children's, the wall that measured CPU does not cover, its world and tenant time and its file's processes — the cue to cheapen it at its owner.
 - Logic reached only through a real resource is a missing port, not an itest. It becomes a unit test through the owner's public operation over fast adapters:
   - disk: `@runlith/testbed/memory` — `Effect.provide(program, Memory.layer)`; one layer build is one volume; host permissions and watcher ordering stay itest ([[e9f3c3e0]]);
   - processes: the `@runlith/executions` contract with the host doubles in `apps/tagma/server/src/executions/testing`;
@@ -46,7 +47,7 @@ Apple M2 Max, 2026-10-24, one sample each; "loaded" means other agents' tests ra
 
 ## Writing a cheap test
 
-- **World per worker.** Scripts run `--no-isolate`, so a world is built once per worker and shared by its files; testbed sets the worker count from its share of the machine's process budget, and a number in the command only caps it ([[f7db8209]]). `world(kind, params)` from `@runlith/testbed/worlds`, and `doorFixture(...)` without `own`, register their own 60 s build hook: call them when the file registers. `demoGraphLayer(...)`, `checkoutFixture` and a helper's `shared(kind, params)` build lazily inside the group's layer hook, under that hook's timeout. A world built inside a setup Effect or a test body is cut by its hook's timeout under load.
+- **World per worker.** Scripts run `--no-isolate`, so a world is built once per worker and shared by its files; testbed sets the worker count from its share of the machine's process budget, and a number in the command only caps it ([[f7db8209]]). `world(kind, params)` from `@runlith/testbed/worlds`, and `doorFixture(...)` without `own`, register their own build hook: call them when the file registers, so the build is the file's setup rather than its first test. `demoGraphLayer(...)`, `checkoutFixture` and a helper's `shared(kind, params)` build lazily inside the group's layer hook.
 - **A shared world is never torn down.** A successfully built shared world's scope finalizers do not run; the reaper kills its held processes when the worker exits ([[82279b2b]]). Restoration or a final write that must happen goes in the test's own scope; a test whose assertion depends on the world's finalizers takes `own`.
 - **World key** = the kind's tag and the canonical JSON of its params. Params are data: a function or a layer makes the world `own`. Lend `models`, `decisions`, `quotaProviders`, `vendorWire` and `exposure` through the shared door world (`doorFixture({ models })`, `makeDoorWorld({ models })`); the lend lasts the scope that asked for it. A per-file value such as a stop time is set in the file's scope: as a param it builds a second world.
 - **`own: '<reason>'`** only when the test changes state the shared world cannot get back — machine settings, accounts, plugins, MCP servers, commits into the global project, maintenance, `process.env` — or when the world's own lifetime is the subject (close, restart). The report lists every own world with its reason.
@@ -80,7 +81,7 @@ A worker keeps one module registry for all its files: module-level state lives f
 - a typecheck duplicate: a field, a union branch or a signature existing;
 - "does not throw" or "it starts" with no state asserted, assembled smoke, a fixture's self-test, an outcome that depends on a live model's obedience (script the agent);
 - a skip, `todo`, `.only` or list of known reds: a red test is fixed or deleted in the change that found it (rule 93739392);
-- a raised timeout — a test's third argument, a hook's, or `layer(l, { timeout })`: cut the cost at its owner;
+- a deadline of its own — a test's third argument, a hook's, `layer(l, { timeout })` or `Effect.timeout` around a wait: it turns load into a red. A wait ends on a fact, a hang is the guard's, slowness is cut at its owner. A deadline stays only where the product's own timeout is the subject;
 - a sleep or a deadline poll;
 - a weakened assertion: an assertion over incidental shared state is replaced by the contract's, not loosened;
 - a matrix repeating one scenario across transports or doors: one conformance per transport (native `packages/agent/src/thread/conformance/transportConformance.test.ts`, ACP `protocolRoad.itest.ts`, Claude `claudeConformance.itest.ts`, terminal `terminalConformance.itest.ts`); an HTTP replay of logic its owner tests is deleted;
@@ -96,9 +97,9 @@ A worker keeps one module registry for all its files: module-level state lives f
 
 ## Checking a change
 
-- `bun run check:change` checks the change: the unit and itest files it reaches, results reused by input hash (AGENTS.md › Validation). A review judges tests by their source and runs none.
-- A file you touched passes alone, from its package: `<repo>/node_modules/.bin/testbed bun test --no-isolate --randomize --seed=1 ./src/x.itest.ts`, then seeds 2 and 3; a Vitest package through its script. Concurrent test commands share the machine's process budget, each through testbed; a script whose files share one external resource caps itself with `--parallel=1`. A `bun test` lives 5 minutes under the machine's command rule: split work that needs longer.
-- testbed's summary gives CPU per file against 40–80 ms, the items load, world, tenant, body and guard, children by kind, worlds built and own. CPU is comparable under load, wall is not. Before/after, profiles and git counts: reference `measuring`.
+- `bun run check:change` checks the change: the unit and itest files it reaches, results reused by input hash. It and `test:all` run each package as one runner over all its files on the machine's process budget, through one testbed scheduler: run it once; never split a selection and run its parts one after another. A review judges tests by their source and runs none.
+- A file you touched passes alone, from its package: `<repo>/node_modules/.bin/testbed bun test --no-isolate --randomize --seed=1 ./src/x.itest.ts`, then seeds 2 and 3; a Vitest package through its script. Concurrent test commands share the machine's process budget, each through testbed; a script whose files share one external resource caps itself with `--parallel=1`. testbed sets no life on a run: a command lives as long as the operator's command rules allow.
+- testbed's summary gives CPU per file against 40–80 ms, the items load, world, tenant, body and guard, children by kind, worlds built and own, and the slow tests with their cost; `check:change` prints the slow tests after its results. CPU is comparable under load, wall is not. Before/after, profiles and git counts: reference `measuring`.
 - `bun test` does not typecheck: `bun run typecheck` before claiming green.
 
 ## Shared tree
