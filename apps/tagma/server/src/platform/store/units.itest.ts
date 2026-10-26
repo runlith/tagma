@@ -2,7 +2,7 @@ import { fixtureGraphMigrations, fixtureMigrations } from '../../composition/tes
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { sql } from 'drizzle-orm';
-import { Cause, Context, Deferred, Duration, Effect, Exit, Fiber, Layer } from 'effect';
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer } from 'effect';
 import { GraphStore, MachineStore, StoreIdentityConflict } from '../contract/service/store.js';
 import { type Unit, GraphUnits, MachineUnits } from '../contract/service/units.js';
 import { seededStoreLayer } from './open.js';
@@ -47,7 +47,7 @@ const race = Effect.fn('race')(function* (settle: 'commit' | 'rollback') {
 
   const admitted = yield* unit.run(store.db.all<{ id: string }>(held));
 
-  const during = yield* units.read((outside) => outside.run(store.db.all<{ id: string }>(held))).pipe(Effect.timeout(Duration.seconds(10)));
+  const during = yield* units.read((outside) => outside.run(store.db.all<{ id: string }>(held)));
 
   yield* Deferred.succeed(letGo, undefined);
   yield* Fiber.await(writing);

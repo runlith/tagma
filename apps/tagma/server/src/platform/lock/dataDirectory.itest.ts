@@ -29,13 +29,13 @@ const contender = (data: string, then: string) =>
    console.log(taken._tag === 'Success' ? 'locked' : taken.failure._tag);
    ${then}`,
         ],
-        { cwd: SERVER, stdin: 'ignore', stdout: 'pipe', stderr: 'inherit' },
+        { cwd: SERVER, stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' },
       ),
     ),
     (child) => Effect.sync(() => child.kill('SIGKILL')),
   );
 
-const firstLine = (child: Bun.Subprocess<'ignore', 'pipe', 'inherit'>) =>
+const firstLine = (child: Bun.Subprocess<'pipe', 'pipe', 'inherit'>) =>
   Effect.promise(async () => {
     const reader = child.stdout.getReader();
     let text = '';
@@ -54,7 +54,7 @@ describe('the data-directory lock', () => {
   it.live('a live holder is refused by name, and its death hands the directory over at once', () =>
     Effect.gen(function* () {
       const data = yield* dataDirectory;
-      const holder = yield* contender(data, 'await Bun.sleep(30_000);');
+      const holder = yield* contender(data, 'await Bun.stdin.text();');
       expect(yield* firstLine(holder)).toBe('locked');
 
       const refused = yield* attempt(data);
@@ -77,7 +77,7 @@ describe('the data-directory lock', () => {
       const data = yield* dataDirectory;
       const dead = (yield* spawnedEffect(['true'])).pid;
       writeFileSync(join(data, 'server.lock'), `${dead}\n`);
-      const racing = [yield* contender(data, 'await Bun.sleep(30_000);'), yield* contender(data, 'await Bun.sleep(30_000);')];
+      const racing = [yield* contender(data, 'await Bun.stdin.text();'), yield* contender(data, 'await Bun.stdin.text();')];
 
       const said = yield* Effect.all(racing.map(firstLine), { concurrency: 'unbounded' });
 
@@ -90,7 +90,7 @@ describe('the data-directory lock', () => {
       const data = yield* dataDirectory;
       const holder = yield* contender(
         data,
-        `const kept = Bun.spawn(['sleep', '5'], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' }); kept.unref(); console.log(kept.pid); process.exit(0);`,
+        `const kept = Bun.spawn(['tail', '-f', '/dev/null'], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' }); kept.unref(); console.log(kept.pid); process.exit(0);`,
       );
       const [said, kept] = (yield* Effect.promise(() => new Response(holder.stdout).text())).trim().split('\n');
       expect(said).toBe('locked');
@@ -124,7 +124,7 @@ describe('the data-directory lock', () => {
     Effect.gen(function* () {
       const data = yield* dataDirectory;
       const reused = yield* Effect.acquireRelease(
-        Effect.sync(() => Bun.spawn(['sleep', '5'])),
+        Effect.sync(() => Bun.spawn(['tail', '-f', '/dev/null'])),
         (child) => Effect.sync(() => child.kill()),
       );
       writeFileSync(join(data, 'server.lock'), `${reused.pid}\n`);

@@ -110,7 +110,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, liveGitLayer, storage, capacity), { ex
       const waiting = yield* Effect.forkScoped(Effect.flip(checks.check(dir, base, tip)));
       yield* Deferred.await(started);
       yield* checks.forget(dir);
-      expect((yield* Fiber.join(waiting).pipe(Effect.timeout('5 seconds')))._tag).toBe('GitUnreadable');
+      expect((yield* Fiber.join(waiting))._tag).toBe('GitUnreadable');
       const preparing = yield* Deferred.make<void>();
       const resume = yield* Deferred.make<void>();
       const preparation = CheckPreparation.of({
@@ -126,7 +126,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, liveGitLayer, storage, capacity), { ex
       yield* Deferred.await(preparing);
       yield* preflight.forget(dir);
       yield* Deferred.succeed(resume, undefined);
-      expect((yield* Fiber.join(late).pipe(Effect.timeout('5 seconds')))._tag).toBe('GitUnreadable');
+      expect((yield* Fiber.join(late))._tag).toBe('GitUnreadable');
       expect((yield* preflight.last(dir, tip, base)).fact.state).toBe('untaken');
     }),
   );
@@ -142,7 +142,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, liveGitLayer, storage, capacity), { ex
       expect((yield* checks.standing(dir, base, tip, false)).fact.state).toBe('untaken');
       expect(merges.count).toBe(0);
       expect((yield* checks.standing(dir, base, tip, true)).fact.state).toBe('queued');
-      expect(yield* Deferred.await(landed).pipe(Effect.timeout('10 seconds'))).toBe(dir);
+      expect(yield* Deferred.await(landed)).toBe(dir);
       expect(yield* checks.standing(dir, base, tip, false)).toMatchObject({
         check: 'conflicts',
         held: false,

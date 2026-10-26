@@ -14,21 +14,13 @@ const WATCH_ROWS_ALL = 10_000;
 
 const arrival = () => {
   const pending = Promise.withResolvers<void>();
-  const timer = setTimeout(() => pending.reject(new Error('the watcher did not deliver its event')), 8_000);
-  return { promise: pending.promise.finally(() => clearTimeout(timer)), resolve: () => pending.resolve() };
+  return { promise: pending.promise, resolve: () => pending.resolve() };
 };
 
 const delivering = (delivered: { readonly promise: Promise<void> }, write: () => Promise<void>) =>
   Effect.promise(async () => {
-    let arrived = false;
-    const waiting = delivered.promise.finally(() => {
-      arrived = true;
-    });
-    while (!arrived) {
-      await write();
-      await Promise.race([waiting, Bun.sleep(50)]);
-    }
-    await waiting;
+    await write();
+    await delivered.promise;
   });
 
 const home = Effect.fnUntraced(function* (prefix: string) {

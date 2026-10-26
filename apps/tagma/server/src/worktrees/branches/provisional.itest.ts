@@ -138,7 +138,6 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(Layer.merge(BunFileSystem.layer, 
             expect(yield* branches.titled('thread-1', 'Another Title')).toBeNull();
           }),
         ),
-      120_000,
     );
   },
 );

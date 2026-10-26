@@ -215,27 +215,23 @@ layer(demoGraphLayer({ repos: ['renames'] }).pipe(Layer.provideMerge(Layer.merge
           expect(yield* sh(tree.path, ['symbolic-ref', '--short', 'HEAD'])).toBe('tagma/Fix-login');
         }),
       ),
-    120_000,
   );
 
-  it.effect(
-    'on a remote that is not GitHub the branch is renamed here only, and the remote and upstream keep the old name',
-    () =>
-      withDemo((demo) =>
-        Effect.gen(function* () {
-          const { make, project, bare, rename } = yield* composed(demo, github().gh);
-          yield* sh(project, ['remote', 'add', 'origin', bare]);
-          const tree = yield* make('tagma/first');
-          yield* sh(tree.path, ['push', '-q', '-u', 'origin', 'tagma/first']);
+  it.effect('on a remote that is not GitHub the branch is renamed here only, and the remote and upstream keep the old name', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const { make, project, bare, rename } = yield* composed(demo, github().gh);
+        yield* sh(project, ['remote', 'add', 'origin', bare]);
+        const tree = yield* make('tagma/first');
+        yield* sh(tree.path, ['push', '-q', '-u', 'origin', 'tagma/first']);
 
-          const renamed = yield* rename(tree.rootId, 'second');
+        const renamed = yield* rename(tree.rootId, 'second');
 
-          expect(renamed._tag === 'Success' ? renamed.success.remote.status : renamed.failure).toBe('kept');
-          expect([yield* has(bare, 'tagma/first'), yield* has(bare, 'tagma/second')]).toEqual([true, false]);
-          expect(yield* sh(tree.path, ['config', 'branch.tagma/second.merge'])).toBe('refs/heads/tagma/first');
-        }),
-      ),
-    120_000,
+        expect(renamed._tag === 'Success' ? renamed.success.remote.status : renamed.failure).toBe('kept');
+        expect([yield* has(bare, 'tagma/first'), yield* has(bare, 'tagma/second')]).toEqual([true, false]);
+        expect(yield* sh(tree.path, ['config', 'branch.tagma/second.merge'])).toBe('refs/heads/tagma/first');
+      }),
+    ),
   );
 
   it.effect(
@@ -275,7 +271,6 @@ layer(demoGraphLayer({ repos: ['renames'] }).pipe(Layer.provideMerge(Layer.merge
           expect([yield* has(bare, 'tagma/pushed-elsewhere'), yield* has(bare, 'tagma/renamed-elsewhere')]).toEqual([true, true]);
         }),
       ),
-    120_000,
   );
 
   it.effect(
@@ -319,35 +314,31 @@ layer(demoGraphLayer({ repos: ['renames'] }).pipe(Layer.provideMerge(Layer.merge
           expect(yield* sh(tree.path, ['config', 'branch.tagma/moved.merge'])).toBe('refs/heads/tagma/moved');
         }),
       ),
-    120_000,
   );
 
-  it.effect(
-    'a record that moves while git renames undoes the rename, and the worktree stays on its old branch',
-    () =>
-      withDemo((demo) =>
-        Effect.gen(function* () {
-          let moving: Effect.Effect<void> = Effect.void;
-          const { make, rename, recorded, records, units } = yield* composed(
-            demo,
-            () => Effect.fail(new ProgramUnavailable({ detail: 'gh is absent' })),
-            (_place, renaming) => Effect.andThen(moving, renaming),
-          );
-          const tree = yield* make('tagma/before');
-          moving = Effect.orDie(
-            Effect.asVoid(units.write('WorktreeRenames', (unit) => records.renamed(tree.rootId, 'tagma/before', 'tagma/elsewhere', unit))),
-          );
+  it.effect('a record that moves while git renames undoes the rename, and the worktree stays on its old branch', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        let moving: Effect.Effect<void> = Effect.void;
+        const { make, rename, recorded, records, units } = yield* composed(
+          demo,
+          () => Effect.fail(new ProgramUnavailable({ detail: 'gh is absent' })),
+          (_place, renaming) => Effect.andThen(moving, renaming),
+        );
+        const tree = yield* make('tagma/before');
+        moving = Effect.orDie(
+          Effect.asVoid(units.write('WorktreeRenames', (unit) => records.renamed(tree.rootId, 'tagma/before', 'tagma/elsewhere', unit))),
+        );
 
-          const refused = yield* rename(tree.rootId, 'after');
+        const refused = yield* rename(tree.rootId, 'after');
 
-          expect(
-            refused._tag === 'Failure' && refused.failure._tag === 'WorktreeFinishRefused' ? refused.failure.reason : refused._tag,
-          ).toBe('off-branch');
-          expect(yield* sh(tree.path, ['symbolic-ref', '--short', 'HEAD'])).toBe('tagma/before');
-          expect((yield* recorded(tree.rootId))?.branch).toBe('tagma/elsewhere');
-        }),
-      ),
-    120_000,
+        expect(refused._tag === 'Failure' && refused.failure._tag === 'WorktreeFinishRefused' ? refused.failure.reason : refused._tag).toBe(
+          'off-branch',
+        );
+        expect(yield* sh(tree.path, ['symbolic-ref', '--short', 'HEAD'])).toBe('tagma/before');
+        expect((yield* recorded(tree.rootId))?.branch).toBe('tagma/elsewhere');
+      }),
+    ),
   );
 
   it.effect(
@@ -375,6 +366,5 @@ layer(demoGraphLayer({ repos: ['renames'] }).pipe(Layer.provideMerge(Layer.merge
           expect(hub.pulls.map((pull) => pull.state)).toEqual(['OPEN']);
         }),
       ),
-    120_000,
   );
 });

@@ -13,74 +13,71 @@ import type { WorktreeFeedEvent, WorktreeRow } from '../contract/wire/rows.js';
 import { listingRig } from '../../composition/testing/listingRig.js';
 
 layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('listed worktrees', (it) => {
-  it.effect(
-    'a worktree with an act in flight keeps the row it showed until the act ends, while other rows move',
-    () =>
-      withDemo((demo) => {
-        const rig = listingRig(demo);
-        return Effect.gen(function* () {
-          const { acquired, repositories, worktrees, listing, placed, moved, paths, progress } = yield* rig.composed;
-          const checkout = yield* tempRepoEffect(demo.fixture, 'frozen-');
-          const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'frozen', rootPath: checkout })).id;
-          yield* listing.list(projectId, {});
-          const store = yield* repositories.register({ path: checkout, projectId });
-          const operationId = RequestKey.make('frozen');
-          yield* worktrees.prepare({
-            intent: {
-              operationId,
-              projectId,
-              repository: { repositoryId: store.repositoryId, locationRevision: store.locationRevision },
-              destination: paths.join(paths.dirname(checkout), `${paths.basename(checkout)}-side`),
-              mode: { kind: 'new-branch', branch: 'tagma/side', start: yield* rig.branchOf(checkout) },
-            },
-            acquired,
-          });
-          const side = yield* worktrees.execute({ operationId, projectId, acquired });
-          const sideRoot = side.rootId;
-          if (sideRoot === null) return yield* Effect.die('the creation registered no root');
-          const frames = yield* Queue.unbounded<WorktreeFeedEvent>();
-          yield* Effect.forkScoped(
-            Stream.runForEach(listing.subscribe(projectId, { start: 0, limit: 3 }), (event) => Queue.offer(frames, event)),
-          );
-          let shown: readonly WorktreeRow[] = [];
-          yield* rig.next(frames, (event) => {
-            if (event.kind === 'list') shown = event.rows;
-            else if (event.kind === 'row') shown = shown.map((row) => (row.rootId === event.row.rootId ? event.row : row));
-            return shown.length === 2 && shown.every((row) => row.reading !== 'pending');
-          });
-          const rowsOf = (event: WorktreeFeedEvent): readonly WorktreeRow[] =>
-            event.kind === 'row' ? [event.row] : event.kind === 'list' ? event.rows : [];
-          const sideOf = (event: WorktreeFeedEvent) => rowsOf(event).find((row) => row.rootId === sideRoot);
-          const mainOf = (event: WorktreeFeedEvent) => rowsOf(event).find((row) => row.kind === 'main');
-
-          const release = yield* Deferred.make<void>();
-          const started = yield* Deferred.make<void>();
-          yield* Effect.forkScoped(
-            progress.during(projectId, sideRoot, 'merge', Effect.andThen(Deferred.succeed(started, undefined), Deferred.await(release))),
-          );
-          yield* Deferred.await(started);
-          writeFileSync(paths.join(side.destination, 'HALF.md'), 'half removed\n');
-          placed.push({
-            threadId: 'in-main',
-            movedAt: new Date(yield* Clock.currentTimeMillis),
-            rootId: null,
-            cleared: false,
-            state: 'working',
-          });
-          moved();
-          const during: WorktreeFeedEvent[] = [];
-          yield* rig.next(frames, (event) => {
-            during.push(event);
-            return mainOf(event)?.agents.working === 1;
-          });
-          expect(during.flatMap((event) => sideOf(event)?.uncommitted ?? [])).not.toContain(1);
-
-          yield* Deferred.succeed(release, undefined);
-          const after = yield* rig.next(frames, (event) => sideOf(event)?.uncommitted === 1);
-          expect(sideOf(after)?.uncommitted).toBe(1);
+  it.effect('a worktree with an act in flight keeps the row it showed until the act ends, while other rows move', () =>
+    withDemo((demo) => {
+      const rig = listingRig(demo);
+      return Effect.gen(function* () {
+        const { acquired, repositories, worktrees, listing, placed, moved, paths, progress } = yield* rig.composed;
+        const checkout = yield* tempRepoEffect(demo.fixture, 'frozen-');
+        const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'frozen', rootPath: checkout })).id;
+        yield* listing.list(projectId, {});
+        const store = yield* repositories.register({ path: checkout, projectId });
+        const operationId = RequestKey.make('frozen');
+        yield* worktrees.prepare({
+          intent: {
+            operationId,
+            projectId,
+            repository: { repositoryId: store.repositoryId, locationRevision: store.locationRevision },
+            destination: paths.join(paths.dirname(checkout), `${paths.basename(checkout)}-side`),
+            mode: { kind: 'new-branch', branch: 'tagma/side', start: yield* rig.branchOf(checkout) },
+          },
+          acquired,
         });
-      }),
-    120_000,
+        const side = yield* worktrees.execute({ operationId, projectId, acquired });
+        const sideRoot = side.rootId;
+        if (sideRoot === null) return yield* Effect.die('the creation registered no root');
+        const frames = yield* Queue.unbounded<WorktreeFeedEvent>();
+        yield* Effect.forkScoped(
+          Stream.runForEach(listing.subscribe(projectId, { start: 0, limit: 3 }), (event) => Queue.offer(frames, event)),
+        );
+        let shown: readonly WorktreeRow[] = [];
+        yield* rig.next(frames, (event) => {
+          if (event.kind === 'list') shown = event.rows;
+          else if (event.kind === 'row') shown = shown.map((row) => (row.rootId === event.row.rootId ? event.row : row));
+          return shown.length === 2 && shown.every((row) => row.reading !== 'pending');
+        });
+        const rowsOf = (event: WorktreeFeedEvent): readonly WorktreeRow[] =>
+          event.kind === 'row' ? [event.row] : event.kind === 'list' ? event.rows : [];
+        const sideOf = (event: WorktreeFeedEvent) => rowsOf(event).find((row) => row.rootId === sideRoot);
+        const mainOf = (event: WorktreeFeedEvent) => rowsOf(event).find((row) => row.kind === 'main');
+
+        const release = yield* Deferred.make<void>();
+        const started = yield* Deferred.make<void>();
+        yield* Effect.forkScoped(
+          progress.during(projectId, sideRoot, 'merge', Effect.andThen(Deferred.succeed(started, undefined), Deferred.await(release))),
+        );
+        yield* Deferred.await(started);
+        writeFileSync(paths.join(side.destination, 'HALF.md'), 'half removed\n');
+        placed.push({
+          threadId: 'in-main',
+          movedAt: new Date(yield* Clock.currentTimeMillis),
+          rootId: null,
+          cleared: false,
+          state: 'working',
+        });
+        moved();
+        const during: WorktreeFeedEvent[] = [];
+        yield* rig.next(frames, (event) => {
+          during.push(event);
+          return mainOf(event)?.agents.working === 1;
+        });
+        expect(during.flatMap((event) => sideOf(event)?.uncommitted ?? [])).not.toContain(1);
+
+        yield* Deferred.succeed(release, undefined);
+        const after = yield* rig.next(frames, (event) => sideOf(event)?.uncommitted === 1);
+        expect(sideOf(after)?.uncommitted).toBe(1);
+      });
+    }),
   );
 
   it.effect(
@@ -177,6 +174,5 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           );
         });
       }),
-    120_000,
   );
 });

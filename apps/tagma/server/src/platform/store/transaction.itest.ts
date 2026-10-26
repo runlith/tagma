@@ -1,17 +1,22 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { sql } from 'drizzle-orm';
-import { Deferred, Effect, Fiber, Layer, Tracer } from 'effect';
+import { Deferred, Effect, Exit, Fiber, Layer, Tracer } from 'effect';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
 import { MachineStore } from '../contract/service/store.js';
 import { seededStoreLayer } from './open.js';
 
-const tracing = () => {
+const tracing = (waiting?: { readonly operation: string; readonly reached: Deferred.Deferred<void> }) => {
   const spans: Tracer.NativeSpan[] = [];
   const tracer = Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
       spans.push(span);
+      if (waiting !== undefined && span.name === 'Store.permit.wait' && span.parent._tag === 'Some') {
+        const parentId = span.parent.value.spanId;
+        const parent = spans.find((one) => one.spanId === parentId);
+        if (parent?.attributes.get('opKind') === waiting.operation) Deferred.doneUnsafe(waiting.reached, Exit.void);
+      }
       return span;
     },
   });
@@ -32,7 +37,8 @@ const childrenOf = (spans: readonly Tracer.NativeSpan[], operation: string) => {
 layer(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations)), { excludeTestServices: true })('store transactions', (it) => {
   it.effect('a transaction separates permit wait, execution and commit', () =>
     Effect.gen(function* () {
-      const { spans, tracer } = tracing();
+      const reached = yield* Deferred.make<void>();
+      const { spans, tracer } = tracing({ operation: 'second', reached });
       yield* Effect.gen(function* () {
         const store = yield* MachineStore;
         const entered = yield* Deferred.make<void>();
@@ -42,7 +48,7 @@ layer(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations)), { excludeT
         );
         yield* Deferred.await(entered);
         const second = yield* Effect.forkChild(store.transaction('second', () => Effect.void));
-        yield* Effect.sleep('1 millis');
+        yield* Deferred.await(reached);
 
         const secondRoot = rootOf(spans, 'second');
         const waiting = spans.find(
@@ -188,7 +194,8 @@ layer(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations)), { excludeT
 
   it.effect('a transaction waiting on the writer counts none of the holder statements', () =>
     Effect.gen(function* () {
-      const { spans, tracer } = tracing();
+      const reached = yield* Deferred.make<void>();
+      const { spans, tracer } = tracing({ operation: 'waiter', reached });
       yield* Effect.gen(function* () {
         const store = yield* MachineStore;
         const entered = yield* Deferred.make<void>();
@@ -206,7 +213,7 @@ layer(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations)), { excludeT
         );
         yield* Deferred.await(entered);
         const waiter = yield* Effect.forkChild(store.transaction('waiter', () => store.db.all(sql`select 4 as four`)));
-        yield* Effect.sleep('1 millis');
+        yield* Deferred.await(reached);
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(holder);
         yield* Fiber.join(waiter);

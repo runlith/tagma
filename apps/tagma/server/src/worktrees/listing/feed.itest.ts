@@ -30,7 +30,7 @@ const next = Effect.fnUntraced(function* (frames: Queue.Queue<WorktreeFeedEvent>
     const event = yield* Queue.take(frames);
     if (matches(event)) return event;
   }
-}, Effect.timeout('5 seconds'));
+});
 
 layer(world, { excludeTestServices: true })('worktree windows', (it) => {
   it.effect(

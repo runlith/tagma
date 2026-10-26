@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { sql } from 'drizzle-orm';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, Layer, Schedule } from 'effect';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
 import { MachineStore } from '../contract/service/store.js';
 import { storePlace } from '../testing/connection.js';
@@ -37,13 +37,8 @@ const pageCount = (store: MachineStore['Service']) =>
 const freeCount = (store: MachineStore['Service']) =>
   Effect.map(store.db.all<{ freelist_count: number }>(sql`PRAGMA freelist_count`), (rows) => rows[0]?.freelist_count ?? 0);
 
-const freeAfterReturn = Effect.fnUntraced(function* (store: MachineStore['Service']) {
-  for (let tries = 0; tries < 100; tries += 1) {
-    if ((yield* freeCount(store)) === 0) break;
-    yield* Effect.sleep(50);
-  }
-  return yield* freeCount(store);
-});
+const freeAfterReturn = (store: MachineStore['Service']) =>
+  freeCount(store).pipe(Effect.repeat({ schedule: Schedule.spaced(50), until: (pages) => pages === 0 }));
 
 layer(BunFileSystem.layer, { excludeTestServices: true })('store vacuum', (it) => {
   it.effect('vacuum shrinks the file, and pages handed back to the store are returned without a rewrite', () =>
@@ -77,7 +72,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('store vacuum', (it) =
 
       const [, first] = yield* store.freeing(empty(store, 'first_probe'));
       expect(first).toBeGreaterThan(0);
-      for (let tries = 0; tries < 200 && (yield* freeCount(store)) >= first; tries += 1) yield* Effect.sleep(5);
+      yield* freeCount(store).pipe(Effect.repeat({ schedule: Schedule.spaced(5), until: (pages) => pages < first }));
       const landed = yield* store.transaction('vacuum_probe.write', () =>
         Effect.andThen(store.db.run(sql`insert into second_probe (value) values (x'00')`), freeCount(store)),
       );

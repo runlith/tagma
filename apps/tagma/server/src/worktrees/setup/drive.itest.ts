@@ -138,54 +138,51 @@ const project = Effect.fnUntraced(function* (demo: DemoState, name: string) {
 layer(demoGraphLayer().pipe(Layer.provideMerge(Layer.merge(BunFileSystem.layer, Path.layer))), { excludeTestServices: true })(
   'worktree setup',
   (it) => {
-    it.effect(
-      'ignored files precede setup, survive a failed command, and settle done when copying is all the setup asks',
-      () =>
-        withDemo((demo) =>
-          Effect.gen(function* () {
-            const script: Script = {
-              launches: [],
-              watched: [],
-              exit: 0,
-              gate: yield* Deferred.make<void>(),
-              launched: yield* Deferred.make<void>(),
-            };
-            const { setups, made, recordOf } = yield* composed(demo, script);
-            const { projectId } = yield* project(demo, 'setup-ready');
-            yield* demo.graph.settings.write({ scope: 'project', projectId, key: 'worktrees.setupRun', value: 'pnpm install' });
+    it.effect('ignored files precede setup, survive a failed command, and settle done when copying is all the setup asks', () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const script: Script = {
+            launches: [],
+            watched: [],
+            exit: 0,
+            gate: yield* Deferred.make<void>(),
+            launched: yield* Deferred.make<void>(),
+          };
+          const { setups, made, recordOf } = yield* composed(demo, script);
+          const { projectId } = yield* project(demo, 'setup-ready');
+          yield* demo.graph.settings.write({ scope: 'project', projectId, key: 'worktrees.setupRun', value: 'pnpm install' });
 
-            const rootId = yield* made(projectId, 'ready');
-            const waiting = yield* Effect.forkChild(setups.ready(rootId));
-            yield* Deferred.await(script.launched!);
-            expect(waiting.pollUnsafe()).toBeUndefined();
-            const running = yield* recordOf(rootId);
-            expect(running?.setup).toBe('running');
-            expect(running?.setupDetail?.execution).toEqual(EXECUTION);
+          const rootId = yield* made(projectId, 'ready');
+          const waiting = yield* Effect.forkChild(setups.ready(rootId));
+          yield* Deferred.await(script.launched!);
+          expect(waiting.pollUnsafe()).toBeUndefined();
+          const running = yield* recordOf(rootId);
+          expect(running?.setup).toBe('running');
+          expect(running?.setupDetail?.execution).toEqual(EXECUTION);
 
-            const tree = running?.path ?? '';
-            const files = yield* FileSystem.FileSystem;
-            expect(yield* files.readFileString(join(tree, '.env.local'))).toBe('SECRET=main\n');
-            expect(yield* files.exists(join(tree, '.gitignore'))).toBe(false);
-            expect(script.launches.map((launch) => ({ cwd: launch.cwd, command: launch.command }))).toEqual([
-              { cwd: tree, command: 'pnpm install' },
-            ]);
+          const tree = running?.path ?? '';
+          const files = yield* FileSystem.FileSystem;
+          expect(yield* files.readFileString(join(tree, '.env.local'))).toBe('SECRET=main\n');
+          expect(yield* files.exists(join(tree, '.gitignore'))).toBe(false);
+          expect(script.launches.map((launch) => ({ cwd: launch.cwd, command: launch.command }))).toEqual([
+            { cwd: tree, command: 'pnpm install' },
+          ]);
 
-            yield* Deferred.succeed(script.gate!, undefined);
-            const settled = yield* Fiber.join(waiting);
-            expect(settled?.setup).toBe('done');
+          yield* Deferred.succeed(script.gate!, undefined);
+          const settled = yield* Fiber.join(waiting);
+          expect(settled?.setup).toBe('done');
 
-            script.exit = 1;
-            script.gate = null;
-            const failed = yield* setups.ready(yield* made(projectId, 'failed'));
-            expect(failed?.setup).toBe('failed');
-            expect(failed?.setupDetail).toMatchObject({ step: 'run', execution: EXECUTION });
-            expect(yield* files.exists(join(failed?.path ?? '', '.env.local'))).toBe(true);
+          script.exit = 1;
+          script.gate = null;
+          const failed = yield* setups.ready(yield* made(projectId, 'failed'));
+          expect(failed?.setup).toBe('failed');
+          expect(failed?.setupDetail).toMatchObject({ step: 'run', execution: EXECUTION });
+          expect(yield* files.exists(join(failed?.path ?? '', '.env.local'))).toBe(true);
 
-            yield* demo.graph.settings.write({ scope: 'project', projectId, key: 'worktrees.setupRun', value: '' });
-            expect((yield* setups.ready(yield* made(projectId, 'copied')))?.setup).toBe('done');
-          }),
-        ),
-      120_000,
+          yield* demo.graph.settings.write({ scope: 'project', projectId, key: 'worktrees.setupRun', value: '' });
+          expect((yield* setups.ready(yield* made(projectId, 'copied')))?.setup).toBe('done');
+        }),
+      ),
     );
   },
 );
