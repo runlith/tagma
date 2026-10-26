@@ -13,15 +13,12 @@ const home = Effect.flatMap(FileSystem.FileSystem, (files) => files.makeTempDire
 
 const emptied = (path: string) =>
   Effect.asVoid(
-    Effect.timeout(
-      Effect.repeat(
-        Effect.andThen(
-          Effect.sleep(10),
-          Effect.sync(() => readFileSync(path, 'utf8')),
-        ),
-        { until: (text) => text === '' },
+    Effect.repeat(
+      Effect.andThen(
+        Effect.sleep(10),
+        Effect.sync(() => readFileSync(path, 'utf8')),
       ),
-      '2 seconds',
+      { until: (text) => text === '' },
     ),
   );
 
@@ -51,7 +48,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('commit queue file', (
           });
           yield* queue.admit(queued('c3'));
           yield* Deferred.await(drained);
-          for (let attempt = 0; attempt < 100 && (yield* queue.drained()).waiting > 0; attempt += 1) yield* Effect.sleep(10);
+          yield* Effect.repeat(Effect.andThen(Effect.sleep(10), queue.drained()), { until: (state) => state.waiting === 0 });
           expect(yield* queue.drained()).toEqual({ waiting: 0, unread: 1 });
         }),
       );

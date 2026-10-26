@@ -225,39 +225,38 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
         expect(merged.code).toBe(0);
         expect(yield* debtAt(root)).toEqual([{ fingerprint: 'F4 core/a.ts', owner: 'aaaaaaaa', value: 860 }]);
       }),
-    30_000,
   );
 
-  it.effect(
-    'the sides git handed the driver are removed when git died while the driver ran, and kept while it lives',
-    () =>
-      Effect.gen(function* () {
-        const root = yield* branched([STANDING[0]!], [STANDING[0]!]);
-        const script = join(root, '.git', 'tagma', 'merge-driver');
-        const sides = ['.merge_file_O', '.merge_file_A', '.merge_file_B'];
-        for (const side of sides) writeFileSync(join(root, side), ruleFile(STANDING));
-        const live = Bun.spawnSync([script, ...sides, '7', FILE], { cwd: root, stdout: 'pipe', stderr: 'pipe' });
-        expect(live.exitCode).toBe(0);
-        expect(sides.every((side) => existsSync(join(root, side)))).toBe(true);
+  it.effect('the sides git handed the driver are removed when git died while the driver ran, and kept while it lives', () =>
+    Effect.gen(function* () {
+      const root = yield* branched([STANDING[0]!], [STANDING[0]!]);
+      const script = join(root, '.git', 'tagma', 'merge-driver');
+      const sides = ['.merge_file_O', '.merge_file_A', '.merge_file_B'];
+      for (const side of sides) writeFileSync(join(root, side), ruleFile(STANDING));
+      const live = Bun.spawnSync([script, ...sides, '7', FILE], { cwd: root, stdout: 'pipe', stderr: 'pipe' });
+      expect(live.exitCode).toBe(0);
+      expect(sides.every((side) => existsSync(join(root, side)))).toBe(true);
 
-        Bun.spawnSync(['sh', '-c', `'${script}' ${sides.join(' ')} 7 ${FILE} >/dev/null 2>&1 &`], { cwd: root });
-        for (let waited = 0; waited < 200 && sides.some((side) => existsSync(join(root, side))); waited += 1) yield* Effect.sleep(50);
-        expect(sides.filter((side) => existsSync(join(root, side)))).toEqual([]);
-      }),
-    30_000,
+      Bun.spawnSync(['sh', '-c', `'${script}' ${sides.join(' ')} 7 ${FILE} >/dev/null 2>&1 &`], { cwd: root });
+      yield* Effect.repeat(
+        Effect.andThen(
+          Effect.sleep(50),
+          Effect.sync(() => sides.some((side) => existsSync(join(root, side)))),
+        ),
+        { until: (remaining) => !remaining },
+      );
+      expect(sides.filter((side) => existsSync(join(root, side)))).toEqual([]);
+    }),
   );
 
-  it.effect(
-    'an owner each branch changed differently still conflicts',
-    () =>
-      Effect.gen(function* () {
-        const { root, merged } = yield* forked(
-          [{ fingerprint: 'F4 core/a.ts', owner: 'bbbbbbbb', value: 900 }, STANDING[1]!],
-          [{ fingerprint: 'F4 core/a.ts', owner: 'cccccccc', value: 900 }, STANDING[1]!],
-        );
-        expect(merged.code).not.toBe(0);
-        expect(readFileSync(join(root, FILE), 'utf8')).toContain('<<<<<<<');
-      }),
-    30_000,
+  it.effect('an owner each branch changed differently still conflicts', () =>
+    Effect.gen(function* () {
+      const { root, merged } = yield* forked(
+        [{ fingerprint: 'F4 core/a.ts', owner: 'bbbbbbbb', value: 900 }, STANDING[1]!],
+        [{ fingerprint: 'F4 core/a.ts', owner: 'cccccccc', value: 900 }, STANDING[1]!],
+      );
+      expect(merged.code).not.toBe(0);
+      expect(readFileSync(join(root, FILE), 'utf8')).toContain('<<<<<<<');
+    }),
   );
 });

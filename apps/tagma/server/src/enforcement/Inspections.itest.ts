@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Assembled } from '@tagma/inspection/builtins';
-import { Duration, Effect, Fiber, FileSystem, Option, Result, Tracer } from 'effect';
+import { Effect, Fiber, FileSystem, Option, Result, Tracer } from 'effect';
 import type { JudgeLane } from './workers/asks.js';
 import type { InspectionRequest } from './workers/asks.js';
 import { inspections, pool } from './workers/inspectionLanes.js';
@@ -53,17 +53,21 @@ const LOST_EXIT = `{ pid: 99999999, command: 'git cat-file --batch', ms: 1, runn
 layer(BunFileSystem.layer, { excludeTestServices: true })('inspection lanes', (it) => {
   it.effect('an ask whose caller is interrupted stops the worker, and the next ask is answered by a fresh one', () =>
     Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const here = yield* home;
+      const received = join(here, 'received');
       const held = yield* poolOf(
-        yield* home,
+        here,
         'silent-on-reach',
-        `self.addEventListener('message', (event) => {
+        `import { writeFileSync } from 'node:fs';
+      self.addEventListener('message', (event) => {
         served += 1;
-        if (event.data.kind === 'reach') return;
+        if (event.data.kind === 'reach') return void writeFileSync(${JSON.stringify(received)}, '');
         self.postMessage({ id: event.data.id, answered: true, verdict: { violations: [], unjudged: [] }, read: [], ms: served });
       });`,
       );
       const hung = yield* Effect.forkChild(held.ask(ask('reach')));
-      yield* Effect.sleep(50);
+      yield* Effect.repeat(Effect.andThen(Effect.sleep(10), files.exists(received)), { until: (exists) => exists });
       yield* Fiber.interrupt(hung);
       expect((yield* held.ask(ask('judge'))).ms).toBe(1);
     }),
@@ -279,7 +283,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('inspection lanes', (i
         (opened) => Effect.sync(() => opened.close()),
       );
       yield* Effect.forkChild(workers.judge(judgedAt('merge')));
-      const landing = yield* Effect.result(workers.judge(judgedAt('landing')).pipe(Effect.timeout(Duration.seconds(5))));
+      const landing = yield* Effect.result(workers.judge(judgedAt('landing')));
       expect(Result.isSuccess(landing) && landing.success.ms).toBe(1);
     }),
   );

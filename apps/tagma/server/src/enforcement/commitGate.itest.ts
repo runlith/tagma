@@ -23,7 +23,7 @@ const quiet = ['-c', 'core.hooksPath=/dev/null'];
 const op = (gate: Effect.Success<typeof commitCase>, cwd: string, id: string, input: unknown) =>
   gate.world.tagma(['op', id, '--json', JSON.stringify(input)], { cwd, env: OPERATOR });
 
-layer(commitFixture, { excludeTestServices: true, testTimeout: 40_000, timeout: '30 seconds' })('commit gate', (it) => {
+layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
   it.effect(
     'the hooks refuse a violating session commit despite --no-verify and another server address, refuse a person’s commit, and let a person commit when no server answers',
     () =>

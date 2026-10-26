@@ -26,7 +26,7 @@ const absorbing = Effect.fnUntraced(function* (gate: LandingFixture) {
   return { input: { blockId: gate.rule, strictness: 'gate' as const, absorb: [FINGERPRINT], owners: { [FINGERPRINT]: owner } }, owner };
 });
 
-layer(landingFixture(), { excludeTestServices: true, timeout: '30 seconds' })('held debt', (it) => {
+layer(landingFixture(), { excludeTestServices: true })('held debt', (it) => {
   it.effect(
     'enforce_rule absorbs a crossing the session’s change brings into a file clean at HEAD as held debt, a re-measure keeps it, and the change lands carrying it',
     () =>
