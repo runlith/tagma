@@ -1,18 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { FileRow, Row } from '@runlith/testbed/ledger';
 import type { FileVerdict, OutcomeRow, RunRow } from '@runlith/testbed/report';
-import { ADMITTED_ENV, budgetOf, budgetRoot, coresOf, freeUnits } from '@runlith/testbed/budget';
-import { costsOf } from './chunking.ts';
+import { budgetOf, coresOf } from '@runlith/testbed/budget';
+import { runJobs, type Ended } from '@runlith/testbed/schedule';
 import { packagesOf, workspacePaths } from './packages.ts';
 import { suitesOf, type Suite } from './suites.ts';
 
-const SUITE_LIFE_MS = 240_000;
-const POLL_MS = 250;
-const GRANT_MS = 2_000;
-const GRANTED = /testbed: (?:\d+ of \d+ processes|a \d+-process budget)/;
 const started = performance.now();
 const own = process.cpuUsage();
 const args = process.argv.slice(2);
@@ -47,36 +43,13 @@ const report = resolve(
   value('--report') ?? join(process.env['XDG_CACHE_HOME'] ?? join(homedir(), '.cache'), 'runlith', 'test-all', `${randomUUID()}.json`),
 );
 const artifacts = `${report}.d`;
-const ledgers = value('--history') === undefined ? undefined : `${resolve(value('--history')!)}.d`;
 let suites = suitesOf(packages, paths, {
   root: toolkit,
   jobs,
-  width: jobs ?? budgetOf(coresOf(process.env['TESTBED_CORES'])),
   seed,
   randomize: args.includes('--randomize'),
   reports: artifacts,
   combineVitest: value('--package') === undefined,
-  history: {
-    costs:
-      ledgers === undefined
-        ? costsOf([])
-        : costsOf(
-            readdirSync(ledgers)
-              .filter((name) => name.endsWith('.jsonl'))
-              .flatMap((name) =>
-                readFileSync(join(ledgers, name), 'utf8')
-                  .split('\n')
-                  .filter(Boolean)
-                  .map((line) => JSON.parse(line) as Row),
-              ),
-          ),
-    lifeMs: SUITE_LIFE_MS,
-    select: (directory, selector) => {
-      const found = Bun.spawnSync(['/bin/sh', '-c', selector], { cwd: join(root, directory), stderr: 'pipe' });
-      if (!found.success) throw new Error(`${directory || '.'}: ${selector} failed: ${found.stderr.toString()}`);
-      return found.stdout.toString().split('\n').filter(Boolean);
-    },
-  },
 })
   .filter((suite) => value('--package') === undefined || (suite.directory || '.') === value('--package'))
   .filter((suite) => value('--script') === undefined || suite.script === value('--script'));
@@ -124,7 +97,8 @@ if (previous !== undefined)
       ? suite
       : {
           ...suite,
-          command: jobs === undefined ? suite.command : suite.command.replace(/--test-threads=\d+/g, `--test-threads=${jobs}`),
+          stages:
+            jobs === undefined ? suite.stages : suite.stages.map((stage) => stage.replace(/--test-threads=\d+/g, `--test-threads=${jobs}`)),
         },
   );
 mkdirSync(dirname(report), { recursive: true });
@@ -166,14 +140,6 @@ const save = (): Reading => {
   writeFileSync(report, JSON.stringify(reading, null, 2));
   return reading;
 };
-let interrupted = false;
-const children = new Set<ReturnType<typeof Bun.spawn>>();
-const stop = (): void => {
-  interrupted = true;
-  for (const child of children) child.kill('SIGTERM');
-};
-process.once('SIGINT', stop);
-process.once('SIGTERM', stop);
 const budget = budgetOf(coresOf(process.env['TESTBED_CORES']));
 const history = value('--history') === undefined ? undefined : resolve(value('--history')!);
 const earlier = history === undefined || !existsSync(history) ? undefined : (JSON.parse(readFileSync(history, 'utf8')) as Reading);
@@ -183,39 +149,40 @@ for (const result of [...(earlier?.suites ?? []), ...(earlier?.aborted ?? [])]) 
   spent.set(result.id, Math.max(spent.get(result.id) ?? 0, result.cpu));
   sized.set(result.id, Math.max(sized.get(result.id) ?? 0, result.files));
 }
-const groupOf = (id: string): string => id.replace(/:\d+\/\d+$/, '');
-const costOf = (suite: Suite): number => {
-  const known = spent.get(suite.id);
-  if (known !== undefined) return known;
-  const group = [...spent].filter(([id]) => groupOf(id) === groupOf(suite.id)).map(([, cpu]) => cpu);
-  return group.length === 0 ? 0 : group.reduce((total, cpu) => total + cpu, 0) / group.length;
-};
-const waiting = suites.filter((suite) => !done.has(suite.id)).sort((a, b) => costOf(b) - costOf(a));
-const running = new Map<string, Promise<void>>();
+const costOf = (suite: Suite): number => spent.get(suite.id) ?? 0;
 const needOf = (suite: Suite): number => Math.max(1, Math.min(suite.files ?? sized.get(suite.id) ?? budget, budget));
-let ran = 0;
-while (!interrupted) {
-  if (ran < limit && waiting.length > 0 && running.size < (jobs === undefined ? Infinity : 1)) {
-    const free = running.size === 0 ? budget : freeUnits(budgetRoot(), budget);
-    const at = running.size === 0 ? 0 : waiting.findIndex((suite) => needOf(suite) <= free);
-    if (at !== -1) {
-      const suite = waiting.splice(at, 1)[0]!;
-      if (running.size === 0) solo.add(suite.id);
-      const { granted, finished } = launch(suite);
-      running.set(suite.id, finished);
-      ran++;
-      await Promise.race([granted, finished]);
-      continue;
-    }
-  }
-  if (running.size === 0) break;
-  await Promise.race([...running.values(), Bun.sleep(POLL_MS)]);
-}
-await Promise.all(running.values());
+const ledgerOf = (suite: Suite): string => join(artifacts, `${encodeURIComponent(suite.id)}.jsonl`);
+const logOf = (suite: Suite): string => join(artifacts, `${encodeURIComponent(suite.id)}.log`);
+const byId = new Map(suites.map((suite) => [suite.id, suite]));
+const begun = new Map<string, number>();
+await runJobs(
+  suites
+    .filter((suite) => !done.has(suite.id))
+    .sort((a, b) => costOf(b) - costOf(a))
+    .map((suite) => ({
+      id: suite.id,
+      cwd: join(root, suite.directory),
+      stages: suite.stages.map((stage) => ['/bin/sh', '-c', `exec ${stage}`]),
+      need: needOf(suite),
+      env: {
+        ...process.env,
+        RUNLITH_TEST_REPORT: ledgerOf(suite),
+        ...(jobs === undefined ? {} : { TESTBED_JOBS: String(jobs) }),
+        PATH: `${join(toolkit, 'node_modules/.bin')}:${process.env['PATH'] ?? ''}`,
+      },
+    })),
+  {
+    budget,
+    serial: jobs !== undefined,
+    limit,
+    started: (job) => prepare(byId.get(job.id)!),
+    ended: (job, run) => settle(byId.get(job.id)!, run),
+  },
+);
 
-function launch(suite: Suite): { readonly granted: Promise<void>; readonly finished: Promise<void> } {
-  const ledger = join(artifacts, `${encodeURIComponent(suite.id)}.jsonl`);
-  const log = join(artifacts, `${encodeURIComponent(suite.id)}.log`);
+function prepare(suite: Suite): void {
+  const ledger = ledgerOf(suite);
+  const log = logOf(suite);
   if (existsSync(ledger) && !aborted.some((result) => result.report === ledger)) {
     const rows = readFileSync(ledger, 'utf8')
       .split('\n')
@@ -252,59 +219,15 @@ function launch(suite: Suite): { readonly granted: Promise<void>; readonly finis
       }));
     }
   console.log(`test:all: ${suite.id}`);
-  const before = performance.now();
-  const child = Bun.spawn(['/bin/sh', '-c', suite.command], {
-    cwd: join(root, suite.directory),
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: {
-      ...process.env,
-      RUNLITH_TEST_REPORT: ledger,
-      [ADMITTED_ENV]: '1',
-      ...(jobs === undefined ? {} : { TESTBED_JOBS: String(jobs) }),
-      PATH: `${join(toolkit, 'node_modules/.bin')}:${process.env['PATH'] ?? ''}`,
-    },
-  });
-  children.add(child);
-  let grant = (): void => undefined;
-  const granted = new Promise<void>((resolve) => {
-    grant = resolve;
-  });
-  const grace = setTimeout(() => grant(), GRANT_MS);
-  const errors = (async () => {
-    const reader = (child.stderr as ReadableStream<Uint8Array>).getReader();
-    const decoder = new TextDecoder();
-    let text = '';
-    for (;;) {
-      const read = await reader.read();
-      if (read.done) break;
-      text += decoder.decode(read.value, { stream: true });
-      if (GRANTED.test(text)) grant();
-    }
-    grant();
-    return text + decoder.decode();
-  })();
-  const finished = Promise.all([new Response(child.stdout).text(), errors, child.exited]).then(([stdout, stderr, exit]) => {
-    clearTimeout(grace);
-    children.delete(child);
-    running.delete(suite.id);
-    settle(suite, { ledger, log, before, stdout, stderr, exit });
-  });
-  return { granted, finished };
+  begun.set(suite.id, performance.now());
 }
 
-function settle(
-  suite: Suite,
-  run: {
-    readonly ledger: string;
-    readonly log: string;
-    readonly before: number;
-    readonly stdout: string;
-    readonly stderr: string;
-    readonly exit: number;
-  },
-): void {
-  const { ledger, log, before, stdout, stderr, exit } = run;
+function settle(suite: Suite, run: Ended): void {
+  const { stdout, stderr, exit, interrupted } = run;
+  const ledger = ledgerOf(suite);
+  const log = logOf(suite);
+  const before = begun.get(suite.id)!;
+  if (run.alone) solo.add(suite.id);
   writeFileSync(log, stdout + stderr);
   const rows = existsSync(ledger)
     ? readFileSync(ledger, 'utf8')
@@ -328,7 +251,7 @@ function settle(
     id: suite.id,
     directory: suite.directory,
     script: suite.script,
-    command: suite.command,
+    command: suite.stages.join(' && '),
     wall: performance.now() - before - runs.reduce((total, run) => total + run.queued, 0),
     cpu: runs.reduce((total, run) => total + run.cpu, 0),
     queued: runs.reduce((total, run) => total + run.queued, 0),
@@ -356,15 +279,12 @@ function settle(
   if (result.code !== 0 && result.failed.length === 0)
     console.log(`  failure before a file verdict; ${log}\n${(stdout + stderr).slice(-3000)}`);
 }
-process.removeListener('SIGINT', stop);
-process.removeListener('SIGTERM', stop);
 const reading = save();
 const groups = new Map<string, Result[]>();
 for (const result of [...aborted, ...results]) {
-  const key = result.id.replace(/:\d+\/\d+$/, '');
-  const group = groups.get(key) ?? [];
+  const group = groups.get(result.id) ?? [];
   group.push(result);
-  groups.set(key, group);
+  groups.set(result.id, group);
 }
 const table = ['suite\twall_s\tcpu_s\tqueued_s\tfile_runs\ttests\tstatus'];
 for (const [name, group] of groups)
@@ -378,7 +298,7 @@ for (const [name, group] of groups)
       group.reduce((n, row) => n + row.tests, 0),
       group.some((row) => row.code !== 0 && !cut(row.code))
         ? 'FAIL'
-        : suites.some((suite) => suite.id.replace(/:\d+\/\d+$/, '') === name && !done.has(suite.id))
+        : !done.has(name)
           ? group.some((row) => cut(row.code))
             ? 'cut'
             : 'partial'

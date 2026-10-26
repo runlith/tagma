@@ -144,15 +144,19 @@ it.live('reads shared and own worlds and the canonical confined home', () => Eff
     mkdirSync(join(external, 'nested'));
     writeFileSync(join(external, 'direct'), 'direct');
     writeFileSync(join(external, 'dot'), 'dot');
+    writeFileSync(join(external, 'opened'), 'opened');
     writeFileSync(
       join(checkout, 'outside.itest.ts'),
       `import { expect, test } from 'bun:test';
 import { readFile, readFileSync, symlinkSync } from 'node:fs';
-import { readFile as readPromise } from 'node:fs/promises';
+import { open, readFile as readPromise } from 'node:fs/promises';
 import { join } from 'node:path';
 test('external targets and failed reads retain their dependency and error channel', async () => {
   const root = process.env.TMPDIR!;
   const external = ${JSON.stringify(external)};
+  const handle = await open(join(external, 'opened'), 'r');
+  expect(await handle.readFile('utf8')).toBe('opened');
+  await handle.close();
   symlinkSync(join(external, 'direct'), join(root, 'outside'));
   expect(readFileSync(join(root, 'outside'), 'utf8')).toBe('direct');
   symlinkSync(join(external, 'nested'), join(root, 'parent'));
@@ -184,7 +188,7 @@ test('external targets and failed reads retain their dependency and error channe
         .trim()
         .split('\n')
         .map((line) => JSON.parse(line) as { file: string; reason: string });
-      for (const name of ['direct', 'dot', 'missing', 'loop'])
+      for (const name of ['opened', 'direct', 'dot', 'missing', 'loop'])
         expect(
           audit.some((row) => row.file === 'outside.itest.ts' && row.reason.endsWith(`/${name}`)),
           JSON.stringify({ name, audit, output }),
@@ -218,6 +222,133 @@ test('external targets and failed reads retain their dependency and error channe
   } finally {
     rmSync(checkout, { recursive: true, force: true });
     rmSync(external, { recursive: true, force: true });
+    rmSync(tagma, { recursive: true, force: true });
+  }
+}, 30_000);
+test('a read through open outside the inputs is audited in every Vitest file a worker runs, not only the first', async () => {
+  const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-vitest-')));
+  const external = realpathSync(mkdtempSync(join(tmpdir(), 'change-opened-')));
+  const tagma = tagmaAnswering({ modules: [{ id: 'reads', territory: ['/'], entries: [] }], relations: [], region: ['/'] });
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout }).exitCode).toBe(0);
+    symlinkSync(join(import.meta.dir, '../node_modules'), join(checkout, 'node_modules'), 'dir');
+    writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'reads', scripts: { test: 'vitest run' } }));
+    writeFileSync(
+      join(checkout, 'vitest.config.ts'),
+      "export default { test: { include: ['*.test.ts'], isolate: false, setupFiles: ['@runlith/testbed/vitest/setup'] } };",
+    );
+    writeFileSync(join(external, 'opened'), 'opened');
+    for (const name of ['one', 'two'])
+      writeFileSync(
+        join(checkout, `${name}.test.ts`),
+        `import { closeSync, openSync, readSync } from 'node:fs';
+import { expect, test } from 'vitest';
+test('reads through open', () => {
+  const handle = openSync(${JSON.stringify(join(external, 'opened'))}, 'r');
+  const bytes = Buffer.alloc(6);
+  readSync(handle, bytes);
+  closeSync(handle);
+  expect(bytes.toString()).toBe('opened');
+});
+`,
+      );
+    writeFileSync(join(checkout, 'changed'), 'one.test.ts\n');
+    const report = join(external, 'report.json');
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      PATH: `${tagma}:${process.env['PATH'] ?? ''}`,
+      TESTBED_CORES: '1',
+      TESTBED_BUDGET_ROOT: join(external, 'budget'),
+    };
+    delete env['RUNLITH_TEST_SLOT'];
+    const run = Bun.spawn(
+      [
+        'bun',
+        join(import.meta.dir, 'check.ts'),
+        '--root',
+        checkout,
+        '--full',
+        '--no-cache',
+        '--paths-from',
+        join(checkout, 'changed'),
+        '--report',
+        report,
+      ],
+      { stdout: 'pipe', stderr: 'pipe', env },
+    );
+    const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
+    expect(code, stdout + stderr).toBe(0);
+    const result = JSON.parse(readFileSync(report, 'utf8')) as { reports: string };
+    const audited = readFileSync(join(result.reports, '0.audit.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { file: string; reason: string })
+      .filter((row) => row.reason.endsWith('/opened'))
+      .map((row) => row.file)
+      .sort();
+    expect(audited, stdout + stderr).toEqual(['one.test.ts', 'two.test.ts']);
+  } finally {
+    rmSync(checkout, { recursive: true, force: true });
+    rmSync(external, { recursive: true, force: true });
+    rmSync(tagma, { recursive: true, force: true });
+  }
+}, 30_000);
+test('the files a change check selects in one package run side by side on the machine budget', async () => {
+  const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-side-')));
+  const marks = realpathSync(mkdtempSync(join(tmpdir(), 'change-marks-')));
+  const tagma = tagmaAnswering({ modules: [{ id: 'side', territory: ['/'], entries: [] }], relations: [], region: ['/'] });
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout }).exitCode).toBe(0);
+    writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'side', scripts: { test: 'bun test' } }));
+    for (const [name, other] of [
+      ['one', 'two'],
+      ['two', 'one'],
+    ] as const)
+      writeFileSync(
+        join(checkout, `${name}.itest.ts`),
+        `import { expect, test } from 'bun:test';
+import { existsSync, writeFileSync } from 'node:fs';
+test('meets the other file', async () => {
+  writeFileSync(${JSON.stringify(join(marks, `${name}.started`))}, '');
+  const until = Date.now() + 4000;
+  while (!existsSync(${JSON.stringify(join(marks, `${other}.started`))}) && Date.now() < until) await Bun.sleep(20);
+  const met = existsSync(${JSON.stringify(join(marks, `${other}.started`))}) && !existsSync(${JSON.stringify(join(marks, `${other}.ended`))});
+  await Bun.sleep(300);
+  writeFileSync(${JSON.stringify(join(marks, `${name}.ended`))}, '');
+  expect(met).toBe(true);
+}, 10_000);
+`,
+      );
+    writeFileSync(join(checkout, 'changed'), 'one.itest.ts\n');
+    const report = join(marks, 'report.json');
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      PATH: `${tagma}:${process.env['PATH'] ?? ''}`,
+      TESTBED_CORES: '12',
+      TESTBED_BUDGET_ROOT: join(marks, 'budget'),
+    };
+    delete env['RUNLITH_TEST_SLOT'];
+    const run = Bun.spawn(
+      [
+        'bun',
+        join(import.meta.dir, 'check.ts'),
+        '--root',
+        checkout,
+        '--full',
+        '--no-cache',
+        '--paths-from',
+        join(checkout, 'changed'),
+        '--report',
+        report,
+      ],
+      { stdout: 'pipe', stderr: 'pipe', env },
+    );
+    const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
+    expect(code, stdout + stderr).toBe(0);
+    expect((JSON.parse(readFileSync(report, 'utf8')) as { ran: number }).ran).toBe(2);
+  } finally {
+    rmSync(checkout, { recursive: true, force: true });
+    rmSync(marks, { recursive: true, force: true });
     rmSync(tagma, { recursive: true, force: true });
   }
 }, 30_000);

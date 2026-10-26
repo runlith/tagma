@@ -7,8 +7,10 @@ import { moduleMapAt } from './modules.ts';
 import { workspacePaths } from './packages.ts';
 import { Hashes, type Inputs, type Variant } from './inputs.ts';
 import { Records } from './records.ts';
+import { budgetOf, coresOf } from '@runlith/testbed/budget';
 import type { FileRow, Row } from '@runlith/testbed/ledger';
 import type { FileVerdict, RunRow } from '@runlith/testbed/report';
+import { runJobs } from '@runlith/testbed/schedule';
 
 const started = performance.now();
 const ownCpu = process.cpuUsage();
@@ -18,18 +20,7 @@ const value = (name: string): string | undefined => {
   const at = args.indexOf(name);
   return at === -1 ? undefined : args[at + 1];
 };
-const flags = new Set([
-  '--root',
-  '--base',
-  '--commit',
-  '--paths-from',
-  '--seed',
-  '--adapter',
-  '--package',
-  '--file',
-  '--shard',
-  '--report',
-]);
+const flags = new Set(['--root', '--base', '--commit', '--paths-from', '--seed', '--adapter', '--package', '--file', '--report']);
 for (let at = 0; at < args.length; at++) {
   if (flags.has(args[at]!)) {
     if (args[at + 1] === undefined || args[at + 1]!.startsWith('--')) throw new Error(`${args[at]} needs a value`);
@@ -39,7 +30,7 @@ for (let at = 0; at < args.length; at++) {
 }
 if (args.includes('--help')) {
   console.log(
-    'bun run check:change [--base ref | --commit ref | --paths-from file] [--package path] [--file path] [--shard k/n] [--seed number] [--adapter kind] [--plan] [--no-cache] [--full] [--isolated] [--report file]',
+    'bun run check:change [--base ref | --commit ref | --paths-from file] [--package path] [--file path] [--seed number] [--adapter kind] [--plan] [--no-cache] [--full] [--isolated] [--report file]',
   );
   process.exit(0);
 }
@@ -105,12 +96,6 @@ const tests = [...graph.files]
   .filter((file) => value('--file') === undefined || file === value('--file'));
 const selection = all || global !== undefined ? undefined : graph.select(tests, changed);
 graph.save();
-const shard = value('--shard')?.match(/^(\d+)\/(\d+)$/);
-if (
-  value('--shard') !== undefined &&
-  (shard === null || shard === undefined || Number(shard[1]) < 1 || Number(shard[1]) > Number(shard[2]) || Number(shard[2]) < 1)
-)
-  throw new Error('--shard must be k/n with 1 <= k <= n');
 if (value('--file') !== undefined && !tests.includes(value('--file')!)) throw new Error(`No test file in scope: ${value('--file')}`);
 if (value('--package') !== undefined && !graph.packages.some((pkg) => pkg.dir === value('--package')!.replace(/\/$/, '')))
   throw new Error(`No workspace package: ${value('--package')}`);
@@ -124,8 +109,7 @@ const selected = tests
         : selection?.selected.get(file);
     return why === undefined ? [] : [{ file, pkg, runner: graph.runner(file), why }];
   })
-  .sort((a, b) => a.file.localeCompare(b.file))
-  .filter((_, at) => shard === undefined || shard === null || at % Number(shard[2]) === Number(shard[1]) - 1);
+  .sort((a, b) => a.file.localeCompare(b.file));
 const counts =
   selection === undefined
     ? { cards: tests.filter((file) => affected.has(graph.owner(file)?.id ?? '')).length, imports: tests.length, runtime: undefined }
@@ -193,37 +177,47 @@ console.log(
   `check:change: ${plans.length} files selected; base ${commit ?? base ?? 'named paths'}, seed ${variant.seed}, adapter ${variant.adapter}`,
 );
 for (const row of output) console.log(`${row.action} ${row.file}: ${row.why}; ${row.selected}`);
-const waiting = plans.filter((plan) => !plan.cached).sort((a, b) => (b.previous?.wall ?? 0) - (a.previous?.wall ?? 0));
 let cpu = 0;
 let code = 0;
 let ran = 0;
 const groups = new Map<string, Planned[]>();
-for (const plan of waiting) {
+for (const plan of plans.filter((plan) => !plan.cached)) {
   const key = `${plan.pkg.dir}\0${plan.runner}`;
   const group = groups.get(key) ?? [];
   group.push(plan);
   groups.set(key, group);
 }
-for (const group of groups.values()) {
-  const pkg = group[0]!.pkg;
-  const runnerKind = group[0]!.runner;
-  const report = join(run, `${ran}.jsonl`);
-  const audit = join(run, `${ran}.audit.jsonl`);
-  const manifest = join(run, `${ran}.inputs.json`);
+const budget = budgetOf(coresOf(process.env['TESTBED_CORES']));
+const suites = [...groups.values()].sort(
+  (a, b) =>
+    b.reduce((total, plan) => total + (plan.previous?.cpu ?? 0), 0) - a.reduce((total, plan) => total + (plan.previous?.cpu ?? 0), 0),
+);
+type Outcome = {
+  readonly exit: number;
+  readonly rows: readonly Row[];
+  readonly issues: readonly { readonly file: string; readonly reason: string }[];
+};
+const outcomes = new Map<string, Outcome>();
+const jobs = suites.map((suite, at) => {
+  const pkg = suite[0]!.pkg;
+  const runnerKind = suite[0]!.runner;
+  const report = join(run, `${at}.jsonl`);
+  const audit = join(run, `${at}.audit.jsonl`);
+  const manifest = join(run, `${at}.inputs.json`);
   writeFileSync(
     manifest,
     JSON.stringify({
       root,
       report: audit,
       runner: runnerKind,
-      entries: group.map((plan) => ({
+      entries: suite.map((plan) => ({
         file: plan.file,
         packages: plan.inputs.packages.filter((dir) => dir !== ''),
         files: plan.inputs.files,
       })),
     }),
   );
-  const local = group.map((plan) => `./${relative(pkg.dir === '' ? root : join(root, pkg.dir), join(root, plan.file))}`);
+  const local = suite.map((plan) => `./${relative(pkg.dir === '' ? root : join(root, pkg.dir), join(root, plan.file))}`);
   const config = ['vitest.config.ts', 'vite.config.ts', 'vitest.config.js', 'vite.config.js']
     .map((name) => join(root, pkg.dir, name))
     .find(existsSync);
@@ -234,13 +228,9 @@ for (const group of groups.values()) {
           process.execPath,
           'test',
           '--no-orphans',
-          '--parallel=1',
           variant.isolated ? '--isolate' : '--no-isolate',
-          `--preload=${join(TOOLKIT, 'packages/testbed/src/bun.ts')}`,
           `--preload=${join(TOOLKIT, 'scripts/change/testing/trace.ts')}`,
           `--seed=${variant.seed}`,
-          `--timings=${join(cache, 'timings.json')}`,
-          '--update-timings',
           ...local,
         ]
       : [
@@ -252,53 +242,60 @@ for (const group of groups.values()) {
           'run',
           '--config',
           join(TOOLKIT, 'scripts/change/vitest.ts'),
-          '--maxWorkers=1',
-          '--no-file-parallelism',
           `--sequence.seed=${variant.seed}`,
           ...(variant.isolated ? ['--isolate'] : []),
           ...local,
         ];
-  const remaining = 540_000 - (performance.now() - started);
-  if (remaining <= 0) throw new Error('check:change reached its nine-minute execution budget; narrow with --package');
-  const command = [process.execPath, join(TOOLKIT, 'packages/testbed/src/cli.ts'), ...runner];
-  const child = Bun.spawn(command, {
+  return {
+    id: String(at),
     cwd: join(root, pkg.dir),
-    stdio: ['inherit', 'inherit', 'inherit'],
-    timeout: Math.floor(Math.min(300_000, remaining)),
+    stages: [[process.execPath, join(TOOLKIT, 'packages/testbed/src/cli.ts'), ...runner]],
+    need: suite.length,
     env: { ...process.env, RUNLITH_TEST_REPORT: report, RUNLITH_CHANGE_AUDIT: manifest, RUNLITH_CHANGE_CONFIG: config },
-  });
-  const stop = (): void => {
-    child.kill('SIGTERM');
   };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
-  const exit = await child.exited;
-  process.removeListener('SIGINT', stop);
-  process.removeListener('SIGTERM', stop);
+});
+const lines = (path: string): string[] => (existsSync(path) ? readFileSync(path, 'utf8').split('\n').filter(Boolean) : []);
+await runJobs(jobs, {
+  budget,
+  serial: false,
+  ended: (job, ending) => {
+    const log = join(run, `${job.id}.log`);
+    writeFileSync(log, ending.stdout + ending.stderr);
+    outcomes.set(job.id, {
+      exit: ending.exit,
+      rows: lines(join(run, `${job.id}.jsonl`)).map((line) => JSON.parse(line) as Row),
+      issues: lines(join(run, `${job.id}.audit.jsonl`)).map(
+        (line) => JSON.parse(line) as { readonly file: string; readonly reason: string },
+      ),
+    });
+    const failed = (ending.stdout + ending.stderr).split('\n').filter((line) => line.startsWith('(fail)'));
+    const suite = suites[Number(job.id)]!;
+    console.log(
+      `check:change: ${suite[0]!.pkg.dir || '.'} ${suite[0]!.runner}, ${suite.length} files: exit ${ending.exit}; ${log}${failed.map((line) => `\n  ${line}`).join('')}`,
+    );
+  },
+});
+const after = new Hashes(graph, hashes.versions, variant);
+for (const [at, suite] of suites.entries()) {
+  const outcome = outcomes.get(String(at));
+  const exit = outcome?.exit ?? 1;
   if (exit !== 0) code = exit || 1;
-  const rows = existsSync(report)
-    ? readFileSync(report, 'utf8')
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line) as Row)
-    : [];
-  const issues = existsSync(audit)
-    ? readFileSync(audit, 'utf8')
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => JSON.parse(line) as { readonly file: string; readonly reason: string })
-    : [];
+  const rows = outcome?.rows ?? [];
+  const issues = outcome?.issues ?? [];
   const runRow = rows.findLast((row): row is RunRow => row.type === 'run');
-  const fileRows = rows.filter((row): row is FileRow => row.type === 'file');
+  const fileRows = new Map(
+    rows.filter((row): row is FileRow => row.type === 'file').map((row) => [resolve(TOOLKIT, row.file), row] as const),
+  );
+  const verdicts = new Map(
+    rows.filter((row): row is FileVerdict => row.type === 'file-verdict').map((row) => [`${row.file}\0${row.run}`, row] as const),
+  );
+  const runnerKind = suite[0]!.runner;
   cpu += runRow?.cpu ?? 0;
-  const after = new Hashes(graph, hashes.versions, variant);
-  for (const plan of group) {
-    const row = fileRows.find((row) => resolve(TOOLKIT, row.file) === join(root, plan.file));
+  for (const plan of suite) {
+    const row = fileRows.get(join(root, plan.file));
     const reason = plan.bypass ?? issues.find((issue) => issue.file === plan.file)?.reason;
     const stable = after.of(plan.file).key === plan.inputs.key;
-    const verdict = rows.find(
-      (entry): entry is FileVerdict => entry.type === 'file-verdict' && entry.file === row?.file && entry.run === row?.run,
-    );
+    const verdict = row === undefined ? undefined : verdicts.get(`${row.file}\0${row.run}`);
     const passed = runnerKind === 'bun' ? verdict?.outcome === 'pass' : exit === 0;
     const problem =
       row === undefined

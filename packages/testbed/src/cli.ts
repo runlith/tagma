@@ -46,8 +46,6 @@ const asked = bunTest ? take(/^--parallel$/) : vitest ? take(/^--max(?:Workers|-
 const concurrency = bunTest ? take(/^--max-concurrency$/) : undefined;
 const jobs = process.env['TESTBED_JOBS'] === undefined ? undefined : Number(process.env['TESTBED_JOBS']);
 if (jobs !== undefined && (!Number.isSafeInteger(jobs) || jobs < 1)) throw new Error('TESTBED_JOBS must be a positive integer');
-const life = process.env['TESTBED_LIFE_MS'] === undefined ? undefined : Number(process.env['TESTBED_LIFE_MS']);
-if (life !== undefined && (!Number.isSafeInteger(life) || life < 1)) throw new Error('TESTBED_LIFE_MS must be a positive integer');
 const wanted = Math.min(asked ?? budget, jobs ?? budget, bunTest && named > 0 ? named : budget);
 
 const processes = await openProcesses();
@@ -80,7 +78,7 @@ if (getPriority(process.pid) < NICE) setPriority(process.pid, NICE);
 const run = openRun({ pid: process.pid, start: processes.facts(process.pid)?.start ?? 0 });
 if (run.fresh) sweepRuns(processes);
 
-if (bunTest) command.push(`--preload=${join(REPO, 'packages/testbed/src/bun.ts')}`);
+if (bunTest) command.splice(command.indexOf('test') + 1, 0, `--preload=${join(REPO, 'packages/testbed/src/bun.ts')}`);
 const option = (prefix: string): string | undefined => command.find((part) => part.startsWith(prefix))?.slice(prefix.length);
 const randomize = command.indexOf('--randomize');
 let seed: number | undefined;
@@ -111,12 +109,10 @@ const environment: Record<string, string | undefined> = {
   [REPORT_ENV]: run.report,
   [SLOT_ENV]: holder,
 };
-delete environment['TESTBED_LIFE_MS'];
 delete environment[ADMITTED_ENV];
 const child = Bun.spawn(command, {
   stdio: ['inherit', 'inherit', 'inherit', ...(units === undefined ? [] : [units.entry])],
   env: environment,
-  ...(life === undefined ? {} : { timeout: life, killSignal: 'SIGTERM' as const }),
 });
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => child.kill(signal));
 let kept = held;

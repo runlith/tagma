@@ -44,6 +44,10 @@
       "types": "./src/slots.ts",
       "default": "./src/slots.ts"
     },
+    "./schedule": {
+      "types": "./src/schedule.ts",
+      "default": "./src/schedule.ts"
+    },
     "./memory": {
       "types": "./src/memory.ts",
       "default": "./src/memory.ts"

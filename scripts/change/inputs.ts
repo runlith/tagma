@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, realpathSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { Graph } from './graph.ts';
 import type { Package } from './packages.ts';
 import { sourceFile } from './graph.ts';
@@ -13,6 +13,7 @@ export type Inputs = {
 };
 export type Variant = { readonly seed: number; readonly adapter: string; readonly isolated: boolean };
 const OUTPUTS = new Set(['node_modules', '.git', '.svelte-kit', '.vite', '.cache', 'target', 'coverage']);
+const KIT = resolve(import.meta.dir, '../..');
 
 export class Hashes {
   private readonly digests = new Map<string, string>();
@@ -45,6 +46,14 @@ export class Hashes {
         ),
       ];
     }
+    const engine = join(KIT, 'packages/sqlite-process/native/build');
+    if (existsSync(engine))
+      this.global = [
+        ...this.global,
+        ...readdirSync(engine, { recursive: true, withFileTypes: true })
+          .filter((entry) => entry.isFile())
+          .map((entry) => join(entry.parentPath, entry.name)),
+      ];
     const release = 'packages/execution-host/native/target/release';
     if (existsSync(join(graph.root, release)))
       this.global = [
@@ -99,7 +108,7 @@ export class Hashes {
   private digest(file: string): string {
     let digest = this.digests.get(file);
     if (digest === undefined) {
-      const absolute = join(this.graph.root, file);
+      const absolute = isAbsolute(file) ? file : join(this.graph.root, file);
       const info = lstatSync(absolute, { throwIfNoEntry: false });
       if (info === undefined) digest = 'missing';
       else {

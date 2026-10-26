@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { packagesOf } from './packages.ts';
@@ -26,12 +26,10 @@ test('combined Vitest follows new workspace packages and extra configs while pre
   const plan = suitesOf(packages, paths, {
     root: '/',
     jobs: 1,
-    width: 1,
     seed: undefined,
     randomize: false,
     reports: '/reports',
     combineVitest: true,
-    history: undefined,
   });
   expect(plan.map((suite) => [suite.id, suite.directory])).toEqual([
     ['packages:vitest:test', ''],
@@ -39,43 +37,20 @@ test('combined Vitest follows new workspace packages and extra configs while pre
   ]);
 });
 
-test('an earlier report splits a selected integration suite into explicit chunks that run every selected file once', () => {
-  const script = "testbed bun test --parallel=2 --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')";
+test('a package script is one suite whose runner gets every file it selects, however many there are', () => {
+  const script = "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')";
   const files = new Map([
     ['package.json', JSON.stringify({ workspaces: ['packages/*'] })],
     ['packages/w/package.json', JSON.stringify({ scripts: { 'test:integration': script } })],
+    ...Array.from({ length: 60 }, (_, at) => [`packages/w/src/f${at}.itest.ts`, ''] as const),
   ]);
-  const selected = ['./src/a.itest.ts', './src/b.itest.ts', './src/c.itest.ts', './src/new.itest.ts'];
   const plan = suitesOf(
     packagesOf([...files.keys()], (path) => files.get(path)!),
     [...files.keys()],
-    {
-      root: '/',
-      jobs: 1,
-      width: 1,
-      seed: undefined,
-      randomize: false,
-      reports: '/reports',
-      combineVitest: false,
-      history: {
-        costs: {
-          files: new Map([
-            ['packages/w/src/a.itest.ts', { wallMs: 1000, worlds: ['Door'] }],
-            ['packages/w/src/b.itest.ts', { wallMs: 1000, worlds: ['Door'] }],
-            ['packages/w/src/c.itest.ts', { wallMs: 100, worlds: [] }],
-          ]),
-          worlds: new Map([['Door', { builds: 2, buildMs: 4000 }]]),
-        },
-        lifeMs: 4000,
-        select: (directory, selector) => (directory === 'packages/w' && selector.startsWith('find src') ? selected : []),
-      },
-    },
+    { root: '/', jobs: undefined, seed: undefined, randomize: false, reports: '/reports', combineVitest: false },
   );
-  expect(plan.length).toBeGreaterThan(1);
-  expect(plan.every((suite) => suite.id === `packages/w:test:integration:${suite.shard}` && !/--shard|\$\(/.test(suite.command))).toBe(
-    true,
-  );
-  expect(plan.flatMap((suite) => suite.command.match(/'\.\/src\/[^']+'/g) ?? []).sort()).toEqual(selected.map((file) => `'${file}'`));
+  expect(plan.map((suite) => suite.id)).toEqual(['packages/w:test:integration']);
+  expect(plan[0]!.stages).toEqual([expect.stringContaining("$(find src -name '*.itest.ts'")]);
 });
 
 test('a cut native suite stays pending and its CPU survives a successful resume', async () => {
@@ -181,10 +156,6 @@ test('all suites resume without replay and report an unconfigured workspace fail
     expect(before.aborted).toEqual([]);
     expect(before.suites[0].files).toBe(1);
     expect(before.suites[0].cpu).toBeGreaterThan(0);
-    writeFileSync(
-      join(root, 'pkg/later.itest.ts'),
-      "import { test } from 'bun:test'; test('outside the saved plan', () => { throw new Error('new file'); });",
-    );
     const second = await invoke('--resume');
     expect(second.code, second.output).toBe(1);
     const after = JSON.parse(readFileSync(report, 'utf8'));
@@ -198,6 +169,36 @@ test('all suites resume without replay and report an unconfigured workspace fail
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('stopping test:all ends the stage a compound suite is running, not only its shell', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'stop-suites-'));
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q', root]).exitCode).toBe(0);
+    const mark = join(root, 'stage.pid');
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          test: `true && bun -e "require('fs').writeFileSync(process.env.STAGE_MARK, String(process.pid)); setInterval(() => {}, 1000)"`,
+        },
+      }),
+    );
+    const env: Record<string, string | undefined> = { ...process.env, STAGE_MARK: mark, TESTBED_BUDGET_ROOT: join(root, 'budget') };
+    delete env['RUNLITH_TEST_SLOT'];
+    const child = Bun.spawn([process.execPath, join(import.meta.dir, 'all.ts'), '--root', root, '--report', join(root, 'reading.json')], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env,
+    });
+    while (!existsSync(mark) || readFileSync(mark, 'utf8') === '') await Bun.sleep(20);
+    const stage = Number(readFileSync(mark, 'utf8'));
+    child.kill('SIGTERM');
+    await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    expect(() => process.kill(stage, 0)).toThrow();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 30_000);
 
 test('suites run side by side while the machine budget has room, and one at a time under --jobs', async () => {
   const root = mkdtempSync(join(tmpdir(), 'side-suites-'));
