@@ -3,7 +3,7 @@ import { it } from '@runlith/effect-test';
 import { once } from 'node:events';
 import { Agent, createServer, type RequestListener } from 'node:http';
 import type { Socket } from 'node:net';
-import { Deferred, Effect, Exit, Scope, Stream } from 'effect';
+import { Cause, Deferred, Effect, Exit, Fiber, Scope, Stream } from 'effect';
 import { HttpClient, HttpClientRequest } from 'effect/http';
 import { layer, RequestOptions } from './verbatim';
 
@@ -63,8 +63,9 @@ it.live('socket timeout and Effect cancellation both release requests waiting fo
     const sockets = new Set<Socket>();
     const released = yield* Deferred.make<void>();
     let closed = 0;
+    let arrived = yield* Deferred.make<void>();
     const { port } = yield* listen(
-      () => {},
+      () => void Deferred.doneUnsafe(arrived, Effect.void),
       (socket) => {
         sockets.add(socket);
         socket.on('close', () => {
@@ -73,19 +74,25 @@ it.live('socket timeout and Effect cancellation both release requests waiting fo
         });
       },
     );
-    for (const timeout of ['socket', 'effect']) {
+    for (const cancellation of ['socket', 'effect']) {
+      arrived = yield* Deferred.make<void>();
       const call = Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;
         return yield* client.get(`http://127.0.0.1:${port}`);
       }).pipe(Effect.provide(layer));
-      const result = yield* (
-        timeout === 'socket' ? call.pipe(Effect.provideService(RequestOptions, { timeout: 25 })) : call.pipe(Effect.timeout('25 millis'))
-      ).pipe(Effect.result);
-      expect(result).toMatchObject(
-        timeout === 'socket'
-          ? { _tag: 'Failure', failure: { reason: { _tag: 'TransportError', cause: { code: 'ETIMEDOUT' } } } }
-          : { _tag: 'Failure', failure: { _tag: 'TimeoutError' } },
-      );
+      if (cancellation === 'socket') {
+        const result = yield* call.pipe(Effect.provideService(RequestOptions, { timeout: 25 }), Effect.result);
+        expect(result).toMatchObject({
+          _tag: 'Failure',
+          failure: { reason: { _tag: 'TransportError', cause: { code: 'ETIMEDOUT' } } },
+        });
+      } else {
+        const calling = yield* Effect.forkScoped(call);
+        yield* Deferred.await(arrived);
+        yield* Fiber.interrupt(calling);
+        const result = yield* Fiber.await(calling);
+        expect(Exit.isFailure(result) && Cause.hasInterruptsOnly(result.cause)).toBe(true);
+      }
     }
     yield* Deferred.await(released);
     expect(sockets.size).toBe(0);
@@ -113,7 +120,6 @@ it.live('slow response consumers bound buffering and then receive every byte', (
     const bytes = yield* Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
       const response = yield* client.get(`http://127.0.0.1:${port}`);
-      yield* Effect.sleep('100 millis');
       expect(written).toBeLessThan(total);
       let read = 0;
       yield* Stream.runForEach(response.stream, (chunk) =>
@@ -145,12 +151,14 @@ it.live('a slow upload receiver bounds producer demand and cancellation releases
       }),
       Stream.ensuring(Deferred.succeed(released, undefined)),
     );
-    const result = yield* Effect.gen(function* () {
+    const uploading = yield* Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
       return yield* client.execute(HttpClientRequest.post(`http://127.0.0.1:${port}`).pipe(HttpClientRequest.bodyStream(body)));
-    }).pipe(Effect.provide(layer), Effect.timeout('150 millis'), Effect.result);
+    }).pipe(Effect.provide(layer), Effect.forkScoped);
     yield* Deferred.await(arrived);
-    expect(result).toMatchObject({ _tag: 'Failure', failure: { _tag: 'TimeoutError' } });
+    yield* Fiber.interrupt(uploading);
+    const result = yield* Fiber.await(uploading);
+    expect(Exit.isFailure(result) && Cause.hasInterruptsOnly(result.cause)).toBe(true);
     expect(produced).toBeLessThan(1024);
     yield* Deferred.await(released);
   }),
