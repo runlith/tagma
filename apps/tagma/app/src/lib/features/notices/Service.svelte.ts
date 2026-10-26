@@ -1,5 +1,6 @@
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
+import { untrack } from 'svelte';
 import type { Told } from '$lib/wire/told.js';
 import { Refusal } from '$lib/wire/refusal.js';
 import { Offer, offeredAct, type OfferPort } from './Offer.js';
@@ -81,16 +82,18 @@ export class Notices extends Service<Notices>()('Notices', { tier: 'app' }) {
   }
 
   fault(title: string, body: string, stack: string | null = null): void {
-    const at = Date.now();
-    const key = `${title}\n${body}`;
-    const standing = this.faults.find((fault) => fault.key === key);
-    if (standing !== undefined) {
-      standing.count += 1;
-      standing.lastAt = at;
-      standing.stack = stack ?? standing.stack;
-      return;
-    }
-    this.faults = [{ key, title, body, stack, count: 1, firstAt: at, lastAt: at }, ...this.faults].slice(0, FAULTS_KEPT);
+    untrack(() => {
+      const at = Date.now();
+      const key = `${title}\n${body}`;
+      const standing = this.faults.find((fault) => fault.key === key);
+      if (standing !== undefined) {
+        standing.count += 1;
+        standing.lastAt = at;
+        standing.stack = stack ?? standing.stack;
+        return;
+      }
+      this.faults = [{ key, title, body, stack, count: 1, firstAt: at, lastAt: at }, ...this.faults].slice(0, FAULTS_KEPT);
+    });
   }
 
   clearFaults(): void {
@@ -102,17 +105,19 @@ export class Notices extends Service<Notices>()('Notices', { tier: 'app' }) {
   }
 
   private push(next: Omit<Notice, 'id' | 'lastAt'>): number {
-    const at = Date.now();
-    const existing = this.list.find((notice) => notice.kind === next.kind && notice.title === next.title && notice.body === next.body);
-    if (existing) {
-      existing.lastAt = at;
-      return existing.id;
-    }
-    const id = this.nextId++;
-    this.list.push({ id, lastAt: at, ...next });
-    const kept = this.list.filter((notice) => notice.kind !== 'undo');
-    if (kept.length > NOTICES_KEPT) this.dismiss(kept[0]!.id);
-    return id;
+    return untrack(() => {
+      const at = Date.now();
+      const existing = this.list.find((notice) => notice.kind === next.kind && notice.title === next.title && notice.body === next.body);
+      if (existing) {
+        existing.lastAt = at;
+        return existing.id;
+      }
+      const id = this.nextId++;
+      this.list.push({ id, lastAt: at, ...next });
+      const kept = this.list.filter((notice) => notice.kind !== 'undo');
+      if (kept.length > NOTICES_KEPT) this.dismiss(kept[0]!.id);
+      return id;
+    });
   }
 
   private static readonly UNDO_LIMIT = 3;
@@ -121,12 +126,14 @@ export class Notices extends Service<Notices>()('Notices', { tier: 'app' }) {
   undoable(title: string, undo: () => void, within?: Scope): void {
     const life = within ?? this.scope;
     const id = this.nextId++;
-    this.list.push({ id, kind: 'undo', title, body: '', lastAt: Date.now(), undo, lifeMs: Notices.UNDO_LIFETIME_MS });
-    const undos = this.list.filter((notice) => notice.kind === 'undo');
-    if (undos.length > Notices.UNDO_LIMIT) {
-      const oldest = undos[0];
-      if (oldest) this.dismiss(oldest.id);
-    }
+    untrack(() => {
+      this.list.push({ id, kind: 'undo', title, body: '', lastAt: Date.now(), undo, lifeMs: Notices.UNDO_LIFETIME_MS });
+      const undos = this.list.filter((notice) => notice.kind === 'undo');
+      if (undos.length > Notices.UNDO_LIMIT) {
+        const oldest = undos[0];
+        if (oldest) this.dismiss(oldest.id);
+      }
+    });
     const timer = setTimeout(() => {
       this.timers.delete(timer);
       this.dismiss(id);
@@ -138,7 +145,7 @@ export class Notices extends Service<Notices>()('Notices', { tier: 'app' }) {
   }
 
   dismiss(id: number): void {
-    this.list = this.list.filter((notice) => notice.id !== id);
+    this.list = untrack(() => this.list.filter((notice) => notice.id !== id));
     const unwatch = this.watched.get(id);
     if (unwatch === undefined) return;
     this.watched.delete(id);

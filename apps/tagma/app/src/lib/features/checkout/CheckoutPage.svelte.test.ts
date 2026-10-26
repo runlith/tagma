@@ -22,7 +22,7 @@ import { refusalOf } from '$lib/wire/refusal.js';
 import { BY_THREAD } from './grouping.js';
 import { Holdings } from './Holdings.svelte.js';
 import { Checkout } from './Selection.svelte.js';
-import { CheckoutRepo, type AuthorshipKey } from './Repo.js';
+import { CheckoutRepo, type AuthorshipKey, type HistoryKey } from './Repo.js';
 import CheckoutPage from './CheckoutPage.svelte';
 import { Column } from './files/Column.svelte.js';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
@@ -83,7 +83,7 @@ afterEach(async () => {
   app = undefined;
 });
 
-function draw(): HTMLElement {
+function draw(over: { places?: Worktrees; history?: unknown } = {}): HTMLElement {
   app = mountShell(
     Layer.mergeAll(
       screen(),
@@ -98,7 +98,7 @@ function draw(): HTMLElement {
       Layer.of(GraphDoor, { aim: { projectId: 1, branch: null } } as never),
       Layer.of(FileOpener, { open: () => Promise.resolve(), stand: () => () => undefined } as never),
       Layer.of(Workspace, { find: () => undefined } as never),
-      Layer.of(Worktrees, testPlaces() as never),
+      Layer.of(Worktrees, (over.places ?? testPlaces()) as never),
       Notices,
       Seams,
       ReaderMarks,
@@ -116,7 +116,7 @@ function draw(): HTMLElement {
           all: stubAll,
           reset: () => undefined,
         },
-        history: keyedBy(async () => undefined),
+        history: over.history ?? keyedBy(async () => undefined),
         commitReading: keyedBy(async () => undefined),
         stage: stubMutation(),
         unstage: stubMutation(),
@@ -294,4 +294,42 @@ test('the branch state selects publish, pull before push when both sides moved, 
 
   sent({ ...checkoutRow(), revision: 7, ahead: null, behind: null });
   expect(offered()).toBe('push');
+});
+
+test('a checkout the server no longer registers is told once, and the window moves to the project’s main checkout', () => {
+  const main = (rootId: string) => ({ rootId, kind: 'main', branch: 'main', folder: '/repo', missing: false }) as never;
+  const registry = $state({ ...testPlaces() });
+  const gone = refusalOf({
+    code: 'not-found',
+    reason: 'root-1 is not a registered checkout.',
+    unblock: ['name a registered checkout root'],
+  });
+  const read: string[] = [];
+  const page = draw({
+    places: registry as never,
+    history: {
+      name: 'history',
+      key: (key: HistoryKey) => {
+        read.push(key.rootId);
+        return stubSingle(key.rootId === 'root-1' ? { error: gone } : {});
+      },
+      all: stubAll,
+      reset: () => undefined,
+    },
+  });
+  sent(checkoutRow());
+  const stale = feed.routes.get('checkout.subscribe');
+
+  expect(read).toContain('root-1');
+  expect(app?.get(Notices).faults.map((fault) => [fault.body, fault.count])).toEqual([['root-1 is not a registered checkout.', 1]]);
+
+  Object.assign(registry, { known: true, main: main('root-2'), rows: [main('root-2')] });
+  flushSync();
+  expect(app?.get(Checkout).row).toBeNull();
+  expect(page.querySelector('[data-checkout-head]')).toBeNull();
+  expect(feed.routes.get('checkout.subscribe')).not.toBe(stale);
+
+  sent({ ...checkoutRow(), rootId: 'root-2' as CheckoutState['rootId'] });
+  expect(read.at(-1)).toBe('root-2');
+  expect(page.querySelector('[data-checkout-head]')).not.toBeNull();
 });

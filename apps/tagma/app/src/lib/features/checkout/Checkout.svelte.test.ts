@@ -6,7 +6,8 @@ import { makeStorage } from '@runlith/layer/testing';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
-import { keyedBy, liveFeed, mountShell, type TestApp } from '$lib/app/testing.js';
+import { keyedBy, liveFeed, mountShell, type TestApp, testPlaces } from '$lib/app/testing.js';
+import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
 import { ProjectsRepo } from '$lib/features/workspace/ProjectsRepo.js';
 import { Live } from '$lib/wire/Live.js';
@@ -67,6 +68,7 @@ function open(
     Layer.mergeAll(Checkout, ReaderMarks),
     Layer.mergeAll(
       Layer.of(Live, feed.live),
+      Layer.of(Worktrees, testPlaces() as never),
       Failure.of((reason) => {
         failures.push(reason);
       }),

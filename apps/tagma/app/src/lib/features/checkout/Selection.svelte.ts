@@ -1,11 +1,15 @@
 import type { CheckoutArea, CheckoutEntry, CheckoutState } from '@tagma/server/workspace/contract/wire/checkout';
+import type { RootId } from '@tagma/server/workspace/contract/wire/ids';
+import type { WorktreePlace } from '@tagma/server/worktrees/contract/wire/rows';
 import { CHECKOUT_DIRECTORY } from '@tagma/server/graph/contract/wire/storage';
 import { Failure } from '@runlith/layer/Failure';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
+import { untrack } from 'svelte';
 import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
 import { GraphRung, type GraphAim } from '$lib/features/workspace/GraphRung.js';
 import { ProjectsRepo } from '$lib/features/workspace/ProjectsRepo.js';
+import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import type { CheckoutTarget } from '$lib/features/worktrees/HoldingsReading.svelte.js';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 import { refusalOf } from '$lib/wire/refusal.js';
@@ -44,7 +48,15 @@ export function sectionsOf(row: CheckoutState): readonly CheckoutSection[] {
 
 export class Checkout extends Service<Checkout>()('Checkout', { tier: 'graph', eager: true }) {
   static *make() {
-    return new Checkout(yield* Live, yield* GraphRung.Current, yield* ProjectsRepo, yield* ReaderMarks, yield* Scope, yield* Failure);
+    return new Checkout(
+      yield* Live,
+      yield* GraphRung.Current,
+      yield* ProjectsRepo,
+      yield* Worktrees,
+      yield* ReaderMarks,
+      yield* Scope,
+      yield* Failure,
+    );
   }
 
   row = $state.raw<CheckoutState | null>(null);
@@ -57,23 +69,38 @@ export class Checkout extends Service<Checkout>()('Checkout', { tier: 'graph', e
 
   private held: { unsubscribe: () => void } | null = null;
   private closed = false;
+  private openedAt: RootId | null = null;
 
   constructor(
     private readonly live: LiveConnection,
     private readonly aim: GraphAim,
     private readonly projects: Projects,
+    private readonly worktrees: Worktrees,
     private readonly marks: ReaderMarks,
     scope: Scope,
     private readonly failure: Failure,
   ) {
     super();
+    const stop = $effect.root(() => {
+      $effect(() => {
+        const read = this.row?.rootId ?? null;
+        const listed = this.listed?.rootId ?? null;
+        if (read === null || read === listed || listed === this.openedAt) return;
+        untrack(() => this.leave(listed));
+      });
+    });
     scope.defer(() => {
+      stop();
       this.closed = true;
       this.held?.unsubscribe();
     });
     if (aim.branch === null) this.open({});
     else void this.follow(aim.branch);
   }
+
+  private listed = $derived.by<WorktreePlace | null>(() =>
+    this.aim.branch === null ? this.worktrees.main : (this.worktrees.rows.find((row) => row.branch === this.aim.branch) ?? null),
+  );
 
   private areas = $derived.by<readonly CheckoutArea[]>(() => {
     const row = this.row;
@@ -129,7 +156,21 @@ export class Checkout extends Service<Checkout>()('Checkout', { tier: 'graph', e
     if (this.reading !== null) this.open(this.reading);
   }
 
+  private leave(listed: RootId | null): void {
+    this.row = null;
+    if (this.aim.branch === null) this.open({});
+    else if (listed !== null) this.open({ root: listed });
+    else {
+      this.openedAt = null;
+      this.held?.unsubscribe();
+      this.held = null;
+      this.reading = null;
+      this.absent = 'no-working-copy';
+    }
+  }
+
   private open(named: CheckoutTarget): void {
+    this.openedAt = untrack(() => this.listed?.rootId ?? null);
     this.reading = named;
     this.held?.unsubscribe();
     this.absent = null;
