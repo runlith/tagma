@@ -88,6 +88,7 @@ export type Run = { readonly root: string; readonly report: string; readonly fre
 export const ownerName = (pid: number, start: number): string => `run.${pid}.${Math.round(start * 1000)}`;
 
 export const openRun = (owner: { readonly pid: number; readonly start: number } | undefined): Run => {
+  delete process.env['BUN_FEATURE_FLAG_NO_ORPHANS'];
   const files = fs();
   const given = process.env[ROOT_ENV];
   pristine(files.mkdirSync)(REPORTS, { recursive: true });
