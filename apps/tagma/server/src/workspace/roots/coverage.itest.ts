@@ -33,7 +33,12 @@ import {
   withDemo,
 } from '../../composition/testing/graphFixture.js';
 import { makeCoverageStore } from '../store/coverage.js';
+import { makeAssignmentStore } from '../store/assignments.js';
 import { makeCoverageLedger } from './coverage.js';
+import { bornThread } from '../../native-harness/testing/born.js';
+import { ThreadId } from '../../platform/contract/wire/thread.js';
+import { assignmentLedger } from '../testing/doubles.js';
+import { lineageOver } from '../testing/lineage.js';
 
 const unreserved = RootReservations.of({ holding: () => Effect.succeed(new Map()) });
 
@@ -67,7 +72,7 @@ const composed = Effect.fnUntraced(function* (demo: DemoState) {
       Git,
       gitOf,
     );
-    const coverage = yield* makeCoverageLedger({ store: makeCoverageStore({ db }) }).pipe(
+    const coverage = yield* makeCoverageLedger({ store: makeCoverageStore({ db }), assignments: makeAssignmentStore({ db }) }).pipe(
       Effect.provideService(Projects, projects),
       Effect.provideService(FileRoots, registry),
       Effect.provideService(Repositories, repositories),
@@ -375,6 +380,60 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(Layer.merge(BunFileSystem.layer, 
           expect(new Set((yield* coverage.cover(demo.projectId)).roots.map((root) => root.origin))).toEqual(
             new Set(['canonical', 'adopted']),
           );
+        }),
+      ),
+    );
+
+    it.effect("a project re-pointed at another checkout carries its threads' place in the main checkout to the new one", () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const { db, units, roots, coverage, rootsOver, coverageOver } = yield* composed(demo);
+          const project = yield* projectOf(demo, yield* tempRepoEffect(demo.fixture, 'repointed-'));
+          const main = (yield* coverage.cover(project)).roots.find((root) => root.origin === 'canonical');
+          if (main === undefined) return yield* Effect.die(new Error('the coverage established no main checkout'));
+          const threadId = ThreadId.make('thread-in-main');
+          yield* bornThread(
+            db,
+            {
+              id: threadId,
+              ownerId: 'owner',
+              agentId: 'tagma',
+              spawnRootId: threadId,
+              status: 'idle',
+              model: 'gpt-test',
+              reasoning: 'high',
+              authority: { mode: 'trust', bypassFrom: null },
+              createdAt: new Date(0),
+              updatedAt: new Date(0),
+            },
+            { projectId: project, title: 'in main', readerOrderAt: new Date(0) },
+          );
+          const assignments = yield* assignmentLedger(makeAssignmentStore({ db }), roots, yield* lineageOver(yield* MachineStore, units));
+          const placed = yield* roots.checked(main.rootId);
+          yield* units.write('Assignments.place', (unit) =>
+            assignments.place(unit, { threadId, root: { rootId: placed.rootId, locationRevision: placed.locationRevision } }),
+          );
+          const target = yield* tempRepoEffect(demo.fixture, 'repointed-to-');
+          yield* demo.graph.projectLifecycle.move(project, target);
+          const held = yield* rootsOver(roots.namespaceId, {
+            holding: (_namespace, paths) =>
+              Effect.succeed(
+                new Map(
+                  paths
+                    .filter((path) => path === target)
+                    .map((path) => [path, [{ owner: 'worktree', holder: 'op-held', admits: [{ kind: 'worktree', id: 'op-held' }] }]]),
+                ),
+              ),
+          });
+          const waiting = yield* Effect.flip((yield* coverageOver(held, yield* Git)).coverage.cover(project));
+          expect(waiting).toMatchObject({ _tag: 'ProjectRootsUnavailable', reason: 'moved' });
+          expect((yield* units.read((unit) => assignments.read(unit, threadId))).selection.rootId).toBe(main.rootId);
+          const moved = (yield* coverage.survey(project)).roots.find((root) => root.origin === 'canonical');
+          if (moved === undefined) return yield* Effect.die(new Error('the coverage taken after the move named no main checkout'));
+          expect(moved.rootId).not.toBe(main.rootId);
+          const standing = yield* units.read((unit) => assignments.read(unit, threadId));
+          expect(standing.selection.rootId).toBe(moved.rootId);
+          expect(standing.memberships.map((membership) => membership.rootId)).toEqual([moved.rootId]);
         }),
       ),
     );

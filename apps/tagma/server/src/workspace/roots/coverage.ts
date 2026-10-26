@@ -6,7 +6,7 @@ import { worktreesOf } from '@runlith/git/worktree';
 import { Git } from '@runlith/git/Git';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { fileRoot, fileRootNamespace, projectRoot, projectRootCover } from '../store/tables.js';
+import { assignmentMembership, assignmentSelection, fileRoot, fileRootNamespace, projectRoot, projectRootCover } from '../store/tables.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import {
   ProjectRootsUnavailable,
@@ -22,6 +22,7 @@ import { Coverage, FileRoots, type RootAdmissionRequest, type RootAdoption } fro
 import { Repositories } from '../contract/service/repositories.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import type { CoverageStore } from '../store/coverage.js';
+import type { AssignmentStore } from '../store/assignments.js';
 
 type Canonical = { readonly git: RootGit; readonly commonDir: string };
 
@@ -33,7 +34,13 @@ const PROBES = 8;
 
 const GIT_LANES = 3;
 
-export const makeCoverageLedger = Effect.fnUntraced(function* ({ store }: { readonly store: CoverageStore }) {
+export const makeCoverageLedger = Effect.fnUntraced(function* ({
+  store,
+  assignments,
+}: {
+  readonly store: CoverageStore;
+  readonly assignments: AssignmentStore;
+}) {
   const projects = yield* Projects;
   const roots = yield* FileRoots;
   const repositories = yield* Repositories;
@@ -116,7 +123,14 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({ store }: { read
       );
       const withheld: WithheldCheckout[] = [];
       const changed = yield* units.write(
-        writes('ProjectRoots.moved', [projectRoot, projectRootCover, fileRoot, fileRootNamespace]),
+        writes('ProjectRoots.moved', [
+          projectRoot,
+          projectRootCover,
+          fileRoot,
+          fileRootNamespace,
+          assignmentSelection,
+          assignmentMembership,
+        ]),
         (unit) =>
           Effect.gen(function* () {
             const held = yield* store.stamp(projectId, unit);
@@ -127,6 +141,7 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({ store }: { read
                 message: `This project's coverage was established in ${held.namespaceId}; a second namespace does not share this record.`,
               });
             }
+            const former = yield* store.canonical(projectId, unit);
             const registeredRoots: ProjectRoot[] = [];
             const noted = new Set<RootId>();
             const published = yield* roots.publishAll(
@@ -145,14 +160,27 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({ store }: { read
               noted.add(root.rootId);
               registeredRoots.push({ projectId, rootId: root.rootId, path: root.path, origin });
             }
+            const main = registeredRoots.find((root) => root.origin === 'canonical');
+            const leaving = former !== null && !noted.has(former) ? former : null;
+            const awaited = main === undefined ? leaving : null;
             const stored = yield* store.rootIds(projectId, unit);
             const live = new Set((yield* roots.live(stored, unit)).map((root) => root.rootId));
             yield* store.forget(
               projectId,
-              stored.filter((rootId) => !live.has(rootId)),
+              stored.filter((rootId) => !live.has(rootId) && rootId !== awaited),
               unit,
             );
-            yield* store.establish({ projectId, namespaceId: roots.namespaceId, rootPath: row.rootPath, roots: registeredRoots }, unit);
+            yield* store.establish(
+              {
+                projectId,
+                namespaceId: roots.namespaceId,
+                rootPath: awaited === null || held === null ? row.rootPath : held.rootPath,
+                roots: registeredRoots,
+                kept: awaited === null ? [] : [awaited],
+              },
+              unit,
+            );
+            if (leaving !== null && main !== undefined) yield* assignments.follow(projectId, leaving, main.rootId, unit);
             const before = new Set(stored);
             const now = yield* store.rootIds(projectId, unit);
             return now.length !== stored.length || now.some((rootId) => !before.has(rootId));

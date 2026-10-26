@@ -39,6 +39,7 @@ import { makeEnvironmentUses } from './environments/uses.js';
 import { makeEnvironmentUseStore } from './store/environmentUses.js';
 import { makeCoverageLedger } from './roots/coverage.js';
 import { makeCoverageStore } from './store/coverage.js';
+import { makeAssignmentStore } from './store/assignments.js';
 import type { Projects } from '../projects/contract/service/registry.js';
 import { CommitTrees } from './contract/service/commitTrees.js';
 import { makeGitCommitTrees } from './checkouts/commitTrees.js';
@@ -83,7 +84,10 @@ export const workspaceLayer: Layer.Layer<
     const watches = yield* Effect.provideContext(makeCheckoutWatches(), registered);
     const used = registered.pipe(Context.add(RootUses, uses), Context.add(CheckoutWatch, watches));
     const checkouts = yield* Effect.provideContext(makeGitCheckoutRows, used);
-    const coverage = yield* Effect.provideContext(makeCoverageLedger({ store: makeCoverageStore({ db }) }), used);
+    const coverage = yield* Effect.provideContext(
+      makeCoverageLedger({ store: makeCoverageStore({ db }), assignments: makeAssignmentStore({ db }) }),
+      used,
+    );
     yield* drive('root-healing', healRootsDaily(yield* Effect.provideContext(makeRootHealing({ records }), used)));
     const covered = used.pipe(Context.add(CheckoutRows, checkouts), Context.add(Coverage, coverage));
     const placed = covered.pipe(Context.add(CheckoutPaths, yield* Effect.provideContext(makeCheckoutPathService, covered)));

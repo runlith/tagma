@@ -212,7 +212,15 @@ export const composed = Effect.fnUntraced(
       running.set(useId, one);
       return useId;
     });
-    const coverage = yield* coverageLedger(demo.graph.projects, roots, repositories, coverageStore(db), units, liveGit);
+    const coverage = yield* coverageLedger(
+      demo.graph.projects,
+      roots,
+      repositories,
+      coverageStore(db),
+      assignmentStore(db),
+      units,
+      liveGit,
+    );
     const worktrees = yield* worktreeCreator({ intents: records, records, repositories, roots, git: liveGit, files, paths, units });
     const holding = new Map<string, CheckoutHolder>();
     const checkouts = yield* gitCheckoutRows(liveGit, roots, files, yield* Effect.scope);

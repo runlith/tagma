@@ -86,7 +86,15 @@ layer(demoGraphLayer({ repos: ['target'] }), { excludeTestServices: true })('for
           const roots = yield* rootRegistry(records, files, path, NamespaceId.make('foreign-checkout'), unreserved);
           const repositories = yield* repositoryRegistry(yield* repositoryStore(store.db, units), liveGit, files, path, roots.namespaceId);
           const uses = yield* rootUseLedger(rootUseStore(store.db), roots, records, units);
-          const coverage = yield* coverageLedger(projects, roots, repositories, coverageStore(store.db), units, liveGit);
+          const coverage = yield* coverageLedger(
+            projects,
+            roots,
+            repositories,
+            coverageStore(store.db),
+            assignmentStore(store.db),
+            units,
+            liveGit,
+          );
           const paths = yield* checkoutPaths(coverage, projects);
           const scope = yield* Effect.scope;
           const checkouts = yield* gitCheckoutRows(liveGit, roots, files, scope);

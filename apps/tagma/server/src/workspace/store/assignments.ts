@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { Data, Effect, Schema } from 'effect';
 import { assignmentMembership, assignmentSelection } from './tables.js';
+import { threadRecord } from '../../thread-record/store/table.js';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
 import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
 import { AssignmentRefused, Membership, RootSelection, SelectionRevision, type SelectionProvenance } from '../contract/wire/assignments.js';
@@ -128,6 +129,38 @@ export const makeAssignmentStore = ({ db }: { readonly db: StoreDb<'machine'> })
     );
   });
 
+  const follow = Effect.fn('AssignmentStore.follow')(function* (
+    projectId: number,
+    from: RootId,
+    to: RootId,
+    unit: WriteUnit<'machine'>,
+  ): Effect.fn.Return<void, StoreFailure> {
+    const homed = db.select({ id: threadRecord.id }).from(threadRecord).where(eq(threadRecord.projectId, projectId));
+    yield* unit.run(
+      db
+        .update(assignmentSelection)
+        .set({ rootId: to, revision: sql`${assignmentSelection.revision} + 1` })
+        .where(and(eq(assignmentSelection.rootId, from), inArray(assignmentSelection.threadId, homed))),
+    );
+    const standing = and(eq(assignmentMembership.rootId, from), inArray(assignmentMembership.threadId, homed));
+    yield* unit.run(
+      db
+        .insert(assignmentMembership)
+        .select((qb) =>
+          qb
+            .select({
+              threadId: assignmentMembership.threadId,
+              rootId: sql<string>`${to}`.as('root_id'),
+              provenance: assignmentMembership.provenance,
+            })
+            .from(assignmentMembership)
+            .where(standing),
+        )
+        .onConflictDoNothing(),
+    );
+    yield* unit.run(db.delete(assignmentMembership).where(standing));
+  });
+
   const selectedStep = Effect.fn('AssignmentStore.selected')(
     (threadId: ThreadId, row: { root_id: string | null; provenance: string; revision: number | null }) =>
       decodeSelection({
@@ -143,5 +176,5 @@ export const makeAssignmentStore = ({ db }: { readonly db: StoreDb<'machine'> })
     ),
   );
 
-  return { assignment, selection: selectionStep, holders, enroll, withdraw, select };
+  return { assignment, selection: selectionStep, holders, enroll, withdraw, select, follow };
 };

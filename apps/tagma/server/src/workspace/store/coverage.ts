@@ -50,11 +50,22 @@ export const makeCoverageStore = ({ db }: { readonly db: StoreDb<'machine'> }) =
     return rows.map((row) => row.rootId as RootId);
   });
 
+  const canonical = Effect.fn('ProjectRootStore.canonical')(function* (projectId: number, unit: Unit<'machine'>) {
+    const row = yield* unit.run(
+      db
+        .select({ rootId: projectRoot.rootId })
+        .from(projectRoot)
+        .where(and(eq(projectRoot.projectId, projectId), eq(projectRoot.origin, 'canonical')))
+        .get(),
+    );
+    return row === undefined ? null : (row.rootId as RootId);
+  });
+
   const establish = Effect.fn('ProjectRootStore.establish')(function* (
-    coverage: { projectId: number; namespaceId: string; rootPath: string; roots: readonly ProjectRoot[] },
+    coverage: { projectId: number; namespaceId: string; rootPath: string; roots: readonly ProjectRoot[]; kept: readonly RootId[] },
     unit: WriteUnit<'machine'>,
   ): Effect.fn.Return<void, StoreFailure> {
-    const found = coverage.roots.map((root) => root.rootId);
+    const found = [...coverage.roots.map((root) => root.rootId), ...coverage.kept];
     yield* unit.run(
       db
         .delete(projectRoot)
@@ -136,5 +147,5 @@ export const makeCoverageStore = ({ db }: { readonly db: StoreDb<'machine'> }) =
     );
   });
 
-  return { coverage, stamp, projectsOf, rootIds, establish, forget, link, unlink, adopt };
+  return { coverage, stamp, projectsOf, rootIds, canonical, establish, forget, link, unlink, adopt };
 };

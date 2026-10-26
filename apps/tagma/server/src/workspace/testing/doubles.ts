@@ -92,10 +92,11 @@ export const coverageLedger = (
   roots: FileRoots['Service'],
   repositories: Repositories['Service'],
   store: CoverageStore,
+  assignments: AssignmentStore,
   units: MachineUnits['Service'],
   git: Git['Service'],
 ) =>
-  makeCoverageLedger({ store }).pipe(
+  makeCoverageLedger({ store, assignments }).pipe(
     Effect.provideService(Projects, projects),
     Effect.provideService(FileRoots, roots),
     Effect.provideService(Repositories, repositories),
@@ -121,7 +122,15 @@ export const coveredWorkspace = Effect.fnUntraced(function* (input: {
     git,
   );
   const uses = yield* Effect.provideService(makeRootUseLedger({ uses: makeRootUseStore({ db }), records }), FileRoots, roots);
-  const coverage = yield* coverageLedger(projects, roots, repositories, makeCoverageStore({ db }), yield* MachineUnits, git);
+  const coverage = yield* coverageLedger(
+    projects,
+    roots,
+    repositories,
+    makeCoverageStore({ db }),
+    makeAssignmentStore({ db }),
+    yield* MachineUnits,
+    git,
+  );
   return { records, roots, repositories, uses, coverage };
 });
 
