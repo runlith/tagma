@@ -8,6 +8,7 @@ import { workspacePaths } from './packages.ts';
 import { Hashes, type Inputs, type Variant } from './inputs.ts';
 import { Records } from './records.ts';
 import { budgetOf, coresOf } from '@runlith/testbed/budget';
+import { kindOf } from '@runlith/testbed/kinds';
 import type { FileRow, Row } from '@runlith/testbed/ledger';
 import { slowLine, type FileVerdict, type RunRow, type SlowRow } from '@runlith/testbed/report';
 import { runJobs } from '@runlith/testbed/schedule';
@@ -182,7 +183,7 @@ let code = 0;
 let ran = 0;
 const groups = new Map<string, Planned[]>();
 for (const plan of plans.filter((plan) => !plan.cached)) {
-  const key = `${plan.pkg.dir}\0${plan.runner}`;
+  const key = `${plan.pkg.dir}\0${plan.runner}\0${kindOf(plan.file)}`;
   const group = groups.get(key) ?? [];
   group.push(plan);
   groups.set(key, group);

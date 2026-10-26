@@ -44,6 +44,10 @@
       "types": "./src/slots.ts",
       "default": "./src/slots.ts"
     },
+    "./kinds": {
+      "types": "./src/core/files.ts",
+      "default": "./src/core/files.ts"
+    },
     "./schedule": {
       "types": "./src/schedule.ts",
       "default": "./src/schedule.ts"
