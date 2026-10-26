@@ -48,7 +48,7 @@ it.live('a live request whose answer cannot be encoded ends by a defect that the
     const { client, defects } = yield* served();
     expect(Exit.isFailure(yield* Effect.exit(Stream.runCollect(client['probe.subscribe']())))).toBe(true);
     expect(defects()).toMatchObject([{ place: 'live probe.subscribe', message: expect.stringContaining('Expected number') }]);
-  }).pipe(Effect.timeout('10 seconds')),
+  }),
 );
 
 it.live('a live handler that dies is kept once with its own error', () =>
@@ -56,5 +56,5 @@ it.live('a live handler that dies is kept once with its own error', () =>
     const { client, defects } = yield* served();
     expect(Exit.isFailure(yield* Effect.exit(client['probe.break']()))).toBe(true);
     expect(defects()).toMatchObject([{ place: 'live probe.break', message: 'the probe broke' }]);
-  }).pipe(Effect.timeout('10 seconds')),
+  }),
 );

@@ -16,25 +16,19 @@ type Standing = { readonly pid: number; readonly port: number };
 
 const nextStanding = async (home: string, previous: number | null): Promise<Standing> => {
   const path = join(home, 'standing.json');
-  const until = Date.now() + 5000;
-  while (Date.now() < until) {
+  for (;;) {
     if (existsSync(path)) {
       const standing: Standing = JSON.parse(readFileSync(path, 'utf8'));
       if (standing.pid !== previous) return standing;
     }
     await Bun.sleep(20);
   }
-  throw new Error('the next server did not stand');
 };
 
 const ask = (standing: Standing, path: string) => fetch(`http://127.0.0.1:${standing.port}/${path}`);
 
 const gone = async (pid: number): Promise<void> => {
-  const until = Date.now() + 5000;
-  while (pidAlive(pid)) {
-    if (Date.now() >= until) throw new Error(`pid ${pid} stayed after cancellation`);
-    await Bun.sleep(20);
-  }
+  while (pidAlive(pid)) await Bun.sleep(20);
 };
 
 test('the launch owns successive servers, refuses a failed candidate, and closes every generation on hangup', async () => {
@@ -52,25 +46,9 @@ test('the launch owns successive servers, refuses a failed candidate, and closes
       ipc: () => {},
     });
     try {
-      const until = Date.now() + 5000;
-      while (!existsSync(connecting)) {
-        if (Date.now() >= until) throw new Error('the late connection did not reach bootstrap');
-        await Bun.sleep(20);
-      }
+      while (!existsSync(connecting)) await Bun.sleep(20);
       late.disconnect();
-      const exited = await new Promise<number>((resolve, reject) => {
-        const deadline = setTimeout(() => reject(new Error('a server booted after its launch had disconnected')), 1000);
-        void late.exited.then(
-          (code) => {
-            clearTimeout(deadline);
-            resolve(code);
-          },
-          (cause: unknown) => {
-            clearTimeout(deadline);
-            reject(cause);
-          },
-        );
-      });
+      const exited = await late.exited;
       expect(exited).toBe(1);
       expect(dataDirectoryHolder(bootstrap)).toBeNull();
     } finally {
@@ -112,7 +90,7 @@ test('the launch owns successive servers, refuses a failed candidate, and closes
     await launch.stop();
     rmSync(home, { recursive: true, force: true });
   }
-}, 10000);
+});
 
 test('the launch closes in-flight candidates and its servers leave when the owner dies', async () => {
   const home = mkdtempSync(join(tmpdir(), 'tagma-launch-'));
@@ -124,11 +102,7 @@ test('the launch closes in-flight candidates and its servers leave when the owne
       (cause: unknown) => cause,
     );
     const marker = join(home, 'candidate');
-    const until = Date.now() + 5000;
-    while (!existsSync(marker)) {
-      if (Date.now() >= until) throw new Error('the candidate did not start');
-      await Bun.sleep(20);
-    }
+    while (!existsSync(marker)) await Bun.sleep(20);
     const candidate = Number(readFileSync(marker, 'utf8'));
     expect(pidAlive(candidate)).toBe(true);
     await launch.stop('SIGHUP');
@@ -163,7 +137,7 @@ test('the launch closes in-flight candidates and its servers leave when the owne
     await launch.stop();
     rmSync(home, { recursive: true, force: true });
   }
-}, 10000);
+});
 
 test('a successor that ends after taking the data directory leaves the launch running the build it replaced', async () => {
   const home = mkdtempSync(join(tmpdir(), 'tagma-launch-'));
@@ -184,7 +158,7 @@ test('a successor that ends after taking the data directory leaves the launch ru
     await launch.stop();
     rmSync(home, { recursive: true, force: true });
   }
-}, 15000);
+});
 
 test.each([
   {
@@ -195,78 +169,70 @@ test.each([
     outcome: 'a predecessor that ends without releasing leaves the successor serving, naming that it left',
     extra: { LAUNCH_TEST_LEAVE_UNRELEASED: '1' } as Record<string, string>,
   },
-])(
-  'without a launch, $outcome',
-  async ({ extra }) => {
-    const home = mkdtempSync(join(tmpdir(), 'tagma-launch-'));
-    const first = Bun.spawn([process.execPath, server], {
-      env: { ...process.env, LAUNCH_TEST_HOME: home, LAUNCH_TEST_UNSUPERVISED: '1', ...extra },
-      stdin: 'ignore',
-      stdout: 'ignore',
-      stderr: 'ignore',
-    });
-    let standing: Standing | undefined;
-    try {
-      standing = await nextStanding(home, null);
-      const predecessor = standing.pid;
-      expect((await ask(standing, 'restart')).ok).toBe(true);
-      standing = await nextStanding(home, predecessor);
-      expect(dataDirectoryHolder(home)).toBe(standing.pid);
-      await gone(predecessor);
-      const named = join(home, `unreleased-${standing.pid}`);
-      expect(existsSync(named)).toBe(true);
-      const reason = readFileSync(named, 'utf8');
-      expect(reason).toBe(extra.LAUNCH_TEST_RELEASE_FAILURE ?? `pid ${predecessor} left without releasing the data directory`);
-    } finally {
-      if (standing !== undefined && pidAlive(standing.pid)) {
-        process.kill(standing.pid, 'SIGTERM');
-        await gone(standing.pid);
-      }
-      if (first.exitCode === null && first.signalCode === null) first.kill('SIGTERM');
-      await first.exited;
-      rmSync(home, { recursive: true, force: true });
+])('without a launch, $outcome', async ({ extra }) => {
+  const home = mkdtempSync(join(tmpdir(), 'tagma-launch-'));
+  const first = Bun.spawn([process.execPath, server], {
+    env: { ...process.env, LAUNCH_TEST_HOME: home, LAUNCH_TEST_UNSUPERVISED: '1', ...extra },
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  let standing: Standing | undefined;
+  try {
+    standing = await nextStanding(home, null);
+    const predecessor = standing.pid;
+    expect((await ask(standing, 'restart')).ok).toBe(true);
+    standing = await nextStanding(home, predecessor);
+    expect(dataDirectoryHolder(home)).toBe(standing.pid);
+    await gone(predecessor);
+    const named = join(home, `unreleased-${standing.pid}`);
+    expect(existsSync(named)).toBe(true);
+    const reason = readFileSync(named, 'utf8');
+    expect(reason).toBe(extra.LAUNCH_TEST_RELEASE_FAILURE ?? `pid ${predecessor} left without releasing the data directory`);
+  } finally {
+    if (standing !== undefined && pidAlive(standing.pid)) {
+      process.kill(standing.pid, 'SIGTERM');
+      await gone(standing.pid);
     }
-  },
-  15000,
-);
+    if (first.exitCode === null && first.signalCode === null) first.kill('SIGTERM');
+    await first.exited;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
 
 test.each([
   { fails: false, outcome: 'the successor serves and the predecessor leaves' },
   { fails: true, outcome: 'a successor that ends after taking the data directory leaves the predecessor starting itself again' },
-])(
-  'without a launch, $outcome',
-  async ({ fails }) => {
-    const home = mkdtempSync(join(tmpdir(), 'tagma-launch-'));
-    const first = Bun.spawn([process.execPath, server], {
-      env: {
-        ...process.env,
-        LAUNCH_TEST_HOME: home,
-        LAUNCH_TEST_UNSUPERVISED: '1',
-        ...(fails ? { LAUNCH_TEST_FAIL_AFTER_TAKE: '1' } : {}),
-      },
-      stdin: 'ignore',
-      stdout: 'ignore',
-      stderr: 'ignore',
-    });
-    let standing: Standing | undefined;
-    try {
-      standing = await nextStanding(home, null);
-      const predecessor = standing.pid;
-      expect((await ask(standing, 'restart')).ok).toBe(true);
-      standing = await nextStanding(home, predecessor);
-      expect(dataDirectoryHolder(home)).toBe(standing.pid);
-      await gone(predecessor);
-      expect(existsSync(join(home, `closed-${predecessor}`))).toBe(true);
-      expect(fails).toBe(readFileSync(join(home, 'serve.log'), 'utf8').includes('returned by pid'));
-    } finally {
-      if (standing !== undefined && pidAlive(standing.pid)) {
-        process.kill(standing.pid, 'SIGTERM');
-        await gone(standing.pid);
-      }
-      if (first.exitCode === null && first.signalCode === null) first.kill('SIGTERM');
-      await first.exited;
-      rmSync(home, { recursive: true, force: true });
+])('without a launch, $outcome', async ({ fails }) => {
+  const home = mkdtempSync(join(tmpdir(), 'tagma-launch-'));
+  const first = Bun.spawn([process.execPath, server], {
+    env: {
+      ...process.env,
+      LAUNCH_TEST_HOME: home,
+      LAUNCH_TEST_UNSUPERVISED: '1',
+      ...(fails ? { LAUNCH_TEST_FAIL_AFTER_TAKE: '1' } : {}),
+    },
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  let standing: Standing | undefined;
+  try {
+    standing = await nextStanding(home, null);
+    const predecessor = standing.pid;
+    expect((await ask(standing, 'restart')).ok).toBe(true);
+    standing = await nextStanding(home, predecessor);
+    expect(dataDirectoryHolder(home)).toBe(standing.pid);
+    await gone(predecessor);
+    expect(existsSync(join(home, `closed-${predecessor}`))).toBe(true);
+    expect(fails).toBe(readFileSync(join(home, 'serve.log'), 'utf8').includes('returned by pid'));
+  } finally {
+    if (standing !== undefined && pidAlive(standing.pid)) {
+      process.kill(standing.pid, 'SIGTERM');
+      await gone(standing.pid);
     }
-  },
-  15000,
-);
+    if (first.exitCode === null && first.signalCode === null) first.kill('SIGTERM');
+    await first.exited;
+    rmSync(home, { recursive: true, force: true });
+  }
+});

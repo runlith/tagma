@@ -114,7 +114,7 @@ layer(browserWorld({ host: Layer.empty, adapters: [desktopAdapter], home }), { e
         const answerSeq = fake.next();
         fake.sent({ kind: 'event', seq: fake.next(), event: { kind: 'changed', page, change: { title: 'Next' } } });
         yield* Effect.yieldNow;
-        expect(yield* Fiber.join(going).pipe(Effect.timeoutOption('50 millis'))).toEqual(Option.none());
+        expect(going.pollUnsafe()).toBeUndefined();
         expect(yield* Queue.poll(heard)).toEqual(Option.none());
         const title = `${'a'.repeat(PART_CHARS - 1)}😀`;
         fake.sent({ kind: 'answer', seq: answerSeq, id: navigate.id, value: { url: 'https://example.com/next', title, loading: true } });

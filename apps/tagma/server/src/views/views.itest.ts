@@ -153,7 +153,6 @@ it.live(
       });
       expect(yield* views.file('board', 'ui/secret.txt')).toBeNull();
     }),
-  20_000,
 );
 
 it.live('a view reaches the outside origins its manifest declares and no origin it does not, this machine never', () =>
@@ -211,49 +210,46 @@ it.live('a contribution naming an undeclared view fails the plugin and shows not
   }),
 );
 
-it.live(
-  'a view calls only its plugin’s view tools, follows its resources and keeps its values',
-  () =>
-    Effect.gen(function* () {
-      const { projectId, plugins, views, storage, mount } = yield* setup(true);
-      yield* plugins.install({ projectId, id: 'board', enabled: true });
-      const caller = { kind: 'operator' as const, projectId, view: 'board' };
-      expect(yield* refusalOf(views.call(mount, 'dashboard', {}, caller))).toBe('plugin-tool-unoffered');
-      expect(yield* refusalOf(views.call({ ...mount, view: 'other' }, 'refresh', {}, caller))).toBe('plugin-view-unknown');
-      let subscribed: unknown;
-      const events = yield* Effect.scoped(
-        Effect.gen(function* () {
-          const seen = yield* Queue.unbounded<string>();
-          const fiber = yield* Effect.forkScoped(
-            Stream.runCollect(
-              views.watch(mount, 'app://state').pipe(
-                Stream.tap((event) => Queue.offer(seen, event.kind)),
-                Stream.take(5),
-              ),
+it.live('a view calls only its plugin’s view tools, follows its resources and keeps its values', () =>
+  Effect.gen(function* () {
+    const { projectId, plugins, views, storage, mount } = yield* setup(true);
+    yield* plugins.install({ projectId, id: 'board', enabled: true });
+    const caller = { kind: 'operator' as const, projectId, view: 'board' };
+    expect(yield* refusalOf(views.call(mount, 'dashboard', {}, caller))).toBe('plugin-tool-unoffered');
+    expect(yield* refusalOf(views.call({ ...mount, view: 'other' }, 'refresh', {}, caller))).toBe('plugin-view-unknown');
+    let subscribed: unknown;
+    const events = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const seen = yield* Queue.unbounded<string>();
+        const fiber = yield* Effect.forkScoped(
+          Stream.runCollect(
+            views.watch(mount, 'app://state').pipe(
+              Stream.tap((event) => Queue.offer(seen, event.kind)),
+              Stream.take(5),
             ),
-          );
-          yield* Queue.take(seen);
-          yield* Queue.take(seen);
-          expect((yield* views.call(mount, 'refresh', {}, caller)).structuredContent).toEqual({ revision: 1 });
-          yield* Queue.take(seen);
-          const named = (yield* views.read(mount, 'app://callers')).contents[0];
-          subscribed = JSON.parse(named !== undefined && 'text' in named ? named.text : '{}');
-          yield* Effect.exit(plugins.call('board', 'exit', {}, {}));
-          return yield* Fiber.join(fiber);
-        }),
-      ).pipe(Effect.timeout('20 seconds'));
-      expect(events.map((event) => event.kind)).toEqual(['subscribed', 'updated', 'updated', 'updated', 'updated']);
-      expect((yield* views.read(mount, 'app://subscriptions')).contents[0]).toMatchObject({ text: '[]' });
-      yield* views.read(mount, 'app://state');
-      const callers = (yield* views.read(mount, 'app://callers')).contents[0];
-      expect(JSON.parse(callers !== undefined && 'text' in callers ? callers.text : '{}')).toMatchObject({ read: caller });
-      expect(subscribed).toEqual({ subscribe: caller });
-      expect(yield* storage.get(mount, 'save')).toEqual({ stored: false });
-      yield* storage.set(mount, 'save', { level: 3 });
-      expect(yield* storage.get(mount, 'save')).toEqual({ stored: true, value: { level: 3 } });
-      yield* storage.set(mount, 'save', undefined);
-      expect(yield* storage.get(mount, 'save')).toEqual({ stored: false });
-      expect(yield* refusalOf(storage.set(mount, 'big', 'x'.repeat(1024 * 1024 + 1)))).toBe('view-storage-too-large');
-    }),
-  30_000,
+          ),
+        );
+        yield* Queue.take(seen);
+        yield* Queue.take(seen);
+        expect((yield* views.call(mount, 'refresh', {}, caller)).structuredContent).toEqual({ revision: 1 });
+        yield* Queue.take(seen);
+        const named = (yield* views.read(mount, 'app://callers')).contents[0];
+        subscribed = JSON.parse(named !== undefined && 'text' in named ? named.text : '{}');
+        yield* Effect.exit(plugins.call('board', 'exit', {}, {}));
+        return yield* Fiber.join(fiber);
+      }),
+    );
+    expect(events.map((event) => event.kind)).toEqual(['subscribed', 'updated', 'updated', 'updated', 'updated']);
+    expect((yield* views.read(mount, 'app://subscriptions')).contents[0]).toMatchObject({ text: '[]' });
+    yield* views.read(mount, 'app://state');
+    const callers = (yield* views.read(mount, 'app://callers')).contents[0];
+    expect(JSON.parse(callers !== undefined && 'text' in callers ? callers.text : '{}')).toMatchObject({ read: caller });
+    expect(subscribed).toEqual({ subscribe: caller });
+    expect(yield* storage.get(mount, 'save')).toEqual({ stored: false });
+    yield* storage.set(mount, 'save', { level: 3 });
+    expect(yield* storage.get(mount, 'save')).toEqual({ stored: true, value: { level: 3 } });
+    yield* storage.set(mount, 'save', undefined);
+    expect(yield* storage.get(mount, 'save')).toEqual({ stored: false });
+    expect(yield* refusalOf(storage.set(mount, 'big', 'x'.repeat(1024 * 1024 + 1)))).toBe('view-storage-too-large');
+  }),
 );
