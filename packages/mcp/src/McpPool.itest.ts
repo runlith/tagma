@@ -277,16 +277,18 @@ describe('McpPool', () => {
     Effect.fnUntraced(function* () {
       const scope = yield* Scope.fork(yield* Effect.scope);
       const pool = yield* McpPool.make().pipe(Scope.provide(scope));
-      yield* pool.reconcile([declare('frozen', [], { timeoutMs: 1_000 })]);
+      const started = join(mkdtempSync(join(tmpdir(), 'mcp-interrupted-')), 'started');
+      yield* pool.reconcile([declare('frozen', [], { timeoutMs: 1_000, env: { MCP_TEST_HOLD_CALL: started } })]);
       yield* pool.awaitHandshakes();
       expect(pool.states()).toMatchObject([{ name: 'frozen', status: 'connected' }]);
       const pid = Number(text(yield* pool.call('frozen', 'pid', {})));
-      process.kill(pid, 'SIGSTOP');
 
-      const calling = yield* Effect.forkScoped(pool.call('frozen', 'echo', { text: 'hi' }));
-      yield* Effect.promise(() => Bun.sleep(100));
-      const answered = yield* Fiber.interrupt(calling).pipe(Effect.andThen(Fiber.await(calling)));
-      process.kill(pid, 'SIGCONT');
+      const answered = yield* Effect.gen(function* () {
+        const calling = yield* Effect.forkScoped(pool.call('frozen', 'echo', { text: 'hi' }));
+        yield* until(() => existsSync(started));
+        process.kill(pid, 'SIGSTOP');
+        return yield* Fiber.interrupt(calling).pipe(Effect.andThen(Fiber.await(calling)));
+      }).pipe(Effect.ensuring(Effect.sync(() => process.kill(pid, 'SIGCONT'))));
 
       expect(Exit.isFailure(answered) && Cause.hasInterruptsOnly(answered.cause)).toBe(true);
       expect(pool.states().map((state) => [state.name, state.status])).toEqual([['frozen', 'connected']]);

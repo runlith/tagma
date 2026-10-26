@@ -1,4 +1,4 @@
-import { Duration, Effect, Exit, Option, Scope } from 'effect';
+import { Effect, Exit, Scope } from 'effect';
 import type { Socket } from 'effect/socket/Socket';
 import type { HelperAbsent } from '../helper/channel.ts';
 import { clientAudio, controlFrame } from '../helper/frame.ts';
@@ -130,20 +130,16 @@ const playback = Effect.fnUntraced(function* (probe: Probe, id: number): Effect.
   yield* probe.clean(step);
 });
 
-export const conformance = (
-  launch: Launch,
-  patience: Duration.Input = Duration.seconds(5),
-): Effect.Effect<ReadonlyArray<string>, ConformanceFailed> =>
+export const conformance = (launch: Launch): Effect.Effect<ReadonlyArray<string>, ConformanceFailed> =>
   Effect.acquireUseRelease(
     Scope.make(),
-    (scope) => scenario(scope, launch, patience),
+    (scope) => scenario(scope, launch),
     (scope) => Scope.close(scope, Exit.void),
   );
 
 const scenario = Effect.fnUntraced(function* (
   scope: Scope.Closeable,
   launch: Launch,
-  patience: Duration.Input,
 ): Effect.fn.Return<ReadonlyArray<string>, ConformanceFailed> {
   const passed: Array<string> = [];
   const pass = (step: string) => Effect.sync(() => void passed.push(step));
@@ -151,7 +147,7 @@ const scenario = Effect.fnUntraced(function* (
   const launched = yield* Scope.provide(launch(secret), scope).pipe(
     Effect.mapError((absent) => new ConformanceFailed({ step: 'launch', detail: absent.reason })),
   );
-  const probe = yield* Scope.provide(openProbe(launched.socket, Duration.fromInputUnsafe(patience)), scope);
+  const probe = yield* Scope.provide(openProbe(launched.socket), scope);
 
   const hello = yield* probe.expect('hello', (received) => {
     if (received.kind !== 'message') return undefined;
@@ -211,8 +207,7 @@ const scenario = Effect.fnUntraced(function* (
   yield* probe.expect('eof with held resources', message('ready', 9));
   yield* probe.bytes('eof with held resources', clientAudio(9, new Int16Array(PIECE)));
   yield* Scope.close(scope, Exit.void);
-  const exited = yield* Effect.timeoutOption(launched.exited, patience);
-  yield* check('eof with held resources', Option.isSome(exited), 'the helper did not exit after the client closed the channel');
+  yield* launched.exited;
   yield* pass('eof with held resources');
   return passed;
 });

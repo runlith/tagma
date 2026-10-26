@@ -1,4 +1,4 @@
-import { type Cause, Clock, Data, Duration, Effect, Option, Queue, Result, type Scope } from 'effect';
+import { type Cause, Clock, Data, Effect, Queue, Result } from 'effect';
 import type { Socket } from 'effect/socket/Socket';
 import { receiving } from '../helper/channel.ts';
 import { encodeClient, FrameReader, type HelperAudio, readHelper, readHelperAudio } from '../helper/frame.ts';
@@ -18,7 +18,7 @@ export type Received =
 
 const TOLERANCE = 2_000_000n;
 
-export const openProbe = Effect.fnUntraced(function* (socket: Socket, patience: Duration.Duration) {
+export const openProbe = Effect.fnUntraced(function* (socket: Socket) {
   const inbox = yield* Queue.unbounded<Received, Cause.Done>();
   const reader = new FrameReader();
   const writer = yield* socket.writer;
@@ -91,26 +91,18 @@ export const openProbe = Effect.fnUntraced(function* (socket: Socket, patience: 
 
   const send = (step: string, message: ClientMessage): Effect.Effect<void, ConformanceFailed> => bytes(step, encodeClient(message));
 
-  const expect = <A>(step: string, match: (received: Received) => A | undefined): Effect.Effect<A, ConformanceFailed> => {
-    const take: Effect.Effect<A, ConformanceFailed> = Effect.gen(function* () {
-      for (;;) {
-        const received = yield* Queue.take(inbox).pipe(Effect.mapError(() => new ConformanceFailed({ step, detail: 'the channel ended' })));
-        if (violation !== undefined) return yield* new ConformanceFailed({ step, detail: violation });
-        const found = match(received);
-        if (found !== undefined) return found;
-        if (received.kind === 'eof') return yield* new ConformanceFailed({ step, detail: 'the helper closed the channel' });
-      }
-    });
-    return take.pipe(
-      Effect.timeoutOption(patience),
-      Effect.flatMap(
-        Option.match({
-          onNone: () => Effect.fail(new ConformanceFailed({ step, detail: `nothing matched within ${Duration.format(patience)}` })),
-          onSome: Effect.succeed,
-        }),
-      ),
-    );
-  };
+  const expect = Effect.fnUntraced(function* <A>(
+    step: string,
+    match: (received: Received) => A | undefined,
+  ): Effect.fn.Return<A, ConformanceFailed> {
+    for (;;) {
+      const received = yield* Queue.take(inbox).pipe(Effect.mapError(() => new ConformanceFailed({ step, detail: 'the channel ended' })));
+      if (violation !== undefined) return yield* new ConformanceFailed({ step, detail: violation });
+      const found = match(received);
+      if (found !== undefined) return found;
+      if (received.kind === 'eof') return yield* new ConformanceFailed({ step, detail: 'the helper closed the channel' });
+    }
+  });
 
   const helperNow = (): bigint | undefined => {
     if (hello === undefined) return undefined;

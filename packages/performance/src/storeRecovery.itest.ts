@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { it } from '@runlith/effect-test';
+import * as Deferred from 'effect/Deferred';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -452,6 +453,7 @@ it.live('a group opened while the worker is gone protects the segment its record
     const directory = yield* scratchDirectory('performance-outage-open-');
     const path = join(directory, 'performance.sqlite');
     const maxStoredBytes = 700_000;
+    let maintenance: Deferred.Deferred<void> | undefined;
     let holder: Bun.Subprocess | undefined;
     yield* Effect.addFinalizer(() => Effect.sync(() => holder?.kill()));
     yield* Effect.gen(function* () {
@@ -481,7 +483,6 @@ it.live('a group opened while the worker is gone protects the segment its record
         yield* store.flush;
       }
       yield* waitFor(() => store.diagnostics().evictedSegments >= 1);
-      yield* Effect.sleep('200 millis');
       const spared = yield* reports.read({ type: 'trace', traceId: 'held', limit: 100 });
       if (spared.type !== 'trace') return yield* Effect.die('unexpected report');
       expect(spared.totalSpans).toBe(16);
@@ -491,7 +492,9 @@ it.live('a group opened while the worker is gone protects the segment its record
 
       store.closeGroup('held');
       expect(store.diagnostics().activeGroups).toBe(1);
-      yield* Effect.sleep('200 millis');
+      maintenance = yield* Deferred.make<void>();
+      yield* Deferred.await(maintenance);
+      yield* store.flush;
       const nested = yield* reports.read({ type: 'trace', traceId: 'held', limit: 100 });
       if (nested.type !== 'trace') return yield* Effect.die('unexpected report');
       expect(nested.totalSpans).toBe(16);
@@ -512,7 +515,10 @@ it.live('a group opened while the worker is gone protects the segment its record
               path,
               instanceId: 'process',
               maxPendingBytes: () => 2_000_000,
-              maxStoredBytes: () => maxStoredBytes,
+              maxStoredBytes: () => {
+                if (maintenance !== undefined) Deferred.doneUnsafe(maintenance, Effect.void);
+                return maxStoredBytes;
+              },
               busyTimeoutMs: 250,
               maintainIntervalMs: 20,
             } satisfies PerformanceStoreOptions),

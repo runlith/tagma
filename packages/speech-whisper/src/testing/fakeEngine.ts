@@ -1,3 +1,5 @@
+import { writeFileSync } from 'node:fs';
+
 type Header = Record<string, unknown> & { readonly type: string };
 type Clip = { readonly id: string; readonly language: string | undefined; readonly pcm: Int16Array };
 
@@ -28,6 +30,7 @@ const next = () => {
   if (clip.pcm[0] === crashSample) process.exit(3);
   const timer = clip.pcm[0] === endlessSample ? undefined : setTimeout(() => finish(clip), clipMs);
   active = { clip, timer };
+  if (process.env.WHISPER_TEST_STARTED !== undefined) writeFileSync(process.env.WHISPER_TEST_STARTED, String(clip.pcm[0]));
 };
 
 const probs = (stream: string, count: number) => {

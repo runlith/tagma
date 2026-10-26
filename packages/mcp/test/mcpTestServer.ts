@@ -102,6 +102,10 @@ if (flags.includes('--hang')) {
     const args = request.params.arguments ?? {};
     switch (request.params.name) {
       case 'echo':
+        if (process.env.MCP_TEST_HOLD_CALL !== undefined) {
+          writeFileSync(process.env.MCP_TEST_HOLD_CALL, 'started');
+          await new Promise<void>((resolve) => extra.signal.addEventListener('abort', () => resolve(), { once: true }));
+        }
         return text(String(args.text ?? ''));
       case 'sleep': {
         const ms = Number(args.ms ?? 0);

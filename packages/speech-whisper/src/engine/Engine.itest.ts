@@ -12,11 +12,16 @@ import { Engine, type EngineOptions } from './Engine.ts';
 
 let root = '';
 let fake = '';
+let transcribing = '';
 
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), 'speech-whisper-engine-'));
   fake = join(root, 'engine');
-  writeFileSync(fake, `#!/bin/sh\nexec "${process.execPath}" "${join(import.meta.dir, '..', 'testing', 'fakeEngine.ts')}"\n`);
+  transcribing = join(root, 'transcribing');
+  writeFileSync(
+    fake,
+    `#!/bin/sh\nWHISPER_TEST_STARTED="${transcribing}" exec "${process.execPath}" "${join(import.meta.dir, '..', 'testing', 'fakeEngine.ts')}"\n`,
+  );
   chmodSync(fake, 0o755);
 });
 
@@ -67,9 +72,10 @@ describe('Engine', () => {
     Effect.gen(function* () {
       const engine = yield* open({ queueMs: 3_000 });
       yield* engine.transcribe(small, clip(5), undefined);
+      rmSync(transcribing, { force: true });
       const stuck = yield* Effect.forkChild(engine.transcribe(small, clip(endless), undefined));
       const next = yield* Effect.forkChild(engine.transcribe(small, clip(7), undefined));
-      yield* Effect.sleep(50);
+      while (!existsSync(transcribing)) yield* Effect.sleep(10);
       const other = yield* Effect.exit(engine.transcribe(large, clip(8), undefined));
       yield* Fiber.interrupt(stuck);
       expect(textOf(yield* Fiber.join(next))).toBe('clip 7');
@@ -132,8 +138,9 @@ describe('Engine', () => {
           const first = yield* Stream.runHead(detection.probs);
           const duringLoad = yield* pending(loading);
           yield* Fiber.join(loading);
+          rmSync(transcribing, { force: true });
           const recognizing = yield* Effect.forkChild(engine.transcribe(small, clip(endless), undefined));
-          yield* Effect.sleep(50);
+          while (!existsSync(transcribing)) yield* Effect.sleep(10);
           yield* detection.push(new Int16Array(detection.window));
           const second = yield* Stream.runHead(detection.probs);
           const duringInference = yield* pending(recognizing);
@@ -158,7 +165,6 @@ describe('Engine', () => {
       const detecting = yield* Effect.forkChild(Effect.scoped(Effect.as(onEngine.detect, 'ready' as const)));
       yield* Effect.promise(async () => {
         while (!existsSync(started)) await Bun.sleep(10);
-        await Bun.sleep(50);
       });
       yield* TestClock.adjust('11 seconds');
       writeFileSync(warm, '');
