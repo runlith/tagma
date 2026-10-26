@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { Graph, testFile } from './graph.ts';
+import { moduleMapAt } from './modules.ts';
 import { workspacePaths } from './packages.ts';
 import { Hashes, type Inputs, type Variant } from './inputs.ts';
 import { Records } from './records.ts';
@@ -50,9 +51,7 @@ const git = (...command: string[]): string => {
 };
 const split = (text: string): string[] => text.split('\0').filter(Boolean);
 const tracked = workspacePaths(root);
-const cards = split(git('grep', '--untracked', '-z', '-l', '-F', 'tags: ["module"]', '--', '.tagma')).filter((path) =>
-  path.endsWith('.md'),
-);
+const modules = moduleMapAt(root);
 const declared = existsSync(join(root, 'tagma.config.ts'))
   ? ((await import(join(root, 'tagma.config.ts'))) as { readonly default: import('@runlith/tagma/rules').Config }).default
   : undefined;
@@ -68,7 +67,7 @@ const identity = createHash('sha256')
 const cache = join(process.env['XDG_CACHE_HOME'] ?? join(homedir(), '.cache'), 'runlith', 'change-check', identity);
 mkdirSync(cache, { recursive: true });
 const records = new Records(cache);
-const graph = new Graph(root, tracked, cards, new Map(built.map((entry) => [entry.output, entry.source])), records);
+const graph = new Graph(root, tracked, modules, new Map(built.map((entry) => [entry.output, entry.source])), records);
 const commit = value('--commit');
 const askedBase = value('--base');
 if ([commit, askedBase, value('--paths-from')].filter((one) => one !== undefined).length > 1)
@@ -98,8 +97,7 @@ const global = changed.find(
     /^(?:bun\.lock|bunfig\.toml|Cargo\.lock|tagma\.config\.ts)$/.test(path) ||
     path.startsWith('packages/testbed/') ||
     path.startsWith('patches/') ||
-    path.includes('/drizzle/') ||
-    (path.startsWith('.tagma/') && cards.includes(path)),
+    path.includes('/drizzle/'),
 );
 const tests = [...graph.files]
   .filter(testFile)
@@ -130,7 +128,7 @@ const selected = tests
   .filter((_, at) => shard === undefined || shard === null || at % Number(shard[2]) === Number(shard[1]) - 1);
 const counts =
   selection === undefined
-    ? { cards: tests.filter((file) => affected.has(graph.owner(file)?.block ?? '')).length, imports: tests.length, runtime: undefined }
+    ? { cards: tests.filter((file) => affected.has(graph.owner(file)?.id ?? '')).length, imports: tests.length, runtime: undefined }
     : { cards: selection.cards, imports: selection.imports, runtime: selection.runtime };
 const variant: Variant = {
   seed: Number(value('--seed') ?? 0),

@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { Graph } from './graph.ts';
+import { Graph, type Module } from './graph.ts';
 import { Hashes } from './inputs.ts';
 import { Records } from './records.ts';
 
@@ -29,29 +29,88 @@ const files = new Map<string, string>([
   ['dep/src/entry.ts', 'export const value = 1;'],
   ['dep/src/browser.ts', 'export const value = 2;'],
   ['dep/fixture.json', '{"value":1}'],
-  [
-    'pkg.card.md',
-    '---\nid: pkg\nfields: {"id":"consumer"}\nsources: [{kind: dir, ref: pkg}]\nedges: [{kind: imports-tests, to: dep}]\n---\n',
-  ],
-  ['dep.card.md', '---\nid: dep\nfields: {"id":"producer"}\nsources: [{kind: dir, ref: dep}]\n---\n'],
-  ['other.card.md', '---\nid: other\nfields: {"id":"other"}\nsources: [{kind: dir, ref: other}]\n---\n'],
 ]);
-const graph = (records?: Records): Graph =>
-  new Graph(root, [...files.keys()], ['pkg.card.md', 'dep.card.md', 'other.card.md'], new Map(), records);
+const modules: readonly Module[] = [
+  { id: 'consumer', paths: ['pkg'], imports: [], tests: ['producer'] },
+  { id: 'producer', paths: ['dep'], imports: [], tests: [] },
+  { id: 'other', paths: ['other'], imports: [], tests: [] },
+];
+const graph = (records?: Records): Graph => new Graph(root, [...files.keys()], modules, new Map(), records);
 const variant = { seed: 0, adapter: 'default', isolated: false };
+
+const tagmaAnswering = (map: Record<string, unknown>): string => {
+  const bin = realpathSync(mkdtempSync(join(tmpdir(), 'change-tagma-')));
+  writeFileSync(join(bin, 'answer.json'), JSON.stringify({ status: 'ok', rows: [], shown: 0, total: 0, map: { problems: [], ...map } }));
+  writeFileSync(
+    join(bin, 'tagma'),
+    `#!/bin/sh\n[ "$1 $2" = "op read_inspections" ] || { echo "unexpected tagma call: $*" >&2; exit 2; }\ncat ${JSON.stringify(join(bin, 'answer.json'))}\n`,
+  );
+  chmodSync(join(bin, 'tagma'), 0o755);
+  return bin;
+};
+
+const checking = (checkout: string, tagma: string, ...args: string[]) =>
+  Bun.spawn(['bun', join(import.meta.dir, 'check.ts'), '--root', checkout, ...args], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: { ...process.env, PATH: `${tagma}:${process.env['PATH'] ?? ''}` },
+  });
+
+test('a checkout whose project keeps its graph outside it selects by the module map Tagma assembles', async () => {
+  const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-stealth-')));
+  const drawn = {
+    modules: [
+      { id: 'app', territory: ['app/'], entries: [] },
+      { id: 'lib', territory: ['lib/'], entries: [] },
+    ],
+    relations: [{ from: 'app', to: 'lib' }],
+    region: ['app/', 'lib/'],
+  };
+  const tagma = tagmaAnswering(drawn);
+  const broken = tagmaAnswering({ ...drawn, problems: ['app names under imports a block that is no module card'] });
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout }).exitCode).toBe(0);
+    writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'stealth', workspaces: ['app', 'lib'] }));
+    mkdirSync(join(checkout, 'lib'));
+    mkdirSync(join(checkout, 'app'));
+    writeFileSync(join(checkout, 'app/package.json'), JSON.stringify({ name: '@stealth/app', scripts: { test: 'bun test' } }));
+    writeFileSync(join(checkout, 'lib/package.json'), JSON.stringify({ name: '@stealth/lib' }));
+    writeFileSync(join(checkout, 'lib/value.ts'), 'export const value = 1;');
+    writeFileSync(
+      join(checkout, 'app/loads.test.ts'),
+      "import { test } from 'bun:test'; const name = './late.ts'; test('loads', async () => { await import(name); });",
+    );
+    writeFileSync(join(checkout, 'changed'), 'lib/value.ts\n');
+    const refused = checking(checkout, broken, '--plan', '--paths-from', join(checkout, 'changed'));
+    const [, unread, failed] = await Promise.all([
+      new Response(refused.stdout).text(),
+      new Response(refused.stderr).text(),
+      refused.exited,
+    ]);
+    expect(failed).toBe(1);
+    expect(unread).toContain('app names under imports a block that is no module card');
+    const run = checking(checkout, tagma, '--plan', '--paths-from', join(checkout, 'changed'));
+    const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
+    expect(code, stdout + stderr).toBe(0);
+    const plan = JSON.parse(stdout) as { selected: { file: string; why: string }[] };
+    expect(plan.selected).toEqual([
+      expect.objectContaining({ file: 'app/loads.test.ts', why: 'module-card reach covers a nonliteral import' }),
+    ]);
+  } finally {
+    rmSync(checkout, { recursive: true, force: true });
+    rmSync(tagma, { recursive: true, force: true });
+    rmSync(broken, { recursive: true, force: true });
+  }
+});
 
 test('the second change check reuses passing isolated fixtures but reruns failures and external reads', async () => {
   const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-results-')));
   const external = realpathSync(mkdtempSync(join(tmpdir(), 'change-external-')));
+  const tagma = tagmaAnswering({ modules: [{ id: 'fixture', territory: ['/'], entries: [] }], relations: [], region: ['/'] });
   try {
     const git = Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout });
     expect(git.exitCode, git.stderr.toString()).toBe(0);
     writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'mixed-results', scripts: { test: 'bun test' } }));
-    mkdirSync(join(checkout, '.tagma'));
-    writeFileSync(
-      join(checkout, '.tagma/module.md'),
-      '---\nid: fixture\ntags: ["module"]\nfields: {id: fixture}\nsources: [{kind: dir, ref: ""}]\n---\n',
-    );
     const pass = `import { expect, test } from 'bun:test'; test('sum', () => expect(2 + 2).toBe(4));`;
     writeFileSync(join(checkout, 'pass.test.ts'), pass);
     writeFileSync(join(checkout, 'fail.test.ts'), pass.replace('toBe(4)', 'toBe(5)'));
@@ -111,13 +170,7 @@ test('external targets and failed reads retain their dependency and error channe
     const output: string[] = [];
     for (const round of [1, 2]) {
       const report = join(tmpdir(), `change-${crypto.randomUUID()}.json`);
-      const run = Bun.spawn(
-        ['bun', join(import.meta.dir, 'check.ts'), '--root', checkout, '--full', '--paths-from', changed, '--report', report],
-        {
-          stdout: 'pipe',
-          stderr: 'pipe',
-        },
-      );
+      const run = checking(checkout, tagma, '--full', '--paths-from', changed, '--report', report);
       const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
       output.push(stdout + stderr);
       expect(code, stdout + stderr).toBe(1);
@@ -165,6 +218,7 @@ test('external targets and failed reads retain their dependency and error channe
   } finally {
     rmSync(checkout, { recursive: true, force: true });
     rmSync(external, { recursive: true, force: true });
+    rmSync(tagma, { recursive: true, force: true });
   }
 }, 30_000);
 beforeAll(() => {
@@ -178,8 +232,23 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 test('a producer change reaches consumers through test-only relations', () => {
   const reached = graph().affected(['dep/src/entry.ts']);
-  expect([...reached.keys()].sort()).toEqual(['dep', 'pkg']);
+  expect([...reached.keys()].sort()).toEqual(['consumer', 'producer']);
   expect(graph().runner('pkg/src/contract.test.ts')).toBe('bun');
+});
+
+test('a path belongs to the module of its deepest territory, and a module drawn at the root carries every package', () => {
+  const drawn = new Graph(
+    root,
+    [...files.keys()],
+    [
+      { id: 'core', paths: ['pkg', 'other/a/very/long/cut.ts'], imports: [], tests: [] },
+      { id: 'contract', paths: ['pkg/src'], imports: [], tests: [] },
+    ],
+  );
+  expect(drawn.owner('pkg/src/contract.test.ts')?.id).toBe('contract');
+  expect(drawn.owner('pkg/package.json')?.id).toBe('core');
+  const whole = new Graph(root, [...files.keys()], [{ id: 'all', paths: [''], imports: [], tests: [] }]);
+  expect([...whole.related(['pkg/src/contract.test.ts'])].sort()).toEqual(['', 'dep', 'other', 'pkg']);
 });
 
 test('the input graph follows testing exports under both runtimes and dynamic imports', () => {
@@ -200,7 +269,7 @@ test('a generated package entry follows its declared source in selection and inp
   const current = new Graph(
     root,
     [...files.keys()],
-    ['pkg.card.md', 'dep.card.md', 'other.card.md'],
+    modules,
     new Map([
       ['dep/dist/entry.js', 'dep/src/entry.ts'],
       ['dep/dist/browser.js', 'dep/src/browser.ts'],

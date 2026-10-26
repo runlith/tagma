@@ -11,7 +11,6 @@ import { workspaceOf } from '@runlith/code-facts/js/workspace';
 import { RUNTIMES } from '@runlith/code-facts/runtimes';
 
 export type Module = {
-  readonly block: string;
   readonly id: string;
   readonly paths: readonly string[];
   readonly imports: readonly string[];
@@ -20,17 +19,10 @@ export type Module = {
 export type Source = { readonly inputs: readonly string[]; readonly uncertain: readonly string[] };
 export const sourceFile = (path: string): boolean => /\.(?:[cm]?[jt]sx?|svelte)$/.test(path);
 export const testFile = (path: string): boolean => /\.(?:test|itest)(?:\.svelte)?\.[cm]?[jt]sx?$/.test(path);
-const inside = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
+const inside = (path: string, root: string): boolean => root === '' || path === root || path.startsWith(`${root}/`);
 
 type Node = { readonly stamp: string; readonly probe: Probed };
 type IndexRecord = { readonly resolution: string; readonly nodes: readonly [string, Node][] };
-
-type Card = {
-  readonly id: string;
-  readonly fields: { readonly id: string };
-  readonly sources: readonly { readonly kind: string; readonly ref: string }[];
-  readonly edges?: readonly { readonly kind: string; readonly to: string }[];
-};
 
 export class Graph {
   readonly modules: Module[];
@@ -48,7 +40,7 @@ export class Graph {
   constructor(
     readonly root: string,
     paths: readonly string[],
-    cards: readonly string[],
+    modules: readonly Module[],
     private readonly built: ReadonlyMap<string, string> = new Map(),
     private readonly cache?: Records,
   ) {
@@ -88,24 +80,7 @@ export class Graph {
       workspaceOf(this.tree, '', ['browser', 'module', 'import', 'development'], built, RUNTIMES),
     ];
     this.packages = packagesOf(paths, (path) => this.text(path));
-    this.modules = cards
-      .map((path) => {
-        const text = this.text(path);
-        const end = text.indexOf('\n---', 4);
-        if (!text.startsWith('---\n') || end === -1) throw new Error(`Invalid module card: ${path}`);
-        const card = Bun.YAML.parse(text.slice(4, end)) as Card;
-        return {
-          block: card.id,
-          id: card.fields.id,
-          paths: card.sources
-            .filter((source) => source.kind === 'dir' || source.kind === 'file')
-            .map((source) => source.ref.replace(/\/$/, '')),
-          imports: (card.edges ?? []).filter((edge) => edge.kind === 'imports').map((edge) => edge.to),
-          tests: (card.edges ?? []).filter((edge) => edge.kind === 'imports-tests').map((edge) => edge.to),
-        };
-      })
-      .filter((card) => card.id !== undefined)
-      .sort((a, b) => Math.max(...b.paths.map((path) => path.length)) - Math.max(...a.paths.map((path) => path.length)));
+    this.modules = [...modules];
   }
 
   text(path: string): string {
@@ -118,7 +93,15 @@ export class Graph {
   }
 
   owner(path: string): Module | undefined {
-    return this.modules.find((card) => card.paths.some((root) => inside(path, root)));
+    let owner: Module | undefined;
+    let depth = -1;
+    for (const module of this.modules)
+      for (const root of module.paths)
+        if (root.length > depth && inside(path, root)) {
+          owner = module;
+          depth = root.length;
+        }
+    return owner;
   }
   package(path: string): Package {
     return this.packages.find((pkg) => pkg.dir === '' || inside(path, pkg.dir))!;
@@ -136,21 +119,21 @@ export class Graph {
     const reached = new Map<string, string>();
     for (const path of changed) {
       const owner = this.owner(path);
-      if (owner !== undefined) reached.set(owner.block, `changed ${path} (${owner.id})`);
+      if (owner !== undefined) reached.set(owner.id, `changed ${path} (${owner.id})`);
     }
     const reverse = new Map<string, Module[]>();
-    for (const card of this.modules)
-      for (const dependency of [...card.imports, ...card.tests]) {
+    for (const module of this.modules)
+      for (const dependency of [...module.imports, ...module.tests]) {
         const list = reverse.get(dependency) ?? [];
-        list.push(card);
+        list.push(module);
         reverse.set(dependency, list);
       }
     const queue = [...reached.keys()];
     for (let at = 0; at < queue.length; at++)
-      for (const card of reverse.get(queue[at]!) ?? []) {
-        if (reached.has(card.block)) continue;
-        reached.set(card.block, `module ${card.id} imports a changed dependency`);
-        queue.push(card.block);
+      for (const module of reverse.get(queue[at]!) ?? []) {
+        if (reached.has(module.id)) continue;
+        reached.set(module.id, `module ${module.id} imports a changed dependency`);
+        queue.push(module.id);
       }
     return reached;
   }
@@ -233,9 +216,9 @@ export class Graph {
   }
 
   related(paths: readonly string[]): readonly string[] {
-    const roots = new Set(paths.map((path) => this.owner(path)?.block).filter((block): block is string => block !== undefined));
+    const roots = new Set(paths.map((path) => this.owner(path)?.id).filter((id): id is string => id !== undefined));
     const packages = new Set<string>();
-    const byBlock = new Map(this.modules.map((module) => [module.block, module]));
+    const byId = new Map(this.modules.map((module) => [module.id, module]));
     for (const root of roots) {
       let held = this.dependencyPackages.get(root);
       if (held === undefined) {
@@ -243,12 +226,15 @@ export class Graph {
         const found = new Set<string>();
         const queue = [root];
         while (queue.length > 0) {
-          const block = queue.pop()!;
-          if (seen.has(block)) continue;
-          seen.add(block);
-          const module = byBlock.get(block);
+          const id = queue.pop()!;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const module = byId.get(id);
           if (module === undefined) continue;
-          for (const path of module.paths) found.add(this.package(path).dir);
+          for (const path of module.paths) {
+            found.add(this.package(path).dir);
+            for (const pkg of this.packages) if (inside(pkg.dir, path)) found.add(pkg.dir);
+          }
           queue.push(...module.imports, ...module.tests);
         }
         held = [...found];
@@ -299,7 +285,7 @@ export class Graph {
     let runtime = 0;
     for (const file of files) {
       const owner = this.owner(file);
-      const card = owner === undefined ? undefined : cards.get(owner.block);
+      const card = owner === undefined ? undefined : cards.get(owner.id);
       if (card !== undefined) cardCount++;
       if (imported.has(file))
         selected.set(file, changed.includes(file) ? `test changed: ${file}` : 'import closure reaches a changed input');
