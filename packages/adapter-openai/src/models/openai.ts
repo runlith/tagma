@@ -78,6 +78,14 @@ const OPENAI_SPECS = {
     reasoning: OPENAI_OAUTH_FRONTIER_LADDER,
     defaultReasoning: 'high',
   },
+  'gpt-6.1-terra': {
+    label: 'GPT-6.1 Terra',
+    short: 'Terra 6.1',
+    capacity: OPENAI_FRONTIER_CAPACITY,
+    capabilities: ['text', 'vision'],
+    reasoning: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+    defaultReasoning: 'medium',
+  },
   'gpt-6-sol': {
     label: 'GPT-6 Sol',
     short: 'Sol',
@@ -150,7 +158,7 @@ export const openaiConsoleDescription: ProviderDescription = {
   label: 'OpenAI',
   auth: 'api-key',
   models: servedModels(OPENAI_SPECS, {
-    ids: ['gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', DEFAULT_OPENAI_MODEL, 'gpt-5.6-luna', 'gpt-5.5'],
+    ids: ['gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', DEFAULT_OPENAI_MODEL, 'gpt-5.6-luna', 'gpt-5.5'],
   }),
   cacheLifetime: { promisedSeconds: null, prior: null },
   requestLimits: OPENAI_REQUEST_LIMITS,
@@ -174,6 +182,7 @@ export const openaiSubscriptionDescription: ProviderDescription = {
     ids: [
       'gpt-6-astra',
       DEFAULT_OPENAI_OAUTH_MODEL,
+      'gpt-6.1-terra',
       'gpt-6-sol',
       'gpt-6-luna',
       'gpt-5.6-sol',
@@ -186,6 +195,12 @@ export const openaiSubscriptionDescription: ProviderDescription = {
         capacity: OPENAI_OAUTH_FRONTIER_CAPACITY,
         reasoning: OPENAI_OAUTH_FRONTIER_LADDER,
         switches: GPT_6_1_FAST_SWITCH,
+      },
+      'gpt-6.1-terra': {
+        capacity: OPENAI_OAUTH_FRONTIER_CAPACITY,
+        reasoning: OPENAI_OAUTH_FRONTIER_LADDER,
+        defaultReasoning: 'low',
+        switches: GPT_6_FAST_SWITCH,
       },
       'gpt-6-sol': {
         capacity: OPENAI_OAUTH_FRONTIER_CAPACITY,
@@ -229,10 +244,25 @@ export const codexDescription: ProviderDescription = {
   label: 'Codex',
   auth: 'cli',
   models: servedModels(OPENAI_SPECS, {
-    ids: [DEFAULT_CODEX_MODEL, 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', DEFAULT_OPENAI_MODEL, 'gpt-5.6-luna', 'gpt-5.5'],
+    ids: [
+      DEFAULT_CODEX_MODEL,
+      'gpt-6.1-sol',
+      'gpt-6.1-terra',
+      'gpt-6-sol',
+      'gpt-6-luna',
+      'gpt-5.6-sol',
+      DEFAULT_OPENAI_MODEL,
+      'gpt-5.6-luna',
+      'gpt-5.5',
+    ],
     overrides: {
       [DEFAULT_CODEX_MODEL]: { switches: [] },
       'gpt-6.1-sol': { capacity: OPENAI_OAUTH_FRONTIER_CAPACITY, reasoning: OPENAI_OAUTH_FRONTIER_LADDER },
+      'gpt-6.1-terra': {
+        capacity: OPENAI_OAUTH_FRONTIER_CAPACITY,
+        reasoning: OPENAI_OAUTH_FRONTIER_LADDER,
+        defaultReasoning: 'low',
+      },
       'gpt-6-sol': { capacity: OPENAI_OAUTH_FRONTIER_CAPACITY, reasoning: OPENAI_OAUTH_FRONTIER_LADDER },
       'gpt-6-luna': { capacity: OPENAI_OAUTH_FRONTIER_CAPACITY, reasoning: OPENAI_OAUTH_FRONTIER_LADDER },
       'gpt-5.6-sol': { capacity: OPENAI_OAUTH_FRONTIER_CAPACITY, reasoning: OPENAI_OAUTH_FRONTIER_LADDER },

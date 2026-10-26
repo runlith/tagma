@@ -97,8 +97,8 @@ describe('model catalog defaults', () => {
     }
   });
 
-  test('keeps GPT-6 Sol/Luna and GPT-5.6 API and OAuth capacities tied to their transport contracts', () => {
-    for (const id of ['gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']) {
+  test('keeps OpenAI frontier API and OAuth capacities tied to their transport contracts', () => {
+    for (const id of ['gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']) {
       const api = resolveTextModel(OPENAI_PROVIDER, id);
       const oauth = resolveTextModel(OPENAI_OAUTH_PROVIDER, id);
 
@@ -249,6 +249,7 @@ describe('model catalog defaults', () => {
     expect(shared).toEqual([
       'gpt-6-astra',
       'gpt-6.1-sol',
+      'gpt-6.1-terra',
       'gpt-6-sol',
       'gpt-6-luna',
       'gpt-5.6-sol',
