@@ -1,4 +1,7 @@
-import { unthreadedCaller } from './testing/caller';
+import { callerInThread, unthreadedCaller } from './testing/caller';
+import { makeAgentCalls } from '@runlith/agent/AgentCalls';
+import { openToolDoor } from '@runlith/agent/door/openToolDoor';
+import type { AgentToolOutputs } from '@runlith/agent/ToolOutput';
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -9,7 +12,7 @@ import type { Tool, ToolVerdict } from '@runlith/agent/tool';
 import type { ToolDisplay } from '@runlith/agent/tool/display';
 import type { CallExecutionControl } from '@runlith/agent/callProgress';
 import { ToolAnswer, ToolFailed, toolExecute, toolPrepare, toolSettleEffect } from '@runlith/agent/tool';
-import { Deferred, Duration, Effect, Fiber, FileSystem, Queue, Scope, Stream } from 'effect';
+import { Deferred, Duration, Effect, Exit, Fiber, FileSystem, Queue, Scope, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { ChildProcess } from 'effect/process';
@@ -101,6 +104,7 @@ type FakeOptions = {
   readonly decide?: (execution: ExecutionRef, operation: HostRequestRef) => CallDecisionAnswer | undefined;
   readonly startGate?: Deferred.Deferred<void>;
   readonly queueGate?: Deferred.Deferred<void>;
+  readonly backgroundGate?: Deferred.Deferred<void>;
   readonly failStream?: 'stdout' | 'stderr';
   readonly stopOnSignal?: boolean;
   readonly stopGate?: Deferred.Deferred<void>;
@@ -208,12 +212,15 @@ const builtOwner = Effect.fnUntraced(function* (options: FakeOptions) {
               state: 'refused' as const,
               reason: 'this owner resolves no policy, so no deadline of its may be moved',
             }),
-          background: Effect.sync(() => {
-            if (mode === 'background') return 'already' as const;
-            mode = 'background';
-            backgrounded.push(execution.execution);
-            return 'moved' as const;
-          }),
+          background: Effect.andThen(
+            options.backgroundGate === undefined ? Effect.void : Deferred.await(options.backgroundGate),
+            Effect.sync(() => {
+              if (mode === 'background') return 'already' as const;
+              mode = 'background';
+              backgrounded.push(execution.execution);
+              return 'moved' as const;
+            }),
+          ),
           foreground: Effect.sync(() => {
             mode = 'foreground';
             foregrounded.push(execution.execution);
@@ -425,6 +432,67 @@ it.live('a command started with a wait of 0 answers its own identity and the lif
     yield* gate.open;
     yield* Deferred.await(owner.concluded);
     expect(yield* host.readFile(join(root, 'mark.txt'), 'utf8')).toBe('started');
+  }),
+);
+
+it.live('a pending report preserves the command address when a background bash returns before its door finishes projecting', () =>
+  Effect.gen(function* () {
+    const root = yield* createTempDir();
+    yield* gitInit(root);
+    const backgroundGate = yield* Deferred.make<void>();
+    const owner = yield* fakeOwner({ backgroundGate });
+    const bash = shellOf(createTools(options({ cwd: root, world: worldWith(owner.work) })));
+    const gate = yield* commandGate(root);
+    const calls = yield* makeAgentCalls({ history: 1 });
+    const projecting = yield* Deferred.make<void>();
+    const projected = yield* Deferred.make<void>();
+    const completed = yield* Deferred.make<unknown>();
+    yield* Effect.addFinalizer(() => Deferred.succeed(projected, undefined));
+    const caller = callerInThread('thread-1', 'run-1');
+    calls.listen('run-1', () => 'report');
+    const outputs: AgentToolOutputs = {
+      project: (answer) =>
+        Deferred.succeed(projecting, undefined).pipe(
+          Effect.andThen(Deferred.await(projected)),
+          Effect.as({ output: answer.output, modelOutput: answer.modelOutput }),
+        ),
+      projectMessages: (messages) => Effect.succeed(messages),
+    };
+    const door = openToolDoor(
+      'run-1',
+      caller,
+      {},
+      { verdict: () => ({ verdict: 'allow' }) },
+      undefined,
+      undefined,
+      undefined,
+      outputs,
+      calls,
+      () => ({
+        retain: () => Effect.succeed({ release: Effect.void }),
+        completed: (_call, exit) =>
+          Deferred.succeed(completed, Exit.isSuccess(exit) ? exit.value.completion : exit.cause).pipe(Effect.asVoid),
+      }),
+    );
+    const launched = yield* Effect.forkScoped(
+      door.settle({
+        name: 'bash',
+        tool: bash,
+        input: { command: `${gate.wait}; printf complete`, workdir: root, waitMs: 0, lifeMs: 600_000 },
+        options: { toolCallId: 'call-1', messages: [] },
+      }),
+    );
+    yield* Deferred.await(projecting);
+    yield* Deferred.succeed(backgroundGate, undefined);
+    const receipt = yield* Fiber.join(launched);
+    expect(receipt.display.reference).toMatchObject({ kind: 'command', execution: 'exec-1', incarnation: 1 });
+    expect(receipt.modelOutput).toMatchObject({ type: 'text', value: expect.stringContaining('exec-1:1') });
+    yield* Deferred.succeed(projected, undefined);
+    expect(yield* Deferred.await(completed)).toBe('command');
+    yield* calls.get({ runId: 'run-1', toolCallId: 'call-1' })!.settled;
+    bash.settled?.({ toolCallId: 'call-1', caller });
+    yield* gate.open;
+    yield* Deferred.await(owner.concluded);
   }),
 );
 
@@ -827,19 +895,20 @@ it.live('withdrawing the waiter leaves the command running, and its observation 
   }),
 );
 
-it.live('a call that answered keeps nothing under its id: there is no command left for a later reader to settle', () =>
+it.live('a command answer stays readable until its owner acknowledges it, then releases its read-back', () =>
   Effect.gen(function* () {
     const root = yield* createTempDir();
     const owner = yield* fakeOwner();
     const bash = shellOf(createTools(options({ cwd: root, world: worldWith(owner.work) })));
     const input = { command: 'echo answered', description: 'Answer at once' };
+    const call = { toolCallId: 'call-answered', caller: unthreadedCaller, toolInput: input };
 
-    yield* shellCall(bash, input, 'call-answered');
-
-    expect(owner.starts()).toBe(1);
-    expect(yield* settleOf(bash, { toolCallId: 'call-answered', caller: unthreadedCaller, toolInput: input })).toEqual({
-      status: 'unknown',
-    });
+    yield* shellCall(bash, input, call.toolCallId);
+    const settlement = yield* settleOf(bash, call);
+    expect(settlement?.status).toBe('completed');
+    expect(settlement?.status === 'completed' ? said(settlement.output) : null).toContain('answered');
+    bash.settled?.(call);
+    expect(yield* settleOf(bash, call)).toEqual({ status: 'unknown' });
   }),
 );
 

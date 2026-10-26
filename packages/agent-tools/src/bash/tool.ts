@@ -1,4 +1,4 @@
-import { Duration, Effect, Exit, Layer, Schema } from 'effect';
+import { Duration, Effect, Layer, Schema } from 'effect';
 import { Tool, ToolFailed } from '@runlith/agent/tool';
 import { TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_LINES } from '@runlith/agent/ToolOutputSpool';
 import { WorkspaceRefused, foreignCause, runToolEffect, unboundTool } from '../ToolEdge';
@@ -122,9 +122,7 @@ export function createBashTool(options: ToolFactoryOptions): Tool {
             services,
             commandWork === undefined
               ? local(resolved.at(call.caller), services, params, call, baselines)
-              : admitted(resolved.at(call.caller), commandWork, services, params, call, baselines, retained).pipe(
-                  Effect.onExit((exit) => (Exit.hasInterrupts(exit) ? Effect.void : Effect.sync(() => retained.delete(call.toolCallId)))),
-                ),
+              : admitted(resolved.at(call.caller), commandWork, services, params, call, baselines, retained),
             call,
           ),
     settleEffect: Effect.fnUntraced(function* ({ toolCallId }) {
