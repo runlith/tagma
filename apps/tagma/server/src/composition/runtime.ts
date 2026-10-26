@@ -90,6 +90,7 @@ import { WORKTREE_HOME, WorktreeHome } from '../worktrees/contract/service/home.
 import { installationAnchor } from '../installation/paths.js';
 import { sessionIdentity } from '../external-harnesses/sessionPrefix.js';
 import { accountCliLayer } from '../external-harnesses/accounts/cli.js';
+import { AccountCli } from '../providers/contract/service/cli.js';
 import { installedHarnessesLayer } from '../external-harnesses/birth/installed.js';
 import { UserEnvironment } from '../installation/contract/service/userEnvironment.js';
 import type { InstalledHarnesses } from '../threads/contract/service/harness.js';
@@ -318,6 +319,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     pluginServer?: string;
     adapters?: readonly AdapterSource[];
     userEnvironment?: UserEnvironment['Service'];
+    accountCli?: AccountCli['Service'];
     drivers?: readonly DriverId[];
   },
   observations: Layer.Layer<never> = Layer.empty,
@@ -487,9 +489,11 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     ),
     Layer.provide(BunFileSystem.layer),
   );
-  const readyProviders = providerLayer.pipe(
-    Layer.provide(accountCliLayer.pipe(Layer.provide(Layer.merge(executionsLayerWithDeps, installedHarnesses)))),
-  );
+  const accountCli =
+    options.accountCli === undefined
+      ? accountCliLayer.pipe(Layer.provide(Layer.merge(executionsLayerWithDeps, installedHarnesses)))
+      : Layer.succeed(AccountCli, options.accountCli);
+  const readyProviders = providerLayer.pipe(Layer.provide(accountCli));
   const pluginPlace = Layer.succeed(PluginPlace, {
     home: dataPath,
     server: options.pluginServer ?? null,

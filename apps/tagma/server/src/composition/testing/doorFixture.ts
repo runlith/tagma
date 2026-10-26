@@ -11,7 +11,9 @@ import { heldPool } from '@runlith/sqlite-process/testing/pool';
 import { spawnedEffect } from '../../platform/testing/spawn.js';
 import { FixtureScope } from '../../platform/testing/scope.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Clock, Context, Effect, FileSystem, Layer, type Scope } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, type Scope, Stream } from 'effect';
+import { AccountCli } from '../../providers/contract/service/cli.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { HttpEffect, HttpMiddleware, HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import type { AccountQuotaProvider } from '../../providers/quota/ledger.js';
 import type { ModelAccess } from '../../providers/contract/service/access.js';
@@ -140,6 +142,21 @@ const lending = () => {
   };
 };
 
+const noCli = () =>
+  Effect.fail(
+    new GateRefusal('account-cli-failed', 'The door world supplies no account CLI process.', [
+      'test a CLI through its owner with a controlled program',
+    ]),
+  );
+const accountCli = AccountCli.of({
+  installed: () => Effect.succeed({ _tag: 'Found' }),
+  changes: Stream.empty,
+  run: noCli,
+  login: noCli,
+  ended: () => Effect.die('the door world opens no account login terminal'),
+  stop: noCli,
+});
+
 const built = Effect.fnUntraced(
   function* (options: DoorParams, root: string, processes?: ProcessPool) {
     const { seams, lend } = lending();
@@ -170,6 +187,7 @@ const built = Effect.fnUntraced(
     const runtime = yield* makeRuntime(
       {
         adapters: TESTING_ADAPTERS,
+        accountCli,
         grants: testGrantSigner,
         profileWindowMs: () => 0,
         spanFloorMicros: options.everySpan === true ? () => 0 : undefined,
