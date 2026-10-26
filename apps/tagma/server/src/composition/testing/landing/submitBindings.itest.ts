@@ -52,7 +52,7 @@ const landing = Layer.effect(
   }),
 ).pipe(Layer.provideMerge(BunFileSystem.layer));
 
-layer(landing, { excludeTestServices: true, testTimeout: 60_000, timeout: '60 seconds' })('native submit_work bindings', (it) => {
+layer(landing, { excludeTestServices: true })('native submit_work bindings', (it) => {
   it.effect(
     'native submit_work lands shadows, data and unrelated member names, names every peer declaration the rest needs, then carries them with taking',
     () =>

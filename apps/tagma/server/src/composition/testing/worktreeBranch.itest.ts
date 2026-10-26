@@ -16,8 +16,6 @@ import { unthreadedCaller } from './callers.js';
 
 layer(Layer.merge(demoGraphLayer({ repos: ['finishing'] }), BunFileSystem.layer), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: 60_000,
 })('worktree branch retirement', (it) => {
   it.effect('delete_worktree reports the unmerged commits after its checkout is gone', () =>
     withDemo((demo) =>

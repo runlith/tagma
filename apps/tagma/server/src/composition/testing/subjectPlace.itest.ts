@@ -9,7 +9,7 @@ import { testSessionIdentity } from '../../platform/testing/identity.js';
 type Answer = { readonly status: number; readonly body: unknown };
 const nameOf = (answer: Answer) => (answer.body as { block: { name: string } }).block.name;
 
-layer(doorFixture(), { excludeTestServices: true, testTimeout: 60_000, timeout: 60_000 })('subject placement through the door', (it) => {
+layer(doorFixture(), { excludeTestServices: true })('subject placement through the door', (it) => {
   it.effect('a block and a cursor select their own project over the caller home, while an explicit conflicting project refuses', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;

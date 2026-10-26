@@ -114,8 +114,6 @@ class Place extends Context.Service<Place, Effect.Success<typeof setup>>()('test
 
 layer(Layer.effect(Place, setup).pipe(Layer.provide(doorFixture()), Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: '60 seconds',
 })('merge from another home', (it) => {
   it.effect('immediate and queued merges run their before and after programs as the calling thread in its home', () =>
     Effect.gen(function* () {

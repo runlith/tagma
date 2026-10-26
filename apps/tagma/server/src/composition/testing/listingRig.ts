@@ -138,7 +138,7 @@ export const listingRig = (demo: DemoState) => {
       const event = yield* Queue.take(frames);
       if (matching(event)) return event;
     }
-  }, Effect.timeout('40 seconds'));
+  });
 
   return { composed: Effect.flatMap(Git, composing), composing, branchOf, headOf, next };
 };

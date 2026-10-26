@@ -38,8 +38,6 @@ const until = Effect.fnUntraced(function* <A, E, R>(
 
 layer(Layer.merge(demoGraphLayer({ repos: ['finishing'] }), BunFileSystem.layer), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: 60_000,
 })('worktree merge boundaries', (it) => {
   it.effect('real merge settlement keeps consent, receipts, pending restart, recovery and retirement decisions coherent', () =>
     withDemo((demo) =>

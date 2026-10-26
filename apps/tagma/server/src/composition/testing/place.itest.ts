@@ -24,6 +24,11 @@ const setup = Effect.gen(function* () {
   expect(born.code).toBe(0);
   const thread = (JSON.parse(born.out) as { snapshot: { thread: { id: string; ownerId: string } } }).snapshot.thread;
   const grant = grantEnvironment(thread.id, testSessionIdentity)[GRANT_VARIABLE]!;
+  const entered = yield* world.tagma(['op', 'search_blocks', '--json', '--project', target.name, '{"limit":1}'], {
+    cwd: home.root,
+    env: { [GRANT_VARIABLE]: grant },
+  });
+  expect({ code: entered.code, err: entered.err }).toEqual({ code: 0, err: '' });
   const native = Effect.gen(function* () {
     const served = yield* world.runtime.pool.resolve({ projectId: home.id });
     const vocabulary = yield* Context.get(served.context, Tags).of(home.id);
@@ -99,7 +104,7 @@ const preparedCall = Effect.fnUntraced(function* (id: string, input: unknown, ke
 const valueOf = (value: unknown): unknown =>
   typeof value === 'object' && value !== null && 'value' in value && 'display' in value ? value.value : value;
 
-layer(Layer.effect(Placed, setup), { excludeTestServices: true, testTimeout: 60_000, timeout: 60_000 })('place', (it) => {
+layer(Layer.effect(Placed, setup), { excludeTestServices: true })('place', (it) => {
   it.effect('native, CLI and MCP proxy act in the selected project while the caller keeps its home', () =>
     Effect.gen(function* () {
       const { world, home, target, grant, tools } = yield* Placed;

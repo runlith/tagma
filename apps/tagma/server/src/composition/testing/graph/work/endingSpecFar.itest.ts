@@ -21,8 +21,6 @@ const signed = signedBy({ harness: 'test', key: 'ending-spec-far' });
 
 layer(demoGraphLayer({ repos: ['front', 'back'] }).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 60_000,
 })('ending the last task of a spec in another project', (it) => {
   it.effect('a spec in another project is named by the last task that implements it, and not before', () =>
     withDemo(({ graph, context, project, demoRoot }) =>

@@ -85,7 +85,7 @@ const projects = Layer.effect(
   }),
 ).pipe(Layer.provideMerge(doorFixture()));
 
-layer(projects, { excludeTestServices: true, timeout: '60 seconds' })('vocabulary neutrality', (it) => {
+layer(projects, { excludeTestServices: true })('vocabulary neutrality', (it) => {
   it.effect(
     'contradictory catalog workflows retain their own lifecycles on one shipped engine',
     () =>

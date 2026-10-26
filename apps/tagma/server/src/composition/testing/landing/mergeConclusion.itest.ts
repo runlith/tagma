@@ -16,8 +16,6 @@ import { seedRepository } from './native.js';
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  timeout: '60 seconds',
-  testTimeout: '60 seconds',
 })('merge conclusion', (it) => {
   it.effect('a watched worktree leaves its open-merge state after submit_work concludes it and can merge into main', () =>
     Effect.gen(function* () {
@@ -113,9 +111,7 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       expect(yield* Fiber.join(submitted)).toMatchObject({ class: 'answer', value: { submitted: { status: 'landed' } } });
       expect(yield* suiteGit(side, 'rev-list', '--parents', '-1', 'HEAD')).toBe(`${during.head} ${head} ${tip}`);
       expect(yield* files.exists(join(gitDir, 'MERGE_HEAD'))).toBe(false);
-      const closed = yield* Stream.runHead(changes.pipe(Stream.filter((row) => row.head === during.head && row.operation === 'none'))).pipe(
-        Effect.timeoutOrElse({ duration: '2 seconds', orElse: () => Effect.die('the watched checkout kept its concluded merge state') }),
-      );
+      const closed = yield* Stream.runHead(changes.pipe(Stream.filter((row) => row.head === during.head && row.operation === 'none')));
       expect(closed._tag).toBe('Some');
       expect(yield* doors.atNative('merge_worktree', { rootId, whenBaseFree: true }, placed)).toMatchObject({
         class: 'answer',

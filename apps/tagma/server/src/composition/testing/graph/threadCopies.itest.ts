@@ -26,7 +26,6 @@ const next = Effect.fnUntraced(function* (events: Queue.Queue<CopyEvent>, kind: 
 
 layer(demoGraphLayer({ repos: ['alpha'] }).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 40_000,
 })('thread copies', (it) => {
   it.effect(
     'a running thread keeps the copy it stands in past its keeping time, follows it when it moves, and lets it go when the run ends',

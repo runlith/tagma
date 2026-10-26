@@ -257,7 +257,6 @@ class PlaceFixture extends Context.Service<PlaceFixture, Effect.Success<typeof m
 
 layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  timeout: '60 seconds',
 })('landing places', (it) => {
   it.effect(
     'foreign landing uses its law, tasks and steps, keeps peer ownership, and splits checkouts explicitly',

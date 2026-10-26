@@ -373,6 +373,7 @@ layer(fixture, { excludeTestServices: true })('working origins', (it) => {
       const path = join(w.A, 'src', 'stopped.ts');
       const after = 'const stopped = 1;\n';
       const started = yield* Deferred.make<void>();
+      const proceed = yield* Deferred.make<void>();
       const fiber = yield* Effect.forkScoped(
         w.intake.land(
           { projectId: w.projectId, holder: { kind: 'thread', thread: MINE } },
@@ -389,14 +390,16 @@ layer(fixture, { excludeTestServices: true })('working origins', (it) => {
           ],
           Effect.gen(function* () {
             yield* Deferred.succeed(started, undefined);
-            yield* Effect.sleep(20);
+            yield* Deferred.await(proceed);
             yield* w.files.writeFileString(path, after);
             return true;
           }),
         ),
       );
       yield* Deferred.await(started);
-      yield* Fiber.interrupt(fiber);
+      yield* Effect.sync(() => fiber.interruptUnsafe());
+      yield* Deferred.succeed(proceed, undefined);
+      yield* Fiber.await(fiber);
       expect(yield* w.files.readFileString(path)).toBe(after);
       expect(
         (yield* recordOfPath(w.store, yield* w.placed(yield* w.originOf(w.A, MINE), 'src/stopped.ts'))).map((row) => row.holder),
