@@ -51,107 +51,101 @@ const resultOf = (input: ModelStreamInput, id: string) =>
     .flatMap((message) => message.content.flatMap((part) => (part.type === 'tool-result' && part.id === id ? [part.result] : [])))
     .at(-1);
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-it.live(
-  'a move waits for the running command boundary, then the next command uses the selected worktree',
-  () =>
-    Effect.gen(function* () {
-      const files = yield* FileSystem.FileSystem;
-      const gates = yield* files.makeTempDirectoryScoped({ prefix: 'thread-move-' });
-      const ready = join(gates, 'ready');
-      const release = join(gates, 'release');
-      const script = `const fs=require('node:fs');let done=false;const finish=()=>{if(done||!fs.existsSync(${JSON.stringify(release)}))return;done=true;watcher.close();console.log(process.cwd());};const watcher=fs.watch(${JSON.stringify(gates)},finish);fs.writeFileSync(${JSON.stringify(ready)},'ready');finish();`;
-      const command = `${quote(process.execPath)} -e ${quote(script)}`;
-      const seen: ModelStreamInput[] = [];
-      const answered = yield* Deferred.make<void>();
-      const world = yield* DoorFixture;
-      yield* world.lend({
-        models: (standing) => ({
-          ...standing,
-          request: (selection) => ({
-            system: selection.instructions,
-            origin: new ModelIdentity({
-              provider: ProviderID.make(selection.provider ?? 'scripted'),
-              model: ModelID.make(selection.model ?? 'scripted'),
-            }),
-            plannedOutputTokens: 32,
-            text: () => Effect.die(new Error('the moving model streams only')),
-            object: () => Effect.die(new Error('the moving model streams only')),
-            stream: (input) =>
-              Stream.unwrap(
-                Effect.gen(function* () {
-                  if (!JSON.stringify(input.messages).includes(MOVER_ASK)) return Stream.fromIterable(answer);
-                  seen.push(input);
-                  if (resultOf(input, 'first-pwd') === undefined) return Stream.fromIterable(call('first-pwd', command));
-                  if (resultOf(input, 'second-pwd') === undefined) return Stream.fromIterable(call('second-pwd', 'pwd'));
-                  yield* Deferred.succeed(answered, undefined);
-                  return Stream.fromIterable(answer);
-                }),
-              ),
+it.live('a move waits for the running command boundary, then the next command uses the selected worktree', () =>
+  Effect.gen(function* () {
+    const files = yield* FileSystem.FileSystem;
+    const gates = yield* files.makeTempDirectoryScoped({ prefix: 'thread-move-' });
+    const ready = join(gates, 'ready');
+    const release = join(gates, 'release');
+    const script = `const fs=require('node:fs');let done=false;const finish=()=>{if(done||!fs.existsSync(${JSON.stringify(release)}))return;done=true;watcher.close();console.log(process.cwd());};const watcher=fs.watch(${JSON.stringify(gates)},finish);fs.writeFileSync(${JSON.stringify(ready)},'ready');finish();`;
+    const command = `${quote(process.execPath)} -e ${quote(script)}`;
+    const seen: ModelStreamInput[] = [];
+    const answered = yield* Deferred.make<void>();
+    const world = yield* DoorFixture;
+    yield* world.lend({
+      models: (standing) => ({
+        ...standing,
+        request: (selection) => ({
+          system: selection.instructions,
+          origin: new ModelIdentity({
+            provider: ProviderID.make(selection.provider ?? 'scripted'),
+            model: ModelID.make(selection.model ?? 'scripted'),
           }),
+          plannedOutputTokens: 32,
+          text: () => Effect.die(new Error('the moving model streams only')),
+          object: () => Effect.die(new Error('the moving model streams only')),
+          stream: (input) =>
+            Stream.unwrap(
+              Effect.gen(function* () {
+                if (!JSON.stringify(input.messages).includes(MOVER_ASK)) return Stream.fromIterable(answer);
+                seen.push(input);
+                if (resultOf(input, 'first-pwd') === undefined) return Stream.fromIterable(call('first-pwd', command));
+                if (resultOf(input, 'second-pwd') === undefined) return Stream.fromIterable(call('second-pwd', 'pwd'));
+                yield* Deferred.succeed(answered, undefined);
+                return Stream.fromIterable(answer);
+              }),
+            ),
         }),
-      });
-      const checkout = yield* world.directory('move-project');
-      yield* gitEffect(checkout, ['init', '-q', '-b', 'main']);
-      yield* files.writeFileString(join(checkout, 'seed'), 'the project\n');
-      yield* gitEffect(checkout, ['add', '.']);
-      yield* gitEffect(checkout, [
-        '-c',
-        'user.email=fixture@tagma',
-        '-c',
-        'user.name=fixture',
-        'commit',
-        '--no-gpg-sign',
-        '-q',
-        '-m',
-        'first',
-      ]);
-      const projectId = yield* world.stealthProject(checkout);
-      yield* projectLeaving(world, projectId);
-      yield* Context.get(world.runtime.workspace, Coverage).cover(projectId);
-      const births = birthsOf(world.runtime.owners);
-      const turns = turnsOf(world.runtime.owners);
-      const moves = movesOf(world.runtime.owners);
-      const units = Context.get(world.runtime.graph, MachineUnits);
-      const { db } = Context.get(world.runtime.graph, MachineStore);
-      const opened = yield* births.create({ projectId, createdBySessionId: null, worktree: 'new', name: 'destination' });
-      const trees = yield* units.read((unit) => Context.get(world.runtime.workspace, WorktreeRecords).records(projectId, unit));
-      const destination = trees[0]!;
-      const mover = yield* births.create({ projectId, createdBySessionId: null, approvalMode: 'bypass' });
-      yield* turns.send(mover.thread.id, projectId, MOVER_ASK);
-      yield* files
-        .exists(ready)
-        .pipe(
-          Effect.repeat({ while: (started) => !started, schedule: Schedule.spaced(25) }),
-          Effect.withSpan('testing.moveCommandStarted'),
-        );
-      expect((yield* moves.move(projectId, { kind: 'operator' }, { threadId: mover.thread.id, worktree: destination.name })).status).toBe(
-        'pending',
-      );
-      yield* files.writeFileString(release, 'release');
-      yield* Deferred.await(answered);
-      const completed = seen.find((input) => resultOf(input, 'second-pwd') !== undefined);
-      if (completed === undefined) return yield* Effect.die(new Error('the model never received its second command result'));
-      expect(JSON.stringify(resultOf(completed, 'first-pwd'))).toContain(yield* files.realPath(checkout));
-      expect(JSON.stringify(resultOf(completed, 'second-pwd'))).toContain(yield* files.realPath(destination.path));
-      const recorded = yield* db
-        .select({ entry: threadEntry().entry })
-        .from(threadEntry())
-        .where(and(eq(threadEntry().threadId, mover.thread.id), eq(threadEntry().type, 'context-change')));
-      expect(yield* Effect.forEach(recorded, (row) => Schema.decodeUnknownEffect(ThreadContextChangeEntry)(row.entry))).toMatchObject([
-        { status: 'published', sourceKey: targetSourceKey(destination.rootId) },
-      ]);
-      const opener = yield* db
-        .select({ threadId: threadEntry().threadId, entry: threadEntry().entry })
-        .from(threadEntry())
-        .where(eq(threadEntry().type, WORKTREE_ENTRY));
-      const parsed = yield* Effect.forEach(opener, (row) =>
-        Effect.map(Schema.decodeUnknownEffect(WorktreeEntry)(row.entry), (entry) => ({ threadId: row.threadId, entry })),
-      );
-      expect(
-        parsed
-          .filter((row) => row.entry.rootId === destination.rootId && row.entry.event === 'created')
-          .map((row) => [row.entry.rootId, row.threadId]),
-      ).toEqual([[destination.rootId, opened.thread.id]]);
-    }).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(fixture)),
-  58_000,
+      }),
+    });
+    const checkout = yield* world.directory('move-project');
+    yield* gitEffect(checkout, ['init', '-q', '-b', 'main']);
+    yield* files.writeFileString(join(checkout, 'seed'), 'the project\n');
+    yield* gitEffect(checkout, ['add', '.']);
+    yield* gitEffect(checkout, [
+      '-c',
+      'user.email=fixture@tagma',
+      '-c',
+      'user.name=fixture',
+      'commit',
+      '--no-gpg-sign',
+      '-q',
+      '-m',
+      'first',
+    ]);
+    const projectId = yield* world.stealthProject(checkout);
+    yield* projectLeaving(world, projectId);
+    yield* Context.get(world.runtime.workspace, Coverage).cover(projectId);
+    const births = birthsOf(world.runtime.owners);
+    const turns = turnsOf(world.runtime.owners);
+    const moves = movesOf(world.runtime.owners);
+    const units = Context.get(world.runtime.graph, MachineUnits);
+    const { db } = Context.get(world.runtime.graph, MachineStore);
+    const opened = yield* births.create({ projectId, createdBySessionId: null, worktree: 'new', name: 'destination' });
+    const trees = yield* units.read((unit) => Context.get(world.runtime.workspace, WorktreeRecords).records(projectId, unit));
+    const destination = trees[0]!;
+    const mover = yield* births.create({ projectId, createdBySessionId: null, approvalMode: 'bypass' });
+    yield* turns.send(mover.thread.id, projectId, MOVER_ASK);
+    yield* files
+      .exists(ready)
+      .pipe(Effect.repeat({ while: (started) => !started, schedule: Schedule.spaced(25) }), Effect.withSpan('testing.moveCommandStarted'));
+    expect((yield* moves.move(projectId, { kind: 'operator' }, { threadId: mover.thread.id, worktree: destination.name })).status).toBe(
+      'pending',
+    );
+    yield* files.writeFileString(release, 'release');
+    yield* Deferred.await(answered);
+    const completed = seen.find((input) => resultOf(input, 'second-pwd') !== undefined);
+    if (completed === undefined) return yield* Effect.die(new Error('the model never received its second command result'));
+    expect(JSON.stringify(resultOf(completed, 'first-pwd'))).toContain(yield* files.realPath(checkout));
+    expect(JSON.stringify(resultOf(completed, 'second-pwd'))).toContain(yield* files.realPath(destination.path));
+    const recorded = yield* db
+      .select({ entry: threadEntry().entry })
+      .from(threadEntry())
+      .where(and(eq(threadEntry().threadId, mover.thread.id), eq(threadEntry().type, 'context-change')));
+    expect(yield* Effect.forEach(recorded, (row) => Schema.decodeUnknownEffect(ThreadContextChangeEntry)(row.entry))).toMatchObject([
+      { status: 'published', sourceKey: targetSourceKey(destination.rootId) },
+    ]);
+    const opener = yield* db
+      .select({ threadId: threadEntry().threadId, entry: threadEntry().entry })
+      .from(threadEntry())
+      .where(eq(threadEntry().type, WORKTREE_ENTRY));
+    const parsed = yield* Effect.forEach(opener, (row) =>
+      Effect.map(Schema.decodeUnknownEffect(WorktreeEntry)(row.entry), (entry) => ({ threadId: row.threadId, entry })),
+    );
+    expect(
+      parsed
+        .filter((row) => row.entry.rootId === destination.rootId && row.entry.event === 'created')
+        .map((row) => [row.entry.rootId, row.threadId]),
+    ).toEqual([[destination.rootId, opened.thread.id]]);
+  }).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(fixture)),
 );

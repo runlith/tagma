@@ -48,7 +48,7 @@ const family = Effect.fn('testing.operatorMessageFamily')(function* () {
   return { parent: parent.thread.id, child: child.thread.id, notices };
 });
 
-layer(Layer.effect(World, setup()), { excludeTestServices: true, timeout: '30 seconds' })('operator messages to child threads', (it) => {
+layer(Layer.effect(World, setup()), { excludeTestServices: true })('operator messages to child threads', (it) => {
   it.effect(
     'accepted operator input pins the child and reaches the parent inbox, while project and caller authority gates preserve notice state',
     () =>

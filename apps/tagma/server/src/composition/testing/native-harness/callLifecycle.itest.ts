@@ -386,10 +386,8 @@ const openWorld = Effect.fnUntraced(function* (turns: ScriptedTurn[], mode: 'tru
     late: () => storage.inbox.receipt(`tool-result:${JSON.stringify([sent.runId, SLOW_CALL])}`),
   };
 });
-const until = Effect.fnUntraced(function* <E, R>(label: string, check: () => Effect.Effect<boolean, E, R>, withinMs = 10_000) {
-  yield* Effect.gen(function* () {
-    while (!(yield* check())) yield* Effect.sleep('10 millis');
-  }).pipe(Effect.timeoutOrElse({ duration: withinMs, orElse: () => Effect.die(`Timed out waiting for: ${label}`) }));
+const until = Effect.fnUntraced(function* <E, R>(_label: string, check: () => Effect.Effect<boolean, E, R>) {
+  while (!(yield* check())) yield* Effect.sleep('10 millis');
 });
 it.live('the owner’s feed carries every movement after the reading it opens on', () =>
   Effect.gen(function* () {
@@ -409,7 +407,7 @@ it.live('the owner’s feed carries every movement after the reading it opens on
         }),
       ),
     );
-    yield* Deferred.await(opened).pipe(Effect.timeout('5 seconds'));
+    yield* Deferred.await(opened);
     calls.open(address('from-test-runtime'));
     const other = yield* Scope.fork(yield* Effect.scope);
     const inOtherContext = yield* Effect.forkIn(
@@ -418,7 +416,7 @@ it.live('the owner’s feed carries every movement after the reading it opens on
     );
     yield* Fiber.join(inOtherContext);
     calls.open(address('from-plain-js'));
-    yield* Deferred.await(movements).pipe(Effect.timeout('5 seconds'));
+    yield* Deferred.await(movements);
     expect(frames[0]?.type).toBe('snapshot');
     expect(updates().map((frame) => frame.call.toolCallId)).toEqual(['from-test-runtime', 'from-harness-runtime', 'from-plain-js']);
   }),
@@ -486,7 +484,7 @@ layer(callStore, { excludeTestServices: true })('call lifecycle', (it) => {
       expect(standing.endedAt).toBeNull();
       yield* Deferred.await(world.entered);
       const feed = yield* world.observe();
-      yield* Deferred.await(feed.opened).pipe(Effect.timeout('5 seconds'));
+      yield* Deferred.await(feed.opened);
       const watching = feed.frames[0];
       expect(watching?.type).toBe('snapshot');
       if (watching?.type === 'snapshot') {
@@ -506,7 +504,7 @@ layer(callStore, { excludeTestServices: true })('call lifecycle', (it) => {
       expect(ended.phase).toBe('stopped');
       expect(ended.endedAt).not.toBeNull();
       expect(after.find((record) => record.toolCallId === SIBLING_CALL)!.phase).toBe('completed');
-      yield* Deferred.await(feed.ending).pipe(Effect.timeout('5 seconds'));
+      yield* Deferred.await(feed.ending);
       const ending = feed.frames.at(-1);
       expect(ending?.type).toBe('updated');
       if (ending?.type === 'updated') {
@@ -534,14 +532,11 @@ layer(callStore, { excludeTestServices: true })('call lifecycle', (it) => {
       );
       expect(world.ran.finished).toBe('the work finished');
       let carried = '';
-      yield* until(
-        'the late result to reach the thread inbox',
-        () =>
-          Effect.gen(function* () {
-            carried = JSON.stringify((yield* world.late()) ?? null);
-            return carried.includes('finished in the background') && carried.includes('the work finished');
-          }),
-        5_000,
+      yield* until('the late result to reach the thread inbox', () =>
+        Effect.gen(function* () {
+          carried = JSON.stringify((yield* world.late()) ?? null);
+          return carried.includes('finished in the background') && carried.includes('the work finished');
+        }),
       );
       expect(carried).toContain('the work finished');
       expect(world.ran.cleaned).toBe(true);

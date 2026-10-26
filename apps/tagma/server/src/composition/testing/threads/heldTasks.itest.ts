@@ -119,8 +119,6 @@ const handedLine = Effect.fnUntraced(function* (parentId: string, childId: strin
 
 layer(Layer.effect(Place, setup), {
   excludeTestServices: true,
-  testTimeout: 60_000,
-  timeout: '30 seconds',
 })('held tasks', (it) => {
   it.effect('worktree task handover and release follow the graph copy after the worker or root leaves', () =>
     Effect.gen(function* () {

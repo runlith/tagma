@@ -11,27 +11,24 @@ import { protocolStopRig } from './protocolStopRig.js';
 import { protocolWordRig } from './protocolWordRig.js';
 
 describe.skipIf(!existsSync(LIBRARY))('the transport conformance set on ACP with the Claude runner over a scripted Claude Code', () => {
-  layer(protocolFixture('claude-conformance'), { excludeTestServices: true, timeout: 180_000 })('protocol rig', (it) => {
+  layer(protocolFixture('claude-conformance'), { excludeTestServices: true })('protocol rig', (it) => {
     describeTransportStops(
       'acp (Claude runner)',
       () => Effect.map(ProtocolRig, (rig) => protocolStopRig(rig, claudeAgent(rig))),
       it.effect,
       ['thinking'],
-      15_000,
     );
     describeTransportRestarts(
       'acp (Claude runner)',
       () => Effect.map(ProtocolRig, (rig) => protocolStopRig(rig, claudeAgent(rig), 'restarts')),
       it.effect,
       undefined,
-      15_000,
     );
     describeTransportWords(
       'acp (Claude runner)',
       () => Effect.map(ProtocolRig, (rig) => protocolWordRig(rig, claudeAgent(rig))),
       it.effect,
       ['running'],
-      15_000,
     );
   });
 });

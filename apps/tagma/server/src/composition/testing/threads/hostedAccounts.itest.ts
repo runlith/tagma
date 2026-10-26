@@ -18,7 +18,7 @@ import { VendorTurns } from '../../../external-harnesses/testing/doubles.js';
 import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
 
-layer(doorFixture(), { excludeTestServices: true, timeout: '60 seconds' })('hosted account world', (it) => {
+layer(doorFixture(), { excludeTestServices: true })('hosted account world', (it) => {
   it.effect(
     'hosted account changes release the pinned process between turns, preserve its vendor session, and leave model-only changes pinned',
     () =>

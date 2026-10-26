@@ -86,7 +86,7 @@ const branchOf = Effect.fnUntraced(function* (title: string, sharedSource?: stri
   return { source, child, append: (events: Parameters<typeof branch.append>[0]) => branch.append(events) };
 });
 
-layer(Layer.effect(World, makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true, timeout: '60 seconds' })(
+layer(Layer.effect(World, makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
   'a fork behind its birth',
   (it) => {
     it.effect('a fork finds its prefix and exports only its tail, including the first append after an interrupted export', () =>

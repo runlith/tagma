@@ -105,11 +105,10 @@ const setup = Effect.fnUntraced(function* (own: string | undefined) {
       onSuccess: codeOf,
       onFailure: (failure) => ('code' in failure ? String(failure.code) : String(failure._tag)),
     });
-  const ended = (threadId: string, within = 4_000) =>
+  const ended = (threadId: string) =>
     until(
       Effect.map(snapshot(threadId), (state) => (state.status.life === 'idle' && state.status.ending !== undefined ? true : null)),
       'ended its run',
-      within,
     );
   const notified = (threadId: string) =>
     until(
@@ -242,7 +241,6 @@ export const describeParity = (title: string, body: (it: LayerMethods<World | Fi
   describe.skipIf(!existsSync(LIBRARY))(title, () => {
     layer(Layer.effect(World, setup(own)).pipe(Layer.provideMerge(BunFileSystem.layer)), {
       excludeTestServices: true,
-      timeout: '60 seconds',
     })('transport world', body);
   });
 
@@ -297,7 +295,7 @@ export const scribbled = Effect.fn('testing.parityScribbled')(function* (ending:
           );
           yield* turns().stop(threadId, parity.projectId);
         }
-        yield* ended(threadId, 15_000);
+        yield* ended(threadId);
         const landed = (yield* snapshot(threadId)).transcript.filter(
           (entry) => coreEntry(entry) && entry.type === 'tool' && entry.toolCallId === 'written-call',
         );
@@ -382,19 +380,16 @@ export const describeSeats = (title: string, scenarios: readonly Scenario[], exp
     for (const name of SEATS) {
       describe(name, () => {
         for (const scenario of scenarios) {
-          it.effect(
-            scenario.name,
-            () =>
-              Effect.gen(function* () {
-                const { parity, serial } = yield* World;
-                const expectation = expected[scenario.name]!;
-                yield* serial.withPermit(
-                  Effect.gen(function* () {
-                    expect(yield* scenario.drive(parity.seats[name])).toEqual(expectation.differs?.[name] ?? expectation.common);
-                  }).pipe(Effect.ensuring(parity.quiet().pipe(Effect.orDie))),
-                );
-              }),
-            60_000,
+          it.effect(scenario.name, () =>
+            Effect.gen(function* () {
+              const { parity, serial } = yield* World;
+              const expectation = expected[scenario.name]!;
+              yield* serial.withPermit(
+                Effect.gen(function* () {
+                  expect(yield* scenario.drive(parity.seats[name])).toEqual(expectation.differs?.[name] ?? expectation.common);
+                }).pipe(Effect.ensuring(parity.quiet().pipe(Effect.orDie))),
+              );
+            }),
           );
         }
       });

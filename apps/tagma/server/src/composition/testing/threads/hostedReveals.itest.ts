@@ -21,60 +21,55 @@ const offeredSchema = Schema.Struct({ tools: Schema.Array(Schema.Struct({ name: 
 describe.skipIf(!existsSync(LIBRARY))('the tools Tagma serves a Claude Code thread over its MCP door', () => {
   layer(protocolWorld({ name: 'hosted-reveals', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }), {
     excludeTestServices: true,
-    timeout: 60_000,
   })('protocol world', (it) => {
-    it.effect(
-      'a deferred tool revealed before Claude Code compacts its session is still served on the next turn',
-      () =>
-        Effect.gen(function* () {
-          const { world, projectId, agent, birth } = yield* ProtocolWorld;
-          const files = yield* FileSystem.FileSystem;
-          const report = yield* agent('reveals');
-          const threadId = yield* birth();
-          const db = Context.get(world.runtime.graph, MachineStore).db;
-          const units = Context.get(world.runtime.graph, MachineUnits);
-          const runStatus = (runId: string) =>
-            Effect.map(
-              units.read((unit) => unit.run(db.select().from(threadRun()).where(eq(threadRun().id, runId)).get())),
-              (row) => (row?.status === 'completed' ? true : null),
-            );
-          const prompted = (count: number) =>
-            Effect.map(heard(report), (lines) => (lines.filter((line) => line.method === 'session/prompt').length >= count ? true : null));
-          const asThread = (id: string, input: object) =>
-            world.op(id, input, `project=${projectId}`, { [GRANT_HEADER]: grantFor(threadId) });
-          const turns = turnsOf(world.runtime.owners);
-
-          const first = yield* turns.send(threadId, projectId, 'HOLD the turn');
-          yield* until(prompted(1), 'the first turn reached the agent', report);
-          yield* asThread('open_hosted_turn', {});
-          yield* files.writeFileString(`${report}.search`, `select:${DEFERRED}`);
-          yield* until(
-            Effect.map(files.readFileString(`${report}.out`), (out) => (out.includes('said-search') ? true : null)),
-            'the agent sealed its search',
-            report,
+    it.effect('a deferred tool revealed before Claude Code compacts its session is still served on the next turn', () =>
+      Effect.gen(function* () {
+        const { world, projectId, agent, birth } = yield* ProtocolWorld;
+        const files = yield* FileSystem.FileSystem;
+        const report = yield* agent('reveals');
+        const threadId = yield* birth();
+        const db = Context.get(world.runtime.graph, MachineStore).db;
+        const units = Context.get(world.runtime.graph, MachineUnits);
+        const runStatus = (runId: string) =>
+          Effect.map(
+            units.read((unit) => unit.run(db.select().from(threadRun()).where(eq(threadRun().id, runId)).get())),
+            (row) => (row?.status === 'completed' ? true : null),
           );
-          yield* asThread('call_hosted_tool', { toolCallId: 'search-call', name: 'tool_search', input: { query: `select:${DEFERRED}` } });
-          yield* files.writeFileString(`${report}.release`, 'release');
-          yield* until(runStatus(first.runId), 'the first turn ended', report);
-          yield* files.remove(`${report}.release`, { force: true });
+        const prompted = (count: number) =>
+          Effect.map(heard(report), (lines) => (lines.filter((line) => line.method === 'session/prompt').length >= count ? true : null));
+        const asThread = (id: string, input: object) => world.op(id, input, `project=${projectId}`, { [GRANT_HEADER]: grantFor(threadId) });
+        const turns = turnsOf(world.runtime.owners);
 
-          const choices = yield* Schema.decodeUnknownEffect(compactionChoicesSchema)(
-            (yield* world.op('read_compaction_choices', { threadId }, `project=${projectId}`)).body,
-          );
-          if (choices.own === null) return yield* Effect.die('a Claude Code thread folds its own session');
-          const folded = yield* Context.get(world.runtime.owners, Compaction).compact(threadId, projectId, {
-            summarizer: { provider: choices.own.provider, model: choices.own.model, reasoning: choices.own.reasoning },
-          });
-          if (folded.status !== 'started') return yield* Effect.die(new Error(`the compaction answered ${folded.status}`));
-          yield* until(runStatus(folded.runId), 'Claude Code compacted its session', report);
+        const first = yield* turns.send(threadId, projectId, 'HOLD the turn');
+        yield* until(prompted(1), 'the first turn reached the agent', report);
+        yield* asThread('open_hosted_turn', {});
+        yield* files.writeFileString(`${report}.search`, `select:${DEFERRED}`);
+        yield* until(
+          Effect.map(files.readFileString(`${report}.out`), (out) => (out.includes('said-search') ? true : null)),
+          'the agent sealed its search',
+          report,
+        );
+        yield* asThread('call_hosted_tool', { toolCallId: 'search-call', name: 'tool_search', input: { query: `select:${DEFERRED}` } });
+        yield* files.writeFileString(`${report}.release`, 'release');
+        yield* until(runStatus(first.runId), 'the first turn ended', report);
+        yield* files.remove(`${report}.release`, { force: true });
 
-          yield* turns.send(threadId, projectId, 'HOLD the next turn');
-          yield* until(prompted(2), 'the next turn reached the agent', report);
-          yield* asThread('open_hosted_turn', {});
-          const served = yield* Schema.decodeUnknownEffect(offeredSchema)((yield* asThread('read_hosted_tools', {})).body);
-          expect(served.tools.map((tool) => tool.name)).toContain(DEFERRED);
-        }),
-      40_000,
+        const choices = yield* Schema.decodeUnknownEffect(compactionChoicesSchema)(
+          (yield* world.op('read_compaction_choices', { threadId }, `project=${projectId}`)).body,
+        );
+        if (choices.own === null) return yield* Effect.die('a Claude Code thread folds its own session');
+        const folded = yield* Context.get(world.runtime.owners, Compaction).compact(threadId, projectId, {
+          summarizer: { provider: choices.own.provider, model: choices.own.model, reasoning: choices.own.reasoning },
+        });
+        if (folded.status !== 'started') return yield* Effect.die(new Error(`the compaction answered ${folded.status}`));
+        yield* until(runStatus(folded.runId), 'Claude Code compacted its session', report);
+
+        yield* turns.send(threadId, projectId, 'HOLD the next turn');
+        yield* until(prompted(2), 'the next turn reached the agent', report);
+        yield* asThread('open_hosted_turn', {});
+        const served = yield* Schema.decodeUnknownEffect(offeredSchema)((yield* asThread('read_hosted_tools', {})).body);
+        expect(served.tools.map((tool) => tool.name)).toContain(DEFERRED);
+      }),
     );
   });
 });

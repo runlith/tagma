@@ -27,7 +27,7 @@ const recordedIn = Effect.fnUntraced(function* (rig: Rig, act: (rig: Rig) => voi
   const events: ThreadWireFeedEvent[] = [...(yield* next)];
   act(rig);
   const through = rig.live.view('thread').at.seq;
-  while ((events.at(-1)?.at.seq ?? 0) < through) events.push(...(yield* next.pipe(Effect.timeout('1 second'))));
+  while ((events.at(-1)?.at.seq ?? 0) < through) events.push(...(yield* next));
   return { rig, events };
 });
 
@@ -37,7 +37,7 @@ const reconnected = Effect.fnUntraced(function* (before: (rig: Rig) => void, awa
   away(first.rig);
   const since = first.events.at(-1)!.at;
   const next = yield* Stream.toPull(first.rig.reconnect(since));
-  const again = [...(yield* next.pipe(Effect.timeout('1 second')))];
+  const again = [...(yield* next)];
   return { rig: first.rig, events: [...first.events, ...again] };
 });
 

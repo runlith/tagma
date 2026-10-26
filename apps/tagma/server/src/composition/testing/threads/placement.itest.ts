@@ -235,58 +235,55 @@ const composed = Effect.fn('testing.rootPlacement')(function* (demo: EffectDemo)
 layer(demoGraphLayer().pipe(Layer.provideMerge(Layer.mergeAll(BunFileSystem.layer, Path.layer))), { excludeTestServices: true })(
   'thread root placement',
   (it) => {
-    it.effect(
-      'a child is born where its parent stands: in main beside a main parent, in the worktree beside a parent there',
-      () =>
-        withDemo((demo) =>
-          Effect.gen(function* () {
-            const { assignments, units, placement, moves, root, child, opensIn } = yield* composed(demo);
-            const checkout = yield* tempRepoEffect(demo.fixture, 'placed-');
-            const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'placed', rootPath: checkout })).id;
-            const parent = yield* root(projectId);
+    it.effect('a child is born where its parent stands: in main beside a main parent, in the worktree beside a parent there', () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const { assignments, units, placement, moves, root, child, opensIn } = yield* composed(demo);
+          const checkout = yield* tempRepoEffect(demo.fixture, 'placed-');
+          const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'placed', rootPath: checkout })).id;
+          const parent = yield* root(projectId);
 
-            const inMain = yield* child(parent);
-            expect((yield* units.read((unit) => assignments.read(unit, ThreadId.make(inMain.id)))).selection.provenance).toBe('intrinsic');
-            expect(yield* opensIn(inMain, projectId)).toBe(checkout);
+          const inMain = yield* child(parent);
+          expect((yield* units.read((unit) => assignments.read(unit, ThreadId.make(inMain.id)))).selection.provenance).toBe('intrinsic');
+          expect(yield* opensIn(inMain, projectId)).toBe(checkout);
 
-            const tree = yield* placement.resolve({
-              projectId,
-              worktree: 'new',
-              from: parent.id,
-              operationId: 'spawn:call-1',
-              name: 'reviewer',
-              agent: true,
-              asked: true,
-              guest: false,
-            });
-            const again = yield* placement.resolve({
-              projectId,
-              worktree: 'new',
-              from: parent.id,
-              operationId: 'spawn:call-1',
-              name: 'reviewer',
-              agent: true,
-              asked: true,
-              guest: false,
-            });
-            expect(again.rootId).toBe(tree.rootId);
+          const tree = yield* placement.resolve({
+            projectId,
+            worktree: 'new',
+            from: parent.id,
+            operationId: 'spawn:call-1',
+            name: 'reviewer',
+            agent: true,
+            asked: true,
+            guest: false,
+          });
+          const again = yield* placement.resolve({
+            projectId,
+            worktree: 'new',
+            from: parent.id,
+            operationId: 'spawn:call-1',
+            name: 'reviewer',
+            agent: true,
+            asked: true,
+            guest: false,
+          });
+          expect(again.rootId).toBe(tree.rootId);
 
-            const moved = yield* moves.move(projectId, { kind: 'operator' }, { threadId: parent.id, worktree: tree.rootId });
-            expect(moved.status).toBe('selected');
-            const treePath = yield* opensIn(parent, projectId);
-            expect(treePath).not.toBe(checkout);
+          const moved = yield* moves.move(projectId, { kind: 'operator' }, { threadId: parent.id, worktree: tree.rootId });
+          expect(moved.status).toBe('selected');
+          const treePath = yield* opensIn(parent, projectId);
+          expect(treePath).not.toBe(checkout);
 
-            const inTree = yield* child(parent);
-            const placed = yield* units.read((unit) => assignments.read(unit, ThreadId.make(inTree.id)));
-            expect(placed.selection).toMatchObject({ rootId: tree.rootId, provenance: 'inherited' });
-            expect(yield* opensIn(inTree, projectId)).toBe(treePath);
+          const inTree = yield* child(parent);
+          const placed = yield* units.read((unit) => assignments.read(unit, ThreadId.make(inTree.id)));
+          expect(placed.selection).toMatchObject({ rootId: tree.rootId, provenance: 'inherited' });
+          expect(yield* opensIn(inTree, projectId)).toBe(treePath);
 
-            const back = yield* moves.move(projectId, { kind: 'operator' }, { threadId: parent.id, worktree: 'main' });
-            expect(back.status).toBe('selected');
-            expect(yield* opensIn(parent, projectId)).toBe(checkout);
-          }).pipe(Effect.provide(demo.context)),
-        ),
-      120_000,
+          const back = yield* moves.move(projectId, { kind: 'operator' }, { threadId: parent.id, worktree: 'main' });
+          expect(back.status).toBe('selected');
+          expect(yield* opensIn(parent, projectId)).toBe(checkout);
+        }).pipe(Effect.provide(demo.context)),
+      ),
     );
 
     it.effect(
@@ -318,159 +315,146 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(Layer.mergeAll(BunFileSystem.laye
             expect(taken.code).toBe('worktree-name-taken');
           }).pipe(Effect.provide(demo.context)),
         ),
-      120_000,
     );
 
-    it.effect(
-      'an agent road that never asked the operator about a new worktree is refused where agent.worktrees is ask',
-      () =>
-        withDemo((demo) =>
-          Effect.gen(function* () {
-            const { placement, root } = yield* composed(demo);
-            const checkout = yield* tempRepoEffect(demo.fixture, 'off-');
-            const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'off', rootPath: checkout })).id;
-            const parent = yield* root(projectId);
-            yield* demo.graph.settings.write({ scope: 'project', projectId, key: 'agent.worktrees', value: 'ask' });
+    it.effect('an agent road that never asked the operator about a new worktree is refused where agent.worktrees is ask', () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const { placement, root } = yield* composed(demo);
+          const checkout = yield* tempRepoEffect(demo.fixture, 'off-');
+          const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'off', rootPath: checkout })).id;
+          const parent = yield* root(projectId);
+          yield* demo.graph.settings.write({ scope: 'project', projectId, key: 'agent.worktrees', value: 'ask' });
 
-            const refused = yield* Effect.flip(
-              placement.resolve({
-                projectId,
-                worktree: 'new',
-                from: parent.id,
-                operationId: 'spawn:call-2',
-                name: 'worker',
-                agent: true,
-                asked: false,
-                guest: false,
-              }),
-            );
-            expect(refused).toBeInstanceOf(GateRefusal);
-            expect(refused.code).toBe('worktrees-ask');
+          const refused = yield* Effect.flip(
+            placement.resolve({
+              projectId,
+              worktree: 'new',
+              from: parent.id,
+              operationId: 'spawn:call-2',
+              name: 'worker',
+              agent: true,
+              asked: false,
+              guest: false,
+            }),
+          );
+          expect(refused).toBeInstanceOf(GateRefusal);
+          expect(refused.code).toBe('worktrees-ask');
 
-            const guest = yield* Effect.flip(
-              placement.resolve({
-                projectId,
-                worktree: 'main',
-                from: parent.id,
-                operationId: 'spawn:call-3',
-                name: 'worker',
-                agent: true,
-                asked: true,
-                guest: true,
-              }),
-            );
-            expect(guest.code).toBe('guest-mobility');
+          const guest = yield* Effect.flip(
+            placement.resolve({
+              projectId,
+              worktree: 'main',
+              from: parent.id,
+              operationId: 'spawn:call-3',
+              name: 'worker',
+              agent: true,
+              asked: true,
+              guest: true,
+            }),
+          );
+          expect(guest.code).toBe('guest-mobility');
 
-            const unasked = yield* Effect.flip(
-              placement.resolve({
-                projectId,
-                worktree: 'new',
-                from: null,
-                operationId: 'start:agent-root',
-                name: 'worker',
-                agent: true,
-                asked: false,
-                guest: false,
-              }),
-            );
-            expect(unasked.code).toBe('worktrees-ask');
-          }).pipe(Effect.provide(demo.context)),
-        ),
-      60_000,
-    );
-
-    it.effect(
-      'a new worktree whose prefix stands as a branch is cut on the flattened name, and a retry answers the same tree',
-      () =>
-        withDemo((demo) =>
-          Effect.gen(function* () {
-            const { placement, roots } = yield* composed(demo);
-            const checkout = yield* tempRepoEffect(demo.fixture, 'prefix-taken-');
-            const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'prefix-taken', rootPath: checkout })).id;
-            yield* gitEffect(checkout, ['branch', 'tagma']);
-            const ask = (operationId: string) => ({
+          const unasked = yield* Effect.flip(
+            placement.resolve({
               projectId,
               worktree: 'new',
               from: null,
-              operationId,
-              name: 'reviewer',
+              operationId: 'start:agent-root',
+              name: 'worker',
+              agent: true,
+              asked: false,
+              guest: false,
+            }),
+          );
+          expect(unasked.code).toBe('worktrees-ask');
+        }).pipe(Effect.provide(demo.context)),
+      ),
+    );
+
+    it.effect('a new worktree whose prefix stands as a branch is cut on the flattened name, and a retry answers the same tree', () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const { placement, roots } = yield* composed(demo);
+          const checkout = yield* tempRepoEffect(demo.fixture, 'prefix-taken-');
+          const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'prefix-taken', rootPath: checkout })).id;
+          yield* gitEffect(checkout, ['branch', 'tagma']);
+          const ask = (operationId: string) => ({
+            projectId,
+            worktree: 'new',
+            from: null,
+            operationId,
+            name: 'reviewer',
+            agent: false,
+            asked: false,
+            guest: false,
+          });
+
+          const made = yield* placement.resolve(ask('spawn:flat-1'));
+          const folder = (yield* roots.read(made.rootId)).path;
+          const head = (yield* spawnedEffect(['git', 'symbolic-ref', '--short', 'HEAD'], { cwd: folder })).stdout.toString().trim();
+          expect(head).toMatch(/^tagma-reviewer-[0-9a-f]{6}$/);
+
+          const again = yield* placement.resolve(ask('spawn:flat-1'));
+          expect(again.rootId).toBe(made.rootId);
+        }).pipe(Effect.provide(demo.context)),
+      ),
+    );
+
+    it.effect('a name whose branch would stand under an existing branch refuses before git makes anything', () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const { placement } = yield* composed(demo);
+          const checkout = yield* tempRepoEffect(demo.fixture, 'prefix-blocked-');
+          const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'prefix-blocked', rootPath: checkout })).id;
+          yield* gitEffect(checkout, ['branch', 'tagma']);
+          const list = () => spawnedEffect(['git', 'branch', '--list', '--format=%(refname)'], { cwd: checkout });
+          const before = (yield* list()).stdout.toString();
+
+          const refused = yield* Effect.flip(
+            placement.resolve({
+              projectId,
+              worktree: 'new',
+              from: null,
+              operationId: 'start:blocked',
+              name: 'thread',
+              branch: 'feature',
               agent: false,
               asked: false,
               guest: false,
-            });
-
-            const made = yield* placement.resolve(ask('spawn:flat-1'));
-            const folder = (yield* roots.read(made.rootId)).path;
-            const head = (yield* spawnedEffect(['git', 'symbolic-ref', '--short', 'HEAD'], { cwd: folder })).stdout.toString().trim();
-            expect(head).toMatch(/^tagma-reviewer-[0-9a-f]{6}$/);
-
-            const again = yield* placement.resolve(ask('spawn:flat-1'));
-            expect(again.rootId).toBe(made.rootId);
-          }).pipe(Effect.provide(demo.context)),
-        ),
-      120_000,
+            }),
+          );
+          expect(refused.code).toBe('worktree-name-taken');
+          expect((yield* list()).stdout.toString()).toBe(before);
+        }).pipe(Effect.provide(demo.context)),
+      ),
     );
 
-    it.effect(
-      'a name whose branch would stand under an existing branch refuses before git makes anything',
-      () =>
-        withDemo((demo) =>
-          Effect.gen(function* () {
-            const { placement } = yield* composed(demo);
-            const checkout = yield* tempRepoEffect(demo.fixture, 'prefix-blocked-');
-            const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'prefix-blocked', rootPath: checkout })).id;
-            yield* gitEffect(checkout, ['branch', 'tagma']);
-            const list = () => spawnedEffect(['git', 'branch', '--list', '--format=%(refname)'], { cwd: checkout });
-            const before = (yield* list()).stdout.toString();
+    it.effect('a name that would stand over an existing branch refuses as taken', () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const { placement } = yield* composed(demo);
+          const checkout = yield* tempRepoEffect(demo.fixture, 'prefix-over-');
+          const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'prefix-over', rootPath: checkout })).id;
+          yield* gitEffect(checkout, ['branch', 'tagma/feature']);
+          yield* demo.graph.settings.write({ scope: 'project', projectId, key: 'worktrees.branchPrefix', value: '' });
 
-            const refused = yield* Effect.flip(
-              placement.resolve({
-                projectId,
-                worktree: 'new',
-                from: null,
-                operationId: 'start:blocked',
-                name: 'thread',
-                branch: 'feature',
-                agent: false,
-                asked: false,
-                guest: false,
-              }),
-            );
-            expect(refused.code).toBe('worktree-name-taken');
-            expect((yield* list()).stdout.toString()).toBe(before);
-          }).pipe(Effect.provide(demo.context)),
-        ),
-      120_000,
-    );
-
-    it.effect(
-      'a name that would stand over an existing branch refuses as taken',
-      () =>
-        withDemo((demo) =>
-          Effect.gen(function* () {
-            const { placement } = yield* composed(demo);
-            const checkout = yield* tempRepoEffect(demo.fixture, 'prefix-over-');
-            const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'prefix-over', rootPath: checkout })).id;
-            yield* gitEffect(checkout, ['branch', 'tagma/feature']);
-            yield* demo.graph.settings.write({ scope: 'project', projectId, key: 'worktrees.branchPrefix', value: '' });
-
-            const refused = yield* Effect.flip(
-              placement.resolve({
-                projectId,
-                worktree: 'new',
-                from: null,
-                operationId: 'start:over',
-                name: 'thread',
-                branch: 'tagma',
-                agent: false,
-                asked: false,
-                guest: false,
-              }),
-            );
-            expect(refused.code).toBe('worktree-name-taken');
-          }).pipe(Effect.provide(demo.context)),
-        ),
-      120_000,
+          const refused = yield* Effect.flip(
+            placement.resolve({
+              projectId,
+              worktree: 'new',
+              from: null,
+              operationId: 'start:over',
+              name: 'thread',
+              branch: 'tagma',
+              agent: false,
+              asked: false,
+              guest: false,
+            }),
+          );
+          expect(refused.code).toBe('worktree-name-taken');
+        }).pipe(Effect.provide(demo.context)),
+      ),
     );
   },
 );

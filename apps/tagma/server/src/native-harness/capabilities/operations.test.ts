@@ -55,12 +55,11 @@ it.effect('a user write during the initial live read reaches an outside-project 
     const read = yield* fixture(live);
     const before = yield* read(null);
     suspended = true;
-    const watching = yield* Effect.forkChild(read(null, before.revision).pipe(Effect.timeout('1 second')));
+    const watching = yield* Effect.forkChild(read(null, before.revision));
     yield* Deferred.await(reading);
     live.publish(enabled.id, 'user', null, 'true', false);
     yield* live.settingChanges.publish({ key: enabled.id, scope: 'user', projectId: null });
     yield* Deferred.succeed(initial, []);
-    yield* TestClock.adjust('1 second');
     expect((yield* Fiber.join(watching)).disabled).toEqual([]);
   }),
 );

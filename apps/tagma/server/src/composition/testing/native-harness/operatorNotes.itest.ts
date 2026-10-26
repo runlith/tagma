@@ -4,12 +4,13 @@ import type { ModelStreamInput } from '@runlith/agent/modelPort';
 import { agentReaderInput } from '@runlith/agent/AgentSignal';
 import { Usage, type LLMEvent } from '@runlith/llm/schema/events';
 import type { Message } from '@runlith/llm/schema/messages';
-import { Clock, Context, Effect, Layer, Stream } from 'effect';
+import { Context, Effect, Layer, Stream } from 'effect';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { OperatorNotes } from '../../../threads/contract/service/notes.js';
 import { autoTitle } from '../../../threads/contract/wire/settings.js';
 import { birthsOf, turnsOf } from '../../../threads/testing/doubles.js';
-import { makeDoorWorld } from '../doorFixture.js';
+import { makeDoorWorld, projectLeaving } from '../doorFixture.js';
+import { modelDefaults, subscriptionLogin } from '../claudeLogin.js';
 import { settledThread } from './settled.fixture.js';
 
 const usage = new Usage({ inputTokens: 10, outputTokens: 2, totalTokens: 12 });
@@ -35,23 +36,11 @@ const setup = Effect.gen(function* () {
       }),
     }),
   });
-  const now = yield* Clock.currentTimeMillis;
-  yield* world.runtime.tokens.add('subscription', {
-    accessToken: 'bearer',
-    refreshToken: 'refresh',
-    expiresAt: now + 3_600_000,
-    scope: 'user:inference',
-    account: { uuid: 'notes-account', email: 'notes@example.com' },
-    organization: { uuid: 'notes-org', name: 'Notes' },
-  });
+  const account = yield* subscriptionLogin(world);
   const projectId = yield* world.stealthProject();
+  yield* projectLeaving(world, projectId);
   yield* Context.get(world.runtime.graph, Settings).write({ key: autoTitle.id, value: false, scope: 'project', projectId });
-  const chosen = yield* world.op(
-    'set_model_defaults',
-    { provider: 'subscription', model: 'claude-sonnet-5-5', reasoning: 'low', account: null },
-    `project=${projectId}`,
-  );
-  expect(chosen.status).toBe(200);
+  yield* modelDefaults(world, { provider: 'subscription', model: 'claude-sonnet-5-5', reasoning: 'low', account });
   return { world, projectId, sent };
 });
 
@@ -65,7 +54,7 @@ const noteRuns = (messages: readonly Message[]) =>
     return state?.['operator-notes'] === undefined ? [] : [{ at, inputs: state['operator-notes'].inputs, text: texts(message) }];
   });
 
-layer(Layer.effect(World, setup), { excludeTestServices: true, timeout: 30_000 })('operator notes on native', (it) => {
+layer(Layer.effect(World, setup), { excludeTestServices: true })('operator notes on native', (it) => {
   it.effect('each operator message gets the set that stood when it was sent, right after its words, and none when the set is empty', () =>
     Effect.gen(function* () {
       const { world, projectId, sent } = yield* World;

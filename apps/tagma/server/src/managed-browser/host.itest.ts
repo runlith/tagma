@@ -94,7 +94,7 @@ const fixture = Layer.effectDiscard(
   }),
 ).pipe(Layer.provideMerge(managedFixture()));
 
-layer(fixture, { excludeTestServices: true, timeout: '60 seconds' })('the managed host', (it) => {
+layer(fixture, { excludeTestServices: true })('the managed host', (it) => {
   it.effect.each(PROFILES)(
     'build %s keeps its identity in workers and requests, drives DOM actions and returns committed navigation',
     (profile) =>
@@ -145,36 +145,32 @@ layer(fixture, { excludeTestServices: true, timeout: '60 seconds' })('the manage
     }),
   );
 
-  it.effect(
-    'a download from a frame of a page without a window lands in the record of that page',
-    () =>
-      Effect.gen(function* () {
-        const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/download'), profile: MANAGED_AGENT }, undefined, agent));
-        const page = opened.page.id;
-        yield* settled(
-          page,
-          Effect.map(Pages, (pages) => (pages.live(page)?.loading === false ? true : undefined)),
-        );
-        const shot = yield* calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent));
-        yield* calling(PAGE.act_on_page.body.execute({ page, action: 'click', ref: refIn(shot.text, /link "Report"/) }, undefined, agent));
-        const done = yield* settled(
-          page,
-          calling(PAGE.read_page_downloads.body.execute({ page }, undefined, agent)).pipe(
-            Effect.map((read) => read.downloads.find((download) => download.state === 'done')),
-          ),
-        );
-        expect([done.name, done.bytes]).toEqual(['report.txt', 12]);
-        expect(yield* Effect.promise(() => Bun.file(done.path ?? '').text())).toBe('twelve bytes');
-        const listed = yield* calling(PAGE.list_pages.body.execute({}, undefined, agent));
-        expect(listed.pages.find((held) => held.id === page)?.downloads).toBe(1);
-      }),
-    30_000,
+  it.effect('a download from a frame of a page without a window lands in the record of that page', () =>
+    Effect.gen(function* () {
+      const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/download'), profile: MANAGED_AGENT }, undefined, agent));
+      const page = opened.page.id;
+      yield* settled(
+        page,
+        Effect.map(Pages, (pages) => (pages.live(page)?.loading === false ? true : undefined)),
+      );
+      const shot = yield* calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent));
+      yield* calling(PAGE.act_on_page.body.execute({ page, action: 'click', ref: refIn(shot.text, /link "Report"/) }, undefined, agent));
+      const done = yield* settled(
+        page,
+        calling(PAGE.read_page_downloads.body.execute({ page }, undefined, agent)).pipe(
+          Effect.map((read) => read.downloads.find((download) => download.state === 'done')),
+        ),
+      );
+      expect([done.name, done.bytes]).toEqual(['report.txt', 12]);
+      expect(yield* Effect.promise(() => Bun.file(done.path ?? '').text())).toBe('twelve bytes');
+      const listed = yield* calling(PAGE.list_pages.body.execute({}, undefined, agent));
+      expect(listed.pages.find((held) => held.id === page)?.downloads).toBe(1);
+    }),
   );
 });
 
 layer(managedFixture({ missing: true }), {
   excludeTestServices: true,
-  timeout: '60 seconds',
 })('the managed host without its build', (it) => {
   it.effect('a page in a profile whose build is missing refuses host-refused naming the build', () =>
     Effect.gen(function* () {
@@ -194,33 +190,30 @@ const restartWorld = kind(ManagedRestart, ({ home }: { readonly home: string }) 
   ),
 );
 
-it.live(
-  'after the server restarts, a page of the managed host stands dormant at its address and comes back there',
-  () =>
-    Effect.gen(function* () {
-      const kept = mkdtempSync(join(tmpdir(), 'managed-restart-'));
-      const world = own(restartWorld, { home: kept }, 'закрытие и повторное открытие сервера — предмет теста');
-      const run = Effect.fnUntraced(function* <A, E>(work: Effect.Effect<A, E, Served>) {
-        const life = yield* Scope.make();
-        const built = yield* Scope.provide(world, life);
-        return yield* work.pipe(Effect.provide(built), Effect.ensuring(Scope.close(life, Exit.void)));
-      });
-      const page = yield* run(
-        Effect.gen(function* () {
-          const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/second'), profile: MANAGED_AGENT }, undefined, agent));
-          return opened.page.id;
-        }),
-      );
-      const after = yield* run(
-        Effect.gen(function* () {
-          const listed = yield* calling(PAGE.list_pages.body.execute({}, undefined, agent));
-          const standing = listed.pages.find((held) => held.id === page);
-          const shot = yield* calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent));
-          return { state: standing?.state, url: standing?.url, text: shot.text };
-        }),
-      );
-      expect([after.state, after.url]).toEqual(['dormant', at('/second')]);
-      expect(after.text).toContain('Second page');
-    }),
-  60_000,
+it.live('after the server restarts, a page of the managed host stands dormant at its address and comes back there', () =>
+  Effect.gen(function* () {
+    const kept = mkdtempSync(join(tmpdir(), 'managed-restart-'));
+    const world = own(restartWorld, { home: kept }, 'закрытие и повторное открытие сервера — предмет теста');
+    const run = Effect.fnUntraced(function* <A, E>(work: Effect.Effect<A, E, Served>) {
+      const life = yield* Scope.make();
+      const built = yield* Scope.provide(world, life);
+      return yield* work.pipe(Effect.provide(built), Effect.ensuring(Scope.close(life, Exit.void)));
+    });
+    const page = yield* run(
+      Effect.gen(function* () {
+        const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/second'), profile: MANAGED_AGENT }, undefined, agent));
+        return opened.page.id;
+      }),
+    );
+    const after = yield* run(
+      Effect.gen(function* () {
+        const listed = yield* calling(PAGE.list_pages.body.execute({}, undefined, agent));
+        const standing = listed.pages.find((held) => held.id === page);
+        const shot = yield* calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent));
+        return { state: standing?.state, url: standing?.url, text: shot.text };
+      }),
+    );
+    expect([after.state, after.url]).toEqual(['dormant', at('/second')]);
+    expect(after.text).toContain('Second page');
+  }),
 );

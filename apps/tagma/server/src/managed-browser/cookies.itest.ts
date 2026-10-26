@@ -76,7 +76,6 @@ const imported = (input: Parameters<(typeof COOKIE.import_cookies.body)['execute
 
 layer(managedFixture({}, wrap), {
   excludeTestServices: true,
-  timeout: '60 seconds',
 })('cookie import into the managed host', (it) => {
   it.effect(
     'cookie replacement rolls back failed and interrupted writes, serializes imports and carries sign-ins to another profile',

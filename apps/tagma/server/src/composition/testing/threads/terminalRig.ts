@@ -203,6 +203,6 @@ export const terminalRig = Effect.fn('testing.terminalRig')(function* (world: Do
   };
 });
 
-export const until = Effect.fn('testing.terminalUntil')(function* <E, R>(accepts: Effect.Effect<boolean, E, R>, within = 5_000) {
-  yield* Effect.repeat(accepts, { until: Boolean, schedule: Schedule.spaced(25) }).pipe(Effect.timeout(within));
+export const until = Effect.fn('testing.terminalUntil')(function* <E, R>(accepts: Effect.Effect<boolean, E, R>) {
+  yield* Effect.repeat(accepts, { until: Boolean, schedule: Schedule.spaced(25) });
 });

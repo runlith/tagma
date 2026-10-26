@@ -44,7 +44,7 @@ it.live('a change heavier than the queue holds wakes the waiting reader with a r
     const waiting = yield* Effect.forkChild(next);
     yield* Effect.yieldNow;
     rig.live.tail('thread', 'run', [heavy], []);
-    const recovered = (yield* Fiber.join(waiting).pipe(Effect.timeout('1 second')))[0]!;
+    const recovered = (yield* Fiber.join(waiting))[0]!;
     expect(recovered.type).toBe('resume');
     if (recovered.type === 'resume') expect(recovered.payload.open).toEqual([heavy]);
   }),

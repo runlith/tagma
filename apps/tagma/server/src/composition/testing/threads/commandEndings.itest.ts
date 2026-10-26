@@ -313,32 +313,29 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
     }),
   );
 
-  it.effect(
-    'a discharge drives an unreachable send again itself, instead of leaving it for the next boot',
-    () =>
-      Effect.gen(function* () {
-        const { waiters } = yield* World;
-        const ref = execution('exec-redriven');
-        yield* owe(ref, 'call-8');
-        const road = yield* deliveryOver(
-          () => ({ _tag: 'Decided', summary: decided(ref, { _tag: 'Code', code: 0 }) }),
-          (attempt) => (attempt === 1 ? { _tag: 'Unreachable', reason: 'the thread host did not answer' } : { _tag: 'Accepted' }),
-        );
+  it.effect('a discharge drives an unreachable send again itself, instead of leaving it for the next boot', () =>
+    Effect.gen(function* () {
+      const { waiters } = yield* World;
+      const ref = execution('exec-redriven');
+      yield* owe(ref, 'call-8');
+      const road = yield* deliveryOver(
+        () => ({ _tag: 'Decided', summary: decided(ref, { _tag: 'Code', code: 0 }) }),
+        (attempt) => (attempt === 1 ? { _tag: 'Unreachable', reason: 'the thread host did not answer' } : { _tag: 'Accepted' }),
+      );
 
-        yield* Effect.gen(function* () {
-          const attending = yield* Effect.forkChild(road.delivery.attend());
-          yield* waiters.due(ref);
-          yield* untilSent(road, 1);
-          yield* TestClock.adjust(Duration.millis(executionHandshakeMs));
-          yield* untilSent(road, 2);
-          yield* untilSettled(ref);
-          yield* Fiber.interrupt(attending);
-        });
-        expect(road.sent()).toHaveLength(2);
-        expect(road.sent()[1]?.text).toBe(road.sent()[0]!.text);
-        expect(yield* waiters.owed(ref).pipe(Effect.orDie)).toBeNull();
-      }),
-    20_000,
+      yield* Effect.gen(function* () {
+        const attending = yield* Effect.forkChild(road.delivery.attend());
+        yield* waiters.due(ref);
+        yield* untilSent(road, 1);
+        yield* TestClock.adjust(Duration.millis(executionHandshakeMs));
+        yield* untilSent(road, 2);
+        yield* untilSettled(ref);
+        yield* Fiber.interrupt(attending);
+      });
+      expect(road.sent()).toHaveLength(2);
+      expect(road.sent()[1]?.text).toBe(road.sent()[0]!.text);
+      expect(yield* waiters.owed(ref).pipe(Effect.orDie)).toBeNull();
+    }),
   );
 
   const endedReading = (ref: ExecutionRef): CommandReading => ({

@@ -72,7 +72,7 @@ describe.skipIf(!existsSync(LIBRARY))('a native conversation crosses Claude Code
         }),
       }),
     }),
-    { excludeTestServices: true, timeout: 60_000 },
+    { excludeTestServices: true },
   )('protocol world', (it) => {
     it.effect(
       'native tool history is accepted as a vendor transcript, and the Claude answer reaches the next native request in one feed',
@@ -155,7 +155,6 @@ describe.skipIf(!existsSync(LIBRARY))('a native conversation crosses Claude Code
             ),
           ).toEqual([REMEMBER, ASK, RECALL]);
         }),
-      30_000,
     );
   });
 });

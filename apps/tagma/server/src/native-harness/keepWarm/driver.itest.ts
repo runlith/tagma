@@ -240,12 +240,8 @@ const opened = Effect.gen(function* () {
 });
 class Floor extends Context.Service<Floor, Effect.Success<typeof opened>>()('test/native-harness/KeepWarmFloor') {}
 const floor = Layer.effect(Floor, opened).pipe(Layer.provideMerge(machine));
-const until = Effect.fnUntraced(function* <R>(what: string, holds: () => Effect.Effect<boolean, unknown, R>) {
-  const deadline = (yield* Clock.currentTimeMillis) + 10_000;
-  while (!(yield* holds())) {
-    if ((yield* Clock.currentTimeMillis) > deadline) return yield* Effect.die(new Error(`Never reached: ${what}.`));
-    yield* Effect.sleep(20);
-  }
+const until = Effect.fnUntraced(function* <R>(_what: string, holds: () => Effect.Effect<boolean, unknown, R>) {
+  while (!(yield* holds())) yield* Effect.sleep(20);
 });
 const settle = Effect.sleep(100);
 const resting = Effect.fnUntraced(function* (threadId: string) {

@@ -142,8 +142,6 @@ const op = Effect.fnUntraced(function* (id: string, input: Record<string, unknow
 describe.skipIf(!existsSync(LIBRARY))('terminal history', () => {
   layer(Layer.effect(World, terminalHistoryWorld).pipe(Layer.provideMerge(BunFileSystem.layer)), {
     excludeTestServices: true,
-    timeout: '60 seconds',
-    testTimeout: '40 seconds',
   })('PTY world', (it) => {
     it.effect(
       'a rewind under a standing Claude Code CLI cuts its session offline, stands the CLI on the cut root with its unsent composer text, and a restore stands it back on the root it was cut from',

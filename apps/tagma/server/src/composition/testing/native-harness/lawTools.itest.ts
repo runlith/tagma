@@ -4,7 +4,7 @@ import { ToolAnswer } from '@runlith/agent/tool';
 import { Effect } from 'effect';
 import { GraphTools, graphToolsFixture } from './graphTools.fixture.js';
 
-layer(graphToolsFixture, { excludeTestServices: true, timeout: 30_000 })('native rule operations', (it) => {
+layer(graphToolsFixture, { excludeTestServices: true })('native rule operations', (it) => {
   it.effect('code delivery without sources warns its caller while keeping the whole-project gate', () =>
     Effect.gen(function* () {
       const { graph, call, answer } = yield* GraphTools;

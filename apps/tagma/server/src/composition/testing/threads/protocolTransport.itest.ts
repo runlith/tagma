@@ -159,7 +159,7 @@ const born = Effect.fn('testing.transportChild')(function* (task: string) {
 });
 
 describe.skipIf(!existsSync(LIBRARY))('an acp thread behaves like a native one', () => {
-  layer(Layer.effect(World, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true, timeout: '60 seconds' })(
+  layer(Layer.effect(World, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
     'ACP transport world',
     (it) => {
       it.effect(
@@ -243,7 +243,6 @@ describe.skipIf(!existsSync(LIBRARY))('an acp thread behaves like a native one',
             expect((yield* listOf(world.runtime.owners).setArchived(cli, projectId, true)).archivedAt).not.toBeNull();
             expect((yield* facet(cli))?.session?.state).toBe('ended');
           }),
-        60_000,
       );
     },
   );

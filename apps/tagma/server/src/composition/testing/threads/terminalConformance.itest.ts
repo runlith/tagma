@@ -177,7 +177,7 @@ const notices = Effect.fnUntraced(function* (threadId?: string) {
 });
 const until = <A, E, R>(read: Effect.Effect<A | null, E, R>, what: string, threadId?: string) =>
   Effect.flatMap(World, (world) =>
-    readUntil(read, what, undefined, Effect.provideService(Effect.map(notices(threadId), Queue.take), World, world)),
+    readUntil(read, what, Effect.provideService(Effect.map(notices(threadId), Queue.take), World, world)),
   ).pipe(Effect.tapCause(() => Effect.logWarning('the conformance wait failed', { what })));
 
 const textOf = Effect.fnUntraced(function* (file: string) {
@@ -734,8 +734,6 @@ const terminalWords: WordRig<Env> = { reach: listen };
 describe.skipIf(!existsSync(LIBRARY))('the terminal transport keeps the shared Esc contract', () => {
   layer(Layer.effect(World, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
     excludeTestServices: true,
-    timeout: '60 seconds',
-    testTimeout: '30 seconds',
   })('PTY world', (it) => {
     describeTransportStops('terminal', () => Effect.succeed(terminalStops), it.effect, ['thinking']);
     describeTransportWords('terminal', () => Effect.succeed(terminalWords), it.effect, ['running']);

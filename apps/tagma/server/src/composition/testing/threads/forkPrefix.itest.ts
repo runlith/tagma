@@ -116,7 +116,7 @@ const count = Effect.fnUntraced(function* (table: 'thread_event' | 'thread_entry
   return row?.n ?? 0;
 });
 
-layer(Layer.effect(World, makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true, timeout: '60 seconds' })(
+layer(Layer.effect(World, makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
   'a branch over its source’s prefix',
   (it) => {
     it.effect('holds no copy of the prefix, and the source settling, rewinding and going on leaves the branch as it was born', () =>

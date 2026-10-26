@@ -486,7 +486,7 @@ layer(Layer.effect(World, setup()).pipe(Layer.provideMerge(storage)), { excludeT
             const plan = harness.runs.reports().of('acp').ended({ id: first.runId, threadId: recipient.thread }, { kind: 'completed' });
             yield* units.write('commandNotice.completed', (unit) => plan.run(unit as unknown as ThreadWriteTx));
           }
-          yield* Deferred.await(completed).pipe(Effect.timeout('5 seconds'));
+          yield* Deferred.await(completed);
           const previous = yield* runsOf(recipient.thread);
           expect(previous?.status).toBe('completed');
           expect((yield* harness.reads.snapshot(recipient.thread)).activeRun).toBeNull();
@@ -542,7 +542,7 @@ layer(Layer.effect(World, setup()).pipe(Layer.provideMerge(storage)), { excludeT
       try {
         const delivery = yield* deliveryTo(unregistered, () => Effect.succeed('wake'));
         expect(yield* delivery.deliver(unregistered)).toEqual({ _tag: 'Settled' });
-        yield* Deferred.await(failed).pipe(Effect.timeout('5 seconds'));
+        yield* Deferred.await(failed);
         expect(yield* delivery.deliver(unregistered)).toEqual({ _tag: 'Settled' });
       } finally {
         unsubscribe();

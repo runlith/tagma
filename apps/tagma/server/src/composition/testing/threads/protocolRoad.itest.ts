@@ -53,27 +53,24 @@ const agent = Effect.fnUntraced(function* (name: string) {
 });
 
 describe.skipIf(!existsSync(LIBRARY))('ACP adapter boundaries over one execution host', () => {
-  layer(protocolFixture('protocol-road'), { excludeTestServices: true, timeout: 180_000 })('protocol rig', (it) => {
+  layer(protocolFixture('protocol-road'), { excludeTestServices: true })('protocol rig', (it) => {
     describeTransportStops(
       'acp (scripted agent)',
       () => Effect.map(ProtocolRig, (rig) => protocolStopRig(rig, scriptedAgent(rig))),
       it.effect,
       ['thinking'],
-      15_000,
     );
     describeTransportRestarts(
       'acp (scripted agent)',
       () => Effect.map(ProtocolRig, (rig) => protocolStopRig(rig, scriptedAgent(rig), 'restarts')),
       it.effect,
       undefined,
-      15_000,
     );
     describeTransportWords(
       'acp (scripted agent)',
       () => Effect.map(ProtocolRig, (rig) => protocolWordRig(rig, scriptedAgent(rig))),
       it.effect,
       ['running'],
-      15_000,
     );
 
     it.effect('a live session copy answers through the ACP extension and is released when its process exits', () =>
@@ -156,7 +153,6 @@ describe.skipIf(!existsSync(LIBRARY))('ACP adapter boundaries over one execution
             }),
           );
         }),
-      60_000,
     );
 
     it.effect(
@@ -198,7 +194,6 @@ describe.skipIf(!existsSync(LIBRARY))('ACP adapter boundaries over one execution
             }),
           );
         }),
-      60_000,
     );
 
     it.effect(
@@ -251,7 +246,6 @@ describe.skipIf(!existsSync(LIBRARY))('ACP adapter boundaries over one execution
             }),
           );
         }),
-      60_000,
     );
 
     it.effect(
@@ -296,55 +290,52 @@ describe.skipIf(!existsSync(LIBRARY))('ACP adapter boundaries over one execution
         }),
     );
 
-    it.effect(
-      'a compaction barrier ends its run with the spend the agent reports, whether it compacts, fails or is cancelled',
-      () =>
-        Effect.gen(function* () {
-          const { openThread, floor } = yield* ProtocolRig;
-          const report = yield* agent('compact');
-          const threadId = 'thread-methods-compact';
-          const until = waiting(threadId);
-          yield* openThread(threadId, CLAUDE);
-          yield* scenario(
-            Effect.gen(function* () {
-              const raised = yield* floor([]);
-              const driver = yield* raised.driver('owner-compact');
-              yield* driver.start(threadId);
-              const compacted = Effect.fn('testing.compactProtocolTurn')(function* (keep: string, count: number) {
-                yield* raised.harness.threads.handle(threadId, 'operator').compact({ at: 'end', keep });
-                yield* until(
-                  Effect.map(asked(report, '_tagma/compact'), (lines) => (lines.length === count ? true : null)),
-                  `asked to compact (${keep})`,
-                  report,
-                );
-                if (keep === 'CANCEL') yield* driver.cancel(threadId);
-                return yield* until(
-                  Effect.map(raised.entries(threadId), (entries) => {
-                    const ended = compactions(entries).filter((entry) => entry.status !== 'running');
-                    return ended.length === count ? ended.at(-1)! : null;
-                  }),
-                  `ended the compaction run (${keep})`,
-                  report,
-                );
-              });
-              const completed = yield* compacted('the active task', 1);
-              const failed = yield* compacted('FAIL', 2);
-              const cancelled = yield* compacted('CANCEL', 3);
-              expect([completed.status, failed.status, cancelled.status]).toEqual(['completed', 'failed', 'aborted']);
-              expect(completed.summary).toBe('the compacted summary');
-              for (const entry of [completed, failed])
-                expect(raised.usages.find((spent) => spent.turn === entry.runId)?.usage).toMatchObject(SPENT);
+    it.effect('a compaction barrier ends its run with the spend the agent reports, whether it compacts, fails or is cancelled', () =>
+      Effect.gen(function* () {
+        const { openThread, floor } = yield* ProtocolRig;
+        const report = yield* agent('compact');
+        const threadId = 'thread-methods-compact';
+        const until = waiting(threadId);
+        yield* openThread(threadId, CLAUDE);
+        yield* scenario(
+          Effect.gen(function* () {
+            const raised = yield* floor([]);
+            const driver = yield* raised.driver('owner-compact');
+            yield* driver.start(threadId);
+            const compacted = Effect.fn('testing.compactProtocolTurn')(function* (keep: string, count: number) {
+              yield* raised.harness.threads.handle(threadId, 'operator').compact({ at: 'end', keep });
               yield* until(
-                Effect.map(raised.spentOf(threadId), (spent) => (spent?.totalTokens === SPENT.totalTokens ? true : null)),
-                'charged the spend the agent reported after the cancel',
+                Effect.map(asked(report, '_tagma/compact'), (lines) => (lines.length === count ? true : null)),
+                `asked to compact (${keep})`,
                 report,
               );
-              expect(yield* driver.current(threadId)).toBeNull();
-              yield* driver.stop(threadId);
-            }),
-          );
-        }),
-      30_000,
+              if (keep === 'CANCEL') yield* driver.cancel(threadId);
+              return yield* until(
+                Effect.map(raised.entries(threadId), (entries) => {
+                  const ended = compactions(entries).filter((entry) => entry.status !== 'running');
+                  return ended.length === count ? ended.at(-1)! : null;
+                }),
+                `ended the compaction run (${keep})`,
+                report,
+              );
+            });
+            const completed = yield* compacted('the active task', 1);
+            const failed = yield* compacted('FAIL', 2);
+            const cancelled = yield* compacted('CANCEL', 3);
+            expect([completed.status, failed.status, cancelled.status]).toEqual(['completed', 'failed', 'aborted']);
+            expect(completed.summary).toBe('the compacted summary');
+            for (const entry of [completed, failed])
+              expect(raised.usages.find((spent) => spent.turn === entry.runId)?.usage).toMatchObject(SPENT);
+            yield* until(
+              Effect.map(raised.spentOf(threadId), (spent) => (spent?.totalTokens === SPENT.totalTokens ? true : null)),
+              'charged the spend the agent reported after the cancel',
+              report,
+            );
+            expect(yield* driver.current(threadId)).toBeNull();
+            yield* driver.stop(threadId);
+          }),
+        );
+      }),
     );
 
     it.effect(
@@ -421,136 +412,129 @@ describe.skipIf(!existsSync(LIBRARY))('ACP adapter boundaries over one execution
             }),
           );
         }),
-      60_000,
     );
 
-    it.effect(
-      'the answer to a hosted call is not written before the assistant message that carries the call',
-      () =>
-        Effect.gen(function* () {
-          const { openThread, floor, files } = yield* ProtocolRig;
-          const report = yield* agent('call');
-          const threadId = 'thread-order-call';
-          const until = waiting(threadId);
-          yield* openThread(threadId, CLAUDE);
-          yield* scenario(
-            Effect.gen(function* () {
-              const raised = yield* floor([]);
-              const driver = yield* raised.driver('owner-order');
-              const carried = Effect.flatMap(raised.events(threadId), (events) =>
-                Effect.map(
-                  Effect.forEach(events, (event) => payloadMessages(event.payload)),
-                  (groups) =>
-                    groups.flat().flatMap((message) => message.content.flatMap((part) => (part.type === 'tool-call' ? [part.id] : []))),
-                ),
-              );
-              yield* driver.send(threadId, 'HOLD the turn');
-              yield* until(driver.current(threadId), 'opened the held turn', report);
-              const run = (yield* raised.harness.reads.snapshot(threadId)).latestRun;
-              if (run === null) return yield* Effect.die('the held turn has no run');
-              let answered = false;
-              const waiting = yield* Effect.forkChild(
-                Effect.tap(driver.runs.reached(run, { callId: 'hosted-call' }), () =>
-                  Effect.sync(() => {
-                    answered = true;
-                  }),
-                ),
-              );
-              yield* files.writeFileString(`${report}.call`, 'call');
-              yield* until(
-                Effect.map(raised.entries(threadId), (entries) =>
-                  entries.some((entry) => entry.type === 'tool' && entry.toolCallId === 'hosted-call') ? true : null,
-                ),
-                'the driver projected the hosted call before its message boundary',
-                report,
-              );
-              expect(answered).toBe(false);
-              expect(yield* carried).toEqual([]);
-              yield* files.writeFileString(`${report}.said`, 'said');
-              yield* Fiber.join(waiting);
-              expect(answered).toBe(true);
-              expect(yield* carried).toEqual(['hosted-call']);
-              yield* driver.stop(threadId);
-            }),
-          );
-        }),
-      30_000,
+    it.effect('the answer to a hosted call is not written before the assistant message that carries the call', () =>
+      Effect.gen(function* () {
+        const { openThread, floor, files } = yield* ProtocolRig;
+        const report = yield* agent('call');
+        const threadId = 'thread-order-call';
+        const until = waiting(threadId);
+        yield* openThread(threadId, CLAUDE);
+        yield* scenario(
+          Effect.gen(function* () {
+            const raised = yield* floor([]);
+            const driver = yield* raised.driver('owner-order');
+            const carried = Effect.flatMap(raised.events(threadId), (events) =>
+              Effect.map(
+                Effect.forEach(events, (event) => payloadMessages(event.payload)),
+                (groups) =>
+                  groups.flat().flatMap((message) => message.content.flatMap((part) => (part.type === 'tool-call' ? [part.id] : []))),
+              ),
+            );
+            yield* driver.send(threadId, 'HOLD the turn');
+            yield* until(driver.current(threadId), 'opened the held turn', report);
+            const run = (yield* raised.harness.reads.snapshot(threadId)).latestRun;
+            if (run === null) return yield* Effect.die('the held turn has no run');
+            let answered = false;
+            const waiting = yield* Effect.forkChild(
+              Effect.tap(driver.runs.reached(run, { callId: 'hosted-call' }), () =>
+                Effect.sync(() => {
+                  answered = true;
+                }),
+              ),
+            );
+            yield* files.writeFileString(`${report}.call`, 'call');
+            yield* until(
+              Effect.map(raised.entries(threadId), (entries) =>
+                entries.some((entry) => entry.type === 'tool' && entry.toolCallId === 'hosted-call') ? true : null,
+              ),
+              'the driver projected the hosted call before its message boundary',
+              report,
+            );
+            expect(answered).toBe(false);
+            expect(yield* carried).toEqual([]);
+            yield* files.writeFileString(`${report}.said`, 'said');
+            yield* Fiber.join(waiting);
+            expect(answered).toBe(true);
+            expect(yield* carried).toEqual(['hosted-call']);
+            yield* driver.stop(threadId);
+          }),
+        );
+      }),
     );
 
-    it.effect(
-      'an ACP run records its actor and inbox cause once, including when stopped before its prompt reaches the agent',
-      () =>
-        Effect.gen(function* () {
-          const { openThread, floor, files } = yield* ProtocolRig;
-          const report = yield* agent('activity');
-          const threadId = 'thread-protocol-activity';
-          const until = waiting(threadId);
-          yield* openThread(threadId, CLAUDE);
-          const recorded = activityRecording();
-          const roots = () => recorded.activities().filter((row) => row.opened.kind === 'run' && row.opened.thread === threadId);
-          yield* scenario(
-            Effect.gen(function* () {
-              const raised = yield* floor([]);
-              const driver = yield* raised.driver('owner-activity');
-              const handle = raised.harness.threads.handle(threadId, 'operator');
-              yield* driver.send(threadId, 'HOLD the activity turn');
-              const first = yield* until(driver.current(threadId), 'opened the activity turn', report);
-              yield* until(
-                Effect.map(asked(report, 'session/prompt'), (lines) => (lines.length === 1 ? true : null)),
-                'prompted the activity turn',
-                report,
-              );
-              const firstRefs = yield* raised.inbox.delivered(threadId, first);
-              expect(firstRefs).toHaveLength(1);
-              yield* handle.stop();
-              yield* until(
-                Effect.sync(() => roots().find((row) => row.opened.run === first)?.ended ?? null),
-                'closed the activity turn',
-                report,
-              );
-              yield* driver.stop(threadId);
-              const hold = join(report, '..', 'opening.hold');
-              yield* Effect.acquireRelease(files.writeFileString(hold, ''), () => files.remove(hold, { force: true }).pipe(Effect.orDie));
-              yield* Effect.forkScoped(driver.send(threadId, 'Never prompt these words'));
-              const second = yield* until(
-                Effect.map(raised.harness.reads.snapshot(threadId), (snapshot) => snapshot.activeRun?.id ?? null),
-                'opened the pre-prompt turn',
-                report,
-              );
-              yield* until(
-                Effect.map(asked(report, 'initialize'), (lines) => (lines.length === 2 ? true : null)),
-                'started the blocked agent',
-                report,
-              );
-              const secondRefs = yield* raised.inbox.delivered(threadId, second);
-              expect(secondRefs).toHaveLength(1);
-              yield* handle.stop();
-              yield* until(
-                Effect.sync(() => roots().find((row) => row.opened.run === second)?.ended ?? null),
-                'closed the pre-prompt activity',
-                report,
-              );
-              expect(roots()).toHaveLength(2);
-              for (const [run, refs] of [
-                [first, firstRefs],
-                [second, secondRefs],
-              ] as const) {
-                expect(roots().find((row) => row.opened.run === run)).toMatchObject({
-                  opened: {
-                    run,
-                    actor: { kind: 'thread', id: threadId },
-                    trigger: { kind: 'inbox', refs },
-                    attrs: { provider: 'claude-code', modelSteps: 'unobserved' },
-                  },
-                  ended: { outcome: 'cancelled', result: { finish: 'aborted' } },
-                });
-              }
-              expect(yield* asked(report, 'session/prompt')).toHaveLength(1);
-              yield* driver.stop(threadId);
-            }).pipe(Effect.provideService(ActivityLog, recorded.log)),
-          );
-        }),
-      30_000,
+    it.effect('an ACP run records its actor and inbox cause once, including when stopped before its prompt reaches the agent', () =>
+      Effect.gen(function* () {
+        const { openThread, floor, files } = yield* ProtocolRig;
+        const report = yield* agent('activity');
+        const threadId = 'thread-protocol-activity';
+        const until = waiting(threadId);
+        yield* openThread(threadId, CLAUDE);
+        const recorded = activityRecording();
+        const roots = () => recorded.activities().filter((row) => row.opened.kind === 'run' && row.opened.thread === threadId);
+        yield* scenario(
+          Effect.gen(function* () {
+            const raised = yield* floor([]);
+            const driver = yield* raised.driver('owner-activity');
+            const handle = raised.harness.threads.handle(threadId, 'operator');
+            yield* driver.send(threadId, 'HOLD the activity turn');
+            const first = yield* until(driver.current(threadId), 'opened the activity turn', report);
+            yield* until(
+              Effect.map(asked(report, 'session/prompt'), (lines) => (lines.length === 1 ? true : null)),
+              'prompted the activity turn',
+              report,
+            );
+            const firstRefs = yield* raised.inbox.delivered(threadId, first);
+            expect(firstRefs).toHaveLength(1);
+            yield* handle.stop();
+            yield* until(
+              Effect.sync(() => roots().find((row) => row.opened.run === first)?.ended ?? null),
+              'closed the activity turn',
+              report,
+            );
+            yield* driver.stop(threadId);
+            const hold = join(report, '..', 'opening.hold');
+            yield* Effect.acquireRelease(files.writeFileString(hold, ''), () => files.remove(hold, { force: true }).pipe(Effect.orDie));
+            yield* Effect.forkScoped(driver.send(threadId, 'Never prompt these words'));
+            const second = yield* until(
+              Effect.map(raised.harness.reads.snapshot(threadId), (snapshot) => snapshot.activeRun?.id ?? null),
+              'opened the pre-prompt turn',
+              report,
+            );
+            yield* until(
+              Effect.map(asked(report, 'initialize'), (lines) => (lines.length === 2 ? true : null)),
+              'started the blocked agent',
+              report,
+            );
+            const secondRefs = yield* raised.inbox.delivered(threadId, second);
+            expect(secondRefs).toHaveLength(1);
+            yield* handle.stop();
+            yield* until(
+              Effect.sync(() => roots().find((row) => row.opened.run === second)?.ended ?? null),
+              'closed the pre-prompt activity',
+              report,
+            );
+            expect(roots()).toHaveLength(2);
+            for (const [run, refs] of [
+              [first, firstRefs],
+              [second, secondRefs],
+            ] as const) {
+              expect(roots().find((row) => row.opened.run === run)).toMatchObject({
+                opened: {
+                  run,
+                  actor: { kind: 'thread', id: threadId },
+                  trigger: { kind: 'inbox', refs },
+                  attrs: { provider: 'claude-code', modelSteps: 'unobserved' },
+                },
+                ended: { outcome: 'cancelled', result: { finish: 'aborted' } },
+              });
+            }
+            expect(yield* asked(report, 'session/prompt')).toHaveLength(1);
+            yield* driver.stop(threadId);
+          }).pipe(Effect.provideService(ActivityLog, recorded.log)),
+        );
+      }),
     );
 
     it.effect(
@@ -615,7 +599,6 @@ describe.skipIf(!existsSync(LIBRARY))('ACP adapter boundaries over one execution
             }),
           );
         }),
-      60_000,
     );
 
     it.effect(
@@ -669,7 +652,6 @@ describe.skipIf(!existsSync(LIBRARY))('ACP adapter boundaries over one execution
             }),
           );
         }),
-      60_000,
     );
   });
 });

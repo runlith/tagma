@@ -50,8 +50,6 @@ const rowsOf = (text: string): readonly Row[] =>
 describe.skipIf(!existsSync(LIBRARY))('Claude Code cut', () => {
   layer(Layer.effect(World, realCuts).pipe(Layer.provideMerge(BunFileSystem.layer)), {
     excludeTestServices: true,
-    timeout: '60 seconds',
-    testTimeout: '40 seconds',
   })('PTY world with the real cut server', (it) => {
     it.effect(
       'a fork before a turn and a rewind are cut offline by the Agent SDK from the transcript in the account store, each onto its own root, leaving the source as it was',

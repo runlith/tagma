@@ -113,7 +113,6 @@ class SummarizerFixture extends Context.Service<SummarizerFixture, Effect.Succes
 
 layer(Layer.effect(SummarizerFixture, makeFixture).pipe(Layer.provide(doorFixture())), {
   excludeTestServices: true,
-  timeout: '60 seconds',
 })('compaction summarizer', (it) => {
   it.effect(
     'a cold thread compacts on the first spendable chain member, keeps its selection, and continues on its own model from the checkpoint',
@@ -171,7 +170,7 @@ layer(Layer.effect(SummarizerFixture, makeFixture).pipe(Layer.provide(doorFixtur
             Effect.gen(function* () {
               const moved = yield* world.op('set_default_account', { provider: 'subscription', account: second });
               expect(moved.status).toBe(200);
-              yield* Queue.take(republished).pipe(Effect.timeout('2 seconds'));
+              yield* Queue.take(republished);
             }),
           (unsubscribe) => Effect.sync(unsubscribe),
         );
@@ -215,6 +214,5 @@ layer(Layer.effect(SummarizerFixture, makeFixture).pipe(Layer.provide(doorFixtur
           preservedCount: expect.any(Number),
         });
       }),
-    60_000,
   );
 });

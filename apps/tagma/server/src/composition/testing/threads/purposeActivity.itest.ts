@@ -40,7 +40,7 @@ const setup = Effect.gen(function* () {
 
 class World extends Context.Service<World, Effect.Success<typeof setup>>()('testing/PurposeActivityWorld') {}
 
-layer(Layer.effect(World, setup), { excludeTestServices: true, timeout: '60 seconds' })('purpose activities', (it) => {
+layer(Layer.effect(World, setup), { excludeTestServices: true })('purpose activities', (it) => {
   it.effect('a cancelled scheduled recap and a malformed manual recap remain readable activities', () =>
     Effect.gen(function* () {
       const { world, projectId, account } = yield* World;

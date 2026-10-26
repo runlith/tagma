@@ -10,25 +10,19 @@ import { LEASE_RHYTHM } from '../../../threads/contract/wire/rhythm.js';
 import type { DoorFixture } from '../doorFixture.js';
 import { stamp, type Cli, type TerminalRig } from './terminalRig.js';
 
-export const until = Effect.fn('testing.terminalDeliveryUntil')(
-  function* <A, E, R>(
-    read: Effect.Effect<A | null, E, R>,
-    what: string,
-    within = 20_000,
-    changes?: Effect.Effect<Effect.Effect<unknown>, never, Scope.Scope>,
-  ) {
-    yield* Effect.annotateCurrentSpan({ what, within });
-    const next = changes === undefined ? Effect.sleep(25) : yield* changes;
-    for (;;) {
-      const seen = yield* read;
-      if (seen !== null) return seen;
-      yield* next;
-    }
-  },
-  Effect.scoped,
-  (effect, _read, _what, within = 20_000, _changes?: Effect.Effect<Effect.Effect<unknown>, never, Scope.Scope>) =>
-    Effect.timeout(effect, within),
-);
+export const until = Effect.fn('testing.terminalDeliveryUntil')(function* <A, E, R>(
+  read: Effect.Effect<A | null, E, R>,
+  what: string,
+  changes?: Effect.Effect<Effect.Effect<unknown>, never, Scope.Scope>,
+) {
+  yield* Effect.annotateCurrentSpan({ what });
+  const next = changes === undefined ? Effect.sleep(25) : yield* changes;
+  for (;;) {
+    const seen = yield* read;
+    if (seen !== null) return seen;
+    yield* next;
+  }
+}, Effect.scoped);
 
 export type Who = { readonly session: string; readonly root: string };
 export const whoSpeaks = (facet: ExternalSession): Who => {

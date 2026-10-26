@@ -302,5 +302,4 @@ it.live(
         freshReason: 'account-changed',
       });
     }).pipe(Effect.provide(fixture)),
-  30_000,
 );

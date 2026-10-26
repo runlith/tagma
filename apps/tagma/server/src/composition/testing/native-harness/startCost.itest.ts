@@ -61,25 +61,21 @@ const cardsOf = Effect.fnUntraced(function* (threadId: string, projectId: number
   return snapshot.transcript.filter((entry): entry is StartEntry => entry.type === START_ENTRY);
 });
 
-const carded = Effect.fnUntraced(
-  function* (threadId: string, projectId: number) {
-    const changed = yield* Effect.acquireRelease(Queue.unbounded<void>(), Queue.shutdown);
-    const feed = yield* EvidenceFeed;
-    yield* Effect.acquireRelease(
-      Effect.sync(() => feed.subscribe(threadId, () => Queue.offerUnsafe(changed, undefined))),
-      (unsubscribe) => Effect.sync(unsubscribe),
-    );
-    for (;;) {
-      const cards = yield* cardsOf(threadId, projectId);
-      if (cards.length > 0) return cards;
-      yield* Queue.take(changed);
-    }
-  },
-  Effect.scoped,
-  Effect.timeout('10 seconds'),
-);
+const carded = Effect.fnUntraced(function* (threadId: string, projectId: number) {
+  const changed = yield* Effect.acquireRelease(Queue.unbounded<void>(), Queue.shutdown);
+  const feed = yield* EvidenceFeed;
+  yield* Effect.acquireRelease(
+    Effect.sync(() => feed.subscribe(threadId, () => Queue.offerUnsafe(changed, undefined))),
+    (unsubscribe) => Effect.sync(unsubscribe),
+  );
+  for (;;) {
+    const cards = yield* cardsOf(threadId, projectId);
+    if (cards.length > 0) return cards;
+    yield* Queue.take(changed);
+  }
+}, Effect.scoped);
 
-layer(Layer.effect(World, setup).pipe(Layer.provide(doorFixture())), { excludeTestServices: true, timeout: 30_000 })('start cost', (it) => {
+layer(Layer.effect(World, setup).pipe(Layer.provide(doorFixture())), { excludeTestServices: true })('start cost', (it) => {
   it.effect('the first real request and agent preview agree on priced prompt parts, and guidance mutations report their cost', () =>
     Effect.gen(function* () {
       const { world, projectId } = yield* World;

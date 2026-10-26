@@ -45,7 +45,6 @@ const framed = (report: string, method: string, count: number, what: string) =>
 describe.skipIf(!existsSync(LIBRARY))('a fork of a Claude Code thread on ACP', () => {
   layer(protocolWorld({ name: 'hosted-fork', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }), {
     excludeTestServices: true,
-    timeout: 60_000,
   })('protocol world', (it) => {
     it.effect('a spawn forks the source’s vendor session instead of opening a new one from the journal', () =>
       Effect.gen(function* () {

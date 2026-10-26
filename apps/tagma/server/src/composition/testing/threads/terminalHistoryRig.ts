@@ -272,8 +272,5 @@ export const terminalHistoryWorld = Effect.gen(function* () {
 export type TerminalHistoryWorld = Effect.Success<typeof terminalHistoryWorld>;
 export type HistoryClaude = Effect.Success<ReturnType<TerminalHistoryWorld['claude']>>;
 
-export const settledOn = <A, E, R>(read: Effect.Effect<A | null, E, R>, within = 20_000) =>
-  Effect.repeat(read, { until: (seen): seen is A => seen !== null, schedule: Schedule.spaced(25) }).pipe(
-    Effect.timeout(within),
-    Effect.map((seen) => seen as A),
-  );
+export const settledOn = <A, E, R>(read: Effect.Effect<A | null, E, R>) =>
+  Effect.repeat(read, { until: (seen): seen is A => seen !== null, schedule: Schedule.spaced(25) }).pipe(Effect.map((seen) => seen as A));

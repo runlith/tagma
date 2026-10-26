@@ -171,7 +171,8 @@ it.live(
     const { db } = yield* Effect.provide(MachineStore, runtime);
     const reached = () =>
       Effect.provide(
-        db.all<{ id: string }>(sql`select thread_id as id from thread_log where ${formedThread(sql`thread_log.thread_id`, kinds.last)}`),
+        db.all<{ id: string }>(sql`select thread_id as id from thread_log
+          where thread_id in ('t-lagging', 't-neighbour') and ${formedThread(sql`thread_log.thread_id`, kinds.last)}`),
         runtime,
       );
     expect(yield* Effect.provide(forms.lags('t-lagging'), runtime)).toBe(true);

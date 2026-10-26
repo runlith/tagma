@@ -71,56 +71,45 @@ const heldTurn = Effect.fnUntraced(function* (label: string, mode: 'bypass' | 'r
 describe.skipIf(!existsSync(LIBRARY))('a Tagma agent on ACP moves between worktrees like a native one', () => {
   layer(protocolWorld({ name: 'hosted-move', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }), {
     excludeTestServices: true,
-    timeout: 60_000,
   })('protocol world', (it) => {
-    it.effect(
-      'a Claude Code thread moves itself in the middle of a turn, and its next command runs in the worktree',
-      () =>
-        Effect.gen(function* () {
-          const files = yield* FileSystem.FileSystem;
-          const side = yield* worktree('side');
-          const { threadId, called, release } = yield* heldTurn('mover', 'bypass');
-          yield* called('reveal', 'tool_search', { query: 'select:move_thread' });
-          const moved = yield* called('move', 'move_thread', { threadId, worktree: side.rootId });
-          expect({ failed: moved.failed, said: textOf(moved) }).toMatchObject({ failed: false });
-          const printed = yield* called('print', 'bash', { command: 'pwd', description: 'Print the working directory' });
-          expect(textOf(printed)).toContain(side.destination);
-          yield* release;
-        }),
-      40_000,
+    it.effect('a Claude Code thread moves itself in the middle of a turn, and its next command runs in the worktree', () =>
+      Effect.gen(function* () {
+        const files = yield* FileSystem.FileSystem;
+        const side = yield* worktree('side');
+        const { threadId, called, release } = yield* heldTurn('mover', 'bypass');
+        yield* called('reveal', 'tool_search', { query: 'select:move_thread' });
+        const moved = yield* called('move', 'move_thread', { threadId, worktree: side.rootId });
+        expect({ failed: moved.failed, said: textOf(moved) }).toMatchObject({ failed: false });
+        const printed = yield* called('print', 'bash', { command: 'pwd', description: 'Print the working directory' });
+        expect(textOf(printed)).toContain(side.destination);
+        yield* release;
+      }),
     );
 
-    it.effect(
-      'a move that lands while a call waits for its approval takes effect after that call, which finishes where it was asked',
-      () =>
-        Effect.gen(function* () {
-          const { world, projectId, checkout } = yield* ProtocolWorld;
-          const files = yield* FileSystem.FileSystem;
-          const aside = yield* worktree('aside');
-          yield* files.writeFileString(join(aside.destination, 'aside-marker'), 'the worktree\n');
-          const { threadId, report, called, release } = yield* heldTurn('approver', 'review');
-          const harness = Context.get(world.runtime.owners, ThreadHarness);
-          const writing = yield* Effect.forkScoped(
-            called('write', 'write', { path: 'asked.txt', content: 'written where it was asked\n' }),
-          );
-          const question = yield* until(
-            Effect.map(harness.runs.questions().open(threadId), (open) => open[0] ?? null),
-            'the write asked the operator',
-            report,
-          );
-          expect((yield* world.op('move_thread', { threadId, worktree: aside.rootId }, `project=${projectId}`)).body).toMatchObject({
-            status: 'pending',
-          });
-          expect(textOf(yield* called('look', 'ls', { path: '.' }))).not.toContain('aside-marker');
-          yield* harness.runs
-            .hosting()
-            .answer(threadId, question.questionId, [{ questionId: 'write', values: [THREAD_TOOL_CONFIRM_VALUE] }]);
-          expect((yield* Fiber.join(writing)).failed).toBe(false);
-          expect(yield* files.readFileString(join(checkout, 'asked.txt'))).toBe('written where it was asked\n');
-          expect(textOf(yield* called('look-again', 'ls', { path: '.' }))).toContain('aside-marker');
-          yield* release;
-        }),
-      40_000,
+    it.effect('a move that lands while a call waits for its approval takes effect after that call, which finishes where it was asked', () =>
+      Effect.gen(function* () {
+        const { world, projectId, checkout } = yield* ProtocolWorld;
+        const files = yield* FileSystem.FileSystem;
+        const aside = yield* worktree('aside');
+        yield* files.writeFileString(join(aside.destination, 'aside-marker'), 'the worktree\n');
+        const { threadId, report, called, release } = yield* heldTurn('approver', 'review');
+        const harness = Context.get(world.runtime.owners, ThreadHarness);
+        const writing = yield* Effect.forkScoped(called('write', 'write', { path: 'asked.txt', content: 'written where it was asked\n' }));
+        const question = yield* until(
+          Effect.map(harness.runs.questions().open(threadId), (open) => open[0] ?? null),
+          'the write asked the operator',
+          report,
+        );
+        expect((yield* world.op('move_thread', { threadId, worktree: aside.rootId }, `project=${projectId}`)).body).toMatchObject({
+          status: 'pending',
+        });
+        expect(textOf(yield* called('look', 'ls', { path: '.' }))).not.toContain('aside-marker');
+        yield* harness.runs.hosting().answer(threadId, question.questionId, [{ questionId: 'write', values: [THREAD_TOOL_CONFIRM_VALUE] }]);
+        expect((yield* Fiber.join(writing)).failed).toBe(false);
+        expect(yield* files.readFileString(join(checkout, 'asked.txt'))).toBe('written where it was asked\n');
+        expect(textOf(yield* called('look-again', 'ls', { path: '.' }))).toContain('aside-marker');
+        yield* release;
+      }),
     );
   });
 });
