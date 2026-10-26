@@ -6,7 +6,8 @@ import { test as mountApp } from '@runlith/layer/svelte/test.svelte';
 import { makePlatform, makeRouter } from '@runlith/layer/testing';
 import { Cache } from '@runlith/query/repo';
 import { tick } from 'svelte';
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { Dictation } from '$lib/features/speech/dictation/Dictation.svelte.js';
 import { SpeechRepo } from '$lib/features/speech/Repo.js';
@@ -90,13 +91,7 @@ test.each([
     mounted.get(Dictation);
     await mounted.get(Workspace).ready;
     const entry = mounted.get(SettingsRepo).catalog.key(7);
-    await vi.waitFor(
-      () => {
-        expect(reads).toBeGreaterThan(0);
-        expect(entry.watchFetching()).toBe(false);
-      },
-      { timeout: 1_000, interval: 1 },
-    );
+    await waitUntil(() => reads > 0 && !entry.watchFetching());
     await tick();
     expect(reads).toBe(requests);
     expect(entry.watchError()).toBeInstanceOf(Refusal);

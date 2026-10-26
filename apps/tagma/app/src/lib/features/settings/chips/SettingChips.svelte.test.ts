@@ -6,7 +6,8 @@ import { Platform } from '@runlith/layer/Platform';
 import { makePlatform, makeRouter } from '@runlith/layer/testing';
 import { Cache } from '@runlith/query/repo';
 import { mount, unmount } from 'svelte';
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { Overlays } from '$lib/app/overlays.js';
 import { testAddressing } from '$lib/app/testing.js';
 import TestHost from '$lib/app/TestHost.svelte';
@@ -102,7 +103,7 @@ test('a catalog key in a settled message switches in place on the machine layer 
     },
   });
   try {
-    await vi.waitFor(() => expect(target.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false'));
+    await waitUntil(() => target.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'false');
     expect([...target.querySelectorAll('[data-setting]')].map((chip) => chip.getAttribute('data-setting'))).toEqual([
       'telemetry.cpuSampler',
     ]);
@@ -116,7 +117,7 @@ test('a catalog key in a settled message switches in place on the machine layer 
     const chip = target.querySelector('[data-setting]');
     target.querySelector<HTMLElement>('[role="switch"]')!.click();
 
-    await vi.waitFor(() => expect(target.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true'));
+    await waitUntil(() => target.querySelector('[role="switch"]')?.getAttribute('aria-checked') === 'true');
     expect(writes).toEqual([{ scope: 'user', key: 'telemetry.cpuSampler', value: true }]);
     expect(target.querySelector('[data-setting]')).toBe(chip);
   } finally {
@@ -147,14 +148,14 @@ test('a key in a finished block of a streaming answer is a chip at once, the liv
     },
   });
   try {
-    await vi.waitFor(() => expect(target.querySelectorAll('[data-setting]')).toHaveLength(1));
+    await waitUntil(() => target.querySelectorAll('[data-setting]').length === 1);
     const chip = target.querySelector('[data-setting]');
     expect([...target.querySelectorAll('p')].at(-1)?.querySelector('code')?.textContent).toBe('telemetry.cpuSampler');
 
     props.text = 'Turn on `telemetry.cpuSampler`.\n\nThen `telemetry.cpuSampler` again.';
     props.streaming = false;
 
-    await vi.waitFor(() => expect(target.querySelectorAll('[data-setting]')).toHaveLength(2));
+    await waitUntil(() => target.querySelectorAll('[data-setting]').length === 2);
     expect(target.querySelector('[data-setting]')).toBe(chip);
   } finally {
     await unmount(host);

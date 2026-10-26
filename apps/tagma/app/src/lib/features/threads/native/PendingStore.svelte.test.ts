@@ -2,7 +2,8 @@
 import { Effect } from 'effect';
 import { makeStorage } from '@runlith/layer/testing';
 import { IDBFactory } from 'fake-indexeddb';
-import { expect, vi } from 'vitest';
+import { expect } from 'vitest';
+import { waitFor } from '@runlith/testing/flush';
 import { it } from '@runlith/effect-test/vitest';
 import { DraftFiles } from './DraftFiles.js';
 import { DraftShelf } from './DraftShelf.svelte.js';
@@ -75,7 +76,7 @@ it.live('a turn a live page holds is no other page’s; once that page is gone o
     next.handBack(turnOf(taken[0]));
     next.drop('turn-1');
 
-    yield* Effect.promise(() => vi.waitFor(() => expect(nextShelf.at('thread:thread-1').text).toBe('проверь, работает ли')));
+    yield* Effect.promise(() => waitFor(() => expect(nextShelf.at('thread:thread-1').text).toBe('проверь, работает ли')));
     expect(nextShelf.at('thread:thread-1').documents).toEqual([{ id: 'd1', title: 'Заметка', text: 'тело' }]);
     yield* next.orphans();
     locks.held.splice(0);
@@ -117,7 +118,7 @@ it.live('words the server already stores come back with their attachments when a
     next.handBack(turnOf(taken));
 
     yield* Effect.promise(() =>
-      vi.waitFor(() => expect(nextShelf.at('thread:thread-1').documents).toMatchObject([{ title: 'Plan', text: '# Plan' }])),
+      waitFor(() => expect(nextShelf.at('thread:thread-1').documents).toMatchObject([{ title: 'Plan', text: '# Plan' }])),
     );
     expect(nextShelf.at('thread:thread-1').text).toBe('then the tests');
     expect(fetched).toEqual(['/api/threads/thread-1/attachments/plan.md']);

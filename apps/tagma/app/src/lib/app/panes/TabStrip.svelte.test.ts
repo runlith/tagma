@@ -24,7 +24,15 @@ afterEach(async () => {
 
 test('the strip opens the active tab’s thing in the full place of its link, and a tab that moves there leaves the strip', async () => {
   const opened: string[] = [];
-  const place = (words: string): LinkPlace<string> => ({ words, icon: X, open: (_app, link) => void opened.push(link.target) });
+  const completed = Promise.withResolvers<void>();
+  const place = (words: string): LinkPlace<string> => ({
+    words,
+    icon: X,
+    open: (_app, link) => {
+      opened.push(link.target);
+      if (opened.length === 2) completed.resolve();
+    },
+  });
   const kind = (name: string): LinkKind<string> => ({
     kind: name,
     what: () => name,
@@ -63,6 +71,7 @@ test('the strip opens the active tab’s thing in the full place of its link, an
   full()?.click();
   flushSync();
 
-  await vi.waitFor(() => expect(opened).toEqual(['n-1', 't-1']));
+  await completed.promise;
+  expect(opened).toEqual(['n-1', 't-1']);
   expect(area.panes.panes.map((tab) => tab.kind)).toEqual(['note', 'changes']);
 });

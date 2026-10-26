@@ -100,7 +100,9 @@ test.each(['ambiguous-name', 'graph-pool'])('a %s refusal remains a typed readin
   try {
     flushSync();
     expect(seen.at(-1)).toBeUndefined();
-    await expect.poll(() => failure(seen.at(-1)), { timeout: 500, interval: 1 }).toBe(refusal);
+    await titles.copy(name);
+    flushSync();
+    expect(failure(seen.at(-1))).toBe(refusal);
     expect(family.key([name]).watchError()).toBe(refusal);
     expect(blockRefView(testAddresses(), name, null, titles.peer(name))).toMatchObject({ text: name, title: refusal.message, dead: false });
     answer = found;
@@ -173,7 +175,8 @@ test('a renewed single address is not overwritten by a late refusal of an earlie
   await started.promise;
   await titles.refresh(name);
   batch.reject(refusal);
-  await expect.poll(() => failure(titles.peer(other)), { timeout: 500, interval: 1 }).toBe(refusal);
+  await titles.copy(other);
+  expect(failure(titles.peer(other))).toBe(refusal);
   expect(titles.peer(name)).toEqual({ title: 'Resolved block', project: 'other', branch: 'feature' });
 });
 
@@ -193,9 +196,8 @@ test('resync abandons the prior generation of title reading before another read 
   send({ type: 'resync' });
   expect(titles.peer(name)).toBeUndefined();
   await reading;
-  await expect
-    .poll(() => titles.peer(name), { timeout: 500, interval: 1 })
-    .toEqual({ title: 'Resolved block', project: 'other', branch: 'feature' });
+  await titles.copy(name);
+  expect(titles.peer(name)).toEqual({ title: 'Resolved block', project: 'other', branch: 'feature' });
   expect(signal.aborted).toBe(true);
 });
 
@@ -269,11 +271,11 @@ test('a live frame renews a pending address without accepting an older batch res
   titles.peer('abcd1234');
   await started.promise;
   send(change(row));
-  await expect
-    .poll(() => titles.peer(name), { timeout: 500, interval: 1 })
-    .toEqual({ title: 'Resolved block', project: 'other', branch: 'feature' });
+  await titles.copy(name);
+  expect(titles.peer(name)).toEqual({ title: 'Resolved block', project: 'other', branch: 'feature' });
   batch.resolve({ status: 'ok', titles: [{ name, title: 'Older block', projectId: 1 }], unreadable: [] });
-  await expect.poll(() => titles.peer('abcd1234'), { timeout: 500, interval: 1 }).toBeNull();
+  await titles.copy('abcd1234');
+  expect(titles.peer('abcd1234')).toBeNull();
   expect(titles.peer(name)).toEqual({ title: 'Resolved block', project: 'other', branch: 'feature' });
 });
 
@@ -284,7 +286,8 @@ test('a newly registered project is resolved by the workspace before its title b
     undefined,
     async () => registry,
   );
-  await expect.poll(() => workspace.loaded, { timeout: 500, interval: 1 }).toBe(true);
+  await workspace.ready;
+  expect(workspace.loaded).toBe(true);
   expect(workspace.projects.map((project) => project.id)).toEqual([1]);
   registry = registered;
   await titles.refresh(name);

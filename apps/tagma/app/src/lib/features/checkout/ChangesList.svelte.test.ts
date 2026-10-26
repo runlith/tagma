@@ -11,6 +11,7 @@ import type {
 } from '@tagma/server/change-record/contract/wire/threadChanges';
 import { Layer } from '@runlith/layer/Layer';
 import { stubAll, stubSingle } from '@runlith/query/testing';
+import { waitUntil } from '@runlith/testing/flush';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
@@ -125,12 +126,10 @@ beforeEach(() => {
 });
 
 async function until(holds: () => boolean): Promise<void> {
-  for (let tries = 0; tries < 50; tries++) {
-    if (holds()) return;
-    await new Promise((done) => setTimeout(done, 0));
+  await waitUntil(() => {
     flushSync();
-  }
-  throw new Error('never reached');
+    return holds();
+  });
 }
 
 afterEach(() => {

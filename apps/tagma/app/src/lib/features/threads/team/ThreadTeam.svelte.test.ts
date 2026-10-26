@@ -2,7 +2,8 @@
 import { NO_REVIEW, type ReviewPolicy, type TeamEdit, type TeamLayer } from '@runlith/agent/collaboration/team';
 import { Layer } from '@runlith/layer/Layer';
 import { Cache } from '@runlith/query/repo';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
+import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
@@ -101,7 +102,7 @@ function open(server: Server): { team: ThreadTeam; notices: Notices } {
 
 async function standing(team: ThreadTeam): Promise<void> {
   team.refresh();
-  await vi.waitFor(() => expect(team.read).toBeDefined());
+  await waitUntil(() => team.read !== undefined);
 }
 
 test('a change in the menu becomes the thread’s own copy, taken from the project, and leaves the project as it was', async () => {
@@ -140,6 +141,6 @@ test('Use for all threads makes the copy the project’s and offers Undo, which 
 
   offered?.undo?.();
 
-  await vi.waitFor(() => expect(server.copy).toEqual(copy));
+  await waitFor(() => expect(server.copy).toEqual(copy));
   expect(server.project).toEqual(before);
 });

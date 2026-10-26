@@ -5,6 +5,7 @@ import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
 import { NATIVE_CAPABILITIES } from '@runlith/agent/thread/record';
 import { Layer } from '@runlith/layer/Layer';
 import { afterEach, expect, test, vi } from 'vitest';
+import { waitFor } from '@runlith/testing/flush';
 
 import { keyedBy, liveFeed, mountShell, threadsRepo, type TestApp } from '$lib/app/testing.js';
 import { ExecutionsRepo } from '$lib/features/executions/Repo.js';
@@ -124,7 +125,7 @@ test('releasing the last pinned sub-agent under an old root re-reads the window,
   roots.mockResolvedValue({ rows: [fresh], roots: 9, windowBefore: fresh.readerOrderAt });
   feed.frame?.({ type: 'row', row: { ...kept, pinnedAt: null } });
 
-  await vi.waitFor(() => expect(drawn(list)).toEqual(['fresh']));
+  await waitFor(() => expect(drawn(list)).toEqual(['fresh']));
 });
 
 test('a released pin re-reads the window, so a row it alone was holding on screen leaves', async () => {
@@ -139,5 +140,5 @@ test('a released pin re-reads the window, so a row it alone was holding on scree
   roots.mockResolvedValue({ rows: [fresh], roots: 9, windowBefore: fresh.readerOrderAt });
   feed.frame?.({ type: 'row', row: { ...held, pinnedAt: null } });
 
-  await vi.waitFor(() => expect(drawn(list)).toEqual(['fresh']));
+  await waitFor(() => expect(drawn(list)).toEqual(['fresh']));
 });

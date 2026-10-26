@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { Layer } from '@runlith/layer/Layer';
 import { Cache } from '@runlith/query/repo';
-import { afterEach, expect, test, vi } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
+import { afterEach, expect, test } from 'vitest';
 
 import { NoticesLayer } from '$lib/features/notices/layer.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
@@ -95,7 +96,8 @@ test('a gate refusal met by a background graph read lands in the error list with
 
   world.resync();
 
-  await vi.waitFor(() => expect(world.notices.faults).toHaveLength(1));
+  await waitUntil(() => world.notices.faults.length > 0);
+  expect(world.notices.faults).toHaveLength(1);
   expect(world.notices.faults[0]).toMatchObject({ title: gate.code, body: gate.reason, count: 1 });
   expect(world.notices.list).toEqual([]);
 });
@@ -104,11 +106,13 @@ test('a failure with no gate behind it lands in the error list, counted once per
   const world = stand(() => new Response('not json at all', { status: 502 }));
 
   world.resync();
-  await vi.waitFor(() => expect(world.notices.faults).toHaveLength(1));
+  await waitUntil(() => world.notices.faults.length > 0);
+  expect(world.notices.faults).toHaveLength(1);
   expect(world.notices.faults[0]?.body).toContain('/api/op/read_tree');
 
   world.resync();
-  await vi.waitFor(() => expect(world.notices.faults[0]?.count).toBe(2));
+  await waitUntil(() => (world.notices.faults[0]?.count ?? 0) >= 2);
+  expect(world.notices.faults[0]?.count).toBe(2);
   expect(world.notices.faults).toHaveLength(1);
   expect(world.notices.list).toEqual([]);
 });

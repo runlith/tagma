@@ -3,7 +3,8 @@ import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { Failure } from '@runlith/layer/Failure';
 import { makePlatform, makeRouter, makeStorage } from '@runlith/layer/testing';
 import { stubSingle } from '@runlith/query/testing';
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
+import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { liveFeed } from '$lib/app/testing.js';
 import { ProjectsFeed } from './ProjectsFeed.js';
 import { Workspace } from './Selection.svelte.js';
@@ -35,11 +36,11 @@ test('a project registered by another door appears in the open workspace when th
   );
   const feed = liveFeed();
   new ProjectsFeed(feed.live, workspace, { defer: () => undefined } as never, failure);
-  await vi.waitFor(() => expect(workspace.loaded).toBe(true));
+  await waitUntil(() => workspace.loaded);
   expect(workspace.projects.map((one) => one.name)).toEqual(['first']);
 
   registry.push(project(2, 'shop-backend'));
   feed.routes.get('projects.subscribe')?.({ revision: 2 });
 
-  await vi.waitFor(() => expect(workspace.projects.map((one) => one.name)).toEqual(['first', 'shop-backend']));
+  await waitFor(() => expect(workspace.projects.map((one) => one.name)).toEqual(['first', 'shop-backend']));
 });

@@ -13,6 +13,7 @@ import { TestConnection } from '@runlith/chat-ui/testing/chatConnection';
 import { Effect, Fiber } from 'effect';
 import { it } from '@runlith/effect-test/vitest';
 import { afterEach, expect, test, vi } from 'vitest';
+import { waitFor, waitUntil } from '@runlith/testing/flush';
 
 import type { PlatformStorage } from '@runlith/layer/Platform';
 import { Scope } from '@runlith/layer/Scope';
@@ -101,7 +102,7 @@ async function shows(id: string, thread: WireThread = opened({ id }), modes?: Th
   slot?.open(id);
   slot && commitRoute(slot);
   port.emit(feedSnapshot(thread, null, modes), id);
-  await vi.waitFor(() => expect(slot?.chat.session?.thread?.id).toBe(id));
+  await waitUntil(() => slot?.chat.session?.thread?.id === id);
 }
 
 afterEach(async () => {
@@ -234,11 +235,11 @@ test('/delegation lands on the draft the birth carries or on the open thread', a
 
   await shows('thread-1', opened({ delegation: { own: null, allowed: true, setAt: null } } as never));
   await pick('on');
-  await vi.waitFor(() => expect(delegation).toMatchObject({ value: 'On' }));
+  await waitFor(() => expect(delegation).toMatchObject({ value: 'On' }));
   expect(setDelegation).toHaveBeenCalledWith({ id: 'thread-1', projectId: 47, delegation: true }, expect.anything());
 
   port.emit(feedSnapshot(opened({ delegation: { own: null, allowed: false, setAt: 'thread-0' } } as never)), 'thread-1');
-  await vi.waitFor(() => expect(delegation).toMatchObject({ value: 'Off' }));
+  await waitFor(() => expect(delegation).toMatchObject({ value: 'Off' }));
   expect(delegation.options?.find((option) => option.active)?.id).toBe('inherit');
 });
 
@@ -258,8 +259,8 @@ test('/recap writes the open thread’s recap, waits without holding the compose
   host.draft.setText('the next turn');
   expect(recap.disabled).toBe(false);
 
-  void write();
-  await vi.waitFor(() => expect(generateRecap).toHaveBeenCalledWith({ id: 'thread-1', projectId: 47 }, expect.anything()));
+  const writing = write();
+  await waitFor(() => expect(generateRecap).toHaveBeenCalledWith({ id: 'thread-1', projectId: 47 }, expect.anything()));
   expect(recap.disabled).toBe(true);
   expect(host.canSend).toBe(true);
 
@@ -272,7 +273,8 @@ test('/recap writes the open thread’s recap, waits without holding the compose
     }),
   );
   written.resolve({ status: 'written' });
-  await vi.waitFor(() => expect(recap.disabled).toBe(false));
+  await writing;
+  expect(recap.disabled).toBe(false);
   expect(host.chat.commands.notice).toBeNull();
 
   await write();
@@ -282,10 +284,8 @@ test('/recap writes the open thread’s recap, waits without holding the compose
   generateRecap.mockRejectedValueOnce(
     new Refusal({ gate: false, code: 'transport', reason: 'The server did not answer.', unblock: ['Ask again once it is back.'] }),
   );
-  void write();
-  await vi.waitFor(() =>
-    expect(host.chat.commands.notice).toEqual({ tone: 'error', message: 'The server did not answer. Ask again once it is back.' }),
-  );
+  await write();
+  expect(host.chat.commands.notice).toEqual({ tone: 'error', message: 'The server did not answer. Ask again once it is back.' });
 });
 
 test('a write in flight holds the thread it was started in, leaves every other thread free, and a thread left behind keeps no hold', async () => {
@@ -293,7 +293,7 @@ test('a write in flight holds the thread it was started in, leaves every other t
   const host = open({ threads: { generateRecap: stubMutation(() => written.promise) } });
   await shows('thread-1');
   void host.writes.perform(recapCommand(host.shown, host.chat, host.writes).run({ gesture: 'send' }));
-  await vi.waitFor(() => expect(host.writes.holding).toBe(true));
+  await waitUntil(() => host.writes.holding);
 
   await shows('thread-2');
   host.chat.target.fold.beginUserMessage({ text: 'what happened here?', turnKey: 'turn-1' });
@@ -328,7 +328,7 @@ test('a setting chosen right before Enter reaches the turn: the send leaves once
   host.draft.setText('the next turn');
   const sent = host.writes.send();
   await asked.promise;
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await new Promise((resolve) => setTimeout(resolve, 0));
   expect(port.called('send')).toEqual([]);
 
   answer.resolve();
@@ -379,7 +379,7 @@ test('a write hanging on another thread does not hold Enter', async () => {
     host.open(id);
     commitRoute(host);
     port.emit(feedSnapshot(opened({ id }), null), id);
-    await vi.waitFor(() => expect(host.chat.session?.thread?.id).toBe(id));
+    await waitUntil(() => host.chat.session?.thread?.id === id);
   }
   void column.writes.applySwitch('speed', 'fast');
   await asked.promise;
@@ -512,7 +512,7 @@ it.live(
       host.open('thread-1');
       commitRoute(host);
       port.emit(feedSnapshot(opened(), 'run-1'), 'thread-1');
-      yield* Effect.promise(() => vi.waitFor(() => expect(host.chat.commands.runId).toBe('run-1')));
+      yield* Effect.promise(() => waitFor(() => expect(host.chat.commands.runId).toBe('run-1')));
 
       const command = compactCommand(host.shown, host.chat, host.writes, host.panel);
       expect(command.disabled).toBe(false);
@@ -520,13 +520,13 @@ it.live(
       expect(host.panel.current).toMatchObject({ mode: 'compact', query: 'flash' });
       host.writes.compactWith('openai-oauth', 'test', null, 'send');
       yield* Effect.promise(() =>
-        vi.waitFor(() => {
+        waitFor(() => {
           expect(compact).toHaveBeenCalledTimes(1);
           expect(host.chat.commands.busy).toBeNull();
         }),
       );
       host.writes.compactWith('openai-oauth', 'test', null, 'queue');
-      yield* Effect.promise(() => vi.waitFor(() => expect(compact).toHaveBeenCalledTimes(2)));
+      yield* Effect.promise(() => waitFor(() => expect(compact).toHaveBeenCalledTimes(2)));
 
       expect(compact.mock.calls).toEqual([[{ at: 'step' }], [{ at: 'end' }]]);
       expect(host.chat.commands.runId).toBe('run-1');
@@ -572,17 +572,17 @@ test('a compaction pick names no summarizer for the standing default, names any 
   await shows('thread-1');
   host.draft.setText('/');
   host.thread?.get(ThreadCompaction).watch(host.draft.slashOpen);
-  await vi.waitFor(() => expect(host.thread?.get(ThreadCompaction).choices).toEqual(read));
+  await waitFor(() => expect(host.thread?.get(ThreadCompaction).choices).toEqual(read));
 
   host.writes.compactWith('opencode-go', 'deepseek-v4.1-flash', 'high', 'send');
-  await vi.waitFor(() => expect(compact).toHaveBeenCalledTimes(1));
-  await vi.waitFor(() => expect(host.chat.commands.busy).toBeNull());
+  await waitFor(() => expect(compact).toHaveBeenCalledTimes(1));
+  await waitUntil(() => host.chat.commands.busy === null);
   host.writes.compactWith('subscription', 'opus', 'high', 'queue');
-  await vi.waitFor(() => expect(compact).toHaveBeenCalledTimes(2));
-  await vi.waitFor(() => expect(host.chat.commands.busy).toBeNull());
+  await waitFor(() => expect(compact).toHaveBeenCalledTimes(2));
+  await waitUntil(() => host.chat.commands.busy === null);
   host.writes.compactWith('opencode-go', 'deepseek-v4.1-flash', 'max', 'send');
-  await vi.waitFor(() => expect(compact).toHaveBeenCalledTimes(3));
-  await vi.waitFor(() => expect(host.chat.commands.busy).toBeNull());
+  await waitFor(() => expect(compact).toHaveBeenCalledTimes(3));
+  await waitUntil(() => host.chat.commands.busy === null);
   host.writes.compactWith('openai-oauth', 'gone', 'high', 'send');
   expect(compact.mock.calls).toEqual([
     [{ at: 'step' }],
@@ -591,7 +591,7 @@ test('a compaction pick names no summarizer for the standing default, names any 
   ]);
 
   host.writes.compactWith('opencode-go', 'deepseek-v4.1-flash', 'high', 'send');
-  await vi.waitFor(() => expect(host.thread?.get(ThreadCompaction).refusal).toBe('nothing spendable'));
+  await waitFor(() => expect(host.thread?.get(ThreadCompaction).refusal).toBe('nothing spendable'));
   expect(host.chat.commands.notice).toBeNull();
 });
 
@@ -693,7 +693,7 @@ test('the open thread is named off its list row for a CLI thread and off its sna
       signing: () => [{ account: 'o1', label: 'codex@runlith.dev', default: true }],
     },
   });
-  await vi.waitFor(() => expect(host.views.model.settings).not.toBeNull());
+  await waitUntil(() => host.views.model.settings !== null);
 
   host.open('claude-thread');
   commitRoute(host);
@@ -709,7 +709,7 @@ test('the open thread is named off its list row for a CLI thread and off its sna
   host.open('chat-thread');
   commitRoute(host);
   port.emit(feedSnapshot(opened({ id: 'chat-thread', title: 'A chat', agentId: 'tagma', profile: null } as never)), 'chat-thread');
-  await vi.waitFor(() => expect(host.identity).toEqual({ id: 'chat-thread', title: 'A chat', parentThreadId: null, bornAs: 'tagma' }));
+  await waitFor(() => expect(host.identity).toEqual({ id: 'chat-thread', title: 'A chat', parentThreadId: null, bornAs: 'tagma' }));
   expect(host.views.model.accountLabel).toBe('codex@runlith.dev');
 
   host.open('claude-thread');
@@ -731,7 +731,7 @@ test('a refresh answered after the slot moved to another thread is not published
   const refresh = refreshInstructionsCommand(host.shown, host.writes);
 
   const first = host.writes.perform(refresh.run({ gesture: 'send' }));
-  await vi.waitFor(() => expect(door.refresh).toHaveBeenCalledWith({ id: 'thread-a', projectId: 47 }, expect.anything()));
+  await waitFor(() => expect(door.refresh).toHaveBeenCalledWith({ id: 'thread-a', projectId: 47 }, expect.anything()));
   host.open('thread-b');
   commitRoute(host);
   late.resolve(refreshed);
@@ -750,7 +750,7 @@ test('a birth that finishes after the slot moved on leaves the new thread in the
   commitRoute(host);
   host.draft.setText('first words');
   const sending = host.writes.send();
-  await vi.waitFor(() => expect(door.create).toHaveBeenCalled());
+  await waitFor(() => expect(door.create).toHaveBeenCalled());
 
   host.open('thread-elsewhere');
   commitRoute(host);
@@ -784,7 +784,7 @@ test('a column and a pane showing one thread hold one scope, one subscription an
   pane.open('thread-1');
   commitRoute(pane);
   port.emit(feedSnapshot(opened(), null), 'thread-1');
-  await vi.waitFor(() => expect(column.chat.session?.thread?.id).toBe('thread-1'));
+  await waitUntil(() => column.chat.session?.thread?.id === 'thread-1');
 
   expect(pane.chat.session).toBe(column.chat.session);
   expect(port.feeds).toHaveLength(1);
@@ -799,7 +799,7 @@ test('a column and a pane showing one thread hold one scope, one subscription an
 
   column.open('thread-3');
   commitRoute(column);
-  await vi.waitFor(() => expect(port.feeds[0]?.open).toBe(false));
+  await waitUntil(() => port.feeds[0]?.open === false);
 });
 
 test('a first turn the server refuses keeps the born thread and gives the words back', async () => {
@@ -827,7 +827,7 @@ it.live('a birth that finishes after the slot closed still answers the thread it
     commitRoute(host);
     host.draft.setText('first words');
     const bearing = yield* Effect.forkScoped(host.birth.born());
-    yield* Effect.promise(() => vi.waitFor(() => expect(door.create).toHaveBeenCalled()));
+    yield* Effect.promise(() => waitFor(() => expect(door.create).toHaveBeenCalled()));
 
     yield* Effect.promise(async () => {
       await life?.close();
@@ -846,7 +846,7 @@ test('a late birth never takes the words of the draft a later opening stands on'
   commitRoute(host);
   host.draft.setText('first words');
   const sending = host.writes.send();
-  await vi.waitFor(() => expect(door.create).toHaveBeenCalled());
+  await waitFor(() => expect(door.create).toHaveBeenCalled());
 
   host.open('thread-elsewhere');
   commitRoute(host);

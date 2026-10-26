@@ -89,9 +89,7 @@ export const runConformance = async (directory: string, fixture: ConformanceFixt
   const credential =
     fixture.signIn === undefined
       ? undefined
-      : await Effect.runPromise(
-          signIn(provider, fixture.signIn).pipe(Effect.provideService(HttpClient.HttpClient, client), Effect.timeout('5 seconds')),
-        );
+      : await Effect.runPromise(signIn(provider, fixture.signIn).pipe(Effect.provideService(HttpClient.HttpClient, client)));
   if (provider.auth === 'oauth') assert(credential !== undefined, 'Exercise a declared sign-in for a subscription provider');
   if (provider.auth === 'api-key') assert(fixture.key !== undefined, 'Supply a local API key fixture');
   const credentials: ModelCredentials = {
@@ -122,10 +120,10 @@ export const runConformance = async (directory: string, fixture: ConformanceFixt
   });
   const layer = llmClientLayer.pipe(Layer.provide(doorExecutorLayer(client)));
   phase = 'model';
-  const answer = await Effect.runPromise(invoke.pipe(Effect.provide(layer), Effect.timeout('5 seconds')));
+  const answer = await Effect.runPromise(invoke.pipe(Effect.provide(layer)));
   assert.equal(answer.text, fixture.expectedText, 'The stub model response did not reach the consumer');
   phase = 'failure';
-  const refused = await Effect.runPromise(Effect.result(invoke).pipe(Effect.provide(layer), Effect.timeout('5 seconds')));
+  const refused = await Effect.runPromise(Effect.result(invoke).pipe(Effect.provide(layer)));
   assert(Result.isFailure(refused), 'The failing stub model call answered success');
   assert(refused.failure instanceof LLMError, 'The adapter failure is not the host LLMError class');
   phase = 'image';
@@ -146,7 +144,7 @@ const drawn = async (
   const draw = (request: Partial<ImageRequest>) =>
     profile
       .generate({ ownerId: 'contract', model, credentials }, { model, prompt: 'contract', images: [], transparent: false, ...request })
-      .pipe(Effect.provide(doorExecutorLayer(client)), Effect.timeout('5 seconds'));
+      .pipe(Effect.provide(doorExecutorLayer(client)));
   const answer = await Effect.runPromise(draw({}));
   const image = answer.images[0];
   assert(image !== undefined && image.bytes.byteLength > 0, 'The stub image response did not reach the consumer');

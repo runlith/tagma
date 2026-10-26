@@ -1,6 +1,7 @@
 import { Effect, Exit, Scope, Stream } from 'effect';
 import { RpcClientError } from 'effect/rpc';
-import { expect, vi } from 'vitest';
+import { expect } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { it } from '@runlith/effect-test/vitest';
 import { DEVICE_REVOKED_CLOSE } from '@tagma/server/remote/contract/wire/access';
 import { LiveConnection, type LiveFailure } from './Live.js';
@@ -45,7 +46,7 @@ it.live('closing the owner’s lifetime closes the socket the connection holds',
     );
 
     yield* Effect.addFinalizer(() => Effect.sync(held.unsubscribe));
-    yield* Effect.promise(() => vi.waitFor(() => expect(opened).toBe(1)));
+    yield* Effect.promise(() => waitUntil(() => opened === 1));
     expect(closes).toEqual([]);
 
     yield* Scope.close(life, Exit.void);
@@ -87,7 +88,7 @@ it.live('a defect the client sends to every request ends the connection, never e
         for (const held of holds) held.unsubscribe();
       }),
     );
-    yield* Effect.promise(() => vi.waitFor(() => expect(live.status).toBe('closed')));
+    yield* Effect.promise(() => waitUntil(() => live.status === 'closed'));
 
     expect(new Set(failures.map((failure) => failure.kind))).toEqual(new Set(['connection']));
   }),
@@ -119,7 +120,7 @@ it.live('a socket the server closes for a revoked device stays shut: no reconnec
     );
 
     yield* Effect.addFinalizer(() => Effect.sync(held.unsubscribe));
-    yield* Effect.promise(() => vi.waitFor(() => expect(sockets).toHaveLength(1)));
+    yield* Effect.promise(() => waitUntil(() => sockets.length === 1));
     sockets[0]?.dispatchEvent(Object.assign(new Event('close'), { code: DEVICE_REVOKED_CLOSE, reason: 'device-revoked', wasClean: true }));
     expect(live.status).toBe('refused');
     live.reopen();

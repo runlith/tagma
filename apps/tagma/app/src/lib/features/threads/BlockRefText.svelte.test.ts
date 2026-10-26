@@ -4,7 +4,8 @@ import { test as mountApp } from '@runlith/layer/svelte/test.svelte';
 import { Router } from '@runlith/layer/Router';
 import { makeRouter } from '@runlith/layer/testing';
 import { flushSync, mount, unmount } from 'svelte';
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import TestHost from '$lib/app/TestHost.svelte';
 import { Overlays } from '$lib/app/overlays.js';
 import { testAddressing } from '$lib/app/testing.js';
@@ -79,7 +80,7 @@ test('a plain message opens confirmed file paths at their location and retires p
     target.querySelector<HTMLElement>('[data-path]')!.click();
     expect(opened).toEqual([]);
     first.resolve(true);
-    await vi.waitFor(() => expect(target.querySelectorAll('[data-openable]')).toHaveLength(2));
+    await waitUntil(() => target.querySelectorAll('[data-openable]').length === 2);
     const link = target.querySelector<HTMLElement>('[data-openable]')!;
     link.click();
     link.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));

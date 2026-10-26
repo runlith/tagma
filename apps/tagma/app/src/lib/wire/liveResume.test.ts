@@ -1,6 +1,7 @@
 import { it } from '@runlith/effect-test/vitest';
 import { Effect, Queue, Stream } from 'effect';
 import { expect, vi } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { LiveConnection } from './Live.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
 
@@ -39,7 +40,7 @@ it.live('a verb the dropped connection was carrying fails as transport, so its c
     );
     try {
       yield* Effect.promise(async () => {
-        await vi.waitFor(() => expect(liveWire.status).toBe('open'));
+        await waitUntil(() => liveWire.status === 'open');
         const verb = liveWire.call(() => Effect.never);
         OpeningSocket.last?.close();
         await expect(verb).rejects.toMatchObject({ code: 'transport' });
@@ -77,11 +78,11 @@ it.live('after a gap the watched feed resumes before the snapshot feeds', () =>
     );
     try {
       yield* Effect.promise(async () => {
-        await vi.waitFor(() => expect(started).toHaveLength(3));
+        await waitUntil(() => started.length === 3);
         started.length = 0;
         liveWire.pause();
         liveWire.resume();
-        await vi.waitFor(() => expect(started).toHaveLength(3));
+        await waitUntil(() => started.length === 3);
         expect(started).toEqual(['bytes', 'frame', 'feed']);
       });
     } finally {
@@ -92,36 +93,33 @@ it.live('after a gap the watched feed resumes before the snapshot feeds', () =>
   }),
 );
 
-it.live(
-  'renew reports the loss of an active one-pass feed instead of leaving its consumer waiting',
-  () =>
-    Effect.gen(function* () {
-      const liveWire = yield* connection;
-      const started = Promise.withResolvers<void>();
-      const failed = Promise.withResolvers<unknown>();
-      const held = liveWire.hold(
-        () => {
-          started.resolve();
-          return Stream.never;
-        },
-        () => {},
-        (failure) => failed.resolve(failure),
-        'feed',
-        'once',
-      );
-      try {
-        yield* Effect.promise(async () => {
-          await started.promise;
-          await vi.waitFor(() => expect(liveWire.status).toBe('open'), { interval: 1, timeout: 500 });
-          liveWire.renew();
-          expect(await failed.promise).toMatchObject({ kind: 'connection' });
-        });
-      } finally {
-        held.unsubscribe();
-        liveWire.pause();
-      }
-    }),
-  1000,
+it.live('renew reports the loss of an active one-pass feed instead of leaving its consumer waiting', () =>
+  Effect.gen(function* () {
+    const liveWire = yield* connection;
+    const started = Promise.withResolvers<void>();
+    const failed = Promise.withResolvers<unknown>();
+    const held = liveWire.hold(
+      () => {
+        started.resolve();
+        return Stream.never;
+      },
+      () => {},
+      (failure) => failed.resolve(failure),
+      'feed',
+      'once',
+    );
+    try {
+      yield* Effect.promise(async () => {
+        await started.promise;
+        await waitUntil(() => liveWire.status === 'open');
+        liveWire.renew();
+        expect(await failed.promise).toMatchObject({ kind: 'connection' });
+      });
+    } finally {
+      held.unsubscribe();
+      liveWire.pause();
+    }
+  }),
 );
 
 it.live('finite snapshots stay current through paced repeats, pause cancels a retry, and async release stops repetition', () =>

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { Host } from '@runlith/layer/Host';
+import { waitUntil } from '@runlith/testing/flush';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
 import TerminalContextMenu from './ContextMenu.svelte';
@@ -81,13 +82,8 @@ async function drawMenu(stand: TabStand): Promise<void> {
     unmount(app);
     host.remove();
   });
-  await settle();
-}
-
-async function settle(): Promise<void> {
   flushSync();
-  await new Promise((done) => setTimeout(done, 20));
-  flushSync();
+  await waitUntil(() => document.activeElement?.closest('[data-pane-menu]') != null);
 }
 
 const item = (name: string): HTMLElement | null => document.querySelector<HTMLElement>(`[data-menu-${name}]`);
@@ -109,7 +105,8 @@ test('an item performs its act, closes the menu and puts the keyboard back in th
 
   expect(item('equalise')?.getAttribute('data-disabled')).toBe(null);
   item('close')?.click();
-  await settle();
+  flushSync();
+  await waitUntil(() => item('close') === null);
 
   expect(stand.closed).toEqual(['p1']);
   expect(stand.menu).toBeNull();
@@ -122,7 +119,8 @@ test('Escape closes the menu and puts the keyboard back in the engine', async ()
   expect(item('copy')).not.toBeNull();
 
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  await settle();
+  flushSync();
+  await waitUntil(() => item('copy') === null);
 
   expect(stand.menu).toBeNull();
   expect(stand.standing.focused).toBe(1);

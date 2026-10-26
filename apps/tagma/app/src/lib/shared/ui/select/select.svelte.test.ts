@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { Layer } from '@runlith/layer/Layer';
 import { flushSync, mount, unmount } from 'svelte';
-import { afterEach, expect, test, vi } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
+import { afterEach, expect, test } from 'vitest';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
 import Fruit from './Fruit.fixture.svelte';
 
@@ -85,7 +86,7 @@ test('a select opened in a modal dialog takes the focus and the keys, and Escape
   app = mountShell(Layer.mergeAll());
   app.draw(Fruit as never, { modal: true });
   const dialog = (): HTMLElement | null => document.querySelector<HTMLElement>('[data-runlith-dialog-content][data-state="open"]');
-  await vi.waitFor(() => expect(dialog()).not.toBeNull());
+  await waitUntil(() => dialog() !== null);
 
   trigger().focus();
   key(trigger(), 'ArrowDown');

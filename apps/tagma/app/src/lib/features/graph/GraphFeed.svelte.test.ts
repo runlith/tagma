@@ -9,7 +9,8 @@ import { Router } from '@runlith/layer/Router';
 import { makePlatform, makeRouter } from '@runlith/layer/testing';
 import { Cache } from '@runlith/query/repo';
 import { QueryClient } from '@tanstack/query-core';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { testTagCatalog } from '$lib/app/testing.js';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
@@ -149,7 +150,7 @@ test('a resync refreshes the vocabulary that could have changed while the graph 
 
   world.frame({ type: 'resync' });
 
-  await vi.waitFor(() => expect(world.tags.titleOnly).toContain('invoice'));
+  await waitUntil(() => world.tags.titleOnly.includes('invoice'));
 });
 
 test('live writers survive initial loading and a reconnect fills the sessions missed during the gap', async () => {
@@ -178,11 +179,11 @@ test('live writers survive initial loading and a reconnect fills the sessions mi
   expect(registry.writerOf(2)).toBeUndefined();
   world.frame(change({ sessions: [session(2)] }));
   initial.resolve(json(writers([session(1)])));
-  await vi.waitFor(() => expect(registry.writerOf(1)?.key).toBe('thread-1'));
+  await waitUntil(() => registry.writerOf(1)?.key === 'thread-1');
   expect(registry.writerOf(2)?.key).toBe('thread-2');
   rows = [session(1), session(3)];
   world.frame({ type: 'resync' });
-  await vi.waitFor(() => expect(registry.writerOf(3)?.key).toBe('thread-3'));
+  await waitUntil(() => registry.writerOf(3)?.key === 'thread-3');
   expect(registry.writerOf(2)?.key).toBe('thread-2');
   expect(world.failures).toEqual([]);
 });
@@ -203,7 +204,7 @@ test('a resync does not join the pre-subscription session read still in flight',
   const registry = world.app.get(SessionRegistry);
   await started.promise;
   world.frame({ type: 'resync' });
-  await vi.waitFor(() => expect(registry.writerOf(2)?.key).toBe('thread-2'));
+  await waitUntil(() => registry.writerOf(2)?.key === 'thread-2');
   initial.resolve(json(writers([session(1)])));
   expect(registry.writerOf(2)?.key).toBe('thread-2');
 });
@@ -216,9 +217,9 @@ test('a failed initial read is reported and a later resync recovers the copied s
     return json([]);
   });
   const registry = world.app.get(SessionRegistry);
-  await vi.waitFor(() => expect(world.failures).toHaveLength(1));
+  await waitUntil(() => world.failures.length === 1);
   expect(world.failures).toEqual([expect.objectContaining({ code: 'database', gate: false })]);
   broken = false;
   world.frame({ type: 'resync' });
-  await vi.waitFor(() => expect(registry.writerOf(5)?.key).toBe('thread-5'));
+  await waitUntil(() => registry.writerOf(5)?.key === 'thread-5');
 });

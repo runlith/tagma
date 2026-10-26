@@ -4,7 +4,7 @@ import { Host } from '@runlith/layer/Host';
 import { Layer } from '@runlith/layer/Layer';
 import type { Resolver } from '@runlith/layer/key';
 import { flushSync } from 'svelte';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import type { LinkHow, LinkPlace } from './Link.js';
@@ -22,11 +22,15 @@ afterEach(async () => {
 
 test('a step chosen in the link menu opens the link it was chosen on, whatever the menu shows by the time it runs, and tells the element it came from', async () => {
   const opened: [string, LinkHow][] = [];
+  const completed = Promise.withResolvers<void>();
   const refused: unknown[] = [];
   const place = (how: LinkHow): LinkPlace<string> => ({
     words: how,
     icon: PanelRight,
-    open: (_app, link) => void opened.push([link.target, how]),
+    open: (_app, link) => {
+      opened.push([link.target, how]);
+      completed.resolve();
+    },
   });
   const kinds = new LinkRegistry([
     { links: [{ kind: 'note', what: () => 'note', beside: place('beside'), full: place('full') }] as never },
@@ -47,6 +51,7 @@ test('a step chosen in the link menu opens the link it was chosen on, whatever t
   expect(told).toBe(1);
   opening.menu({ kind: 'note', target: 'n-2' }, { x: 10, y: 10 }, here);
 
-  await vi.waitFor(() => expect(opened).toEqual([['n-1', 'full']]));
+  await completed.promise;
+  expect(opened).toEqual([['n-1', 'full']]);
   expect(refused).toEqual([]);
 });

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { waitUntil } from '@runlith/testing/flush';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, expect, test, vi } from 'vitest';
 import Picker from './Picker.fixture.svelte';
@@ -51,7 +52,7 @@ test('the trigger opens and closes the popover, and Escape or a press outside cl
   press();
   key(part('field'), 'Escape');
   expect(expanded()).toBe('false');
-  await vi.waitFor(() => expect(content()).toBeNull());
+  await waitUntil(() => content() === null);
 
   press();
   part('outside').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }));

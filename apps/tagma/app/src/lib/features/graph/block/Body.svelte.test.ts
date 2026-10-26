@@ -6,7 +6,8 @@ import { Router } from '@runlith/layer/Router';
 import { test as mountApp } from '@runlith/layer/svelte/test.svelte';
 import { makeRouter } from '@runlith/layer/testing';
 import { flushSync, mount, unmount } from 'svelte';
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { Overlays } from '$lib/app/overlays.js';
 import TestHost from '$lib/app/TestHost.svelte';
 import { testAddresses, testAddressing } from '$lib/app/testing.js';
@@ -71,7 +72,7 @@ test('the block body renders thread references, follows live names and opens the
     },
   });
   try {
-    await vi.waitFor(() => expect(target.querySelectorAll(`[data-bracket-ref-target="${thread}"]`)).toHaveLength(2));
+    await waitUntil(() => target.querySelectorAll(`[data-bracket-ref-target="${thread}"]`).length === 2);
     const editor = target.querySelector('.ProseMirror');
     const labelled = target.querySelector<HTMLElement>(`[data-bracket-ref-target="${thread}"]`)!;
     expect(labelled.textContent).toBe('исходном треде');
@@ -79,8 +80,8 @@ test('the block body renders thread references, follows live names and opens the
 
     words.current = { label: 'Source run', archived: false, harness: false, home: 'shop', projectId: 7 };
     flushSync();
-    await vi.waitFor(() =>
-      expect(target.querySelector('.ProseMirror')?.textContent).toBe('В исходном треде run начался; Source run, удалённый и Notes.'),
+    await waitUntil(
+      () => target.querySelector('.ProseMirror')?.textContent === 'В исходном треде run начался; Source run, удалённый и Notes.',
     );
     expect(target.querySelector('.ProseMirror')).toBe(editor);
     expect(target.querySelector(`[data-bracket-ref-target="${thread}"]`)).toBe(labelled);
@@ -119,7 +120,7 @@ test('the link menu opened by a right click on a reference in the body stays ope
   const menu = mount(TestHost, { target, props: { app: app.app, view: LinkMenu as never, props: {} } });
   const pointAt = document.elementFromPoint;
   try {
-    await vi.waitFor(() => expect(target.querySelector('[data-bracket-ref-target="5b386d76"]')).not.toBeNull());
+    await waitUntil(() => target.querySelector('[data-bracket-ref-target="5b386d76"]') !== null);
     const ref = target.querySelector<HTMLElement>('[data-bracket-ref-target="5b386d76"]')!;
     document.elementFromPoint = () => ref;
     target.querySelector<HTMLElement>('.ProseMirror')!.focus();
@@ -127,7 +128,7 @@ test('the link menu opened by a right click on a reference in the body stays ope
     ref.dispatchEvent(new MouseEvent('mousedown', press));
     ref.dispatchEvent(new MouseEvent('contextmenu', press));
     flushSync();
-    await vi.waitFor(() => expect(document.activeElement?.closest('[data-link-menu]')).not.toBeNull());
+    await waitUntil(() => document.activeElement?.closest('[data-link-menu]') != null);
     ref.dispatchEvent(new MouseEvent('mouseup', { ...press, buttons: 0 }));
     flushSync();
     expect(opening.aim?.link).toEqual({ kind: 'block', target: { name: '5b386d76' }, from: undefined });

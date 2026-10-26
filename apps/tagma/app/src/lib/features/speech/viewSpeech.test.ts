@@ -3,6 +3,7 @@ import { SPEECH_NOTIFICATION } from '@tagma/server/speech/contract/wire/view';
 import { Effect, Exit, Scope } from 'effect';
 import { afterEach, beforeEach, expect, vi } from 'vitest';
 import { it } from '@runlith/effect-test/vitest';
+import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { Door } from '$lib/wire/Door.js';
 import { LiveConnection } from '$lib/wire/Live.js';
 import { loadOperations } from '$lib/wire/operation.js';
@@ -352,14 +353,12 @@ it.live('recognition delivers its confirmed tail before ending and text synthesi
       await view.changed.promise;
       await view.invoke({ action: 'finish', subscription: opened.subscription });
       const events = () => view.messages.filter((message) => message.method === SPEECH_NOTIFICATION);
-      await vi.waitFor(
-        () =>
-          expect(events().at(-1)).toEqual({
-            jsonrpc: '2.0',
-            method: SPEECH_NOTIFICATION,
-            params: { subscription: opened.subscription, event: null },
-          }),
-        { interval: 1, timeout: 500 },
+      await waitFor(() =>
+        expect(events().at(-1)).toEqual({
+          jsonrpc: '2.0',
+          method: SPEECH_NOTIFICATION,
+          params: { subscription: opened.subscription, event: null },
+        }),
       );
       expect(events().at(-2)).toEqual({
         jsonrpc: '2.0',
@@ -387,13 +386,11 @@ it.live('a finite transcript notifies its end and cannot be held by the view aft
       await view.changed.promise;
       const request = [...SpeechSocket.current.active.values()].find((one) => one.tag === 'speech.transcript.subscribe')!;
       SpeechSocket.current.end(request.id);
-      await vi.waitFor(
-        () =>
-          expect(view.messages.at(-1)).toMatchObject({
-            method: SPEECH_NOTIFICATION,
-            params: { subscription: opened.subscription, event: null },
-          }),
-        { interval: 1, timeout: 500 },
+      await waitFor(() =>
+        expect(view.messages.at(-1)).toMatchObject({
+          method: SPEECH_NOTIFICATION,
+          params: { subscription: opened.subscription, event: null },
+        }),
       );
       await expect(view.invoke({ action: 'unsubscribe', subscription: opened.subscription })).rejects.toMatchObject({
         code: INVALID_PARAMS,
@@ -411,7 +408,7 @@ it.live.each([true, false])(
       const feed = new CallFeed(view.live, 7, 'call');
       yield* Effect.addFinalizer(() => Effect.sync(() => feed.close()));
       yield* Effect.promise(async () => {
-        await vi.waitFor(() => expect(texts(feed).length).toBe(1), { interval: 1, timeout: 500 });
+        await waitUntil(() => texts(feed).length === 1);
         expect(feed.fresh).toBe(confirmed ? 1 : 0);
         const socket = SpeechSocket.current;
         const transcript = [...socket.active.values()].find((one) => one.tag === 'speech.transcript.subscribe')!;
@@ -421,22 +418,16 @@ it.live.each([true, false])(
         socket.event(transcript.id, tail);
         socket.event(listening.id, { kind: 'state', state: 'completed' });
         socket.event(listening.id, { kind: 'listing', listening: listing(tail.change, 'completed') });
-        await vi.waitFor(
-          () => {
-            expect(feed.ended).toBe(true);
-            expect(feed.fresh).toBe(0);
-          },
-          { interval: 1, timeout: 500 },
-        );
+        await waitUntil(() => feed.ended && feed.fresh === 0);
         expect(texts(feed)).toEqual(['Bonjour encore']);
         view.live.pause();
         view.live.resume();
-        await vi.waitFor(() => expect(SpeechSocket.current.active.size).toBe(2), { interval: 1, timeout: 500 });
+        await waitUntil(() => SpeechSocket.current.active.size === 2);
         const reopened = [...SpeechSocket.current.active.values()].find((one) => one.tag === 'speech.transcript.subscribe');
         expect(reopened?.payload.after).toBe(tail.change);
         feed.close();
         await SpeechSocket.current.interrupted.promise;
-        await vi.waitFor(() => expect(SpeechSocket.current.active.size).toBe(0), { interval: 1, timeout: 500 });
+        await waitUntil(() => SpeechSocket.current.active.size === 0);
       });
     }),
 );
@@ -513,7 +504,7 @@ it.live('paced speech does not hold up an independent transcript on the live con
     yield* Effect.promise(async () => {
       const speaking = view.invoke({ action: 'speak', text: 'Bonjour' }, mounted);
       const refused = expect(speaking).rejects.toBeInstanceOf(Error);
-      await vi.waitFor(() => expect(BrowserAudio.current.sources.length).toBeGreaterThanOrEqual(20), { interval: 1, timeout: 500 });
+      await waitUntil(() => BrowserAudio.current.sources.length >= 20);
       const transcript = (await view.invoke({ action: 'transcript', listening: 'lesson' })) as { subscription: string };
       await view.changed.promise;
       expect(view.messages).toContainEqual({
@@ -536,7 +527,7 @@ it.live.each(['silence', 'teardown'])('%s stops the browser voice while its audi
     yield* Effect.promise(async () => {
       const speaking = view.invoke({ action: 'speak', text: 'Bonjour' }, mounted);
       const refused = expect(speaking).rejects.toBeInstanceOf(Error);
-      await vi.waitFor(() => expect(BrowserAudio.current.sources[0]?.playing).toBe(true), { interval: 1, timeout: 500 });
+      await waitUntil(() => BrowserAudio.current.sources[0]?.playing === true);
       if (action === 'silence') {
         expect(await view.invoke({ action: 'silence' }, mounted)).toEqual({ status: 'stopped', voices: 1 });
       } else mounted.abort();

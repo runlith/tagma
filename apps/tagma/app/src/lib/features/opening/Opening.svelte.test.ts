@@ -5,7 +5,8 @@ import { Host } from '@runlith/layer/Host';
 import type { KeyClass, Resolver } from '@runlith/layer/key';
 import { Router } from '@runlith/layer/Router';
 import { makeRouterWithLog } from '@runlith/layer/testing';
-import { expect, test, vi } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
+import { expect, test } from 'vitest';
 import { besideOf } from '$lib/app/opening/beside.js';
 import { DECLARED_LINKS } from '$lib/app/opening/declaredLinks.js';
 import { testArea, testKind } from '$lib/app/panes/testing.js';
@@ -141,7 +142,8 @@ test('a block anchor of Knowledge keeps the copy its address names: the modified
   document.body.append(anchor);
   try {
     anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true }));
-    await vi.waitFor(() => expect(at.tabs()).toHaveLength(1));
+    await waitUntil(() => at.tabs().length > 0);
+    expect(at.tabs()).toHaveLength(1);
     expect(placedBlockOf(at.tabs()[0]!.id)).toEqual({ projectId: 1, branch: 'feature/one', name: '5940aab8', diff: null });
 
     anchor.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));

@@ -3,7 +3,8 @@ import type { AgentCatalog } from '@tagma/server/threads/contract/wire/agentLibr
 import { Layer } from '@runlith/layer/Layer';
 import { stubMutation } from '@runlith/query/testing';
 import { flushSync } from 'svelte';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
+import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
 import AgentLibrary from './AgentLibrary.svelte';
 import { AgentLibraryRepo } from './AgentLibraryRepo.js';
@@ -40,26 +41,28 @@ test('Escape on an unsaved draft asks before closing, and asks again from anywhe
   );
   app.draw();
   app.dialogs.open(AgentLibrary as never, { projectId: 1 });
-  const create = await vi.waitFor(() => {
+  const create = await waitFor(() => {
     const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === 'New agent');
-    if (button === undefined || button.disabled) throw new Error('The library offers no new agent yet.');
-    return button;
+    expect(button).toBeDefined();
+    expect(button?.disabled).toBe(false);
+    return button!;
   });
   create.click();
   flushSync();
-  const name = await vi.waitFor(() => document.querySelector<HTMLInputElement>('input[placeholder="code-reviewer"]')!);
+  await waitUntil(() => document.querySelector('input[placeholder="code-reviewer"]') !== null);
+  const name = document.querySelector<HTMLInputElement>('input[placeholder="code-reviewer"]')!;
   name.focus();
   name.value = 'reviewer';
   name.dispatchEvent(new Event('input', { bubbles: true }));
   flushSync();
 
   escape();
-  await vi.waitFor(() => expect(question()).not.toBeNull());
+  await waitUntil(() => question() !== null);
   escape();
-  await vi.waitFor(() => expect(question()).toBeNull());
+  await waitUntil(() => question() === null);
   expect(app.dialogs.stack[0]?.open).toBe(true);
 
   name.closest<HTMLElement>('[data-runlith-dialog-content]')!.focus();
   escape();
-  await vi.waitFor(() => expect(question()).not.toBeNull());
+  await waitUntil(() => question() !== null);
 });

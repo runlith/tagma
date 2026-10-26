@@ -1,5 +1,6 @@
 import { Effect, Scope } from 'effect';
-import { expect, vi } from 'vitest';
+import { expect } from 'vitest';
+import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { it } from '@runlith/effect-test/vitest';
 import { LiveConnection } from './Live.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
@@ -56,18 +57,18 @@ it.live('a stop made while the socket is closed reaches the server first once it
       'frame',
     );
     yield* Effect.addFinalizer(() => Effect.sync(feed.unsubscribe));
-    yield* Effect.promise(() => vi.waitFor(() => expect(sockets).toHaveLength(1)));
+    yield* Effect.promise(() => waitUntil(() => sockets.length === 1));
     sockets[0]?.open();
-    yield* Effect.promise(() => vi.waitFor(() => expect(sockets[0]?.requests()).toEqual(['thread.subscribe'])));
+    yield* Effect.promise(() => waitFor(() => expect(sockets[0]?.requests()).toEqual(['thread.subscribe'])));
     sockets[0]?.drop();
     expect(live.status).toBe('closed');
 
     yield* Effect.forkScoped(Effect.exit(live.attempt((client) => client['thread.send']({ ...at, params: { text: 'next', key: 'k-1' } }))));
     yield* Effect.forkScoped(Effect.exit(live.attemptFirst((client) => client['thread.stop']({ ...at, params: {} }))));
-    yield* Effect.promise(() => vi.waitFor(() => expect(sockets).toHaveLength(2)));
+    yield* Effect.promise(() => waitUntil(() => sockets.length === 2));
     sockets[1]?.open();
 
-    yield* Effect.promise(() => vi.waitFor(() => expect(sockets[1]?.requests()).toHaveLength(3)));
+    yield* Effect.promise(() => waitUntil(() => sockets[1]?.requests().length === 3));
     expect(sockets[1]?.requests()[0]).toBe('thread.stop');
   }),
 );

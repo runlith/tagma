@@ -2,6 +2,7 @@
 import PanelRight from '@lucide/svelte/icons/panel-right';
 import { Host } from '@runlith/layer/Host';
 import type { Resolver } from '@runlith/layer/key';
+import { waitFor } from '@runlith/testing/flush';
 import { flushSync, mount, unmount } from 'svelte';
 import { expect, test, vi } from 'vitest';
 import type { Notices } from '$lib/features/notices/Service.svelte.js';
@@ -87,7 +88,7 @@ test('a link on an element and one within a root open beside by click and Enter,
   }
   span.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 4, clientY: 8 }));
 
-  await vi.waitFor(() =>
+  await waitFor(() =>
     expect(opened).toEqual([
       ['n-1', 'beside'],
       ['n-1', 'beside'],
@@ -142,7 +143,7 @@ test('a kind with no place beside opens its full place by click and modified cli
   button.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
   button.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, metaKey: true }));
 
-  await vi.waitFor(() => expect(opened).toEqual(['full', 'full']));
+  await waitFor(() => expect(opened).toEqual(['full', 'full']));
   expect(opening.shape({ kind: 'folder', target: 'src' }, here)?.steps.map((step) => [step.how, step.keys])).toEqual([
     ['full', opening.keys(false)],
   ]);

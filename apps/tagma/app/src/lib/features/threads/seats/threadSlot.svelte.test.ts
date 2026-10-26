@@ -5,8 +5,8 @@ import { Layer } from '@runlith/layer/Layer';
 import { Scope } from '@runlith/layer/Scope';
 import { makeStorage } from '@runlith/layer/testing';
 import { stubFamily } from '@runlith/query/testing';
-import { flush } from '@runlith/testing/flush';
-import { afterEach, expect, test, vi } from 'vitest';
+import { flush, waitFor, waitUntil } from '@runlith/testing/flush';
+import { afterEach, expect, test } from 'vitest';
 
 import { mountShell, testTagCatalog, type TestApp } from '$lib/app/testing.js';
 import { feedSnapshot, slotWorld, testThreadChat } from '$lib/app/slotWorld.js';
@@ -67,12 +67,12 @@ test('a thread of another project opened beside is fed and answered through its 
 
   expect([slot?.home, host.projectId, host.activeId]).toEqual([2, 2, 't9']);
   expect(app.app.hasScope(ProjectRung, { projectId: 2 })).toBe(true);
-  await vi.waitFor(() => expect(home.feeds.map((feed) => feed.threadId)).toEqual(['t9']));
+  await waitFor(() => expect(home.feeds.map((feed) => feed.threadId)).toEqual(['t9']));
   expect(here.feeds).toEqual([]);
 
   home.emit(feedSnapshot({ id: 't9' }), 't9');
   host.draft.setText('an answer');
-  await vi.waitFor(() => expect(host.canSend).toBe(true));
+  await waitUntil(() => host.canSend);
   await host.writes.send();
 
   expect(home.called('send').map((call) => call.threadId)).toEqual(['t9']);
@@ -102,14 +102,14 @@ test('a pane of another project lets its thread go when it moves to another one,
   );
   app.draw(Fixture as never, { ...area, onSlot: () => undefined });
   const fed = (): string[] => home.feeds.filter((feed) => feed.open).map((feed) => feed.threadId);
-  await vi.waitFor(() => expect(fed()).toEqual(['t9']));
+  await waitFor(() => expect(fed()).toEqual(['t9']));
 
   seats.writerOf(key).navigate('t10');
-  await vi.waitFor(() => expect(fed()).toEqual(['t10']));
+  await waitFor(() => expect(fed()).toEqual(['t10']));
   expect(panes.panes.map((pane) => pane.id)).toEqual(['2:t10']);
   expect(app.app.hasScope(ProjectRung, { projectId: 2 })).toBe(true);
 
   panes.close(key);
-  await vi.waitFor(() => expect(fed()).toEqual([]));
-  await vi.waitFor(() => expect(app?.app.hasScope(ProjectRung, { projectId: 2 })).toBe(false));
+  await waitFor(() => expect(fed()).toEqual([]));
+  await waitUntil(() => app?.app.hasScope(ProjectRung, { projectId: 2 }) === false);
 });

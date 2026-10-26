@@ -1,6 +1,7 @@
 import { it } from '@runlith/effect-test/vitest';
 import { Cause, Effect, Exit, Fiber } from 'effect';
-import { expect, vi } from 'vitest';
+import { expect } from 'vitest';
+import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { LiveConnection, type LiveFailure } from './Live.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
 
@@ -58,14 +59,14 @@ it.live('an attempt that fails leaves the loop waiting for its next one, and int
       () => {},
       () => {},
     );
-    yield* Effect.promise(() => vi.waitFor(() => expect(liveWire.status).toBe('closed')));
+    yield* Effect.promise(() => waitUntil(() => liveWire.status === 'closed'));
 
     const seen: string[] = [];
     const off = liveWire.subscribeStatus((status) => seen.push(status));
     const loop = liveWire.reopening();
     try {
-      yield* Effect.promise(() => vi.waitFor(() => expect(seen).toContain('connecting')));
-      yield* Effect.promise(() => vi.waitFor(() => expect(liveWire.status).toBe('closed')));
+      yield* Effect.promise(() => waitUntil(() => seen.includes('connecting')));
+      yield* Effect.promise(() => waitUntil(() => liveWire.status === 'closed'));
 
       expect(loop.pollUnsafe()).toBeUndefined();
 
@@ -93,7 +94,7 @@ it.live('a socket error without details has a connection explanation', () =>
 
     try {
       yield* Effect.promise(() =>
-        vi.waitFor(() =>
+        waitFor(() =>
           expect(failures).toContainEqual(
             expect.objectContaining({ kind: 'connection', message: expect.stringContaining('without saying why') }),
           ),

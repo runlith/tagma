@@ -2,7 +2,7 @@
 import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
 import { Layer } from '@runlith/layer/Layer';
 import { flushSync } from 'svelte';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { FolderActs } from '$lib/features/threads/FolderActs.js';
@@ -18,7 +18,14 @@ afterEach(async () => {
 
 test('a thread act closes the sheet and acts on the thread it was opened for', async () => {
   const renamed: [string, string][] = [];
-  const list = { folders: [], rename: async (id: string, title: string) => void renamed.push([id, title]) };
+  const completed = Promise.withResolvers<void>();
+  const list = {
+    folders: [],
+    rename: async (id: string, title: string) => {
+      renamed.push([id, title]);
+      completed.resolve();
+    },
+  };
   app = mountShell(
     Layer.mergeAll(
       Layer.of(ThreadList, list as never),
@@ -47,5 +54,6 @@ test('a thread act closes the sheet and acts on the thread it was opened for', a
   app = undefined;
   await closing;
 
-  await vi.waitFor(() => expect(renamed).toEqual([['thread-1', 'New']]));
+  await completed.promise;
+  expect(renamed).toEqual([['thread-1', 'New']]);
 });

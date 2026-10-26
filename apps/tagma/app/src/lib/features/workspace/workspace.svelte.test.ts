@@ -3,7 +3,8 @@ import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { Failure } from '@runlith/layer/Failure';
 import { makePlatform, makeRefusingStorage, makeRouter, makeStorage } from '@runlith/layer/testing';
 import { stubSingle } from '@runlith/query/testing';
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { Workspace } from './Selection.svelte.js';
 
 const projects = ['first', 'second'].map((name, i): Project => ({
@@ -38,7 +39,7 @@ test.each(['refused', 'older'] as const)('the remembered project survives %s sto
     makePlatform({ local }),
     failure,
   );
-  await vi.waitFor(() => expect(workspace.loaded).toBe(true));
+  await waitUntil(() => workspace.loaded);
   expect(workspace.contextProject?.name).toBe('second');
   workspace.remember('second');
   route.params = {};
@@ -62,7 +63,7 @@ test('the project the composition names is resumed even when only global project
     );
   const named = opened({ project: 'global' });
   const bare = opened();
-  await vi.waitFor(() => expect(named.loaded && bare.loaded).toBe(true));
+  await waitUntil(() => named.loaded && bare.loaded);
   expect(named.resumed()?.name).toBe('global');
   expect(bare.resumed()).toBeNull();
 });
@@ -86,11 +87,11 @@ test('a project registered after the registry was read is found by one re-read, 
       throw error;
     }),
   );
-  await vi.waitFor(() => expect(workspace.loaded).toBe(true));
+  await waitUntil(() => workspace.loaded);
 
   expect(workspace.find(3)).toBeNull();
   expect(workspace.find(3)).toBeNull();
-  await vi.waitFor(() => expect(workspace.find(3)?.name).toBe('polygon'));
+  await waitUntil(() => workspace.find(3)?.name === 'polygon');
   expect(workspace.find(1)?.name).toBe('first');
   expect(reads).toBe(1);
 });

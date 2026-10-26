@@ -5,7 +5,8 @@ import { Layer } from '@runlith/layer/Layer';
 import { stubFamily } from '@runlith/query/testing';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 import { TestConnection } from '@runlith/chat-ui/testing/chatConnection';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
 import { feedSnapshot, testThreadChat } from '$lib/app/slotWorld.js';
 import { Door } from '$lib/wire/Door.js';
@@ -55,15 +56,15 @@ test('the last holder leaving shelves the session and a later hold resumes from 
 
   const held = tagma.app.hold(ThreadRung, { id: 'thread-1' });
   tagma.app.resolve(ThreadFeed, held.scope);
-  await vi.waitFor(() => expect(port.feeds).toHaveLength(1));
+  await waitUntil(() => port.feeds.length === 1);
   port.emit(feedSnapshot({ id: 'thread-1' }, null, undefined, 7), 'thread-1');
-  await vi.waitFor(() => expect(tagma.app.resolve(ThreadFeed, held.scope).session.status).toBe('ready'));
+  await waitUntil(() => tagma.app.resolve(ThreadFeed, held.scope).session.status === 'ready');
 
   held.release();
-  await vi.waitFor(() => expect(port.open).toBe(0));
+  await waitUntil(() => port.open === 0);
 
   const again = tagma.app.hold(ThreadRung, { id: 'thread-1' });
   tagma.app.resolve(ThreadFeed, again.scope);
-  await vi.waitFor(() => expect(port.feeds).toHaveLength(2));
+  await waitUntil(() => port.feeds.length === 2);
   expect(port.feeds[1]?.from).toEqual({ position: 0, seq: 7 });
 });

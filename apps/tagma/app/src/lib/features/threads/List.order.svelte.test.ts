@@ -5,6 +5,7 @@ import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
 import { NATIVE_CAPABILITIES } from '@runlith/agent/thread/record';
 import { Layer } from '@runlith/layer/Layer';
 import { afterEach, expect, test, vi } from 'vitest';
+import { waitFor } from '@runlith/testing/flush';
 
 import { keyedBy, liveFeed, mountShell, threadsRepo, type TestApp } from '$lib/app/testing.js';
 import { ExecutionsRepo } from '$lib/features/executions/Repo.js';
@@ -118,7 +119,7 @@ test('reader words on a quiet thread move nothing, and the top arrives when the 
   };
   rows = [watched, finished, written];
   feed.frame?.({ type: 'row', row: finished });
-  await vi.waitFor(() => expect(drawn(list)).toEqual(['quiet', 'watched']));
+  await waitFor(() => expect(drawn(list)).toEqual(['quiet', 'watched']));
 });
 
 test('a heartbeat, a tool row and an outcome leave the drawn order identical', () => {

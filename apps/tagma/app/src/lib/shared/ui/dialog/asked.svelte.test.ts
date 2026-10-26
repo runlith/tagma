@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { Layer } from '@runlith/layer/Layer';
 import { flushSync } from 'svelte';
-import { afterEach, expect, test, vi } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
+import { afterEach, expect, test } from 'vitest';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
 import Asked from './Asked.fixture.svelte';
 
@@ -35,11 +36,13 @@ test('a question its owner opens by value opens again after Escape, the close bu
   ];
   for (const [at, close] of closers.entries()) {
     ask();
-    await vi.waitFor(() => expect(asked(), `opened before closer ${at}`).not.toBeNull());
+    await waitUntil(() => asked() !== null);
+    expect(asked(), `opened before closer ${at}`).not.toBeNull();
     close();
     flushSync();
-    await vi.waitFor(() => expect(asked(), `closed by closer ${at}`).toBeNull());
+    await waitUntil(() => asked() === null);
+    expect(asked(), `closed by closer ${at}`).toBeNull();
   }
   ask();
-  await vi.waitFor(() => expect(asked()).not.toBeNull());
+  await waitUntil(() => asked() !== null);
 });

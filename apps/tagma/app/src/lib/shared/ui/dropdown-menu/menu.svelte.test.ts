@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { waitUntil } from '@runlith/testing/flush';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, expect, test, vi } from 'vitest';
 import Menu from './Menu.fixture.svelte';
@@ -83,7 +84,7 @@ test('ArrowDown on the trigger opens the menu on its first item, typing finds an
   menu();
   trigger().focus();
   key('ArrowDown', trigger());
-  await vi.waitFor(() => expect(document.activeElement).toBe(item('Alpha')));
+  await waitUntil(() => document.activeElement === item('Alpha'));
   expect(document.querySelector('[role="menu"]')?.getAttribute('aria-labelledby')).toBe(trigger().id);
   const group = document.querySelector('[data-group]')!;
   expect(document.getElementById(group.getAttribute('aria-labelledby') ?? '')?.textContent?.trim()).toBe('Format');
@@ -99,7 +100,7 @@ test('a menu with a filter field opens on it, ArrowDown leaves it for the first 
   trigger().focus();
   key('ArrowDown', trigger());
   const field = (): HTMLElement | null => document.querySelector<HTMLElement>('[data-filter]');
-  await vi.waitFor(() => expect(document.activeElement).toBe(field()));
+  await waitUntil(() => field() !== null && document.activeElement === field());
   key('ArrowDown');
   expect(document.activeElement).toBe(item('Alpha'));
   key('o');
@@ -110,16 +111,16 @@ test('ArrowRight opens a submenu on its first item, ArrowLeft and Escape close o
   menu();
   trigger().focus();
   key('ArrowDown', trigger());
-  await vi.waitFor(() => expect(document.activeElement).toBe(item('Alpha')));
+  await waitUntil(() => document.activeElement === item('Alpha'));
   key('m');
   key('ArrowRight');
-  await vi.waitFor(() => expect(document.activeElement).toBe(item('Deep')));
+  await waitUntil(() => document.activeElement === item('Deep'));
   key('ArrowLeft');
   expect(sub().getAttribute('aria-expanded')).toBe('false');
   expect(document.activeElement).toBe(sub());
 
   key('ArrowRight');
-  await vi.waitFor(() => expect(document.activeElement).toBe(item('Deep')));
+  await waitUntil(() => document.activeElement === item('Deep'));
   key('Escape');
   expect(sub().getAttribute('aria-expanded')).toBe('false');
   expect(isOpen()).toBe(true);
@@ -201,7 +202,7 @@ test('a menu opened at the cursor over a field that swallows keys takes the keyb
 
   props.aside = 'row';
   flushSync();
-  await vi.waitFor(() => expect(document.activeElement?.closest('[role="menu"]')).not.toBeNull());
+  await waitUntil(() => document.activeElement?.closest('[role="menu"]') != null);
   key('ArrowDown');
   expect(document.activeElement).toBe(item('Aside'));
   key('Escape');

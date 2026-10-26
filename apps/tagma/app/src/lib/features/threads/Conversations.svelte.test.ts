@@ -5,7 +5,8 @@ import { Scope } from '@runlith/layer/Scope';
 import { keyed } from '@runlith/query/builders/keyed';
 import { QueryClient } from '@tanstack/query-core';
 import { flushSync } from 'svelte';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
 import Conversations from './Conversations.svelte';
 import { ThreadsRepo } from './Repo.js';
@@ -86,10 +87,10 @@ test('a new input aborts the search of the input before it', async () => {
     signals.push(signal);
     return new Promise(() => undefined);
   }, props);
-  await vi.waitFor(() => expect(signals).toHaveLength(1));
+  await waitUntil(() => signals.length === 1);
 
   props.query = 'montene';
-  await vi.waitFor(() => expect(signals).toHaveLength(2));
+  await waitUntil(() => signals.length === 2);
 
   expect(signals[0]?.aborted).toBe(true);
   expect(signals[1]?.aborted).toBe(false);
@@ -98,13 +99,13 @@ test('a new input aborts the search of the input before it', async () => {
 test('a refined query that finds the same thread does not open its window on its own', async () => {
   const props = $state({ query: 'monte', projectId: 1 });
   const host = draw(async () => answer, props);
-  await vi.waitFor(() => expect(host.querySelector('[data-conversation-hit]')).not.toBeNull());
+  await waitUntil(() => host.querySelector('[data-conversation-hit]') !== null);
 
   host.querySelector<HTMLElement>('[data-conversation-hit]')?.click();
-  await vi.waitFor(() => expect(host.querySelector('[data-conversation-window]')).not.toBeNull());
+  await waitUntil(() => host.querySelector('[data-conversation-window]') !== null);
 
   props.query = 'montene';
-  await vi.waitFor(() => expect(host.querySelector('[data-conversation-hit]')).not.toBeNull());
+  await waitUntil(() => host.querySelector('[data-conversation-hit]') !== null);
   flushSync();
 
   expect(host.querySelector('[data-conversation-window]')).toBeNull();

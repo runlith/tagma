@@ -1,6 +1,7 @@
 import { Effect, Fiber, Stream } from 'effect';
 import { expect, vi } from 'vitest';
 import { it } from '@runlith/effect-test/vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import type { FeedPosition } from '@runlith/agent/transcript/live';
 import { CallFailed, LiveConnection } from '$lib/wire/Live.js';
 import { Refusal } from '$lib/wire/refusal.js';
@@ -42,7 +43,7 @@ it.live('every generation of a held thread feed names the position the session h
       ),
     );
 
-    yield* Effect.promise(() => vi.waitFor(() => expect(opens).toHaveLength(1)));
+    yield* Effect.promise(() => waitUntil(() => opens.length === 1));
     yield* Stream.runDrain(opens[0]!(client));
     held = { position: 42, seq: 9 };
     yield* Stream.runDrain(opens[0]!(client));

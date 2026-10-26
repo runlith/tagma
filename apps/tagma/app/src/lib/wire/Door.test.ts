@@ -3,7 +3,7 @@ import { ThreadEntryUnreadable } from '@runlith/agent/transcript/kinds';
 import { createFeedKinds } from '$lib/features/threads/native/feedRecords.js';
 import { Effect, Schema } from 'effect';
 import { PAIRING_ENDPOINT, PairedAnswer } from '@tagma/server/remote/contract/wire/access';
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
 import { makeRouter } from '@runlith/layer/testing';
 import { Refusal } from './refusal.js';
 import { Door } from './Door.js';
@@ -98,14 +98,18 @@ test('the contract the server first answered under stands until an answer names 
 });
 
 test('the door is idle only while no ask is in flight', async () => {
-  let release: (response: Response) => void = () => undefined;
-  answer = () => new Promise<Response>((resolve) => (release = resolve));
+  const started = Promise.withResolvers<void>();
+  const response = Promise.withResolvers<Response>();
+  answer = () => {
+    started.resolve();
+    return response.promise;
+  };
   const door = doorOf();
   expect(door.idle).toBe(true);
   const asked = door.ask((api) => api.operations.perform({ params: { id: 'list_sessions' }, query: {}, headers: {}, payload: {} }));
   expect(door.idle).toBe(false);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  release(Response.json([]));
+  await started.promise;
+  response.resolve(Response.json([]));
   await asked;
   expect(door.idle).toBe(true);
 });
@@ -175,11 +179,14 @@ test('the final keepalive request completes after cancellation while an earlier 
   const ordinary = new AbortController();
   const final = new AbortController();
   const requests: Request[] = [];
+  const firstStarted = Promise.withResolvers<void>();
+  const lastStarted = Promise.withResolvers<void>();
   const responses: { response: ReturnType<typeof Promise.withResolvers<Response>>; keepalive: boolean }[] = [];
   answer = (input, init) => {
     const request = new Request(input, init);
     const response = Promise.withResolvers<Response>();
     requests.push(request);
+    (requests.length === 1 ? firstStarted : lastStarted).resolve();
     responses.push({ response, keepalive: init?.keepalive === true });
     request.signal.addEventListener('abort', () => response.reject(request.signal.reason), { once: true });
     return response.promise;
@@ -189,12 +196,12 @@ test('the final keepalive request completes after cancellation while an earlier 
     signal: ordinary.signal,
   });
   const rejected = expect(earlier).rejects.toBeDefined();
-  await vi.waitFor(() => expect(requests).toHaveLength(1));
+  await firstStarted.promise;
   door.markLeaving();
   const last = door.ask((api) => api.operations.perform({ params: { id: 'list_sessions' }, query: {}, headers: {}, payload: {} }), {
     signal: final.signal,
   });
-  await vi.waitFor(() => expect(requests).toHaveLength(2));
+  await lastStarted.promise;
   ordinary.abort();
   final.abort();
   await rejected;

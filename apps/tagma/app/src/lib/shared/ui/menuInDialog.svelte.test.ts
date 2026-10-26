@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { Layer } from '@runlith/layer/Layer';
 import { flushSync } from 'svelte';
-import { afterEach, expect, test, vi } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
+import { afterEach, expect, test } from 'vitest';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
 import MenuInDialog from './MenuInDialog.fixture.svelte';
 
@@ -23,17 +24,17 @@ function escape(): void {
 test('a menu opened in a dialog stands above it, and Escape closes the menu first and the dialog next', async () => {
   app = mountShell(Layer.mergeAll());
   app.draw(MenuInDialog as never);
-  await vi.waitFor(() => expect(dialog()).not.toBeNull());
+  await waitUntil(() => dialog() !== null);
 
   document.querySelector<HTMLElement>('[data-menu-trigger]')!.click();
   flushSync();
-  await vi.waitFor(() => expect(menu()).not.toBeNull());
+  await waitUntil(() => menu() !== null);
   expect(Number(menu()!.style.zIndex)).toBeGreaterThan(Number(dialog()!.style.zIndex));
 
   escape();
-  await vi.waitFor(() => expect(menu()).toBeNull());
+  await waitUntil(() => menu() === null);
   expect(dialog()).not.toBeNull();
 
   escape();
-  await vi.waitFor(() => expect(dialog()).toBeNull());
+  await waitUntil(() => dialog() === null);
 });

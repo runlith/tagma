@@ -2,7 +2,8 @@
 import { QueryClient } from '@tanstack/query-core';
 import { mountRepo } from '@runlith/query/testing';
 import { Scope } from '@runlith/layer/Scope';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { testDoor } from '$lib/wire/testing.js';
 import { loadOperations } from '$lib/wire/operation.js';
 import { SettingsCatalog } from './SettingsCatalog.svelte.js';
@@ -113,7 +114,7 @@ async function read(): Promise<SettingsCatalog> {
     await mounted.unmount();
   });
   const catalog = new SettingsCatalog(mounted.repo, scope, { projectId: 1 });
-  await vi.waitFor(() => expect(catalog.entries).toHaveLength(3));
+  await waitUntil(() => catalog.entries.length === 3);
   return catalog;
 }
 

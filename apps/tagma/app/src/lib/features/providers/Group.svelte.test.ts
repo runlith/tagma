@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { AccountQuotaRow } from '@tagma/server/providers/contract/wire/accounts';
+import { waitFor } from '@runlith/testing/flush';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
@@ -117,7 +118,7 @@ test('removing an account waits for the answer to a question the frame asks', as
   expect(stack).toHaveLength(1);
 
   (stack[0]?.props as { onConfirm: () => void }).onConfirm();
-  await vi.waitFor(() => expect(door.remove).toHaveBeenCalledWith({ provider: 'subscription', account: 'k2' }, expect.anything()));
+  await waitFor(() => expect(door.remove).toHaveBeenCalledWith({ provider: 'subscription', account: 'k2' }, expect.anything()));
 
   trigger.click();
   flushSync();

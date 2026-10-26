@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { AccountQuotaRow } from '@tagma/server/providers/contract/wire/accounts';
 import { QuotaObservation, QuotaWindow } from '@runlith/llm/schema/quota';
+import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { Layer } from '@runlith/layer/Layer';
@@ -113,7 +114,7 @@ let trigger: HTMLButtonElement | null = null;
 async function reopen(): Promise<HTMLElement> {
   trigger?.click();
   flushSync();
-  await vi.waitFor(() => expect(document.querySelector('[data-roster-row]')).not.toBeNull());
+  await waitUntil(() => document.querySelector('[data-roster-row]') !== null);
   flushSync();
   return document.body;
 }
@@ -157,7 +158,7 @@ test('the default moves through the door, not the thread’s pin', async () => {
   const detail = drill(target, 'subscription');
 
   press(detail, '[data-switch-row="k2"]');
-  await vi.waitFor(() => expect(door.setDefault).toHaveBeenCalledWith({ provider: 'subscription', account: 'k2' }, expect.anything()));
+  await waitFor(() => expect(door.setDefault).toHaveBeenCalledWith({ provider: 'subscription', account: 'k2' }, expect.anything()));
   expect(thread).not.toHaveBeenCalled();
 });
 
@@ -175,11 +176,11 @@ test('the thread’s pin and the way back are offered in the thread’s provider
 
   expect(detail.querySelector('[data-pin-row="k2"]')).toBeNull();
   press(detail, '[data-pin-row="k1"]');
-  await vi.waitFor(() => expect(thread).toHaveBeenCalledWith('k1'));
+  await waitFor(() => expect(thread).toHaveBeenCalledWith('k1'));
   expect(door.setDefault).not.toHaveBeenCalled();
 
   press(drill(await reopen(), 'subscription'), '[data-thread-strip]');
-  await vi.waitFor(() => expect(follow).toHaveBeenCalled());
+  await waitFor(() => expect(follow).toHaveBeenCalled());
 
   const other = drill(await reopen(), 'openai-oauth');
   expect(other.querySelector('[data-pin-row]')).toBeNull();

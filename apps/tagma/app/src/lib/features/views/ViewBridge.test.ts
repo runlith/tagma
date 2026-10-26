@@ -9,6 +9,9 @@ type Rig = {
   readonly calls: { readonly server: string; readonly params: ViewParams }[];
   readonly released: string[];
   readonly aborted: string[];
+  readonly acquiring: PromiseWithResolvers<void>;
+  readonly acquire: PromiseWithResolvers<void>;
+  readonly releasedOne: PromiseWithResolvers<void>;
   send(data: unknown, from?: { source?: object; origin?: string }): void;
 };
 
@@ -18,6 +21,9 @@ const rig = (): Rig => {
   const calls: { server: string; params: ViewParams }[] = [];
   const released: string[] = [];
   const aborted: string[] = [];
+  const acquiring = Promise.withResolvers<void>();
+  const acquire = Promise.withResolvers<void>();
+  const releasedOne = Promise.withResolvers<void>();
   const bound = 'own-server';
   const host: ViewHost = {
     methods: {
@@ -35,8 +41,14 @@ const rig = (): Rig => {
     },
     subscribe: async (uri) => {
       if (uri === 'app://refused') throw new Error('mcp-resource-failed');
-      if (uri === 'app://slow') await new Promise((resolve) => setTimeout(resolve, 5));
-      return () => released.push(uri);
+      if (uri === 'app://slow') {
+        acquiring.resolve();
+        await acquire.promise;
+      }
+      return () => {
+        released.push(uri);
+        releasedOne.resolve();
+      };
     },
     context: () => ({}),
   };
@@ -51,6 +63,9 @@ const rig = (): Rig => {
     calls,
     released,
     aborted,
+    acquiring,
+    acquire,
+    releasedOne,
     send: (data, from = {}) => bridge.receive({ source: from.source ?? proxy, origin: from.origin ?? ORIGIN, data }),
   };
 };
@@ -85,8 +100,10 @@ test('a subscription the server refuses is answered as a failure, never as succe
 test('a subscription the view lets go of while it is being acquired is released once it lands', async () => {
   const mount = rig();
   mount.send({ jsonrpc: '2.0', id: 1, method: 'resources/subscribe', params: { uri: 'app://slow' } });
+  await mount.acquiring.promise;
   mount.send({ jsonrpc: '2.0', id: 2, method: 'resources/unsubscribe', params: { uri: 'app://slow' } });
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  mount.acquire.resolve();
+  await mount.releasedOne.promise;
   expect(mount.released).toEqual(['app://slow']);
 });
 

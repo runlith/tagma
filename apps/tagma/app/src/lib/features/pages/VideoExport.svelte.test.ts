@@ -42,13 +42,19 @@ afterEach(async () => {
 test('an export the page feed reports ready offers its video and downloads it, with nothing left to stop', async () => {
   const feed = liveFeed();
   const opened: string[] = [];
+  const downloaded = Promise.withResolvers<void>();
   const exported = vi.fn(async () => ({ status: 'exporting' as const, page: PAGE, video: drawing(0) }));
   app = mountShell(
     PageStates,
     Layer.mergeAll(
       Layer.of(Live, feed.live),
       Layer.of(VideosRepo, { export: stubMutation(exported), cancel: stubMutation() } as never),
-      Layer.of(Links, { system: (url: string) => void opened.push(url) } as never),
+      Layer.of(Links, {
+        system: (url: string) => {
+          opened.push(url);
+          downloaded.resolve();
+        },
+      } as never),
     ),
   );
   app.get(ServerOrigin).declare({ artifactOrigin: SHELF, sandboxOrigin: null });
@@ -73,7 +79,8 @@ test('an export the page feed reports ready offers its video and downloads it, w
 
   page(state([{ ...drawing(210), state: 'ready', url: FILE, bytes: 1_384_422 }]));
   flushSync();
-  await vi.waitFor(() => expect(opened).toEqual([FILE]));
+  await downloaded.promise;
+  expect(opened).toEqual([FILE]);
   const ready = target.querySelector('[data-video-state="ready"]')!;
   expect(ready.querySelector('button[aria-label^="Stop"]')).toBeNull();
   ready.querySelector('button')!.click();

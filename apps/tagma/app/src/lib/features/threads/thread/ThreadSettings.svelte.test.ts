@@ -6,6 +6,7 @@ import type { WireThread } from '@tagma/server/threads/contract/wire/snapshot';
 import { Cause, Effect, Exit, Fiber } from 'effect';
 import { it } from '@runlith/effect-test/vitest';
 import { afterEach, expect, test, vi } from 'vitest';
+import { waitFor, waitUntil } from '@runlith/testing/flush';
 
 import type { AccountQuotaRow } from '@tagma/server/providers/contract/wire/accounts';
 import { modelCatalog } from '@runlith/llm/models/catalog';
@@ -135,9 +136,9 @@ async function open(row: WireThread | null): Promise<ThreadSlot> {
     host.open(row.id);
     commitRoute(host);
     port.emit(opening(row), row.id);
-    await vi.waitFor(() => expect(host?.activeThread).not.toBeNull());
+    await waitUntil(() => host?.activeThread != null);
   }
-  await vi.waitFor(() => expect(host?.views.model.settings).not.toBeNull());
+  await waitUntil(() => host?.views.model.settings != null);
   return host;
 }
 
@@ -237,7 +238,7 @@ test('a star appends in pin order, removal keeps the rest, an unoffered pair is 
   door.saveFavorites.mockImplementation((favorites: FavoriteModels) => Promise.resolve(favorites));
 
   const opened = await open(null);
-  await vi.waitFor(() => expect(favorites!.list).toHaveLength(2));
+  await waitFor(() => expect(favorites!.list).toHaveLength(2));
   expect(opened.views.model.settings?.favorites.map((row) => `${row.provider}:${row.id}`)).toEqual(['openai-oauth:gpt-5.6-sol']);
 
   await favorites!.toggle('subscription', 'claude-opus-5-5');
@@ -279,7 +280,7 @@ test('a favorite dropped before another takes its place, one dropped past the en
   door.saveFavorites.mockImplementation((favorites: FavoriteModels) => Promise.resolve(favorites));
 
   const opened = await open(null);
-  await vi.waitFor(() => expect(favorites!.list).toHaveLength(3));
+  await waitFor(() => expect(favorites!.list).toHaveLength(3));
 
   await favorites!.move(c, a);
   expect(door.saveFavorites).toHaveBeenLastCalledWith({ models: [c, a, b] }, expect.anything());
@@ -416,7 +417,7 @@ it.live(
       if (!settings) return yield* Effect.die('the open thread holds no settings');
 
       const writes = [yield* Effect.forkScoped(settings.chooseSwitch(declared.id, on.id))];
-      yield* Effect.promise(() => vi.waitFor(() => expect(calls).toHaveLength(1)));
+      yield* Effect.promise(() => waitFor(() => expect(calls).toHaveLength(1)));
       writes.push(
         yield* Effect.forkScoped(settings.chooseSwitch(declared.id, off.id)),
         yield* Effect.forkScoped(settings.chooseSwitch(declared.id, on.id)),
@@ -432,7 +433,7 @@ it.live(
         return slow.promise;
       });
       const leaving = yield* Effect.forkScoped(Effect.exit(settings.chooseSwitch(declared.id, off.id)));
-      yield* Effect.promise(() => vi.waitFor(() => expect(calls).toHaveLength(3)));
+      yield* Effect.promise(() => waitFor(() => expect(calls).toHaveLength(3)));
       opened.open('thread-2');
       commitRoute(opened);
       slow.resolve({});

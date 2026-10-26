@@ -9,7 +9,8 @@ import { makePlatform, makeRouter } from '@runlith/layer/testing';
 import { Cache } from '@runlith/query/repo';
 import { observe } from '@runlith/query/test-utils/observe.svelte';
 import { QueryClient } from '@tanstack/query-core';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { ShellOps } from '$lib/features/workspace/ShellOps.js';
 import { Door } from '$lib/wire/Door.js';
@@ -74,20 +75,20 @@ test('a thread’s work, followed by one feed however many surfaces show it, is 
   const work = app.get(ThreadWork);
   const query = work.of(1, THREAD);
   close.push(observe(() => query.data));
-  await vi.waitFor(() => expect(query.data?.works[0]?.title).toBe('Lay the floor'));
+  await waitUntil(() => query.data?.works[0]?.title === 'Lay the floor');
   close.push(work.follow(1, THREAD, query.data!.copies, () => query.data));
   close.push(work.follow(1, THREAD, query.data!.copies, () => query.data));
   expect(feeds).toHaveLength(1);
 
   answer = held('Lay the floor tiles');
   feeds[0]!(change(true));
-  await vi.waitFor(() => expect(query.data?.works[0]?.title).toBe('Lay the floor tiles'));
+  await waitUntil(() => query.data?.works[0]?.title === 'Lay the floor tiles');
 
   answer = held('Lay the floor tiles', 'Floors stand level');
   feeds[0]!(change(false, ['5c12013b']));
-  await vi.waitFor(() => expect(query.data?.works[0]?.spec?.title).toBe('Floors stand level'));
+  await waitUntil(() => query.data?.works[0]?.spec?.title === 'Floors stand level');
 
   answer = { ...held('Lay the floor tiles'), works: [] };
   feeds[0]!(change(false, ['9ac665e5']));
-  await vi.waitFor(() => expect(query.data?.works).toEqual([]));
+  await waitUntil(() => query.data?.works.length === 0);
 });

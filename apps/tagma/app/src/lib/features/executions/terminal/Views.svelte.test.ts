@@ -8,6 +8,7 @@ import { Graph } from '@runlith/layer/Graph';
 import { Host } from '@runlith/layer/Host';
 import { Layer } from '@runlith/layer/Layer';
 import { Scope } from '@runlith/layer/Scope';
+import { waitFor } from '@runlith/testing/flush';
 import { mount, tick, unmount } from 'svelte';
 import { expect, test, vi } from 'vitest';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
@@ -150,11 +151,7 @@ test('leases share a pane, protect it from eviction, then trim released panes ol
 });
 
 async function until(reached: () => boolean, what: string): Promise<void> {
-  for (let turn = 0; turn < 500; turn += 1) {
-    if (reached()) return;
-    await new Promise((done) => setTimeout(done, 0));
-  }
-  throw new Error(`never reached: ${what}`);
+  await waitFor(() => expect(reached(), what).toBe(true));
 }
 
 type Act = { readonly cause: string; readonly act: { readonly _tag: string } };

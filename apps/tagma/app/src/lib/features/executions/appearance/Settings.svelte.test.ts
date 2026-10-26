@@ -2,7 +2,8 @@
 import { QueryClient } from '@tanstack/query-core';
 import { mountRepo, stubFamily, stubMutation } from '@runlith/query/testing';
 import { tick } from 'svelte';
-import { afterEach, expect, test, vi } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
+import { afterEach, expect, test } from 'vitest';
 import { EXECUTION_SETTING_KEYS as SETTING_KEYS } from '@tagma/server/executions/settings';
 import type { SettingEntry } from '@tagma/server/settings/contract/wire/catalog';
 import type { ITheme, ITerminalOptions } from '@xterm/xterm';
@@ -251,10 +252,12 @@ test('a write another project answered leaves this project’s look, and one thi
 
 test('a project whose catalog nobody holds yet is asked for once, and its look lands when that one answers', async () => {
   const asked: string[] = [];
+  const requested = Promise.withResolvers<void>();
   let answer!: (response: Response) => void;
   const answered = new Promise<Response>((resolve) => (answer = resolve));
   const door = testDoor((input: RequestInfo | URL, init?: RequestInit) => {
     asked.push(new Request(input, init).url);
+    requested.resolve();
     return answered;
   });
   const mounted = mountRepo(SettingsRepo, { door, queryClient: new QueryClient() });
@@ -266,7 +269,8 @@ test('a project whose catalog nobody holds yet is asked for once, and its look l
     }),
   );
 
-  await vi.waitFor(() => expect(asked).toHaveLength(1));
+  await requested.promise;
+  expect(asked).toHaveLength(1);
   const text = JSON.stringify({ status: 'ok', project: { id: 7, name: 'demo' }, settings: { sections: [], entries: [], rejections: [] } });
   const bytes = new TextEncoder().encode(text);
   const buffer = new ArrayBuffer(bytes.length);
@@ -276,6 +280,6 @@ test('a project whose catalog nobody holds yet is asked for once, and its look l
       arrayBuffer: async () => buffer,
     }),
   );
-  await vi.waitFor(() => expect(owner.known).toBe(true));
+  await waitUntil(() => owner.known);
   expect(asked).toHaveLength(1);
 });

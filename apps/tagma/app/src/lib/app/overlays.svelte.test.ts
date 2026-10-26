@@ -2,7 +2,8 @@
 import { Layer } from '@runlith/layer/Layer';
 import { Overlay } from '@runlith/primitives/Overlay.svelte';
 import { flushSync } from 'svelte';
-import { afterEach, expect, test, vi } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
+import { afterEach, expect, test } from 'vitest';
 import NoticeCards from '$lib/app/chrome/NoticeCards.svelte';
 import { Frame } from '$lib/app/chrome/FrameState.svelte.js';
 import { NoticesLayer } from '$lib/features/notices/layer.js';
@@ -32,5 +33,5 @@ test('a notice puts the column on screen, and the last one dismissed takes it aw
 
   notices.dismiss(id);
 
-  await vi.waitFor(() => expect(overlay.isOpen(NoticeColumn)).toBe(false));
+  await waitUntil(() => !overlay.isOpen(NoticeColumn));
 });

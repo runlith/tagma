@@ -3,7 +3,8 @@ import type { Block, TreeBlock } from '@tagma/server/graph/contract/wire/rows';
 import { Failure } from '@runlith/layer/Failure';
 import { Layer } from '@runlith/layer/Layer';
 import { Cache } from '@runlith/query/repo';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 
 import { ProjectTree } from '$lib/features/graph/ProjectTree.svelte.js';
 import { BlocksRepo } from '$lib/features/graph/BlocksRepo.js';
@@ -160,7 +161,7 @@ test('a resync reads the whole graph again: the rows, the frontier, the trash ro
 
   world.send({ type: 'resync' });
 
-  await vi.waitFor(() => expect(world.tree.loaded).toBe(true));
+  await waitUntil(() => world.tree.loaded);
   expect([...world.tree.blocks.keys()].sort()).toEqual(['first', 'root', 'second']);
   expect(world.tree.children('root')).toEqual(['first', 'second']);
   expect(world.tree.rootName).toBe('root');
@@ -175,7 +176,7 @@ test('a resync gathers every ready page before replacing the frontier', async ()
     ready: Array.from({ length: 101 }, (_, index) => detail(`task-${index}`)),
   });
   world.send({ type: 'resync' });
-  await vi.waitFor(() => expect(world.tree.loaded).toBe(true));
+  await waitUntil(() => world.tree.loaded);
   expect(world.tree.readyNames.size).toBe(101);
   expect(world.tree.readyNames.has('task-100')).toBe(true);
   expect(world.failures).toEqual([]);
@@ -184,7 +185,7 @@ test('a resync gathers every ready page before replacing the frontier', async ()
 test('a row older than the one already held is dropped, a newer one lands, and a deleted row leaves the live map', async () => {
   const world = stand({ tree: [block('root'), block('task', { parentName: 'root', title: 'as it stands' })] });
   world.send({ type: 'resync' });
-  await vi.waitFor(() => expect(world.tree.loaded).toBe(true));
+  await waitUntil(() => world.tree.loaded);
 
   world.send(change({ blocks: [block('task', { title: 'stale', updatedAt: EARLIER })] }));
   expect(world.tree.block('task')?.title).toBe('as it stands');
@@ -209,7 +210,7 @@ test('a change replaces the frontier, the trash and the sibling order only where
     trash: [detail('orphan', { parentName: 'shelf', deletedAt: EARLIER }), detail('loose', { deletedAt: EARLIER })],
   });
   world.send({ type: 'resync' });
-  await vi.waitFor(() => expect(world.tree.loaded).toBe(true));
+  await waitUntil(() => world.tree.loaded);
 
   world.send(
     change({
@@ -241,7 +242,7 @@ test('a commit landing while the whole-project read is in flight survives it', a
 
   server.gate?.resolve();
 
-  await vi.waitFor(() => expect(world.tree.block('landed')?.name).toBe('landed'));
+  await waitUntil(() => world.tree.block('landed')?.name === 'landed');
   expect([...world.tree.readyNames]).toEqual(['landed']);
   expect(world.tree.rootName).toBe('root');
   expect(world.failures).toEqual([]);

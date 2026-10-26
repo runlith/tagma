@@ -8,6 +8,7 @@ import { Failure } from '@runlith/layer/Failure';
 import { Layer } from '@runlith/layer/Layer';
 import { stubMutation } from '@runlith/query/testing';
 import { afterEach, expect, test, vi } from 'vitest';
+import { waitFor } from '@runlith/testing/flush';
 
 import { keyedBy, liveFeed, mountShell, threadsRepo, type TestApp } from '$lib/app/testing.js';
 import { ExecutionsRepo } from '$lib/features/executions/Repo.js';
@@ -97,10 +98,12 @@ test('an off-window working child refreshes the bounded root family, then readMo
 
   feed.frame?.({ type: 'row', row: offChild });
 
-  await vi.waitFor(() => expect(roots).toHaveBeenCalledWith({ projectId: 1 }));
-  expect(new Set(list.threads.map((entry) => entry.id))).toEqual(
-    new Set([offRoot.id, offChild.id, ...initial.slice(1).map((entry) => entry.id)]),
+  await waitFor(() =>
+    expect(new Set(list.threads.map((entry) => entry.id))).toEqual(
+      new Set([offRoot.id, offChild.id, ...initial.slice(1).map((entry) => entry.id)]),
+    ),
   );
+  expect(roots).toHaveBeenCalledWith({ projectId: 1 });
   expect(list.tree).toHaveLength(50);
   expect(list.roots).toBe(51);
   expect(list.more).toBe(1);
@@ -133,13 +136,14 @@ test('a working root ending and a root birth each refresh membership and the roo
     type: 'row',
     row: { ...oldWorker, life: 'idle', activeRunId: null, activeRunStartedAt: null, liveSpellStartedAt: null },
   });
-  await vi.waitFor(() => expect(roots).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(list.threads.some((entry) => entry.id === window[0]?.id)).toBe(true));
+  expect(roots).toHaveBeenCalledTimes(1);
   expect(list.threads.some((entry) => entry.id === oldWorker.id)).toBe(false);
-  expect(list.threads.some((entry) => entry.id === window[0]?.id)).toBe(true);
   expect(list.roots).toBe(51);
 
   feed.frame?.({ type: 'row', row: newborn });
-  await vi.waitFor(() => expect(roots).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(list.roots).toBe(52));
+  expect(roots).toHaveBeenCalledTimes(2);
   expect(list.threads.some((entry) => entry.id === newborn.id)).toBe(true);
   expect(list.roots).toBe(52);
   expect(list.more).toBe(2);
@@ -193,7 +197,7 @@ test('a window read that feed frames overtook still lands, and the frames win ov
   feed.frame?.({ type: 'row', row: calling });
   answer({ rows: [newborn, worker], roots: 2, windowBefore: null });
 
-  await vi.waitFor(() => expect(list.threads.map((entry) => entry.id)).toEqual([newborn.id, worker.id]));
+  await waitFor(() => expect(list.threads.map((entry) => entry.id)).toEqual([newborn.id, worker.id]));
   expect(list.threads.find((entry) => entry.id === worker.id)?.phase).toEqual(calling.phase);
   expect(list.roots).toBe(2);
 });
@@ -212,7 +216,7 @@ test('a root born after the window was read gets a read of its own', async () =>
   feed.frame?.({ type: 'row', row: second });
   answer({ rows: [first], roots: 1, windowBefore: null });
 
-  await vi.waitFor(() => expect(list.threads.map((entry) => entry.id)).toEqual([second.id, first.id]));
+  await waitFor(() => expect(list.threads.map((entry) => entry.id)).toEqual([second.id, first.id]));
   expect(list.roots).toBe(2);
 });
 
@@ -231,7 +235,7 @@ test('a root born while a window read fails gets the read it asked for', async (
   const broke = new Error('the window read broke');
   fail(broke);
 
-  await vi.waitFor(() => expect(list.threads.map((entry) => entry.id)).toEqual([second.id, first.id]));
+  await waitFor(() => expect(list.threads.map((entry) => entry.id)).toEqual([second.id, first.id]));
   expect(reported).toEqual([broke]);
 });
 
@@ -252,7 +256,7 @@ test('a new root stands from its own frame before the window read answers; an id
   expect(list.threads.map((entry) => entry.id)).toEqual([newborn.id, first.id]);
   expect(roots).toHaveBeenCalledTimes(1);
   answer({ rows: [newborn, first], roots: 3, windowBefore: first.readerOrderAt });
-  await vi.waitFor(() => expect(list.roots).toBe(3));
+  await waitFor(() => expect(list.roots).toBe(3));
   expect(list.more).toBe(1);
 });
 
@@ -410,7 +414,7 @@ test('a subscription refused after a window keeps the rows and the reason until 
 
   feed.frame?.({ type: 'row', row: off });
   feed.ended?.({ kind: 'subscription', message: 'refused' });
-  await vi.waitFor(() => expect(list.roots).toBe(2));
+  await waitFor(() => expect(list.roots).toBe(2));
   expect(list.refused).toBe('refused');
   expect(list.threads.map((entry) => entry.id)).toEqual(['shown']);
 
@@ -466,7 +470,7 @@ test('a finished thread the list already holds is marked seen once it comes on s
   expect(list.threads[0]?.outcome?.isSeen).toBe(false);
 
   screen.shown = [{ activeId: 'done' }];
-  await vi.waitFor(() => expect(list.threads[0]?.outcome?.isSeen).toBe(true));
+  await waitFor(() => expect(list.threads[0]?.outcome?.isSeen).toBe(true));
 });
 
 test('a frame merges the fields that moved onto the record and leaves the rest of the list standing', () => {

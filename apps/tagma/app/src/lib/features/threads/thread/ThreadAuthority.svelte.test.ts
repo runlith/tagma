@@ -7,6 +7,7 @@ import type { ThreadModes } from '@runlith/chat-ui/wire/ChatConnection';
 import { Scope } from '@runlith/layer/Scope';
 import { Effect } from 'effect';
 import { afterEach, expect, test, vi } from 'vitest';
+import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { feedSnapshot, testLive, testThreadChat, testThreadSlot, commitRoute } from '$lib/app/slotWorld.js';
 import { builtinModeRegistry } from '@runlith/agent/modes/ApprovalModes';
 const DECLARED_MODES = builtinModeRegistry().declared();
@@ -58,7 +59,7 @@ async function shows(slot: ThreadSlot, shown: WireThread, modes: ThreadModes): P
   slot.open(shown.id);
   commitRoute(slot);
   port.emit(feedSnapshot(shown, null, modes), shown.id);
-  await vi.waitFor(() => expect(slot.chat.target.modes?.active).toBe(modes.active));
+  await waitFor(() => expect(slot.chat.target.modes?.active).toBe(modes.active));
 }
 
 test('a draft offers the modes its birth catalog served and accepts a registered mode', async () => {
@@ -106,9 +107,9 @@ test('a mode chosen while a send is in flight and while an earlier mode write is
   await held;
 
   const first = slot.writes.perform(modeCycle(slot.writes).run());
-  await vi.waitFor(() => expect(slot.writes.modes?.active).toBe('review'));
+  await waitFor(() => expect(slot.writes.modes?.active).toBe('review'));
   const second = slot.writes.perform(modeCycle(slot.writes).run());
-  await vi.waitFor(() => expect(slot.writes.modes?.active).toBe('bypass'));
+  await waitFor(() => expect(slot.writes.modes?.active).toBe('bypass'));
 
   answered.resolve();
   await Promise.all([first, second]);
@@ -150,7 +151,7 @@ test('a terminal thread opened by address takes the terminal surface and states 
   expect(slot.surface.terminal).toBeNull();
 
   port.emit(feedSnapshot(cli('review'), null, approvalModes('review')), 'thread-1');
-  await vi.waitFor(() => expect(slot.surface.terminal).toMatchObject({ threadId: 'thread-1', projectId: 47 }));
+  await waitFor(() => expect(slot.surface.terminal).toMatchObject({ threadId: 'thread-1', projectId: 47 }));
   expect(slot.chat.target.modes?.active).toBe('review');
   expect(modeCycle(slot.writes).available).toBe(true);
 
@@ -163,17 +164,17 @@ test('a terminal thread whose transport moves to acp leaves the terminal surface
   const slot = open(() => Effect.succeed({}));
   slot.activateRoute('thread-1', 47);
   port.emit(feedSnapshot(cli('review'), null, approvalModes('review')), 'thread-1');
-  await vi.waitFor(() => expect(slot.surface.terminal).not.toBeNull());
+  await waitUntil(() => slot.surface.terminal !== null);
 
   port.emit(feedSnapshot(cli('review', 'acp'), null, approvalModes('review')), 'thread-1');
-  await vi.waitFor(() => expect(slot.surface.terminal).toBeNull());
+  await waitUntil(() => slot.surface.terminal === null);
 });
 
 test('a refused write leaves the terminal thread’s mode and names why on the thread', async () => {
   const slot = open(() => Effect.fail(new Error('The thread is not yours to change.')) as never);
   slot.activateRoute('thread-1', 47);
   port.emit(feedSnapshot(cli('review'), null, approvalModes('review')), 'thread-1');
-  await vi.waitFor(() => expect(slot.chat.target.modes?.active).toBe('review'));
+  await waitFor(() => expect(slot.chat.target.modes?.active).toBe('review'));
 
   await slot.writes.perform(modeCycle(slot.writes).run());
   expect(slot.chat.target.modes?.active).toBe('review');
@@ -190,7 +191,7 @@ test('a mode reply that arrives after the thread was left revises nothing', asyn
   if (session === null) throw new Error('the thread was not shown');
 
   const writing = slot.writes.perform(slot.writes.chooseMode('review'));
-  await vi.waitFor(() => expect(slot.writes.modes?.active).toBe('review'));
+  await waitFor(() => expect(slot.writes.modes?.active).toBe('review'));
   slot.open('thread-2');
   commitRoute(slot);
   gate.resolve();

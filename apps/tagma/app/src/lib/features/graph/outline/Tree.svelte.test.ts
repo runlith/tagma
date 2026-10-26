@@ -6,7 +6,8 @@ import { Layer } from '@runlith/layer/Layer';
 import { Scope } from '@runlith/layer/Scope';
 import { Cache } from '@runlith/query/repo';
 import { flushSync } from 'svelte';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { mountShell, type TestApp, testTagCatalog } from '$lib/app/testing.js';
 import { BlocksRepo } from '$lib/features/graph/BlocksRepo.js';
 import { GraphFeed } from '$lib/features/graph/Feed.js';
@@ -183,7 +184,7 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
   };
 
   try {
-    await vi.waitFor(() => expect(link('a1b2c3d4')).not.toBeNull());
+    await waitUntil(() => link('a1b2c3d4') !== null);
 
     titleOf('a1b2c3d4').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     link('a1b2c3d4').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -199,13 +200,13 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
 
     titleOf('a1b2c3d4').textContent = 'Plan the week';
     titleOf('a1b2c3d4').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(editing()).toBe('e5f6a7b8'));
+    await waitUntil(() => editing() === 'e5f6a7b8');
     expect(titled).toContainEqual({ blockId: 'a1b2c3d4', title: 'Plan the week' });
 
     titleOf('e5f6a7b8').textContent = 'Draft';
     titleOf('e5f6a7b8').dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(rows.get('e5f6a7b8')?.parentName).toBe('a1b2c3d4'));
-    await vi.waitFor(() => expect(editing()).toBe('e5f6a7b8'));
+    await waitUntil(() => rows.get('e5f6a7b8')?.parentName === 'a1b2c3d4');
+    await waitUntil(() => editing() === 'e5f6a7b8');
     expect(titleOf('e5f6a7b8').textContent).toBe('Draft');
     titleOf('e5f6a7b8').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     flushSync();

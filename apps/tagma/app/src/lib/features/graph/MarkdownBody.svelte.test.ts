@@ -2,7 +2,8 @@
 import { Layer } from '@runlith/layer/Layer';
 import { test as mountApp } from '@runlith/layer/svelte/test.svelte';
 import { flushSync, mount, unmount } from 'svelte';
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
 import { Overlays } from '$lib/app/overlays.js';
 import { testAddressing } from '$lib/app/testing.js';
 import TestHost from '$lib/app/TestHost.svelte';
@@ -64,13 +65,13 @@ test('file paths become actionable only after resolution and one click opens onc
     opened,
   );
   try {
-    await vi.waitFor(() => expect(target.querySelectorAll('[data-path]')).toHaveLength(4));
+    await waitUntil(() => target.querySelectorAll('[data-path]').length === 4);
     expect(target.querySelector('a[href="//example.com/report"]')).not.toBeNull();
     expect(target.querySelectorAll('[role="link"]')).toHaveLength(0);
     target.querySelector<HTMLElement>('[data-path]')!.click();
     expect(opened).toEqual([]);
     confirm(true);
-    await vi.waitFor(() => expect(target.querySelectorAll('[role="link"]')).toHaveLength(3));
+    await waitUntil(() => target.querySelectorAll('[role="link"]').length === 3);
     target.querySelector<HTMLElement>('[role="link"]')!.click();
     expect(opened.map(pathOf)).toEqual([path]);
     target.querySelector<HTMLElement>('[data-path="/missing.txt"]')!.click();
@@ -106,7 +107,7 @@ test('a commit id in code or text links to that commit in its project once confi
     opened,
   );
   try {
-    await vi.waitFor(() => expect(target.querySelectorAll('a[data-commit-link]')).toHaveLength(2));
+    await waitUntil(() => target.querySelectorAll('a[data-commit-link]').length === 2);
     const anchors = [...target.querySelectorAll<HTMLElement>('a[data-commit-link]')];
     const links = anchors.map((link) => {
       const href = new URL(link.getAttribute('href') ?? '', 'https://tagma.test');
@@ -151,19 +152,19 @@ test('path resolution waits for the closed entry and reads only its final render
     opened,
   );
   try {
-    await vi.waitFor(() => expect(props.rendered).toBe(1));
+    await waitUntil(() => props.rendered === 1);
     expect(target.querySelector('code')?.textContent).toBe('Good');
     expect(requested).toEqual([]);
 
     props.text = '`Good day,';
-    await vi.waitFor(() => expect(props.rendered).toBe(2));
+    await waitUntil(() => props.rendered === 2);
     expect(target.querySelector('code')?.textContent).toBe('Good day,');
     expect(requested).toEqual([]);
     expect(target.querySelector('[role="link"]')).toBeNull();
 
     props.text = '`Good day, Ana.`';
     props.streaming = false;
-    await vi.waitFor(() => expect(target.querySelector('[role="link"]')?.textContent).toBe('Good day, Ana.'));
+    await waitUntil(() => target.querySelector('[role="link"]')?.textContent === 'Good day, Ana.');
     expect(requested).toEqual(['Good day, Ana.']);
     target.querySelector<HTMLElement>('[role="link"]')!.click();
     expect(opened.map(pathOf)).toEqual(['Good day, Ana.']);
@@ -194,7 +195,7 @@ test('a streamed body keeps its settled DOM while reference reading moves from p
     opened,
   );
 
-  await vi.waitFor(() => expect(props.rendered).toBe(1));
+  await waitUntil(() => props.rendered === 1);
   flushSync();
   const first = target.querySelector('p');
   expect(first?.textContent).toBe('First 5b386d76 here.');
@@ -226,7 +227,7 @@ test('a streamed body keeps its settled DOM while reference reading moves from p
   expect(names()).toEqual(['5b386d76', '5b386d76', '5b386d76']);
 
   props.text = 'First [[5b386d76]] here.\n\nSecond.\n\nThird.\n\nFour';
-  await vi.waitFor(() => expect(props.rendered).toBe(2));
+  await waitUntil(() => props.rendered === 2);
   flushSync();
 
   const paragraphs = [...target.querySelectorAll('p')];

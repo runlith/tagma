@@ -3,8 +3,8 @@ import type { TreeBlock } from '@tagma/server/graph/contract/wire/rows';
 import { Failure } from '@runlith/layer/Failure';
 import { Layer } from '@runlith/layer/Layer';
 import { Cache, Repo } from '@runlith/query/repo';
-import { flush } from '@runlith/testing/flush';
-import { afterEach, expect, test, vi } from 'vitest';
+import { flush, waitFor } from '@runlith/testing/flush';
+import { afterEach, expect, test } from 'vitest';
 
 import { ProjectTree } from '$lib/features/graph/ProjectTree.svelte.js';
 import { SessionRegistry } from '$lib/features/graph/SessionRegistry.svelte.js';
@@ -218,10 +218,10 @@ test('a change frame invalidates the graph’s own answers and the reader watchi
   });
 
   try {
-    await vi.waitFor(() => expect(seen?.map((row) => row.name)).toEqual(['main-root']));
+    await waitFor(() => expect(seen?.map((row) => row.name)).toEqual(['main-root']));
     world.graph('main').tree = [block('main-root'), block('landed')];
     world.push('main', change({ blocks: [block('landed')] }));
-    await vi.waitFor(() => expect(seen?.map((row) => row.name)).toEqual(['main-root', 'landed']));
+    await waitFor(() => expect(seen?.map((row) => row.name)).toEqual(['main-root', 'landed']));
   } finally {
     stop();
   }
@@ -237,7 +237,7 @@ test('a session id belongs to one graph: the registry that met it names the writ
   const mine = world.app.app.resolve(SessionRegistry, here.scope);
   const other = world.app.app.resolve(SessionRegistry, there.scope);
 
-  await vi.waitFor(() => expect(mine.writerOf(7)?.key).toBe('thread-7'));
+  await waitFor(() => expect(mine.writerOf(7)?.key).toBe('thread-7'));
   expect(other.writerOf(7)).toBeUndefined();
   expect(mine.writerOf(null)).toBeNull();
   expect(world.failures).toEqual([]);

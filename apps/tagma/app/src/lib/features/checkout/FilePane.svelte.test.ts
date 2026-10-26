@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { Layer } from '@runlith/layer/Layer';
 import { flushSync } from 'svelte';
-import { expect, test, vi } from 'vitest';
+import { waitUntil } from '@runlith/testing/flush';
+import { expect, test } from 'vitest';
 import { mountShell } from '$lib/app/testing.js';
 import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
 import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
@@ -80,13 +81,13 @@ test('a sidebar file previews Markdown and returns to its source in place, inclu
       expect(target.querySelector('[data-preview-tab]')).toBeNull();
     };
     open();
-    await vi.waitFor(() => expect(target.querySelector('[data-preview-tab] h1')?.textContent).toBe('Project 5'));
+    await waitUntil(() => target.querySelector('[data-preview-tab] h1')?.textContent === 'Project 5');
     back();
 
     Object.assign(pane, filePane({ projectId: 7, rootId: 'root-7' as never, path, at: null }));
     flushSync();
     open(true);
-    await vi.waitFor(() => expect(target.querySelector('[data-preview-tab] h1')?.textContent).toBe('Project 7'));
+    await waitUntil(() => target.querySelector('[data-preview-tab] h1')?.textContent === 'Project 7');
     back();
   } finally {
     await app.unmount();

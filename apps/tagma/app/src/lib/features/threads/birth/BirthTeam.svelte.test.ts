@@ -2,7 +2,8 @@
 import { NO_REVIEW, type ReviewPolicy, type TeamEdit, type TeamLayer } from '@runlith/agent/collaboration/team';
 import { Layer } from '@runlith/layer/Layer';
 import { Cache } from '@runlith/query/repo';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
+import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { mountShell, type TestApp } from '$lib/app/testing.js';
 import { testShelf } from '../native/testing.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
@@ -104,7 +105,7 @@ test('Undo of a draft’s Use for all threads, after the draft was sent, puts th
   const born = new Map<string, string>();
   const team = new BirthTeam(draft, app.app.resolve(TeamRepo), app.app.resolve(SettingsRepo), notices, 1, (key) => born.get(key) ?? null);
   team.refresh();
-  await vi.waitFor(() => expect(team.layer).not.toBeNull());
+  await waitUntil(() => team.layer !== null);
   await team.review({ ...PROJECT_REVIEW, reviewers: 0 });
   const copy = draft.team;
 
@@ -113,6 +114,6 @@ test('Undo of a draft’s Use for all threads, after the draft was sent, puts th
   draft.useKey('thread:thread-9');
   notices.list.find((notice) => notice.kind === 'undo')?.undo?.();
 
-  await vi.waitFor(() => expect(server.copies.get('thread-9')).toEqual(copy));
+  await waitFor(() => expect(server.copies.get('thread-9')).toEqual(copy));
   expect(server.project).toEqual(before);
 });
