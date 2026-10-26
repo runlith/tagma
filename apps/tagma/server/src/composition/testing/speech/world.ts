@@ -13,7 +13,7 @@ import { type Key, scriptedProvider } from '@runlith/speech/testing/scriptedProv
 import { type ScriptedLink, scriptedTransport } from '@runlith/speech/testing/ScriptedTransport';
 import { credentials } from '@runlith/speech/testing/world';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { type Cause, Clock, Context, Effect, Exit, FileSystem, Layer, Queue, Scope, Stream } from 'effect';
+import { type Cause, Clock, Context, Deferred, Effect, Exit, FileSystem, Layer, Queue, Scope, Stream } from 'effect';
 import { fixtureMigrations } from '../migrations.js';
 
 import { RecordingsPlace } from '../../../speech/contract/service/recording.js';
@@ -68,6 +68,7 @@ export type World = {
   readonly links: Effect.Effect<ScriptedLink>;
   readonly play: (capture: number, chunks: number) => Effect.Effect<void>;
   readonly sound: (capture: number, at: bigint, pcm: Int16Array) => Effect.Effect<void>;
+  readonly pulled: (capture: number) => Effect.Effect<void>;
   readonly overflow: (capture: number, from: bigint, to: bigint) => Effect.Effect<void>;
   readonly drain: (capture: number) => Effect.Effect<void>;
   readonly now: () => bigint;
@@ -133,9 +134,13 @@ const makeStand = Effect.gen(function* () {
     const settings = opening.settings ?? fallbacks;
     const transport = yield* scriptedTransport;
     const queues = yield* Effect.forEach([0, 1, 2], () => Queue.unbounded<ReturnType<typeof chunk> | Gap, Cause.Done>());
+    const pulled = yield* Effect.forEach(queues, () => Deferred.make<void>());
     const devices = makeFakeDevices({
       output: opening.output,
-      capture: (_request, index) => ({ sounds: Stream.fromQueue(queues[index]!), ending: opening.ending }),
+      capture: (_request, index) => ({
+        sounds: Stream.fromQueue(queues[index]!).pipe(Stream.tap(() => Deferred.succeed(pulled[index]!, undefined))),
+        ending: opening.ending,
+      }),
     });
     const clock = yield* Clock.Clock;
     const at = [0n, 0n, 0n];
@@ -177,6 +182,7 @@ const makeStand = Effect.gen(function* () {
           { discard: true },
         ),
       sound: (capture, moment, pcm) => Effect.asVoid(Queue.offer(queues[capture]!, chunk(captureFormat, moment, pcm))),
+      pulled: (capture) => Deferred.await(pulled[capture]!),
       overflow: (capture, from, to) => Effect.asVoid(Queue.offer(queues[capture]!, gap(from, to, 'overflow'))),
       drain: (capture) => Effect.asVoid(Queue.end(queues[capture]!)),
       now: () => clock.monotonicTimeNanosUnsafe(),
@@ -220,8 +226,14 @@ const makeStand = Effect.gen(function* () {
     registered,
     reader:
       (world: World, projectId: number, id: string) =>
-      (after: number, waitMs = 5_000, bytes = 50_000) =>
-        world.listenings.read({ projectId, id, after, limit: 50, bytes, waitMs }),
+      (after: number, waitMs?: number, bytes = 50_000) =>
+        waitMs === undefined
+          ? awaited(
+              world.listenings.read({ projectId, id, after, limit: 50, bytes, waitMs: 0 }),
+              (page) => page.lines.length > 0 || page.state !== 'live',
+              'the transcript to change or end',
+            )
+          : world.listenings.read({ projectId, id, after, limit: 50, bytes, waitMs }),
   };
 });
 

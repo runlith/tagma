@@ -2,6 +2,7 @@ import { layer } from '@runlith/effect-test';
 import { SpeechFixture, speechFixture } from './world.js';
 import { expect } from 'bun:test';
 import { SpeechEvent } from '@runlith/speech/wire/events';
+import { pcmOf } from '@runlith/speech/testing/scriptedProvider';
 import { event, ready, word } from '@runlith/speech/testing/world';
 import { count } from 'drizzle-orm';
 import { type Cause, Clock, Deferred, Effect, Fiber, Queue, Stream } from 'effect';
@@ -117,9 +118,10 @@ layer(speechFixture({}), { excludeTestServices: true })('speech', (it) => {
           yield* link.receive(event(SpeechEvent.final('t1', [word('remote', 0, 800)])));
           yield* until(() => heard.includes('remote'), 'the sent phrase');
           yield* world.listenings.finishRecognition('phone-1');
-          yield* Effect.sleep(20);
+          yield* Queue.offer(frames, frame(3, new Int16Array(320).fill(3000)));
+          yield* until(() => link.sent.some((message) => pcmOf(message)?.includes(3000)), 'the sound sent after finish was requested');
           expect(sentFinish(link)()).toBe(false);
-          yield* Queue.offer(frames, last(3));
+          yield* Queue.offer(frames, last(4));
           expect(yield* Fiber.join(sending)).toBe('finished');
           yield* until(sentFinish(link), 'the track to ask for the tail');
           yield* link.receive(event(SpeechEvent.finished));
@@ -251,12 +253,17 @@ layer(speechFixture({}), { excludeTestServices: true })('speech', (it) => {
       Effect.gen(function* () {
         const world = yield* fixture.stand.opened;
         const ask: HearAsk = { id: 'twin-1', tracks: [{ source: 'mic' }] };
-        const first = yield* Effect.forkChild(Effect.result(Stream.runDrain(world.listenings.recognize(ask))));
-        const second = yield* Effect.forkChild(Effect.result(Stream.runDrain(world.listenings.recognize(ask))));
+        const admitted = yield* Deferred.make<void>();
+        const recognition = world.listenings
+          .recognize(ask)
+          .pipe(
+            Stream.tap((item) => (item.kind === 'state' && item.state === 'live' ? Deferred.succeed(admitted, undefined) : Effect.void)),
+          );
+        const first = yield* Effect.forkChild(Effect.result(Stream.runDrain(recognition)));
+        const second = yield* Effect.forkChild(Effect.result(Stream.runDrain(recognition)));
         const refused = yield* Effect.raceFirst(Fiber.join(first), Fiber.join(second));
         expect(refused._tag === 'Failure' ? codeOf(refused.failure) : refused._tag).toBe('track-invalid');
-        yield* until(() => world.devices.captures.length === 1, 'the admitted recognition to capture');
-        yield* Effect.sleep(20);
+        yield* Deferred.await(admitted);
         expect(world.devices.captures.length).toBe(1);
         yield* Fiber.interrupt(first);
         yield* Fiber.interrupt(second);
