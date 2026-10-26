@@ -220,8 +220,6 @@ process.stdin.on('end', () => leave(0));
 process.stdin.on('close', () => leave(0));
 process.stdin.on('error', () => leave(0));
 
-setTimeout(() => leave(0), 120_000);
-
 process.stdin.setRawMode?.(true);
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk: string) => strokes(chunk));

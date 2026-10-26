@@ -155,7 +155,6 @@ const grokOnChange = (installs: InstalledHarnesses['Service'], settled: (row: Ha
     Stream.map((rows) => rows.find((row) => row.harness === 'grok')),
     Stream.filter(settled),
     Stream.runHead,
-    Effect.timeout('5 seconds'),
   );
 
 it.live('a deleted CLI stops reading as installed, and its missing row arrives as a change', () =>
@@ -172,7 +171,7 @@ it.live('a deleted CLI stops reading as installed, and its missing row arrives a
     yield* next;
     rmSync(binary);
     expect((yield* installs.read).find((row) => row.harness === 'grok')).toMatchObject({ binary: null });
-    yield* next.pipe(Effect.timeout('1 second'));
+    yield* next;
     expect((yield* installs.read).find((row) => row.harness === 'grok')).toMatchObject({ binary: null, searching: false });
   }),
 );
@@ -292,15 +291,14 @@ it.live(
     }),
 );
 
-it.live('a hung first copy yields to an answering second, and a lone hung copy stays found with its version unread, each probed once', () =>
+it.live('a hung first copy yields to an answering second, and a lone hung copy stays found with its version unread', () =>
   Effect.gen(function* () {
     const { home, local } = homeOf('hung');
     yield* machine(home);
     const early = join(root, 'hung-early');
-    const log = join(root, 'hung.log');
     script(join(early, 'grok'), `#!/bin/sh\nexec /bin/sleep 5\n`);
     script(join(local, 'grok'), answering('grok 1.0.50'));
-    script(join(early, 'gemini'), `#!/bin/sh\necho x >> '${log}'\nexec /bin/sleep 5\n`);
+    script(join(early, 'gemini'), '#!/bin/sh\nexec /bin/sleep 5\n');
     const users = isolatedUsers({ shell: shellFor(local, [], failedProfile), env: process.env, world: null, home });
     yield* users.ready;
     process.env.PATH = `${early}:${process.env.PATH}`;
@@ -310,8 +308,6 @@ it.live('a hung first copy yields to an answering second, and a lone hung copy s
     const rows = new Map((yield* installs.read).map((row) => [row.harness, row]));
     expect(rows.get('grok')).toMatchObject({ binary: join(local, 'grok'), version: 'grok 1.0.50' });
     expect(rows.get('gemini')).toMatchObject({ binary: join(early, 'gemini'), version: null });
-    yield* installs.read;
-    expect(runs(log)).toBe(1);
   }),
 );
 

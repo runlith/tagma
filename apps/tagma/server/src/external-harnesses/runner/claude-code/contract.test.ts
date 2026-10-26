@@ -1,6 +1,7 @@
 import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Clock, Deferred, Effect, Fiber, Stream } from 'effect';
+import { TestClock } from 'effect/testing';
 import { QuotaObservation, QuotaWindow } from '@runlith/llm/schema/quota';
 import type { HookInput, McpSdkServerConfigWithInstance, Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { AgentFault, FAULT, type AgentHandlers, type Outlet } from '@runlith/acp/agent';
@@ -331,8 +332,13 @@ const agent = Effect.fnUntraced(function* (script: Script, options: Options_ = {
   const notices: Array<{ readonly method: string; readonly params: unknown }> = [];
   const phases: string[] = [];
   const noticed: Waiter[] = [];
+  const updated: Waiter[] = [];
   const outlet: Outlet = {
-    update: (update) => Effect.sync(() => void updates.push(update)),
+    update: (update) =>
+      Effect.sync(() => {
+        updates.push(update);
+        release(updated, updates.length);
+      }),
     notify: (method, params) =>
       Effect.sync(() => {
         if (method === PHASE) return void phases.push((params as { readonly phase: string }).phase);
@@ -350,7 +356,8 @@ const agent = Effect.fnUntraced(function* (script: Script, options: Options_ = {
     (standing) => standing.ended,
   );
   const heard = (count: number) => waiting(noticed, notices.length, count);
-  return { handlers, sdk, deaths, updates, requests, notices, phases, heard };
+  const saw = (count: number) => waiting(updated, updates.length, count);
+  return { handlers, sdk, deaths, updates, requests, notices, phases, heard, saw };
 });
 
 const open = Effect.fnUntraced(function* (script: Script, options: Options_ = {}) {
@@ -685,11 +692,11 @@ const readingsOf = (updates: readonly SessionNotification[]): readonly Reading_[
   );
 
 const settled = Effect.fnUntraced(function* (look: () => boolean) {
-  for (let beat = 0; beat < 200 && !look(); beat += 1) yield* Effect.sleep(2);
+  while (!look()) yield* Effect.sleep(2);
 });
 
 describe('a model request', () => {
-  it.live(
+  it.effect(
     'is measured as it ends: the context it filled, the window, its usage, when its input was handed over and the cache lifetime it wrote',
     () =>
       Effect.gen(function* () {
@@ -697,8 +704,8 @@ describe('a model request', () => {
         const running = yield* started(session.prompt('one'));
         yield* session.sdk.first.arrived(1);
         session.sdk.first.emit(echoOf(session.sdk.first.received[0]!.uuid!), ...requested(10, 0, { fiveMinutes: 0, hour: 900 }, 50, 20));
-        yield* settled(() => readingsOf(session.updates).length === 1);
-        yield* Effect.sleep(5);
+        yield* session.saw(1);
+        yield* TestClock.adjust(1);
         const handed = yield* Clock.currentTimeMillis;
         session.sdk.first.emit(toolResult('t1'), ...requested(5, 910, { fiveMinutes: 0, hour: 0 }, 30, 0), resultOf(1, 1, 0.1));
         yield* Fiber.join(running);
@@ -1143,7 +1150,7 @@ describe('cancel', () => {
       const running = yield* started(session.prompt('one'));
       yield* settled(() => server.told.includes('notifications/tools/list_changed'));
       yield* session.cancel();
-      expect((yield* Fiber.join(running).pipe(Effect.timeout('1 second'))).stopReason).toBe('cancelled');
+      expect((yield* Fiber.join(running)).stopReason).toBe('cancelled');
       expect(session.sdk.first.received).toEqual([]);
       const next = yield* Effect.forkChild(session.prompt('two'), { startImmediately: true });
       expect(session.sdk.first.received).toEqual([]);

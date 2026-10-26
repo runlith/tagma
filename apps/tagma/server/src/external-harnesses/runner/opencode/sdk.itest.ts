@@ -214,5 +214,4 @@ it.live(
       expect(yield* resumed.wait).toMatchObject({ status: 'finished' });
       yield* loaded.close;
     }).pipe(Effect.provide(BunFileSystem.layer)),
-  60_000,
 );
