@@ -198,7 +198,7 @@ test('stopping test:all ends the stage a compound suite is running, not only its
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-}, 30_000);
+});
 
 test('suites run side by side while the machine budget has room, and one at a time under --jobs', async () => {
   const root = mkdtempSync(join(tmpdir(), 'side-suites-'));
@@ -223,7 +223,7 @@ test('meets the other suite', async () => {
   await Bun.sleep(300);
   writeFileSync(${JSON.stringify(join(root, `${name}.ended`))}, '');
   expect(met).toBe(process.env.MEET === '1');
-}, 10_000);
+});
 `,
       );
     }
@@ -257,4 +257,4 @@ test('meets the other suite', async () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-}, 30_000);
+});

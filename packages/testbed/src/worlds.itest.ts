@@ -125,7 +125,7 @@ test('takes the world', async () => { await open(fresh, null); });
   const child = Bun.spawn(['bun', 'test', '--parallel=1', './a.itest.ts', './b.itest.ts'], { cwd: root, stdout: 'pipe', stderr: 'pipe' });
   const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
   expect(code, stdout + stderr).toBe(0);
-}, 60_000);
+});
 
 test('a run world is built once for every worker of the run, and each reads the value its builder published', async () => {
   const root = join(process.env['TMPDIR']!, `run-worlds-${crypto.randomUUID()}`);
@@ -174,7 +174,7 @@ test('takes the run world', async () => {
   expect(rows).toHaveLength(2);
   expect(new Set(rows.map((row) => row.world)).size).toBe(1);
   expect(rows[0]!.world).toBeGreaterThan(0);
-}, 60_000);
+});
 
 test('each worker builds a shared world once for every file that takes it, an own world stands apart, a failed build answers its waiters, and every world ends with the run', async () => {
   const root = join(process.env['TMPDIR']!, `worlds-${crypto.randomUUID()}`);
@@ -207,4 +207,4 @@ test('each worker builds a shared world once for every file that takes it, an ow
   };
   const worlds = [...shared, of('own'), of('early'), of('late')].map((row) => row.world);
   expect(await Promise.all(worlds.map(ended))).toEqual(worlds);
-}, 60_000);
+});

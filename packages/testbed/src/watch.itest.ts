@@ -111,7 +111,7 @@ test('a detached shell leaves a sleeper in its group and exits', async () => {
     bunTest(serialRoot, ['./a-loads.itest.ts', './b-group.itest.ts']),
     bunTest(hookedRoot, ['./c-world.itest.ts', './d-world.itest.ts']),
   ]);
-}, 30_000);
+});
 
 test('in a sequential run, what a file starts in its own beforeAll and ends in its afterAll is no residue of the file before it', () => {
   expect(hooked.code, hooked.output).toBe(0);
@@ -141,4 +141,4 @@ test('a world process is not residue at file end and dies with the worker, and w
   ]);
   expect(next.code, next.output).toBe(0);
   expect(alive(shared.pids['pidChild']!)).toBe(false);
-}, 30_000);
+});

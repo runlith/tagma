@@ -162,7 +162,7 @@ export type SlowRow = {
   readonly file: string;
   readonly test: number;
   readonly name: string | undefined;
-  readonly outcome: Case['outcome'] | undefined;
+  readonly outcome: string | undefined;
   readonly over: number;
   readonly wall: number;
   readonly cpu: number;
@@ -187,7 +187,7 @@ export const slowOf = (tests: readonly TestRow[], outcomes: readonly OutcomeRow[
         file: test.file,
         test: test.test,
         name: outcome?.name ?? test.name,
-        outcome: outcome?.outcome,
+        outcome: outcome?.outcome ?? test.outcome,
         over,
         wall: Math.round(wall),
         cpu: Math.round(test.body.cpu + test.tenant.cpu + test.world.cpu),
@@ -202,9 +202,18 @@ export const slowOf = (tests: readonly TestRow[], outcomes: readonly OutcomeRow[
 
 export const slowLine = (row: SlowRow): string => {
   const spawned = CHILD_KINDS.filter((kind) => row.fileChildren[kind].count > 0)
-    .map((kind) => `${kind} ${row.fileChildren[kind].count} (${seconds(row.fileChildren[kind].cpu)})`)
+    .map(
+      (kind) =>
+        `${kind} ${row.fileChildren[kind].count} (${seconds(row.fileChildren[kind].cpu)}${row.fileChildren[kind].unmeasured > 0 ? `, ${row.fileChildren[kind].unmeasured} without a CPU reading` : ''})`,
+    )
     .join(', ');
-  return `${seconds(row.wall)} over ${seconds(row.over)}: ${row.file}${row.name === undefined ? ` #${row.test}` : ` > ${row.name}`} — cpu ${seconds(row.cpu)}, waiting ${seconds(Math.max(0, row.wall - row.cpu))}${row.world > 0 ? `, world ${seconds(row.world)}` : ''}${row.tenant > 0 ? `, tenant ${seconds(row.tenant)}` : ''}${spawned === '' ? '' : `; its file spawned ${spawned}`}`;
+  const parts = [
+    `cpu ${seconds(row.cpu)} with its children`,
+    ...(row.wall > row.cpu ? [`${seconds(row.wall - row.cpu)} of wall not covered by measured cpu`] : []),
+    ...(row.world > 0 ? [`world ${seconds(row.world)}`] : []),
+    ...(row.tenant > 0 ? [`tenant ${seconds(row.tenant)}`] : []),
+  ];
+  return `${seconds(row.wall)} over ${seconds(row.over)}: ${row.file}${row.name === undefined ? ` #${row.test}` : ` > ${row.name}`}${row.outcome === undefined ? '' : ` (${row.outcome})`} — ${parts.join(', ')}${spawned === '' ? '' : `; its file spawned ${spawned}`}`;
 };
 
 export type OwnWorld = { readonly file: string; readonly kind: string; readonly own: string };

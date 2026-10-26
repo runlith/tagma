@@ -56,14 +56,14 @@ test('every guarded call fails a unit file at the call, naming the file and the 
     missing.map(([name]) => name),
     output,
   ).toEqual([]);
-}, 30_000);
+});
 
 test('the same calls run in .itest.ts files', async () => {
   const { root, files } = planted(() => 'itest');
   const { output, code } = await bunTest(root, files);
   expect(output).not.toMatch(/\.itest\.ts × /);
   expect(code, output).toBe(0);
-}, 30_000);
+});
 
 const OUTBOUND: Readonly<Record<string, { readonly imports: string; readonly call: string; readonly reached: string }>> = {
   fetch: { imports: '', call: "await fetch('https://example.com/')", reached: 'fetch https://example.com/' },
@@ -100,4 +100,4 @@ test('a resource file reaching a host beyond loopback fails at the call, whateve
     missing.map(([name]) => name),
     output,
   ).toEqual([]);
-}, 30_000);
+});

@@ -29,6 +29,7 @@ let claimed: string | undefined;
 const claim = (): void => {
   if (claimed === Bun.main) return;
   claimed = Bun.main;
+  setDefaultTimeout(HANG_MS);
   beforeAll(handoff, HANG_MS);
 };
 

@@ -224,7 +224,7 @@ test('external targets and failed reads retain their dependency and error channe
     rmSync(external, { recursive: true, force: true });
     rmSync(tagma, { recursive: true, force: true });
   }
-}, 30_000);
+});
 test('a read through open outside the inputs is audited in every Vitest file a worker runs, not only the first', async () => {
   const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-vitest-')));
   const external = realpathSync(mkdtempSync(join(tmpdir(), 'change-opened-')));
@@ -292,7 +292,7 @@ test('reads through open', () => {
     rmSync(external, { recursive: true, force: true });
     rmSync(tagma, { recursive: true, force: true });
   }
-}, 30_000);
+});
 test('the files a change check selects in one package run side by side on the machine budget', async () => {
   const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-side-')));
   const marks = realpathSync(mkdtempSync(join(tmpdir(), 'change-marks-')));
@@ -316,7 +316,7 @@ test('meets the other file', async () => {
   await Bun.sleep(300);
   writeFileSync(${JSON.stringify(join(marks, `${name}.ended`))}, '');
   expect(met).toBe(true);
-}, 10_000);
+});
 `,
       );
     writeFileSync(join(checkout, 'changed'), 'one.itest.ts\n');
@@ -351,7 +351,7 @@ test('meets the other file', async () => {
     rmSync(marks, { recursive: true, force: true });
     rmSync(tagma, { recursive: true, force: true });
   }
-}, 30_000);
+});
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), 'change-inputs-'));
   for (const [file, text] of files) {

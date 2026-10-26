@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { closeOnExec, lockExclusive } from '@runlith/file-lock/flock';
+import { HANG_MS } from './core/files.ts';
 import type { Cost, Meter } from './core/ledger.ts';
 import { quietly } from './core/pristine.ts';
 import { worldHome } from './core/run.ts';
@@ -23,8 +24,6 @@ export const kind = <I, S, P extends Params = null, E = never>(
   tag: Context.Key<I, S>,
   build: (params: P, home: string) => Effect.Effect<S, E, Scope.Scope>,
 ): Kind<I, S, P, E> => ({ tag, build });
-
-const BUILD_BUDGET_MS = 60_000;
 
 const NOTHING: Cost = { cpu: 0, wall: 0 };
 
@@ -119,7 +118,7 @@ const ownEarly = <I, S, P extends Params, E>(kind: Kind<I, S, P, E>, params: P, 
         return exit;
       }),
     ));
-  runner?.beforeAll(() => start().then(() => undefined), BUILD_BUDGET_MS);
+  runner?.beforeAll(() => start().then(() => undefined), HANG_MS);
   return Layer.effect(
     kind.tag,
     Effect.acquireRelease(
@@ -247,6 +246,6 @@ export const once = <V extends Params, P extends Params, E>(kind: RunKind<V, P, 
 export const world = <I, S, P extends Params, E>(kind: Kind<I, S, P, E>, params: P, taking: Taking = {}): Layer.Layer<I, E> => {
   if (taking.own !== undefined)
     return runner === undefined ? Layer.effect(kind.tag, own(kind, params, taking.own)) : ownEarly(kind, params, taking.own);
-  runner?.beforeAll(() => Effect.runPromise(taken(kind, params, false)), BUILD_BUDGET_MS);
+  runner?.beforeAll(() => Effect.runPromise(taken(kind, params, false)), HANG_MS);
   return Layer.effect(kind.tag, shared(kind, params));
 };

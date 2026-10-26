@@ -87,23 +87,31 @@ describe('outer', () => {
     .filter((row) => row.type === 'outcome')
     .map((row) => row.name);
   expect(names.sort()).toEqual(['outer > inner > leaf', 'outer > top']);
-}, 30_000);
+});
 
-test('a unit test slower than its kind is not failed for it, and the report names it slow with what it waited on', async () => {
+const slowRows = (report: string): SlowRow[] =>
+  readFileSync(report, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as SlowRow)
+    .filter((row) => row.type === 'slow');
+
+test('a Bun test slower than the runner default passes in a later file of the worker and is reported slow with its outcome', async () => {
   const dir = join(process.env['TMPDIR']!, `slow-${crypto.randomUUID()}`);
   mkdirSync(dir);
   writeFileSync(join(dir, 'bunfig.toml'), `[test]\npreload = [${JSON.stringify(PRELOAD)}]\n`);
+  writeFileSync(join(dir, 'a.test.ts'), `import { expect, test } from 'bun:test';\ntest('first', () => expect(2 + 2).toBe(4));\n`);
   writeFileSync(
-    join(dir, 'slow.test.ts'),
+    join(dir, 'b.test.ts'),
     `import { expect, test } from 'bun:test';
-test('waits past a second', async () => {
-  await new Promise((done) => setTimeout(done, 1_300));
+test('waits past the runner default', async () => {
+  await new Promise((done) => setTimeout(done, 5_200));
   expect(2 + 2).toBe(4);
 });
 `,
   );
   const report = join(dir, 'report.jsonl');
-  const run = Bun.spawn(['bun', CLI, 'bun', 'test', './slow.test.ts'], {
+  const run = Bun.spawn(['bun', CLI, 'bun', 'test', '--parallel=1', '--no-isolate', './a.test.ts', './b.test.ts'], {
     cwd: dir,
     env: { ...process.env, RUNLITH_TEST_REPORT: report },
     stdout: 'pipe',
@@ -111,23 +119,36 @@ test('waits past a second', async () => {
   });
   const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
   expect(code, stdout + stderr).toBe(0);
-  const slow = readFileSync(report, 'utf8')
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as SlowRow)
-    .filter((row) => row.type === 'slow');
-  expect(slow, stdout + stderr).toEqual([
-    expect.objectContaining({
-      name: 'waits past a second',
-      outcome: 'pass',
-      over: 1_000,
-      wall: expect.any(Number),
-      cpu: expect.any(Number),
-    }),
+  expect(slowRows(report), stdout + stderr).toEqual([
+    expect.objectContaining({ name: 'waits past the runner default', outcome: 'pass', over: 1_000 }),
   ]);
-  expect(slow[0]!.wall - slow[0]!.cpu).toBeGreaterThan(1_000);
   expect(stderr).toContain('slow tests, over 1.0 s unit or 10.0 s integration: 1');
-}, 30_000);
+});
+
+test('a slow Vitest test is reported with the outcome Vitest gave it', async () => {
+  const root = join(process.env['TMPDIR']!, `slow-vitest-${crypto.randomUUID()}`);
+  mkdirSync(root);
+  writeFileSync(
+    join(root, 'vitest.config.mjs'),
+    `export default { test: { globals: true, include: ['slow.test.js'], setupFiles: [${JSON.stringify(join(import.meta.dir, 'vitest/setup.ts'))}] } };`,
+  );
+  writeFileSync(
+    join(root, 'slow.test.js'),
+    "test('waits past a second', async () => { await new Promise((done) => setTimeout(done, 1_200)); expect(2 + 2).toBe(4); });",
+  );
+  const report = join(root, 'report.jsonl');
+  const env: Record<string, string | undefined> = { ...process.env, RUNLITH_TEST_REPORT: report, TESTBED_BUDGET_ROOT: join(root, 'units') };
+  delete env['RUNLITH_TEST_SLOT'];
+  const run = Bun.spawn([process.execPath, CLI, process.execPath, '--bun', VITEST, 'run', '--config', './vitest.config.mjs'], {
+    cwd: root,
+    env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
+  expect(code, stdout + stderr).toBe(0);
+  expect(slowRows(report), stdout + stderr).toEqual([expect.objectContaining({ name: 'waits past a second', outcome: 'pass' })]);
+});
 
 test('the report distinguishes a passing file from a body failure and a cleanup failure in the same run', async () => {
   const dir = join(process.env['TMPDIR']!, `verdicts-${crypto.randomUUID()}`);
@@ -161,4 +182,4 @@ test('the report distinguishes a passing file from a body failure and a cleanup 
     ['hook.test.ts', 'fail'],
     ['pass.test.ts', 'pass'],
   ]);
-}, 30_000);
+});

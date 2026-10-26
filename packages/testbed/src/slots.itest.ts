@@ -34,7 +34,7 @@ test('holds', async () => {
   ${index === 0 ? `writeFileSync(${JSON.stringify(niceness)}, \`\${getPriority()} \${Bun.spawnSync(['/bin/sh', '-c', 'ps -o nice= -p $$']).stdout.toString().trim()}\`);` : ''}
   if (!${holding(index)}) await Bun.sleep(600);
   while (${holding(index)} && !existsSync(${JSON.stringify(release)})) await Bun.sleep(5);
-}, 60_000);
+});
 `,
       );
     const child = Bun.spawn(
@@ -98,7 +98,7 @@ test('runs share the machine budget at entry, never exceed it, and get back the 
     await finish(runs);
     expect(existsSync(units)).toBe(true);
   }
-}, 60_000);
+});
 
 test('a run whose workers have finished gives their processes back while its last file still runs', async () => {
   const { start } = pool();
@@ -116,4 +116,4 @@ test('a run whose workers have finished gives their processes back while its las
   } finally {
     await finish(runs);
   }
-}, 60_000);
+});

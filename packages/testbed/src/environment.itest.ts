@@ -77,7 +77,7 @@ test('a repeat has a writable root and confined home', () => {
   expect(roots).toHaveLength(2);
   expect(new Set(roots).size).toBe(2);
   expect(roots.map((path) => existsSync(path))).toEqual([false, false]);
-}, 30_000);
+});
 
 test("a directory the next file makes while it is imported outlives the previous file's cleanup", async () => {
   const dir = plant('1-first.itest.ts', `import { test } from 'bun:test';\ntest('first', () => {});\n`);
@@ -100,7 +100,7 @@ test('second', () => {
   });
   const [stderr, code] = await Promise.all([new Response(run.stderr).text(), run.exited]);
   expect({ code, stderr: code === 0 ? '' : stderr }).toEqual({ code: 0, stderr: '' });
-}, 30_000);
+});
 
 test('a file whose setup fails before any test is charged no negative world', async () => {
   const dir = plant('1-ran.itest.ts', `import { test } from 'bun:test';\ntest('ran', () => {});\n`);
@@ -124,7 +124,7 @@ test('a file whose setup fails before any test is charged no negative world', as
     .filter((row) => row.type === 'file');
   expect(files.map((row) => row.file.split('/').at(-1))).toEqual(['1-ran.itest.ts', '2-unready.itest.ts', '3-ran.itest.ts']);
   expect(files.filter((row) => row.world.cpu < 0 || row.world.wall < 0)).toEqual([]);
-}, 30_000);
+});
 
 test('the report charges a child to the item it ran in: the body, or the tenant a fixture measured', async () => {
   const dir = plant(
@@ -170,4 +170,4 @@ test('tenant', async () => { const ms = await measure('tenant', burn); console.l
   expect(file.tenant.cpu).toBeGreaterThanOrEqual(child.tenant - 1);
   expect(file.body.cpu).toBeGreaterThanOrEqual(child.body - 1);
   expect(file.body.cpu).toBeLessThan(child.body + child.tenant);
-}, 30_000);
+});

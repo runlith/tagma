@@ -78,7 +78,7 @@ test('under Node, a unit file is refused at the call with its name and the kind,
   const { output, code, rows } = await vitest('node', {});
   expect(code).toBe(1);
   expectGuards(rows, output);
-}, 60_000);
+});
 
 test('under Bun, the same holds, and a process a test leaves behind fails its file', async () => {
   const { output, code, rows } = await vitest('bun', {
@@ -89,4 +89,4 @@ test('under Bun, the same holds, and a process a test leaves behind fails its fi
   expectGuards(rows, output);
   expect(rows.find((row) => row.type === 'file' && row.file.endsWith('/leaves.itest.ts'))?.residue).toBe(1);
   expect(output).toContain('sleep 311');
-}, 60_000);
+});
