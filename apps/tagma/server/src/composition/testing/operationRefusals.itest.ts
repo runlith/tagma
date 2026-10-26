@@ -39,7 +39,7 @@ const serversOver = (demo: EffectDemo, env: Record<string, string>) =>
     (context) => Context.get(context, McpServers),
   );
 
-layer(demoGraphLayer(), { excludeTestServices: true, testTimeout: 30_000, timeout: 60_000 })('operation refusals', (it) => {
+layer(demoGraphLayer(), { excludeTestServices: true })('operation refusals', (it) => {
   it.effect('claim_block names the refusal a replaced task answers with', () =>
     withDemo((demo) =>
       Effect.gen(function* () {

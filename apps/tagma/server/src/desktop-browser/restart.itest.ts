@@ -109,5 +109,4 @@ it.live(
       yield* click(page).pipe(Effect.provide(after));
       expect(yield* items(page).pipe(Effect.provide(after))).toBe(3);
     }),
-  45_000,
 );

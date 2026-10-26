@@ -9,7 +9,7 @@ const op = Effect.fnUntraced(function* (cwd: string, id: string, input: unknown,
   return yield* world.tagma(['op', id, '--json', ...(project === undefined ? [] : ['--project', project]), JSON.stringify(input)], { cwd });
 });
 
-layer(terminalFixture, { excludeTestServices: true, testTimeout: 60_000 })('project selection', (it) => {
+layer(terminalFixture, { excludeTestServices: true })('project selection', (it) => {
   it.effect('an explicit project preserves its current worktree and still selects another project', () =>
     Effect.gen(function* () {
       const world = yield* TerminalFixture;

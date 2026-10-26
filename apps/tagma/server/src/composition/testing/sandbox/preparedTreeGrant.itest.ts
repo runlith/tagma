@@ -6,7 +6,7 @@ import { dockerSuite, dockerSaid } from '../../../sandbox/testing/doubles.js';
 import { LIMITS, preparedTreeFixture, PreparedTreeFixture, REGISTRY } from '../preparedTreeFixture.js';
 
 dockerSuite('prepared-tree grants', () => {
-  layer(preparedTreeFixture(), { excludeTestServices: true, timeout: '60 seconds' })('resources', (it) => {
+  layer(preparedTreeFixture(), { excludeTestServices: true })('resources', (it) => {
     it.effect(
       'a granted build seals an offline toolchain whose sandbox copies diverge without changing the artifact or host checkout',
       () =>
@@ -65,7 +65,6 @@ dockerSuite('prepared-tree grants', () => {
             expect(yield* files.exists(join(world.checkout, 'node_modules'))).toBe(false);
           }).pipe(Effect.provide(world.context)),
         ),
-      60_000,
     );
   });
 });

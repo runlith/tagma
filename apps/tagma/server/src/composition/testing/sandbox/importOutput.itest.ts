@@ -203,220 +203,215 @@ class ImportFixture extends Context.Service<ImportFixture, Effect.Success<typeof
 
 dockerSuite('imported output', () => {
   const fixture = Layer.effect(ImportFixture, makeImportWorld).pipe(Layer.provide(world(sandboxResources, { source: 'import' })));
-  layer(fixture, { excludeTestServices: true, timeout: '60 seconds' })('resources', (it) => {
-    it.effect(
-      'a produced tree imports through its native door and change record, seals unbound reads and admits bound output',
-      () =>
-        ImportFixture.use((world) =>
-          Effect.gen(function* () {
-            {
-              const landed = yield* world.importing(MINE, {
+  layer(fixture, { excludeTestServices: true })('resources', (it) => {
+    it.effect('a produced tree imports through its native door and change record, seals unbound reads and admits bound output', () =>
+      ImportFixture.use((world) =>
+        Effect.gen(function* () {
+          {
+            const landed = yield* world.importing(MINE, {
+              source: world.source,
+              from: 'generated.lock',
+              to: 'generated.lock',
+              expect: IMPORT_BASE_ABSENT,
+            });
+            expect(landed.created).toBe(true);
+            expect(landed.digest).toBe(contentDigest('lock = 1\n'));
+            expect(yield* world.hostFiles.readFileString(join(world.checkout, 'generated.lock'))).toBe('lock = 1\n');
+            yield* world.importing(MINE, { source: world.source, from: 'src/made.ts', to: 'src/made.ts', expect: IMPORT_BASE_ABSENT });
+            const rows = yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'generated.lock' });
+            expect(rows.map((row) => [row.holder, row.origin, row.lines])).toEqual([[MINE, 'write', 1]]);
+            const receipt = yield* submitOver(
+              world.faces,
+              world.checkout,
+              world.store,
+              world.units,
+              world.origin,
+              { projectId: world.projectId, tasks: [], taking: [], subject: 'the produced files' },
+              noRuleInPlay,
+              world.producer,
+            );
+            expect(receipt.status).toBe('landed');
+            if (receipt.status !== 'landed') return yield* Effect.die('the produced files did not land');
+            expect([...receipt.committed].sort()).toEqual(['generated.lock', 'src/made.ts']);
+            expect((yield* world.git('show', '--name-only', '--format=', 'HEAD')).trim().split('\n').sort()).toEqual([
+              'generated.lock',
+              'src/made.ts',
+            ]);
+            expect(yield* world.git('show', 'HEAD:generated.lock')).toBe('lock = 1\n');
+            expect(yield* world.git('status', '--porcelain')).toContain('src/somebody-else.ts');
+            expect(yield* world.hostFiles.readFileString(join(world.checkout, 'src', 'somebody-else.ts'))).toBe(
+              'export const theirs = 1;\n',
+            );
+            yield* world.hostFiles.writeFileString(join(world.checkout, 'generated.lock'), 'somebody rewrote it\n');
+            const before = yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'generated.lock' });
+            const refused = yield* world
+              .importing(MINE, {
                 source: world.source,
                 from: 'generated.lock',
                 to: 'generated.lock',
-                expect: IMPORT_BASE_ABSENT,
-              });
-              expect(landed.created).toBe(true);
-              expect(landed.digest).toBe(contentDigest('lock = 1\n'));
-              expect(yield* world.hostFiles.readFileString(join(world.checkout, 'generated.lock'))).toBe('lock = 1\n');
-              yield* world.importing(MINE, { source: world.source, from: 'src/made.ts', to: 'src/made.ts', expect: IMPORT_BASE_ABSENT });
-              const rows = yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'generated.lock' });
-              expect(rows.map((row) => [row.holder, row.origin, row.lines])).toEqual([[MINE, 'write', 1]]);
-              const receipt = yield* submitOver(
-                world.faces,
-                world.checkout,
-                world.store,
-                world.units,
-                world.origin,
-                { projectId: world.projectId, tasks: [], taking: [], subject: 'the produced files' },
-                noRuleInPlay,
-                world.producer,
-              );
-              expect(receipt.status).toBe('landed');
-              if (receipt.status !== 'landed') return yield* Effect.die('the produced files did not land');
-              expect([...receipt.committed].sort()).toEqual(['generated.lock', 'src/made.ts']);
-              expect((yield* world.git('show', '--name-only', '--format=', 'HEAD')).trim().split('\n').sort()).toEqual([
-                'generated.lock',
-                'src/made.ts',
-              ]);
-              expect(yield* world.git('show', 'HEAD:generated.lock')).toBe('lock = 1\n');
-              expect(yield* world.git('status', '--porcelain')).toContain('src/somebody-else.ts');
-              expect(yield* world.hostFiles.readFileString(join(world.checkout, 'src', 'somebody-else.ts'))).toBe(
-                'export const theirs = 1;\n',
-              );
-              yield* world.hostFiles.writeFileString(join(world.checkout, 'generated.lock'), 'somebody rewrote it\n');
-              const before = yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'generated.lock' });
-              const refused = yield* world
-                .importing(MINE, {
-                  source: world.source,
-                  from: 'generated.lock',
-                  to: 'generated.lock',
-                  expect: contentDigest('lock = 1\n'),
-                })
-                .pipe(Effect.flip);
-              expect(refused._tag).toBe('ImportRefused');
-              expect(refused.message).toContain(contentDigest('somebody rewrote it\n'));
-              expect(yield* world.hostFiles.readFileString(join(world.checkout, 'generated.lock'))).toBe('somebody rewrote it\n');
-              expect((yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'generated.lock' })).map((row) => row.id)).toEqual(
-                before.map((row) => row.id),
-              );
-            }
-            {
-              const record = Context.get(world.context, ChangeRecord);
-              const destination = toolOptions({
-                cwd: world.checkout,
-                allowOutsideCwd: true,
-                changes: record.changes({ work: { projectId: world.projectId, threadId: MINE } }),
-                comments: () => Effect.succeed('allowed' as const),
-                unowned: [CHECKOUT_DIRECTORY],
-              });
-              const tools = yield* fixtureNativeCatalog(
-                {
-                  place: { root: world.checkout, origin: null },
-                  caller: {
-                    actor: {
-                      kind: 'thread',
-                      threadId: MINE,
-                      projectId: world.projectId,
-                      principalId: 'operator',
-                      session: { harness: 'tagma', key: MINE },
-                    },
-                    files: { path: join(world.home, 'scratch'), resolve: (candidate) => join(world.home, 'scratch', candidate) },
+                expect: contentDigest('lock = 1\n'),
+              })
+              .pipe(Effect.flip);
+            expect(refused._tag).toBe('ImportRefused');
+            expect(refused.message).toContain(contentDigest('somebody rewrote it\n'));
+            expect(yield* world.hostFiles.readFileString(join(world.checkout, 'generated.lock'))).toBe('somebody rewrote it\n');
+            expect((yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'generated.lock' })).map((row) => row.id)).toEqual(
+              before.map((row) => row.id),
+            );
+          }
+          {
+            const record = Context.get(world.context, ChangeRecord);
+            const destination = toolOptions({
+              cwd: world.checkout,
+              allowOutsideCwd: true,
+              changes: record.changes({ work: { projectId: world.projectId, threadId: MINE } }),
+              comments: () => Effect.succeed('allowed' as const),
+              unowned: [CHECKOUT_DIRECTORY],
+            });
+            const tools = yield* fixtureNativeCatalog(
+              {
+                place: { root: world.checkout, origin: null },
+                caller: {
+                  actor: {
+                    kind: 'thread',
+                    threadId: MINE,
+                    projectId: world.projectId,
+                    principalId: 'operator',
+                    session: { harness: 'tagma', key: MINE },
                   },
-                  project: { id: world.projectId, name: 'import-fixture' },
-                  vocabulary: () => VOCABULARY,
-                  identity: sessionIdentity,
-                  world: 'checkout',
-                  graphRoot: world.checkout,
-                  owners: world.context.pipe(
-                    Context.add(ImportDestination, destination),
-                    Context.add(GuestFileReader, world.imports(MINE)),
-                    Context.add(RuleChecks, NO_RULES),
-                    Context.add(OperationChecks, operationChecks(NO_RULES)),
-                  ),
+                  files: { path: join(world.home, 'scratch'), resolve: (candidate) => join(world.home, 'scratch', candidate) },
                 },
-                ['import_output'],
-              );
-              const tool = tools.import_output;
-              if (tool === undefined) return yield* Effect.die('the composed catalog offers no import_output');
-              const execute = toolExecute(tool);
-              if (execute === null) return yield* Effect.die('the composed import_output has no body');
-              const door = (input: InputOf<typeof SANDBOX_OPERATIONS.import_output>) =>
-                Effect.map(execute(input, { toolCallId: 'call-door', caller: unthreadedCaller, messages: [] }), (answered) =>
-                  answered instanceof ToolAnswer ? answered.value : answered,
-                );
-              const input = { sandbox: world.prepared.id, from: 'src/made.ts', to: 'src/made-by-door.ts', expect: IMPORT_BASE_ABSENT };
-              expect(yield* door(input)).toMatchObject({ status: 'imported', created: true });
-              expect(yield* world.hostFiles.readFileString(join(world.checkout, 'src', 'made-by-door.ts'))).toBe(
-                'export const made = 1;\n',
-              );
-              expect(
-                (yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'src/made-by-door.ts' })).map((row) => [
-                  row.holder,
-                  row.origin,
-                  row.lines,
-                ]),
-              ).toEqual([[MINE, 'write', 1]]);
-              expect(yield* door(input)).toMatchObject({
-                value: { status: 'refused', code: 'expected-base' },
-                verdict: { kind: 'refused', refusal: { code: 'expected-base' } },
-              });
-            }
-            {
-              for (const from of ['../etc/hostname', '/etc/hostname']) {
-                const refused = yield* world
-                  .importing(MINE, { source: world.source, from, to: 'stolen.txt', expect: IMPORT_BASE_ABSENT })
-                  .pipe(Effect.flip);
-                expect(refused.message).toContain("inside the guest's tree");
-              }
-              expect(yield* world.hostFiles.exists(join(world.checkout, 'stolen.txt'))).toBe(false);
-            }
-            {
-              yield* world.backend.start(world.prepared.runtime);
-              yield* world.backend.run(world.prepared.runtime, [
-                '/bin/sh',
-                '-c',
-                'date +%s%N > churn.txt; nohup sh -c "while :; do date +%s%N > churn.tmp; mv churn.tmp churn.txt; done" >/dev/null 2>&1 & echo started',
-              ]);
-              const read = Effect.scoped(
-                world.files.read(world.prepared.id, 'churn.txt', { ownerId: 'operator', projectId: world.projectId }),
-              );
-              const first = yield* read;
-              expect((yield* read).text).toBe(first.text);
-              expect(first.text.trim()).toMatch(/^\d+$/);
-              expect((yield* world.backend.inspect(world.prepared.runtime)).status).toBe('stopped');
-            }
-            {
-              const refused = yield* Effect.scoped(
-                world.files.read(world.prepared.id, 'generated.lock', {
-                  ownerId: 'somebody-else',
-                  projectId: world.projectId,
-                }),
-              ).pipe(Effect.flip);
-              expect(refused.message).toContain('another owner');
-              const child = yield* world.threads.insert({
-                ownerId: 'operator',
-                agentId: 'tagma',
-                hostKind: 'sandbox',
-                hostId: world.prepared.id,
-              });
-              yield* scopeRecord(world.store.db, child.id, { projectId: world.projectId });
-              yield* world.units.write('importOutput.born', (tx) =>
-                world.sandboxes.admit(
-                  { host: { kind: 'sandbox', id: world.prepared.id }, child, projectId: world.projectId, carried: 'fresh' },
-                  tx,
+                project: { id: world.projectId, name: 'import-fixture' },
+                vocabulary: () => VOCABULARY,
+                identity: sessionIdentity,
+                world: 'checkout',
+                graphRoot: world.checkout,
+                owners: world.context.pipe(
+                  Context.add(ImportDestination, destination),
+                  Context.add(GuestFileReader, world.imports(MINE)),
+                  Context.add(RuleChecks, NO_RULES),
+                  Context.add(OperationChecks, operationChecks(NO_RULES)),
                 ),
+              },
+              ['import_output'],
+            );
+            const tool = tools.import_output;
+            if (tool === undefined) return yield* Effect.die('the composed catalog offers no import_output');
+            const execute = toolExecute(tool);
+            if (execute === null) return yield* Effect.die('the composed import_output has no body');
+            const door = (input: InputOf<typeof SANDBOX_OPERATIONS.import_output>) =>
+              Effect.map(execute(input, { toolCallId: 'call-door', caller: unthreadedCaller, messages: [] }), (answered) =>
+                answered instanceof ToolAnswer ? answered.value : answered,
               );
-              expect((yield* world.sandboxes.ofThread(child.id))?.id).toBe(world.prepared.id);
-              yield* world.backend.start(world.prepared.runtime);
-              yield* world.backend.run(world.prepared.runtime, ['/bin/sh', '-c', 'printf "export const theirs = 3;\\n" > src/child.ts']);
-              const landed = yield* world.importing(MINE, {
-                source: world.source,
-                from: 'src/child.ts',
-                to: 'src/child.ts',
-                expect: IMPORT_BASE_ABSENT,
-              });
-              expect(yield* world.hostFiles.readFileString(join(world.checkout, 'src', 'child.ts'))).toBe('export const theirs = 3;\n');
-              expect(landed.from).toContain(child.id);
-              expect((yield* world.backend.inspect(world.prepared.runtime)).status).toBe('running');
-              expect(
-                (yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'src/child.ts' })).map((row) => [row.holder, row.origin]),
-              ).toEqual([[MINE, 'write']]);
+            const input = { sandbox: world.prepared.id, from: 'src/made.ts', to: 'src/made-by-door.ts', expect: IMPORT_BASE_ABSENT };
+            expect(yield* door(input)).toMatchObject({ status: 'imported', created: true });
+            expect(yield* world.hostFiles.readFileString(join(world.checkout, 'src', 'made-by-door.ts'))).toBe('export const made = 1;\n');
+            expect(
+              (yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'src/made-by-door.ts' })).map((row) => [
+                row.holder,
+                row.origin,
+                row.lines,
+              ]),
+            ).toEqual([[MINE, 'write', 1]]);
+            expect(yield* door(input)).toMatchObject({
+              value: { status: 'refused', code: 'expected-base' },
+              verdict: { kind: 'refused', refusal: { code: 'expected-base' } },
+            });
+          }
+          {
+            for (const from of ['../etc/hostname', '/etc/hostname']) {
+              const refused = yield* world
+                .importing(MINE, { source: world.source, from, to: 'stolen.txt', expect: IMPORT_BASE_ABSENT })
+                .pipe(Effect.flip);
+              expect(refused.message).toContain("inside the guest's tree");
             }
-            {
-              const contested = join(world.checkout, 'src', 'contested.ts');
-              const text = 'export const theirs = 2;\n';
-              yield* world.hostFiles.writeFileString(contested, text);
-              yield* reporterOf(world.intake, world.projectId, THEIRS).record({
-                origin: 'write',
-                path: contested,
-                at: new Date(yield* Clock.currentTimeMillis),
-                before: contentDigest(''),
-                after: contentDigest(text),
-              });
-              yield* world.importing(MINE, {
-                source: world.source,
-                from: 'src/made.ts',
-                to: 'src/contested.ts',
-                expect: contentDigest(text),
-              });
-              expect(
-                (yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'src/contested.ts' })).map((row) => [
-                  row.holder,
-                  row.origin,
-                  row.lines,
-                ]),
-              ).toEqual([
-                [MINE, 'write', 1],
-                [THEIRS, 'write', null],
-              ]);
-              expect(yield* world.hostFiles.readFileString(contested)).toBe(
-                yield* world.hostFiles.readFileString(join(world.checkout, 'src', 'made.ts')),
-              );
-            }
-          }).pipe(Effect.provide(world.context)),
-        ),
-      60_000,
+            expect(yield* world.hostFiles.exists(join(world.checkout, 'stolen.txt'))).toBe(false);
+          }
+          {
+            yield* world.backend.start(world.prepared.runtime);
+            yield* world.backend.run(world.prepared.runtime, [
+              '/bin/sh',
+              '-c',
+              'date +%s%N > churn.txt; nohup sh -c "while :; do date +%s%N > churn.tmp; mv churn.tmp churn.txt; done" >/dev/null 2>&1 & echo started',
+            ]);
+            const read = Effect.scoped(
+              world.files.read(world.prepared.id, 'churn.txt', { ownerId: 'operator', projectId: world.projectId }),
+            );
+            const first = yield* read;
+            expect((yield* read).text).toBe(first.text);
+            expect(first.text.trim()).toMatch(/^\d+$/);
+            expect((yield* world.backend.inspect(world.prepared.runtime)).status).toBe('stopped');
+          }
+          {
+            const refused = yield* Effect.scoped(
+              world.files.read(world.prepared.id, 'generated.lock', {
+                ownerId: 'somebody-else',
+                projectId: world.projectId,
+              }),
+            ).pipe(Effect.flip);
+            expect(refused.message).toContain('another owner');
+            const child = yield* world.threads.insert({
+              ownerId: 'operator',
+              agentId: 'tagma',
+              hostKind: 'sandbox',
+              hostId: world.prepared.id,
+            });
+            yield* scopeRecord(world.store.db, child.id, { projectId: world.projectId });
+            yield* world.units.write('importOutput.born', (tx) =>
+              world.sandboxes.admit(
+                { host: { kind: 'sandbox', id: world.prepared.id }, child, projectId: world.projectId, carried: 'fresh' },
+                tx,
+              ),
+            );
+            expect((yield* world.sandboxes.ofThread(child.id))?.id).toBe(world.prepared.id);
+            yield* world.backend.start(world.prepared.runtime);
+            yield* world.backend.run(world.prepared.runtime, ['/bin/sh', '-c', 'printf "export const theirs = 3;\\n" > src/child.ts']);
+            const landed = yield* world.importing(MINE, {
+              source: world.source,
+              from: 'src/child.ts',
+              to: 'src/child.ts',
+              expect: IMPORT_BASE_ABSENT,
+            });
+            expect(yield* world.hostFiles.readFileString(join(world.checkout, 'src', 'child.ts'))).toBe('export const theirs = 3;\n');
+            expect(landed.from).toContain(child.id);
+            expect((yield* world.backend.inspect(world.prepared.runtime)).status).toBe('running');
+            expect(
+              (yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'src/child.ts' })).map((row) => [row.holder, row.origin]),
+            ).toEqual([[MINE, 'write']]);
+          }
+          {
+            const contested = join(world.checkout, 'src', 'contested.ts');
+            const text = 'export const theirs = 2;\n';
+            yield* world.hostFiles.writeFileString(contested, text);
+            yield* reporterOf(world.intake, world.projectId, THEIRS).record({
+              origin: 'write',
+              path: contested,
+              at: new Date(yield* Clock.currentTimeMillis),
+              before: contentDigest(''),
+              after: contentDigest(text),
+            });
+            yield* world.importing(MINE, {
+              source: world.source,
+              from: 'src/made.ts',
+              to: 'src/contested.ts',
+              expect: contentDigest(text),
+            });
+            expect(
+              (yield* recordOfPath(world.store, { checkout: 'repo-root', path: 'src/contested.ts' })).map((row) => [
+                row.holder,
+                row.origin,
+                row.lines,
+              ]),
+            ).toEqual([
+              [MINE, 'write', 1],
+              [THEIRS, 'write', null],
+            ]);
+            expect(yield* world.hostFiles.readFileString(contested)).toBe(
+              yield* world.hostFiles.readFileString(join(world.checkout, 'src', 'made.ts')),
+            );
+          }
+        }).pipe(Effect.provide(world.context)),
+      ),
     );
   });
 });

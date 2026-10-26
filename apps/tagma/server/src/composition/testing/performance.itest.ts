@@ -23,8 +23,6 @@ const read = (world: World, init: { method: string; body: unknown }) =>
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 60_000,
 })('performance door', (it) => {
   it.effect('HTTP and the runtime projection answer one PerformanceReadValue contract', () =>
     Effect.gen(function* () {

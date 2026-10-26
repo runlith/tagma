@@ -16,32 +16,29 @@ const created = Effect.fnUntraced(function* (checkout: TerminalCheckout, input: 
   return (JSON.parse(born.out) as { block: { name: string } }).block.name;
 });
 
-layer(Layer.merge(terminalFixture, BunFileSystem.layer), { excludeTestServices: true, testTimeout: 60_000 })(
-  'document operations',
-  (it) => {
-    it.effect('an apply_batch input names the project it lands in, and refuses when nothing does', () =>
-      Effect.gen(function* () {
-        const world = yield* TerminalFixture;
-        const checkout = yield* world.checkout();
-        const files = yield* FileSystem.FileSystem;
-        const area = yield* created(checkout, { tags: ['idea'], title: 'landing area' });
-        const elsewhere = yield* world.directory('outside');
-        const document = join(elsewhere, 'document.json');
-        yield* files.writeFileString(
-          document,
-          JSON.stringify({ ops: [{ op: 'create', tags: ['idea'], title: 'landed by name', parentId: area }] }),
-        );
-        const homeless = yield* opIn(elsewhere, 'apply_batch', { file: document });
-        expect(homeless.code).toBe(2);
-        expect(JSON.parse(homeless.out)).toMatchObject({ code: 'project-required' });
-        const named = yield* opIn(elsewhere, 'apply_batch', { file: document }, checkout.name);
-        expect(named.code).toBe(0);
-        const searched = yield* opIn(elsewhere, 'search_blocks', { query: 'landed by name' }, checkout.name);
-        expect((JSON.parse(searched.out) as { blocks: unknown[] }).blocks[0]).toMatchObject({
-          title: 'landed by name',
-          parentTitle: 'landing area',
-        });
-      }),
-    );
-  },
-);
+layer(Layer.merge(terminalFixture, BunFileSystem.layer), { excludeTestServices: true })('document operations', (it) => {
+  it.effect('an apply_batch input names the project it lands in, and refuses when nothing does', () =>
+    Effect.gen(function* () {
+      const world = yield* TerminalFixture;
+      const checkout = yield* world.checkout();
+      const files = yield* FileSystem.FileSystem;
+      const area = yield* created(checkout, { tags: ['idea'], title: 'landing area' });
+      const elsewhere = yield* world.directory('outside');
+      const document = join(elsewhere, 'document.json');
+      yield* files.writeFileString(
+        document,
+        JSON.stringify({ ops: [{ op: 'create', tags: ['idea'], title: 'landed by name', parentId: area }] }),
+      );
+      const homeless = yield* opIn(elsewhere, 'apply_batch', { file: document });
+      expect(homeless.code).toBe(2);
+      expect(JSON.parse(homeless.out)).toMatchObject({ code: 'project-required' });
+      const named = yield* opIn(elsewhere, 'apply_batch', { file: document }, checkout.name);
+      expect(named.code).toBe(0);
+      const searched = yield* opIn(elsewhere, 'search_blocks', { query: 'landed by name' }, checkout.name);
+      expect((JSON.parse(searched.out) as { blocks: unknown[] }).blocks[0]).toMatchObject({
+        title: 'landed by name',
+        parentTitle: 'landing area',
+      });
+    }),
+  );
+});

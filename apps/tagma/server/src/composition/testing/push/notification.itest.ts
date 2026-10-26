@@ -75,14 +75,14 @@ it.live(
         body: '',
         question: { text: 'Raise to 40?', options: ['Yes', 'No'] },
       });
-      const reached = yield* Queue.take(pushes).pipe(Effect.timeout('5 seconds'));
+      const reached = yield* Queue.take(pushes);
       expect(reached).toMatchObject({ tag: `notification:${sent.id}`, url: `/?notification=${sent.id}`, body: 'Raise to 40?' });
 
       const answered = yield* notifications.answer(sent.id, 'Yes');
       const again = yield* notifications.answer(sent.id, 'No');
       expect(answered).toMatchObject({ repeated: false, outcome: { kind: 'answered', answer: 'Yes' } });
       expect(again).toMatchObject({ repeated: true, outcome: answered.outcome });
-      expect(yield* Queue.take(handed).pipe(Effect.timeout('5 seconds'))).toMatchObject({
+      expect(yield* Queue.take(handed)).toMatchObject({
         id: sent.id,
         sender: 'plugin:poker',
         kind: 'answered',

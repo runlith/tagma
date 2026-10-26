@@ -122,8 +122,6 @@ const turn = Effect.fnUntraced(function* (threadId: string) {
 
 layer(Layer.effect(Table, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 30_000,
 })('plugin agents', (it) => {
   it.effect(
     'the plugin’s agent is offered under its id in trust, holds the plugin’s own tools that a plain agent never sees, and its turn’s end reaches the process',

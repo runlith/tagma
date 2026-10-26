@@ -161,5 +161,5 @@ it.live('the real RPC socket preserves frame order and shares lane receipts betw
       [2, 'applied'],
       [3, 'applied'],
     ]);
-  }).pipe(Effect.timeout('10 seconds')),
+  }),
 );

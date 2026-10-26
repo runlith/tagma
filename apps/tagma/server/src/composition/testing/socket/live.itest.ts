@@ -117,146 +117,137 @@ const signed = Effect.fnUntraced(function* <A, E>(threadId: string, work: (calle
   return yield* work(caller);
 });
 
-layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true, timeout: '60 seconds' })(
-  'live socket',
-  (it) => {
-    it.effect('a feed of a project this installation does not hold is refused before its channel opens', () =>
-      Effect.gen(function* () {
-        const { client } = yield* World;
-        const unknown = 987654;
-        const refusals = yield* Effect.all(
-          [
-            Effect.flip(Stream.runCollect(client['graph.subscribe']({ projectId: unknown }))),
-            Effect.flip(Stream.runCollect(client['worktrees.subscribe']({ projectId: unknown, start: 0, limit: 1 }))),
-            Effect.flip(Stream.runCollect(client['commands.subscribe']({ projectId: unknown, ended: 0 }))),
-          ],
-          { concurrency: 'unbounded' },
-        );
-        for (const refusal of refusals) expect(refusal).toMatchObject({ code: 'not-found' });
-      }),
-    );
+layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('live socket', (it) => {
+  it.effect('a feed of a project this installation does not hold is refused before its channel opens', () =>
+    Effect.gen(function* () {
+      const { client } = yield* World;
+      const unknown = 987654;
+      const refusals = yield* Effect.all(
+        [
+          Effect.flip(Stream.runCollect(client['graph.subscribe']({ projectId: unknown }))),
+          Effect.flip(Stream.runCollect(client['worktrees.subscribe']({ projectId: unknown, start: 0, limit: 1 }))),
+          Effect.flip(Stream.runCollect(client['commands.subscribe']({ projectId: unknown, ended: 0 }))),
+        ],
+        { concurrency: 'unbounded' },
+      );
+      for (const refusal of refusals) expect(refusal).toMatchObject({ code: 'not-found' });
+    }),
+  );
 
-    it.effect('operator feeds serve the app and refuse thread callers in every approval mode', () =>
-      Effect.gen(function* () {
-        const { client, runtime } = yield* World;
-        const project = yield* addProject('feed-callers');
-        const trust = yield* birthsOf(runtime.owners).create({ projectId: project.id, createdBySessionId: null, approvalMode: 'trust' });
-        const bypass = yield* birthsOf(runtime.owners).create({ projectId: project.id, createdBySessionId: null, approvalMode: 'bypass' });
-        const first = <A, E>(stream: Stream.Stream<A, E>) => Stream.runCollect(Stream.take(stream, 1));
-        expect(yield* first(client['commands.subscribe']({ projectId: project.id, ended: 0 }))).toMatchObject([
-          { _tag: 'Snapshot', snapshot: { projectId: project.id, active: [], ended: [] } },
-        ]);
-        expect(yield* first(client['artifacts.thread']({ projectId: project.id, threads: [trust.thread.id] }))).toEqual([
-          { pages: [], total: 0 },
-        ]);
-        expect(yield* first(client['installation.next']({}))).toMatchObject([
-          { pid: process.pid, offers: [], watched: false, revision: expect.any(Number) },
-        ]);
-        for (const threadId of [trust.thread.id, bypass.thread.id]) {
-          yield* signed(threadId, (caller) =>
-            Effect.gen(function* () {
-              const refused = yield* Effect.flip(first(caller['artifacts.thread']({ projectId: project.id, threads: [threadId] })));
-              expect(refused).toMatchObject({ code: 'operator-only', unblock: expect.any(Array) });
-              const machine = yield* Effect.flip(first(caller['attention.subscribe']({})));
-              expect(machine).toMatchObject({ code: 'operator-only', unblock: expect.any(Array) });
-              const source = yield* Effect.flip(first(caller['installation.next']({})));
-              expect(source).toMatchObject({ code: 'operator-only', unblock: expect.any(Array) });
-            }),
-          ).pipe(Effect.scoped, Effect.timeout('30 seconds'));
-        }
-      }),
-    );
+  it.effect('operator feeds serve the app and refuse thread callers in every approval mode', () =>
+    Effect.gen(function* () {
+      const { client, runtime } = yield* World;
+      const project = yield* addProject('feed-callers');
+      const trust = yield* birthsOf(runtime.owners).create({ projectId: project.id, createdBySessionId: null, approvalMode: 'trust' });
+      const bypass = yield* birthsOf(runtime.owners).create({ projectId: project.id, createdBySessionId: null, approvalMode: 'bypass' });
+      const first = <A, E>(stream: Stream.Stream<A, E>) => Stream.runCollect(Stream.take(stream, 1));
+      expect(yield* first(client['commands.subscribe']({ projectId: project.id, ended: 0 }))).toMatchObject([
+        { _tag: 'Snapshot', snapshot: { projectId: project.id, active: [], ended: [] } },
+      ]);
+      expect(yield* first(client['artifacts.thread']({ projectId: project.id, threads: [trust.thread.id] }))).toEqual([
+        { pages: [], total: 0 },
+      ]);
+      expect(yield* first(client['installation.next']({}))).toMatchObject([
+        { pid: process.pid, offers: [], watched: false, revision: expect.any(Number) },
+      ]);
+      for (const threadId of [trust.thread.id, bypass.thread.id]) {
+        yield* signed(threadId, (caller) =>
+          Effect.gen(function* () {
+            const refused = yield* Effect.flip(first(caller['artifacts.thread']({ projectId: project.id, threads: [threadId] })));
+            expect(refused).toMatchObject({ code: 'operator-only', unblock: expect.any(Array) });
+            const machine = yield* Effect.flip(first(caller['attention.subscribe']({})));
+            expect(machine).toMatchObject({ code: 'operator-only', unblock: expect.any(Array) });
+            const source = yield* Effect.flip(first(caller['installation.next']({})));
+            expect(source).toMatchObject({ code: 'operator-only', unblock: expect.any(Array) });
+          }),
+        ).pipe(Effect.scoped);
+      }
+    }),
+  );
 
-    it.effect('a subscriber opens on resync, and a committed write arrives as a change carrying the fresh rows', () =>
-      Effect.gen(function* () {
-        const { client } = yield* World;
-        const project = yield* addProject('p');
-        const frames = yield* Queue.make<unknown>();
-        yield* Effect.forkScoped(
-          Stream.runForEach(client['graph.subscribe']({ projectId: project.id }), (frame) => Queue.offer(frames, frame)),
-        );
-        expect(yield* Queue.take(frames)).toEqual({ type: 'resync' });
+  it.effect('a subscriber opens on resync, and a committed write arrives as a change carrying the fresh rows', () =>
+    Effect.gen(function* () {
+      const { client } = yield* World;
+      const project = yield* addProject('p');
+      const frames = yield* Queue.make<unknown>();
+      yield* Effect.forkScoped(
+        Stream.runForEach(client['graph.subscribe']({ projectId: project.id }), (frame) => Queue.offer(frames, frame)),
+      );
+      expect(yield* Queue.take(frames)).toEqual({ type: 'resync' });
 
-        const created = yield* addBlock({ projectId: project.id, tags: ['task'], title: 'live', body: 'detail' });
-        const change = (yield* Queue.take(frames)) as {
-          type: string;
-          projectId: number;
-          blocks: { name: string; tags: readonly string[]; fields: Readonly<Record<string, unknown>> }[];
-          ready: string[];
-          events: { op: string }[];
-        };
-        expect(change.type).toBe('change');
-        expect(change.projectId).toBe(project.id);
-        expect(change.blocks.map((row) => row.name)).toContain(created.name);
-        const row = change.blocks.find((block) => block.name === created.name);
-        expect(row).not.toHaveProperty('body');
-        expect(row).not.toHaveProperty('payload');
-        expect(row?.tags).toEqual(['task']);
-        expect(row?.fields).toEqual({ status: 'open' });
-        expect(change.ready).toContain(created.name);
-        expect(change.events.map((entry) => entry.op)).toContain('create');
-      }),
-    );
+      const created = yield* addBlock({ projectId: project.id, tags: ['task'], title: 'live', body: 'detail' });
+      const change = (yield* Queue.take(frames)) as {
+        type: string;
+        projectId: number;
+        blocks: { name: string; tags: readonly string[]; fields: Readonly<Record<string, unknown>> }[];
+        ready: string[];
+        events: { op: string }[];
+      };
+      expect(change.type).toBe('change');
+      expect(change.projectId).toBe(project.id);
+      expect(change.blocks.map((row) => row.name)).toContain(created.name);
+      const row = change.blocks.find((block) => block.name === created.name);
+      expect(row).not.toHaveProperty('body');
+      expect(row).not.toHaveProperty('payload');
+      expect(row?.tags).toEqual(['task']);
+      expect(row?.fields).toEqual({ status: 'open' });
+      expect(change.ready).toContain(created.name);
+      expect(change.events.map((entry) => entry.op)).toContain('create');
+    }),
+  );
 
-    it.effect('a thread’s work feed opens on resync and names the blocks another writer changed in its copies', () =>
-      Effect.gen(function* () {
-        const { client, runtime } = yield* World;
-        const project = yield* addProject('work');
-        const born = yield* birthsOf(runtime.owners).create({ projectId: project.id, createdBySessionId: null }).pipe(Effect.orDie);
-        const frames = yield* Queue.make<unknown>();
-        yield* Effect.forkScoped(
-          Stream.runForEach(client['graph.work']({ projectId: project.id, threadId: born.thread.id }), (frame) =>
-            Queue.offer(frames, frame),
-          ),
-        );
-        expect(yield* Queue.take(frames)).toEqual({ type: 'resync' });
-        const created = yield* addBlock({ projectId: project.id, title: 'seen' });
-        expect(yield* Queue.take(frames)).toEqual({ type: 'change', own: false, names: [created.name] });
-        expect(yield* Effect.flip(Stream.runCollect(client['graph.work']({ projectId: project.id, threadId: 'no-thread' })))).toMatchObject(
-          {
-            code: 'not-found',
-          },
-        );
-      }),
-    );
+  it.effect('a thread’s work feed opens on resync and names the blocks another writer changed in its copies', () =>
+    Effect.gen(function* () {
+      const { client, runtime } = yield* World;
+      const project = yield* addProject('work');
+      const born = yield* birthsOf(runtime.owners).create({ projectId: project.id, createdBySessionId: null }).pipe(Effect.orDie);
+      const frames = yield* Queue.make<unknown>();
+      yield* Effect.forkScoped(
+        Stream.runForEach(client['graph.work']({ projectId: project.id, threadId: born.thread.id }), (frame) => Queue.offer(frames, frame)),
+      );
+      expect(yield* Queue.take(frames)).toEqual({ type: 'resync' });
+      const created = yield* addBlock({ projectId: project.id, title: 'seen' });
+      expect(yield* Queue.take(frames)).toEqual({ type: 'change', own: false, names: [created.name] });
+      expect(yield* Effect.flip(Stream.runCollect(client['graph.work']({ projectId: project.id, threadId: 'no-thread' })))).toMatchObject({
+        code: 'not-found',
+      });
+    }),
+  );
 
-    it.effect('socket generations expose RPC work and a typed close without a lifetime HTTP span', () =>
-      Effect.gen(function* () {
-        const { client, runtime, spans, changed, port } = yield* World;
-        const project = yield* addProject('telemetry');
-        const created = yield* birthsOf(runtime.owners).create({ projectId: project.id, createdBySessionId: null }).pipe(Effect.orDie);
+  it.effect('socket generations expose RPC work and a typed close without a lifetime HTTP span', () =>
+    Effect.gen(function* () {
+      const { client, runtime, spans, changed, port } = yield* World;
+      const project = yield* addProject('telemetry');
+      const created = yield* birthsOf(runtime.owners).create({ projectId: project.id, createdBySessionId: null }).pipe(Effect.orDie);
 
-        expect(
-          yield* client['thread.entry']({ projectId: project.id, threadId: created.thread.id, params: { entryId: 'missing' } }),
-        ).toBeNull();
-        const request = spans.find((span) => span.name === 'RpcServer.thread.entry');
-        const opening = spans.length;
-        const socket = new WebSocket(`ws://127.0.0.1:${port}${TAGMA_SOCKET_PATH}`);
-        yield* Effect.callback<void, SocketUnopened>((resume) => {
-          socket.addEventListener('open', () => resume(Effect.void), { once: true });
-          socket.addEventListener('error', () => resume(Effect.fail(new SocketUnopened())), { once: true });
-        });
-        yield* Effect.callback<void>((resume) => {
-          socket.addEventListener('close', () => resume(Effect.void), { once: true });
-          socket.close(1000);
-        });
-        while (!spans.slice(opening).some((span) => span.name === 'WebSocket.close')) yield* Queue.take(changed);
+      expect(
+        yield* client['thread.entry']({ projectId: project.id, threadId: created.thread.id, params: { entryId: 'missing' } }),
+      ).toBeNull();
+      const request = spans.find((span) => span.name === 'RpcServer.thread.entry');
+      const opening = spans.length;
+      const socket = new WebSocket(`ws://127.0.0.1:${port}${TAGMA_SOCKET_PATH}`);
+      yield* Effect.callback<void, SocketUnopened>((resume) => {
+        socket.addEventListener('open', () => resume(Effect.void), { once: true });
+        socket.addEventListener('error', () => resume(Effect.fail(new SocketUnopened())), { once: true });
+      });
+      yield* Effect.callback<void>((resume) => {
+        socket.addEventListener('close', () => resume(Effect.void), { once: true });
+        socket.close(1000);
+      });
+      while (!spans.slice(opening).some((span) => span.name === 'WebSocket.close')) yield* Queue.take(changed);
 
-        const lifecycle = spans.slice(opening);
-        const opened = lifecycle.find((span) => span.name === 'WebSocket.open');
-        const closed = lifecycle.find((span) => span.name === 'WebSocket.close');
-        const generation = opened?.attributes.get('generation');
-        const requestGeneration = request?.attributes.get('generation');
-        if (typeof generation !== 'number' || typeof requestGeneration !== 'number') {
-          return yield* Effect.die('the socket and its earlier RPC must carry numeric generations');
-        }
-        expect(requestGeneration).toBeLessThan(generation);
-        expect(closed?.attributes.get('generation')).toBe(generation);
-        expect(closed?.attributes.get('closeCause')).toBe('interrupted');
-        expect(spans.some((span) => span.name === 'http.server GET' && span.attributes.get('http.route') === TAGMA_SOCKET_PATH)).toBe(
-          false,
-        );
-      }),
-    );
-  },
-);
+      const lifecycle = spans.slice(opening);
+      const opened = lifecycle.find((span) => span.name === 'WebSocket.open');
+      const closed = lifecycle.find((span) => span.name === 'WebSocket.close');
+      const generation = opened?.attributes.get('generation');
+      const requestGeneration = request?.attributes.get('generation');
+      if (typeof generation !== 'number' || typeof requestGeneration !== 'number') {
+        return yield* Effect.die('the socket and its earlier RPC must carry numeric generations');
+      }
+      expect(requestGeneration).toBeLessThan(generation);
+      expect(closed?.attributes.get('generation')).toBe(generation);
+      expect(closed?.attributes.get('closeCause')).toBe('interrupted');
+      expect(spans.some((span) => span.name === 'http.server GET' && span.attributes.get('http.route') === TAGMA_SOCKET_PATH)).toBe(false);
+    }),
+  );
+});

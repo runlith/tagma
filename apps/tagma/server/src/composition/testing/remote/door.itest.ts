@@ -70,7 +70,7 @@ const reachedIn = (world: World, state: string) =>
       if (now._tag === 'blocked') return yield* Effect.die(new RemoteBlocked({ state: now }));
       return yield* new NotYet({ waiting: state });
     }),
-    { schedule: Schedule.spaced('10 millis'), times: 200 },
+    { schedule: Schedule.spaced('10 millis') },
   );
 
 const setup = Effect.gen(function* () {
@@ -250,8 +250,6 @@ const websocketProtocol = Effect.fnUntraced(function* (headers: Record<string, s
 
 layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 60_000,
 })('remote door', (it) => {
   it.effect('server namespaces cannot register as project names', () =>
     Effect.gen(function* () {
@@ -320,7 +318,7 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
             ),
           );
           return Option.getOrThrow(served);
-        }).pipe(Effect.timeout('5 seconds')),
+        }),
       );
       expect(site?._tag, 'the phone was handed no site for the plugin').toBe('served');
       if (site?._tag !== 'served') return;
@@ -392,7 +390,7 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
             Stream.take(client['artifacts.thread']({ projectId: project, threads: [threadId] }), 1),
           );
           expect(artifacts).toEqual([{ pages: [], total: 0 }]);
-        }).pipe(Effect.timeout('5 seconds')),
+        }),
       );
     }),
   );
@@ -405,7 +403,7 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
         Effect.gen(function* () {
           const client = yield* Effect.provide(RpcClient.make(LiveRpc), yield* Layer.build(protocol));
           return yield* Effect.flip(Stream.runHead(client.attach_browser_host({ host: '6f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b', pid: 1 })));
-        }).pipe(Effect.timeout('5 seconds')),
+        }),
       );
       expect(attached).toMatchObject({ code: 'device-refused' });
       const reported = yield* remote(`${REPORT_PATH}?host=6f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b&generation=1`, {
@@ -514,32 +512,26 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
     }),
   );
 
-  it.effect(
-    'a plugin site refused once leaves the door ready, is placed again when the access is read, and keeps its port',
-    () =>
-      Effect.gen(function* () {
-        const { world } = yield* Remote;
-        const siteOf = Effect.suspend(() =>
-          Effect.map(
-            world.op('read_remote_access', {}),
-            (answer) => (answer.body as { sites: Record<string, AccessState> }).sites['static'],
-          ),
+  it.effect('a plugin site refused once leaves the door ready, is placed again when the access is read, and keeps its port', () =>
+    Effect.gen(function* () {
+      const { world } = yield* Remote;
+      const siteOf = Effect.suspend(() =>
+        Effect.map(world.op('read_remote_access', {}), (answer) => (answer.body as { sites: Record<string, AccessState> }).sites['static']),
+      );
+      const settles = (tag: AccessState['_tag']) =>
+        Effect.retry(
+          Effect.flatMap(siteOf, (site) => (site?._tag === tag ? Effect.succeed(site) : Effect.fail(new NotYet({ waiting: tag })))),
+          { schedule: Schedule.spaced('50 millis') },
         );
-        const settles = (tag: AccessState['_tag']) =>
-          Effect.retry(
-            Effect.flatMap(siteOf, (site) => (site?._tag === tag ? Effect.succeed(site) : Effect.fail(new NotYet({ waiting: tag })))),
-            { schedule: Schedule.spaced('50 millis'), times: 180 },
-          );
-        yield* switched(false);
-        yield* reached('off');
-        siteRefused = true;
-        yield* switched(true);
-        yield* reached('ready');
-        expect((yield* settles('blocked'))._tag).toBe('blocked');
-        siteRefused = false;
-        expect(yield* settles('ready')).toEqual({ _tag: 'ready', origin: SITE });
-      }),
-    15_000,
+      yield* switched(false);
+      yield* reached('off');
+      siteRefused = true;
+      yield* switched(true);
+      yield* reached('ready');
+      expect((yield* settles('blocked'))._tag).toBe('blocked');
+      siteRefused = false;
+      expect(yield* settles('ready')).toEqual({ _tag: 'ready', origin: SITE });
+    }),
   );
 
   it.effect('the pairing exchange refuses another origin before it reads the body, and a body past one kilobyte', () =>

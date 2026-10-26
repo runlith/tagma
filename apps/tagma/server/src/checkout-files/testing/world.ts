@@ -135,7 +135,6 @@ export const feeding = Effect.fnUntraced(function* <A, E>(stream: Stream.Stream<
     ),
   );
   const next: Effect.Effect<A, E> = Queue.take(queue).pipe(
-    Effect.timeoutOrElse({ duration: '10 seconds', orElse: () => Effect.die('no frame within 10 seconds') }),
     Effect.flatMap((item) => ('ok' in item ? Effect.succeed(item.ok) : Effect.fail(item.err))),
   );
   const until = (found: (item: A) => boolean): Effect.Effect<A, E> =>

@@ -118,7 +118,6 @@ it.live(
       expect(readdirSync(where.install).sort()).toEqual(['20260101T000000000Z', 'current', RELEASE_LOG]);
       expect(readdirSync(join(where.source, '../app/.svelte-kit'))).toEqual([]);
     }),
-  30_000,
 );
 
 it.live('a refusal from before the version opens writes the log it names', () =>
@@ -134,18 +133,15 @@ it.live('a refusal from before the version opens writes the log it names', () =>
   }),
 );
 
-it.live(
-  'a producer that exits 0 having written nothing refuses at its own step',
-  () =>
-    Effect.gen(function* () {
-      const where = checkout(yield* treed, 'surface-empty', options);
-      const refusal = yield* refusalOf(where);
-      expect(refusal.step).toBe('surface');
-      expect(refusal.detail).toContain(`no ${SURFACE}/${SURFACE_INDEX}`);
-      expect(readlinkSync(join(where.install, 'current'))).toBe('20260101T000000000Z');
-      expect(existsSync(where.launcher)).toBe(false);
-    }),
-  30_000,
+it.live('a producer that exits 0 having written nothing refuses at its own step', () =>
+  Effect.gen(function* () {
+    const where = checkout(yield* treed, 'surface-empty', options);
+    const refusal = yield* refusalOf(where);
+    expect(refusal.step).toBe('surface');
+    expect(refusal.detail).toContain(`no ${SURFACE}/${SURFACE_INDEX}`);
+    expect(readlinkSync(join(where.install, 'current'))).toBe('20260101T000000000Z');
+    expect(existsSync(where.launcher)).toBe(false);
+  }),
 );
 
 it.live('a refusal that could not make the installation root names no log', () =>
@@ -160,31 +156,25 @@ it.live('a refusal that could not make the installation root names no log', () =
   }),
 );
 
-it.live(
-  'a checkout that cannot supply ripgrep refuses at the tools step',
-  () =>
-    Effect.gen(function* () {
-      const where = checkout(yield* treed, 'no-ripgrep', { ...options, ripgrep: false });
-      const refusal = yield* refusalOf(where);
-      expect(refusal.step).toBe('tools');
-      expect(refusal.detail).toContain('ripgrep');
-      expect(readlinkSync(join(where.install, 'current'))).toBe('20260101T000000000Z');
-      expect(existsSync(where.launcher)).toBe(false);
-    }),
-  30_000,
+it.live('a checkout that cannot supply ripgrep refuses at the tools step', () =>
+  Effect.gen(function* () {
+    const where = checkout(yield* treed, 'no-ripgrep', { ...options, ripgrep: false });
+    const refusal = yield* refusalOf(where);
+    expect(refusal.step).toBe('tools');
+    expect(refusal.detail).toContain('ripgrep');
+    expect(readlinkSync(join(where.install, 'current'))).toBe('20260101T000000000Z');
+    expect(existsSync(where.launcher)).toBe(false);
+  }),
 );
 
-it.live(
-  'a CLI bundle that would have swallowed the server refuses instead of landing',
-  () =>
-    Effect.gen(function* () {
-      const where = checkout(yield* treed, 'cli-inlines', { ...options, cliImportsServer: false });
-      const refusal = yield* refusalOf(where);
-      expect(refusal.step).toBe('program');
-      expect(refusal.detail).toContain('../server/http.js');
-      expect(readlinkSync(join(where.install, 'current'))).toBe('20260101T000000000Z');
-    }),
-  30_000,
+it.live('a CLI bundle that would have swallowed the server refuses instead of landing', () =>
+  Effect.gen(function* () {
+    const where = checkout(yield* treed, 'cli-inlines', { ...options, cliImportsServer: false });
+    const refusal = yield* refusalOf(where);
+    expect(refusal.step).toBe('program');
+    expect(refusal.detail).toContain('../server/http.js');
+    expect(readlinkSync(join(where.install, 'current'))).toBe('20260101T000000000Z');
+  }),
 );
 
 const versions = (tree: string, name: string, standing: string, ...held: readonly string[]): string => {

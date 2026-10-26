@@ -14,8 +14,6 @@ const performed = Effect.fnUntraced(function* <A>(id: string, payload: unknown) 
 
 layer(Layer.effect(Page, makePageWorld()).pipe(Layer.provide(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 30_000,
 })('page composition', (it) => {
   it.effect('the page starts a terminal through the real door, types into its lane, reads its output and observes its exit', () =>
     Effect.gen(function* () {

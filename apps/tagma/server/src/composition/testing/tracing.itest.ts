@@ -42,8 +42,6 @@ const traceOf = (world: TracedWorld, traceId: string) =>
 
 layer(doorFixture({ everySpan: true }).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-  testTimeout: 30_000,
-  timeout: 60_000,
 })('door tracing', (it) => {
   it.effect('the HTTP door continues a W3C parent into the persisted server span', () =>
     Effect.gen(function* () {
@@ -78,40 +76,37 @@ layer(doorFixture({ everySpan: true }).pipe(Layer.provideMerge(BunFileSystem.lay
     }),
   );
 
-  it.effect(
-    'one cwd request discovers its repository once across routing and response projection',
-    () =>
-      Effect.gen(function* () {
-        const world = yield* DoorFixture;
-        const traceId = randomUUID().replaceAll('-', '');
-        const parentId = randomUUID().replaceAll('-', '').slice(0, 16);
-        const checkouts = yield* Effect.acquireRelease(Effect.sync(rootFixture), (roots) => Effect.orDie(roots.releaseEffect));
-        const repo = yield* tempRepoEffect(yield* checkouts.openEffect, 'tagma-door-checkout-');
+  it.effect('one cwd request discovers its repository once across routing and response projection', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const traceId = randomUUID().replaceAll('-', '');
+      const parentId = randomUUID().replaceAll('-', '').slice(0, 16);
+      const checkouts = yield* Effect.acquireRelease(Effect.sync(rootFixture), (roots) => Effect.orDie(roots.releaseEffect));
+      const repo = yield* tempRepoEffect(yield* checkouts.openEffect, 'tagma-door-checkout-');
 
-        yield* keepEveryTrace(world);
-        const created = yield* world.call('/api/op/add_project', {
-          method: 'POST',
-          body: { name: world.uniqueName(), rootPath: repo, storage: 'stealth' },
-        });
-        expect(created.status).toBe(200);
-        const response = yield* Effect.promise(() =>
-          world.app(
-            new Request(`http://tagma/api/op/read_project?cwd=${encodeURIComponent(repo)}`, {
-              method: 'POST',
-              headers: { traceparent: `00-${traceId}-${parentId}-01`, 'content-type': 'application/json' },
-              body: '{}',
-            }),
-            world.routed,
-          ),
-        );
-        expect(response.status).toBe(200);
+      yield* keepEveryTrace(world);
+      const created = yield* world.call('/api/op/add_project', {
+        method: 'POST',
+        body: { name: world.uniqueName(), rootPath: repo, storage: 'stealth' },
+      });
+      expect(created.status).toBe(200);
+      const response = yield* Effect.promise(() =>
+        world.app(
+          new Request(`http://tagma/api/op/read_project?cwd=${encodeURIComponent(repo)}`, {
+            method: 'POST',
+            headers: { traceparent: `00-${traceId}-${parentId}-01`, 'content-type': 'application/json' },
+            body: '{}',
+          }),
+          world.routed,
+        ),
+      );
+      expect(response.status).toBe(200);
 
-        const report = yield* traceOf(world, traceId);
-        expect(report.type).toBe('trace');
-        if (report.type !== 'trace') return;
-        const spans = report.segments.flatMap((segment) => segment.spans);
-        expect(spans.filter((span) => span.name === 'Repo.locate')).toHaveLength(1);
-      }),
-    10_000,
+      const report = yield* traceOf(world, traceId);
+      expect(report.type).toBe('trace');
+      if (report.type !== 'trace') return;
+      const spans = report.segments.flatMap((segment) => segment.spans);
+      expect(spans.filter((span) => span.name === 'Repo.locate')).toHaveLength(1);
+    }),
   );
 });

@@ -17,44 +17,38 @@ const probes = [
 ].join('; ');
 
 dockerSuite('prepared-tree network', () => {
-  layer(preparedTreeFixture(), { excludeTestServices: true, timeout: '60 seconds' })('resources', (it) => {
-    it.effect(
-      'a build cannot reach an ungranted host, raw socket or DNS',
-      () =>
-        PreparedTreeFixture.use((world) =>
-          Effect.gen(function* () {
-            const met = said(yield* world.build({ network: [REGISTRY], setup: [probes] }));
-            expect(met, met).toContain('FOREIGN status=403 bytes=0');
-            expect(met, met).not.toContain('SOCKET open');
-            expect(met, met).toContain('SOCKET error=');
-            expect(met, met).not.toContain('DNS addresses=');
-            expect(met, met).toContain('DNS error=');
-          }).pipe(Effect.provide(world.context)),
-        ),
-      60_000,
+  layer(preparedTreeFixture(), { excludeTestServices: true })('resources', (it) => {
+    it.effect('a build cannot reach an ungranted host, raw socket or DNS', () =>
+      PreparedTreeFixture.use((world) =>
+        Effect.gen(function* () {
+          const met = said(yield* world.build({ network: [REGISTRY], setup: [probes] }));
+          expect(met, met).toContain('FOREIGN status=403 bytes=0');
+          expect(met, met).not.toContain('SOCKET open');
+          expect(met, met).toContain('SOCKET error=');
+          expect(met, met).not.toContain('DNS addresses=');
+          expect(met, met).toContain('DNS error=');
+        }).pipe(Effect.provide(world.context)),
+      ),
     );
 
-    it.effect(
-      'a build with no grant gets no network and records its failed preparation',
-      () =>
-        PreparedTreeFixture.use((world) =>
-          Effect.gen(function* () {
-            const refused = yield* world.build({
-              setup: [
-                `bun -e 'fetch("https://${REGISTRY}/typescript").then((r) => console.log("GRANTED status=" + r.status)).catch((e) => console.log("GRANTED error=" + (e.code || e.name)))'; exit 7`,
-              ],
-            });
-            const met = said(refused);
-            expect(met, met).not.toContain('GRANTED status=');
-            expect(met, met).toContain('GRANTED error=');
-            const failed = (yield* world.store.standing()).find(
-              (row) => row.state === 'failed' && row.failureReason?.includes('GRANTED error='),
-            );
-            expect(failed?.manifest).toBeNull();
-            expect(failed?.resourcesReleased).toBe(true);
-          }).pipe(Effect.provide(world.context)),
-        ),
-      60_000,
+    it.effect('a build with no grant gets no network and records its failed preparation', () =>
+      PreparedTreeFixture.use((world) =>
+        Effect.gen(function* () {
+          const refused = yield* world.build({
+            setup: [
+              `bun -e 'fetch("https://${REGISTRY}/typescript").then((r) => console.log("GRANTED status=" + r.status)).catch((e) => console.log("GRANTED error=" + (e.code || e.name)))'; exit 7`,
+            ],
+          });
+          const met = said(refused);
+          expect(met, met).not.toContain('GRANTED status=');
+          expect(met, met).toContain('GRANTED error=');
+          const failed = (yield* world.store.standing()).find(
+            (row) => row.state === 'failed' && row.failureReason?.includes('GRANTED error='),
+          );
+          expect(failed?.manifest).toBeNull();
+          expect(failed?.resourcesReleased).toBe(true);
+        }).pipe(Effect.provide(world.context)),
+      ),
     );
   });
 });

@@ -97,17 +97,13 @@ const noThreads: CallThreads['Service'] = {
   withdraw: () => Effect.succeed(false),
 };
 
-export const awaited = Effect.fnUntraced(
-  function* <A, E, R>(read: Effect.Effect<A, E, R>, check: (value: A) => boolean, what: string) {
-    for (;;) {
-      const value = yield* read;
-      if (check(value)) return value;
-      yield* Effect.sleep(10);
-    }
-  },
-  (effect, _read, _check, what) =>
-    effect.pipe(Effect.timeoutOrElse({ duration: '5 seconds', orElse: () => Effect.die(new Error(`waited 5 s for ${what}`)) })),
-);
+export const awaited = Effect.fnUntraced(function* <A, E, R>(read: Effect.Effect<A, E, R>, check: (value: A) => boolean, _what: string) {
+  for (;;) {
+    const value = yield* read;
+    if (check(value)) return value;
+    yield* Effect.sleep(10);
+  }
+});
 
 export const until = (check: () => boolean, what: string): Effect.Effect<void> =>
   Effect.asVoid(awaited(Effect.sync(check), (ready) => ready, what));

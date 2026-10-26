@@ -175,7 +175,7 @@ layer(speechFixture({}), { excludeTestServices: true })('speech', (it) => {
           const cancelled = yield* Effect.forkChild(
             world.listenings.send('phone-4', 'mic', Stream.fromQueue(held).pipe(Stream.tap(() => Deferred.succeed(received, undefined)))),
           );
-          yield* Deferred.await(received).pipe(Effect.timeout('5 seconds'));
+          yield* Deferred.await(received);
           yield* Fiber.interrupt(cancelled);
           yield* until(() => gaps.some(([, to]) => to === null), 'a cancelled sender to lose its track');
           yield* Fiber.interrupt(again);

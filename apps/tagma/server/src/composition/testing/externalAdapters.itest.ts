@@ -68,97 +68,94 @@ const rooted = Layer.effect(
   }),
 );
 
-layer(rooted.pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true, testTimeout: 30_000, timeout: 60_000 })(
-  'external adapters',
-  (it) => {
-    it.effect('a created adapter passes the author kit and serves a model call through the real external loader', () =>
+layer(rooted.pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('external adapters', (it) => {
+  it.effect('a created adapter passes the author kit and serves a model call through the real external loader', () =>
+    Effect.gen(function* () {
+      const { root } = yield* Adapters;
+      const directory = join(root, 'created');
+      yield* Effect.promise(() => createAdapter(directory, 'acme'));
+      const [loaded] = yield* probe(['--no-install'], join(root, 'created-machine'), [`template:${directory}`]);
+      expect(loaded).toMatchObject({
+        state: { state: 'loaded', providers: ['acme'] },
+        model: { text: 'hello', sameClass: true },
+        contract: { provider: 'acme', model: 'acme-1', text: 'hello', sameClass: true, image: 'image/png' },
+      });
+    }),
+  );
+
+  it.effect(
+    'an adapter installed from a directory loads through the host modules, a new version serves the next run without a restart, and an import outside the host modules fails its load',
+    () =>
       Effect.gen(function* () {
         const { root } = yield* Adapters;
-        const directory = join(root, 'created');
-        yield* Effect.promise(() => createAdapter(directory, 'acme'));
-        const [loaded] = yield* probe(['--no-install'], join(root, 'created-machine'), [`template:${directory}`]);
-        expect(loaded).toMatchObject({
-          state: { state: 'loaded', providers: ['acme'] },
-          model: { text: 'hello', sameClass: true },
-          contract: { provider: 'acme', model: 'acme-1', text: 'hello', sameClass: true, image: 'image/png' },
+        const first = yield* adapterPackage('v1', '1.0.0', 'Acme one', 'first');
+        const second = yield* adapterPackage('v2', '2.0.0', 'Acme two', 'second');
+        const foreign = yield* adapterPackage('v3', '3.0.0', 'Acme three', 'third', "import 'left-pad-never-installed';\n");
+        const machine = join(root, 'machine');
+
+        const [installed, updated, broken] = yield* probe(['--no-install'], machine, [first, second, foreign]);
+
+        expect(installed).toMatchObject({
+          state: { id: 'acme-adapter', origin: 'machine', version: '1.0.0', state: 'loaded', providers: ['acme'] },
+          label: 'Acme one',
+          inner: 'first',
+          refusal: { sameClass: true },
         });
+        expect(updated).toMatchObject({
+          state: { version: '2.0.0', state: 'loaded' },
+          label: 'Acme two',
+          inner: 'second',
+          pinned: 'Acme one',
+        });
+        expect(broken.state).toMatchObject({ version: '3.0.0', state: 'failed' });
+        expect(broken.state.reason).toContain('left-pad-never-installed');
+        expect((yield* entries(machine)).filter((name) => !name.endsWith('.json')).sort()).toEqual([
+          'acme-adapter@1.0.0',
+          'acme-adapter@2.0.0',
+          'acme-adapter@3.0.0',
+        ]);
+
+        yield* probe(['--no-install'], machine, []);
+        expect((yield* entries(machine)).filter((name) => !name.endsWith('.json'))).toEqual(['acme-adapter@3.0.0']);
       }),
-    );
+  );
 
-    it.effect(
-      'an adapter installed from a directory loads through the host modules, a new version serves the next run without a restart, and an import outside the host modules fails its load',
-      () =>
-        Effect.gen(function* () {
-          const { root } = yield* Adapters;
-          const first = yield* adapterPackage('v1', '1.0.0', 'Acme one', 'first');
-          const second = yield* adapterPackage('v2', '2.0.0', 'Acme two', 'second');
-          const foreign = yield* adapterPackage('v3', '3.0.0', 'Acme three', 'third', "import 'left-pad-never-installed';\n");
-          const machine = join(root, 'machine');
+  it.effect('an update installs again from the recorded source, and a removed adapter stops serving and leaves no folder', () =>
+    Effect.gen(function* () {
+      const { root } = yield* Adapters;
+      const at = yield* adapterPackage('kept', '1.0.0', 'Acme kept', 'kept');
+      const machine = join(root, 'kept-machine');
 
-          const [installed, updated, broken] = yield* probe(['--no-install'], machine, [first, second, foreign]);
+      const [, updated, removed] = yield* probe(['--no-install'], machine, [at, 'update:acme-adapter', 'remove:acme-adapter']);
 
-          expect(installed).toMatchObject({
-            state: { id: 'acme-adapter', origin: 'machine', version: '1.0.0', state: 'loaded', providers: ['acme'] },
-            label: 'Acme one',
-            inner: 'first',
-            refusal: { sameClass: true },
-          });
-          expect(updated).toMatchObject({
-            state: { version: '2.0.0', state: 'loaded' },
-            label: 'Acme two',
-            inner: 'second',
-            pinned: 'Acme one',
-          });
-          expect(broken.state).toMatchObject({ version: '3.0.0', state: 'failed' });
-          expect(broken.state.reason).toContain('left-pad-never-installed');
-          expect((yield* entries(machine)).filter((name) => !name.endsWith('.json')).sort()).toEqual([
-            'acme-adapter@1.0.0',
-            'acme-adapter@2.0.0',
-            'acme-adapter@3.0.0',
-          ]);
+      expect(updated).toMatchObject({ state: { state: 'loaded', version: '1.0.0' }, label: 'Acme kept' });
+      expect(removed).toMatchObject({ state: { removed: 'acme-adapter' }, label: null });
+      expect(yield* entries(machine)).toEqual(['installed.json']);
+    }),
+  );
 
-          yield* probe(['--no-install'], machine, []);
-          expect((yield* entries(machine)).filter((name) => !name.endsWith('.json'))).toEqual(['acme-adapter@3.0.0']);
-        }),
-    );
+  it.effect('a disabled adapter is not loaded and its provider is gone until it is enabled again', () =>
+    Effect.gen(function* () {
+      const { root } = yield* Adapters;
+      const at = yield* adapterPackage('switched', '1.0.0', 'Acme switched', 'switched');
+      const machine = join(root, 'switched-machine');
 
-    it.effect('an update installs again from the recorded source, and a removed adapter stops serving and leaves no folder', () =>
-      Effect.gen(function* () {
-        const { root } = yield* Adapters;
-        const at = yield* adapterPackage('kept', '1.0.0', 'Acme kept', 'kept');
-        const machine = join(root, 'kept-machine');
+      const [installed, disabled, enabled] = yield* probe(['--no-install'], machine, [at, 'disable:acme-adapter', 'enable:acme-adapter']);
 
-        const [, updated, removed] = yield* probe(['--no-install'], machine, [at, 'update:acme-adapter', 'remove:acme-adapter']);
+      expect(installed).toMatchObject({ state: { state: 'loaded', source: at }, label: 'Acme switched' });
+      expect(disabled).toMatchObject({ state: { state: 'disabled', id: 'acme-adapter', version: '1.0.0', source: at }, label: null });
+      expect(enabled).toMatchObject({ state: { state: 'loaded' }, label: 'Acme switched' });
+    }),
+  );
 
-        expect(updated).toMatchObject({ state: { state: 'loaded', version: '1.0.0' }, label: 'Acme kept' });
-        expect(removed).toMatchObject({ state: { removed: 'acme-adapter' }, label: null });
-        expect(yield* entries(machine)).toEqual(['installed.json']);
-      }),
-    );
+  it.effect('a server started without --no-install refuses to load an external adapter', () =>
+    Effect.gen(function* () {
+      const { root } = yield* Adapters;
+      const at = yield* adapterPackage('plain', '1.0.0', 'Acme plain', 'plain');
+      const [installed] = yield* probe([], join(root, 'plain-machine'), [at]);
 
-    it.effect('a disabled adapter is not loaded and its provider is gone until it is enabled again', () =>
-      Effect.gen(function* () {
-        const { root } = yield* Adapters;
-        const at = yield* adapterPackage('switched', '1.0.0', 'Acme switched', 'switched');
-        const machine = join(root, 'switched-machine');
-
-        const [installed, disabled, enabled] = yield* probe(['--no-install'], machine, [at, 'disable:acme-adapter', 'enable:acme-adapter']);
-
-        expect(installed).toMatchObject({ state: { state: 'loaded', source: at }, label: 'Acme switched' });
-        expect(disabled).toMatchObject({ state: { state: 'disabled', id: 'acme-adapter', version: '1.0.0', source: at }, label: null });
-        expect(enabled).toMatchObject({ state: { state: 'loaded' }, label: 'Acme switched' });
-      }),
-    );
-
-    it.effect('a server started without --no-install refuses to load an external adapter', () =>
-      Effect.gen(function* () {
-        const { root } = yield* Adapters;
-        const at = yield* adapterPackage('plain', '1.0.0', 'Acme plain', 'plain');
-        const [installed] = yield* probe([], join(root, 'plain-machine'), [at]);
-
-        expect(installed.state).toMatchObject({ state: 'failed' });
-        expect(installed.state.reason).toContain('--no-install');
-      }),
-    );
-  },
-);
+      expect(installed.state).toMatchObject({ state: 'failed' });
+      expect(installed.state.reason).toContain('--no-install');
+    }),
+  );
+});

@@ -166,50 +166,47 @@ it.effect('the tool-output protection share: the narrow value agrees with the ca
   }),
 );
 
-layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices: true, testTimeout: 30_000, timeout: 60_000 })(
-  'the compaction policy',
-  (compaction) => {
-    compaction.effect('the compaction policy resolves the pruning share from each thread own project', () =>
-      withDemo((demo) =>
-        Effect.gen(function* () {
-          const run = <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E> =>
-            Effect.provide(work, demo.context) as Effect.Effect<A, E>;
-          const settings = Context.get(demo.context, Settings);
-          const secondProject = yield* run(
-            demo.graph.projectLifecycle.create({
-              name: 'settings-policy-two',
-              rootPath: yield* tempRootEffect(demo.fixture, 'settings-policy-two-'),
+layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices: true })('the compaction policy', (compaction) => {
+  compaction.effect('the compaction policy resolves the pruning share from each thread own project', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const run = <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E> =>
+          Effect.provide(work, demo.context) as Effect.Effect<A, E>;
+        const settings = Context.get(demo.context, Settings);
+        const secondProject = yield* run(
+          demo.graph.projectLifecycle.create({
+            name: 'settings-policy-two',
+            rootPath: yield* tempRootEffect(demo.fixture, 'settings-policy-two-'),
+          }),
+        );
+        const records = yield* run(makeThreadRecords);
+        const { store, threads } = yield* run(
+          threadStack({ db: demo.graph.store.db, units: demo.graph.units, records, kinds: ENTRY_KINDS }),
+        );
+
+        const [firstId, secondId] = yield* demo.graph.units
+          .write('Settings', (unit) =>
+            Effect.gen(function* () {
+              const first = yield* store.insert({ ownerId: 'operator', agentId: 'tagma' }, unit);
+              const second = yield* store.insert({ ownerId: 'operator', agentId: 'tagma' }, unit);
+              yield* threads.rows.attachFacet({ threadId: first.id, projectId: demo.projectId }, unit);
+              yield* threads.rows.attachFacet({ threadId: second.id, projectId: secondProject.id }, unit);
+              return [first.id, second.id] as const;
             }),
-          );
-          const records = yield* run(makeThreadRecords);
-          const { store, threads } = yield* run(
-            threadStack({ db: demo.graph.store.db, units: demo.graph.units, records, kinds: ENTRY_KINDS }),
-          );
+          )
+          .pipe(Effect.orDie);
+        yield* run(settings.write({ scope: 'project', projectId: demo.projectId, key: toolOutputShare.id, value: 0.2 }));
+        yield* run(settings.write({ scope: 'project', projectId: secondProject.id, key: toolOutputShare.id, value: 0.3 }));
 
-          const [firstId, secondId] = yield* demo.graph.units
-            .write('Settings', (unit) =>
-              Effect.gen(function* () {
-                const first = yield* store.insert({ ownerId: 'operator', agentId: 'tagma' }, unit);
-                const second = yield* store.insert({ ownerId: 'operator', agentId: 'tagma' }, unit);
-                yield* threads.rows.attachFacet({ threadId: first.id, projectId: demo.projectId }, unit);
-                yield* threads.rows.attachFacet({ threadId: second.id, projectId: secondProject.id }, unit);
-                return [first.id, second.id] as const;
-              }),
-            )
-            .pipe(Effect.orDie);
-          yield* run(settings.write({ scope: 'project', projectId: demo.projectId, key: toolOutputShare.id, value: 0.2 }));
-          yield* run(settings.write({ scope: 'project', projectId: secondProject.id, key: toolOutputShare.id, value: 0.3 }));
-
-          expect((yield* compactionPolicy(records, settings, firstId)).toolPruneProtectShare).toBe(0.2);
-          expect((yield* compactionPolicy(records, settings, secondId)).toolPruneProtectShare).toBe(0.3);
-          const missing = yield* Effect.flip(compactionPolicy(records, settings, 'missing-facet'));
-          expect(missing).toBeInstanceOf(ThreadNotFoundError);
-          expect((missing as ThreadNotFoundError).threadId).toBe('missing-facet');
-        }),
-      ),
-    );
-  },
-);
+        expect((yield* compactionPolicy(records, settings, firstId)).toolPruneProtectShare).toBe(0.2);
+        expect((yield* compactionPolicy(records, settings, secondId)).toolPruneProtectShare).toBe(0.3);
+        const missing = yield* Effect.flip(compactionPolicy(records, settings, 'missing-facet'));
+        expect(missing).toBeInstanceOf(ThreadNotFoundError);
+        expect((missing as ThreadNotFoundError).threadId).toBe('missing-facet');
+      }),
+    ),
+  );
+});
 
 it.effect('the checkout model resolves user to project, projects the choice, and stays closed to an agent', () =>
   Effect.gen(function* () {

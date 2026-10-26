@@ -96,11 +96,11 @@ const server = Effect.fnUntraced(function* () {
   );
   const context = yield* Layer.build(push.lifetimes.serving.pipe(Layer.provide(doubles), Layer.provide(Layer.succeedContext(machine))));
   const subscriptions = Context.get(context, Subscriptions);
-  const next = Queue.take(calls).pipe(Effect.timeout('5 seconds'));
+  const next = Queue.take(calls);
   const until = <E>(holds: Effect.Effect<boolean, E>) =>
     Effect.retry(
       Effect.flatMap(holds, (standing) => (standing ? Effect.void : Effect.fail(new NotYet()))),
-      { schedule: Schedule.spaced('20 millis'), times: 100 },
+      { schedule: Schedule.spaced('20 millis') },
     );
   return {
     subscriptions,
@@ -129,7 +129,7 @@ const store = Layer.effect(
   }),
 ).pipe(Layer.provide(BunFileSystem.layer));
 
-layer(store, { excludeTestServices: true, testTimeout: 30_000, timeout: 60_000 })('push delivery', (it) => {
+layer(store, { excludeTestServices: true })('push delivery', (it) => {
   it.effect('an event sent once is never sent again: not on a rename, not after an archive and a restore, not after a restart', () =>
     Effect.gen(function* () {
       const row = yield* Effect.gen(function* () {

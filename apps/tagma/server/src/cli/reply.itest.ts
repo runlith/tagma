@@ -3,7 +3,7 @@ import { layer } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import { TerminalFixture, terminalFixture } from '../composition/testing/fixture.js';
 
-layer(terminalFixture, { excludeTestServices: true, testTimeout: 60_000 })('reply', (it) => {
+layer(terminalFixture, { excludeTestServices: true })('reply', (it) => {
   it.effect('unknown and absent questions remain refusals on an idle thread', () =>
     Effect.gen(function* () {
       const world = yield* TerminalFixture;

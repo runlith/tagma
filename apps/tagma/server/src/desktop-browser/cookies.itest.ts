@@ -25,7 +25,6 @@ const server: Bun.Server<undefined> = Bun.serve({
 afterAll(() => server.stop(true));
 layer(desktopFixture(), {
   excludeTestServices: true,
-  timeout: '60 seconds',
 })('cookie import into a desktop profile', (it) => {
   it.effect(
     'an import writes the partition of the desktop profile, keeps partition keys, counts what the store refuses, and the pages of the profile send the cookies',
@@ -73,6 +72,5 @@ layer(desktopFixture(), {
         );
         expect(heard[0]).toBe('sid=signed-in');
       }),
-    45_000,
   );
 });

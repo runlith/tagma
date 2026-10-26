@@ -102,7 +102,7 @@ server.close();
 });
 
 dockerSuite('the preparation proxy', () =>
-  layer(guests.pipe(Layer.provideMerge(world(proxyImage, null))), { excludeTestServices: true, timeout: '55 seconds' })('guests', (it) => {
+  layer(guests.pipe(Layer.provideMerge(world(proxyImage, null))), { excludeTestServices: true })('guests', (it) => {
     it.effect('the proxy refuses loopback spellings, ungranted hosts and ports outside HTTPS', () =>
       Effect.gen(function* () {
         const spellings = ['::ffff:7f00:1', '::ffff:127.0.0.1', '127.0.0.1', '[::1]', '0:0:0:0:0:ffff:7f00:0001'];

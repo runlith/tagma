@@ -28,53 +28,50 @@ const models = Effect.gen(function* () {
   return { access: Context.get(built, ModelAccess), catalog };
 });
 
-layer(Layer.merge(BunFileSystem.layer, builtinRegistry), { excludeTestServices: true, testTimeout: 30_000, timeout: 60_000 })(
-  'provider access',
-  (it) => {
-    it.effect('every text-serving wire provider the built-in adapters install prepares a request that names its own deployment', () =>
-      Effect.gen(function* () {
-        const { access, catalog } = yield* models;
-        expect(catalog.wires.providers.length).toBeGreaterThan(0);
-        for (const registration of catalog.wires.providers.filter((provider) => provider.textless !== true)) {
-          const request = access.request({ ownerId: OPERATOR_PRINCIPAL, provider: registration.id });
+layer(Layer.merge(BunFileSystem.layer, builtinRegistry), { excludeTestServices: true })('provider access', (it) => {
+  it.effect('every text-serving wire provider the built-in adapters install prepares a request that names its own deployment', () =>
+    Effect.gen(function* () {
+      const { access, catalog } = yield* models;
+      expect(catalog.wires.providers.length).toBeGreaterThan(0);
+      for (const registration of catalog.wires.providers.filter((provider) => provider.textless !== true)) {
+        const request = access.request({ ownerId: OPERATOR_PRINCIPAL, provider: registration.id });
 
-          expect(request.refusal).toBeUndefined();
-          expect(String(request.origin?.provider)).toBe(String(registration.id));
-          expect(request.plannedOutputTokens).toBeGreaterThan(0);
-        }
-      }),
-    );
+        expect(request.refusal).toBeUndefined();
+        expect(String(request.origin?.provider)).toBe(String(registration.id));
+        expect(request.plannedOutputTokens).toBeGreaterThan(0);
+      }
+    }),
+  );
 
-    it.effect('a provider no adapter installs as a wire, and a harness provider, are refused as not installed', () =>
-      Effect.gen(function* () {
-        const { access, catalog } = yield* models;
-        const uncallable = ['no-such-provider', ...catalog.harnesses.map(({ id }) => id)];
-        for (const id of uncallable) {
-          const request = access.request({ ownerId: OPERATOR_PRINCIPAL, provider: id });
-          const failure = yield* Effect.flip(request.text({ prompt: 'Hello' }));
-          expect(failure.reason).toMatchObject({ _tag: 'NotInstalled', provider: id });
-        }
-      }),
-    );
+  it.effect('a provider no adapter installs as a wire, and a harness provider, are refused as not installed', () =>
+    Effect.gen(function* () {
+      const { access, catalog } = yield* models;
+      const uncallable = ['no-such-provider', ...catalog.harnesses.map(({ id }) => id)];
+      for (const id of uncallable) {
+        const request = access.request({ ownerId: OPERATOR_PRINCIPAL, provider: id });
+        const failure = yield* Effect.flip(request.text({ prompt: 'Hello' }));
+        expect(failure.reason).toMatchObject({ _tag: 'NotInstalled', provider: id });
+      }
+    }),
+  );
 
-    it.effect('a catalog model is prepared at the effort the request names', () =>
-      Effect.gen(function* () {
-        const { access } = yield* models;
-        const request = access.request({ ownerId: OPERATOR_PRINCIPAL, ...SELECTED });
+  it.effect('a catalog model is prepared at the effort the request names', () =>
+    Effect.gen(function* () {
+      const { access } = yield* models;
+      const request = access.request({ ownerId: OPERATOR_PRINCIPAL, ...SELECTED });
 
-        expect(request.providerOptions).toMatchObject({ anthropic: { outputConfig: { effort: 'xhigh' } } });
-      }),
-    );
+      expect(request.providerOptions).toMatchObject({ anthropic: { outputConfig: { effort: 'xhigh' } } });
+    }),
+  );
 
-    it.effect('a served model answers its window, and a model or provider no adapter serves is refused by name', () =>
-      Effect.gen(function* () {
-        const { access } = yield* models;
-        expect((yield* access.served(SELECTED.provider, SELECTED.model)).capacity.context).toBeGreaterThan(0);
-        const unknownModel = yield* Effect.flip(access.served(SELECTED.provider, 'a-model-this-catalog-never-carried'));
-        expect(unknownModel).toBeInstanceOf(ThreadModelNotServed);
-        const removed = yield* Effect.flip(access.served('removed-oauth', null));
-        expect(removed).toMatchObject({ _tag: 'ThreadModelNotServed', provider: 'removed-oauth' });
-      }),
-    );
-  },
-);
+  it.effect('a served model answers its window, and a model or provider no adapter serves is refused by name', () =>
+    Effect.gen(function* () {
+      const { access } = yield* models;
+      expect((yield* access.served(SELECTED.provider, SELECTED.model)).capacity.context).toBeGreaterThan(0);
+      const unknownModel = yield* Effect.flip(access.served(SELECTED.provider, 'a-model-this-catalog-never-carried'));
+      expect(unknownModel).toBeInstanceOf(ThreadModelNotServed);
+      const removed = yield* Effect.flip(access.served('removed-oauth', null));
+      expect(removed).toMatchObject({ _tag: 'ThreadModelNotServed', provider: 'removed-oauth' });
+    }),
+  );
+});

@@ -41,5 +41,4 @@ it.live(
       expect(info.slice(16, 20)).toBe('0400');
       expect(existsSync(`${image}.rw.dmg`) || existsSync(`${image}.stage`)).toBe(false);
     }),
-  60_000,
 );

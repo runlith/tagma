@@ -42,38 +42,35 @@ const outputOf = (child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>) =>
     error: await new Response(child.stderr).text(),
   }));
 
-it.live(
-  'an occupied local port leaves a failed startup that status reads after the process exits',
-  () =>
-    Effect.gen(function* () {
-      const files = yield* FileSystem.FileSystem;
-      const root = yield* files.makeTempDirectoryScoped({ prefix: 'tagma-startup-process-' });
-      const { port, state } = yield* Effect.scoped(
-        Effect.gen(function* () {
-          const held = yield* Effect.acquireRelease(
-            Effect.sync(() => Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('held') })),
-            (listening) => Effect.promise(() => listening.stop(true)),
-          );
-          const port = held.port!;
-          const child = yield* spawn(server, root, port);
-          const code = yield* Effect.promise(() => child.exited);
-          const output = yield* outputOf(child);
-          const state = yield* readStartup(join(root, 'restart.json'));
-          expect(code, output.error).not.toBe(0);
-          expect(state.startup, output.error).toMatchObject({ status: 'failed', phase: 'local door opened', readyAt: null });
-          expect(state.startup?.failure?.detail).toContain(String(port));
-          expect(yield* Effect.promise(async () => (await fetch(`http://127.0.0.1:${port}`)).text())).toBe('held');
-          return { port, state };
-        }),
-      );
-      const status = yield* spawn(cli, root, port, ['status', '--json']);
-      const code = yield* Effect.promise(() => status.exited);
-      const answer = yield* outputOf(status);
-      expect(code, answer.error).toBe(0);
-      const decoded = yield* Schema.decodeUnknownEffect(
-        Schema.fromJsonString(Schema.Struct({ ready: Schema.Literal(false), ...startupStateSchema.fields })),
-      )(answer.out);
-      expect(decoded).toEqual({ ready: false, ...state });
-    }).pipe(Effect.provide(BunFileSystem.layer)),
-  20_000,
+it.live('an occupied local port leaves a failed startup that status reads after the process exits', () =>
+  Effect.gen(function* () {
+    const files = yield* FileSystem.FileSystem;
+    const root = yield* files.makeTempDirectoryScoped({ prefix: 'tagma-startup-process-' });
+    const { port, state } = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const held = yield* Effect.acquireRelease(
+          Effect.sync(() => Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('held') })),
+          (listening) => Effect.promise(() => listening.stop(true)),
+        );
+        const port = held.port!;
+        const child = yield* spawn(server, root, port);
+        const code = yield* Effect.promise(() => child.exited);
+        const output = yield* outputOf(child);
+        const state = yield* readStartup(join(root, 'restart.json'));
+        expect(code, output.error).not.toBe(0);
+        expect(state.startup, output.error).toMatchObject({ status: 'failed', phase: 'local door opened', readyAt: null });
+        expect(state.startup?.failure?.detail).toContain(String(port));
+        expect(yield* Effect.promise(async () => (await fetch(`http://127.0.0.1:${port}`)).text())).toBe('held');
+        return { port, state };
+      }),
+    );
+    const status = yield* spawn(cli, root, port, ['status', '--json']);
+    const code = yield* Effect.promise(() => status.exited);
+    const answer = yield* outputOf(status);
+    expect(code, answer.error).toBe(0);
+    const decoded = yield* Schema.decodeUnknownEffect(
+      Schema.fromJsonString(Schema.Struct({ ready: Schema.Literal(false), ...startupStateSchema.fields })),
+    )(answer.out);
+    expect(decoded).toEqual({ ready: false, ...state });
+  }).pipe(Effect.provide(BunFileSystem.layer)),
 );
