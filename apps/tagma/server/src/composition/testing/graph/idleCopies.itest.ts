@@ -356,5 +356,4 @@ it.live(
       expect(yield* Effect.forEach(worktrees, (tree) => suiteGit(tree, 'status', '--porcelain'))).toEqual(worktrees.map(() => ''));
       expect(yield* mirrorsBeside(home, mainMirror)).toEqual(mirrors);
     }).pipe(Effect.provide(projectIdentificationLayer.pipe(Layer.provideMerge(liveGitLayer), Layer.provideMerge(BunFileSystem.layer)))),
-  60_000,
 );
