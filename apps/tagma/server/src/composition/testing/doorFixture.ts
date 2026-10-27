@@ -14,7 +14,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Clock, Context, Effect, FileSystem, Layer, type Scope, Stream } from 'effect';
 import { AccountCli } from '../../providers/contract/service/cli.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { HttpEffect, HttpMiddleware, HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
+import { FetchHttpClient, HttpEffect, HttpMiddleware, HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import type { AccountQuotaProvider } from '../../providers/quota/ledger.js';
 import type { ModelAccess } from '../../providers/contract/service/access.js';
 import type { DecisionModels } from '../../providers/contract/service/decisions.js';
@@ -27,6 +27,7 @@ import { routedContext } from '../../graph/testing/doubles.js';
 import { makeRuntime } from '../runtime.js';
 import { chosenModel } from './chosenModel.js';
 import { checkoutBuildsLayer } from '../../checkout-builds/testing/doubles.js';
+import { devSurfaceLayer } from '../../checkout-builds/surface.js';
 import { ServerProcess } from '../../installation/contract/service/succession.js';
 import { doorCompositionLayer } from '../http/handlers.js';
 import { successionLayer } from '../../installation/testing/doubles.js';
@@ -220,6 +221,9 @@ const built = Effect.fnUntraced(
       Layer.mergeAll(
         successionLayer(undefined, join(data, 'install'), join(data, 'serve.log')),
         checkoutBuildsLayer({ checkout: undefined, log: join(data, 'build.log'), worktrees: join(data, 'build') }),
+        devSurfaceLayer({ checkout: undefined, port: 5642 }).pipe(
+          Layer.provide(Layer.mergeAll(Layer.succeedContext(runtime.door), FetchHttpClient.layer)),
+        ),
       ),
     );
     const born = { startedAt: new Date(yield* Clock.currentTimeMillis).toISOString(), replacedPid: null };

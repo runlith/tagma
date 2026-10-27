@@ -1,3 +1,4 @@
+import { Layer } from 'effect';
 import { CHANNEL } from '@tagma/server/composition/channel';
 import { PROGRAM_RELEASE } from '../../platform/contract/wire/program.js';
 import { applications } from '../../mac-applications/placement.js';
@@ -21,4 +22,4 @@ const nextInstallation = (place: NextPlace) =>
     env: process.env,
   });
 
-export const BINDINGS: Bindings = { nextInstallation };
+export const BINDINGS: Bindings = { nextInstallation, door: () => Layer.empty };

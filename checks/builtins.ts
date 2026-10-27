@@ -28,6 +28,11 @@ export const names: Builtin<'names', NamesParams> = {
       F4: {
         allowances: [
           {
+            lines: 655,
+            path: 'apps/tagma/server/src/composition/server.ts',
+            why: 'One subject: the boot of the server process — its data directory and installation, the runtime it composes, the adapters its composition binds, the doors it opens and how it hands over or leaves; each step needs the ones before it within the same process lifetime.',
+          },
+          {
             lines: 662,
             path: 'apps/tagma/server/src/managed-browser/host.ts',
             why: 'One subject: the managed Chromium Host adapter owns each profile process and its CDP pipe, target sessions, browser events and shutdown; these operations share the same running profiles and tabs, whose lifetime determines whether pages close or become dormant.',

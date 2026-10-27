@@ -515,8 +515,23 @@ const nextInstallation = Context.get(
   NextInstallation,
 );
 
+const doorBound = await Effect.runPromise(
+  phase(
+    'door bindings bound',
+    Scope.provide(
+      Layer.build(
+        BINDINGS.door({ serverPath, installation, port }).pipe(
+          Layer.provide(Layer.mergeAll(Layer.succeedContext(tagma.door), FetchHttpClient.layer)),
+        ),
+      ),
+      localScope,
+    ),
+  ),
+);
+
 const doorServices = Context.mergeAll(
   tagma.door,
+  doorBound,
   Context.make(Succession, succession),
   Context.make(NextInstallation, nextInstallation),
   Context.make(ServerProcess, { born, source: tagma.status.source }),

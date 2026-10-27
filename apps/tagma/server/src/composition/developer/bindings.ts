@@ -1,11 +1,12 @@
 import { resolve } from 'node:path';
 import { Layer } from 'effect';
 import { checkoutBuildsLayer } from '../../checkout-builds/runner.js';
+import { devSurfaceLayer } from '../../checkout-builds/surface.js';
 import { SourceChanges } from '../../checkout-builds/contract/service/changes.js';
 import { buildPlaces } from '../../checkout-builds/places.js';
 import type { RunningRevision } from '../../checkout-builds/reading.js';
 import { labelRevision } from '../../installation/contract/wire/layout.js';
-import type { Bindings, NextPlace } from '../next.js';
+import type { Bindings, DoorPlace, NextPlace, SourcePlace } from '../next.js';
 import { sourceChanges } from './sourceChanges.js';
 
 const runningRevision = ({ installation, source }: NextPlace): RunningRevision | null => {
@@ -17,10 +18,13 @@ const runningRevision = ({ installation, source }: NextPlace): RunningRevision |
   return revision === null ? null : { ...revision, tree: installation.manifest.identity.tree ?? null };
 };
 
+const checkoutOf = (place: SourcePlace): string | undefined =>
+  place.installation === undefined ? resolve(place.serverPath, '..', '..', '..') : place.installation.manifest.origin?.checkout;
+
 const nextInstallation = (place: NextPlace) => {
   const { log, record, worktrees } = buildPlaces(place.dataPath);
   return checkoutBuildsLayer({
-    checkout: place.installation === undefined ? resolve(place.serverPath, '..', '..', '..') : place.installation.manifest.origin?.checkout,
+    checkout: checkoutOf(place),
     log,
     record,
     worktrees,
@@ -31,4 +35,6 @@ const nextInstallation = (place: NextPlace) => {
   }).pipe(Layer.provide(Layer.succeed(SourceChanges, sourceChanges(place.roots, place.watch))));
 };
 
-export const BINDINGS: Bindings = { nextInstallation };
+const door = (place: DoorPlace) => devSurfaceLayer({ checkout: checkoutOf(place), port: place.port });
+
+export const BINDINGS: Bindings = { nextInstallation, door };

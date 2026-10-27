@@ -7,12 +7,22 @@ import type { DowngradeSteps } from '../installation/contract/service/steps.js';
 import type { Settings } from '../settings/contract/service/values.js';
 import type { FileRoots } from '../workspace/contract/service/roots.js';
 import type { CheckoutWatch } from '../workspace/contract/service/watch.js';
+import type { TerminalRequests, Terminals } from '../executions/contract/service/terminals.js';
+import type { TerminalEndings } from '../executions/contract/service/endings.js';
+import type { TerminalScreens } from '../executions/contract/service/records.js';
+import type { HostManagement } from '../executions/contract/service/host.js';
+import type { ProjectIdentification, Projects } from '../projects/contract/service/registry.js';
 
-export type NextPlace = {
+export type SourcePlace = {
   readonly serverPath: string;
+  readonly installation: Installation | undefined;
+};
+
+export type DoorPlace = SourcePlace & { readonly port: number };
+
+export type NextPlace = SourcePlace & {
   readonly dataPath: string;
   readonly installations: string;
-  readonly installation: Installation | undefined;
   readonly source: ProcessProvenance | undefined;
   readonly restart: () => Promise<string | null>;
   readonly landed: () => Promise<string | null>;
@@ -24,6 +34,17 @@ export type NextPlace = {
 
 export type NextNeeds = Settings | HttpClient.HttpClient;
 
+export type DoorNeeds =
+  | Terminals
+  | TerminalRequests
+  | TerminalEndings
+  | TerminalScreens
+  | HostManagement
+  | Projects
+  | ProjectIdentification
+  | HttpClient.HttpClient;
+
 export type Bindings = {
   readonly nextInstallation: (place: NextPlace) => Layer.Layer<NextInstallation, never, NextNeeds>;
+  readonly door: (place: DoorPlace) => Layer.Layer<never, never, DoorNeeds>;
 };
