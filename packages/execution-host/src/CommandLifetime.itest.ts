@@ -3,8 +3,7 @@ import { layer } from '@runlith/effect-test';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Context, Deferred, Duration, Effect, Fiber, FileSystem, Layer } from 'effect';
-import { TestClock } from 'effect/testing';
+import { Context, Deferred, Effect, Fiber, FileSystem, Layer } from 'effect';
 import type { CommandAdmission, CommandLimits } from '@runlith/executions/protocol/command';
 import { Principal } from '@runlith/executions/protocol/custody';
 import { ExecutionId } from '@runlith/executions/protocol/execution';
@@ -147,7 +146,7 @@ const fixture = Layer.effect(
     const owners = ExecutionRegistry.layer().pipe(
       Layer.provideMerge(Bindings.layer),
       Layer.provideMerge(store),
-      Layer.provide(Layer.effectContext(TestClock.withLive(Effect.map(Layer.build(testHolder(directory)), Context.omit(Processes))))),
+      Layer.provide(Layer.effectContext(Effect.map(Layer.build(testHolder(directory)), Context.omit(Processes)))),
       Layer.provideMerge(heldFiles),
       Layer.provide(hostSpawner),
     );
@@ -234,7 +233,7 @@ const arrived = Effect.fnUntraced(function* (open: Host, execution: ExecutionId,
 const stop = (open: Host, key: string, execution: ExecutionId, how: 'destroy' | 'signal' = 'destroy') =>
   open.stops.stop(open.claim, keyOf(key), execution, 'explicit-stop', how);
 
-layer(fixture)('a bounded command', (it) => {
+layer(fixture, { excludeTestServices: true })('a bounded command', (it) => {
   it.effect('accepts before acquisition and runs one native intent despite repeated requests', () =>
     withHost(
       Effect.fnUntraced(function* (open) {
@@ -537,7 +536,6 @@ layer(fixture)('a bounded command', (it) => {
         expect(holding.state.streams).toEqual({ stdout: 'open', stderr: 'open', pty: 'open' });
         expect(holding.decision).toBeUndefined();
         expect((yield* open.requests.callResult(keyOf('command-holder')))._tag).toBe('Pending');
-        yield* TestClock.adjust(Duration.seconds(2));
         const decided = yield* arrived(open, execution, (held) => held.decision !== undefined);
         expect(decided.decision).toMatchObject({ _tag: 'Cancelled', cause: 'timeout' });
         const released = yield* arrived(

@@ -1,6 +1,8 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect } from 'effect';
+import { Effect, Fiber } from 'effect';
+import { TestClock } from 'effect/testing';
+import { STOP_LADDER } from '@runlith/executions/protocol/call';
 import type { ProcessTarget } from '@runlith/executions/protocol/stop';
 import { endProcess } from './ProcessEnding';
 import { Processes, type ProcessReader } from './ProcessReader';
@@ -55,10 +57,14 @@ it.effect('a replacement under the selected pid remains alive', () =>
 it.effect('an ending is observed and a refused signal remains a refusal', () =>
   Effect.gen(function* () {
     const ended = world(1000);
-    expect(yield* ended.end(target)).toMatchObject({ _tag: 'Ended', steps: ['terminate'] });
+    const ending = yield* Effect.forkScoped(ended.end(target));
+    yield* TestClock.adjust(STOP_LADDER.terminateAtMs);
+    expect(yield* Fiber.join(ending)).toMatchObject({ _tag: 'Ended', steps: ['terminate'] });
     expect(ended.alive()).toBe(false);
     const denied = world(1000, true);
-    expect(yield* denied.end(target)).toMatchObject({ _tag: 'Refused', reason: 'signal-failed' });
+    const refusing = yield* Effect.forkScoped(denied.end(target));
+    yield* TestClock.adjust(STOP_LADDER.terminateAtMs);
+    expect(yield* Fiber.join(refusing)).toMatchObject({ _tag: 'Refused', reason: 'signal-failed' });
     expect(denied.alive()).toBe(true);
   }),
 );

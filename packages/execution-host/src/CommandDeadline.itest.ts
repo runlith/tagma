@@ -6,6 +6,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Context, Deferred, Duration, Effect, Fiber, FileSystem, Layer } from 'effect';
 import { TestClock } from 'effect/testing';
 import type { CeilingExemption, CommandAdmission, CommandLimits, DeadlineChange } from '@runlith/executions/protocol/command';
+import { STOP_LADDER } from '@runlith/executions/protocol/call';
 import { Principal } from '@runlith/executions/protocol/custody';
 import { InstallationId, type ExecutionId, type HostRequestRef } from '@runlith/executions/protocol/execution';
 import type { LaunchRequest } from '@runlith/executions/protocol/launch';
@@ -195,7 +196,11 @@ const until = Effect.fnUntraced(function* <A, E, R>(read: Effect.Effect<A, E, R>
   return value;
 });
 const running = (path: string) => until(witnessed(path), (value) => value !== '');
-const stopped = (host: Host, execution: ExecutionId) => until(host.hostCommands.command(execution), (row) => row?.state.phase === 'ended');
+const stopped = Effect.fnUntraced(function* (host: Host, execution: ExecutionId) {
+  const row = yield* until(host.hostCommands.command(execution), (row) => row?.state.phase === 'ended');
+  yield* TestClock.adjust(STOP_LADDER.reapMs);
+  return row;
+});
 const decided = (host: Host, key: HostRequestRef) => until(host.requests.callResult(key), (answer) => answer._tag !== 'Pending');
 const accept = Effect.fnUntraced(function* (host: Host, key: HostRequestRef, input: CommandInput) {
   const answer = yield* host.hostExecutions.start(host.claim, key, commandOf(input));
@@ -205,8 +210,7 @@ const accept = Effect.fnUntraced(function* (host: Host, key: HostRequestRef, inp
     Effect.orDie(
       Effect.gen(function* () {
         const row = yield* host.hostCommands.command(execution);
-        if (row?.state.phase !== 'ended')
-          yield* host.stops.stop(host.claim, keyOf(`cleanup-${key.operation}`), execution, 'explicit-stop', 'destroy');
+        if (row?.state.phase !== 'ended') yield* end(host, `cleanup-${key.operation}`, execution);
       }),
     ),
   );
@@ -229,8 +233,10 @@ const revise = (
     cause: 'the case asked for it',
     exception,
   });
-const end = (host: Host, key: string, execution: ExecutionId) =>
-  host.stops.stop(host.claim, keyOf(key), execution, 'explicit-stop', 'destroy');
+const end = Effect.fnUntraced(function* (host: Host, key: string, execution: ExecutionId) {
+  const stopping = yield* Effect.forkChild(host.stops.stop(host.claim, keyOf(key), execution, 'explicit-stop', 'destroy'));
+  return yield* Effect.raceFirst(Fiber.join(stopping), Effect.andThen(stopped(host, execution), Fiber.join(stopping)));
+});
 
 layer(fixture)("a command's deadline", (it) => {
   it.effect('takes a total while queued and refuses a remaining duration before acquisition', () =>
