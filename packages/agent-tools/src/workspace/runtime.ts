@@ -158,7 +158,7 @@ export const pathPreparation = Effect.fn('pathPreparation')(function* (
   return { subjects: [subject] as readonly PermissionSubject[], prepared: path };
 });
 
-const fileWriters: Held<string, never> = declare<string>({
+export const fileWriters: Held<string, never> = declare<string>({
   name: 'agent-tools-file-writer',
   owner: 'agent-tools',
   rank: 261,

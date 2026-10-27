@@ -72,24 +72,35 @@ it.live('the writer standing names the work holding it, counts only the time not
   }),
 );
 
-it.live('the asking loop keeps its frames while a statement burns a second', () =>
+it.live('a statement waiting in SQLite leaves the asking loop able to release its blocker', () =>
   Effect.gen(function* () {
-    const { queryMs, worstGapMs } = yield* withClient((sql) =>
-      Effect.gen(function* () {
-        let worst = 0;
-        let last = Bun.nanoseconds();
-        const ticker = setInterval(() => {
-          const now = Bun.nanoseconds();
-          worst = Math.max(worst, (now - last) / 1e6);
-          last = now;
-        }, 5);
-        const started = Bun.nanoseconds();
-        yield* sql`${sql.literal(SLOW)}`.pipe(Effect.ensuring(Effect.sync(() => clearInterval(ticker))));
-        return { queryMs: (Bun.nanoseconds() - started) / 1e6, worstGapMs: worst };
-      }),
+    const filename = yield* onDisk;
+    const context = yield* Layer.build(sqliteProcessLayer({ filename, busyTimeout: Duration.seconds(86_400), onLost: () => {} }));
+    const sql = Context.get(context, SqlClient);
+    const { writer } = Context.get(context, Connections);
+    yield* sql`CREATE TABLE t (id INTEGER PRIMARY KEY)`;
+    const blocker = yield* Effect.acquireRelease(
+      Effect.sync(() => new Database(filename)),
+      (blocker) => Effect.sync(() => blocker.close()),
     );
-    expect(queryMs).toBeGreaterThan(300);
-    expect(worstGapMs).toBeLessThan(100);
+    blocker.run('BEGIN IMMEDIATE');
+    const writing = yield* Effect.forkChild(sql`INSERT INTO t (id) VALUES (1)`, { startImmediately: true });
+    while (true) {
+      const standing = yield* writer;
+      if (standing.holder?.quietMs === 0) break;
+      yield* Effect.yieldNow;
+    }
+    yield* Effect.promise(
+      () =>
+        new Promise<void>((resolve) =>
+          setImmediate(() => {
+            blocker.run('COMMIT');
+            resolve();
+          }),
+        ),
+    );
+    yield* Fiber.join(writing);
+    expect(yield* sql<{ id: number }>`SELECT id FROM t`).toEqual([{ id: 1 }]);
   }),
 );
 

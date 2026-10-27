@@ -1,4 +1,4 @@
-import { describe, expect, jest } from 'bun:test';
+import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
@@ -12,6 +12,7 @@ import type { McpHttpServerDeclaration, McpStdioServerDeclaration } from './McpS
 import type { McpSdkCallResult } from './sdk';
 
 const SERVER = resolve(import.meta.dir, '../test/mcpTestServer.ts');
+const PENDING_TIMEOUT_MS = 86_400_000;
 
 const declare = (
   name: string,
@@ -288,26 +289,19 @@ describe('McpPool', () => {
         ),
         (watcher) => Effect.sync(() => watcher.close()),
       );
-      yield* pool.reconcile([declare('frozen', [], { timeoutMs: 1_000, env: { MCP_TEST_HOLD_CALL: startedFile } })]);
+      yield* pool.reconcile([declare('frozen', [], { timeoutMs: PENDING_TIMEOUT_MS, env: { MCP_TEST_HOLD_CALL: startedFile } })]);
       yield* pool.awaitHandshakes();
       expect(pool.states()).toMatchObject([{ name: 'frozen', status: 'connected' }]);
       const pid = Number(text(yield* pool.call('frozen', 'pid', {})));
-      yield* Effect.acquireUseRelease(
-        Effect.sync(() => jest.useFakeTimers()),
-        () =>
-          Effect.gen(function* () {
-            const answered = yield* Effect.gen(function* () {
-              const calling = yield* Effect.forkScoped(pool.call('frozen', 'echo', { text: 'hi' }));
-              yield* Deferred.await(started);
-              process.kill(pid, 'SIGSTOP');
-              return yield* Fiber.interrupt(calling).pipe(Effect.andThen(Fiber.await(calling)));
-            }).pipe(Effect.ensuring(Effect.sync(() => process.kill(pid, 'SIGCONT'))));
+      const answered = yield* Effect.gen(function* () {
+        const calling = yield* Effect.forkScoped(pool.call('frozen', 'echo', { text: 'hi' }));
+        yield* Deferred.await(started);
+        process.kill(pid, 'SIGSTOP');
+        return yield* Fiber.interrupt(calling).pipe(Effect.andThen(Fiber.await(calling)));
+      }).pipe(Effect.ensuring(Effect.sync(() => process.kill(pid, 'SIGCONT'))));
 
-            expect(Exit.isFailure(answered) && Cause.hasInterruptsOnly(answered.cause)).toBe(true);
-            expect(pool.states().map((state) => [state.name, state.status])).toEqual([['frozen', 'connected']]);
-          }),
-        () => Effect.sync(() => jest.useRealTimers()),
-      );
+      expect(Exit.isFailure(answered) && Cause.hasInterruptsOnly(answered.cause)).toBe(true);
+      expect(pool.states().map((state) => [state.name, state.status])).toEqual([['frozen', 'connected']]);
 
       yield* Scope.close(scope, Exit.void);
     }),
@@ -380,7 +374,7 @@ describe('McpPool', () => {
       const pidFile = join(dir, 'pid');
       const scope = yield* Scope.fork(yield* Effect.scope);
       const pool = yield* McpPool.make().pipe(Scope.provide(scope));
-      yield* pool.reconcile([declare('mute', ['--hang'], { timeoutMs: 5_000, env: { MCP_TEST_PID_FILE: pidFile } })]);
+      yield* pool.reconcile([declare('mute', ['--hang'], { timeoutMs: PENDING_TIMEOUT_MS, env: { MCP_TEST_PID_FILE: pidFile } })]);
       expect(yield* until(() => existsSync(pidFile))).toBe(true);
       const pid = Number(readFileSync(pidFile, 'utf8'));
       expect(pool.states().map((state) => state.status)).toEqual(['connecting']);

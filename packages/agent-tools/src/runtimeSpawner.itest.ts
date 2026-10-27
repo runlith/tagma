@@ -18,7 +18,12 @@ layer(bunSpawner(), { excludeTestServices: true })('the runtime spawner', (it) =
         yield* handle.exitCode;
         return processCost(handle);
       }, Effect.scoped);
-      const readings = { burner: yield* of('yes | head -c 20000000 > /dev/null'), idler: yield* of('true') };
+      const idler = yield* ChildProcess.make('/bin/sh', ['-c', 'printf ready; exec cat'], { stdin: 'pipe' });
+      yield* Stream.runHead(idler.stdout);
+      const burner = yield* of('yes | head -c 20000000 > /dev/null');
+      yield* Stream.run(Stream.empty, idler.stdin);
+      yield* idler.exitCode;
+      const readings = { burner, idler: processCost(idler) };
 
       expect(readings.burner?._tag).toBe('Measured');
       expect(readings.idler?._tag).toBe('Measured');

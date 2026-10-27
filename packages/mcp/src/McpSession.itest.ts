@@ -2,15 +2,16 @@ import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, watch } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { TOOL_OUTPUT_MAX_BYTES } from '@runlith/agent/ToolOutputSpool';
-import { Cause, Effect, Exit, Fiber, PubSub, Scope } from 'effect';
+import { Cause, Deferred, Effect, Exit, Fiber, PubSub, Scope } from 'effect';
 import type { McpFailure } from './McpFailure';
 import type { McpStdioServerDeclaration } from './McpServerDeclaration';
 import { openMcpSession } from './McpSession';
 import { mcpCallTool, mcpClose, mcpConnect, openMcpTransport, type McpSdkCallResult } from './sdk';
 
 const SPAWN_BUDGET_MS = 30_000;
+const PENDING_TIMEOUT_MS = 86_400_000;
 const SERVER = resolve(import.meta.dir, '../test/mcpTestServer.ts');
 
 const declare = (
@@ -47,6 +48,21 @@ const gone = Effect.fnUntraced(function* (pid: number) {
   return true;
 });
 
+const fileWritten = Effect.fnUntraced(function* (path: string) {
+  const written = yield* Deferred.make<string>();
+  const read = () => {
+    if (!existsSync(path)) return;
+    const contents = readFileSync(path, 'utf8');
+    if (contents !== '') Deferred.doneUnsafe(written, Effect.succeed(contents));
+  };
+  yield* Effect.acquireRelease(
+    Effect.sync(() => watch(dirname(path), read)),
+    (watcher) => Effect.sync(() => watcher.close()),
+  );
+  read();
+  return yield* Deferred.await(written);
+});
+
 describe('McpSession', () => {
   it.live(
     'connects, lists descriptors as the server spelled them, calls a tool, and ends the child with its scope',
@@ -75,18 +91,29 @@ describe('McpSession', () => {
     Effect.fnUntraced(function* () {
       const program = Effect.scoped(
         Effect.gen(function* () {
+          const home = yield* Effect.acquireRelease(
+            Effect.sync(() => mkdtempSync(join(tmpdir(), 'mcp-call-'))),
+            (home) => Effect.sync(() => rmSync(home, { recursive: true, force: true })),
+          );
+          const started = join(home, 'started');
           const connection = yield* openMcpTransport(
             'slow',
-            { transport: 'stdio', command: process.execPath, args: [SERVER], onStderr: () => {} },
+            {
+              transport: 'stdio',
+              command: process.execPath,
+              args: [SERVER],
+              env: { MCP_TEST_HOLD_CALL: started },
+              onStderr: () => {},
+            },
             { onToolsChanged: () => {}, onClosed: () => {} },
           );
           yield* Effect.addFinalizer(() => mcpClose(connection, SPAWN_BUDGET_MS));
           yield* mcpConnect(connection, { timeout: SPAWN_BUDGET_MS });
-          const calling = yield* Effect.forkChild(mcpCallTool(connection, 'sleep', { ms: 5_000 }, { timeout: 5_000 }));
-          yield* Effect.sleep('50 millis');
+          const calling = yield* Effect.forkChild(mcpCallTool(connection, 'echo', {}, { timeout: PENDING_TIMEOUT_MS }));
+          yield* fileWritten(started);
           yield* Fiber.interrupt(calling);
           const interrupted = yield* Fiber.await(calling);
-          const expired = yield* failed(mcpCallTool(connection, 'sleep', { ms: 5_000 }, { timeout: 300 }));
+          const expired = yield* failed(mcpCallTool(connection, 'echo', {}, { timeout: 300 }));
           return { interrupted, expired };
         }),
       );
@@ -108,42 +135,21 @@ describe('McpSession', () => {
   );
 
   it.live(
-    'ends an interrupted handshake at once rather than waiting out the timeout',
+    'interrupts a handshake without waiting for its timeout and ends a child that ignores stdin closing',
     Effect.fnUntraced(function* () {
-      const opening = yield* Effect.forkScoped(Effect.scoped(openMcpSession(declare('mute', ['--hang'], { timeoutMs: 5_000 }))));
-      yield* Effect.sleep(100);
-      const ended = yield* Fiber.interrupt(opening).pipe(Effect.andThen(Fiber.await(opening)));
-      expect(Exit.isFailure(ended) && Cause.hasInterruptsOnly(ended.cause)).toBe(true);
-    }),
-  );
-
-  it.live(
-    'leaves no child running once an interrupted connect has ended, even one that ignores its stdin closing',
-    Effect.fnUntraced(function* () {
-      const home = mkdtempSync(join(tmpdir(), 'mcp-session-'));
+      const home = yield* Effect.acquireRelease(
+        Effect.sync(() => mkdtempSync(join(tmpdir(), 'mcp-session-'))),
+        (home) => Effect.sync(() => rmSync(home, { recursive: true, force: true })),
+      );
       const pidFile = join(home, 'pid');
-      const spawned = Promise.withResolvers<number>();
-      const watcher = watch(home, () => {
-        if (!existsSync(pidFile)) return;
-        const pid = Number(readFileSync(pidFile, 'utf8'));
-        if (pid > 0) spawned.resolve(pid);
-      });
       const opening = yield* Effect.forkScoped(
         Effect.scoped(
-          openMcpSession(declare('wedged', ['--hang', '--no-exit'], { timeoutMs: SPAWN_BUDGET_MS, env: { MCP_TEST_PID_FILE: pidFile } })),
-        ),
-      );
-      yield* Effect.addFinalizer(() =>
-        Fiber.interrupt(opening).pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              watcher.close();
-              rmSync(home, { recursive: true, force: true });
-            }),
+          openMcpSession(
+            declare('wedged', ['--hang', '--no-exit'], { timeoutMs: PENDING_TIMEOUT_MS, env: { MCP_TEST_PID_FILE: pidFile } }),
           ),
         ),
       );
-      const pid = yield* Effect.promise(() => spawned.promise);
+      const pid = Number(yield* fileWritten(pidFile));
       const ended = yield* Fiber.interrupt(opening).pipe(Effect.andThen(Fiber.await(opening)));
       expect(Exit.isFailure(ended) && Cause.hasInterruptsOnly(ended.cause)).toBe(true);
       expect(alive(pid)).toBe(false);

@@ -11,7 +11,7 @@ import { toolDecode } from '@runlith/agent/tool/arguments';
 import { ByteSize, Deferred, Effect, Fiber, FileSystem, Layer, Option } from 'effect';
 import { PlatformError, SystemError } from 'effect/PlatformError';
 import { createTools } from './index';
-import { withFileWriteLock } from './workspace/runtime';
+import { fileWriters, withFileWriteLock } from './workspace/runtime';
 import { porcelainListing } from './checkoutState';
 import { bytesDigest, contentDigest } from '@runlith/files/content';
 import { IntakeRefused, type Landed } from './WorkspaceChanges';
@@ -929,6 +929,9 @@ it.live('a relative path and an absolute one take the same write permit', () =>
         newString: 'const a = 3;',
       }),
     );
+    const key = join(yield* host.realpath(dir), 'alpha.ts');
+    while (fileWriters.standing(key)[0]?.waiters !== 1) yield* Effect.yieldNow;
+    expect(fileWriters.holders(key)).toHaveLength(1);
     yield* Deferred.succeed(release, undefined);
     yield* Fiber.join(holder);
     yield* Fiber.join(editing);
