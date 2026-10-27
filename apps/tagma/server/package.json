@@ -599,6 +599,16 @@
       "browser": "./src/installation/contract/wire/machine.ts",
       "default": "./src/installation/contract/wire/machine.ts"
     },
+    "./installation/contract/wire/newHost": {
+      "types": "./src/installation/contract/wire/newHost.ts",
+      "browser": "./src/installation/contract/wire/newHost.ts",
+      "default": "./src/installation/contract/wire/newHost.ts"
+    },
+    "./installation/contract/wire/source": {
+      "types": "./src/installation/contract/wire/source.ts",
+      "browser": "./src/installation/contract/wire/source.ts",
+      "default": "./src/installation/contract/wire/source.ts"
+    },
     "./installation/contract/wire/next": {
       "types": "./src/installation/contract/wire/next.ts",
       "browser": "./src/installation/contract/wire/next.ts",

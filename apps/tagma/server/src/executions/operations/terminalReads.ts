@@ -175,6 +175,7 @@ export const TERMINAL_READ_PAIRS = {
         return {
           terminal: adoptedBy === undefined ? terminalView(record) : { ...terminalView(record), adoptedBy: ThreadId.make(adoptedBy) },
           state: state === undefined ? lost : state.state,
+          endedWithHost: state === undefined && lost !== null,
           grid: state?.grid ?? null,
           lanes: (yield* TerminalWriting).lanesOver(record.projectId, record.execution),
           ...(yield* typedBy(caller, record)),

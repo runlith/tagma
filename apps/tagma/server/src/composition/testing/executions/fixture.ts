@@ -1,9 +1,9 @@
-import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Schema } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { kind, shared } from '@runlith/testbed/worlds';
 import { join } from 'node:path';
-import { readArtifact } from '@runlith/executions/hostArtifacts';
-import type { ArtifactManifest } from '@runlith/executions/protocol/artifact';
+import { digestOf, holderEntryOf, identityOf, readArtifact } from '@runlith/executions/hostArtifacts';
+import { ARTIFACT_FILE, ArtifactManifest, HOLDER_ENTRY_FILE } from '@runlith/executions/protocol/artifact';
 import type { ExecutionPolicy } from '@runlith/executions/protocol/capacity';
 import type { InstallationId } from '@runlith/executions/protocol/execution';
 import { THREAD_AUTHORITY_DEFAULT } from '@runlith/agent/thread/rows';
@@ -44,6 +44,27 @@ const makeBundle = Effect.fn('ExecutionFixture.bundle')(function* () {
 });
 
 export const hostBundleWorld = kind(HostBundle, (_params: null) => makeBundle().pipe(Effect.provide(BunFileSystem.layer)));
+
+export const EXTRA_MIGRATION = '29991231000000_stest_extra';
+
+const manifestJson = Schema.fromJsonString(ArtifactManifest);
+
+export const migrated = Effect.fn('ExecutionFixture.migrated')(function* (bundle: string) {
+  const files = yield* FileSystem.FileSystem;
+  const manifest = yield* files.readFileString(join(bundle, ARTIFACT_FILE)).pipe(Effect.flatMap(Schema.decodeUnknownEffect(manifestJson)));
+  const like = manifest.parts.find((one) => one.path.startsWith('drizzle/'));
+  if (like === undefined) return yield* Effect.die(new Error('the bundle carries no migrations'));
+  const path = `drizzle/${EXTRA_MIGRATION}/migration.sql`;
+  const bytes = new TextEncoder().encode('CREATE TABLE `stest_extra` (`x` integer);\n');
+  yield* files.makeDirectory(join(bundle, 'drizzle', EXTRA_MIGRATION), { recursive: true });
+  yield* files.writeFile(join(bundle, path), bytes, { mode: 0o600 });
+  const parts = [...manifest.parts, { ...like, path, bytes: bytes.length, digest: digestOf(bytes) }];
+  const next = { ...manifest, parts, identity: { ...manifest.identity, digest: identityOf({ ...manifest, parts }) } };
+  const entry = holderEntryOf(next);
+  if (entry === undefined) return yield* Effect.die(new Error('the bundle has no holder entry'));
+  yield* files.writeFileString(join(bundle, ARTIFACT_FILE), yield* Schema.encodeEffect(manifestJson)(next));
+  yield* files.writeFileString(join(bundle, HOLDER_ENTRY_FILE), entry);
+});
 
 export const hostFixtureLayer = (_name: string) => Layer.effect(HostBundle, shared(hostBundleWorld, null));
 

@@ -1,6 +1,7 @@
 import { Context, type Effect } from 'effect';
 import type { SnapshotFailed, SnapshotLoss } from '../../../platform/contract/service/snapshots.js';
 import type { McpDeclarationWrite } from '../wire/install.js';
+import type { RestartHost } from '../wire/source.js';
 import type { HostUnprepared } from './succession.js';
 
 export class SetupSteps extends Context.Service<
@@ -13,7 +14,7 @@ export class SetupSteps extends Context.Service<
 export class SuccessionSteps extends Context.Service<
   SuccessionSteps,
   {
-    readonly prepare: (restart: string) => Effect.Effect<void, HostUnprepared>;
+    readonly prepare: (restart: string, host: RestartHost) => Effect.Effect<void, HostUnprepared>;
     readonly withdraw: Effect.Effect<void>;
   }
 >()('tagma/installation/SuccessionSteps') {}

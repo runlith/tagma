@@ -12,6 +12,7 @@ import {
   launchAnswerSchema,
   launchRequestSchema,
   HANDOFF,
+  HOST_REPLACE,
   HOST_STATE,
   RELEASES,
   REPLACES,
@@ -22,7 +23,7 @@ import {
 import { RESTART_ID } from '../contract/wire/restart.js';
 import { LaunchLifetime } from './lifetime.js';
 
-const RETURN_DROPS = [REPLACES, HANDOFF, HOST_STATE, RESTART_ID] as const;
+const RETURN_DROPS = [REPLACES, HANDOFF, HOST_STATE, HOST_REPLACE, RESTART_ID] as const;
 
 const decodeRequest = Schema.decodeUnknownSync(Schema.Union([launchRequestSchema, handoffSchema, takeoverSchema]));
 const decodeAnswer = Schema.decodeUnknownSync(launchAnswerSchema);

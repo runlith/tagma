@@ -5,7 +5,23 @@ import { ExecutionHistory } from './contract/service/history.js';
 
 import { SessionIdentity } from '../platform/contract/wire/session.js';
 
-import { Cause, Clock, Context, Deferred, Duration, Effect, Exit, FileSystem, Layer, Path, Queue, Ref, Scope } from 'effect';
+import {
+  Cause,
+  Clock,
+  Context,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Path,
+  PubSub,
+  Queue,
+  Ref,
+  Scope,
+  Stream,
+} from 'effect';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import { hostAddress, type HostAddressInvalid } from '@runlith/executions/hostAddress';
 import type { BindingId } from '@runlith/executions/protocol/custody';
@@ -57,7 +73,7 @@ import { carriedOffer, hostBundleNext, hostOffer, swapBundle, withdrawCandidate 
 import { prepareChange, yieldPlace } from './host/departure.js';
 import { awaitLogic } from './host/arrival.js';
 import { placeOverForeign, standingAfter } from './host/foreign.js';
-import { firstEnable } from './host/firstEnable.js';
+import { endStanding, firstEnable } from './host/firstEnable.js';
 import { shutdownMsOf } from '@runlith/executions/protocol/capacity';
 import {
   holdHostShare,
@@ -118,7 +134,7 @@ const heldByThreads = (
         (failure) =>
           new TerminalUnavailable({
             owner: 'store',
-            message: `The terminals threads hold could not be read before ending the execution host that has no holder (${failure._tag}).`,
+            message: `The terminals threads hold could not be read before ending the standing execution host (${failure._tag}).`,
           }),
       ),
     );
@@ -146,7 +162,7 @@ const tellReplaced = (
               (failure) =>
                 new TerminalUnavailable({
                   owner: 'store',
-                  message: `The threads whose terminals ended with the execution host that had no holder could not be owed a notice (${failure._tag}; ${held.length} terminals).`,
+                  message: `The threads whose terminals ended with the execution host this server ended could not be owed a notice (${failure._tag}; ${held.length} terminals).`,
                 }),
             ),
           ),
@@ -206,7 +222,7 @@ export const executionsLayer: Layer.Layer<
   | ChildProcessSpawner.ChildProcessSpawner
 > = Layer.effectContext(
   Effect.gen(function* () {
-    const { source, placed, migrations, programVersion, firstEnded, lifetime, takenAfter } = yield* HostOffering;
+    const { source, placed, replacing, migrations, programVersion, hostEnded, lifetime, takenAfter } = yield* HostOffering;
     const machine = yield* MachineStore;
     const { db, path, schema } = machine;
     const units = yield* MachineUnits;
@@ -270,7 +286,7 @@ export const executionsLayer: Layer.Layer<
     const heldAtFence = yield* Ref.make<readonly TerminalRecord[]>([]);
     const yieldAsk = yield* LogicYield;
     const broughtUp = Effect.fnUntraced(function* (cold: Effect.Success<typeof coldRoad>, given: HostOffer) {
-      const first = yield* firstEnable({
+      const ending = {
         files,
         bundle,
         state: address.state,
@@ -278,8 +294,9 @@ export const executionsLayer: Layer.Layer<
         claim: stateClaim(files, address.state),
         signalClaim: signalClaimHolder,
         fence: heldByThreads(units, terminalRows).pipe(Effect.flatMap((held) => Ref.set(heldAtFence, held))),
-        record: (ended, detail) => firstEnded?.(ended, detail) ?? Effect.void,
-      });
+        record: (ended: number | undefined, detail: string) => hostEnded?.(ended, detail) ?? Effect.void,
+      };
+      const first = yield* firstEnable(ending);
       if (first._tag === 'Enabled') {
         yield* tellReplaced(units, terminalRows, displaced, yield* Ref.get(heldAtFence)).pipe(Effect.orDie);
       }
@@ -295,7 +312,15 @@ export const executionsLayer: Layer.Layer<
         },
         cold?._tag === 'Foreign' ? cold.placed : placed,
       );
-      const stayed = yield* standingAfter(arrival, files, address.state);
+      const replaced =
+        replacing === true && (arrival._tag === 'Refused' || arrival._tag === 'Kept')
+          ? yield* endStanding(ending, `the execution host of another build, which does not take this one (${arrival.detail})`)
+          : undefined;
+      if (replaced?._tag === 'Enabled') {
+        yield* tellReplaced(units, terminalRows, displaced, yield* Ref.get(heldAtFence)).pipe(Effect.orDie);
+      }
+      if (replaced?._tag === 'Refused') yield* Effect.logWarning(replaced.detail);
+      const stayed = replaced?._tag === 'Enabled' ? null : yield* standingAfter(arrival, files, address.state);
       if (stayed !== null) yield* Effect.logWarning(stayed);
       const raised: HostBoot =
         given._tag === 'Unoffered'
@@ -327,24 +352,33 @@ export const executionsLayer: Layer.Layer<
         ? hostBootDetail(boot)
         : `${hostBootDetail(boot)} This floor does not hold custody of it (${assurance.reason._tag}): ${detailOf(assurance.reason, state)}.`;
     const awaited: HostBoot = { _tag: 'Awaited' };
-    const live = yield* Ref.make<HostStanding>({
+    const opening: HostStanding = {
       boot: awaited,
       custodian: false,
       detail: hostBootDetail(awaited),
       notice: hostBootDetail(awaited),
       geometry: policy.execution.geometry,
-    });
+    };
+    const live = yield* Ref.make<HostStanding>(opening);
+    const standings = yield* Effect.acquireRelease(PubSub.sliding<HostStanding>({ capacity: 1, replay: 1 }), PubSub.shutdown);
+    yield* PubSub.publish(standings, opening);
+    const stand = (standing: HostStanding) => Effect.andThen(Ref.set(live, standing), PubSub.publish(standings, standing));
     const settings = yield* Settings;
     const settled = Effect.fnUntraced(function* ({ stayed, raised }: Effect.Success<ReturnType<typeof broughtUp>>) {
       const assured = yield* custody.ensure();
       const floor = floorDetail(raised, assured, address.state);
       const detail = stayed === null ? floor : `${floor} ${stayed}.`;
-      yield* Ref.set(live, {
+      yield* stand({
         boot: raised,
         custodian: assured._tag === 'Held',
         detail,
-        notice: stayed === null && assured._tag === 'Held' && (raised._tag === 'Adopted' || raised._tag === 'Raised') ? null : detail,
+        notice:
+          (stayed === null && assured._tag === 'Held' && (raised._tag === 'Adopted' || raised._tag === 'Raised')) ||
+          (stayed !== null && assured._tag !== 'Held')
+            ? null
+            : detail,
         geometry: policy.execution.geometry,
+        stays: assured._tag === 'Held' ? undefined : (stayed ?? undefined),
       });
       if (raised._tag !== 'Adopted' && raised._tag !== 'Raised') {
         yield* Effect.logWarning('this installation has no execution host', { detail: hostBootDetail(raised) });
@@ -448,7 +482,7 @@ export const executionsLayer: Layer.Layer<
         ),
     };
     const succession: SuccessionSteps['Service'] = {
-      prepare: (restart) =>
+      prepare: (restart, mode) =>
         prepareChange(
           executions,
           custody.ensure({ seen: true }),
@@ -457,6 +491,7 @@ export const executionsLayer: Layer.Layer<
           address.installation,
           stateClaim(files, address.state),
           restart,
+          mode,
         ).pipe(Effect.onExit((exit) => Ref.set(yielding, Exit.isSuccess(exit) && exit.value ? 'armed' : 'idle'))),
       withdraw: Effect.flatMap(
         Ref.modify(yielding, (stage): [boolean, YieldStage] => (stage === 'yielding' ? [false, stage] : [true, 'idle'])),
@@ -504,7 +539,7 @@ export const executionsLayer: Layer.Layer<
             if (Cause.hasInterruptsOnly(cause)) return Effect.void;
             const failed: HostBoot = { _tag: 'Unraised', reason: `taking the host over after the door failed: ${Cause.pretty(cause)}` };
             return Effect.andThen(
-              Ref.set(live, {
+              stand({
                 boot: failed,
                 custodian: false,
                 detail: hostBootDetail(failed),
@@ -542,7 +577,31 @@ export const executionsLayer: Layer.Layer<
         Context.add(TerminalEndings, endings),
         Context.add(ExecutionHost, terminals),
         Context.add(HostManagement, hostState),
-        Context.add(MachineHost, yield* makeMachineHost({ host: hostState, terminals })),
+        Context.add(
+          MachineHost,
+          yield* makeMachineHost({
+            host: hostState,
+            standings: Stream.fromPubSub(standings),
+            terminals,
+            evidence: terminals,
+            rows: Effect.matchEffect(
+              units.read((unit) => Effect.all({ terminals: terminalRows.standing(unit), commands: commandRows.commandsStanding(unit) })),
+              {
+                onSuccess: Effect.succeed,
+                onFailure: (failure) =>
+                  Effect.as(
+                    Effect.logDebug(
+                      'the terminals and commands this installation holds could not be read; what a new host ends is unmeasured',
+                      {
+                        reason: failure._tag,
+                      },
+                    ),
+                    null,
+                  ),
+              },
+            ),
+          }),
+        ),
         Context.add(ViewLeases, yield* makeViewLeaseBook()),
         Context.add(ViewLanes, lanes),
         Context.add(TerminalGrids, grids),

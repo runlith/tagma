@@ -307,9 +307,10 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     hostSourcePath?: string;
     hostBundlePath?: string;
     placedHost?: HostPlacement;
+    replacingHost?: boolean;
     hostLifetime?: HostLifetime;
     watchLifetime?: WatchLifetime;
-    firstEnded?: (executions: number | undefined, detail: string) => Effect.Effect<void>;
+    hostEnded?: (executions: number | undefined, detail: string) => Effect.Effect<void>;
     installation?: Installation;
     models?: (standing: ModelAccess['Service']) => ModelAccess['Service'];
     decisions?: (standing: DecisionModels['Service']) => DecisionModels['Service'];
@@ -468,7 +469,8 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
         Layer.succeed(HostOffering, {
           source: hostSource,
           placed: options.placedHost,
-          firstEnded: options.firstEnded,
+          replacing: options.replacingHost,
+          hostEnded: options.hostEnded,
           migrations,
           programVersion: PROGRAM_RELEASE,
           lifetime: options.hostLifetime,

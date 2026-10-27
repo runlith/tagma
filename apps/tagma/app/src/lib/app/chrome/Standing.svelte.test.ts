@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { flushSync } from 'svelte';
 import { afterEach, expect, test, vi } from 'vitest';
+import { makeStorage } from '@runlith/layer/testing';
 import { Refusal } from '$lib/wire/refusal.js';
 import type { NextFrame } from '@tagma/server/installation/contract/wire/next';
 import type { LiveConnection, LiveFailure } from '$lib/wire/Live.js';
@@ -459,6 +460,21 @@ test('live source revisions update the standing and survive a delayed older mach
   expect(standing.next?.standing.behindBy).toBe(26);
 });
 
+test('a host verdict on the live source brings the new host card with no reading of its own', async () => {
+  const live = sourceLive();
+  const needed = { cause: 'standing', build: 'v2 b', host: 'v1 a', detail: 'the standing host refused', ends: [], back: null } as const;
+  const door = {
+    ask: () => Promise.resolve(health('v2 b', 'v2 b')),
+    perform: () => Promise.resolve({ machine: machineWith() }),
+  };
+  const standing = new Standing(door as never, origin, scope, windowOf() as never, live.connection);
+  await standing.read();
+  expect(standing.offersNewHost).toBe(false);
+  live.send(frameOf(1, null, { newHost: needed }));
+  expect(standing.newHost).toEqual(needed);
+  expect(standing.offersNewHost).toBe(true);
+});
+
 test('a refused source subscription is visible, a new snapshot clears it, and disposal ends delivery', async () => {
   const live = sourceLive();
   const disposers: Array<() => void> = [];
@@ -484,4 +500,38 @@ test('a refused source subscription is visible, a new snapshot clears it, and di
   for (const dispose of disposers.reverse()) dispose();
   live.send(frameOf(4, 27));
   expect(standing.next?.standing.behindBy).toBe(26);
+});
+
+test('Later puts off the card of one version for good, the chip keeps the update, and another version brings a new card', async () => {
+  let ready = 'v2 b';
+  const door = {
+    ask: (call: (api: unknown) => unknown) => call({ health: { health: () => Promise.resolve(health('v1 a', ready)) } }),
+    perform: performOver({
+      read_machine_state: () =>
+        Promise.resolve({
+          machine: {
+            ...machineWith(),
+            newHost: { cause: 'update', build: ready, host: 'v1 a', detail: 'the host does not take it', ends: [], back: null },
+          },
+        }),
+    }),
+  } as never;
+  const kept = makeStorage();
+  const standing = new Standing(door, origin, scope, windowOf() as never, null, null, null, kept);
+  await standing.read();
+  flushSync();
+  expect(standing.offersNewHost).toBe(true);
+  standing.putOff();
+  flushSync();
+  expect(standing.offersNewHost).toBe(false);
+  expect(standing.newHost?.build).toBe('v2 b');
+
+  const reopened = new Standing(door, origin, scope, windowOf() as never, null, null, null, kept);
+  await reopened.read();
+  flushSync();
+  expect(reopened.offersNewHost).toBe(false);
+  ready = 'v3 c';
+  await reopened.read();
+  flushSync();
+  expect(reopened.offersNewHost).toBe(true);
 });

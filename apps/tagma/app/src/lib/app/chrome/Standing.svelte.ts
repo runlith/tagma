@@ -1,8 +1,11 @@
 import { Scope } from '@runlith/layer/Scope';
 import type { MigrationLoad } from '@tagma/server/platform/contract/wire/migrationLoad';
 import { Service } from '@runlith/layer/key';
+import { Platform, type PlatformStorage } from '@runlith/layer/Platform';
 import type { healthSchema } from '@tagma/server/http/contract/wire/health';
 import type { MachineState } from '@tagma/server/installation/contract/wire/machine';
+import type { NewHost } from '@tagma/server/installation/contract/wire/newHost';
+import type { RestartHost } from '@tagma/server/installation/contract/wire/source';
 import type { Installing, MachineAct, NextFrame, NextOffer, Then } from '@tagma/server/installation/contract/wire/next';
 import { BUILD_ASKED_EVERY_MS } from '@tagma/server/installation/contract/wire/layout';
 import { Door } from '$lib/wire/Door.js';
@@ -16,6 +19,12 @@ import { SessionNaming } from '$lib/wire/SessionNaming.svelte.js';
 import { accessRefusal, WireState } from './WireState.svelte.js';
 
 type Health = typeof healthSchema.Type;
+
+const newHostKey = (needed: NewHost): string => `${needed.cause}:${needed.build ?? ''}:${needed.host ?? ''}`;
+
+const keyOf = (needed: NewHost | null): string => (needed === null ? '' : newHostKey(needed));
+
+const LATER_KEY = 'tagma.newHost.later';
 
 type Sleep = (ms: number) => Promise<void>;
 
@@ -35,7 +44,16 @@ export type StandingActing =
 export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
   static *make() {
     const door = yield* Door;
-    return new Standing(door, yield* ServerOrigin, yield* Scope, yield* Restart, yield* Live, yield* SessionNaming, yield* WireState);
+    return new Standing(
+      door,
+      yield* ServerOrigin,
+      yield* Scope,
+      yield* Restart,
+      yield* Live,
+      yield* SessionNaming,
+      yield* WireState,
+      (yield* Platform).storage.local,
+    );
   }
 
   health = $state<Health | null>(null);
@@ -60,6 +78,14 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
     const next = this.next;
     return next === null || next.update === null ? null : (next.offers.find((offer) => offer.id === next.update) ?? null);
   });
+  private heard = 0;
+  private hostSaid = $state<{ readonly newHost: NewHost | null; readonly at: number } | null>(null);
+  private snapshotAt = $state(0);
+  newHost = $derived(
+    this.hostSaid !== null && this.hostSaid.at > this.snapshotAt ? this.hostSaid.newHost : (this.snapshot?.newHost ?? null),
+  );
+  private later = $state<string | null>(null);
+  offersNewHost = $derived(this.newHost !== null && newHostKey(this.newHost) !== this.later);
   readAt = $state<number | null>(null);
   acting = $state<StandingActing | null>(null);
   restarting = $state<string | null>(null);
@@ -90,8 +116,10 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
     live: LiveConnection | null = null,
     private readonly naming: SessionNaming | null = null,
     private readonly wire: WireState | null = null,
+    private readonly kept: PlatformStorage | null = null,
   ) {
     super();
+    this.later = kept?.getItem(LATER_KEY) ?? null;
     scope.defer(() => {
       this.disposed = true;
     });
@@ -105,7 +133,10 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
             this.nextFrame = frame;
             this.liveProblem = null;
             this.readAt = Date.parse(frame.readAt);
-            if (this.snapshot !== null && this.snapshot.server.next.instance !== frame.instance) {
+            const said = frame.newHost ?? null;
+            const moved = keyOf(said) !== keyOf(this.newHost);
+            if (moved) this.hostSaid = { newHost: said, at: ++this.heard };
+            if (moved || (this.snapshot !== null && this.snapshot.server.next.instance !== frame.instance)) {
               this.readAfter = true;
               void this.read();
             }
@@ -181,6 +212,7 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
     }
     try {
       const requestedInstance = this.nextFrame?.instance;
+      const asked = ++this.heard;
       const machine = (await this.door.perform('read_machine_state', {}, {})).machine;
       if (this.disposed) return;
       if (this.nextFrame !== null && machine.server.next.instance !== this.nextFrame.instance) {
@@ -191,6 +223,7 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
         this.nextFrame = null;
       }
       this.snapshot = machine;
+      this.snapshotAt = asked;
       this.readProblem = null;
       this.readAt = Date.now();
     } catch (caught) {
@@ -198,7 +231,18 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
     }
   }
 
-  async restart(): Promise<void> {
+  putOff(): void {
+    if (this.newHost === null) return;
+    this.later = newHostKey(this.newHost);
+    this.kept?.setItem(LATER_KEY, this.later);
+  }
+
+  private askAgain(): void {
+    this.later = null;
+    this.kept?.removeItem(LATER_KEY);
+  }
+
+  async restart(host?: RestartHost): Promise<void> {
     if (this.acting !== null) return;
     const wanted = this.ready ?? this.health?.source.installation?.build ?? 'the installation that stands';
     this.acting = { _tag: 'Restart', onto: wanted, update: null };
@@ -206,10 +250,15 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
     this.actionProblem = null;
     let heavy: MigrationLoad | undefined;
     try {
-      heavy = (await this.door.perform('restart_server', {}, {})).restart.heavy;
+      heavy = (await this.door.perform('restart_server', { host }, {})).restart.heavy;
     } catch (error) {
       this.acting = null;
       this.restarting = null;
+      if (error instanceof Refusal && error.code === 'host-unprepared') {
+        this.askAgain();
+        await this.read();
+        if (this.newHost !== null) return;
+      }
       this.actionProblem = toldOf(error);
       return;
     }
@@ -271,6 +320,8 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
       }
       if (ended.restartRefused !== null) {
         this.acting = null;
+        this.askAgain();
+        if (machine.newHost !== undefined) return;
         this.actionProblem = {
           text: 'The update is installed, but Tagma could not restart onto it. Restart to apply it.',
           details: [ended.restartRefused],

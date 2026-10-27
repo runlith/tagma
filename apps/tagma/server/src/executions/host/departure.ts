@@ -6,6 +6,7 @@ import type { HostRegistration } from '@runlith/executions/HostRegistration';
 import { HostRequestKey, type HostRequestRef, type InstallationId } from '@runlith/executions/protocol/execution';
 import type { QuiescenceTicket } from '@runlith/executions/protocol/runtime';
 import { HostUnprepared } from '../../installation/contract/service/succession.js';
+import type { RestartHost } from '../../installation/contract/wire/source.js';
 import type { HostPreparationRefused } from '../contract/service/host.js';
 import { pacedClaim, type StateClaim } from './boot.js';
 import type { CustodyAssurance } from './custody.js';
@@ -51,11 +52,15 @@ export const prepareChange = Effect.fnUntraced(function* (
   installation: InstallationId,
   claim: Effect.Effect<StateClaim>,
   restart: string,
+  host: RestartHost = 'hand-over',
 ): Effect.fn.Return<boolean, HostUnprepared> {
   const unprepared = (failure: HostPreparationRefused) => new HostUnprepared({ detail: failure.detail });
   const pending = yield* candidateOf(files, state).pipe(Effect.mapError(unprepared));
   if (pending === undefined) return false;
-  const refused = (detail: string) => Effect.andThen(withdrawCandidate(files, state), Effect.fail(new HostUnprepared({ detail })));
+  const refused = (detail: string): Effect.Effect<boolean, HostUnprepared> =>
+    host === 'replace'
+      ? Effect.as(Effect.logWarning(`${detail}; the successor ends the standing host and raises its own`), false)
+      : Effect.andThen(withdrawCandidate(files, state), Effect.fail(new HostUnprepared({ detail })));
   const placedBy = yield* candidateRestart(files, state).pipe(Effect.mapError(unprepared));
   if (placedBy !== restart) {
     const named = pending._tag === 'Unread' ? `this build cannot read (${pending.detail})` : pending.digest;

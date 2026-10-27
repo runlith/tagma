@@ -80,7 +80,7 @@ const letGo = Effect.fnUntraced(function* (input: FirstEnableInput, graceMs: num
   }
 });
 
-const forced = Effect.fnUntraced(function* (input: FirstEnableInput, asked: string, graceMs: number) {
+const forced = Effect.fnUntraced(function* (input: FirstEnableInput, named: string, asked: string, graceMs: number) {
   const rungs: ReadonlyArray<readonly [string, number | undefined]> = [
     ['SIGTERM', graceMs],
     ['SIGKILL', undefined],
@@ -89,7 +89,7 @@ const forced = Effect.fnUntraced(function* (input: FirstEnableInput, asked: stri
     const claim = yield* input.claim;
     if (claim._tag === 'Free') return true;
     if (claim._tag === 'Unmeasured') return false;
-    yield* Effect.logWarning(`ending the execution host that has no holder by signal: ${asked}; ${signal} to ${claim.holders.join(', ')}`);
+    yield* Effect.logWarning(`ending ${named} by signal: ${asked}; ${signal} to ${claim.holders.join(', ')}`);
     yield* Effect.forEach(claim.holders, (pid) => input.signalClaim(pid, signal), { discard: true });
     if (yield* letGo(input, within)) return true;
   }
@@ -100,6 +100,10 @@ export const firstEnable = Effect.fnUntraced(function* (input: FirstEnableInput)
   const standing = yield* readHolderless(input.bundle).pipe(Effect.provideService(FileSystem.FileSystem, input.files));
   if (standing._tag === 'Unread') return { _tag: 'Refused', detail: standing.detail };
   if (standing._tag === 'Held' || standing._tag === 'Absent') return { _tag: 'NotNeeded' };
+  return yield* endStanding(input, 'the execution host that has no holder');
+});
+
+export const endStanding = Effect.fnUntraced(function* (input: FirstEnableInput, named: string): Effect.fn.Return<FirstEnabled> {
   const fenced = yield* Effect.result(input.fence);
   if (fenced._tag === 'Failure') {
     return {
@@ -111,9 +115,9 @@ export const firstEnable = Effect.fnUntraced(function* (input: FirstEnableInput)
   const ending = yield* endHolderless({ bundle: input.bundle, state: input.state });
   const gone =
     ending._tag === 'Refused'
-      ? yield* forced(input, `its own recovery program refused: ${ending.detail}`, graceMs)
-      : (yield* letGo(input, graceMs)) || (yield* forced(input, 'it did not let go after its recovery program ended it', graceMs));
-  if (!gone) return { _tag: 'Refused', detail: 'the execution host without a holder did not let go of this installation' };
+      ? yield* forced(input, named, `its own recovery program refused: ${ending.detail}`, graceMs)
+      : (yield* letGo(input, graceMs)) || (yield* forced(input, named, 'it did not let go after its recovery program ended it', graceMs));
+  if (!gone) return { _tag: 'Refused', detail: `${named} did not let go of this installation` };
   const executions = ending._tag === 'Ended' ? ending.executions : undefined;
   yield* input.record(executions, ending.detail);
   return { _tag: 'Enabled', executions, detail: ending.detail };

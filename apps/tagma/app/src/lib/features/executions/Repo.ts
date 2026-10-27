@@ -101,7 +101,9 @@ export const ExecutionsRepo = Repo.define(
 
     record: keyed({
       loader: ({ key, signal }: KeyedLoaderContext<ExecutionAddress>, door) =>
-        door.perform('read_terminal', at(key), { signal }).then(({ terminal, state }) => ({ record: terminal, state })),
+        door
+          .perform('read_terminal', at(key), { signal })
+          .then(({ terminal, state, endedWithHost }) => ({ record: terminal, state, endedWithHost })),
     }),
 
     operation: keyed({
@@ -207,7 +209,10 @@ export const projectReads = (door: Door, projectId: number): RecordReads => {
   return {
     terminalBytes: (window) => door.perform('read_terminal_bytes', byteWindow(window), lens),
     commandBytes: (window) => door.perform('read_command_bytes', { ...byteWindow(window), stream: window.stream }, lens),
-    terminal: (address) => door.perform('read_terminal', at(address), lens).then(({ terminal, state }) => ({ record: terminal, state })),
+    terminal: (address) =>
+      door
+        .perform('read_terminal', at(address), lens)
+        .then(({ terminal, state, endedWithHost }) => ({ record: terminal, state, endedWithHost })),
     command: (address) => door.perform('read_command', at(address), lens),
   };
 };

@@ -1,6 +1,6 @@
-import { Context, Data, type Effect } from 'effect';
+import { Context, Data, type Effect, type Stream } from 'effect';
 import type { Installation, InstallationFailure } from '../wire/manifest.js';
-import type { Restart, Source } from '../wire/source.js';
+import type { InstallationCut, Restart, RestartHost, Source } from '../wire/source.js';
 import type { MigrationLoad } from '../../../platform/contract/wire/migrationLoad.js';
 
 export class SuccessionRefused extends Data.TaggedError('SuccessionRefused')<{ readonly detail: string }> {}
@@ -37,12 +37,19 @@ export class ServerProcess extends Context.Service<
   }
 >()('tagma/installation/ServerProcess') {}
 
+export type HostRefusal = {
+  readonly successor: InstallationCut | null;
+  readonly detail: string;
+};
+
 export class Succession extends Context.Service<
   Succession,
   {
     readonly current: Effect.Effect<Installation | null, InstallationFailure>;
     readonly leaving: Effect.Effect<boolean>;
-    restart(): Effect.Effect<Restart, SuccessionRefused | SuccessorFailed | HostUnprepared>;
+    restart(host?: RestartHost): Effect.Effect<Restart, SuccessionRefused | SuccessorFailed | HostUnprepared>;
+    readonly refused: Effect.Effect<HostRefusal | null>;
+    readonly refusals: Stream.Stream<void>;
     readonly release: (failure: string | null) => Effect.Effect<void, SuccessorFailed>;
     readonly settle: Effect.Effect<void>;
   }

@@ -2,6 +2,7 @@ import { Schema } from 'effect';
 import { restartStateSchema } from './restart.js';
 import { installationCutSchema } from './source.js';
 import { machineActSchema, nextFrameSchema } from './next.js';
+import { newHostSchema } from './newHost.js';
 import { processProvenanceSchema } from '../../../platform/contract/wire/provenance.js';
 
 export const runningExecutionSchema = Schema.Struct({
@@ -52,5 +53,6 @@ export const machineStateSchema = Schema.Struct({
   host: hostStateSchema,
   acts: Schema.Array(machineActSchema),
   restart: restartStateSchema,
+  newHost: Schema.optional(newHostSchema),
 });
 export type MachineState = typeof machineStateSchema.Type;

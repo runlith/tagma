@@ -44,6 +44,7 @@ export const TerminalInventory = Schema.Struct({
 export const TerminalReading = Schema.Struct({
   terminal: TerminalView,
   state: Schema.NullOr(ExecutionState),
+  endedWithHost: Schema.Boolean,
   grid: Schema.NullOr(TerminalGeometry),
   lanes: Schema.Array(TerminalLaneRow),
   ...typedBy,

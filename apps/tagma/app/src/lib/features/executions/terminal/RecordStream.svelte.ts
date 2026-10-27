@@ -30,9 +30,13 @@ export interface RecordStreamOptions {
 export type ChildEnding =
   | { readonly _tag: 'Exit'; readonly native: NativeExit }
   | { readonly _tag: 'None' }
+  | { readonly _tag: 'HostEnded' }
   | { readonly _tag: 'Unread'; readonly problem: string };
 
-type ReadExit = { readonly _tag: 'Read'; readonly exit?: NativeExit } | { readonly _tag: 'Unread'; readonly problem: string };
+type ReadExit =
+  | { readonly _tag: 'Read'; readonly exit?: NativeExit }
+  | { readonly _tag: 'HostEnded' }
+  | { readonly _tag: 'Unread'; readonly problem: string };
 
 export type StreamFrame =
   | { readonly _tag: 'Ended'; readonly ending: ChildEnding }
@@ -544,7 +548,7 @@ export class RecordStream {
       if (generation !== this.generation) return;
       try {
         const native = await (this.aim.kind === 'terminal' ? this.terminalExit() : this.commandExit());
-        ending = native._tag === 'Unread' ? native : native.exit === undefined ? { _tag: 'None' } : { _tag: 'Exit', native: native.exit };
+        ending = native._tag !== 'Read' ? native : native.exit === undefined ? { _tag: 'None' } : { _tag: 'Exit', native: native.exit };
         break;
       } catch (error) {
         ending = { _tag: 'Unread', problem: messageOf(error) };
@@ -557,6 +561,7 @@ export class RecordStream {
 
   private async terminalExit(): Promise<ReadExit> {
     const answer = await this.reads.terminal(this.address);
+    if (answer?.endedWithHost === true) return { _tag: 'HostEnded' };
     return { _tag: 'Read', exit: answer?.state?.nativeExit };
   }
 

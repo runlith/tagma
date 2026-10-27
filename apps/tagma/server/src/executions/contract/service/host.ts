@@ -38,6 +38,7 @@ export type HostStanding = {
   readonly detail: string;
   readonly geometry: TerminalGeometry;
   readonly notice: string | null;
+  readonly stays?: string;
 };
 
 export class HostManagement extends Context.Service<
@@ -53,7 +54,8 @@ export class HostOffering extends Context.Service<
   {
     readonly source: OfferSource | undefined;
     readonly placed?: HostPlacement;
-    readonly firstEnded?: (executions: number | undefined, detail: string) => Effect.Effect<void>;
+    readonly replacing?: boolean;
+    readonly hostEnded?: (executions: number | undefined, detail: string) => Effect.Effect<void>;
     readonly migrations: MigrationChain<'machine'>;
     readonly programVersion: string;
     readonly lifetime?: HostLifetime;

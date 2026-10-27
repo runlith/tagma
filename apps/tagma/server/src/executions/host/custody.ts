@@ -347,7 +347,11 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
 });
 
 const refusalOf = (reason: CustodyDeferral, detail: string): Refusal =>
-  reason._tag === 'HostUnreachable' ? { _tag: 'HostUnavailable', reason: detail } : { _tag: 'Unauthorized', reason: detail };
+  reason._tag === 'HostUnreachable'
+    ? { _tag: 'HostUnavailable', reason: detail }
+    : reason._tag === 'ActivationDeferred' && reason.reason._tag === 'BundleMismatch'
+      ? { _tag: 'HostIncompatible', reason: detail }
+      : { _tag: 'Unauthorized', reason: detail };
 
 const refusedStart = (operation: HostRequestRef, reason: CustodyDeferral, state: string): StartAnswer => ({
   _tag: 'Refused',

@@ -100,6 +100,7 @@ type HostAnswers = {
   readonly closeBinding?: (binding: BindingId) => Effect.Effect<AuthorityAnswer, ExecutionsFailure>;
   readonly input?: () => Effect.Effect<InputAnswer, ExecutionsFailure>;
   readonly screen?: () => Effect.Effect<ScreenFeedItem, ExecutionsFailure>;
+  readonly generation?: number;
   readonly watching?: boolean;
 };
 
@@ -167,7 +168,7 @@ const hostThat = (answers: HostAnswers): ControlledHost => {
     listeners: () => undeclared<never>('listeners'),
     hostListeners: () => undeclared<never>('hostListeners'),
     capabilities: () => undeclared<never>('capabilities'),
-    generation: () => undeclared<never>('generation'),
+    generation: () => (answers.generation === undefined ? undeclared<never>('generation') : Effect.succeed(answers.generation)),
     served: () => undeclared<never>('served'),
     custody: (request, principal) => {
       count('custody');
@@ -968,6 +969,22 @@ layer(Layer.provideMerge(Layer.effect(Fixture, seeded), environment), { excludeT
       expect(answer.status).toBe('ok');
       expect('state' in answer).toBe(true);
       expect(answer.state).toBeNull();
+    }),
+  );
+
+  it.effect('a read of a terminal whose host generation was replaced answers that it ended with that host', () =>
+    Effect.gen(function* () {
+      const ref = execution('exec-host-replaced');
+      const host = hostThat({ start: () => Effect.succeed(started(ref)), state: () => Effect.succeed(undefined), generation: 2 });
+      const tools = yield* toolsOver(host);
+      yield* walk(tools.start_terminal as Tool, startInput('op-host-replaced'));
+
+      const answer = (yield* walk(tools.read_terminal as Tool, { execution: ref.execution, incarnation: ref.incarnation })) as {
+        status: string;
+        endedWithHost: boolean;
+        state: { phase: string } | null;
+      };
+      expect(answer).toMatchObject({ status: 'ok', endedWithHost: true, state: { phase: 'ended' } });
     }),
   );
 

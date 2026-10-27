@@ -3,14 +3,14 @@ import { mkdir, open } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { pidAlive } from '@runlith/utils/process';
 import { CEILINGS } from '../../platform/contract/service/deadlines.js';
-import { Cause, Clock, Context, Deferred, Effect, Exit, Layer, Result, Schema, Semaphore } from 'effect';
+import { Cause, Clock, Context, Deferred, Effect, Exit, Layer, PubSub, Result, Schema, Semaphore, Stream } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { readAttempt } from '../closure/attempt.js';
 import { serverPartsStand } from '../closure/present.js';
 import { readInstallation, refusalDetail } from '../closure/read.js';
 import type { Installation } from '../contract/wire/manifest.js';
 import { ASKED_EVERY_MS, CLI_ENTRY, CURRENT, RUNTIME_PART, SERVE_FLAGS } from '../contract/wire/layout.js';
-import type { Restart } from '../contract/wire/source.js';
+import type { Restart, RestartHost } from '../contract/wire/source.js';
 import type { SuccessionSteps } from '../contract/service/steps.js';
 import {
   type DataDirectoryConflict,
@@ -20,6 +20,7 @@ import {
 } from '../../platform/lock/dataDirectory.js';
 import { dataDirectoryLocked } from '../../platform/lock/holder.js';
 import {
+  type HostRefusal,
   type HostUnprepared,
   type SuccessorLaunch,
   type SuccessorPlan,
@@ -28,7 +29,16 @@ import {
   SuccessionRefused,
   SuccessorFailed,
 } from '../contract/service/succession.js';
-import { HANDOFF, HOST_STATE, handoffOf, handoffSchema, REPLACES, STANDING_BY, takeoverSchema } from '../contract/wire/launch.js';
+import {
+  HANDOFF,
+  HOST_REPLACE,
+  HOST_STATE,
+  handoffOf,
+  handoffSchema,
+  REPLACES,
+  STANDING_BY,
+  takeoverSchema,
+} from '../contract/wire/launch.js';
 import { RESTART_ID, RESTART_RECORD } from '../contract/wire/restart.js';
 import { RestartRecords } from '../contract/service/restarts.js';
 import { makeProcessRestart, type ProcessRestart } from './record.js';
@@ -105,6 +115,9 @@ const processSuccession = Effect.fnUntraced(function* (input: {
   const { runsFrom, installRoot, log, record, signal, launch, preparation, steps, own, handoff } = input;
   let left: Restart | null = null;
   let candidate: Candidate | null = null;
+  let refusal: HostRefusal | null = null;
+  const refusals = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1, replay: 1 }), PubSub.shutdown);
+  yield* PubSub.publish(refusals, undefined);
   const asking = yield* Semaphore.make(1);
   const scope = yield* Effect.scope;
   const clock = yield* Clock.Clock;
@@ -119,7 +132,7 @@ const processSuccession = Effect.fnUntraced(function* (input: {
       `[tagma] the successor ended before it served; pid ${process.pid} starts ${retried ? 'the attempt that stands again' : 'its own build again'}`,
     );
     const env: NodeJS.ProcessEnv = { ...process.env, ...handoff() };
-    for (const name of [REPLACES, HANDOFF, HOST_STATE, RESTART_ID]) delete env[name];
+    for (const name of [REPLACES, HANDOFF, HOST_STATE, HOST_REPLACE, RESTART_ID]) delete env[name];
     mkdirSync(dirname(log), { recursive: true });
     const sink = openSync(log, 'a');
     try {
@@ -175,9 +188,20 @@ const processSuccession = Effect.fnUntraced(function* (input: {
     });
   });
 
-  const readied = (restartId: string): Effect.Effect<void, HostUnprepared> => {
+  const readied = (restartId: string, host: RestartHost, successor: Successor): Effect.Effect<void, HostUnprepared> => {
     if (steps === undefined) return Effect.void;
-    return Effect.flatMap(steps, (port) => port.prepare(restartId)).pipe(
+    return Effect.flatMap(steps, (port) => port.prepare(restartId, host)).pipe(
+      Effect.tapError((unprepared) =>
+        Effect.andThen(
+          Effect.sync(() => {
+            refusal = {
+              successor: successor._tag === 'Installation' ? identityOf(successor.installation) : null,
+              detail: unprepared.detail,
+            };
+          }),
+          PubSub.publish(refusals, undefined),
+        ),
+      ),
       Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : Effect.andThen(cancelled, withdrawn))),
     );
   };
@@ -201,6 +225,7 @@ const processSuccession = Effect.fnUntraced(function* (input: {
     successor: Successor,
     restartId: string,
     plan: SuccessorPlan | null,
+    host: RestartHost,
   ): Effect.fn.Return<void, SuccessorFailed> {
     const command =
       successor._tag === 'Installation'
@@ -213,6 +238,7 @@ const processSuccession = Effect.fnUntraced(function* (input: {
       [REPLACES]: String(process.pid),
       ...(launch === undefined || launch.releases ? { [HANDOFF]: '1' } : {}),
       ...(plan === null ? {} : { [HOST_STATE]: plan.hostState }),
+      ...(host === 'replace' ? { [HOST_REPLACE]: '1' } : {}),
       [RESTART_ID]: restartId,
     };
     if (launch !== undefined) {
@@ -330,7 +356,9 @@ const processSuccession = Effect.fnUntraced(function* (input: {
       const standing = candidate;
       return standing === null ? Effect.void : Effect.promise(() => settled(standing));
     }),
-    restart: () =>
+    refusals: Stream.fromPubSub(refusals),
+    refused: Effect.sync(() => refusal),
+    restart: (host = 'hand-over') =>
       asking
         .withPermit(
           Effect.uninterruptibleMask((restore) =>
@@ -348,10 +376,10 @@ const processSuccession = Effect.fnUntraced(function* (input: {
                 step.pipe(
                   Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : Effect.sync(() => record.fail(Cause.pretty(exit.cause))))),
                 );
-              yield* recorded(restore(started(successor, id, plan))).pipe(
+              yield* recorded(restore(started(successor, id, plan, host))).pipe(
                 Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : withdrawn)),
               );
-              yield* recorded(restore(readied(id)));
+              yield* recorded(restore(readied(id, host, successor)));
               record.point('standing-by', plan === null ? {} : { migrations: plan.migrations });
               const leaving: Restart = {
                 leaving: runsFrom === undefined ? null : identityOf(runsFrom),

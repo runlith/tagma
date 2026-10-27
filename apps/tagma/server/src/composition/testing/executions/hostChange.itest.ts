@@ -9,8 +9,7 @@ import * as BunServices from '@effect/platform-bun/BunServices';
 import { Context, Data, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Schedule, Schema, Scope, Tracer } from 'effect';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
-import { digestOf, holderEntryOf, identityOf } from '@runlith/executions/hostArtifacts';
-import { ARTIFACT_FILE, ArtifactManifest, HOLDER_ENTRY_FILE } from '@runlith/executions/protocol/artifact';
+import { ARTIFACT_FILE, ArtifactManifest } from '@runlith/executions/protocol/artifact';
 import { HostRequestKey, type ExecutionRef } from '@runlith/executions/protocol/execution';
 import { ByteOffset } from '@runlith/executions/protocol/record';
 import { EXECUTIONS } from '../../../installation/contract/wire/manifest.js';
@@ -31,30 +30,12 @@ import { HostManagement, HostOffering } from '../../../executions/contract/servi
 import { endHosts, hostsUnder, terminalIntent, terminalRequestKey } from '../../../executions/testing/doubles.js';
 import { rootUse } from '../../../workspace/testing/doubles.js';
 import { programRoadOver } from '../../../executions/ports.js';
-import { HostBundle, hostFixtureLayer, makeWorkspaceCase, HOST_LIBRARY as LIBRARY } from './fixture.js';
+import { EXTRA_MIGRATION, HostBundle, hostFixtureLayer, makeWorkspaceCase, migrated, HOST_LIBRARY as LIBRARY } from './fixture.js';
 
 const manifestJson = Schema.fromJsonString(ArtifactManifest);
-const EXTRA_MIGRATION = '29991231000000_stest_extra';
 const stepThread = ThreadId.make('host-change-step');
 
 class LedgerUnmeasured extends Data.TaggedError('LedgerUnmeasured')<{ readonly message: string; readonly cause: unknown }> {}
-
-const migrated = Effect.fn('hostChange.migration')(function* (bundle: string) {
-  const files = yield* FileSystem.FileSystem;
-  const manifest = yield* files.readFileString(join(bundle, ARTIFACT_FILE)).pipe(Effect.flatMap(Schema.decodeUnknownEffect(manifestJson)));
-  const like = manifest.parts.find((one) => one.path.startsWith('drizzle/'));
-  if (like === undefined) return yield* Effect.die(new Error('the bundle carries no migrations'));
-  const path = `drizzle/${EXTRA_MIGRATION}/migration.sql`;
-  const bytes = new TextEncoder().encode('CREATE TABLE `stest_extra` (`x` integer);\n');
-  yield* files.makeDirectory(join(bundle, 'drizzle', EXTRA_MIGRATION), { recursive: true });
-  yield* files.writeFile(join(bundle, path), bytes, { mode: 0o600 });
-  const parts = [...manifest.parts, { ...like, path, bytes: bytes.length, digest: digestOf(bytes) }];
-  const next = { ...manifest, parts, identity: { ...manifest.identity, digest: identityOf({ ...manifest, parts }) } };
-  const entry = holderEntryOf(next);
-  if (entry === undefined) return yield* Effect.die(new Error('the bundle has no holder entry'));
-  yield* files.writeFileString(join(bundle, ARTIFACT_FILE), yield* Schema.encodeEffect(manifestJson)(next));
-  yield* files.writeFileString(join(bundle, HOLDER_ENTRY_FILE), entry);
-});
 
 const hostMigrations = (state: string) =>
   Effect.acquireUseRelease(

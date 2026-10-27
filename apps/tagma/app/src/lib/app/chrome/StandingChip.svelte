@@ -18,6 +18,8 @@
   import { Restart } from '$lib/wire/Restart.svelte.js';
   import { LIVE_TROUBLE } from './liveTrouble.js';
   import { Standing } from './Standing.svelte.js';
+  import NewHostCard from './NewHostCard.svelte';
+  import { shortBuild } from './newHost.js';
   import SurfaceRow from './SurfaceRow.svelte';
   import { WireState } from './WireState.svelte.js';
 
@@ -78,7 +80,7 @@
   const host = $derived(machine?.host ?? null);
   const running = $derived(host?.holds?.running ?? []);
 
-  const short = (build: string): string => (labelRevision(build)?.head ?? build.split(' ')[0] ?? build).slice(0, 7);
+  const short = shortBuild;
 
   const secondsSince = (from: string | number | null | undefined, at: number): number =>
     from === null || from === undefined ? 0 : Math.max(0, Math.round((at - (typeof from === 'number' ? from : Date.parse(from))) / 1000));
@@ -344,6 +346,7 @@
       if (host !== null && host.presence !== 'answering') return { ...plain, tone: 'bad', word: 'host down' };
       if (installed?.outcome === 'failed' && secondsSince(installed.endedAt, now) < 3600)
         return { ...plain, tone: 'bad', word: 'install failed' };
+      if (standing.newHost?.cause === 'update') return { ...plain, tone: 'warn', word: 'update ready' };
       if (standing.ready !== null) return { ...plain, tone: 'warn', word: 'restart to update' };
       const behind = next?.standing.behind ?? null;
       return {
@@ -520,7 +523,7 @@
           {/if}
         </div>
       </div>
-    {:else if standing.quietSince === null && (rows.length > 0 || backRow !== null || standing.ready !== null || failed !== null)}
+    {:else if standing.quietSince === null && (rows.length > 0 || backRow !== null || standing.ready !== null || standing.newHost !== null || failed !== null)}
       <div class="grid grid-cols-1 gap-2 border-t border-border p-3" data-standing-update>
         {#if failed !== null}
           <div class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2" data-standing-built>
@@ -536,7 +539,9 @@
             />
           </div>
         {/if}
-        {#if standing.ready !== null}
+        {#if standing.newHost !== null}
+          <NewHostCard needed={standing.newHost} place="popover" />
+        {:else if standing.ready !== null}
           <div
             class="flex items-center gap-2 rounded-lg border border-status-in-work/30 bg-status-in-work/10 px-3 py-2"
             data-standing-ready
@@ -544,6 +549,7 @@
             <div class="grid min-w-0 flex-1 gap-0.5">
               <span class="font-semibold">Installation <span class="stamp text-small">{short(standing.ready)}</span> is ready</span>
               <span class="truncate text-small text-muted-foreground">{readyFrom ?? 'stands, and is not running yet'}</span>
+              <span class="text-small text-muted-foreground">Your terminals and agents keep running through the update.</span>
             </div>
             <button
               type="button"

@@ -46,6 +46,8 @@ const REFUSAL_WAYS_OUT: Record<TerminalRefused['reason'], string> = {
     'end an execution you have finished with: a reserve is funded for a running child and comes back when it exits, and the history a finished one still holds is reclaimed on its own. Raising the host’s memory share is the operator’s act on the settings page',
   'host-state':
     'read_machine_state names the host acceptance and its failure. If the host does not recover, have the operator rebuild the installation and restart Tagma',
+  'host-incompatible':
+    'this server stands beside the execution host of another build, which does not take it, so nothing starts until the operator restarts the host or opens the build it takes: read_machine_state names both and what restarting the host ends under newHost',
   'foreign-project':
     'ask from the project that holds this execution: its project is fixed for its whole life, so nothing here is retried and no key answers it',
   'operation-conflict': 'read the operation by its own key instead of sending it again',

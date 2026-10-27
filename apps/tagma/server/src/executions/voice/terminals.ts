@@ -58,7 +58,12 @@ export const terminalsText = (
 
 function* readingLines(reading: typeof TerminalReading.Type): Generator<string> {
   const { terminal, state } = reading;
-  const standing = state === null ? 'host not answering — no phase and no ending is known' : stateWords(state);
+  const standing =
+    state === null
+      ? 'host not answering — no phase and no ending is known'
+      : reading.endedWithHost
+        ? 'ended with the execution host it ran in, which was replaced'
+        : stateWords(state);
   yield `${refWords(terminal.execution)} ${standing} — ${terminal.lifetime} ${terminal.transport}, custody revision ${terminal.revision}, held by ${terminal.holder}${
     terminal.heldBy === undefined ? '' : ` for thread:${terminal.heldBy}`
   }`;

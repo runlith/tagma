@@ -1,5 +1,6 @@
 import { Schema } from 'effect';
 import { feed } from '../../../platform/contract/wire/operation.js';
+import { newHostSchema } from './newHost.js';
 
 export const nextIssueCodeSchema = Schema.Literals(['source-unreadable', 'offline', 'platform-unavailable']);
 export type NextIssueCode = typeof nextIssueCodeSchema.Type;
@@ -105,6 +106,10 @@ export const nextFrameSchema = Schema.Struct({
   installing: Schema.NullOr(installingSchema),
   installed: Schema.NullOr(installedSchema),
   acts: Schema.Array(machineActSchema),
+  newHost: Schema.optional(newHostSchema).annotate({
+    description:
+      'On a frame of the installation.next feed: what read_machine_state answers as newHost, sent again whenever it appears, changes or goes; its ends are measured when it changed.',
+  }),
 });
 export type NextFrame = typeof nextFrameSchema.Type;
 

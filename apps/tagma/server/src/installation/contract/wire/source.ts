@@ -27,4 +27,10 @@ export const restartSchema = Schema.Struct({
 });
 export type Restart = typeof restartSchema.Type;
 
-export const restartAskSchema = Schema.Struct({});
+export const restartHostSchema = Schema.Literals(['hand-over', 'replace']).annotate({
+  description:
+    'hand-over (the default) gives the standing execution host to the successor, and a host that will not take the successor refuses the restart; replace ends everything the standing host runs and raises a host from the successor’s own bundle.',
+});
+export type RestartHost = typeof restartHostSchema.Type;
+
+export const restartAskSchema = Schema.Struct({ host: Schema.optional(restartHostSchema) });

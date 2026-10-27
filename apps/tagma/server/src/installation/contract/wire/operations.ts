@@ -45,17 +45,25 @@ export const INSTALLATION_OPERATIONS = {
     ...operatorOnly,
     meaning: 'Hand this server over to a successor started from the installation that stands, or from the checkout it runs from.',
     grammar:
-      'The successor is started and must answer before this server leaves; if it cannot be started it refuses `no-successor`, if it starts and dies it refuses `successor-left` naming its log, and if the execution host cannot prepare the successor build it refuses `host-unprepared`; this server keeps running in every case. The execution host moves to the successor build without ending anything it runs. The answer names the build leaving and the successor.',
+      'The successor is started and must answer before this server leaves; if it cannot be started it refuses `no-successor`, if it starts and dies it refuses `successor-left` naming its log, and if the execution host cannot take the successor build it refuses `host-unprepared` naming what a new host would end; this server keeps running in every case. The execution host moves to the successor build without ending anything it runs. `host: replace` is the consent to end it instead when it will not take the successor: the successor ends the standing host by its own recovery program, raises a host from its own bundle and tells each thread its terminals ended. The answer names the build leaving and the successor.',
     input: restartAskSchema,
     answer: arms({ restarting: { restart: restartSchema } }),
     refusals: ['no-successor', 'successor-left', 'host-unprepared'],
     effect: 'external',
     identity: { key: 'call' },
     subjects: () => [],
-    confirmation: () => ({
-      summary: 'Restart the server onto the installation that stands?',
-      consequence: 'Every connection drops while the successor comes up; terminals and commands keep running.',
-    }),
+    confirmation: (input) =>
+      input.host === 'replace'
+        ? {
+            summary:
+              'Restart the server onto the installation that stands, with a new execution host if the standing one will not take it?',
+            consequence:
+              'Every connection drops while the successor comes up; a new execution host ends every terminal and command the standing one runs.',
+          }
+        : {
+            summary: 'Restart the server onto the installation that stands?',
+            consequence: 'Every connection drops while the successor comes up; terminals and commands keep running.',
+          },
     confirmLabel: 'Restart',
     presentation: { running: 'Restarting the server', done: 'Handed the server over' },
   }),

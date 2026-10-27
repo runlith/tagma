@@ -1,5 +1,6 @@
 import { Context, Data, Effect, Layer } from 'effect';
 import type { NextInstallation } from '../installation/contract/service/next.js';
+import type { ServerProcess, Succession } from '../installation/contract/service/succession.js';
 import type { RpcGroup } from 'effect/rpc';
 import { type LiveHandlers, liveLayer } from '../socket/live.js';
 import type { Connections } from '../socket/connections.js';
@@ -25,7 +26,7 @@ export const SOCKET_VERBS: Readonly<Record<string, OperationId>> = Object.fromEn
 type LiveDoorOf<M> = M extends { readonly live: { readonly handlers: (door: Context.Context<infer R>) => unknown } } ? R : never;
 
 export type SocketDoor = LiveDoorOf<(typeof MODULES)[number]>;
-export type RuntimeSocketDoor = Exclude<SocketDoor, NextInstallation>;
+export type RuntimeSocketDoor = Exclude<SocketDoor, NextInstallation | Succession | ServerProcess>;
 
 const performing = (declared: FeedDeclaration) => {
   const id = OperationId.make(declared.performs!);

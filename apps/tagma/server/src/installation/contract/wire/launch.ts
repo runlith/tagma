@@ -5,6 +5,7 @@ export const REPLACES = 'TAGMA_REPLACES';
 export const HANDOFF = 'TAGMA_HANDOFF';
 export const RELEASES = 'TAGMA_LAUNCH_RELEASES';
 export const HOST_STATE = 'TAGMA_HOST_STATE';
+export const HOST_REPLACE = 'TAGMA_HOST_REPLACE';
 
 export const STANDING_BY = 'standing-by';
 

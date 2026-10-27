@@ -17,6 +17,9 @@
     if (ending._tag === 'None') {
       return { heading: `${who} exited`, detail: `${process} ended. ${kept}` };
     }
+    if (ending._tag === 'HostEnded') {
+      return { heading: `${who} ended`, detail: `${process} ended with the execution host it ran in, which was replaced. ${kept}` };
+    }
     if (ending._tag === 'Unread') {
       return { heading: `${who} exited`, detail: `${process} ended, but its exit could not be read. ${kept}` };
     }
@@ -31,6 +34,7 @@
 
   export function exitLine(ending: ChildEnding, named: string | null = null): string {
     const who = named ?? 'Terminal';
+    if (ending._tag === 'HostEnded') return `${who} ended with its execution host, which was replaced`;
     if (ending._tag !== 'Exit') return `${who} exited`;
     return ending.native._tag === 'Code'
       ? `${who} exited with code ${String(ending.native.code)}`

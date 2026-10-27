@@ -51,6 +51,7 @@ import { RETAINED_OPERATION_KEYS as retainedKeys } from '../store/requestKeys.js
 import {
   command as commandTable,
   commandWait as commandWaitTable,
+  custodyNotice as custodyNoticeTable,
   terminal as terminalTable,
   terminalIntent as terminalIntentTable,
   terminalRequestKey as terminalRequestKeyTable,
@@ -343,6 +344,8 @@ export const terminalIntent = () => terminalIntentTable;
 export const terminal = () => terminalTable;
 
 export const commandWait = () => commandWaitTable;
+
+export const custodyNotice = () => custodyNoticeTable;
 
 export const command = () => commandTable;
 

@@ -11,6 +11,7 @@ import { InstalledChannel } from '../contract/service/channel.js';
 import { launcherPath } from '../paths.js';
 import { launcherStands } from '../setup/launcher.js';
 import { shellEnv } from './command.js';
+import { newHostOf, waitingOf } from '../newHost.js';
 
 export const readMachineState = pair(
   OPS.read_machine_state,
@@ -24,10 +25,7 @@ export const readMachineState = pair(
       if (standing._tag === 'Failure') yield* Effect.logWarning('the standing installation was not read', standing.failure);
       const current = standing._tag === 'Success' ? standing.success : null;
       const runs = source.installation;
-      const waiting =
-        current !== null && runs !== null && current.manifest.identity.build !== runs.build
-          ? { build: current.manifest.identity.build, digest: current.manifest.identity.digest }
-          : null;
+      const waiting = waitingOf(current, runs);
       const [host, next, agents, calls] = yield* Effect.all(
         [machineHost.standing, nextInstallation.reading, (yield* MachineAgents).working, (yield* MachineCalls).live],
         { concurrency: 3 },
@@ -35,9 +33,11 @@ export const readMachineState = pair(
       const records = yield* RestartRecords;
       const restart = yield* records.state;
       const channel = yield* InstalledChannel;
+      const newHost = yield* newHostOf(succession, machineHost, waiting, runs?.build ?? null, host.build, next.back?.id ?? null);
       return {
         status: 'read' as const,
         machine: {
+          newHost,
           readAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           server: {
             pid: process.pid,

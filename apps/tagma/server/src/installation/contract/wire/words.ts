@@ -18,6 +18,6 @@ export const QUIT_WORDS = {
 
 export const RESTART_WORDS = {
   'successor-left': { text: 'Tagma could not start again and keeps running as it was. Try again.' },
-  'host-unprepared': { text: 'Tagma could not restart right now and keeps running as it was. Try again in a moment.' },
+  'host-unprepared': { text: 'The execution host cannot take this version, so Tagma keeps running as it was.' },
   'no-successor': { text: 'There is no installed version of Tagma to restart onto.' },
 } as const satisfies Readonly<Record<string, Words>>;

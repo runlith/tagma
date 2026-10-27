@@ -64,7 +64,7 @@ import {
   SuccessionRefused,
   type SuccessorFailed,
 } from '../installation/contract/service/succession.js';
-import { HOST_STATE } from '../installation/contract/wire/launch.js';
+import { HOST_REPLACE, HOST_STATE } from '../installation/contract/wire/launch.js';
 import { MachineStore, storeDirectory } from '../platform/contract/service/store.js';
 import { StoreSnapshots } from '../platform/contract/service/snapshots.js';
 import { chain, pendingMigrations } from '../platform/store/chain.js';
@@ -142,6 +142,8 @@ const predecessor = replaced(process.env);
 const notified = expectsRelease(process.env);
 const hostState = process.env[HOST_STATE];
 delete process.env[HOST_STATE];
+const replacingHost = process.env[HOST_REPLACE] === '1';
+delete process.env[HOST_REPLACE];
 const incoming = process.env[RESTART_ID];
 delete process.env[RESTART_ID];
 const restartRecord = await Effect.runPromise(makeProcessRestart({ path: join(dataPath, RESTART_RECORD), pid: process.pid, incoming }));
@@ -424,7 +426,8 @@ const tagma: ServerRuntime = await Effect.runPromise(
           placedHost,
           hostLifetime,
           watchLifetime: launch === undefined ? 'detached' : 'with-parent',
-          firstEnded: (executions, detail) => Effect.sync(() => restartRecord.hostEnded(executions, detail)),
+          replacingHost,
+          hostEnded: (executions, detail) => Effect.sync(() => restartRecord.hostEnded(executions, detail)),
           hostSourcePath: executionHostPath,
           installation,
           memoryCeiling,
