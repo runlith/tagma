@@ -5,7 +5,6 @@ import { layer } from '@runlith/effect-test';
 import { Clock, Context, Deferred, Duration, Effect, Fiber, Layer, Option, Queue, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import { ByteOffset, type ByteCursor } from '@runlith/executions/protocol/record';
-import type { CommandDeadline } from '@runlith/executions/protocol/command';
 import { Principal } from '@runlith/executions/protocol/custody';
 import type { ExecutionSummary } from '@runlith/executions/protocol/runtime';
 import { type NativeExit, ExecutionId, HostRequestKey, InstallationId, type ExecutionRef } from '@runlith/executions/protocol/execution';
@@ -174,8 +173,15 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
       expect(road.landed()).toHaveLength(1);
       expect(road.landed()[0]?.id).toBe(`command:exec-delivered:1:call-1`);
       expect(road.landed()[0]?.threadId).toBe(holder);
-      expect(road.landed()[0]?.text).toContain('exit 0');
-      expect(road.landed()[0]?.text).toContain('exec-delivered:1');
+      expect(road.landed()[0]?.notice).toEqual({
+        kind: 'command-ending',
+        execution: ref.execution,
+        incarnation: ref.incarnation,
+        command: null,
+        ending: 'completed',
+        exit: { kind: 'code', code: 0 },
+        tail: '',
+      });
 
       expect(yield* waiters.owed(ref).pipe(Effect.orDie)).toBeNull();
       yield* road.delivery.deliver(ref);
@@ -183,66 +189,66 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
     }),
   );
 
-  const lifeRule = {
-    id: 'rlife001',
-    limitMs: 300_000,
-    writer: 'operator',
-    at: new Date(0).toISOString(),
-    words: 'five minutes to live',
-  };
-
-  const lifeRanOut = Effect.fn('testing.commandLifetimeEnding')(function* (ref: ExecutionRef, deadline: CommandDeadline) {
-    const killed: ExecutionSummary = {
-      ...decided(ref, { _tag: 'Signal', signal: 'SIGKILL' }),
-      decision: {
-        _tag: 'Cancelled',
-        operation: { installation: INSTALLATION, operation: HostRequestKey.make('op-1') },
-        execution: ref,
-        sequence: 0,
-        cause: 'timeout',
-        trigger: 'deadline',
-      },
-    };
-    const commands = Layer.mock(ManagedCommands, {
-      record: () =>
-        Effect.succeed({
-          projectId: 1,
-          execution: ref,
-          owner: { _tag: 'Thread', thread: holder },
-          origin: { _tag: 'Thread', thread: holder },
-          policyIdentity: 'p',
-          targetKey: TargetKey.make('k'),
-          holdings: {},
-          admittedAt: 0,
-          commandLine: 'sleep 7200',
-          time: { tool: 'bash', rules: [lifeRule], life: { ms: 300_000, origin: 'rule' } },
-        }),
-      deadline: () => Effect.succeed(deadline),
-      changes: () => Stream.empty,
-    });
-    const road = yield* deliveryOver(() => ({ _tag: 'Decided', summary: killed }), accepted, Effect.void, commands);
-    yield* road.delivery.deliver(ref);
-    return road.landed()[0]?.text ?? '';
-  });
-
-  it.effect('a command whose life a change revised after a rule set it is told the life that stood, not the rule', () =>
-    Effect.gen(function* () {
-      const ref = execution('exec-revised');
-      yield* owe(ref, 'call-revised');
-      const told = yield* lifeRanOut(ref, { execution: ref, revision: 1, executionMs: 120_000, origin: 'caller' });
-      expect(told).toContain('life 2m');
-      expect(told).not.toContain(lifeRule.id);
-    }),
-  );
-
-  it.effect('a command killed when its life ran out is told so, naming the rule that set that life', () =>
+  it.effect('an expired command delivers its command line and native signal as a structured ending', () =>
     Effect.gen(function* () {
       const ref = execution('exec-life');
       yield* owe(ref, 'call-life');
-      const told = yield* lifeRanOut(ref, { execution: ref, revision: 1, executionMs: 300_000, origin: 'rule' });
-      expect(told).toContain(lifeRule.id);
-      expect(told).toContain(lifeRule.words);
-      expect(told).toContain('exec-life:1');
+      const killed: ExecutionSummary = {
+        ...decided(ref, { _tag: 'Signal', signal: 'SIGKILL' }),
+        decision: {
+          _tag: 'Cancelled',
+          operation: { installation: INSTALLATION, operation: HostRequestKey.make('op-1') },
+          execution: ref,
+          sequence: 0,
+          cause: 'timeout',
+          trigger: 'deadline',
+        },
+      };
+      const commands = Layer.mock(ManagedCommands, {
+        record: () =>
+          Effect.succeed({
+            projectId: 1,
+            execution: ref,
+            owner: { _tag: 'Thread', thread: holder },
+            origin: { _tag: 'Thread', thread: holder },
+            policyIdentity: 'p',
+            targetKey: TargetKey.make('k'),
+            holdings: {},
+            admittedAt: 0,
+            commandLine: 'sleep 7200',
+          }),
+        deadline: () => Effect.succeed({ execution: ref, revision: 1, executionMs: 120_000, origin: 'caller' }),
+        changes: () => Stream.empty,
+      });
+      const road = yield* deliveryOver(() => ({ _tag: 'Decided', summary: killed }), accepted, Effect.void, commands);
+      yield* road.delivery.deliver(ref);
+      expect(road.landed()[0]?.notice).toEqual({
+        kind: 'command-ending',
+        execution: ref.execution,
+        incarnation: ref.incarnation,
+        command: 'sleep 7200',
+        ending: 'expired',
+        exit: { kind: 'signal', signal: 'SIGKILL' },
+        tail: '',
+      });
+    }),
+  );
+
+  it.effect('an unreadable ending delivers an unknown outcome without inventing an exit or output', () =>
+    Effect.gen(function* () {
+      const ref = execution('exec-unreadable');
+      yield* owe(ref, 'call-unreadable');
+      const road = yield* deliveryOver(() => ({ _tag: 'Unwatchable' }), accepted);
+      yield* road.delivery.deliver(ref);
+      expect(road.landed()[0]?.notice).toEqual({
+        kind: 'command-ending',
+        execution: ref.execution,
+        incarnation: ref.incarnation,
+        command: null,
+        ending: 'unknown',
+        exit: null,
+        tail: null,
+      });
     }),
   );
 
@@ -261,7 +267,6 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
 
       expect(yield* road.delivery.deliver(ref)).toEqual({ _tag: 'Settled' });
       expect(road.landed()).toHaveLength(1);
-      expect(road.landed()[0]?.text).toContain('exit 3');
       expect(yield* waiters.owed(ref).pipe(Effect.orDie)).toBeNull();
     }),
   );
@@ -332,7 +337,6 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
         yield* Fiber.interrupt(attending);
       });
       expect(road.sent()).toHaveLength(2);
-      expect(road.sent()[1]?.text).toBe(road.sent()[0]!.text);
       expect(yield* waiters.owed(ref).pipe(Effect.orDie)).toBeNull();
     }),
   );

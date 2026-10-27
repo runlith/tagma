@@ -1,5 +1,5 @@
 import { Duration, Effect, Queue, Schedule } from 'effect';
-import type { AgentSignalNotice } from '@runlith/agent/contracts';
+import type { AgentCommandEnding, AgentSignalNotice } from '@runlith/agent/contracts';
 import { type ThreadPortFailure } from '@runlith/agent/thread/ThreadBorder';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
@@ -38,6 +38,8 @@ export type CommandDeliveryAttempt = { readonly _tag: 'Settled' } | { readonly _
 const REDRIVE_ATTEMPTS = 3;
 
 export type CommandDelivery = Effect.Success<ReturnType<typeof makeCommandDelivery>>;
+
+type EndingMessage = { readonly text: string; readonly notice: AgentCommandEnding };
 
 export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { readonly send: CommandSignalSend }) {
   const waiters = yield* CommandWaiters;
@@ -102,7 +104,8 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
     const sent = yield* send({
       threadId: obligation.thread,
       id: obligation.signalId,
-      text: words,
+      text: words.text,
+      notice: words.notice,
       condition: (unit) =>
         Effect.mapError(waiters.accepted(unit, execution), (cause) => new ThreadStorageFailed({ call: 'CommandDelivery.accepted', cause })),
     });
@@ -141,8 +144,11 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
 
   const endingWords = Effect.fn('CommandDelivery.words')(function* (
     obligation: CommandDeliveryObligation,
-  ): Effect.fn.Return<string | null | undefined, never> {
-    if (obligation.text !== undefined) return obligation.text;
+  ): Effect.fn.Return<EndingMessage | null | undefined, never> {
+    if (obligation.text !== undefined) {
+      const notice = endingNotice(obligation.execution, yield* commandRecord(obligation.execution), null, null, null);
+      return { text: obligation.text, notice };
+    }
     const read = yield* Effect.result(terminals.wait(obligation.execution, READ_MS));
     if (read._tag === 'Failure') {
       yield* Effect.logWarning('the ending of a command owed could not be read; the obligation stands', {
@@ -162,18 +168,25 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
       return undefined;
     }
     if (measured.success === null) return null;
-    if (answer._tag !== 'Decided') return unreadableText(obligation.execution, measured.success ?? '');
     const record = yield* commandRecord(obligation.execution);
+    if (answer._tag !== 'Decided') {
+      const notice = endingNotice(obligation.execution, record, null, null, null);
+      return { text: unreadableText(notice, measured.success ?? ''), notice };
+    }
     const decision = answer.summary.decision;
     const expired = decision?._tag === 'Cancelled' && decision.cause === 'timeout';
-    return endingText(
-      obligation.execution,
-      answer.summary,
-      record,
-      expired ? yield* life(obligation.execution, record) : null,
-      yield* tail(obligation.execution),
-      measured.success ?? '',
-    );
+    const limit = expired ? yield* life(obligation.execution, record) : null;
+    const notice = endingNotice(obligation.execution, record, answer.summary, limit, yield* tail(obligation.execution));
+    return {
+      notice,
+      text: endingText(
+        notice,
+        limit,
+        cleanupWords(answer.summary.state.cleanup),
+        decision?._tag === 'Cancelled' ? `${decision.cause}: ${decision.trigger}` : null,
+        measured.success ?? '',
+      ),
+    };
   });
 
   const life = Effect.fn('CommandDelivery.life')(function* (
@@ -225,28 +238,46 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
 const ENDING_TAIL_BYTES = 4 * 1024;
 const ENDING_TAIL_LINES = 40;
 
-const endingText = (
+const endingNotice = (
   execution: ExecutionRef,
-  summary: ExecutionSummary,
   record: CommandRecord | null,
+  summary: ExecutionSummary | null,
   life: CommandLimit | null,
   tail: string | null,
+): AgentCommandEnding => {
+  const decision = summary?.decision;
+  const exit = summary?.state.nativeExit;
+  return {
+    kind: 'command-ending',
+    execution: execution.execution,
+    incarnation: execution.incarnation,
+    command: record?.commandLine ?? record?.label ?? null,
+    ending: decision === undefined ? 'unknown' : decision._tag === 'Completed' ? 'completed' : life !== null ? 'expired' : 'stopped',
+    exit: exit === undefined ? null : exit._tag === 'Code' ? { kind: 'code', code: exit.code } : { kind: 'signal', signal: exit.signal },
+    tail,
+  };
+};
+
+const endingText = (
+  notice: AgentCommandEnding,
+  life: CommandLimit | null,
+  cleanup: string | null,
+  stopped: string | null,
   measured: string,
 ): string => {
-  const where = `${execution.execution}:${execution.incarnation}`;
-  const decision = summary.decision;
-  const named = record?.commandLine ?? record?.label ?? null;
+  const where = `${notice.execution}:${notice.incarnation}`;
+  const named = notice.command;
   const ending =
-    decision === undefined
+    notice.ending === 'unknown'
       ? 'ended, and this installation holds no decision for it'
-      : decision._tag === 'Completed'
+      : notice.ending === 'completed'
         ? 'completed'
-        : life !== null
+        : notice.ending === 'expired'
           ? 'its life ran out'
-          : `ended by its execution owner — ${decision.cause}: ${decision.trigger}`;
-  const exit = summary.state.nativeExit;
-  const reported = exit === undefined ? 'no exit was reported' : exit._tag === 'Code' ? `exit ${exit.code}` : `killed by ${exit.signal}`;
-  const cleanup = cleanupWords(summary.state.cleanup);
+          : `ended by its execution owner — ${stopped}`;
+  const exit = notice.exit;
+  const reported = exit === null ? 'no exit was reported' : exit.kind === 'code' ? `exit ${exit.code}` : `killed by ${exit.signal}`;
+  const tail = notice.tail;
   return [
     `A command you left running has ended: ${ending}, ${reported}${named === null ? '' : ` — ${named}`}.`,
     ...(life === null ? [] : [lifeEnded(life)]),
@@ -259,11 +290,11 @@ const endingText = (
   ].join('\n');
 };
 
-const unreadableText = (execution: ExecutionRef, measured: string): string =>
+const unreadableText = (notice: AgentCommandEnding, measured: string): string =>
   [
     `A command you left running is over, and how it ended can no longer be read here.`,
     ``,
     ...(measured === '' ? [] : [measured, ``]),
-    `execution: ${execution.execution}:${execution.incarnation}`,
+    `execution: ${notice.execution}:${notice.incarnation}`,
     `This installation holds no ending for that reference: whether it finished, and with what, is not known — and it was not run again to find out.`,
   ].join('\n');
