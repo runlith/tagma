@@ -258,7 +258,7 @@ const program = Effect.gen(function* () {
         buffered.set(chunk, at);
         at += chunk.length;
       }
-      return [{ after: 0, bytes: buffered }, ...echoes];
+      return [{ after: 0, bytes: buffered, output: true }, ...echoes];
     });
 
   const question = (handle: number, asked: Question): Effect.Effect<void, Failure> =>

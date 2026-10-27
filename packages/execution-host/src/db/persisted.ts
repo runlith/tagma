@@ -98,5 +98,6 @@ export type CallRecord = typeof CallRecord.Type;
 export const StoredEcho = Schema.Struct({
   after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   bytes: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
+  output: Schema.optional(Schema.Literal(true)),
 });
 export type StoredEcho = typeof StoredEcho.Type;

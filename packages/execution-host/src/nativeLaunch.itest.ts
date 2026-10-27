@@ -1,5 +1,6 @@
 import { userInfo } from 'node:os';
 import { expect } from 'bun:test';
+import { dlopen, FFIType } from 'bun:ffi';
 import { layer } from '@runlith/effect-test';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { Context, Data, Effect, FileSystem, Layer, Option, Schedule, Schema, Stream } from 'effect';
@@ -7,10 +8,12 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { ExecutionRef, ExecutionId, InstallationId } from '@runlith/executions/protocol/execution';
 import type { LaunchRequest, LaunchTransport } from '@runlith/executions/protocol/launch';
 import { TRANSFER_LIMIT, type ExecutionLimits } from '@runlith/executions/protocol/capacity';
-import { byteOffset } from '@runlith/executions/protocol/record';
+import { LANE_PATH, type LaneReply } from '@runlith/executions/protocol/lane';
+import { byteOffset, offsetValue } from '@runlith/executions/protocol/record';
 import { ProcessControl } from './ProcessControl';
 import { Processes, type ProcessReader } from './ProcessReader';
-import { admit, runtimeProfile } from './runtimeFixture';
+import { admit, laneBinding, runtimeProfile } from './runtimeFixture';
+import { laneViewer } from './testing/laneViewer';
 import { TerminalInputs } from './TerminalInputs';
 import { Holder, HolderRefused } from './holder/Holder';
 import { launchNative, type NativeSource } from './nativeLaunch';
@@ -23,7 +26,7 @@ import { makeProcessTables } from './ProvenSet';
 import { terminalFacts } from './posix/testing/terminal';
 import { Descriptors } from './posix/native';
 import { Descriptor } from './posix/Descriptor';
-import { isThreadTerminal } from './posix/TerminalThread';
+import { isThreadTerminal, openTerminalThread } from './posix/TerminalThread';
 
 const ref = ExecutionRef.make({
   installation: InstallationId.make('native-launch'),
@@ -107,6 +110,16 @@ const fillTerminal = Effect.fnUntraced(function* (native: Effect.Success<ReturnT
     return terminal;
   }
 });
+const duplicate = Effect.fnUntraced(function* (fd: number) {
+  const libc = yield* Effect.acquireRelease(
+    Effect.try({ try: () => dlopen('/usr/lib/libSystem.B.dylib', { dup: { args: [FFIType.i32], returns: FFIType.i32 } }), catch: failed }),
+    (library) => Effect.sync(() => library.close()),
+  );
+  return libc.symbols.dup(fd);
+}, Effect.scoped);
+const PRINTED = Array.from({ length: 20_000 }, (_, line) => `${line + 1}\r\n`).join('');
+const PRINTER =
+  'use POSIX; $| = 1; print "$_\\n" for 1 .. 20000; POSIX::tcdrain(1); open(my $f, ">", $ARGV[0]) or die; close $f; sleep 600;';
 const through = Effect.fnUntraced(function* (source: NativeSource, marker: string, maximum = TRANSFER_LIMIT) {
   let text = '';
   yield* Stream.runDrain(
@@ -583,6 +596,74 @@ while True: signal.pause()`;
         }
       }),
     }),
+  );
+  it.effect(
+    'gives the next logic the output its predecessor read ahead first and whole through an interrupt, byte for byte on its lane',
+    () =>
+      nativeCase({
+        use: Effect.fnUntraced(function* ({ directory, holder }) {
+          const files = yield* FileSystem.FileSystem;
+          const drained = `${directory}/drained`;
+          const base = launch(TERMINAL);
+          const native = yield* launchNative(
+            { ...base, command: { ...base.command, program: '/usr/bin/perl', args: ['-e', PRINTER, drained] } },
+            named('handover'),
+            holder,
+          );
+          const leaving = yield* terminalOf(native);
+          const taken = yield* leaving.read();
+          if (taken === undefined) return yield* new FixtureFailed({ message: 'the terminal ended before its first output' });
+          yield* files.exists(drained).pipe(Effect.repeat({ until: (done) => done, schedule: Schedule.spaced('5 millis') }));
+          yield* leaving.stopReading;
+          const echoes = yield* leaving.pendingEchoes;
+          const inherited = Buffer.concat(echoes.map((echo) => echo.bytes));
+          expect(Buffer.concat([taken, inherited]).toString('latin1')).toBe(PRINTED);
+
+          const thread = yield* openTerminalThread(HOLDER_LIBRARY);
+          const next = thread.adopt(yield* duplicate(leaving.fd));
+          yield* Effect.addFinalizer(() => Effect.sync(() => next.close()));
+          yield* next.owe(echoes);
+          const from = BigInt(taken.length);
+          const opened = yield* thread.inputs.open(next, {
+            limits: runtimeProfile({ transports: ['pty'] }).execution,
+            ref: named('handover-next'),
+            announce: Effect.void,
+            end: () => Effect.void,
+            resized: () => Effect.void,
+            output: byteOffset(from),
+            admitted: () => Effect.void,
+          });
+          if (opened.endpoint === undefined) return yield* new FixtureFailed({ message: 'the terminal thread serves no endpoint' });
+          const binding = laneBinding();
+          const lane = yield* opened.endpoint.open(binding);
+          const watching = yield* laneViewer(`ws://127.0.0.1:${lane.port}${LANE_PATH}`, lane.token);
+          const ready = (yield* watching.reply) as Extract<LaneReply, { readonly t: 'ready' }>;
+          expect(offsetValue(ready.head)).toBe(from);
+          yield* watching.send({ t: 'follow', offset: String(from) });
+          expect((yield* admit(opened.input, { sequence: lane.next, cause: 'interrupt', act: { _tag: 'Interrupt' } }, binding))._tag).toBe(
+            'InputAdmitted',
+          );
+
+          const recorded: Uint8Array[] = [];
+          const read = next.read().pipe(
+            Effect.catchIf(
+              (failure) => failure.reason === 'gone',
+              () => Effect.succeed(undefined),
+            ),
+          );
+          for (let chunk = yield* read; chunk !== undefined; chunk = yield* read) recorded.push(chunk);
+          expect(Buffer.concat(recorded).subarray(0, inherited.length).equals(inherited)).toBe(true);
+          expect(yield* watching.reply).toMatchObject({ t: 'ended' });
+          const live = yield* watching.received;
+          let end = from;
+          for (const frame of live) {
+            expect(frame.offset).toBe(end);
+            end += BigInt(frame.bytes.length);
+          }
+          expect(Buffer.concat(live.map((frame) => frame.bytes)).equals(Buffer.concat(recorded))).toBe(true);
+          yield* native.target.end('destroy', undefined, 'stopping');
+        }),
+      }),
   );
   it.effect('refuses interrupt with ISIG disabled without closing ordinary input', () =>
     nativeCase({

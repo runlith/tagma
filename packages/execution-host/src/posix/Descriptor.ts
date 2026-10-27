@@ -23,7 +23,7 @@ export class Descriptor {
   private reading = true;
   private writing = true;
   private landing: Uint8Array | undefined;
-  private readonly echoes: { readonly after: number; readonly bytes: Uint8Array }[] = [];
+  private readonly echoes: PendingEcho[] = [];
   private echoHead = 0;
   private readBytes = 0;
   private readonly token: number;
@@ -41,7 +41,7 @@ export class Descriptor {
       const echo = this.echoes[this.echoHead];
       if (echo !== undefined && echo.after <= this.readBytes) {
         const taken = echo.bytes.subarray(0, limit);
-        if (taken.length < echo.bytes.length) this.echoes[this.echoHead] = { after: echo.after, bytes: echo.bytes.subarray(taken.length) };
+        if (taken.length < echo.bytes.length) this.echoes[this.echoHead] = { ...echo, bytes: echo.bytes.subarray(taken.length) };
         else {
           this.echoHead += 1;
           if (this.echoHead === this.echoes.length) {
@@ -92,12 +92,12 @@ export class Descriptor {
   });
 
   readonly pendingEchoes: Effect.Effect<ReadonlyArray<PendingEcho>> = Effect.sync(() =>
-    this.echoes.slice(this.echoHead).map((echo) => ({ after: Math.max(0, echo.after - this.readBytes), bytes: echo.bytes })),
+    this.echoes.slice(this.echoHead).map((echo) => ({ ...echo, after: Math.max(0, echo.after - this.readBytes) })),
   );
 
   owe(echoes: ReadonlyArray<PendingEcho>): Effect.Effect<void> {
     return Effect.sync(() => {
-      for (const echo of echoes) this.echoes.push({ after: this.readBytes + echo.after, bytes: echo.bytes });
+      for (const echo of echoes) this.echoes.push({ ...echo, after: this.readBytes + echo.after });
       if (echoes.length > 0) this.reactor.wake(this.token, 'read');
     });
   }
@@ -145,21 +145,13 @@ export class Descriptor {
       });
     const written = facts.external ? { count: 0 } : this.native.write(this.fd, Uint8Array.of(facts.interrupt));
     if ('count' in written && written.count > 0) {
-      if (!facts.noFlush) {
-        onFlush?.();
-        this.echoes.length = 0;
-        this.echoHead = 0;
-      }
+      if (!facts.noFlush) this.flushed(onFlush);
       return written.count;
     }
     if ('refusal' in written && written.refusal !== 'would-block') return yield* failure(written);
     const signalled = this.native.interrupt(this.fd);
     if ('refusal' in signalled) return yield* failure(signalled);
-    if (!facts.noFlush) {
-      onFlush?.();
-      this.echoes.length = 0;
-      this.echoHead = 0;
-    }
+    if (!facts.noFlush) this.flushed(onFlush);
     if (facts.echo && !facts.external) {
       this.echoes.push({
         after: this.readBytes + (facts.noFlush ? signalled.count : 0),
@@ -172,6 +164,13 @@ export class Descriptor {
     }
     return 1;
   });
+  private flushed(onFlush: (() => void) | undefined): void {
+    onFlush?.();
+    const output = this.echoes.slice(this.echoHead).filter((echo) => echo.output === true);
+    this.echoes.length = 0;
+    this.echoes.push(...output);
+    this.echoHead = 0;
+  }
 
   facts(pid: number): Effect.Effect<TerminalFacts, ChannelFailed> {
     return Effect.suspend(() => {

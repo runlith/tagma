@@ -106,7 +106,7 @@ export type Terminal = Readable &
     readonly owe: (echoes: ReadonlyArray<PendingEcho>) => Effect.Effect<void>;
   };
 
-export type PendingEcho = { readonly after: number; readonly bytes: Uint8Array };
+export type PendingEcho = { readonly after: number; readonly bytes: Uint8Array; readonly output?: true };
 
 export type HeldChannels =
   | { readonly _tag: 'pty'; readonly terminal: Terminal | undefined }

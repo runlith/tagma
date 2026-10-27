@@ -51,7 +51,7 @@ export const departures = (store: OpenedStore) => {
           ended: departure.input?.ended ?? null,
           parsed: departure.parsed ?? null,
           descendants: departure.descendants,
-          echoes: departure.echoes.map((echo) => ({ after: echo.after, bytes: [...echo.bytes] })),
+          echoes: departure.echoes.map((echo) => ({ ...echo, bytes: [...echo.bytes] })),
           lost: null,
         });
       }),
@@ -91,7 +91,7 @@ export const departures = (store: OpenedStore) => {
           parsed: row.parsed === null ? undefined : yield* decodeOffset(row.parsed).pipe(Effect.mapError(fail)),
           descendants: yield* decodeDescendants(row.descendants).pipe(Effect.mapError(fail)),
           echoes: (yield* decodeEchoes(row.echoes).pipe(Effect.mapError(fail))).map((echo) => ({
-            after: echo.after,
+            ...echo,
             bytes: Uint8Array.from(echo.bytes),
           })),
         } satisfies Departure;
