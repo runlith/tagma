@@ -80,11 +80,7 @@ const make = Effect.fnUntraced(function* (options: Options) {
     external: { named: 'CPU inspector', callsBack: false },
   });
   const session = yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const opened = new Session();
-      opened.connect();
-      return opened;
-    }).pipe(Effect.orDie),
+    Effect.sync(() => new Session()),
     (opened) =>
       Effect.try(() => opened.disconnect()).pipe(
         Effect.tapError((failure) => Effect.logWarning('CPU inspector disconnect failed during release', failure)),
@@ -97,12 +93,24 @@ const make = Effect.fnUntraced(function* (options: Options) {
     readonly monotonicStart: number;
     readonly cpu: NodeJS.CpuUsage;
   } | null = null;
+  let connected = false;
   let keptBusyAt = Number.NEGATIVE_INFINITY;
   let capturing: CaptureWindow | null = null;
 
   const begin = Effect.gen(function* () {
     if (open !== null || (capturing === null && options.windowMs() <= 0)) return;
-    const started = yield* post(session, 'Profiler.start').pipe(
+    const started = yield* Effect.gen(function* () {
+      if (!connected) {
+        yield* Effect.sync(() => {
+          session.connect();
+          connected = true;
+        });
+        yield* post(session, 'Profiler.enable');
+        const interval = Math.max(1, Math.round((options.stallCeilingMs * 1000) / SAMPLES_PER_CEILING));
+        yield* post(session, 'Profiler.setSamplingInterval', { interval });
+      }
+      return yield* post(session, 'Profiler.start');
+    }).pipe(
       Effect.tapError((failure) => Effect.logWarning('The CPU sampler could not start its next window', failure.message)),
       Effect.option,
     );
@@ -172,18 +180,7 @@ const make = Effect.fnUntraced(function* (options: Options) {
     return record;
   }, Effect.withTracerEnabled(false));
 
-  const samplingIntervalUs = Math.max(1, Math.round((options.stallCeilingMs * 1000) / SAMPLES_PER_CEILING));
-
-  yield* gate
-    .hold(
-      'sole',
-      post(session, 'Profiler.enable').pipe(
-        Effect.andThen(post(session, 'Profiler.setSamplingInterval', { interval: samplingIntervalUs })),
-        Effect.andThen(begin),
-        Effect.ignore,
-      ),
-    )
-    .pipe(Effect.ignore);
+  yield* gate.hold('sole', begin).pipe(Effect.ignore);
 
   yield* Effect.forkScoped(
     Effect.gen(function* () {

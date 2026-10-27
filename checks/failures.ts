@@ -1258,14 +1258,7 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     path: 'packages/performance/src/CpuProfiler.ts',
     symbol: 'make',
     form: 'ignore',
-    site: '7efc804d',
-    why: 'Telemetry: an inspector that will not enable leaves no window open, and every cut then answers null, which its readers treat as no profile.',
-  },
-  {
-    path: 'packages/performance/src/CpuProfiler.ts',
-    symbol: 'make',
-    form: 'ignore',
-    site: '92b75834',
+    site: '28e53cd3',
     why: 'Telemetry: a gate that does not admit the first window leaves none open, and every cut then answers null.',
   },
   {

@@ -3,7 +3,11 @@ import { it } from '@runlith/effect-test';
 import * as Effect from 'effect/Effect';
 import * as Fiber from 'effect/Fiber';
 import * as Layer from 'effect/Layer';
+import * as Schema from 'effect/Schema';
+import { TestClock } from 'effect/testing';
+import { Session } from 'node:inspector';
 import { join } from 'node:path';
+import { cpuProfileArtifactSchema } from './CpuProfile.js';
 import { scratchDirectory } from './testing/scratchDirectory.js';
 import * as LoopStalls from './LoopStalls.js';
 import { CpuProfiler, cpuProfilerLayer } from './CpuProfiler.js';
@@ -148,6 +152,44 @@ it.live('without a standing sampler a manual capture still profiles its window, 
     expect(result.frames).toContain('burnLoop');
   }),
 );
+
+it.effect('a disabled sampler leaves an external CPU profile intact when its layer closes', () =>
+  Effect.gen(function* () {
+    const session = yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const opened = new Session();
+        opened.connect();
+        return opened;
+      }),
+      (opened) => Effect.sync(() => opened.disconnect()),
+    );
+    yield* postInspector(session, 'Profiler.enable');
+    yield* postInspector(session, 'Profiler.start');
+    const directory = yield* scratchDirectory('performance-cpu-external-');
+    yield* Effect.gen(function* () {
+      const profiler = yield* CpuProfiler;
+      expect(profiler.running()).toBe(false);
+      expect(yield* profiler.cut('stall')).toBeNull();
+      yield* TestClock.adjust(CEILING_MS * 10);
+    }).pipe(
+      Effect.provide(
+        cpuProfilerLayer({ instanceId: 'disabled', stallCeilingMs: CEILING_MS, windowMs: () => 0 }).pipe(
+          Layer.provide(performanceStoreLayer(storeOptions(join(directory, 'performance.sqlite')))),
+        ),
+      ),
+    );
+    burnLoop(30);
+    const stopped = yield* postInspector(session, 'Profiler.stop');
+    const { profile } = yield* Schema.decodeUnknownEffect(Schema.Struct({ profile: cpuProfileArtifactSchema }))(stopped);
+    expect(profile.nodes.map((node) => node.callFrame.functionName)).toContain('burnLoop');
+  }),
+);
+
+function postInspector(session: Session, method: 'Profiler.enable' | 'Profiler.start' | 'Profiler.stop') {
+  return Effect.callback<unknown, Error>((resume) => {
+    session.post(method, (error, result) => resume(error ? Effect.fail(error) : Effect.succeed(result)));
+  });
+}
 
 function burnLoop(milliseconds: number): void {
   const started = performance.now();
