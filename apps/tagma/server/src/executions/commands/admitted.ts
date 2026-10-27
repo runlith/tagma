@@ -72,15 +72,27 @@ export const refusedAs = (failure: TerminalFailure): string => {
 export type AdmittedWatch = Pick<AdmittedCommand, 'commands' | 'access' | 'projectId' | 'actor' | 'subject' | 'bytes'>;
 
 export const admittedCommand = Effect.fnUntraced(function* (input: AdmittedCommand): Effect.fn.Return<AdmittedEnding> {
-  const started = yield* Effect.result(start(input));
-  if (started._tag === 'Failure') return started.failure;
-  const { execution, waitMs, targetKey } = started.success;
-  if (input.started !== undefined) {
-    const recorded = yield* Effect.result(input.started(execution));
-    if (recorded._tag === 'Failure')
-      return { _tag: 'Unwatched', execution, said: `${input.subject} started but could not be recorded: ${recorded.failure.message}` };
-  }
-  return yield* admittedWatch(input, execution, waitMs).pipe(Effect.onInterrupt(() => halted(input, execution, targetKey)));
+  return yield* Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const started = yield* Effect.result(start(input));
+      if (started._tag === 'Failure') return started.failure;
+      const { execution, waitMs, targetKey } = started.success;
+      return yield* restore(
+        Effect.gen(function* () {
+          if (input.started !== undefined) {
+            const recorded = yield* Effect.result(input.started(execution));
+            if (recorded._tag === 'Failure')
+              return {
+                _tag: 'Unwatched',
+                execution,
+                said: `${input.subject} started but could not be recorded: ${recorded.failure.message}`,
+              } satisfies AdmittedEnding;
+          }
+          return yield* admittedWatch(input, execution, waitMs);
+        }),
+      ).pipe(Effect.onInterrupt(() => halted(input, execution, targetKey)));
+    }),
+  );
 });
 
 const halted = Effect.fnUntraced(

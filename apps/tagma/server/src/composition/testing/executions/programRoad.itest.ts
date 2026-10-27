@@ -219,7 +219,7 @@ describe.skipIf(!existsSync(LIBRARY))('the program road over a live execution ho
         );
         const child = Number((yield* files.readFileString(pidfile)).trim());
         yield* Fiber.interrupt(fiber);
-        expect(yield* Effect.repeat(alive(child), { until: (standing) => !standing, schedule: Schedule.spaced('20 millis') })).toBe(false);
+        expect(yield* alive(child)).toBe(false);
       }),
     );
 

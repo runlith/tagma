@@ -79,6 +79,7 @@ it.effect('a repeated sweep waits for the active pass and answers its discharged
     const ended = yield* Queue.unbounded<typeof execution>();
     const states = new Map<HostRequestKey, Extract<TerminalOperationState, { readonly _tag: 'Pending' | 'Settled' }>>();
     let held = true;
+    let hasStopped = false;
     const unit = writeUnitOf<'machine'>({
       store: { path: 'memory', generation: 1 },
       run: (query) => query,
@@ -142,7 +143,12 @@ it.effect('a repeated sweep waits for the active pass and answers its discharged
           Layer.succeed(Discharge, discharge),
           Layer.mock(ExecutionEvidence, {}),
           Layer.mock(Executions, {
-            stop: () => Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(released)), Effect.as(receipt)),
+            stop: () =>
+              Effect.suspend(() => {
+                if (hasStopped) return Effect.die('a repeated sweep must not stop the same command twice');
+                hasStopped = true;
+                return Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(released)), Effect.as(receipt));
+              }),
           }),
         ),
       ),

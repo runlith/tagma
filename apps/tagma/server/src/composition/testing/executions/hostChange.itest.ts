@@ -2,6 +2,7 @@ import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { kind, own } from '@runlith/testbed/worlds';
 import { Database } from 'bun:sqlite';
+import { and, eq } from 'drizzle-orm';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import * as BunServices from '@effect/platform-bun/BunServices';
@@ -26,7 +27,7 @@ import { targetIdentity, targetKeyOf } from '../../../executions/terminals/subje
 import { Terminals } from '../../../executions/contract/service/terminals.js';
 import { ExecutionRecords } from '../../../executions/contract/service/records.js';
 import { HostManagement, HostOffering } from '../../../executions/contract/service/host.js';
-import { endHosts, hostsUnder } from '../../../executions/testing/doubles.js';
+import { endHosts, hostsUnder, terminalIntent } from '../../../executions/testing/doubles.js';
 import { HostBundle, hostFixtureLayer, makeWorkspaceCase, HOST_LIBRARY as LIBRARY } from './fixture.js';
 
 const manifestJson = Schema.fromJsonString(ArtifactManifest);
@@ -119,7 +120,7 @@ const makeFixture = Effect.gen(function* () {
     yield* Scope.close(scope, Exit.void);
     scopes.delete(executions);
   });
-  return { files, home, checkout: raised.checkout, projectId: raised.projectId, closures, boot, leave };
+  return { files, home, store, checkout: raised.checkout, projectId: raised.projectId, closures, boot, leave };
 });
 class Fixture extends Context.Service<Fixture, Effect.Success<typeof makeFixture>>()('testing/executions/HostChangeFixture') {}
 const fixture = Layer.effect(
@@ -182,7 +183,8 @@ describe.skipIf(!existsSync(LIBRARY))('host activation after the server door', (
   layer(fixture, { excludeTestServices: true })('host', (it) => {
     it.effect('defers host migration and consumers until the door opens, and releases consumers after a failed take-over', () =>
       Effect.gen(function* () {
-        const { boot, leave, closures, files, home, projectId } = yield* Fixture;
+        const { boot, leave, closures, files, home, store, projectId } = yield* Fixture;
+        const intents = terminalIntent();
         const first = yield* boot(closures.before);
         const counter = yield* started(first, projectId, 'counter', 'i=0; while :; do echo n$i; i=$((i+1)); sleep 0.02; done');
         const prior = yield* until(output(first, counter), (read) => counted(read.text).length > 5, 'the counter');
@@ -202,10 +204,21 @@ describe.skipIf(!existsSync(LIBRARY))('host activation after the server door', (
         expect(yield* hostMigrations(state)).toEqual(ledger);
         const terminals = Context.get(successor, Terminals);
         const host = Context.get(successor, HostManagement);
-        const early = yield* Effect.forkChild(started(successor, projectId, 'before-door', 'echo before-door'));
-        const read = yield* Effect.forkChild(terminals.state(counter));
-        const world = yield* Effect.forkChild(host.connection.port.state(counter));
-        yield* Effect.sleep('300 millis');
+        const afterDoor = <A, E, R>(call: Effect.Effect<A, E, R>) =>
+          call.pipe(Effect.tap(() => Effect.sync(() => expect(Deferred.isDoneUnsafe(opened)).toBe(true))));
+        const early = yield* Effect.forkChild(afterDoor(started(successor, projectId, 'before-door', 'echo before-door')));
+        const read = yield* Effect.forkChild(afterDoor(terminals.state(counter)), { startImmediately: true });
+        const world = yield* Effect.forkChild(afterDoor(host.connection.port.state(counter)), { startImmediately: true });
+        yield* until(
+          store.db
+            .select({ phase: intents.phase })
+            .from(intents)
+            .where(and(eq(intents.projectId, projectId), eq(intents.operationId, HostRequestKey.make('before-door'))))
+            .get(),
+          (intent) => intent?.phase === 'dispatched',
+          'the early start reached host dispatch',
+        );
+        expect((yield* Effect.result(host.connection.direct.state(counter)))._tag).toBe('Failure');
         expect(early.pollUnsafe()).toBeUndefined();
         expect(read.pollUnsafe()).toBeUndefined();
         expect(world.pollUnsafe()).toBeUndefined();
@@ -227,8 +240,13 @@ describe.skipIf(!existsSync(LIBRARY))('host activation after the server door', (
         const door = yield* Deferred.make<void>();
         const failing = yield* boot(closures.before, Effect.andThen(Deferred.await(door), Effect.die(new Error('the take-over broke'))));
         const failedHost = Context.get(failing, HostManagement);
-        const pending = yield* Effect.forkChild(Effect.result(failedHost.connection.port.state(counter)));
-        yield* Effect.sleep('300 millis');
+        const pending = yield* Effect.forkChild(
+          Effect.result(failedHost.connection.port.state(counter)).pipe(
+            Effect.tap(() => Effect.sync(() => expect(Deferred.isDoneUnsafe(door)).toBe(true))),
+          ),
+          { startImmediately: true },
+        );
+        expect((yield* Effect.result(failedHost.connection.direct.state(counter)))._tag).toBe('Failure');
         expect(pending.pollUnsafe()).toBeUndefined();
         yield* Deferred.succeed(door, undefined);
         expect((yield* Fiber.join(pending))._tag).toBe('Failure');
