@@ -1,6 +1,7 @@
 import { Deferred, Effect, Exit, type Scope } from 'effect';
 import type { BindingId } from '@runlith/executions/protocol/custody';
 import type { LaneInput } from '@runlith/executions/protocol/lane';
+import { admittedInto, droppedFrom, type AdmittedInputs } from './TerminalInputs';
 
 export type LaneWatch = { readonly next: Effect.Effect<LaneInput> };
 
@@ -11,7 +12,7 @@ export type LaneInputs = {
   readonly watch: Effect.Effect<LaneWatch, never, Scope.Scope>;
 };
 
-type Watcher = { readonly latest: Map<BindingId, LaneInput>; wake: Deferred.Deferred<void> | undefined };
+type Watcher = { readonly latest: AdmittedInputs; wake: Deferred.Deferred<void> | undefined };
 
 export const makeLaneInputs = (): LaneInputs => {
   const watchers = new Set<Watcher>();
@@ -19,8 +20,8 @@ export const makeLaneInputs = (): LaneInputs => {
 
   const nextOf = (watcher: Watcher): Effect.Effect<LaneInput> =>
     Effect.suspend(() => {
-      for (const [binding, input] of watcher.latest) {
-        watcher.latest.delete(binding);
+      for (const [key, input] of watcher.latest) {
+        watcher.latest.delete(key);
         return Effect.succeed(input);
       }
       watcher.wake ??= Deferred.makeUnsafe<void>();
@@ -32,14 +33,13 @@ export const makeLaneInputs = (): LaneInputs => {
     forget: (binding) =>
       Effect.sync(() => {
         tracked.delete(binding);
-        for (const watcher of watchers) watcher.latest.delete(binding);
+        for (const watcher of watchers) droppedFrom(watcher.latest, binding);
       }),
     publish: (input) =>
       Effect.sync(() => {
         if (!tracked.has(input.binding)) return;
         for (const watcher of watchers) {
-          watcher.latest.delete(input.binding);
-          watcher.latest.set(input.binding, input);
+          admittedInto(watcher.latest, input);
           const wake = watcher.wake;
           watcher.wake = undefined;
           if (wake !== undefined) Deferred.doneUnsafe(wake, Exit.void);

@@ -42,6 +42,18 @@ export type TerminalInput = {
   readonly endpoint: TerminalEndpoint | undefined;
 };
 
+export type AdmittedInputs = Map<string, LaneInput>;
+
+export const admittedInto = (held: AdmittedInputs, input: LaneInput): void => {
+  const key = `${input.binding}\u0000${input.receipt.cause}`;
+  held.delete(key);
+  held.set(key, input);
+};
+
+export const droppedFrom = (held: AdmittedInputs, binding: BindingId): void => {
+  for (const [key, input] of held) if (input.binding === binding) held.delete(key);
+};
+
 export type TerminalInputs = {
   readonly open: (terminal: Terminal, options: TerminalInputOptions) => Effect.Effect<TerminalInput, never, Scope.Scope>;
 };

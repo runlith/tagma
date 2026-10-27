@@ -19,7 +19,7 @@ import {
   type InputOwed,
 } from '../ExecutionInput';
 import { ChannelFailed, type PendingEcho } from '../holder/Holder';
-import { terminalSink } from '../TerminalInputs';
+import { admittedInto, terminalSink, type AdmittedInputs } from '../TerminalInputs';
 import { Descriptor } from './Descriptor';
 import { makeLanes } from './lanes';
 import { Descriptors } from './native';
@@ -118,7 +118,7 @@ type Held = {
 
 type HostedInput = { readonly scope: Scope.Closeable; readonly queue: ExecutionInput };
 
-type Reported = { readonly pending: Map<BindingId, LaneInput>; sent: boolean };
+type Reported = { readonly pending: AdmittedInputs; sent: boolean };
 
 const stoppedFailure = () => new ChannelFailed({ reason: 'stopped', detail: 'reading was stopped on this terminal before it took a byte' });
 const unknownHandle = (handle: number) =>
@@ -172,8 +172,7 @@ const program = Effect.gen(function* () {
       admitted: (handle, input) => {
         const held = reported.get(handle) ?? { pending: new Map(), sent: false };
         reported.set(handle, held);
-        held.pending.delete(input.binding);
-        held.pending.set(input.binding, input);
+        admittedInto(held.pending, input);
         if (!held.sent) report(handle, held);
       },
     },
