@@ -10,6 +10,7 @@ import type { PinnedView } from '../wire/pins.js';
 import type { ThreadParent } from '../wire/snapshot.js';
 
 export type NativeThreadState = ThreadState & {
+  readonly home: number | null;
   readonly title: string;
   readonly parent?: ThreadParent;
   readonly detachedFrom?: ThreadParent;

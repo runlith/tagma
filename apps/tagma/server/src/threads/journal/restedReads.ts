@@ -29,7 +29,7 @@ import { ROLLOUT_SUFFIX, rolloutFiles, rolloutStateOf, streamedRollout } from '.
 import { revived } from './rolloutMeta.js';
 import type { RolloutForms } from './rolloutForming.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
-import { threadRolloutCursor } from '../store/journal.js';
+import { journalProjectOf, threadRolloutCursor } from '../store/journal.js';
 import { RestedRollouts, type RolloutRange } from '../contract/service/rested.js';
 import { RolloutReads, type ReadRollout } from '../contract/service/rolloutReads.js';
 
@@ -63,7 +63,7 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
       unit.run(
         db
           .select({
-            projectId: recordFacts.projectId,
+            journal: journalProjectOf(recordFacts.id, recordFacts.projectId),
             evictedAt: restedAtOf(recordFacts.id),
           })
           .from(recordFacts)
@@ -71,14 +71,14 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
           .get(),
       );
     return Effect.map(tx ? read(tx) : units.read(read), (row) =>
-      row === undefined || row.projectId === null ? null : { projectId: row.projectId, evicted: row.evictedAt !== null },
+      row === undefined || row.journal === null ? null : { journal: row.journal, evicted: row.evictedAt !== null },
     );
   };
 
   const formedPath = Effect.fnUntraced(function* (threadId: string, tx?: Unit<'machine'>) {
     const standing = yield* facet(threadId, tx);
     if (standing === null || !standing.evicted || home === undefined) return null;
-    const path = `${home}/${standing.projectId}/${threadId}${ROLLOUT_SUFFIX}`;
+    const path = `${home}/${standing.journal}/${threadId}${ROLLOUT_SUFFIX}`;
     if ((yield* rolloutStateOf(path)) === null) return null;
     yield* forms.readable(threadId, path).pipe(Effect.mapError(formFailed));
     lagging(threadId);
@@ -90,7 +90,7 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
       unit.run(
         db
           .select({
-            projectId: recordFacts.projectId,
+            journal: journalProjectOf(recordFacts.id, recordFacts.projectId),
             evictedAt: restedAtOf(recordFacts.id),
             bytes: threadRolloutCursor.nextByteOffset,
             position: threadRolloutCursor.nextPosition,
@@ -101,10 +101,10 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
           .get(),
       );
     return Effect.map(tx ? read(tx) : units.read(read), (row) =>
-      row === undefined || row.projectId === null || row.evictedAt === null || home === undefined
+      row === undefined || row.journal === null || row.evictedAt === null || home === undefined
         ? null
         : {
-            ...rolloutFiles(`${home}/${row.projectId}/${threadId}${ROLLOUT_SUFFIX}`),
+            ...rolloutFiles(`${home}/${row.journal}/${threadId}${ROLLOUT_SUFFIX}`),
             key: { bytes: row.bytes ?? 0, position: row.position ?? 0 },
           },
     );
@@ -211,7 +211,7 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
     range: Effect.fnUntraced(function* (threadId, window, tx) {
       const standing = yield* facet(threadId, tx);
       if (standing === null || home === undefined) return null;
-      const path = `${home}/${standing.projectId}/${threadId}${ROLLOUT_SUFFIX}`;
+      const path = `${home}/${standing.journal}/${threadId}${ROLLOUT_SUFFIX}`;
       if ((yield* rolloutStateOf(path)) !== null) {
         yield* forms.formed(threadId, path).pipe(Effect.mapError(formFailed));
         if (standing.evicted) lagging(threadId);

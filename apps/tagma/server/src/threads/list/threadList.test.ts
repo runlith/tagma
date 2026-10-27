@@ -82,7 +82,7 @@ const opened = Effect.fnUntraced(function* (source?: 'resource' | 'commands') {
         }),
         Layer.succeed(ThreadLive, live),
         Layer.succeed(ThreadLaunchGate, gate),
-        Layer.mock(ThreadRollouts, { pathOf: unused, appendRecord: unused, shelve: unused, formRested: unused }),
+        Layer.mock(ThreadRollouts, { pathOf: unused, appendRecord: unused, queueMeta: unused, shelve: unused, formRested: unused }),
         Layer.succeed(HeldPathCounts, {
           counts: () => Effect.sync(() => new Map([['thread', { paths: held, unproven: 0 }]])),
           moved: () => Effect.sync(() => new Map([['thread', { paths: held, unproven: 0 }]])),

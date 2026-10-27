@@ -8,7 +8,8 @@ import { threadRecord } from '../../thread-record/store/table.js';
 import { setRested } from '../rest.js';
 import { threadMandate } from '../store/mandate.js';
 import { session } from '../../platform/store/writers.js';
-import { conversationWrites, threadBase, threadEvent, threadRolloutCursor } from '../store/journal.js';
+import { basename, dirname } from 'node:path';
+import { conversationWrites, threadBase, threadEvent, threadJournalPlace, threadRolloutCursor } from '../store/journal.js';
 import { threadResource } from '../store/tables.js';
 import {
   type CarriedRecord,
@@ -296,10 +297,11 @@ export const replayThreadRollout = Effect.fnUntraced(function* (input: {
   const base = meta?.base ?? [];
   const prefix = base.length === 0 || meta?.record == null ? [] : yield* prefixOf(String(meta.record.id), base, input.sources);
   const rollout = prefix.length === 0 ? read : { ...read, items: inherited(prefix, read.items) };
+  const journal = Number(basename(dirname(input.path)));
   const threadId = yield* store.transaction(
     writes(
       'thread.rollout',
-      [threadRecord, threadMandate, session, threadEvent, threadRolloutCursor, threadResource, threadBase],
+      [threadRecord, threadMandate, session, threadEvent, threadRolloutCursor, threadResource, threadBase, threadJournalPlace],
       input.parts.native.writes,
       input.parts.native.folds.writes,
       input.parts.external.writes,
@@ -309,6 +311,9 @@ export const replayThreadRollout = Effect.fnUntraced(function* (input: {
       Effect.gen(function* () {
         const id = yield* importRolloutMeta(meta, input.parts, input.records, unit);
         if (id === null) return null;
+        if (Number.isSafeInteger(journal) && journal !== meta?.record?.projectId) {
+          yield* db.insert(threadJournalPlace).values({ threadId: id, projectId: journal }).onConflictDoNothing();
+        }
         if (prefix.length > 0) {
           yield* db.insert(threadBase).values(
             base.map((layer, depth) => ({

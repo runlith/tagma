@@ -37,12 +37,13 @@ export const rolloutEvicting = (
   rewrite: (threadId: string) => Effect.Effect<void, HarnessFailure>,
   whole: (threadId: string, path: string) => Effect.Effect<void, RolloutSyncRefused | RolloutUnreadable | StoreFailure>,
 ) => {
-  const { graph, parts, machineStore, inJournal, pathOf, records, floor } = ctx;
+  const { graph, parts, machineStore, inJournal, locate, records, floor } = ctx;
 
-  const projected = Effect.fnUntraced(function* (projectId: number, threadId: string, returning: boolean, whole = false) {
+  const projected = Effect.fnUntraced(function* (threadId: string, returning: boolean, whole = false) {
     const running = yield* threads.activeRunInSubtree(threadId);
     if (running !== null) return { outcome: 'kept', reason: 'running' } as const;
-    const verdict = yield* machineStore(evictThreadProjection({ threadId, path: pathOf(projectId, threadId), parts, returning, whole }));
+    const path = yield* locate(threadId);
+    const verdict = yield* machineStore(evictThreadProjection({ threadId, path, parts, returning, whole }));
     if (verdict.outcome === 'evicted') floor.forget(threadId);
     return verdict;
   });
@@ -56,8 +57,7 @@ export const rolloutEvicting = (
       }),
     );
 
-  const rest = (projectId: number, threadId: string): Effect.Effect<ThreadEvictionVerdict, HarnessFailure> =>
-    projected(projectId, threadId, true);
+  const rest = (threadId: string): Effect.Effect<ThreadEvictionVerdict, HarnessFailure> => projected(threadId, true);
 
   const inherited = (threadId: string) =>
     machineStore(
@@ -92,7 +92,7 @@ export const rolloutEvicting = (
           threadId,
           Effect.gen(function* () {
             if (!(yield* still)) return { verdict: { outcome: 'kept', reason: 'unarchived' } as const, heirs: [] };
-            const path = pathOf(projectId, threadId);
+            const path = yield* locate(threadId);
             const standing = !(yield* resting(threadId));
             if (standing && (yield* threads.activeRunInSubtree(threadId)) !== null) {
               return { verdict: { outcome: 'kept', reason: 'running' } as const, heirs: [] };
@@ -107,7 +107,7 @@ export const rolloutEvicting = (
               );
               if (!caught) return { verdict: { outcome: 'kept', reason: 'cursor-behind' } as const, heirs };
             }
-            const verdict = yield* projected(projectId, threadId, false, carrying);
+            const verdict = yield* projected(threadId, false, carrying);
             if (verdict.outcome === 'evicted') {
               const reached = yield* machineStore(Effect.flatMap(MachineStore, ({ db }) => referenced(db, threadId)));
               if (!reached) yield* evictThreadResources(ledger, resourceKinds(), threadId);

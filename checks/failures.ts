@@ -1937,7 +1937,7 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     path: 'apps/tagma/server/src/threads/journal/lane.ts',
     symbol: 'makeThreadRollouts.appendMeta',
     form: 'catchCause',
-    site: 'd4b36720',
+    site: '26923b9a',
     why: 'Background mirror of durable state; a failed append is logged and the export re-derives from the store.',
   },
   {

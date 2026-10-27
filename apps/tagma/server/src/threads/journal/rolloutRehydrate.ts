@@ -16,7 +16,7 @@ import type { RolloutContext } from './rolloutContext.js';
 import { unformableRefusal, type RolloutForms } from './rolloutForming.js';
 
 export const rolloutRehydrating = (ctx: RolloutContext, forms: RolloutForms, scratch: ThreadScratch) => {
-  const { graph, parts, machineStore, inJournal, pathOf } = ctx;
+  const { graph, parts, machineStore, inJournal, locate } = ctx;
   const wake = Effect.fnUntraced(function* (threadId: string, path: string): Effect.fn.Return<void, HarnessFailure> {
     const standing = yield* rolloutStateOf(path);
     const file = standing === null ? {} : { bytes: standing.bytes, compressed: standing.form === 'compressed' };
@@ -57,7 +57,7 @@ export const rolloutRehydrating = (ctx: RolloutContext, forms: RolloutForms, scr
         ),
       ));
     if (facet === undefined || facet.evictedAt === null || facet.projectId === null) return;
-    const path = pathOf(facet.projectId, threadId);
+    const path = yield* stored('rollout-rehydrate')(locate(threadId));
     if (path === undefined) return;
     yield* inJournal(
       threadId,

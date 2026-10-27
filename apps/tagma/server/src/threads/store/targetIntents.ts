@@ -21,6 +21,7 @@ export type ThreadTargetOperation = {
   readonly threadId: string;
   readonly operationKey: string;
   readonly projectId: number;
+  readonly homeId: number | null;
   readonly payloadDigest: string;
   readonly rootId: string;
   readonly locationRevision: number;
@@ -35,7 +36,8 @@ export type ThreadTargetOperation = {
   readonly detail: string | null;
 };
 
-export type ThreadTargetOperationNew = Omit<ThreadTargetOperation, 'generation' | 'detail'> & {
+export type ThreadTargetOperationNew = Omit<ThreadTargetOperation, 'generation' | 'detail' | 'homeId'> & {
+  readonly homeId?: number | null;
   readonly generation?: number | null;
   readonly detail?: string | null;
 };
@@ -47,6 +49,7 @@ const decodeOperation = Schema.decodeUnknownEffect(
     threadId: Schema.String,
     operationKey: Schema.String,
     projectId: Schema.Number,
+    homeId: Schema.NullOr(Schema.Number),
     payloadDigest: Schema.String,
     rootId: Schema.String,
     locationRevision: Schema.Number,
@@ -90,6 +93,7 @@ export const makeThreadTargetOperationStore = Effect.gen(function* () {
           threadId: operation.threadId,
           operationKey: operation.operationKey,
           projectId: operation.projectId,
+          homeId: operation.homeId ?? null,
           payloadDigest: operation.payloadDigest,
           rootId: operation.rootId,
           locationRevision: operation.locationRevision,

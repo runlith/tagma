@@ -74,6 +74,7 @@ export const makeEngineStates = Effect.fnUntraced(function* ({
     const address = ancestor?.projectId == null ? undefined : { id: ancestor.id, projectId: ancestor.projectId, title: ancestor.title };
     const recap = yield* failedAs('recap', recaps.reading({ id: threadId, projectId: facts?.projectId ?? null }, facts?.recap ?? null));
     return {
+      home: facts?.projectId ?? null,
       title: facts?.title ?? DEFAULT_TITLE,
       ...(address === undefined ? {} : facts?.parentId == null ? { detachedFrom: address } : { parent: address }),
       harness,

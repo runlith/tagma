@@ -166,6 +166,7 @@ export type ThreadTargetChangeInput = {
   readonly expectedGeneration?: WorkspaceGeneration;
   readonly root: ThreadTargetDestination;
   readonly creationOperationId?: string;
+  readonly home?: number;
 };
 
 export type ThreadTargetReadInput = {

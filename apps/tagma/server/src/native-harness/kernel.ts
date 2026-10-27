@@ -30,6 +30,8 @@ import {
   SettledRelease,
 } from '../threads/contract/service/engine.js';
 import { kernelStorageWrites } from './rows/storageWrites.js';
+import { writes } from '../platform/contract/service/writes.js';
+import { ThreadHomes } from '../threads/contract/service/homes.js';
 import { CallEpoch } from '../threads/contract/service/owedCalls.js';
 import { randomUUID } from 'node:crypto';
 import { makeSettledRelease } from './runs/settled.js';
@@ -119,6 +121,7 @@ export type NativeKernelRequirements =
   | DeclaredCapabilities
   | ThreadEntryKinds
   | PluginPoints
+  | ThreadHomes
   | Scope.Scope;
 const WEB_MEMORY_CHARACTERS = 16 * 1024 * 1024;
 const WORKFLOW_LEASE_MS = 300_000;
@@ -179,6 +182,7 @@ export const assembleNativeKernel: Effect.Effect<NativeKernel['Service'], never,
   const units = yield* MachineUnits;
   const records = yield* ThreadRecords;
   const harnesses = yield* HarnessRegistry;
+  const transitionWrites = writes(kernelStorageWrites.operation, [], kernelStorageWrites, (yield* ThreadHomes).writes);
   const settings = yield* Settings;
   const models = yield* ModelAccess;
   const rollouts = yield* ThreadRollouts;
@@ -211,8 +215,7 @@ export const assembleNativeKernel: Effect.Effect<NativeKernel['Service'], never,
     calibration: calibration ? { store: calibration } : undefined,
     policy: ({ threadId }) => compactionPolicy(records, settings, threadId),
     transcriptLocation: Effect.fnUntraced(function* (threadId) {
-      const projectId = yield* records.projectOf(threadId).pipe(stored('projectOf'));
-      const path = projectId === undefined ? undefined : rollouts.pathOf(projectId, threadId);
+      const path = yield* rollouts.locate(threadId).pipe(stored('locate'));
       if (path === undefined) return yield* new ThreadCallBroke({ cause: new Error('The compaction transcript location is unavailable.') });
       return path;
     }),
@@ -270,7 +273,7 @@ export const assembleNativeKernel: Effect.Effect<NativeKernel['Service'], never,
     choices,
     warmth,
     birthModels: yield* makeBirthModels({ rows: modelRows }),
-    transitions: yield* makeTransitions({ threads: store, writes: () => harnesses.writes(kernelStorageWrites) }),
+    transitions: yield* makeTransitions({ threads: store, writes: () => harnesses.writes(transitionWrites) }),
     runs: yield* makeWorkflowRuns,
     cacheObservations,
     fillers: {

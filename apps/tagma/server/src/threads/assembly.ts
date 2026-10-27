@@ -105,6 +105,8 @@ import { PluginPoints } from '../plugins/contract/service/points.js';
 import { ProjectChanges } from '../projects/contract/service/changes.js';
 import { ModelChanges } from './contract/service/modelChanges.js';
 import { makeModelChanges } from './events/modelChanges.js';
+import { ThreadHomes } from './contract/service/homes.js';
+import { makeThreadHomes } from './homes.js';
 
 export const threadStoresLayer = Layer.effectContext(
   Effect.gen(function* () {
@@ -127,6 +129,7 @@ export const threadStoresLayer = Layer.effectContext(
       Context.add(OperatorNotes, notes),
       Context.add(AgentRules, { rules: [notesRule(notes)] }),
       Context.add(OwnWork, yield* makeOwnWork),
+      Context.add(ThreadHomes, yield* makeThreadHomes),
     );
   }),
 );

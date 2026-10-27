@@ -3,7 +3,7 @@ import { ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
 import type { ThreadContextAsk } from '@runlith/agent/thread/run/ThreadRunContexts';
 import type { ThreadContextUse } from '@runlith/agent/thread/agents/ThreadAgent';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
-import { MachineUnits } from '../../platform/contract/service/units.js';
+import { MachineUnits, type WriteUnit } from '../../platform/contract/service/units.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { GateRefusal, type Unblock } from '../../platform/contract/wire/refusal.js';
 import type { Assignment } from '../../workspace/contract/wire/assignments.js';
@@ -22,6 +22,7 @@ import type {
   PreparedTarget,
   TargetChange,
   TargetFailure,
+  TargetHomeMove,
   TargetStanding,
   TargetThread,
   WorldAcquire,
@@ -94,12 +95,13 @@ export const makeTargetContexts = Effect.gen(function* () {
       runId: change.runId,
       generation: WorkspaceGeneration.make(change.fromGeneration + 1),
     };
+    const home = change.home;
     const assignment = yield* readAssignment(change.thread);
-    const { rootId } = assignment.selection;
-    if (rootId === null || assignment.standing !== 'live') {
+    const rootId = home?.root.rootId ?? assignment.selection.rootId;
+    if (rootId === null || (home === undefined && assignment.standing !== 'live')) {
       return yield* noDestination(change.thread, assignment);
     }
-    const root = yield* units.read((unit) => roots.checked(rootId, undefined, unit)).pipe(unregistered);
+    const root = yield* units.read((unit) => roots.checked(rootId, home?.root.locationRevision, unit)).pipe(unregistered);
     const acquired = yield* acquire({ at, root: root.path });
     const target: TargetSnapshot = {
       work: { projectId: change.thread.projectId, threadId: change.thread.id },
@@ -122,7 +124,9 @@ export const makeTargetContexts = Effect.gen(function* () {
         sourceKey: target.sourceKey,
         commit: Effect.fnUntraced(
           function* (unit) {
-            const publication = yield* assignments.publish(unit, change.thread.id as ThreadId, revision);
+            const threadId = change.thread.id as ThreadId;
+            const decided = home === undefined ? revision : yield* homeSelected(unit, threadId, home);
+            const publication = yield* assignments.publish(unit, threadId, decided);
             if (!publication.current) {
               return yield* Effect.fail(
                 new TargetPublicationRefused({
@@ -138,12 +142,26 @@ export const makeTargetContexts = Effect.gen(function* () {
               );
             }
             yield* targets.record(target, unit);
+            if (home !== undefined) yield* home.shift(unit);
             settled(at, at.generation);
           },
           Effect.mapError((cause) => new ThreadCallBroke({ cause })),
         ),
       },
     };
+  });
+
+  const homeSelected = Effect.fnUntraced(function* (unit: WriteUnit<'machine'>, threadId: ThreadId, home: TargetHomeMove) {
+    const standing = yield* assignments.read(unit, threadId);
+    if (standing.selection.revision !== home.revision) {
+      return yield* Effect.fail(
+        new TargetPublicationRefused({
+          message: `The placement this move was decided against has been overtaken: selection revision ${home.revision} is no longer the one that stands.`,
+        }),
+      );
+    }
+    const selected = yield* assignments.select(unit, { actor: home.actor, threadId, root: home.root });
+    return selected.selection.revision;
   });
 
   const openTarget = Effect.fn('TargetContexts.opening')(function* (

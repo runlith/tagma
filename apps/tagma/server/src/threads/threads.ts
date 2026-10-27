@@ -15,6 +15,7 @@ import { birthApprovalMode, THREADS_SETTING_KEYS, THREADS_SETTING_SECTIONS } fro
 import { THREADS_ENTRY_KINDS } from './contract/wire/entryKinds.js';
 import { SECTIONS } from './doctrine/registry.js';
 import { BUILTIN_NOTES } from './contract/service/notes.js';
+import { HOME_FOLLOWERS } from '../thread-record/contract/service/homes.js';
 import { stance } from './notes/stance.js';
 import { recordMetaForm } from './steps/recordMeta.js';
 import { questionEndorsedForm } from './steps/questionEndorsed.js';
@@ -44,6 +45,7 @@ export const threads = manifest({
       relocate: () => Effect.succeed([]),
     }),
     ...BUILTIN_NOTES.of(stance),
+    ...HOME_FOLLOWERS.of({ id: 'threads/places', load: async () => (await import('./homeFollowing.js')).threadHomes }),
   ],
   snapshots: async (home) =>
     (await import('./journal/rolloutSnapshot.js')).rolloutParticipant(home.machine, join(dirname(home.machine), ROLLOUT_HOME)),
@@ -116,7 +118,7 @@ export const threads = manifest({
     const [
       { threadSeen, threadInbox, threadInboxWake, threadResource, threadTargetOperation },
       { threadViewPin },
-      { threadBase, threadEvent, threadRolloutCursor, threadRolloutForm, threadRolloutHome, threadRolloutRefusal },
+      { threadBase, threadEvent, threadJournalPlace, threadRolloutCursor, threadRolloutForm, threadRolloutHome, threadRolloutRefusal },
       { approvalPreference },
       { threadMandate, threadLiveSpell },
       { workflowRun },
@@ -147,6 +149,7 @@ export const threads = manifest({
         threadResource,
         threadSeen,
         threadViewPin,
+        threadJournalPlace,
         threadRolloutCursor,
         threadRolloutForm,
         threadRolloutHome,

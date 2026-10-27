@@ -69,6 +69,7 @@ const fixture = Effect.gen(function* () {
     detach: unread,
     reattach: unread,
     advanceReaderOrder: unread,
+    rehome: unread,
     setTitle: unread,
     nameTitle: unread,
     adoptTitle: unread,

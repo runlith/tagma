@@ -23,7 +23,7 @@ const later = (threadId: string, work: Effect.Effect<void, unknown>): Effect.Eff
 export const rolloutWhole = (
   ctx: RolloutContext,
   forms: RolloutForms,
-  rest: (projectId: number, threadId: string) => Effect.Effect<ThreadEvictionVerdict, HarnessFailure>,
+  rest: (threadId: string) => Effect.Effect<ThreadEvictionVerdict, HarnessFailure>,
   wake: (threadId: string, path: string) => Effect.Effect<void, HarnessFailure>,
   runAppend: (effect: Effect.Effect<void>) => void,
   uses: ThreadUses,
@@ -33,9 +33,8 @@ export const rolloutWhole = (
 
   const placed = Effect.fnUntraced(function* (threadId: string) {
     if (ctx.home === undefined || !(yield* forms.lags(threadId))) return null;
-    const projectId = yield* ctx.records.projectOf(threadId);
-    const path = projectId === undefined ? undefined : ctx.pathOf(projectId, threadId);
-    return projectId === undefined || path === undefined ? null : { projectId, path };
+    const path = yield* ctx.locate(threadId);
+    return path === undefined ? null : { path };
   });
 
   const resident = (threadId: string): Effect.Effect<void> =>
@@ -54,7 +53,7 @@ export const rolloutWhole = (
                   if (!(yield* forms.lags(threadId))) return;
                   yield* ctx.projection.run({ threadId, path: place.path });
                   if (yield* forms.eventlessLag(threadId)) return yield* forms.formedHere(threadId, place.path);
-                  if ((yield* rest(place.projectId, threadId)).outcome !== 'evicted') return;
+                  if ((yield* rest(threadId)).outcome !== 'evicted') return;
                   yield* wake(threadId, place.path);
                 }),
                 undefined,

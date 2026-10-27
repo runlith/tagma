@@ -10,6 +10,7 @@ import type { ThreadId } from '../../../platform/contract/wire/thread.js';
 import type { ThreadRecordFacts, ThreadRelation } from '../wire/record.js';
 import type { ThreadRecap } from '../wire/recap.js';
 import type { ThreadTitle, TitleNaming, TitleProvenance } from '../wire/title.js';
+import type { HomeMove } from './homes.js';
 
 export type RecordAddress = { readonly threadId: ThreadId; readonly projectId: number };
 
@@ -118,6 +119,7 @@ export class ThreadRecords extends Context.Service<
     detach(unit: WriteUnit<'machine'>, id: string, at: Date): Effect.Effect<Detached | DetachRefused, StoreFailure>;
     reattach(unit: WriteUnit<'machine'>, id: string): Effect.Effect<Reattached | ReattachRefused, StoreFailure>;
     advanceReaderOrder(unit: WriteUnit<'machine'>, id: string, at: Date): Effect.Effect<void, StoreFailure>;
+    rehome(unit: WriteUnit<'machine'>, move: HomeMove, at: Date): Effect.Effect<boolean, StoreFailure>;
     setTitle(unit: WriteUnit<'machine'>, id: string, title: string, provenance: TitleProvenance): Effect.Effect<void, StoreFailure>;
     nameTitle(unit: WriteUnit<'machine'>, id: string, title: string, expectedRevision: number): Effect.Effect<TitleNaming, StoreFailure>;
     adoptTitle(

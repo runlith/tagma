@@ -12,6 +12,7 @@ import { ThreadTurns } from '../turns/acts.js';
 import { ThreadList } from '../contract/service/list.js';
 import { ThreadRollouts } from '../contract/service/rollouts.js';
 import { ThreadMoves } from '../targets/moves.js';
+import { MAIN_WORKTREE } from '../birth/placement.js';
 import { ThreadTitles } from '../contract/service/titles.js';
 import { threadSelectionOf, wireSnapshotPayload } from '../list/wire.js';
 import type { CacheWarmth } from '../contract/service/evidence.js';
@@ -104,7 +105,11 @@ export const ACT_PAIRS = {
     OPS.move_thread,
     body<typeof OPS.move_thread, readonly Raised[], ThreadRecords | CurrentProject | ThreadMoves>(OPS.move_thread, {
       prepare: (input, caller: Caller) =>
-        strangerRaised(input.threadId, threadIdOf(caller.actor), `it moves into ${input.worktree} anyway`),
+        strangerRaised(
+          input.threadId,
+          threadIdOf(caller.actor),
+          `it moves into ${input.worktree ?? MAIN_WORKTREE}${input.home === undefined ? '' : ` of project ${input.home}`} anyway`,
+        ),
       execute: Effect.fnUntraced(function* (input, consents: readonly Raised[], caller) {
         const call = yield* yield* CurrentProject;
         const moves = yield* ThreadMoves;
@@ -112,7 +117,8 @@ export const ACT_PAIRS = {
         return yield* moves
           .move(call.project.id, caller.actor, {
             threadId: input.threadId,
-            worktree: input.worktree,
+            worktree: input.worktree ?? MAIN_WORKTREE,
+            home: input.home,
             operationKey: input.operationKey,
             expectedSelectionRevision: input.expectedSelectionRevision,
             expectedGeneration: input.expectedGeneration,

@@ -70,6 +70,7 @@ export const threadParentSchema = Schema.Struct({ id: Schema.String, projectId: 
 export type ThreadParent = typeof threadParentSchema.Type;
 
 export type WireThread = ThreadStateView['thread'] & {
+  readonly projectId: number | null;
   readonly title: string;
   readonly parent?: ThreadParent;
   readonly detachedFrom?: ThreadParent;
@@ -93,6 +94,7 @@ export type ThreadWireFeedEvent = ThreadFeedEvent<WireState>;
 
 const wireThreadSchema = Schema.Struct({
   ...serializedThreadSchema.fields,
+  projectId: Schema.NullOr(Schema.Int),
   title: Schema.String,
   parent: Schema.optional(threadParentSchema),
   detachedFrom: Schema.optional(threadParentSchema),

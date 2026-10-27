@@ -83,7 +83,11 @@ A \`cursor\` alone continues its saved question, including its page size. The re
 
 const threadAt = { threadId: Schema.String };
 
-const moved = <F extends { readonly status: Schema.Top }>({ status: _status, ...fields }: F) => ({ ...fields, ...threadAt });
+const moved = <F extends { readonly status: Schema.Top }>({ status: _status, ...fields }: F) => ({
+  ...fields,
+  ...threadAt,
+  projectId: Schema.Int.annotate({ description: 'The home the thread stands in once this move applies.' }),
+});
 
 const titled = { ...threadAt, ...threadTitleAnswerSchema.fields };
 
@@ -286,14 +290,21 @@ export const THREAD_OPERATIONS = {
       applied: moved(ThreadTargetApplied.fields),
       failed: moved(ThreadTargetFailureState.fields),
     }),
-    meaning: 'Move a thread into another worktree of this project, so the commands and file tools of its next step work there.',
-    grammar: `\`worktree\` names where it goes: \`main\`, a worktree's name as list_worktrees answers it, or a root id. A thread with no run going moves at once. A running thread keeps the step in flight where it was and moves at its next step boundary: the answer is \`pending\` until then, and read it again under the same \`operationKey\` to see it \`applied\` or \`failed\`. The moved thread's next turn is told where it now stands and where its earlier reads were.
-The same \`operationKey\` with the same move answers what that move reached; the same key carrying another move refuses. A thread moves itself and the threads it spawned; the operator moves any thread of the project. A thread born on a guest host keeps its world and refuses \`guest-mobility\`, and a CLI thread running its own agent refuses \`harness-pinned\` while a turn of it runs, because that agent works in the folder it launched in; a Tagma agent on any transport moves like a native one. Making a new worktree is its own act — prepare_worktree and create_worktree — and this moves into one that stands.`,
+    meaning:
+      'Move a thread into another worktree of its project, or into a checkout of another project, which becomes its home: the commands and file tools of its next step work there.',
+    grammar: `\`worktree\` names where it goes: \`main\` (the default), a worktree's name as list_worktrees answers it, or a root id. A thread with no run going moves at once. A running thread keeps the step in flight where it was and moves at its next step boundary: the answer is \`pending\` until then, and read it again under the same \`operationKey\` to see it \`applied\` or \`failed\`. The moved thread's next turn is told where it now stands and where its earlier reads were.
+\`home\` names another registered project: the thread moves into its \`worktree\` and that project becomes its home — the thread list it stands in, and from its next step the law, command rules, settings, skills and agents it works under; \`projectId\` in the answer names it. The thread keeps its conversation, scratch, its own command rules, the lines it holds and the tasks it holds; its folder and pin in the old list fall away, and the threads it spawned keep their own homes. A running thread that reaches no step boundary before its run ends is not moved at all and answers \`failed\`. Work it holds running — a terminal, a command in the background, a custody handover — stays with the project it runs in, so the move refuses \`executions-held\` naming it until it ends, is stopped or is handed to the operator.
+The same \`operationKey\` with the same move answers what that move reached; the same key carrying another move refuses. A thread moves itself and the threads it spawned; the operator moves any thread. A thread born on a guest host keeps its world and refuses \`guest-mobility\`, and a CLI thread running its own agent refuses \`harness-pinned\` while a turn of it runs, because that agent works in the folder it launched in; a Tagma agent on any transport moves like a native one. Making a new worktree is its own act — prepare_worktree and create_worktree — and this moves into one that stands.`,
     input: Schema.Struct({
       threadId: ThreadId,
-      worktree: Schema.NonEmptyString.annotate({
+      home: Schema.optional(Schema.Union([Schema.String, Schema.Int.check(Schema.isGreaterThan(0))])).annotate({
         ...placeRole('value'),
-        description: '`main`, a worktree name list_worktrees answers, or a root id.',
+        description:
+          'The project the thread moves into, by registered name or id; it becomes the thread’s home. Omitted: the project it stands in.',
+      }),
+      worktree: Schema.optional(Schema.NonEmptyString).annotate({
+        ...placeRole('value'),
+        description: '`main` (the default), a worktree name list_worktrees answers in the destination project, or a root id.',
       }),
       operationKey: Schema.optional(ThreadTargetOperationKey).annotate({
         description:
@@ -306,12 +317,28 @@ The same \`operationKey\` with the same move answers what that move reached; the
         description: 'The context generation a running thread leaves. Omitted: whatever the run has reached.',
       }),
     }),
-    refusals: [...CHANGE_REFUSALS, 'worktree-unknown', 'worktree-unavailable', 'placement-refused', 'harness-pinned', ...ENDING_REFUSALS],
+    refusals: [
+      ...CHANGE_REFUSALS,
+      'worktree-unknown',
+      'worktree-unavailable',
+      'placement-refused',
+      'harness-pinned',
+      'unknown-project',
+      'ambiguous-project',
+      'executions-held',
+      ...ENDING_REFUSALS,
+    ],
     subjects: (input, consents: readonly Raised[] | undefined, actor) => [...subject('write', input.threadId, actor)],
     raises: (input, consents: readonly Raised[] | undefined, actor) => consents ?? [],
     confirmation: (input) => ({
-      summary: `Move ${input.threadId} into ${input.worktree}?`,
-      consequence: 'Its next step runs its commands and file tools in that worktree; a step already running finishes where it was.',
+      summary:
+        input.home === undefined
+          ? `Move ${input.threadId} into ${input.worktree ?? 'main'}?`
+          : `Move ${input.threadId} into ${input.worktree ?? 'main'} of project ${input.home}?`,
+      consequence:
+        input.home === undefined
+          ? 'Its next step runs its commands and file tools in that worktree; a step already running finishes where it was.'
+          : 'It leaves this project for that one: its next step works under that project’s law, command rules and agents, and its folder and pin here fall away; a step already running finishes where it was.',
     }),
     confirmLabel: 'Move',
     presentation: {

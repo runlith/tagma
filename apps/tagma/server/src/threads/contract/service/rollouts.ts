@@ -3,13 +3,16 @@ import type { ThreadEvictionVerdict, ThreadSweep } from '../wire/eviction.js';
 import type { RolloutRepair, ThreadRolloutDisagreement } from '../wire/evidence.js';
 import type { HarnessFailure } from './failure.js';
 import type { ThreadGate } from '../../list/store.js';
+import type { StoreFailure } from '../../../platform/contract/service/store.js';
 
 export class ThreadRollouts extends Context.Service<
   ThreadRollouts,
   {
     pathOf(projectId: number, threadId: string): string | undefined;
+    locate(threadId: string): Effect.Effect<string | undefined, StoreFailure>;
     appendRecord(threadId: string, record: unknown): void;
     appendMeta(threadId: string): Effect.Effect<void>;
+    queueMeta(threadId: string): void;
     ensure(threadId: string): Effect.Effect<void, unknown>;
     behind(threadId: string): Effect.Effect<Effect.Effect<void, unknown>, unknown>;
     owed(threadId: string): Effect.Effect<void, unknown>;

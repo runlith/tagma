@@ -78,8 +78,9 @@ import { externalHarnesses } from '../external-harnesses/external-harnesses.js';
 import { Git } from '@runlith/git/Git';
 import { DoctrineFacts } from '../platform/contract/service/facts.js';
 import type { FactCheckout } from '../platform/contract/wire/section.js';
-import { BUILTIN_NOTE_ENTRIES, CAPABILITIES, FACTS } from './manifest.js';
+import { BUILTIN_NOTE_ENTRIES, CAPABILITIES, FACTS, HOME_FOLLOWER_ENTRIES } from './manifest.js';
 import { BuiltinNotes } from '../threads/contract/service/notes.js';
+import { HomeFollowers } from '../thread-record/contract/service/homes.js';
 import { DeclaredCapabilities } from '../native-harness/contract/service/capabilities.js';
 import { nativeDoor } from './nativeDoor.js';
 import { navigationServing } from './navigation.js';
@@ -204,6 +205,13 @@ const stores = threads.lifetimes.installation.pipe(
       targetSnapshots,
       heldPathCounts,
       Layer.succeed(BuiltinNotes, { notes: BUILTIN_NOTE_ENTRIES }),
+      Layer.effect(
+        HomeFollowers,
+        Effect.map(
+          Effect.promise(() => Promise.all(HOME_FOLLOWER_ENTRIES.map((follower) => follower.load()))),
+          (all) => ({ all }),
+        ),
+      ),
     ),
   ),
   Layer.provideMerge(machineServed),

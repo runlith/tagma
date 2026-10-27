@@ -35,6 +35,8 @@ import {
 } from '../store/targetIntents.js';
 import { threadTargetOperation } from '../store/tables.js';
 import { assignmentMembership, assignmentSelection } from '../../workspace/store/tables.js';
+import type { ThreadHomes } from '../contract/service/homes.js';
+import type { HomeMove } from '../../thread-record/contract/service/homes.js';
 
 export type ThreadTargetFailure =
   | StoreFailure
@@ -63,7 +65,11 @@ export type ThreadTargetThreads = {
 export type TargetEffects = {
   readonly kernel: ThreadTargetKernel;
   readonly acquire: WorldAcquire;
+  readonly homes?: ThreadHomes['Service'];
 };
+
+const crossing = (caller: ThreadTargetCaller, input: ThreadTargetChangeInput): number | null =>
+  input.home === undefined || input.home === caller.projectId ? null : input.home;
 
 export type ThreadTargets = Effect.Success<ReturnType<typeof makeThreadTargets>>;
 
@@ -82,25 +88,50 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
   const change: (
     caller: ThreadTargetCaller,
     input: ThreadTargetChangeInput,
-    ports: Pick<TargetEffects, 'kernel' | 'acquire'>,
+    ports: TargetEffects,
   ) => Effect.Effect<ThreadTargetChange, ThreadTargetFailure> = Effect.fn('ThreadTargets.change')(function* (
     caller: ThreadTargetCaller,
     input: ThreadTargetChangeInput,
-    ports: Pick<TargetEffects, 'kernel' | 'acquire'>,
+    ports: TargetEffects,
   ): Effect.fn.Return<ThreadTargetChange, ThreadTargetFailure> {
     const digest = digestOf(input);
+    const home = crossing(caller, input);
+    const homes = home === null ? undefined : ports.homes;
+    if (home !== null && homes === undefined) {
+      return yield* Effect.die(new Error('A move into another project reached the targets without the owner of thread homes.'));
+    }
+    const shift =
+      home === null || homes === undefined ? null : { homes, move: { threadId: input.threadId, from: caller.projectId, to: home } };
     const decided = yield* units.write(
-      writes('ThreadTargets.decided', [threadTargetOperation, assignmentMembership, assignmentSelection]),
-      (unit) => decide(caller, input, digest, unit),
+      writes(
+        'ThreadTargets.decided',
+        [threadTargetOperation, assignmentMembership, assignmentSelection],
+        ...(homes === undefined ? [] : [homes.writes]),
+      ),
+      (unit) => decide(caller, input, digest, unit, shift),
     );
     if (decided.kind === 'replay') return yield* replay(caller, decided.row, digest, ports);
     if (decided.kind === 'idle') {
       return { status: 'selected', operationKey: input.operationKey, revision: decided.revision };
     }
-    const thread: TargetThread = { id: input.threadId, projectId: caller.projectId };
+    const thread: TargetThread = { id: input.threadId, projectId: home ?? caller.projectId };
     const prepared = yield* Effect.result(
       contexts.prepare(
-        { thread, runId: decided.runId, fromGeneration: decided.fromGeneration, requestId: input.operationKey },
+        {
+          thread,
+          runId: decided.runId,
+          fromGeneration: decided.fromGeneration,
+          requestId: input.operationKey,
+          home:
+            shift === null
+              ? undefined
+              : {
+                  root: input.root,
+                  revision: decided.revision,
+                  actor: caller.actor,
+                  shift: (unit) => shift.homes.move(unit, shift.move),
+                },
+        },
         ports.acquire,
       ),
     );
@@ -181,10 +212,16 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
     input: ThreadTargetChangeInput,
     digest: string,
     unit: WriteUnit<'machine'>,
+    shift: HomeShift | null,
   ): Effect.fn.Return<
     | { readonly kind: 'replay'; readonly row: ThreadTargetOperation }
     | { readonly kind: 'idle'; readonly revision: SelectionRevision }
-    | { readonly kind: 'active'; readonly runId: string; readonly fromGeneration: WorkspaceGeneration },
+    | {
+        readonly kind: 'active';
+        readonly runId: string;
+        readonly fromGeneration: WorkspaceGeneration;
+        readonly revision: SelectionRevision;
+      },
     ThreadTargetFailure
   > {
     const standing = yield* operations.of(input.threadId, input.operationKey, unit);
@@ -224,13 +261,16 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
       }
     }
     const active = yield* snapshots.readActive(input.threadId, unit);
+    const homeId = shift === null ? null : shift.move.to;
     if (active.state === 'unavailable' && active.reason === 'no-run') {
       const selected = yield* select(caller.actor, input, unit);
+      if (shift !== null) yield* shift.homes.move(unit, shift.move);
       const row = yield* operations.insert(
         {
           threadId: input.threadId,
           operationKey: input.operationKey,
           projectId: caller.projectId,
+          homeId,
           payloadDigest: digest,
           rootId: input.root.rootId,
           locationRevision: input.root.locationRevision,
@@ -256,17 +296,19 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
         ["Read the run's context changes and decide the move against the generation it stands in."],
       );
     }
-    const selected = yield* select(caller.actor, input, unit);
+    if (shift !== null) yield* shift.homes.admit(unit, shift.move);
+    const revision = shift === null ? (yield* select(caller.actor, input, unit)).selection.revision : assignment.selection.revision;
     const row = yield* operations.insert(
       {
         threadId: input.threadId,
         operationKey: input.operationKey,
         projectId: caller.projectId,
+        homeId,
         payloadDigest: digest,
         rootId: input.root.rootId,
         locationRevision: input.root.locationRevision,
         expectedSelectionRevision: input.expectedSelectionRevision ?? null,
-        selectionRevision: selected.selection.revision,
+        selectionRevision: revision,
         expectedGeneration: input.expectedGeneration ?? null,
         fromGeneration: generation,
         creationOperationId: input.creationOperationId ?? null,
@@ -276,7 +318,7 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
       unit,
     );
     if (row.payloadDigest !== digest) return { kind: 'replay', row };
-    return { kind: 'active', runId, fromGeneration: generation };
+    return { kind: 'active', runId, fromGeneration: generation, revision: SelectionRevision.make(revision) };
   });
 
   const replay = Effect.fn('ThreadTargets.replay')(function* (
@@ -322,7 +364,7 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
           return { kind: 'settled-gone' as const };
         }
         const assignment = yield* assignments.read(unit, ThreadId.make(row.threadId)).pipe(refusing);
-        if (assignment.selection.revision !== row.selectionRevision) {
+        if (!crossed(row) && assignment.selection.revision !== row.selectionRevision) {
           return { kind: 'overtaken' as const };
         }
         return { kind: 'standing' as const, runId: active.target.runId };
@@ -553,9 +595,14 @@ const digestOf = (input: ThreadTargetChangeInput): string =>
         expectedSelectionRevision: input.expectedSelectionRevision ?? null,
         expectedGeneration: input.expectedGeneration ?? null,
         creationOperationId: input.creationOperationId ?? null,
+        ...(input.home === undefined ? {} : { home: input.home }),
       }),
     )
     .digest('hex');
+
+const crossed = (row: ThreadTargetOperation): boolean => row.homeId !== null && row.homeId !== row.projectId;
+
+type HomeShift = { readonly homes: ThreadHomes['Service']; readonly move: HomeMove };
 
 const refusedPlacement = (failure: PlacementFailure): GateRefusal => {
   if (failure instanceof AssignmentRefused) {

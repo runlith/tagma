@@ -1,6 +1,6 @@
 import type { ThreadEventPayloadValue, ThreadEventRow } from '@runlith/agent/thread/storage/eventLog';
 import type { ThreadProjectionRefusalReason } from '../contract/wire/projection.js';
-import { sql, type SQL } from 'drizzle-orm';
+import { sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 import { type AnySQLiteColumn, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { threadRecord } from '../../thread-record/store/table.js';
 import { writes, type WriteSet } from '../../platform/contract/service/writes.js';
@@ -23,6 +23,18 @@ export const threadRolloutCursor = sqliteTable('thread_rollout_cursor', {
   generation: integer('generation').notNull().default(0),
   restedAt: integer('rested_at', { mode: 'timestamp_ms' }),
 });
+
+export const threadJournalPlace = sqliteTable('thread_journal_place', {
+  threadId: text('thread_id')
+    .primaryKey()
+    .references(() => threadRecord.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull(),
+});
+
+export const journalProjectOf = (thread: SQLWrapper, home: SQLWrapper): SQL<number | null> =>
+  sql<
+    number | null
+  >`coalesce((select ${threadJournalPlace.projectId} from ${threadJournalPlace} where ${threadJournalPlace.threadId} = ${thread}), ${home})`;
 
 export const threadRolloutHome = sqliteTable('thread_rollout_home', {
   path: text('path').primaryKey(),

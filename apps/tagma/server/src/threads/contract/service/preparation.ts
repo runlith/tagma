@@ -8,6 +8,8 @@ import type { TargetAt } from '../../../workspace/contract/wire/place.js';
 import type { WorkspaceGeneration } from '../../../workspace/contract/wire/ids.js';
 import type { ThreadWorld, WorldAcquisition, WorldUnavailable } from '../../../executions/contract/service/worlds.js';
 import type { GraphOrigin, TargetSnapshot } from '../wire/target.js';
+import type { RootBinding } from '../../../workspace/contract/wire/roots.js';
+import type { AssignmentActor, SelectionRevision } from '../../../workspace/contract/wire/assignments.js';
 
 export type TargetThread = { readonly id: string; readonly projectId: number; readonly root?: string };
 
@@ -20,11 +22,19 @@ export type AdmittedTarget = {
   readonly world: ThreadWorld;
 };
 
+export type TargetHomeMove = {
+  readonly root: RootBinding;
+  readonly revision: SelectionRevision;
+  readonly actor: AssignmentActor;
+  readonly shift: (unit: WriteUnit<'machine'>) => Effect.Effect<void, StoreFailure | GateRefusal>;
+};
+
 export type TargetChange = {
   readonly thread: TargetThread;
   readonly runId: string;
   readonly fromGeneration: WorkspaceGeneration;
   readonly requestId: string;
+  readonly home?: TargetHomeMove;
 };
 
 export type TargetStanding = {

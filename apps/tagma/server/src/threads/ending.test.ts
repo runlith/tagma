@@ -85,6 +85,7 @@ const stand = Effect.fnUntraced(function* (
       freeing: () => Effect.succeed(Effect.void),
       pathOf: unexpected,
       appendRecord: unexpected,
+      queueMeta: unexpected,
       formRested: unexpected,
       shelve: unexpected,
     }),

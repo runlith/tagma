@@ -17,7 +17,7 @@ export class RestedRollouts extends Context.Service<
     facet(
       threadId: string,
       tx?: Unit<'machine'>,
-    ): Effect.Effect<{ readonly projectId: number; readonly evicted: boolean } | null, StoredFailure>;
+    ): Effect.Effect<{ readonly journal: number; readonly evicted: boolean } | null, StoredFailure>;
     restedRollout(threadId: string, tx?: Unit<'machine'>): Effect.Effect<RestedRollout | null, StoredFailure>;
     readable(threadId: string): Effect.Effect<void, StoredFailure>;
     events(

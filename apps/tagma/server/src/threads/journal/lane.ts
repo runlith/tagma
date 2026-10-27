@@ -77,9 +77,27 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
   const { repair: repaired, report } = rolloutRepairing(ctx, forms, repair, rollout, rehydrate);
   const whole = rolloutWhole(ctx, forms, rest, wake, runAppend, uses, background);
   const { shelve, shelving } = rolloutShelf(ctx, evict);
+  const appendMeta = (threadId: string): Effect.Effect<void> => {
+    if (rolloutHome === undefined) return Effect.void;
+    return ctx
+      .inJournal(
+        threadId,
+        Effect.gen(function* () {
+          const meta = yield* units.markReadOnly(ctx.machineStore(threadRolloutMeta(threadId, parts)));
+          if (meta === null || meta.record.projectId == null) return;
+          const journal = yield* ctx.journalOf(threadId);
+          if (journal === undefined) return;
+          yield* floor.appendRecord(threadId, journal, { kind: 'meta', meta });
+        }),
+      )
+      .pipe(
+        Effect.catchCause((cause) => Effect.sync(() => console.error(`[tagma] rollout meta failed for ${threadId}`, Cause.squash(cause)))),
+      );
+  };
 
   return ThreadRollouts.of({
     pathOf: ctx.pathOf,
+    locate: ctx.locate,
     rehydrate: (threadId, read) => Effect.tap(rehydrate(threadId, read), () => whole.resident(threadId)),
     formRested: whole.rested,
     formLagging: whole.lagging,
@@ -100,9 +118,9 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
       if (rolloutHome === undefined) return;
       runAppend(
         Effect.gen(function* () {
-          const projectId = yield* records.projectOf(threadId);
-          if (projectId === undefined) return;
-          yield* ctx.inJournal(threadId, floor.appendRecord(threadId, projectId, record));
+          const journal = yield* ctx.journalOf(threadId);
+          if (journal === undefined) return;
+          yield* ctx.inJournal(threadId, floor.appendRecord(threadId, journal, record));
         }).pipe(
           Effect.catchCause((cause) =>
             Effect.sync(() => console.error(`[tagma] rollout record failed for ${threadId}`, Cause.squash(cause))),
@@ -111,22 +129,10 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
       );
     },
 
-    appendMeta: (threadId) => {
-      if (rolloutHome === undefined) return Effect.void;
-      return ctx
-        .inJournal(
-          threadId,
-          Effect.gen(function* () {
-            const meta = yield* units.markReadOnly(ctx.machineStore(threadRolloutMeta(threadId, parts)));
-            if (meta === null || meta.record.projectId == null) return;
-            yield* floor.appendRecord(threadId, meta.record.projectId as number, { kind: 'meta', meta });
-          }),
-        )
-        .pipe(
-          Effect.catchCause((cause) =>
-            Effect.sync(() => console.error(`[tagma] rollout meta failed for ${threadId}`, Cause.squash(cause))),
-          ),
-        );
+    appendMeta,
+
+    queueMeta: (threadId) => {
+      if (rolloutHome !== undefined) runAppend(appendMeta(threadId));
     },
 
     freeing: Effect.fnUntraced(function* (threadIds) {

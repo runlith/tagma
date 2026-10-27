@@ -1,13 +1,16 @@
 import { Context, Effect } from 'effect';
+import { eq } from 'drizzle-orm';
 import { join } from 'node:path';
 import { HoldCut, HoldStalled, ReentrantCall } from '@runlith/held/failures';
 import type { Lane } from '@runlith/held/Lane';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import type { GraphServices } from '../../graph/contract/service/services.js';
-import { MachineStore } from '../../platform/contract/service/store.js';
+import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { ThreadRecords } from '../../thread-record/contract/service/records.js';
+import { recordFacts } from '../../thread-record/facts.js';
+import { journalProjectOf } from '../store/journal.js';
 import type { ThreadProjection } from './projection.js';
 import { ROLLOUT_SUFFIX } from './rolloutForms.js';
 import type { RolloutParts } from './rolloutMeta.js';
@@ -25,6 +28,8 @@ export type RolloutContext = {
   readonly home: string | undefined;
   readonly machineStore: ReturnType<typeof providing>;
   readonly pathOf: (projectId: number, threadId: string) => string | undefined;
+  readonly journalOf: (threadId: string) => Effect.Effect<number | undefined, StoreFailure>;
+  readonly locate: (threadId: string) => Effect.Effect<string | undefined, StoreFailure>;
   readonly inJournal: <A, E>(threadId: string, work: Effect.Effect<A, E>) => Effect.Effect<A, E | GateRefusal | ThreadStorageFailed>;
 };
 
@@ -61,6 +66,18 @@ export const rolloutContext = (input: {
   readonly home: string | undefined;
 }): RolloutContext => {
   const { journal, home } = input;
+  const store = Context.get(input.graph, MachineStore);
+  const pathOf = (projectId: number, threadId: string) =>
+    home === undefined ? undefined : join(home, String(projectId), `${threadId}${ROLLOUT_SUFFIX}`);
+  const journalOf = (threadId: string) =>
+    Effect.map(
+      store.db
+        .select({ journal: journalProjectOf(recordFacts.id, recordFacts.projectId) })
+        .from(recordFacts)
+        .where(eq(recordFacts.id, threadId))
+        .get(),
+      (row) => row?.journal ?? undefined,
+    );
   return {
     records: input.records,
     floor: input.floor,
@@ -69,8 +86,10 @@ export const rolloutContext = (input: {
     parts: input.parts,
     kinds: input.kinds,
     home,
-    machineStore: providing(Context.get(input.graph, MachineStore)),
-    pathOf: (projectId, threadId) => (home === undefined ? undefined : join(home, String(projectId), `${threadId}${ROLLOUT_SUFFIX}`)),
+    machineStore: providing(store),
+    pathOf,
+    journalOf,
+    locate: (threadId) => Effect.map(journalOf(threadId), (journal) => (journal === undefined ? undefined : pathOf(journal, threadId))),
     inJournal: journalEntry(journal),
   };
 };

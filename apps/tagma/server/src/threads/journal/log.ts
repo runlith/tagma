@@ -13,7 +13,7 @@ import { MachineStore, type StoreFailure } from '../../platform/contract/service
 import { MachineUnits, type Unit, type WriteUnit } from '../../platform/contract/service/units.js';
 import { thread, threadEntry } from '../store/kernel.js';
 import { recordFacts } from '../../thread-record/facts.js';
-import { threadBase, threadEvent, threadEventIdentity } from '../store/journal.js';
+import { journalProjectOf, threadBase, threadEvent, threadEventIdentity } from '../store/journal.js';
 import { payloadField } from '../store/fields.js';
 import { foldedBody, foldedEntryId, restoredFact } from './foldedFacts.js';
 import { RolloutWriterFailed, RolloutWriting } from './rolloutWriter.js';
@@ -95,7 +95,7 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
       unit.run(
         db
           .select({
-            projectId: recordFacts.projectId,
+            journal: journalProjectOf(recordFacts.id, recordFacts.projectId),
             logged: sql<number>`${journalHead(sql`${threadId}`)}`,
             floor: sql<number>`coalesce((select max(${threadBase.throughPosition}) from ${threadBase} where ${threadBase.threadId} = ${threadId}), 0)`,
           })
@@ -104,7 +104,7 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
           .get(),
       ),
     );
-    const filed = yield* read((unit) => held.head(threadId, facet?.projectId ?? undefined, unit));
+    const filed = yield* read((unit) => held.head(threadId, facet?.journal ?? undefined, unit));
     if (filed === null) return yield* held.adopt(threadId, 0, []);
     const head = Math.max(filed, facet?.floor ?? 0);
     const standing = facet?.logged ?? 0;

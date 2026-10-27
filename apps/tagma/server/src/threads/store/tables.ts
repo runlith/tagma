@@ -32,6 +32,7 @@ export const threadTargetOperation = sqliteTable(
       .references(() => threadRecord.id, { onDelete: 'cascade' }),
     operationKey: text('operation_key').notNull(),
     projectId: integer('project_id').notNull(),
+    homeId: integer('home_id'),
     payloadDigest: text('payload_digest').notNull(),
     rootId: text('root_id').notNull(),
     locationRevision: integer('location_revision').notNull(),

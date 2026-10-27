@@ -58,7 +58,7 @@ export const names: Builtin<'names', NamesParams> = {
             why: "One subject: a tool call's life at the door from admission through permission, order and execution to its answer, foreground or carried to the background at any of those stages; every stage shares the same tracked call, its order claim and its ledger.",
           },
           {
-            lines: 674,
+            lines: 700,
             path: 'apps/tagma/server/src/threads/contract/wire/operations/catalog.ts',
             why: 'One subject: the declarations of the thread operations — their doors, callers, answers, refusals and the words agents read for each.',
           },

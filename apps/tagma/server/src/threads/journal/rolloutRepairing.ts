@@ -18,12 +18,12 @@ export const rolloutRepairing = (
   rollout: ThreadRolloutReport,
   rehydrate: (threadId: string) => Effect.Effect<void, HarnessFailure>,
 ) => {
-  const { records, floor, projection, graph, inJournal, pathOf } = ctx;
+  const { records, floor, projection, graph, inJournal, locate } = ctx;
 
   const repaired = (threadId: string, projectId: number): Effect.Effect<RolloutRepair, HarnessFailure> =>
     gated(records, threadId, projectId, () =>
       Effect.gen(function* () {
-        const path = pathOf(projectId, threadId);
+        const path = yield* locate(threadId);
         if (path === undefined) {
           return yield* new GateRefusal('no-rollout-home', `This deployment keeps no rollout for ${threadId}.`, [
             'a repair acts on a file, and this server writes none',
@@ -70,13 +70,7 @@ export const rolloutRepairing = (
     );
 
   const reported = (threadId: string, projectId: number, limit?: number): Effect.Effect<ThreadRolloutDisagreement, HarnessFailure> =>
-    gated(records, threadId, projectId, () =>
-      rollout.read({
-        threadId,
-        path: pathOf(projectId, threadId),
-        records: limit,
-      }),
-    );
+    gated(records, threadId, projectId, () => Effect.flatMap(locate(threadId), (path) => rollout.read({ threadId, path, records: limit })));
 
   return { repair: repaired, report: reported };
 };

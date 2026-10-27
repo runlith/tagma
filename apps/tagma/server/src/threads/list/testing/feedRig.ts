@@ -98,6 +98,7 @@ const initial: NativeThreadState = {
     receipts: [],
   },
   now: at.toISOString(),
+  home: 1,
   title: 'thread',
   harness: null,
   delegation: { own: null, allowed: true, setAt: null },

@@ -12,6 +12,7 @@ import { EXECUTION_SETTING_KEYS, EXECUTION_SETTING_SECTIONS } from './settings.j
 import { heldProcesses } from './doctrine/heldProcesses.js';
 import { RELOCATIONS } from '../platform/contract/service/relocation.js';
 import { executionRelocation } from './relocation.js';
+import { HOME_FOLLOWERS } from '../thread-record/contract/service/homes.js';
 
 const live: ExecutionLive = liveOf(EXECUTION_FEEDS, async (door) => {
   const { terminal, command, commandBytes, load } = (await import('./ports.js')).executionChannels({ executions: door });
@@ -21,7 +22,10 @@ const live: ExecutionLive = liveOf(EXECUTION_FEEDS, async (door) => {
 export const executions = manifest({
   ...declaration,
   capabilities: [terminalsCapability],
-  contributions: RELOCATIONS.of(executionRelocation),
+  contributions: [
+    ...RELOCATIONS.of(executionRelocation),
+    ...HOME_FOLLOWERS.of({ id: 'executions/command-rules', load: async () => (await import('./homes.js')).executionHomes }),
+  ],
   verbs: executionVerbs,
   bodies: async () => {
     const [

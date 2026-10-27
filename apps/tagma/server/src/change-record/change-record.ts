@@ -12,6 +12,7 @@ import { CheckoutPlaces } from '../workspace/contract/service/checkouts.js';
 import { theSharedCheckout } from './doctrine/theSharedCheckout.js';
 import { StripComments, type StripCommentsRequest } from './contract/service/sweep.js';
 import type { StripCommentsContext } from './sweep/stripComments.js';
+import { HOME_FOLLOWERS } from '../thread-record/contract/service/homes.js';
 
 const FEEDS = [HOLDINGS_FEED, THREAD_CHANGES_FEED] as const;
 
@@ -26,6 +27,7 @@ const live: ChangesLive = liveOf(FEEDS, async (door) =>
 
 export const changeRecord = manifest({
   ...declaration,
+  contributions: HOME_FOLLOWERS.of({ id: 'change-record/holders', load: async () => (await import('./homes.js')).changeHomes }),
   bodies: async () => Object.values((await import('./operations/pairs.js')).CHANGE_PAIRS),
   presentation: async () => (await import('./presentation.js')).CHANGES_PRESENTATION,
   tables: async () => {

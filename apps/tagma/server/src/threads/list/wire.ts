@@ -295,6 +295,7 @@ export function cacheWarmthOf(
 function wireThreadOf(state: NativeThreadState, basis: ThreadBasis): WireThread {
   return {
     ...serializeThread(state.thread),
+    projectId: state.home,
     title: state.title,
     ...(state.parent === undefined ? {} : { parent: state.parent }),
     ...(state.detachedFrom === undefined ? {} : { detachedFrom: state.detachedFrom }),

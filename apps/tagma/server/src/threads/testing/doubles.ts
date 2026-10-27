@@ -8,6 +8,8 @@ import { makeModelChanges } from '../events/modelChanges.js';
 import { makeThreadRebinding } from '../harness/rebinding.js';
 import { JournalOrder } from '../journal/lane.js';
 import { makeHarnessMoves } from '../harness/moves.js';
+import { ThreadHomes } from '../contract/service/homes.js';
+import { writes } from '../../platform/contract/service/writes.js';
 
 export const harnessMoves = makeHarnessMoves;
 
@@ -307,6 +309,14 @@ export const moverDoubles = (placement: Placing['Service']) =>
         setup: () => Effect.die('NoteWriting.setup'),
         moved: () => Effect.void,
         merged: () => Effect.die('NoteWriting.merged'),
+      }),
+    ),
+    Context.add(
+      ThreadHomes,
+      ThreadHomes.of({
+        writes: writes('testing/thread-homes', []),
+        admit: () => Effect.die('ThreadHomes.admit'),
+        move: () => Effect.die('ThreadHomes.move'),
       }),
     ),
   );

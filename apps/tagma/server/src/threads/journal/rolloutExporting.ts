@@ -1,6 +1,6 @@
 import { Cause, Context, Effect } from 'effect';
 import { eq, isNotNull, sql } from 'drizzle-orm';
-import { threadEvent, threadRolloutCursor, threadRolloutRefusal } from '../store/journal.js';
+import { journalProjectOf, threadEvent, threadRolloutCursor, threadRolloutRefusal } from '../store/journal.js';
 import { RolloutWriterFailed } from './rolloutWriter.js';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -15,7 +15,7 @@ import { rolloutStateOf } from './rolloutForms.js';
 import type { RolloutContext } from './rolloutContext.js';
 
 export const rolloutExporting = (ctx: RolloutContext) => {
-  const { records, floor, parts, machineStore, inJournal, pathOf, graph } = ctx;
+  const { floor, parts, machineStore, inJournal, pathOf, locate, graph } = ctx;
 
   const journaled = Effect.fnUntraced(function* (threadId: string) {
     const { db } = Context.get(graph, MachineStore);
@@ -61,10 +61,7 @@ export const rolloutExporting = (ctx: RolloutContext) => {
     yield* written(threadId, path);
   });
 
-  const pathFor = Effect.fnUntraced(function* (threadId: string) {
-    const projectId = yield* records.projectOf(threadId);
-    return projectId === undefined ? undefined : pathOf(projectId, threadId);
-  });
+  const pathFor = locate;
 
   const ensure = Effect.fnUntraced(function* (threadId: string) {
     const path = yield* pathFor(threadId);
@@ -95,7 +92,7 @@ export const rolloutExporting = (ctx: RolloutContext) => {
     const rows = yield* stored('rollout-export')(
       Effect.mapError(
         store.db
-          .select({ threadId: recordFacts.id, projectId: recordFacts.projectId })
+          .select({ threadId: recordFacts.id, projectId: journalProjectOf(recordFacts.id, recordFacts.projectId) })
           .from(recordFacts)
           .where(isNotNull(recordFacts.projectId)),
         (error) => error,

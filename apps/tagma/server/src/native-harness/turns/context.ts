@@ -150,13 +150,20 @@ export function threadContext(
   const checkoutFlights = new CheckoutFlights(changeSource);
   return Effect.fn('native-harness.threadContext')(
     function* (thread, use) {
-      const projectId = yield* records.projectOf(thread.id);
-      if (projectId === undefined) {
+      const recorded = yield* records.projectOf(thread.id);
+      if (recorded === undefined) {
         return yield* new GateRefusal('thread-project-missing', 'The agent requires a thread bound to a project.', [
           'Open the thread through the project thread door.',
         ]);
       }
-      const project = yield* (yield* Projects).byId(projectId);
+      const projects = yield* Projects;
+      const home = yield* projects.byId(recorded);
+      yield* scratch.ensure(thread.id);
+      const { target, world } = yield* targets.of({ id: thread.id, projectId: recorded, root: home.rootPath }, use, (request) =>
+        worlds.of({ thread, at: request.at, root: request.root }),
+      );
+      const projectId = target.work.projectId;
+      const project = projectId === recorded ? home : yield* projects.byId(projectId);
       const checkout = yield* settings.value(checkoutMode, projectId);
       const commitsOwnWork = yield* settings.value(autoCommit, projectId);
       const web = yield* webs.of(
@@ -167,10 +174,6 @@ export function threadContext(
       const description = yield* descriptions.of(use, settings.value(commandDescription, projectId));
       const drawing = yield* images.of(projectId);
       const comments = yield* settings.held(commentPolicy, projectId);
-      yield* scratch.ensure(thread.id);
-      const { target, world } = yield* targets.of({ id: thread.id, projectId, root: project.rootPath }, use, (request) =>
-        worlds.of({ thread, at: request.at, root: request.root }),
-      );
       const facts =
         turnFacts === undefined ? {} : yield* turnFacts({ projectId, root: world.facts.shared ? world.root : project.rootPath });
       const placedIn = rootOfSourceKey(target.sourceKey);

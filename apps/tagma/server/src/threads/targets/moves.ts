@@ -15,10 +15,13 @@ import { ThreadHarness } from '../contract/service/engine.js';
 import type { ThreadTargets } from './decide.js';
 import { NoteWriting } from '../journal/worktreeNotes.js';
 import { Worlds } from '../../executions/contract/service/worlds.js';
+import { Projects } from '../../projects/contract/service/registry.js';
+import { ThreadHomes } from '../contract/service/homes.js';
 
 export type ThreadMove = {
   readonly threadId: string;
   readonly worktree: string;
+  readonly home?: string | number;
   readonly operationKey?: string;
   readonly expectedSelectionRevision?: SelectionRevision;
   readonly expectedGeneration?: WorkspaceGeneration;
@@ -42,15 +45,26 @@ export const makeThreadMover = Effect.fnUntraced(function* ({ targets }: { reado
   const worlds = yield* Worlds;
   const list = yield* ThreadList;
   const notes = yield* NoteWriting;
-  const move: (
-    projectId: number,
-    actor: Actor,
-    move: ThreadMove,
-  ) => Effect.Effect<ThreadTargetChange & { readonly threadId: string }, GateRefusal> = Effect.fn('ThreadMover.move')(function* (
-    projectId: number,
-    actor: Actor,
-    move: ThreadMove,
-  ) {
+  const projects = yield* Projects;
+  const homes = yield* ThreadHomes;
+  const destinationOf = (projectId: number, ref: string | number | undefined) =>
+    ref === undefined
+      ? Effect.succeed(projectId)
+      : projects.named(String(ref)).pipe(
+          Effect.map((project) => project.id),
+          Effect.mapError((failure) =>
+            failure instanceof GateRefusal
+              ? failure.code === 'not-found'
+                ? new GateRefusal('unknown-project', failure.reason, failure.unblock)
+                : failure
+              : new GateRefusal('target-placement-unreadable', `The project registry could not be read: ${failure.message}`, [
+                  'read the projects again, and move the thread once storage answers',
+                ]),
+          ),
+        );
+  const move: (projectId: number, actor: Actor, move: ThreadMove) => Effect.Effect<ThreadMoved, GateRefusal> = Effect.fn(
+    'ThreadMover.move',
+  )(function* (projectId: number, actor: Actor, move: ThreadMove) {
     if (move.worktree === NEW_WORKTREE) {
       return yield* new GateRefusal('worktree-unknown', 'A move enters a worktree that stands; `new` is not one.', [
         'make it first: prepare_worktree, then create_worktree',
@@ -107,8 +121,9 @@ export const makeThreadMover = Effect.fnUntraced(function* ({ targets }: { reado
           }),
         );
     }
+    const destination = yield* destinationOf(projectId, move.home);
     const root = yield* placement.resolve({
-      projectId,
+      projectId: destination,
       worktree: move.worktree,
       from: move.threadId,
       operationId: `move:${move.threadId}`,
@@ -127,10 +142,12 @@ export const makeThreadMover = Effect.fnUntraced(function* ({ targets }: { reado
           root,
           expectedSelectionRevision: move.expectedSelectionRevision,
           expectedGeneration: move.expectedGeneration,
+          home: destination === projectId ? undefined : destination,
         },
         {
           kernel: { request: (_runId, ask) => harness.threads.handle(move.threadId, OPERATOR_PRINCIPAL).changeContext(ask) },
           acquire: (request) => worlds.of({ thread: row, at: request.at, root: request.root }),
+          homes,
         },
       )
       .pipe(
@@ -146,16 +163,32 @@ export const makeThreadMover = Effect.fnUntraced(function* ({ targets }: { reado
       );
     if (changed.status === 'selected') {
       yield* notes.moved(move.threadId, root.rootId, changed.operationKey);
+      if (destination !== projectId) {
+        yield* harness.threads
+          .publish(move.threadId)
+          .pipe(
+            Effect.mapError(
+              (failure) =>
+                new GateRefusal(
+                  'target-placement-unreadable',
+                  `Thread ${move.threadId} moved into project ${destination}, but its view could not be published: ${failure.message}`,
+                  ['read the thread again from project ' + destination + ': it stands there now'],
+                ),
+            ),
+          );
+      }
     }
     yield* list.announceThread(move.threadId);
-    return { ...changed, threadId: move.threadId };
+    return { ...changed, threadId: move.threadId, projectId: destination };
   });
   return ThreadMoves.of({ move });
 });
 
+export type ThreadMoved = ThreadTargetChange & { readonly threadId: string; readonly projectId: number };
+
 export class ThreadMoves extends Context.Service<
   ThreadMoves,
   {
-    move(projectId: number, actor: Actor, move: ThreadMove): Effect.Effect<ThreadTargetChange & { readonly threadId: string }, GateRefusal>;
+    move(projectId: number, actor: Actor, move: ThreadMove): Effect.Effect<ThreadMoved, GateRefusal>;
   }
 >()('tagma/threads/ThreadMoves') {}

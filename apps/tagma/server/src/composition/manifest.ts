@@ -17,6 +17,7 @@ import { makeThreadEntryReader, type ThreadEntryReader } from '@runlith/agent/tr
 import { JOURNAL_BASE, journalSteps } from '../threads/journal/formSteps.js';
 import { BUILTIN_NOTES, type BuiltinNote } from '../threads/contract/service/notes.js';
 import { NATIVE_RULES } from '../native-harness/contract/service/rules.js';
+import { HOME_FOLLOWERS, type HomeFollower } from '../thread-record/contract/service/homes.js';
 
 const modules: readonly Manifest[] = MODULES;
 
@@ -41,6 +42,8 @@ export const BEHAVIOUR_REGISTRY: BehaviourRegistry = registerBehaviours(BEHAVIOU
 export const BUILTIN_NOTE_ENTRIES: readonly BuiltinNote[] = BUILTIN_NOTES.collect(modules).map(({ entry }) => entry);
 
 export const NATIVE_AGENT_RULES = NATIVE_RULES.collect(modules);
+
+export const HOME_FOLLOWER_ENTRIES: readonly HomeFollower[] = HOME_FOLLOWERS.collect(modules).map(({ entry }) => entry);
 
 export const ENTRY_KINDS: ThreadEntryReader = makeThreadEntryReader({
   products: modules.flatMap((module) => module.entryKinds ?? []),

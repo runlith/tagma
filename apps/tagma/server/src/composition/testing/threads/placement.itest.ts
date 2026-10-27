@@ -133,6 +133,7 @@ const composed = Effect.fn('testing.rootPlacement')(function* (demo: EffectDemo)
   );
   const moves = yield* threadMover({ targets }).pipe(
     Effect.provide(moverDoubles(placement)),
+    Effect.provideService(Projects, demo.graph.projects),
     Effect.provideService(ThreadLookup, threads.list),
     Effect.provideService(Worlds, worlds),
     Effect.provide(
