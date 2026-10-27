@@ -3,10 +3,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { Graph, testFile } from './graph.ts';
-import { moduleMapAt } from './modules.ts';
 import { workspacePaths } from './packages.ts';
 import { Hashes, type Inputs, type Variant } from './inputs.ts';
+import { Loads, type Load } from './loads.ts';
 import { Records } from './records.ts';
+import { inSession, sessionPaths } from './session.ts';
 import { budgetOf, coresOf, memoryOf } from '@runlith/testbed/budget';
 import { kindOf } from '@runlith/testbed/kinds';
 import type { FileRow, Row } from '@runlith/testbed/ledger';
@@ -43,7 +44,6 @@ const git = (...command: string[]): string => {
 };
 const split = (text: string): string[] => text.split('\0').filter(Boolean);
 const tracked = workspacePaths(root);
-const modules = moduleMapAt(root);
 const declared = existsSync(join(root, 'tagma.config.ts'))
   ? ((await import(join(root, 'tagma.config.ts'))) as { readonly default: import('@runlith/tagma/rules').Config }).default
   : undefined;
@@ -59,13 +59,16 @@ const identity = createHash('sha256')
 const cache = join(process.env['XDG_CACHE_HOME'] ?? join(homedir(), '.cache'), 'runlith', 'change-check', identity);
 mkdirSync(cache, { recursive: true });
 const records = new Records(cache);
-const graph = new Graph(root, tracked, modules, new Map(built.map((entry) => [entry.output, entry.source])), records);
+const loads = new Loads(cache);
+const graph = new Graph(root, tracked, new Map(built.map((entry) => [entry.output, entry.source])), records, loads);
 const commit = value('--commit');
 const askedBase = value('--base');
 if ([commit, askedBase, value('--paths-from')].filter((one) => one !== undefined).length > 1)
   throw new Error('Choose one of --base, --commit or --paths-from');
+const session =
+  commit === undefined && askedBase === undefined && value('--paths-from') === undefined && inSession() ? sessionPaths(root) : undefined;
 let base = askedBase;
-if (base === undefined && commit === undefined && value('--paths-from') === undefined) {
+if (base === undefined && commit === undefined && value('--paths-from') === undefined && session === undefined) {
   const branch = git('branch', '--show-current').trim();
   const main = git('for-each-ref', '--format=%(refname:short)', 'refs/heads/main', 'refs/heads/master')
     .trim()
@@ -80,9 +83,11 @@ let changed =
       ? readFileSync(resolve(value('--paths-from')!), 'utf8')
           .split(/\r?\n/)
           .filter(Boolean)
-      : [...split(git('diff', '--name-only', '-z', base!)), ...split(git('ls-files', '-z', '--others', '--exclude-standard'))];
+      : session !== undefined
+        ? [...session.paths]
+        : [...split(git('diff', '--name-only', '-z', base!)), ...split(git('ls-files', '-z', '--others', '--exclude-standard'))];
 changed = [...new Set(changed)].filter((path) => !path.startsWith('archive/'));
-const affected = graph.affected(changed);
+const named = commit ?? base ?? (session === undefined ? 'named paths' : `lines session ${session.session} holds`);
 const all = args.includes('--full');
 const global = changed.find(
   (path) =>
@@ -112,9 +117,11 @@ const selected = tests
   })
   .sort((a, b) => a.file.localeCompare(b.file));
 const counts =
-  selection === undefined
-    ? { cards: tests.filter((file) => affected.has(graph.owner(file)?.id ?? '')).length, imports: tests.length, runtime: undefined }
-    : { cards: selection.cards, imports: selection.imports, runtime: selection.runtime };
+  selection === undefined ? { imports: tests.length, untraced: undefined } : { imports: selection.imports, untraced: selection.untraced };
+if (session !== undefined && changed.length === 0)
+  console.error(
+    `check:change: session ${session.session} holds no uncommitted lines in ${root}; name landed work with --commit <ref>, or other paths with --paths-from <file>`,
+  );
 const variant: Variant = {
   seed: Number(value('--seed') ?? 0),
   adapter: value('--adapter') ?? 'default',
@@ -130,7 +137,7 @@ if (args.includes('--plan')) {
   console.log(
     JSON.stringify(
       {
-        base: commit ?? base ?? 'named paths',
+        base: named,
         changed,
         seed: variant.seed,
         adapter: variant.adapter,
@@ -174,9 +181,7 @@ const output = plans.map((plan) => ({
   selected: plan.why,
   key: plan.inputs.key,
 }));
-console.log(
-  `check:change: ${plans.length} files selected; base ${commit ?? base ?? 'named paths'}, seed ${variant.seed}, adapter ${variant.adapter}`,
-);
+console.log(`check:change: ${plans.length} files selected; base ${named}, seed ${variant.seed}, adapter ${variant.adapter}`);
 for (const row of output) console.log(`${row.action} ${row.file}: ${row.why}; ${row.selected}`);
 let cpu = 0;
 let code = 0;
@@ -197,7 +202,9 @@ type Outcome = {
   readonly exit: number;
   readonly rows: readonly Row[];
   readonly issues: readonly { readonly file: string; readonly reason: string }[];
+  readonly loads: readonly Load[];
 };
+type Audited = { readonly type: 'input'; readonly file: string; readonly reason: string } | Load;
 const outcomes = new Map<string, Outcome>();
 const jobs = suites.map((suite, at) => {
   const pkg = suite[0]!.pkg;
@@ -211,6 +218,7 @@ const jobs = suites.map((suite, at) => {
       root,
       report: audit,
       runner: runnerKind,
+      importers: [...new Set(suite.flatMap((plan) => plan.inputs.importers))].map((path) => ({ path, literal: graph.literal(path) })),
       entries: suite.map((plan) => ({
         file: plan.file,
         packages: plan.inputs.packages.filter((dir) => dir !== ''),
@@ -262,12 +270,12 @@ await runJobs(jobs, {
   ended: (job, ending) => {
     const log = join(run, `${job.id}.log`);
     writeFileSync(log, ending.stdout + ending.stderr);
+    const audited = lines(join(run, `${job.id}.audit.jsonl`)).map((line) => JSON.parse(line) as Audited);
     outcomes.set(job.id, {
       exit: ending.exit,
       rows: lines(join(run, `${job.id}.jsonl`)).map((line) => JSON.parse(line) as Row),
-      issues: lines(join(run, `${job.id}.audit.jsonl`)).map(
-        (line) => JSON.parse(line) as { readonly file: string; readonly reason: string },
-      ),
+      issues: audited.filter((row) => row.type === 'input'),
+      loads: audited.filter((row) => row.type === 'load'),
     });
     const failed = (ending.stdout + ending.stderr).split('\n').filter((line) => line.startsWith('(fail)'));
     const suite = suites[Number(job.id)]!;
@@ -277,12 +285,19 @@ await runJobs(jobs, {
   },
 });
 const after = new Hashes(graph, hashes.versions, variant);
+const settled: {
+  readonly plan: Planned;
+  readonly row: FileRow | undefined;
+  readonly problem: string | undefined;
+  readonly issue: string | undefined;
+}[] = [];
+const traced = new Map<string, Readonly<Record<string, string>>>();
+const cleared: string[] = [];
 for (const [at, suite] of suites.entries()) {
   const outcome = outcomes.get(String(at));
   const exit = outcome?.exit ?? 1;
   if (exit !== 0) code = exit || 1;
   const rows = outcome?.rows ?? [];
-  const issues = outcome?.issues ?? [];
   const runRow = rows.findLast((row): row is RunRow => row.type === 'run');
   const fileRows = new Map(
     rows.filter((row): row is FileRow => row.type === 'file').map((row) => [resolve(TOOLKIT, row.file), row] as const),
@@ -292,9 +307,17 @@ for (const [at, suite] of suites.entries()) {
   );
   const runnerKind = suite[0]!.runner;
   cpu += runRow?.cpu ?? 0;
+  const undeclared = new Map<string, string>();
+  for (const load of outcome?.loads ?? []) {
+    const declared = graph.declared(load.importer);
+    if (declared !== undefined && !declared.includes(load.target))
+      undeclared.set(
+        load.file,
+        `${load.importer} loaded ${load.target}, which changeCheck.loads in ${graph.package(load.importer).manifest} does not declare`,
+      );
+  }
   for (const plan of suite) {
     const row = fileRows.get(join(root, plan.file));
-    const reason = plan.bypass ?? issues.find((issue) => issue.file === plan.file)?.reason;
     const stable = after.of(plan.file).key === plan.inputs.key;
     const verdict = row === undefined ? undefined : verdicts.get(`${row.file}\0${row.run}`);
     const passed = runnerKind === 'bun' ? verdict?.outcome === 'pass' : exit === 0;
@@ -307,21 +330,37 @@ for (const [at, suite] of suites.entries()) {
             ? 'runner did not prove a passing file'
             : !stable
               ? 'inputs changed during the run'
-              : undefined;
-    const result = {
-      code: problem === undefined ? 0 : 1,
-      wall: row?.total?.wall ?? 0,
-      cpu: row?.total?.cpu ?? 0,
-      reason: problem ?? reason,
-      bypass: reason,
-    };
-    if (result.code !== 0) code = code || 1;
-    if (row !== undefined) ran++;
-    if (!args.includes('--no-cache') && variant.adapter === 'default') records.write(plan.inputs.key, result);
-    console.log(
-      `${row === undefined ? 'unproved' : 'ran'} ${plan.file}: ${result.code === 0 ? 'pass' : 'not cached'}${result.reason === undefined ? '' : `; ${result.reason}`}`,
-    );
+              : undeclared.get(plan.file);
+    if (problem === undefined && runnerKind === 'bun')
+      traced.set(plan.file, Object.fromEntries(plan.inputs.importers.map((importer) => [importer, graph.stamp(importer)])));
+    else if (row !== undefined) cleared.push(plan.file);
+    settled.push({ plan, row, problem, issue: outcome?.issues.find((issue) => issue.file === plan.file)?.reason });
   }
+}
+loads.record(
+  [...outcomes.values()].flatMap((outcome) => outcome.loads),
+  traced,
+  cleared,
+  (path) => graph.stamp(path),
+);
+for (const { plan, row, problem, issue } of settled) {
+  const inputs = after.of(plan.file);
+  const grown = inputs.packages.find((dir) => !plan.inputs.packages.includes(dir));
+  const reason =
+    inputs.uncertain[0] ?? issue ?? (grown === undefined ? undefined : `traced loads reach package ${grown || '.'}, unread before the run`);
+  const result = {
+    code: problem === undefined ? 0 : 1,
+    wall: row?.total?.wall ?? 0,
+    cpu: row?.total?.cpu ?? 0,
+    reason: problem ?? reason,
+    bypass: reason,
+  };
+  if (result.code !== 0) code = code || 1;
+  if (row !== undefined) ran++;
+  if (!args.includes('--no-cache') && variant.adapter === 'default') records.write(inputs.key, result);
+  console.log(
+    `${row === undefined ? 'unproved' : 'ran'} ${plan.file}: ${result.code === 0 ? 'pass' : 'not cached'}${result.reason === undefined ? '' : `; ${result.reason}`}`,
+  );
 }
 const slow = [...outcomes.values()]
   .flatMap((outcome) => outcome.rows.filter((row): row is SlowRow => row.type === 'slow'))
@@ -339,7 +378,7 @@ const result = {
   wall: Math.round(performance.now() - started),
   cpu,
   code,
-  base: commit ?? base ?? 'named paths',
+  base: named,
   seed: variant.seed,
   adapter: variant.adapter,
   files: output,

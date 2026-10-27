@@ -1,38 +1,38 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { join, posix } from 'node:path';
 import type { Records } from './records.ts';
+import type { Loads } from './loads.ts';
 import { adapterOf } from '@runlith/code-facts/adapter';
 import type { ImportEdge, ImportSite } from '@runlith/code-facts/imports';
-import { join } from 'node:path';
 import { packagesOf, type Package } from './packages.ts';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
-import { fileEdges, type Probed, type Tree, type Unresolved } from '@runlith/code-facts/tree';
+import { fileEdges, type Dynamic, type Probed, type Tree, type Unresolved } from '@runlith/code-facts/tree';
 import { workspaceOf } from '@runlith/code-facts/js/workspace';
 import { RUNTIMES } from '@runlith/code-facts/runtimes';
 
-export type Module = {
-  readonly id: string;
-  readonly paths: readonly string[];
-  readonly imports: readonly string[];
-  readonly tests: readonly string[];
+export type Source = {
+  readonly inputs: readonly string[];
+  readonly uncertain: readonly string[];
+  readonly importers: readonly string[];
 };
-export type Source = { readonly inputs: readonly string[]; readonly uncertain: readonly string[] };
 export const sourceFile = (path: string): boolean => /\.(?:[cm]?[jt]sx?|svelte)$/.test(path);
 export const testFile = (path: string): boolean => /\.(?:test|itest)(?:\.svelte)?\.[cm]?[jt]sx?$/.test(path);
-const inside = (path: string, root: string): boolean => root === '' || path === root || path.startsWith(`${root}/`);
+const VIRTUAL = (specifier: string): boolean => specifier.startsWith('$app/') || specifier === '$service-worker';
 
 type Node = { readonly stamp: string; readonly probe: Probed };
 type IndexRecord = { readonly resolution: string; readonly nodes: readonly [string, Node][] };
 
 export class Graph {
-  readonly modules: Module[];
   readonly packages: Package[];
   readonly files: ReadonlySet<string>;
   private readonly probes = new Map<string, Probed>();
   private readonly texts = new Map<string, string>();
+  private readonly stamps = new Map<string, string>();
   private readonly sites = new Map<string, readonly ImportSite[]>();
   private readonly held = new Map<string, Node>();
-  private readonly dependencyPackages = new Map<string, readonly string[]>();
+  private readonly declarations = new Map<string, readonly string[] | undefined>();
+  private readonly threaded = new Map<string, readonly ImportEdge[]>();
   private readonly resolution: string;
   private readonly resolvers;
   readonly tree: Tree;
@@ -40,9 +40,9 @@ export class Graph {
   constructor(
     readonly root: string,
     paths: readonly string[],
-    modules: readonly Module[],
     private readonly built: ReadonlyMap<string, string> = new Map(),
     private readonly cache?: Records,
+    private readonly loads?: Loads,
   ) {
     this.files = new Set(paths);
     this.tree = {
@@ -80,7 +80,6 @@ export class Graph {
       workspaceOf(this.tree, '', ['browser', 'module', 'import', 'development'], built, RUNTIMES),
     ];
     this.packages = packagesOf(paths, (path) => this.text(path));
-    this.modules = [...modules];
   }
 
   text(path: string): string {
@@ -92,19 +91,17 @@ export class Graph {
     return text;
   }
 
-  owner(path: string): Module | undefined {
-    let owner: Module | undefined;
-    let depth = -1;
-    for (const module of this.modules)
-      for (const root of module.paths)
-        if (root.length > depth && inside(path, root)) {
-          owner = module;
-          depth = root.length;
-        }
-    return owner;
+  stamp(path: string): string {
+    let stamp = this.stamps.get(path);
+    if (stamp === undefined) {
+      stamp = createHash('sha256').update(this.text(path)).digest('hex');
+      this.stamps.set(path, stamp);
+    }
+    return stamp;
   }
+
   package(path: string): Package {
-    return this.packages.find((pkg) => pkg.dir === '' || inside(path, pkg.dir))!;
+    return this.packages.find((pkg) => pkg.dir === '' || path === pkg.dir || path.startsWith(`${pkg.dir}/`))!;
   }
   runner(path: string): 'bun' | 'vitest' {
     const sites = this.tree.sites!(path);
@@ -115,84 +112,141 @@ export class Graph {
         : this.package(path).runner;
   }
 
-  affected(changed: readonly string[]): Map<string, string> {
-    const reached = new Map<string, string>();
-    for (const path of changed) {
-      const owner = this.owner(path);
-      if (owner !== undefined) reached.set(owner.id, `changed ${path} (${owner.id})`);
+  private globbed(path: string, patterns: readonly string[]): string[] | undefined {
+    const positive: Bun.Glob[] = [];
+    const negative: Bun.Glob[] = [];
+    for (const written of patterns) {
+      const negated = written.startsWith('!');
+      const pattern = negated ? written.slice(1) : written;
+      const at = pattern.startsWith('/')
+        ? posix.join(this.package(path).dir, pattern.slice(1))
+        : pattern.startsWith('./') || pattern.startsWith('../')
+          ? posix.join(posix.dirname(path), pattern)
+          : undefined;
+      if (at === undefined) return undefined;
+      (negated ? negative : positive).push(new Bun.Glob(at));
     }
-    const reverse = new Map<string, Module[]>();
-    for (const module of this.modules)
-      for (const dependency of [...module.imports, ...module.tests]) {
-        const list = reverse.get(dependency) ?? [];
-        list.push(module);
-        reverse.set(dependency, list);
-      }
-    const queue = [...reached.keys()];
-    for (let at = 0; at < queue.length; at++)
-      for (const module of reverse.get(queue[at]!) ?? []) {
-        if (reached.has(module.id)) continue;
-        reached.set(module.id, `module ${module.id} imports a changed dependency`);
-        queue.push(module.id);
-      }
-    return reached;
+    return [...this.files].filter((file) => positive.some((glob) => glob.match(file)) && !negative.some((glob) => glob.match(file)));
   }
 
   private probe(path: string): Probed {
     const current = this.probes.get(path);
     if (current !== undefined) return current;
-    const stamp = createHash('sha256').update(this.text(path)).digest('hex');
+    const stamp = this.stamp(path);
     const saved = this.held.get(path);
     if (saved?.stamp === stamp) {
       this.probes.set(path, saved.probe);
       return saved.probe;
     }
     const reads = this.resolvers.map((resolver) =>
-      fileEdges(this.tree, path, 'every', ADAPTERS, resolver, ['?raw', '?url', '?inline', '?worker']),
+      fileEdges(this.tree, path, 'runtime', ADAPTERS, resolver, ['?raw', '?url', '?inline', '?worker']),
     );
-    const special = this.tree.sites!(path).filter((site) => site.kind !== undefined);
-    const workers = special
-      .filter((site) => site.kind === 'worker')
-      .flatMap((site) => {
-        const target = adapterOf(ADAPTERS, path).resolve(site.specifier, path, this.tree);
-        return target !== null && 'to' in target ? [{ file: path, line: site.line, specifier: site.specifier, to: target.to }] : [];
-      });
+    const special = this.tree.sites!(path).filter((site) => site.kind !== undefined && site.loads !== 'never');
     const edges: ImportEdge[] = [];
     const unresolved: Unresolved[] = [];
-    for (const edge of [...reads.flatMap((read) => read.edges), ...workers]) {
+    const dynamic: Dynamic[] = [];
+    const add = (edge: ImportEdge): void => {
       const source = this.built.get(edge.to);
       if (source === undefined) edges.push(edge);
       else if (this.files.has(source)) edges.push({ ...edge, to: source });
       else unresolved.push({ file: edge.file, line: edge.line, specifier: edge.specifier, unlisted: source, absent: [source] });
+    };
+    for (const edge of reads.flatMap((read) => read.edges)) add(edge);
+    for (const edge of this.workers(path)) add(edge);
+    for (const site of special) {
+      if (site.kind === 'worker') continue;
+      const matched = site.kind === 'glob' && site.patterns !== undefined ? this.globbed(path, site.patterns) : undefined;
+      if (matched === undefined) dynamic.push({ file: path, line: site.line, specifier: site.specifier });
+      else for (const to of matched) edges.push({ file: path, line: site.line, specifier: site.specifier, to });
     }
+    const reached = new Set(edges.map((edge) => `${edge.line}\0${edge.specifier}`));
+    const missed = new Set<string>();
     for (const missing of reads.flatMap((read) => read.unresolved)) {
       const source = this.built.get(missing.unlisted);
-      if (source !== undefined && this.files.has(source))
+      if (source !== undefined && this.files.has(source)) {
         edges.push({ file: missing.file, line: missing.line, specifier: missing.specifier, to: source });
-      else unresolved.push(missing);
+        reached.add(`${missing.line}\0${missing.specifier}`);
+      }
+    }
+    for (const missing of reads.flatMap((read) => read.unresolved)) {
+      const site = `${missing.line}\0${missing.specifier}`;
+      if (reached.has(site) || missed.has(site)) continue;
+      missed.add(site);
+      unresolved.push(missing);
     }
     const probe: Probed = {
       edges,
       inputs: [...new Set(reads.flatMap((read) => read.inputs))],
       absent: [...new Set(reads.flatMap((read) => read.absent))],
       packages: [],
-      unresolved,
-      dynamic: [
-        ...reads.flatMap((read) => read.dynamic),
-        ...special
-          .filter((site) => site.kind !== 'worker')
-          .map((site) => ({ file: path, line: site.line, specifier: `${site.kind} ${site.specifier}` })),
-      ],
+      unresolved: unresolved.filter((missing) => !VIRTUAL(missing.specifier)),
+      dynamic,
     };
     this.probes.set(path, probe);
     this.held.set(path, { stamp, probe });
     return probe;
   }
 
-  private walk(files: readonly string[]): Source {
+  private workers(path: string): readonly ImportEdge[] {
+    let edges = this.threaded.get(path);
+    if (edges === undefined) {
+      edges = this.tree.sites!(path).flatMap((site) => {
+        if (site.kind !== 'worker') return [];
+        const target = adapterOf(ADAPTERS, path).resolve(site.specifier, path, this.tree);
+        return target !== null && 'to' in target ? [{ file: path, line: site.line, specifier: site.specifier, to: target.to }] : [];
+      });
+      this.threaded.set(path, edges);
+    }
+    return edges;
+  }
+
+  private unknown(path: string): readonly { readonly line: number; readonly specifier: string }[] {
+    const probe = this.probe(path);
+    return [...probe.dynamic, ...probe.unresolved];
+  }
+
+  literal(path: string): readonly string[] {
+    return this.tree.sites!(path)
+      .filter((site) => site.kind === undefined)
+      .map((site) => site.specifier);
+  }
+
+  declared(path: string): readonly string[] | undefined {
+    if (this.declarations.has(path)) return this.declarations.get(path);
+    const pkg = this.package(path);
+    const globs = pkg.loads[pkg.dir === '' ? path : path.slice(pkg.dir.length + 1)]?.map((glob) => new Bun.Glob(glob));
+    const targets = globs === undefined ? undefined : [...this.files].filter((file) => globs.some((glob) => glob.match(file)));
+    this.declarations.set(path, targets);
+    return targets;
+  }
+
+  private next(path: string): string[] {
+    const probe = this.probe(path);
+    const observed = this.unknown(path).length === 0 ? [] : (this.declared(path) ?? this.loads?.targets(path, this.stamp(path)) ?? []);
+    return [...probe.edges.map((edge) => edge.to), ...observed.filter((target) => this.files.has(target))];
+  }
+
+  private settled(path: string, test: string | undefined, threaded: ReadonlySet<string>): boolean {
+    if (this.declared(path) !== undefined) return true;
+    return test !== undefined && !threaded.has(path) && this.loads?.covers(test, path, this.stamp(path)) === true;
+  }
+
+  private threads(starts: readonly string[]): Set<string> {
+    const threaded = new Set<string>();
+    const queue = starts.flatMap((path) => (this.files.has(path) && sourceFile(path) ? this.workers(path).map((edge) => edge.to) : []));
+    while (queue.length > 0) {
+      const path = queue.pop()!;
+      if (threaded.has(path)) continue;
+      threaded.add(path);
+      if (this.files.has(path) && sourceFile(path)) queue.push(...this.next(path), ...this.workers(path).map((edge) => edge.to));
+    }
+    return threaded;
+  }
+
+  private walk(files: readonly string[], test?: string): Source {
     const visited = new Set<string>();
     const inputs = new Set<string>();
-    const uncertain = new Set<string>();
+    const found = new Set<string>();
     const queue = [...files];
     while (queue.length > 0) {
       const path = queue.pop()!;
@@ -200,55 +254,26 @@ export class Graph {
       visited.add(path);
       inputs.add(path);
       if (!this.files.has(path) || !sourceFile(path)) continue;
-      const probe = this.probe(path);
-      for (const input of probe.inputs) if (this.files.has(input)) inputs.add(input);
-      for (const edge of probe.edges) if (!visited.has(edge.to)) queue.push(edge.to);
-      for (const missing of [...probe.dynamic, ...probe.unresolved]) {
-        if (!missing.specifier.startsWith('$app/') && missing.specifier !== '$service-worker')
-          uncertain.add(`${path}:${missing.line} unresolved ${missing.specifier}`);
-      }
+      for (const input of this.probe(path).inputs) if (this.files.has(input)) inputs.add(input);
+      for (const target of this.next(path)) if (!visited.has(target)) queue.push(target);
+      if (this.unknown(path).length > 0) found.add(path);
     }
-    return { inputs: [...inputs].sort(), uncertain: [...uncertain].sort() };
+    const threaded = this.threads([...visited]);
+    const uncertain = [...found].flatMap((path) => {
+      const site = this.unknown(path)[0]!;
+      return this.settled(path, test, threaded) ? [] : [`${path}:${site.line} ${site.specifier}`];
+    });
+    return { inputs: [...inputs].sort(), uncertain: uncertain.sort(), importers: [...found].sort() };
   }
 
   closure(file: string): Source {
-    return this.walk([file]);
-  }
-
-  related(paths: readonly string[]): readonly string[] {
-    const roots = new Set(paths.map((path) => this.owner(path)?.id).filter((id): id is string => id !== undefined));
-    const packages = new Set<string>();
-    const byId = new Map(this.modules.map((module) => [module.id, module]));
-    for (const root of roots) {
-      let held = this.dependencyPackages.get(root);
-      if (held === undefined) {
-        const seen = new Set<string>();
-        const found = new Set<string>();
-        const queue = [root];
-        while (queue.length > 0) {
-          const id = queue.pop()!;
-          if (seen.has(id)) continue;
-          seen.add(id);
-          const module = byId.get(id);
-          if (module === undefined) continue;
-          for (const path of module.paths) {
-            found.add(this.package(path).dir);
-            for (const pkg of this.packages) if (inside(pkg.dir, path)) found.add(pkg.dir);
-          }
-          queue.push(...module.imports, ...module.tests);
-        }
-        held = [...found];
-        this.dependencyPackages.set(root, held);
-      }
-      for (const dir of held) packages.add(dir);
-    }
-    return [...packages];
+    return this.walk([file], file);
   }
 
   select(
     files: readonly string[],
     changed: readonly string[],
-  ): { readonly selected: Map<string, string>; readonly imports: number; readonly cards: number; readonly runtime: number } {
+  ): { readonly selected: Map<string, string>; readonly imports: number; readonly untraced: number } {
     this.walk(files);
     const reverse = new Map<string, Set<string>>();
     const add = (to: string, from: string): void => {
@@ -256,9 +281,11 @@ export class Graph {
       list.add(from);
       reverse.set(to, list);
     };
+    const importers: string[] = [];
     for (const [path, probe] of this.probes) {
-      for (const target of [...probe.edges.map((edge) => edge.to), ...probe.inputs, ...probe.absent]) add(target, path);
+      for (const target of [...this.next(path), ...probe.inputs, ...probe.absent]) add(target, path);
       add(`package:${this.package(path).dir}`, path);
+      if (this.unknown(path).length > 0 && this.declared(path) === undefined) importers.push(path);
     }
     const reach = (starts: readonly string[]): Set<string> => {
       const found = new Set(starts);
@@ -277,22 +304,24 @@ export class Graph {
         : [path],
     );
     const imported = reach(seeds);
-    const uncertain = reach([...this.probes].filter(([, probe]) => probe.dynamic.length > 0).map(([path]) => path));
-    const cards = this.affected(changed);
-    const runtimeFiles = reach(['apps/tagma/server/src/composition/runtime.ts']);
     const selected = new Map<string, string>();
-    let cardCount = 0;
-    let runtime = 0;
-    for (const file of files) {
-      const owner = this.owner(file);
-      const card = owner === undefined ? undefined : cards.get(owner.id);
-      if (card !== undefined) cardCount++;
+    for (const file of files)
       if (imported.has(file))
         selected.set(file, changed.includes(file) ? `test changed: ${file}` : 'import closure reaches a changed input');
-      else if (card !== undefined && uncertain.has(file)) selected.set(file, 'module-card reach covers a nonliteral import');
-      if (runtimeFiles.has(file)) runtime++;
+    let untraced = 0;
+    const tests = new Set(files);
+    const threaded = this.threads([...this.probes.keys()]);
+    for (const importer of importers.sort()) {
+      const site = this.unknown(importer)[0]!;
+      for (const file of reach([importer])) {
+        if (!tests.has(file) || this.settled(importer, file, threaded)) continue;
+        if (!selected.has(file)) {
+          untraced++;
+          selected.set(file, `reaches a nonliteral import its run has not traced: ${importer}:${site.line} ${site.specifier}`);
+        }
+      }
     }
-    return { selected, imports: files.filter((file) => imported.has(file)).length, cards: cardCount, runtime };
+    return { selected, imports: files.filter((file) => imported.has(file)).length, untraced };
   }
 
   save(): void {

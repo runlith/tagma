@@ -17,6 +17,7 @@ export type Package = {
   readonly runner: 'bun' | 'vitest';
   readonly manifest: string;
   readonly externalInputs: Readonly<Record<string, string>>;
+  readonly loads: Readonly<Record<string, readonly string[]>>;
   readonly scripts: Readonly<Record<string, string>>;
 };
 
@@ -29,13 +30,17 @@ export const packagesOf = (paths: readonly string[], read: (path: string) => str
     .map((manifest) => {
       const parsed = JSON.parse(read(manifest)) as {
         readonly scripts?: Readonly<Record<string, string>>;
-        readonly changeCheck?: { readonly externalInputs?: Readonly<Record<string, string>> };
+        readonly changeCheck?: {
+          readonly externalInputs?: Readonly<Record<string, string>>;
+          readonly loads?: Readonly<Record<string, readonly string[]>>;
+        };
       };
       return {
         dir: manifest === 'package.json' ? '' : dirname(manifest),
         manifest,
         scripts: parsed.scripts ?? {},
         externalInputs: parsed.changeCheck?.externalInputs ?? {},
+        loads: parsed.changeCheck?.loads ?? {},
         runner: /\bvitest\b/.test(parsed.scripts?.test ?? '') ? ('vitest' as const) : ('bun' as const),
       };
     })

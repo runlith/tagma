@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { Graph, type Module } from './graph.ts';
+import { Graph } from './graph.ts';
 import { Hashes } from './inputs.ts';
 import { Records } from './records.ts';
 import { budgetOf, memoryOf } from '@runlith/testbed/budget';
@@ -35,7 +35,12 @@ const files = new Map<string, string>([
   ],
   ['other/package.json', JSON.stringify({ name: '@sample/other' })],
   ['other/src/value.ts', 'export const value = 3;'],
-  ['pkg/src/contract.test.ts', "import { value } from '@sample/dep/testing'; export const load = () => import('./dynamic.ts');"],
+  [
+    'pkg/src/contract.test.ts',
+    "import { value } from '@sample/dep/testing'; export const load = () => import('./dynamic.ts'); export const pages = import.meta.glob(['./pages/*.ts', '!./pages/hidden.ts']);",
+  ],
+  ['pkg/src/pages/shown.ts', 'export const page = 1;'],
+  ['pkg/src/pages/hidden.ts', 'export const page = 2;'],
   ['pkg/src/dynamic.ts', 'export const dynamic = 1;'],
   ['pkg/src/built.test.ts', "import { value } from '@sample/dep/built'; export const answer = value;"],
   ['pkg/src/child.fixture.ts', 'export const child = 1;'],
@@ -43,83 +48,178 @@ const files = new Map<string, string>([
   ['dep/src/browser.ts', 'export const value = 2;'],
   ['dep/fixture.json', '{"value":1}'],
 ]);
-const modules: readonly Module[] = [
-  { id: 'consumer', paths: ['pkg'], imports: [], tests: ['producer'] },
-  { id: 'producer', paths: ['dep'], imports: [], tests: [] },
-  { id: 'other', paths: ['other'], imports: [], tests: [] },
-];
-const graph = (records?: Records): Graph => new Graph(root, [...files.keys()], modules, new Map(), records);
+const graph = (records?: Records): Graph => new Graph(root, [...files.keys()], new Map(), records);
 const variant = { seed: 0, adapter: 'default', isolated: false };
 
-const tagmaAnswering = (map: Record<string, unknown>): string => {
-  const bin = realpathSync(mkdtempSync(join(tmpdir(), 'change-tagma-')));
-  writeFileSync(join(bin, 'answer.json'), JSON.stringify({ status: 'ok', rows: [], shown: 0, total: 0, map: { problems: [], ...map } }));
-  writeFileSync(
-    join(bin, 'tagma'),
-    `#!/bin/sh\n[ "$1 $2" = "op read_inspections" ] || { echo "unexpected tagma call: $*" >&2; exit 2; }\ncat ${JSON.stringify(join(bin, 'answer.json'))}\n`,
-  );
-  chmodSync(join(bin, 'tagma'), 0o755);
-  return bin;
+const checking = (checkout: string, ...args: string[]) =>
+  Bun.spawn(['bun', join(import.meta.dir, 'check.ts'), '--root', checkout, ...args], { stdout: 'pipe', stderr: 'pipe' });
+const ended = async (run: ReturnType<typeof checking>): Promise<{ code: number; stdout: string; stderr: string }> => {
+  const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
+  return { code, stdout, stderr };
+};
+const answer = async (run: ReturnType<typeof checking>): Promise<string> => {
+  const { code, stdout, stderr } = await ended(run);
+  expect(code, stdout + stderr).toBe(0);
+  return stdout;
 };
 
-const checking = (checkout: string, tagma: string, ...args: string[]) =>
-  Bun.spawn(['bun', join(import.meta.dir, 'check.ts'), '--root', checkout, ...args], {
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: { ...process.env, PATH: `${tagma}:${process.env['PATH'] ?? ''}` },
-  });
-
-test('a checkout whose project keeps its graph outside it selects by the module map Tagma assembles', async () => {
-  const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-stealth-')));
-  const drawn = {
-    modules: [
-      { id: 'app', territory: ['app/'], entries: [] },
-      { id: 'lib', territory: ['lib/'], entries: [] },
-    ],
-    relations: [{ from: 'app', to: 'lib' }],
-    region: ['app/', 'lib/'],
-  };
-  const tagma = tagmaAnswering(drawn);
-  const broken = tagmaAnswering({ ...drawn, problems: ['app names under imports a block that is no module card'] });
+test('a nonliteral import selects its tests until their run traces what it loaded or its package declares it, and a load outside the declaration fails the file', async () => {
+  const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-traced-')));
   try {
     expect(Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout }).exitCode).toBe(0);
-    writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'stealth', workspaces: ['app', 'lib'] }));
+    writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'traced', workspaces: ['app', 'lib'] }));
     mkdirSync(join(checkout, 'lib'));
     mkdirSync(join(checkout, 'app'));
-    writeFileSync(join(checkout, 'app/package.json'), JSON.stringify({ name: '@stealth/app', scripts: { test: 'bun test' } }));
-    writeFileSync(join(checkout, 'lib/package.json'), JSON.stringify({ name: '@stealth/lib' }));
-    writeFileSync(join(checkout, 'lib/value.ts'), 'export const value = 1;');
+    writeFileSync(
+      join(checkout, 'app/package.json'),
+      JSON.stringify({ name: '@traced/app', scripts: { test: 'bun test' }, dependencies: { '@traced/lib': 'workspace:*' } }),
+    );
+    writeFileSync(
+      join(checkout, 'lib/package.json'),
+      JSON.stringify({
+        name: '@traced/lib',
+        exports: { './loader': { bun: './loader.ts' }, './only': { bun: './only.ts' }, './declared': { bun: './declared.ts' } },
+        changeCheck: { loads: { 'declared.ts': ['lib/dyn/*.ts'] } },
+      }),
+    );
+    writeFileSync(join(checkout, 'lib/suffix.ts'), "export const suffix = '.ts';");
+    const computed = "import { suffix } from './suffix.ts'; export const load = (name: string) => import(`./${name}${suffix}`);";
+    writeFileSync(join(checkout, 'lib/loader.ts'), computed);
+    writeFileSync(join(checkout, 'lib/declared.ts'), computed);
+    mkdirSync(join(checkout, 'lib/dyn'));
+    writeFileSync(join(checkout, 'lib/dyn/a.ts'), 'export const a = 1;');
+    writeFileSync(join(checkout, 'lib/stray.ts'), 'export const stray = 5;');
+    for (const [name, loaded, field, value] of [
+      ['declared', 'dyn/a', 'a', 1],
+      ['stray', 'stray', 'stray', 5],
+    ] as const)
+      writeFileSync(
+        join(checkout, `app/${name}.test.ts`),
+        `import { expect, test } from 'bun:test'; import { load } from '@traced/lib/declared'; test('${name}', async () => { expect((await load('${loaded}')).${field}).toBe(${value}); });`,
+      );
+    writeFileSync(join(checkout, 'lib/late.ts'), 'export const late = 2;');
+    writeFileSync(join(checkout, 'lib/other.ts'), 'export const other = 3;');
+    writeFileSync(join(checkout, 'lib/only.ts'), 'export const only = 1;');
     writeFileSync(
       join(checkout, 'app/loads.test.ts'),
-      "import { test } from 'bun:test'; const name = './late.ts'; test('loads', async () => { await import(name); });",
+      "import { expect, test } from 'bun:test'; import { load } from '@traced/lib/loader'; test('loads', async () => { expect((await load('late')).late).toBe(2); });",
     );
-    writeFileSync(join(checkout, 'changed'), 'lib/value.ts\n');
-    const refused = checking(checkout, broken, '--plan', '--paths-from', join(checkout, 'changed'));
-    const [, unread, failed] = await Promise.all([
-      new Response(refused.stdout).text(),
-      new Response(refused.stderr).text(),
-      refused.exited,
+    writeFileSync(
+      join(checkout, 'app/only.test.ts'),
+      "import { expect, test } from 'bun:test'; import { only } from '@traced/lib/only'; test('only', () => expect(only).toBe(1));",
+    );
+    writeFileSync(
+      join(checkout, 'app/other.test.ts'),
+      "import { expect, test } from 'bun:test'; import { other } from '../lib/other.ts'; test('other', () => expect(other).toBe(3));",
+    );
+    expect(Bun.spawnSync(['bun', 'install'], { cwd: checkout, stdout: 'pipe', stderr: 'pipe' }).exitCode).toBe(0);
+    const paths = (name: string, ...changed: string[]): string => {
+      writeFileSync(join(checkout, name), `${changed.join('\n')}\n`);
+      return join(checkout, name);
+    };
+    const plan = async (...changed: string[]) =>
+      (
+        JSON.parse(await answer(checking(checkout, '--plan', '--paths-from', paths('changed', ...changed)))) as {
+          selected: { file: string; why: string }[];
+        }
+      ).selected.map(({ file, why }) => [file, why.split(':')[0]]);
+    expect(await plan('lib/other.ts')).toEqual([
+      ['app/loads.test.ts', 'reaches a nonliteral import its run has not traced'],
+      ['app/other.test.ts', 'import closure reaches a changed input'],
     ]);
-    expect(failed).toBe(1);
-    expect(unread).toContain('app names under imports a block that is no module card');
-    const run = checking(checkout, tagma, '--plan', '--paths-from', join(checkout, 'changed'));
-    const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
-    expect(code, stdout + stderr).toBe(0);
-    const plan = JSON.parse(stdout) as { selected: { file: string; why: string }[] };
-    expect(plan.selected).toEqual([
-      expect.objectContaining({ file: 'app/loads.test.ts', why: 'module-card reach covers a nonliteral import' }),
+    const run = async (): Promise<{ ran: number; cached: number }> => {
+      const report = join(checkout, 'report.json');
+      await answer(checking(checkout, '--paths-from', paths('ran', 'app/loads.test.ts', 'app/declared.test.ts'), '--report', report));
+      return JSON.parse(readFileSync(report, 'utf8')) as { ran: number; cached: number };
+    };
+    expect(await run()).toMatchObject({ ran: 2, cached: 0 });
+    expect(await plan('lib/other.ts')).toEqual([['app/other.test.ts', 'import closure reaches a changed input']]);
+    expect(await plan('lib/late.ts')).toEqual([['app/loads.test.ts', 'import closure reaches a changed input']]);
+    expect(await plan('lib/dyn/a.ts')).toEqual([
+      ['app/declared.test.ts', 'import closure reaches a changed input'],
+      ['app/stray.test.ts', 'import closure reaches a changed input'],
     ]);
+    expect(await run()).toMatchObject({ ran: 0, cached: 2 });
+    const stray = await ended(checking(checkout, '--paths-from', paths('ran', 'app/stray.test.ts')));
+    expect(stray.code, stray.stdout + stray.stderr).toBe(1);
+    expect(stray.stdout).toContain('lib/declared.ts loaded lib/stray.ts, which changeCheck.loads in lib/package.json does not declare');
   } finally {
     rmSync(checkout, { recursive: true, force: true });
-    rmSync(tagma, { recursive: true, force: true });
-    rmSync(broken, { recursive: true, force: true });
+  }
+});
+
+test('inside a Tagma session the change is what the session holds in this checkout, and an unfinished judgement refuses', async () => {
+  const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-session-')));
+  const bin = realpathSync(mkdtempSync(join(tmpdir(), 'change-tagma-')));
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout }).exitCode).toBe(0);
+    writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'session', scripts: { test: 'bun test' } }));
+    const page = (state: object) => ({
+      status: 'ok',
+      subject: 'thread-a',
+      checkouts: [
+        {
+          checkout: 'root-a',
+          root: checkout,
+          state,
+          entries: [
+            { section: 'uncommitted', path: 'moved.ts', from: 'old.ts' },
+            { section: 'outside', path: 'ignored.log', from: null },
+          ],
+        },
+        {
+          checkout: 'root-b',
+          root: bin,
+          state: { kind: 'current' },
+          entries: [{ section: 'uncommitted', path: 'elsewhere.ts', from: null }],
+        },
+      ],
+      unattributed: [],
+      next: 'second',
+    });
+    const second = {
+      status: 'ok',
+      checkouts: [],
+      unattributed: [
+        { checkout: 'root-a', path: 'written.ts' },
+        { checkout: 'root-b', path: 'other.ts' },
+      ],
+      next: null,
+    };
+    writeFileSync(join(bin, 'second.json'), JSON.stringify(second));
+    const tagma = (first: object): void => {
+      writeFileSync(join(bin, 'first.json'), JSON.stringify(first));
+      writeFileSync(
+        join(bin, 'tagma'),
+        `#!/bin/sh\n[ "$1 $2" = "op read_changes" ] || exit 2\ncase "$3" in *cursor*) cat ${JSON.stringify(join(bin, 'second.json'))};; *) cat ${JSON.stringify(join(bin, 'first.json'))};; esac\n`,
+      );
+      chmodSync(join(bin, 'tagma'), 0o755);
+    };
+    const planned = () =>
+      ended(
+        Bun.spawn(['bun', join(import.meta.dir, 'check.ts'), '--root', checkout, '--plan'], {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env: { ...process.env, TAGMA_SESSION_GRANT: 'grant', PATH: `${bin}:${process.env['PATH'] ?? ''}` },
+        }),
+      );
+    tagma(page({ kind: 'current' }));
+    const held = await planned();
+    expect(held.code, held.stdout + held.stderr).toBe(0);
+    expect(JSON.parse(held.stdout)).toMatchObject({ base: 'lines session thread-a holds', changed: ['moved.ts', 'old.ts', 'written.ts'] });
+    tagma(page({ kind: 'judging', paths: 3 }));
+    const judging = await planned();
+    expect(judging.code).toBe(1);
+    expect(judging.stderr).toContain('Tagma has not finished judging');
+  } finally {
+    rmSync(checkout, { recursive: true, force: true });
+    rmSync(bin, { recursive: true, force: true });
   }
 });
 
 test('the second change check reuses passing isolated fixtures but reruns failures and external reads', async () => {
   const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-results-')));
   const external = realpathSync(mkdtempSync(join(tmpdir(), 'change-external-')));
-  const tagma = tagmaAnswering({ modules: [{ id: 'fixture', territory: ['/'], entries: [] }], relations: [], region: ['/'] });
   try {
     const git = Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout });
     expect(git.exitCode, git.stderr.toString()).toBe(0);
@@ -189,7 +289,7 @@ test('external targets and failed reads retain their dependency and error channe
     const output: string[] = [];
     for (const round of [1, 2]) {
       const report = join(tmpdir(), `change-${crypto.randomUUID()}.json`);
-      const run = checking(checkout, tagma, '--full', '--paths-from', changed, '--report', report);
+      const run = checking(checkout, '--full', '--paths-from', changed, '--report', report);
       const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
       output.push(stdout + stderr);
       expect(code, stdout + stderr).toBe(1);
@@ -238,13 +338,11 @@ test('external targets and failed reads retain their dependency and error channe
   } finally {
     rmSync(checkout, { recursive: true, force: true });
     rmSync(external, { recursive: true, force: true });
-    rmSync(tagma, { recursive: true, force: true });
   }
 });
 test('a read through open outside the inputs is audited in every Vitest file a worker runs, not only the first', async () => {
   const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-vitest-')));
   const external = realpathSync(mkdtempSync(join(tmpdir(), 'change-opened-')));
-  const tagma = tagmaAnswering({ modules: [{ id: 'reads', territory: ['/'], entries: [] }], relations: [], region: ['/'] });
   try {
     expect(Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout }).exitCode).toBe(0);
     symlinkSync(join(import.meta.dir, '../node_modules'), join(checkout, 'node_modules'), 'dir');
@@ -272,7 +370,6 @@ test('reads through open', () => {
     const report = join(external, 'report.json');
     const env: Record<string, string | undefined> = {
       ...process.env,
-      PATH: `${tagma}:${process.env['PATH'] ?? ''}`,
       TESTBED_CORES: '1',
       TESTBED_BUDGET_ROOT: join(external, 'budget'),
     };
@@ -306,13 +403,11 @@ test('reads through open', () => {
   } finally {
     rmSync(checkout, { recursive: true, force: true });
     rmSync(external, { recursive: true, force: true });
-    rmSync(tagma, { recursive: true, force: true });
   }
 });
 test('the files a change check selects in one package run side by side on the machine budget', async () => {
   const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-side-')));
   const marks = realpathSync(mkdtempSync(join(tmpdir(), 'change-marks-')));
-  const tagma = tagmaAnswering({ modules: [{ id: 'side', territory: ['/'], entries: [] }], relations: [], region: ['/'] });
   try {
     expect(Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout }).exitCode).toBe(0);
     writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'side', scripts: { test: 'bun test' } }));
@@ -325,7 +420,6 @@ test('the files a change check selects in one package run side by side on the ma
     const report = join(marks, 'report.json');
     const env: Record<string, string | undefined> = {
       ...process.env,
-      PATH: `${tagma}:${process.env['PATH'] ?? ''}`,
       TESTBED_CORES: '12',
       TESTBED_BUDGET_ROOT: join(marks, 'budget'),
       MEET: budgetOf(12, memoryOf()) > 1 ? '1' : '0',
@@ -352,7 +446,6 @@ test('the files a change check selects in one package run side by side on the ma
   } finally {
     rmSync(checkout, { recursive: true, force: true });
     rmSync(marks, { recursive: true, force: true });
-    rmSync(tagma, { recursive: true, force: true });
   }
 });
 beforeAll(() => {
@@ -364,31 +457,12 @@ beforeAll(() => {
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-test('a producer change reaches consumers through test-only relations', () => {
-  const reached = graph().affected(['dep/src/entry.ts']);
-  expect([...reached.keys()].sort()).toEqual(['consumer', 'producer']);
-  expect(graph().runner('pkg/src/contract.test.ts')).toBe('bun');
-});
-
-test('a path belongs to the module of its deepest territory, and a module drawn at the root carries every package', () => {
-  const drawn = new Graph(
-    root,
-    [...files.keys()],
-    [
-      { id: 'core', paths: ['pkg', 'other/a/very/long/cut.ts'], imports: [], tests: [] },
-      { id: 'contract', paths: ['pkg/src'], imports: [], tests: [] },
-    ],
-  );
-  expect(drawn.owner('pkg/src/contract.test.ts')?.id).toBe('contract');
-  expect(drawn.owner('pkg/package.json')?.id).toBe('core');
-  const whole = new Graph(root, [...files.keys()], [{ id: 'all', paths: [''], imports: [], tests: [] }]);
-  expect([...whole.related(['pkg/src/contract.test.ts'])].sort()).toEqual(['', 'dep', 'other', 'pkg']);
-});
-
-test('the input graph follows testing exports under both runtimes and dynamic imports', () => {
+test('the input graph follows testing exports under both runtimes, dynamic imports and import globs', () => {
   const current = graph();
   const selected = current.select(['pkg/src/contract.test.ts'], ['pkg/src/dynamic.ts']);
   expect([...selected.selected.keys()]).toEqual(['pkg/src/contract.test.ts']);
+  expect(current.closure('pkg/src/contract.test.ts').inputs).toContain('pkg/src/pages/shown.ts');
+  expect(current.closure('pkg/src/contract.test.ts').inputs).not.toContain('pkg/src/pages/hidden.ts');
   expect([...current.select(['pkg/src/contract.test.ts'], ['pkg/src/child.fixture.ts']).selected.keys()]).toEqual([
     'pkg/src/contract.test.ts',
   ]);
@@ -403,7 +477,6 @@ test('a generated package entry follows its declared source in selection and inp
   const current = new Graph(
     root,
     [...files.keys()],
-    modules,
     new Map([
       ['dep/dist/entry.js', 'dep/src/entry.ts'],
       ['dep/dist/browser.js', 'dep/src/browser.ts'],

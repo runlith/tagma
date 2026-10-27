@@ -9,6 +9,7 @@ export type Inputs = {
   readonly key: string;
   readonly packages: readonly string[];
   readonly files: readonly string[];
+  readonly importers: readonly string[];
   readonly uncertain: readonly string[];
 };
 export type Variant = { readonly seed: number; readonly adapter: string; readonly isolated: boolean };
@@ -126,11 +127,7 @@ export class Hashes {
   of(file: string): Inputs {
     const closure = this.graph.closure(file);
     const packages = [
-      ...new Set([
-        this.graph.package(file).dir,
-        ...closure.inputs.filter(sourceFile).map((path) => this.graph.package(path).dir),
-        ...(closure.uncertain.length > 0 ? this.graph.related(closure.inputs) : []),
-      ]),
+      ...new Set([this.graph.package(file).dir, ...closure.inputs.filter(sourceFile).map((path) => this.graph.package(path).dir)]),
     ].sort();
     const files = [...new Set([...this.global, ...closure.inputs.filter((path) => !sourceFile(path))])].sort();
     const hash = createHash('sha256')
@@ -152,6 +149,15 @@ export class Hashes {
     const pkg = this.graph.package(file);
     const external =
       pkg.externalInputs[relative(pkg.dir === '' ? this.graph.root : join(this.graph.root, pkg.dir), join(this.graph.root, file))];
-    return { key: hash.digest('hex'), packages, files, uncertain: external === undefined ? [] : [`declared external input: ${external}`] };
+    return {
+      key: hash.digest('hex'),
+      packages,
+      files,
+      importers: closure.importers,
+      uncertain: [
+        ...closure.uncertain.map((site) => `nonliteral import not traced for this file: ${site}`),
+        ...(external === undefined ? [] : [`declared external input: ${external}`]),
+      ],
+    };
   }
 }

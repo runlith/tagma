@@ -86,6 +86,11 @@
   "peerDependencies": {
     "effect": "^4.0.1"
   },
+  "changeCheck": {
+    "loads": {
+      "src/adapter/loader.ts": []
+    }
+  },
   "tagma": {
     "host": [
       "./adapter/provider",
