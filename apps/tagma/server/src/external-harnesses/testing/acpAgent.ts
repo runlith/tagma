@@ -50,7 +50,7 @@ const announce = (sessionId: string, call: Announced): void => {
   send({ method: '_tagma/said', params: { sessionId, messageId: `said-${call.toolCallId}`, toolCallIds: [call.toolCallId] } });
 };
 
-let prompt: { readonly id: string | number; readonly sessionId: string; readonly turn: unknown } | null = null;
+let prompt: { readonly id: string | number; readonly sessionId: string; readonly turn: unknown; readonly unsent: boolean } | null = null;
 let asking: string | null = null;
 const doubled = { pending: new Set<string>(), chose: [] as string[] };
 let compacting: string | number | null = null;
@@ -243,7 +243,7 @@ const finish = (stopReason: string): void => {
   unstepped(-32010, 'the turn ended before the agent reached another step');
   const meta =
     mode === 'tagma' && typeof prompt.turn === 'string'
-      ? { _meta: { 'tagma/turn': { prompt: prompt.turn, last: `last-${prompt.turn}` } } }
+      ? { _meta: { 'tagma/turn': { prompt: prompt.turn, last: `last-${prompt.turn}` }, 'tagma/opened': !prompt.unsent } }
       : {};
   send({ id: prompt.id, result: { stopReason, usage, ...meta } });
   prompt = null;
@@ -482,8 +482,8 @@ const handle = (message: Message): void => {
       }
       const sessionId = String(message.params?.sessionId);
       const meta = message.params?._meta as Record<string, unknown> | undefined;
-      prompt = { id: message.id!, sessionId, turn: meta?.['tagma/turn'] };
       const text = textOf(message.params);
+      prompt = { id: message.id!, sessionId, turn: meta?.['tagma/turn'], unsent: text.includes('UNSENT') };
       late = text.includes('LATE');
       trailing = text.includes('TRAIL');
       owed = mode === 'tagma' && text.includes('OWED');

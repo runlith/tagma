@@ -1,4 +1,4 @@
-import { Clock, Context, Effect } from 'effect';
+import { Clock, Context, Effect, Predicate } from 'effect';
 import { Message } from '@runlith/llm/schema/messages';
 import { type PackedWorldStateSection, renderWorldState } from '@runlith/agent/WorldState';
 import type { ThreadContextEntry } from '@runlith/agent/transcript/entries';
@@ -35,13 +35,49 @@ export function turnNotes(history: readonly Message[], runId: string): StartPiec
   return { workspace: sized(TURN_NOTES.workspace), graph: sized(TURN_NOTES.graph), deferred: sized(TURN_NOTES.deferred) };
 }
 
-const toldRuns = (history: readonly Message[]): ReadonlySet<string> =>
-  new Set(
-    history.flatMap((message) => {
-      const run = message.metadata?.[CONTEXT_RUN];
-      return typeof run === 'string' ? [run] : [];
-    }),
+const TOLD = 'told';
+
+const GRAPH = 'graph';
+
+type GraphSpan = { readonly run: string; readonly from: number; readonly through: number };
+
+type Heard = {
+  readonly runs: ReadonlySet<string>;
+  readonly sections: ReadonlyMap<string, string | null>;
+  readonly graph: readonly GraphSpan[];
+};
+
+const heardIn = (history: readonly Message[]): Heard => {
+  const runs = new Set<string>();
+  const sections = new Map<string, string | null>();
+  const graph: GraphSpan[] = [];
+  for (const message of history) {
+    const run = message.metadata?.[CONTEXT_RUN];
+    if (typeof run !== 'string') continue;
+    runs.add(run);
+    const told = message.metadata?.[TOLD];
+    if (Predicate.isObject(told))
+      for (const [id, digest] of Object.entries(told)) if (typeof digest === 'string' || digest === null) sections.set(id, digest);
+    const span = message.metadata?.[GRAPH];
+    if (Predicate.isObject(span) && typeof span.from === 'number' && typeof span.through === 'number')
+      graph.push({ run, from: span.from, through: span.through });
+  }
+  return { runs, sections, graph };
+};
+
+const resumedAt = (order: readonly string[], heard: Heard): number => {
+  const kept = new Set(
+    order.slice(
+      0,
+      Math.max(
+        0,
+        order.findIndex((run) => !heard.runs.has(run)),
+      ),
+    ),
   );
+  const spans = heard.graph.filter((span) => kept.has(span.run));
+  return spans.some((span) => span.from === 0) ? (spans.at(-1)?.through ?? 0) : 0;
+};
 
 export const nativeTurnContext = Effect.fn('native-harness.turnContext')(
   function* (deps: {
@@ -58,13 +94,14 @@ export const nativeTurnContext = Effect.fn('native-harness.turnContext')(
     const stored = yield* deps.threads.worldStateSnapshot(deps.threadId);
     const checkpointId = yield* deps.threads.latestCompactionCheckpointId(deps.threadId);
     const compacted = stored.checkpointId !== checkpointId;
-    const told = toldRuns(deps.history);
-    const lost = !compacted && !(stored.contextRuns?.every((run) => told.has(run)) ?? false);
-    const prior = compacted || lost ? {} : stored.snapshot;
-    const standing = compacted || lost ? [] : (stored.contextRuns ?? []);
+    const heard = heardIn(deps.history);
+    const lost = !compacted && !(stored.contextRuns?.every((run) => heard.runs.has(run)) ?? false);
+    const prior =
+      compacted || lost ? Object.fromEntries(Object.entries(stored.snapshot).filter(([id]) => heard.sections.has(id))) : stored.snapshot;
+    const standing = (stored.contextRuns ?? []).filter((run) => heard.runs.has(run));
 
     const read = deps.digest ? yield* deps.threads.graphCursor(deps.threadId) : null;
-    const cursor = read && lost ? { ...read, eventId: 0 } : read;
+    const cursor = read && lost ? { ...read, eventId: resumedAt(stored.contextRuns ?? [], heard) } : read;
 
     const digest = cursor
       ? yield* Effect.gen(function* () {
@@ -89,7 +126,7 @@ export const nativeTurnContext = Effect.fn('native-harness.turnContext')(
       : null;
 
     const fork = stored.fork === null ? null : { thread: stored.fork.thread, at: stored.fork.at.toISOString() };
-    const world = yield* renderWorldState([forkSection(fork), ...deps.sections], prior);
+    const world = yield* renderWorldState([forkSection(fork), ...deps.sections], prior, heard.sections);
 
     const occurredAt = new Date(yield* Clock.currentTimeMillis).toISOString();
     const parts: string[] = [];
@@ -127,12 +164,12 @@ export const nativeTurnContext = Effect.fn('native-harness.turnContext')(
                 ),
               ]
             : []),
-          ...(world.kind === 'changed' || delivered
+          ...(world.kind === 'changed' || delivered || compacted || lost
             ? [
                 deps.threads.advanceWorldState(
                   deps.threadId,
                   {
-                    snapshot: world.kind === 'changed' ? { ...world.snapshot } : prior,
+                    snapshot: { ...world.snapshot },
                     checkpointId,
                     contextRuns: delivered ? [...standing, deps.runId] : standing,
                   },
@@ -161,7 +198,13 @@ export const nativeTurnContext = Effect.fn('native-harness.turnContext')(
       message: Message.make({
         role: 'user',
         content: [...(context.length === 0 ? [] : [{ type: 'text' as const, text: context }]), ...inventory],
-        metadata: { [CONTEXT_RUN]: deps.runId },
+        metadata: {
+          [CONTEXT_RUN]: deps.runId,
+          ...(world.kind === 'changed' ? { [TOLD]: { ...world.told } } : {}),
+          ...(digest !== null && digest.text !== null && cursor
+            ? { [GRAPH]: { from: cursor.eventId, through: digest.throughEventId } }
+            : {}),
+        },
       }),
       entry,
       parts: sections,

@@ -47,7 +47,7 @@ describe.skipIf(!existsSync(LIBRARY))('a fork of a Claude Code thread on ACP', (
     excludeTestServices: true,
   })('protocol world', (it) => {
     it.effect(
-      'a spawn forks the source’s vendor session instead of opening a new one from the journal, and its first turn alone names the source',
+      'a spawn forks the source’s vendor session instead of opening a new one from the journal, and the source is named until a turn of the fork reaches the agent, then never again',
       () =>
         Effect.gen(function* () {
           const { world, projectId, agent, birth } = yield* ProtocolWorld;
@@ -58,7 +58,7 @@ describe.skipIf(!existsSync(LIBRARY))('a fork of a Claude Code thread on ACP', (
           yield* completed(report, (yield* turnsOf(world.runtime.owners).send(source, projectId, 'Read the module.')).runId);
           const spawn = (input: object) =>
             world.op('spawn_agent', input, `project=${projectId}`, { [GRANT_HEADER]: grantFor(parent), [APPROVAL_WAIT_HEADER]: '0' });
-          const ask = { agentId: 'tagma', task: 'HOLD the turn and say what it does.', fork: 'all', forkFrom: source };
+          const ask = { agentId: 'tagma', task: 'HOLD UNSENT the turn and say what it does.', fork: 'all', forkFrom: source };
           const first = (yield* spawn(ask)).body;
           const answered = Schema.is(refusalSchema)(first) && first.code === 'instructions-unread' ? (yield* spawn(ask)).body : first;
           const started = yield* decodeSpawn(answered);
@@ -79,13 +79,22 @@ describe.skipIf(!existsSync(LIBRARY))('a fork of a Claude Code thread on ACP', (
               world.op('open_hosted_turn', {}, `project=${projectId}`, { [GRANT_HEADER]: grantFor(started.threadId) }),
               (answer) => String((answer.body as { readonly context: string | null }).context ?? '').split(source).length - 1,
             );
+          const turn = Effect.fnUntraced(function* (words: string, prompts: number) {
+            yield* turnsOf(world.runtime.owners).send(started.threadId, projectId, words);
+            yield* framed(report, 'session/prompt', prompts, 'the turn of the fork reached the agent');
+          });
+          const released = Effect.fnUntraced(function* () {
+            const held = (yield* kernel.reads.snapshot(started.threadId)).latestRun?.id ?? '';
+            yield* files.writeFileString(`${report}.release`, 'release');
+            yield* completed(report, held);
+            yield* files.remove(`${report}.release`);
+          });
           expect(yield* opened()).toBe(1);
-          const held = (yield* kernel.reads.snapshot(started.threadId)).latestRun?.id ?? '';
-          yield* files.writeFileString(`${report}.release`, 'release');
-          yield* completed(report, held);
-          yield* files.remove(`${report}.release`);
-          yield* turnsOf(world.runtime.owners).send(started.threadId, projectId, 'HOLD the turn and say it again.');
-          yield* framed(report, 'session/prompt', 3, 'the second turn of the fork reached the agent');
+          yield* released();
+          yield* turn('HOLD the turn and say it again.', 3);
+          expect(yield* opened()).toBe(1);
+          yield* released();
+          yield* turn('HOLD the turn and say it once more.', 4);
           expect(yield* opened()).toBe(0);
         }),
     );

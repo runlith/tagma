@@ -1,4 +1,4 @@
-import { Effect, Predicate, Result, Schema } from 'effect';
+import { Effect, Result, Schema } from 'effect';
 import { AgentFault, FAULT } from '@runlith/acp/agent';
 import { transportWebSchema } from '@runlith/agent/thread/record';
 import { AGAIN_AFTER_SILENCE, transportOf, unanswered } from '../../../platform/cli/silence.js';
@@ -30,18 +30,7 @@ const Called = Schema.Struct({
 
 const RUN_NOT_HELD = 'run-not-held';
 
-const REFUSED_CONNECTION = 'ECONNREFUSED';
-
-type Repeat = 'answered-again' | 'unsent-only';
-
-const notYet =
-  (repeat: Repeat) =>
-  (cause: unknown): boolean => {
-    if (refusalOf(cause)?.code === RUN_NOT_HELD) return true;
-    if (repeat === 'answered-again') return unanswered(cause);
-    const transport = transportOf(cause);
-    return transport !== null && Predicate.hasProperty(transport.cause, 'code') && transport.cause.code === REFUSED_CONNECTION;
-  };
+const notYet = (cause: unknown): boolean => refusalOf(cause)?.code === RUN_NOT_HELD || unanswered(cause);
 
 export type HostedAgent = typeof Agent.Type;
 export type HostedListed = typeof Listed.Type;
@@ -63,26 +52,26 @@ export class ServerDoor implements HostedDoor {
   ) {}
 
   agent(): Effect.Effect<HostedAgent, AgentFault> {
-    return this.perform('read_hosted_agent', {}, Agent, 'answered-again');
+    return this.perform('read_hosted_agent', {}, Agent);
   }
 
   tools(): Effect.Effect<HostedListed, AgentFault> {
-    return this.perform('read_hosted_tools', {}, Listed, 'answered-again');
+    return this.perform('read_hosted_tools', {}, Listed);
   }
 
   history(): Effect.Effect<readonly HostedMessage[], AgentFault> {
-    return Effect.map(this.perform('read_hosted_history', {}, Held, 'answered-again'), (read) => read.messages);
+    return Effect.map(this.perform('read_hosted_history', {}, Held), (read) => read.messages);
   }
 
   turn(): Effect.Effect<HostedOpened, AgentFault> {
-    return this.perform('open_hosted_turn', {}, Opened, 'unsent-only');
+    return this.perform('open_hosted_turn', {}, Opened);
   }
 
   call(toolCallId: string, name: string, input: unknown): Effect.Effect<HostedCalled, AgentFault> {
-    return this.perform('call_hosted_tool', { toolCallId, name, input }, Called, 'answered-again');
+    return this.perform('call_hosted_tool', { toolCallId, name, input }, Called);
   }
 
-  private perform<A>(id: HostedOperationId, input: object, schema: Schema.Codec<A, unknown>, repeat: Repeat): Effect.Effect<A, AgentFault> {
+  private perform<A>(id: HostedOperationId, input: object, schema: Schema.Codec<A, unknown>): Effect.Effect<A, AgentFault> {
     const decode = Schema.decodeUnknownResult(schema);
     return this.server
       .ask((door) =>
@@ -94,7 +83,7 @@ export class ServerDoor implements HostedDoor {
         }),
       )
       .pipe(
-        Effect.retry({ while: notYet(repeat), schedule: AGAIN_AFTER_SILENCE }),
+        Effect.retry({ while: notYet, schedule: AGAIN_AFTER_SILENCE }),
         Effect.mapError((cause) => {
           const refusal = refusalOf(cause);
           if (refusal !== null)

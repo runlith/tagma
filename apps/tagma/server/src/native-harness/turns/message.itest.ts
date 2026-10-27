@@ -57,6 +57,9 @@ const setup = Effect.fnUntraced(function* (demo: EffectDemo) {
     rewind: () => {
       history = [];
     },
+    takeBack: () => {
+      history.pop();
+    },
     wrote: (paths: readonly string[]) => {
       written = paths;
     },
@@ -92,6 +95,26 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         expect(yield* nextTurn()).toBeNull();
       }),
     ),
+  );
+
+  it.effect(
+    'a later turn taken back un-tells only what it told: the workspace and the graph map stay told, its graph change is told again',
+    () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const { nextTurn, takeBack } = yield* setup(demo);
+          const first = yield* nextTurn();
+          const task = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['task'], title: 'взятая задача' });
+          yield* demo.graph.tasks.claim({ id: task.id });
+          expect((yield* nextTurn())?.parts?.map((part) => part.name)).toEqual(['Graph']);
+          takeBack();
+          const again = yield* nextTurn();
+          expect(again?.parts?.map((part) => part.name)).toEqual(['Graph']);
+          expect(contextText(again)).toContain(yield* demo.nameOf(task.id));
+          expect(again?.message.metadata?.graph).toMatchObject({ from: (first?.message.metadata?.graph as { through: number }).through });
+          expect(yield* nextTurn()).toBeNull();
+        }),
+      ),
   );
 
   it.effect('the turn names the sections it composed, so nothing has to read the message back', () =>

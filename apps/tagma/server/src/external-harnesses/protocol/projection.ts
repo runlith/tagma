@@ -16,7 +16,7 @@ import { textOf } from './content.js';
 import type { OpenedTurn } from './row.js';
 import type { VendorAddress } from '../store/turns.js';
 import type { HarnessTurnEnded } from './turns.js';
-import { EXECUTES, FAILURE, type Said } from '../contract/wire/extensions.js';
+import { EXECUTES, FAILURE, OPENED, type Said } from '../contract/wire/extensions.js';
 
 export type Sealed = { readonly _tag: 'Sealed'; readonly said: (typeof Said)['Type'] | null };
 
@@ -28,6 +28,7 @@ export type Projection = {
   readonly turns: readonly OpenedTurn[];
   readonly closed: readonly OpenedTurn[];
   readonly vendor: readonly VendorAddress[];
+  readonly heard: boolean;
   readonly messages: readonly Message[] | undefined;
   readonly failure: string | null;
 };
@@ -137,6 +138,7 @@ export const project = (
   const ended: HarnessTurnEnded[] = [];
   const closed: OpenedTurn[] = [];
   const vendor: VendorAddress[] = [];
+  let heard = false;
   let turns = [...opened];
   const messages: Message[] | undefined = hosted ? [] : undefined;
   let failure: string | null = null;
@@ -251,6 +253,7 @@ export const project = (
         const stopped = outcome._tag === 'Stopped' ? outcome.stopReason : null;
         const carried = outcome._tag === 'Failed' && outcome.cause._tag === 'Agent' ? spendOf(outcome.cause.error.data) : null;
         if (outcome.meta != null) vendor.push(vendorOf(event.turn, outcome.meta));
+        if ((outcome.meta ?? carried?._meta)?.[OPENED] === true) heard = true;
         ended.push({
           turn: event.turn,
           at,
@@ -321,5 +324,5 @@ export const project = (
       }
     }
   }
-  return { boundaries, ended, turns, closed, vendor, messages, failure };
+  return { boundaries, ended, turns, closed, vendor, heard, messages, failure };
 };

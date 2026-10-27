@@ -8,6 +8,7 @@ import { ThreadHarness } from '../threads/contract/service/engine.js';
 import { ThreadLookup } from '../threads/contract/service/reads.js';
 import { declaredRefusals } from '../threads/refusalAnswers.js';
 import { HOSTED_OPERATIONS } from './contract/wire/hosted.js';
+import { HostedOpenings } from './contract/service/protocol.js';
 import { hostedContent, hostedHistory } from './hostedHistory.js';
 
 const provenThread = (caller: Caller) => {
@@ -87,7 +88,8 @@ export const hostedTurn = pair(
       const turn = yield* declaredRefusals(HOSTED_OPERATIONS.open_hosted_turn)(
         (yield* ThreadHarness).runs.hosting().open(threadId, agentId),
       );
-      return { status: 'opened' as const, context: turn.context, prompt: turn.prompt, web: turn.web };
+      const context = yield* (yield* HostedOpenings).opened(threadId, turn.context);
+      return { status: 'opened' as const, context, prompt: turn.prompt, web: turn.web };
     }),
   }),
 );

@@ -1,7 +1,8 @@
-import { Deferred, Effect, Exit, Fiber, Option } from 'effect';
+import { Deferred, Effect, Exit, Fiber, Option, Predicate } from 'effect';
 import { AgentFault, FAULT } from '@runlith/acp/agent';
 import type { ContentBlock } from '@runlith/acp/content';
 import type { PromptResult } from '@runlith/acp/methods';
+import { OPENED } from '../../contract/wire/extensions.js';
 import type { Session, Steered, Withdrawn } from './cycle.js';
 import type { HostedDoor } from './door.js';
 
@@ -22,6 +23,13 @@ type Running = {
 };
 
 const cancelled = () => new AgentFault({ code: CANCELLED, message: 'the turn was cancelled before the agent read these words' });
+
+const heard = (fault: AgentFault): AgentFault => {
+  const data = Predicate.isObject(fault.data) ? fault.data : fault.data === undefined ? {} : null;
+  if (data === null) return fault;
+  const meta = Predicate.isObject(data._meta) ? data._meta : {};
+  return new AgentFault({ code: fault.code, message: fault.message, data: { ...data, _meta: { ...meta, [OPENED]: true } } });
+};
 
 export class Turn {
   private running: Running | null = null;
@@ -86,8 +94,9 @@ export class Turn {
       this.running = null;
       this.session.turning?.(false);
     }
-    if (Exit.isFailure(result)) return yield* Effect.failCause(result.cause);
-    return result.value;
+    if (Exit.isFailure(result)) return yield* Effect.failCause(result.cause).pipe(Effect.mapError(heard));
+    const meta = Predicate.isObject(result.value._meta) ? result.value._meta : {};
+    return { ...result.value, _meta: { ...meta, [OPENED]: true } } satisfies PromptResult;
   });
 
   readonly steer = Effect.fnUntraced(function* (this: Turn, prompt: readonly ContentBlock[], input: string | undefined) {

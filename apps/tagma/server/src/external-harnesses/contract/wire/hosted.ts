@@ -98,7 +98,7 @@ export const HOSTED_OPERATIONS = {
     ...hostedDoor,
     meaning:
       'Open the running turn of a thread whose agent loop runs outside Tagma: record and answer the turn context and the step guidance Tagma owes it, and the prompt the run holds.',
-    grammar: `${PROVEN}\nAnswers nulls when the thread runs no turn; \`context\` is null when nothing is owed. \`web\` says whose web the turn searches and reads with: \`vendor\` is the agent's own, \`none\` the tools of the list.`,
+    grammar: `${PROVEN}\nAnswers nulls when the thread runs no turn; \`context\` is null when nothing is owed. Context answered before stays owed, ahead of what is new, until a prompt answer carries \`_meta["tagma/opened"]: true\`, so opening again after a lost answer or a turn that never reached the agent answers it again. \`web\` says whose web the turn searches and reads with: \`vendor\` is the agent's own, \`none\` the tools of the list.`,
     input: Schema.Struct({}),
     answer: arms({
       opened: {

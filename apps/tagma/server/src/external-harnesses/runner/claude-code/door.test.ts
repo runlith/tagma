@@ -65,24 +65,6 @@ it.effect(
     }),
 );
 
-it.effect('an opening, which no record answers again, is asked again only when its request never reached a server', () =>
-  Effect.gen(function* () {
-    const opened = { status: 'opened', context: 'the graph moved', prompt: null, web: 'none' };
-    const waited = serverAnswering([Effect.fail(unreached), Effect.fail(unheld), Effect.succeed(opened)]);
-    const opening = yield* Effect.forkChild(waited.door.turn());
-    yield* TestClock.adjust('2 seconds');
-    expect(yield* Fiber.join(opening)).toEqual({ context: 'the graph moved', prompt: null, web: 'none' });
-
-    const lost = serverAnswering([Effect.fail(cut), Effect.succeed(opened)]);
-    expect(yield* Effect.flip(lost.door.turn())).toMatchObject({ data: 'failed' });
-    expect(lost.asked()).toBe(1);
-
-    const aborted = serverAnswering([Effect.fail(stopped), Effect.succeed(opened)]);
-    expect(yield* Effect.flip(aborted.door.turn())).toMatchObject({ data: 'failed' });
-    expect(aborted.asked()).toBe(1);
-  }),
-);
-
 it.effect('a server that broke or refused is answered at once, never asked again', () =>
   Effect.gen(function* () {
     const broke = serverAnswering([Effect.fail(new Error('server-fault: this call broke inside the server'))]);

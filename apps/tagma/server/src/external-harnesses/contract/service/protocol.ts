@@ -15,6 +15,13 @@ export type ProtocolSessions = {
   readonly release: (threadId: string, unit: WriteUnit<'machine'>) => Effect.Effect<void, StoreFailure>;
 };
 
+export class HostedOpenings extends Context.Service<
+  HostedOpenings,
+  {
+    opened(threadId: string, context: string | null): Effect.Effect<string | null, StoreFailure>;
+  }
+>()('tagma/external-harnesses/HostedOpenings') {}
+
 export class ProtocolStates extends Context.Service<
   ProtocolStates,
   {

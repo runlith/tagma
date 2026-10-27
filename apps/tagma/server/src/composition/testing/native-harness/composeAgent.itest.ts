@@ -1098,7 +1098,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   });
   const orientingThreads = {
     rows: {
-      worldStateSnapshot: () => Effect.succeed({ snapshot: {}, checkpointId: null }),
+      worldStateSnapshot: () => Effect.succeed({ snapshot: {}, checkpointId: null, contextRuns: null, fork: null }),
       latestCompactionCheckpointId: () => Effect.succeed('ckpt-1'),
       advanceWorldState: () => Effect.void,
       advanceGraphCursor: () => Effect.void,

@@ -1,5 +1,6 @@
 import { Effect, Schema } from 'effect';
 import type { TextPart } from '@runlith/llm/schema/messages';
+import { sha256 } from '@runlith/utils/sha256';
 
 export type PriorSection<A> = { readonly kind: 'absent' } | { readonly kind: 'unknown' } | { readonly kind: 'known'; readonly value: A };
 
@@ -32,17 +33,29 @@ function readSection<A>(section: WorldStateSection<A>): Effect.Effect<A | Unread
 
 export type WorldStateSnapshot = Readonly<Record<string, unknown>>;
 
+export type WorldStateTold = Readonly<Record<string, string | null>>;
+
+export type WorldStateHeard = ReadonlyMap<string, string | null>;
+
 export type WorldStateDiff =
-  | { readonly kind: 'unchanged' }
-  | { readonly kind: 'changed'; readonly text: string; readonly content: readonly TextPart[]; readonly snapshot: WorldStateSnapshot };
+  | { readonly kind: 'unchanged'; readonly snapshot: WorldStateSnapshot }
+  | {
+      readonly kind: 'changed';
+      readonly text: string;
+      readonly content: readonly TextPart[];
+      readonly snapshot: WorldStateSnapshot;
+      readonly told: WorldStateTold;
+    };
 
 export const renderWorldState = Effect.fn('WorldState.render')(function* (
   packedSections: readonly PackedWorldStateSection[],
   previous: WorldStateSnapshot,
+  heard?: WorldStateHeard,
 ): Effect.fn.Return<WorldStateDiff> {
   const sections = packedSections as unknown as readonly WorldStateSection<unknown>[];
   const seen = new Set<string>();
   const snapshot: Record<string, unknown> = {};
+  const told: Record<string, string | null> = {};
   const parts: TextPart[] = [];
 
   for (const section of sections) {
@@ -50,31 +63,54 @@ export const renderWorldState = Effect.fn('WorldState.render')(function* (
     seen.add(section.id);
 
     const current = yield* readSection(section);
-    const prior = priorOf(section, previous);
 
     if (current === unreadable) {
       if (Object.hasOwn(previous, section.id)) snapshot[section.id] = previous[section.id];
       continue;
     }
 
+    const encoded = current === withdrawn ? undefined : Schema.encodeSync(section.codec)(current);
+    const prior = priorOf(section, previous, heard, encoded);
+
     if (current === withdrawn) {
       if (prior.kind === 'absent') continue;
       const removal = section.removed?.(priorValue(prior));
       if (removal) parts.push(typeof removal === 'string' ? { type: 'text', text: removal } : removal);
+      told[section.id] = null;
       continue;
     }
 
-    snapshot[section.id] = Schema.encodeSync(section.codec)(current);
+    snapshot[section.id] = encoded;
     if (prior.kind === 'known' && equals(section, prior.value, current)) continue;
     const rendered = prior.kind === 'absent' ? section.baseline(current) : section.update(priorValue(prior), current);
     parts.push(typeof rendered === 'string' ? { type: 'text', text: rendered } : rendered);
+    told[section.id] = digestOf(encoded);
   }
 
-  if (parts.length === 0) return { kind: 'unchanged' };
-  return { kind: 'changed', text: parts.map((part) => part.text).join('\n\n'), content: parts, snapshot };
+  if (parts.length === 0) return { kind: 'unchanged', snapshot };
+  return { kind: 'changed', text: parts.map((part) => part.text).join('\n\n'), content: parts, snapshot, told };
 });
 
-function priorOf<A>(section: WorldStateSection<A>, previous: WorldStateSnapshot): PriorSection<A> {
+const digestOf = (encoded: unknown): string => sha256().update(JSON.stringify(encoded)).digest('base64url');
+
+function priorOf<A>(
+  section: WorldStateSection<A>,
+  previous: WorldStateSnapshot,
+  heard: WorldStateHeard | undefined,
+  encoded: unknown,
+): PriorSection<A> {
+  const last = heard?.get(section.id);
+  if (last === undefined) return storedPrior(section, previous);
+  if (last === null) return { kind: 'absent' };
+  if (Object.hasOwn(previous, section.id) && digestOf(previous[section.id]) === last) return storedPrior(section, previous);
+  if (encoded !== undefined && digestOf(encoded) === last) {
+    const value = decode(section, encoded);
+    if (value !== undefined) return { kind: 'known', value };
+  }
+  return { kind: 'unknown' };
+}
+
+function storedPrior<A>(section: WorldStateSection<A>, previous: WorldStateSnapshot): PriorSection<A> {
   if (!Object.hasOwn(previous, section.id)) return { kind: 'absent' };
   const decoded = decode(section, previous[section.id]);
   return decoded === undefined ? { kind: 'unknown' } : { kind: 'known', value: decoded };

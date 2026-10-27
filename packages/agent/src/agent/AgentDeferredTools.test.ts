@@ -332,12 +332,18 @@ describe('the deferred-tools section', () => {
       if (first.kind !== 'changed') return;
       expect(first.text).toContain('- mcp__calendar__create_event\n- mcp__tagma__read_block\n- mcp__tagma__search');
       expect(first.text).not.toContain('read_file');
-      expect(yield* renderWorldState([deferredToolsSection(catalog)], first.snapshot)).toEqual({ kind: 'unchanged' });
+      expect(yield* renderWorldState([deferredToolsSection(catalog)], first.snapshot)).toEqual({
+        kind: 'unchanged',
+        snapshot: first.snapshot,
+      });
       const gone = yield* renderWorldState([deferredToolsSection({ read_file: catalog.read_file! })], first.snapshot);
       expect(gone.kind).toBe('changed');
       if (gone.kind !== 'changed') return;
       expect(gone.snapshot).toEqual({});
-      expect(yield* renderWorldState([deferredToolsSection({ read_file: catalog.read_file! })], {})).toEqual({ kind: 'unchanged' });
+      expect(yield* renderWorldState([deferredToolsSection({ read_file: catalog.read_file! })], {})).toEqual({
+        kind: 'unchanged',
+        snapshot: {},
+      });
     }),
   );
 });

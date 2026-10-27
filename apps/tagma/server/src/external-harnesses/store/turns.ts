@@ -28,6 +28,7 @@ export const vendorSession = sqliteTable('vendor_session', {
   account: text('account'),
   replaced: text('replaced', { mode: 'json' }).$type<unknown>(),
   origin: text('origin', { mode: 'json' }).$type<unknown>(),
+  owed: text('owed'),
 });
 
 export type VendorAddress = { readonly run: string; readonly address: string | null };
@@ -189,14 +190,43 @@ export class VendorTurns {
   });
 
   based(unit: Unit<'machine'>, threadId: string, standing: readonly string[]): Effect.Effect<void, StoreFailure> {
-    return Effect.andThen(
-      this.rowsGone(unit, threadId),
-      this.inserted(
-        unit,
-        threadId,
-        standing.map((run) => ({ run, address: null })),
-      ),
+    return Effect.all(
+      [
+        this.rowsGone(unit, threadId),
+        this.inserted(
+          unit,
+          threadId,
+          standing.map((run) => ({ run, address: null })),
+        ),
+        this.heard(unit, threadId),
+      ],
+      { discard: true },
     );
+  }
+
+  readonly opened = Effect.fnUntraced(function* (this: VendorTurns, threadId: string, context: string | null) {
+    const { db } = this;
+    return yield* this.units.write(this.writes, (unit) =>
+      Effect.gen(function* () {
+        const standing = yield* unit.run(
+          db.select({ owed: vendorSession.owed }).from(vendorSession).where(eq(vendorSession.threadId, threadId)).get(),
+        );
+        const owed = [standing?.owed ?? null, context].filter((part): part is string => part !== null && part !== '');
+        const answer = owed.length === 0 ? null : owed.join('\n\n');
+        if (answer !== null)
+          yield* unit.run(
+            db
+              .insert(vendorSession)
+              .values({ threadId, account: null, replaced: null, origin: null, owed: answer })
+              .onConflictDoUpdate({ target: vendorSession.threadId, set: { owed: answer } }),
+          );
+        return answer;
+      }),
+    );
+  });
+
+  heard(unit: Unit<'machine'>, threadId: string): Effect.Effect<void, StoreFailure> {
+    return Effect.asVoid(unit.run(this.db.update(vendorSession).set({ owed: null }).where(eq(vendorSession.threadId, threadId))));
   }
 
   readonly cut = Effect.fnUntraced(function* (

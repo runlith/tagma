@@ -82,7 +82,7 @@ import { ProtocolDriver } from './protocol/driver.js';
 import { RunActivities } from './protocol/activities.js';
 import { ActivityLog } from '@runlith/activity/log';
 import { protocolStates } from './protocol/diagnosis.js';
-import { ProtocolStates } from './contract/service/protocol.js';
+import { HostedOpenings, ProtocolStates } from './contract/service/protocol.js';
 import { WorkPlaces } from '../threads/contract/service/working.js';
 import { ProjectPolicy } from '../graph/contract/service/serving.js';
 import { ProtocolRows } from './store/protocol.js';
@@ -477,6 +477,7 @@ export const externalHarnessesLayer = Layer.effectContext(
       Context.add(HarnessSpeech, harnessSpeech(records, threads, words, notices.wrote)),
       Context.add(ScreenAsks, screenTexts(records, threads, terminals, screens)),
       Context.add(ProtocolStates, protocolStates(records, threads, protocol.state)),
+      Context.add(HostedOpenings, HostedOpenings.of({ opened: (threadId, context) => turns.opened(threadId, context) })),
       Context.add(TransportSwitch, transportSwitch(records, lookup, store, yield* ThreadRebinding, registry, providers)),
       Context.add(HarnessImplementations, (name, retract) =>
         externalHarness(

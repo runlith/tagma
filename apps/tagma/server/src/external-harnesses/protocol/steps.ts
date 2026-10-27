@@ -641,6 +641,7 @@ export class ProtocolSteps {
             yield* rows.write(unit, link.threadId, seated.row);
             for (const at of trims) yield* turns.cut(unit, link.threadId, current.sessionKey, at);
             yield* turns.record(unit, link.threadId, projected.vendor);
+            if (projected.heard) yield* turns.heard(unit, link.threadId);
             yield* unit.afterCommit(
               Effect.sync(() => {
                 links.landed(link, seated.row);

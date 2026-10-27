@@ -37,13 +37,14 @@ describe('rendering a world state against what the model was last told', () => {
     Effect.fnUntraced(function* () {
       expect(yield* renderWorldState([section(() => ['reviewer'], { update: () => 'reworded' })], { skills: ['reviewer'] })).toEqual({
         kind: 'unchanged',
+        snapshot: { skills: ['reviewer'] },
       });
     }),
   );
   it.effect(
     'keeps an unreadable section’s admitted snapshot and invents nothing on a failed first read',
     Effect.fnUntraced(function* () {
-      expect(yield* renderWorldState([section(() => unreadable)], {})).toEqual({ kind: 'unchanged' });
+      expect(yield* renderWorldState([section(() => unreadable)], {})).toEqual({ kind: 'unchanged', snapshot: {} });
       expect(
         yield* renderWorldState([section(() => unreadable), section(() => ['other'], { id: 'files' })], { skills: ['reviewer'] }),
       ).toMatchObject({ kind: 'changed', text: 'baseline: other', snapshot: { skills: ['reviewer'], files: ['other'] } });
@@ -52,12 +53,13 @@ describe('rendering a world state against what the model was last told', () => {
   it.effect(
     'removes a delivered section from both the text and snapshot, but stays silent for an unseen section',
     Effect.fnUntraced(function* () {
-      expect(yield* renderWorldState([section(() => withdrawn)], {})).toEqual({ kind: 'unchanged' });
+      expect(yield* renderWorldState([section(() => withdrawn)], {})).toEqual({ kind: 'unchanged', snapshot: {} });
       expect(yield* renderWorldState([section(() => withdrawn)], { skills: ['reviewer'] })).toEqual({
         kind: 'changed',
         text: 'removed',
         content: [{ type: 'text', text: 'removed' }],
         snapshot: {},
+        told: { skills: null },
       });
     }),
   );
@@ -97,7 +99,26 @@ describe('rendering a world state against what the model was last told', () => {
       if (next.kind !== 'changed') return;
       expect(initial.content[0]?.deferredTools).toEqual(['read']);
       expect(next.content[0]?.deferredTools).toEqual(['read', 'write']);
-      expect(yield* renderWorldState([inventory], next.snapshot)).toEqual({ kind: 'unchanged' });
+      expect(yield* renderWorldState([inventory], next.snapshot)).toEqual({ kind: 'unchanged', snapshot: next.snapshot });
+    }),
+  );
+  it.effect(
+    'judges a section by what the model last heard of it, not by the snapshot: heard as it stands is silent, heard otherwise is an update, heard removed or never is a baseline',
+    Effect.fnUntraced(function* () {
+      const told = yield* renderWorldState([section(() => ['reviewer'])], {});
+      const reviewer = told.kind === 'changed' ? told.told.skills : undefined;
+      if (reviewer == null) return yield* Effect.die('the first rendering told no skills');
+      const heard = (digest: string | null) => new Map([['skills', digest]]);
+      expect((yield* renderWorldState([section(() => ['reviewer'])], {}, heard(reviewer))).kind).toBe('unchanged');
+      expect(yield* renderWorldState([section(() => ['deployer'])], { skills: ['deployer'] }, heard(reviewer))).toMatchObject({
+        kind: 'changed',
+        text: 'update: deployer',
+      });
+      expect(yield* renderWorldState([section(() => ['reviewer'])], { skills: ['reviewer'] }, heard(null))).toMatchObject({
+        kind: 'changed',
+        text: 'baseline: reviewer',
+      });
+      expect(yield* renderWorldState([section(() => withdrawn)], {}, heard(reviewer))).toMatchObject({ kind: 'changed', text: 'removed' });
     }),
   );
 });

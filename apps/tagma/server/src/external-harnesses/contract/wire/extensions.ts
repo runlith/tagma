@@ -35,6 +35,8 @@ export const Phased = Schema.Struct({ sessionId: Schema.String, phase: AgentPhas
 
 export const FAILURE = 'tagma/failure';
 
+export const OPENED = 'tagma/opened';
+
 export const MEASURED = 'tagma/measured';
 
 export const Measured = Schema.Struct({
