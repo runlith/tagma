@@ -12,7 +12,7 @@ export type TreeChange = { readonly status: string; readonly path: string };
 
 export type IgnoreRules = { readonly files: readonly string[]; readonly stamp: string };
 
-export type TreeSeen = TreeBasis & { readonly prefix: string };
+export type TreeSeen = TreeBasis & { readonly prefix: string; readonly base: string | null };
 
 function insideTree(prefix: string, path: string): string | null {
   if (prefix === '') return path;
@@ -175,13 +175,15 @@ const scopedPaths = (scope: TreeScope | null): ReadonlySet<string> | null => {
 
 const listed = (out: string): readonly string[] => out.split('\0').filter((path) => path !== '');
 
+type TreeMovement = { readonly paths: readonly string[] | null; readonly base: string | null };
+
 const movedPaths = Effect.fnUntraced(function* (
   git: Git['Service'],
   treeRoot: string,
   from: string | null,
   to: string | null,
   staged: boolean,
-): Effect.fn.Return<readonly string[] | null, OwnGitFailed> {
+): Effect.fn.Return<TreeMovement, OwnGitFailed> {
   const paths: string[] = [];
   if (staged && to !== null) {
     paths.push(
@@ -190,11 +192,12 @@ const movedPaths = Effect.fnUntraced(function* (
       ),
     );
   }
-  if (from === to) return paths;
-  if (from === null || to === null) return null;
-  if ((yield* quietGit(git, 'stamped', ['-C', treeRoot, 'rev-parse', '--verify', '-q', `${from}^{commit}`])) === null) return null;
+  if (from === to) return { paths, base: null };
+  if (from === null || to === null) return { paths: null, base: null };
+  const base = yield* quietGit(git, 'stamped', ['-C', treeRoot, 'rev-parse', '--verify', '-q', `${from}^{commit}`]);
+  if (base === null) return { paths: null, base: null };
   paths.push(...listed(yield* runGit(git, 'moved', ['-C', treeRoot, 'diff', '--name-only', '-z', '--no-renames', '--relative', from, to])));
-  return paths;
+  return { paths, base };
 });
 
 export const treeSeen = Effect.fnUntraced(function* (
@@ -210,21 +213,21 @@ export const treeSeen = Effect.fnUntraced(function* (
     const seen = named.size === 0 ? null : yield* statusOf(git, treeRoot, [...named].map(literal));
     const head = seen === null ? yield* quietGit(git, 'head', ['-C', treeRoot, 'rev-parse', '--verify', '-q', 'HEAD']) : seen.branch.head;
     const moved = yield* movedPaths(git, treeRoot, scope.since.head, head, scope.staged);
-    const extra = moved === null ? null : moved.filter((path) => !named.has(path));
+    const extra = moved.paths === null ? null : moved.paths.filter((path) => !named.has(path));
     const read = extra === null ? null : new Set([...named, ...extra]);
     if (extra !== null && read !== null && pathspecFits(read) && !extra.some(widens)) {
       const more = extra.length === 0 ? null : yield* statusOf(git, treeRoot, extra.map(literal));
       if (more === null || more.branch.head === head) {
         yield* Effect.annotateCurrentSpan('status', read.size);
         const rows = [...(seen === null ? [] : changesIn(seen.entries)), ...(more === null ? [] : changesIn(more.entries))];
-        return { head, prefix, rules: since, dirty: mergeScoped(scope.since.dirty, treeRelative(prefix, rows), read) };
+        return { head, prefix, base: moved.base, rules: since, dirty: mergeScoped(scope.since.dirty, treeRelative(prefix, rows), read) };
       }
     }
   }
   yield* Effect.annotateCurrentSpan('status', 'whole');
   const rules = yield* rulesOf(git, treeRoot, place);
   const seen = yield* statusOf(git, treeRoot, ['.']);
-  return { head: seen.branch.head, prefix, rules, dirty: treeRelative(prefix, changesIn(seen.entries)) };
+  return { head: seen.branch.head, prefix, base: null, rules, dirty: treeRelative(prefix, changesIn(seen.entries)) };
 });
 
 function parseDelta(out: string): TreeChange[] | null {
@@ -276,7 +279,10 @@ export const readTree = Effect.fnUntraced(function* <E, R>(
   if (stamped === null) return reading(null);
   const byPath = new Map<string, TreeChange>();
   if (seen.head !== null && stamped !== seen.head) {
-    if ((yield* quietGit(git, 'stamped', ['-C', treeRoot, 'rev-parse', '--verify', '-q', `${stamped}^{commit}`])) === null)
+    if (
+      stamped !== seen.base &&
+      (yield* quietGit(git, 'stamped', ['-C', treeRoot, 'rev-parse', '--verify', '-q', `${stamped}^{commit}`])) === null
+    )
       return reading(null);
     const delta = yield* runGit(git, 'delta', [
       '-C',

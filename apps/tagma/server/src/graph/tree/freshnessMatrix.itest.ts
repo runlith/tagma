@@ -140,17 +140,31 @@ layer(Layer.merge(twinWorldLayer, watchProcessLayer), { excludeTestServices: tru
       const first = yield* shadow.commitAct(tree, 'first');
       if (first === null) return yield* Effect.die('the first commit was not made');
       yield* file('moved.md', 'two');
-      yield* shadow.commitAct(tree, 'second');
+      const second = yield* shadow.commitAct(tree, 'second');
+      if (second === null) return yield* Effect.die('the second commit was not made');
+      yield* drivers.writeStamp(second);
       const settled = yield* reading;
       yield* run('reset', '-q', '--mixed', first);
       yield* file('late.md', 'untracked and never named');
       const reset = yield* readTree(git, tree, drivers.readStamp, { since: settled, paths: new Set(['other.md']), staged: false });
-      expect(reset.dirty).toEqual([{ status: 'M', path: 'moved.md' }]);
+      expect(reset).toMatchObject({
+        head: first,
+        stamped: second,
+        changes: [{ status: 'M', path: 'moved.md' }],
+        dirty: [{ status: 'M', path: 'moved.md' }],
+      });
       yield* run('rm', '-q', '--cached', 'kept.md');
       const unstaged = yield* readTree(git, tree, drivers.readStamp, { since: reset, paths: new Set(['other.md']), staged: false });
       expect(unstaged.dirty.map((change) => change.path)).toEqual(['moved.md']);
       const staged = yield* readTree(git, tree, drivers.readStamp, { since: reset, paths: new Set(['other.md']), staged: true });
       expect(staged.dirty.map((change) => change.path).toSorted()).toEqual(['kept.md', 'moved.md']);
+      const unknown = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+      yield* drivers.writeStamp(unknown);
+      expect(yield* readTree(git, tree, drivers.readStamp, { since: settled, paths: new Set(['other.md']), staged: false })).toMatchObject({
+        head: first,
+        stamped: unknown,
+        changes: null,
+      });
     }),
   );
 
