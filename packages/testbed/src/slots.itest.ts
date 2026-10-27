@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { budgetOf, memoryOf, SLOT_ENV } from './slots.ts';
 
@@ -10,6 +10,8 @@ const FILES = 12;
 type Run = {
   readonly child: ReturnType<typeof Bun.spawn>;
   readonly line: (pattern: RegExp) => Promise<string>;
+  readonly running: () => Promise<void>;
+  readonly kill: () => Promise<void>;
   readonly release: () => void;
 };
 
@@ -31,6 +33,7 @@ const pool = () => {
 import { existsSync, writeFileSync } from 'node:fs';
 import { getPriority } from 'node:os';
 test('holds', async () => {
+  writeFileSync(${JSON.stringify(join(dir, `up-${index}`))}, '');
   ${index === 0 ? `writeFileSync(${JSON.stringify(niceness)}, \`\${getPriority()} \${Bun.spawnSync(['/bin/sh', '-c', 'ps -o nice= -p $$']).stdout.toString().trim()}\`);` : ''}
   if (!${holding(index)}) await Bun.sleep(600);
   while (${holding(index)} && !existsSync(${JSON.stringify(release)})) await Bun.sleep(5);
@@ -39,7 +42,7 @@ test('holds', async () => {
       );
     const child = Bun.spawn(
       [process.execPath, CLI, 'bun', 'test', ...Array.from({ length: FILES }, (_, index) => `./w${index}.itest.ts`)],
-      { cwd: dir, env: { ...env, RUNLITH_TEST_REPORT: join(dir, 'report.jsonl') }, stdout: 'ignore', stderr: 'pipe' },
+      { cwd: dir, env: { ...env, RUNLITH_TEST_REPORT: join(dir, 'report.jsonl') }, stdout: 'ignore', stderr: 'pipe', detached: true },
     );
     let seen = '';
     const reader = (child.stderr as ReadableStream<Uint8Array>).getReader();
@@ -52,7 +55,28 @@ test('holds', async () => {
         seen += new TextDecoder().decode(read.value);
       }
     };
-    return { child, line, release: () => writeFileSync(release, '') };
+    const running = (): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const up = (): boolean => readdirSync(dir).some((entry) => entry.startsWith('up-'));
+        const watcher = watch(dir, () => {
+          if (!up()) return;
+          watcher.close();
+          resolve();
+        });
+        child.exited.then(() => {
+          watcher.close();
+          reject(new Error(`${name} ended before any of its tests ran: ${seen}`));
+        });
+        if (!up()) return;
+        watcher.close();
+        resolve();
+      });
+    const kill = async (): Promise<void> => {
+      process.kill(-child.pid, 'SIGKILL');
+      while (!(await reader.read()).done);
+      await child.exited;
+    };
+    return { child, line, running, kill, release: () => writeFileSync(release, '') };
   };
   return { root, units, start };
 };
@@ -92,16 +116,16 @@ test('runs share the machine budget at entry, never exceed it, and get back the 
     if (budget === 1) {
       const admitted = await Promise.race([firstHeld.then(() => first), secondHeld.then(() => second)]);
       expect(await (admitted === first ? firstHeld : secondHeld)).toBe(1);
-      admitted.child.kill('SIGKILL');
-      await admitted.child.exited;
+      await admitted.running();
+      await admitted.kill();
       expect(await (admitted === first ? secondHeld : firstHeld)).toBe(1);
     } else {
       const shares = await Promise.all([firstHeld, secondHeld]);
       expect([...shares].sort((a, b) => a - b)).toEqual([Math.floor(budget / 2), Math.ceil(budget / 2)]);
       expect(shares[0]! + shares[1]!).toBeLessThanOrEqual(budget);
 
-      first.child.kill('SIGKILL');
-      await first.child.exited;
+      await first.running();
+      await first.kill();
       const next = start('next');
       runs.push(next);
       expect(await held(next)).toBe(budget - shares[1]!);
