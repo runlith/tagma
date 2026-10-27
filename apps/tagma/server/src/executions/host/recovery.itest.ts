@@ -1,8 +1,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
 import { afterAll, expect, test } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect } from 'effect';
+import { Effect, Fiber } from 'effect';
+import { TestClock } from 'effect/testing';
 import { fixtureRoot } from '../../platform/testing/roots.js';
 import { endByRecovery, listByRecovery, operationCommand, readRecoveryVersion, shutdownCommand, type RecoveryInput } from './recovery.js';
 
@@ -19,7 +21,7 @@ const script = [
   'code=$(cat "$state/.exit" 2>/dev/null || echo 0)',
   'if [ "$code" != "0" ]; then cat "$state/.stderr" >&2 2>/dev/null; exit "$code"; fi',
   'if [ -f "$state/.killed" ]; then kill -KILL $$; fi',
-  'if [ -f "$state/.sleep$n" ]; then sleep "$(cat "$state/.sleep$n")"; elif [ -f "$state/.sleep" ]; then sleep "$(cat "$state/.sleep")"; fi',
+  'if [ -p "$state/.started" ]; then echo started > "$state/.started"; cat "$state/.gate" > /dev/null; fi',
   'cat "$state/.page$n" 2>/dev/null || true',
   'exit 0',
   '',
@@ -108,13 +110,26 @@ it.live('a program that refuses answers its own first line', () =>
   }),
 );
 
-it.live('a program slower than the five seconds a listing once had is waited for and its answer taken', () =>
-  Effect.gen(function* () {
-    const measured = yield* listByRecovery(
-      world('slow', { '.sleep': '5.5', '.page1': `${row('11111111-1111-4111-8111-111111111111', 'running')}\n` }),
-    );
-    expect(measured).toMatchObject({ _tag: 'Measured', live: 1 });
-  }),
+it.effect(
+  'a listing sets no deadline of its own: its program still running an hour later on the clock is waited for and its answer taken',
+  () =>
+    Effect.gen(function* () {
+      const input = world('slow', { '.page1': `${row('11111111-1111-4111-8111-111111111111', 'running')}\n` });
+      const started = join(input.state, '.started');
+      expect(Bun.spawnSync(['mkfifo', started, join(input.state, '.gate')]).exitCode).toBe(0);
+      const listing = yield* Effect.forkChild(listByRecovery(input));
+      const settled = Effect.asVoid(Fiber.await(listing));
+      yield* Effect.race(
+        Effect.promise(() => readFile(started, 'utf8')),
+        settled,
+      );
+      yield* TestClock.adjust('1 hour');
+      yield* Effect.race(
+        Effect.promise(() => writeFile(join(input.state, '.gate'), 'go\n')),
+        settled,
+      );
+      expect(yield* Fiber.join(listing)).toMatchObject({ _tag: 'Measured', live: 1 });
+    }),
 );
 
 test('the manual command names the bundle, the state and a key of its own', () => {
