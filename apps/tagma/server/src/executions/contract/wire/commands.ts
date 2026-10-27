@@ -259,6 +259,7 @@ export const CommandOutputReading = Schema.Struct({
   first: Schema.Boolean,
   evicted: Schema.optional(Schema.Boolean),
   outputFile: Schema.optional(OutputFile),
+  outputUnkept: Schema.optional(Schema.NonEmptyString),
   measurement: Schema.optional(Schema.NonEmptyString),
 });
 export type CommandOutputReading = typeof CommandOutputReading.Type;

@@ -18,7 +18,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { ChildProcess } from 'effect/process';
 import type { CallDecisionAnswer } from '@runlith/executions/protocol/call';
 import type { Cleanup, ExecutionRef, HostRequestRef } from '@runlith/executions/protocol/execution';
-import { byteOffset, type OutputFile } from '@runlith/executions/protocol/record';
+import { byteOffset } from '@runlith/executions/protocol/record';
 import { type StoppableProgress, stoppableProgress } from './testing/progress';
 
 import { createTools } from './index';
@@ -36,6 +36,8 @@ import {
   type CommandRun,
   type CommandRunDeadline,
   type CommandWork,
+  type KeptOutput,
+  type RuledAnswer,
 } from './CommandWork';
 import { exists, host, options, recorder } from './testing/toolHarness';
 
@@ -109,7 +111,7 @@ type FakeOptions = {
   readonly failStream?: 'stdout' | 'stderr';
   readonly stopOnSignal?: boolean;
   readonly stopGate?: Deferred.Deferred<void>;
-  readonly outputFile?: OutputFile;
+  readonly kept?: KeptOutput;
 };
 
 const builtOwner = Effect.fnUntraced(function* (options: FakeOptions) {
@@ -157,9 +159,9 @@ const builtOwner = Effect.fnUntraced(function* (options: FakeOptions) {
           detached: true,
         }).pipe(Scope.provide(scope));
         const ended = yield* Deferred.make<void>();
-        const result: Effect.Effect<CallDecisionAnswer, CommandUnreadable> = handle.exitCode.pipe(
+        const result: Effect.Effect<RuledAnswer, CommandUnreadable> = handle.exitCode.pipe(
           Effect.map(
-            (code): CallDecisionAnswer =>
+            (code): RuledAnswer =>
               options.decide?.(execution, operation) ?? {
                 _tag: 'Decided',
                 decision: { _tag: 'Completed', operation, execution, sequence: 0 },
@@ -171,6 +173,7 @@ const builtOwner = Effect.fnUntraced(function* (options: FakeOptions) {
                 cleanup: 'complete',
                 retention: 'retained',
                 cost: { _tag: 'Unmeasured', reason: 'unsupported', detail: 'the fake owner measures nothing' },
+                kept: options.kept,
               },
           ),
           Effect.catchCause(() =>
@@ -241,7 +244,6 @@ const builtOwner = Effect.fnUntraced(function* (options: FakeOptions) {
             options.failStream === 'stderr'
               ? Stream.fail(new CommandUnreadable({ reason: 'the record evicted bytes this reader had not reached' }))
               : handle.stderr.pipe(Stream.mapError(() => new CommandUnreadable({ reason: 'stderr' }))),
-          outputFile: Effect.succeed(options.outputFile),
         };
         const settled = yield* Deferred.make<A, CommandUnreadable>();
         yield* Effect.forkIn(
@@ -868,24 +870,25 @@ it.live('a failed output stream discloses that the printed output may be incompl
   }),
 );
 
-it.live('an answer that cannot carry the whole output names the file the host kept it in, and one that carries it names none', () =>
+it.live('a kept file that lost the start of the output is named with the bytes gone, and output that could not be kept says why', () =>
   Effect.gen(function* () {
     const root = yield* createTempDir();
-    const kept: OutputFile = { path: join(root, 'record', 'output.log'), from: byteOffset(0n), through: byteOffset(40_000n) };
-    const owner = yield* fakeOwner({ outputFile: kept });
-    const bash = shellOf(createTools(options({ cwd: root, world: worldWith(owner.work) })));
-    const lost = yield* fakeOwner({ outputFile: { ...kept, from: byteOffset(4096n) } });
-    const partial = shellOf(createTools(options({ cwd: root, world: worldWith(lost.work) })));
+    const file = { path: join(root, 'record', 'output.log'), from: byteOffset(4096n), through: byteOffset(40_000n) };
+    const lost = yield* fakeOwner({ kept: { _tag: 'Kept', file } });
+    const reason = 'a process it started outlived it and still holds its output open';
+    const unkept = yield* fakeOwner({ kept: { _tag: 'Unkept', reason } });
 
-    const long = yield* run(bash, { command: 'seq 1 9000', description: 'Print many lines' });
-    const short = yield* run(bash, { command: 'printf hello', description: 'Print a word' });
-    const gone = yield* run(partial, { command: 'printf hello', description: 'Print a word' });
-    expect(long.text).toContain(kept.path);
-    expect(long.text).toContain('9000');
-    expect(short.text).toContain('hello');
-    expect(short.text).not.toContain(kept.path);
-    expect(gone.text).toContain(kept.path);
+    const gone = yield* run(shellOf(createTools(options({ cwd: root, world: worldWith(lost.work) }))), {
+      command: 'printf hello',
+      description: 'Print a word',
+    });
+    const held = yield* run(shellOf(createTools(options({ cwd: root, world: worldWith(unkept.work) }))), {
+      command: 'seq 1 9000',
+      description: 'Print many lines',
+    });
+    expect(gone.text).toContain(file.path);
     expect(gone.text).toContain('4096');
+    expect(held.text).toContain(reason);
   }),
 );
 

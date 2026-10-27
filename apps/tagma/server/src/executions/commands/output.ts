@@ -1,5 +1,6 @@
 import { Effect, Exit } from 'effect';
 import { TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_LINES } from '@runlith/agent/ToolOutputSpool';
+import { keptOutputLine, keptOutputOf, type KeptOutput } from '@runlith/agent-tools/CommandWork';
 import { ByteOffset, offsetValue, byteOffset } from '@runlith/executions/protocol/record';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import type { ThreadId } from '../../platform/contract/wire/thread.js';
@@ -80,14 +81,10 @@ export const makeCommandOutput = ({
     return { output, skipped, whole: whole && output === joined };
   });
 
-  const kept = Effect.fn('CommandOutput.kept')(function* (execution: ExecutionRef) {
+  const kept = Effect.fn('CommandOutput.kept')(function* (execution: ExecutionRef): Effect.fn.Return<KeptOutput> {
     const read = yield* Effect.result(terminals.state(execution));
-    if (read._tag === 'Success') return read.success?.outputFile;
-    yield* Effect.logInfo('the summary of an ended command could not be read for the file of its output', {
-      execution: execution.execution,
-      reason: read.failure._tag,
-    });
-    return undefined;
+    if (read._tag === 'Success') return read.success === undefined ? { _tag: 'Empty' } : keptOutputOf(read.success);
+    return { _tag: 'Unkept', reason: `the state of the command could not be read: ${read.failure._tag}` };
   });
 
   const take = Effect.fn('CommandOutput.take')(function* (execution: ExecutionRef, thread: ThreadId) {
@@ -151,7 +148,8 @@ export const makeCommandOutput = ({
                   ? unread(execution)
                   : Effect.void,
           );
-      const file = status.phase === 'ended' && !evicted ? yield* kept(execution) : undefined;
+      const standing = status.phase === 'ended' && !evicted ? yield* kept(execution) : undefined;
+      const said = standing === undefined || keptOutputLine(standing, whole) === null ? undefined : standing;
       return {
         execution,
         label: reading.command.label,
@@ -161,7 +159,8 @@ export const makeCommandOutput = ({
         skippedBytes: Number(skipped),
         first: remembered === undefined,
         evicted: evicted ? true : undefined,
-        outputFile: file !== undefined && (!whole || file.from !== '0') ? file : undefined,
+        outputFile: said?._tag === 'Kept' ? said.file : undefined,
+        outputUnkept: said?._tag === 'Unkept' ? said.reason : undefined,
         measurement: typeof measured === 'string' && measured !== '' ? measured : undefined,
       };
     }),

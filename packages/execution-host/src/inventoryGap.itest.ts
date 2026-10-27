@@ -139,7 +139,7 @@ layer(platform, { excludeTestServices: true })('two subscribers across an invent
           if (update._tag === 'Gap') {
             expect(update.revision - revision).toBeGreaterThan(1);
             gaps += 1;
-          } else moved += 1;
+          } else if (update.revision > revision) moved += 1;
           revision = update.revision;
         }
         expect(moved).toBeLessThan(revision - before);

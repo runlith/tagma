@@ -2,6 +2,7 @@ import { Effect, Fiber, type Result, Stream } from 'effect';
 import {
   CommandRefused,
   CommandUnreadable,
+  keptOutputOf,
   type CommandPhase,
   type CommandRunDeadline,
   type RuledAnswer,
@@ -151,7 +152,8 @@ export const decided = (
       }),
     ),
     Stream.filter(
-      (delivery): delivery is Extract<typeof delivery, { readonly _tag: 'State' }> => delivery._tag === 'State' && ended(delivery.summary),
+      (delivery): delivery is Extract<typeof delivery, { readonly _tag: 'State' }> =>
+        delivery._tag === 'State' && ended(delivery.summary) && keptOutputOf(delivery.summary)._tag !== 'Open',
     ),
     Stream.map((delivery) => commandResult(operation, execution, delivery.summary)),
     Stream.runHead,
@@ -159,8 +161,8 @@ export const decided = (
     Effect.map((found) =>
       found._tag === 'Some'
         ? found.value
-        : ending === 'completed' && last?.state.phase === 'ended'
-          ? commandResult(operation, execution, last)
+        : last !== undefined && (ended(last) || (ending === 'completed' && last.state.phase === 'ended'))
+          ? unsettled(commandResult(operation, execution, last))
           : ({
               _tag: 'Unavailable',
               operation,
@@ -173,8 +175,13 @@ export const decided = (
 
 const ended = (summary: ExecutionSummary): boolean => summary.decision !== undefined || summary.state.unacquired !== undefined;
 
+const unsettled = (result: RuledAnswer): RuledAnswer =>
+  result.kept?._tag === 'Open'
+    ? { ...result, kept: { _tag: 'Unkept', reason: 'the execution host stopped reporting the command before its output ended' } }
+    : result;
+
 export const commandResult = (operation: HostRequestRef, execution: ExecutionRef, summary: ExecutionSummary): RuledAnswer => {
-  const result = callResultOf(operation, execution, summary);
+  const result = { ...callResultOf(operation, execution, summary), kept: keptOutputOf(summary) };
   const processes = summary.processes;
   return processes === undefined || (processes.rulings.length === 0 && processes.omitted === 0)
     ? result

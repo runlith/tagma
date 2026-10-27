@@ -709,7 +709,8 @@ export const makeSegmentRecord = Effect.fnUntraced(function* (opening: Opening) 
 
   const keepOutput = Effect.fnUntraced(function* (rebuild: boolean) {
     const held = (yield* Ref.get(state)).streams.get(OUTPUT);
-    if (held === undefined || held.ending !== 'eof' || held.failure !== undefined || held.durableThrough === held.retainedFrom) return;
+    if (held === undefined || held.ending !== (rebuild ? 'eof' : 'open')) return;
+    if (held.failure !== undefined || held.durableThrough === held.retainedFrom) return;
     const standing = rebuild ? yield* Effect.result(writer.keptOutput) : undefined;
     if (standing !== undefined && Result.isFailure(standing)) {
       yield* Effect.logWarning(`the kept output of ${ref.execution} could not be looked up`, standing.failure);
@@ -736,10 +737,11 @@ export const makeSegmentRecord = Effect.fnUntraced(function* (opening: Opening) 
       if (output.ending !== 'open') return [Effect.void, current];
       const settled = Deferred.makeUnsafe<void>();
       settling = settled;
+      const ending = sources.some((held) => held.ending === 'error') ? 'error' : 'eof';
       return [
-        endOne(OUTPUT, sources.some((held) => held.ending === 'error') ? 'error' : 'eof').pipe(
+        (ending === 'eof' ? keepOutput(false) : Effect.void).pipe(
+          Effect.andThen(endOne(OUTPUT, ending)),
           Effect.catchTag('StreamMissing', () => Effect.void),
-          Effect.andThen(keepOutput(false)),
           Effect.ensuring(Deferred.succeed(settled, undefined)),
         ),
         current,

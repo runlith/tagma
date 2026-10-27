@@ -107,7 +107,6 @@ const cannedWork = (exit: number, started: Effect.Effect<void> = Effect.void, en
       ),
       stdout: Stream.empty,
       stderr: Stream.empty,
-      outputFile: Effect.succeed(undefined),
     };
     return Effect.succeed({ run, observed: observe(run) });
   },

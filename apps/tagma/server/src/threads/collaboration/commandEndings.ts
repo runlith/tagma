@@ -5,7 +5,7 @@ import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import type { ExecutionSummary } from '@runlith/executions/protocol/runtime';
 import type { WriteUnit } from '../../platform/contract/service/units.js';
-import { cleanupWords, lifeEnded, outputFileWords, type CommandLimit } from '@runlith/agent-tools/CommandWork';
+import { cleanupWords, keptOutputLine, keptOutputOf, lifeEnded, type CommandLimit } from '@runlith/agent-tools/CommandWork';
 import type { CommandDelivery as CommandDeliveryObligation, CommandRecord } from '../../executions/contract/wire/commands.js';
 import { copyHead } from '../../executions/commands/ruleResolution.js';
 import { lastLines, recordTail } from '../../executions/commands/outputTail.js';
@@ -178,7 +178,6 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
     const limit = expired ? yield* life(obligation.execution, record) : null;
     const printed = yield* tail(obligation.execution);
     const notice = endingNotice(obligation.execution, record, answer.summary, printed === null ? null : printed.text);
-    const file = answer.summary.outputFile;
     return {
       notice,
       text: endingText(
@@ -187,7 +186,7 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
         cleanupWords(answer.summary.state.cleanup),
         decision?._tag === 'Cancelled' ? `${decision.cause}: ${decision.trigger}` : null,
         measured.success ?? '',
-        file !== undefined && (printed === null || !printed.whole || file.from !== '0') ? outputFileWords(file) : null,
+        keptOutputLine(keptOutputOf(answer.summary), printed !== null && printed.whole),
       ),
     };
   });

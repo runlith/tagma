@@ -9,7 +9,7 @@ import {
   IN_BACKGROUND,
   lifeEnded,
   lifeWords,
-  outputFileWords,
+  keptOutputLine,
   waitWords,
   type CommandAcceptance,
   type CommandLimit,
@@ -317,15 +317,8 @@ export const finishedAnswer = (
     return tail;
   };
   const whole = compose(null);
-  const kept = result.outputFile;
-  const file = kept !== null && kept._tag === 'Success' ? kept.success : undefined;
-  const cut = result.cut || printedTail.dropped || whole.dropped;
-  const answer =
-    file !== undefined && (cut || file.from !== '0')
-      ? compose(outputFileWords(file))
-      : cut && kept !== null && kept._tag === 'Failure'
-        ? compose(`The file holding its whole output could not be read: ${kept.failure.reason}.`)
-        : whole;
+  const line = result.kept === null ? null : keptOutputLine(result.kept, !(result.cut || printedTail.dropped || whole.dropped));
+  const answer = line === null ? whole : compose(line);
 
   const ending =
     settled.notStarted !== null

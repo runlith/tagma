@@ -6,6 +6,7 @@ import type { LimitProvenance } from '@runlith/executions/protocol/command';
 import type { ProcessRuling } from '@runlith/executions/protocol/stop';
 import type { Cleanup, ExecutionRef, HostRequestKey, HostRequestRef } from '@runlith/executions/protocol/execution';
 import type { OutputFile } from '@runlith/executions/protocol/record';
+import type { ExecutionSummary } from '@runlith/executions/protocol/runtime';
 
 export const COMMAND_WAIT = { defaultMs: 2 * 60_000, ceilingMs: LONGEST_ACT_MS } as const;
 
@@ -28,7 +29,41 @@ export type CommandPhase = 'queued' | 'running' | 'ended';
 
 export type RuledAnswer = CallDecisionAnswer & {
   readonly ruled?: { readonly rulings: ReadonlyArray<ProcessRuling>; readonly omitted: number };
+  readonly kept?: KeptOutput;
 };
+
+export type KeptOutput =
+  | { readonly _tag: 'Kept'; readonly file: OutputFile }
+  | { readonly _tag: 'Unkept'; readonly reason: string }
+  | { readonly _tag: 'Empty' }
+  | { readonly _tag: 'Open' };
+
+export const keptOutputOf = (summary: ExecutionSummary): KeptOutput => {
+  if (summary.outputFile !== undefined) return { _tag: 'Kept', file: summary.outputFile };
+  const output = summary.streams.find((positions) => positions.stream === 'output');
+  if (output === undefined || summary.state.unacquired !== undefined) return { _tag: 'Empty' };
+  if (output.ending === 'error') return { _tag: 'Unkept', reason: 'its output stream ended in error' };
+  if (output.ending === 'eof') {
+    return output.durableThrough === output.retainedFrom
+      ? { _tag: 'Empty' }
+      : { _tag: 'Unkept', reason: 'the execution host kept no file of it' };
+  }
+  const cleanup = summary.state.cleanup;
+  if (cleanup === 'residual') return { _tag: 'Unkept', reason: 'a process it started outlived it and still holds its output open' };
+  if (cleanup === 'unverifiable') {
+    return { _tag: 'Unkept', reason: 'whether the processes holding its output open are gone could not be verified' };
+  }
+  return { _tag: 'Open' };
+};
+
+export const keptOutputLine = (kept: KeptOutput, whole: boolean): string | null =>
+  kept._tag === 'Kept' && (!whole || kept.file.from !== '0')
+    ? outputFileWords(kept.file)
+    : kept._tag === 'Unkept' && !whole
+      ? unkeptWords(kept.reason)
+      : null;
+
+export const unkeptWords = (reason: string): string => `Its output could not be kept as a file: ${reason}.`;
 
 export class CommandUnreadable extends Data.TaggedError('CommandUnreadable')<{
   readonly reason: string;
@@ -68,7 +103,6 @@ export type CommandRun = {
   readonly measured: (words: string) => Effect.Effect<void, CommandUnreadable>;
   readonly stdout: Stream.Stream<Uint8Array, CommandUnreadable>;
   readonly stderr: Stream.Stream<Uint8Array, CommandUnreadable>;
-  readonly outputFile: Effect.Effect<OutputFile | undefined, CommandUnreadable>;
 };
 
 export type CommandObservation<A> = (run: CommandRun) => Effect.Effect<A>;

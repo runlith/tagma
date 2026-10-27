@@ -131,10 +131,6 @@ export const commandRun = Effect.fnUntraced(function* (
       road.managed.measured(execution, words).pipe(Effect.mapError((failure) => new CommandUnreadable({ reason: refusalText(failure) }))),
     stdout: bytes(road.executions, execution, 'stdout', road.binding.credits),
     stderr: bytes(road.executions, execution, 'stderr', road.binding.credits),
-    outputFile: road.executions.state(execution).pipe(
-      Effect.map((summary) => summary?.outputFile),
-      Effect.mapError((failure) => new CommandUnreadable({ reason: refusalText(failure) })),
-    ),
   };
 });
 

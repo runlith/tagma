@@ -24,7 +24,7 @@ import {
 } from './execution.js';
 import type { CommandTimeRecord } from '../contract/wire/commands.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
-import { outputFileWords } from '@runlith/agent-tools/CommandWork';
+import { outputFileWords, unkeptWords } from '@runlith/agent-tools/CommandWork';
 import { elapsedWords } from '../../platform/contract/wire/text.js';
 
 const refusedText = (answer: VoiceRefused): string => refusalLines(answer).join('\n');
@@ -59,6 +59,7 @@ export const outputText = (answer: Answered<CommandOutputReading>): string => {
   if (answer.skippedBytes > 0) lines.push(`(${answer.skippedBytes} bytes before this window were not read)`);
   lines.push(answer.output === '' ? (answer.first ? '(no output)' : '(no new output)') : answer.output);
   if (answer.outputFile !== undefined) lines.push('', outputFileWords(answer.outputFile));
+  if (answer.outputUnkept !== undefined) lines.push('', unkeptWords(answer.outputUnkept));
   if (answer.measurement !== undefined) lines.push('', answer.measurement);
   return lines.join('\n');
 };
