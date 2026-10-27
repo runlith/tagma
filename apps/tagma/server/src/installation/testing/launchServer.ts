@@ -70,23 +70,25 @@ await Effect.runPromise(
                   process.execPath,
                   '-e',
                   `
-          const { writeFileSync } = require('node:fs');
+          const { renameSync, writeFileSync } = require('node:fs');
           process.on('SIGTERM', () => { process.send?.(${JSON.stringify(STANDING_BY)}); process.exit(0); });
-          writeFileSync(${JSON.stringify(marker)}, String(process.pid));
+          writeFileSync(${JSON.stringify(marker)} + '.' + process.pid, String(process.pid));
+          renameSync(${JSON.stringify(marker)} + '.' + process.pid, ${JSON.stringify(marker)});
           setInterval(() => {}, 1000);
         `,
                 ];
                 const controller = new AbortController();
+                let answered = false;
                 const started = launch!.start(command, process.env, controller.signal).then(
                   () => ({ started: true }),
                   (cause: unknown) => ({ failure: String(cause) }),
                 );
+                void started.then(() => {
+                  answered = true;
+                });
                 if (path === '/pending') return Response.json(await started);
-                const until = Date.now() + 5000;
-                while (!existsSync(marker)) {
-                  if (Date.now() >= until) throw new Error('the candidate did not start');
-                  await Bun.sleep(20);
-                }
+                while (!existsSync(marker) && !answered) await Bun.sleep(20);
+                if (!existsSync(marker)) return Response.json(await started);
                 const pid = Number(readFileSync(marker, 'utf8'));
                 controller.abort(new Error('cancelled'));
                 return Response.json({ ...(await started), pid });
