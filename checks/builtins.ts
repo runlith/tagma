@@ -38,9 +38,9 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: what the Holdings judge reads about a path before folding it — the probe of its record rows, head, working bytes and git letters, and the preparation of the contents, version texts and hunks those rows fold over; both halves share the same probe and prepared shapes.',
           },
           {
-            lines: 700,
+            lines: 736,
             path: 'apps/tagma/server/src/enforcement/remeasure/driver.ts',
-            why: 'One subject: the remeasurement lifecycle of an open checkout — Start waiters, rule-slot scheduling with its debt and origin-tracing lanes, HEAD observation and cancellation share the same copy and confirmed measurement boundary.',
+            why: 'One subject: the remeasurement lifecycle of an open checkout — Start waiters, rule-slot scheduling with its per-request answers, pauses, debt and origin-tracing lanes, HEAD observation and cancellation share the same copy and confirmed measurement boundary.',
           },
           {
             lines: 698,

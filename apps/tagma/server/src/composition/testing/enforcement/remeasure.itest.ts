@@ -324,6 +324,34 @@ layer(enforceFixture(), { excludeTestServices: true })('remeasurement', (it) => 
     ),
   );
 
+  it.effect('an opening is ready after one pass even when enforce_rule’s re-measurement already waits out its pause', () =>
+    withCase((scene) =>
+      Effect.gen(function* () {
+        const { demo } = scene;
+        const { id, rule } = yield* scene.enforced('gate');
+        yield* scene.put('src/core/view.ts', "import { model } from './model';\nexport const view = model;\n");
+        yield* scene.committed('the view drops the panel outside Tagma');
+        const covering = fixedCoverage(demo.projectId, [{ checkout: 'demo', root: demo.demoRoot }]);
+        const enforcedPlaced = yield* Deferred.make<void>();
+        let opens = 0;
+        const driver = yield* driverOver({
+          graphOf: () =>
+            Effect.suspend(() => (++opens === 1 ? Deferred.await(enforcedPlaced) : Effect.void)).pipe(
+              Effect.as(withLanes(demo.context, scene.workers)),
+            ),
+          delayMs: 3_600_000,
+          coverage: {
+            ...covering,
+            covered: (projectId) => Deferred.succeed(enforcedPlaced, undefined).pipe(Effect.andThen(covering.covered(projectId))),
+          },
+        });
+        yield* driver.enforced({ projectId: demo.projectId, root: demo.demoRoot, rule });
+        yield* driver.ready(demo.projectId, demo.demoRoot);
+        expect((yield* scene.documentOf(id))?.debt).toEqual([]);
+      }),
+    ),
+  );
+
   it.effect('a carried crossing removed before remeasurement names no holder while another crossing stands', () =>
     withCase((scene) =>
       Effect.gen(function* () {

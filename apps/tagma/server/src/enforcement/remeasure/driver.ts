@@ -57,6 +57,8 @@ type Watched = {
   readonly fiber: Fiber.Fiber<void>;
 };
 
+type Ask = { readonly done: Deferred.Deferred<void, GateRefusal<'inspection-failed'>>; readonly pause: number };
+
 type Slot = {
   readonly key: string;
   readonly checkout: Checkout;
@@ -68,15 +70,20 @@ type Slot = {
   running: boolean;
   due: boolean;
   refresh: boolean;
-  completion: Deferred.Deferred<void, GateRefusal<'inspection-failed'>>;
+  pause: number;
+  soonest: number;
+  wake: Deferred.Deferred<void> | null;
+  asked: Ask[];
+  covered: Ask[];
   fiber?: Fiber.Fiber<void>;
-  failed: boolean;
 };
+
+type Again = (withOwes: boolean, urgent: boolean) => void;
 
 type Traced = {
   readonly tracing: Tracing;
   readonly owes: readonly string[];
-  readonly again: (withOwes: boolean) => void;
+  readonly again: Again;
 };
 
 type Starting = {
@@ -138,31 +145,43 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
       if (slots.get(slot.key) !== slot) return Effect.void;
       if (slot.due) {
         slot.due = false;
-        wait(slot);
-      } else if (!slot.waiting && slot.hints.length === 0) {
-        slots.delete(slot.key);
-        return Effect.asVoid(Deferred.succeed(slot.completion, undefined));
-      }
+        const pause = slot.soonest;
+        slot.soonest = delay;
+        wait(slot, pause);
+      } else if (!slot.waiting && slot.hints.length === 0) slots.delete(slot.key);
       return Effect.void;
     });
 
-  const failedPass = (slot: Slot, cause: Cause.Cause<unknown>, owes: readonly string[], again: (withOwes: boolean) => void) => {
+  const taken = (slot: Slot, all: boolean): readonly Ask[] => {
+    const asks = all ? [...slot.covered, ...slot.asked] : slot.covered;
+    slot.covered = [];
+    if (all) slot.asked = [];
+    return asks;
+  };
+
+  const answered = (slot: Slot): Effect.Effect<void> =>
+    Effect.suspend(() => Effect.forEach(taken(slot, false), (ask) => Deferred.succeed(ask.done, undefined), { discard: true }));
+
+  const refused = (asks: readonly Ask[], refusal: GateRefusal<'inspection-failed'>): Effect.Effect<void> =>
+    Effect.forEach(asks, (ask) => Deferred.fail(ask.done, refusal), { discard: true });
+
+  const failedPass = (slot: Slot, cause: Cause.Cause<unknown>, owes: readonly string[], again: Again) => {
     if (Cause.hasInterruptsOnly(cause)) {
       if (slots.get(slot.key) === slot) slots.delete(slot.key);
       return parkedAll(owes, `the re-measurement of ${slot.checkout.root} was interrupted`).pipe(Effect.andThen(Effect.interrupt));
     }
     slot.failures += 1;
     const kept = slot.failures < FAILED_RUNS_KEPT;
-    again(kept);
+    again(kept, false);
     slot.due ||= kept;
     if (!kept) slot.failures = 0;
-    slot.failed = !kept;
+    const covered = taken(slot, false);
     const reason = `the rule ${slot.rule} could not be re-measured ${FAILED_RUNS_KEPT} times in a row: ${Cause.pretty(cause)}`;
     return Effect.andThen(
       kept
         ? Effect.void
-        : Deferred.fail(
-            slot.completion,
+        : refused(
+            covered,
             new GateRefusal('inspection-failed', reason, ['fix the reported inspection failure, then run the act again']),
           ).pipe(Effect.andThen(parkedAll(owes, reason))),
       Effect.logWarning('an enforced rule could not be re-measured', {
@@ -188,10 +207,16 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
     slot.refresh = false;
     slot.hints = [];
     slot.owes.clear();
-    const again = (withOwes: boolean) => {
+    slot.covered = slot.asked;
+    slot.asked = [];
+    const again: Again = (withOwes, urgent) => {
       slot.hints = [...hints, ...slot.hints];
       slot.refresh ||= refresh;
-      if (withOwes) for (const key of owes) slot.owes.add(key);
+      if (!withOwes) return;
+      for (const key of owes) slot.owes.add(key);
+      const back = taken(slot, false);
+      slot.asked = [...back, ...slot.asked];
+      if (urgent) for (const ask of back) slot.soonest = Math.min(slot.soonest, ask.pause);
     };
     return inGraph(slot, remeasureRule(slot.checkout.projectId, slot.rule, hints, refresh)).pipe(
       Effect.flatMap((exit) => {
@@ -199,11 +224,11 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
         slot.failures = 0;
         const measured = exit.value;
         if (measured._tag === 'Stale') {
-          again(true);
+          again(true, true);
           slot.due = true;
           return Effect.succeed(undefined);
         }
-        if (measured._tag !== 'Measured') return Effect.as(acknowledged(owes), undefined);
+        if (measured._tag !== 'Measured') return Effect.as(Effect.andThen(answered(slot), acknowledged(owes)), undefined);
         return Effect.forEach(
           measured.notices,
           (notice) =>
@@ -219,14 +244,12 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
             ),
           { discard: true },
         ).pipe(
+          Effect.andThen(answered(slot)),
           Effect.andThen(
             Effect.suspend(() => {
               const { tracing } = measured;
               if (tracing === undefined) return Effect.as(acknowledged(owes), undefined);
-              const rest: Traced = { tracing, owes, again };
-              return !slot.due && !slot.waiting && slot.hints.length === 0
-                ? Effect.as(Deferred.succeed(slot.completion, undefined), rest)
-                : Effect.succeed(rest);
+              return Effect.succeed<Traced>({ tracing, owes, again });
             }),
           ),
         );
@@ -240,7 +263,7 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
         if (Exit.isFailure(exit)) return failedPass(slot, exit.cause, owes, again);
         slot.failures = 0;
         if (exit.value._tag !== 'Stale') return acknowledged(owes);
-        again(true);
+        again(true, true);
         slot.due = true;
         return Effect.void;
       }),
@@ -248,8 +271,11 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
 
   const wait = (slot: Slot, pause = delay) => {
     slot.waiting = true;
+    slot.pause = pause;
+    const wake = Deferred.makeUnsafe<void>();
+    slot.wake = wake;
     slot.fiber = fork(
-      Effect.sleep(pause).pipe(
+      Effect.raceFirst(Effect.sleep(pause), Deferred.await(wake)).pipe(
         Effect.andThen(
           Effect.suspend(() =>
             turns.within({}, () =>
@@ -280,15 +306,21 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
         ),
         Effect.ensuring(Effect.suspend(() => (slot.running ? settled(slot) : Effect.void))),
         Effect.onExit((exit) => {
-          if (Exit.isSuccess(exit) || !Cause.hasInterruptsOnly(exit.cause)) return Effect.void;
+          if (Exit.isSuccess(exit)) return Effect.void;
+          if (!Cause.hasInterruptsOnly(exit.cause))
+            return refused(
+              taken(slot, false),
+              new GateRefusal('inspection-failed', `the re-measurement of ${slot.checkout.root} failed: ${Cause.pretty(exit.cause)}`, [
+                'fix the reported failure, then run the act again',
+              ]),
+            );
           if (slots.get(slot.key) === slot) slots.delete(slot.key);
           const owes = [...slot.owes];
           slot.owes.clear();
           const reason = `the re-measurement of ${slot.checkout.root} was interrupted`;
-          return Deferred.fail(
-            slot.completion,
-            new GateRefusal('inspection-failed', reason, ['open the graph copy to re-measure it']),
-          ).pipe(Effect.andThen(parkedAll(owes, reason)));
+          return refused(taken(slot, true), new GateRefusal('inspection-failed', reason, ['open the graph copy to re-measure it'])).pipe(
+            Effect.andThen(parkedAll(owes, reason)),
+          );
         }),
       ),
     );
@@ -307,13 +339,12 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
       running: false,
       due: false,
       refresh: false,
-      completion: Deferred.makeUnsafe<void, GateRefusal<'inspection-failed'>>(),
-      failed: false,
+      pause: delay,
+      soonest: delay,
+      wake: null,
+      asked: [],
+      covered: [],
     };
-    if (slot.failed) {
-      slot.failed = false;
-      slot.completion = Deferred.makeUnsafe<void, GateRefusal<'inspection-failed'>>();
-    }
     slots.set(key, slot);
     slot.refresh ||= refresh;
     slot.hints.push(...hints);
@@ -321,9 +352,14 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
       slot.owes.add(journal);
       settlements.owe(journal);
     }
-    if (slot.running) slot.due = true;
-    else if (!slot.waiting) wait(slot, pause);
-    return slot.completion;
+    const ask: Ask = { done: Deferred.makeUnsafe(), pause };
+    slot.asked.push(ask);
+    if (slot.running) {
+      slot.due = true;
+      slot.soonest = Math.min(slot.soonest, pause);
+    } else if (!slot.waiting) wait(slot, pause);
+    else if (pause < slot.pause && slot.wake !== null) Deferred.doneUnsafe(slot.wake, Exit.void);
+    return ask.done;
   };
 
   const place = (
