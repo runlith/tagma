@@ -5,7 +5,7 @@ import { isStaging } from './atomicFile.js';
 import type { Git } from '@runlith/git/Git';
 import { OwnGitFailed, gitAnswer, runGit, runGitBytes } from '../../platform/git/ownGit.js';
 import { publish } from '../../platform/git/publish.js';
-import { openOperation, pointedAt } from '../../platform/git/places.js';
+import { operationIn, placesOf, pointedAt } from '../../platform/git/places.js';
 import type { SettleEntry, Settlement } from '../../platform/git/settle.js';
 
 export type CapturedFile = {
@@ -167,7 +167,8 @@ export const publishToCheckout = Effect.fnUntraced(function* (
   capture: TreeCapture,
   commit: Omit<BatchCommit, 'ref' | 'from' | 'at'>,
 ): Effect.fn.Return<CheckoutPublished, OwnGitFailed> {
-  if ((yield* openOperation(git, checkout)) !== null) return { kind: 'held', reason: 'merge' } as const;
+  const places = yield* placesOf(git, checkout);
+  if ((yield* operationIn(places)) !== null) return { kind: 'held', reason: 'merge' } as const;
   const head = yield* pointedAt(git, checkout);
   const ref = head.ref;
   if (ref === null) return { kind: 'held', reason: 'detached' } as const;
@@ -209,7 +210,7 @@ export const publishToCheckout = Effect.fnUntraced(function* (
   const answer = yield* Effect.result(
     publish(
       git,
-      { checkout, ref, base, tree: `${built}^{tree}`, message: commit.message, job: 'graph batch', entries, author: commit.author },
+      { checkout, places, ref, base, tree: `${built}^{tree}`, message: commit.message, job: 'graph batch', entries, author: commit.author },
       () => Effect.void,
     ),
   );

@@ -3,11 +3,12 @@ import { Data, Effect } from 'effect';
 import type { Git } from '@runlith/git/Git';
 import type { HoldCut, HoldStalled } from '@runlith/held/failures';
 import { gitIdentity, OwnGitFailed, quietGit, runGit } from './ownGit.js';
-import { type GitPlaces, type OpenOperation, operationIn, placesOf, pointedAt } from './places.js';
+import { type GitPlaces, type OpenOperation, operationIn, pointedAt } from './places.js';
 import { type IndexBusy, type IndexWriteFailed, type SettleEntry, type Settlement, settleIndex } from './settle.js';
 
 export type Publication = {
   readonly checkout: string;
+  readonly places: GitPlaces;
   readonly ref: string;
   readonly base: string | null;
   readonly tree: string;
@@ -130,7 +131,7 @@ export const publish = Effect.fn('platform.git.publish')(function* <E>(
   publication: Publication,
   witness: (commit: string, ref: string) => Effect.Effect<void, E>,
 ): Effect.fn.Return<Published, MidOperation | OwnGitFailed | E> {
-  const { checkout, ref, base, tree, message, job, entries, author } = publication;
+  const { checkout, places, ref, base, tree, message, job, entries, author } = publication;
   const commit = yield* runGit(
     git,
     'publish-commit',
@@ -141,7 +142,6 @@ export const publish = Effect.fn('platform.git.publish')(function* <E>(
     },
   );
   yield* witness(commit, ref);
-  const places = yield* placesOf(git, checkout);
   const advanced = yield* advance(git, { writer: git, checkout, places, ref, base, commit, job });
   if (advanced.outcome === 'moved') return advanced;
   const unsettled = (failure: Unsettled) => Effect.succeed<Unsettled>(failure);

@@ -6,7 +6,7 @@ import { Effect, FileSystem, Layer } from 'effect';
 import { GitUnavailable, Git } from '@runlith/git/Git';
 import { liveGitLayer } from '../../composition/testing/liveGit.js';
 import { publish } from './publish.js';
-import { standingOf } from './places.js';
+import { placesOf, standingOf } from './places.js';
 
 const IDENTITY = {
   GIT_AUTHOR_NAME: 'operator',
@@ -47,6 +47,7 @@ const prepared = Effect.gen(function* () {
     tree,
     publication: {
       checkout: tree,
+      places: yield* placesOf(yield* Git, tree),
       ref: 'refs/heads/main',
       base: head,
       tree: built,
@@ -145,6 +146,21 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
       expect(standing.places.hooks).toBe(yield* run(['rev-parse', '--path-format=absolute', '--git-path', 'hooks'], tree));
       expect(standing.places.operations).toContain(yield* run(['rev-parse', '--path-format=absolute', '--git-path', 'REVERT_HEAD'], tree));
       expect(standing.head).toEqual({ ref: 'refs/heads/main', commit: yield* run(['rev-parse', 'HEAD'], tree) });
+    }),
+  );
+
+  it.effect('a merge begun after the publication was witnessed leaves the branch and index unchanged', () =>
+    Effect.gen(function* () {
+      const git = yield* Git;
+      const files = yield* FileSystem.FileSystem;
+      const { tree, publication } = yield* prepared;
+      const index = yield* files.readFile(publication.places.index);
+      const merge = yield* run(['rev-parse', '--path-format=absolute', '--git-path', 'MERGE_HEAD'], tree);
+      const failure = yield* Effect.flip(publish(git, publication, () => files.writeFileString(merge, `${publication.base}\n`)));
+      expect(failure).toMatchObject({ _tag: 'MidOperation', checkout: tree, operation: 'merge' });
+      expect(yield* run(['rev-parse', 'HEAD'], tree)).toBe(publication.base);
+      expect(yield* files.readFile(publication.places.index)).toEqual(index);
+      expect(yield* files.readFileString(merge)).toBe(`${publication.base}\n`);
     }),
   );
 
