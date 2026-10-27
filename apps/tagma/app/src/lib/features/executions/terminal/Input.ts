@@ -612,6 +612,7 @@ export class TerminalInput {
   }
 
   private admits(): boolean {
+    if (this.observing) return false;
     if (this.ended) {
       this.fail('this terminal takes no more input');
       return false;

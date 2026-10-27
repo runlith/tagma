@@ -732,7 +732,7 @@ export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPa
     void this.pasteDropped(Promise.resolve({ paths, problems: [] }));
   }
 
-  private landDropped(key: string | null, answer: DroppedPaths): void {
+  private async landDropped(key: string | null, answer: DroppedPaths): Promise<void> {
     const input = this.input;
     if (answer.paths.length > 0 && (this.boundKey !== key || !this.typable || input === null)) {
       this.noteProblem('The terminal moved on before the dropped file was ready, so its path was not typed.');
@@ -744,9 +744,8 @@ export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPa
       problems.push('A name with a line break or another control character cannot be typed as a path, so it was left out.');
     if (problems.length > 0) this.noteProblem(problems.join(' '));
     if (input === null || typed.pieces.length === 0) return;
-    void input.pasteEach(typed.pieces, ' ').then((taken) => {
-      if (!taken && this.input === input) this.noteProblem('The terminal did not take the dropped path in time, so it was not typed.');
-    });
+    const taken = await input.pasteEach(typed.pieces, ' ');
+    if (!taken && this.input === input) this.noteProblem('The terminal did not take the dropped path in time, so it was not typed.');
   }
 
   get search(): Engine['search'] | null {

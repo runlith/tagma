@@ -461,8 +461,6 @@ async function until(reached: () => boolean, what: string): Promise<void> {
   await waitFor(() => expect(reached(), what).toBe(true));
 }
 
-const settled = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
-
 function engineBackground(box: HTMLElement): string {
   return box.querySelector<HTMLElement>('.xterm')?.style.backgroundColor ?? '';
 }
@@ -485,7 +483,7 @@ test('a pane drawn before the appearance is known opens no engine, and opens on 
   };
   const env = await paneOver('', { known: false, settings: waiting });
   const { pane, box, isHeld } = env;
-  await settled();
+  await tick();
 
   expect(pane.measuredGrid()).toBe(null);
   expect(box.querySelector('.xterm')).toBe(null);
@@ -933,7 +931,6 @@ test('a quarantined act resent after a lost answer keeps the verdict it was firs
 test('focus opens the bound pane’s input lane for typing and shell-quoted dropped paths', async () => {
   const env = await paneOver('');
   await until(() => env.isHeld(), 'the live feed');
-  await settled();
   expect(env.laneOpens).toEqual([]);
 
   env.box.querySelector('textarea')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
@@ -958,10 +955,30 @@ test('focus opens the bound pane’s input lane for typing and shell-quoted drop
   expect(env.laneOpens).toHaveLength(1);
 });
 
+test('a dropped path finishes once the input lane has admitted it', async () => {
+  const asked = Promise.withResolvers<void>();
+  const admitted = Promise.withResolvers<void>();
+  const order: string[] = [];
+  const env = await paneOver('', {
+    inputWith: async () => {
+      asked.resolve();
+      await admitted.promise;
+      order.push('admitted');
+      return { _tag: 'InputAdmitted' };
+    },
+  });
+  await until(() => env.isHeld(), 'the live feed');
+  const dropped = env.pane.pasteDropped(Promise.resolve({ paths: ['/tmp/a.txt'], problems: [] })).then(() => order.push('finished'));
+  await asked.promise;
+  admitted.resolve();
+  await dropped;
+  expect(order).toEqual(['admitted', 'finished']);
+  expect(env.sent.map((act) => act.act)).toEqual([{ _tag: 'Write', bytes: btoa('/tmp/a.txt ') }]);
+});
+
 test('dropped files and paths land in the order they were dropped, and none is typed into a terminal that ended while they were fetched', async () => {
   const env = await paneOver('');
   await until(() => env.isHeld(), 'the live feed');
-  await settled();
   env.box.querySelector('textarea')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
   await until(() => env.laneOpens.length === 1, 'the lane the focus opened');
 
@@ -981,7 +998,6 @@ test('dropped files and paths land in the order they were dropped, and none is t
   env.pane.ending = { _tag: 'Exit', native: { _tag: 'Code', code: 0 } };
   late({ paths: ['/tmp/d.txt'], problems: [] });
   await ended;
-  await settled();
   expect(env.sent.filter((act) => act.act._tag === 'Write')).toEqual([]);
   expect(env.pane.refusal?.message).toBe('The terminal moved on before the dropped file was ready, so its path was not typed.');
 });
@@ -998,7 +1014,6 @@ test('a picture on a clipboard with no text is pasted as the path of its kept co
   );
   const env = await paneOver('');
   await until(() => env.isHeld(), 'the live feed');
-  await settled();
   env.box.querySelector('textarea')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
   await until(() => env.laneOpens.length === 1, 'the lane the focus opened');
 
@@ -1022,7 +1037,6 @@ test('a picture on a clipboard with no text is pasted as the path of its kept co
   env.sent.length = 0;
   read();
   await pasting;
-  await settled();
   expect(env.sent.filter((act) => act.act._tag === 'Write' && atob(act.act.bytes).includes('clipboard'))).toEqual([]);
   expect(env.pane.refusal?.message).toBe('The terminal moved on before the dropped file was ready, so its path was not typed.');
 
@@ -1042,8 +1056,7 @@ test('a pane watching a program on pipes reads its output stream, and neither fo
 
   env.box.querySelector('textarea')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
   type(env.box, 'l', 76);
-  await settled();
-  await settled();
+  expect(await env.pane.paste('unavailable input')).toBe(false);
   expect(env.laneOpens).toEqual([]);
   expect(env.sent).toEqual([]);
 });

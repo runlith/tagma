@@ -312,12 +312,20 @@ test('a write in flight holds the thread it was started in, leaves every other t
 test('a setting chosen right before Enter reaches the turn: the send leaves once that write answered', async () => {
   const asked = Promise.withResolvers<void>();
   const answer = Promise.withResolvers<void>();
+  const order: string[] = [];
+  port.stub('send', () =>
+    Effect.sync(() => {
+      order.push('send');
+      return { status: 'started', runId: 'run-1', acted: true };
+    }),
+  );
   const host = open({
     live: testLive({
       model: () =>
-        Effect.promise(() => {
+        Effect.promise(async () => {
           asked.resolve();
-          return answer.promise;
+          await answer.promise;
+          order.push('model');
         }),
     }),
     threads: { setDefaults: stubMutation(async (selection: unknown) => selection) },
@@ -328,11 +336,9 @@ test('a setting chosen right before Enter reaches the turn: the send leaves once
   host.draft.setText('the next turn');
   const sent = host.writes.send();
   await asked.promise;
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(port.called('send')).toEqual([]);
-
   answer.resolve();
   expect(await sent).toBe(true);
+  expect(order).toEqual(['model', 'send']);
   expect(port.called('send').map((call) => call.threadId)).toEqual(['thread-1']);
 });
 

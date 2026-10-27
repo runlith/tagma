@@ -12,6 +12,7 @@ const isolatedUnit = [
   'src/lib/features/executions/terminal/PaneTree.close.svelte.test.ts',
   'src/lib/features/executions/terminal/Views.svelte.test.ts',
   'src/lib/features/speech/viewSpeech.test.ts',
+  'src/lib/features/views/ViewBridge.test.ts',
   'src/lib/features/threads/ThreadSlot.open.svelte.test.ts',
   'src/lib/features/worktrees/Window.svelte.test.ts',
 ];

@@ -17,7 +17,6 @@ function deferred() {
 }
 const answer = (id: string): AgentSkillCatalog => ({ skills: [{ id, description: id }], available: true, basis: 'thread', note: null });
 const nextTurnAnswer = (id: string): AgentSkillCatalog => ({ ...answer(id), basis: 'next-turn' });
-const nextTurn = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 function world(load: (key: SkillCatalogKey) => Promise<AgentSkillCatalog>) {
   const app = Scope.make();
@@ -47,11 +46,12 @@ test('a late catalog cannot replace the thread now on screen', async () => {
   const stand = world((key) => (key.aim.kind === 'thread' && key.aim.id === 'first' ? first.promise : second.promise));
   try {
     stand.catalog.aim({ kind: 'thread', id: 'first' }, 'run-first');
+    const firstRead = stand.catalog.refreshCurrent();
     stand.catalog.aim({ kind: 'thread', id: 'second' }, 'run-second');
     second.resolve(answer('second-skill'));
     await waitFor(() => expect(stand.catalog.view.items.map((skill) => skill.id)).toEqual(['second-skill']));
     first.resolve(answer('first-skill'));
-    await nextTurn();
+    await firstRead;
     expect(stand.catalog.view.items.map((skill) => skill.id)).toEqual(['second-skill']);
   } finally {
     await stand.close();
@@ -104,11 +104,12 @@ test('opening the menu reads again, so a catalog left waiting still answers', as
   try {
     stand.catalog.aim({ kind: 'draft' }, null);
     await waitUntil(() => reads === 1);
+    const firstRead = stand.catalog.refreshCurrent();
     expect(stand.catalog.view.state).toBe('loading');
     await stand.catalog.view.onOpen!();
     expect(stand.catalog.view.items.map((skill) => skill.id)).toEqual(['late-skill']);
     stuck.resolve(answer('never-shown'));
-    await nextTurn();
+    await firstRead;
     expect(stand.catalog.view.items.map((skill) => skill.id)).toEqual(['late-skill']);
   } finally {
     await stand.close();
@@ -126,7 +127,7 @@ test('a new run of the same thread keeps the list on screen while the next read 
     stand.catalog.aim({ kind: 'thread', id: 'thread' }, 'run-one');
     await waitFor(() => expect(stand.catalog.view.items.map((skill) => skill.id)).toEqual(['first-skill']));
     stand.catalog.aim({ kind: 'thread', id: 'thread' }, 'run-two');
-    await nextTurn();
+    await waitUntil(() => reads === 2);
     expect(stand.catalog.view.items.map((skill) => skill.id)).toEqual(['first-skill']);
     second.resolve(answer('second-skill'));
     await waitFor(() => expect(stand.catalog.view.items.map((skill) => skill.id)).toEqual(['second-skill']));

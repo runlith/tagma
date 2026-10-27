@@ -399,6 +399,16 @@ test('every one of the seven reply grammars is dropped, consecutive replies incl
   expect(bodies.join('')).toBe(`${ESC}[97;5u${ESC}[6;1Rls`);
 });
 
+test('a paste while observing is refused and is not carried into the next writable binding', async () => {
+  const t = setup();
+  t.input.observe();
+  const refused = t.input.paste('observed-only');
+  t.input.attach({ execution: 'exec-2', incarnation: 0 }, VIEW);
+  expect(await t.input.paste('writable')).toBe(true);
+  expect(await refused).toBe(false);
+  expect(t.inputCalls.map((call) => decode(call.act.bytes ?? ''))).toEqual(['writable']);
+});
+
 test('a pasted terminator arrives inert inside the bracketed frame', async () => {
   const t = setup();
   await drain();
