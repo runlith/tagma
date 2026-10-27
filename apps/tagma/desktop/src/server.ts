@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { appendFile, mkdir, open } from 'node:fs/promises';
+import { request } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { Effect, Schema } from 'effect';
 import { type Handover, RESTART_RECORD, type Startup } from '@tagma/server/installation/contract/wire/restart';
@@ -217,17 +218,33 @@ export async function askRestart(surfaceUrl: URL): Promise<Refusal | null> {
   return refusalOf(decodeRefusal(body), `the restart answered ${answer.status}`);
 }
 
+type Answered = { readonly status: number; readonly body: unknown };
+
+const posted = (url: URL): Promise<Answered | Error> =>
+  new Promise((settle) => {
+    const asked = request(url, { method: 'POST', headers: { 'content-type': 'application/json' } }, (answer) => {
+      let text = '';
+      answer.setEncoding('utf8');
+      answer.on('data', (chunk: string) => (text += chunk));
+      answer.on('error', settle);
+      answer.on('end', () => {
+        let body: unknown = null;
+        try {
+          body = JSON.parse(text);
+        } catch {}
+        settle({ status: answer.statusCode ?? 0, body });
+      });
+    });
+    asked.on('error', settle);
+    asked.end('{}');
+  });
+
 export async function startDevSurface(surfaceUrl: URL): Promise<URL | Refusal> {
-  const answer = await fetch(new URL('/api/op/start_dev_surface', surfaceUrl), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: '{}',
-  }).catch((error: unknown) => (error instanceof Error ? error : new Error(String(error))));
+  const answer = await posted(new URL('/api/op/start_dev_surface', surfaceUrl));
   if (answer instanceof Error) return { code: 'unanswered', reason: `the dev surface was not answered: ${answer.message}`, said: null };
-  const body: unknown = await answer.json().catch(() => null);
-  const started = decodeDevSurface(body);
-  if (answer.ok && started._tag === 'Success' && URL.canParse(started.success.url)) return new URL(started.success.url);
-  return refusalOf(decodeRefusal(body), `the dev surface answered ${answer.status}`);
+  const started = decodeDevSurface(answer.body);
+  if (answer.status === 200 && started._tag === 'Success' && URL.canParse(started.success.url)) return new URL(started.success.url);
+  return refusalOf(decodeRefusal(answer.body), `the dev surface answered ${answer.status}`);
 }
 
 export type Ran = { readonly code: number | null; readonly out: string };
