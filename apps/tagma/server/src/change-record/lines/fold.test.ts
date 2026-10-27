@@ -461,6 +461,21 @@ test('an insertion stays after the line HEAD replaced at the start of the file',
   expect(select(folded(value), value, A)).toMatchObject({ kind: 'text', text: text('new', 'insert', 'tail') });
 });
 
+test('a peer whose only line the shortest diff cancels against the carrier’s stays out of the carrier’s landing', () => {
+  const base = text('}', 'keep');
+  const mine = text('x', '}', '}', 'keep');
+  const work = text('x', '}', 'keep');
+  const value = input(base, work, [
+    { ...row('a1', A, base, mine), hunk: workspaceChangeHunk(base, mine)! },
+    { ...row('b1', B, mine, work), hunk: workspaceChangeHunk(mine, work)! },
+  ]);
+  expect(select(folded(value), value, A)).toMatchObject({
+    kind: 'text',
+    text: mine,
+    carried: { holders: [], external: false, unknown: false },
+  });
+});
+
 test('separable peer regions stay on disk and carry no carrier lines', () => {
   const base = text('a', 'middle', 'z');
   const first = text('A', 'middle', 'z');
