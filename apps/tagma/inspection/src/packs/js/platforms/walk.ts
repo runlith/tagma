@@ -1,5 +1,5 @@
 import { js } from '@runlith/code-facts/adapters';
-import { configResolver } from '@runlith/code-facts/js/config';
+import { configResolver, installedOf } from '@runlith/code-facts/js/config';
 import { resolveUnique } from '@runlith/code-facts/js/resolve';
 import { queryOf, sitesOf, type Tree } from '@runlith/code-facts/tree';
 import { matchesGlob, posix } from 'node:path';
@@ -58,7 +58,15 @@ type Summary = { readonly key: string; readonly value: MemoValue };
 
 const MIB = 1024 * 1024;
 const PACKAGE_NAME = /^(?:@[A-Za-z0-9~-][\w.~-]*\/)?[A-Za-z0-9~-][\w.~-]*$/u;
-const empty = (): File => ({ edges: [], causes: [], dependencies: new Map(), listings: new Map(), violations: [], universal: [] });
+const empty = (): File => ({
+  edges: [],
+  causes: [],
+  dependencies: new Map(),
+  installed: new Map(),
+  listings: new Map(),
+  violations: [],
+  universal: [],
+});
 
 export function readSlice(
   params: Of,
@@ -86,7 +94,6 @@ export function readSlice(
   };
   const tree: Tree = {
     ...source,
-    environment: undefined,
     read: (path) => {
       count(path);
       return source.read(path);
@@ -319,6 +326,11 @@ export function readSlice(
           node.dependencies.set(path, object);
           return;
         }
+        const stamp = installedOf(tree, path);
+        if (stamp !== undefined) {
+          node.installed.set(path, stamp);
+          return;
+        }
         const unit = listedUnit(parentOf(path));
         node.dependencies.set(unit, objects?.(unit) ?? null);
       };
@@ -331,6 +343,15 @@ export function readSlice(
           dependency(path);
           return tree.has(path);
         },
+      };
+      const aliased = (request: string) => {
+        if (request.startsWith('.') || request.startsWith('/')) return null;
+        const inputs = new Set<string>();
+        try {
+          return configured(request, file, measured, inputs);
+        } finally {
+          for (const input of inputs) dependency(input);
+        }
       };
       dependency(file);
       dependency(inventory.manifest);
@@ -415,9 +436,7 @@ export function readSlice(
           if (!worker && queryOf(specifier.includes('?') ? queryLeaves : params.leaves, specifier) !== undefined) continue;
           const request =
             site.kind === 'worker' ? specifier.split('?')[0]! : started !== undefined ? specifier.slice(0, -started.length) : specifier;
-          const inputs = new Set<string>();
-          const alias = request.startsWith('.') || request.startsWith('/') ? null : configured(request, file, measured, inputs);
-          for (const input of inputs) dependency(input);
+          const alias = aliased(request);
           if (alias !== null && generated('to' in alias ? alias.to : alias.unlisted)) continue;
           if (alias !== null && 'to' in alias) {
             if (worker) discover({ id: alias.to, file: alias.to, platform, internal, package: owner?.name });

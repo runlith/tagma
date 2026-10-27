@@ -11,6 +11,22 @@ import { LAYERED } from '../../../enforcement/testing/layered.js';
 import { enforceFixture, withEnforcement, type EnforcementFixture } from './enforceFixture.js';
 
 const ROOTED: Inspection = { builtin: 'modules', params: { ...(LAYERED.params as Params<'modules'>), base: '' } };
+const LOADING: Inspection = {
+  builtin: 'platforms',
+  params: {
+    base: '',
+    platforms: { bun: { runtime: 'bun', unmarked: true } },
+    shipped: 'bun',
+    allows: {},
+    refuses: { bun: ['node:fs'] },
+    packages: {},
+    apps: [],
+    programs: [{ at: 'packages/web/tool.ts', platform: 'bun' }],
+    compiled: [],
+    leaves: [],
+    files: { extensions: ['.ts'], exclude: [] },
+  },
+};
 const revision = Effect.fnUntraced(function* (fx: EnforcementFixture, spec: string) {
   return (yield* spawnedEffect(['git', 'rev-parse', spec], { cwd: fx.demo.demoRoot })).stdout.toString().trim();
 });
@@ -71,6 +87,46 @@ layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
             const uninstalled = yield* landing(fx, 'src/core/peek.ts');
             expect(uninstalled.refused?.code).toBe('inspection-failed');
             expect(uninstalled.refused?.reason).toContain('`@acme/tsconfig/base.json`');
+          })(),
+        ),
+    );
+
+    it.effect(
+      'resolves the loads of every start through the installed package, and a start reaching it refuses once the package is gone',
+      () =>
+        withEnforcement((fx) =>
+          Effect.fnUntraced(function* () {
+            const files = yield* FileSystem.FileSystem;
+            const store = `../acme-store-${fx.demo.projectId}/node_modules/@acme`;
+            yield* fx.wrote('.gitignore', 'node_modules/\n');
+            yield* fx.wrote('package.json', JSON.stringify({ name: 'demo', private: true, workspaces: ['packages/*'] }));
+            yield* fx.wrote('tsconfig.json', JSON.stringify({ extends: '@acme/tsconfig/base.json' }));
+            yield* fx.wrote(`${store}/tsconfig/package.json`, JSON.stringify({ name: '@acme/tsconfig', version: '1.0.0' }));
+            yield* fx.wrote(`${store}/tsconfig/base.json`, JSON.stringify({ extends: '@acme/strict/strict.json' }));
+            yield* fx.wrote(`${store}/strict/package.json`, JSON.stringify({ name: '@acme/strict', version: '1.0.0' }));
+            yield* fx.wrote(
+              `${store}/strict/strict.json`,
+              JSON.stringify({ compilerOptions: { paths: { '$x/*': ['${configDir}/packages/web/lib/*'] } } }),
+            );
+            yield* files.makeDirectory(join(fx.demo.demoRoot, 'node_modules/@acme'), { recursive: true });
+            yield* files.symlink(join(fx.demo.demoRoot, store, 'tsconfig'), join(fx.demo.demoRoot, 'node_modules/@acme/tsconfig'));
+            yield* fx.wrote('packages/web/package.json', JSON.stringify({ name: 'web', exports: { '.': { bun: './main.ts' } } }));
+            yield* fx.wrote('packages/web/main.ts', "import { shared } from '$x/shared';\nexport const main = shared;\n");
+            yield* fx.wrote('packages/web/tool.ts', 'export const tool = 1;\n');
+            yield* fx.wrote('packages/web/lib/shared.ts', 'export const shared = 1;\n');
+            yield* fx.committed('a web package whose alias an installed config declares');
+            const rule = yield* fx.created(['rule'], 'Load only what bun runs');
+            fx.demo.described.set('loading', LOADING);
+            const enforced = yield* fx.enforce({ blockId: rule, strictness: 'gate', on: TRIGGERS.landing, inspection: 'loading' });
+            expect(enforced).toMatchObject({ debt: { after: 0 }, escaped: 0 });
+            yield* fx.wrote('packages/web/tool.ts', "import './main';\nexport const tool = 1;\n");
+            yield* fx.committed('the tool runs the main');
+            expect((yield* landing(fx, 'packages/web/tool.ts')).refused).toBeNull();
+            yield* files.remove(join(fx.demo.demoRoot, 'node_modules'), { recursive: true });
+            const uninstalled = yield* landing(fx, 'packages/web/tool.ts');
+            expect(
+              uninstalled.crossed?.map(({ fingerprint, message }) => [fingerprint, message.includes('`@acme/tsconfig/base.json`')]),
+            ).toEqual([['packages/web/tool.ts [bun] -> unresolved packages/web/main.ts @ packages/web/main.ts', true]]);
           })(),
         ),
     );

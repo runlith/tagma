@@ -1,6 +1,7 @@
 import type { Installed } from '@runlith/code-facts/tree';
 import { Effect, FileSystem } from 'effect';
 import { isAbsolute, join, relative } from 'node:path';
+import type { Installs } from './asks.js';
 import { Unread } from './unread.js';
 
 export const checkoutText = Effect.fn('inspecting.checkoutText')(function* (root: string, path: string) {
@@ -34,3 +35,11 @@ export const checkoutFile = Effect.fn('inspecting.checkoutFile')(
   },
   (effect, _real, path) => Effect.mapError(effect, (failure) => new Unread({ cause: 'source', reason: `${path}: ${failure.message}` })),
 );
+
+export const installedIn = Effect.fnUntraced(function* (root: string, pinned: Installs, paths: readonly string[]) {
+  const held = new Map(pinned);
+  const { real } = yield* checkoutAt(root);
+  const found: (readonly [string, Installed | null])[] = [];
+  for (const path of paths) found.push([path, held.has(path) ? (held.get(path) ?? null) : yield* checkoutFile(real, path)]);
+  return found satisfies Installs;
+});

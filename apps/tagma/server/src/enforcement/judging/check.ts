@@ -271,7 +271,6 @@ export const checkChange = Effect.fn('enforcement.checkChange')(function* (ask: 
                 places: target.places,
                 inspection,
                 debt: judgedDebt(debt),
-                job: change.job,
               }),
         (changed) => touchedBy(target, changed),
         target.debt,

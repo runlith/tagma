@@ -70,6 +70,7 @@ const hit = Schema.Struct({
 });
 const memo = Schema.Struct({
   dependencies: Schema.Array(Schema.Tuple([Schema.String, Schema.NullOr(Schema.String)])),
+  installed: Schema.optional(Schema.Array(Schema.Tuple([Schema.String, Schema.NullOr(Schema.String)]))),
   listings: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
   parents: Schema.optional(Schema.Array(Schema.String)),
   violations: Schema.Array(Violation),

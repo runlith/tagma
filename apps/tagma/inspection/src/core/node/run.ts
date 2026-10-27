@@ -109,6 +109,7 @@ export const slicedSide = (
   places: readonly string[],
   store: InspectionMemo,
   envelope: Envelope = sliceEnvelopeOf(inspection),
+  placed: (tree: Tree) => Tree = (tree) => tree,
 ) => {
   let snapshot: unknown;
   const plan = settled(
@@ -116,11 +117,11 @@ export const slicedSide = (
     [[]],
     ([tree]) => {
       try {
-        snapshot = snapshotOf(inspection, tree as Tree);
+        snapshot = snapshotOf(inspection, placed(tree as Tree));
       } catch {
         snapshot = undefined;
       }
-      return planOf(inspection, tree as Tree, places, snapshot, envelope);
+      return planOf(inspection, placed(tree as Tree), places, snapshot, envelope);
     },
     undefined,
     budgetOf(inspection.builtin, envelope),
@@ -135,7 +136,7 @@ export const slicedSide = (
         ([tree]) => {
           const writes = memoWrites(store);
           const trusted = memoWrites(frontiers);
-          return { sliced: sliceOf(inspection, tree as Tree, step.scope, writes, trusted, snapshot, places), writes, trusted };
+          return { sliced: sliceOf(inspection, placed(tree as Tree), step.scope, writes, trusted, snapshot, places), writes, trusted };
         },
         undefined,
         budgetOf(inspection.builtin, envelope),
@@ -260,7 +261,7 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
     const fetchBudget = budgetOf(inspection.builtin, envelope);
     if (prefetches(inspection.builtin)) admitted(inspection, built, judged);
     const verdict = sliced
-      ? slicedSide(inspection, built, [''], memo)
+      ? slicedSide(inspection, built, [''], memo, sliceEnvelopeOf(inspection), (tree) => withCheckout(environment, tree))
       : settled(
           [built],
           [prefetches(inspection.builtin) ? judged : []],
@@ -307,8 +308,9 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
   ensureRunCalibration(inspection, [before, built], changed);
   const fetchBudget = budgetOf(inspection.builtin, envelope);
   if (sliced) {
-    const baseReading = slicedSide(inspection, before, [''], memo);
-    const builtReading = slicedSide(inspection, built, [''], memo);
+    const slice = sliceEnvelopeOf(inspection);
+    const baseReading = slicedSide(inspection, before, [''], memo, slice, (tree) => withEnvironment(environment, tree));
+    const builtReading = slicedSide(inspection, built, [''], memo, slice, (tree) => withCheckout(environment, tree));
     const verdict = settled(
       [before, built],
       [[], []],

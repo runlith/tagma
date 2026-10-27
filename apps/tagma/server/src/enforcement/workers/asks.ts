@@ -4,6 +4,7 @@ import type { Plan, Scope, Sliced } from '@tagma/inspection/node/slices';
 import type { BindingReach, FactKind, ProgramFacts } from '@tagma/inspection/program';
 import type { Debt, Verdict } from '@tagma/inspection/verdict';
 import type { Context } from '@runlith/code-facts/adapter';
+import type { Installed } from '@runlith/code-facts/tree';
 
 export type ReachRequest = {
   readonly kind: 'reach';
@@ -13,7 +14,6 @@ export type ReachRequest = {
   readonly places: readonly string[];
   readonly previous?: { readonly inspection: Assembled; readonly fingerprints: readonly string[] };
   readonly paths?: readonly string[];
-  readonly job?: string;
 };
 
 export type JudgeLane = 'landing' | 'merge';
@@ -28,17 +28,19 @@ export type JudgeRequest = {
   readonly places: readonly string[];
   readonly inspection: Assembled;
   readonly debt: readonly (string | Debt)[];
-  readonly job?: string;
   readonly readings?: {
     readonly base: Reading;
     readonly built: Reading;
     readonly compared: Compared;
+    readonly installed: { readonly base: Installs; readonly built: Installs };
     readonly headroom: { readonly base: number; readonly built: number };
   };
   readonly checkout?: string;
 };
 
 export type Compared = readonly (readonly [path: string, text: string | null])[];
+
+export type Installs = readonly (readonly [path: string, file: Installed | null])[];
 
 export type PlanAsk = {
   readonly kind: 'plan';
@@ -50,6 +52,8 @@ export type PlanAsk = {
   readonly measures?: true;
   readonly from?: { readonly commit: string; readonly headroom: number };
   readonly compared?: Compared;
+  readonly installed?: Installs;
+  readonly checkout?: string;
 };
 
 export type SliceAsk = {
@@ -62,6 +66,8 @@ export type SliceAsk = {
   readonly job?: string;
   readonly measures?: true;
   readonly compared: Compared;
+  readonly installed: Installs;
+  readonly checkout?: string;
 };
 
 export type PackUseAsk = { readonly kind: 'packs'; readonly root: string; readonly commit: string };
@@ -110,7 +116,13 @@ export type Planned = { readonly compared: Compared } & (
   | { readonly same: true; readonly headroom: number }
 );
 
-type Served = { readonly id: number; readonly answered: true; readonly read: readonly string[]; readonly ms: number };
+type Served = {
+  readonly id: number;
+  readonly answered: true;
+  readonly read: readonly string[];
+  readonly installed: Installs;
+  readonly ms: number;
+};
 
 export type InspectionAnswer =
   | (Served & { readonly verdict: Verdict; readonly footprint?: Footprint })

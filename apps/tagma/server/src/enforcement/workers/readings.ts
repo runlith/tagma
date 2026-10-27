@@ -4,11 +4,12 @@ import type { Reading } from '@tagma/inspection/node/reading';
 import { carriesOf } from '@tagma/inspection/node/slices';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
 import { blobTree, type ParseMemo } from '@runlith/code-facts/blobs';
+import { installedStamp } from '@runlith/code-facts/js/config';
 import type { Git } from '@runlith/git/Git';
 import { pointedTreeAt, type TreeDifference } from '@runlith/git/trees';
 import { Effect } from 'effect';
 import { createHash } from 'node:crypto';
-import type { Compared } from './asks.js';
+import type { Compared, Installs } from './asks.js';
 import { GrowingPaths, type Side, texts } from './sides.js';
 import { gitUnread, unreadFrom } from './unread.js';
 
@@ -17,15 +18,23 @@ const keyOf = (inspection: Assembled, places: readonly string[], compared: Compa
     .update(JSON.stringify([inspection, places, compared]))
     .digest('hex')}/${tree}`;
 
+type Known = {
+  readonly reading: Reading;
+  readonly headroom: number;
+  readonly installed: readonly (readonly [string, string | null])[];
+};
+
 export const knownReading = (
   memo: InspectionMemo | undefined,
   inspection: Assembled,
   places: readonly string[],
   compared: Compared,
   tree: string,
-): { readonly reading: Reading; readonly headroom: number } | undefined => {
+): Known | undefined => {
   const held = memo?.get(keyOf(inspection, places, compared, tree));
-  return held === undefined ? undefined : { reading: { violations: held.violations, unjudged: [] }, headroom: held.headroom ?? 0 };
+  return held === undefined
+    ? undefined
+    : { reading: { violations: held.violations, unjudged: [] }, headroom: held.headroom ?? 0, installed: held.installed ?? [] };
 };
 
 export const keepReading = (
@@ -36,10 +45,12 @@ export const keepReading = (
   tree: string,
   reading: Reading,
   headroom: number,
+  installed: Installs,
 ): void => {
   if (reading.unjudged.length > 0) return;
   memo?.set(keyOf(inspection, places, compared, tree), {
     dependencies: [],
+    installed: installed.map(([path, file]) => [path, installedStamp(file ?? undefined)]),
     listings: [],
     violations: reading.violations,
     headroom,

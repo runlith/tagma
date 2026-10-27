@@ -1,3 +1,4 @@
+import { installedOf } from '@runlith/code-facts/js/config';
 import type { Tree } from '@runlith/code-facts/tree';
 import { createHash } from 'node:crypto';
 import {
@@ -74,7 +75,7 @@ export const unitObjects = (tree: Tree, units: Units): Objects | undefined => {
   const object = tree.object;
   if (object === undefined) return undefined;
   const objects = (name: string): string | null => {
-    if (!name.endsWith('/')) return object(name) ?? null;
+    if (!name.endsWith('/')) return object(name) ?? installedOf(tree, name) ?? null;
     const held = units.digests.get(name) ?? inheritedDigest(units, name);
     if (held !== undefined) return held;
     const whole = name.endsWith(WHOLE);
@@ -120,6 +121,7 @@ export const remember = (memo: InspectionMemo, index: string, key: string, value
 const footprintOf = (dir: string, keys: readonly string[], objects: Objects, memo: InspectionMemo, inventory: Inventory) => {
   const unit = wholeUnit(dir);
   const dependencies = new Map<string, string | null>([[unit, objects(unit)]]);
+  const installed = new Map<string, string | null>();
   const listings = new Map<string, string>();
   const seen = new Set<string>();
   const pending = [...keys];
@@ -137,10 +139,11 @@ const footprintOf = (dir: string, keys: readonly string[], objects: Objects, mem
         if (!dependencies.has(unit)) dependencies.set(unit, objects(unit));
       }
     }
+    for (const [path, stamp] of value.installed ?? []) installed.set(path, stamp);
     for (const [query, stamp] of value.listings) listings.set(query, stamp);
     pending.push(...(value.parents ?? []));
   }
-  return { dependencies, listings };
+  return { dependencies, installed, listings };
 };
 
 export type Ledger = {
@@ -172,6 +175,7 @@ export function ledgerOf(
       if (footprint === undefined) return;
       const variant: MemoValue = {
         dependencies: [...footprint.dependencies],
+        ...(footprint.installed.size === 0 ? {} : { installed: [...footprint.installed] }),
         listings: [[MEMBERS, members], ...footprint.listings],
         violations: own.violations,
         universal: own.universal,

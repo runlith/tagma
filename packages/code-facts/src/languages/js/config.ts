@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import ts from 'typescript';
 import type { Resolution } from '../../adapter';
@@ -9,6 +10,12 @@ export type Built = ReadonlyMap<string, string>;
 export const namesConfig = (path: string): boolean => path.endsWith('.json');
 
 export const environmental = (path: string): boolean => path.startsWith('../') || path.split('/').includes('node_modules');
+
+export const installedStamp = (found: Installed | undefined): string | null =>
+  found === undefined ? null : createHash('sha256').update(found.at).update('\0').update(found.text).digest('hex');
+
+export const installedOf = (tree: Tree, path: string): string | null | undefined =>
+  environmental(path) && !tree.has(path) ? installedStamp(tree.environment?.read(path)) : undefined;
 
 type Mount = {
   readonly root: string;
@@ -192,34 +199,38 @@ export function configResolver(
       observed.add(found.at);
       return absolute(found.at);
     };
-    const parsed = ts.getParsedCommandLineOfConfigFile(
-      path,
-      {},
-      {
-        useCaseSensitiveFileNames: true,
-        getCurrentDirectory: () => root,
-        fileExists: (file) => guarded(false, () => standing(local(canonical(file, observed)), observed) !== undefined),
-        readFile: (file) => guarded(undefined, () => read(local(canonical(file, observed)))),
-        realpath: (file) => guarded(file, () => real(file)),
-        readDirectory: () => [],
-        onUnRecoverableConfigFileDiagnostic: fail,
-      },
-    );
-    if (refused !== undefined) throw refused;
-    const [missing] = missed;
-    if (missing !== undefined) throw absentOf(local(path), missing);
-    if (parsed === undefined) throw new UnsupportedSource(local(path), 'the TypeScript config could not be read');
-    const error = parsed.errors.find((diagnostic) => diagnostic.code !== 18003 && diagnostic.code !== 18002);
-    const absent = error === undefined ? undefined : unfound(local(path), error);
-    if (absent !== undefined) throw absent;
-    if (error !== undefined) fail(error);
-    const malformed = Object.entries(parsed.options.paths ?? {}).find(
-      ([, targets]) => !Array.isArray(targets) || !targets.every((target) => typeof target === 'string'),
-    );
-    if (malformed !== undefined) throw new UnsupportedSource(local(path), `its \`paths\` entry \`${malformed[0]}\` is not a list of paths`);
-    configs.set(path, { options: parsed.options, inputs: [...observed] });
-    for (const path of observed) inputs.add(path);
-    return parsed.options;
+    try {
+      const parsed = ts.getParsedCommandLineOfConfigFile(
+        path,
+        {},
+        {
+          useCaseSensitiveFileNames: true,
+          getCurrentDirectory: () => root,
+          fileExists: (file) => guarded(false, () => standing(local(canonical(file, observed)), observed) !== undefined),
+          readFile: (file) => guarded(undefined, () => read(local(canonical(file, observed)))),
+          realpath: (file) => guarded(file, () => real(file)),
+          readDirectory: () => [],
+          onUnRecoverableConfigFileDiagnostic: fail,
+        },
+      );
+      if (refused !== undefined) throw refused;
+      const [missing] = missed;
+      if (missing !== undefined) throw absentOf(local(path), missing);
+      if (parsed === undefined) throw new UnsupportedSource(local(path), 'the TypeScript config could not be read');
+      const error = parsed.errors.find((diagnostic) => diagnostic.code !== 18003 && diagnostic.code !== 18002);
+      const absent = error === undefined ? undefined : unfound(local(path), error);
+      if (absent !== undefined) throw absent;
+      if (error !== undefined) fail(error);
+      const malformed = Object.entries(parsed.options.paths ?? {}).find(
+        ([, targets]) => !Array.isArray(targets) || !targets.every((target) => typeof target === 'string'),
+      );
+      if (malformed !== undefined)
+        throw new UnsupportedSource(local(path), `its \`paths\` entry \`${malformed[0]}\` is not a list of paths`);
+      configs.set(path, { options: parsed.options, inputs: [...observed] });
+      return parsed.options;
+    } finally {
+      for (const path of observed) inputs.add(path);
+    }
   };
   return (specifier, from, measuring, inputs) => {
     const options = configOf(from, inputs);

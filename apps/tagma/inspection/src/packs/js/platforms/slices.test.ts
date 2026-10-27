@@ -551,6 +551,7 @@ describe('slice closure', () => {
         { file: 'a.ts', line: 2, specifier: 'y', group: 'y', suffix: 'y', message: 'loads `y`', fix: 'Move it.' },
       ],
       dependencies: new Map(),
+      installed: new Map(),
       listings: new Map(),
       violations: [],
       universal: [],

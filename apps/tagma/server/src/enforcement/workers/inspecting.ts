@@ -14,6 +14,7 @@ import type { Footprint, Reading } from '@tagma/inspection/node/reading';
 import type { ProgramFacts } from '@tagma/inspection/program';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
 import { blobTree, facetHeld, memoHolds, parseAhead } from '@runlith/code-facts/blobs';
+import { installedStamp } from '@runlith/code-facts/js/config';
 import type { Installed, Tree, TreeChange } from '@runlith/code-facts/tree';
 import { createHash } from 'node:crypto';
 import { gitLayer, Git } from '@runlith/git/Git';
@@ -30,12 +31,13 @@ import {
   treeOf,
   validityOf,
 } from './treeMemo.js';
-import { Effect, Exit, Layer, ManagedRuntime, Result } from 'effect';
+import { Effect, Exit, FileSystem, Layer, ManagedRuntime, Result } from 'effect';
 import { actingGit, ownGitLayer } from '../../platform/git/ownGit.js';
 import type {
   Compared,
   HistoryPage,
   InspectionAnswer,
+  Installs,
   JudgeRequest,
   PackUseAsk,
   PlanAsk,
@@ -46,7 +48,7 @@ import type {
   StateAsk,
 } from './asks.js';
 import { cacheAt, type InspectionCache, rested } from './caches.js';
-import { checkoutAt, checkoutFile, checkoutText } from './checkout.js';
+import { checkoutAt, checkoutFile, checkoutText, installedIn } from './checkout.js';
 import { ensureCalibration } from './calibration.js';
 import { factsAt } from './facts.js';
 import { facets, parses, trimParses } from './parses.js';
@@ -99,7 +101,8 @@ const settled = Effect.fn('inspecting.settled')(function* (
   trusted?: Map<string, MemoValue>,
   validity?: Validity,
   checkoutRoot = root,
-  pinned?: Compared,
+  compared?: Compared,
+  installed: Installs = [],
 ) {
   return yield* Effect.gen(function* () {
     yield* ensureCalibration(git, root, inspection, sides, cache);
@@ -113,11 +116,12 @@ const settled = Effect.fn('inspecting.settled')(function* (
     const known = (object: string, path: string) =>
       facet !== undefined ? facetHeld(facets, ADAPTERS, facet, object, path) : memoHolds(imports, ADAPTERS, object, path);
     const words = sides.map(() => new Map<string, ReadonlySet<string>>());
-    const checkout = new Map<string, Installed | null>(
-      (pinned ?? []).map(([path, text]) => [path, text === null ? null : { text, at: path }]),
-    );
+    const checkout = new Map<string, Installed | null>([
+      ...(compared ?? []).map(([path, text]) => [path, text === null ? null : { text, at: path }] as const),
+      ...installed,
+    ]);
     const placed = yield* checkoutAt(checkoutRoot);
-    const working: Working = { files: checkout, asked: new Set(), depth: placed.depth };
+    const working: Working = { files: checkout, asked: new Set(), installed: new Set(), depth: placed.depth };
     const fetchedBudget = budgetOf(inspection.builtin, envelopeOf(inspection.builtin));
     let wanted = sides.map((side) => ({
       ...side,
@@ -146,6 +150,7 @@ const settled = Effect.fn('inspecting.settled')(function* (
       const missing = sides.map(() => new Set<string>());
       const asked = sides.map(() => new Map<string, readonly string[]>());
       const touched = new Set(sides.flatMap((side) => side.paths));
+      working.installed.clear();
       const trees = sides.map((side, at) =>
         sideTree(
           blobTree(side.listed.objects, held, imports, ADAPTERS, missing[at], facets),
@@ -209,7 +214,8 @@ const settled = Effect.fn('inspecting.settled')(function* (
           }
           cache?.flush();
         }).pipe(Effect.withSpan('inspecting.commit'));
-        return { worked, read: [...touched] };
+        const used: Installs = [...working.installed].map((path) => [path, checkout.get(path) ?? null]);
+        return { worked, read: [...touched], installed: used };
       }
       for (const [at, side] of sides.entries()) {
         const paths = unknowns[at] ?? [];
@@ -312,7 +318,7 @@ const comparedAt = Effect.fn('inspecting.compared')(function* (root: string, ins
 });
 
 type HeldReading =
-  | { readonly reading: Reading; readonly headroom: number }
+  | { readonly reading: Reading; readonly headroom: number; readonly installed: Installs }
   | { readonly same: true; readonly headroom: number }
   | { readonly same: true; readonly planned: true };
 
@@ -323,9 +329,17 @@ const readingHeld = Effect.fn('inspecting.readingHeld')(function* (
   tree: string,
   compared: Compared,
   cache: InspectionCache | undefined,
-): Effect.fn.Return<HeldReading | undefined, Unread> {
+): Effect.fn.Return<HeldReading | undefined, Unread, FileSystem.FileSystem> {
   const known = knownReading(cache?.memo, inspection, ask.places, compared, tree);
-  if (known !== undefined) return known;
+  if (known !== undefined) {
+    const installed = yield* installedIn(
+      ask.checkout ?? ask.root,
+      ask.installed ?? [],
+      known.installed.map(([path]) => path),
+    );
+    if (installed.every(([, file], at) => installedStamp(file ?? undefined) === known.installed[at]![1]))
+      return { reading: known.reading, headroom: known.headroom, installed };
+  }
   if (ask.from === undefined) return undefined;
   const from = yield* treeIdOf(git, ask.root, ask.from.commit);
   if (from === tree) return { same: true, headroom: ask.from.headroom };
@@ -345,9 +359,15 @@ const plan = Effect.fn('inspecting.plan')(function* (git: Git['Service'], ask: P
   const inspection = yield* slicedOnly(ask.inspection);
   const tree = yield* treeIdOf(git, ask.root, ask.commit);
   const job = jobOf(ask.job);
-  const compared = ask.compared ?? (yield* comparedAt(ask.root, inspection));
+  const compared = ask.compared ?? (yield* comparedAt(ask.checkout ?? ask.root, inspection));
   const held = ask.measures === true ? undefined : yield* readingHeld(git, ask, inspection, tree, compared, cache);
-  if (held !== undefined && 'headroom' in held) return { worked: { ...held, compared } satisfies Worked, read: [] };
+  if (held !== undefined && 'reading' in held)
+    return {
+      worked: { reading: held.reading, headroom: held.headroom, compared } satisfies Worked,
+      read: [],
+      installed: held.installed,
+    };
+  if (held !== undefined && 'headroom' in held) return { worked: { ...held, compared } satisfies Worked, read: [], installed: [] };
   const parts = lists(inspection);
   const listed = yield* listing(git, ask.root, ask.commit, parts);
   const kind = createHash('sha256').update(JSON.stringify(inspection)).digest('hex');
@@ -379,15 +399,20 @@ const plan = Effect.fn('inspecting.plan')(function* (git: Git['Service'], ask: P
     cache,
     undefined,
     undefined,
-    ask.root,
+    ask.checkout ?? ask.root,
     compared,
+    ask.installed,
   );
   if (prepared !== undefined) {
     rememberSnapshot(job, ask.commit, prepared);
     keepNearSnapshot(ask.root, kind, tree, prepared);
   }
   if (held === undefined || !('plan' in result.worked)) return result;
-  return { worked: { same: true, headroom: result.worked.plan.headroom, compared } satisfies Worked, read: result.read };
+  return {
+    worked: { same: true, headroom: result.worked.plan.headroom, compared } satisfies Worked,
+    read: result.read,
+    installed: result.installed,
+  };
 });
 
 const slice = Effect.fn('inspecting.slice')(function* (git: Git['Service'], ask: SliceAsk, cache: InspectionCache | undefined) {
@@ -407,8 +432,9 @@ const slice = Effect.fn('inspecting.slice')(function* (git: Git['Service'], ask:
     cache,
     frontiersOf(job, ask.commit),
     ask.measures === true ? undefined : validityOf(ask.root, tree),
-    ask.root,
+    ask.checkout ?? ask.root,
     ask.compared,
+    ask.installed,
   );
 });
 
@@ -444,8 +470,8 @@ const change = Effect.fn('inspecting.change')(function* (git: Git['Service'], as
   if (ask.readings !== undefined && cache !== undefined) {
     const { baseTree, builtTree } = yield* treeIdsOf(git, ask.root, ask.base, ask.built);
     const { base, built, compared, headroom } = ask.readings;
-    keepReading(cache.memo, ask.inspection, ask.places, compared, baseTree, base, headroom.base);
-    keepReading(cache.memo, ask.inspection, ask.places, compared, builtTree, built, headroom.built);
+    keepReading(cache.memo, ask.inspection, ask.places, compared, baseTree, base, headroom.base, ask.readings.installed.base);
+    keepReading(cache.memo, ask.inspection, ask.places, compared, builtTree, built, headroom.built, ask.readings.installed.built);
   }
   const parts = lists(ask.inspection);
   if (prefetches(ask.inspection.builtin)) {
@@ -658,11 +684,12 @@ export const answer = (posted: Posted, serves: 'reach' | 'judge'): Promise<Inspe
   });
   return runtime.runPromise(
     work.pipe(
-      Effect.map(({ worked, read }): InspectionAnswer => ({
+      Effect.map((done): InspectionAnswer => ({
         id: posted.id,
         answered: true,
-        ...worked,
-        read,
+        ...done.worked,
+        read: done.read,
+        installed: 'installed' in done ? done.installed : [],
         ms: Math.round(performance.now() - started),
       })),
       Effect.catchTag('Unread', (unread) =>

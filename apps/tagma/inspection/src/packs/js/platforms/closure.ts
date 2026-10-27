@@ -17,6 +17,7 @@ export type File = {
   readonly edges: Edge[];
   readonly causes: Cause[];
   readonly dependencies: Map<string, string | null>;
+  readonly installed: Map<string, string | null>;
   readonly listings: Map<string, string>;
   readonly violations: Violation[];
   readonly universal: Keyed[];
@@ -233,6 +234,7 @@ export function memoDependencies(
   const keys = new Map<number, string>();
   for (let id = groups.length - 1; id >= 0; id -= 1) {
     const dependencies = new Map<string, string | null>(),
+      installed = new Map<string, string | null>(),
       listings = new Map<string, string>(),
       parents = new Set<string>();
     const violations: Violation[] = [],
@@ -242,6 +244,7 @@ export function memoDependencies(
       violations.push(...node.violations);
       universal.push(...node.universal);
       for (const [path, object] of node.dependencies) dependencies.set(path, object);
+      for (const [path, stamp] of node.installed) installed.set(path, stamp);
       for (const [query, stamp] of node.listings) listings.set(query, stamp);
       for (const edge of node.edges) {
         const target = component.get(edge.to);
@@ -253,8 +256,9 @@ export function memoDependencies(
         parents.add(keys.get(target)!);
       }
     }
-    const value = {
+    const value: MemoValue = {
       dependencies: [...dependencies].sort(byKey),
+      ...(installed.size === 0 ? {} : { installed: [...installed].sort(byKey) }),
       listings: [...listings].sort(byKey),
       parents: [...parents].sort(),
       violations,

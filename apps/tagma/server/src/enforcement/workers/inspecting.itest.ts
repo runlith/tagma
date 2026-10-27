@@ -78,13 +78,13 @@ beforeAll(async () => {
 });
 
 let asked = 0;
-const reach = (commitName: string, job?: string) =>
-  answer({ id: ++asked, kind: 'reach', root, commit: commitName, inspection, places: ['app/src'], job }, 'reach');
+const reach = (commitName: string) =>
+  answer({ id: ++asked, kind: 'reach', root, commit: commitName, inspection, places: ['app/src'] }, 'reach');
 
 test('a reach reads beyond its base from the committed tree, never the working tree, and names the files it read', async () => {
   write({ 'packages/client/src/shape.ts': 'export const shape = 1;\n' });
-  const reply = await reach(first, 'held');
-  const again = await reach(first, 'held');
+  const reply = await reach(first);
+  const again = await reach(first);
   expect(again.answered && [...again.read].sort()).toEqual(reply.answered ? [...reply.read].sort() : []);
   expect(reply.answered && 'verdict' in reply && reply.verdict.violations).toEqual([
     {

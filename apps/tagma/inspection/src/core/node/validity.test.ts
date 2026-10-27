@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Dependents, type MemoValue, Validity } from './memo';
+import { checkedOnce, Dependents, type MemoValue, Validity, validMemo } from './memo';
 
 const value = (dependencies: readonly string[], parents: readonly string[] = [], listings: readonly string[] = []): MemoValue => ({
   dependencies: dependencies.map((name) => [name, 'o'] as const),
@@ -66,6 +66,17 @@ describe('validity carried from one tree to the next', () => {
     expect([moved.stands('P'), moved.stands('K'), moved.stands('L')]).toEqual([false, false, true]);
     const added = restored.derive([{ path: 'src/new.ts', before: null, after: 'new' }]);
     expect([added.stands('K'), added.stands('L')]).toEqual([true, false]);
+  });
+
+  test('a key that stands is still judged against the installed files it read, which no tree change reaches', () => {
+    const base = Validity.fresh(new Dependents(100));
+    const memo = new Map<string, MemoValue>([['K', { ...value(['src/a.ts']), installed: [['node_modules/x/base.json', 'first']] }]]);
+    let installed = 'first';
+    const objects = (name: string) => (name === 'src/a.ts' ? 'o' : installed);
+    expect(validMemo('K', objects, () => '', memo, checkedOnce(base))).toBe(true);
+    const next = base.derive([edit('src/c.ts')]);
+    installed = 'second';
+    expect([next.stands('K'), validMemo('K', objects, () => '', memo, checkedOnce(next))]).toEqual([true, false]);
   });
 
   test('a long line of trees still carries what no change reached', () => {

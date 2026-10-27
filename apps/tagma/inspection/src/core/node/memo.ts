@@ -22,6 +22,7 @@ export type Hit = {
 
 export type MemoValue = {
   readonly dependencies: readonly (readonly [string, string | null])[];
+  readonly installed?: readonly (readonly [string, string | null])[];
   readonly listings: readonly (readonly [string, string])[];
   readonly parents?: readonly string[];
   readonly violations: readonly Violation[];
@@ -130,7 +131,8 @@ export function validMemo(
         (at.value.parents ?? []).every((parent) => decided.get(parent) === true) &&
         (checked.stands(at.key) ||
           (at.value.dependencies.every(([name, object]) => objects(name) === object) &&
-            at.value.listings.every(([query, stamp]) => listing(query) === stamp)));
+            at.value.listings.every(([query, stamp]) => listing(query) === stamp))) &&
+        (at.value.installed ?? []).every(([path, stamp]) => objects(path) === stamp);
       decided.set(at.key, valid);
       checked.settle(at.key, valid, at.value);
       open.delete(at.key);

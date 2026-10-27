@@ -401,7 +401,6 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
                 places: rule.places,
                 inspection,
                 debt: judgedDebt(debt),
-                job: subject.job,
                 checkout: subject.checkout,
               }),
         (changed) => touching(document, rule.places, changed),

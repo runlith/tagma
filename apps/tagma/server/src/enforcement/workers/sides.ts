@@ -153,14 +153,12 @@ export const fetchedBlobs = (sides: readonly Side[], held: ReadonlyMap<string, s
     }),
   );
 
-export type Working = { readonly files: ReadonlyMap<string, Installed | null>; readonly asked: Set<string>; readonly depth: number };
-
-export class WorkingUnread extends Error {
-  constructor(readonly path: string) {
-    super(`the checkout's ${path} is read before the inspection runs again`);
-    this.name = 'WorkingUnread';
-  }
-}
+export type Working = {
+  readonly files: ReadonlyMap<string, Installed | null>;
+  readonly asked: Set<string>;
+  readonly installed: Set<string>;
+  readonly depth: number;
+};
 
 export const sideTree = (
   tree: Tree,
@@ -180,10 +178,7 @@ export const sideTree = (
       ? undefined
       : (path: string): Installed | undefined => {
           if (tree.has(path)) return undefined;
-          if (!checkout.working.files.has(path)) {
-            checkout.working.asked.add(path);
-            throw new WorkingUnread(path);
-          }
+          if (!checkout.working.files.has(path)) checkout.working.asked.add(path);
           return checkout.working.files.get(path) ?? undefined;
         };
   return {
@@ -246,6 +241,16 @@ export const sideTree = (
       return known;
     },
     working: checkout?.judged === true && outside !== undefined ? (path) => outside(path)?.text : undefined,
-    environment: checkout === undefined || outside === undefined ? undefined : { depth: checkout.working.depth, read: outside },
+    environment:
+      checkout === undefined || outside === undefined
+        ? undefined
+        : {
+            depth: checkout.working.depth,
+            read: (path) => {
+              const found = outside(path);
+              if (!tree.has(path)) checkout.working.installed.add(path);
+              return found;
+            },
+          },
   };
 };

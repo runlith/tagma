@@ -23,6 +23,7 @@ const served = (payload: { readonly plan: Plan } | { readonly sliced: Sliced }, 
   id: 1,
   answered: true,
   read,
+  installed: [],
   ms: 1,
   ...('plan' in payload ? { ...payload, compared: [] } : payload),
 });
