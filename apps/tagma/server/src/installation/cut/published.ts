@@ -1,60 +1,117 @@
 import { join } from 'node:path';
 import { Effect, FileSystem, Schema, type Scope } from 'effect';
 import { Git } from '@runlith/git/Git';
-import { type Feed, feedSchema } from '../contract/wire/feed.js';
+import type { GitHubCli, ProgramFailure } from '@runlith/github/GitHubCli';
+import { compareReleases, type Feed, FEED_FILE, feedSchema, releaseOfTag } from '../contract/wire/feed.js';
 
-export const FEED_FILE = 'feed.json';
-export const FEED_REPOSITORY = 'runlith/tagma';
-export const FEED_BRANCH = 'refs/heads/main';
-export const feedRemote = (repo: string): string => `https://github.com/${repo}.git`;
+const NOT_FOUND = /release not found/u;
 
-const CREDENTIAL = ['-c', 'credential.helper=', '-c', 'credential.helper=!gh auth git-credential'];
-const ABSENT = /repository not found|not found/iu;
+export type PublishedTrouble = { readonly detail: string; readonly unblock: readonly string[] };
 
+export type Issued = { readonly latest: Feed | null; readonly numbers: readonly string[] };
+
+export const ghTrouble =
+  (repo: string) =>
+  (failure: ProgramFailure): PublishedTrouble =>
+    failure._tag === 'ProgramUnavailable'
+      ? { detail: `gh: ${failure.detail}`, unblock: ['install the GitHub CLI (https://cli.github.com), then gh auth login'] }
+      : { detail: `gh: ${failure.detail}`, unblock: [`gh auth status — gh signs in to github.com and reaches ${repo}`] };
+
+const absentAsNull = <A>(effect: Effect.Effect<A, ProgramFailure>): Effect.Effect<A | null, ProgramFailure> =>
+  effect.pipe(
+    Effect.catchTag('ProgramFailed', (failure) =>
+      failure.phase === 'exit' && NOT_FOUND.test(failure.stderr ?? '') ? Effect.succeed(null) : Effect.fail(failure),
+    ),
+  );
+
+const Latest = Schema.Struct({ tagName: Schema.String, assets: Schema.Array(Schema.Struct({ name: Schema.String })) });
+const decodeLatest = Schema.decodeUnknownResult(Schema.fromJsonString(Latest));
 const decodeFeed = Schema.decodeUnknownResult(Schema.fromJsonString(feedSchema));
 
-export type PublishedTrouble = { readonly detail: string; readonly remote: boolean };
-
-export type Clone = {
-  readonly work: string;
-  readonly feed: Feed | null;
-  readonly git: (args: readonly string[], remote?: boolean) => Effect.Effect<string, PublishedTrouble>;
-};
-
-export const publishedClone = Effect.fnUntraced(function* (
-  remote: string,
-): Effect.fn.Return<Clone, PublishedTrouble, FileSystem.FileSystem | Git | Scope.Scope> {
+export const releaseFeed = Effect.fnUntraced(function* (
+  gh: GitHubCli,
+  repo: string,
+  tag: string,
+  cwd: string,
+): Effect.fn.Return<Feed, PublishedTrouble, FileSystem.FileSystem | Scope.Scope> {
   const files = yield* FileSystem.FileSystem;
-  const git = yield* Git;
-  const work = yield* files
+  const into = yield* files
     .makeTempDirectoryScoped({ prefix: 'tagma-feed-' })
-    .pipe(Effect.mapError((error) => ({ detail: `a directory for the feed could not be made: ${error.reason._tag}`, remote: false })));
-  const run = (args: readonly string[], remotely = false) =>
-    git.run(remotely ? [...CREDENTIAL, ...args] : args, { cwd: work, env: { GIT_TERMINAL_PROMPT: '0' }, extendEnv: true }).pipe(
-      Effect.mapError((failure) => ({ detail: failure.message, remote: remotely })),
-      Effect.flatMap((answer) =>
-        answer.status === 0
-          ? Effect.succeed(answer.stdout)
-          : Effect.fail({ detail: `git ${args.join(' ')} exited ${answer.status}: ${answer.stderr.trim()}`, remote: remotely }),
-      ),
-    );
-  yield* run(['init', '-q']);
-  const asked = yield* git
-    .run([...CREDENTIAL, 'ls-remote', remote, FEED_BRANCH], { cwd: work, env: { GIT_TERMINAL_PROMPT: '0' }, extendEnv: true })
-    .pipe(Effect.mapError((failure) => ({ detail: failure.message, remote: true })));
-  const absent = asked.status !== 0 && ABSENT.test(asked.stderr);
-  if (asked.status !== 0 && !absent) {
-    return yield* Effect.fail({ detail: `git ls-remote ${remote} exited ${asked.status}: ${asked.stderr.trim()}`, remote: true });
-  }
-  if (absent || asked.stdout.trim() === '') return { work, feed: null, git: run };
-  yield* run(['fetch', '-q', '--depth', '1', remote, FEED_BRANCH], true);
-  yield* run(['checkout', '-q', 'FETCH_HEAD']);
-  const path = join(work, FEED_FILE);
-  const present = yield* files.exists(path).pipe(Effect.mapError(() => ({ detail: `${path} could not be read`, remote: false })));
-  if (!present) return { work, feed: null, git: run };
-  const text = yield* files.readFileString(path).pipe(Effect.mapError(() => ({ detail: `${path} could not be read`, remote: false })));
+    .pipe(Effect.mapError((error) => ({ detail: `a directory for the feed could not be made: ${error.reason._tag}`, unblock: [] })));
+  yield* gh
+    .run(['release', 'download', tag, '--repo', repo, '--pattern', FEED_FILE, '--dir', into, '--clobber'], cwd)
+    .pipe(Effect.mapError(ghTrouble(repo)));
+  const path = join(into, FEED_FILE);
+  const text = yield* files
+    .readFileString(path)
+    .pipe(Effect.mapError((error) => ({ detail: `${path} could not be read: ${error.reason._tag}`, unblock: [] })));
   const decoded = decodeFeed(text);
-  if (decoded._tag === 'Failure')
-    return yield* Effect.fail({ detail: `${FEED_FILE} on main does not read as a feed: ${decoded.failure.message}`, remote: false });
-  return { work, feed: decoded.success, git: run };
+  if (decoded._tag === 'Failure') {
+    return yield* Effect.fail({
+      detail: `${FEED_FILE} of ${tag} in ${repo} does not read as a feed: ${decoded.failure.message}`,
+      unblock: [`gh release edit ${tag} --repo ${repo} --prerelease — the release before it becomes Latest again`],
+    });
+  }
+  return decoded.success;
 });
+
+export const latestFeed = Effect.fnUntraced(function* (
+  gh: GitHubCli,
+  repo: string,
+  cwd: string,
+): Effect.fn.Return<Feed | null, PublishedTrouble, FileSystem.FileSystem | Scope.Scope> {
+  const viewed = yield* absentAsNull(gh.run(['release', 'view', '--repo', repo, '--json', 'tagName,assets'], cwd)).pipe(
+    Effect.mapError(ghTrouble(repo)),
+  );
+  if (viewed === null) return null;
+  const read = decodeLatest(viewed.stdout);
+  if (read._tag === 'Failure') {
+    return yield* Effect.fail({ detail: `gh release view answered what does not read as a release: ${read.failure.message}`, unblock: [] });
+  }
+  const { tagName, assets } = read.success;
+  if (!assets.some((asset) => asset.name === FEED_FILE)) {
+    return yield* Effect.fail({
+      detail: `${tagName}, the Latest release of ${repo}, carries no ${FEED_FILE}, so the releases published before it cannot be read`,
+      unblock: [`gh release edit ${tagName} --repo ${repo} --prerelease — the release before it becomes Latest again`],
+    });
+  }
+  return yield* releaseFeed(gh, repo, tagName, cwd);
+});
+
+export const publishedNumbers = (gh: GitHubCli, repo: string, cwd: string): Effect.Effect<readonly string[], PublishedTrouble> =>
+  gh.run(['api', '--paginate', `repos/${repo}/releases?per_page=100`, '--jq', '.[] | select(.draft | not) | .tag_name'], cwd).pipe(
+    Effect.mapError(ghTrouble(repo)),
+    Effect.map((ended) =>
+      ended.stdout
+        .split('\n')
+        .map((line) => releaseOfTag(line.trim()))
+        .filter((release) => release !== null),
+    ),
+  );
+
+export const issuedReleases = Effect.fnUntraced(function* (gh: GitHubCli, repo: string, cwd: string) {
+  const [latest, numbers] = yield* Effect.all([latestFeed(gh, repo, cwd), publishedNumbers(gh, repo, cwd)], { concurrency: 2 });
+  return { latest, numbers } satisfies Issued;
+});
+
+export const checkoutTags = Effect.fnUntraced(function* (checkout: string): Effect.fn.Return<readonly string[], PublishedTrouble, Git> {
+  const git = yield* Git;
+  const answer = yield* git
+    .run(['tag', '--list', 'v*'], { cwd: checkout })
+    .pipe(Effect.mapError((failure): PublishedTrouble => ({ detail: failure.message, unblock: [] })));
+  if (answer.status !== 0) {
+    return yield* Effect.fail<PublishedTrouble>({ detail: `git tag --list exited ${answer.status}: ${answer.stderr.trim()}`, unblock: [] });
+  }
+  return answer.stdout
+    .split('\n')
+    .map((line) => releaseOfTag(line.trim()))
+    .filter((release) => release !== null);
+});
+
+export const highestOf = (issued: Issued, tags: readonly string[]): string | null =>
+  [...issued.numbers, ...tags, ...(issued.latest?.releases.map((one) => one.release) ?? [])].reduce<string | null>(
+    (highest, one) => (highest === null || compareReleases(one, highest) > 0 ? one : highest),
+    null,
+  );
+
+export const newestIn = (feed: Feed) => feed.releases.toSorted((a, b) => compareReleases(b.release, a.release))[0]!;

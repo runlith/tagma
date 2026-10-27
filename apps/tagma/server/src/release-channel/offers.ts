@@ -167,7 +167,7 @@ export const frameOf = (given: ChannelState): NextFrame => {
     revision: state.revision,
     readAt: state.readAt,
     readFrom: state.readFrom,
-    watched: false,
+    watched: true,
     issue: state.issue,
     standing: standingOf(state, newer),
     offers: offer === null ? [] : [offer],

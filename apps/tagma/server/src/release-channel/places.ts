@@ -1,6 +1,7 @@
 import { join } from 'node:path';
+import { FEED_REPOSITORY, feedAddress } from '../installation/contract/wire/feed.js';
 
-export const FEED = 'https://raw.githubusercontent.com/runlith/tagma/main/feed.json';
+export const FEED = feedAddress(FEED_REPOSITORY);
 
 export type ReleasePlaces = {
   readonly log: string;

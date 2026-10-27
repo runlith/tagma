@@ -31,9 +31,7 @@ it.live(
         JSON.stringify({
           release: '0.1.1',
           commit: 'b'.repeat(40),
-          archive: 'tagma-0.1.1-darwin-arm64.tar.gz',
-          image: 'Tagma-0.1.1.dmg',
-          ...archived,
+          images: { 'darwin-arm64': 'Tagma-0.1.1.dmg', 'darwin-x64': 'Tagma-0.1.1.dmg' },
           platforms: {
             'darwin-arm64': { archive: 'tagma-0.1.1-darwin-arm64.tar.gz', ...archived },
             'darwin-x64': { archive: 'tagma-0.1.1-darwin-x64.tar.gz', sha256: '0'.repeat(64), size: 24 },
@@ -64,9 +62,10 @@ it.live(
               },
             };
           }),
-        trial: ({ predecessor }) =>
+        trial: (trying) =>
           Effect.suspend(() => {
-            predecessors.push(predecessor === null ? null : readFileSync(predecessor, 'utf8'));
+            const verified = Object.entries(trying.predecessors);
+            predecessors.push(verified.map(([platform, archive]) => `${platform}: ${readFileSync(archive, 'utf8')}`).join(', ') || null);
             return stopping.during ? Effect.andThen(Deferred.succeed(inTrial, undefined), Effect.never) : Effect.void;
           }),
       };
@@ -81,7 +80,7 @@ it.live(
 
       expect(standingAfterStop).toBe('0.1.1');
       expect(builds).toEqual([homeOf(out, { ...identity, notarized: false })]);
-      expect(predecessors).toEqual(['the archive of 0.1.1', 'the archive of 0.1.1']);
+      expect(predecessors).toEqual(['darwin-arm64: the archive of 0.1.1', 'darwin-arm64: the archive of 0.1.1']);
       expect(recordAt(out).release).toBe('0.1.2');
       const x64 = recordAt(out).platforms['darwin-x64']!;
       expect(x64).toEqual({
@@ -91,7 +90,6 @@ it.live(
       });
       const feed = JSON.parse(readFileSync(resumed.feed, 'utf8')).releases[0];
       expect(feed.platforms['darwin-x64']).toEqual({ ...x64, archive: new URL(x64.archive, `file://${realpathSync(out)}/`).href });
-      expect(feed.platforms['darwin-arm64'].archive).toBe(feed.archive);
       expect(readFileSync(resumed.images['darwin-x64']!, 'utf8')).toBe('the x64 dmg of 0.1.2');
       expect(readdirSync(parent).sort()).toEqual(['release', basename(builds[0]!)]);
     }),
@@ -118,10 +116,8 @@ it.live(
         join(home, RELEASE_RECORD),
         JSON.stringify({
           ...identity,
-          archive: 'tagma-0.1.3-darwin-arm64.tar.gz',
-          image: 'Tagma-0.1.3.dmg',
-          sha256: '0'.repeat(64),
-          size: 20,
+          platforms: { 'darwin-arm64': { archive: 'tagma-0.1.3-darwin-arm64.tar.gz', sha256: '0'.repeat(64), size: 20 } },
+          images: { 'darwin-arm64': 'Tagma-0.1.3.dmg' },
           notarized: false,
         }),
       );

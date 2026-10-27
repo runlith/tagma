@@ -4,6 +4,14 @@ Tagma keeps a project's knowledge as one graph — specs, decisions, rules and t
 
 This repository holds the local product: the server and CLI (`apps/tagma/server`), the app (`apps/tagma/app`), the desktop shell (`apps/tagma/desktop`), the inspection runner (`apps/tagma/inspection`) and the packages under `packages/` they are built from.
 
+## Install the Mac app
+
+1. Download `Tagma-<version>-arm64.dmg` (Apple silicon) or `Tagma-<version>-x64.dmg` (Intel) from the [latest release](https://github.com/runlith/tagma/releases/latest). macOS 13 or newer.
+2. Open the DMG, drag Tagma into Applications, replacing an older Tagma there, and open it. The first launch installs the release it carries into `~/.tagma/install` and starts the server; it needs no terminal and no separate runtime.
+3. `tagma release path` puts the `tagma` command on your PATH.
+
+Tagma looks for updates when its server starts and once a day, reading the `feed.json` of the latest release at `https://github.com/runlith/tagma/releases/latest/download/feed.json` (setting `release.feed`). A newer release shows in the status bar and in `tagma status` with its download size and whether there is a way back from it. It installs from the window or with `tagma release update`; nothing updates on its own. A release that fails before it starts serving restores the previous release and its data by itself. `tagma release back` returns to the release kept before the current one, unless the current one changed data that release cannot read.
+
 ## Run from source
 
 1. Install [Bun](https://bun.sh) 1.4.4 or newer:

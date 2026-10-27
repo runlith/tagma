@@ -9,12 +9,13 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { Git, gitLayer } from '@runlith/git/Git';
 import { troubleOf } from '@runlith/git/repository';
+import { gitHubCli, type GitHubCli } from '@runlith/github/GitHubCli';
 import { developerLabels } from '@runlith/tagma/adapter/host-modules';
 import { gitCut, gitTree } from '../../platform/git/readings.js';
 import { baselineReceipt } from '../../platform/store/baseline.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import { EXECUTIONS_RUNTIME } from '../contract/wire/archive.js';
-import { archivesOf, compareReleases, isRelease, LEGACY_PLATFORM, releaseAfter, type StoreMarks } from '../contract/wire/feed.js';
+import { compareReleases, FEED_REPOSITORY, isRelease, releaseAfter, type StoreMarks } from '../contract/wire/feed.js';
 import type { Channel } from '../contract/wire/channel.js';
 import { dataDirectory, hostBundle, RELEASE_INSIDE } from '../contract/wire/layout.js';
 import { diskImage } from './dmg.js';
@@ -22,11 +23,11 @@ import { DESKTOP, IRREVERSIBLE_STORES, type IrreversibleChange, MIGRATIONS } fro
 import { releaseIdentity } from '../setup/signing.js';
 import { output } from './command.js';
 import { archiveTrouble, developerInputs, type Label, sourceComments } from './proof.js';
-import { FEED_REPOSITORY, feedRemote, publishedClone } from './published.js';
+import { checkoutTags, highestOf, issuedReleases, newestIn } from './published.js';
 import { type Composition, INPUT_RECORDS, RELEASE_LOG, ReleaseRefused, releaseStaged } from './release.js';
 import { releaseRuntime } from './runtime.js';
 import { type Built, type BuiltPlatform, INPUTS, MAPS, type Released, stagedCut, type Stages, type Trying } from './stage.js';
-import { type Target, TARGETS, targetName } from './target.js';
+import { machineTarget, type Target, TARGETS, targetName } from './target.js';
 import { trialStart } from './trial.js';
 
 export const RELEASE_DIRECTORY = 'release';
@@ -116,12 +117,13 @@ export type Cut = {
   readonly out: string;
   readonly cache: CutCache;
   readonly steps: Steps;
-  readonly remote: string;
+  readonly repo: string;
+  readonly gh: GitHubCli;
 };
 
 export const cutRelease = Effect.fn('installation.cutRelease')(function* (
   sourcePath: string,
-  { composition, asked, out, cache, steps, remote }: Cut,
+  { composition, asked, out, cache, steps, repo, gh }: Cut,
 ): Effect.fn.Return<Released, ReleaseRefused, Machine | Scope.Scope> {
   const files = yield* FileSystem.FileSystem;
   const git = yield* Git;
@@ -148,21 +150,24 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
     );
   }
 
-  const published = yield* publishedClone(remote).pipe(
+  const issued = yield* issuedReleases(gh, repo, checkout).pipe(
     Effect.mapError((trouble) =>
-      refusal('feed', `what ${remote} publishes could not be read: ${trouble.detail}`, [
+      refusal('feed', `what ${repo} publishes could not be read: ${trouble.detail}`, [
+        ...trouble.unblock,
         'the version and what is irreversible are judged against the newest published release: reach GitHub, then bun run tagma:release',
       ]),
     ),
   );
-  const newest = published.feed === null ? null : published.feed.releases.toSorted((a, b) => compareReleases(b.release, a.release))[0]!;
-  if (asked !== null && newest !== null && compareReleases(asked, newest.release) <= 0) {
-    return yield* refuse('version', `${newest.release} is published, and each version is newer than every one before it`, [
-      `bun run tagma:release --version <a version after ${newest.release}>`,
+  const tags = yield* checkoutTags(checkout).pipe(Effect.mapError((trouble) => refusal('tree', trouble.detail)));
+  const highest = highestOf(issued, tags);
+  const newest = issued.latest === null ? null : newestIn(issued.latest);
+  if (asked !== null && highest !== null && compareReleases(asked, highest) <= 0) {
+    return yield* refuse('version', `${highest} is published, and each version is newer than every one before it`, [
+      `bun run tagma:release --version <a version after ${highest}>`,
       'bun run tagma:release — takes the next one',
     ]);
   }
-  const release = asked ?? releaseAfter(newest?.release ?? null);
+  const release = asked ?? releaseAfter(highest);
 
   const runtimes = yield* Effect.forEach(TARGETS, (target) =>
     releaseRuntime(checkout, Bun.version, target, cache.runtimes).pipe(
@@ -270,9 +275,10 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
     return { platforms };
   });
 
+  const native = machineTarget();
   const tried = (trying: Trying, target: Target): Effect.Effect<void, ReleaseRefused> => {
     const name = targetName(target);
-    const offered = archivesOf(trying.offer)[name];
+    const offered = trying.offer.platforms[name];
     if (offered === undefined) {
       return refuse('trial', `the release offers no ${name} archive to try`, [`${trying.log} — the cut it built`]);
     }
@@ -280,7 +286,7 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
       channel: composition.channel,
       archive: fileURLToPath(offered.archive),
       offer: trying.offer,
-      predecessor: name === LEGACY_PLATFORM ? trying.predecessor : null,
+      predecessor: native !== null && targetName(native) === name ? (trying.predecessors[name] ?? null) : null,
       labels,
       scratch: tmpdir(),
       log: (line) => appendFileSync(trying.log, `\n=== trial ${name} ===\n${line}\n`),
@@ -359,7 +365,8 @@ export const releaseCommand = Effect.fnUntraced(function* (
       out,
       cache: cutCache(data),
       steps,
-      remote: feedRemote(repo),
+      repo,
+      gh: gitHubCli,
     }).pipe(Effect.provide(Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), spawning, BunFileSystem.layer))),
   );
   if (cut._tag === 'Failure') {

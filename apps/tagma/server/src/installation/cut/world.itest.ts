@@ -46,9 +46,7 @@ const world: World = {
 };
 const offer: FeedRelease = {
   release: '0.2.0',
-  archive: 'file:///release.tar.gz',
-  sha256: '1'.repeat(64),
-  size: 0,
+  platforms: { 'darwin-arm64': { archive: 'file:///release.tar.gz', sha256: '1'.repeat(64), size: 0 } },
   irreversible: false,
   stores: { 'machine-store': [], 'host-store': [], graph: [], journal: [] },
   changes: [],

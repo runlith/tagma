@@ -2,7 +2,6 @@ import { Effect, Schema } from 'effect';
 import { HttpClient, HttpClientRequest } from 'effect/http';
 import type { NextIssue } from '../installation/contract/wire/next.js';
 import {
-  archivesOf,
   compareReleases,
   type Feed,
   type FeedRelease,
@@ -28,7 +27,7 @@ export const releaseFor = (feed: Feed, running: string, platform: InstallationPl
   const newest = newestOf(feed);
   if (isRelease(running) && compareReleases(newest.release, running) <= 0) return { release: null, issue: null };
   const key = `${platform.os}-${platform.arch}`;
-  const archive = archivesOf(newest)[key];
+  const archive = newest.platforms[key];
   return archive === undefined
     ? {
         release: null,
@@ -65,6 +64,7 @@ export const readFeed = Effect.fn('release.readFeed')(function* (client: HttpCli
   const response = yield* client
     .execute(HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson))
     .pipe(Effect.mapError((failure) => unreachable(url, failure.message)));
+  if (response.status === 404) return yield* Effect.fail(unreadable(url, 'it answered 404: no published release carries a feed there'));
   if (response.status < 200 || response.status >= 300) return yield* Effect.fail(unreadable(url, `it answered ${response.status}`));
   const text = yield* response.text.pipe(Effect.mapError((failure) => unreachable(url, failure.message)));
   const decoded = decodeFeed(text);

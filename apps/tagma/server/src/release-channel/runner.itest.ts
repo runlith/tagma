@@ -156,9 +156,6 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
     sha256 = packed.sha256,
   ) => ({
     release,
-    archive,
-    sha256,
-    size: packed.size,
     platforms: { [platformKey]: { archive, sha256, size: packed.size } },
     irreversible,
     stores: { 'machine-store': [], 'host-store': [], graph: [], journal: [] },
@@ -257,9 +254,6 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
             releases: [
               {
                 ...offered,
-                archive: `${url}/wrong-flat.tar.gz`,
-                sha256: '0'.repeat(64),
-                size: 1,
                 platforms: {
                   ...offered.platforms,
                   [other]: { archive: `${url}/wrong-platform.tar.gz`, sha256: '0'.repeat(64), size: 2 },
@@ -520,10 +514,7 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           const { fourth, releaseOf, standing, channel, placed, until } = world;
           const newest = releaseOf('0.7.0', fourth, false);
           world.feed = {
-            releases: [
-              { ...newest, platforms: { 'linux-x64': { archive: newest.archive, sha256: newest.sha256, size: newest.size } } },
-              releaseOf('0.6.0', fourth, false),
-            ],
+            releases: [{ ...newest, platforms: { 'linux-x64': Object.values(newest.platforms)[0]! } }, releaseOf('0.6.0', fourth, false)],
           };
           const denied = yield* channel({ ...placed('0.5.0', standing()), machine: macPlatform }, (next) =>
             Effect.gen(function* () {
@@ -537,24 +528,15 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           expect(denied.reading.issue?.reason).toContain(world.platformKey);
           expect(denied.reading.issue?.unblock.length).toBeGreaterThan(0);
           expect(denied.install).toMatchObject({ _tag: 'Failure', failure: { code: 'platform-unavailable' } });
-        });
 
-        yield* Effect.gen(function* () {
-          const world = yield* World;
-          const { platforms: _, ...legacy } = world.releaseOf('0.8.0', world.fourth, false);
-          world.feed = { releases: [legacy] };
-          for (const arch of ['arm64', 'x64']) {
-            const read = yield* world.channel(
-              { ...world.placed('0.5.0', world.standing()), machine: { current: Effect.succeed({ os: 'darwin', arch }) } },
-              (next) =>
-                Effect.gen(function* () {
-                  yield* world.until(next, (frame) => frame.readFrom !== null);
-                  return yield* next.reading;
-                }),
-            );
-            expect(read.offers.map((offer) => offer.id)).toEqual(arch === 'arm64' ? ['0.8.0'] : []);
-            expect(read.issue?.code ?? null).toBe(arch === 'arm64' ? null : 'platform-unavailable');
-          }
+          world.feed = null;
+          const absent = yield* channel(placed('0.5.0', standing()), (next) =>
+            Effect.gen(function* () {
+              return yield* until(next, (frame) => frame.issue?.code === 'source-unreadable');
+            }),
+          );
+          expect(absent.offers).toEqual([]);
+          expect(absent.issue?.reason).toContain('404');
         });
       }),
   );

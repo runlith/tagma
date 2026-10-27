@@ -7,7 +7,7 @@ import { output } from './command.js';
 import { diskImage } from './dmg.js';
 import { packRelease } from './pipeline.js';
 import { digestOf, type ReleaseRecord, replaced } from './stage.js';
-import { type FeedArchive, LEGACY_PLATFORM } from '../contract/wire/feed.js';
+import type { FeedArchive } from '../contract/wire/feed.js';
 
 export const NOTARY_PROFILE = 'tagma-notary';
 
@@ -192,10 +192,7 @@ const sealed = Effect.fn('Notarize.seal')(function* (
     yield* apple.accepted(yield* submission(join(staging, IMAGE_SUBMISSION), image));
     yield* apple.staple(image);
   }
-  const legacy = platforms[LEGACY_PLATFORM];
-  if (legacy === undefined)
-    return yield* refused(`the cut of ${record.release} holds no ${LEGACY_PLATFORM} archive for issued clients`, [RECUT]);
-  return { ...record, ...legacy, platforms, images, notarized: true };
+  return { ...record, platforms, images, notarized: true };
 });
 
 export const appleNotary = (developer: Developer): Effect.Effect<Notary, never, FileSystem.FileSystem | Spawner> =>

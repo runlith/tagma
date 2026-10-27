@@ -3,20 +3,19 @@ import { createReadStream } from 'node:fs';
 import { lstat } from 'node:fs/promises';
 import { basename, dirname, join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Effect, FileSystem, type PlatformError, Result, Schema } from 'effect';
+import { Effect, FileSystem, type PlatformError, Schema } from 'effect';
 import {
   compareReleases,
   type Feed,
   type FeedArchive,
+  FEED_FILE,
   type FeedRelease,
   feedSchema,
-  LEGACY_PLATFORM,
   platformArchivesSchema,
   RELEASE_NUMBER,
   storeMarksSchema,
 } from '../contract/wire/feed.js';
 import { IrreversibleChange } from '../contract/wire/manifest.js';
-import { FEED_FILE } from './published.js';
 import { RELEASE_LOG, ReleaseRefused } from './release.js';
 
 export const RELEASE_RECORD = 'release.json';
@@ -31,9 +30,6 @@ const OWNED = '.cut';
 export const ReleaseRecord = Schema.Struct({
   release: Schema.String.check(Schema.isPattern(RELEASE_NUMBER)),
   commit: Schema.NonEmptyString,
-  archive: Schema.NonEmptyString,
-  sha256: Schema.String,
-  size: Schema.Int,
   platforms: platformArchivesSchema,
   images: Schema.Record(Schema.String, Schema.NonEmptyString),
   stores: storeMarksSchema,
@@ -49,9 +45,8 @@ export type BuiltPlatform = { readonly archive: string; readonly image: string }
 export type Built = { readonly platforms: Readonly<Record<string, BuiltPlatform>> };
 
 export type Trying = {
-  readonly archive: string;
   readonly offer: FeedRelease;
-  readonly predecessor: string | null;
+  readonly predecessors: Readonly<Record<string, string>>;
   readonly log: string;
 };
 
@@ -69,27 +64,12 @@ export type Released = {
   readonly log: string;
 };
 
-const storedRecord = Schema.Struct({
-  ...ReleaseRecord.fields,
-  platforms: Schema.optional(platformArchivesSchema),
-  images: Schema.optional(ReleaseRecord.fields.images),
-  image: Schema.optional(Schema.NonEmptyString),
-});
-const readRecord = Schema.decodeUnknownResult(Schema.fromJsonString(storedRecord));
-export const decodeRecord = (text: string) =>
-  Result.map(readRecord(text), ({ image, ...one }): ReleaseRecord => ({
-    ...one,
-    platforms: one.platforms ?? { [LEGACY_PLATFORM]: { archive: one.archive, sha256: one.sha256, size: one.size } },
-    images: one.images ?? (image === undefined ? {} : { [LEGACY_PLATFORM]: image }),
-  }));
+export const decodeRecord = Schema.decodeUnknownResult(Schema.fromJsonString(ReleaseRecord));
 const encodeRecord = Schema.encodeSync(Schema.fromJsonString(ReleaseRecord, { space: 2 }));
 export const encodeFeed = Schema.encodeSync(Schema.fromJsonString(feedSchema, { space: 2 }));
 
 export const feedEntry = (one: ReleaseRecord, address: (archive: string) => string): FeedRelease => ({
   release: one.release,
-  archive: address(one.archive),
-  sha256: one.sha256,
-  size: one.size,
   platforms: Object.fromEntries(
     Object.entries(one.platforms).map(([platform, archive]) => [platform, { ...archive, archive: address(archive.archive) }]),
   ),
@@ -266,42 +246,31 @@ export const stagedCut = Effect.fn('installation.stagedCut')(function* (out: str
             const size = (yield* files.stat(archive).pipe(Effect.mapError(unreadable(archive)))).size;
             platforms[platform] = { archive: relative(home, archive), sha256, size: Number(size) };
           }
-          const legacy = platforms[LEGACY_PLATFORM];
-          if (legacy === undefined)
-            return yield* new ReleaseRefused({
-              step: 'record',
-              detail: `the cut has no ${LEGACY_PLATFORM} archive for issued clients`,
-              log,
-              unblock: ['build the darwin-arm64 archive with this cut'],
-            });
-          const fresh: ReleaseRecord = {
-            ...identity,
-            ...legacy,
-            platforms,
-            images,
-            notarized: false,
-          };
+          const fresh: ReleaseRecord = { ...identity, platforms, images, notarized: false };
           yield* recorded(home, fresh).pipe(Effect.mapError(unreadable(home)));
           return fresh;
         });
   const tried = join(home, TRIED);
   if (!(yield* files.exists(tried).pipe(Effect.mapError(unreadable(tried))))) {
-    const archive = join(home, record.archive);
-    const predecessor =
-      at !== null && standing !== null && compareReleases(standing.release, identity.release) < 0
-        ? yield* verified(join(at, standing.archive), standing)
-        : null;
-    yield* stages.trial({ archive, offer: feedEntry(record, (name) => pathToFileURL(join(home, name)).href), predecessor, log });
+    const predecessors =
+      at !== null && standing !== null && compareReleases(standing.release, identity.release) < 0 ? yield* verified(at, standing) : {};
+    yield* stages.trial({ offer: feedEntry(record, (name) => pathToFileURL(join(home, name)).href), predecessors, log });
     yield* replaced(tried, '').pipe(Effect.mapError(unreadable(tried)));
   }
   yield* stand(out, home);
   return releasedAt(home, record);
 });
 
-const verified = Effect.fn('installation.predecessor')(function* (archive: string, standing: ReleaseRecord) {
-  const sha256 = yield* Effect.tryPromise({
-    try: () => digestOf(archive),
-    catch: (error) => new ReleaseRefused({ step: 'trial', detail: `${archive} could not be read: ${String(error)}`, log: '', unblock: [] }),
-  });
-  return sha256 === standing.sha256 ? archive : null;
+const verified = Effect.fn('installation.predecessor')(function* (at: string, standing: ReleaseRecord) {
+  const archives: Record<string, string> = {};
+  for (const [platform, one] of Object.entries(standing.platforms)) {
+    const archive = join(at, one.archive);
+    const sha256 = yield* Effect.tryPromise({
+      try: () => digestOf(archive),
+      catch: (error) =>
+        new ReleaseRefused({ step: 'trial', detail: `${archive} could not be read: ${String(error)}`, log: '', unblock: [] }),
+    });
+    if (sha256 === one.sha256) archives[platform] = archive;
+  }
+  return archives;
 });

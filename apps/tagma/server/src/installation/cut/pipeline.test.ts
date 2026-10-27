@@ -13,9 +13,6 @@ const STORES: StoreMarks = {
 const record = (release: string, irreversible: ReleaseRecord['irreversible']): ReleaseRecord => ({
   release,
   commit: 'abc1234',
-  archive: `tagma-${release}-darwin-arm64.tar.gz`,
-  sha256: '0'.repeat(64),
-  size: 100,
   platforms: { 'darwin-arm64': { archive: `tagma-${release}-darwin-arm64.tar.gz`, sha256: '0'.repeat(64), size: 100 } },
   images: { 'darwin-arm64': `Tagma-${release}-arm64.dmg` },
   stores: STORES,
@@ -68,9 +65,9 @@ test('a release folds carried machine migrations beyond the baseline while retai
   expect(unfoldedOf(standing, carried, null)).toEqual(['20261010115509_baseline', '20261012000000_carried']);
 });
 
-test('the version after a published one raises its last number, and the first is 0.1.0', () => {
+test('the version after a published one raises its last number, and the first published through the feed is 0.2.0', () => {
   expect([releaseAfter(null), releaseAfter('0.1.4'), releaseAfter('0.2'), releaseAfter('1.0.9')]).toEqual([
-    '0.1.0',
+    '0.2.0',
     '0.1.5',
     '0.2.1',
     '1.0.10',

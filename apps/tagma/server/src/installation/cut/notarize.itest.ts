@@ -47,9 +47,6 @@ it.live(
       const record: ReleaseRecord = {
         release: '0.1.0',
         commit: 'c'.repeat(40),
-        archive,
-        sha256: sha(join(out, archive)),
-        size: readFileSync(join(out, archive)).length,
         platforms: {
           'darwin-arm64': { archive, sha256: sha(join(out, archive)), size: readFileSync(join(out, archive)).length },
           'darwin-x64': { archive: x64, sha256: sha(join(out, x64)), size: readFileSync(join(out, x64)).length },
@@ -90,7 +87,7 @@ it.live(
       yield* Deferred.await(checking);
       yield* Fiber.interrupt(stopped);
       const standingAfterStop = recordAt(out);
-      const wholeAfterStop = sha(join(out, standingAfterStop.archive)) === standingAfterStop.sha256;
+      const wholeAfterStop = Object.values(standingAfterStop.platforms).every((one) => sha(join(out, one.archive)) === one.sha256);
       stopping.during = false;
       yield* notarize();
       const notarized = recordAt(out);
@@ -100,7 +97,6 @@ it.live(
       expect(waited.slice(-2)).toEqual([submissionId(3), submissionId(4)]);
       expect([...stapled].sort()).toEqual(['Tagma-0.1.0-arm64.dmg', 'Tagma-0.1.0-x64.dmg']);
       expect(notarized.notarized).toBe(true);
-      expect(sha(join(out, notarized.archive))).toBe(notarized.sha256);
       for (const [platform, one] of Object.entries(notarized.platforms)) {
         expect(sha(join(out, one.archive))).toBe(one.sha256);
         const unpacked = join(scratch, `unpacked-${platform}`);

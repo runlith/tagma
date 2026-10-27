@@ -17,7 +17,7 @@ import { DESKTOP } from '../contract/wire/manifest.js';
 import { releaseIdentity } from '../setup/signing.js';
 import { checkoutOf, cutCache, flagsOf, irreversibleOf, packRelease, RELEASE_DIRECTORY, type Steps, storesOf } from './pipeline.js';
 import { releaseRuntime } from './runtime.js';
-import { machineTarget } from './target.js';
+import { machineTarget, targetName } from './target.js';
 import { decodeRecord, digestOf, feedEntry, RELEASE_RECORD } from './stage.js';
 import { type Composition, ReleaseRefused, releaseStaged } from './release.js';
 import { transitionTrouble, trialStart } from './trial.js';
@@ -245,9 +245,12 @@ export const transitionCommand = Effect.fnUntraced(function* (
   const cut = existsSync(release) ? yield* Effect.promise(() => realpath(release)) : release;
   const named = flags.value('--from');
   const standingCut = named === undefined ? yield* recordIn(cut) : null;
+  const here = machineTarget();
+  const standingArchive =
+    standingCut?._tag === 'Success' && here !== null ? standingCut.success.platforms[targetName(here)]?.archive : undefined;
   const from = resolve(
     named ??
-      (standingCut?._tag === 'Success' ? join(cut, standingCut.success.archive) : told('no-from', `${cut} holds no cut to update from`)),
+      (standingArchive === undefined ? told('no-from', `${cut} holds no cut for this machine to update from`) : join(cut, standingArchive)),
   );
   const before = yield* recordIn(dirname(from));
   if (before?._tag !== 'Success') {
@@ -298,10 +301,7 @@ export const transitionCommand = Effect.fnUntraced(function* (
       {
         release: number,
         commit: 'tree',
-        archive,
         images: {},
-        sha256,
-        size,
         platforms: { [`${landed.manifest.platform.os}-${landed.manifest.platform.arch}`]: { archive, sha256, size } },
         stores,
         irreversible,
