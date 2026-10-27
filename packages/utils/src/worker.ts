@@ -22,6 +22,7 @@ export const eventReason = (event: ErrorEvent, fallback: string): string =>
 
 export type WorkerLink<Ask extends { readonly id: number }, Answer extends { readonly id: number }> = {
   readonly ask: (make: (id: number) => Ask, transfer?: readonly ArrayBuffer[]) => Effect.Effect<Answer, WorkerUnavailable>;
+  readonly close: (reason: string) => void;
 };
 
 type BunWorker = Worker & { ref(): void; unref(): void };
@@ -34,14 +35,17 @@ export const workerLink = <Ask extends { readonly id: number }, Answer extends {
   let asked = 0;
   const waiting = new Map<number, (answer: Answer | WorkerUnavailable) => void>();
 
-  const failed = (thread: BunWorker, reason: string): void => {
+  const ended = (thread: BunWorker, gone: WorkerUnavailable): void => {
     if (worker !== thread) return;
     worker = undefined;
     thread.terminate();
-    const gone = workerGone(label, reason);
     const standing = [...waiting.values()];
     waiting.clear();
     for (const answered of standing) answered(gone);
+  };
+
+  const failed = (thread: BunWorker, reason: string): void => {
+    if (worker === thread) ended(thread, workerGone(label, reason));
   };
 
   const started = (): BunWorker => {
@@ -84,5 +88,8 @@ export const workerLink = <Ask extends { readonly id: number }, Answer extends {
           if (waiting.size === 0) thread.unref();
         });
       }),
+    close: (reason) => {
+      if (worker !== undefined) ended(worker, new WorkerUnavailable(label, reason));
+    },
   };
 };
