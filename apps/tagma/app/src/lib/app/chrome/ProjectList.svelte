@@ -10,6 +10,7 @@
   import { Host } from '@runlith/layer/Host';
   import { Menu } from '@runlith/primitives/menu.svelte';
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
+  import { chordOf, Keymap, sameChord } from '$lib/app/keys/Keymap.svelte.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { labelOf } from '$lib/features/workspace/mark.js';
   import { ProjectPrefetch } from '$lib/features/projects/Prefetch.js';
@@ -37,6 +38,7 @@
   const SEARCH_FROM = 8;
   const RECENT = 4;
   const TEAM_TIP = 'Team: the graph ships with the repository';
+  const ACT = 'grid size-5 place-items-center rounded-sm text-muted-foreground';
 
   const workspace = Workspace.use();
   const shell = shellActs(ShellOps.use(), Notices.use());
@@ -49,8 +51,11 @@
   const menu = Menu.use();
   const drops = MentionDrops.use();
   const host = Host.use();
+  const keymap = Keymap.use();
   const windows = ProjectWindows.find();
   const newWindowKeys = spellChord({ key: 'Enter', meta: host.apple, ctrl: !host.apple, alt: false, shift: false }, host.apple);
+  const removeChord = keymap.mod('Backspace');
+  const removeKeys = keymap.spell(removeChord);
 
   let query = $state('');
 
@@ -69,7 +74,9 @@
   const rest = $derived(projects.filter((project) => project.id !== current?.id && !recent.includes(project)));
 
   function open(project: Project, event: Event): void {
-    if (windows !== undefined && event.target instanceof Element && event.target.closest('[data-new-window]') !== null)
+    const target = event.target instanceof Element ? event.target : null;
+    if (target !== null && target.closest('[data-project-remove]') !== null) removal.ask(project);
+    else if (windows !== undefined && target !== null && target.closest('[data-new-window]') !== null)
       windows.openProject(visits.resume(project));
     else go(project);
   }
@@ -79,8 +86,13 @@
   }
 
   function pressed(event: KeyboardEvent & { currentTarget: HTMLElement }): void {
-    if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return;
-    const button = event.currentTarget.querySelector<HTMLElement>('[data-new-window]');
+    const act = sameChord(chordOf(event), removeChord)
+      ? '[data-project-remove]'
+      : event.key === 'Enter' && (event.metaKey || event.ctrlKey)
+        ? '[data-new-window]'
+        : null;
+    if (act === null) return;
+    const button = event.currentTarget.querySelector<HTMLElement>(act);
     if (button === null) return;
     event.preventDefault();
     button.click();
@@ -114,13 +126,9 @@
       {#if project.global}<Network class="size-3.5" />{:else}<Swatch projectId={project.id} />{/if}
     {/snippet}
     {#snippet tail()}
-      <span class="relative flex h-5 min-w-5 items-center justify-end">
-        <span
-          class={cn(
-            'flex items-center',
-            windows !== undefined && 'group-hover/menu-row:invisible group-data-highlighted/menu-row:invisible',
-          )}
-        >
+      {@const acts = windows !== undefined || !project.global}
+      <span class="flex h-5 min-w-5 items-center justify-end">
+        <span class={cn('flex items-center', acts && 'group-hover/menu-row:hidden group-data-highlighted/menu-row:hidden')}>
           {#if project.id === context?.id}
             <Check class="size-3.5 text-brand" />
           {:else if hint !== null}
@@ -129,18 +137,35 @@
             <PulseMarks projectId={project.id} />
           {/if}
         </span>
-        {#if windows !== undefined}
-          <Tooltip text="Open in New Window" keys={newWindowKeys}>
-            <button
-              type="button"
-              tabindex="-1"
-              data-new-window
-              aria-label="Open in New Window"
-              class="invisible absolute inset-y-0 right-0 grid w-5 place-items-center rounded-sm text-muted-foreground group-hover/menu-row:visible group-data-highlighted/menu-row:visible hover:text-foreground"
-            >
-              <AppWindow class="size-3.5" />
-            </button>
-          </Tooltip>
+        {#if acts}
+          <span class="hidden items-center gap-0.5 group-hover/menu-row:flex group-data-highlighted/menu-row:flex">
+            {#if windows !== undefined}
+              <Tooltip text="Open in New Window" keys={newWindowKeys}>
+                <button
+                  type="button"
+                  tabindex="-1"
+                  data-new-window
+                  aria-label="Open in New Window"
+                  class={cn(ACT, 'hover:text-foreground')}
+                >
+                  <AppWindow class="size-3.5" />
+                </button>
+              </Tooltip>
+            {/if}
+            {#if !project.global}
+              <Tooltip text="Remove from Tagma…" keys={removeKeys}>
+                <button
+                  type="button"
+                  tabindex="-1"
+                  data-project-remove
+                  aria-label={`Remove “${labelOf(project)}” from Tagma`}
+                  class={cn(ACT, 'hover:text-destructive')}
+                >
+                  <FolderMinus class="size-3.5" />
+                </button>
+              </Tooltip>
+            {/if}
+          </span>
         {/if}
       </span>
     {/snippet}
