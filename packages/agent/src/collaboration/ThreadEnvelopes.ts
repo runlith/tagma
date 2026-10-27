@@ -8,7 +8,7 @@ import { actDigest, type Keyed } from '../thread/keyed';
 import { causeSentence } from '../thread/persisted';
 import { threadTarget, type ThreadRecord, type ThreadTarget } from '../thread/record';
 import { ThreadCallBroke, threadCauseOf } from '../thread/ThreadBorder';
-import { ThreadInbox, ThreadResting } from '../thread/ThreadPorts';
+import { ThreadInbox, ThreadOwnWork, ThreadResting } from '../thread/ThreadPorts';
 import {
   THREAD_REQUEST_REQUESTER_GONE,
   type ThreadInboxItem,
@@ -160,6 +160,7 @@ export const threadEnvelopesLayer = Layer.effect(
     const stages = yield* EndingStages;
     const threads = yield* Threads;
     const resting = yield* ThreadResting;
+    const own = yield* ThreadOwnWork;
     const wakes = yield* makeWakes;
     const reconcileMs = collaboration?.reconcileIntervalMs ?? Number.POSITIVE_INFINITY;
 
@@ -638,7 +639,7 @@ export const threadEnvelopesLayer = Layer.effect(
     });
 
     return ThreadEnvelopes.of({
-      completeRun: (ended) => reportOwed(inbox, threads, runs, stages, deliver, ended, wakes.contextOf),
+      completeRun: (ended) => reportOwed(inbox, threads, runs, stages, own, deliver, ended, wakes.contextOf),
 
       withdrawRequest: (threadId, principal, inputId) => withdrawQueued(inbox, threads, deliver, threadId, principal, inputId),
 

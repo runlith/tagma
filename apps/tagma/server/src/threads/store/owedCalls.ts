@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, ne } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne } from 'drizzle-orm';
 import { Effect } from 'effect';
 import type { CallAddress, CallRecord } from '@runlith/agent/callProgress';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -67,6 +67,19 @@ export const makeOwedCallRows = Effect.gen(function* () {
       Effect.map(unit.run(db.delete(owedCall).where(at(address)).returning({ runId: owedCall.runId })), (rows) => rows.length > 0),
     row: (unit: Unit<'machine'>, address: CallAddress) =>
       Effect.map(unit.run(db.select().from(owedCall).where(at(address)).all()), (rows): OwedRow | null => rows[0] ?? null),
+    owing: (unit: Unit<'machine'>, threads: readonly string[] | undefined) =>
+      threads?.length === 0
+        ? Effect.succeed([])
+        : Effect.map(
+            unit.run(
+              db
+                .selectDistinct({ thread: owedCall.threadId })
+                .from(owedCall)
+                .where(threads === undefined ? undefined : inArray(owedCall.threadId, [...threads]))
+                .all(),
+            ),
+            (rows): readonly string[] => rows.map((row) => row.thread),
+          ),
     of: (unit: Unit<'machine'>, scope: OwedScope) =>
       Effect.map(
         unit.run(

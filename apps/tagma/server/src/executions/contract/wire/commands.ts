@@ -64,6 +64,9 @@ export type CommandDelivery = typeof CommandDelivery.Type;
 export const commandSignalId = (execution: ExecutionRef, toolCall: string | undefined): string =>
   `command:${execution.execution}:${execution.incarnation}${toolCall === undefined ? '' : `:${toolCall}`}`;
 
+export const commandInspection = (execution: { readonly execution: string; readonly incarnation: number }): string =>
+  `read_output with execution ${execution.execution} and incarnation ${execution.incarnation} reads what it has printed so far.`;
+
 export const CommandCreator = Schema.Union([
   Schema.Struct({
     _tag: Schema.Literal('Thread'),

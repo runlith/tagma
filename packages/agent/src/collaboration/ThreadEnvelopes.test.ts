@@ -21,7 +21,7 @@ import {
   threadSignalOfInboxItem,
 } from '../thread/inboxItems';
 import { MemoryTx } from '../thread/storage/memory/units';
-import { ThreadInbox, ThreadResting, type ThreadWriteTx } from '../thread/ThreadPorts';
+import { ThreadInbox, ThreadOwnWork, ThreadResting, type ThreadWriteTx } from '../thread/ThreadPorts';
 import { storageFailed } from '../thread/ThreadBorder';
 import { threadStorageLayer } from '../thread/kernelPorts';
 import { ThreadMemory } from '../thread/storage/memory/state';
@@ -55,6 +55,7 @@ const fixtureModel = modelCatalog(DEFAULT_PROVIDER_DESCRIPTIONS)
   .modelsByCapability('text')
   .find((option) => option.defaultReasoning !== null)!;
 const fixtureSelection = { provider: fixtureModel.provider, model: fixtureModel.id, reasoning: fixtureModel.defaultReasoning };
+const OWN_ENDING = 'command-result';
 describe('ThreadEnvelopes completion routing', () => {
   it.effect(
     'one run answers its spawn and peer task requesters',
@@ -130,6 +131,64 @@ describe('ThreadEnvelopes completion routing', () => {
       yield* h.complete(completed('run-after', h.source.id), { answer: 'Chatting on.' });
       expect(answers().map((report) => report.id)).toEqual([threadReportEnvelopeId(task, 'run-asked')]);
       expect(answers()[0]?.body.text).toContain('DONE: reviewed.');
+    }),
+  );
+  it.effect(
+    'a fallback waits on a command of its own still running or its ending still unread, and the run that reads the ending sends it once',
+    Effect.fnUntraced(function* () {
+      const h = yield* envelopeHarness();
+      const task = 'envelope:spawn:call-1';
+      const ending = 'command:exec-tests:1:call-tests';
+      yield* h.task(task, h.source.id, h.parent.id, 'run-asked');
+      const answers = () => h.reports().filter((report) => report.threadId === h.parent.id);
+      h.owing.add(h.source.id);
+      yield* h.complete(completed('run-asked', h.source.id), { answer: 'The tests run in the background.' });
+      expect(answers()).toEqual([]);
+      expect(h.recording.runNotes('run-asked')).toEqual([
+        { type: 'run-reporting', requests: 1, fallbacks: 0, diagnoses: 0, held: 1, closed: 0 },
+      ]);
+      h.owing.delete(h.source.id);
+      yield* h.ledger.put({
+        id: ending,
+        threadId: h.source.id,
+        sender: { kind: 'host' },
+        kind: 'signal',
+        body: { type: OWN_ENDING, addressee: 'transport', text: 'A command you left running has ended: completed, exit 0.' },
+        occurredAt: '2026-08-31T20:10:00.000Z',
+      });
+      yield* h.complete(completed('run-between', h.source.id), { answer: 'Noted the question.' });
+      expect(answers()).toEqual([]);
+      yield* h.ledger.deliver([ending], 'run-done');
+      yield* h.ledger.acknowledge([ending], 'run-done');
+      yield* h.complete(completed('run-done', h.source.id), { answer: 'DONE: the tests passed.' });
+      expect(answers().map((report) => report.id)).toEqual([threadReportEnvelopeId(task, 'run-asked')]);
+      expect(answers()[0]?.body.text).toContain('DONE: the tests passed.');
+    }),
+  );
+  it.effect(
+    'a run that read the ending of its own command answers before the taking run reports, and the taking run then sends nothing',
+    Effect.fnUntraced(function* () {
+      const h = yield* envelopeHarness();
+      const task = 'envelope:spawn:call-1';
+      const ending = 'command:exec-tests:1:call-tests';
+      yield* h.task(task, h.source.id, h.parent.id, 'run-asked');
+      yield* h.ledger.acknowledge([task], 'run-asked');
+      yield* h.pend('run-asked', h.source.id);
+      yield* h.ledger.put({
+        id: ending,
+        threadId: h.source.id,
+        sender: { kind: 'host' },
+        kind: 'signal',
+        body: { type: OWN_ENDING, addressee: 'transport', text: 'A command you left running has ended: completed, exit 0.' },
+        occurredAt: '2026-08-31T20:10:00.000Z',
+      });
+      yield* h.ledger.deliver([ending], 'run-done');
+      yield* h.ledger.acknowledge([ending], 'run-done');
+      yield* h.complete(completed('run-done', h.source.id), { handled: [ending], answer: 'DONE: the tests passed.' });
+      yield* h.complete(completed('run-asked', h.source.id), { handled: [task], answer: 'The tests run in the background.' });
+      const answers = h.reports().filter((report) => report.threadId === h.parent.id);
+      expect(answers.map((report) => report.id)).toEqual([threadReportEnvelopeId(task, 'run-asked')]);
+      expect(answers[0]?.body.text).toContain('DONE: the tests passed.');
     }),
   );
   it.effect(
@@ -1522,6 +1581,7 @@ const envelopeHarness = Effect.fnUntraced(function* (
     signal: ThreadSignal;
   }[] = [];
   const working = new Set<string>();
+  const owing = new Set<string>();
   const queuedTasks: ThreadSignal[] = [];
   const woken: ThreadSignal[] = [];
   const moved = new Date('2026-08-31T20:00:00.000Z');
@@ -1688,6 +1748,7 @@ const envelopeHarness = Effect.fnUntraced(function* (
           Layer.succeed(EndingStages, endings),
           Layer.succeed(ThreadInbox, inbox),
           Layer.succeed(ThreadResting, null),
+          Layer.succeed(ThreadOwnWork, { owed: (threadId) => Effect.succeed(owing.has(threadId)), endings: new Set([OWN_ENDING]) }),
           Layer.succeed(ThreadDirectory, directory),
           Layer.succeed(
             ContextCompaction,
@@ -1740,6 +1801,7 @@ const envelopeHarness = Effect.fnUntraced(function* (
     recording,
     published,
     working,
+    owing,
     queuedTasks,
     woken,
     unreachable,

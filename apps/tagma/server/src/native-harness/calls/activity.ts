@@ -1,4 +1,4 @@
-import { Duration, Effect, Stream } from 'effect';
+import { Effect, Stream } from 'effect';
 import type { AgentCalls } from '@runlith/agent/AgentCalls';
 import { callEnded } from '@runlith/agent/callProgress';
 import type { CallAddress, CallEvent, CallRecord } from '@runlith/agent/callProgress';
@@ -80,14 +80,6 @@ export function callActivity(deps: {
       if (held === undefined) return yield* Effect.fail(unknownInvocation(address));
       if (!(yield* mine(scope, held.record))) return yield* Effect.fail(unknownInvocation(address));
       return yield* deps.calls.control(address, control, scope.threadId === undefined ? 'operator' : 'agent');
-    }),
-
-    settled: Effect.fnUntraced(function* (scope, address, waitMs) {
-      const held = deps.calls.get(address);
-      if (held === undefined) return null;
-      if (!(yield* mine(scope, held.record))) return yield* Effect.fail(unknownInvocation(address));
-      yield* Effect.timeoutOption(held.settled, Duration.millis(waitMs));
-      return held.record;
     }),
   });
 }

@@ -1,6 +1,6 @@
 import type { ThreadRunRow } from '@runlith/agent/thread/rows';
 import { KEEP_WARM_SIGNAL_TYPE, keepWarmPingOf } from '@runlith/agent/transcript/keepWarm';
-import { sql } from 'drizzle-orm';
+import { type SQL, sql } from 'drizzle-orm';
 import { Effect } from 'effect';
 import { threadRun } from '../../threads/store/kernel.js';
 import { threadInbox, KEEP_WARM_PING_IDS } from '../../threads/store/tables.js';
@@ -17,9 +17,18 @@ export type KeepWarmLatest = {
 export type KeepWarmWaiting = {
   readonly parentThreadId: string | null;
   readonly waits: boolean;
+  readonly below: readonly string[];
 };
 
 export type KeepWarmReads = Effect.Success<typeof makeKeepWarmReads>;
+
+const among = (ids: readonly string[]): SQL =>
+  ids.length === 0
+    ? sql`(select null where 0)`
+    : sql`(${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})`;
 
 export const makeKeepWarmReads = Effect.gen(function* () {
   const { db } = yield* MachineStore;
@@ -27,28 +36,33 @@ export const makeKeepWarmReads = Effect.gen(function* () {
 
   const standing = (threadId: string): Effect.Effect<KeepWarmWaiting | null, StoreFailure> =>
     units.read((unit) =>
-      Effect.map(
-        unit.run(
-          db.get<{ parentThreadId: string | null; waits: number }>(sql`
+      Effect.gen(function* () {
+        const thread = yield* unit.run(
+          db.get<{ parentThreadId: string | null }>(sql`
+            select t.parent_id as parentThreadId from ${recordsAs('t')} where t.id = ${threadId}`),
+        );
+        if (thread === undefined) return null;
+        const below = yield* unit.run(
+          db.all<{ id: string; running: number }>(sql`
             with recursive below(id) as (
               select c.id from ${recordsAs('c')} where c.parent_id = ${threadId}
               union all
               select cc.id from below b cross join ${recordsAs('cc')} on cc.parent_id = b.id
             )
-            select t.parent_id as parentThreadId, (
-              exists (
-                select 1 from below b cross join ${threadRun} r on r.thread_id = b.id
-                 where r.status = 'running'
-              )
-            ) as waits
-              from ${recordsAs('t')}
-             where t.id = ${threadId}`),
-        ),
-        (row) => (row === undefined ? null : { parentThreadId: row.parentThreadId, waits: row.waits === 1 }),
-      ),
+            select b.id as id, exists (
+              select 1 from ${threadRun} r where r.thread_id = b.id and r.status = 'running'
+            ) as running
+              from below b`),
+        );
+        return {
+          parentThreadId: thread.parentThreadId,
+          waits: below.some((row) => row.running === 1),
+          below: below.map((row) => row.id),
+        };
+      }),
     );
 
-  const waiting = (): Effect.Effect<readonly string[], StoreFailure> =>
+  const waiting = (owing: readonly string[]): Effect.Effect<readonly string[], StoreFailure> =>
     units.read((unit) =>
       Effect.map(
         unit.run(
@@ -57,6 +71,8 @@ export const makeKeepWarmReads = Effect.gen(function* () {
               select t.parent_id from ${threadRun} w
                 cross join ${recordsAs('t')} on t.id = w.thread_id
                where w.status = 'running' and t.parent_id is not null
+              union
+              select o.id from ${recordsAs('o')} where o.id in ${among(owing)}
               union
               select p.parent_id from above a
                 cross join ${recordsAs('p')} on p.id = a.id

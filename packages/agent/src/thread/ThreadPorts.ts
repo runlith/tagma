@@ -322,6 +322,14 @@ export class ThreadOwedCalls extends Context.Service<
   { owe(call: CallRecord, tx: ThreadWriteTx): Effect.Effect<void, ThreadBorderFailed> } | null
 >()('@runlith/agent/ThreadOwedCalls') {}
 
+export class ThreadOwnWork extends Context.Service<
+  ThreadOwnWork,
+  {
+    owed(threadId: string): Effect.Effect<boolean, ThreadBorderFailed>;
+    readonly endings: ReadonlySet<string>;
+  } | null
+>()('@runlith/agent/ThreadOwnWork') {}
+
 export class ThreadReadiness extends Context.Service<
   ThreadReadiness,
   { ready(thread: ThreadRow): Effect.Effect<void, ThreadBorderFailed> } | null
@@ -371,6 +379,7 @@ export type ThreadHostPorts =
   | ThreadInputRecoveries
   | ThreadBirthRecords
   | ThreadOwedCalls
+  | ThreadOwnWork
   | ThreadReadiness
   | ThreadResting
   | ThreadResidence
@@ -384,6 +393,7 @@ export type ThreadHost<TWrite = ThreadWriteTx> = {
   readonly inputRecovery?: ThreadInputRecovery;
   readonly births?: { record(birth: ThreadBirth, tx: TWrite): Effect.Effect<void, ThreadBorderFailed> };
   readonly owedCalls?: { owe(call: CallRecord, tx: TWrite): Effect.Effect<void, ThreadBorderFailed> };
+  readonly ownWork?: NonNullable<Context.Service.Shape<typeof ThreadOwnWork>>;
   readonly readiness?: NonNullable<Context.Service.Shape<typeof ThreadReadiness>>;
   readonly resting?: NonNullable<Context.Service.Shape<typeof ThreadResting>>;
   readonly residence?: NonNullable<Context.Service.Shape<typeof ThreadResidence>>;
@@ -404,6 +414,7 @@ export function threadHostLayer<TWrite = ThreadWriteTx>(given: ThreadHost<TWrite
     Layer.succeed(ThreadInputRecoveries, host.inputRecovery ? { of: host.inputRecovery } : null),
     Layer.succeed(ThreadBirthRecords, host.births ?? null),
     Layer.succeed(ThreadOwedCalls, host.owedCalls ?? null),
+    Layer.succeed(ThreadOwnWork, host.ownWork ?? null),
     Layer.succeed(ThreadReadiness, host.readiness ?? null),
     Layer.succeed(ThreadResting, host.resting ?? null),
     Layer.succeed(ThreadResidence, host.residence ?? null),

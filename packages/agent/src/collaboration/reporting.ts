@@ -8,7 +8,7 @@ import { actDigest } from '../thread/keyed';
 import type { ThreadRecord } from '../thread/record';
 import type { ThreadContextReading } from '../thread/rows';
 import type { AgentSignalContext } from '../agent/contracts';
-import type { ThreadInbox } from '../thread/ThreadPorts';
+import type { ThreadInbox, ThreadOwnWork } from '../thread/ThreadPorts';
 import { THREAD_REQUEST_REQUESTER_GONE, type ThreadInboxItem, type ThreadInboxRequest } from '../thread/storage/inbox';
 import { controlled, itemOf } from './envelopeActs';
 import { sentTaskPrefixes, threadReportEnvelopeId, threadWithdrawnEnvelopeId } from './envelopeKeys';
@@ -34,10 +34,20 @@ export const reportOwed = Effect.fnUntraced(function* (
   threads: Context.Service.Shape<typeof Threads>,
   runs: Context.Service.Shape<typeof ThreadRuns>,
   stages: Context.Service.Shape<typeof EndingStages>,
+  own: Context.Service.Shape<typeof ThreadOwnWork>,
   deliver: EnvelopeDelivery,
   ended: RunEnded,
   contextOf: ReportContext,
 ): Effect.fn.Return<readonly ReportReceipt[], ThreadPlaneFailure> {
+  const ownEnding = (item: ThreadInboxItem | undefined): boolean =>
+    own !== null && item !== undefined && item.kind === 'signal' && own.endings.has(item.body.type);
+
+  const working = Effect.fnUntraced(function* (threadId: string): Effect.fn.Return<boolean, ThreadPlaneFailure> {
+    if (own === null) return false;
+    if (yield* own.owed(threadId)) return true;
+    return (yield* inbox.pending(threadId)).some(ownEnding);
+  });
+
   const reported = (request: ThreadInboxRequest): Effect.Effect<boolean, ThreadPlaneFailure> =>
     request.deliveredToRunId === null
       ? Effect.succeed(false)
@@ -56,6 +66,7 @@ export const reportOwed = Effect.fnUntraced(function* (
   ) => Effect.Effect<boolean, ThreadPlaneFailure> = Effect.fnUntraced(function* (threadId, pending, runId, seen) {
     const reports = pending.filter(isReport);
     if (reports.some((item) => item.state === 'queued')) return true;
+    if (yield* working(threadId)) return true;
     const taken = runId === null ? [] : reports.filter((item) => item.deliveredToRunId !== null && item.deliveredToRunId !== runId);
     if (taken.length > 0) {
       const current = yield* runs.current(threadId);
@@ -186,7 +197,7 @@ export const reportOwed = Effect.fnUntraced(function* (
   const answering: ThreadInboxRequest[] = [];
   for (const request of completed ? handledOpen : []) if (!(yield* reported(request))) answering.push(request);
   const consumed = claimed === null ? pending.filter((item) => item.deliveredToRunId === ended.runId) : candidates;
-  const resumed = consumed.some((item) => item !== undefined && isReport(item));
+  const resumed = consumed.some((item) => item !== undefined && (isReport(item) || ownEnding(item)));
   const fallbacks = completed ? [...answering, ...(closing ? yield* unreported(open, handledOpen, resumed) : [])] : handledOpen;
   const held = completed && fallbacks.length > 0 && (yield* awaiting(ended.threadId, pending, ended.runId, new Set()));
   const interrupters = owedInterrupters(ended, pending);

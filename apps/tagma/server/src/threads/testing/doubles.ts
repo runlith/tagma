@@ -129,9 +129,10 @@ import {
   commandNoticeTakeBack as commandNoticeTakeBackOver,
   commandSignalSend as commandSignalSendOver,
   stayIdle as stayIdleOver,
-  wakeUnlessCold as wakeUnlessColdOver,
+  wakeCompleted as wakeCompletedOver,
 } from '../collaboration/signals.js';
 import type { IdleDelivery } from '../collaboration/signals.js';
+import { makeOwnWork } from '../collaboration/ownWork.js';
 import { makeThreadsLifetime } from '../lifetime.js';
 import { harnessSpend as harnessSpendOver } from '../store/harnessSpend.js';
 import { harnessRefusal as harnessRefusalOver } from '../refusals.js';
@@ -492,8 +493,8 @@ export const commandSignalSend = (...input: Parameters<typeof commandSignalSendO
 
 export const stayIdle = (...input: Parameters<typeof stayIdleOver>): ReturnType<typeof stayIdleOver> => stayIdleOver(...input);
 
-export const wakeUnlessCold = (...input: Parameters<typeof wakeUnlessColdOver>): ReturnType<typeof wakeUnlessColdOver> =>
-  wakeUnlessColdOver(...input);
+export const wakeCompleted = (...input: Parameters<typeof wakeCompletedOver>): ReturnType<typeof wakeCompletedOver> =>
+  wakeCompletedOver(...input);
 
 export const assembliesOf = (...input: Parameters<typeof assembliesOfOver>): ReturnType<typeof assembliesOfOver> =>
   assembliesOfOver(...input);
@@ -545,6 +546,8 @@ export const movesOf = (owners: Context.Context<ThreadMovesTag>): ThreadMovesTag
 export const asCommandSignalSend = (value: CommandSignalSend): CommandSignalSend => value;
 
 export const asIdleDelivery = (value: IdleDelivery): IdleDelivery => value;
+
+export const ownWork = () => makeOwnWork;
 
 export const asThreadTargetOperationNew = (value: ThreadTargetOperationNew): ThreadTargetOperationNew => value;
 

@@ -220,17 +220,6 @@ export const makeCallEndings = Effect.fnUntraced(function* ({
         });
       }),
 
-    take: (address, threadId) =>
-      units.write(owing, (unit) =>
-        Effect.gen(function* () {
-          const row = yield* rows.row(unit, address);
-          if (row === null || row.threadId !== threadId) return { status: 'none' } as const;
-          if (row.outcome === null) return { status: 'running' } as const;
-          yield* rows.settle(unit, address);
-          return { status: 'ended', outcome: row.outcome, words: row.words ?? INTERRUPTED_WORDS } as const;
-        }),
-      ),
-
     owed: (scope) => units.read((unit) => Effect.map(rows.of(unit, scope), (found) => found.map((row) => recordOf(row, epoch)))),
   });
 

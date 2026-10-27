@@ -19,10 +19,9 @@ const awaited = (toolName: string, toolInput: unknown, awaitsMs: number): ChatEn
 test('a wait reads its target and budget from the declaration display, not the operation name or input', () => {
   const address = { execution: 'exec-1', incarnation: 52 };
   const target = { kind: 'execution', address };
-  expect(awaitedTarget(awaited('read_output', { wait: 1 }, 600_000))).toEqual({ target, budgetMs: 600_000 });
-  expect(awaitedTarget(awaited('wait_command', { waitMs: 1 }, 90_000))).toEqual({ target, budgetMs: 90_000 });
+  expect(awaitedTarget(awaited('any_wait', {}, 600_000))).toEqual({ target, budgetMs: 600_000 });
   expect(awaitedTarget(awaited('read_output', {}, 0))).toEqual({ target, budgetMs: null });
-  expect(awaitedTarget(call('read_output', { ...address, wait: 600 }))).toBeNull();
+  expect(awaitedTarget(call('read_output', { ...address }))).toBeNull();
   expect(awaitedTarget(call('bash', { command: 'sleep 1' }))).toBeNull();
 
   const aimed = (reference: unknown): ChatEntry =>

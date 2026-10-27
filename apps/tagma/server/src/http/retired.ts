@@ -166,7 +166,6 @@ const RETIRED: readonly Retired[] = [
   ['GET', '/api/commands/:execution/:incarnation', 'read_command'],
   ['GET', '/api/commands/:execution/:incarnation/output', 'read_output'],
   ['GET', '/api/commands/:execution/:incarnation/bytes', 'read_command_bytes'],
-  ['GET', '/api/commands/:execution/:incarnation/wait', 'wait_command'],
   ['POST', '/api/commands/:execution/:incarnation/stop', 'stop_command'],
   ['POST', '/api/commands/:execution/:incarnation/limit', 'change_command_limit'],
   ['GET', '/api/command-rules', 'read_command_rules'],

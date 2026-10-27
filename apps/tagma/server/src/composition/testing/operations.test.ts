@@ -47,10 +47,7 @@ it.effect('project-declared edge names cross operation, batch, query and read sc
 it.effect('a wait an agent sits through is admitted up to the longest act and refused past it', () =>
   Effect.sync(() => {
     const ref = { execution: 'exec-1', incarnation: 1 };
-    const output = Schema.decodeUnknownResult(OPERATIONS.read_output.params);
     const watch = Schema.decodeUnknownResult(OPERATIONS.wait_terminal.params);
-    expect(output({ ...ref, wait: LONGEST_ACT_MS / 1000 })._tag).toBe('Success');
-    expect(output({ ...ref, wait: LONGEST_ACT_MS / 1000 + 1 })._tag).toBe('Failure');
     expect(watch({ ...ref, waitMs: LONGEST_ACT_MS })._tag).toBe('Success');
     expect(watch({ ...ref, waitMs: LONGEST_ACT_MS + 1 })._tag).toBe('Failure');
   }),

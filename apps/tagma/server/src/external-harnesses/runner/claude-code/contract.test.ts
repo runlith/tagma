@@ -2139,7 +2139,7 @@ describe('a call of a Tagma tool', () => {
       const running = yield* started(session.prompt('one'));
       yield* session.sdk.first.arrived(1);
       const server = yield* ownServer(session.sdk.opened[0]!.options, () => void order.push('answered'));
-      const answered = yield* started(server('wait_command', { 'claudecode/toolUseId': 'toolu_1' }));
+      const answered = yield* started(server('wait_terminal', { 'claudecode/toolUseId': 'toolu_1' }));
       yield* Deferred.await(reached);
       const steering = yield* started(session.extension(STEER, { prompt: text('Look here instead.'), input: word }));
       yield* Fiber.join(answered);

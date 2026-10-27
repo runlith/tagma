@@ -81,6 +81,7 @@ import { ThreadInbox } from '../store/inbox.js';
 import { ThreadResources } from '../store/resources.js';
 import { makeOwedCallRows } from '../store/owedCalls.js';
 import { CallEpoch } from '../contract/service/owedCalls.js';
+import { OwnWork } from '../contract/service/ownWork.js';
 import { PluginPoints } from '../../plugins/contract/service/points.js';
 import { makeEndingDelivery } from './pluginEndings.js';
 import { makeRunSweep } from '../ending.js';
@@ -244,6 +245,7 @@ export const threadEngineLayer = Layer.effectContext(
     );
     const depths = yield* makeSubAgentDepths;
     const owedRows = yield* makeOwedCallRows;
+    const ownWork = yield* OwnWork;
     const epoch = (yield* CallEpoch).id;
     const standingOf = approverStanding(lookup, mandate, settings);
     const states = yield* makeEngineStates({ depths, standingOf });
@@ -292,6 +294,10 @@ export const threadEngineLayer = Layer.effectContext(
               : owedRows
                   .owe(tx, call, call.threadId, epoch)
                   .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'OwedCalls.owe', cause }))),
+        },
+        ownWork: {
+          owed: (threadId) => Effect.map(ownWork.owing([threadId]), (owing) => owing.length > 0),
+          endings: ownWork.endings,
         },
         readiness: {
           ready: (thread) =>

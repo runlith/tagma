@@ -19,10 +19,5 @@ export class CallActivity extends Context.Service<
       address: CallAddress,
       control: CallControl,
     ): Effect.Effect<CallControlResult, GateRefusal<'unknown-invocation'> | StoreFailure>;
-    settled(
-      scope: CallScope,
-      address: CallAddress,
-      waitMs: number,
-    ): Effect.Effect<CallRecord | null, GateRefusal<'unknown-invocation'> | StoreFailure>;
   }
 >()('tagma/native-harness/CallActivity') {}

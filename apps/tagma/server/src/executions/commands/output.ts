@@ -115,7 +115,7 @@ export const makeCommandOutput = ({
       const status = statusOf(reading);
       const origin = reading.command.origin;
       const own = origin._tag === 'Thread' && origin.thread === request.thread ? origin : undefined;
-      const measured = status.phase === 'ended' ? yield* waiters.measurement(execution, own === undefined ? 0 : request.waitMs) : null;
+      const measured = status.phase === 'ended' ? yield* waiters.measurement(execution) : null;
       const owner = status.phase === 'ended' && measured !== null ? own : undefined;
       const evicted =
         status.phase === 'ended' &&

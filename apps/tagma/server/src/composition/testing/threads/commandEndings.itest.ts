@@ -19,8 +19,7 @@ import { TerminalUnavailable } from '../../../executions/contract/wire/refusals.
 import { commandSignalId } from '../../../executions/contract/wire/commands.js';
 import type { CommandReading } from '../../../executions/contract/wire/commands.js';
 import { type CommandOutputRequest, CommandReader, CommandWaiters } from '../../../executions/contract/service/commands.js';
-import { command, commandOutputReader } from '../../../executions/testing/doubles.js';
-import { project } from '../../../projects/testing/doubles.js';
+import { commandOutputReader } from '../../../executions/testing/doubles.js';
 import { waitersOver } from '../../../executions/testing/waitersFixture.js';
 import { executionHandshakeMs } from '../../../executions/contract/wire/terminalBehavior.js';
 import type { TerminalWaitAnswer } from '../../../executions/contract/wire/terminals.js';
@@ -539,82 +538,6 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
       yield* waiters.recover().pipe(Effect.orDie);
       expect(yield* road.delivery.deliver(ref)).toEqual({ _tag: 'Settled' });
       expect(road.landed()).toHaveLength(1);
-    }),
-  );
-
-  it.effect('a waiting read of its own ended command holds for the measurement, answers it and leaves no notice to send', () =>
-    Effect.gen(function* () {
-      const { waiters, store, units, db } = yield* World;
-      const ref = execution('exec-measured-late');
-      yield* owe(ref, 'call-15');
-      yield* units
-        .write('CommandDelivery.admit', (unit) =>
-          Effect.gen(function* () {
-            const [created] = yield* unit.run(
-              db
-                .insert(project())
-                .values({
-                  name: 'measured-late',
-                  repoKey: '/measured-late',
-                  rootPath: '/measured-late',
-                  createdAt: new Date(yield* Clock.currentTimeMillis),
-                })
-                .returning({ id: project().id }),
-            );
-            yield* unit.run(
-              db.insert(command()).values({
-                executionId: ref.execution,
-                incarnation: ref.incarnation,
-                projectId: created!.id,
-                owner: `thread:${holder}`,
-                ownerThread: holder,
-                createdBy: `thread:${holder}`,
-                policyIdentity: 'p',
-                targetKey: 'k',
-                admittedAt: new Date(yield* Clock.currentTimeMillis),
-              }),
-            );
-          }),
-        )
-        .pipe(Effect.orDie);
-      const road = yield* deliveryOver(() => ({ _tag: 'Decided', summary: decided(ref, { _tag: 'Code', code: 0 }) }), accepted);
-      const unmeasured = yield* Deferred.make<void>();
-      const deliveries: typeof store.deliveries = Object.assign(Object.create(store.deliveries), {
-        measurement: (...args: Parameters<typeof store.deliveries.measurement>) =>
-          Effect.tap(store.deliveries.measurement(...args), () => Deferred.succeed(unmeasured, undefined)),
-      });
-      const measuring = yield* waitersOver(deliveries);
-
-      const answer = yield* Effect.gen(function* () {
-        const given = yield* Layer.build(
-          Layer.mergeAll(
-            Layer.mock(ManagedCommands, { bytes: emptyBytes }),
-            Layer.mock(CommandReader, { one: () => Effect.succeed(endedReading(ref)) }),
-          ),
-        );
-        const reading = yield* Effect.forkChild(
-          commandOutputReader({
-            commands: Context.get(given, ManagedCommands),
-            reader: Context.get(given, CommandReader),
-            waiters: measuring,
-          }).output({
-            projectId: 1,
-            reader: holder,
-            thread: holder,
-            execution: ref,
-            authority: unreadAuthority,
-            waitMs: 5_000,
-          }),
-        );
-        yield* Deferred.await(unmeasured);
-        yield* Effect.orDie(measuring.measured(ref, '2 files moved while this ran'));
-        return yield* Fiber.join(reading);
-      });
-
-      expect(answer.measurement).toBe('2 files moved while this ran');
-      expect(yield* waiters.owed(ref).pipe(Effect.orDie)).toBeNull();
-      expect(yield* road.delivery.deliver(ref)).toEqual({ _tag: 'Settled' });
-      expect(road.sent()).toHaveLength(0);
     }),
   );
 

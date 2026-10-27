@@ -63,7 +63,7 @@ export type Params = typeof bashInputSchema.Type;
 const ELSEWHERE = "This git commit lands in a checkout other than this session's own:";
 
 const ONLY_SLEEPS =
-  'A command that only sleeps holds this turn and runs nothing, so it was not run. A command you started reports its ending here on its own; wait_command waits on it. An agent you started reports when it is done: end your turn, and its report opens the next one. To wait for a condition, run `until <check>; do sleep 2; done` with `waitMs: 0`.';
+  'A command that only sleeps holds this turn and runs nothing, so it was not run. A command you started, and an agent you started, report when they are done, and the report wakes you: end your turn, and it opens the next one. To wait for a condition, run `until <check>; do sleep 2; done` with `waitMs: 0`.';
 
 const fileEditRefusal = (edit: ShellFileEdit) =>
   `${edit.program} rewrites ${edit.files.join(', ')} in place, so it was not run: a command's writes skip the checks the file tools make, and those its line does not name are nobody's lines. Change each named file with edit (replaceAll for every occurrence) or write; a command writes files only for a sweep across tens of files, a generator or a formatter.`;

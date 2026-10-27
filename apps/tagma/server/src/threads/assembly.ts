@@ -29,7 +29,6 @@ import { RULE_ESCAPED_SIGNAL } from '../enforcement/contract/wire/checks.js';
 import { ExternalThreads, HarnessAsides, ThreadHarness } from './contract/service/engine.js';
 import { MergeNotice } from '../landing/contract/service/mergeNotice.js';
 import { makeMergeNotice } from './mergeNotice.js';
-import { CacheWarmth } from './contract/service/evidence.js';
 import { Conversations } from './contract/service/conversations.js';
 import { makeConversationReads } from './journal/conversationReads.js';
 import { ThreadLookup, ThreadPlaces, ThreadReading, ThreadRunning } from './contract/service/reads.js';
@@ -71,9 +70,11 @@ import { makeCallEndings } from './collaboration/callEndings.js';
 import { CALL_RESULT_SIGNAL } from './contract/wire/calls.js';
 import { makeOwedCallRows } from './store/owedCalls.js';
 import { OwedCalls } from './contract/service/owedCalls.js';
+import { OwnWork } from './contract/service/ownWork.js';
+import { makeOwnWork } from './collaboration/ownWork.js';
 import type { CallAddress } from '@runlith/agent/callProgress';
 import { CUSTODY_NOTICE_PASS_MS, makeCustodyNotices, TERMINAL_CUSTODY_SIGNAL } from './collaboration/custodyNotices.js';
-import { commandNoticeTakeBack, commandSignalSend, stayIdle, wakeUnlessCold } from './collaboration/signals.js';
+import { commandNoticeTakeBack, commandSignalSend, stayIdle, wakeCompleted } from './collaboration/signals.js';
 import { AGENT_IDLE_MS } from '@runlith/agent/callProgress';
 import { RECAP_MARGIN_MS, RECAP_WAIT_MS } from './contract/wire/rhythm.js';
 import { ThreadRecaps } from './contract/service/recaps.js';
@@ -125,6 +126,7 @@ export const threadStoresLayer = Layer.effectContext(
       Context.add(ThreadSubscriptions, yield* makeThreadSubscriptions),
       Context.add(OperatorNotes, notes),
       Context.add(AgentRules, { rules: [notesRule(notes)] }),
+      Context.add(OwnWork, yield* makeOwnWork),
     );
   }),
 );
@@ -327,13 +329,13 @@ export const threadsLayer = Layer.effectContext(
     });
     const mover = yield* makeThreadMover({ targets });
 
-    const delivery = yield* makeCommandDelivery({ send: commandSignalSend(threads, harness, wakeUnlessCold(threads, yield* CacheWarmth)) });
+    const delivery = yield* makeCommandDelivery({ send: commandSignalSend(threads, harness, wakeCompleted(threads)) });
     yield* Effect.forkScoped(delivery.attend());
     yield* Effect.forkScoped(Effect.asVoid(delivery.resume()));
     const owedRows = yield* makeOwedCallRows;
     const callEndings = yield* makeCallEndings({
       rows: owedRows,
-      send: commandSignalSend(threads, harness, wakeUnlessCold(threads, yield* CacheWarmth), CALL_RESULT_SIGNAL),
+      send: commandSignalSend(threads, harness, wakeCompleted(threads), CALL_RESULT_SIGNAL),
       ended: yield* Queue.unbounded<CallAddress>(),
       withdraw: (threadId, toolCallId, reason) => harness.runs.questions().withdraw(threadId, toolCallId, reason),
     });

@@ -8,7 +8,6 @@ import type {
   CommandSearchReading,
   OutputStanding,
 } from '../contract/wire/commands.js';
-import type { CommandWaited } from '../contract/wire/operationAnswers.js';
 import { subjectKeyOf } from '../contract/wire/commandSubject.js';
 import { UNVOICED } from '../../platform/contract/service/presentation.js';
 import type { VoiceRefused } from '../../platform/contract/wire/voiceAnswer.js';
@@ -22,7 +21,6 @@ import {
   megabytes,
   processWords,
   refWords,
-  waitLines,
 } from './execution.js';
 import type { CommandTimeRecord } from '../contract/wire/commands.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
@@ -291,6 +289,3 @@ function* commandLines(reading: CommandReading): Generator<string> {
 }
 
 export const commandVoice = (answer: Answered<CommandReading>) => (answer.status === 'ok' ? commandLines(answer) : UNVOICED);
-
-export const commandWaitVoice = (answer: Answered<typeof CommandWaited.Type>, input: Addressed & { readonly waitMs: number }) =>
-  answer.status === 'ok' ? waitLines(answer.waited, input, input.waitMs) : UNVOICED;

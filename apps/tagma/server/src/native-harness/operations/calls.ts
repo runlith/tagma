@@ -3,7 +3,6 @@ import { said } from '../../platform/contract/service/presentation.js';
 import { keyOrder, page, pageRows, pastKey, readCursor, type PageDirection, type PageKey, type PageQuestion } from '@runlith/paging';
 import type { CallRecord } from '@runlith/agent/callProgress';
 import { CallActivity, type CallScope } from '../contract/service/calls.js';
-import { unknownInvocation } from '../calls/activity.js';
 import { OwedCalls } from '../../threads/contract/service/owedCalls.js';
 import type { Caller } from '../../platform/contract/wire/caller.js';
 import { ceilingOf } from '../../platform/contract/wire/pageFamily.js';
@@ -57,22 +56,6 @@ export const readCalls = Effect.fnUntraced(function* (input: typeof OPS.read_cal
   return { status: 'ok' as const, calls: cut.rows, shown: cut.shown, total: held.length, next: cut.next, complete: cut.complete };
 });
 
-export const waitCall = Effect.fnUntraced(function* (input: typeof OPS.wait_call.input.Type, caller: Caller) {
-  const call = yield* yield* CurrentProject;
-  const scope = scopeOf(caller, call.project.id);
-  const address = { runId: input.runId, toolCallId: input.toolCallId };
-  const owed = yield* OwedCalls;
-  const live = yield* (yield* CallActivity).settled(scope, address, input.waitMs);
-  const record = live ?? (yield* owed.owed(scope)).find((row) => row.runId === address.runId && row.toolCallId === address.toolCallId);
-  if (record === undefined) return yield* Effect.fail(unknownInvocation(address));
-  const answer = { status: 'ok' as const, runId: input.runId, toolCallId: input.toolCallId };
-  if (record.endedAt === null) return { ...answer, phase: record.phase, detail: record.detail, words: null };
-  const taken = scope.threadId === undefined ? { status: 'none' as const } : yield* owed.take(address, scope.threadId);
-  return taken.status === 'ended'
-    ? { ...answer, phase: taken.outcome, detail: null, words: taken.words }
-    : { ...answer, phase: record.phase, detail: null, words: null };
-});
-
 export const CALL_PAIRS: { readonly [K in CallOperationId]: OperationPair<(typeof OPS)[K]> } = {
   read_calls: pair(OPS.read_calls, body(OPS.read_calls, { execute: readCalls, voice: said(callsText) })),
 
@@ -89,10 +72,5 @@ export const CALL_PAIRS: { readonly [K in CallOperationId]: OperationPair<(typeo
         return { status: 'ok' as const, runId: input.runId, toolCallId: input.toolCallId, control: outcome.status, detail: outcome.detail };
       }),
     }),
-  ),
-
-  wait_call: pair(
-    OPS.wait_call,
-    body(OPS.wait_call, { execute: (input, _prepared: undefined, caller: Caller) => waitCall(input, caller) }),
   ),
 };

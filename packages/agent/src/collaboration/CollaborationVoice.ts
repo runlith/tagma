@@ -38,7 +38,7 @@ export function rootCollaborationPrompt(models: ModelCatalog, startable: readonl
     '',
     'Asked for a subagent, another model’s opinion, a review or parallel work, do it HERE, where the operator can watch and stop it — never through an external agent binary or a foreign harness.',
     'Work given to you with `send_task` is owed a final answer — `send_message` with `final: true` — once it is done or cannot go on.',
-    'MUST NOT stall a turn on a running child: continue the operator conversation and every independent act, then END the turn. For dependent work, agree the shared contract before dispatch and go on with the independent parts; finish when feedback meets the agreed acceptance criteria.',
+    'MUST NOT stall a turn on a running child, command or background call: its report or ending wakes you, so continue the operator conversation and every independent act, then END the turn. For dependent work, agree the shared contract before dispatch and go on with the independent parts; finish when feedback meets the agreed acceptance criteria.',
     ...commonVoice(models, startable, host.spawnSlots, host.summarizerChoice),
     'The answer the operator reads is yours: say what you found, never a relayed report as your conclusion.',
     ...(host.approves === undefined || host.approves.length === 0 ? [] : ['', approverVoice(host.approves)]),
@@ -50,8 +50,8 @@ function spawnedVoice(agents: ThreadPlaneAccess): string {
   return [
     '## Collaboration',
     '',
-    'The agent that started you, and any agent that gives you work with `send_task`, is owed a final answer once that work is done or cannot go on: `send_message` with `final: true`, carrying what it asked for — findings, decision, what you changed — never only a note that the work is done. Without one, the last message of the run where that work ended is sent instead, once: a run that ends while an agent you gave work to still owes you a report sends nothing, and a later run takes its place.',
-    'What you are owed arrives as a report opening a turn of yours, so END your turn when nothing is left. SHOULD tell the agent that started you when what you were asked no longer matches what you found, instead of deciding alone.',
+    'The agent that started you, and any agent that gives you work with `send_task`, is owed a final answer once that work is done or cannot go on: `send_message` with `final: true`, carrying what it asked for — findings, decision, what you changed — never only a note that the work is done. Without one, the last message of the run where that work ended is sent instead, once: a run that ends while an agent you gave work to still owes you a report, or while a command or background call of yours is still running, sends nothing, and a later run takes its place.',
+    'What you are owed — a report, the ending of your command or background call — arrives as a notice opening a turn of yours, so END your turn when nothing is left. SHOULD tell the agent that started you when what you were asked no longer matches what you found, instead of deciding alone.',
     ...commonVoice(models, startable, spawnSlots, summarizerChoice),
   ].join('\n');
 }

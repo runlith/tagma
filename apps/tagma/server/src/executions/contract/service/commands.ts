@@ -91,7 +91,6 @@ export type CommandOutputRequest = {
   readonly execution: ExecutionRef;
   readonly authority: CommandAuthority<ObservePreparation>;
   readonly tail?: number;
-  readonly waitMs?: number;
 };
 
 export type OutputSearchRefusal = 'search-failed' | 'search-unavailable' | 'bad-cursor' | 'cursor-stale';
@@ -124,6 +123,7 @@ export class CommandWaiters extends Context.Service<
   {
     readonly owed: (execution: ExecutionRef) => Effect.Effect<CommandDelivery | null, DeliveryFailure>;
     readonly outstanding: (after?: CommandDeliveryCursor) => Effect.Effect<readonly CommandDelivery[], DeliveryFailure>;
+    readonly owing: (threads?: readonly string[]) => Effect.Effect<readonly string[], DeliveryFailure>;
     readonly accepted: (unit: WriteUnit<'machine'>, execution: ExecutionRef) => Effect.Effect<boolean, ExecutionStoreFailure>;
     readonly delivered: (execution: ExecutionRef) => Effect.Effect<void, DeliveryFailure>;
     readonly take: (execution: ExecutionRef, thread: ThreadId) => Effect.Effect<boolean, DeliveryFailure>;
@@ -145,7 +145,7 @@ export class CommandWaiters extends Context.Service<
       call: CallDebt | null,
     ) => Effect.Effect<CommandWaitMove, DeliveryFailure>;
     readonly measured: (execution: ExecutionRef, words: string) => Effect.Effect<void, DeliveryFailure>;
-    readonly measurement: (execution: ExecutionRef, waitMs?: number) => Effect.Effect<string | null | undefined, DeliveryFailure>;
+    readonly measurement: (execution: ExecutionRef) => Effect.Effect<string | null | undefined, DeliveryFailure>;
     readonly ended: Queue.Dequeue<ExecutionRef>;
   }
 >()('tagma/executions/CommandWaiters') {}

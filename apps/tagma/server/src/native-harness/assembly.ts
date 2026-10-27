@@ -32,6 +32,7 @@ import { ProviderRegistry } from '../providers/contract/service/registry.js';
 import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import type { HarnessFailure } from '../threads/contract/service/failure.js';
 import { CacheWarmth, EvidenceFeed, EvidenceQueries, ThreadEvidence, EvidenceReads } from '../threads/contract/service/evidence.js';
+import { OwnWork } from '../threads/contract/service/ownWork.js';
 import { EndingRedelivery } from '../threads/contract/service/redelivery.js';
 import { gatedByProject } from '../threads/birth/projectGate.js';
 import { AgentLibrary } from '../threads/contract/service/library.js';
@@ -227,6 +228,7 @@ export type NativeHarnessRequirements =
   | HarnessMoves
   | CacheWarmth
   | ContextLimits
+  | OwnWork
   | TargetPreparation
   | TargetSnapshots;
 

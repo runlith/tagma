@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 import { PAGE_CURSOR, PageCursor, pageRows } from '@runlith/paging';
-import { CallControl, CallControlResult, CallRecord, LONGEST_ACT_MS } from '@runlith/agent/callProgress';
+import { CallControl, CallControlResult, CallRecord } from '@runlith/agent/callProgress';
 import type { ClaimTarget } from '@runlith/agent/tool';
 import { ceilingOf, limitOf } from '../../../../platform/contract/wire/pageFamily.js';
 import { arms, operation } from '../../../../platform/contract/wire/operation.js';
@@ -106,55 +106,6 @@ THE ADDRESS IS THE WHOLE OF IT. A pair this installation does not hold, a pair b
       running: 'Controlling an invocation',
       done: 'Controlled an invocation',
     },
-    subjects: () => [],
-    claims: { writes: callKey },
-  }),
-
-  wait_call: operation('wait_call', {
-    approval: ASKS_IN_REVIEW,
-    ...everyDoor,
-    effect: 'write',
-    identity: { key: 'call' },
-    meaning: 'Wait, within a budget you name, for one agent invocation to end, and read how it ended.',
-    grammar: `The budget bounds the WAITING and nothing else: its expiry answers \`running\`, ends no work and moves no limit. The operator's words or a report owed to you end the wait early when they arrive, with the invocation untouched.
-A call still running answers in \`detail\` the step it last named, null when it names none. An ended call answers its \`phase\`. A call of your own thread that ran in the background answers its outcome's words here, and then its notice is not sent — the words reach you once, by whichever road comes first. \`words\` is null when the notice already reached the thread, or the call was never in the background.
-The address and who may reach it are \`control_call\`'s: a pair this caller may not reach is answered as one this installation does not hold.`,
-    input: Schema.Struct({
-      runId,
-      toolCallId,
-      waitMs: Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(LONGEST_ACT_MS)).annotate({
-        description: `How long to wait, at most ${LONGEST_ACT_MS} ms. It bounds your waiting, never the work.`,
-      }),
-    }),
-    answer: arms({
-      ok: {
-        runId: Schema.String,
-        toolCallId: Schema.String,
-        phase: CallRecord.fields.phase,
-        detail: Schema.NullOr(Schema.String),
-        words: Schema.NullOr(Schema.String),
-      },
-    }),
-    refusals: ['unknown-invocation'],
-    confirmation: (input) => ({
-      summary: `Wait up to ${input.waitMs} ms for the invocation ${input.toolCallId} of run ${input.runId}?`,
-      consequence: 'The budget bounds the waiting and nothing else: it ends no work.',
-    }),
-    confirmLabel: 'Wait',
-    presentation: {
-      running: 'Waiting for an invocation',
-      done: 'Waited for an invocation',
-    },
-    called: (input) =>
-      typeof input.runId !== 'string' || typeof input.toolCallId !== 'string' || !Number.isFinite(input.waitMs)
-        ? { form: 'none' }
-        : {
-            form: 'none',
-            title: 'Waiting for an invocation',
-            awaitsMs: input.waitMs,
-            reference: { kind: 'call', runId: input.runId, toolCallId: input.toolCallId },
-          },
-    watches: () => true,
     subjects: () => [],
     claims: { writes: callKey },
   }),

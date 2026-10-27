@@ -11,6 +11,7 @@ import type { ProviderRegistry } from '../../providers/contract/service/registry
 import { keepWarm, keepWarmPings } from '../contract/wire/settings.js';
 import { type KeepWarmLatest, makeKeepWarmReads } from './reads.js';
 import { ThreadLookup } from '../../threads/contract/service/reads.js';
+import { OwnWork } from '../../threads/contract/service/ownWork.js';
 import { ThreadHarness, ThreadLive } from '../../threads/contract/service/engine.js';
 import type { NativeThreadState } from '../../threads/contract/service/state.js';
 import type { ThreadSummary } from '../../threads/list/summary.js';
@@ -124,6 +125,7 @@ export type KeepWarmInput = {
 
 export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spending, marginMs = KEEP_WARM_MARGIN_MS }: KeepWarmInput) {
   const reads = yield* makeKeepWarmReads;
+  const own = yield* OwnWork;
   const threads = yield* ThreadLookup;
   const harness = yield* ThreadHarness;
   const live = yield* ThreadLive;
@@ -170,7 +172,7 @@ export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spe
       if (look.climb && standing.parentThreadId !== null) {
         yield* Queue.offer(looks, { threadId: standing.parentThreadId, busy: false, climb: true });
       }
-      if (!standing.waits) return;
+      if (!standing.waits && (yield* own.owing([look.threadId, ...standing.below])).length === 0) return;
       const now = yield* Clock.currentTimeMillis;
       const judged = yield* subject(look.threadId, now);
       if (judged === null) return;
@@ -209,7 +211,8 @@ export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spe
       Effect.sync(() => live.subscribeStates((state) => framed(state, looks))),
       (detach) => Effect.sync(detach),
     );
-    const everyWaiting = reads.waiting().pipe(
+    const everyWaiting = own.owing().pipe(
+      Effect.flatMap((owing) => reads.waiting(owing)),
       Effect.flatMap((ids) =>
         Effect.forEach(ids, (threadId) => Queue.offer(looks, { threadId, busy: false, climb: false }), { discard: true }),
       ),

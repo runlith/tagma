@@ -12,23 +12,19 @@ import { writes } from '../../platform/contract/service/writes.js';
 import { owedCall } from '../store/calls.js';
 import type { OwedCallRows } from '../store/owedCalls.js';
 import type { CommandSignalSend } from './commandEndings.js';
-import { cacheWarmthOf } from '../list/wire.js';
 import type { NativeThreadState } from '../contract/service/state.js';
 import type { ThreadLookup } from '../contract/service/reads.js';
-import type { CacheWarmth } from '../contract/service/evidence.js';
 
 export type IdleDelivery = (threadId: string) => Effect.Effect<'wake' | 'wait'>;
 
 export const stayIdle: IdleDelivery = () => Effect.succeed('wait');
 
-export const wakeUnlessCold = (threads: ThreadLookup['Service'], evidence: CacheWarmth['Service']): IdleDelivery =>
+export const wakeCompleted = (threads: ThreadLookup['Service']): IdleDelivery =>
   Effect.fnUntraced(
     function* (threadId) {
       const thread = yield* threads.summary(threadId);
       if (thread === undefined || thread.archivedAt !== null) return 'wait' as const;
-      if (thread.activeRun !== null || thread.outcome?.status !== 'completed') return 'wait' as const;
-      const warmth = cacheWarmthOf(thread, false, yield* evidence.warmthBasis([thread]));
-      return warmth?.state === 'cold' ? ('wait' as const) : ('wake' as const);
+      return thread.activeRun === null && thread.outcome?.status === 'completed' ? ('wake' as const) : ('wait' as const);
     },
     (work, threadId) =>
       Effect.catchCause(work, (cause) =>

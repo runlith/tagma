@@ -29,7 +29,7 @@ export const keepWarm = nativeKey({
   order: 570,
   title: 'Keep a waiting thread warm',
   description:
-    "Whether a thread at rest that waits on its children is pinged shortly before its prompt cache expires, so their reports wake it warm instead of rewriting its whole context. A ping requires a warm context reading with an evidenced cache lifetime and spendable quota. A ping is a short turn on the thread's own model and account, answered with ok, and it shows in the thread's feed.",
+    "Whether a thread at rest that waits on its children, its commands or its background calls is pinged shortly before its prompt cache expires, so their reports and endings wake it warm instead of rewriting its whole context. A ping requires a warm context reading with an evidenced cache lifetime and spendable quota. A ping is a short turn on the thread's own model and account, answered with ok, and it shows in the thread's feed.",
   schema: Schema.Boolean,
   fallback: true,
   scopes: SETTABLE_SCOPES,

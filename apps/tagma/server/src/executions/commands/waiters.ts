@@ -1,4 +1,4 @@
-import { Context, Deferred, Duration, Effect, Queue } from 'effect';
+import { Context, Effect, Queue } from 'effect';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits, type WriteUnit } from '../../platform/contract/service/units.js';
@@ -22,8 +22,6 @@ export class TakeBackOpening extends Context.Service<
   }
 >()('tagma/executions/TakeBackOpening') {}
 
-const measuringKey = (execution: ExecutionRef): string => `${execution.execution}:${execution.incarnation}`;
-
 export const makeCommandWaiters = Effect.fnUntraced(function* ({
   deliveries,
   ended,
@@ -34,7 +32,6 @@ export const makeCommandWaiters = Effect.fnUntraced(function* ({
   readonly takeBack: Effect.Effect<NoticeTakeBack['Service']>;
 }) {
   const units = yield* MachineUnits;
-  const measuring = new Map<string, Set<Deferred.Deferred<void>>>();
   const due = (execution: ExecutionRef) => Effect.asVoid(Queue.offer(ended, execution));
 
   const answered = Effect.fn('CommandWaiters.answered')(function* (
@@ -55,6 +52,9 @@ export const makeCommandWaiters = Effect.fnUntraced(function* ({
     }),
     outstanding: Effect.fn('CommandWaiters.outstanding')(function* (after) {
       return yield* units.read((unit) => deliveries.deliveriesOwed(unit, after, DELIVERY_PAGE));
+    }),
+    owing: Effect.fn('CommandWaiters.owing')(function* (threads) {
+      return yield* units.read((unit) => deliveries.owing(unit, threads));
     }),
     accepted: deliveries.acceptDelivery,
     delivered: Effect.fn('CommandWaiters.delivered')(function* (execution) {
@@ -90,37 +90,9 @@ export const makeCommandWaiters = Effect.fnUntraced(function* ({
     }),
     measured: Effect.fn('CommandWaiters.measured')(function* (execution, words) {
       yield* units.write(writes('CommandWaiters.measured', [command]), (unit) => deliveries.measure(unit, execution, words));
-      yield* Effect.forEach(measuring.get(measuringKey(execution)) ?? [], (waiting) => Deferred.succeed(waiting, undefined), {
-        discard: true,
-      });
       yield* due(execution);
     }),
-    measurement: (execution, waitMs = 0) => {
-      const read = units.read((unit) => deliveries.measurement(unit, execution));
-      if (waitMs <= 0) return read;
-      const key = measuringKey(execution);
-      return Effect.acquireUseRelease(
-        Effect.sync(() => {
-          const waiting = Deferred.makeUnsafe<void>();
-          const standing = measuring.get(key);
-          if (standing === undefined) measuring.set(key, new Set([waiting]));
-          else standing.add(waiting);
-          return waiting;
-        }),
-        (waiting) =>
-          Effect.flatMap(read, (now) =>
-            now !== null
-              ? Effect.succeed(now)
-              : Deferred.await(waiting).pipe(Effect.timeoutOption(Duration.millis(waitMs)), Effect.andThen(read)),
-          ),
-        (waiting) =>
-          Effect.sync(() => {
-            const standing = measuring.get(key);
-            standing?.delete(waiting);
-            if (standing?.size === 0) measuring.delete(key);
-          }),
-      );
-    },
+    measurement: (execution) => units.read((unit) => deliveries.measurement(unit, execution)),
     recover: Effect.fn('CommandWaiters.recover')(function* () {
       yield* units.write(writes('CommandWaiters.recover', [commandDelivery, command]), (unit) =>
         Effect.andThen(deliveries.releaseClaims(unit), deliveries.unmeasured(unit, UNMEASURED_AT_RESTART)),

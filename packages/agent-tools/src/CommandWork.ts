@@ -148,4 +148,4 @@ export const lifeEnded = (life: CommandLimit): string =>
   }`;
 
 export const IN_BACKGROUND =
-  'Its result arrives here as a notice when it ends. Do not run it again and do not wait for it with sleep: read_output reads what it has printed so far, and wait_command waits on it.';
+  'Its ending arrives here as a notice and wakes you, so do not run it again or wait for it: go on with work that does not need it, or end your turn.';

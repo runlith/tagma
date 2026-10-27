@@ -54,7 +54,8 @@ import { composeAgent as composeWithSections } from '../../../native-harness/tes
 import { testGrantSigner } from '../../../platform/testing/grants.js';
 import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
 import { OperationId } from '../../../platform/contract/wire/ids.js';
-import { unruledTimes } from '@runlith/agent-tools/CommandWork';
+import { IN_BACKGROUND, unruledTimes } from '@runlith/agent-tools/CommandWork';
+import { commandInspection } from '../../../executions/contract/wire/commands.js';
 import { demoGraphLayer, withDemo, type EffectDemo } from '../graphFixture.js';
 import { Git } from '@runlith/git/Git';
 import { CheckoutFlights } from '@runlith/agent-tools/CheckoutFlights';
@@ -785,7 +786,6 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             'stop_command',
             'submit_work',
             'tool_search',
-            'wait_command',
             'write',
           ]);
           const forbidden = asThreadContext({ ...onCheckout(local), comments: () => 'forbid' as const });
@@ -1035,6 +1035,20 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           const notes =
             DEFINITIONS.find('shell')!.turnNote?.(asThreadContext({ machine: {}, projectId: 1, thread: { id: 'thread-1' } })) ?? [];
           expect(notes.map((note) => note.id)).toContain('command-rules');
+        }),
+      ),
+    ),
+  );
+  it.effect('a command left in the background prints only calls a shell holder is offered directly', () =>
+    withDemo((demo) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { offers } = yield* makeComposition(demo);
+          const shell = offers('shell', { world: CHECKOUT, comments: 'allowed', images: true });
+          const direct = new Set(shell.filter((offered) => offered.direct).map((offered) => offered.id));
+          const notice = `${IN_BACKGROUND}\n${commandInspection({ execution: 'exec-1', incarnation: 3 })}`;
+          expect(direct.has('read_output')).toBe(true);
+          expect(OPERATION_IDS.filter((id) => new RegExp(`\\b${id}\\b`).test(notice) && !direct.has(id))).toEqual([]);
         }),
       ),
     ),

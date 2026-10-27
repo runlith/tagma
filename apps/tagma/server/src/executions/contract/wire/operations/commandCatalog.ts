@@ -1,6 +1,5 @@
 import { Schema } from 'effect';
 import { type Raised } from '@runlith/agent/permissions';
-import { LONGEST_ACT_MS } from '@runlith/agent/callProgress';
 import { COMMAND_LIFE } from '@runlith/agent-tools/CommandWork';
 import type { ToolDisplay } from '@runlith/agent/tool/display';
 import { DeclaredCancellationCause } from '@runlith/executions/protocol/call';
@@ -16,7 +15,7 @@ import {
 } from '../commands.js';
 import { arms, operation } from '../../../../platform/contract/wire/operation.js';
 import { executionReads, executionShapes, executionWrites, OPERATOR_DOORS } from './shape.js';
-import { ByteChunk, CommandLimitChanged, CommandWaited, ExecutionStopped } from '../operationAnswers.js';
+import { ByteChunk, CommandLimitChanged, ExecutionStopped } from '../operationAnswers.js';
 import { family, PAGE_CURSOR } from '@runlith/paging';
 import { limitOf } from '../../../../platform/contract/wire/pageFamily.js';
 import { OUTPUT_RETAINED_BYTES } from '../terminalBehavior.js';
@@ -77,17 +76,13 @@ const RECOVERY_FREE = `This act keeps no operation key and needs none: it change
 const SILENCES = `Four answers no reader may fold together. A command this installation never admitted is a REFUSAL and not a row. A row whose host holds nothing under its reference is \`Unheld\` — a generation the host replaced, a record retired out of its inventory — which is a fact about the host and never an ending. A host that could not be read at all is \`Unavailable\`, and it is the one answer a surface must never draw as an idle machine. A reading that reached everything but one region names that region in \`unmeasured\`.
 Load is the same discipline. Absent \`usage\` is a host holding no sample; \`usage.cpu\` or \`usage.memory\` tagged \`Unknown\` is a sample from which no figure could be derived, carrying the reason; \`completeness: 'partial'\` is a real reading with a named hole. Every one of them is a silence and none of them is a zero. \`cpu.cores\` is CORE-EQUIVALENTS — 1.0 is one core kept busy, and 8.0 on an eight-core machine is honest — and \`memory\` is a SUM of resident sets counting each process identity once, which is neither unique physical memory nor a whole-tree total under partial coverage.`;
 
-const commandWaitDisplay = (
-  input: { readonly execution?: string; readonly incarnation?: number },
-  awaitsMs: number | undefined,
-  title: string,
-): ToolDisplay =>
-  input.execution === undefined || input.incarnation === undefined || awaitsMs === undefined || !Number.isFinite(awaitsMs)
+const commandDisplay = (input: { readonly execution?: string; readonly incarnation?: number }, title: string): ToolDisplay =>
+  input.execution === undefined || input.incarnation === undefined
     ? { form: 'none' }
     : {
         form: 'none',
         title,
-        awaitsMs,
+        awaitsMs: 0,
         reference: { kind: 'command', execution: input.execution, incarnation: input.incarnation, standing: false },
       };
 
@@ -211,20 +206,15 @@ ${SILENCES}`,
   read_output: operation('read_output', {
     approval: ASKS_NEVER,
     ...read,
+    tool: { capability: 'shell', direct: true, needs: ['shared'] },
     answer: arms({ ok: CommandOutputReading.fields }),
     meaning: 'Read what a command printed: the output since you last read it, and whether it is still running.',
-    grammar: `The one read of a command's output an agent makes. Name the command by the execution and incarnation its launch answered. The first read answers the tail of what stands; every later read answers only what arrived since your previous one, so a running command is read in steps and nothing is read twice. stdout comes first and stderr after it, under the same window a foreground command's answer keeps.
-\`wait\` holds this read for up to that many seconds until the command ends, then answers — one call to wait out a build and read its result. On a command you started, the wait also covers the checkout measured after it, and an ending this read answers whole reaches you no second time as a notice. Its expiry says the command is still running; it ends nothing and moves no deadline. The operator's words or a report owed to you end the wait early when they arrive, with the command still running.
+    grammar: `The one read of a command's output an agent makes. Name the command by the execution and incarnation its launch answered. The first read answers the tail of what stands; every later read answers only what arrived since your previous one, so a running command is read in steps and nothing is read twice. stdout comes first and stderr after it, under the same window a foreground command's answer keeps. It answers at once: the ending of a command you started reaches you as a notice, and one this read already answered whole, with the checkout measured after it, is not sent again.
 \`tail\` keeps only the last so many lines of what this read would answer.
 ${RECOVERY_FREE}`,
     input: Schema.Struct({
       execution,
       incarnation,
-      wait: Schema.optional(
-        Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: LONGEST_ACT_MS / 1000 })).annotate({
-          description: `Seconds to wait for the command to end before answering, at most ${LONGEST_ACT_MS / 1000}: this call is held while it waits. Omitted answers at once.`,
-        }),
-      ),
       tail: Schema.optional(
         Schema.Int.check(Schema.isGreaterThan(0)).annotate({
           description: 'Answer only the last so many lines.',
@@ -238,11 +228,8 @@ ${RECOVERY_FREE}`,
       'terminal-ineligible',
       'terminal-host-unavailable-absent',
     ],
-    confirmation: (input: { readonly execution: string; readonly wait?: number }) => ({
-      summary:
-        input.wait === undefined || input.wait <= 0
-          ? `Read what command ${input.execution} has printed?`
-          : `Wait up to ${input.wait}s for command ${input.execution} and read what it printed?`,
+    confirmation: (input: { readonly execution: string }) => ({
+      summary: `Read what command ${input.execution} has printed?`,
       consequence: 'Reading starts nothing, ends nothing and grants nothing.',
     }),
     confirmLabel: 'Read',
@@ -251,9 +238,7 @@ ${RECOVERY_FREE}`,
       done: 'Read command output',
       many: (count) => `Read command output ${count} times`,
     },
-    called: (input: { readonly execution?: string; readonly incarnation?: number; readonly wait?: number }) =>
-      commandWaitDisplay(input, (input.wait ?? 0) * 1000, 'Reading command output'),
-    watches: (input: { readonly wait?: number }) => input.wait !== undefined && input.wait > 0,
+    called: (input: { readonly execution?: string; readonly incarnation?: number }) => commandDisplay(input, 'Reading command output'),
     subjects: () => [],
     claims: executionReads,
   }),
@@ -301,47 +286,6 @@ ${RECOVERY_FREE}`,
       many: (count) => `Searched command output ${count} times`,
     },
     subjects: () => [],
-  }),
-
-  wait_command: operation('wait_command', {
-    approval: ASKS_NEVER,
-    ...read,
-    doors: OPERATOR_DOORS,
-    answer: arms({ ok: CommandWaited.fields }),
-    meaning: 'Watch one bounded command until it is decided, within an observation budget you declare.',
-    grammar: `The budget bounds the WAITING and NOTHING ELSE. Its expiry answers that the command is still undecided, which was true the whole time; it ends no work, moves no deadline and changes no mode. A caller out of patience is not a command out of time.
-It is an observation, not a poll: nothing is asked on a timer, and a command that never decides costs one wait rather than a loop of reads.
-Observation is project-scoped, as every command read is: watching another owner's work grants nothing over it.
-THREE ARMS, and none is derived from another. \`Decided\` carries the ending that actually happened. \`Undecided\` is the budget expiring, which says the command was still undecided, exactly as it was the whole time, and may carry the newest summary actually observed. \`Unwatchable\` is the host holding nothing under that reference — not an ending and not a refusal.
-${RECOVERY_FREE}`,
-    input: Schema.Struct({
-      execution,
-      incarnation,
-      waitMs: Schema.Int.check(Schema.isGreaterThan(0)).annotate({
-        description: 'How long to watch. It bounds your observation, never the work.',
-      }),
-    }),
-    refusals: [
-      'terminal-no-command',
-      'terminal-stale-authority',
-      'terminal-foreign-project',
-      'terminal-ineligible',
-      'terminal-host-unavailable-absent',
-    ],
-    confirmation: (input: { readonly execution: string; readonly waitMs: number }) => ({
-      summary: `Watch command ${input.execution} for up to ${input.waitMs}ms?`,
-      consequence: 'The budget bounds the waiting and nothing else: it ends no work and moves no deadline.',
-    }),
-    confirmLabel: 'Wait',
-    presentation: {
-      running: 'Waiting for a command',
-      done: 'Waited for a command',
-    },
-    called: (input: { readonly execution?: string; readonly incarnation?: number; readonly waitMs?: number }) =>
-      commandWaitDisplay(input, input.waitMs, 'Waiting for a command'),
-    watches: () => true,
-    subjects: () => [],
-    claims: executionReads,
   }),
 
   change_command_limit: operation('change_command_limit', {

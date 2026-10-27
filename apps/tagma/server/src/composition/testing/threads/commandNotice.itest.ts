@@ -15,8 +15,7 @@ import type { ModelRequest } from '@runlith/agent/modelPort';
 import { SUB_AGENT_DEPTH } from '@runlith/agent/collaboration/CollaborationConfig';
 import { AgentHarness } from '@runlith/agent/thread/AgentHarness';
 import { NATIVE_CAPABILITIES } from '@runlith/agent/thread/record';
-import { wakeUnlessCold } from '../../../threads/testing/doubles.js';
-import { CacheWarmth } from '../../../threads/contract/service/evidence.js';
+import { wakeCompleted } from '../../../threads/testing/doubles.js';
 import { unmeasuredObservation } from '../../../threads/testing/doubles.js';
 import { threadAgentsLayer, threadCompactorLayer, threadFeaturesLayer, threadStorageLayer } from '@runlith/agent/thread/kernelPorts';
 import { threadHostLayer, type ThreadWriteTx } from '@runlith/agent/thread/ThreadPorts';
@@ -462,16 +461,10 @@ layer(Layer.effect(World, setup()).pipe(Layer.provideMerge(storage)), { excludeT
   );
   it.effect('a background command ending opens a follow-up on a completed idle Claude acp thread just as on native', () =>
     Effect.gen(function* () {
-      const { harness, threadFixture, execution, owedThread, runsOf, deliveryTo, accepted, owed, units, catalog } = yield* World;
+      const { harness, threadFixture, execution, owedThread, runsOf, deliveryTo, accepted, owed, units } = yield* World;
       const native = yield* harness.runs.transports().of({ adapter: 'native', profile: null, agent: 'tagma' });
       yield* harness.runs.transports().register({ ...native, adapter: 'acp', runs: { ...native.runs, launch: () => Effect.void } });
-      const evidence = yield* Effect.provide(
-        CacheWarmth,
-        Layer.mock(CacheWarmth, {
-          warmthBasis: () => Effect.succeed({ curves: new Map(), accounts: new Map(), models: catalog }),
-        }),
-      );
-      const idle = wakeUnlessCold(threadFixture.list, evidence);
+      const idle = wakeCompleted(threadFixture.list);
       for (const acp of [false, true]) {
         const ref = execution(acp ? 'exec-idle-acp' : 'exec-idle-native');
         const recipient = yield* owedThread(ref, acp);

@@ -2,8 +2,8 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { type AgentCalls, makeAgentCalls } from '@runlith/agent/AgentCalls';
 import { mintCursor } from '@runlith/paging';
-import { Deferred, Effect, Result } from 'effect';
-import { readCalls, waitCall } from './calls.js';
+import { Effect, Result } from 'effect';
+import { readCalls } from './calls.js';
 import { callActivity } from '../calls/activity.js';
 import type { Caller } from '../../platform/contract/wire/caller.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
@@ -24,7 +24,6 @@ const nothingOwed: OwedCalls['Service'] = {
   owe: () => Effect.void,
   began: () => Effect.die('No call begins in this scenario.'),
   end: () => Effect.void,
-  take: () => Effect.succeed({ status: 'none' }),
   owed: () => Effect.succeed([]),
   detached: (_call, work) => work,
 };
@@ -121,49 +120,4 @@ it.live('a cursor minted for the operator does not walk another session’s narr
     );
     expect(refusedCode(reread)).toBe('cursor-stale');
   }),
-);
-
-it.live(
-  'wait_call answers running with the step the call names at its budget, then the owed words once, and refuses a call of another thread',
-  () =>
-    Effect.gen(function* () {
-      const calls = yield* makeAgentCalls({ history: 200 });
-      const activity = callActivity({ calls, projectOf: () => Effect.succeed(1) });
-      const words = new Map<string, string>();
-      const owedOnce: OwedCalls['Service'] = {
-        ...nothingOwed,
-        take: (address) =>
-          Effect.sync(() => {
-            const said = words.get(address.toolCallId);
-            words.delete(address.toolCallId);
-            return said === undefined ? { status: 'none' } : { status: 'ended', outcome: 'completed', words: said };
-          }),
-      };
-      const release = yield* Deferred.make<void>();
-      const call = calls.open({ runId: 'run-1', toolCallId: 'long', threadId: 't-1', name: 'probe', input: {} });
-      yield* Effect.forkScoped(
-        call.run({
-          work: Effect.as(Deferred.await(release), 'done'),
-          background: () => 'receipt',
-          stopped: () => Effect.succeed('stopped'),
-          completed: () => Effect.void,
-        }),
-      );
-      const waited = (caller: Caller, waitMs: number) =>
-        waitCall({ runId: 'run-1', toolCallId: 'long', waitMs }, caller).pipe(
-          forProject(Effect.succeed(projectCall)),
-          Effect.provideService(CallActivity, activity),
-          Effect.provideService(OwedCalls, owedOnce),
-          Effect.result,
-        );
-
-      expect(yield* waited(thread('t-1'), 1)).toMatchObject({ success: { phase: 'running', detail: null, words: null } });
-      call.progress.stage('step-2');
-      expect(yield* waited(thread('t-1'), 1)).toMatchObject({ success: { phase: 'running', detail: 'step-2', words: null } });
-      expect(refusedCode(yield* waited(thread('t-2'), 1))).toBe('unknown-invocation');
-      words.set('long', 'the work finished');
-      yield* Deferred.succeed(release, undefined);
-      expect(yield* waited(thread('t-1'), 1_000)).toMatchObject({ success: { phase: 'completed', words: 'the work finished' } });
-      expect(yield* waited(thread('t-1'), 1_000)).toMatchObject({ success: { phase: 'completed', words: null } });
-    }),
 );

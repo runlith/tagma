@@ -69,6 +69,4 @@ export const TerminalSignalled = Schema.Struct({ outcome: SignalAnswer });
 
 export const ExecutionStopped = Schema.Struct({ receipt: StopReceipt });
 
-export const CommandWaited = Schema.Struct({ waited: TerminalWaitAnswer });
-
 export const CommandLimitChanged = Schema.Struct({ outcome: CommandRevisionAnswer });

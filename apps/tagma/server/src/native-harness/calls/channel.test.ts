@@ -10,7 +10,6 @@ const frames = (events: readonly CallEvent[]): CallActivity['Service'] => ({
   held: () => Effect.succeed([]),
   feed: () => Stream.fromIterable(events),
   control: () => Effect.succeed({ status: 'changed', detail: null }),
-  settled: () => Effect.succeed(null),
 });
 
 const channelOver = (events: readonly CallEvent[]) => callChannel({ activity: frames(events) });

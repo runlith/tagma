@@ -83,6 +83,19 @@ export const makeCommandDeliveries = ({ db, installation }: { readonly db: Store
       return yield* Effect.forEach(rows, (row) => deliveryOf(installation, row));
     }),
 
+    owing: Effect.fn('CommandDeliveries.owing')(function* (unit: Unit<'machine'>, threads: readonly string[] | undefined) {
+      if (threads?.length === 0) return [];
+      const rows = yield* queried(
+        unit,
+        db
+          .selectDistinct({ thread: commandDelivery.threadId })
+          .from(commandDelivery)
+          .where(threads === undefined ? undefined : inArray(commandDelivery.threadId, [...threads]))
+          .all(),
+      );
+      return rows.map((row) => row.thread);
+    }),
+
     acceptDelivery: Effect.fn('CommandDeliveries.acceptDelivery')(function* (unit: WriteUnit<'machine'>, execution: ExecutionRef) {
       const settled = yield* queried(
         unit,

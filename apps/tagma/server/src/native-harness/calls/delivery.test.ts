@@ -14,7 +14,6 @@ const owedInto = (ended: CallEnding[]): OwedCalls['Service'] => ({
     Effect.sync(() => {
       ended.push(ending);
     }),
-  take: () => Effect.succeed({ status: 'none' }),
   owed: () => Effect.succeed([]),
   detached: (_call, work) => work,
 });

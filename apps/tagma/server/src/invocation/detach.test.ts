@@ -10,7 +10,6 @@ const endings = Effect.fnUntraced(function* (answers: readonly DetachedAnswer[])
     owe: () => Effect.void,
     began: () => Effect.die('No call begins in this scenario.'),
     end: () => Effect.void,
-    take: () => Effect.succeed({ status: 'none' }),
     owed: () => Effect.succeed([]),
     detached: (_call, work, _stopped, ending) =>
       Effect.tap(Effect.exit(work), (exit) => Effect.sync(() => ended.push(ending(exit, false)))),

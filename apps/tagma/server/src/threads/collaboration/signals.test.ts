@@ -6,10 +6,9 @@ import { ThreadSignalConflictError } from '@runlith/agent/thread/run/scheduler/i
 import type { AgentHarness } from '@runlith/agent/thread/AgentHarness';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
 import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
-import { commandSignalSend, stayIdle, wakeUnlessCold } from './signals.js';
+import { commandSignalSend, stayIdle, wakeCompleted } from './signals.js';
 import type { NativeThreadState } from '../contract/service/state.js';
 import type { ThreadLookup } from '../contract/service/reads.js';
-import type { CacheWarmth } from '../contract/service/evidence.js';
 
 const threadId = ThreadId.make('thread-signal-send');
 const words = { threadId, id: 'command:exec-1:1:call-1', text: 'A command you left running has ended.' };
@@ -124,23 +123,22 @@ const resting = (
   };
 };
 
+const UNPROMISED = 'an-unpromised-provider';
+
 const idleChoice = (row: unknown) => {
   const threads = { summary: () => Effect.succeed(row) } as unknown as ThreadLookup['Service'];
-  const evidence = {
-    warmthBasis: () => Effect.succeed({ curves: new Map(), accounts: new Map() }),
-  } as unknown as CacheWarmth['Service'];
-  return wakeUnlessCold(threads, evidence)(threadId);
+  return wakeCompleted(threads)(threadId);
 };
 
-it.live('an ending wakes a thread that finished its turn while its prompt cache is warm or unmeasured, and waits while it is cold', () =>
+it.live('an ending wakes a thread that finished its turn whatever its prompt cache: warm, expired or never promised', () =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     for (const harness of [null, { kind: 'claude-code', transport: 'acp' }]) {
       expect(yield* idleChoice(resting(now, { measuredAgoMs: MINUTE, harness }))).toBe('wake');
-      expect(yield* idleChoice(resting(now, { measuredAgoMs: 10 * MINUTE, harness }))).toBe('wait');
+      expect(yield* idleChoice(resting(now, { measuredAgoMs: 10 * MINUTE, harness }))).toBe('wake');
     }
-    expect(yield* idleChoice(resting(now, { measuredAgoMs: 10 * MINUTE }))).toBe('wait');
-    expect(yield* idleChoice(resting(now, { provider: 'an-unmeasured-provider', measuredAgoMs: 10 * MINUTE }))).toBe('wake');
+    expect(yield* idleChoice(resting(now, { provider: UNPROMISED, measuredAgoMs: MINUTE }))).toBe('wake');
+    expect(yield* idleChoice(resting(now, { provider: UNPROMISED, measuredAgoMs: 10 * MINUTE }))).toBe('wake');
   }),
 );
 
@@ -156,11 +154,10 @@ it.live('an ending never wakes a thread someone stopped, one whose turn broke, a
   }),
 );
 
-it.live('a thread whose warmth cannot be read keeps the ending for its next turn', () =>
+it.live('a thread whose standing cannot be read keeps the ending for its next turn', () =>
   Effect.gen(function* () {
     const threads = { summary: () => Effect.die(new Error('the store is gone')) } as unknown as ThreadLookup['Service'];
-    const evidence = {} as unknown as CacheWarmth['Service'];
 
-    expect(yield* wakeUnlessCold(threads, evidence)(threadId)).toBe('wait');
+    expect(yield* wakeCompleted(threads)(threadId)).toBe('wait');
   }),
 );

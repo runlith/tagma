@@ -1,6 +1,6 @@
 import type { Raised } from '@runlith/agent/permissions';
 import { said, saidLines } from '../../platform/contract/service/presentation.js';
-import { Clock, Effect } from 'effect';
+import { Effect } from 'effect';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { CommandRevision } from '@runlith/executions/protocol/command';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
@@ -14,7 +14,6 @@ import { TerminalRefused } from '../contract/wire/refusals.js';
 import { principalOf } from '../terminals/principals.js';
 import {
   CommandAccess,
-  type AwaitPreparation,
   type CommandPreparation,
   type ObservePreparation,
   type RevisePreparation,
@@ -26,7 +25,7 @@ import { CurrentProject } from '../../projects/contract/service/caller.js';
 import { actorOf } from './terminalReads.js';
 import { terminalBody } from './projection.js';
 import { COMMAND_OPERATIONS, OUTPUT_MATCHES } from '../contract/wire/operations/commandCatalog.js';
-import { commandVoice, commandWaitVoice, limitText, listingText, outputText, searchText, stopText } from '../voice/commands.js';
+import { commandVoice, limitText, listingText, outputText, searchText, stopText } from '../voice/commands.js';
 import { ceilingOf } from '../../platform/contract/wire/pageFamily.js';
 import { pageRows } from '@runlith/paging';
 import { TOOL_OUTPUT_MAX_BYTES } from '@runlith/agent/ToolOutputSpool';
@@ -180,69 +179,27 @@ export const COMMAND_PAIRS = {
         const call = yield* yield* CurrentProject;
         const row = yield* placed(caller, input);
         const actor = yield* observerOf(caller);
-        const access = yield* CommandAccess;
-        const observe = yield* access.prepare({ _tag: 'Observe', actor, scope: call.project.id, execution: row.execution });
+        const observe = yield* (yield* CommandAccess).prepare({ _tag: 'Observe', actor, scope: call.project.id, execution: row.execution });
         if (observe.request._tag !== 'Observe') return yield* wrongAct('read');
         const observing = { ...observe, request: observe.request } satisfies ObservePreparation;
-        const reader = principalOf(actor);
-        const thread = actor._tag === 'Thread' ? actor.threadId : undefined;
-        if (input.wait === undefined || input.wait <= 0) return { observing, awaiting: undefined, reader, thread };
-        const awaited = yield* access.prepare({ _tag: 'Await', actor, scope: call.project.id, execution: row.execution });
-        if (awaited.request._tag !== 'Await') return yield* wrongAct('wait');
-        return { observing, awaiting: { ...awaited, request: awaited.request } satisfies AwaitPreparation, reader, thread };
+        return { observing, reader: principalOf(actor), thread: actor._tag === 'Thread' ? actor.threadId : undefined };
       }),
       execute: Effect.fnUntraced(function* (
         input: InputOf<typeof COMMAND_OPERATIONS.read_output>,
-        prepared: {
-          readonly observing: ObservePreparation;
-          readonly awaiting: AwaitPreparation | undefined;
-          readonly reader: string;
-          readonly thread: ThreadId | undefined;
-        },
+        prepared: { readonly observing: ObservePreparation; readonly reader: string; readonly thread: ThreadId | undefined },
       ) {
         const call = yield* yield* CurrentProject;
         const access = yield* CommandAccess;
-        const execution = prepared.observing.request.execution;
-        const until = (yield* Clock.currentTimeMillis) + (input.wait ?? 0) * 1000;
-        if (prepared.awaiting !== undefined && input.wait !== undefined) {
-          yield* (yield* ManagedCommands).wait(execution, authority(access, prepared.awaiting), input.wait * 1000);
-        }
         return yield* (yield* CommandReader).output({
           projectId: call.project.id,
           reader: prepared.reader,
           thread: prepared.thread,
-          execution,
+          execution: prepared.observing.request.execution,
           authority: authority(access, prepared.observing),
           tail: input.tail,
-          waitMs: prepared.awaiting === undefined ? 0 : until - (yield* Clock.currentTimeMillis),
         });
       }),
       voice: said(outputText),
-    }),
-  ),
-
-  wait_command: pair(
-    COMMAND_OPERATIONS.wait_command,
-    terminalBody(COMMAND_OPERATIONS.wait_command, {
-      prepare: Effect.fn('wait_command.prepare')(function* (input: InputOf<typeof COMMAND_OPERATIONS.wait_command>, caller: Caller) {
-        const call = yield* yield* CurrentProject;
-        const row = yield* placed(caller, input);
-        const act = yield* (yield* CommandAccess).prepare({
-          _tag: 'Await',
-          actor: yield* observerOf(caller),
-          scope: call.project.id,
-          execution: row.execution,
-        });
-        const { request } = act;
-        if (request._tag !== 'Await') return yield* wrongAct('wait');
-        return { ...act, request } satisfies AwaitPreparation;
-      }),
-      execute: Effect.fnUntraced(function* (input: InputOf<typeof COMMAND_OPERATIONS.wait_command>, prepared: AwaitPreparation) {
-        const access = yield* CommandAccess;
-        const waited = yield* (yield* ManagedCommands).wait(prepared.request.execution, authority(access, prepared), input.waitMs);
-        return { waited };
-      }),
-      voice: saidLines(commandWaitVoice),
     }),
   ),
 

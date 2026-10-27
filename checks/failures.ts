@@ -1935,10 +1935,10 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
   },
   {
     path: 'apps/tagma/server/src/threads/collaboration/signals.ts',
-    symbol: 'wakeUnlessCold',
+    symbol: 'wakeCompleted',
     form: 'catchCause',
     site: '92479320',
-    why: 'Advisory: an unreadable warmth reads as wait, which is the safe default for a wake.',
+    why: 'Advisory: an unreadable thread standing reads as wait, which is the safe default for a wake.',
   },
   {
     path: 'apps/tagma/server/src/threads/journal/lane.ts',

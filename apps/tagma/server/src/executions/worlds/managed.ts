@@ -8,6 +8,7 @@ import { offersCommands } from '@runlith/executions/protocol/capacity';
 import { principalOf } from '../terminals/principals.js';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
 import type { WorldPreferences } from '../contract/service/worlds.js';
+import { commandInspection } from '../contract/wire/commands.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import type { HostConnection } from '../host/connection.js';
 import { executionWireLimits } from '../host/policy.js';
@@ -205,8 +206,7 @@ export const managedWorld = Effect.fnUntraced(function* (
     target,
     environment: (env) => resolveEnvironment(processVariables(), { inherit: true, entries: entriesOf(env) }),
     credits: executionWireLimits.credits,
-    inspect: (execution) =>
-      `read_output with execution ${execution.execution} and incarnation ${execution.incarnation} reads what it printed (its wait: <seconds> holds that read until the command ends); wait_command with the same execution and incarnation watches it (its waitMs: <milliseconds> bounds the watching); stop_command and change_command_limit take the same execution and incarnation, beside an operationId you name, a cause and the rest their schemas ask`,
+    inspect: commandInspection,
   };
   const spawner = yield* executionSpawner(processEnvironment, {
     installation: input.host.installation,
