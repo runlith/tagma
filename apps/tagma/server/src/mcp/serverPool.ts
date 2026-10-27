@@ -4,7 +4,7 @@ import { McpPool } from '@runlith/mcp/McpPool';
 import { mcpDeclarationFingerprint } from '@runlith/mcp/mcpDeclarationFingerprint';
 import { mcpRedactor } from '@runlith/mcp/mcpRedactor';
 import type { McpResourceEvent } from './contract/wire/feeds.js';
-import { Clock, Effect, Exit, Layer, Scope, Stream } from 'effect';
+import { Clock, Effect, Exit, FiberSet, Layer, Scope, Stream } from 'effect';
 import { flight } from '@runlith/held/Flight';
 import type { HoldStalled, ReentrantCall } from '@runlith/held/failures';
 import type { StoreFailure } from '../platform/contract/service/store.js';
@@ -20,6 +20,7 @@ import {
   type McpViewRefusal,
   type McpReconcileRefusal,
 } from './contract/service/servers.js';
+import { McpPlaces } from './contract/service/places.js';
 import { mcpDeclared, mcpReachOf, rowOf, mcpMissingReferences, mcpResolvedValues, expandEnvReferences } from './declarations.js';
 
 function reached(declaration: McpServerDeclaration): string {
@@ -85,9 +86,20 @@ const makeMcpServers = Effect.fnUntraced(function* ({
   readonly environment: Readonly<Record<string, string | undefined>>;
 }) {
   const settings = yield* Settings;
+  const places = yield* McpPlaces;
   const scope = yield* Effect.scope;
   const opening = yield* flight<number, McpPool, never>({ name: 'mcp-pool-open', owner: 'mcp', key: String, ceiling: '30 seconds' });
   const pools = new Map<number, Pooled>();
+  const moving = yield* FiberSet.makeRuntime<never, void, never>();
+  yield* Effect.acquireRelease(
+    Effect.sync(() =>
+      places.onMoved((projectId) => {
+        const held = pools.get(projectId);
+        if (held !== undefined) moving(Effect.flatMap(places.of(projectId), held.pool.place));
+      }),
+    ),
+    (release) => Effect.sync(release),
+  );
 
   const list: McpServers['Service']['list'] = Effect.fn('McpServers.list')(function* (projectId) {
     const resolved = mcpDeclared(yield* settings.read(mcpServers, projectId));
@@ -341,13 +353,14 @@ const makeMcpServers = Effect.fnUntraced(function* ({
         Effect.suspend(() => {
           const held = pools.get(projectId);
           if (held !== undefined) return Effect.succeed(held.pool);
-          return Effect.flatMap(Scope.fork(scope), (own) => {
+          return Effect.gen(function* () {
+            const own = yield* Scope.fork(scope);
             const secrets = new Set<string>();
             const redaction = { of: (text: string) => text };
-            return Effect.map(Scope.provide(McpPool.make({ redact: (text) => redaction.of(text) }), own), (pool) => {
-              pools.set(projectId, { pool, scope: own, secrets, redaction, narrowed: new Set(), reached: new Set() });
-              return pool;
-            });
+            const pool = yield* Scope.provide(McpPool.make({ redact: (text) => redaction.of(text) }), own);
+            yield* pool.place(yield* places.of(projectId));
+            pools.set(projectId, { pool, scope: own, secrets, redaction, narrowed: new Set(), reached: new Set() });
+            return pool;
           });
         }),
       );
@@ -372,7 +385,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
 
 export const mcpServersLayer = (
   environment: Readonly<Record<string, string | undefined>> = process.env,
-): Layer.Layer<McpServers, never, Settings | ProjectChanges> =>
+): Layer.Layer<McpServers, never, Settings | ProjectChanges | McpPlaces> =>
   Layer.effect(
     McpServers,
     Effect.gen(function* () {

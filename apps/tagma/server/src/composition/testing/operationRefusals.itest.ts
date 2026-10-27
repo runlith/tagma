@@ -5,7 +5,7 @@ import { Context, Effect, Layer, Result, Schema } from 'effect';
 import { type EffectDemo, demoGraphLayer, withDemo } from './graphFixture.js';
 import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { McpServers } from '../../mcp/contract/service/servers.js';
-import { mcpServersLayer } from '../../mcp/serverPool.js';
+import { mcpServersLayer } from '../../mcp/testing/doubles.js';
 import { ProjectChanges } from '../../projects/contract/service/changes.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { type CatalogOperationId, OPERATIONS } from '../catalog.js';

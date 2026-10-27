@@ -13,6 +13,7 @@ import {
   McpToolUnoffered,
 } from './McpFailure';
 import { mcpDeclarationFingerprint } from './mcpDeclarationFingerprint';
+import { McpRoots } from './McpRoots';
 import { type McpServerDeclaration, mcpDeclarationsEqual } from './McpServerDeclaration';
 import {
   type McpCallOptions,
@@ -102,7 +103,9 @@ type Entry = {
 
 export type McpPool = Effect.Success<ReturnType<typeof makeMcpPool>>;
 
-const makeMcpPool = Effect.fnUntraced(function* (options: McpSessionOptions = {}) {
+const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) {
+  const workspace = given.roots ?? new McpRoots();
+  const options: McpSessionOptions = { ...given, roots: workspace };
   const scope = yield* Effect.scope;
   const connects = yield* FiberMap.make<string>();
   const flights = yield* Scope.fork(scope);
@@ -184,9 +187,32 @@ const makeMcpPool = Effect.fnUntraced(function* (options: McpSessionOptions = {}
       identity: entry.identity,
     }));
 
+  const announce = Effect.fn('McpPool.announce')(function* () {
+    for (const [name, entry] of entries) {
+      const session = entry.session;
+      if (session === undefined) continue;
+      yield* Effect.forkIn(
+        session.syncRoots().pipe(
+          Effect.catchTags({
+            McpCallFailed: (failure) => Effect.logWarning('An MCP server was not told of its changed roots', { server: name, failure }),
+            McpTimedOut: (failure) => Effect.logWarning('An MCP server was not told of its changed roots', { server: name, failure }),
+          }),
+        ),
+        scope,
+      );
+    }
+  });
+
+  const place = Effect.fn('McpPool.place')((paths: readonly string[]) =>
+    Effect.suspend(() => (workspace.seed(paths) ? announce() : Effect.void)),
+  );
+
   const call = Effect.fn('McpPool.call')(
     (server: string, tool: string, args: Readonly<Record<string, unknown>>, options: McpCallOptions = {}) =>
-      Effect.flatMap(live(server, tool, options), (session) => answering(server, session, session.call(tool, args, options), options)),
+      Effect.andThen(
+        Effect.suspend(() => (workspace.join(options.roots ?? []) ? announce() : Effect.void)),
+        Effect.flatMap(live(server, tool, options), (session) => answering(server, session, session.call(tool, args, options), options)),
+      ),
   );
 
   const appView = Effect.fn('McpPool.appView')((view: McpAppTarget, uri: string, tool: string | undefined, options: McpCallOptions = {}) =>
@@ -553,6 +579,7 @@ const makeMcpPool = Effect.fnUntraced(function* (options: McpSessionOptions = {}
     awaitHandshakes,
     paletteUnsafe,
     states,
+    place,
     call,
     appView,
     appCall,

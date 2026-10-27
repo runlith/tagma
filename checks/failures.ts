@@ -1829,13 +1829,6 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     why: 'A storage binding that cannot be resolved leaves the adopted session without launch storage, the state of a session that never named one; the failure is logged.',
   },
   {
-    path: 'packages/mcp/src/sdk.ts',
-    symbol: 'notifyReleasedRoots',
-    form: 'catch',
-    site: '5c8bfcfa',
-    why: 'Best-effort уведомление после завершения tools/call сохраняет известный исход; сбой логируется, изменение roots остаётся pending до следующего вызова.',
-  },
-  {
     path: 'apps/tagma/server/src/external-harnesses/birth/installed.ts',
     symbol: 'makeInstalledHarnesses.fileKey',
     form: 'catch',

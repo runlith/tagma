@@ -8,7 +8,7 @@ import { graphFixture } from '../composition/testing/graphFixture.js';
 import { mcpServers as mcpServersKey } from './contract/wire/settings.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { McpServers } from './contract/service/servers.js';
-import { mcpServersLayer } from './serverPool.js';
+import { mcpServersLayer } from './testing/doubles.js';
 
 const mcpGraph = graphFixture();
 const MCP_SERVER = resolve(import.meta.dir, '../../../../../packages/mcp/test/mcpTestServer.ts');

@@ -27,8 +27,7 @@ const descriptor = (name: string) => ({
 const contextOf = (palette: ReturnType<McpServers['Service']['palette']>, bound = mcpBoundTools()): ReturnType<typeof asMcpToolsContext> =>
   ({
     projectId: 1,
-    workingRoot: '/workspace',
-    caller: { files: null },
+    world: { root: '/workspace', facts: { shared: true } },
     thread: { id: 'thread-1' },
     mcp: () => palette,
     mcpBound: bound,

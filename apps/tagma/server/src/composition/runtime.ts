@@ -81,6 +81,9 @@ import { ToolOutputsPlace } from '../native-harness/contract/service/toolOutputs
 import { HarnessOwner } from '../threads/contract/service/engine.js';
 import { ThreadFilesPlace } from '../threads/contract/service/parts.js';
 import { ScratchAreas } from '../threads/contract/service/scratch.js';
+import { McpPlaces } from '../mcp/contract/service/places.js';
+import { Coverage } from '../workspace/contract/service/roots.js';
+import { mcpPlaces } from './mcpPlaces.js';
 import { MachineWorld } from '../executions/contract/service/worlds.js';
 import { Holdings } from '../change-record/contract/service/holdings.js';
 import { holderAt } from '../workspace/contract/wire/checkout.js';
@@ -407,6 +410,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   const machine = machineWorld(() => presentCarried(CARRIED_RIPGREP));
   const calls = callThreads();
   const browserThreads = browserRuns();
+  const mcpPlacesPort = mcpPlaces();
   const sandboxInstallation = Layer.effect(
     EnvironmentBackends,
     Effect.gen(function* () {
@@ -518,7 +522,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             closing('sandbox', sandboxInstallation),
             closing('working owners', workingLayerWithUnits),
             closing('terminals floor', agentPaceLayer.pipe(Layer.provideMerge(executionsLayerWithDeps))),
-            closing('mcp servers', mcp.lifetimes.installation),
+            closing('mcp servers', mcp.lifetimes.installation.pipe(Layer.provide(Layer.succeed(McpPlaces, mcpPlacesPort.port)))),
             closing('plugin secrets', pluginSecrets.lifetimes.installation.pipe(Layer.provide(pluginPlace))),
             closing(
               'artifacts',
@@ -743,6 +747,10 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Effect.sync(() => unheld.forEach((leave) => leave())),
   );
   yield* Scope.provide(browserThreads.bind(Context.get(owners, ThreadRunning)), stackScope);
+  yield* Scope.provide(
+    mcpPlacesPort.bind({ coverage: Context.get(owners, Coverage), bases: [scratch.root, options.attachmentsPath] }),
+    stackScope,
+  );
   yield* Scope.provide(
     calls.bind({
       turns: Context.get(owners, ThreadTurns),

@@ -27,5 +27,5 @@ export const makeThreadScratch = Effect.fnUntraced(function* ({ root }: { readon
   const release = Effect.fn('ScratchAreas.release')(function* (threadId: string) {
     yield* files.remove(directory(threadId), { recursive: true, force: true }).pipe(Effect.orDie);
   });
-  return ScratchAreas.of({ directory, scope, ensure, release });
+  return ScratchAreas.of({ root, directory, scope, ensure, release });
 });

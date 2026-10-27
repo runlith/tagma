@@ -5,12 +5,12 @@ import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/cl
 import type { ReadBuffer } from '@modelcontextprotocol/sdk/shared/stdio.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
-import { Duration, Effect, type Scope } from 'effect';
+import { Duration, Effect } from 'effect';
 import { type McpCaller, mcpCallerMeta } from './mcpCallerMeta';
 import { McpCallFailed, McpConnectFailed, McpResourceFailed, McpTimedOut, type McpTransportKind } from './McpFailure';
 import { redactValue } from './mcpRedactor';
 import type { McpResourcePage, McpResourceResult, McpResourceUpdated } from './mcpResources';
-import { McpRoots } from './McpRoots';
+import { McpRoots, McpRootsPeer } from './McpRoots';
 
 const loadSdk = async () => {
   const [client, stdio, framing, http, protocol, types] = await Promise.all([
@@ -70,7 +70,6 @@ export const mcpSdkDefaults = (server: string, transport: McpTransportKind): Eff
 
 export type McpRequestOptions = {
   readonly timeout: number;
-  readonly roots?: readonly string[];
   readonly caller?: McpCaller;
   readonly redact?: (text: string) => string;
 };
@@ -147,8 +146,7 @@ export type McpSdkConnection = {
   readonly client: Client;
   readonly transport: GroupedStdioTransport | StreamableHTTPClientTransport;
   readonly childExit: Effect.Effect<void>;
-  readonly roots: McpRoots;
-  readonly scope: Scope.Scope;
+  readonly roots: McpRootsPeer;
 };
 
 type SdkCallResult = Awaited<ReturnType<Client['callTool']>>;
@@ -311,43 +309,55 @@ export type McpTransportHooks = {
   readonly onResourcesChanged?: () => void;
 };
 
+const observed = <T extends Transport>(transport: T, roots: McpRootsPeer): T => {
+  const send = transport.send.bind(transport);
+  transport.onmessage = (message) => roots.heard(message);
+  transport.send = (message, options) => send(message, options).then(() => roots.sent(message));
+  return transport;
+};
+
 export const openMcpTransport = Effect.fn('mcp.openTransport')(
-  (server: string, input: McpTransportInput, hooks: McpTransportHooks): Effect.Effect<McpSdkConnection, McpConnectFailed, Scope.Scope> =>
-    Effect.flatMap(Effect.scope, (scope) =>
-      Effect.flatMap(
-        sdkFor(server, input.transport),
-        ({
-          Client,
-          framing,
-          StreamableHTTPClientTransport,
-          ResourceUpdatedNotificationSchema,
-          ResourceListChangedNotificationSchema,
-          ListRootsRequestSchema,
-        }) =>
-          Effect.try({
-            try: () => {
-              const client = new Client(
-                { name: '@runlith/mcp', version: '0.1.0' },
-                {
-                  capabilities: {
-                    roots: { listChanged: true },
-                    extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } },
-                  },
-                  listChanged: { tools: { autoRefresh: false, debounceMs: 0, onChanged: () => hooks.onToolsChanged() } },
+  (
+    server: string,
+    input: McpTransportInput,
+    hooks: McpTransportHooks,
+    workspace: McpRoots = new McpRoots(),
+  ): Effect.Effect<McpSdkConnection, McpConnectFailed> =>
+    Effect.flatMap(
+      sdkFor(server, input.transport),
+      ({
+        Client,
+        framing,
+        StreamableHTTPClientTransport,
+        ResourceUpdatedNotificationSchema,
+        ResourceListChangedNotificationSchema,
+        ListRootsRequestSchema,
+      }) =>
+        Effect.try({
+          try: () => {
+            const client = new Client(
+              { name: '@runlith/mcp', version: '0.1.0' },
+              {
+                capabilities: {
+                  roots: { listChanged: true },
+                  extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } },
                 },
-              );
-              const roots = new McpRoots();
-              client.setRequestHandler(ListRootsRequestSchema, () => roots.answer());
-              client.onclose = () => {
-                roots.close();
-                hooks.onClosed();
-              };
-              client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification) =>
-                hooks.onResourceUpdated?.(notification.params),
-              );
-              client.setNotificationHandler(ResourceListChangedNotificationSchema, () => hooks.onResourcesChanged?.());
-              if (input.transport === 'stdio') {
-                const transport = new GroupedStdioTransport(
+                listChanged: { tools: { autoRefresh: false, debounceMs: 0, onChanged: () => hooks.onToolsChanged() } },
+              },
+            );
+            const roots = new McpRootsPeer(workspace);
+            client.setRequestHandler(ListRootsRequestSchema, (_request, extra) => roots.answer(extra.requestId));
+            client.onclose = () => {
+              roots.close();
+              hooks.onClosed();
+            };
+            client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification) =>
+              hooks.onResourceUpdated?.(notification.params),
+            );
+            client.setNotificationHandler(ResourceListChangedNotificationSchema, () => hooks.onResourcesChanged?.());
+            if (input.transport === 'stdio') {
+              const transport = observed(
+                new GroupedStdioTransport(
                   {
                     command: input.command,
                     args: input.args,
@@ -355,11 +365,14 @@ export const openMcpTransport = Effect.fn('mcp.openTransport')(
                     env: input.env,
                   },
                   framing,
-                );
-                transport.stderr.on('data', (chunk: Uint8Array) => input.onStderr(chunk));
-                return { server, transportKind: 'stdio' as const, client, transport, childExit: childExitOf(transport), roots, scope };
-              }
-              const transport = new StreamableHTTPClientTransport(new URL(input.url), {
+                ),
+                roots,
+              );
+              transport.stderr.on('data', (chunk: Uint8Array) => input.onStderr(chunk));
+              return { server, transportKind: 'stdio' as const, client, transport, childExit: childExitOf(transport), roots };
+            }
+            const transport = observed(
+              new StreamableHTTPClientTransport(new URL(input.url), {
                 requestInit: input.headers === undefined ? undefined : { headers: { ...input.headers } },
                 fetch: input.fetch,
                 reconnectionOptions: {
@@ -368,12 +381,13 @@ export const openMcpTransport = Effect.fn('mcp.openTransport')(
                   reconnectionDelayGrowFactor: 1.5,
                   maxRetries: 0,
                 },
-              });
-              return { server, transportKind: 'http' as const, client, transport, childExit: Effect.void, roots, scope };
-            },
-            catch: (error) => new McpConnectFailed({ server, transport: input.transport, reason: reasonOf(error) }),
-          }),
-      ),
+              }),
+              roots,
+            );
+            return { server, transportKind: 'http' as const, client, transport, childExit: Effect.void, roots };
+          },
+          catch: (error) => new McpConnectFailed({ server, transport: input.transport, reason: reasonOf(error) }),
+        }),
     ),
 );
 
@@ -418,29 +432,47 @@ export const mcpListTools = Effect.fn('mcp.listTools')(
     ),
 );
 
-const notifyRoots = Effect.fn('mcp.notifyRoots')((connection: McpSdkConnection, options: McpRequestOptions) =>
-  Effect.suspend(() => {
-    const revision = connection.roots.pending();
-    if (revision === undefined) return Effect.void;
-    return Effect.tryPromise({
-      try: () => connection.client.sendRootsListChanged(),
-      catch: (error) => new McpCallFailed({ server: connection.server, tool: 'roots/list', reason: said(options, reasonOf(error)) }),
-    }).pipe(
-      Effect.tap(() => Effect.sync(() => connection.roots.notified(revision))),
+export const mcpSyncRoots = Effect.fn('mcp.syncRoots')(
+  function* (connection: McpSdkConnection, options: McpRequestOptions) {
+    const { server, client, roots } = connection;
+    if (roots.synced >= roots.revision) return;
+    const loaded = yield* connected(connection);
+    const asking = <A>(request: (signal: AbortSignal) => Promise<A>) =>
+      Effect.tryPromise({
+        try: request,
+        catch: (error) =>
+          isRequestTimeout(loaded, error)
+            ? new McpTimedOut({ server, tool: 'roots/list', ms: options.timeout })
+            : new McpCallFailed({ server, tool: 'roots/list', reason: said(options, reasonOf(error)) }),
+      });
+    const ping = asking((signal) => client.ping(requestOptions(signal, options)));
+    while (roots.synced < roots.revision) {
+      const target = roots.revision;
+      const asked = roots.asked;
+      yield* asking(() => client.sendRootsListChanged());
+      yield* ping;
+      if (roots.asked !== asked) {
+        if (!(yield* roots.answered(target))) {
+          return yield* new McpCallFailed({
+            server,
+            tool: 'roots/list',
+            reason: 'the server closed its transport before it read its roots',
+          });
+        }
+        yield* ping;
+      }
+      roots.settle(target);
+    }
+  },
+  (work, connection, options) =>
+    work.pipe(
+      connection.roots.syncing.withPermits(1),
       Effect.timeoutOrElse({
         duration: Duration.millis(options.timeout),
         orElse: () => Effect.fail(new McpTimedOut({ server: connection.server, tool: 'roots/list', ms: options.timeout })),
       }),
-    );
-  }),
+    ),
 );
-
-const notifyReleasedRoots = (connection: McpSdkConnection, options: McpRequestOptions) =>
-  notifyRoots(connection, options).pipe(
-    Effect.catch((failure) => Effect.logWarning('Released MCP roots could not be announced', { server: connection.server, failure })),
-    Effect.forkIn(connection.scope),
-    Effect.asVoid,
-  );
 
 export const mcpCallTool = Effect.fn('mcp.callTool')(
   (
@@ -449,56 +481,55 @@ export const mcpCallTool = Effect.fn('mcp.callTool')(
     args: Readonly<Record<string, unknown>>,
     options: McpRequestOptions,
   ): Effect.Effect<McpSdkCallResult, McpCallFailed | McpTimedOut> =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => connection.roots.retain(options.roots ?? [])),
-      () =>
-        Effect.flatMap(Effect.andThen(notifyRoots(connection, options), connected(connection)), (loaded) =>
-          Effect.tryPromise({
-            try: (signal) =>
-              connection.client.callTool(
-                { name: tool, arguments: { ...args }, ...callerOf(options) },
-                undefined,
-                requestOptions(signal, options),
-              ),
-            catch: (error) =>
-              isRequestTimeout(loaded, error)
-                ? new McpTimedOut({ server: connection.server, tool, ms: options.timeout })
-                : new McpCallFailed({ server: connection.server, tool, reason: said(options, reasonOf(error)) }),
-          }),
-        ).pipe(
-          Effect.map((result): McpSdkCallResult =>
-            hasContent(result)
-              ? {
-                  content: result.content.map((part) => {
-                    const scrubbed = part._meta === undefined ? part : { ...part, _meta: redactValue(part._meta, options.redact) };
-                    if (scrubbed.type === 'text') return { ...scrubbed, text: said(options, scrubbed.text) };
-                    if (scrubbed.type === 'resource_link') {
-                      return { ...scrubbed, uri: said(options, scrubbed.uri), name: said(options, scrubbed.name) };
-                    }
-                    if (scrubbed.type === 'resource') {
-                      return {
-                        ...scrubbed,
-                        resource: {
-                          ...scrubbed.resource,
-                          uri: said(options, scrubbed.resource.uri),
-                          ...('text' in scrubbed.resource ? { text: said(options, scrubbed.resource.text) } : {}),
-                        },
-                      };
-                    }
-                    return scrubbed;
-                  }),
-                  structuredContent:
-                    result.structuredContent === undefined ? undefined : redactValue(result.structuredContent, options.redact),
-                  isError: result.isError,
-                  _meta: result._meta === undefined ? undefined : redactValue(result._meta, options.redact),
+    Effect.suspend(() =>
+      connection.roots.synced >= connection.roots.revision
+        ? connected(connection)
+        : Effect.andThen(mcpSyncRoots(connection, options), connected(connection)),
+    ).pipe(
+      Effect.flatMap((loaded) =>
+        Effect.tryPromise({
+          try: (signal) =>
+            connection.client.callTool(
+              { name: tool, arguments: { ...args }, ...callerOf(options) },
+              undefined,
+              requestOptions(signal, options),
+            ),
+          catch: (error) =>
+            isRequestTimeout(loaded, error)
+              ? new McpTimedOut({ server: connection.server, tool, ms: options.timeout })
+              : new McpCallFailed({ server: connection.server, tool, reason: said(options, reasonOf(error)) }),
+        }),
+      ),
+      Effect.map((result): McpSdkCallResult =>
+        hasContent(result)
+          ? {
+              content: result.content.map((part) => {
+                const scrubbed = part._meta === undefined ? part : { ...part, _meta: redactValue(part._meta, options.redact) };
+                if (scrubbed.type === 'text') return { ...scrubbed, text: said(options, scrubbed.text) };
+                if (scrubbed.type === 'resource_link') {
+                  return { ...scrubbed, uri: said(options, scrubbed.uri), name: said(options, scrubbed.name) };
                 }
-              : {
-                  toolResult: redactValue(result.toolResult, options.redact),
-                  _meta: result._meta === undefined ? undefined : redactValue(result._meta, options.redact),
-                },
-          ),
-        ),
-      (lease) => Effect.andThen(Effect.sync(lease.release), notifyReleasedRoots(connection, options)),
+                if (scrubbed.type === 'resource') {
+                  return {
+                    ...scrubbed,
+                    resource: {
+                      ...scrubbed.resource,
+                      uri: said(options, scrubbed.resource.uri),
+                      ...('text' in scrubbed.resource ? { text: said(options, scrubbed.resource.text) } : {}),
+                    },
+                  };
+                }
+                return scrubbed;
+              }),
+              structuredContent: result.structuredContent === undefined ? undefined : redactValue(result.structuredContent, options.redact),
+              isError: result.isError,
+              _meta: result._meta === undefined ? undefined : redactValue(result._meta, options.redact),
+            }
+          : {
+              toolResult: redactValue(result.toolResult, options.redact),
+              _meta: result._meta === undefined ? undefined : redactValue(result._meta, options.redact),
+            },
+      ),
     ),
 );
 

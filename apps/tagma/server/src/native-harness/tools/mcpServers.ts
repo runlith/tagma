@@ -4,12 +4,11 @@ import { mcpToolIdentity } from '@runlith/mcp/identity';
 import type { Context } from 'effect';
 import type { McpServers } from '../../mcp/contract/service/servers.js';
 import type { McpBoundTools } from './mcpRule.js';
-import type { Caller } from '../../platform/contract/wire/caller.js';
+import type { ThreadWorld } from '../../executions/contract/service/worlds.js';
 
 export type McpToolsContext = {
   readonly projectId: number;
-  readonly caller: Caller;
-  readonly workingRoot: string;
+  readonly world: ThreadWorld;
   readonly thread: { readonly id: string };
   readonly mcpServers: Context.Service.Shape<typeof McpServers>;
   readonly mcp: () => ReturnType<McpServers['Service']['palette']>;
@@ -27,7 +26,7 @@ export function mcpServerTools(ctx: McpToolsContext): ToolCatalog {
       descriptors: entry.descriptors,
       pool,
       apps: true,
-      roots: ctx.caller.files === null ? [ctx.workingRoot] : [ctx.workingRoot, ctx.caller.files.path],
+      roots: ctx.world.facts.shared ? [ctx.world.root] : [],
     });
     for (const [tool, callable] of Object.entries(offered.tools)) {
       const naming = mcpToolIdentity(server, tool);

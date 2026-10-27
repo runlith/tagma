@@ -192,7 +192,7 @@ export const keyboardSession = Effect.fnUntraced(function* ({
           return uncalled();
         },
       }),
-      Layer.mock(ScratchAreas, { directory: uncalled, scope: uncalled }),
+      Layer.mock(ScratchAreas, { root: '/scratch', directory: uncalled, scope: uncalled }),
       Layer.mock(Settings, { value: (key) => Effect.succeed(key.fallback) }),
       Layer.mock(GrantSigner, {
         grantFor: (id) => `grant:${id}`,

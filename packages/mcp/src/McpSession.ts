@@ -6,6 +6,7 @@ import type { McpServerDeclaration } from './McpServerDeclaration';
 import { redactValue } from './mcpRedactor';
 import type { McpResourcePage, McpResourceResult, McpResourceUpdated } from './mcpResources';
 import { MCP_APP_DOCUMENT_MAX_LENGTH, type McpAppDirectory, type McpAppView, mcpAppDirectory, mcpAppDocument } from './mcpApps';
+import type { McpRoots } from './McpRoots';
 import {
   type McpRequestOptions,
   type McpSdkCallResult,
@@ -20,6 +21,7 @@ import {
   mcpPing,
   mcpReadResource,
   mcpSubscribeResource,
+  mcpSyncRoots,
   mcpUnsubscribeResource,
   mcpSdkDefaults,
   openMcpTransport,
@@ -177,7 +179,6 @@ const makeMcpSession = (input: SessionInput) => {
   const under = (options: McpCallOptions): McpRequestOptions => ({
     timeout: timeoutMs,
     caller: options.caller,
-    roots: options.roots,
     redact,
   });
 
@@ -312,6 +313,8 @@ const makeMcpSession = (input: SessionInput) => {
   const ping = (options: McpCallOptions = {}): Effect.Effect<void, McpCallFailed | McpTimedOut> =>
     heard(mcpPing(connection, under(options)));
 
+  const syncRoots = (): Effect.Effect<void, McpCallFailed | McpTimedOut> => heard(mcpSyncRoots(connection, under({})));
+
   const refresh = Effect.fn('McpSession.refresh')((options: McpCallOptions = {}) =>
     heard(listAll(connection, under(options), maxCatalogBytes)).pipe(
       Effect.mapError((failure) => scrubbed(failure, redact)),
@@ -358,6 +361,7 @@ const makeMcpSession = (input: SessionInput) => {
     },
     subscribeResource,
     ping,
+    syncRoots,
     refresh,
     close,
   } as const;
@@ -366,6 +370,7 @@ const makeMcpSession = (input: SessionInput) => {
 export type McpSessionOptions = {
   readonly fetch?: (url: string | URL, init?: RequestInit) => Promise<Response>;
   readonly redact?: (text: string) => string;
+  readonly roots?: McpRoots;
 };
 
 const transportInput = (
@@ -417,27 +422,32 @@ const acquire = Effect.fn('McpSession.acquire')(function* (declaration: McpServe
   const closed = yield* Deferred.make<McpConnectFailed>();
   const input = transportInput(declaration, stderr, options, defaults.environment);
   let opened: McpSession | undefined;
-  const connection = yield* openMcpTransport(declaration.name, input, {
-    onToolsChanged: () => PubSub.publishUnsafe(changes, undefined),
-    onResourcesChanged: () => opened?.forgetListing(),
-    onResourceUpdated: (update) => {
-      opened?.forgetDocument(update.uri);
-      const entry = resources.get(update.uri);
-      if (entry !== undefined) Effect.runSync(PubSub.publish(entry.updates, redactValue(update, redact)));
-    },
-    onClosed: () =>
-      Deferred.doneUnsafe(
-        closed,
-        Effect.succeed(
-          new McpConnectFailed({
-            server: declaration.name,
-            transport: declaration.transport,
-            reason: 'the server closed its transport',
-            stderr: stderr.tail === undefined ? undefined : (redact?.(stderr.tail) ?? stderr.tail),
-          }),
+  const connection = yield* openMcpTransport(
+    declaration.name,
+    input,
+    {
+      onToolsChanged: () => PubSub.publishUnsafe(changes, undefined),
+      onResourcesChanged: () => opened?.forgetListing(),
+      onResourceUpdated: (update) => {
+        opened?.forgetDocument(update.uri);
+        const entry = resources.get(update.uri);
+        if (entry !== undefined) Effect.runSync(PubSub.publish(entry.updates, redactValue(update, redact)));
+      },
+      onClosed: () =>
+        Deferred.doneUnsafe(
+          closed,
+          Effect.succeed(
+            new McpConnectFailed({
+              server: declaration.name,
+              transport: declaration.transport,
+              reason: 'the server closed its transport',
+              stderr: stderr.tail === undefined ? undefined : (redact?.(stderr.tail) ?? stderr.tail),
+            }),
+          ),
         ),
-      ),
-  }).pipe(Effect.mapError((failure) => scrubbed(failure, redact)));
+    },
+    options.roots,
+  ).pipe(Effect.mapError((failure) => scrubbed(failure, redact)));
   const under: McpRequestOptions = {
     timeout,
     redact,
