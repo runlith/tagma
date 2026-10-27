@@ -73,6 +73,7 @@ const row = (id: string, order: number, parentThreadId: string | null = null, li
   held: { paths: 0, unproven: 0 },
   provider: 'openai-oauth',
   account: null,
+  processAccount: null,
   model: 'test',
   reasoning: null,
   switches: {},

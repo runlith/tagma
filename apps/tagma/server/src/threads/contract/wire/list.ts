@@ -97,6 +97,7 @@ export type ThreadListRow = {
   readonly held: ThreadHeld;
   readonly launchBlocked?: true;
   readonly account: string | null;
+  readonly processAccount: string | null;
   readonly provider: string;
   readonly model: string | null;
   readonly reasoning: string | null;
@@ -143,6 +144,7 @@ const threadListRowFields = {
   held: ThreadHeld,
   launchBlocked: Schema.optional(Schema.Literal(true)),
   account: Schema.NullOr(Schema.String),
+  processAccount: Schema.NullOr(Schema.String),
   provider: Schema.String,
   model: Schema.NullOr(Schema.String),
   reasoning: Schema.NullOr(Schema.String),

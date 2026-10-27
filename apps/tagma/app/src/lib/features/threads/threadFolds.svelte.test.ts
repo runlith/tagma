@@ -31,6 +31,7 @@ const row = (id: string, parentThreadId: string | null): ThreadListRow => ({
   phase: null,
   held: { paths: 0, unproven: 0 },
   account: null,
+  processAccount: null,
   provider: 'anthropic',
   model: null,
   reasoning: null,

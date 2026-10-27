@@ -83,7 +83,7 @@ export const terminalCapabilities = (name: HarnessName, plain: boolean): Transpo
     authorship: events?.postWrite != null ? 'observed' : null,
     callEnvelopeMs: harnessAdapter(name).callEnvelopeMs,
     screen: true,
-    continue: false,
+    continue: true,
     feed: 'turns',
     usage: transcriptUsage(harnessAdapter(name)) ? 'partial' : 'none',
     aside: 'none',

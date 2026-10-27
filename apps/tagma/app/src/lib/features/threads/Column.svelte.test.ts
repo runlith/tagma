@@ -82,6 +82,7 @@ const row = (index: number): ThreadListRow => ({
   phase: null,
   held: { paths: 0, unproven: 0 },
   account: null,
+  processAccount: null,
   provider: 'subscription',
   model: 'claude-opus-5',
   reasoning: null,

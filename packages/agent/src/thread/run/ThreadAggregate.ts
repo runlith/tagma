@@ -12,7 +12,7 @@ import type { ThreadSnapshot, ThreadState } from '../state';
 import { ATTACHED_CONTEXT_SIGNAL_TYPE, type ThreadSignal } from '../../transcript/parts';
 import { isReaderWordsItem } from '../inboxItems';
 import type { ThreadInboxItem } from '../storage/inbox';
-import { type ThreadAuthority, type ThreadMetadataRow, type ThreadRow, type ThreadRunRow } from '../rows';
+import { threadRunLimited, type ThreadAuthority, type ThreadMetadataRow, type ThreadRow, type ThreadRunRow } from '../rows';
 import type { ThreadInsertValues } from '../storage/aggregate';
 import type { ThreadTranscriptPage } from '../../transcript/rows';
 import type { AgentApprovalMode, ThreadBindings } from '../../agent/contracts';
@@ -528,7 +528,8 @@ export const threadAggregateLayer = Layer.effect(
                     coreEntry(entry) && entry.type === 'tool' && entry.toolState === 'output-available' ? [entry.toolCallId] : [],
                   ),
                 );
-          const continued = going !== null && going.kind !== 'compaction' && thread.capabilities.continue;
+          const limited = going === null && threadRunLimited(yield* ledger.latestRun(thread.id));
+          const continued = ((going !== null && going.kind !== 'compaction') || limited) && thread.capabilities.continue;
           const entry: ThreadRestartEntry = {
             type: 'restart',
             id: `restart:${mintThreadEventId()}`,
@@ -550,7 +551,7 @@ export const threadAggregateLayer = Layer.effect(
             () => replaced,
             (lift) => Effect.sync(() => lift(true)),
           );
-          if (going === null || !continued) return { stoppedRunId: going?.id ?? null, runId: null };
+          if (!continued) return { stoppedRunId: going?.id ?? null, runId: null };
           yield* agents.get(thread.agentId);
           const begun = yield* scheduler.admit(thread, { kind: 'continue' }).pipe(
             Effect.map((opened) => opened.runId),
@@ -561,7 +562,7 @@ export const threadAggregateLayer = Layer.effect(
               () => Effect.map(ledger.latestRun(thread.id), (latest) => latest?.id ?? null),
             ),
           );
-          return { stoppedRunId: going.id, runId: begun };
+          return { stoppedRunId: going?.id ?? null, runId: begun };
         });
         return yield* Fiber.join(yield* Effect.forkDetach(work));
       }),

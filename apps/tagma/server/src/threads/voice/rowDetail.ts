@@ -1,5 +1,6 @@
 import { currentEffort, currentModel } from '../contract/wire/harness/observation.js';
 import type { ExternalSession, HarnessRowDetail } from '../contract/wire/harness/externalSession.js';
+import { harnessSessionActive } from '../contract/wire/harness/session.js';
 import { harnessTransportOf, type HarnessRoad } from '../contract/wire/harness/seat.js';
 import type { HarnessName } from '../contract/wire/harness/names.js';
 
@@ -14,6 +15,11 @@ export const shownHarness = (facet: ExternalSession | null, road: HarnessRoad): 
 
 export const hostingCli = (facet: ExternalSession | null, road: HarnessRoad): HarnessName | null =>
   facet !== null && road.transport.agent !== null ? facet.name : null;
+
+export const processAccount = (facet: ExternalSession | null): string | null => {
+  const session = facet?.session;
+  return harnessSessionActive(session) ? (session.account?.key ?? null) : null;
+};
 
 export const wireHarness = (facet: ExternalSession | null, road: HarnessRoad): HarnessRowDetail | null =>
   facet === null

@@ -5,7 +5,9 @@
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
   import { tick } from 'svelte';
   import { Overlay } from '@runlith/primitives/Overlay.svelte';
+  import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
+  import { Button } from '$lib/shared/ui/button/index.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import { Input } from '$lib/shared/ui/input/index.js';
@@ -43,6 +45,7 @@
   const bornLabel = $derived(bornType === DEFAULT_THREAD_TYPE ? 'Tagma' : bornType);
   const title = $derived(isRoot ? thread?.title.trim() || 'Untitled' : (row?.name ?? bornLabel ?? 'Untitled'));
   const accountMissing = $derived(host.views.model.accountMissing);
+  const accountMove = $derived(host.views.model.accountMove);
 
   const types = $derived(agents.agents);
   const rejected = $derived(agents.rejected);
@@ -242,12 +245,39 @@
         <WorktreeChip {host} threadId={host.activeId} />
       </span>
     {/if}
-    {#if accountMissing && host.views.model.accountLabel}
-      <Tooltip text={`${host.views.model.accountLabel} is no longer stored: the next turn fails with this key.`}>
+    {#if accountMove !== null && host.activeId}
+      {@const id = host.activeId}
+      {@const move = accountMove}
+      {@const restarting = list.busy(id, 'restart')}
+      <span class="no-drag-region flex min-w-0 shrink items-center gap-1.5" data-account-move>
+        <span class="flex min-w-0 shrink items-center gap-1 text-small {move.limited ? 'text-severity-lie' : 'text-muted-foreground'}">
+          {#if move.limited}<TriangleAlert class="size-3.5 shrink-0" />{/if}
+          <FadeText text={move.limited ? `${move.standing} hit its limit` : `On ${move.standing}`} />
+        </span>
+        <Tooltip
+          text={`The CLI runs on ${move.standing}; ${move.chosen} is chosen. Starts the CLI on ${move.chosen} with this conversation${move.limited ? ' and continues the turn the limit stopped' : ''}. Commands the CLI is running end with it.`}
+          class="flex min-w-0 shrink"
+        >
+          <Button
+            type="button"
+            size="xs"
+            variant={move.limited ? 'default' : 'outline'}
+            class="min-w-0 shrink"
+            disabled={restarting}
+            onclick={() => void list.restart(id)}
+          >
+            {#if restarting}<Waiting class="size-3" />{/if}
+            <FadeText text={`Continue on ${move.chosen}`} />
+          </Button>
+        </Tooltip>
+      </span>
+    {/if}
+    {#if accountMissing && host.views.model.chosenLabel}
+      <Tooltip text={`${host.views.model.chosenLabel} is no longer stored: the next turn fails with this key.`}>
         <span
           class="grid shrink-0 place-items-center text-severity-lie"
           role="img"
-          aria-label={`${host.views.model.accountLabel} is no longer stored`}
+          aria-label={`${host.views.model.chosenLabel} is no longer stored`}
         >
           <TriangleAlert class="size-3.5" />
         </span>

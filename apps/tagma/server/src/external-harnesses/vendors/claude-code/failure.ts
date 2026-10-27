@@ -57,6 +57,18 @@ export type Failing = {
   readonly at: number;
 };
 
+export const stopFailureOf = (event: Record<string, unknown>): TransportFailure | null => {
+  const known = typeof event.error === 'string' ? classOf(event.error as SDKAssistantMessageError, null) : null;
+  if (known === null) return null;
+  return {
+    stage: 'claude-code.stop',
+    type: known.type,
+    retryable: familyRetries(known.family),
+    modelStarted: null,
+    reason: { family: known.family },
+  };
+};
+
 export const failureOf = (failing: Failing): TransportFailure | null => {
   const known = classOf(failing.error, failing.status);
   if (known === null) return null;

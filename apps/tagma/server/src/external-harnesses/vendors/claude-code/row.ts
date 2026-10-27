@@ -23,6 +23,8 @@ import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion } from '../..
 import { field, namedCall, rootOfArgv, sessionIdOf, unreported } from '../../adapter/payload.js';
 import { claudeAcp } from './acp.js';
 import { claudeAddress, claudeCut } from './cut.js';
+import { stopFailureOf } from './failure.js';
+import { claudeCarry } from './carry.js';
 import { SESSION_VARIABLES } from '../../contract/wire/sessionVariables.js';
 
 const permission = { tagma: ['--dangerously-skip-permissions'] } as const satisfies HarnessPermissionArgv;
@@ -196,6 +198,7 @@ export const claudeCode: TerminalHarnessAdapter = {
     root: rootOfArgv('--resume', true),
     oneShot,
     cut: claudeCut,
+    carry: claudeCarry,
     address: claudeAddress,
   },
   hooks: {
@@ -219,6 +222,7 @@ export const claudeCode: TerminalHarnessAdapter = {
   subjectOf: namedCall,
   filesOf: claudeFiles,
   printedOf: claudePrinted,
+  failureOf: stopFailureOf,
   eventKeys: ['hook_event_name', 'hookEventName', 'session_id', 'sessionId', 'prompt_id', 'tool_name', 'toolName', 'notification_type'],
   screenAskOf: claudeScreenAsk,
   promptScreenOf: claudePromptScreen,

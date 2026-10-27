@@ -22,12 +22,20 @@ import type { Discharge } from '../../executions/contract/service/discharge.js';
 import type { Environments } from '../../workspace/contract/service/environments.js';
 import type { HarnessPlace } from './launch.js';
 import { cutRoot, type CutRootAnswer } from './prepareRoot.js';
+import type { Carrying, SessionCarrying } from './carry.js';
 
 type Prepared = Extract<HarnessCutMaking, { readonly _tag: 'Prepare' }>;
 
 export type Alignment =
   | { readonly _tag: 'Keep' }
   | { readonly _tag: 'Fresh'; readonly reason: string | null; readonly replaced: string | null }
+  | {
+      readonly _tag: 'Carry';
+      readonly root: string;
+      readonly replaced: string | null;
+      readonly from: string;
+      readonly into: string;
+    }
   | {
       readonly _tag: 'Cut';
       readonly ask: HarnessCutAsk;
@@ -40,6 +48,8 @@ export type AlignmentFacts = {
   readonly root: string | null;
   readonly plain: boolean;
   readonly cut: HarnessCut | undefined;
+  readonly carries: boolean;
+  readonly uncarried: string | null;
   readonly header: VendorSessionRow | null;
   readonly account: string | null;
   readonly point: CutPoint;
@@ -49,6 +59,8 @@ export type AlignmentFacts = {
 
 export const ALIGNMENT_WORDS = {
   account: 'The CLI session belongs to another account, so the thread’s kept turns were handed to a fresh session.',
+  uncarried: (reason: string) =>
+    `The CLI session could not be carried to this account’s folder (${reason}); the kept turns were handed to a fresh session.`,
   unmapped: 'The CLI session predates the turn map, so its rewound turns could not be cut; the kept turns were handed to a fresh session.',
   uncut: 'The CLI session cannot be cut where the rewound turns begin, so the kept turns were handed to a fresh session.',
   refused: (reason: string) => `The CLI could not cut its session (${reason}); the kept turns were handed to a fresh session.`,
@@ -56,22 +68,39 @@ export const ALIGNMENT_WORDS = {
 
 const fresh = (reason: string | null, replaced: string | null): Alignment => ({ _tag: 'Fresh', reason, replaced });
 
-export const alignmentOf = ({ root, plain, cut, header, account, point, unmapped, kept }: AlignmentFacts): Alignment => {
+export const alignmentOf = ({
+  root,
+  plain,
+  cut,
+  carries,
+  uncarried,
+  header,
+  account,
+  point,
+  unmapped,
+  kept,
+}: AlignmentFacts): Alignment => {
   const origin = header?.origin ?? null;
   const seeded = (reason: string) => (kept > 0 ? reason : null);
+  const elsewhere = (session: string): Alignment => {
+    const from = header?.account ?? null;
+    if (carries && uncarried === null && from !== null && account !== null)
+      return { _tag: 'Carry', root: session, replaced: header?.replaced?.root ?? null, from, into: account };
+    return fresh(seeded(uncarried === null ? ALIGNMENT_WORDS.account : ALIGNMENT_WORDS.uncarried(uncarried)), null);
+  };
   if (origin !== null) {
     if (point._tag === 'Fresh') return fresh(cut?.point == null ? null : seeded(ALIGNMENT_WORDS.uncut), null);
     const ask = point._tag === 'Cut' ? { root: origin.root, address: point.address } : origin;
     const making = (ask.address === null ? cut?.whole : cut?.point) ?? null;
     if (making === null || (plain && making._tag !== 'Prepare')) return fresh(null, null);
-    if (header!.account !== account) return fresh(seeded(ALIGNMENT_WORDS.account), null);
+    if (header!.account !== account) return elsewhere(origin.root);
     return { _tag: 'Cut', ask, making, at: point._tag === 'Cut' ? point.run : null, own: false };
   }
   if (plain) return { _tag: 'Keep' };
   if (root === null) return fresh(null, null);
   const making = cut?.point ?? null;
   if (unmapped) return fresh(making === null ? null : seeded(ALIGNMENT_WORDS.unmapped), root);
-  if (header !== null && header.account !== account) return fresh(seeded(ALIGNMENT_WORDS.account), null);
+  if (header !== null && header.account !== account) return elsewhere(root);
   if (point._tag === 'None') return { _tag: 'Keep' };
   if (point._tag === 'Fresh') return fresh(making === null ? null : seeded(ALIGNMENT_WORDS.uncut), root);
   if (making === null) return fresh(null, root);
@@ -115,6 +144,7 @@ type Decided =
   | { readonly _tag: 'Gone' }
   | { readonly _tag: 'Again' }
   | { readonly _tag: 'Aligned'; readonly facet: ExternalSession; readonly reason: string | null }
+  | ({ readonly _tag: 'Carry' } & Carrying)
   | {
       readonly _tag: 'Prepare';
       readonly name: HarnessName;
@@ -134,6 +164,7 @@ export const makeSessionAlignment = (
   journal: JournalRuns,
   observations: SessionObservations['Service'],
   preparing: CutPreparing,
+  carrying: SessionCarrying,
   ownerId: string,
 ): SessionAlignment => {
   const aligning = writes('SessionAlignment.align', [thread], turns.writes);
@@ -149,16 +180,20 @@ export const makeSessionAlignment = (
     account: string | null,
     root: string | null,
     unit?: Unit<'machine'>,
+    uncarried: string | null = null,
   ) {
     const header = yield* turns.session(threadId, unit);
     const kept = yield* Effect.mapError(journal.kept(threadId, unit), threadCallFailed);
     const rewound = header === null ? yield* Effect.mapError(journal.rewound(threadId, unit), threadCallFailed) : [];
     const cut = header === null ? [] : yield* Effect.mapError(journal.cut(threadId, unit), threadCallFailed);
     const point = yield* turns.point(threadId, cut, null, unit);
+    const launch = harnessAdapter(facet.name).launch;
     const alignment = alignmentOf({
       root,
       plain: facet.plain === true,
-      cut: harnessAdapter(facet.name).launch?.cut,
+      cut: launch?.cut,
+      carries: launch?.carry !== undefined && facet.plain !== true,
+      uncarried,
       header,
       account,
       point,
@@ -201,12 +236,18 @@ export const makeSessionAlignment = (
     facet: ExternalSession,
     unit: WriteUnit<'machine'>,
     choice: HarnessModelChoice | undefined,
+    uncarried: string | null,
   ): Effect.fn.Return<SessionChange<Decided>, HarnessFailure> {
     const session = held(facet, sessionId);
     if (session === null) return { facet, value: GONE };
     const account = accountKey(session.account);
     yield* declareHistory(db, unit, threadId, terminalHistory(facet.name, facet.plain === true));
-    const { header, kept, alignment } = yield* judged(threadId, facet, account, facet.sessionKey, unit);
+    const { header, kept, alignment } = yield* judged(threadId, facet, account, facet.sessionKey, unit, uncarried);
+    if (alignment._tag === 'Carry') {
+      const { root, replaced, from, into } = alignment;
+      const carry: Decided = { _tag: 'Carry', name: facet.name, provider: session.account!.provider, root, replaced, from, into };
+      return { facet, value: carry };
+    }
     if (alignment._tag === 'Keep') {
       if (facet.plain !== true) {
         if (header === null) {
@@ -265,6 +306,16 @@ export const makeSessionAlignment = (
     return { facet: aligned, value: committed };
   });
 
+  const moved = Effect.fnUntraced(function* (
+    unit: WriteUnit<'machine'>,
+    threadId: string,
+    facet: ExternalSession,
+    carried: Extract<Decided, { readonly _tag: 'Carry' }>,
+  ): Effect.fn.Return<SessionChange<void>, HarnessFailure> {
+    if ((yield* turns.session(threadId, unit))?.account === carried.from) yield* turns.launched(unit, threadId, carried.into);
+    return { facet, value: undefined };
+  });
+
   const noted = Effect.fnUntraced(function* (threadId: string, facet: ExternalSession, reason: string | null) {
     if (reason !== null) yield* observations.notedWords(threadId, 'history-seeded', reason);
     const aligned: AlignAnswer = { _tag: 'Aligned', facet };
@@ -279,10 +330,17 @@ export const makeSessionAlignment = (
     choice: HarnessModelChoice | undefined,
   ) {
     const gone: AlignAnswer = { _tag: 'Gone' };
+    let uncarried: string | null = null;
     for (;;) {
-      const decided = yield* store.change(threadId, (facet, unit) => decide(threadId, sessionId, facet, unit, choice), aligning);
+      const decided = yield* store.change(threadId, (facet, unit) => decide(threadId, sessionId, facet, unit, choice, uncarried), aligning);
       if (decided._tag === 'Gone' || decided._tag === 'Again') return gone;
       if (decided._tag === 'Aligned') return yield* noted(threadId, decided.facet, decided.reason);
+      if (decided._tag === 'Carry') {
+        const carried = yield* carrying(decided);
+        if (carried._tag === 'Refused') uncarried = carried.reason;
+        else yield* store.change(threadId, (facet, unit) => moved(unit, threadId, facet, decided), aligning);
+        continue;
+      }
       const { terminals, writing, records, discharge, access } = preparing;
       const answer = yield* cutRoot(terminals, writing, records, discharge, access, harnessAdapter(decided.name), decided.making, place, {
         sessionId,

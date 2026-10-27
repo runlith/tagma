@@ -266,7 +266,7 @@ export const THREAD_OPERATIONS = {
     identity: { key: 'call' },
     answer: arms({ restarted: { stoppedRunId: Schema.NullOr(Schema.String), runId: Schema.NullOr(Schema.String) } }),
     meaning:
-      "Restart one thread's agent: stop its running turn, end the agent process its transport holds so the next turn starts one from the installed build, and continue the stopped turn over its history. A transport that cannot continue without words, and a thread with no turn, only lose the process; their next words start the new one. Each restart leaves one feed entry naming who restarted, the stopped turn and the calls it closed.",
+      "Restart one thread's agent: stop its running turn, end the agent process its transport holds so the next turn starts one from the installed build and the account the thread chose, and continue the stopped turn, or the last turn a rate limit ended, over its history. A transport that cannot continue without words, and a thread with neither turn, only lose the process; their next words start the new one. Each restart leaves one feed entry naming who restarted, the stopped turn and the calls it closed.",
     input: Schema.Struct({ threadId: ThreadId }),
     refusals: ['not-found', 'foreign-project', 'session-owned', 'session-uncertain'],
     subjects: (input, _prepared, actor) => subject('write', input.threadId, actor),

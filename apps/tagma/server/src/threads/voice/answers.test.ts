@@ -32,6 +32,7 @@ const row: ThreadListRow = {
   phase: null,
   held: { paths: 0, unproven: 0 },
   account: null,
+  processAccount: null,
   provider: 'openai-oauth',
   model: 'gpt-6.1-sol',
   reasoning: 'high',

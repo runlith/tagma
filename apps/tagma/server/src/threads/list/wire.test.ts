@@ -437,6 +437,7 @@ test('a full thread list row survives the wire with every key equal', () => {
     },
     held: { paths: 2, unproven: 0 },
     account: 'operator',
+    processAccount: null,
     provider: 'subscription',
     model: 'claude-sonnet-5',
     reasoning: 'high',

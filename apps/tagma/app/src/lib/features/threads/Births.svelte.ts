@@ -186,6 +186,7 @@ export class Births {
       phase: null,
       held: { paths: 0, unproven: 0 },
       account: null,
+      processAccount: null,
       provider: birth.provider,
       model: birth.model,
       reasoning: birth.reasoning,

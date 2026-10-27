@@ -28,6 +28,10 @@ export function threadRunInterrupted(status: ThreadRunStatus | null | undefined)
   return status !== null && status !== undefined && THREAD_RUN_INTERRUPTED.includes(status);
 }
 
+export function threadRunLimited(run: ThreadRunRow | null): boolean {
+  return run !== null && run.status === 'failed' && run.failure?.reason?.family === 'rate-limit';
+}
+
 export type ThreadRunStage = {
   stage: import('../transcript/live').RunStage | null;
   message: string | null;

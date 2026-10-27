@@ -4,7 +4,7 @@ import type { SessionUpdate } from '@runlith/acp/updates';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentPhase } from '@runlith/agent/AgentPhase';
 import { INPUT, PHASE, RETRYING } from '../../contract/wire/extensions.js';
-import { retryFamilyOf } from './failure.js';
+import { retryFamilyOf } from '../../vendors/claude-code/failure.js';
 import { Inputs } from './inputs.js';
 import type { Handed } from '../hosted/handed.js';
 import { Meter } from './meter.js';

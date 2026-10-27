@@ -34,6 +34,7 @@ const row = (id: string, parentThreadId: string | null, over: { life?: RunLife; 
   held: { paths: 0, unproven: 0 },
   provider: 'subscription',
   account: null,
+  processAccount: null,
   model: null,
   reasoning: null,
   switches: {},

@@ -76,6 +76,7 @@ export type WireThread = ThreadStateView['thread'] & {
   readonly cacheWarmth: typeof ThreadCacheWarmth.Type | null;
   readonly harness: HarnessRowDetail | null;
   readonly cli: HarnessName | null;
+  readonly processAccount: string | null;
   readonly delegation: Delegation;
   readonly approving: Approving;
   readonly spawnDepth: ThreadSpawnDepth;
@@ -98,6 +99,7 @@ const wireThreadSchema = Schema.Struct({
   cacheWarmth: Schema.NullOr(ThreadCacheWarmth),
   harness: Schema.NullOr(harnessRowSchema),
   cli: Schema.NullOr(harnessNameSchema),
+  processAccount: Schema.NullOr(Schema.String),
   delegation: delegationSchema,
   approving: approvingSchema,
   spawnDepth: spawnDepthSchema,

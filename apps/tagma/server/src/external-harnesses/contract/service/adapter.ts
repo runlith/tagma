@@ -1,5 +1,7 @@
+import type { Effect, FileSystem, PlatformError } from 'effect';
 import type { ModelCapacity } from '@runlith/llm/models/description';
 import type { Approval, PermissionKind } from '@runlith/agent/permissions';
+import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import type { HarnessAnswer } from '../../../threads/contract/service/harness.js';
 import type { HarnessModelReport } from '../../../threads/contract/wire/harness/observation.js';
 import type { HarnessQuestionKind, HarnessQuestionOption } from '../../../threads/contract/wire/harness/session.js';
@@ -144,6 +146,15 @@ export type HarnessCutMaking =
 
 export type HarnessCut = { readonly whole: HarnessCutMaking | null; readonly point: HarnessCutMaking | null };
 
+export type HarnessCarry = {
+  readonly folder: string;
+  readonly session: (
+    files: FileSystem.FileSystem,
+    home: string,
+    root: string,
+  ) => Effect.Effect<readonly string[], PlatformError.PlatformError>;
+};
+
 export type HarnessRunSeen = { readonly turn: string | null; readonly before: string | null };
 
 export type HarnessAddress = { readonly reads: 'turn' | 'transcript'; readonly of: (seen: HarnessRunSeen) => string | null };
@@ -196,6 +207,7 @@ export type HarnessLaunch = {
   readonly witness?: (text: string) => string | null;
   readonly prepare?: HarnessPrepare;
   readonly cut?: HarnessCut;
+  readonly carry?: HarnessCarry;
   readonly address?: HarnessAddress;
 };
 
@@ -293,6 +305,7 @@ export type HarnessAdapter = {
   readonly subjectOf: (event: Record<string, unknown>) => HarnessCall | null;
   readonly filesOf: (event: Record<string, unknown>) => readonly FileEffect[];
   readonly printedOf: (event: Record<string, unknown>) => HarnessPrinted | null;
+  readonly failureOf?: (event: Record<string, unknown>) => TransportFailure | null;
   readonly eventKeys: readonly string[];
   readonly screenAskOf: HarnessScreenReader;
   readonly promptScreenOf?: (lines: readonly string[]) => boolean;

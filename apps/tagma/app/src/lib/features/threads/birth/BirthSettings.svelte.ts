@@ -9,6 +9,7 @@ import type { ModelDefaults } from '../ModelDefaults.svelte.js';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import {
   accountMissingOf,
+  type AccountMove,
   birthable,
   carriedSwitches,
   chosenSwitches,
@@ -69,6 +70,10 @@ export class BirthSettings implements ModelView {
   });
 
   readonly accountLabel: string | null = null;
+
+  readonly chosenLabel: string | null = null;
+
+  readonly accountMove: AccountMove | null = null;
 
   chooseModel(provider: string, modelId: string, reasoning?: string | null, options?: PickOptions): Effect.Effect<void, ThreadRefused> {
     return Effect.suspend(() => {

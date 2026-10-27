@@ -76,6 +76,7 @@ import { HarnessObservations } from './observations/admission.js';
 import { SessionObservations } from './contract/service/observations.js';
 import { SessionDriver } from './sessions/drive.js';
 import { makeSessionAlignment } from './sessions/alignment.js';
+import { makeSessionCarrying } from './sessions/carry.js';
 import { makeTerminalHistory } from './terminal/history.js';
 import { ProtocolDriver } from './protocol/driver.js';
 import { RunActivities } from './protocol/activities.js';
@@ -256,6 +257,7 @@ export const externalHarnessesLayer = Layer.effectContext(
       harness.runs.history(),
       observations,
       { terminals, writing, records: executionRecords, discharge, access: environments },
+      makeSessionCarrying(accounts, files),
       ownerId,
     );
     const terminalClosing = new TerminalClosing(

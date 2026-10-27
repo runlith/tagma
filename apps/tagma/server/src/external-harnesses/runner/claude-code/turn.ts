@@ -8,7 +8,8 @@ import { CANCELLED, failed, user, type Ended, type Heard } from './calls.js';
 import type { Commanded } from './channel.js';
 import type { Input, Steered, Withdrawn } from '../hosted/cycle.js';
 import { FAILURE } from '../../contract/wire/extensions.js';
-import { failureOf } from './failure.js';
+import { failureOf } from '../../vendors/claude-code/failure.js';
+import { CONTINUE_WORDS } from '../../adapter/input.js';
 import type { Feed } from './feed.js';
 import type { Lifecycle } from './lifecycle.js';
 import type { Mark, Spend } from './spend.js';
@@ -43,8 +44,6 @@ type Running = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const CONTINUE = 'Continue the task from where you stopped.';
 
 const STOPPED: Outcome = { _tag: 'Stopped', stopReason: 'cancelled' };
 
@@ -110,7 +109,7 @@ export class Turn {
     running.opener = uuid;
     running.baseline = spend.mark();
     this.recap = [];
-    const prompt = content.success.some((block) => block.type !== 'text' || block.text.trim() !== '') ? content.success : CONTINUE;
+    const prompt = content.success.some((block) => block.type !== 'text' || block.text.trim() !== '') ? content.success : CONTINUE_WORDS;
     yield* lifecycle.send(user(prompt, { uuid, client_composed: true }));
     while (running.early.length > 0) {
       const message = running.early.shift()!;
@@ -290,7 +289,7 @@ export class Turn {
     const running = this.running;
     if (running === null) return;
     const uuid = crypto.randomUUID();
-    yield* this.lifecycle.send(user(CONTINUE, { uuid }));
+    yield* this.lifecycle.send(user(CONTINUE_WORDS, { uuid }));
     running.continued = true;
     running.opener = uuid;
   });

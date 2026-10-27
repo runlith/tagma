@@ -33,7 +33,10 @@ import { HarnessPermissions } from '../../../external-harnesses/contract/service
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 import { EXECUTION_HOST_ROOT } from '../repoRoot.js';
 import { makeDoorWorld, projectLeaving } from '../doorFixture.js';
-import { claudeLogin } from '../claudeLogin.js';
+import { claudeLogin, keepAccountDefaults } from '../claudeLogin.js';
+import { AccountKey } from '@runlith/llm/models/authStatus';
+import { HarnessDirectories } from '../../../providers/accounts/harnessRows.js';
+import { DefaultAccounts } from '../../../providers/contract/service/accounts.js';
 import { deliveryRig, until as readUntil, whoSpeaks, type Who } from './terminalDeliveryRig.js';
 import { stamp, terminalRig, type Cli } from './terminalRig.js';
 import { windowChannel } from './windowChannel.js';
@@ -749,6 +752,103 @@ describe.skipIf(!existsSync(LIBRARY))('the terminal transport keeps the shared E
         expect(session?.id).not.toBe(before);
         expect(yield* runningOf(fake.cli.threadId)).toBeNull();
       }),
+    );
+    it.effect('Restart agent after a turn the CLI ended on its rate limit stands a new CLI that continues the turn in a new run', () =>
+      Effect.gen(function* () {
+        const { world, flow, projectId } = yield* World;
+        const fake = yield* raised('restart-limited');
+        const limited = yield* working(fake);
+        yield* fake.hook('StopFailure', { prompt_id: fake.current(), error: 'rate_limit' });
+        const failed = yield* until(
+          Effect.map(
+            flow.db().get<{
+              readonly family: string | null;
+            }>(sql`select json_extract(failure, '$.reason.family') as family from thread_run where id = ${limited} and status = 'failed'`),
+            (row) => row ?? null,
+          ),
+          'ended the turn on the rate limit',
+        );
+        expect(failed.family).toBe('rate-limit');
+        const boots = Effect.map(textOf(`${fake.keys}.events`), (text) =>
+          text
+            .split('\n')
+            .filter((line) => line !== '')
+            .map((line) => JSON.parse(line) as { readonly kind: string; readonly prompt?: string | null })
+            .filter((event) => event.kind === 'boot'),
+        );
+        const booted = (yield* boots).length;
+        const answer = yield* world.op('restart_thread', { threadId: fake.cli.threadId }, `project=${projectId}`);
+        expect(answer.status).toBe(200);
+        const continuing = (answer.body as { readonly runId: string | null }).runId!;
+        const continued = yield* until(
+          Effect.map(boots, (all) => all[booted]?.prompt ?? null),
+          'stood the new CLI with the words that continue the turn',
+        );
+        const who = whoSpeaks(
+          yield* until(
+            Effect.map(fake.cli.facet(), (facet) => (harnessSessionActive(facet?.session) && facet.execution !== null ? facet : null)),
+            'stood the new CLI',
+          ),
+        );
+        yield* fake.cli.hook(
+          'UserPromptSubmit',
+          { session_id: who.root, prompt_id: 'p-continued' },
+          { session: who.session, prompt: continued },
+        );
+        yield* fake.cli.hook(
+          'Stop',
+          { session_id: who.root, prompt_id: 'p-continued' },
+          { session: who.session, said: { last_assistant_message: 'Carried on.' } },
+        );
+        expect((yield* until(flow.ended(continuing), 'ended the continuing run')).status).toBe('completed');
+        const runs = yield* flow.runsOf(fake.cli.threadId);
+        expect(runs.at(-1)?.id).toBe(continuing);
+      }),
+    );
+    it.effect(
+      'Restart agent on a thread whose CLI stands on the account before the default moved carries its session to the new account and resumes it',
+      () =>
+        Effect.gen(function* () {
+          const { world, projectId } = yield* World;
+          const files = yield* FileSystem.FileSystem;
+          const fake = yield* raised('restart-carried');
+          const standing = (yield* fake.cli.facet())!.session!.account!;
+          const owners = world.runtime.owners;
+          const directories = Context.get(owners, HarnessDirectories);
+          const source = (yield* directories.of(standing.provider)).find((row) => row.key === standing.key)!.directory!;
+          const transcript = join('projects', 'carried-project', `${fake.who.root}.jsonl`);
+          yield* files.makeDirectory(join(source, 'projects', 'carried-project'), { recursive: true });
+          yield* files.writeFileString(join(source, transcript), '{"type":"user","sessionId":"carried"}\n');
+          const target = yield* world.directory('claude-carried');
+          const chosen = AccountKey.make('carried-account');
+          yield* keepAccountDefaults(world, standing.provider);
+          yield* Effect.acquireRelease(
+            directories.keep(standing.provider, {
+              key: chosen,
+              label: 'carried@example.com',
+              machine: directories.machine,
+              directory: target,
+              addedAt: yield* Clock.currentTimeMillis,
+              signed: true,
+              pending: false,
+            }),
+            () => directories.remove(standing.provider, chosen).pipe(Effect.orDie),
+          );
+          yield* Context.get(owners, DefaultAccounts).saveDefaultAccount(standing.provider, chosen);
+          const answer = yield* world.op('restart_thread', { threadId: fake.cli.threadId }, `project=${projectId}`);
+          expect(answer.status).toBe(200);
+          const session = yield* until(
+            Effect.map(fake.cli.facet(), (facet) =>
+              harnessSessionActive(facet?.session) && facet.session.account?.key === chosen && facet.execution !== null
+                ? facet.session
+                : null,
+            ),
+            'stood the CLI on the chosen account',
+          );
+          expect(yield* files.readFileString(join(target, transcript))).toBe('{"type":"user","sessionId":"carried"}\n');
+          expect(session.argv).toEqual(expect.arrayContaining(['--resume', fake.who.root]));
+          expect(session.seed).toBeUndefined();
+        }),
     );
     it.effect('an answer to a CLI screen question the CLI has already left closes it unsent, and the next screen is its own question', () =>
       Effect.gen(function* () {

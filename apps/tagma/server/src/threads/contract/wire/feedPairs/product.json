@@ -68,6 +68,7 @@
             "cacheWarmth": null,
             "harness": null,
             "cli": null,
+            "processAccount": null,
             "delegation": {
               "own": null,
               "allowed": true,
@@ -252,6 +253,7 @@
             "cacheWarmth": null,
             "harness": null,
             "cli": null,
+            "processAccount": null,
             "delegation": {
               "own": null,
               "allowed": true,
@@ -430,6 +432,7 @@
             "cacheWarmth": null,
             "harness": null,
             "cli": null,
+            "processAccount": null,
             "delegation": {
               "own": null,
               "allowed": true,

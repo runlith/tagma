@@ -187,10 +187,12 @@ export function modelListOf(
   };
 }
 
-export function accountLabelOf(settings: ModelSettings): string | null {
-  if (settings.account === '' || !settings.accountsKnown) return null;
-  return settings.accountOptions.find((option) => option.id === settings.account)?.label ?? settings.account;
+export function accountLabelOf(settings: ModelSettings, account: string = settings.account): string | null {
+  if (account === '' || !settings.accountsKnown) return null;
+  return settings.accountOptions.find((option) => option.id === account)?.label ?? account;
 }
+
+export type AccountMove = { readonly standing: string; readonly chosen: string; readonly limited: boolean };
 
 export type ModelPick = { readonly model: ModelOption; readonly rung: string | null };
 
@@ -256,6 +258,8 @@ export interface ModelView {
   readonly settings: ModelSettings | null;
   readonly modelList: ThreadModelList | null;
   readonly accountLabel: string | null;
+  readonly chosenLabel: string | null;
+  readonly accountMove: AccountMove | null;
   readonly accountMissing: boolean;
   readonly busy: boolean;
   chooseModel(provider: string, modelId: string, reasoning?: string | null, options?: PickOptions): Effect.Effect<void, ThreadRefused>;

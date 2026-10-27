@@ -30,6 +30,7 @@ import type { ProvenEnd, TerminalWatch } from './watch.js';
 import type { OpenRuns } from './open.js';
 import type { TerminalClosing, TurnSpend } from './closing.js';
 import { closedWords } from './words.js';
+import { typedShape } from '../adapter/input.js';
 import { armedConfirmed, confirmedBy } from './interrupts.js';
 import { RUN_UNOWNED } from '../contract/wire/call.js';
 import type { TerminalCommands } from './commands.js';
@@ -366,6 +367,8 @@ export class TerminalEvents {
           after: this.watch.mark(ctx.threadId),
         };
       }
+      if (words !== '' && (turn.typed ?? []).some((shape) => shape.digest === typedShape(words).digest))
+        return { facet: { ...facet, turn: { ...turn, turn: reusedAs(facet, vendor) } }, after: this.watch.mark(ctx.threadId) };
       const landed = yield* this.opened(facet, ctx, (runId) => (words === '' ? [] : [userWords(runId, words)]), turn.run);
       return { facet: landed.facet, after: landed.run === null ? Effect.void : this.opening(landed.run, ctx.threadId, turn.run) };
     }
@@ -512,7 +515,7 @@ export class TerminalEvents {
       status === 'aborted' || (status === 'error' && interrupted)
         ? ({ kind: 'aborted', stoppedBy: 'reader' } as const)
         : status === 'error' || failure
-          ? ({ kind: 'failed', reason: failureLine(ctx) } as const)
+          ? ({ kind: 'failed', reason: failureLine(ctx), cause: (failure ? ctx.adapter.failureOf?.(ctx.raw) : null) ?? undefined } as const)
           : ({ kind: 'completed' } as const);
     const plans: ReportPlan[] = [];
     if (text !== '' && ending.kind === 'completed') {

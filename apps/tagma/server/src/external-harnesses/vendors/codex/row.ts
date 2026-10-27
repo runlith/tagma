@@ -24,6 +24,7 @@ import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion } from '../..
 import { oneValue } from '../../adapter/screenAsk.js';
 import { field, modelField, namedCall, nested, patchFiles, rootOfArgv, sessionIdOf, tail } from '../../adapter/payload.js';
 import { SESSION_VARIABLES } from '../../contract/wire/sessionVariables.js';
+import { codexCarry } from './carry.js';
 
 const CODEX_FOOTER = 'Press enter to confirm or esc to cancel';
 const CODEX_SELECTED = /^› (\d+)\. (.+)$/;
@@ -257,6 +258,7 @@ export const codex: TerminalHarnessAdapter = {
     root: rootOfArgv('resume'),
     prepare,
     cut: { whole: cut, point: cut },
+    carry: codexCarry,
     address: { reads: 'turn', of: (seen) => seen.turn },
   },
   hooks: {

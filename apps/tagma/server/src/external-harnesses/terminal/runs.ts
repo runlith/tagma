@@ -20,7 +20,7 @@ import type { ExternalSession, HarnessTypedShape, HarnessUnread } from '../../th
 import type { HarnessExecutionRef } from '../../threads/contract/wire/harness/observation.js';
 import { harnessSessionActive } from '../../threads/contract/wire/harness/session.js';
 import { harnessAdapter } from '../contract/service/table.js';
-import { inputWords, plainWords, promptDigest, typedShape } from '../adapter/input.js';
+import { CONTINUE_WORDS, inputWords, plainWords, promptDigest, typedShape } from '../adapter/input.js';
 import type { Keyboard, SessionDriver } from '../sessions/drive.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import type { TerminalEndings } from './endings.js';
@@ -74,6 +74,8 @@ const verbatim = (stored: readonly ThreadInboxItem[]): Delivery => {
 
 const deliveryOf = (facet: ExternalSession | null, items: readonly ThreadInboxItem[]): Delivery =>
   facet?.plain === true ? verbatim(items) : framed(items);
+
+const CONTINUED: Delivery = { items: [], text: CONTINUE_WORDS, spoken: '', digest: undefined, typed: typedShape(CONTINUE_WORDS) };
 
 const unwritten = (cause: Cause.Cause<HarnessFailure>): HarnessFailure | null => {
   if (Cause.hasDies(cause) || Cause.hasInterrupts(cause)) return null;
@@ -162,7 +164,7 @@ export class TerminalRuns {
         .pipe(Effect.mapError((failure) => new LaunchFailed({ reason: reasonOf(failure) })));
     const read = yield* Effect.result(this.launched(threadId, seed));
     if (read._tag === 'Failure') return yield* this.refused(threadId, runId, read.failure);
-    const delivery = read.success;
+    const delivery = read.success.text === '' ? CONTINUED : read.success;
     const aligned = yield* Effect.result(this.driver.aligned(threadId));
     if (aligned._tag === 'Failure') return yield* this.refused(threadId, runId, aligned.failure);
     const declared = yield* Effect.result(this.words.intend(threadId, runId, delivery.items, delivery.spoken, delivery.digest));

@@ -21,6 +21,7 @@ import { refusedCall, ThreadRefused } from './ThreadRefused.js';
 import {
   accountLabelOf,
   accountMissingOf,
+  type AccountMove,
   birthable,
   carriedSwitches,
   chosenSwitches,
@@ -127,7 +128,28 @@ export class ThreadSettings extends Service<ThreadSettings>()('ThreadSettings', 
     return basis === null ? false : accountMissingOf(this.catalog.models, basis.provider, basis.account, this.accounts);
   });
 
-  accountLabel = $derived.by<string | null>(() => (this.thread === null || this.settings === null ? null : accountLabelOf(this.settings)));
+  private standing = $derived(this.thread?.processAccount ?? null);
+
+  accountLabel = $derived.by<string | null>(() =>
+    this.thread === null || this.settings === null ? null : accountLabelOf(this.settings, this.standing ?? this.settings.account),
+  );
+
+  chosenLabel = $derived.by<string | null>(() => (this.thread === null || this.settings === null ? null : accountLabelOf(this.settings)));
+
+  accountMove = $derived.by<AccountMove | null>(() => {
+    const settings = this.settings;
+    const standing = this.standing;
+    const row = this.harness;
+    if (settings === null || standing === null || row?.harness?.transport !== 'terminal') return null;
+    const chosen = accountLabelOf(settings);
+    if (chosen === null || standing === settings.account) return null;
+    const outcome = row.activeRunId === null ? row.outcome : null;
+    return {
+      standing: accountLabelOf(settings, standing) ?? standing,
+      chosen,
+      limited: outcome?.status === 'failed' && outcome.failure?.reason?.family === 'rate-limit',
+    };
+  });
 
   chooseModel(provider: string, modelId: string, reasoning?: string | null, options?: PickOptions): Effect.Effect<void, ThreadRefused> {
     return Effect.suspend(() => {

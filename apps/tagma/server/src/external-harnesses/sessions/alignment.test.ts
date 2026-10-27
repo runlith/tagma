@@ -16,6 +16,8 @@ const facts = (over: Partial<AlignmentFacts>): AlignmentFacts => ({
   root: 'X',
   plain: false,
   cut: both,
+  carries: false,
+  uncarried: null,
   header,
   account: 'a',
   point: { _tag: 'None' },
@@ -39,6 +41,26 @@ test('the launch keeps, cuts or seeds the vendor session from the map, and names
   expect(alignmentOf(facts({ header: null, unmapped: true }))).toEqual({ _tag: 'Fresh', reason: ALIGNMENT_WORDS.unmapped, replaced: 'X' });
   expect(alignmentOf(facts({ account: 'b' }))).toEqual({ _tag: 'Fresh', reason: ALIGNMENT_WORDS.account, replaced: null });
   expect(alignmentOf(facts({ point: { _tag: 'Fresh' }, kept: 0 }))).toEqual({ _tag: 'Fresh', reason: null, replaced: 'X' });
+});
+
+test('a session standing in another account is carried to the launch account where the CLI declares its session files, and seeded once carrying refused', () => {
+  expect(alignmentOf(facts({ account: 'b', carries: true }))).toEqual({ _tag: 'Carry', root: 'X', replaced: null, from: 'a', into: 'b' });
+  const rewound = { ...header, replaced: { root: 'W', cut: ['r2'], turns: [] } };
+  expect(alignmentOf(facts({ account: 'b', carries: true, header: rewound }))).toEqual({
+    _tag: 'Carry',
+    root: 'X',
+    replaced: 'W',
+    from: 'a',
+    into: 'b',
+  });
+  expect(alignmentOf(facts({ account: 'b', carries: true, uncarried: 'gone' }))).toEqual({
+    _tag: 'Fresh',
+    reason: ALIGNMENT_WORDS.uncarried('gone'),
+    replaced: null,
+  });
+  expect(
+    alignmentOf(facts({ root: null, account: 'b', carries: true, header: { ...header, origin: { root: 'S', address: null } } })),
+  ).toEqual({ _tag: 'Carry', root: 'S', replaced: null, from: 'a', into: 'b' });
 });
 
 test('a fork child cuts from the root it was born from, before the first copied turn it took out itself, unless its CLI, account or plainness cannot', () => {

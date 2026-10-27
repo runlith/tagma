@@ -43,6 +43,7 @@ const row = (id: string, life: RunLife, parentThreadId: string | null, clocks: C
   held: { paths: 0, unproven: 0 },
   provider: 'anthropic',
   account: null,
+  processAccount: null,
   model: null,
   reasoning: null,
   switches: {},

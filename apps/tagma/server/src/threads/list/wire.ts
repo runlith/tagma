@@ -43,7 +43,7 @@ import { runFacts } from '../presence/projection.js';
 import type { ThreadClockRange, ThreadCursor, ThreadSelection, ThreadStateTerm } from './select.js';
 import type { ThreadContextTokens, ThreadListRow, ThreadListPage, ThreadListWindow } from '../contract/wire/list.js';
 import type { ThreadWireFeedEvent, ThreadWireSnapshotPayload, WireState, WireThread } from '../contract/wire/snapshot.js';
-import { hostingCli, shownHarness } from '../voice/rowDetail.js';
+import { hostingCli, processAccount, shownHarness } from '../voice/rowDetail.js';
 import type { ThreadSelectionQuery } from '../contract/wire/selection.js';
 import { ThreadInputRefused } from '../contract/service/failure.js';
 
@@ -249,6 +249,7 @@ export function wireThread(row: ThreadListProjection, basis: ThreadBasis): Threa
     held: row.held,
     launchBlocked: row.launchBlocked === true ? (true as const) : undefined,
     account: row.account,
+    processAccount: processAccount(row.harness),
     provider: row.provider,
     model: row.model,
     reasoning: row.reasoning,
@@ -300,6 +301,7 @@ function wireThreadOf(state: NativeThreadState, basis: ThreadBasis): WireThread 
     cacheWarmth: cacheWarmthOf(state.thread, state.activeRun !== null, basis.warmth),
     harness: shownHarness(state.harness, state.thread),
     cli: hostingCli(state.harness, state.thread),
+    processAccount: processAccount(state.harness),
     delegation: state.delegation,
     approving: state.approving,
     spawnDepth: state.spawnDepth,

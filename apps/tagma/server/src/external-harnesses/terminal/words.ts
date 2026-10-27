@@ -95,11 +95,18 @@ export class TerminalWords {
     return Effect.flatMap(Clock.currentTimeMillis, (now) =>
       this.store.change(threadId, (facet) => {
         const entries = facet.unread ?? [];
+        const turn = facet.turn;
+        if (items.length === 0) {
+          const own = turn?.run === runId && typed !== undefined;
+          return Effect.succeed({
+            facet: own ? { ...facet, turn: { ...turn, typed: [...(turn.typed ?? []), typed] } } : facet,
+            value: own,
+          });
+        }
         const owed = entries.find((entry) => entry.send !== undefined && carries(entry, runId, items));
         if (owed === undefined) return Effect.succeed({ facet, value: false });
         if (owed.send === 'sending') return Effect.succeed({ facet, value: true });
         const at = new Date(now).toISOString();
-        const turn = facet.turn;
         return Effect.succeed({
           facet: {
             ...facet,

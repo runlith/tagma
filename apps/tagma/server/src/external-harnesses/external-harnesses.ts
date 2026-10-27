@@ -12,6 +12,7 @@ import { claudeCodeHarnessForm } from './steps/claudeCodeHarness.js';
 import { sessionMetaForm } from './steps/sessionMeta.js';
 import { terminalSteerForm } from './steps/terminalSteer.js';
 import { terminalHistoryForm } from './steps/terminalHistory.js';
+import { terminalContinueForm } from './steps/terminalContinue.js';
 
 export const externalHarnesses = manifest({
   ...declaration,
@@ -33,6 +34,7 @@ export const externalHarnesses = manifest({
     sessionMetaForm,
     terminalSteerForm,
     terminalHistoryForm,
+    terminalContinueForm,
   ],
   bodies: async () => {
     const [{ HOOK_PAIRS }, { HOSTED_PAIRS }, { HARNESS_PAIRS }, { installationStatusRead }] = await Promise.all([
