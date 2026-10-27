@@ -1,5 +1,5 @@
 import { js } from '@runlith/code-facts/adapters';
-import { configResolver, installedOf } from '@runlith/code-facts/js/config';
+import { configResolver, environmental, installedOf } from '@runlith/code-facts/js/config';
 import { resolveUnique } from '@runlith/code-facts/js/resolve';
 import { queryOf, sitesOf, type Tree } from '@runlith/code-facts/tree';
 import { matchesGlob, posix } from 'node:path';
@@ -489,6 +489,7 @@ export function readSlice(
             unresolved(site, 'The specifier is outside supported resolution', OUTSIDE_FIX);
             continue;
           }
+          if (alias !== null && 'unlisted' in alias && environmental(tree, alias.unlisted)) continue;
           const name = packageOf(request);
           if (!PACKAGE_NAME.test(name)) {
             unresolved(

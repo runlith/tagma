@@ -4,7 +4,7 @@ import { UnsupportedSource } from '../../imports';
 import type { Runtime } from '../../runtime';
 import { runtimeNamed } from '../../runtimes/index';
 import type { Tree } from '../../tree';
-import { type Built, configResolver, installedOf, namesConfig, staleAmong } from './config';
+import { type Built, configResolver, environmental, installedOf, namesConfig, staleAmong } from './config';
 import { resolveRelative } from './resolve';
 
 export type Member = { readonly dir: string; readonly manifest: Readonly<Record<string, unknown>> };
@@ -598,6 +598,7 @@ const doorsOf = (
     if (runtimes.some((runtime) => runtime.builtin(specifier) !== undefined)) return null;
     const alias = configured(specifier, file, measuring, inputs);
     if (alias !== null && 'to' in alias) return alias;
+    if (alias !== null && environmental(tree, alias.unlisted)) return null;
     const name = packageName(specifier);
     const member = memberOf(name);
     const enter = (member: Member): Resolution => {

@@ -11,7 +11,7 @@ export const namesConfig = (path: string): boolean => path.endsWith('.json');
 
 const installedPlace = (path: string): boolean => path.startsWith('../') || path.split('/').includes('node_modules');
 
-const environmental = (tree: Tree, path: string): boolean => installedPlace(path) || submoduleOf(tree, path) !== undefined;
+export const environmental = (tree: Tree, path: string): boolean => installedPlace(path) || submoduleOf(tree, path) !== undefined;
 
 export const installedStamp = (found: Installed | undefined): string | null =>
   found === undefined ? null : createHash('sha256').update(found.at).update('\0').update(found.text).digest('hex');
@@ -242,7 +242,7 @@ export function configResolver(
   };
   return (specifier, from, measuring, inputs) => {
     const options = configOf(from, inputs);
-    const aims = options === undefined ? [] : aimsOf(specifier, options, root, aimed);
+    const aims = options === undefined ? [] : aimsOf(specifier, options, root, aimed).map((aim) => local(canonical(absolute(aim), inputs)));
     const [first] = aims;
     if (options === undefined || first === undefined) return null;
     const host = {
@@ -266,7 +266,7 @@ export function configResolver(
       if (answer !== undefined) return { to: local(answer.resolvedFileName) };
     }
     const exact = aims.find((aim) => measuring.has(aim));
-    return exact === undefined ? { unlisted: first } : { to: exact };
+    return exact === undefined ? { unlisted: aims.find((aim) => environmental(tree, aim)) ?? first } : { to: exact };
   };
 }
 
