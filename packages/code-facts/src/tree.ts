@@ -29,6 +29,10 @@ export type TreeChange = {
   readonly headEntries?: readonly TreeDiffEntry[];
 };
 
+export type Installed = { readonly text: string; readonly at: string };
+
+export type Environment = { readonly depth: number; readonly read: (path: string) => Installed | undefined };
+
 export type Tree = {
   readonly has: (path: string) => boolean;
   readonly read: (path: string) => string;
@@ -44,6 +48,7 @@ export type Tree = {
   readonly size?: (path: string) => number | undefined;
   readonly mentions?: (words: readonly string[]) => ReadonlySet<string> | undefined;
   readonly working?: (path: string) => string | undefined;
+  readonly environment?: Environment;
   readonly realpath?: (path: string) => string;
 };
 
@@ -376,7 +381,7 @@ export function impactOf(change: ImpactChange, adapters: Adapters, index: () => 
     if (!base.has(path) && !built.has(path)) continue;
     const before = change.beforeInputs === undefined ? inputOf(adapters, path, base) : (change.beforeInputs[path] ?? undefined);
     const after = inputOf(adapters, path, built);
-    if (before?.kind === 'config' || after?.kind === 'config') {
+    if (before?.kind === 'config' || after?.kind === 'config' || before?.kind === 'installed' || after?.kind === 'installed') {
       for (const file of indexed().importers(path)) files.add(file);
       continue;
     }

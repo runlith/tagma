@@ -14,7 +14,7 @@ import type { Footprint, Reading } from '@tagma/inspection/node/reading';
 import type { ProgramFacts } from '@tagma/inspection/program';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
 import { blobTree, facetHeld, memoHolds, parseAhead } from '@runlith/code-facts/blobs';
-import type { Tree, TreeChange } from '@runlith/code-facts/tree';
+import type { Installed, Tree, TreeChange } from '@runlith/code-facts/tree';
 import { createHash } from 'node:crypto';
 import { gitLayer, Git } from '@runlith/git/Git';
 import { diffTreeAt, pointedTreeAt, type TreeListing } from '@runlith/git/trees';
@@ -30,7 +30,7 @@ import {
   treeOf,
   validityOf,
 } from './treeMemo.js';
-import { Effect, Exit, FileSystem, Layer, ManagedRuntime, Result } from 'effect';
+import { Effect, Exit, Layer, ManagedRuntime, Result } from 'effect';
 import { actingGit, ownGitLayer } from '../../platform/git/ownGit.js';
 import type {
   Compared,
@@ -46,6 +46,7 @@ import type {
   StateAsk,
 } from './asks.js';
 import { cacheAt, type InspectionCache, rested } from './caches.js';
+import { checkoutAt, checkoutFile, checkoutText } from './checkout.js';
 import { ensureCalibration } from './calibration.js';
 import { factsAt } from './facts.js';
 import { facets, parses, trimParses } from './parses.js';
@@ -79,14 +80,6 @@ const diffEntriesOf = (git: Git['Service'], root: string, from: string, to: stri
   diffTreeAt(git, root, from, to).pipe(Effect.mapError(gitUnread));
 const listing = (git: Git['Service'], root: string, commit: string, parts: readonly string[]) =>
   listingAt(git, root, commit, parts).pipe(Effect.mapError(gitUnread));
-const checkoutText = Effect.fn('inspecting.checkoutText')(function* (root: string, path: string) {
-  const files = yield* FileSystem.FileSystem;
-  return yield* files.readFileString(`${root}/${path}`).pipe(
-    Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(null)),
-    Effect.mapError((failure) => new Unread({ cause: 'source', reason: `${path}: ${failure.message}` })),
-  );
-});
-
 type Worked =
   | { readonly verdict: Verdict; readonly footprint?: Footprint }
   | Planned
@@ -120,8 +113,11 @@ const settled = Effect.fn('inspecting.settled')(function* (
     const known = (object: string, path: string) =>
       facet !== undefined ? facetHeld(facets, ADAPTERS, facet, object, path) : memoHolds(imports, ADAPTERS, object, path);
     const words = sides.map(() => new Map<string, ReadonlySet<string>>());
-    const checkout = new Map<string, string | null>(pinned);
-    const working: Working = { texts: checkout, asked: new Set() };
+    const checkout = new Map<string, Installed | null>(
+      (pinned ?? []).map(([path, text]) => [path, text === null ? null : { text, at: path }]),
+    );
+    const placed = yield* checkoutAt(checkoutRoot);
+    const working: Working = { files: checkout, asked: new Set(), depth: placed.depth };
     const fetchedBudget = budgetOf(inspection.builtin, envelopeOf(inspection.builtin));
     let wanted = sides.map((side) => ({
       ...side,
@@ -158,7 +154,7 @@ const settled = Effect.fn('inspecting.settled')(function* (
           words[at] as Map<string, ReadonlySet<string>>,
           asked[at] as Map<string, readonly string[]>,
           unread,
-          at === sides.length - 1 ? working : undefined,
+          { working, judged: at === sides.length - 1 },
         ),
       );
       const table = cache?.reach;
@@ -230,7 +226,7 @@ const settled = Effect.fn('inspecting.settled')(function* (
           words[at]?.set(key, found);
         }
       }
-      for (const path of working.asked) checkout.set(path, yield* checkoutText(checkoutRoot, path));
+      for (const path of working.asked) checkout.set(path, yield* checkoutFile(placed.real, path));
       working.asked.clear();
       wanted = sides.map((side, at) => ({ ...side, paths: [...(missing[at] ?? [])] }));
     }

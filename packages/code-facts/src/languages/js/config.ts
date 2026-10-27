@@ -2,15 +2,31 @@ import { posix } from 'node:path';
 import ts from 'typescript';
 import type { Resolution } from '../../adapter';
 import { CopyStale, InputAbsent, UnsupportedSource } from '../../imports';
-import type { Tree } from '../../tree';
+import type { Installed, Tree } from '../../tree';
 
 export type Built = ReadonlyMap<string, string>;
 
 export const namesConfig = (path: string): boolean => path.endsWith('.json');
 
-const absolute = (path: string): string => posix.resolve('/', path);
-const local = (path: string): string => path.replace(/^\//, '');
-const aimed = (base: string, target: string): string => local(posix.resolve(base, target.replaceAll('\\', '/')));
+export const environmental = (path: string): boolean => path.startsWith('../') || path.split('/').includes('node_modules');
+
+type Mount = {
+  readonly root: string;
+  readonly absolute: (path: string) => string;
+  readonly local: (path: string) => string;
+  readonly aimed: (base: string, target: string) => string;
+};
+
+const mountOf = (depth: number): Mount => {
+  const root = posix.join('/', ...Array.from({ length: depth }, () => '_'));
+  const local = (path: string): string => posix.relative(root, path);
+  return {
+    root,
+    absolute: (path) => posix.resolve(root, path),
+    local,
+    aimed: (base, target) => local(posix.resolve(base, target.replaceAll('\\', '/'))),
+  };
+};
 
 const NOT_FOUND = 6053;
 const COMPILED = /\.[cm]?js$/;
@@ -59,6 +75,10 @@ export function configResolver(
   memberDir: (name: string) => string | undefined,
   built: Built,
 ): (specifier: string, from: string, measuring: Tree, inputs: Set<string>) => Resolution | null {
+  const { environment } = tree;
+  const { root, absolute, local, aimed } = mountOf(environment?.depth ?? 0);
+  const installedAt = (path: string): Installed | undefined =>
+    environment === undefined || !environmental(path) ? undefined : environment.read(path);
   const canonical = (path: string, inputs: Set<string>): string => {
     const marker = '/node_modules/';
     const at = path.lastIndexOf(marker);
@@ -74,7 +94,7 @@ export function configResolver(
     observed.add(path);
     if (tree.has(path)) return path;
     const source = built.get(path);
-    if (source === undefined) return undefined;
+    if (source === undefined) return installedAt(path) === undefined ? undefined : path;
     if (!namesConfig(source))
       throw new UnsupportedSource(
         source,
@@ -83,8 +103,14 @@ export function configResolver(
     observed.add(source);
     return tree.has(source) ? source : undefined;
   };
-  const absentOf = (config: string, missing: string): InputAbsent => {
+  const uninstalled = (config: string, named: string): UnsupportedSource =>
+    new UnsupportedSource(
+      config,
+      `its extends chain names \`${named}\`, which no package installed in the judging checkout provides: install the checkout's dependencies`,
+    );
+  const absentOf = (config: string, missing: string): UnsupportedSource => {
     const source = built.get(missing);
+    if (source === undefined && environment !== undefined && environmental(missing)) return uninstalled(config, missing);
     return source === undefined
       ? new InputAbsent(config, missing, `its extends chain reaches \`${missing}\`, which the tree lacks`)
       : new InputAbsent(
@@ -99,10 +125,12 @@ export function configResolver(
     const extended = writtenOf(file.text.slice(start, start + length))?.replaceAll('\\', '/');
     if (extended === undefined) return undefined;
     if (!extended.startsWith('./') && !extended.startsWith('../') && !extended.startsWith('/'))
-      return new UnsupportedSource(
-        config,
-        `its extends chain names the package config \`${extended}\`, which resolves to no file the tree holds`,
-      );
+      return environment === undefined
+        ? new UnsupportedSource(
+            config,
+            `its extends chain names the package config \`${extended}\`, which resolves to no file the tree holds`,
+          )
+        : uninstalled(config, extended);
     const path = aimed(posix.dirname(file.fileName), extended);
     return absentOf(config, namesConfig(path) ? path : `${path}.json`);
   };
@@ -113,7 +141,10 @@ export function configResolver(
     let near = nearest.get(dir);
     if (near === undefined) {
       const probes = new Set<string>();
-      const path = ts.findConfigFile(absolute(dir), (path) => standing(local(path), probes) !== undefined);
+      const path = ts.findConfigFile(absolute(dir), (path) => {
+        const at = local(path);
+        return !at.startsWith('../') && standing(at, probes) !== undefined;
+      });
       near = { path, inputs: [...probes] };
       nearest.set(dir, near);
     }
@@ -132,33 +163,44 @@ export function configResolver(
       if (refused !== undefined) throw refused;
       throw new UnsupportedSource(local(diagnostic.file?.fileName ?? path), ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
     };
+    const guarded = <A>(otherwise: A, answer: () => A): A => {
+      try {
+        return answer();
+      } catch (error) {
+        refused ??= error;
+        return otherwise;
+      }
+    };
     const read = (wanted: string): string | undefined => {
       const at = standing(wanted, observed);
       if (at === undefined) {
         missed.push(wanted);
         return undefined;
       }
+      if (at === wanted && !tree.has(at)) return installedAt(at)?.text;
       const text = tree.read(at);
       const stale = at === wanted ? undefined : staleOf(tree, wanted, at, text);
       if (stale !== undefined) throw stale;
       return text;
+    };
+    const real = (file: string): string => {
+      const named = canonical(file, observed);
+      const at = local(named);
+      if (tree.has(at) || built.has(at)) return named;
+      const found = installedAt(at);
+      if (found === undefined) return named;
+      observed.add(found.at);
+      return absolute(found.at);
     };
     const parsed = ts.getParsedCommandLineOfConfigFile(
       path,
       {},
       {
         useCaseSensitiveFileNames: true,
-        getCurrentDirectory: () => '/',
-        fileExists: (file) => standing(local(canonical(file, observed)), observed) !== undefined,
-        readFile: (file) => {
-          try {
-            return read(local(canonical(file, observed)));
-          } catch (error) {
-            refused ??= error;
-            return undefined;
-          }
-        },
-        realpath: (file) => canonical(file, observed),
+        getCurrentDirectory: () => root,
+        fileExists: (file) => guarded(false, () => standing(local(canonical(file, observed)), observed) !== undefined),
+        readFile: (file) => guarded(undefined, () => read(local(canonical(file, observed)))),
+        realpath: (file) => guarded(file, () => real(file)),
         readDirectory: () => [],
         onUnRecoverableConfigFileDiagnostic: fail,
       },
@@ -181,7 +223,7 @@ export function configResolver(
   };
   return (specifier, from, measuring, inputs) => {
     const options = configOf(from, inputs);
-    const aims = options === undefined ? [] : aimsOf(specifier, options);
+    const aims = options === undefined ? [] : aimsOf(specifier, options, root, aimed);
     const [first] = aims;
     if (options === undefined || first === undefined) return null;
     const host = {
@@ -209,11 +251,11 @@ export function configResolver(
   };
 }
 
-const aimsOf = (specifier: string, options: ts.CompilerOptions): readonly string[] => {
+const aimsOf = (specifier: string, options: ts.CompilerOptions, root: string, aimed: Mount['aimed']): readonly string[] => {
   const { paths, baseUrl, pathsBasePath } = options;
   const matched = paths === undefined ? undefined : patternOf(Object.keys(paths), specifier);
   if (paths === undefined || matched === undefined) return baseUrl === undefined ? [] : [aimed(baseUrl, specifier)];
-  const base = baseUrl ?? (typeof pathsBasePath === 'string' ? pathsBasePath : '/');
+  const base = baseUrl ?? (typeof pathsBasePath === 'string' ? pathsBasePath : root);
   return (paths[matched.key] ?? []).map((target) => aimed(base, matched.star === undefined ? target : target.replace('*', matched.star)));
 };
 

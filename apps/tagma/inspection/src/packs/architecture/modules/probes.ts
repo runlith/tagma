@@ -195,6 +195,33 @@ const derive = (params: Run, tree: Tree, path: string, adapters: Adapters, budge
 
 type Inputs = Readonly<Record<string, ResolverInput | null>>;
 
+const inputAt = (adapters: Adapters, tree: Tree, path: string): ResolverInput | undefined => {
+  for (const adapter of adapters) {
+    const input = adapter.input?.(path, tree);
+    if (input !== undefined) return input;
+  }
+  return undefined;
+};
+
+const memberOf = (tree: Tree, path: string, input: ResolverInput): ResolverInput | null =>
+  tree.has(path) || input.kind === 'installed' ? input : null;
+
+const reinstalled = (members: Inputs | undefined, tree: Tree, adapters: Adapters): readonly string[] => {
+  const moved: string[] = [];
+  let unread: unknown;
+  for (const [path, held] of Object.entries(members ?? {})) {
+    if (held?.kind !== 'installed') continue;
+    try {
+      const now = inputAt(adapters, tree, path);
+      if (now?.kind !== 'installed' || now.stamp !== held.stamp) moved.push(path);
+    } catch (failure) {
+      unread ??= failure;
+    }
+  }
+  if (unread !== undefined) throw unread;
+  return moved;
+};
+
 const candidates = (
   base: Tree,
   built: Tree,
@@ -244,30 +271,28 @@ export const mapFiles = (
     for (const path of new Set(files))
       rows.set(path, tree.has(path) && selects(path) ? derive(params, tree, path, adapters, budget) : null);
   };
+  const shifted = rebuild ? [] : reinstalled(index?.members, tree, adapters);
+  const reread = shifted.flatMap((path) => [...rows.watchers(`p:${path}`)]);
   if (rebuild) update(tree.paths());
   else if (advances) {
     const entries = change!.headEntries!;
     const touched = entries.map(({ path }) => path);
     const before = new Map(entries.map((entry) => [entry.path, entry.before]));
     const prior: Tree = { ...tree, has: (path) => (before.has(path) ? before.get(path) !== null : tree.has(path)) };
-    update([...touched, ...candidates(prior, tree, touched, adapters, rows, index?.members)]);
-  }
-  if ((rebuild || advances) && index !== undefined && tree.snapshot !== undefined) {
+    update([...touched, ...candidates(prior, tree, touched, adapters, rows, index?.members), ...reread]);
+  } else update(reread);
+  if ((rebuild || advances || shifted.length > 0) && index !== undefined && tree.snapshot !== undefined) {
     const inputs: Record<string, ResolverInput | null> = rebuild ? {} : { ...index.members };
     const observed = new Set([
       ...adapters.flatMap((adapter) => adapter.inputs?.(params.base) ?? []),
       ...(change?.headEntries ?? []).map(({ path }) => path),
+      ...shifted,
     ]);
     for (const node of rows.changed.values()) if (node !== null) for (const path of node.note.inputs) observed.add(path);
     for (const path of observed) {
       delete inputs[path];
-      for (const adapter of adapters) {
-        const input = adapter.input?.(path, tree);
-        if (input !== undefined) {
-          inputs[path] = tree.has(path) ? input : null;
-          break;
-        }
-      }
+      const input = inputAt(adapters, tree, path);
+      if (input !== undefined) inputs[path] = memberOf(tree, path, input);
     }
     index.stage(
       index.head,
@@ -313,19 +338,12 @@ export const affectedFiles = (
   memo: InspectionMemo | undefined,
   selects: (path: string) => boolean,
 ): readonly string[] => {
-  const inputAt = (tree: Tree, path: string): ResolverInput | undefined => {
-    for (const adapter of adapters) {
-      const input = adapter.input?.(path, tree);
-      if (input !== undefined) return input;
-    }
-    return undefined;
-  };
   const breaking = paths.filter((path) => {
     if (!base.has(path)) return false;
-    const before = inputAt(base, path);
+    const before = inputAt(adapters, base, path);
     if (before?.kind === 'config') return true;
     if (before?.kind !== 'manifest') return !built.has(path);
-    const after = inputAt(built, path);
+    const after = inputAt(adapters, built, path);
     if (!built.has(path) || after?.kind !== 'manifest') return true;
     if (before.stamp !== undefined && before.stamp === after.stamp) return false;
     return (inputDeltaOf(adapters, before, after)?.narrowed.length ?? 1) > 0;
@@ -345,6 +363,8 @@ export const affectedFiles = (
       rows.set(path, tree.has(path) && selects(path) ? derive(params, tree, path, adapters, budget) : null);
   };
   const changed = new Set(paths);
+  const shifted = rebuild ? [] : reinstalled(index?.members, base, adapters);
+  const reread = shifted.flatMap((path) => [...rows.watchers(`p:${path}`)]);
   if (rebuild) {
     const globsOnly = breaking.length === 0 && index === undefined;
     const mentioned = globsOnly ? base.mentions?.(['meta']) : undefined;
@@ -361,9 +381,13 @@ export const affectedFiles = (
     const prior: Tree = { ...base, has: (path) => (before.has(path) ? before.get(path) !== null : base.has(path)) };
     update(
       base,
-      [...touched, ...candidates(prior, base, touched, adapters, rows, index?.members)].filter((path) => !changed.has(path)),
+      [...touched, ...candidates(prior, base, touched, adapters, rows, index?.members), ...reread].filter((path) => !changed.has(path)),
     );
-  }
+  } else
+    update(
+      base,
+      reread.filter((path) => !changed.has(path)),
+    );
   const found = candidates(base, built, [...new Set([...breaking, ...moved])], adapters, rows, undefined, 'narrowed').filter(
     (path) => !changed.has(path) && base.has(path) && built.has(path) && selects(path),
   );
@@ -382,14 +406,19 @@ export const affectedFiles = (
       ...paths,
       ...(change?.headEntries ?? []).map(({ path }) => path),
       ...adapters.flatMap((adapter) => adapter.inputs?.(params.base) ?? []),
+      ...shifted,
     ]);
     for (const node of rows.changed.values()) if (node !== null) for (const path of node.note.inputs) observed.add(path);
-    const moved = new Set([...(change?.baseEntries ?? []).map(({ path }) => path), ...(change?.headEntries ?? []).map(({ path }) => path)]);
+    const moved = new Set([
+      ...(change?.baseEntries ?? []).map(({ path }) => path),
+      ...(change?.headEntries ?? []).map(({ path }) => path),
+      ...shifted,
+    ]);
     for (const path of observed) {
       if (!rebuild && !moved.has(path) && Object.hasOwn(inputs, path)) continue;
-      const input = inputAt(built, path);
+      const input = inputAt(adapters, built, path);
       if (input === undefined) delete inputs[path];
-      else inputs[path] = built.has(path) ? input : null;
+      else inputs[path] = memberOf(built, path, input);
     }
     index.stage(
       index.head,

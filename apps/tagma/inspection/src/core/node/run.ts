@@ -22,7 +22,18 @@ import { type InspectionMemo, type MemoValue, memoWrites } from './memo';
 import { judge, judgeReadings } from './judge';
 import { diffEntriesOf, git, pointListingOf, treeIdOf } from './gitTrees';
 import { ruleOf } from './registry';
-import { commitSide, commitSideAt, type LazySide, pathsSide, seedAt, type Side, withCheckout, worktreeSide } from './sides';
+import {
+  commitSide,
+  commitSideAt,
+  environmentOf,
+  type LazySide,
+  pathsSide,
+  seedAt,
+  type Side,
+  withCheckout,
+  withEnvironment,
+  worktreeSide,
+} from './sides';
 import { mergeSlices, planOf, schedule, sliceEnvelopeOf, sliceExceeded, sliceOf, snapshotOf } from './slices';
 
 const MIB = 1024 * 1024;
@@ -236,6 +247,7 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
   const memo: InspectionMemo = new Map();
   const envelope = ruleOf(inspection.builtin).envelope;
   const sliced = ruleOf(inspection.builtin).sliced === true;
+  const environment = environmentOf(repository);
   if (base === undefined) {
     const built =
       at === null
@@ -252,7 +264,7 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
       : settled(
           [built],
           [prefetches(inspection.builtin) ? judged : []],
-          ([tree], memo) => inspect(inspection, withCheckout(repository, tree as Tree), judged, undefined, undefined, memo),
+          ([tree], memo) => inspect(inspection, withCheckout(environment, tree as Tree), judged, undefined, undefined, memo),
           memo,
           fetchBudget,
         );
@@ -274,7 +286,7 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
       ([baseTreeObj, builtTreeObj], memo) =>
         judge(
           inspection,
-          { base: baseTreeObj as Tree, built: withCheckout(repository, builtTreeObj as Tree), paths },
+          { base: withEnvironment(environment, baseTreeObj as Tree), built: withCheckout(environment, builtTreeObj as Tree), paths },
           debt,
           undefined,
           memo,
@@ -314,7 +326,7 @@ export const measure = (repository: string, inspection: Applied, { at, base, nam
     ([baseTree, builtTree], memo) =>
       judge(
         inspection,
-        { base: baseTree as Tree, built: withCheckout(repository, builtTree as Tree), paths: changed },
+        { base: withEnvironment(environment, baseTree as Tree), built: withCheckout(environment, builtTree as Tree), paths: changed },
         debt,
         undefined,
         memo,

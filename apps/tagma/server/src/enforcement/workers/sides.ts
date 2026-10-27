@@ -2,7 +2,7 @@ import type { Facet } from '@runlith/code-facts/adapter';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
 import type { BlobText } from '@runlith/code-facts/blobs';
 import { UnsupportedSource } from '@runlith/code-facts/imports';
-import { facetOf, importsOf, pathsUnder, sitesOf, type Tree, type TreeChange } from '@runlith/code-facts/tree';
+import { facetOf, importsOf, type Installed, pathsUnder, sitesOf, type Tree, type TreeChange } from '@runlith/code-facts/tree';
 import { blobsAt } from '@runlith/git/entries';
 import type { Git } from '@runlith/git/Git';
 import { pointedTreeAt, type SortedPaths, treeDirectoriesAt, treeMentionsAt, type TreeListing } from '@runlith/git/trees';
@@ -153,7 +153,7 @@ export const fetchedBlobs = (sides: readonly Side[], held: ReadonlyMap<string, s
     }),
   );
 
-export type Working = { readonly texts: ReadonlyMap<string, string | null>; readonly asked: Set<string> };
+export type Working = { readonly files: ReadonlyMap<string, Installed | null>; readonly asked: Set<string>; readonly depth: number };
 
 export class WorkingUnread extends Error {
   constructor(readonly path: string) {
@@ -169,12 +169,23 @@ export const sideTree = (
   words: Map<string, ReadonlySet<string>>,
   wanted: Map<string, readonly string[]>,
   unread: ReadonlyMap<string, string>,
-  working?: Working,
+  checkout?: { readonly working: Working; readonly judged: boolean },
 ): Tree => {
   const note = (path: string): void => {
     if (side.unknown !== undefined && side.lookedUp !== undefined && !side.listed.objects.has(path) && !side.lookedUp.has(path))
       side.unknown.add(path);
   };
+  const outside =
+    checkout === undefined
+      ? undefined
+      : (path: string): Installed | undefined => {
+          if (tree.has(path)) return undefined;
+          if (!checkout.working.files.has(path)) {
+            checkout.working.asked.add(path);
+            throw new WorkingUnread(path);
+          }
+          return checkout.working.files.get(path) ?? undefined;
+        };
   return {
     snapshot: side.tree,
     slot: side.slot,
@@ -234,16 +245,7 @@ export const sideTree = (
       if (known === undefined) wanted.set(key, terms);
       return known;
     },
-    working:
-      working === undefined
-        ? undefined
-        : (path) => {
-            if (tree.has(path)) return undefined;
-            if (!working.texts.has(path)) {
-              working.asked.add(path);
-              throw new WorkingUnread(path);
-            }
-            return working.texts.get(path) ?? undefined;
-          },
+    working: checkout?.judged === true && outside !== undefined ? (path) => outside(path)?.text : undefined,
+    environment: checkout === undefined || outside === undefined ? undefined : { depth: checkout.working.depth, read: outside },
   };
 };

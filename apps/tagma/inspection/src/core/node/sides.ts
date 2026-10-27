@@ -2,9 +2,18 @@ import { ADAPTERS } from '@runlith/code-facts/adapters';
 import type { Facet } from '@runlith/code-facts/adapter';
 import { blobTree, type FacetMemo, type ParseMemo } from '@runlith/code-facts/blobs';
 import { UnsupportedSource } from '@runlith/code-facts/imports';
-import { facetOf, importsOf, pathsUnder, sitesOf, type Tree, type TreeChange } from '@runlith/code-facts/tree';
-import { readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  type Environment,
+  facetOf,
+  importsOf,
+  type Installed,
+  pathsUnder,
+  sitesOf,
+  type Tree,
+  type TreeChange,
+} from '@runlith/code-facts/tree';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { isAbsolute, join, relative } from 'node:path';
 import { type Budget } from './budget';
 import {
   commitGrep,
@@ -28,18 +37,41 @@ export type Side = {
   readonly fetch: (paths: Iterable<string>, budget?: Budget) => void;
 };
 
-export const withCheckout = (repository: string, tree: Tree): Tree => ({
+const ABSENT = new Set(['ENOENT', 'ENOTDIR', 'EISDIR', 'ELOOP']);
+
+const checkoutFile = (real: string, path: string): Installed | undefined => {
+  const at = join(real, path);
+  try {
+    const text = decoded(path, readFileSync(at));
+    const lies = relative(real, realpathSync(at)).replaceAll('\\', '/');
+    return { text, at: isAbsolute(lies) ? path : lies };
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && typeof error.code === 'string' && ABSENT.has(error.code)) return undefined;
+    throw error;
+  }
+};
+
+export const environmentOf = (repository: string): Environment => {
+  const real = realpathSync(repository);
+  const held = new Map<string, Installed | undefined>();
+  return {
+    depth: real.split(/[\\/]/).filter((part) => part !== '').length,
+    read: (path) => {
+      if (!held.has(path)) held.set(path, checkoutFile(real, path));
+      return held.get(path);
+    },
+  };
+};
+
+export const withEnvironment = (environment: Environment, tree: Tree): Tree => ({
   ...tree,
-  working: (path) => {
-    if (tree.has(path)) return undefined;
-    try {
-      return decoded(path, readFileSync(join(repository, path)));
-    } catch (error) {
-      if (error instanceof Error && 'code' in error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) return undefined;
-      throw error;
-    }
-  },
+  environment: { depth: environment.depth, read: (path) => (tree.has(path) ? undefined : environment.read(path)) },
 });
+
+export const withCheckout = (environment: Environment, tree: Tree): Tree => {
+  const held = withEnvironment(environment, tree);
+  return { ...held, working: (path) => held.environment?.read(path)?.text };
+};
 
 export type Seeded = {
   readonly asked: ReadonlySet<string>;

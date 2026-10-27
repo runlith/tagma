@@ -110,6 +110,7 @@ export type InputBindings = {
 
 export type ResolverInput =
   | { readonly kind: 'config' }
+  | { readonly kind: 'installed'; readonly stamp: string | null }
   | {
       readonly kind: 'manifest';
       readonly dir: string;

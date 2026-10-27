@@ -86,6 +86,7 @@ export function readSlice(
   };
   const tree: Tree = {
     ...source,
+    environment: undefined,
     read: (path) => {
       count(path);
       return source.read(path);

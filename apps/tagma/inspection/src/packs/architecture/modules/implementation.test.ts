@@ -255,6 +255,72 @@ describe('modules: reading a tree', () => {
       };
       expect(prints(judge(copy, change, []).violations)).toEqual(['routes -> store private @ app/src/routes/page.ts']);
     });
+
+    it('reads a declared copy in place of an installed package config its link leads elsewhere, and refuses the copy the installed file contradicts', () => {
+      const output = 'node_modules/@acme/tsconfig/base.json';
+      const copied = aliased('../../../app/src/lib/*');
+      const stored = (installedText: string): Tree => {
+        const installed: Record<string, string> = {
+          'node_modules/@acme/tsconfig/package.json': JSON.stringify({ name: '@acme/tsconfig' }),
+          [output]: installedText,
+        };
+        const link = 'node_modules/@acme/tsconfig';
+        const store = 'node_modules/.store/acme/node_modules/@acme/tsconfig';
+        const read = (path: string) => {
+          const linked = path.startsWith(store) ? `${link}${path.slice(store.length)}` : path;
+          const text = installed[linked];
+          return text === undefined ? undefined : { text, at: linked.startsWith(link) ? `${store}${linked.slice(link.length)}` : linked };
+        };
+        return {
+          ...tree({ ...texts, 'app/tsconfig.json': JSON.stringify({ extends: '@acme/tsconfig/base.json' }), 'app/cfg.json': copied }),
+          environment: { depth: 0, read },
+          working: (path) => read(path)?.text,
+        };
+      };
+      const declared = generated([{ output, source: 'app/cfg.json', why: 'The committed copy of the installed base config.' }]);
+      expect(prints(inspect(declared, stored(copied), page).violations)).toEqual(['routes -> store private @ app/src/routes/page.ts']);
+      expect(refusal(declared, stored(aliased('../../../app/src/kit/*')))).toMatchObject({ path: 'app/cfg.json', output });
+    });
+
+    it('re-resolves the files that read an installed package config once a reinstall changes it, before the importer index serves them', () => {
+      const aliasedIn = (target: string) => JSON.stringify({ compilerOptions: { paths: { '$lib/*': [`\${configDir}/${target}`] } } });
+      let installed: Record<string, string> = {
+        'node_modules/@acme/tsconfig/package.json': JSON.stringify({ name: '@acme/tsconfig' }),
+        'node_modules/@acme/tsconfig/base.json': aliasedIn('src/lib/store/contract/*'),
+      };
+      const lib = {
+        'app/src/lib/store/contract/x.ts': texts['app/src/lib/store/contract/x.ts'],
+        'app/src/lib/store/x.ts': 'export const x = 2;\n',
+        'app/src/routes/page.ts': "import { x } from '$lib/x';\n",
+      };
+      const side = (options: object, snapshot: string): Tree => ({
+        ...tree({ ...lib, 'app/tsconfig.json': JSON.stringify({ extends: '@acme/tsconfig/base.json', compilerOptions: options }) }),
+        snapshot,
+        slot: 'checkout',
+        environment: { depth: 0, read: (path) => (installed[path] === undefined ? undefined : { text: installed[path]!, at: path }) },
+      });
+      const views = new Map<string, ReachView<unknown, unknown>>();
+      const empty = { head: undefined, members: undefined, node: () => undefined, sources: () => [], watchers: () => [] };
+      const table: ReachTable = {
+        open: <N, M>(key: string) => (views.get(key) ?? empty) as ReachView<N, M>,
+        apply: (key, _from, to, delta, members) => {
+          const before = views.get(key) ?? empty;
+          views.set(key, { ...overlay(before, delta), head: { tree: to, generation: (before.head?.generation ?? 0) + 1 }, members });
+          return 'applied';
+        },
+      };
+      const judged = (base: Tree, built: Tree) => {
+        const memo = memoWrites(new Map(), table);
+        const verdict = judge(generated(), { base, built, paths: ['app/tsconfig.json'] }, [], ADAPTERS, memo);
+        memo.commit();
+        return prints(verdict.violations);
+      };
+      const strict = side({ strict: true }, 'strict');
+      expect(judged(side({}, 'plain'), strict)).toEqual([]);
+      installed = { ...installed, 'node_modules/@acme/tsconfig/base.json': aliasedIn('src/lib/store/*') };
+      expect(judged(strict, side({ strict: true, noEmit: true }, 'quiet'))).toEqual([]);
+      expect(prints(inspect(generated(), strict, page).violations)).toEqual(['routes -> store private @ app/src/routes/page.ts']);
+    });
   });
 
   it('names an import no relation allows, one that reaches no entry open to its consumer, one landing on a path nobody owns, an unresolved one and an uncovered file, and nothing else', () => {

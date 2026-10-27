@@ -1,10 +1,11 @@
+import { createHash } from 'node:crypto';
 import { matchesGlob, posix } from 'node:path';
 import type { Context, InputDelta, Manifest, Resolution, Resolver, ResolverInput, Traced } from '../../adapter';
 import { UnsupportedSource } from '../../imports';
 import type { Runtime } from '../../runtime';
 import { runtimeNamed } from '../../runtimes/index';
 import type { Tree } from '../../tree';
-import { type Built, configResolver, namesConfig, staleAmong } from './config';
+import { type Built, configResolver, environmental, namesConfig, staleAmong } from './config';
 import { resolveRelative } from './resolve';
 
 export type Member = { readonly dir: string; readonly manifest: Readonly<Record<string, unknown>> };
@@ -132,6 +133,13 @@ export const inputs = (from: string): readonly string[] =>
   ancestorsOf(from).flatMap((dir) => [manifestPath(dir), posix.join(dir, 'tsconfig.json')]);
 
 export const input = (path: string, tree: Tree): ResolverInput | undefined => {
+  if (environmental(path) && !tree.has(path)) {
+    const found = tree.environment?.read(path);
+    return {
+      kind: 'installed',
+      stamp: found === undefined ? null : createHash('sha256').update(found.at).update('\0').update(found.text).digest('hex'),
+    };
+  }
   const base = posix.basename(path);
   if (base === 'package.json') {
     const dir = posix.dirname(path) === '.' ? '' : posix.dirname(path);
