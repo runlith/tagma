@@ -126,7 +126,11 @@ export type WorkspaceChanges = {
     changes: readonly WorkspaceChange[],
     write: Effect.Effect<boolean, E, R>,
   ) => Effect.Effect<Landed, E | IntakeRefused, R>;
-  readonly records?: (path: string, target?: ChangeTarget) => Effect.Effect<boolean, IntakeRefused>;
+  readonly landEach: <E, R>(
+    changes: readonly WorkspaceChange[],
+    write: Effect.Effect<readonly boolean[], E, R>,
+  ) => Effect.Effect<readonly Landed[], E | IntakeRefused, R>;
+  readonly records?: (paths: readonly string[], target?: ChangeTarget) => Effect.Effect<readonly boolean[], IntakeRefused>;
   readonly normalized?: (path: string) => Effect.Effect<boolean | undefined, IntakeRefused>;
   readonly basis?: <A, E, R>(paths: readonly string[], work: Effect.Effect<A, E, R>) => Effect.Effect<A, E | IntakeRefused, R>;
   readonly turn?: <A, E, R>(

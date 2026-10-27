@@ -1,4 +1,6 @@
 import { ByteSize, Effect, FileSystem, Layer, Option, PlatformError, Stream } from 'effect';
+import { kindOf, LANES, stands, type Entries, type Listed, type Read } from '@runlith/files/entries';
+import { sameEntryVersion, type Entry } from '@runlith/files/replace';
 import type { GuestChannel } from './channel.js';
 import { brokenAsFailure, guestFailure, type GuestRequest } from './wire.js';
 
@@ -30,8 +32,9 @@ function fileInfo(said: Record<string, unknown>): FileSystem.File.Info {
   };
 }
 
-export const guestFileLayer = (channel: GuestChannel): Layer.Layer<FileSystem.FileSystem> => {
-  const ask = (
+const asking =
+  (channel: GuestChannel) =>
+  (
     method: string,
     path: string | undefined,
     request: GuestRequest,
@@ -45,6 +48,87 @@ export const guestFileLayer = (channel: GuestChannel): Layer.Layer<FileSystem.Fi
           : Effect.fail(guestFailure(method, path, (frame.value.error ?? {}) as Record<string, unknown>)),
       ),
     );
+
+const LISTED_KINDS = new Set(['file', 'directory', 'link', 'special']);
+
+const absentFailure = (failure: PlatformError.PlatformError): boolean => {
+  const code = (failure.reason.cause as { readonly code?: unknown } | undefined)?.code;
+  return code === 'ENOENT' || code === 'ENOTDIR';
+};
+
+export const guestEntries = (channel: GuestChannel): Entries => {
+  const ask = asking(channel);
+  const orNull = <A>(work: Effect.Effect<A, PlatformError.PlatformError>) =>
+    work.pipe(
+      Effect.map((value): A | null => value),
+      Effect.catchIf(absentFailure, () => Effect.succeed(null)),
+    );
+  const at = (path: string) =>
+    ask('lstat', path, { op: 'entry', path }).pipe(
+      Effect.map((said): Entry => {
+        if (typeof said.value.link === 'string') return { kind: 'link', target: said.value.link };
+        const info = fileInfo(said.value.info as Record<string, unknown>);
+        return { kind: kindOf(info.type), info };
+      }),
+      Effect.catchIf(absentFailure, () => Effect.succeed(undefined)),
+    );
+  const read = (path: string) => orNull(Effect.map(ask('readFile', path, { op: 'readFile', path }), (said) => said.payload));
+  const unlink = (path: string) => Effect.asVoid(ask('unlink', path, { op: 'unlink', path }));
+  const rmdir = (path: string) => Effect.asVoid(ask('rmdir', path, { op: 'rmdir', path }));
+  return {
+    list: (directory) =>
+      ask('readDirectory', directory, { op: 'list', path: directory }).pipe(
+        Effect.map((said) =>
+          ((said.value.entries as { readonly name: string; readonly kind: unknown }[] | undefined) ?? []).map((one): Listed => ({
+            name: one.name,
+            kind: LISTED_KINDS.has(String(one.kind)) ? (one.kind as Listed['kind']) : null,
+          })),
+        ),
+      ),
+    at,
+    unlink,
+    rmdir,
+    readAll: (paths, whole) =>
+      Effect.forEach(
+        paths,
+        (path) =>
+          Effect.result(
+            Effect.flatMap(at(path), (entry): Effect.Effect<Read, PlatformError.PlatformError> =>
+              entry?.kind !== 'file' || entry.info.size > ByteSize.bytes(whole)
+                ? Effect.succeed({ entry, bytes: null })
+                : Effect.map(read(path), (bytes) => ({ entry, bytes })),
+            ),
+          ),
+        { concurrency: LANES },
+      ),
+    removeAll: (removals) =>
+      Effect.forEach(
+        removals,
+        ({ path, selected, kept }) =>
+          Effect.result(
+            Effect.gen(function* () {
+              const now =
+                kept === null
+                  ? null
+                  : 'link' in kept
+                    ? yield* orNull(Effect.map(ask('readLink', path, { op: 'readLink', path }), (said) => String(said.value.target)))
+                    : yield* read(path);
+              if (!stands(kept, now)) return 'changed' as const;
+              const actual = yield* at(path);
+              if (actual === undefined) return 'absent' as const;
+              if (!sameEntryVersion(selected, actual)) return 'changed' as const;
+              yield* selected.kind === 'directory' ? rmdir(path) : unlink(path);
+              return 'removed' as const;
+            }),
+          ),
+        { concurrency: LANES },
+      ),
+    unlinkAll: (paths) => Effect.forEach(paths, (path) => Effect.result(unlink(path)), { concurrency: LANES }),
+  };
+};
+
+export const guestFileLayer = (channel: GuestChannel): Layer.Layer<FileSystem.FileSystem> => {
+  const ask = asking(channel);
 
   const done = (method: string, path: string | undefined, request: GuestRequest): Effect.Effect<void, PlatformError.PlatformError> =>
     Effect.asVoid(ask(method, path, request));

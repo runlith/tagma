@@ -45,6 +45,10 @@
       "types": "./src/replace.ts",
       "default": "./src/replace.ts"
     },
+    "./entries": {
+      "types": "./src/entries.ts",
+      "default": "./src/entries.ts"
+    },
     "./change": {
       "types": "./src/change.ts",
       "default": "./src/change.ts"

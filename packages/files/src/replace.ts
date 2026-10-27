@@ -1,7 +1,5 @@
-import { rmdir } from 'node:fs/promises';
-import { Effect, FileSystem, Option, PlatformError } from 'effect';
+import { Effect, FileSystem, Option, type PlatformError } from 'effect';
 import { basename, dirname, join } from 'node:path';
-import { filePrefix } from './content';
 
 export type Standing = { readonly bytes: Uint8Array } | { readonly absent: true } | { readonly link: string };
 
@@ -60,29 +58,6 @@ export function sameEntryVersion(expected: Entry, actual: Entry | undefined): bo
   );
 }
 
-export const removeEntry = Effect.fn('replace.removeEntry')(function* (path: string, expected: Entry) {
-  const fs = yield* FileSystem.FileSystem;
-  const actual = yield* entryAt(path);
-  if (!sameEntryVersion(expected, actual)) return false;
-  if (expected.kind === 'directory') {
-    yield* Effect.tryPromise({
-      try: () => rmdir(path),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: 'Unknown',
-          module: 'FileSystem',
-          method: 'rmdir',
-          pathOrDescriptor: path,
-          cause,
-          description: cause instanceof Error ? cause.message : String(cause),
-        }),
-    });
-  } else {
-    yield* fs.remove(path);
-  }
-  return true;
-});
-
 export type ReplaceOptions = {
   readonly resource?: string;
   readonly executable?: boolean;
@@ -128,7 +103,7 @@ const published = <A, E, R>(options: ReplaceOptions, write: Effect.Effect<A, E, 
 
 const viewOf = (bytes: Uint8Array): Buffer => Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
-const sameBytes = (left: Uint8Array, right: Uint8Array): boolean =>
+export const sameBytes = (left: Uint8Array, right: Uint8Array): boolean =>
   left.byteLength === right.byteLength && viewOf(left).equals(viewOf(right));
 
 export const stillStanding = Effect.fn('replace.stillStanding')(function* (path: string, standing: Standing) {
@@ -227,58 +202,6 @@ const overwritten = Effect.fn('replace.overwritten')(function* (
     }),
     cleared(fs, staged),
   );
-});
-
-export const removedEntry = Effect.fn('replace.removedEntry')(function* (
-  path: string,
-  expected: FileSystem.File.Info,
-  prefix?: Uint8Array,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  if (prefix !== undefined) {
-    const read = yield* filePrefix(fs, path, prefix.byteLength).pipe(
-      Effect.map((bytes): Uint8Array | null => bytes),
-      Effect.catchIf(
-        (error) => error.reason._tag === 'NotFound',
-        () => Effect.succeed(null),
-      ),
-    );
-    if (read === null || !sameBytes(read, prefix)) return false;
-  }
-  const target = yield* fs.readLink(path).pipe(
-    Effect.map(() => true),
-    Effect.catchIf(
-      (error) => (error.reason.cause as { code?: string } | undefined)?.code === 'EINVAL',
-      () => Effect.succeed(false),
-    ),
-    Effect.catchIf(
-      (error) => error.reason._tag === 'NotFound',
-      () => Effect.succeed(true),
-    ),
-  );
-  if (target) return false;
-  const actual = yield* fs.stat(path).pipe(
-    Effect.map((info) => info as FileSystem.File.Info | null),
-    Effect.catchIf(
-      (error) => error.reason._tag === 'NotFound',
-      () => Effect.succeed(null),
-    ),
-  );
-  const timeOf = (time: Option.Option<Date>) => Option.getOrNull(Option.map(time, (value) => value.getTime()));
-  if (
-    actual === null ||
-    actual.type !== 'File' ||
-    expected.type !== 'File' ||
-    actual.dev !== expected.dev ||
-    Option.getOrNull(actual.ino) !== Option.getOrNull(expected.ino) ||
-    actual.size !== expected.size ||
-    actual.mode !== expected.mode ||
-    timeOf(actual.mtime) !== timeOf(expected.mtime) ||
-    timeOf(actual.birthtime) !== timeOf(expected.birthtime)
-  )
-    return false;
-  yield* fs.remove(path);
-  return true;
 });
 
 export const replaced = Effect.fn('replace.replaced')(function* (

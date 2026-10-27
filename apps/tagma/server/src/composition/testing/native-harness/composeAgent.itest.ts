@@ -185,6 +185,7 @@ const makeComposition = Effect.fnUntraced(function* (instructionWorld: EffectDem
     facts: { shared: false, history: false, network: false },
     world: {
       files: machineWorld.files,
+      entries: machineWorld.entries,
       exec: machineWorld.exec,
       environment: {
         ...machineWorld.environment,

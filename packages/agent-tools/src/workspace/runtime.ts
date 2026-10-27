@@ -212,6 +212,14 @@ export function withDirectoryLocks<A, E, R>(parents: readonly string[], work: Ef
   return directories.holdAll([...parents], work);
 }
 
+export function withNamedEntries<A, E, R>(
+  parents: readonly string[],
+  keys: readonly string[],
+  work: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> {
+  return directories.holdAll([...parents], fileWriters.holdAll(keys, work));
+}
+
 export function withNamedEntry<A, E, R>(
   root: string,
   path: string,

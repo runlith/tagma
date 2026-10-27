@@ -132,6 +132,7 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
 
   const matching = Effect.fn('FileRoots.matching')(
     function* (path: string): Effect.fn.Return<RootMatch | null, RootFailure> {
+      if ((yield* io(files.stat(path), path)).type !== 'Directory') return null;
       const fact = yield* probe(path);
       if (fact.type !== 'Directory') return null;
       const candidates = yield* store.candidates(namespaceId, fact.path, fact.witness);

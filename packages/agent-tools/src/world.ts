@@ -7,6 +7,7 @@ import type { ChildProcessSpawner } from 'effect/process';
 import type { CommandWork } from './CommandWork';
 import type { Git } from '@runlith/git/Git';
 import type { workingAt } from '@runlith/files/working';
+import type { Entries } from '@runlith/files/entries';
 
 export type Egress = {
   readonly fetch: typeof globalThis.fetch;
@@ -40,6 +41,7 @@ export type WorldEnvironment = {
 
 export type World = {
   readonly files?: Layer.Layer<FileSystem.FileSystem>;
+  readonly entries?: Entries;
   readonly exec?: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner>;
   readonly git?: Layer.Layer<Git>;
   readonly working?: typeof workingAt;

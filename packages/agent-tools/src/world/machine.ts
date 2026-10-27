@@ -10,6 +10,7 @@ import { bunSpawner } from '@runlith/executions/bunSpawner';
 import type { World } from '../world';
 import { gitLayer } from '@runlith/git/Git';
 import { workingAt } from '@runlith/files/working';
+import { machineEntries } from '@runlith/files/entries';
 
 const HOST_SHELL = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh';
 
@@ -25,6 +26,7 @@ const hostRipgrep: Effect.Effect<string, ToolFailed> = Effect.tryPromise({
 
 export const machineWorld = {
   files: BunFileSystem.layer,
+  entries: machineEntries,
   exec: hostExec,
   git: gitLayer.pipe(Layer.provide(hostExec)),
   working: workingAt,

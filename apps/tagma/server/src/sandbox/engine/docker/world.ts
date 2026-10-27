@@ -8,7 +8,7 @@ import type { World } from '@runlith/agent-tools/world';
 import { gitLayer } from '@runlith/git/Git';
 import { type GuestChannel, openGuestChannel } from './channel.js';
 import { GuestExec } from './exec.js';
-import { guestFileLayer } from './fileLayer.js';
+import { guestEntries, guestFileLayer } from './fileLayer.js';
 import { GUEST_HOME, GUEST_RIPGREP, GUEST_SHELL, GUEST_TMP, GUEST_TREE, type Guest } from './layout.js';
 import { GuestUnavailable } from './wire.js';
 
@@ -53,6 +53,7 @@ const guestWorking = Effect.fn('GuestWorld.working')(function* (channel: GuestCh
 function guestWorld(channel: GuestChannel, guest: Guest, host: ChildProcessSpawner.ChildProcessSpawner['Service']) {
   return {
     files: guestFileLayer(channel),
+    entries: guestEntries(channel),
     exec: GuestExec(guest, host),
     git: gitLayer.pipe(Layer.provide(GuestExec(guest, host))),
     working: (path) => guestWorking(channel, path),

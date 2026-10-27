@@ -17,7 +17,7 @@ import { TEST_CHECKOUT, testPlace } from '../../../workspace/testing/doubles.js'
 import { call, FILE, MINE, THEIRS } from '../checkoutFixture.js';
 import { lines, retirementFixture, withRetirement } from '../retirementFixture.js';
 import { contentDigest } from '@runlith/files/content';
-import { insertRow } from '../../../change-record/record/intake.js';
+import { insertRow } from '../../../change-record/record/inserts.js';
 import { changeLogWrites } from '../../../change-record/store/tables.js';
 
 const CHECKOUT = RootId.make(TEST_CHECKOUT);

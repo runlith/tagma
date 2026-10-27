@@ -14,13 +14,16 @@ it.live('stopping in the middle of a recursive walk reports the removed entries 
     const dir = yield* host.realpath(yield* createTempDir());
     for (const name of ['first', 'second', 'third']) yield* host.writeFile(join(dir, name), 'walked\n');
     const reading = yield* Deferred.make<void>();
-    let asked = 0;
     const tool = createDeleteTool(
       options({
         cwd: dirname(dir),
+        world: {
+          ...machineWorld,
+          entries: { ...machineWorld.entries!, readAll: () => Effect.andThen(Deferred.succeed(reading, undefined), Effect.never) },
+        },
         changes: {
           ...recorder().port,
-          records: () => (++asked === 3 ? Effect.andThen(Deferred.succeed(reading, undefined), Effect.never) : Effect.succeed(true)),
+          records: (paths) => Effect.succeed(paths.map((path) => path.endsWith('/third'))),
         },
       }),
     );
@@ -42,7 +45,8 @@ it.live('stopping in the middle of a recursive walk reports the removed entries 
 it.live('stopping during the next read retains completed deletions and the full spilled report', () =>
   Effect.gen(function* () {
     const dir = yield* createTempDir();
-    const files = ['first', 'second', 'third'].map((name) => join(dir, name));
+    const files = ['first', 'second', 'then/third'].map((name) => join(dir, name));
+    yield* host.mkdir(join(dir, 'then'));
     for (const path of files) yield* host.writeFile(path, 'kept until selected\n');
     const reading = yield* Deferred.make<void>();
     const blocked = yield* Deferred.make<boolean>();
@@ -53,13 +57,21 @@ it.live('stopping during the next read retains completed deletions and the full 
         world: { ...machineWorld, environment: { ...machineWorld.environment, tmp: dir } },
         changes: {
           ...recorded.port,
-          records: (path) =>
-            path.endsWith('/third') ? Effect.andThen(Deferred.succeed(reading, undefined), Deferred.await(blocked)) : Effect.succeed(true),
+          records: (paths) =>
+            paths.some((path) => path.endsWith('/third'))
+              ? Effect.andThen(
+                  Deferred.succeed(reading, undefined),
+                  Effect.as(
+                    Deferred.await(blocked),
+                    paths.map(() => true),
+                  ),
+                )
+              : Effect.succeed(paths.map(() => true)),
         },
       }),
     );
     const prefix = './'.repeat(13_000);
-    const input = { args: ['-v', ...files.map((path) => prefix + path.slice(path.lastIndexOf('/') + 1))], glob: false };
+    const input = { args: ['-v', ...files.map((path) => prefix + path.slice(dir.length + 1))], glob: false };
     const running = yield* Effect.forkChild(answer(tool, input));
     yield* Deferred.await(reading);
     yield* Fiber.interrupt(running);

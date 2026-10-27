@@ -10,7 +10,11 @@ export type CheckoutPlace = PlacedPath & { readonly projectId: number; readonly 
 export class PlaceUnread extends Data.TaggedError('PlaceUnread')<{
   readonly path: string;
   readonly reason: string;
-}> {}
+}> {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 export class CheckoutUnknown extends Data.TaggedError('CheckoutUnknown')<{
   readonly path: string;

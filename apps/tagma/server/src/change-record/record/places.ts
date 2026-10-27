@@ -4,6 +4,7 @@ import type { PlacedPath } from '../../workspace/contract/wire/place.js';
 import { and, eq, gte, inArray, lt, or } from 'drizzle-orm';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { rowsPerStatement } from '../../platform/store/binds.js';
+import { among } from '../../platform/store/rows.js';
 import { unique } from '@runlith/utils/collection';
 
 export type StoreShape = Context.Service.Shape<typeof MachineStore>;
@@ -35,7 +36,7 @@ export function samePlaces(on: PlaceColumns, places: readonly PlacedPath[]) {
     else paths.push(place.path);
   }
   if (byCheckout.size === 0) return eq(on.checkout, '');
-  return or(...[...byCheckout].map(([checkout, paths]) => and(eq(on.checkout, checkout), inArray(on.path, unique(paths)))));
+  return or(...[...byCheckout].map(([checkout, paths]) => and(eq(on.checkout, checkout), inArray(on.path, among(unique(paths))))));
 }
 
 export const placeKey = (place: PlacedPath): string => `${place.checkout}\0${place.path}`;

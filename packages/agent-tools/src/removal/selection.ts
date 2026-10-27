@@ -1,6 +1,7 @@
 import { basename, dirname, resolve } from 'node:path';
 import { ToolFailed } from '@runlith/agent/tool';
-import { entryAt, fileFailure, type Entry } from '@runlith/files/replace';
+import type { Entries } from '@runlith/files/entries';
+import { fileFailure, type Entry } from '@runlith/files/replace';
 import { Effect, FileSystem, Result } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
 import { GLOBSTAR } from 'minimatch';
@@ -70,6 +71,7 @@ export function issueOf(path: string, stage: RemovalStage, error: PlatformError)
 
 export const selectRemoval = Effect.fn('removal.select')(function* (
   resolved: ResolvedToolOptions,
+  entries: Entries,
   input: RemovalInput,
 ): Effect.fn.Return<RemovalSelection, ToolFailed, FileSystem.FileSystem> {
   const { options, operands } = yield* removalArguments(input.args);
@@ -88,13 +90,13 @@ export const selectRemoval = Effect.fn('removal.select')(function* (
           new ToolFailed({ code: 'resolve-failed', reason: `Cannot establish working directory ${askedCwd}: ${fileFailure(error)}` }),
       ),
     );
-  const cwdEntry = yield* entryAt(cwd).pipe(
-    Effect.mapError((error) => new ToolFailed({ code: 'resolve-failed', reason: fileFailure(error) })),
-  );
+  const cwdEntry = yield* entries
+    .at(cwd)
+    .pipe(Effect.mapError((error) => new ToolFailed({ code: 'resolve-failed', reason: fileFailure(error) })));
   if (cwdEntry?.kind !== 'directory')
     return yield* new ToolFailed({ code: 'not-directory', reason: `The working directory is not a directory: ${cwd}.` });
 
-  const entries = new Map<string, Result.Result<Entry | undefined, PlatformError>>([[cwd, Result.succeed(cwdEntry)]]);
+  const known = new Map<string, Result.Result<Entry | undefined, PlatformError>>([[cwd, Result.succeed(cwdEntry)]]);
   const directories = new Map<string, Result.Result<DirectorySnapshot, PlatformError>>();
   const realDirectories = new Map<string, Result.Result<string, PlatformError>>([
     [askedCwd, Result.succeed(cwd)],
@@ -116,10 +118,10 @@ export const selectRemoval = Effect.fn('removal.select')(function* (
     for (const operand of issue.operands ?? origins) group.operands.add(operand);
   };
   const readEntry = Effect.fnUntraced(function* (path: string) {
-    const cached = entries.get(path);
+    const cached = known.get(path);
     if (cached !== undefined) return cached;
-    const read = yield* Effect.result(entryAt(path));
-    entries.set(path, read);
+    const read = yield* Effect.result(entries.at(path));
+    known.set(path, read);
     return read;
   });
   const readDirectory = Effect.fn('removal.directory')(function* (path: string) {

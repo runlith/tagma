@@ -148,6 +148,33 @@ const serve = async (ask: Json, payload: Uint8Array): Promise<Answer> => {
       return {};
     case 'readDirectory':
       return { value: { entries: await fs.readdir(text(ask.path), { recursive: ask.recursive === true }) } };
+    case 'list':
+      return {
+        value: {
+          entries: (await fs.readdir(text(ask.path), { withFileTypes: true })).map((one) => ({
+            name: one.name,
+            kind: one.isDirectory()
+              ? 'directory'
+              : one.isFile()
+                ? 'file'
+                : one.isSymbolicLink()
+                  ? 'link'
+                  : one.isFIFO() || one.isSocket() || one.isBlockDevice() || one.isCharacterDevice()
+                    ? 'special'
+                    : null,
+          })),
+        },
+      };
+    case 'entry': {
+      const info = await fs.lstat(text(ask.path));
+      return { value: info.isSymbolicLink() ? { link: await fs.readlink(text(ask.path)) } : { info: statInfo(info) } };
+    }
+    case 'unlink':
+      await fs.unlink(text(ask.path));
+      return {};
+    case 'rmdir':
+      await fs.rmdir(text(ask.path));
+      return {};
     case 'readFile':
       return { payload: await fs.readFile(text(ask.path)) };
     case 'readLink':

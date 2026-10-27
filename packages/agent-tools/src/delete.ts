@@ -1,27 +1,36 @@
-import { Effect, FileSystem } from 'effect';
+import { dirname } from 'node:path';
+import { Effect, FileSystem, type PlatformError } from 'effect';
 import { Tool, ToolAnswer, ToolFailed, everyClaim } from '@runlith/agent/tool';
 import type { ToolCaller } from '@runlith/agent/contracts';
 import type { ToolDisplay } from '@runlith/agent/tool/display';
 import type { PermissionSubject } from '@runlith/agent/permissions';
 import { ASKS_IN_REVIEW } from '@runlith/agent/permissions';
 import { pathSubject } from '@runlith/agent/permissions/pathSubject';
+import type { Entries } from '@runlith/files/entries';
 import { type Entry, fileFailure } from '@runlith/files/replace';
 import { prepareToolEffect, runToolEffect, unboundTool } from './ToolEdge';
-import type { PreparedPath, ToolFactoryOptions } from './workspace';
-import { preparedPath, resolveToolOptions } from './workspace/runtime';
+import type { PreparedPath, ResolvedToolOptions, ToolFactoryOptions } from './workspace';
+import { admitPreparedPath, preparedPath, resolveToolOptions } from './workspace/runtime';
 import { DESCRIPTION_DELETE } from './descriptions';
 import { displayPath } from './display';
 import { REFUSALS } from './refusals';
-import { removalInput, type RemovalResult, type RemovalSelection, type RemovalStage, type RemovalTarget } from './removal/model';
+import { removalInput, type RemovalSelection, type RemovalTarget } from './removal/model';
 import { selectRemoval } from './removal/selection';
-import { admitRoot, removeTarget, removalIssue } from './removal/execute';
-import { removeTree } from './removal/tree';
+import { admitRoot, removalIssue } from './removal/execute';
+import { CHUNK, LANES, type Leaf, type Outcome, removeLeaves } from './removal/leaves';
+import { removeTree, type Settled } from './removal/tree';
 import { makeReport, type RemovalJournal } from './removal/report';
 import { inBasis } from './changed';
 
 export type PreparedRemoval = { readonly selection: RemovalSelection; readonly paths: readonly PreparedPath[] };
 
-type RemovalCall = { readonly journal: RemovalJournal; answer?: ToolAnswer; next: number; nextIssue: number; removed: number };
+type RemovalCall = {
+  readonly journal: RemovalJournal;
+  answer?: ToolAnswer;
+  readonly done: Set<number>;
+  nextIssue: number;
+  removed: number;
+};
 
 const CONFIRMED_PATHS = 20;
 
@@ -35,9 +44,66 @@ const KIND_LABELS: Readonly<Record<Entry['kind'], string>> = {
 const keyOf = (toolCallId: string, caller: ToolCaller): string =>
   JSON.stringify([caller.ownerId, caller.agentId, caller.thread?.threadId ?? null, caller.thread?.runId ?? null, toolCallId]);
 
+const groupsOf = (targets: readonly RemovalTarget[]): readonly (readonly number[])[] => {
+  const groups: number[][] = [];
+  for (const [index, target] of targets.entries()) {
+    const last = groups.at(-1);
+    const previous = last === undefined ? undefined : targets[last[0]!];
+    if (
+      last !== undefined &&
+      previous !== undefined &&
+      !target.tree &&
+      !previous.tree &&
+      last.length < CHUNK &&
+      dirname(previous.path) === dirname(target.path)
+    )
+      last.push(index);
+    else groups.push([index]);
+  }
+  return groups;
+};
+
+const removeTargets = Effect.fnUntraced(function* (input: {
+  readonly at: ResolvedToolOptions;
+  readonly entries: Entries;
+  readonly selection: RemovalSelection;
+  readonly paths: readonly PreparedPath[];
+  readonly indexes: readonly number[];
+  readonly report: (index: number, outcome: Outcome) => Effect.Effect<void, PlatformError.PlatformError>;
+  readonly shown: (display: ToolDisplay) => void;
+}) {
+  const { at, entries, selection, paths, indexes, report } = input;
+  const admitted = yield* Effect.forEach(
+    indexes,
+    (index) =>
+      admitPreparedPath(at, paths[index], { allowMissing: true }).pipe(
+        Effect.matchEffect({
+          onFailure: (failure) =>
+            Effect.as(report(index, { status: 'failed', issue: removalIssue(selection.targets[index]!.path, 'resolve', failure) }), null),
+          onSuccess: () => Effect.succeed(index),
+        }),
+      ),
+    { concurrency: LANES },
+  );
+  const standing = admitted.filter((index): index is number => index !== null);
+  const indexOf = new Map(standing.map((index) => [selection.targets[index]!.path, index] as const));
+  const leaves: Leaf[] = standing.map((index) => {
+    const target = selection.targets[index]!;
+    return { path: target.path, kind: target.entry.kind, expected: target.entry, operands: target.operands };
+  });
+  yield* removeLeaves({
+    resolved: at,
+    entries,
+    directories: [],
+    leaves,
+    settle: (leaf, outcome) => report(indexOf.get(leaf.path)!, outcome),
+    shown: selection.targets.length === 1 ? (_leaf, display) => input.shown(display) : undefined,
+  });
+});
+
 export function createDeleteTool(options: ToolFactoryOptions): Tool {
   const resolved = resolveToolOptions(options);
-  const { files, environment } = resolved.world;
+  const { files, entries, environment } = resolved.world;
   const retained = new Map<string, RemovalCall>();
   return Tool.make<typeof removalInput, PreparedRemoval>({
     approval: ASKS_IN_REVIEW,
@@ -59,12 +125,12 @@ export function createDeleteTool(options: ToolFactoryOptions): Tool {
       project: (input) => ({ form: 'none', title: input.args?.join(' '), subtitle: input.workdir }),
     },
     prepare: (input) =>
-      files === undefined
+      files === undefined || entries === undefined
         ? unboundTool('delete', 'filesystem')
         : prepareToolEffect(
             files,
             Effect.gen(function* () {
-              const selection = yield* selectRemoval(resolved, input);
+              const selection = yield* selectRemoval(resolved, entries, input);
               const fs = yield* FileSystem.FileSystem;
               const subjectRoot = yield* fs.realPath(resolved.cwd).pipe(
                 Effect.mapError(
@@ -87,7 +153,7 @@ export function createDeleteTool(options: ToolFactoryOptions): Tool {
           ),
     claims: () => Effect.succeed(everyClaim('write')),
     execute: (_input, call) =>
-      files === undefined
+      files === undefined || entries === undefined
         ? unboundTool('delete', 'filesystem')
         : runToolEffect(
             'delete',
@@ -100,8 +166,9 @@ export function createDeleteTool(options: ToolFactoryOptions): Tool {
                   reason: 'Deletion has no admitted selection. Prepare this call before executing it.',
                 });
               const { selection, paths } = prepared;
+              const at = resolved.at(call.caller);
               const journal = yield* makeReport(environment.tmp, selection.options.verbose);
-              const state: RemovalCall = { journal, next: 0, nextIssue: 0, removed: 0 };
+              const state: RemovalCall = { journal, done: new Set(), nextIssue: 0, removed: 0 };
               retained.set(keyOf(call.toolCallId, call.caller), state);
               let display: ToolDisplay | undefined;
               const initial = Effect.gen(function* () {
@@ -126,21 +193,53 @@ export function createDeleteTool(options: ToolFactoryOptions): Tool {
                     );
                 }
               });
-              const tree = (target: RemovalTarget, path: PreparedPath, index: number) => {
-                const at = resolved.at(call.caller);
-                const settled = (row: RemovalResult, root: boolean) =>
+              const report = (index: number, outcome: Outcome) => {
+                const target = selection.targets[index]!;
+                return journal
+                  .append(
+                    outcome.status === 'failed'
+                      ? {
+                          path: target.path,
+                          kind: target.entry.kind,
+                          operands: target.operands,
+                          status: selection.options.force && outcome.issue.code === 'not-found' ? 'absent' : 'failed',
+                          issue: outcome.issue,
+                        }
+                      : {
+                          path: target.path,
+                          kind: target.entry.kind,
+                          operands: target.operands,
+                          status: 'removed',
+                          record: outcome.record,
+                          issue:
+                            outcome.pending === null
+                              ? undefined
+                              : { path: target.path, stage: 'record', code: 'confirmation-pending', reason: outcome.pending },
+                        },
+                  )
+                  .pipe(
+                    Effect.tap(() =>
+                      Effect.sync(() => {
+                        state.done.add(index);
+                      }),
+                    ),
+                  );
+              };
+              const tree = (index: number) => {
+                const target = selection.targets[index]!;
+                const settled: Settled = (row, root) =>
                   root
                     ? journal.append(row).pipe(
                         Effect.tap(() =>
                           Effect.sync(() => {
-                            state.next = index + 1;
+                            state.done.add(index);
                             state.removed = 0;
                           }),
                         ),
                         Effect.uninterruptible,
                       )
                     : journal.entry(row);
-                return admitRoot(at, target, path).pipe(
+                return admitRoot(at, entries, target, paths[index]!).pipe(
                   Effect.matchEffect({
                     onFailure: (failure) => {
                       const issue = removalIssue(target.path, 'resolve', failure);
@@ -157,7 +256,7 @@ export function createDeleteTool(options: ToolFactoryOptions): Tool {
                       );
                     },
                     onSuccess: () =>
-                      removeTree(at, target, selection.options, selection.nested, settled, (removed) => {
+                      removeTree(at, entries, target, selection.options, selection.nested, settled, (removed) => {
                         state.removed = removed;
                       }),
                   }),
@@ -165,74 +264,39 @@ export function createDeleteTool(options: ToolFactoryOptions): Tool {
               };
               const run = Effect.gen(function* () {
                 yield* initial;
-                for (let index = 0; index < selection.targets.length; index++) {
-                  const target = selection.targets[index]!;
+                for (const group of groupsOf(selection.targets)) {
                   state.removed = 0;
-                  if (target.tree) {
-                    yield* tree(target, paths[index]!, index);
+                  if (selection.targets[group[0]!]!.tree) {
+                    yield* tree(group[0]!);
                     continue;
                   }
-                  const path = paths[index]!;
-                  let stage: RemovalStage = 'resolve';
-                  yield* removeTarget(
-                    resolved.at(call.caller),
-                    target,
-                    path,
-                    selection.targets.length === 1,
-                    (next) => {
-                      stage = next;
+                  yield* removeTargets({
+                    at,
+                    entries,
+                    selection,
+                    paths,
+                    indexes: group,
+                    report,
+                    shown: (shown) => {
+                      display = shown;
                     },
-                    (removed) => {
-                      display = removed.display ?? display;
-                      state.next = index + 1;
-                      return journal.append({
-                        path: target.path,
-                        kind: target.entry.kind,
-                        operands: target.operands,
-                        status: 'removed',
-                        record: removed.record.pending !== null ? 'pending' : removed.record.kept ? 'recorded' : 'outside',
-                        issue:
-                          removed.record.pending === null
-                            ? undefined
-                            : { path: target.path, stage: 'record', code: 'confirmation-pending', reason: removed.record.pending },
-                      });
-                    },
-                  ).pipe(
-                    Effect.matchEffect({
-                      onFailure: (failure) => {
-                        if (state.next > index) return Effect.fail(failure);
-                        const issue = removalIssue(target.path, stage, failure);
-                        return journal.append({
-                          path: target.path,
-                          kind: target.entry.kind,
-                          operands: target.operands,
-                          status: selection.options.force && issue.code === 'not-found' ? 'absent' : 'failed',
-                          issue,
-                        });
-                      },
-                      onSuccess: () => Effect.void,
-                    }),
-                    Effect.tap(() =>
-                      Effect.sync(() => {
-                        state.next = index + 1;
-                      }),
-                    ),
-                  );
+                  });
                 }
                 state.answer = yield* journal.answer('completed', display);
                 return state.answer;
               });
               const stopped = Effect.gen(function* () {
                 yield* initial;
-                for (let index = state.next; index < selection.targets.length; index++) {
-                  const target = selection.targets[index]!;
+                for (const [index, target] of selection.targets.entries()) {
+                  if (state.done.has(index)) continue;
                   yield* journal.append({
                     path: target.path,
                     kind: target.entry.kind,
                     operands: target.operands,
                     status: 'unprocessed',
-                    removed: target.tree ? (index === state.next ? state.removed : 0) : undefined,
+                    removed: target.tree ? state.removed : undefined,
                   });
+                  state.removed = 0;
                 }
                 state.answer = yield* journal.answer('cancelled', display);
               }).pipe(
@@ -247,7 +311,7 @@ export function createDeleteTool(options: ToolFactoryOptions): Tool {
                 ),
               );
               return yield* inBasis(
-                resolved.at(call.caller),
+                at,
                 selection.targets.map((target) => target.path),
                 run,
               ).pipe(

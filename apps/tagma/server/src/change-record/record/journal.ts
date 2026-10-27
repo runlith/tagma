@@ -23,7 +23,7 @@ import { type Span, WRITE_GAP_MS } from './lives.js';
 import type { Role } from './roles.js';
 import { PLACES_PER_STATEMENT } from './places.js';
 import type { Walks } from '../lines/walks.js';
-import { keepVersions } from './intake.js';
+import { keepVersions } from './inserts.js';
 import { batches, collectReleased, releaseVersions } from './versions.js';
 import { workspaceChangeContent } from '../store/tables.js';
 import { versionContentLimit } from '@runlith/files/content';

@@ -76,10 +76,11 @@ export const makeChangeRecord = Effect.fnUntraced(function* ({
 
   const changes = (work: ChangeWork): ReturnType<ChangeRecord['Service']['changes']> => ({
     land: (facts, write) => intake.land(workOf(work), facts, write),
+    landEach: (facts, write) => intake.landEach(workOf(work), facts, write),
     turn: (paths, run, target) => intake.turn(work.work.projectId, paths, run, target),
     basis: (paths, run) => intake.basis(work.work.projectId, paths, run),
     normalized: (path) => intake.normalized(work.work.projectId, path),
-    records: (path, target) => Effect.map(intake.placeOf(work.work.projectId, path, target), (place) => place !== null),
+    records: (paths, target) => intake.records(work.work.projectId, paths, target),
     command: (tree, facts) =>
       Effect.flatMap(
         Effect.mapError(paths.resourceAcross(tree), (failure) => new IntakeRefused({ path: tree, reason: failure.reason })),

@@ -18,7 +18,8 @@ import type { Decider, Life, Lives, Span } from './lives.js';
 import { PLACES_PER_STATEMENT, type StoreShape, samePlaces } from './places.js';
 import { versionTexts } from './evidence.js';
 import { runningRunOf } from './sessions.js';
-import { type RowIntake, insertRow, keepVersions } from './intake.js';
+import type { RowIntake } from './intake.js';
+import { insertRow, keepVersions } from './inserts.js';
 import { movedSize, sizesOf } from './moves.js';
 
 export type CommandOpening = {

@@ -24,6 +24,8 @@ const unrecorded = {
   changes: () => ({
     land: <E, R>(_changes: readonly unknown[], write: Effect.Effect<boolean, E, R>) =>
       Effect.map(write, (written) => landedOf(written, false)),
+    landEach: <E, R>(_changes: readonly unknown[], write: Effect.Effect<readonly boolean[], E, R>) =>
+      Effect.map(write, (written) => written.map((one) => landedOf(one, false))),
     command: () => Effect.succeed(null),
   }),
 };

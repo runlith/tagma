@@ -36,6 +36,7 @@ function world(text: string | ImportSourceRefused) {
         }
         return landedOf(written, written);
       }),
+    landEach: () => Effect.die('file imports delete nothing'),
   };
   return { imports, changes, rows, spans };
 }
@@ -228,6 +229,7 @@ it.effect('an import the binding could not record lands with recorded false', ()
         command: () => Effect.die('file imports open no command window'),
         land: <E, R>(_batch: readonly WorkspaceChange[], write: Effect.Effect<boolean, E, R>) =>
           Effect.map(write, (written) => landedOf(written, false)),
+        landEach: () => Effect.die('file imports delete nothing'),
       },
       { from: 'out.ts', to: 'out.ts', expect: IMPORT_BASE_ABSENT },
     );

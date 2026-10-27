@@ -1,5 +1,5 @@
 import { lstat } from 'node:fs/promises';
-import type { GitMetadata } from './metadata.js';
+import { type GitMetadata } from './metadata.js';
 import { Clock, Context, Effect, Option, Semaphore } from 'effect';
 import { and, eq, inArray } from 'drizzle-orm';
 import { IntakeRefused, type Landed } from '@runlith/agent-tools/WorkspaceChanges';
@@ -9,7 +9,6 @@ import { normalizedAt } from '@runlith/git/working';
 import { troubleOf } from '@runlith/git/repository';
 import { configuredGit } from '../../platform/git/ownGit.js';
 import type { ChangeTarget } from '@runlith/files/change';
-import type { LineHunk } from '@runlith/files/hunk';
 import { chunk } from '@runlith/utils/collection';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
@@ -21,105 +20,33 @@ import { OPERATOR, holderKey } from '../../workspace/contract/wire/checkout.js';
 import { HeldFeed } from '../contract/service/held.js';
 import type { IntakeFact, IntakeWork } from '../contract/service/intake.js';
 import type { Walks } from '../lines/walks.js';
-import { changeLogWrites, held, workspaceChange, workspaceChangeContent, type RowState } from '../store/tables.js';
+import { changeLogWrites, held, workspaceChange, type RowState } from '../store/tables.js';
+import { pagesOf } from '../../platform/store/binds.js';
+import { among } from '../../platform/store/rows.js';
+import { type Covered, coveringTree, makeCover, placeWithin } from './cover.js';
+import { insertRows, keepVersions, type RowHolder, type Version, VERSION_COLUMNS } from './inserts.js';
 import type { Heads } from './heads.js';
 import { BaseTexts, joinable, joined, type Joining, type Windowed } from './joining.js';
 import type { InstantMark, Lives } from './lives.js';
 import { PLACES_PER_STATEMENT, placeKey, samePlaces } from './places.js';
 import { runningRunOf } from './sessions.js';
 import { releaseVersions } from './versions.js';
-import { putHunkText } from './hunks.js';
-
-export type RowHolder = { readonly projectId: number; readonly holder: string };
 
 const OPERATOR_KEY = holderKey(OPERATOR);
-
-export type Version = { readonly digest: string; readonly text: string };
-
-export type RowFact = {
-  readonly place: PlacedPath;
-  readonly projectId: number;
-  readonly origin: 'edit' | 'write' | 'delete';
-  readonly provenance?: NonNullable<typeof workspaceChange.$inferSelect.provenance>;
-  readonly mode: string | null;
-  readonly hunk: LineHunk | null;
-  readonly beforeHash: string | null;
-  readonly afterHash: string | null;
-  readonly at: Date;
-  readonly movedFrom?: string | null;
-  readonly reverts?: readonly string[] | null;
-  readonly key?: string | null;
-};
 
 type Placed = { readonly fact: IntakeFact; readonly place: CheckoutPlace };
 
 type WriteBasis = {
-  readonly places: ReadonlyMap<string, CheckoutPlace | null>;
+  readonly places: Map<string, CheckoutPlace | null>;
   readonly heads: ReadonlyMap<string, string | null>;
   readonly normalized: ReadonlyMap<string, boolean>;
+  readonly trees: ReadonlyMap<string, readonly Covered[]>;
+  readonly landed: Map<string, Placed[]>;
 };
 
 type NormalizationGroup = { readonly root: string; readonly paths: Map<string, string> };
 
 const WriteBasis = Context.Reference<WriteBasis | null>('change-record/WriteBasis', { defaultValue: () => null });
-
-export const keepVersions = Effect.fnUntraced(function* (db: MachineStore['Service']['db'], versions: readonly Version[]) {
-  if (versions.length === 0) return;
-  const at = new Date(yield* Clock.currentTimeMillis);
-  yield* db
-    .insert(workspaceChangeContent)
-    .values(
-      versions.map((version) => ({
-        digest: version.digest,
-        text: version.text,
-        bytes: Buffer.byteLength(version.text, 'utf8'),
-        at,
-      })),
-    )
-    .onConflictDoNothing();
-});
-
-export const insertRow = Effect.fnUntraced(function* (
-  db: MachineStore['Service']['db'],
-  work: RowHolder,
-  runId: string | null,
-  head: string | null,
-  state: RowState,
-  row: RowFact,
-): Effect.fn.Return<string | null, StoreFailure> {
-  const rows = yield* db
-    .insert(workspaceChange)
-    .values({
-      projectId: row.projectId,
-      holderProjectId: work.holder === OPERATOR_KEY ? null : work.projectId,
-      holder: work.holder,
-      runId,
-      checkout: row.place.checkout,
-      path: row.place.path,
-      movedFrom: row.movedFrom ?? null,
-      head,
-      state,
-      origin: row.origin,
-      provenance: row.provenance ?? 'typed',
-      mode: row.mode,
-      firstLine: row.hunk?.firstLine ?? null,
-      lines: row.hunk?.newLines ?? null,
-      oldLines: row.hunk?.oldLines ?? null,
-      windowBefore: row.hunk?.windowBefore ?? null,
-      reverts: row.reverts ?? null,
-      beforeHash: row.beforeHash,
-      afterHash: row.origin === 'delete' ? null : row.afterHash,
-      recordKey: row.key ?? crypto.randomUUID(),
-      at: row.at,
-    })
-    .onConflictDoNothing({ target: [workspaceChange.holder, workspaceChange.recordKey] })
-    .returning({ id: workspaceChange.id });
-  const id = rows[0]?.id ?? null;
-  const oldText = row.hunk?.oldText ?? null;
-  const newText = row.origin === 'delete' ? null : (row.hunk?.newText ?? null);
-  if (id !== null && (oldText !== null || newText !== null)) yield* putHunkText(db, id, oldText, newText);
-  return id;
-});
 
 const provenPair = (digest: string | undefined, text: string | undefined): Version | undefined =>
   digest === undefined || text === undefined || contentDigest(text) !== digest ? undefined : { digest, text };
@@ -184,6 +111,8 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
   const bases = new BaseTexts();
   let unjoined = 0;
 
+  const { cover: coverOf, standingAmong } = makeCover({ store, units, paths, git, metadata });
+
   const placeOf = Effect.fnUntraced(function* (
     projectId: number,
     path: string,
@@ -192,6 +121,13 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
     const basis = yield* WriteBasis;
     const key = spellingKey(projectId, path, target);
     if (basis?.places.has(key)) return basis.places.get(key) ?? null;
+    if (target === 'entry' && basis !== null && basis.trees.size > 0) {
+      const covered = coveringTree(basis.trees, path);
+      if (covered !== undefined) {
+        const within = placeWithin(covered, path, graphDirectory);
+        return within === null || within.ignored ? null : within.place;
+      }
+    }
     return yield* Effect.suspend(() => {
       const standing = placing.get(key);
       if (standing !== undefined) return Effect.succeed(standing.place);
@@ -207,6 +143,48 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
         );
       });
     });
+  });
+
+  const records = Effect.fnUntraced(function* (
+    projectId: number,
+    asked: readonly string[],
+    target: ChangeTarget = 'entry',
+  ): Effect.fn.Return<readonly boolean[], IntakeRefused> {
+    const basis = yield* WriteBasis;
+    const answers: boolean[] = [];
+    const ignored = new Map<
+      string,
+      { readonly at: number; readonly path: string; readonly key: string; readonly place: CheckoutPlace }[]
+    >();
+    for (const [at, path] of asked.entries()) {
+      const key = spellingKey(projectId, path, target);
+      const covered = target === 'entry' && basis !== null && !basis.places.has(key) ? coveringTree(basis.trees, path) : undefined;
+      const within = covered === undefined ? undefined : placeWithin(covered, path, graphDirectory);
+      if (within === undefined || within === null || !within.ignored) {
+        answers.push(within === undefined ? (yield* placeOf(projectId, path, target)) !== null : within !== null);
+        continue;
+      }
+      answers.push(false);
+      const group = ignored.get(within.place.checkout);
+      if (group === undefined) ignored.set(within.place.checkout, [{ at, path, key, place: within.place }]);
+      else group.push({ at, path, key, place: within.place });
+    }
+    for (const [checkout, group] of ignored) {
+      const rows = yield* Effect.mapError(
+        standingAmong(
+          checkout,
+          group.map(({ place }) => place.path),
+        ),
+        refusal(group[0]!.path),
+      );
+      const standing = new Set(rows.map((row) => row.path));
+      for (const { at, key, place } of group) {
+        const kept = standing.has(place.path);
+        basis!.places.set(key, kept ? place : null);
+        answers[at] = kept;
+      }
+    }
+    return answers;
   });
 
   const holdersOf = (places: readonly PlacedPath[]): Effect.Effect<readonly string[], StoreFailure> =>
@@ -232,7 +210,11 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
     return Effect.gen(function* () {
       if (Option.isSome(checkouts)) {
         const byCheckout = new Map<string, string[]>();
-        for (const place of unique) byCheckout.set(place.checkout, [...(byCheckout.get(place.checkout) ?? []), place.path]);
+        for (const place of unique) {
+          const marked = byCheckout.get(place.checkout);
+          if (marked === undefined) byCheckout.set(place.checkout, [place.path]);
+          else marked.push(place.path);
+        }
         yield* Effect.forEach(byCheckout, ([checkout, marked]) => checkouts.value.mark(checkout as RootId, 'written', marked), {
           discard: true,
         });
@@ -263,6 +245,15 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
     return Effect.forEach(byProject, ([projectId, places]) => announce(projectId, holder, places), { discard: true });
   };
 
+  const announceLanded = (holder: string, placed: readonly Placed[]): Effect.Effect<void> =>
+    Effect.flatMap(WriteBasis, (basis) => {
+      if (basis === null) return announcePlaced(holder, placed);
+      const kept = basis.landed.get(holder);
+      if (kept === undefined) basis.landed.set(holder, [...placed]);
+      else for (const one of placed) kept.push(one);
+      return Effect.void;
+    });
+
   const placedOf = (projectId: number, facts: readonly IntakeFact[]): Effect.Effect<readonly Placed[], IntakeRefused> =>
     Effect.map(
       Effect.forEach(facts, (fact) => {
@@ -272,12 +263,29 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
       (placed) => placed.filter((one): one is Placed => one !== null),
     );
 
-  const instants = (work: RowHolder, placed: readonly Placed[], from: number): readonly InstantMark[] =>
-    placed.flatMap(({ fact, place }) =>
-      fact.after === undefined
-        ? []
-        : [lives.instant(place.checkout, work.holder, place.path, fact.after, Math.min(from, fact.at.getTime()), null)],
-    );
+  const marksOf = (work: RowHolder, placed: readonly Placed[], from: number): ReadonlyMap<Placed, InstantMark> => {
+    const byCheckout = new Map<string, Placed[]>();
+    for (const one of placed) {
+      if (one.fact.after === undefined) continue;
+      const group = byCheckout.get(one.place.checkout);
+      if (group === undefined) byCheckout.set(one.place.checkout, [one]);
+      else group.push(one);
+    }
+    const marks = new Map<Placed, InstantMark>();
+    for (const [checkout, group] of byCheckout) {
+      const made = lives.instants(
+        checkout,
+        work.holder,
+        group.map(({ fact, place }) => ({ name: place.path, after: fact.after!, from: Math.min(from, fact.at.getTime()) })),
+      );
+      for (const [at, one] of group.entries()) marks.set(one, made[at]!);
+    }
+    return marks;
+  };
+
+  const instants = (work: RowHolder, placed: readonly Placed[], from: number): readonly InstantMark[] => [
+    ...marksOf(work, placed, from).values(),
+  ];
 
   const rows = Effect.fnUntraced(function* (work: RowHolder, placed: readonly Placed[], state: RowState) {
     const runId = work.holder === OPERATOR_KEY ? null : yield* runningRunOf(units, store, work.projectId, work.holder);
@@ -292,26 +300,38 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
     const movedFrom = new Map(placed.map(({ fact, place }) => [fact.path, place.path] as const));
     return yield* units.write(changeLogWrites, () =>
       Effect.gen(function* () {
-        const ids: { readonly id: string; readonly placed: Placed }[] = [];
-        for (const one of placed) {
-          const { fact, place } = one;
-          yield* keepVersions(store.db, versionsOf(fact));
-          const id = yield* insertRow(store.db, work, runId, headsAt.get(place.checkout) ?? null, state, {
-            place,
-            projectId: place.projectId,
-            origin: fact.origin,
-            mode: fact.mode ?? null,
-            hunk: fact.hunk ?? null,
-            beforeHash: fact.before ?? null,
-            afterHash: fact.after ?? null,
-            at: fact.at,
-            movedFrom: fact.movedFrom === undefined ? null : (movedFrom.get(fact.movedFrom) ?? null),
-            reverts: fact.reverts ?? null,
-            key: fact.key ?? null,
-          });
-          if (id !== null) ids.push({ id, placed: one });
-        }
-        return ids;
+        for (const page of pagesOf(
+          placed.flatMap(({ fact }) => versionsOf(fact)),
+          VERSION_COLUMNS,
+          (version) => version.text.length,
+        ))
+          yield* keepVersions(store.db, page);
+        const inserted = yield* insertRows(
+          store.db,
+          work,
+          runId,
+          state,
+          placed.map(({ fact, place }) => ({
+            head: headsAt.get(place.checkout) ?? null,
+            row: {
+              place,
+              projectId: place.projectId,
+              origin: fact.origin,
+              mode: fact.mode ?? null,
+              hunk: fact.hunk ?? null,
+              beforeHash: fact.before ?? null,
+              afterHash: fact.after ?? null,
+              at: fact.at,
+              movedFrom: fact.movedFrom === undefined ? null : (movedFrom.get(fact.movedFrom) ?? null),
+              reverts: fact.reverts ?? null,
+              key: fact.key ?? null,
+            },
+          })),
+        );
+        return placed.flatMap((one, at) => {
+          const id = inserted[at];
+          return id === null || id === undefined ? [] : [{ id, placed: one }];
+        });
       }),
     );
   });
@@ -363,14 +383,19 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
           if (yield* joined(store, one, modes.get(one.row) ?? null)) merged.add(one.row);
         }
         const byMode = new Map<string | null, string[]>();
-        for (const [id, mode] of modes) if (!merged.has(id)) byMode.set(mode, [...(byMode.get(mode) ?? []), id]);
+        for (const [id, mode] of modes) {
+          if (merged.has(id)) continue;
+          const ids = byMode.get(mode);
+          if (ids === undefined) byMode.set(mode, [id]);
+          else ids.push(id);
+        }
         yield* Effect.forEach(
           byMode,
           ([mode, ids]) =>
             store.db
               .update(workspaceChange)
               .set({ state: 'held', mode, at: landedAt })
-              .where(and(inArray(workspaceChange.id, ids), eq(workspaceChange.state, 'writing'))),
+              .where(and(inArray(workspaceChange.id, among(ids)), eq(workspaceChange.state, 'writing'))),
           { discard: true },
         );
       }),
@@ -385,15 +410,7 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
         Effect.flatMap(
           store.db
             .delete(workspaceChange)
-            .where(
-              and(
-                inArray(
-                  workspaceChange.id,
-                  intended.ids.map((one) => one.id),
-                ),
-                eq(workspaceChange.state, 'writing'),
-              ),
-            )
+            .where(and(inArray(workspaceChange.id, among(intended.ids.map((one) => one.id))), eq(workspaceChange.state, 'writing')))
             .returning({ before: workspaceChange.beforeHash, after: workspaceChange.afterHash }),
           (gone) =>
             releaseVersions(
@@ -414,6 +431,7 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
     const places = new Map(inherited?.places);
     const pinned = new Map(inherited?.heads);
     const normalized = new Map(inherited?.normalized);
+    const trees = new Map(inherited?.trees);
     const groups = new Map<string, NormalizationGroup>();
     const pin = Effect.fnUntraced(function* (checkout: CheckoutPlace) {
       if (!pinned.has(checkout.checkout)) pinned.set(checkout.checkout, yield* heads.of(checkout.projectId, checkout));
@@ -423,6 +441,15 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
       const key = spellingKey(projectId, path, 'entry');
       places.set(key, place);
       for (const reached of yield* Effect.mapError(paths.rootsWithin(path), refusal(path))) yield* pin(reached);
+      const directory = yield* Effect.tryPromise({
+        try: () =>
+          lstat(path).then(
+            (info) => info.isDirectory(),
+            (cause: NodeJS.ErrnoException) => (cause.code === 'ENOENT' || cause.code === 'ENOTDIR' ? false : Promise.reject(cause)),
+          ),
+        catch: (cause) => new IntakeRefused({ path, reason: `Cannot read whether ${path} is a directory: ${String(cause)}` }),
+      });
+      if (directory) trees.set(path, yield* coverOf(path));
       if (place === null) {
         const root = yield* Effect.mapError(paths.placeAcross(path), refusal(path));
         if (root?.path === '') yield* pin(root);
@@ -430,7 +457,7 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
         continue;
       }
       if (!pinned.has(place.checkout)) pinned.set(place.checkout, yield* heads.of(place.projectId, place));
-      if (normalized.has(key)) continue;
+      if (directory || normalized.has(key)) continue;
       const group = groups.get(place.checkout) ?? { root: place.root, paths: new Map<string, string>() };
       group.paths.set(path, place.path);
       groups.set(place.checkout, group);
@@ -444,11 +471,18 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
       );
       for (const [path, name] of group.paths) normalized.set(spellingKey(projectId, path, 'entry'), converted.has(name));
     }
-    return yield* Effect.provideService(work, WriteBasis, { places, heads: pinned, normalized });
+    const landed = inherited?.landed ?? new Map<string, Placed[]>();
+    const provided = Effect.provideService(work, WriteBasis, { places, heads: pinned, normalized, trees, landed });
+    if (inherited !== null) return yield* provided;
+    return yield* Effect.ensuring(
+      provided,
+      Effect.suspend(() => Effect.forEach(landed, ([holder, placed]) => announcePlaced(holder, placed), { discard: true })),
+    );
   });
 
   return {
     basis,
+    records,
     normalized: (projectId: number, path: string) =>
       Effect.map(WriteBasis, (basis) => basis?.normalized.get(spellingKey(projectId, path, 'entry'))),
     placeOf,
@@ -523,11 +557,73 @@ export const makeRowIntake = Effect.fnUntraced(function* ({
               confirm(intended, new Date(yield* Clock.currentTimeMillis), joining).pipe(Effect.withSpan('Intake.confirm')),
             );
             if (confirmed._tag === 'Failure') return { _tag: 'unconfirmed', reason: confirmed.failure.message } satisfies Landed;
-            yield* announcePlaced(holder.holder, placed);
+            yield* announceLanded(holder.holder, placed);
             return { _tag: 'written', kept: true } satisfies Landed;
           }),
         );
       });
+    },
+    landEach: <E, R>(
+      work: IntakeWork,
+      facts: readonly IntakeFact[],
+      write: Effect.Effect<readonly boolean[], E, R>,
+    ): Effect.Effect<readonly Landed[], E | IntakeRefused, R> => {
+      const holder = rowHolder(work);
+      const unplaced = (written: readonly boolean[]): readonly Landed[] =>
+        facts.map((_, at): Landed => (written[at] === true ? { _tag: 'written', kept: false } : { _tag: 'moved' }));
+      return Effect.flatMap(
+        Effect.forEach(facts, (fact) =>
+          Effect.map(
+            placeOf(work.projectId, fact.path, fact.target ?? (fact.origin === 'delete' || fact.mode === '120000' ? 'entry' : 'resource')),
+            (place): Placed | null => (place === null ? null : { fact, place }),
+          ),
+        ),
+        (each) => {
+          const placed = each.filter((one): one is Placed => one !== null);
+          if (placed.length === 0) return Effect.map(write, unplaced);
+          const named = placed[0]!.fact.path;
+          return Effect.uninterruptible(
+            Effect.gen(function* () {
+              const from = yield* Clock.currentTimeMillis;
+              const ids = yield* rows(holder, placed, 'writing').pipe(Effect.withSpan('Intake.intent'), Effect.mapError(refusal(named)));
+              const marks = marksOf(holder, placed, from);
+              const intended = (kept: ReadonlySet<Placed>): Intended => ({
+                holder,
+                ids: ids.filter((one) => kept.has(one.placed)),
+                marks: [...marks].flatMap(([one, mark]) => (kept.has(one) ? [mark] : [])),
+              });
+              const all = new Set(placed);
+              const written = yield* Effect.catch(write.pipe(Effect.withSpan('Intake.write')), (failure) =>
+                Effect.andThen(withdraw(intended(all), named), Effect.fail(failure)),
+              );
+              const landedSet = new Set(each.flatMap((one, at) => (one !== null && written[at] === true ? [one] : [])));
+              const missed = new Set(placed.filter((one) => !landedSet.has(one)));
+              if (missed.size > 0) {
+                const withdrawn = yield* Effect.result(withdraw(intended(missed), named));
+                if (withdrawn._tag === 'Failure')
+                  yield* Effect.logWarning('intents of entries left standing wait for the next start: withdrawing them failed', {
+                    entries: missed.size,
+                    reason: withdrawn.failure.reason,
+                  });
+              }
+              const landing = intended(landedSet);
+              for (const mark of landing.marks) mark.landed();
+              const joining = work.holder.kind === 'operator' ? yield* joins(landing) : [];
+              const confirmed = yield* Effect.result(
+                confirm(landing, new Date(yield* Clock.currentTimeMillis), joining).pipe(Effect.withSpan('Intake.confirm')),
+              );
+              if (landedSet.size > 0) yield* announceLanded(holder.holder, [...landedSet]);
+              return each.map((one, at): Landed => {
+                if (written[at] !== true) return { _tag: 'moved' };
+                if (one === null) return { _tag: 'written', kept: false };
+                return confirmed._tag === 'Failure'
+                  ? { _tag: 'unconfirmed', reason: confirmed.failure.message }
+                  : { _tag: 'written', kept: true };
+              });
+            }),
+          );
+        },
+      );
     },
     report: Effect.fnUntraced(function* (work: IntakeWork, facts: readonly IntakeFact[]) {
       const holder = rowHolder(work);

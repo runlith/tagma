@@ -80,6 +80,28 @@ export function landing<E, R>(
   );
 }
 
+export function landingEach<E, R>(
+  resolved: ResolvedToolOptions,
+  changes: readonly WorkspaceChange[],
+  write: Effect.Effect<readonly boolean[], E, R>,
+): Effect.Effect<readonly (Recorded | null)[], E | ToolFailed, R> {
+  const sink = resolved.changes;
+  if (sink === undefined) return Effect.map(write, (written) => written.map((one) => (one ? { kept: true, pending: null } : null)));
+  return sink.landEach(changes, write).pipe(
+    Effect.mapError(refused),
+    Effect.map((landed) =>
+      landed.map((one) =>
+        one._tag === 'moved' ? null : one._tag === 'written' ? { kept: one.kept, pending: null } : { kept: true, pending: one.reason },
+      ),
+    ),
+  );
+}
+
+export const deletionOf = Effect.fnUntraced(function* (resolved: ResolvedToolOptions, path: string, standing: Standing, before: string) {
+  const normalized = yield* normalizedOf(resolved, path, { standing, before, after: '' });
+  return changeOf('delete', path, standing, before, '', normalized, new Date(yield* Clock.currentTimeMillis));
+});
+
 export type TextChange = {
   readonly standing: Standing;
   readonly before: string;
@@ -167,7 +189,7 @@ const normalizedOf = Effect.fnUntraced(function* (
     if (prepared !== undefined) return prepared;
   }
   if (git === undefined) return false;
-  if (changes.records !== undefined && !(yield* changes.records(path).pipe(Effect.mapError(refusedBy)))) return false;
+  if (changes.records !== undefined && (yield* changes.records([path]).pipe(Effect.mapError(refusedBy)))[0] !== true) return false;
   const name = basename(path);
   return yield* Effect.flatMap(Git, (service) => normalizedAt(service, dirname(path), [name])).pipe(
     Effect.provide(git),

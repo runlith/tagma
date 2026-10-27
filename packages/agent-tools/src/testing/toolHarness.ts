@@ -150,6 +150,14 @@ export function recorder() {
           if (written) changes.push(...batch);
           return landedOf(written, written);
         }),
+      landEach: <E, R>(batch: readonly WorkspaceChange[], write: Effect.Effect<readonly boolean[], E, R>) =>
+        Effect.map(write, (written) =>
+          batch.map((change, at) => {
+            const landed = written[at] === true;
+            if (landed) changes.push(change);
+            return landedOf(landed, landed);
+          }),
+        ),
       command: () =>
         Effect.succeed<CommandLife>({
           based: () => Effect.void,

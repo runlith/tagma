@@ -30,7 +30,11 @@ export const foldMemoryBudget = (): number => Math.min(FOLD_MEMORY_CEILING, Math
 
 export const judgedChange = (judges: Judges, change: HeldChange): Effect.Effect<void> => {
   const byCheckout = new Map<string, string[]>();
-  for (const place of change.moved.places) byCheckout.set(place.checkout, [...(byCheckout.get(place.checkout) ?? []), place.path]);
+  for (const place of change.moved.places) {
+    const paths = byCheckout.get(place.checkout);
+    if (paths === undefined) byCheckout.set(place.checkout, [place.path]);
+    else paths.push(place.path);
+  }
   return Effect.forEach(byCheckout, ([checkout, paths]) => judges.moved(RootId.make(checkout), paths), { discard: true });
 };
 

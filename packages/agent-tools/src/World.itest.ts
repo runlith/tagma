@@ -18,7 +18,7 @@ it.effect('a files-only world serves its file tools alone, and their reads obser
 
     const tools = createTools(options({ cwd: dir, world }));
 
-    expect(Object.keys(tools).sort()).toEqual(['delete', 'edit', 'ls', 'read', 'rename', 'write']);
+    expect(Object.keys(tools).sort()).toEqual(['edit', 'ls', 'read', 'rename', 'write']);
     expect(tools.bash).toBeUndefined();
     expect(tools.glob).toBeUndefined();
     expect(tools.grep).toBeUndefined();

@@ -9,6 +9,22 @@ type Row = Readonly<Record<string, unknown>>;
 //! One bound parameter carries the whole list, so no list length meets SQLite's parameter ceiling.
 export const among = (values: readonly string[]): SQL => sql`(select value from json_each(${JSON.stringify(values)}))`;
 
+export const fromJson = (columns: readonly Column[], rows: readonly (readonly unknown[])[]): SQL => {
+  const encoded = rows.map((row) =>
+    columns.map((column, at) => {
+      const value = row[at];
+      return value === null || value === undefined ? null : column.mapToDriverValue(value);
+    }),
+  );
+  return sql`(${sql.join(
+    columns.map((column) => sql.identifier(column.name)),
+    sql`, `,
+  )}) select ${sql.join(
+    columns.map((_, at) => sql.raw(`value ->> '$[${at}]'`)),
+    sql`, `,
+  )} from json_each(${JSON.stringify(encoded)}) where true`;
+};
+
 const standingColumns = Effect.fnUntraced(function* <Brand extends StoreBrand>(
   unit: WriteUnit<Brand>,
   db: StoreDb<Brand>,

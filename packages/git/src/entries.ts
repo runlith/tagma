@@ -404,9 +404,22 @@ export const ignoredAmong = Effect.fn('Git.ignoredAmong')(function* (
 export const ignoredPaths = Effect.fn('Git.ignoredPaths')(function* (
   git: Git['Service'],
   dir: string,
-  options: { readonly capture?: number } = {},
+  options: { readonly capture?: number; readonly place?: string } = {},
 ): Effect.fn.Return<readonly string[], GitUnreadable | GitRefused | GitAnswerInvalid> {
-  const listing = yield* run(git, dir, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'], options.capture);
+  const listing = yield* run(
+    git,
+    dir,
+    [
+      'ls-files',
+      '-z',
+      '--others',
+      '--ignored',
+      '--exclude-standard',
+      '--directory',
+      ...(options.place === undefined || options.place === '' ? [] : ['--', literal(options.place)]),
+    ],
+    options.capture,
+  );
   return listing.split('\0').filter((name) => name !== '');
 });
 

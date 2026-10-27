@@ -1,60 +1,18 @@
 import { afterAll, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import {
-  chmodSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Effect } from 'effect';
 import { applyLineEdits } from './lines';
-import { entryAt, fileFailure, removeEntry, replaced, type Standing } from './replace';
+import { replaced, type Standing } from './replace';
 
 const dir = mkdtempSync(join(tmpdir(), 'replace-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const standing = (text: string): Standing => ({ bytes: new TextEncoder().encode(text) });
 
 layer(BunFileSystem.layer, { excludeTestServices: true })('file replacement', (it) => {
-  it.effect('removing a selected directory never recursively removes a newly present child', () =>
-    Effect.gen(function* () {
-      const path = join(dir, 'selected-directory');
-      mkdirSync(path);
-      const selected = yield* entryAt(path);
-      if (selected === undefined) return yield* Effect.die('The directory is missing.');
-      writeFileSync(join(path, 'new-child'), 'kept');
-      const failure = yield* Effect.flip(removeEntry(path, selected));
-      expect(fileFailure(failure)).toContain('ENOTEMPTY');
-      expect(readFileSync(join(path, 'new-child'), 'utf8')).toBe('kept');
-      unlinkSync(join(path, 'new-child'));
-      expect(yield* removeEntry(path, selected)).toBe(true);
-      expect(yield* entryAt(path)).toBeUndefined();
-    }),
-  );
-
-  it.effect('a link to a directory is removed as an entry without reading or changing its target', () =>
-    Effect.gen(function* () {
-      const target = join(dir, 'entry-link-target');
-      const path = join(dir, 'entry-link');
-      mkdirSync(target);
-      writeFileSync(join(target, 'file'), 'kept');
-      symlinkSync(target, path);
-      const selected = yield* entryAt(path);
-      if (selected === undefined) return yield* Effect.die('The link is missing.');
-      expect(selected.kind).toBe('link');
-      expect(yield* removeEntry(path, selected)).toBe(true);
-      expect(readFileSync(join(target, 'file'), 'utf8')).toBe('kept');
-    }),
-  );
-
   it.effect('a line edit over a CRLF file with a BOM and no final ending keeps every untouched byte, mode included', () =>
     Effect.gen(function* () {
       const path = join(dir, 'crlf.txt');

@@ -15,6 +15,7 @@ it.effect('an edit whose oldString is gone from a file the commit steps rewrote 
     const changes = {
       land: <E, R>(_changes: readonly unknown[], write: Effect.Effect<boolean, E, R>) =>
         Effect.map(write, (written) => landedOf(written, written)),
+      landEach: () => Effect.die('this test deletes nothing'),
       rewrittenBy: (path: string, text: string) =>
         Effect.succeed(path.endsWith('alpha.ts') && text === 'const a = 1;\n' ? { commit: COMMIT } : null),
     };

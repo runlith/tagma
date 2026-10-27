@@ -160,23 +160,51 @@ export class Lives {
     };
   };
 
+  readonly instants = (
+    key: string,
+    threadId: string,
+    asked: readonly { readonly name: string; readonly after: string; readonly from: number }[],
+  ): readonly InstantMark[] => {
+    const made = asked.map(({ name, after, from }) => {
+      const mark: Instant = { threadId, after, from, to: null };
+      return { name, mark };
+    });
+    const undone = this.marks(key, (checkout) => checkout.instants, made);
+    return made.map(({ mark }, at) => ({
+      landed: () => {
+        if (mark.to === null) mark.to = this.now();
+      },
+      undo: undone[at]!,
+    }));
+  };
+
   readonly unowned = (key: string, name: string, after: string, at: number): (() => void) =>
     this.mark(key, (checkout) => checkout.unowned, name, { after, at });
 
   private mark<M>(key: string, marks: (checkout: Checkout) => Map<string, M[]>, name: string, mark: M): () => void {
+    return this.marks(key, marks, [{ name, mark }])[0]!;
+  }
+
+  private marks<M>(
+    key: string,
+    marks: (checkout: Checkout) => Map<string, M[]>,
+    made: readonly { readonly name: string; readonly mark: M }[],
+  ): readonly (() => void)[] {
     const checkout = this.checkout(key);
     const named = marks(checkout);
-    const known = named.get(name);
-    if (known === undefined) named.set(name, [mark]);
-    else known.push(mark);
+    for (const { name, mark } of made) {
+      const known = named.get(name);
+      if (known === undefined) named.set(name, [mark]);
+      else known.push(mark);
+    }
     if (checkout.holds.size === 0) this.prune(key);
-    return () => {
+    return made.map(({ name, mark }) => () => {
       const standing = named.get(name);
       if (standing === undefined) return;
       const kept = standing.filter((one) => one !== mark);
       if (kept.length === 0) named.delete(name);
       else named.set(name, kept);
-    };
+    });
   }
 
   readonly hold = (key: string, from: number): (() => void) => {

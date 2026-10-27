@@ -4,6 +4,7 @@ import { ToolAnswer, ToolFailed, toolExecute } from '@runlith/agent/tool';
 import { Effect, FileSystem, Layer, PlatformError } from 'effect';
 import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
+import { type Entries, machineEntries } from '@runlith/files/entries';
 import { createDeleteTool } from './delete';
 import type { RemovalReport } from './removal/model';
 import { unthreadedCaller } from './testing/caller';
@@ -49,7 +50,7 @@ it.live('preparing a recursive removal reads as much of the filesystem for a lar
   }),
 );
 
-it.live('a walked entry replaced while its loss is being read remains untouched even with identical bytes', () =>
+it.live('a walked entry replaced after its loss was read remains untouched even with identical bytes', () =>
   Effect.gen(function* () {
     const root = yield* host.realpath(yield* createTempDir());
     const selected = join(root, 'tree/selected.txt');
@@ -58,15 +59,20 @@ it.live('a walked entry replaced while its loss is being read remains untouched 
     yield* host.mkdir(join(root, 'tree'));
     yield* host.writeFile(selected, bytes);
     yield* host.writeFile(replacement, bytes);
+    const entries: Entries = {
+      ...machineEntries,
+      readAll: (paths, whole) =>
+        Effect.tap(machineEntries.readAll(paths, whole), () =>
+          paths.includes(selected) ? host.rename(replacement, selected) : Effect.void,
+        ),
+    };
     const recorded = recorder();
     const result = yield* answer(
       createDeleteTool(
         options({
           cwd: root,
-          changes: {
-            ...recorded.port,
-            records: (path) => (path === selected ? Effect.as(host.rename(replacement, selected), true) : Effect.succeed(true)),
-          },
+          world: { ...machineWorld, entries },
+          changes: { ...recorded.port, records: (paths) => Effect.succeed(paths.map(() => true)) },
         }),
       ),
       { args: ['-r', 'tree'], glob: false },
@@ -97,7 +103,17 @@ it.live('a directory replaced while it is being walked keeps its replacement and
       for (const name of names) yield* host.writeFile(join(root, 'tree', name), 'replacement');
     });
     const tool = createDeleteTool(
-      options({ cwd: root, changes: { ...recorder().port, records: () => Effect.as(swapped ? Effect.void : swap, true) } }),
+      options({
+        cwd: root,
+        changes: {
+          ...recorder().port,
+          records: (paths) =>
+            Effect.as(
+              swapped ? Effect.void : swap,
+              paths.map(() => true),
+            ),
+        },
+      }),
     );
     const report = (yield* answer(tool, { args: ['-r', 'tree'] })).value as RemovalReport;
     expect(report.results.map((row) => [relative(root, row.path), row.status, row.issue?.code])).toEqual([
@@ -109,6 +125,43 @@ it.live('a directory replaced while it is being walked keeps its replacement and
   }),
 );
 
+it.live('a directory replaced while its recorded entries are read keeps every replacement entry and gains no fact', () =>
+  Effect.gen(function* () {
+    const root = yield* host.realpath(yield* createTempDir());
+    const names = ['first', 'second', 'third'];
+    yield* host.mkdir(join(root, 'tree'));
+    for (const name of names) yield* host.writeFile(join(root, 'tree', name), 'selected');
+    let swapped = false;
+    const entries: Entries = {
+      ...machineEntries,
+      readAll: (paths, whole) =>
+        Effect.andThen(
+          swapped
+            ? Effect.void
+            : Effect.gen(function* () {
+                swapped = true;
+                yield* host.rename(join(root, 'tree'), join(root, 'moved'));
+                yield* host.mkdir(join(root, 'tree'));
+                for (const name of names) yield* host.writeFile(join(root, 'tree', name), 'replacement');
+              }),
+          machineEntries.readAll(paths, whole),
+        ),
+    };
+    const recorded = recorder();
+    const tool = createDeleteTool(
+      options({
+        cwd: root,
+        world: { ...machineWorld, entries },
+        changes: { ...recorded.port, records: (paths) => Effect.succeed(paths.map(() => true)) },
+      }),
+    );
+    const report = (yield* answer(tool, { args: ['-r', 'tree'] })).value as RemovalReport;
+    expect(report.counts.removed).toBe(0);
+    expect((yield* host.readdir(join(root, 'tree'))).sort()).toEqual(names);
+    expect(recorded.changes).toEqual([]);
+  }),
+);
+
 it.live('a recursive removal records entries the change record keeps and removes the rest unread', () =>
   Effect.gen(function* () {
     const root = yield* host.realpath(yield* createTempDir());
@@ -117,29 +170,24 @@ it.live('a recursive removal records entries the change record keeps and removes
     yield* host.writeFile(join(root, 'tree/checkout/kept.txt'), 'kept\n');
     yield* host.writeFile(join(root, 'tree/outside/cache.bin'), 'cache\n');
     const opened: string[] = [];
-    const files = Layer.effect(
-      FileSystem.FileSystem,
-      Effect.map(FileSystem.FileSystem, (fs) =>
-        FileSystem.FileSystem.of({
-          ...fs,
-          open: (path, options) => {
-            opened.push(path);
-            return fs.open(path, options);
-          },
-          readFile: (path) => {
-            opened.push(path);
-            return fs.readFile(path);
-          },
-        }),
-      ),
-    ).pipe(Layer.provide(machineWorld.files));
+    const entries: Entries = {
+      ...machineEntries,
+      readAll: (paths, whole) => {
+        opened.push(...paths);
+        return machineEntries.readAll(paths, whole);
+      },
+      removeAll: (removals) => {
+        opened.push(...removals.flatMap((one) => (one.kept === null ? [] : [one.path])));
+        return machineEntries.removeAll(removals);
+      },
+    };
     const recorded = recorder();
     const result = yield* answer(
       createDeleteTool(
         options({
           cwd: root,
-          world: { ...machineWorld, files },
-          changes: { ...recorded.port, records: (path) => Effect.succeed(path.includes('/checkout/')) },
+          world: { ...machineWorld, entries },
+          changes: { ...recorded.port, records: (paths) => Effect.succeed(paths.map((path) => path.includes('/checkout/'))) },
         }),
       ),
       { args: ['-r', 'tree'] },
@@ -189,7 +237,7 @@ it.live('non-verbose removal keeps a spilled outside-checkout report separate fr
         world: { ...machineWorld, environment: { ...machineWorld.environment, tmp: root } },
         changes: {
           ...recorder().port,
-          records: () => Effect.succeed(false),
+          records: (paths) => Effect.succeed(paths.map(() => false)),
           land: (_batch, write) => Effect.map(write, (written) => landedOf(written, false)),
         },
       }),
@@ -377,28 +425,22 @@ it.live('an unreadable subtree remains explicit while force still removes indepe
     const denied = join(root, 'tree/blocked');
     yield* host.mkdir(denied, { recursive: true });
     for (const name of ['tree/blocked/secret', 'tree/accessible', 'independent']) yield* host.writeFile(join(root, name), name);
-    const files = Layer.effect(
-      FileSystem.FileSystem,
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        return FileSystem.FileSystem.of({
-          ...fs,
-          readDirectory: (path) =>
-            path === denied
-              ? Effect.fail(
-                  PlatformError.systemError({
-                    _tag: 'PermissionDenied',
-                    module: 'FileSystem',
-                    method: 'readDirectory',
-                    pathOrDescriptor: path,
-                    cause: { code: 'EACCES', syscall: 'scandir', message: 'permission denied' },
-                  }),
-                )
-              : fs.readDirectory(path),
-        });
-      }),
-    ).pipe(Layer.provide(machineWorld.files));
-    const result = yield* answer(createDeleteTool(options({ cwd: root, world: { ...machineWorld, files } })), {
+    const entries: Entries = {
+      ...machineEntries,
+      list: (path) =>
+        path === denied
+          ? Effect.fail(
+              PlatformError.systemError({
+                _tag: 'PermissionDenied',
+                module: 'FileSystem',
+                method: 'readDirectory',
+                pathOrDescriptor: path,
+                cause: { code: 'EACCES', syscall: 'scandir', message: 'permission denied' },
+              }),
+            )
+          : machineEntries.list(path),
+    };
+    const result = yield* answer(createDeleteTool(options({ cwd: root, world: { ...machineWorld, entries } })), {
       args: ['-rf', '--', 'tree', 'independent'],
     });
     const report = result.value as RemovalReport;

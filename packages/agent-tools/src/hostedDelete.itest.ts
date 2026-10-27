@@ -40,8 +40,8 @@ it.effect('a hosted deletion records and returns its result after a slow writer 
         cwd: root,
         changes: {
           ...record.port,
-          land: (changes, write) =>
-            Effect.tap(record.port.land(changes, write), () =>
+          landEach: (changes, write) =>
+            Effect.tap(record.port.landEach(changes, write), () =>
               Effect.sync(() => {
                 deleted = true;
               }),

@@ -1,5 +1,6 @@
 import { unthreadedCaller } from './testing/caller';
 import type { WorkspaceChange } from '@runlith/files/change';
+import type { Entries } from '@runlith/files/entries';
 import { landedOf } from './WorkspaceChanges';
 import { afterAll, expect, test } from 'bun:test';
 import { release } from '@runlith/git/testing';
@@ -8,7 +9,7 @@ import { join } from 'node:path';
 import type { Tool } from '@runlith/agent/tool';
 import { ToolAnswer, ToolFailed, toolExecute, toolSubjects } from '@runlith/agent/tool';
 import { toolDecode } from '@runlith/agent/tool/arguments';
-import { ByteSize, Effect, FileSystem, Layer, Option } from 'effect';
+import { ByteSize, Effect, FileSystem, Layer, Option, Result } from 'effect';
 import { PlatformError, SystemError } from 'effect/PlatformError';
 import { createTools } from './index';
 import { entryKey } from './workspace/runtime';
@@ -112,6 +113,64 @@ function fileEntry(size: number): FileSystem.File.Info {
 
 function dirEntry(): FileSystem.File.Info {
   return { ...fileEntry(0), type: 'Directory' };
+}
+
+function treeEntries(tree: Map<string, string>, denied: ReadonlySet<string>): Entries {
+  const holds = (path: string) => [...tree.keys()].some((name) => name.startsWith(`${path}/`));
+  const entryOf = (path: string) =>
+    tree.has(path)
+      ? { kind: 'file' as const, info: fileEntry(tree.get(path)?.length ?? 0) }
+      : holds(path)
+        ? { kind: 'directory' as const, info: dirEntry() }
+        : undefined;
+  const refused = (path: string) =>
+    Result.fail(
+      new PlatformError(
+        new SystemError({
+          _tag: 'PermissionDenied',
+          module: 'FileSystem',
+          method: 'readFile',
+          pathOrDescriptor: path,
+          cause: { code: 'EACCES' },
+        }),
+      ),
+    );
+  return {
+    list: (path) =>
+      Effect.succeed(
+        [...tree.keys()]
+          .filter((name) => name.startsWith(`${path}/`))
+          .map((name) => ({ name: name.slice(path.length + 1), kind: 'file' as const })),
+      ),
+    at: (path) => Effect.succeed(entryOf(path)),
+    unlink: (path) =>
+      Effect.sync(() => {
+        tree.delete(path);
+      }),
+    rmdir: () => Effect.void,
+    readAll: (paths) =>
+      Effect.succeed(
+        paths.map((path) =>
+          denied.has(path)
+            ? refused(path)
+            : Result.succeed({ entry: entryOf(path), bytes: tree.has(path) ? new TextEncoder().encode(tree.get(path)) : null }),
+        ),
+      ),
+    removeAll: (removals) =>
+      Effect.succeed(
+        removals.map(({ path }) => {
+          tree.delete(path);
+          return Result.succeed('removed' as const);
+        }),
+      ),
+    unlinkAll: (paths) =>
+      Effect.succeed(
+        paths.map((path) => {
+          tree.delete(path);
+          return Result.succeed(undefined);
+        }),
+      ),
+  };
 }
 
 function unreadableFiles(tree: Map<string, string>, denied: ReadonlySet<string>): Layer.Layer<FileSystem.FileSystem> {
@@ -553,7 +612,7 @@ it.effect('delete removes a 24 GiB scratch file without reading its contents', (
     yield* host.writeFile(path, 'A'.repeat(8000));
     yield* host.truncate(path, 24 * 1024 ** 3);
     const sink = recorder();
-    const tools = createTools(options({ cwd: dir, changes: { ...sink.port, records: () => Effect.succeed(false) } }));
+    const tools = createTools(options({ cwd: dir, changes: { ...sink.port, records: (paths) => Effect.succeed(paths.map(() => false)) } }));
     const removed = yield* answer(tools.delete, { args: [path], glob: false });
     expect(removed.shown).toEqual([{ path: join(yield* host.realpath(dir), 'large.txt'), entry: true, as: 'wrote' }]);
     expect(yield* exists(path)).toBe(false);
@@ -623,10 +682,10 @@ it.effect('delete refuses a binary replaced by text or a symlink after its loss 
           cwd: dir,
           changes: {
             ...sink.port,
-            land: (changes, write) =>
+            landEach: (changes, write) =>
               Effect.andThen(
                 replacement === 'text' ? host.writeFile(path, 'NEW') : Effect.andThen(host.rm(path), host.symlink(target, path)),
-                sink.port.land(changes, write),
+                sink.port.landEach(changes, write),
               ),
           },
         }),
@@ -656,7 +715,8 @@ it.effect('delete keeps the text deletion fact and refuses text changed before C
         cwd: dir,
         changes: {
           ...sink.port,
-          land: (changes, write) => Effect.andThen(host.writeFile(path, 'const foreign = false;\n'), sink.port.land(changes, write)),
+          landEach: (changes, write) =>
+            Effect.andThen(host.writeFile(path, 'const foreign = false;\n'), sink.port.landEach(changes, write)),
         },
       }),
     );
@@ -818,6 +878,7 @@ it.effect('a record that refuses before the write leaves the file as it stood, a
         cwd: dir,
         changes: {
           land: () => Effect.fail(new IntakeRefused({ path: join(dir, 'alpha.ts'), reason: 'the store is down' })),
+          landEach: () => Effect.die('this test deletes nothing'),
         },
       }),
     );
@@ -860,6 +921,7 @@ it.effect('a file another writer created after the read is never overwritten by 
               host.writeFile(join(dir, 'fresh.ts'), theirs),
               Effect.map(write, (written) => landedOf(written, written)),
             ),
+          landEach: () => Effect.die('this test deletes nothing'),
         },
       }),
     );
@@ -879,6 +941,7 @@ it.effect('a write whose record waits for confirmation says the file is written'
         changes: {
           land: <E, R>(_batch: readonly WorkspaceChange[], write: Effect.Effect<boolean, E, R>) =>
             Effect.map(write, (): Landed => ({ _tag: 'unconfirmed', reason: 'the store is busy' })),
+          landEach: () => Effect.die('this test deletes nothing'),
         },
       }),
     );
@@ -1186,6 +1249,7 @@ it.effect('a move hands its two rows to a binding that can write them as one act
         changes: {
           land: <E, R>(changes: readonly WorkspaceChange[], write: Effect.Effect<boolean, E, R>) =>
             Effect.map(write, (written) => (batches.push(changes), landedOf(written, written))),
+          landEach: () => Effect.die('this test deletes nothing'),
         },
       }),
     );
@@ -1207,7 +1271,10 @@ it.effect('a move the record refuses moves nothing', () =>
     const failing = createTools(
       options({
         cwd: dir,
-        changes: { land: () => Effect.fail(new IntakeRefused({ path: join(dir, 'a.ts'), reason: 'the store is down' })) },
+        changes: {
+          land: () => Effect.fail(new IntakeRefused({ path: join(dir, 'a.ts'), reason: 'the store is down' })),
+          landEach: () => Effect.die('this test deletes nothing'),
+        },
       }),
     );
 
@@ -1432,7 +1499,11 @@ it.effect('delete leaves a recorded file it cannot read and preserves its failur
     const kept = join(dir, 'kept.ts');
     const tree = new Map([[kept, 'KEPT\n']]);
     const tools = createTools(
-      options({ cwd: dir, changes: recorder().port, world: { ...machineWorld, files: unreadableFiles(tree, new Set([kept])) } }),
+      options({
+        cwd: dir,
+        changes: recorder().port,
+        world: { ...machineWorld, files: unreadableFiles(tree, new Set([kept])), entries: treeEntries(tree, new Set([kept])) },
+      }),
     );
 
     const refused = yield* answer(tools.delete, { args: ['kept.ts'], glob: false });
@@ -1466,9 +1537,10 @@ it.live('a CRLF write outside Git lands when the record excludes its path, and s
       options({
         cwd: dir,
         changes: {
-          records: () => Effect.succeed(false),
+          records: (paths: readonly string[]) => Effect.succeed(paths.map(() => false)),
           land: <E, R>(_changes: readonly WorkspaceChange[], write: Effect.Effect<boolean, E, R>) =>
             Effect.map(write, (written) => landedOf(written, false)),
+          landEach: () => Effect.die('this test deletes nothing'),
         },
       }),
     );
