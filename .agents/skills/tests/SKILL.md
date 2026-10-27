@@ -35,7 +35,7 @@ The suffix is the kind; testbed (`packages/testbed`) enforces it at the call sit
 
 ## Where the CPU goes
 
-Apple M2 Max, 2026-10-24, one sample each; "loaded" means other agents' tests ran beside it. Baseline: 5220 s CPU over 2177 files — test bodies 60%, world builds 27%, module load 8%; git children 18% (70 953 processes), SQLite children 9%.
+Apple M2 Max, one sample each; "loaded" means other agents' tests ran beside it. 2026-10-24 baseline: 5220 s CPU over 2177 files — test bodies 60%, world builds 27%, module load 8%; git children 18% (70 953 processes), SQLite children 9%. 2026-10-27, loaded (load 5–26), every suite through `test:all`: 676 s wall, 2591 s CPU — unit 320 s, integration 2271 s, of it server integration 2057 s (754 files). Server integration by item: bodies 72%, worlds 18%, load 6%, tenant 4%; git 50 884 processes, 501 s; landing and enforcement files carry a third of its CPU and git. App unit costs 87 ms CPU per test, server unit ~10 ms.
 - **Project birth** (`stealthProject`: `git init` plus the product's `add_project`): ~1 s CPU of the test process and ~29 git, loaded; 143 calls in 109 files. Birth once per file or scenario; only a test whose subject is the birth pays it per test.
 - **Product git per act**: a native `submit_work` spawns ~80 git (Holdings judges 24, prepared build 11, commit steps and trees 13, landing 10, graph freshness 10, retirement 6); a graph pool open ~13. Count a scenario's acts: each landing, open and birth costs tens of processes.
 - **One git process**: 22.5 ms CPU through the macOS `/usr/bin/git` xcrun shim, 10 ms direct. testbed puts the developer directory first in PATH ([[5294065f]]); a test that rebuilds PATH or calls `/usr/bin/git` by path pays the shim again.
