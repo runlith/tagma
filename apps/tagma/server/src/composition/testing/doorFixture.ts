@@ -40,6 +40,7 @@ import { Settings } from '../../settings/contract/service/values.js';
 import { keepAwake } from '../../power/keys.js';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { Exposure } from '../../remote/contract/service/exposure.js';
+import { tenant } from './tenant.js';
 
 type CallOptions = {
   readonly method?: string;
@@ -273,6 +274,15 @@ const built = Effect.fnUntraced(
       if (created.status !== 200) return yield* Effect.die(new Error(`add_project refused: ${JSON.stringify(created.body)}`));
       return (created.body as { project: { id: number } }).project.id;
     });
+    const stealth = Effect.fnUntraced(function* (rootPath?: string) {
+      const root = rootPath ?? (yield* directory('project'));
+      yield* spawnedEffect(['git', 'init', '-q', '-b', 'main'], { cwd: root });
+      const created = yield* call('/api/op/add_project', {
+        method: 'POST',
+        body: { name: uniqueName(), rootPath: root, storage: 'stealth' },
+      });
+      return (created.body as { project: { id: number } }).project.id;
+    });
 
     return {
       runtime,
@@ -283,17 +293,9 @@ const built = Effect.fnUntraced(
         call(`/api/op/${id}${query === '' ? '' : `?${query}`}`, { method: 'POST', body: input, headers }),
       uniqueName,
       directory,
-      stealthProject: Effect.fnUntraced(function* (rootPath?: string) {
-        const root = rootPath ?? (yield* directory('project'));
-        yield* spawnedEffect(['git', 'init', '-q', '-b', 'main'], { cwd: root });
-        const created = yield* call('/api/op/add_project', {
-          method: 'POST',
-          body: { name: uniqueName(), rootPath: root, storage: 'stealth' },
-        });
-        return (created.body as { project: { id: number } }).project.id;
-      }),
-      plainProject: () => unversioned(undefined),
-      knowledgeProject: (catalogs: readonly string[] = ['knowledge']) => unversioned(catalogs),
+      stealthProject: (rootPath?: string) => tenant(stealth(rootPath)),
+      plainProject: () => tenant(unversioned(undefined)),
+      knowledgeProject: (catalogs: readonly string[] = ['knowledge']) => tenant(unversioned(catalogs)),
       sourceCheckout,
       root: fixture.root,
       dataHome: storageHomes(join(data, 'tagma.sqlite')).appHome,
@@ -339,18 +341,20 @@ export const doorFixture = (options: WorldOptions = {}) => {
 
 export const projectLeaving = (world: DoorFixture['Service'], ...projectIds: readonly number[]) =>
   Effect.addFinalizer(() =>
-    Effect.gen(function* () {
-      const db = Context.get(world.runtime.graph, MachineStore).db;
-      const rows = yield* db.select({ id: threadRecord().id }).from(threadRecord()).where(inArray(threadRecord().projectId, projectIds));
-      const records = Context.get(world.runtime.owners, ThreadRecords);
-      for (const row of rows) {
-        const projectId = yield* records.projectOf(row.id);
-        if (projectId !== undefined) yield* Effect.provide(turnsOf(world.runtime.owners).delete(row.id, projectId), world.runtime.owners);
-      }
-      for (const projectId of projectIds) {
-        const removed = yield* world.op('remove_project', { ref: String(projectId) });
-        if (removed.status !== 200)
-          return yield* Effect.die(new Error(`project ${projectId} was not removed: ${JSON.stringify(removed.body)}`));
-      }
-    }).pipe(Effect.orDie),
+    tenant(
+      Effect.gen(function* () {
+        const db = Context.get(world.runtime.graph, MachineStore).db;
+        const rows = yield* db.select({ id: threadRecord().id }).from(threadRecord()).where(inArray(threadRecord().projectId, projectIds));
+        const records = Context.get(world.runtime.owners, ThreadRecords);
+        for (const row of rows) {
+          const projectId = yield* records.projectOf(row.id);
+          if (projectId !== undefined) yield* Effect.provide(turnsOf(world.runtime.owners).delete(row.id, projectId), world.runtime.owners);
+        }
+        for (const projectId of projectIds) {
+          const removed = yield* world.op('remove_project', { ref: String(projectId) });
+          if (removed.status !== 200)
+            return yield* Effect.die(new Error(`project ${projectId} was not removed: ${JSON.stringify(removed.body)}`));
+        }
+      }).pipe(Effect.orDie),
+    ),
   );

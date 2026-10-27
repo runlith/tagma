@@ -1,5 +1,5 @@
 import { sessionIdentityLayer } from '../../external-harnesses/sessionPrefix.js';
-import { span } from '@runlith/testbed/fixture';
+import { tenant } from './tenant.js';
 import { kind, shared } from '@runlith/testbed/worlds';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -302,12 +302,6 @@ export class DemoGraphs extends Context.Service<
     ): Effect.Effect<A, E | DemoGraphUnbuilt | DemoGraphStillHeld, Exclude<R, DemoServices>>;
   }
 >()('testing/DemoGraphs') {}
-
-const tenant = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.suspend(() => {
-    const stop = span('tenant');
-    return Effect.ensuring(effect, Effect.sync(stop));
-  });
 
 export const demoGraphLayer = (settings: GraphFixtureOptions = {}) =>
   Layer.effect(
