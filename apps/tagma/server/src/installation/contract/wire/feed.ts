@@ -66,3 +66,6 @@ export type FeedRelease = typeof feedReleaseSchema.Type;
 
 export const feedSchema = Schema.Struct({ releases: Schema.NonEmptyArray(feedReleaseSchema) });
 export type Feed = typeof feedSchema.Type;
+
+export const newestOf = (feed: Feed): FeedRelease =>
+  feed.releases.reduce((newest, one) => (compareReleases(one.release, newest.release) > 0 ? one : newest));

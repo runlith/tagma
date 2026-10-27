@@ -98,6 +98,7 @@ type Held = {
 
 const github = () => {
   const releases = new Map<string, Held>();
+  const tags = new Map<string, string>();
   const pushed = new Set<string>();
   const failing = { upload: false };
   const access = { push: true };
@@ -120,6 +121,10 @@ const github = () => {
     if (path.startsWith(`repos/${REPO}/commits/`)) {
       const commit = path.slice(`repos/${REPO}/commits/`.length);
       return pushed.has(commit) ? answer(`${commit}\n`) : failed(`gh: No commit found for SHA: ${commit} (HTTP 422)`);
+    }
+    if (path.startsWith(`repos/${REPO}/git/ref/tags/`)) {
+      const commit = tags.get(path.slice(`repos/${REPO}/git/ref/tags/`.length));
+      return commit === undefined ? failed('gh: Not Found (HTTP 404)') : answer(`commit ${commit}\n`);
     }
     if (path.startsWith(`repos/${REPO}/releases`)) {
       return answer([...releases.entries()].flatMap(([tag, one]) => (one.draft ? [] : [`${tag}\n`])).join(''));
@@ -182,8 +187,12 @@ const github = () => {
         }
         if (verb === 'edit') {
           if (args.includes('--target')) held.target = args[args.indexOf('--target') + 1]!;
-          if (args.includes('--draft=false')) held.draft = false;
-          if (args.includes('--latest')) latest = tag;
+          if (args.includes('--prerelease=false')) held.prerelease = false;
+          if (args.includes('--draft=false')) {
+            held.draft = false;
+            if (!tags.has(tag)) tags.set(tag, held.target);
+          }
+          if (args.includes('--latest') && !held.prerelease) latest = tag;
           return answer('');
         }
         return failed(`gh release ${verb} is not faked`);
@@ -193,7 +202,7 @@ const github = () => {
     const bytes = releases.get(tag)?.assets.find((one) => one.name === 'feed.json')?.bytes;
     return JSON.parse(new TextDecoder().decode(bytes));
   };
-  return { cli, releases, pushed, failing, access, latestTag, feedOf };
+  return { cli, releases, tags, pushed, failing, access, latestTag, feedOf };
 };
 
 const placeOf = (name: string) => {
@@ -215,6 +224,7 @@ it.live(
       gh.failing.upload = true;
       const broken = yield* run(publishRelease(gh.cli, notarizing, place));
       const draft = structuredClone(gh.releases.get('v0.2.0'));
+      gh.releases.get('v0.2.0')!.prerelease = true;
       gh.failing.upload = false;
       const one = yield* run(publishRelease(gh.cli, notarizing, place));
 
@@ -232,7 +242,7 @@ it.live(
         ['0.2.0', { ...first.platforms['darwin-x64']!, archive: releaseFile(REPO, '0.2.0', first.platforms['darwin-x64']!.archive) }],
       ]);
       expect(one._tag === 'Success' && one.success.feed).toBe(releaseFile(REPO, '0.2.0', 'feed.json'));
-      expect(said(['-C', place.checkout, 'rev-parse', 'v0.2.0^{commit}'])).toBe(firstCommit);
+      expect([gh.tags.get('v0.2.0'), said(['-C', place.checkout, 'rev-parse', 'v0.2.0^{commit}'])]).toEqual([firstCommit, firstCommit]);
       expect(readFileSync(join(place.kept, '0.2.0', 'http.js.map'), 'utf8')).toBe('{"release":"0.2.0"}');
 
       const secondCommit = committed(place.checkout);
@@ -289,7 +299,7 @@ it.live(
 );
 
 it.live(
-  'a cut Apple refuses, one whose commit is not on GitHub, one the account cannot push, one without its DMG and one not newer than what is published leave GitHub as it was',
+  'a cut Apple refuses, one whose commit is not on GitHub, one the account cannot push, one whose tag GitHub holds on another commit, one without its DMG and one not newer than what is published leave GitHub as it was',
   () =>
     Effect.gen(function* () {
       const gh = github();
@@ -303,6 +313,9 @@ it.live(
       gh.access.push = false;
       const unwritable = yield* run(publishRelease(gh.cli, notarized.notary, place));
       gh.access.push = true;
+      gh.tags.set('v0.2.0', 'f'.repeat(40));
+      const foreignTag = yield* run(publishRelease(gh.cli, notarized.notary, place));
+      gh.tags.delete('v0.2.0');
       notarized.failing.refuse = true;
       const refused = yield* run(publishRelease(gh.cli, notarized.notary, place));
       notarized.failing.refuse = false;
@@ -315,10 +328,10 @@ it.live(
       const older = yield* run(publishRelease(gh.cli, notarized.notary, place));
 
       expect(
-        [unpushed, unwritable, refused, imageless, older].map((outcome) =>
+        [unpushed, unwritable, foreignTag, refused, imageless, older].map((outcome) =>
           outcome._tag === 'Failure' ? outcome.failure.step : 'published',
         ),
-      ).toEqual(['commit', 'access', 'notarization', 'release', 'version']);
+      ).toEqual(['commit', 'access', 'tag', 'notarization', 'release', 'version']);
       expect(notarized.sealed).toEqual(['0.2.0', '0.2.0']);
       expect(untouched).toBe(0);
       expect([...gh.releases.keys()]).toEqual(['v0.2.0']);

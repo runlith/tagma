@@ -21,7 +21,7 @@ import { dataDirectory } from '../contract/wire/layout.js';
 import { developerTeam, releaseIdentity } from '../setup/signing.js';
 import { appleNotary, type Notary } from './notarize.js';
 import { checkoutOf, desktopAssets, flagsOf, KEPT_MAPS, RELEASE_DIRECTORY } from './pipeline.js';
-import { checkoutTags, ghTrouble, highestOf, issuedReleases, type PublishedTrouble, releaseFeed } from './published.js';
+import { checkoutTags, ghTrouble, highestOf, issuedReleases, type PublishedTrouble, releaseFeed, remoteTag } from './published.js';
 import {
   decodeRecord,
   digestOf,
@@ -101,7 +101,7 @@ const ghFailed = (step: string, repo: string) => (failure: ProgramFailure) => {
 const troubled = (step: string) => (trouble: PublishedTrouble) =>
   refused(step, trouble.detail, trouble.unblock.length > 0 ? trouble.unblock : [AGAIN]);
 
-const writable = Effect.fnUntraced(function* (gh: GitHubCli, repo: string, cwd: string) {
+const writable = Effect.fn('installation.publishAccess')(function* (gh: GitHubCli, repo: string, cwd: string) {
   const answered = yield* gh.run(['api', `repos/${repo}`], cwd).pipe(Effect.mapError(ghFailed('access', repo)));
   const read = decodeRepository(answered.stdout);
   if (read._tag === 'Failure') return yield* refused('access', `gh api repos/${repo} answered what does not read: ${read.failure.message}`);
@@ -122,6 +122,7 @@ const committed = (gh: GitHubCli, repo: string, commit: string, release: string,
           ])
         : ghFailed('commit', repo)(failure),
     ),
+    Effect.withSpan('installation.publishCommit'),
   );
 
 const offersAsCut = (offered: PlatformArchives, record: ReleaseRecord, repo: string): boolean =>
@@ -251,6 +252,14 @@ export const publishRelease = (
           `git tag -d ${tag}, if it names nothing published`,
         ]);
       }
+      const remote = yield* remoteTag(gh, repo, tag, cut).pipe(Effect.mapError(troubled('tag')));
+      if (remote !== null && remote !== commit) {
+        return yield* refused(
+          'tag',
+          `${tag} in ${repo} names ${remote}, and ${release} was cut from ${commit}; GitHub publishes a release on the tag that stands`,
+          [`git push origin :refs/tags/${tag} — if ${tag} names nothing published`, RECUT],
+        );
+      }
       const found = yield* viewed(gh, repo, tag, cut);
       if (found?.isDraft === false && found.isPrerelease) {
         return yield* refused(
@@ -347,7 +356,7 @@ export const publishRelease = (
             .pipe(Effect.mapError(ghFailed('upload', repo)));
         }
         yield* gh
-          .run(['release', 'edit', tag, '--repo', repo, '--draft=false', '--latest'], cut)
+          .run(['release', 'edit', tag, '--repo', repo, '--draft=false', '--prerelease=false', '--latest'], cut)
           .pipe(Effect.mapError(ghFailed('release', repo)));
         const published = yield* viewed(gh, repo, tag, cut);
         if (published === null || published.isDraft || published.isPrerelease || fits(published.assets, feed) === undefined) {

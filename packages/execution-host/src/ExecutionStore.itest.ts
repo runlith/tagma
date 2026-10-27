@@ -601,6 +601,44 @@ describe('generations', () => {
 });
 
 describe('installed metadata', () => {
+  it.live('a store at the ledger Tagma 0.1.0 shipped opens at the head of the chain and keeps its executions', () =>
+    Effect.gen(function* () {
+      const directory = yield* temporary;
+      const path = `${directory}/executions.sqlite`;
+      const at = yield* Clock.currentTimeMillis;
+      const next = chain[chain.findIndex((migration) => migration.name === '20261024112808_pace_lowered') + 1]?.name;
+      if (next == null) return yield* Effect.die(new Error('no migration follows the ledger 0.1.0 shipped'));
+      yield* installed({
+        path,
+        suffix: next,
+        at,
+        use: (db) => {
+          db.run(
+            'INSERT INTO incarnation (incarnation, installation, registration, phase, current, entered_at) VALUES (0, ?, ?, ?, 1, ?)',
+            [INSTALLATION, JSON.stringify(registrationOf(directory)), 'open', at],
+          );
+          db.run(
+            `INSERT INTO execution (execution_id, installation, incarnation, transport, lifetime, purpose, phase, native_exit, stdout, stderr, pty, cleanup, record_availability, target_environment, target_namespace, target_cwd, pid, terminal, created_at, updated_at) VALUES ('exec-issued', ?, 0, 'pty', 'held', 'command', 'ended', ?, 'eof', 'eof', 'eof', 'complete', 'available', 'local', 'default', '/tmp', 4242, '/dev/ttys004', ?, ?)`,
+            [INSTALLATION, JSON.stringify({ _tag: 'Code', code: 0 }), at, at],
+          );
+        },
+      });
+      const saved = yield* withStore({
+        directory,
+        work: Effect.flatMap(ExecutionStore, (store) => store.evidenceOf(ref('exec-issued'))),
+      });
+      const ledger = yield* withDatabase({
+        path,
+        use: (db) => db.query<{ n: number }, []>('SELECT count(*) AS n FROM __drizzle_migrations').get()?.n,
+      });
+      expect([saved.record.state.phase, saved.record.native, ledger]).toEqual([
+        'ended',
+        { pid: 4242, terminal: '/dev/ttys004' },
+        chain.length,
+      ]);
+    }).pipe(Effect.provide(BunServices.layer)),
+  );
+
   it.live('upgrades action words without rewriting exit signals, native identities or diagnostic text', () =>
     Effect.gen(function* () {
       const directory = yield* temporary;

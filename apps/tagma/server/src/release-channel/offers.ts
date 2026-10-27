@@ -10,8 +10,8 @@ import type {
   Said,
 } from '../installation/contract/wire/next.js';
 import type { IrreversibleChange } from '../installation/contract/wire/manifest.js';
-import { compareReleases, type Feed, type FeedRelease, isRelease } from '../installation/contract/wire/feed.js';
-import { crossesNoWayBack, newerThan, newestOf, type ReleaseChoice } from './feed.js';
+import { compareReleases, type Feed, type FeedRelease, isRelease, newestOf } from '../installation/contract/wire/feed.js';
+import { crossesNoWayBack, newerThan, type ReleaseChoice } from './feed.js';
 
 export const BACK = 'back';
 export const RELEASE_TITLE = 'Release';

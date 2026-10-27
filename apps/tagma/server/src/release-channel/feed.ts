@@ -7,6 +7,7 @@ import {
   type FeedRelease,
   feedSchema,
   isRelease,
+  newestOf,
   type ReleaseArchive,
 } from '../installation/contract/wire/feed.js';
 import type { InstallationPlatform } from '../installation/contract/wire/manifest.js';
@@ -17,9 +18,6 @@ export const newerThan = (feed: Feed, running: string): readonly FeedRelease[] =
   feed.releases
     .filter((one) => !isRelease(running) || compareReleases(one.release, running) > 0)
     .toSorted((a, b) => compareReleases(b.release, a.release));
-
-export const newestOf = (feed: Feed): FeedRelease =>
-  feed.releases.reduce((newest, one) => (compareReleases(one.release, newest.release) > 0 ? one : newest));
 
 export type ReleaseChoice = { readonly release: ReleaseArchive | null; readonly issue: NextIssue | null };
 

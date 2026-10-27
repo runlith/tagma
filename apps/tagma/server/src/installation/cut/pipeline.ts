@@ -14,7 +14,7 @@ import { developerLabels } from '@runlith/tagma/adapter/host-modules';
 import { gitCut, gitTree } from '../../platform/git/readings.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import { EXECUTIONS_RUNTIME } from '../contract/wire/archive.js';
-import { compareReleases, FEED_REPOSITORY, isRelease, releaseAfter, type StoreMarks } from '../contract/wire/feed.js';
+import { compareReleases, FEED_REPOSITORY, isRelease, newestOf, releaseAfter, type StoreMarks } from '../contract/wire/feed.js';
 import type { Channel } from '../contract/wire/channel.js';
 import { dataDirectory, hostBundle, RELEASE_INSIDE } from '../contract/wire/layout.js';
 import { diskImage } from './dmg.js';
@@ -22,7 +22,7 @@ import { DESKTOP, IRREVERSIBLE_STORES, type IrreversibleChange, MIGRATIONS } fro
 import { releaseIdentity } from '../setup/signing.js';
 import { output } from './command.js';
 import { archiveTrouble, developerInputs, type Label, sourceComments } from './proof.js';
-import { checkoutTags, highestOf, issuedReleases, newestIn } from './published.js';
+import { checkoutTags, highestOf, issuedReleases } from './published.js';
 import { type Composition, INPUT_RECORDS, RELEASE_LOG, ReleaseRefused, releaseStaged } from './release.js';
 import { releaseRuntime } from './runtime.js';
 import { type Built, type BuiltPlatform, INPUTS, MAPS, type Released, stagedCut, type Stages, type Trying } from './stage.js';
@@ -64,7 +64,7 @@ export const irreversibleOf = (release: string, stores: StoreMarks, previous: Pr
         })),
       ];
 
-export const droppedOf = (stores: StoreMarks, carried: StoreMarks): readonly string[] =>
+const droppedOf = (stores: StoreMarks, carried: StoreMarks): readonly string[] =>
   IRREVERSIBLE_STORES.flatMap((store) => carried[store].filter((name) => !stores[store].includes(name)).map((name) => `${store} ${name}`));
 
 type Machine = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Git;
@@ -157,7 +157,7 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
   );
   const tags = yield* checkoutTags(checkout).pipe(Effect.mapError((trouble) => refusal('tree', trouble.detail)));
   const highest = highestOf(issued, tags);
-  const newest = issued.latest === null ? null : newestIn(issued.latest);
+  const newest = issued.latest === null ? null : newestOf(issued.latest);
   if (asked !== null && highest !== null && compareReleases(asked, highest) <= 0) {
     return yield* refuse('version', `${highest} is published, and each version is newer than every one before it`, [
       `bun run tagma:release --version <a version after ${highest}>`,
@@ -165,14 +165,6 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
     ]);
   }
   const release = asked ?? releaseAfter(highest);
-
-  const runtimes = yield* Effect.forEach(TARGETS, (target) =>
-    releaseRuntime(checkout, Bun.version, target, cache.runtimes).pipe(
-      Effect.map((runtime) => ({ target, runtime })),
-      Effect.mapError((trouble) => refusal('runtime', trouble.detail, trouble.unblock)),
-    ),
-  );
-  const signer = yield* releaseIdentity.pipe(Effect.mapError((failure) => refusal('signing', failure.detail, failure.unblock)));
 
   const stores = yield* storesOf(sourcePath, steps);
   const dropped = newest === null ? [] : droppedOf(stores, newest.stores);
@@ -184,6 +176,14 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
     );
   }
   const irreversible = irreversibleOf(release, stores, newest === null ? null : { stores: newest.stores, changes: newest.changes });
+
+  const runtimes = yield* Effect.forEach(TARGETS, (target) =>
+    releaseRuntime(checkout, Bun.version, target, cache.runtimes).pipe(
+      Effect.map((runtime) => ({ target, runtime })),
+      Effect.mapError((trouble) => refusal('runtime', trouble.detail, trouble.unblock)),
+    ),
+  );
+  const signer = yield* releaseIdentity.pipe(Effect.mapError((failure) => refusal('signing', failure.detail, failure.unblock)));
 
   const manifests = [
     ...(yield* files.readDirectory(join(checkout, 'packages')).pipe(Effect.mapError(unreadable(join(checkout, 'packages'))))).map((name) =>

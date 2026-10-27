@@ -5,6 +5,7 @@ import type { GitHubCli, ProgramFailure } from '@runlith/github/GitHubCli';
 import { compareReleases, type Feed, FEED_FILE, feedSchema, releaseOfTag } from '../contract/wire/feed.js';
 
 const NOT_FOUND = /release not found/u;
+const ABSENT_REF = /\(HTTP 404\)/u;
 
 export type PublishedTrouble = { readonly detail: string; readonly unblock: readonly string[] };
 
@@ -17,10 +18,10 @@ export const ghTrouble =
       ? { detail: `gh: ${failure.detail}`, unblock: ['install the GitHub CLI (https://cli.github.com), then gh auth login'] }
       : { detail: `gh: ${failure.detail}`, unblock: [`gh auth status — gh signs in to github.com and reaches ${repo}`] };
 
-const absentAsNull = <A>(effect: Effect.Effect<A, ProgramFailure>): Effect.Effect<A | null, ProgramFailure> =>
+const absentAs = <A>(absent: RegExp, effect: Effect.Effect<A, ProgramFailure>): Effect.Effect<A | null, ProgramFailure> =>
   effect.pipe(
     Effect.catchTag('ProgramFailed', (failure) =>
-      failure.phase === 'exit' && NOT_FOUND.test(failure.stderr ?? '') ? Effect.succeed(null) : Effect.fail(failure),
+      failure.phase === 'exit' && absent.test(failure.stderr ?? '') ? Effect.succeed(null) : Effect.fail(failure),
     ),
   );
 
@@ -28,7 +29,7 @@ const Latest = Schema.Struct({ tagName: Schema.String, assets: Schema.Array(Sche
 const decodeLatest = Schema.decodeUnknownResult(Schema.fromJsonString(Latest));
 const decodeFeed = Schema.decodeUnknownResult(Schema.fromJsonString(feedSchema));
 
-export const releaseFeed = Effect.fnUntraced(function* (
+export const releaseFeed = Effect.fn('installation.releaseFeed')(function* (
   gh: GitHubCli,
   repo: string,
   tag: string,
@@ -55,12 +56,12 @@ export const releaseFeed = Effect.fnUntraced(function* (
   return decoded.success;
 });
 
-export const latestFeed = Effect.fnUntraced(function* (
+export const latestFeed = Effect.fn('installation.latestFeed')(function* (
   gh: GitHubCli,
   repo: string,
   cwd: string,
 ): Effect.fn.Return<Feed | null, PublishedTrouble, FileSystem.FileSystem | Scope.Scope> {
-  const viewed = yield* absentAsNull(gh.run(['release', 'view', '--repo', repo, '--json', 'tagName,assets'], cwd)).pipe(
+  const viewed = yield* absentAs(NOT_FOUND, gh.run(['release', 'view', '--repo', repo, '--json', 'tagName,assets'], cwd)).pipe(
     Effect.mapError(ghTrouble(repo)),
   );
   if (viewed === null) return null;
@@ -87,6 +88,7 @@ export const publishedNumbers = (gh: GitHubCli, repo: string, cwd: string): Effe
         .map((line) => releaseOfTag(line.trim()))
         .filter((release) => release !== null),
     ),
+    Effect.withSpan('installation.publishedNumbers'),
   );
 
 export const issuedReleases = Effect.fnUntraced(function* (gh: GitHubCli, repo: string, cwd: string) {
@@ -94,7 +96,26 @@ export const issuedReleases = Effect.fnUntraced(function* (gh: GitHubCli, repo: 
   return { latest, numbers } satisfies Issued;
 });
 
-export const checkoutTags = Effect.fnUntraced(function* (checkout: string): Effect.fn.Return<readonly string[], PublishedTrouble, Git> {
+export const remoteTag = Effect.fn('installation.remoteTag')(function* (
+  gh: GitHubCli,
+  repo: string,
+  tag: string,
+  cwd: string,
+): Effect.fn.Return<string | null, PublishedTrouble> {
+  const named = yield* absentAs(
+    ABSENT_REF,
+    gh.run(['api', `repos/${repo}/git/ref/tags/${tag}`, '--jq', '.object.type + " " + .object.sha'], cwd),
+  ).pipe(Effect.mapError(ghTrouble(repo)));
+  if (named === null) return null;
+  const [kind, sha = ''] = named.stdout.trim().split(' ');
+  if (kind !== 'tag') return sha;
+  const peeled = yield* gh.run(['api', `repos/${repo}/git/tags/${sha}`, '--jq', '.object.sha'], cwd).pipe(Effect.mapError(ghTrouble(repo)));
+  return peeled.stdout.trim();
+});
+
+export const checkoutTags = Effect.fn('installation.checkoutTags')(function* (
+  checkout: string,
+): Effect.fn.Return<readonly string[], PublishedTrouble, Git> {
   const git = yield* Git;
   const answer = yield* git
     .run(['tag', '--list', 'v*'], { cwd: checkout })
@@ -113,5 +134,3 @@ export const highestOf = (issued: Issued, tags: readonly string[]): string | nul
     (highest, one) => (highest === null || compareReleases(one, highest) > 0 ? one : highest),
     null,
   );
-
-export const newestIn = (feed: Feed) => feed.releases.toSorted((a, b) => compareReleases(b.release, a.release))[0]!;
