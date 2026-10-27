@@ -124,7 +124,7 @@ it.live('slow response consumers bound buffering and then receive every byte', (
       reuse(socket, request);
     };
     let written = 0;
-    const { port } = yield* listen((request, response) => {
+    const { server, port } = yield* listen((request, response) => {
       if (request.url === '/warm') {
         response.end('warm');
         return;
@@ -142,6 +142,7 @@ it.live('slow response consumers bound buffering and then receive every byte', (
       };
       write();
     });
+    server.keepAliveTimeout = 0;
     const bytes = yield* Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
       const warm = yield* client.get(`http://127.0.0.1:${port}/warm`);
