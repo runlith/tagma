@@ -72,9 +72,11 @@ export const refusedAs = (failure: TerminalFailure): string => {
 export type AdmittedWatch = Pick<AdmittedCommand, 'commands' | 'access' | 'projectId' | 'actor' | 'subject' | 'bytes'>;
 
 export const admittedCommand = Effect.fnUntraced(function* (input: AdmittedCommand): Effect.fn.Return<AdmittedEnding> {
+  const admitted = yield* Effect.result(admit(input));
+  if (admitted._tag === 'Failure') return admitted.failure;
   return yield* Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
-      const started = yield* Effect.result(start(input));
+      const started = yield* Effect.result(start(input, admitted.success));
       if (started._tag === 'Failure') return started.failure;
       const { execution, waitMs, targetKey } = started.success;
       return yield* restore(
@@ -204,7 +206,7 @@ const unstartedBy =
   (failure: TerminalFailure): Unstarted =>
     failure instanceof TerminalRefused ? refused(input, step, failure) : unrun(`${input.subject} ${step}: ${refusedAs(failure)}`);
 
-const start = Effect.fn('admittedCommand.start')(function* (input: AdmittedCommand) {
+const admit = Effect.fn('admittedCommand.admit')(function* (input: AdmittedCommand) {
   const target = yield* input.targets
     .resolve({ projectId: input.projectId, kind: 'host', cwd: input.cwd })
     .pipe(Effect.mapError(unstartedBy(input, 'could not be placed where it runs')));
@@ -229,7 +231,12 @@ const start = Effect.fn('admittedCommand.start')(function* (input: AdmittedComma
   if (request._tag !== 'Launch' || receipt === undefined) {
     return yield* Effect.fail(unrun(`${input.subject} prepared no launch of its own`));
   }
-  const launch = { ...prepared, request, receipt };
+  return { target, launch: { ...prepared, request, receipt } };
+});
+
+type Admitted = Effect.Success<ReturnType<typeof admit>>;
+
+const start = Effect.fn('admittedCommand.start')(function* (input: AdmittedCommand, { target, launch }: Admitted) {
   const started = yield* Effect.scoped(
     input.terminals.start({
       actor: input.actor,
@@ -247,7 +254,7 @@ const start = Effect.fn('admittedCommand.start')(function* (input: AdmittedComma
     }),
   ).pipe(Effect.mapError(unstartedBy(input, 'could not be started')));
   if (started._tag === 'Accepted') {
-    return { execution: started.record.execution, waitMs: receipt.limits.executionMs ?? WAIT_SLICE_MS, targetKey: launch.targetKey };
+    return { execution: started.record.execution, waitMs: launch.receipt.limits.executionMs ?? WAIT_SLICE_MS, targetKey: launch.targetKey };
   }
   if (started._tag === 'Refused') {
     return yield* Effect.fail(refused(input, 'was refused', started.refusal));
