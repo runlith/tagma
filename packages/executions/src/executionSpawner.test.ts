@@ -107,7 +107,8 @@ layer(services)('managed process spawner', (it) => {
                 native: { pid: 4242 },
               }),
             subscribe: () => Stream.succeed({ _tag: 'Ended', ending: 'gap' }),
-            stop: () => Effect.fail(new WireLost({ sent: false, reason: 'this test owns no native child' })),
+            stop: () =>
+              Effect.fail(new HostRefused({ refusal: { _tag: 'UnknownExecution', reason: 'the replacement host holds no child' } })),
           }),
         ),
       );

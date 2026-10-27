@@ -513,8 +513,18 @@ export const executionSpawner = Effect.fnUntraced(function* (environment: Comman
           WireLost: (failure) => Effect.logWarning('execution cleanup lost its host connection', { execution, reason: failure.reason }),
           WireUnavailable: (failure) =>
             Effect.logWarning('execution cleanup could not reach its host', { execution, reason: failure.reason }),
+          WireInvalid: (failure) =>
+            Effect.logWarning('execution cleanup received an invalid host reply', { execution, detail: failure.detail }),
+          WireUnreadable: (failure) =>
+            Effect.logWarning('execution cleanup could not read its host reply', { execution, detail: failure.detail }),
+          WireFailed: (failure) => Effect.logWarning('execution cleanup failed on the host wire', { execution, fault: failure.fault }),
+          HostRefused: (failure) =>
+            Effect.logWarning('execution cleanup was refused by its host', {
+              execution,
+              code: failure.refusal._tag,
+              reason: failure.refusal.reason,
+            }),
         }),
-        Effect.orDie,
       );
     });
     const lane =
