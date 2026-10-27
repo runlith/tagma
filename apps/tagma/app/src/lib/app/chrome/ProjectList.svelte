@@ -56,6 +56,7 @@
   const newWindowKeys = spellChord({ key: 'Enter', meta: host.apple, ctrl: !host.apple, alt: false, shift: false }, host.apple);
   const removeChord = keymap.mod('Backspace');
   const removeKeys = keymap.spell(removeChord);
+  const renameKeys = spellKey('F2', host.apple);
 
   let query = $state('');
 
@@ -76,6 +77,7 @@
   function open(project: Project, event: Event): void {
     const target = event.target instanceof Element ? event.target : null;
     if (target !== null && target.closest('[data-project-remove]') !== null) removal.ask(project);
+    else if (target !== null && target.closest('[data-project-rename]') !== null) renaming.ask(project);
     else if (windows !== undefined && target !== null && target.closest('[data-new-window]') !== null)
       windows.openProject(visits.resume(project));
     else go(project);
@@ -88,9 +90,11 @@
   function pressed(event: KeyboardEvent & { currentTarget: HTMLElement }): void {
     const act = sameChord(chordOf(event), removeChord)
       ? '[data-project-remove]'
-      : event.key === 'Enter' && (event.metaKey || event.ctrlKey)
-        ? '[data-new-window]'
-        : null;
+      : event.key === 'F2'
+        ? '[data-project-rename]'
+        : event.key === 'Enter' && (event.metaKey || event.ctrlKey)
+          ? '[data-new-window]'
+          : null;
     if (act === null) return;
     const button = event.currentTarget.querySelector<HTMLElement>(act);
     if (button === null) return;
@@ -139,6 +143,19 @@
         </span>
         {#if acts}
           <span class="hidden items-center gap-0.5 group-hover/menu-row:flex group-data-highlighted/menu-row:flex">
+            {#if !project.global}
+              <Tooltip text="Rename…" keys={renameKeys}>
+                <button
+                  type="button"
+                  tabindex="-1"
+                  data-project-rename
+                  aria-label={`Rename “${labelOf(project)}”`}
+                  class={cn(ACT, 'hover:text-foreground')}
+                >
+                  <PencilLine class="size-3.5" />
+                </button>
+              </Tooltip>
+            {/if}
             {#if windows !== undefined}
               <Tooltip text="Open in New Window" keys={newWindowKeys}>
                 <button
