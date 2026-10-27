@@ -111,6 +111,62 @@ export function* pathsUnder(sorted: readonly string[], prefix = ''): Iterable<st
   for (let at = lower(directory); (sorted[at] ?? '').startsWith(directory); at++) yield sorted[at] as string;
 }
 
+const GITMODULES = '.gitmodules';
+const SECTION = /^\[\s*([A-Za-z0-9.-]+)(?:\s+"(?:[^"\\]|\\.)*")?\s*\]/;
+const VARIABLE = /^([A-Za-z][A-Za-z0-9-]*)\s*=(.*)$/;
+const CONTINUED = /(?:^|[^\\])(?:\\\\)*\\$/;
+
+const configValue = (raw: string): string => {
+  let value = '';
+  let space = '';
+  let quoted = false;
+  for (let at = 0; at < raw.length; at += 1) {
+    const char = raw[at] as string;
+    if (char === '\\') {
+      const next = raw[at + 1] ?? '';
+      at += 1;
+      value += space + (next === 'n' ? '\n' : next === 't' ? '\t' : next === 'b' ? '\b' : next);
+      space = '';
+    } else if (char === '"') {
+      value += space;
+      space = '';
+      quoted = !quoted;
+    } else if (!quoted && (char === '#' || char === ';')) break;
+    else if (!quoted && (char === ' ' || char === '\t')) {
+      if (value !== '') space += char;
+    } else {
+      value += space + char;
+      space = '';
+    }
+  }
+  return value;
+};
+
+const submodulesIn = (text: string): readonly string[] => {
+  const lines = text.split(/\r?\n/);
+  const dirs: string[] = [];
+  let section = '';
+  for (let at = 0; at < lines.length; at += 1) {
+    let line = (lines[at] as string).trimStart();
+    const header = SECTION.exec(line);
+    if (header !== null) {
+      section = (header[1] as string).toLowerCase().split('.')[0] as string;
+      line = line.slice(header[0].length).trimStart();
+    }
+    const variable = VARIABLE.exec(line);
+    if (variable === null || section !== 'submodule' || (variable[1] as string).toLowerCase() !== 'path') continue;
+    let raw = variable[2] as string;
+    while (CONTINUED.test(raw) && at + 1 < lines.length) raw = raw.slice(0, -1) + (lines[++at] as string);
+    const value = configValue(raw);
+    const parts = value.split('/').filter((part) => part !== '' && part !== '.');
+    if (!value.startsWith('/') && parts.length > 0 && !parts.includes('..')) dirs.push(parts.join('/'));
+  }
+  return dirs;
+};
+
+export const submoduleOf = (tree: Tree, path: string): string | undefined =>
+  tree.has(GITMODULES) ? submodulesIn(tree.read(GITMODULES)).find((dir) => path.startsWith(`${dir}/`)) : undefined;
+
 export const importsOf = (tree: Tree, path: string, reads: ImportReads, adapters: Adapters): readonly ParsedImport[] =>
   tree.imports?.(path, reads) ?? parseImports(adapters, tree.read(path), path, reads);
 

@@ -3,19 +3,21 @@ import { posix } from 'node:path';
 import ts from 'typescript';
 import type { Resolution } from '../../adapter';
 import { CopyStale, InputAbsent, UnsupportedSource } from '../../imports';
-import type { Installed, Tree } from '../../tree';
+import { type Installed, submoduleOf, type Tree } from '../../tree';
 
 export type Built = ReadonlyMap<string, string>;
 
 export const namesConfig = (path: string): boolean => path.endsWith('.json');
 
-export const environmental = (path: string): boolean => path.startsWith('../') || path.split('/').includes('node_modules');
+const installedPlace = (path: string): boolean => path.startsWith('../') || path.split('/').includes('node_modules');
+
+const environmental = (tree: Tree, path: string): boolean => installedPlace(path) || submoduleOf(tree, path) !== undefined;
 
 export const installedStamp = (found: Installed | undefined): string | null =>
   found === undefined ? null : createHash('sha256').update(found.at).update('\0').update(found.text).digest('hex');
 
 export const installedOf = (tree: Tree, path: string): string | null | undefined =>
-  environmental(path) && !tree.has(path) ? installedStamp(tree.environment?.read(path)) : undefined;
+  !tree.has(path) && environmental(tree, path) ? installedStamp(tree.environment?.read(path)) : undefined;
 
 type Mount = {
   readonly root: string;
@@ -85,7 +87,7 @@ export function configResolver(
   const { environment } = tree;
   const { root, absolute, local, aimed } = mountOf(environment?.depth ?? 0);
   const installedAt = (path: string): Installed | undefined =>
-    environment === undefined || !environmental(path) ? undefined : environment.read(path);
+    environment === undefined || !environmental(tree, path) ? undefined : environment.read(path);
   const canonical = (path: string, inputs: Set<string>): string => {
     const marker = '/node_modules/';
     const at = path.lastIndexOf(marker);
@@ -117,7 +119,13 @@ export function configResolver(
     );
   const absentOf = (config: string, missing: string): UnsupportedSource => {
     const source = built.get(missing);
-    if (source === undefined && environment !== undefined && environmental(missing)) return uninstalled(config, missing);
+    const submodule = source === undefined ? submoduleOf(tree, missing) : undefined;
+    if (submodule !== undefined && environment !== undefined)
+      return new UnsupportedSource(
+        config,
+        `its extends chain reaches \`${missing}\`, which the submodule \`${submodule}\` of the judging checkout does not hold: check out the checkout's submodules (\`git submodule update --init\`)`,
+      );
+    if (source === undefined && environment !== undefined && installedPlace(missing)) return uninstalled(config, missing);
     return source === undefined
       ? new InputAbsent(config, missing, `its extends chain reaches \`${missing}\`, which the tree lacks`)
       : new InputAbsent(

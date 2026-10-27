@@ -8,6 +8,7 @@ import { TRIGGERS } from '../../../graph/testing/triggers.js';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import { checksIn } from '../../../enforcement/testing/wiring.js';
 import { LAYERED } from '../../../enforcement/testing/layered.js';
+import { gitEffect } from '../graphFixture.js';
 import { enforceFixture, withEnforcement, type EnforcementFixture } from './enforceFixture.js';
 
 const ROOTED: Inspection = { builtin: 'modules', params: { ...(LAYERED.params as Params<'modules'>), base: '' } };
@@ -89,6 +90,48 @@ layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
             expect(uninstalled.refused?.reason).toContain('`@acme/tsconfig/base.json`');
           })(),
         ),
+    );
+
+    it.effect('is measured and landed through a package whose link leads into a git submodule of the checkout', () =>
+      withEnforcement((fx) =>
+        Effect.fnUntraced(function* () {
+          const files = yield* FileSystem.FileSystem;
+          const shared = `../acme-shared-${fx.demo.projectId}`;
+          yield* fx.wrote(`${shared}/tsconfig/package.json`, JSON.stringify({ name: '@acme/tsconfig', version: '1.0.0' }));
+          yield* fx.wrote(`${shared}/tsconfig/base.json`, JSON.stringify({ extends: './strict.json' }));
+          yield* fx.wrote(
+            `${shared}/tsconfig/strict.json`,
+            JSON.stringify({ compilerOptions: { paths: { '$x/*': ['${configDir}/src/app/*'] } } }),
+          );
+          const source = join(fx.demo.demoRoot, shared);
+          yield* gitEffect(source, ['init', '-q']);
+          yield* gitEffect(source, ['add', '-A']);
+          yield* gitEffect(source, ['commit', '-qm', 'shared configs']);
+          yield* gitEffect(fx.demo.demoRoot, ['-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', source, 'vendor/shared']);
+          yield* fx.wrote('.gitignore', 'node_modules/\n');
+          yield* fx.wrote('tsconfig.json', JSON.stringify({ extends: '@acme/tsconfig/base.json' }));
+          yield* files.makeDirectory(join(fx.demo.demoRoot, 'node_modules/@acme'), { recursive: true });
+          yield* files.symlink('../../vendor/shared/tsconfig', join(fx.demo.demoRoot, 'node_modules/@acme/tsconfig'));
+          yield* fx.wrote('src/app/shared.ts', 'export const shared = 1;\n');
+          yield* fx.wrote('src/core/peek.ts', "import { shared } from '$x/shared';\nexport const peek = shared;\n");
+          yield* fx.committed('a config extending a package of a submodule');
+          const rule = yield* fx.created(['rule'], 'Import only downward');
+          const owner = yield* fx.created(['task'], 'Move the core off the app');
+          fx.demo.described.set('submodule', ROOTED);
+          const standing = ['app order src/core/peek.ts -> src/app/', 'app order src/core/view.ts -> src/ui/'];
+          yield* fx.enforce({
+            blockId: rule,
+            strictness: 'gate',
+            on: TRIGGERS.landing,
+            inspection: 'submodule',
+            owners: Object.fromEntries(standing.map((one) => [one, owner])),
+          });
+          expect((yield* fx.documentOf(rule))?.debt?.map(({ fingerprint }) => fingerprint).sort()).toEqual(standing);
+          yield* fx.wrote('src/core/peek.ts', "import { shared } from '$x/shared';\nexport const peek = shared + 1;\n");
+          yield* fx.committed('the peek adds one');
+          expect((yield* landing(fx, 'src/core/peek.ts')).refused).toBeNull();
+        })(),
+      ),
     );
 
     it.effect(
