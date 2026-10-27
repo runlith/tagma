@@ -14,7 +14,7 @@ import { AgentHostFailed, AgentToolFailed, type AgentToolFailure } from '../Agen
 import { type AgentToolOutputs, boundAgentToolOutput, inspectAgentToolOutput } from '../ToolOutput';
 import { TOOL_OUTPUT_MAX_BYTES } from '../ToolOutputSpool';
 import { type Claim, Tool, type ToolOutputSource } from '../tool';
-import { makeCallSettlements, ToolSettlements } from '../ToolSettlements';
+import { makeCallSettlements, ToolSettlements, type CallSettlements } from '../ToolSettlements';
 import type { ToolDisplay } from '../../tool/display';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../permissions/vocabulary';
 type Ctx = Record<string, never>;
@@ -34,6 +34,7 @@ function doorOver(
     hooks?: CallHooks;
     outputs?: AgentToolOutputs;
     mode?: 'trust' | 'review';
+    settlements?: CallSettlements;
   } = {},
 ) {
   const hooks = input.hooks;
@@ -48,6 +49,12 @@ function doorOver(
     input.outputs,
     input.calls,
     hooks === undefined ? undefined : () => hooks,
+    undefined,
+    undefined,
+    0,
+    false,
+    [],
+    input.settlements,
   );
 }
 const threadDoor = (calls: AgentCalls, hooks: CallHooks, runId: string) =>
@@ -1207,6 +1214,7 @@ describe('a call taken to the background before it runs', () => {
     release: Effect.Effect<void, Tool.ToolFailed>,
     log: string[],
     approval = ASKS_NEVER,
+    settled?: () => void,
   ) =>
     Tool.make({
       display: () => ({ form: 'none' }),
@@ -1216,6 +1224,7 @@ describe('a call taken to the background before it runs', () => {
       mutates: true,
       prepare: () => Deferred.succeed(prepared, undefined).pipe(Effect.andThen(release), Effect.as({ subjects: [] })),
       execute: () => Effect.sync(() => log.push('body')).pipe(Effect.as({ done: true })),
+      settled,
     });
   const attend = (door: AgentToolDoor<Ctx>, tool: Tool.Tool, input: unknown, confirming?: true) =>
     door.attend({ name: 'slow', tool, input, confirming, options: { toolCallId: 'call-1', messages: [] } });
@@ -1324,15 +1333,16 @@ describe('a call taken to the background before it runs', () => {
       const landed = yield* Deferred.make<Landed>();
       const preparing = yield* Deferred.make<void>();
       const held = yield* Deferred.make<void>();
-      const door = doorOver({ calls, hooks: owing(log, landed) });
-      const waiter = yield* Effect.forkScoped(attend(door, preparedOver(preparing, Deferred.await(held), log), {}));
+      const door = doorOver({ calls, hooks: owing(log, landed), settlements: yield* makeCallSettlements });
+      const tool = preparedOver(preparing, Deferred.await(held), log, ASKS_NEVER, () => log.push('settled'));
+      const waiter = yield* Effect.forkScoped(attend(door, tool, {}));
       yield* Deferred.await(preparing);
       expect(calls.get(address)!.record).toMatchObject({ phase: 'preparing', detachable: true });
       expect((yield* calls.control(address, { action: 'background' })).status).toBe('changed');
       expect(yield* Fiber.join(waiter)).toMatchObject({ kind: 'answered', outcome: { output: { status: 'background' } } });
       yield* Deferred.succeed(held, undefined);
       expect(outcomeOf(yield* Deferred.await(landed))).toMatchObject({ executed: true, output: { done: true } });
-      expect(log).toEqual(['owed', 'began', 'body', 'released', 'completed']);
+      expect(log).toEqual(['owed', 'began', 'body', 'released', 'completed', 'settled']);
     }),
   );
   it.effect(

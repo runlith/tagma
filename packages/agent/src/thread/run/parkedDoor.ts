@@ -1,6 +1,7 @@
 import { Cause, Effect, Exit } from 'effect';
 import type { CallHooks } from '../../agent/AgentCalls';
 import type { AgentToolDoor } from '../../agent/door/AgentToolDoor';
+import { ToolSettlements } from '../../agent/ToolSettlements';
 import type { AgentToolResolution } from '../../agent/door/types';
 import type { ThreadTranscriptEntry } from '../../transcript/rows';
 import { admittedToolSources } from '../agents/admittedToolSources';
@@ -36,6 +37,7 @@ export const makeParkedDoors = Effect.gen(function* () {
   const agents = yield* ThreadAgents;
   const toolSources = yield* ThreadToolRegistry;
   const doors = yield* ThreadAgentDoors;
+  const settlements = yield* ToolSettlements;
   return Effect.fnUntraced(function* (
     thread: ThreadRow,
     run: ThreadRunRow,
@@ -61,7 +63,7 @@ export const makeParkedDoors = Effect.gen(function* () {
           resolutions,
           callHooks: callHooks?.(toolContext),
         });
-      }),
+      }).pipe(Effect.provideService(ToolSettlements, settlements)),
     ).pipe(Effect.onError(() => disposed(toolContext)));
     return { transcript, toolContext, door } satisfies ParkedDoor;
   });

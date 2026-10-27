@@ -28,6 +28,7 @@ import { ToolJudge } from './door/openToolDoor';
 import type { ToolGuides } from './door/ToolRules';
 import type { AgentCallHooks } from './door/types';
 import { type AgentCalls, makeAgentCalls } from './AgentCalls';
+import { ToolSettlements, type CallSettlements } from './ToolSettlements';
 import type { Arrival } from './AgentCall';
 import type { RunStop } from './RunStop';
 import { type AgentScope, type AgentScopeBoundary, type CatalogRefresh, agentCatalog, agentScope, refreshCatalog } from './AgentScope';
@@ -160,7 +161,7 @@ export const makeAgentRunner = Effect.fnUntraced(function* ({
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
           const held = yield* Scope.fork(runs);
-          const door = runDoor(agent, input, calls, () => scope, input.onGuides);
+          const door = runDoor(agent, input, calls, () => scope, input.onGuides, yield* ToolSettlements);
           const unheard = input.arrivals === undefined ? () => {} : heard(calls, input.runId, input.arrivals);
           const unbound = calls.bind(input.runId, input.stop);
           yield* Scope.addFinalizer(
@@ -225,6 +226,7 @@ const startAgentRun = Effect.fnUntraced(function* <TCtx>(
         (directives, context) => {
           stepGuides.push(...pendingRuntimeGuides(context.hook, directives, context));
         },
+        yield* ToolSettlements,
       );
       yield* Scope.addFinalizer(held, door.close());
       const unbound = calls.bind(input.runId, stop);
@@ -377,6 +379,7 @@ const runDoor = <TCtx>(
   calls: AgentCalls,
   live: () => AgentScope<TCtx>,
   onGuides: ToolGuides | undefined,
+  settlements: CallSettlements | undefined,
 ): AgentToolDoor<TCtx> =>
   openToolDoor<TCtx>(
     input.runId,
@@ -393,6 +396,8 @@ const runDoor = <TCtx>(
     onGuides,
     0,
     !input.approval.interactive,
+    [],
+    settlements,
   );
 function forkedAside(hook: AgentAsideHook, runs: Scope.Scope, runId: string, stop: RunStop): AgentAsideHook {
   return (aside) =>

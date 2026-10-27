@@ -1,4 +1,5 @@
 import type { AgentCalls } from '../AgentCalls';
+import type { CallSettlements } from '../ToolSettlements';
 import { AgentRunState } from '../AgentRunState';
 import { AgentRuntimePolicy } from '../policy/AgentRuntimePolicy';
 import type { ToolCaller } from '../contracts';
@@ -34,8 +35,9 @@ export function openToolDoor<TCtx>(
   generation: number = 0,
   unattended: boolean = false,
   resolutions: readonly AgentToolResolution[] = [],
+  settlements: CallSettlements | undefined = undefined,
 ): AgentToolDoor<TCtx> {
-  const run = new ToolRun<TCtx>(runId, caller, ctx, runState, unattended);
+  const run = new ToolRun<TCtx>(runId, caller, ctx, runState, unattended, settlements);
   const ledger = makeCallLedger({ runId, generation, resolutions });
   const order = makeCallOrder(
     calls === undefined || run.threadId === undefined ? undefined : { runId, threadId: run.threadId, claims: calls.claims },

@@ -1,5 +1,6 @@
 import type { AgentRunState } from '../AgentRunState';
 import type { ToolCaller } from '../contracts';
+import type { CallSettlements } from '../ToolSettlements';
 
 export class ToolRun<TCtx> {
   readonly threadId: string | undefined;
@@ -10,6 +11,7 @@ export class ToolRun<TCtx> {
     public ctx: TCtx,
     readonly runState: AgentRunState,
     readonly unattended: boolean,
+    readonly settlements: CallSettlements | undefined,
   ) {
     this.threadId = caller.thread?.threadId;
   }

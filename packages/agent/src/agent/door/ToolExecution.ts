@@ -275,7 +275,7 @@ export const makeToolExecution = <TCtx>({
       });
     if (waited !== undefined) yield* note<AgentNote>({ type: 'tool-ordered', after: waited.after, waitedMs: waited.waitedMs });
     yield* note<AgentNote>({ type: 'tool-executing' });
-    const settlements = yield* ToolSettlements;
+    const settlements = run.settlements ?? (yield* ToolSettlements);
     const settled = tool.settled;
     const identity = { toolCallId: options.toolCallId, caller: options.caller };
     const owner = tracked?.call;

@@ -3,6 +3,7 @@ import type { AgentToolDoor } from '../../agent/door/AgentToolDoor';
 import { declaredConfirmations } from '../../agent/door/DeclaredConfirmations';
 import { openToolDoor } from '../../agent/door/openToolDoor';
 import { ToolJudge } from '../../agent/door/openToolDoor';
+import { ToolSettlements } from '../../agent/ToolSettlements';
 import type { ToolGuides } from '../../agent/door/ToolRules';
 import type { AgentToolResolution } from '../../agent/door/types';
 import type { CallHooks } from '../../agent/AgentCalls';
@@ -568,7 +569,12 @@ export function threadAgent<TCtx, TFail = never, TWrite = unknown>(options: Thre
           context: input.admitted ?? null,
         }),
       ).pipe(
-        Effect.map((ctx) =>
+        Effect.flatMap((ctx) =>
+          Effect.gen(function* () {
+            return { ctx, settlements: yield* ToolSettlements };
+          }),
+        ),
+        Effect.map(({ ctx, settlements }) =>
           openToolDoor(
             input.run.id,
             threadCaller(input.thread, input.run.id),
@@ -585,6 +591,7 @@ export function threadAgent<TCtx, TFail = never, TWrite = unknown>(options: Thre
             input.admitted?.generation ?? 0,
             input.unattended === true,
             input.resolutions,
+            settlements,
           ),
         ),
       );

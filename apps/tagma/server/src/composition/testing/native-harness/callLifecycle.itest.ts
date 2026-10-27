@@ -158,7 +158,11 @@ const openWorld = Effect.fnUntraced(function* (turns: ScriptedTurn[], mode: 'tru
       claims: () => Effect.succeed([NOTES]),
       parameters: Schema.Struct({}),
       execute: () => Effect.sync(() => ran.order.push(name)).pipe(Effect.as({ [name]: 'done' })),
+      settled: ({ toolCallId }) => {
+        settlements.push(toolCallId);
+      },
     });
+  const settlements: string[] = [];
   const entries = { count: 0 };
   const retained = { count: 0 };
   const delivered: string[] = [];
@@ -219,6 +223,9 @@ const openWorld = Effect.fnUntraced(function* (turns: ScriptedTurn[], mode: 'tru
           ran.sibling += 1;
           return { sibling: 'answered' };
         }),
+      settled: ({ toolCallId }) => {
+        settlements.push(toolCallId);
+      },
     }),
   };
   const agent = new Agent({
@@ -344,6 +351,7 @@ const openWorld = Effect.fnUntraced(function* (turns: ScriptedTurn[], mode: 'tru
     released,
     ran,
     retained,
+    settlements,
     observe: Effect.fnUntraced(function* () {
       const frames: CallEvent[] = [];
       const opened = yield* Deferred.make<void>();
@@ -459,9 +467,10 @@ layer(callStore, { excludeTestServices: true })('call lifecycle', (it) => {
       expect(world.asked.length).toBe(1);
       const question = yield* world.question();
       if (question?.type !== 'question') return yield* Effect.die('The sibling approval is missing.');
-      yield* world.approve(question.questionId, SIBLING_CALL);
+      yield* world.questions().answer(world.threadId, question.questionId, [{ questionId: SIBLING_CALL, values: ['confirm'] }]);
       yield* until('grouped approval run to settle', () => world.settled());
       expect(world.ran.sibling).toBe(1);
+      yield* until('the approved sibling to be settled', () => Effect.sync(() => world.settlements.includes(SIBLING_CALL)));
       expect(world.ran.cleaned).toBe(false);
       expect(JSON.stringify(world.asked[1])).toContain('cancelled');
       expect(JSON.stringify(world.asked[1])).toContain('answered');
@@ -692,6 +701,9 @@ layer(callStore, { excludeTestServices: true })('call lifecycle', (it) => {
         yield* until("the write's ending to reach the thread", () => Effect.sync(() => world.delivered.includes(address)));
         expect(world.delivered.filter((id) => id === address)).toHaveLength(1);
         expect(yield* world.endings.owed({ threadId: world.threadId })).toEqual([]);
+        const executed = allowed ? ['call-edit', 'call-write'] : ['call-edit'];
+        yield* until('every executed call to be settled', () => Effect.sync(() => world.settlements.length === executed.length));
+        expect([...world.settlements].sort()).toEqual(executed);
       }),
   );
   it.effect('moving a parked approval is one fact: when its owed ending cannot be written, the question still asks about the call', () =>
