@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Context, Effect, Fiber, Layer, Queue, Stream } from 'effect';
+import { TestClock } from 'effect/testing';
 import { it } from '@runlith/effect-test';
 import { type ProfileRead, UserEnvironment, type UserShell } from '../../installation/contract/service/userEnvironment.js';
 import { makeUserEnvironment, type EnvironmentInput } from '../../installation/process/userEnvironment.js';
@@ -106,7 +107,7 @@ const spawnsOf = (binary: string, seen: (child: ReturnType<typeof Bun.spawn>) =>
     ({ children }) => children,
   );
 
-it.live('a probe still running when its reader leaves is reaped when the layer closes', () =>
+it.effect('a probe still running when its reader leaves is reaped when the layer closes', () =>
   Effect.gen(function* () {
     const { home, local } = homeOf('interrupted');
     yield* machine(home);
@@ -130,7 +131,7 @@ it.live('a probe still running when its reader leaves is reaped when the layer c
   }),
 );
 
-it.live('listing and refreshing locate executable files without running them; selecting one proves only its version', () =>
+it.effect('listing and refreshing locate executable files without running them; selecting one proves only its version', () =>
   Effect.gen(function* () {
     const { home, local } = homeOf('passive');
     yield* machine(home);
@@ -163,7 +164,7 @@ const grokOnChange = (installs: InstalledHarnesses['Service'], settled: (row: Ha
     Stream.runHead,
   );
 
-it.live('a deleted CLI stops reading as installed, and its missing row arrives as a change', () =>
+it.effect('a deleted CLI stops reading as installed, and its missing row arrives as a change', () =>
   Effect.gen(function* () {
     const { home, local } = homeOf('deleted');
     yield* machine(home);
@@ -182,7 +183,7 @@ it.live('a deleted CLI stops reading as installed, and its missing row arrives a
   }),
 );
 
-it.live('rewriting an executable invalidates its proven version until the next explicit selection', () =>
+it.effect('rewriting an executable invalidates its proven version until the next explicit selection', () =>
   Effect.gen(function* () {
     const { home, local } = homeOf('rewritten');
     yield* machine(home);
@@ -203,7 +204,7 @@ it.live('rewriting an executable invalidates its proven version until the next e
   }),
 );
 
-it.live(
+it.effect(
   'with a system PATH and a profile that never answered, each CLI is found where it was installed and the dead copy first on PATH is passed over',
   () =>
     Effect.gen(function* () {
@@ -268,7 +269,7 @@ it.live(
     }),
 );
 
-it.live(
+it.effect(
   'a CLI installed after the first reading is found by refresh, and a missing one waits for the profile before it is told missing',
   () =>
     Effect.gen(function* () {
@@ -297,33 +298,42 @@ it.live(
     }),
 );
 
-it.live('a hung first copy yields to an answering second, and a lone hung copy stays found with its version unread, each probed once', () =>
-  Effect.gen(function* () {
-    const { home, local } = homeOf('hung');
-    yield* machine(home);
-    const early = join(root, 'hung-early');
-    script(join(early, 'grok'), `#!/bin/sh\nexec /bin/sleep 5\n`);
-    script(join(local, 'grok'), answering('grok 1.0.50'));
-    script(join(early, 'gemini'), '#!/bin/sh\nexec /bin/sleep 5\n');
-    const users = isolatedUsers({ shell: shellFor(local, [], failedProfile), env: process.env, world: null, home });
-    yield* users.ready;
-    process.env.PATH = `${early}:${process.env.PATH}`;
-    const hungGrok = yield* spawnsOf(join(early, 'grok'));
-    const hungGemini = yield* spawnsOf(join(early, 'gemini'));
-    const installs = yield* installsOver(users, 1_000);
-    yield* installs.program('grok');
-    yield* installs.program('gemini');
-    const rows = new Map((yield* installs.read).map((row) => [row.harness, row]));
-    expect(rows.get('grok')).toMatchObject({ binary: join(local, 'grok'), version: 'grok 1.0.50' });
-    expect(rows.get('gemini')).toMatchObject({ binary: join(early, 'gemini'), version: null });
-    expect(yield* installs.program('gemini')).toEqual({ path: join(early, 'gemini'), runtime: null });
-    yield* installs.program('grok');
-    yield* installs.read;
-    expect([hungGrok.length, hungGemini.length]).toEqual([1, 1]);
-  }),
+it.effect(
+  'a hung first copy yields to an answering second, and a lone hung copy stays found with its version unread, each probed once',
+  () =>
+    Effect.gen(function* () {
+      const { home, local } = homeOf('hung');
+      yield* machine(home);
+      const early = join(root, 'hung-early');
+      script(join(early, 'grok'), `#!/bin/sh\nexec /bin/sleep 5\n`);
+      script(join(local, 'grok'), answering('grok 1.0.50'));
+      script(join(early, 'gemini'), '#!/bin/sh\nexec /bin/sleep 5\n');
+      const users = isolatedUsers({ shell: shellFor(local, [], failedProfile), env: process.env, world: null, home });
+      yield* users.ready;
+      process.env.PATH = `${early}:${process.env.PATH}`;
+      const hung = yield* Effect.acquireRelease(Queue.unbounded<number>(), Queue.shutdown);
+      const hungGrok = yield* spawnsOf(join(early, 'grok'), (child) => Queue.offerUnsafe(hung, child.pid));
+      const hungGemini = yield* spawnsOf(join(early, 'gemini'), (child) => Queue.offerUnsafe(hung, child.pid));
+      const installs = yield* installsOver(users, 1_000);
+      const outwaited = Effect.fnUntraced(function* (name: string) {
+        const probing = yield* Effect.forkScoped(installs.program(name));
+        yield* Queue.take(hung);
+        yield* TestClock.adjust('1 second');
+        return yield* Fiber.join(probing);
+      });
+      yield* outwaited('grok');
+      yield* outwaited('gemini');
+      const rows = new Map((yield* installs.read).map((row) => [row.harness, row]));
+      expect(rows.get('grok')).toMatchObject({ binary: join(local, 'grok'), version: 'grok 1.0.50' });
+      expect(rows.get('gemini')).toMatchObject({ binary: join(early, 'gemini'), version: null });
+      expect(yield* installs.program('gemini')).toEqual({ path: join(early, 'gemini'), runtime: null });
+      yield* installs.program('grok');
+      yield* installs.read;
+      expect([hungGrok.length, hungGemini.length]).toEqual([1, 1]);
+    }),
 );
 
-it.live(
+it.effect(
   'concurrent readers share one probe, a failed probe is not repeated on the same PATH, and is tried again once PATH gives it its runtime',
   () =>
     Effect.gen(function* () {
