@@ -590,9 +590,15 @@ test('a forced minimum-diff anchor transfer belongs to the last crossing writer'
 test('a write whose shortest diff moves a line across lines it removed holds every line of the patch', () => {
   const base = text('', 'u', 'k', '', 'u', 't');
   const work = text('k', '', 'u', '', 'u');
-  const answer = folded(input(base, work, [{ ...row('a1', A, base, work), hunk: workspaceChangeHunk(base, work)! }]));
+  const value = input(base, work, [{ ...row('a1', A, base, work), hunk: workspaceChangeHunk(base, work)! }]);
+  const answer = folded(value);
   expect(answer.result.nobody).toEqual({ added: 0, removed: 0 });
   expect(answer.result.hands.map((hand) => hand.holder)).toEqual([A]);
+  expect(select(answer, value, A)).toMatchObject({
+    kind: 'whole',
+    rows: ['a1'],
+    carried: { holders: [], external: false, unknown: false },
+  });
 });
 
 test('a replaced new file has no residual creation holder', () => {
