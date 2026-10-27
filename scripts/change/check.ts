@@ -186,6 +186,7 @@ for (const row of output) console.log(`${row.action} ${row.file}: ${row.why}; ${
 let cpu = 0;
 let code = 0;
 let ran = 0;
+let notRun = 0;
 const groups = new Map<string, Planned[]>();
 for (const plan of plans.filter((plan) => !plan.cached)) {
   const key = `${plan.pkg.dir}\0${plan.runner}\0${kindOf(plan.file)}`;
@@ -289,6 +290,7 @@ const settled: {
   readonly plan: Planned;
   readonly row: FileRow | undefined;
   readonly problem: string | undefined;
+  readonly skipped: string | undefined;
   readonly issue: string | undefined;
 }[] = [];
 const traced = new Map<string, Readonly<Record<string, string>>>();
@@ -321,20 +323,21 @@ for (const [at, suite] of suites.entries()) {
     const stable = after.of(plan.file).key === plan.inputs.key;
     const verdict = row === undefined ? undefined : verdicts.get(`${row.file}\0${row.run}`);
     const passed = runnerKind === 'bun' ? verdict?.outcome === 'pass' : exit === 0;
+    const skipped = verdict?.outcome === 'skip' ? verdict.reason || 'all tests were skipped' : undefined;
     const problem =
       row === undefined
         ? 'runner produced no report for the selected file'
         : row.residue !== 0
           ? 'the file left processes behind'
-          : !passed
+          : !passed && skipped === undefined
             ? 'runner did not prove a passing file'
             : !stable
               ? 'inputs changed during the run'
               : undeclared.get(plan.file);
-    if (problem === undefined && runnerKind === 'bun')
+    if (problem === undefined && skipped === undefined && runnerKind === 'bun')
       traced.set(plan.file, Object.fromEntries(plan.inputs.importers.map((importer) => [importer, graph.stamp(importer)])));
     else if (row !== undefined) cleared.push(plan.file);
-    settled.push({ plan, row, problem, issue: outcome?.issues.find((issue) => issue.file === plan.file)?.reason });
+    settled.push({ plan, row, problem, skipped, issue: outcome?.issues.find((issue) => issue.file === plan.file)?.reason });
   }
 }
 loads.record(
@@ -343,7 +346,7 @@ loads.record(
   cleared,
   (path) => graph.stamp(path),
 );
-for (const { plan, row, problem, issue } of settled) {
+for (const { plan, row, problem, skipped, issue } of settled) {
   const inputs = after.of(plan.file);
   const grown = inputs.packages.find((dir) => !plan.inputs.packages.includes(dir));
   const reason =
@@ -352,14 +355,18 @@ for (const { plan, row, problem, issue } of settled) {
     code: problem === undefined ? 0 : 1,
     wall: row?.total?.wall ?? 0,
     cpu: row?.total?.cpu ?? 0,
-    reason: problem ?? reason,
-    bypass: reason,
+    reason: problem ?? skipped ?? reason,
+    bypass: skipped ?? reason,
   };
+  const isSkipped = skipped !== undefined && problem === undefined;
   if (result.code !== 0) code = code || 1;
-  if (row !== undefined) ran++;
+  if (isSkipped) notRun++;
+  else if (row !== undefined) ran++;
   if (!args.includes('--no-cache') && variant.adapter === 'default') records.write(inputs.key, result);
   console.log(
-    `${row === undefined ? 'unproved' : 'ran'} ${plan.file}: ${result.code === 0 ? 'pass' : 'not cached'}${result.reason === undefined ? '' : `; ${result.reason}`}`,
+    isSkipped
+      ? `not run ${plan.file}: ${skipped}; not cached`
+      : `${row === undefined ? 'unproved' : 'ran'} ${plan.file}: ${result.code === 0 ? 'pass' : 'not cached'}${result.reason === undefined ? '' : `; ${result.reason}`}`,
   );
 }
 const slow = [...outcomes.values()]
@@ -374,6 +381,7 @@ cpu += (spent.user + spent.system) / 1000;
 const result = {
   selected: plans.length,
   ran,
+  skipped: notRun,
   cached: plans.filter((plan) => plan.cached).length,
   wall: Math.round(performance.now() - started),
   cpu,
@@ -388,6 +396,6 @@ const result = {
 const report = value('--report');
 if (report !== undefined) writeFileSync(resolve(report), JSON.stringify(result, null, 2));
 console.log(
-  `check:change: ${ran} ran, ${result.cached} cached; wall ${(result.wall / 1000).toFixed(2)} s, cpu ${(cpu / 1000).toFixed(2)} s; ${run}`,
+  `check:change: ${ran} ran, ${notRun} not run, ${result.cached} cached; wall ${(result.wall / 1000).toFixed(2)} s, cpu ${(cpu / 1000).toFixed(2)} s; ${run}`,
 );
 process.exitCode = code;

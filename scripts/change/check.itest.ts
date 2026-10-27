@@ -340,6 +340,35 @@ test('external targets and failed reads retain their dependency and error channe
     rmSync(external, { recursive: true, force: true });
   }
 });
+test('an environment-skipped file reports why it did not run without failing or becoming reusable, while a real failure still fails', async () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'change-skipped-')));
+  const checkout = join(directory, 'repo');
+  mkdirSync(checkout);
+  try {
+    expect(Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout }).exitCode).toBe(0);
+    writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'environment-skip', scripts: { test: 'bun test' } }));
+    writeFileSync(
+      join(checkout, 'skip.itest.ts'),
+      "import { describe, test } from 'bun:test'; describe('Docker work', () => test.skip('requires a running Docker engine', () => {}));",
+    );
+    writeFileSync(join(checkout, 'fail.itest.ts'), "import { expect, test } from 'bun:test'; test('failure', () => expect(1).toBe(2));");
+    const changed = join(directory, 'changed');
+    const report = join(directory, 'report.json');
+    writeFileSync(changed, 'skip.itest.ts\n');
+    for (const round of [1, 2]) {
+      const { code, stdout, stderr } = await ended(checking(checkout, '--paths-from', changed, '--report', report));
+      expect(code, `round ${round}\n${stdout}${stderr}`).toBe(0);
+      expect(stdout).toContain('not run skip.itest.ts: Docker work > requires a running Docker engine');
+      expect(JSON.parse(readFileSync(report, 'utf8'))).toMatchObject({ selected: 1, ran: 0, cached: 0, skipped: 1 });
+    }
+    const failed = await ended(checking(checkout, '--full', '--paths-from', changed));
+    expect(failed.code, failed.stdout + failed.stderr).toBe(1);
+    expect(failed.stdout).toContain('not run skip.itest.ts: Docker work > requires a running Docker engine');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('a read through open outside the inputs is audited in every Vitest file a worker runs, not only the first', async () => {
   const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-vitest-')));
   const external = realpathSync(mkdtempSync(join(tmpdir(), 'change-opened-')));

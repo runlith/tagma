@@ -99,6 +99,7 @@ export type FileVerdict = {
   readonly run: string;
   readonly file: string;
   readonly outcome: Case['outcome'];
+  readonly reason?: string;
 };
 
 export const verdictsOf = (files: readonly FileRow[], junit: Junit): FileVerdict[] =>
@@ -112,6 +113,13 @@ export const verdictsOf = (files: readonly FileRow[], junit: Junit): FileVerdict
             run: file.run,
             file: file.file,
             outcome: file.residue !== 0 || result.tests !== file.tests ? 'fail' : result.outcome,
+            reason:
+              result.outcome === 'skip'
+                ? (junit.cases.get(file.file) ?? [])
+                    .filter((entry) => entry.outcome === 'skip')
+                    .map((entry) => entry.name)
+                    .join('; ')
+                : undefined,
           },
         ];
   });
