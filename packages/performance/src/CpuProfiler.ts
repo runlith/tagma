@@ -94,6 +94,7 @@ const make = Effect.fnUntraced(function* (options: Options) {
     readonly cpu: NodeJS.CpuUsage;
   } | null = null;
   let connected = false;
+  let isConfigured = false;
   let keptBusyAt = Number.NEGATIVE_INFINITY;
   let capturing: CaptureWindow | null = null;
 
@@ -105,9 +106,12 @@ const make = Effect.fnUntraced(function* (options: Options) {
           session.connect();
           connected = true;
         });
+      }
+      if (!isConfigured) {
         yield* post(session, 'Profiler.enable');
         const interval = Math.max(1, Math.round((options.stallCeilingMs * 1000) / SAMPLES_PER_CEILING));
         yield* post(session, 'Profiler.setSamplingInterval', { interval });
+        isConfigured = true;
       }
       return yield* post(session, 'Profiler.start');
     }).pipe(

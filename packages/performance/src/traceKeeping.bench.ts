@@ -238,6 +238,7 @@ const drive = Effect.fnUntraced(
         pendingRecords: 0,
         peakPendingBytes: 0,
         dropCount: 0,
+        maintenancePasses: 0,
         evictedSegments: 0,
         lastEvictionMs: null,
         uncertainRecords: 0,

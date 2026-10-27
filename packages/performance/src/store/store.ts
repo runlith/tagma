@@ -376,6 +376,7 @@ const make = Effect.fn('PerformanceStore.make')(function* (options: PerformanceS
   const unpersistedDroppedKinds = new Map<PerformanceRecordKind, number>();
   const handedDrops = new Map<number, LossKindCounts>();
   let persistedRecords = 0;
+  let maintenancePasses = 0;
   let evictedSegments = 0;
   let lastEvictionMs: number | null = null;
   let peakPendingBytes = 0;
@@ -580,6 +581,7 @@ const make = Effect.fn('PerformanceStore.make')(function* (options: PerformanceS
         completeCommand(response.sequence);
         return;
       case 'StoreMaintained':
+        maintenancePasses += 1;
         handedDrops.delete(response.sequence);
         if (response.evicted > 0) {
           evictedSegments += response.evicted;
@@ -943,6 +945,7 @@ const make = Effect.fn('PerformanceStore.make')(function* (options: PerformanceS
         pendingRecords: pending.size,
         peakPendingBytes,
         dropCount: dropCount(),
+        maintenancePasses,
         evictedSegments,
         lastEvictionMs,
         uncertainRecords,
@@ -996,6 +999,7 @@ function unavailableServices(
         pendingRecords: 0,
         peakPendingBytes: 0,
         dropCount,
+        maintenancePasses: 0,
         evictedSegments: 0,
         lastEvictionMs: null,
         uncertainRecords: 0,

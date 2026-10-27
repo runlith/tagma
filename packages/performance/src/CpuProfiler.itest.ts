@@ -1,4 +1,4 @@
-import { expect } from 'bun:test';
+import { expect, spyOn } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import * as Effect from 'effect/Effect';
 import * as Fiber from 'effect/Fiber';
@@ -150,6 +150,44 @@ it.live('without a standing sampler a manual capture still profiles its window, 
 
     expect(result).toMatchObject({ before: false, captured: true, after: false });
     expect(result.frames).toContain('burnLoop');
+  }),
+);
+
+it.effect('a failed inspector enable leaves the next window able to start and persist its profile', () =>
+  Effect.gen(function* () {
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        spyOn(Session.prototype, 'post').mockImplementationOnce((...args: unknown[]) => {
+          const callback = args.at(-1);
+          if (typeof callback === 'function') callback(new Error('inspector enable refused'));
+        }),
+      ),
+      (patched) => Effect.sync(() => patched.mockRestore()),
+    );
+    const directory = yield* scratchDirectory('performance-cpu-enable-recovery-');
+    yield* Effect.gen(function* () {
+      const profiler = yield* CpuProfiler;
+      const store = yield* PerformanceStore;
+      const reports = yield* PerformanceReports;
+      expect(profiler.running()).toBe(false);
+      expect(yield* profiler.cut('retry')).toBeNull();
+      expect(profiler.running()).toBe(true);
+      yield* TestClock.adjust(1);
+      const kept = yield* profiler.cut('after-enable-failure');
+      if (kept === null) return yield* Effect.die('the recovered window returned no profile');
+      yield* store.flush;
+      const read = yield* reports.read({ type: 'profile', id: kept.id, limit: 1 });
+      if (read.type !== 'profile') return yield* Effect.die('unexpected report');
+      expect(read.profile.id).toBe(kept.id);
+      expect(read.profile.payload.requestedBy).toBe('after-enable-failure');
+    }).pipe(
+      Effect.provide(
+        performanceReportsLayer.pipe(
+          Layer.provideMerge(cpuProfilerLayer({ instanceId: 'process', stallCeilingMs: CEILING_MS, windowMs: () => WINDOW_MS })),
+          Layer.provideMerge(performanceStoreLayer(storeOptions(join(directory, 'performance.sqlite')))),
+        ),
+      ),
+    );
   }),
 );
 

@@ -61,6 +61,7 @@ export type PerformanceStoreDiagnostics = {
   readonly pendingRecords: number;
   readonly peakPendingBytes: number;
   readonly dropCount: number;
+  readonly maintenancePasses: number;
   readonly evictedSegments: number;
   readonly lastEvictionMs: number | null;
   readonly uncertainRecords: number;

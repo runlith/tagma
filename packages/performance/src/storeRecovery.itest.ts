@@ -1,7 +1,6 @@
 import { expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { it } from '@runlith/effect-test';
-import * as Deferred from 'effect/Deferred';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -453,7 +452,6 @@ it.live('a group opened while the worker is gone protects the segment its record
     const directory = yield* scratchDirectory('performance-outage-open-');
     const path = join(directory, 'performance.sqlite');
     const maxStoredBytes = 700_000;
-    let maintenance: Deferred.Deferred<void> | undefined;
     let holder: Bun.Subprocess | undefined;
     yield* Effect.addFinalizer(() => Effect.sync(() => holder?.kill()));
     yield* Effect.gen(function* () {
@@ -492,21 +490,19 @@ it.live('a group opened while the worker is gone protects the segment its record
 
       store.closeGroup('held');
       expect(store.diagnostics().activeGroups).toBe(1);
-      maintenance = yield* Deferred.make<void>();
-      yield* Deferred.await(maintenance);
-      yield* store.flush;
+      const maintained = store.diagnostics().maintenancePasses;
+      yield* waitFor(() => store.diagnostics().maintenancePasses >= maintained + 2);
       const nested = yield* reports.read({ type: 'trace', traceId: 'held', limit: 100 });
       if (nested.type !== 'trace') return yield* Effect.die('unexpected report');
       expect(nested.totalSpans).toBe(16);
 
+      const evicted = store.diagnostics().evictedSegments;
       store.closeGroup('held');
       expect(store.diagnostics().activeGroups).toBe(0);
-      while (true) {
-        const gone = yield* reports.read({ type: 'trace', traceId: 'held', limit: 1 });
-        if (gone.type !== 'trace') return yield* Effect.die('unexpected report');
-        if (gone.totalSpans === 0) break;
-        yield* Effect.sleep('50 millis');
-      }
+      yield* waitFor(() => store.diagnostics().evictedSegments > evicted);
+      const gone = yield* reports.read({ type: 'trace', traceId: 'held', limit: 1 });
+      if (gone.type !== 'trace') return yield* Effect.die('unexpected report');
+      expect(gone.totalSpans).toBe(0);
     }).pipe(
       Effect.provide(
         performanceReportsLayer.pipe(
@@ -515,10 +511,7 @@ it.live('a group opened while the worker is gone protects the segment its record
               path,
               instanceId: 'process',
               maxPendingBytes: () => 2_000_000,
-              maxStoredBytes: () => {
-                if (maintenance !== undefined) Deferred.doneUnsafe(maintenance, Effect.void);
-                return maxStoredBytes;
-              },
+              maxStoredBytes: () => maxStoredBytes,
               busyTimeoutMs: 250,
               maintainIntervalMs: 20,
             } satisfies PerformanceStoreOptions),
