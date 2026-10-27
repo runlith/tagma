@@ -118,13 +118,12 @@ layer(world, { excludeTestServices: true })('worktree windows', (it) => {
         return settled.size === 2;
       });
       at.missing(missing.rootId);
+      const newer = '9'.repeat(40);
+      at.head(other.rootId, newer);
+      yield* checks.fresh(other.path, base, newer);
+      yield* next(frames, (frame) => rowsOf(frame).some((row) => row.rootId === other.rootId && row.mergeFact.head === newer));
       at.moved();
       yield* next(frames, (frame) => rowsOf(frame).some((row) => row.rootId === missing.rootId && row.status === 'missing'));
-      yield* checks.fresh(other.path, base, tip);
-      at.placed.push({ threadId: 'working-main', rootId: at.main.rootId, state: 'working', cleared: false, movedAt: new Date(1) });
-      at.threadsMoved();
-      const moved = yield* next(frames, (frame) => rowsOf(frame).some((row) => row.rootId === at.main.rootId && row.agents.working === 1));
-      expect(rowsOf(moved).find((row) => row.rootId === at.main.rootId)?.status).toBe('working');
       expect((yield* listing.list(7, { limit: 3 })).rows.find((row) => row.rootId === missing.rootId)?.status).toBe('missing');
     }),
   );

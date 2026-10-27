@@ -46,6 +46,8 @@ export type WorktreeRowReader = WorktreeRows['Service'] & FeedReads;
 const UNKNOWN: MergeVerdict = { check: 'unknown', held: false, fact: UNTAKEN };
 const stored = <A>(work: Effect.Effect<A, StoreFailure | { readonly message: string }>): Effect.Effect<A, WorktreeUnavailable> =>
   Effect.mapError(work, (failure) => new WorktreeUnavailable({ reason: 'storage', message: failure.message }));
+const gitRead = <A>(work: Effect.Effect<A, { readonly message: string }>): Effect.Effect<A, WorktreeUnavailable> =>
+  Effect.mapError(work, (failure) => new WorktreeUnavailable({ reason: 'git', message: failure.message }));
 const refused = <A>(work: Effect.Effect<A, WorktreeFeedFailure>): Effect.Effect<A, GateRefusal<WorktreeRowsRefusal>> =>
   Effect.catch(work, (failure) => declaredRefusal(WORKTREE_ROWS_REFUSALS)(worktreeRefusal(failure)));
 type ListedSnapshot = {
@@ -110,7 +112,7 @@ export const makeWorktreeRowReader = Effect.fnUntraced(function* (input: {
         readings.restore(projectId, roots),
         options.checks === undefined
           ? Effect.succeed(new Map<string, MergeVerdict>())
-          : stored(options.checks.saved(records.map((record) => record.path))),
+          : gitRead(options.checks.saved(records.map((record) => record.path))),
       ],
       { concurrency: 2 },
     );
@@ -124,7 +126,7 @@ export const makeWorktreeRowReader = Effect.fnUntraced(function* (input: {
     follow: (rootId) => checkouts.follow(rootId),
     state: readings.read,
     verdict: (path, tip, head, start) =>
-      options.checks === undefined ? Effect.succeed(UNKNOWN) : stored(options.checks.standing(path, tip, head, start)),
+      options.checks === undefined ? Effect.succeed(UNKNOWN) : gitRead(options.checks.standing(path, tip, head, start)),
     checked: (listener) => options.checks?.onTaken(listener) ?? (() => undefined),
     topology: checkouts.checkoutsMoved,
   };
@@ -194,13 +196,15 @@ export const makeWorktreeRowReader = Effect.fnUntraced(function* (input: {
     if (record === undefined) return externalEntry(root, sight, standing);
     const checks = options.checks;
     const verdict =
-      checks === undefined || metadata.head === null || tip === null ? UNKNOWN : yield* stored(checks.last(row.folder, metadata.head, tip));
+      checks === undefined || metadata.head === null || tip === null
+        ? UNKNOWN
+        : yield* gitRead(checks.last(row.folder, metadata.head, tip));
     if (fresh && checks !== undefined && metadata.head !== null && tip !== null && record.baseBranch !== null) {
-      yield* stored(checks.fresh(row.folder, tip, metadata.head));
+      yield* gitRead(checks.fresh(row.folder, tip, metadata.head));
     }
     const latest =
       fresh && checks !== undefined && metadata.head !== null && tip !== null
-        ? yield* stored(checks.last(row.folder, metadata.head, tip))
+        ? yield* gitRead(checks.last(row.folder, metadata.head, tip))
         : verdict;
     return recordedEntry(
       record,

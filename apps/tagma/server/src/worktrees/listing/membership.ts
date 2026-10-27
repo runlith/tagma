@@ -79,7 +79,7 @@ export type FeedMembership = {
     mode?: StateQuestion['mode'],
   ) => Effect.Effect<void, WorktreeUnavailable>;
   readonly reconcile: (next: WorktreeMembership) => Effect.Effect<ReadonlySet<string>>;
-  readonly measureMoved: Effect.Effect<void, WorktreeUnavailable>;
+  readonly checked: (paths: ReadonlySet<string>) => Effect.Effect<void>;
   readonly checkBusy: (scope: Scope.Scope) => Effect.Effect<void, WorktreeUnavailable>;
   readonly placeAll: (read: readonly ThreadPlacing[]) => void;
   readonly placeOne: (threadId: string, next: ThreadPlacing | undefined) => void;
@@ -156,20 +156,27 @@ export const makeFeedMembership = (input: {
       own,
     );
   });
-  const measure = Effect.fnUntraced(function* (tree: Tree) {
+  const measure = Effect.fnUntraced(function* (tree: Tree, start: boolean) {
     if (tree.kind !== 'tagma' || !tree.sight.present || !wanted(tree)) return;
     const head = tree.sight.metadata?.head ?? null;
     if (head === null || tree.tip === null || tree.record.baseBranch === null) return;
-    const verdict = yield* reads.verdict(tree.record.path, tree.tip, head, true);
-    const distance: Distance = {
-      ahead: tree.distance?.ahead ?? null,
-      behind: tree.distance?.behind ?? null,
-      check: verdict.check,
-      held: verdict.held,
-      fact: verdict.fact,
-    };
-    if (JSON.stringify(distance) !== JSON.stringify(tree.distance)) rowsMoved.add(tree.record.rootId);
-    tree.distance = distance;
+    const rootId = tree.record.rootId;
+    yield* reads.verdict(tree.record.path, tree.tip, head, start).pipe(
+      Effect.map((verdict) => {
+        const distance: Distance = {
+          ahead: tree.distance?.ahead ?? null,
+          behind: tree.distance?.behind ?? null,
+          check: verdict.check,
+          held: verdict.held,
+          fact: verdict.fact,
+        };
+        if (JSON.stringify(distance) !== JSON.stringify(tree.distance)) rowsMoved.add(rootId);
+        tree.distance = distance;
+      }),
+      Effect.catchTag('WorktreeUnavailable', (failure) =>
+        Effect.logWarning('a worktree merge verdict could not be read', { rootId, reason: failure.message }),
+      ),
+    );
   });
   const resighted = Effect.fnUntraced(function* (
     rootIds: readonly string[],
@@ -237,7 +244,7 @@ export const makeFeedMembership = (input: {
             held: current.distance?.held ?? false,
           };
         rowsMoved.add(rootId);
-        yield* measure(current);
+        yield* measure(current, true);
       }).pipe(
         Effect.catchTag('WorktreeUnavailable', (failure) =>
           Effect.gen(function* () {
@@ -394,7 +401,14 @@ export const makeFeedMembership = (input: {
         'page',
       );
     }),
-    measureMoved: Effect.suspend(() => Effect.forEach(trees.values(), measure, { concurrency: 3, discard: true })),
+    checked: (paths) =>
+      Effect.suspend(() =>
+        Effect.forEach(
+          [...trees.values()].filter((tree) => tree.kind === 'tagma' && paths.has(tree.record.path)),
+          (tree) => measure(tree, false),
+          { concurrency: 3, discard: true },
+        ),
+      ),
     checkBusy: (scope) => resighted([...trees.keys()], new Set(), scope),
     placeAll,
     placeOne,

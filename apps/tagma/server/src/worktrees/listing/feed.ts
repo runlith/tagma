@@ -23,6 +23,7 @@ type Dirt = {
   readonly roots: Set<string>;
   readonly acted: Set<string>;
   readonly threads: Set<string>;
+  readonly checked: Set<string>;
   everyThread: boolean;
   metadata: boolean;
 };
@@ -32,6 +33,7 @@ const clean = (): Dirt => ({
   roots: new Set(),
   acted: new Set(),
   threads: new Set(),
+  checked: new Set(),
   everyThread: false,
   metadata: false,
 });
@@ -217,7 +219,7 @@ export const makeWorktreeFeed = (input: {
         }),
       );
     }
-    if (check > 0) yield* step('check', check, membership.measureMoved);
+    if (check > 0) yield* step('check', check, membership.checked(batch.checked));
     if (interest > 0) yield* step('interest', interest, membership.checkBusy(scope));
     if (rowsMoved.size > 0 || membership.state.strayed) yield* publish(frames, before);
   });
@@ -247,7 +249,11 @@ export const makeWorktreeFeed = (input: {
           if (moved === projectId) poke('interest');
         }) ?? (() => undefined),
         reads.checked((path) => {
-          for (const tree of trees.values()) if (tree.kind === 'tagma' && tree.record.path === path) return poke('check');
+          for (const tree of trees.values())
+            if (tree.kind === 'tagma' && tree.record.path === path) {
+              dirt.checked.add(path);
+              return poke('check');
+            }
         }),
       ];
       yield* Effect.addFinalizer(() =>
