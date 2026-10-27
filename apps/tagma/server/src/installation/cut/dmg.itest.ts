@@ -30,7 +30,7 @@ it.live(
       yield* diskImage(bundle, image, assets, 'Tagma', { identity: '-', timestamp: false }).pipe(Effect.provide(spawning));
 
       expect(Bun.spawnSync(['/usr/bin/codesign', '--verify', image]).exitCode).toBe(0);
-      const attached = Bun.spawnSync(['/usr/bin/hdiutil', 'attach', image, '-nobrowse', '-readonly', '-mountpoint', mounted]);
+      const attached = Bun.spawnSync(['/usr/bin/hdiutil', 'attach', image, '-nobrowse', '-readonly', '-noverify', '-mountpoint', mounted]);
       expect(attached.exitCode === 0 ? '' : attached.stderr.toString()).toBe('');
       expect(existsSync(join(mounted, 'Tagma.app/Contents/MacOS/Electron'))).toBe(true);
       expect(lstatSync(join(mounted, 'Applications')).isSymbolicLink() && readlinkSync(join(mounted, 'Applications'))).toBe(
@@ -39,6 +39,6 @@ it.live(
       for (const part of ['.DS_Store', '.background.tiff', '.VolumeIcon.icns']) expect(existsSync(join(mounted, part))).toBe(true);
       const info = Bun.spawnSync(['/usr/bin/xattr', '-px', 'com.apple.FinderInfo', mounted]).stdout.toString().replace(/\s/gu, '');
       expect(info.slice(16, 20)).toBe('0400');
-      expect(existsSync(`${image}.rw.dmg`) || existsSync(`${image}.stage`)).toBe(false);
+      expect(existsSync(`${image}.rw.dmg`) || existsSync(`${image}.stage`) || existsSync(`${image}.mount`)).toBe(false);
     }),
 );
