@@ -4,61 +4,25 @@ import { holderLayer } from './posix/PosixHolder';
 import { HOLDER_BINARY } from './posix/testing/holder';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Duration, Effect, FileSystem, Layer, Runtime, Schedule, Schema, Stream } from 'effect';
+import { Duration, Effect, FileSystem, Layer, Runtime, Schema, Stream } from 'effect';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import * as BunServices from '@effect/platform-bun/BunServices';
-import { ExecutionClient } from '@runlith/executions/ExecutionClient';
 import type { Executions } from '@runlith/executions/Executions';
-import type { HostAuthority } from '@runlith/executions/HostAuthority';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
-import { ExecutionPolicy } from '@runlith/executions/protocol/capacity';
 import { Principal } from '@runlith/executions/protocol/custody';
 import { PERFORMANCE_FILE } from '@runlith/executions/protocol/registration';
-import type { WireLimits } from '@runlith/executions/protocol/wire';
 import { PerformanceReports, performanceReportsLayer } from '@runlith/performance/PerformanceReports';
 import { PerformanceStore, performanceStoreWatchLayer } from '@runlith/performance/PerformanceStore';
 import type { CpuProfileArtifact } from '@runlith/performance/CpuProfile';
 import { HostBoot } from '@runlith/executions/protocol/boot';
 import { serve } from './composition/host';
-import { keyOf, registrationOf } from './hostFixture';
+import { keyOf } from './hostFixture';
+import { BENCH_LIMITS, benchBoot, benchClient, benchFlag } from './composition/testing/benchHost';
 
-const flag = (name: string, fallback: number): number => {
-  const given = process.argv.find((argument) => argument.startsWith(`--${name}=`));
-  return given === undefined ? fallback : Number(given.slice(name.length + 3));
-};
-
-const SECONDS = Math.min(60, flag('seconds', 30));
-const TERMINALS = flag('terminals', 8);
-const VIEWERS = Math.min(TERMINALS, flag('viewers', 4));
-const BUSY_SHARE = flag('busy', 0.2);
-
-const LIBRARY = join(import.meta.dir, '..', 'native', 'target', 'release', 'libexecution_platform.dylib');
-
-const policy = Schema.decodeUnknownSync(ExecutionPolicy)({
-  transports: ['pipes', 'pty'],
-  relations: ['leader'],
-  execution: {
-    input: { pendingBytes: 65536, chunkBytes: 16384, receipts: 128 },
-    output: { landingBytes: 16384, segmentBytes: 262144, retainedBytes: 8388608 },
-    parser: { pendingBytes: 262144, cellBytes: 234881024 },
-    geometry: { columns: 320, rows: 100, scrollbackRows: 5000 },
-    read: { chunkBytes: 65536, readerCredits: 65536, readers: 4 },
-    frame: { bytes: 16777216, inFlight: 1 },
-    receipts: 4096,
-  },
-  host: { bindings: 4096, custodyReceipts: 4096, tombstones: 4096 },
-  usage: { periodMs: 1200 },
-});
-
-const limits = {
-  frameBytes: 16793604,
-  headerBytes: 16384,
-  connections: 6,
-  requests: 6,
-  subscriptions: 3296,
-  credits: 16793604,
-  helloMs: 5000,
-} as WireLimits;
+const SECONDS = Math.min(60, benchFlag('seconds', 30));
+const TERMINALS = benchFlag('terminals', 8);
+const VIEWERS = Math.min(TERMINALS, benchFlag('viewers', 4));
+const BUSY_SHARE = benchFlag('busy', 0.2);
 
 const WORKLOAD =
   'i=0; while :; do i=$((i+1)); printf "\\033[32mround %d\\033[0m\\n" $i; ls -la /usr/lib | head -120; ps -o pid=,rss= -p $$ >/dev/null; sleep 0.4; done';
@@ -80,15 +44,6 @@ const hosting = Effect.fnUntraced(
   Effect.provide(BunServices.layer),
 );
 
-const takeHost = Effect.fnUntraced(
-  function* (executions: HostAuthority['Service']) {
-    const first = yield* executions.take(keyOf('bench-take'), 0);
-    if (first._tag !== 'Stale') return first;
-    return yield* executions.take(keyOf('bench-take-standing'), first.standing.revision);
-  },
-  Effect.retry(Schedule.upTo(Schedule.spaced(Duration.millis(25)), { duration: Duration.seconds(10) })),
-);
-
 const cpuSeconds = (pid: number): number => {
   const text = Bun.spawnSync(['ps', '-o', 'time=', '-p', String(pid)])
     .stdout.toString()
@@ -106,13 +61,8 @@ const shortUrl = (url: string): string => {
 
 const drive = Effect.fnUntraced(
   function* (directory: string, hostPid: number) {
-    const registration = registrationOf(directory);
-    const address = { state: registration.state, installation: registration.installation };
-    const executions = yield* ExecutionClient.make({ address, role: 'custodian', limits, budget: { handshakeMs: 5_000 } }).pipe(
-      Effect.retry(Schedule.upTo(Schedule.spaced(Duration.millis(50)), { duration: Duration.seconds(15) })),
-    );
-    yield* takeHost(executions);
-    yield* Stream.runDrain(executions.subscribe({ _tag: 'Inventory' }, limits.credits)).pipe(Effect.ignore, Effect.forkScoped);
+    const executions = yield* benchClient(directory);
+    yield* Stream.runDrain(executions.subscribe({ _tag: 'Inventory' }, BENCH_LIMITS.credits)).pipe(Effect.ignore, Effect.forkScoped);
     const started = [];
     for (let index = 0; index < TERMINALS; index += 1) {
       const launched = yield* executions.start(keyOf(`bench-${index}`), {
@@ -128,7 +78,10 @@ const drive = Effect.fnUntraced(
       started.push(launched.execution);
     }
     for (const execution of started.slice(0, VIEWERS)) {
-      yield* Stream.runDrain(executions.subscribe({ _tag: 'Screen', execution }, limits.credits)).pipe(Effect.ignore, Effect.forkScoped);
+      yield* Stream.runDrain(executions.subscribe({ _tag: 'Screen', execution }, BENCH_LIMITS.credits)).pipe(
+        Effect.ignore,
+        Effect.forkScoped,
+      );
     }
     const before = cpuSeconds(hostPid);
     const began = performance.now();
@@ -215,20 +168,7 @@ if (process.argv.includes('--serve')) {
   });
 } else {
   const directory = mkdtempSync(join(tmpdir(), 'host-load-'));
-  const boot = join(directory, 'boot.json');
-  writeFileSync(
-    boot,
-    Schema.encodeSync(Schema.fromJsonString(HostBoot))({
-      state: directory,
-      registration: registrationOf(directory),
-      library: LIBRARY,
-      policy,
-      share: 0.25,
-      limits,
-      lifetime: 'with-parent',
-    }),
-    { mode: 0o600 },
-  );
+  const boot = benchBoot(directory);
   const host = Bun.spawn([HOLDER_BINARY, directory, process.execPath, import.meta.path, `--busy=${BUSY_SHARE}`, '--serve', boot], {
     stdin: 'pipe',
     stdout: 'pipe',
