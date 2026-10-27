@@ -39,6 +39,7 @@ export type HarnessSeating = {
 export type HarnessSeated = { readonly name: HarnessId; readonly seat: SeatedHarness };
 export type HarnessMoveTo = ThreadModelSelection & { readonly account?: string | null; readonly switches?: ModelSwitches };
 export type HarnessMoved = { readonly from: ThreadModelSelection | null; readonly to: ThreadModelSelection };
+export type HarnessFollowed = HarnessMoved & { readonly left: string | null };
 export type HarnessQuestion = { readonly system: string; readonly text: string };
 export type HarnessAnswer = (
   | { readonly outcome: 'answered'; readonly text: string }
@@ -99,6 +100,8 @@ export class HarnessMoves extends Context.Service<
   HarnessMoves,
   {
     move(threadId: string, to: HarnessMoveTo): Effect.Effect<HarnessMoved | null, HarnessFailure>;
+    lagging(provider: string, account: string): Effect.Effect<readonly string[], StoreFailure>;
+    follow(threadId: string, provider: string, account: string | null): Effect.Effect<HarnessFollowed | null, HarnessFailure>;
   }
 >()('tagma/threads/HarnessMoves') {}
 

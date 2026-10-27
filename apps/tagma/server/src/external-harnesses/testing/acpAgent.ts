@@ -136,6 +136,7 @@ let late = false;
 let trailing = false;
 let owed = false;
 let lingering: boolean | 'held' = false;
+let refusals = 0;
 const WITHDRAWN = { code: -32800, message: 'the words were taken back before the agent read them' };
 const SUMMARY = { preTokens: 900, postTokens: 90, summary: 'the compacted summary' };
 const stepped = (): void => {
@@ -151,6 +152,8 @@ const unstepped = (code: number, message: string): void => {
   send({ id: stepping.id, error: { code, message } });
   stepping = null;
 };
+const limitedHere = (): boolean =>
+  !existsSync(`${report}.limited`) || readFileSync(`${report}.limited`, 'utf8').trim() === process.env.CLAUDE_CONFIG_DIR;
 const later = (answer: () => void): void => {
   if (existsSync(`${report}.hold`)) held.push(answer);
   else answer();
@@ -188,9 +191,10 @@ if (mode === 'tagma') {
     }
     if (prompt !== null && existsSync(`${report}.refused`)) {
       rmSync(`${report}.refused`, { force: true });
+      const toolCallId = `refused-call-${(refusals += 1)}`;
       update(prompt.sessionId, {
         sessionUpdate: 'tool_call',
-        toolCallId: 'refused-call',
+        toolCallId,
         title: 'read_output',
         name: 'read_output',
         kind: 'other',
@@ -198,10 +202,10 @@ if (mode === 'tagma') {
         rawInput: { id: 'c-1' },
         _meta: { 'tagma/executes': true },
       });
-      send({ method: '_tagma/said', params: { sessionId: prompt.sessionId, messageId: 'said-refused', toolCallIds: ['refused-call'] } });
+      send({ method: '_tagma/said', params: { sessionId: prompt.sessionId, messageId: `said-${toolCallId}`, toolCallIds: [toolCallId] } });
       update(prompt.sessionId, {
         sessionUpdate: 'tool_call_update',
-        toolCallId: 'refused-call',
+        toolCallId,
         status: 'failed',
         content: [{ type: 'content', content: { type: 'text', text: 'No such tool available: mcp__tagma__read_output' } }],
         _meta: { 'tagma/executes': false },
@@ -661,7 +665,7 @@ const handle = (message: Message): void => {
         finish(text.includes('TRUNCATE') ? 'max_tokens' : 'refusal');
         return;
       }
-      if (mode === 'tagma' && text.includes('RATELIMIT')) {
+      if (mode === 'tagma' && text.includes('RATELIMIT') && limitedHere()) {
         update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'API Error: Rate limited' } });
         send({ id: prompt.id, error: { code: -32603, message: 'Rate limited', data: { 'tagma/failure': RATE_LIMITED } } });
         prompt = null;

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { Effect } from 'effect';
 import { RunAdmission } from '@runlith/agent/thread/run/runAdmission';
 import { ThreadModel, ThreadModelRefused } from '@runlith/agent/collaboration/model';
@@ -13,8 +13,10 @@ import { writes } from '../../platform/contract/service/writes.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { NATIVE_HARNESS, type HarnessId } from '../../platform/contract/wire/session.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
+import { threadRecord } from '../../thread-record/store/table.js';
 import type { HarnessFailure } from '../contract/service/failure.js';
 import {
+  type HarnessFollowed,
   HarnessMoves,
   type HarnessMoved,
   type HarnessMoveTo,
@@ -33,8 +35,8 @@ import { currentEffort, currentModel } from '../contract/wire/harness/observatio
 import { harnessSessionActive } from '../contract/wire/harness/session.js';
 import { nativeCapabilities, servedSelection, type KernelSeat } from '../contract/wire/harness/seat.js';
 import { mandateFacts } from '../mandate.js';
-import { deleteSession, externalSession, insertSession } from '../store/harnessFacet.js';
-import { thread } from '../store/kernel.js';
+import { deleteSession, externalSession, insertSession, recoverableSession } from '../store/harnessFacet.js';
+import { thread, threadRun } from '../store/kernel.js';
 import { bindingOf, capabilitiesOf, switchesOf } from '../store/seat.js';
 import { keptSwitches } from '@runlith/llm/models/description';
 
@@ -200,7 +202,71 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
       (lift) => Effect.sync(() => lift()),
     );
 
+  const hostedRow = (threadId: string) =>
+    units.read((unit) =>
+      Effect.all({
+        bound: bindingOf(db, unit, threadId),
+        row: unit.run(
+          db
+            .select({ provider: thread.provider, model: thread.model, reasoning: thread.reasoning, account: thread.account })
+            .from(thread)
+            .where(eq(thread.id, threadId))
+            .get(),
+        ),
+      }),
+    );
+
   return HarnessMoves.of({
+    lagging: Effect.fn('HarnessMoves.lagging')(function* (provider, account) {
+      const lagged = sql`json_extract(${externalSession.facet}, '$.session.account.provider') = ${provider} and json_extract(${externalSession.facet}, '$.session.account.key') != ${account}`;
+      const unbound = sql`json_extract(${externalSession.facet}, '$.session.state') = 'starting' and json_extract(${externalSession.facet}, '$.session.account') is null`;
+      const limited = sql`exists (select 1 from ${threadRun} as latest where latest.id = (select r.id from ${threadRun} as r where r.thread_id = ${externalSession.id} order by r.created_at desc limit 1) and latest.status = 'failed' and json_extract(latest.failure, '$.reason.family') = 'rate-limit')`;
+      const rows = yield* units.read((unit) =>
+        unit.run(
+          db
+            .select({ id: externalSession.id })
+            .from(externalSession)
+            .innerJoin(thread, eq(thread.id, externalSession.id))
+            .innerJoin(threadRecord, eq(threadRecord.id, externalSession.id))
+            .where(
+              and(
+                isNull(threadRecord.archivedAt),
+                isNull(thread.account),
+                eq(thread.provider, provider),
+                sql`json_extract(${thread.transport}, '$.adapter') = 'acp'`,
+                sql`json_extract(${thread.transport}, '$.agent') is not null`,
+                or(and(recoverableSession(externalSession.facet), or(lagged, unbound)), and(lagged, limited)),
+              ),
+            )
+            .all(),
+        ),
+      );
+      return rows.map((row) => row.id);
+    }),
+    follow: Effect.fn('HarnessMoves.follow')(
+      function* (threadId, provider, account) {
+        const facet = yield* sessionOf(threadId);
+        const { bound, row } = yield* hostedRow(threadId);
+        if (row === undefined) return null;
+        const served = servedSelection(row.provider, row, facet) ?? { provider: row.provider, model: 'default', reasoning: row.reasoning };
+        const stays: HarnessFollowed = { from: served, to: served, left: null };
+        const standing = facet?.session;
+        const follows = bound?.adapter === 'acp' && bound.agent != null && row.account === null && row.provider === provider;
+        if (!follows || account === null || standing === undefined) return stays;
+        if (harnessSessionActive(standing) && standing.state === 'starting' && standing.account === undefined)
+          return yield* new GateRefusal('session-starting', `The agent process of ${threadId} has not taken its account yet.`, [
+            'read the thread once its process has started',
+          ]);
+        if (standing.account?.provider !== provider || standing.account.key === account) return stays;
+        if (harnessSessionActive(standing)) {
+          if ((yield* runs.runningRunOf(threadId)) !== null) return yield* running(threadId);
+          yield* releasing(threadId);
+        }
+        return { ...stays, left: standing.account.key };
+      },
+      (work, threadId) => held(threadId, work),
+    ),
+
     move: Effect.fn('HarnessMoves.move')(
       function* (threadId, asked) {
         const to = { ...asked, switches: asked.switches ?? (yield* kept(threadId, asked)) };

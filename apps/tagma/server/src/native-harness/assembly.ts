@@ -67,6 +67,7 @@ import { makeEventStripping } from './maintenance/stripping.js';
 import { makeFootprintFolding } from './maintenance/footprintFolding.js';
 import { makeTransitionRetirement } from './maintenance/transitions.js';
 import { makeModelPreferences, publishDefaultMoves } from './models/preference.js';
+import { carryDefaultMoves } from './models/defaultMoves.js';
 import { publishLimitMoves } from './compaction/limits.js';
 import type { ContextLimits } from '../threads/contract/service/limits.js';
 import { SettingChanges } from '../settings/contract/service/changes.js';
@@ -340,6 +341,7 @@ export const assembleNativeHarness: Effect.Effect<NativeAssembly, never, NativeH
     ),
   );
   yield* Effect.forkScoped(publishDefaultMoves);
+  yield* Effect.forkScoped(carryDefaultMoves);
   yield* Effect.forkScoped(publishLimitMoves);
   yield* Effect.forkScoped(
     afterPort.pipe(
