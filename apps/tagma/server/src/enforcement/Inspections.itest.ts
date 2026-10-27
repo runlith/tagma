@@ -95,36 +95,38 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('inspection lanes', (i
     }),
   );
 
-  it.effect(
-    'a worker asked again within the quiet period answers again; one quiet past it is stopped, and a fresh one answers the next ask',
-    () =>
-      Effect.gen(function* () {
-        const held = yield* poolOf(yield* home, 'counting', COUNTING, { idleMs: 20 });
-        const burst = yield* Effect.all([held.ask(ask('judge')), held.ask(ask('judge'))], { concurrency: 2 });
-        expect(burst.map((one) => one.ms).sort()).toEqual([1, 2]);
-        yield* Effect.sleep(80);
-        expect((yield* held.ask(ask('judge'))).ms).toBe(1);
-      }),
-  );
-
-  it.effect('a worker quiet past the period is asked to rest before it stops, so it can keep what it holds', () =>
+  it.effect('a worker is reused while wanted, keeps its state before retiring, and is replaced for the next ask', () =>
     Effect.gen(function* () {
+      const stopped = Promise.withResolvers<void>();
+      const listener = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.listen({
+            hostname: '127.0.0.1',
+            port: 0,
+            socket: { data() {}, close: () => stopped.resolve() },
+          }),
+        ),
+        (opened) => Effect.sync(() => opened.stop(true)),
+      );
       const here = yield* home;
       const marker = join(here, 'rested');
       const held = yield* poolOf(
         here,
         'resting',
         `import { writeFileSync } from 'node:fs';
-      self.addEventListener('message', (event) => {
+      const connected = Bun.connect({ hostname: '127.0.0.1', port: ${listener.port}, socket: { data() {} } });
+      self.addEventListener('message', async (event) => {
+        await connected;
         served += 1;
         if (event.data.kind === 'rest') writeFileSync(${JSON.stringify(marker)}, String(served));
         self.postMessage({ id: event.data.id, answered: true, verdict: { violations: [], unjudged: [] }, read: [], ms: served });
       });`,
         { idleMs: 20 },
       );
-      expect((yield* held.ask(ask('judge'))).ms).toBe(1);
-      yield* Effect.sleep(80);
-      expect(readFileSync(marker, 'utf8')).toBe('2');
+      const burst = yield* Effect.all([held.ask(ask('judge')), held.ask(ask('judge'))], { concurrency: 2 });
+      expect(burst.map((one) => one.ms).sort()).toEqual([1, 2]);
+      yield* Effect.promise(() => stopped.promise);
+      expect(readFileSync(marker, 'utf8')).toBe('3');
       expect((yield* held.ask(ask('judge'))).ms).toBe(1);
     }),
   );

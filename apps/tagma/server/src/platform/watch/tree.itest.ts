@@ -2,7 +2,6 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { makeWatchClient } from '@runlith/watch/client';
-import { watch } from 'node:fs';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Context, Effect, FileSystem, Layer, Queue } from 'effect';
@@ -177,6 +176,8 @@ layer(watcherProcess, { excludeTestServices: true })('tree watching', (it) => {
       const standingHeard: WatchEvent[] = [];
       const latecomerHeard: WatchEvent[] = [];
       const standing = yield* watched(tree, (event) => standingHeard.push(event));
+      expect(yield* (yield* FileWatcher).settle(tree, [])).toBe(true);
+      standingHeard.length = 0;
       const during = yield* withholding(
         [tree],
         Effect.gen(function* () {
@@ -263,14 +264,18 @@ layer(watcherProcess, { excludeTestServices: true })('tree watching', (it) => {
         [commonDir, ''],
         [info, 'info/'],
       ] as const) {
-        yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            watch(at, { persistent: false }, (_kind, file) => {
-              if (file !== null) raw.add(`${prefix}${file}`);
-              complete();
-            }),
-          ),
-          (observer) => Effect.sync(() => observer.close()),
+        yield* following(
+          watchAll([
+            {
+              at,
+              recursive: false,
+              required: true,
+              listen: (event) => {
+                for (const file of event.paths ?? []) raw.add(`${prefix}${file}`);
+                complete();
+              },
+            },
+          ]),
         );
       }
       const tracked = yield* following(
@@ -298,6 +303,7 @@ layer(watcherProcess, { excludeTestServices: true })('tree watching', (it) => {
             .filter((event) => event.movement === 'ignore')
             .every((event) => event.paths?.every((path) => path === 'info/exclude') === true),
         ).toBe(true);
+        raw.clear();
         heard.length = 0;
         delivered = arrival();
       }

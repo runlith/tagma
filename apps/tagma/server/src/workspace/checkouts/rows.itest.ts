@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { statSync } from 'node:fs';
-import { Deferred, Effect, Fiber, Stream } from 'effect';
+import { Deferred, Effect, Fiber, Stream, Tracer } from 'effect';
 import type { CheckoutState } from '../contract/wire/checkout.js';
 import { RootId } from '../contract/wire/ids.js';
 import { fixture, pause, provenance, run, rowTests } from '../testing/rowsFixture.js';
@@ -405,7 +405,10 @@ rowTests('checkouts/rows.itest.ts', (it) => {
   );
   it.effect('marks reaching a checkout whose reading still waits for its turn are carried by that reading', () =>
     Effect.gen(function* () {
-      const { files, paths, home, door, roots, status, rootId, root } = yield* fixture;
+      const { files, paths, home, door, roots, rowsOver, rootId, root } = yield* fixture;
+      const status = yield* rowsOver({
+        follow: () => Effect.succeed({ shifts: Stream.never, watching: () => true, release: () => undefined }),
+      });
       const more = yield* Effect.forEach(
         [1, 2, 3],
         Effect.fnUntraced(function* (n) {
@@ -418,8 +421,20 @@ rowTests('checkouts/rows.itest.ts', (it) => {
       const checkouts = [{ at: root, rootId }, ...more];
       const held = yield* pause;
       door.holdEvery(held, 3);
-      const readers = yield* Effect.forkChild(Effect.forEach(checkouts, (one) => status.read(one.rootId), { concurrency: 'unbounded' }));
+      const queued = yield* Deferred.make<void>();
+      let started = 0;
+      const tracer = Tracer.make({
+        span: (options) => {
+          if (options.name === 'CheckoutStatus.reading' && ++started === checkouts.length) Deferred.doneUnsafe(queued, Effect.void);
+          return new Tracer.NativeSpan(options);
+        },
+      });
+      const following = yield* Effect.forEach(checkouts, (one) => status.follow(one.rootId)).pipe(Effect.withTracer(tracer));
+      const readers = yield* Effect.forkChild(
+        Effect.forEach(following, (stream) => Stream.runCollect(Stream.take(stream, 1)), { concurrency: 'unbounded' }),
+      );
       yield* Deferred.await(held.arrived);
+      yield* Deferred.await(queued);
       const listed = (at: string) => door.commands.filter((args) => args.includes('--porcelain=v2') && args.includes(at)).length;
       const waiting = checkouts.find((one) => listed(one.at) === 0);
       if (waiting === undefined) return yield* Effect.die('every reading had started');
@@ -428,8 +443,9 @@ rowTests('checkouts/rows.itest.ts', (it) => {
       yield* status.mark(waiting.rootId);
       yield* Deferred.succeed(held.gate, undefined);
       const rows = yield* Fiber.join(readers);
+      yield* status.read(waiting.rootId, 'HEAD');
       expect(listed(waiting.at)).toBe(1);
-      expect(rows[checkouts.indexOf(waiting)]?.entries.untracked.entries.map((entry) => entry.path)).toContain('queued.txt');
+      expect(rows[checkouts.indexOf(waiting)]?.[0]?.entries.untracked.entries.map((entry) => entry.path)).toContain('queued.txt');
     }),
   );
   it.effect('a mark naming more paths than one command line carries still answers a fresh row', () =>
