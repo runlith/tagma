@@ -14,6 +14,7 @@
   import { ProjectRenaming } from './Renaming.svelte.js';
   import { ProjectStrip } from './Strip.svelte.js';
   import { labelOf } from '$lib/features/workspace/mark.js';
+  import Swatch from '$lib/features/workspace/Swatch.svelte';
 
   let { aim, project }: { aim: ContextAim; project: Project | null } = $props();
 
@@ -32,7 +33,10 @@
 <DropdownMenu.Root bind:open={() => open, setOpen}>
   <DropdownMenu.Content anchor={aim.anchor ?? undefined} align="start" sideOffset={0} class="min-w-52" returnFocus={false}>
     {#if project !== null}
-      <DropdownMenu.Label>{labelOf(project)}</DropdownMenu.Label>
+      <DropdownMenu.Label>
+        {#snippet lead()}<Swatch projectId={project.id} />{/snippet}
+        {labelOf(project)}
+      </DropdownMenu.Label>
       {#if !project.global}
         <DropdownMenu.Item icon={PencilLine} onSelect={() => renaming.ask(project)}>Rename…</DropdownMenu.Item>
       {/if}
