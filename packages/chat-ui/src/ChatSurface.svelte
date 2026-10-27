@@ -29,8 +29,6 @@
   import RetiredReadyAnswersRow from './entries/RetiredReadyAnswersRow.svelte';
   import SignalRow from './entries/SignalRow.svelte';
   import ToolRow from './entries/ToolRow.svelte';
-  import Clamp from './entries/Clamp.svelte';
-  import { WORDS_LINES } from './rowEstimate';
   import UserMessageRow from './entries/UserMessageRow.svelte';
   import Well from './entries/Well.svelte';
   import WordsRow from './entries/WordsRow.svelte';
@@ -340,16 +338,14 @@
 {/snippet}
 
 {#snippet reasoningStep(entry: ChatEntryOf<'reasoning'>, context: ChatEntryContext)}
-  <Clamp id={entry.id} lines={WORDS_LINES} class="leading-5">
-    {@render rendering.markdown({
-      cacheKey: entry.id,
-      size: 'ui',
-      class: 'text-muted-foreground',
-      streaming: entry.reasoningState === 'streaming',
-      text: entry.text,
-      onRendered: () => context.contentRendered(entry.id),
-    })}
-  </Clamp>
+  {@render rendering.markdown({
+    cacheKey: entry.id,
+    size: 'ui',
+    class: 'text-muted-foreground',
+    streaming: entry.reasoningState === 'streaming',
+    text: entry.text,
+    onRendered: () => context.contentRendered(entry.id),
+  })}
 {/snippet}
 
 {#snippet guidanceStep(entry: ChatEntryOf<'runtime-guidance'>)}

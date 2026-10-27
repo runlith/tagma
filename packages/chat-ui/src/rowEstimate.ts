@@ -163,7 +163,7 @@ function formBodyHeight(key: string, display: ToolDisplay, view: RowSizing): num
     case 'markdown':
       return STEP_BODY_PX + wellHeight(view.markdown(`${key}:display`, display.text, BODY_COLUMNS), whole);
     case 'message':
-      return STEP_BODY_PX + clamped(view.markdown(`${key}:display`, display.text, BODY_COLUMNS), WORDS_LINES, whole);
+      return STEP_BODY_PX + view.markdown(`${key}:display`, display.text, BODY_COLUMNS);
     case 'text':
       return STEP_BODY_PX + wellHeight(lines(display.text) * FENCE_LINE_PX, whole);
     default:

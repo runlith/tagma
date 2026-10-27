@@ -4,11 +4,10 @@
   import type { ChatAttachment } from '../entries';
   import type { ChatEntryContext, ChatEntryOf } from '../renderers';
   import { useChatRendering } from '../renderers';
-  import { patchBodyHeight, WORDS_LINES } from '../rowEstimate';
+  import { patchBodyHeight } from '../rowEstimate';
   import { useChatStrings } from '../strings';
   import type { ChatLink } from '../surface';
   import AttachmentStrip from './AttachmentStrip.svelte';
-  import Clamp from './Clamp.svelte';
   import ToolDiff from './ToolDiff.svelte';
   import Well from './Well.svelte';
 
@@ -63,9 +62,9 @@
     </div>
   {/if}
   {#if display?.form === 'message' && display.text}
-    <Clamp id={entry.id} lines={WORDS_LINES} class="leading-5">
+    <div class="min-w-0 leading-5">
       {@render rendering.markdown({ cacheKey: entry.id, size: 'ui', class: 'text-foreground/85', text: display.text })}
-    </Clamp>
+    </div>
   {:else if display?.form === 'code' && display.text}
     <Well id={entry.id} copy={display.text} open={file} count={lineCount(display.text)}>
       {@render rendering.code({

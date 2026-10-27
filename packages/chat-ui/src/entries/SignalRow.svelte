@@ -3,10 +3,8 @@
   import { messageTime } from '../chatTime';
   import type { ChatAttachedDoc } from '../entries';
   import { type ChatEntryContext, type ChatEntryOf, useChatRendering } from '../renderers';
-  import { WORDS_LINES } from '../rowEstimate';
   import { useChatStrings } from '../strings';
   import AttachedDocsRow from './AttachedDocsRow.svelte';
-  import Clamp from './Clamp.svelte';
   import EntryDisclosure from './EntryDisclosure.svelte';
 
   type Props = {
@@ -44,14 +42,12 @@
       <span>{strings.fromAgent()}</span>
       {#if entry.occurredAt}<span class="text-muted-foreground/50">{messageTime(entry.occurredAt, strings.locale)}</span>{/if}
     </p>
-    <Clamp id={entry.id} lines={WORDS_LINES} class="leading-5">
-      {@render rendering.markdown({
-        cacheKey: entry.id,
-        size: 'ui',
-        class: 'text-muted-foreground',
-        text: entry.text,
-        onRendered: () => context.contentRendered(entry.id),
-      })}
-    </Clamp>
+    {@render rendering.markdown({
+      cacheKey: entry.id,
+      size: 'ui',
+      class: 'text-muted-foreground',
+      text: entry.text,
+      onRendered: () => context.contentRendered(entry.id),
+    })}
   </div>
 {/if}
