@@ -80,21 +80,6 @@ it.live('a completed check with no offered release ends the trial without asking
   }),
 );
 
-it.live('an issued predecessor without a feed-check source is waited on until it offers the release', () =>
-  Effect.gen(function* () {
-    let checking = true;
-    readNext = () => {
-      if (checking) {
-        checking = false;
-        return { offers: [], issue: null };
-      }
-      return { offers: [{ id: offer.release, label: offer.release }], issue: null };
-    };
-    const outcome = yield* Effect.promise(() => updated(world, offer));
-    expect(outcome).toContain('installation-stopped');
-  }),
-);
-
 it.live('a terminal with no host state ends its wait when no flock holder or live handover exists', () =>
   Effect.gen(function* () {
     mkdirSync(world.data, { recursive: true });

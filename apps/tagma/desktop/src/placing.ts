@@ -3,7 +3,7 @@ import { access, mkdir } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { BundleRefused, recoverBundle, replaceBundle, verifiedBundle } from '@tagma/server/mac-applications/placement';
 import { compareReleases, isRelease } from '@tagma/server/installation/contract/wire/feed';
-import { type Bearing, carriedBy } from './release.js';
+import { carriedBy } from './release.js';
 
 const SYSTEM_APPLICATIONS = '/Applications';
 const REFUSED = new Set(['EACCES', 'EPERM', 'EROFS', 'ENOENT', 'ENOTDIR']);
@@ -56,11 +56,6 @@ export async function become(own: string | null, kept: string, installRoot: stri
 export async function replaceAt(copy: string, kept: string, installRoot: string): Promise<Placed | null> {
   if (within(copy, installRoot) || !(await writable(dirname(copy)))) return null;
   return replaced(copy, kept);
-}
-
-export async function keepCopy(own: string, bearing: Bearing, kept: string, installRoot: string): Promise<void> {
-  if (within(own, installRoot) || carriedBy(kept)?.digest === bearing.digest) return;
-  await replaceBundle(kept, own);
 }
 
 export const settleOwn = (own: string): Promise<void> => recoverBundle(own);

@@ -438,20 +438,6 @@ test('a window that meets its own server stalled ends that process, says why, an
   expect(acts()).toEqual(['serve']);
 });
 
-test('an application whose release lost its kept copy puts a copy of itself back', async () => {
-  const kept = installed('0.2.0');
-  rmSync(kept, { recursive: true, force: true });
-  served = bearing('0.2.0');
-  answering();
-  const window = windowOf(application(join(base, 'Applications'), '0.2.0'));
-
-  window.loader.start();
-  await until(() => window.opened === 1);
-
-  expect(carried(kept)).toBe('0.2.0');
-  expect(acts()).toEqual([]);
-});
-
 test('an older application becomes the standing one: replaced where it is writable, opened from the kept copy where not, its own release pruned or not', async () => {
   const kept = installed('0.2.0');
   const writable = application(join(base, 'Applications'), '0.1.0');

@@ -4,7 +4,6 @@ export type Applications = {
   readonly verify: (bundle: string, signal: AbortSignal) => Promise<string | null>;
   readonly copy: (bundle: string, to: string) => Promise<void>;
   readonly unquarantine: (path: string) => Promise<string | null>;
-  readonly clearPlace: (installRoot: string) => void;
   readonly forget: (dir: string) => void;
   readonly signature: (carried: string, installRoot: string, signal: AbortSignal) => Promise<string | null>;
 };

@@ -85,7 +85,6 @@ const inert: Applications = {
   verify: async () => null,
   copy: async () => undefined,
   unquarantine: async () => null,
-  clearPlace: () => undefined,
   forget: () => undefined,
   signature: async () => null,
 };

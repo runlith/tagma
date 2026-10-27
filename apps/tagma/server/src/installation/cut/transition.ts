@@ -27,7 +27,6 @@ import {
   held,
   installedFrom,
   observed,
-  observedAfresh,
   observedSettled,
   openWorld,
   ran,
@@ -35,21 +34,18 @@ import {
   serving,
   type Terminals,
   unpacked,
-  updated,
   type World,
 } from './world.js';
 
-const USAGE = 'bun run tagma:transition [--head] [--from <archive of the release before>] [--version <x.y.z>] [--commit <its commit>]';
+const USAGE = 'bun run tagma:transition [--head] [--from <archive of the release before>] [--version <x.y.z>]';
 
 type Plan = {
   readonly channel: Channel;
   readonly from: string;
   readonly before: string;
-  readonly commit: string;
   readonly archive: string;
   readonly offer: FeedRelease;
   readonly desktop: string;
-  readonly frozen: string;
   readonly out: string;
 };
 
@@ -61,9 +57,6 @@ const lastLine = (text: string): unknown => {
   const read = decodeLine(text.trim().split('\n').at(-1) ?? '');
   return Result.isSuccess(read) ? read.success : { unread: read.failure.message };
 };
-
-const reopenOf = (answer: unknown): string | null =>
-  typeof answer === 'object' && answer !== null && 'reopen' in answer && typeof answer.reopen === 'string' ? answer.reopen : null;
 
 const openedOf = (answer: unknown): boolean =>
   typeof answer === 'object' && answer !== null && 'opened' in answer && answer.opened === true;
@@ -81,9 +74,6 @@ const windowAct = async (
   return { said: `${args[0]}: exited ${done.code} ${done.out.trim() || said(done)}`, answer: done.code === 0 ? lastLine(done.out) : null };
 };
 
-const frozenAct = (plan: Plan, world: World, verb: 'frozen-launch' | 'frozen-follow', app: string) =>
-  windowAct(plan, world, [verb, '--commit', plan.commit, '--frozen', plan.frozen, '--app', app, '--url', world.url]);
-
 const opened = (plan: Plan, world: World, app: string) => windowAct(plan, world, ['open', '--app', app, '--url', world.url]);
 
 type Stood = { readonly old: string; readonly terminals: Terminals };
@@ -91,8 +81,6 @@ type Stood = { readonly old: string; readonly terminals: Terminals };
 const standing = async (plan: Plan, world: World, lines: string[]): Promise<Result.Result<Stood, string>> => {
   const old = await unpacked(world, plan.from, join(world.dir, 'Applications'));
   if (Result.isFailure(old)) return Result.fail(old.failure);
-  const launched = await frozenAct(plan, world, 'frozen-launch', old.success);
-  lines.push(`the ${plan.before} window opens from ${relative(world.dir, old.success)} and records its place — ${launched.said}`);
   const installed = await installedFrom(world, old.success);
   lines.push(`${plan.before} install-from: exited ${installed.code}`);
   if (installed.code !== 0) return Result.fail(`${plan.before} did not install: ${said(installed)}`);
@@ -116,37 +104,12 @@ const inWorld = (plan: Plan, lines: string[], work: (world: World, stood: Stood)
     }
   });
 
-const LAUNCHES = 2;
-
 const inside = (world: World, path: string): string => relative(world.dir, path);
 
 const settledIn = async (plan: Plan, world: World, app: string, lines: string[]): Promise<string | null> => {
   const met = await opened(plan, world, app);
   lines.push(`the window of ${carried(app) ?? 'an unknown release'} opens from ${inside(world, app)} — ${met.said}`);
   return openedOf(met.answer) ? null : `the window from ${inside(world, app)} did not open its surface`;
-};
-
-const converged = async (plan: Plan, world: World, { old, terminals }: Stood, lines: string[]): Promise<string | null> => {
-  for (let launch = 1; launch <= LAUNCHES; launch += 1) {
-    const followed = await frozenAct(plan, world, 'frozen-follow', old);
-    const successor = reopenOf(followed.answer);
-    lines.push(
-      `the ${plan.before} window meets ${plan.offer.release} and reopens in ${successor === null ? 'nothing' : inside(world, successor)}`,
-    );
-    if (successor === null) return `the ${plan.before} window stays on ${plan.before}: ${followed.said}`;
-    lines.push(`  ${JSON.stringify(await observed(world, terminals))}`);
-    const settled = await settledIn(plan, world, successor, lines);
-    if (settled !== null) return settled;
-    if (carried(old) === plan.offer.release) {
-      const seen = await observedAfresh(world, terminals);
-      lines.push(`converged, with a helper started afresh: ${JSON.stringify(seen)}`);
-      return transitionTrouble(seen, plan.offer.release, true);
-    }
-    lines.push(`${inside(world, old)} still carries ${carried(old)}; the person opens it again`);
-    const launched = await frozenAct(plan, world, 'frozen-launch', old);
-    lines.push(`the ${plan.before} window opens — ${launched.said}`);
-  }
-  return `${inside(world, old)} still carries ${carried(old)} after ${LAUNCHES} launches of its window`;
 };
 
 const proved = (title: string, work: (lines: string[]) => Promise<string | null>): Effect.Effect<Proved> =>
@@ -156,34 +119,17 @@ const proved = (title: string, work: (lines: string[]) => Promise<string | null>
     return { title, lines, trouble };
   });
 
-const button = (plan: Plan) =>
-  proved(`${plan.before} updates to ${plan.offer.release} by its own button while its window is open`, (lines) =>
-    inWorld(plan, lines, async (world, stood) => {
-      const update = await updated(world, plan.offer);
-      if (update !== null) return update;
-      lines.push(`the button: ${JSON.stringify(await observed(world, stood.terminals))}`);
-      return converged(plan, world, stood, lines);
-    }),
-  );
-
 const newApp = (plan: Plan) =>
-  proved(
-    `the ${plan.offer.release} application opens beside the server of ${plan.before}, then the ${plan.before} application opens again`,
-    (lines) =>
-      inWorld(plan, lines, async (world, stood) => {
-        const fresh = await unpacked(world, plan.archive, join(world.dir, 'Downloads'));
-        if (Result.isFailure(fresh)) return fresh.failure;
-        const first = await settledIn(plan, world, fresh.success, lines);
-        if (first !== null) return first;
-        const seen = await observedSettled(world, stood.terminals);
-        lines.push(`  ${JSON.stringify(seen)}`);
-        const transition = transitionTrouble(seen, plan.offer.release, true);
-        if (transition !== null) return transition;
-        lines.push(`Move to Applications: Not Now; later the person opens ${inside(world, stood.old)} again`);
-        const launched = await frozenAct(plan, world, 'frozen-launch', stood.old);
-        lines.push(`the ${plan.before} window opens — ${launched.said}`);
-        return converged(plan, world, stood, lines);
-      }),
+  proved(`the ${plan.offer.release} application opens beside the server of ${plan.before}`, (lines) =>
+    inWorld(plan, lines, async (world, stood) => {
+      const fresh = await unpacked(world, plan.archive, join(world.dir, 'Downloads'));
+      if (Result.isFailure(fresh)) return fresh.failure;
+      const first = await settledIn(plan, world, fresh.success, lines);
+      if (first !== null) return first;
+      const seen = await observedSettled(world, stood.terminals);
+      lines.push(`  ${JSON.stringify(seen)}`);
+      return transitionTrouble(seen, plan.offer.release, true);
+    }),
   );
 
 const recordIn = (dir: string) =>
@@ -319,14 +265,12 @@ export const transitionCommand = Effect.fnUntraced(function* (
     channel: composition.channel,
     from,
     before: before.success.release,
-    commit: flags.value('--commit') ?? before.success.commit,
     archive: staged.success.archive,
     offer: staged.success.offer,
     desktop: resolve(sourcePath, '..', 'desktop'),
-    frozen: join(out, 'frozen'),
     out,
   };
-  console.log(`${composition.channel.name} ${number} of this tree, over ${plan.before} from ${from} (its window from ${plan.commit})`);
+  console.log(`${composition.channel.name} ${number} of this tree, over ${plan.before} from ${from}`);
   const trialLines: string[] = [];
   const trial = yield* trialStart({
     channel: plan.channel,
@@ -339,7 +283,6 @@ export const transitionCommand = Effect.fnUntraced(function* (
   });
   const runs: Proved[] = [
     { title: `the release trial: ${plan.before} updates to ${number} by its own button`, lines: trialLines, trouble: trial },
-    yield* button(plan),
     yield* newApp(plan),
   ];
   yield* Effect.promise(() => rm(out, { recursive: true, force: true }));

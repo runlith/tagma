@@ -273,15 +273,14 @@ const placed = Effect.fn('release.place')(function* (
       detail: verdict.detail,
     } satisfies Held;
   }
-  yield* attempt('current', () => {
-    applications.clearPlace(installRoot);
-    if (version === standing) return;
-    openAttempt(installRoot, from, version);
-    clearReturn(installRoot);
-    swapCurrent(installRoot, version);
-  });
-  if (version !== standing)
+  if (version !== standing) {
+    yield* attempt('current', () => {
+      openAttempt(installRoot, from, version);
+      clearReturn(installRoot);
+      swapCurrent(installRoot, version);
+    });
     yield* pruned(installRoot, [version, ...(from === null ? [] : [from]), ...(standing === null ? [] : [standing])], applications);
+  }
   return {
     status: 'landed',
     version,

@@ -73,22 +73,5 @@ layer(Layer.effect(CopyPlace, setup).pipe(Layer.provideMerge(BunFileSystem.layer
           ).toBe(1);
         }),
     );
-
-    it.effect('clearing the previous application placement keeps the application and removes its staging siblings and record', () =>
-      Effect.gen(function* () {
-        const files = yield* FileSystem.FileSystem;
-        const { home, place } = yield* CopyPlace;
-        const placed = join(home, 'Applications', 'Tagma.app');
-        const beside = (part: string) => join(home, 'Applications', `.Tagma.app.${part}`);
-        const paths = [placed, ...['next', 'prev', 'lock'].map(beside), join(place.installRoot, 'application')];
-        yield* Effect.forEach(paths.slice(0, 4), (at) => files.makeDirectory(at, { recursive: true }), { discard: true });
-        yield* files.writeFileString(join(place.installRoot, 'application'), `${placed}\n`);
-        yield* Effect.try({
-          try: () => applications.clearPlace(place.installRoot),
-          catch: (cause) => new ApplicationFixtureRefused({ path: place.installRoot, cause }),
-        });
-        expect(yield* Effect.forEach(paths, (at) => files.exists(at))).toEqual([true, false, false, false, false]);
-      }),
-    );
   },
 );

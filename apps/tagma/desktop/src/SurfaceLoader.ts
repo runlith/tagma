@@ -17,7 +17,6 @@ import {
   fallen,
   installedAs,
   keptApplication,
-  keptPath,
   numbered,
   standingIn,
   type Standing,
@@ -35,7 +34,7 @@ import {
   startServer,
   startupLeft,
 } from './server.js';
-import { become, keepCopy, replaceAt, settleOwn } from './placing.js';
+import { become, replaceAt, settleOwn } from './placing.js';
 import type { LoaderState } from './waitingPage.js';
 
 export type Opening = {
@@ -240,10 +239,7 @@ export class SurfaceLoader {
     const bundle = this.bundle;
     const own = this.own();
     const selecting = own !== null && numbered(own);
-    if (bundle !== null && own !== null) {
-      await this.keep(bundle, own, places);
-      if ((await this.converged(bundle, own, selecting, places)) !== 'go') return;
-    }
+    if (bundle !== null && own !== null && (await this.converged(bundle, own, selecting, places)) !== 'go') return;
     let served = await this.served(places, null);
     if (served === 'again') return this.meet();
     if (served === 'stood') return;
@@ -265,14 +261,6 @@ export class SurfaceLoader {
     const fell = fallen(places.installRoot);
     if (fell?.fell !== 'rolled-back' || fell.to?.digest === own?.digest) return;
     if ((await this.window.fell(fell)) === 'retry' && fell.to !== null) await this.retried(fell.to, places);
-  }
-
-  private async keep(bundle: string, own: Bearing, places: Places): Promise<void> {
-    const mine = installedAs(places.installRoot, own);
-    if (mine === null) return;
-    await keepCopy(bundle, own, keptPath(places.installRoot, mine.version), places.installRoot).catch((error: unknown) =>
-      console.warn(`[tagma-desktop] the kept copy of ${own.build} could not be restored from ${bundle}: ${String(error)}`),
-    );
   }
 
   private async retried(to: Standing, places: Places): Promise<void> {

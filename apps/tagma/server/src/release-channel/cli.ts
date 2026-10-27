@@ -216,36 +216,34 @@ const back = (cli: ServerCli) =>
     ),
   ).pipe(Command.withDescription('step back onto the release kept beside the one that stands, then restart onto it'));
 
-const removeVerb = (applications: Applications) =>
-  Command.make('remove', { json }, (o) =>
-    Effect.gen(function* () {
-      const channel = yield* InstalledChannel;
-      const data = dataPath(channel);
-      const holder = dataDirectoryHolder(data);
-      if (holder !== null) {
-        return refuse('server-running', `a server (pid ${holder}) runs from these releases`, [
-          `kill ${holder} — ends it gracefully; quit the window too, then tagma release remove`,
-        ]);
-      }
-      const root = installationRoot(channel);
-      const held = versionsNewestFirst(root).find((version) => directoryLeased(join(root, version)));
-      if (held !== undefined) {
-        return refuse('window-running', `a window runs from the release in ${join(root, held)}`, [
-          'quit the Tagma window, then tagma release remove',
-        ]);
-      }
-      applications.clearPlace(root);
-      const removed: string[] = [];
-      for (const gone of [root, launcherPath(channel), releasePlaces(data).staging]) {
-        if (!existsSync(gone)) continue;
-        rmSync(gone, { recursive: true, force: true });
-        removed.push(gone);
-      }
-      if (o.json) return yield* print({ removed, data }, true);
-      for (const one of removed) yield* Console.log(`removed ${one}`);
-      yield* Console.log(`the data stays in ${data}`);
-    }),
-  ).pipe(Command.withDescription('remove every installed release and the launcher; the data and the application where you keep it stay'));
+const removeVerb = Command.make('remove', { json }, (o) =>
+  Effect.gen(function* () {
+    const channel = yield* InstalledChannel;
+    const data = dataPath(channel);
+    const holder = dataDirectoryHolder(data);
+    if (holder !== null) {
+      return refuse('server-running', `a server (pid ${holder}) runs from these releases`, [
+        `kill ${holder} — ends it gracefully; quit the window too, then tagma release remove`,
+      ]);
+    }
+    const root = installationRoot(channel);
+    const held = versionsNewestFirst(root).find((version) => directoryLeased(join(root, version)));
+    if (held !== undefined) {
+      return refuse('window-running', `a window runs from the release in ${join(root, held)}`, [
+        'quit the Tagma window, then tagma release remove',
+      ]);
+    }
+    const removed: string[] = [];
+    for (const gone of [root, launcherPath(channel), releasePlaces(data).staging]) {
+      if (!existsSync(gone)) continue;
+      rmSync(gone, { recursive: true, force: true });
+      removed.push(gone);
+    }
+    if (o.json) return yield* print({ removed, data }, true);
+    for (const one of removed) yield* Console.log(`removed ${one}`);
+    yield* Console.log(`the data stays in ${data}`);
+  }),
+).pipe(Command.withDescription('remove every installed release and the launcher; the data and the application where you keep it stay'));
 
 const pathVerb = Command.make('path', {}, () =>
   Effect.gen(function* () {
@@ -271,10 +269,10 @@ const pathVerb = Command.make('path', {}, () =>
 does, when asked. Hooks call tagma by name and stay silent where it is not on PATH.`),
 );
 
-export const release = (cli: ServerCli, applications: Applications) =>
+export const release = (cli: ServerCli) =>
   Command.make('release').pipe(
     Command.withDescription('the releases of Tagma on this machine: update, step back, remove, put on PATH'),
-    Command.withSubcommands([update(cli), back(cli), removeVerb(applications), pathVerb]),
+    Command.withSubcommands([update(cli), back(cli), removeVerb, pathVerb]),
   );
 
 const unweighed: Weigh = () => Effect.succeed({ _tag: 'Unasked', detail: 'the person agreed to a new execution host' });

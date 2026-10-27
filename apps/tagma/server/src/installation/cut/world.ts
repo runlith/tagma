@@ -71,7 +71,7 @@ const Next = Schema.Struct({
     server: Schema.Struct({
       next: Schema.Struct({
         offers: Schema.Array(Schema.Struct({ id: Schema.String, label: Schema.String })),
-        readFrom: Schema.optional(Schema.NullOr(Schema.String)),
+        readFrom: Schema.NullOr(Schema.String),
         issue: Schema.NullOr(Refused),
         installed: Schema.optional(Schema.NullOr(Schema.Struct({ outcome: Schema.String, detail: Schema.String }))),
       }),
@@ -327,7 +327,6 @@ export const updated = async (world: World, offer: FeedRelease): Promise<string 
   const wrote = await op(world, 'write_setting', { key: 'release.feed', value: url });
   if (Result.isSuccess(readRefused(wrote))) return `its release feed could not be set: ${refusalOf(wrote)}`;
   let id: string | undefined;
-  let shown: string | null = null;
   while (id === undefined) {
     const answer = await op(world, 'read_machine_state', {});
     const next = readNext(answer);
@@ -345,13 +344,6 @@ export const updated = async (world: World, offer: FeedRelease): Promise<string 
         if (frame.issue !== null) return `its release feed could not be read: ${frame.issue.code}: ${frame.issue.reason}`;
         if (offered === undefined) return `its server checked ${url} and did not offer ${offer.release}`;
         id = offered.id;
-      } else if (frame.readFrom === undefined) {
-        id = offered?.id;
-        const issue = frame.issue === null ? null : `${frame.issue.code}: ${frame.issue.reason}`;
-        if (issue !== shown) {
-          shown = issue;
-          console.error(`waiting for ${offer.release} from ${url}: ${issue ?? 'the feed issue cleared'}`);
-        }
       }
     }
     if (id === undefined) await pause(ASKED_EVERY_MS);

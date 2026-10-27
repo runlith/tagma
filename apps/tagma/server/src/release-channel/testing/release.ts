@@ -89,7 +89,6 @@ export const trustedApplications: Applications = {
     cpSync(bundle, to, { recursive: true, verbatimSymlinks: true });
   },
   unquarantine: async () => null,
-  clearPlace: () => undefined,
   forget: () => undefined,
   signature: async () => null,
 };

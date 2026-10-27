@@ -1,11 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { mkdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import type { Applications } from '../installation/contract/service/applications.js';
-import { APPLICATION_PLACE, RELEASE_INSIDE } from '../installation/contract/wire/layout.js';
+import { RELEASE_INSIDE } from '../installation/contract/wire/layout.js';
 import { DESKTOP } from '../installation/contract/wire/manifest.js';
-import { absentPath } from '../installation/closure/manifests.js';
 import { currentVersion } from '../installation/closure/versions.js';
 import { requireFree, treeBytes } from '../platform/durable/space.js';
 
@@ -20,16 +19,6 @@ export const carrierOf = (dir: string): string | null => {
   const suffix = `/${RELEASE_INSIDE}`;
   const bundle = dir.endsWith(suffix) ? dir.slice(0, -suffix.length) : null;
   return bundle !== null && bundle.endsWith('.app') ? bundle : null;
-};
-
-const placeOf = (installRoot: string): string | null => {
-  try {
-    const named = readFileSync(join(installRoot, APPLICATION_PLACE), 'utf8').trim();
-    return named === '' ? null : named;
-  } catch (error) {
-    if (absentPath(error)) return null;
-    throw error;
-  }
 };
 
 const keptApplication = (root: string): string | undefined => {
@@ -99,17 +88,6 @@ export const copyBundle = (from: string, to: string): Promise<void> => replaceBu
 export const carriedIn = (dir: string): string | null => {
   const bundles = readdirSync(dir).filter((name) => name.endsWith('.app'));
   return bundles.length === 1 ? carriedRelease(join(dir, bundles[0]!)) : null;
-};
-
-export const clearPlace = (installRoot: string): void => {
-  const place = placeOf(installRoot);
-  if (place !== null) {
-    const beside = (suffix: string) => join(dirname(place), `.${basename(place)}.${suffix}`);
-    rmSync(beside('next'), { recursive: true, force: true });
-    rmSync(beside('lock'), { recursive: true, force: true });
-    if (existsSync(place)) rmSync(beside('prev'), { recursive: true, force: true });
-  }
-  rmSync(join(installRoot, APPLICATION_PLACE), { force: true });
 };
 
 const bundlesUnder = (dir: string): string[] => {
@@ -198,7 +176,6 @@ export const applications: Applications = {
   verify: verifiedBundle,
   copy: copyBundle,
   unquarantine: unquarantined,
-  clearPlace,
   forget: forgetBundles,
   signature: signatureRefusal,
 };
