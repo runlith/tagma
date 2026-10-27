@@ -119,7 +119,7 @@ const duplicate = Effect.fnUntraced(function* (fd: number) {
 }, Effect.scoped);
 const PRINTED = Array.from({ length: 20_000 }, (_, line) => `${line + 1}\r\n`).join('');
 const PRINTER =
-  'use POSIX; $| = 1; print "$_\\n" for 1 .. 20000; POSIX::tcdrain(1); open(my $f, ">", $ARGV[0]) or die; close $f; sleep 600;';
+  'use POSIX; my $tty = POSIX::Termios->new; defined($tty->getattr(1)) or die; $tty->setoflag($tty->getoflag & ~POSIX::OPOST()); defined($tty->setattr(1, POSIX::TCSANOW())) or die; $| = 1; print "$_\\r\\n" for 1 .. 20000; POSIX::tcdrain(1); open(my $f, ">", $ARGV[0]) or die; close $f; sleep 600;';
 const through = Effect.fnUntraced(function* (source: NativeSource, marker: string, maximum = TRANSFER_LIMIT) {
   let text = '';
   yield* Stream.runDrain(
