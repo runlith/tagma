@@ -1,11 +1,12 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import { join } from 'node:path';
 import type { ModelRequestInput, ModelStreamInput } from '@runlith/agent/modelPort';
 import { ModelID, ProviderID } from '@runlith/llm/schema/ids';
 import { ModelIdentity } from '@runlith/llm/schema/options';
 import { Usage, type LLMEvent } from '@runlith/llm/schema/events';
-import { Context, Deferred, Effect, FileSystem, Stream } from 'effect';
+import { Context, Deferred, Effect, FileSystem, Schedule, Stream } from 'effect';
 import type { ModelAccess } from '../../../providers/contract/service/access.js';
 import { turnsOf } from '../../../threads/testing/doubles.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
@@ -162,5 +163,34 @@ it.live('an agent moves itself into another project mid-turn and its next step i
     expect(told[0]).not.toContain(to.law);
     expect(told.at(-1)).toContain(to.law);
     expect([yield* listed(from.id), yield* listed(to.id)]).toEqual(['place-mismatch', 1]);
+  }).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(fixture)),
+);
+
+it.live('a thread whose command still runs in the background keeps its home until the command ends', () =>
+  Effect.gen(function* () {
+    const ASK = 'Start the long command in the background.';
+    const files = yield* FileSystem.FileSystem;
+    const gates = yield* files.makeTempDirectoryScoped({ prefix: 'project-move-' });
+    const ready = join(gates, 'ready');
+    const release = join(gates, 'release');
+    const script = `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(ready)},'ready');const watcher=fs.watch(${JSON.stringify(gates)},()=>{if(fs.existsSync(${JSON.stringify(release)}))watcher.close();});`;
+    const command = `'${process.execPath}' -e '${script.replaceAll("'", "'\\''")}'`;
+    const world = yield* DoorFixture;
+    yield* world.lend({
+      models: scripted((input, said) =>
+        Effect.succeed(
+          said.includes(ASK) && resultOf(input, 'background') === undefined
+            ? call('background', 'bash', { command, description: 'Wait for the release', waitMs: 0 })
+            : answer,
+        ),
+      ),
+    });
+    const { from, to, thread, listed } = yield* projects;
+    yield* turnsOf(world.runtime.owners).send(thread, from.id, ASK);
+    yield* files.exists(ready).pipe(Effect.repeat({ while: (started) => !started, schedule: Schedule.spaced(25) }));
+    const refused = yield* world.op('move_thread', { threadId: thread, home: to.id }, `project=${from.id}`);
+    yield* files.writeFileString(release, 'release');
+    expect(refused).toMatchObject({ status: 409, body: { code: 'executions-held' } });
+    expect([yield* listed(from.id), yield* listed(to.id)]).toEqual([1, 'place-mismatch']);
   }).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(fixture)),
 );

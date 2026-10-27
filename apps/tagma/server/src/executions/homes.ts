@@ -4,7 +4,7 @@ import { MachineStore } from '../platform/contract/service/store.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import type { HomeFollowing } from '../thread-record/contract/service/homes.js';
 import { commandRule } from './store/commandRule.js';
-import { terminal, terminalIntent } from './store/terminal.js';
+import { command, commandWait, terminal, terminalIntent } from './store/terminal.js';
 
 const named = (row: { readonly execution: string; readonly label: string | null; readonly commandLine: string | null }): string =>
   `${row.label ?? row.commandLine ?? 'an execution'} (${row.execution})`;
@@ -20,6 +20,14 @@ export const executionHomes: HomeFollowing = {
         .where(eq(terminal.heldByThread, move.threadId))
         .all(),
     );
+    const running = yield* unit.run(
+      db
+        .select({ execution: command.executionId, label: command.label, commandLine: command.commandLine })
+        .from(command)
+        .innerJoin(commandWait, and(eq(commandWait.executionId, command.executionId), eq(commandWait.incarnation, command.incarnation)))
+        .where(eq(command.ownerThread, move.threadId))
+        .all(),
+    );
     const handing = yield* unit.run(
       db
         .select({ operation: terminalIntent.operationId })
@@ -27,8 +35,8 @@ export const executionHomes: HomeFollowing = {
         .where(or(eq(terminalIntent.outgoingThread, move.threadId), eq(terminalIntent.incomingThread, move.threadId)))
         .all(),
     );
-    if (held.length === 0 && handing.length === 0) return;
-    const holding = held.map(named);
+    if (held.length === 0 && running.length === 0 && handing.length === 0) return;
+    const holding = [...held, ...running].map(named);
     return yield* new GateRefusal(
       'executions-held',
       `Thread ${move.threadId} holds work running in project ${move.from}${
