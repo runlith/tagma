@@ -1,6 +1,6 @@
 import { getContext, setContext } from 'svelte';
-import type { AgentCallEnding, AgentChildUpdate, AgentHook, AgentThreadEvent } from '@runlith/agent/contracts';
-import type { CallEndingCount, ChildUpdateCount, ThreadEventCount } from './notices';
+import type { AgentCallEnding, AgentChildUpdate, AgentCommandEnding, AgentHook, AgentThreadEvent } from '@runlith/agent/contracts';
+import type { CallEndingCount, ChildUpdateCount, CommandEndingCount, ThreadEventCount } from './notices';
 import type { RunEndStatus, WordsWait } from '@runlith/agent/transcript/live';
 import type { ChatLiveStatus } from './liveStatus';
 
@@ -50,6 +50,11 @@ export type ChatStrings = {
   childUpdate(update: AgentChildUpdate): string;
   callEndings(counts: readonly CallEndingCount[]): string;
   callEnding(ending: AgentCallEnding): string;
+  commandEndings(counts: readonly CommandEndingCount[]): string;
+  commandEnding(ending: AgentCommandEnding): string;
+  commandExit(exit: NonNullable<AgentCommandEnding['exit']>): string;
+  noOutput(): string;
+  outputUnread(): string;
   threadEvents(counts: readonly ThreadEventCount[]): string;
   threadEvent(event: AgentThreadEvent): string;
   childContext(tokens: string): string;

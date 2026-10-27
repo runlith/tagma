@@ -47,7 +47,9 @@
       ? strings.childUpdate(notice)
       : notice.kind === 'thread-event'
         ? strings.threadEvent(notice)
-        : strings.callEnding(notice)}{#if at !== undefined}<span class="text-muted-foreground">
+        : notice.kind === 'command-ending'
+          ? strings.commandEnding(notice)
+          : strings.callEnding(notice)}{#if at !== undefined}<span class="text-muted-foreground">
         · {messageTime(at, strings.locale)}</span
       >{/if}{#if (notice.kind === 'child-update' || notice.kind === 'thread-event') && notice.forOperator}<span
         class="ml-1.5 rounded-full bg-selected px-1.5 text-meta text-foreground">{strings.yourWords()}</span

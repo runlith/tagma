@@ -107,6 +107,23 @@ export const AgentCallEnding = Schema.Struct({
 });
 export type AgentCallEnding = typeof AgentCallEnding.Type;
 
+export const AgentCommandExit = Schema.Union([
+  Schema.Struct({ kind: Schema.tag('code'), code: Schema.Int }),
+  Schema.Struct({ kind: Schema.tag('signal'), signal: Schema.String }),
+]);
+export type AgentCommandExit = typeof AgentCommandExit.Type;
+
+export const AgentCommandEnding = Schema.Struct({
+  kind: Schema.tag('command-ending'),
+  execution: Schema.String,
+  incarnation: Schema.Int,
+  command: Schema.NullOr(Schema.String),
+  ending: Schema.Literals(['completed', 'stopped', 'expired', 'unknown']),
+  exit: Schema.NullOr(AgentCommandExit),
+  tail: Schema.NullOr(Schema.String),
+});
+export type AgentCommandEnding = typeof AgentCommandEnding.Type;
+
 export const THREAD_EVENT_SIGNAL_TYPE = 'thread-event';
 
 export const THREAD_EVENT_KINDS = [
@@ -139,7 +156,7 @@ export const AgentThreadEvent = Schema.Struct({
 });
 export type AgentThreadEvent = typeof AgentThreadEvent.Type;
 
-export const AgentSignalNotice = Schema.Union([AgentChildUpdate, AgentCallEnding, AgentThreadEvent]);
+export const AgentSignalNotice = Schema.Union([AgentChildUpdate, AgentCallEnding, AgentCommandEnding, AgentThreadEvent]);
 export type AgentSignalNotice = typeof AgentSignalNotice.Type;
 
 export type AgentSignal = {

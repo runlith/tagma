@@ -5,6 +5,7 @@ import { mcpToolNamed } from '@runlith/mcp/identity';
 import { KEEP_WARM_SIGNAL_TYPE } from '@runlith/agent/transcript/keepWarm';
 import { AGENT_CHILD_UPDATE_SIGNAL_TYPE, THREAD_EVENT_SIGNAL_TYPE } from '@runlith/agent/contracts';
 import { CALL_RESULT_SIGNAL } from '@tagma/server/threads/contract/wire/calls';
+import { COMMAND_RESULT_SIGNAL } from '@tagma/server/executions/contract/wire/commands';
 import type { ChatRewindWords } from '@runlith/chat-ui/rewind';
 import type { ChatStrings } from '@runlith/chat-ui/strings';
 import { queuedCalls, waitingWords } from '../workWords.js';
@@ -66,7 +67,8 @@ const SIGNAL_LINES: Readonly<Record<string, string>> = {
   [KEEP_WARM_SIGNAL_TYPE]: 'Kept warm',
   [AGENT_CHILD_UPDATE_SIGNAL_TYPE]: 'Child update',
   [THREAD_EVENT_SIGNAL_TYPE]: 'Thread event',
-  [CALL_RESULT_SIGNAL]: 'Background call',
+  [CALL_RESULT_SIGNAL]: 'Background call ended',
+  [COMMAND_RESULT_SIGNAL]: 'Command ended',
 };
 
 function signalLine(signalType: string, sender: boolean): string {
@@ -104,6 +106,8 @@ const CHILD_EVENTS = {
 } as const;
 
 const CALL_OUTCOMES = { completed: 'finished', failed: 'failed', stopped: 'was stopped', interrupted: 'was interrupted' } as const;
+
+const COMMAND_ENDINGS = { completed: 'finished', stopped: 'stopped', expired: 'ran out of life', unknown: 'ended' } as const;
 
 const THREAD_EVENTS = {
   rested: 'came to rest',
@@ -200,6 +204,18 @@ export function nativeStrings(): ChatStrings {
         )
         .join(' · '),
     callEnding: (ending) => `${ending.tool} ${CALL_OUTCOMES[ending.outcome]}`,
+    commandEndings: (counts) => {
+      const total = counts.reduce((sum, { count }) => sum + count, 0);
+      const [only] = counts;
+      if (counts.length === 1 && only !== undefined) {
+        return total === 1 ? `Command ${COMMAND_ENDINGS[only.ending]}` : `${total} commands ${COMMAND_ENDINGS[only.ending]}`;
+      }
+      return `${total} commands ended`;
+    },
+    commandEnding: (ending) => `Command ${COMMAND_ENDINGS[ending.ending]}`,
+    commandExit: (exit) => (exit.kind === 'code' ? `exit ${exit.code}` : exit.signal),
+    noOutput: () => 'No output',
+    outputUnread: () => 'The output could not be read',
     threadEvents: (counts) =>
       counts
         .map(({ event, count }, index) => {
