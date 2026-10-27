@@ -25,7 +25,7 @@ export const readMachineState = pair(
       if (standing._tag === 'Failure') yield* Effect.logWarning('the standing installation was not read', standing.failure);
       const current = standing._tag === 'Success' ? standing.success : null;
       const runs = source.installation;
-      const waiting = waitingOf(current, runs);
+      const waiting = waitingOf(current, runs, yield* succession.refused);
       const [host, next, agents, calls] = yield* Effect.all(
         [machineHost.standing, nextInstallation.reading, (yield* MachineAgents).working, (yield* MachineCalls).live],
         { concurrency: 3 },

@@ -5,12 +5,14 @@ import type { HostLifecycle } from '@runlith/executions/HostLifecycle';
 import type { HostRegistration } from '@runlith/executions/HostRegistration';
 import { HostRequestKey, type HostRequestRef, type InstallationId } from '@runlith/executions/protocol/execution';
 import type { QuiescenceTicket } from '@runlith/executions/protocol/runtime';
+import type { HostLifetime } from '@runlith/executions/protocol/boot';
+import type { HostVerdict } from '../../installation/contract/service/steps.js';
 import { HostUnprepared } from '../../installation/contract/service/succession.js';
 import type { RestartHost } from '../../installation/contract/wire/source.js';
 import type { HostPreparationRefused } from '../contract/service/host.js';
 import { pacedClaim, type StateClaim } from './boot.js';
 import type { CustodyAssurance } from './custody.js';
-import { candidateOf, candidateRestart, promoteBoot, withdrawCandidate } from './offer.js';
+import { candidateOf, candidateRestart, hostBundleNext, hostBundleOwn, placeCandidate, promoteBoot, withdrawCandidate } from './offer.js';
 
 const keyed = (installation: InstallationId, act: string): HostRequestRef => ({
   installation,
@@ -95,6 +97,77 @@ export const prepareChange = Effect.fnUntraced(function* (
     case 'Refused':
       return yield* refused(`the execution host refused to prepare its successor: ${prepared.refusal._tag} — ${prepared.refusal.reason}`);
   }
+});
+
+export type Weighing = {
+  readonly executions: HostLifecycle['Service'];
+  readonly custody: Effect.Effect<CustodyAssurance>;
+  readonly files: FileSystem.FileSystem;
+  readonly registrations: HostRegistration['Service'];
+  readonly state: string;
+  readonly installation: InstallationId;
+  readonly claim: Effect.Effect<StateClaim>;
+  readonly lifetime: HostLifetime | undefined;
+  readonly bundle: string;
+};
+
+const unasked = (detail: string): HostVerdict => ({ _tag: 'Unasked', detail });
+
+const preparedOf = (installation: InstallationId, executions: HostLifecycle['Service']): Effect.Effect<HostVerdict> =>
+  Effect.match(executions.prepare(keyed(installation, 'weigh')), {
+    onFailure: (failure) => unasked(`the execution host could not be asked: ${failure._tag}`),
+    onSuccess: (answer): HostVerdict => {
+      switch (answer._tag) {
+        case 'Prepared':
+          return { _tag: 'Takes' };
+        case 'Unprepared':
+          return { _tag: 'Refuses', detail: `the execution host could not prepare it (${answer.reason}): ${answer.detail}` };
+        case 'Refused':
+          return unasked(`the execution host would not be asked: ${answer.refusal._tag} — ${answer.refusal.reason}`);
+      }
+    },
+  });
+
+export const weighBundle = Effect.fn('SuccessionSteps.weigh')(function* (input: Weighing) {
+  const { executions, files, state } = input;
+  const present = yield* answering(executions, input.claim);
+  if (present._tag === 'Vacant') return unasked('no execution host stands to ask');
+  if (present._tag === 'Foreign') return unasked('the execution host stands at a build this server does not speak to');
+  if (present._tag === 'Unread') return unasked(`the execution host ${present.detail}`);
+  const assured = yield* input.custody;
+  if (assured._tag !== 'Held') return unasked(`this server does not hold the custody of its execution host (${assured.reason._tag})`);
+  const waiting = yield* Effect.match(candidateOf(files, state), {
+    onFailure: (refused) => refused.detail,
+    onSuccess: (candidate) =>
+      candidate === undefined
+        ? null
+        : `a host candidate already stands at ${hostBundleNext(state)}, and weighing another would take its place`,
+  });
+  if (waiting !== null) return unasked(waiting);
+  return yield* placeCandidate({
+    files,
+    registrations: input.registrations,
+    source: { _tag: 'Closure', path: input.bundle },
+    own: hostBundleOwn(state),
+    state,
+    restart: `weigh-${randomUUID()}`,
+    lifetime: input.lifetime,
+  }).pipe(
+    Effect.flatMap((placement) => {
+      switch (placement._tag) {
+        case 'Vacant':
+          return Effect.succeed(unasked(placement.detail));
+        case 'Standing':
+          return Effect.succeed<HostVerdict>({ _tag: 'Takes' });
+        case 'Placed':
+          return preparedOf(input.installation, executions);
+      }
+    }),
+    Effect.catchTag('HostPreparationRefused', (refused) =>
+      Effect.succeed<HostVerdict>({ _tag: 'Refuses', detail: `${input.bundle} cannot stand as its candidate: ${refused.detail}` }),
+    ),
+    Effect.ensuring(withdrawCandidate(files, state)),
+  );
 });
 
 type LogicReading = { readonly _tag: 'Read'; readonly logic: string | undefined } | { readonly _tag: 'Unread'; readonly detail: string };

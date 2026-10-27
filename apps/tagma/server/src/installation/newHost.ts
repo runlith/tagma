@@ -1,7 +1,7 @@
 import { Effect, Stream } from 'effect';
 import type { MachineHost } from './contract/service/machineHost.js';
 import type { NextInstallation } from './contract/service/next.js';
-import type { Succession } from './contract/service/succession.js';
+import type { HostRefusal, Succession } from './contract/service/succession.js';
 import type { Installation } from './contract/wire/manifest.js';
 import type { NewHost } from './contract/wire/newHost.js';
 import type { NextFrame, NextIssue } from './contract/wire/next.js';
@@ -13,10 +13,18 @@ type Moved = { readonly _tag: 'Frame'; readonly frame: NextFrame } | { readonly 
 
 type Measured = { readonly key: string; readonly newHost: NewHost | undefined };
 
-export const waitingOf = (current: Installation | null, runs: InstallationCut | null): InstallationCut | null =>
-  current !== null && runs !== null && current.manifest.identity.build !== runs.build
+export const waitingOf = (
+  current: Installation | null,
+  runs: InstallationCut | null,
+  refused: HostRefusal | null,
+): InstallationCut | null => {
+  const waits = refused?.waits ?? null;
+  const held = waits === null ? null : (refused?.successor ?? null);
+  if (held !== null && (current?.manifest.identity.digest ?? null) === waits?.over) return held;
+  return current !== null && runs !== null && current.manifest.identity.build !== runs.build
     ? { build: current.manifest.identity.build, digest: current.manifest.identity.digest }
     : null;
+};
 
 const needOf = Effect.fnUntraced(function* (
   succession: Succession['Service'],
@@ -72,7 +80,7 @@ export const framesWithNewHost = (input: {
         const need = yield* needOf(
           succession,
           machineHost,
-          waitingOf(current, runs),
+          waitingOf(current, runs, yield* succession.refused),
           runs?.build ?? null,
           yield* machineHost.build,
           standing.back?.id ?? null,

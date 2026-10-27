@@ -44,6 +44,7 @@ it.effect('a host verdict that comes after the window subscribed reaches it as a
         current: Effect.succeed(null),
         leaving: Effect.succeed(false),
         restart: () => Effect.die('nothing restarts here'),
+        weigh: () => Effect.die('nothing is weighed here'),
         refused: Effect.succeed(null),
         refusals: Stream.never,
         release: () => Effect.die('nothing restarts here'),

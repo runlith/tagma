@@ -70,7 +70,7 @@ import type { TerminalWatched } from './contract/service/endings.js';
 import { makeTerminalGrants } from './terminals/grantBook.js';
 import { makeTerminalHostCustody, detailOf, type CustodyAssurance } from './host/custody.js';
 import { carriedOffer, hostBundleNext, hostOffer, swapBundle, withdrawCandidate } from './host/offer.js';
-import { prepareChange, yieldPlace } from './host/departure.js';
+import { prepareChange, weighBundle, yieldPlace } from './host/departure.js';
 import { awaitLogic } from './host/arrival.js';
 import { placeOverForeign, standingAfter } from './host/foreign.js';
 import { endStanding, firstEnable } from './host/firstEnable.js';
@@ -497,6 +497,18 @@ export const executionsLayer: Layer.Layer<
         Ref.modify(yielding, (stage): [boolean, YieldStage] => (stage === 'yielding' ? [false, stage] : [true, 'idle'])),
         (open) => (open ? withdrawCandidate(files, address.state) : Effect.void),
       ),
+      weigh: (bundle) =>
+        weighBundle({
+          executions,
+          custody: custody.ensure({ seen: true }),
+          files,
+          registrations,
+          state: address.state,
+          installation: address.installation,
+          claim: stateClaim(files, address.state),
+          lifetime,
+          bundle,
+        }),
     };
     const booted = Effect.gen(function* () {
       const recovered = yield* Effect.result(waiters.recover());

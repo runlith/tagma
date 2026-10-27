@@ -12,6 +12,7 @@ import { manifestAt, releaseAt, releaseIdentified } from '../installation/closur
 import { compareReleases, isRelease } from '../installation/contract/wire/feed.js';
 import { claimLeased, type InstallHeld, pruneReleases, withInstallLock } from '../installation/closure/leases.js';
 import type { Applications } from '../installation/contract/service/applications.js';
+import type { HostVerdict } from '../installation/contract/service/steps.js';
 import { type InstallationManifest, releaseApplication } from '../installation/contract/wire/manifest.js';
 import { writeLauncherBeside } from '../installation/setup/launcher.js';
 import { RELEASE_INSIDE, RUNTIME_PART } from '../installation/contract/wire/layout.js';
@@ -42,6 +43,17 @@ export type Asked = {
   readonly reason: 'stepped-back' | 'irreversible' | 'failed';
   readonly said: string;
 };
+
+export type Held = {
+  readonly status: 'held';
+  readonly version: string;
+  readonly root: string;
+  readonly build: string;
+  readonly standing: string | null;
+  readonly detail: string;
+};
+
+export type Weigh = (root: string) => Effect.Effect<HostVerdict>;
 
 export type InstallPlace = {
   readonly installRoot: string;
@@ -183,6 +195,7 @@ const placed = Effect.fn('release.place')(function* (
   applications: Applications,
   at: Date,
   asking: boolean,
+  weigh: Weigh,
 ) {
   const { installRoot } = place;
   const read = manifestAt(dir);
@@ -249,6 +262,17 @@ const placed = Effect.fn('release.place')(function* (
     Effect.ensuring(Effect.sync(claimed.release)),
   );
   const version = yield* written;
+  const verdict = version === standing ? null : yield* weigh(join(installRoot, version));
+  if (verdict?._tag === 'Refuses') {
+    return {
+      status: 'held',
+      version,
+      root: join(installRoot, version),
+      build: manifest.identity.build,
+      standing: standingBuild ?? null,
+      detail: verdict.detail,
+    } satisfies Held;
+  }
   yield* attempt('current', () => {
     applications.clearPlace(installRoot);
     if (version === standing) return;
@@ -275,10 +299,11 @@ export const installRelease = Effect.fn('release.install')(function* (
   applications: Applications,
   at: Date,
   asking: boolean,
+  weigh: Weigh,
 ) {
   const carrier = applications.carrier(dir);
   if (carrier === null) return yield* refused('carrier', `${dir} is not the release inside an application bundle`);
-  return yield* withInstallLock(place.installRoot, LOCK_PATIENCE_MS, placed(dir, carrier, place, applications, at, asking)).pipe(
+  return yield* withInstallLock(place.installRoot, LOCK_PATIENCE_MS, placed(dir, carrier, place, applications, at, asking, weigh)).pipe(
     Effect.mapError((failure) => (failure instanceof ReleaseNotInstalled ? failure : lockRefusal(failure))),
   );
 });

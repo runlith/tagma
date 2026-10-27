@@ -249,6 +249,7 @@ it.live(
       const steps: SuccessionSteps['Service'] = {
         prepare: () => Effect.fail(new HostUnprepared({ detail: 'the next bundle does not verify' })),
         withdraw: Effect.sync(() => void (withdrawn += 1)),
+        weigh: () => Effect.die('this restart weighs nothing'),
       };
       const succession = yield* succeeding(
         older,

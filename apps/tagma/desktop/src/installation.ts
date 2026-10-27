@@ -31,13 +31,14 @@ export type Planned = { readonly closure: Closure } | { readonly missing: string
 
 export type InstallAnswer =
   | { readonly status: 'landed' }
+  | { readonly status: 'held' }
   | { readonly status: 'ask'; readonly reason: string; readonly said: string }
   | { readonly status: 'refused'; readonly refusal: Refusal };
 
 const decodeAnswer = Schema.decodeUnknownResult(
   Schema.fromJsonString(
     Schema.Union([
-      Schema.Struct({ status: Schema.Literal('landed') }),
+      Schema.Struct({ status: Schema.Literals(['landed', 'held']) }),
       Schema.Struct({ status: Schema.Literal('ask'), reason: Schema.String, said: Schema.String }),
     ]),
   ),

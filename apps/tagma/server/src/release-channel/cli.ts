@@ -22,7 +22,8 @@ import { InstalledChannel } from '../installation/contract/service/channel.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import { directoryLeased } from '../platform/lock/directoryLease.js';
 import { reachLine, writeLauncher } from '../installation/setup/launcher.js';
-import { installRelease } from './install.js';
+import { installRelease, type Weigh } from './install.js';
+import { weighedByServer } from './successor.js';
 import { BACK } from './offers.js';
 import { releasePlaces } from './places.js';
 
@@ -276,7 +277,9 @@ export const release = (cli: ServerCli, applications: Applications) =>
     Command.withSubcommands([update(cli), back(cli), removeVerb(applications), pathVerb]),
   );
 
-export const installFrom = (applications: Applications) =>
+const unweighed: Weigh = () => Effect.succeed({ _tag: 'Unasked', detail: 'the person agreed to a new execution host' });
+
+export const installFrom = (cli: ServerCli, applications: Applications) =>
   Command.make(
     'install-from',
     {
@@ -284,6 +287,10 @@ export const installFrom = (applications: Applications) =>
       agreed: Flag.Boolean('agreed').pipe(
         Flag.withDefault(false),
         Flag.withDescription('install even where --json would ask first: the person agreed to the question'),
+      ),
+      newHost: Flag.Boolean('new-host').pipe(
+        Flag.withDefault(false),
+        Flag.withDescription('make it current even where the execution host of the running server would not take it'),
       ),
       directory: Argument.String('directory'),
     },
@@ -297,6 +304,7 @@ export const installFrom = (applications: Applications) =>
           applications,
           new Date(yield* Clock.currentTimeMillis),
           o.json && !o.agreed,
+          o.newHost ? unweighed : weighedByServer(cli),
         ).pipe(
           Effect.provide(BunFileSystem.layer),
           Effect.catchTag('ReleaseNotInstalled', (failure) =>
@@ -307,6 +315,12 @@ export const installFrom = (applications: Applications) =>
         );
         if (o.json) return yield* write(`${JSON.stringify(answer)}\n`);
         if (answer.status === 'ask') return yield* Console.log(`${answer.said} — install-from --agreed installs it`);
+        if (answer.status === 'held') {
+          yield* Console.log(
+            `release ${answer.build} stands in ${answer.root}, and ${answer.standing ?? 'the release that stands'} stays current: the execution host of the running server does not take it (${answer.detail})`,
+          );
+          return yield* Console.log(`tagma status names what a new execution host ends; restart_server {"host":"replace"} updates onto it`);
+        }
         yield* Console.log(
           `release ${answer.build} stands in ${answer.root}${answer.previous === null ? '' : `, beside ${answer.previous}`}`,
         );

@@ -6,7 +6,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { releasesNewestFirst } from '../../../installation/closure/versions.js';
 import { applications } from '../../../mac-applications/placement.js';
 import { installRelease, type InstallPlace } from '../../../release-channel/install.js';
-import { carriedIn, signedBundle, syntheticReleaseEffect } from '../../../release-channel/testing/release.js';
+import { carriedIn, serverless, signedBundle, syntheticReleaseEffect } from '../../../release-channel/testing/release.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { fixtureHome } from '../../../platform/testing/roots.js';
 
@@ -47,15 +47,22 @@ layer(Layer.effect(CopyPlace, setup).pipe(Layer.provideMerge(BunFileSystem.layer
           const files = yield* FileSystem.FileSystem;
           const { home, place } = yield* CopyPlace;
           const bundle = yield* downloaded(home, 'Downloads', '0.1.0');
-          const landed = yield* installRelease(carriedIn(bundle), place, applications, new Date(yield* Clock.currentTimeMillis), false);
-          if (landed.status !== 'landed') return yield* Effect.die(landed.said);
+          const landed = yield* installRelease(
+            carriedIn(bundle),
+            place,
+            applications,
+            new Date(yield* Clock.currentTimeMillis),
+            false,
+            serverless,
+          );
+          if (landed.status !== 'landed') return yield* Effect.die(landed.status === 'ask' ? landed.said : landed.detail);
           expect(yield* quarantined(join(bundle, 'Contents/Info.plist'))).toBe(true);
           expect(yield* quarantined(join(landed.application, 'Contents/Info.plist'))).toBe(false);
           expect(yield* quarantined(join(landed.root, 'install.json'))).toBe(false);
           const broken = yield* downloaded(home, 'Broken', '0.2.0');
           yield* files.writeFileString(join(carriedIn(broken), 'surface/index.html'), '<p>changed after signing</p>\n');
           const refused = yield* Effect.result(
-            installRelease(carriedIn(broken), place, applications, new Date(yield* Clock.currentTimeMillis), false),
+            installRelease(carriedIn(broken), place, applications, new Date(yield* Clock.currentTimeMillis), false, serverless),
           );
           expect(refused).toMatchObject({ _tag: 'Failure', failure: { step: 'signature' } });
           expect(

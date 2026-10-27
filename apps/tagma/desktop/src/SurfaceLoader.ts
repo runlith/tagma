@@ -344,6 +344,10 @@ export class SurfaceLoader {
       answer = await installFrom(carriedIn(bundle), places.log, true, this.opening.env);
     }
     if (answer.status === 'landed') return 'go';
+    if (answer.status === 'held') {
+      this.declined = true;
+      return 'go';
+    }
     const refusal: Refusal = answer.status === 'refused' ? answer.refusal : { code: 'asked-again', reason: answer.said, said: null };
     if (!standing) {
       this.stand({ why: 'not-installed', build: bearing.build, said: refusal.said, detail: `${refusal.code}: ${refusal.reason}` });

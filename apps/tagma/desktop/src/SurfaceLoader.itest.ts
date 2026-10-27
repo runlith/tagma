@@ -49,6 +49,7 @@ case "$verb" in
       mkdir -p "$root/desktop"; cp -R "$dir/." "$root/"
       cp -R "\${dir%/${RELEASE_INSIDE}}" "$root/desktop/${NAME}"
     fi
+    if [ -f "$HELD" ]; then echo '{"status":"held"}'; exit 0; fi
     ln -sfn "$build" "$TAGMA_INSTALL_ROOT/current"
     echo '{"status":"landed"}' ;;
   serve)
@@ -292,6 +293,7 @@ beforeEach(async () => {
     UNRETURNED: join(base, 'unreturned'),
     LOSES: join(base, 'loses'),
     TAKEN: join(base, 'taken'),
+    HELD: join(base, 'held'),
     REAL_BUN: process.execPath,
   };
   written(env.ACTS!, '');
@@ -522,6 +524,22 @@ test('a newer application over a running server of the release before installs i
   expect(current()).toBe('0.2.0');
   expect(restarts).toBe(1);
   expect(served).toEqual(bearing('0.2.0'));
+});
+
+test('a newer application whose release the running server’s execution host does not take opens on that server, telling nothing and asking no restart', async () => {
+  installed('0.1.0');
+  served = bearing('0.1.0');
+  writeFileSync(env.HELD!, '');
+  answering();
+  const window = windowOf(application(join(base, 'Downloads'), '0.2.0'));
+
+  window.loader.start();
+  await until(() => window.opened === 1);
+
+  expect(acts()).toEqual(['install-from']);
+  expect(current()).toBe('0.1.0');
+  expect(restarts).toBe(0);
+  expect(window.told).toEqual([]);
 });
 
 test.each([false, true])('after a step back a copy of the newer release asks before it installs (agreed: %p)', async (agrees) => {

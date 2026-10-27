@@ -11,11 +11,17 @@ export class SetupSteps extends Context.Service<
   }
 >()('tagma/installation/SetupSteps') {}
 
+export type HostVerdict =
+  | { readonly _tag: 'Takes' }
+  | { readonly _tag: 'Refuses'; readonly detail: string }
+  | { readonly _tag: 'Unasked'; readonly detail: string };
+
 export class SuccessionSteps extends Context.Service<
   SuccessionSteps,
   {
     readonly prepare: (restart: string, host: RestartHost) => Effect.Effect<void, HostUnprepared>;
     readonly withdraw: Effect.Effect<void>;
+    readonly weigh: (bundle: string) => Effect.Effect<HostVerdict>;
   }
 >()('tagma/installation/SuccessionSteps') {}
 

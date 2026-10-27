@@ -1,8 +1,12 @@
+import { join } from 'node:path';
 import { Effect } from 'effect';
 import { body, pair } from '../../platform/contract/service/body.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { InstalledChannel } from '../contract/service/channel.js';
 import { MachineHost } from '../contract/service/machineHost.js';
 import { Succession } from '../contract/service/succession.js';
+import { RELEASE_INSIDE } from '../contract/wire/layout.js';
+import { releaseApplication } from '../contract/wire/manifest.js';
 import type { HostEnding } from '../contract/wire/newHost.js';
 import { INSTALLATION_OPERATIONS as OPS } from '../contract/wire/operations.js';
 import { RESTART_WORDS } from '../contract/wire/words.js';
@@ -16,6 +20,20 @@ const costOf = (ends: ReadonlyArray<HostEnding> | null): string => {
   const rest = ends.length - named.length;
   return `it ends ${ends.length}: ${named.join(', ')}${rest > 0 ? ` and ${rest} more` : ''}`;
 };
+
+const VERDICTS = { Takes: 'takes', Refuses: 'refuses', Unasked: 'unasked' } as const;
+
+export const checkSuccessor = pair(
+  OPS.check_successor,
+  body(OPS.check_successor, {
+    execute: Effect.fnUntraced(function* ({ installation }) {
+      const channel = yield* InstalledChannel;
+      const release = join(releaseApplication(installation, channel.name), RELEASE_INSIDE);
+      const verdict = yield* (yield* Succession).weigh(installation, release);
+      return { status: 'checked' as const, verdict: VERDICTS[verdict._tag], detail: verdict._tag === 'Takes' ? null : verdict.detail };
+    }),
+  }),
+);
 
 export const restartServer = pair(
   OPS.restart_server,

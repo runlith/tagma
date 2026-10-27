@@ -67,6 +67,23 @@ export const INSTALLATION_OPERATIONS = {
     confirmLabel: 'Restart',
     presentation: { running: 'Restarting the server', done: 'Handed the server over' },
   }),
+  check_successor: operation('check_successor', {
+    approval: ASKS_NEVER,
+    ...operatorOnly,
+    meaning:
+      'Ask the execution host this server holds whether it takes the host bundle of an installation placed beside the one that stands, before that installation becomes current.',
+    grammar:
+      '`installation` is the root install-from placed. The bundle stands beside the host as its candidate only while the host is asked to prepare for it; nothing the host runs moves. `takes` and `refuses` are the host’s verdict, `refuses` with its reason. A refusal holds the installation beside this server: read_machine_state names it in `newHost` with what a new host ends, `restart_server` refuses `host-unprepared`, and `restart_server {"host":"replace"}` makes it current and restarts onto it. `unasked` says why the host was not asked: no host stands, this server does not hold its custody, a candidate already waits, or this server is leaving.',
+    input: Schema.Struct({ installation: Schema.String }),
+    answer: arms({ checked: { verdict: Schema.Literals(['takes', 'refuses', 'unasked']), detail: Schema.NullOr(Schema.String) } }),
+    refusals: [],
+    effect: 'write',
+    identity: { key: 'call' },
+    subjects: () => [],
+    confirmation: () => ({ summary: 'Ask the execution host whether it takes this installation?' }),
+    confirmLabel: 'Check successor',
+    presentation: { running: 'Asking the execution host', done: 'Asked the execution host' },
+  }),
   read_machine_state: operation('read_machine_state', {
     approval: ASKS_NEVER,
     ...operatorOnly,

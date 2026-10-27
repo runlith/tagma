@@ -2,6 +2,7 @@ import { Context, Data, type Effect, type Stream } from 'effect';
 import type { Installation, InstallationFailure } from '../wire/manifest.js';
 import type { InstallationCut, Restart, RestartHost, Source } from '../wire/source.js';
 import type { MigrationLoad } from '../../../platform/contract/wire/migrationLoad.js';
+import type { HostVerdict } from './steps.js';
 
 export class SuccessionRefused extends Data.TaggedError('SuccessionRefused')<{ readonly detail: string }> {}
 
@@ -37,9 +38,16 @@ export class ServerProcess extends Context.Service<
   }
 >()('tagma/installation/ServerProcess') {}
 
+export type Waiting = {
+  readonly root: string;
+  readonly release: string;
+  readonly over: string | null;
+};
+
 export type HostRefusal = {
   readonly successor: InstallationCut | null;
   readonly detail: string;
+  readonly waits: Waiting | null;
 };
 
 export class Succession extends Context.Service<
@@ -48,6 +56,7 @@ export class Succession extends Context.Service<
     readonly current: Effect.Effect<Installation | null, InstallationFailure>;
     readonly leaving: Effect.Effect<boolean>;
     restart(host?: RestartHost): Effect.Effect<Restart, SuccessionRefused | SuccessorFailed | HostUnprepared>;
+    weigh(root: string, release: string): Effect.Effect<HostVerdict>;
     readonly refused: Effect.Effect<HostRefusal | null>;
     readonly refusals: Stream.Stream<void>;
     readonly release: (failure: string | null) => Effect.Effect<void, SuccessorFailed>;

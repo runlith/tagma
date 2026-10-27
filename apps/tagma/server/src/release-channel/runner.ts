@@ -435,7 +435,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     if (carried === null) return yield* undelivered(`the archive of release ${release.release} holds no one application at its root`);
     const unsigned = yield* Effect.promise((signal) => place.applications.signature(carried, place.installations, signal));
     if (unsigned !== null) return yield* undelivered(`release ${release.release} is refused before it runs: ${unsigned}`);
-    yield* provenRelease(carried).pipe(
+    const proven = yield* provenRelease(carried).pipe(
       Effect.provide(BunFileSystem.layer),
       Effect.mapError((failure) => undelivered(`release ${release.release} does not prove itself at ${failure.step}: ${failure.reason}`)),
     );
@@ -443,9 +443,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     yield* Effect.uninterruptible(
       Effect.gen(function* () {
         yield* ran('install-from', installing);
-        const standing = currentVersion(place.installations);
-        const build = standing === null ? null : (releaseAt(place.installations, standing)?.identity.build ?? null);
-        if (delivering !== null) delivering = { ...delivering, landed: build ?? release.release };
+        if (delivering !== null) delivering = { ...delivering, landed: proven.identity.build };
       }),
     );
     yield* clean(into);

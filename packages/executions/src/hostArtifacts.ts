@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Data, Effect, FileSystem, type PlatformError, Schema } from 'effect';
+import { Data, Effect, FileSystem, type PlatformError, Schema, Stream } from 'effect';
 import { bootName } from './protocol/boot';
 import {
   ARTIFACT_FILE,
@@ -35,6 +35,8 @@ export class ArtifactUnreadable extends Data.TaggedError('ArtifactUnreadable')<{
 }> {}
 
 export type ArtifactFailure = ArtifactMissing | ArtifactInvalid | ArtifactUnreadable;
+
+const HASHED_CHUNK = 1024 * 1024;
 
 const decodeManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(ArtifactManifest));
 const readDigest = Schema.decodeUnknownSync(Digest);
@@ -189,13 +191,21 @@ const proved = Effect.fnUntraced(function* (files: FileSystem.FileSystem, root: 
   if (size !== part.bytes) {
     return yield* mismatched(`${part.bytes} bytes`, `${size} bytes`);
   }
-  const bytes = yield* files
-    .readFile(resolved)
-    .pipe(Effect.catchTag('PlatformError', (error: PlatformError.PlatformError) => Effect.fail(unreadable(error.reason._tag))));
-  if (bytes.length !== part.bytes) {
-    return yield* mismatched(`${part.bytes} bytes`, `${bytes.length} bytes`);
+  const hash = createHash('sha256');
+  let read = 0;
+  yield* files.stream(resolved, { chunkSize: HASHED_CHUNK }).pipe(
+    Stream.runForEach((chunk) =>
+      Effect.sync(() => {
+        read += chunk.length;
+        hash.update(chunk);
+      }),
+    ),
+    Effect.catchTag('PlatformError', (error: PlatformError.PlatformError) => Effect.fail(unreadable(error.reason._tag))),
+  );
+  if (read !== part.bytes) {
+    return yield* mismatched(`${part.bytes} bytes`, `${read} bytes`);
   }
-  const digest = digestOf(bytes);
+  const digest = readDigest(`sha256:${hash.digest('hex')}`);
   if (digest !== part.digest) {
     return yield* mismatched(part.digest, digest);
   }

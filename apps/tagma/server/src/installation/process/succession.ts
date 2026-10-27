@@ -8,10 +8,10 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { readAttempt } from '../closure/attempt.js';
 import { serverPartsStand } from '../closure/present.js';
 import { readInstallation, refusalDetail } from '../closure/read.js';
-import type { Installation } from '../contract/wire/manifest.js';
+import { EXECUTIONS, type Installation } from '../contract/wire/manifest.js';
 import { ASKED_EVERY_MS, CLI_ENTRY, CURRENT, RUNTIME_PART, SERVE_FLAGS } from '../contract/wire/layout.js';
 import type { Restart, RestartHost } from '../contract/wire/source.js';
-import type { SuccessionSteps } from '../contract/service/steps.js';
+import type { HostVerdict, SuccessionSteps } from '../contract/service/steps.js';
 import {
   type DataDirectoryConflict,
   type DataDirectoryLock,
@@ -21,13 +21,14 @@ import {
 import { dataDirectoryLocked } from '../../platform/lock/holder.js';
 import {
   type HostRefusal,
-  type HostUnprepared,
+  HostUnprepared,
   type SuccessorLaunch,
   type SuccessorPlan,
   type SuccessionPreparation,
   Succession,
   SuccessionRefused,
   SuccessorFailed,
+  type Waiting,
 } from '../contract/service/succession.js';
 import {
   HANDOFF,
@@ -54,6 +55,7 @@ type Candidate = Acknowledgements & { readonly child: Bun.Subprocess<'ignore', n
 type Successor = { readonly _tag: 'Installation'; readonly installation: Installation } | { readonly _tag: 'Checkout' };
 
 const ANSWER_GRACE_MS = 100;
+const ADOPTION_LINES = 6;
 
 const decodeTakeover = Schema.decodeUnknownResult(takeoverSchema);
 
@@ -197,6 +199,7 @@ const processSuccession = Effect.fnUntraced(function* (input: {
             refusal = {
               successor: successor._tag === 'Installation' ? identityOf(successor.installation) : null,
               detail: unprepared.detail,
+              waits: null,
             };
           }),
           PubSub.publish(refusals, undefined),
@@ -205,6 +208,66 @@ const processSuccession = Effect.fnUntraced(function* (input: {
       Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : Effect.andThen(cancelled, withdrawn))),
     );
   };
+
+  const unasked = (detail: string): HostVerdict => ({ _tag: 'Unasked', detail });
+
+  const weighed = Effect.fn('Succession.weigh')(function* (root: string, release: string) {
+    if (left !== null) return unasked('this server is already handing over to its successor');
+    if (steps === undefined) return unasked('this server has no execution host to ask');
+    const successor = yield* Effect.match(readInstallation(root).pipe(Effect.provide(BunFileSystem.layer)), {
+      onFailure: (failure) => refusalDetail(failure),
+      onSuccess: (manifest) => identityOf({ root, manifest }),
+    });
+    if (typeof successor === 'string') return unasked(successor);
+    const standing = yield* Effect.match(current, {
+      onFailure: (failure) => ({ _tag: 'Unread', detail: refusalDetail(failure) }) as const,
+      onSuccess: (installation) => ({ _tag: 'Read', over: installation?.manifest.identity.digest ?? null }) as const,
+    });
+    if (standing._tag === 'Unread') return unasked(standing.detail);
+    const verdict = yield* Effect.flatMap(steps, (port) => port.weigh(join(root, EXECUTIONS)));
+    const held = refusal;
+    if (verdict._tag === 'Refuses') refusal = { successor, detail: verdict.detail, waits: { root, release, over: standing.over } };
+    else if (held?.successor?.digest === successor.digest) refusal = null;
+    if (refusal !== held) yield* PubSub.publish(refusals, undefined);
+    return verdict;
+  });
+
+  const madeCurrent = Effect.fn('Succession.adopt')(function* (waits: Waiting, digest: string) {
+    const command = [
+      join(waits.root, RUNTIME_PART),
+      ...SERVE_FLAGS,
+      join(waits.root, CLI_ENTRY),
+      'install-from',
+      '--json',
+      '--agreed',
+      '--new-host',
+      waits.release,
+    ];
+    const ran = yield* Effect.tryPromise({
+      try: async (signal) => {
+        const child = Bun.spawn(command, { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env, signal });
+        const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+        return { said: `${out}\n${err}`.trim().split('\n').slice(-ADOPTION_LINES).join(' | '), code };
+      },
+      catch: (cause) => new SuccessionRefused({ detail: `${command.join(' ')} would not run: ${String(cause)}` }),
+    });
+    const standing = yield* current.pipe(Effect.mapError((failure) => new SuccessionRefused({ detail: refusalDetail(failure) })));
+    if (standing?.manifest.identity.digest === digest) return;
+    return yield* new SuccessionRefused({
+      detail: `the release waiting at ${waits.root} did not become current: install-from ended with code ${ran.code}${ran.said === '' ? '' : `: ${ran.said}`}`,
+    });
+  });
+
+  const adopted = Effect.fnUntraced(function* (host: RestartHost) {
+    const held = refusal;
+    if (left !== null || held === null || held.waits === null || held.successor === null) return;
+    const standing = yield* current.pipe(Effect.mapError((failure) => new SuccessionRefused({ detail: refusalDetail(failure) })));
+    const digest = standing?.manifest.identity.digest ?? null;
+    const switched = digest === held.successor.digest;
+    if (!switched && digest !== held.waits.over) return;
+    if (host !== 'replace') return yield* new HostUnprepared({ detail: held.detail });
+    if (!switched) yield* madeCurrent(held.waits, held.successor.digest);
+  });
 
   const successorOf = Effect.gen(function* () {
     if (runsFrom === undefined) return { _tag: 'Checkout' } as const;
@@ -358,9 +421,11 @@ const processSuccession = Effect.fnUntraced(function* (input: {
     }),
     refusals: Stream.fromPubSub(refusals),
     refused: Effect.sync(() => refusal),
+    weigh: (root, release) => asking.withPermit(weighed(root, release)),
     restart: (host = 'hand-over') =>
-      asking
-        .withPermit(
+      Effect.andThen(
+        adopted(host),
+        asking.withPermit(
           Effect.uninterruptibleMask((restore) =>
             Effect.gen(function* () {
               if (left !== null) return left;
@@ -398,8 +463,8 @@ const processSuccession = Effect.fnUntraced(function* (input: {
               return leaving;
             }),
           ),
-        )
-        .pipe(Effect.withSpan('Succession.restart')),
+        ),
+      ).pipe(Effect.withSpan('Succession.restart')),
   });
 });
 

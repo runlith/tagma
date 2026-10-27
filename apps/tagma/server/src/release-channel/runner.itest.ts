@@ -21,7 +21,7 @@ import { type ChannelPlace, makeReleaseChannel } from './runner.js';
 import { releaseFeed } from './settings.js';
 import { CHANNELS } from '../installation/contract/wire/channel.js';
 import { macPlatform } from '../installation/setup/macos.js';
-import { carriedIn, packRelease, syntheticReleaseEffect, trustedApplications, type Packed } from './testing/release.js';
+import { carriedIn, packRelease, serverless, syntheticReleaseEffect, trustedApplications, type Packed } from './testing/release.js';
 
 const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
   const files = yield* FileSystem.FileSystem;
@@ -185,9 +185,12 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
     trustedApplications,
     new Date(yield* Clock.currentTimeMillis),
     false,
+    serverless,
   );
   if (installedFirst.status !== 'landed')
-    return yield* Effect.die(`the initial release asked instead of installing: ${installedFirst.said}`);
+    return yield* Effect.die(
+      `the initial release did not land: ${installedFirst.status === 'ask' ? installedFirst.said : installedFirst.detail}`,
+    );
   const first = { version: readlinkSync(join(root, 'current')) };
   const second = yield* packed('0.2.0', [{ store: 'graph', release: '0.2.0' }]);
   const third = yield* packed('0.3.0');

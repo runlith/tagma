@@ -9,6 +9,7 @@ import type { Applications } from '../../installation/contract/service/applicati
 import { RELEASE_INSIDE } from '../../installation/contract/wire/layout.js';
 import { type InstallationPlatform, type InstallationRole, type IrreversibleChange } from '../../installation/contract/wire/manifest.js';
 import { EXECUTIONS_RUNTIME } from '../../installation/contract/wire/archive.js';
+import type { Weigh } from '../install.js';
 
 const ENTRY = fileURLToPath(new URL('./entry.ts', import.meta.url));
 
@@ -46,6 +47,7 @@ export const syntheticReleaseEffect = Effect.fn('releaseFixture.build')(function
   build: string,
   irreversible?: ReadonlyArray<IrreversibleChange>,
   runtime: SyntheticRuntime = { platform: { os: process.platform, arch: process.arch }, executable: process.execPath },
+  host?: string,
 ) {
   const files = yield* FileSystem.FileSystem;
   const dir = carriedIn(bundle);
@@ -55,13 +57,19 @@ export const syntheticReleaseEffect = Effect.fn('releaseFixture.build')(function
     yield* files.chmod(path, mode);
   });
   yield* write(join(bundle, 'Contents/MacOS/Electron'), '#!/bin/sh\n', 0o700);
-  yield* write(join(dir, 'bun'), `#!/bin/sh\nexec '${runtime.executable}' "$@"\n`, 0o700);
   yield* write(join(dir, 'bin/cli/main.js'), `await import(${JSON.stringify(ENTRY)});\n`);
   yield* write(join(dir, 'bin/server/http.js'), `export const build = ${JSON.stringify(build)};\n`);
   yield* write(join(dir, 'drizzle/0000_base.sql'), 'select 1;\n');
   yield* write(join(dir, 'surface/index.html'), `<p>${build}</p>\n`);
-  yield* write(join(dir, 'executions/artifact.json'), '{}\n');
-  yield* files.copyFile(join(dir, 'bun'), join(dir, EXECUTIONS_RUNTIME));
+  if (host === undefined) {
+    yield* write(join(dir, 'bun'), `#!/bin/sh\nexec '${runtime.executable}' "$@"\n`, 0o700);
+    yield* write(join(dir, 'executions/artifact.json'), '{}\n');
+    yield* files.copyFile(join(dir, 'bun'), join(dir, EXECUTIONS_RUNTIME));
+  } else {
+    yield* files.copy(host, join(dir, 'executions'), { overwrite: true });
+    yield* files.copyFile(join(dir, EXECUTIONS_RUNTIME), join(dir, 'bun'));
+    yield* files.chmod(join(dir, 'bun'), 0o700);
+  }
   const parts = yield* Effect.forEach(LAYOUT, ([role, path]) => partsAt(dir, role, path));
   const manifest = yield* writeInstallation(dir, runtime.platform, build, parts.flat(), undefined, undefined, irreversible);
   yield* files.remove(join(dir, EXECUTIONS_RUNTIME));
@@ -85,6 +93,8 @@ export const trustedApplications: Applications = {
   forget: () => undefined,
   signature: async () => null,
 };
+
+export const serverless: Weigh = () => Effect.succeed({ _tag: 'Unasked', detail: 'no server runs beside this installation' });
 
 export type Packed = { readonly file: string; readonly sha256: string; readonly size: number };
 

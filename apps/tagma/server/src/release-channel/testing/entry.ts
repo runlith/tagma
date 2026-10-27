@@ -4,7 +4,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { installationRoot, launcherPath } from '../../installation/paths.js';
 import { CHANNELS } from '../../installation/contract/wire/channel.js';
 import { installRelease } from '../install.js';
-import { trustedApplications } from './release.js';
+import { serverless, trustedApplications } from './release.js';
 
 const [verb, ...rest] = process.argv.slice(2);
 const channel = CHANNELS.stable;
@@ -13,11 +13,12 @@ if (verb === 'install-from') {
   const landed = await Effect.runPromise(
     Effect.result(
       installRelease(
-        resolve(rest[0] ?? '.'),
+        resolve(rest.at(-1) ?? '.'),
         { installRoot: installationRoot(channel), launcher: launcherPath(channel), name: channel.name },
         trustedApplications,
         new Date(),
         false,
+        serverless,
       ),
     ).pipe(Effect.provide(BunFileSystem.layer)),
   );

@@ -10,7 +10,7 @@ import { releaseAt } from '../installation/closure/manifests.js';
 import { swapCurrent } from '../installation/closure/versions.js';
 import { EXECUTIONS_RUNTIME } from '../installation/contract/wire/archive.js';
 import { type InstallPlace, installRelease } from './install.js';
-import { carriedIn, syntheticReleaseEffect, trustedApplications } from './testing/release.js';
+import { carriedIn, serverless, syntheticReleaseEffect, trustedApplications } from './testing/release.js';
 
 class World extends Context.Service<World, { readonly home: string; readonly root: string; readonly place: InstallPlace }>()(
   'testing/ReleaseInstallation',
@@ -41,15 +41,24 @@ const built = Effect.fnUntraced(function* (name: string, build: string, irrevers
 const offered = Effect.fnUntraced(function* (bundle: string, asking = false) {
   const { place } = yield* World;
   return yield* Effect.result(
-    installRelease(carriedIn(bundle), place, trustedApplications, new Date(yield* Clock.currentTimeMillis), asking),
+    installRelease(carriedIn(bundle), place, trustedApplications, new Date(yield* Clock.currentTimeMillis), asking, serverless),
   );
 });
 const landed = Effect.fnUntraced(function* (bundle: string) {
   const { place } = yield* World;
-  return yield* installRelease(carriedIn(bundle), place, trustedApplications, new Date(yield* Clock.currentTimeMillis), false).pipe(
+  return yield* installRelease(
+    carriedIn(bundle),
+    place,
+    trustedApplications,
+    new Date(yield* Clock.currentTimeMillis),
+    false,
+    serverless,
+  ).pipe(
     Effect.mapError((failure) => new Error(`${failure.step}: ${failure.reason}`)),
     Effect.orDie,
-    Effect.flatMap((answer) => (answer.status === 'landed' ? Effect.succeed(answer) : Effect.die(answer.said))),
+    Effect.flatMap((answer) =>
+      answer.status === 'landed' ? Effect.succeed(answer) : Effect.die(answer.status === 'ask' ? answer.said : answer.detail),
+    ),
   );
 });
 
