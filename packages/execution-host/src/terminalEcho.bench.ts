@@ -1,12 +1,12 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { availableParallelism, cpus, loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Duration, Effect } from 'effect';
+import { Data, Deferred, Duration, Effect, Stream } from 'effect';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
-import { LANE_PATH, readOutputFrame } from '@runlith/executions/protocol/lane';
+import { LANE_PATH, LaneClose, readOutputFrame } from '@runlith/executions/protocol/lane';
 import type { LaunchRequest } from '@runlith/executions/protocol/launch';
 import { keyOf, principalOf } from './hostFixture';
 import { heldHost } from './posix/testing/holder';
@@ -15,8 +15,8 @@ import { benchBoot, benchClient, benchFlag } from './composition/testing/benchHo
 const KEYS = benchFlag('keys', 400);
 const PRINTERS = benchFlag('printers', 4);
 const BURNERS = benchFlag('burners', availableParallelism());
+const LOAD_SECONDS = 55;
 const WARMUP_MS = 3_000;
-const LOAD_CAP = Duration.seconds(55);
 const GAP_MS = 15;
 const LINE_KEYS = 32;
 const SETTLE_MS = 50;
@@ -24,15 +24,23 @@ const STARTUP_MS = 300;
 const LETTERS = 'abcdefgijkmnopqrstuvwxyz';
 const ERASE = '\u0015';
 const SHELL_ENV = { PATH: '/usr/bin:/bin', TERM: 'xterm-256color', PS1: '' };
-const PRINTER = 'my $line = ("x" x 79) . "\\n"; $| = 1; while (1) { print $line x 100; select(undef, undef, undef, 0.01) }';
-const BURNER = '1 while 1';
+const PRINTER = `my $end = time + ${LOAD_SECONDS}; my $line = ("x" x 79) . "\\n"; $| = 1; while (time < $end) { print $line x 100; select(undef, undef, undef, 0.01) }`;
+const BURNER = `my $end = time + ${LOAD_SECONDS}; while (time < $end) { for (1 .. 1e6) {} }`;
 
 type Lane = { readonly url: string; readonly token: string; readonly next: number };
 type Stats = { readonly samples: number; readonly p50: number; readonly p99: number; readonly max: number };
+type Reply = { readonly t: string; readonly head?: string; readonly retainedFrom?: string; readonly answer?: { readonly _tag: string } };
+type Said = { readonly ready?: number; readonly dropped?: number; readonly behind?: string; readonly lost?: unknown };
+
+class BenchFailed extends Data.TaggedError('BenchFailed')<{ readonly message: string }> {}
 
 const now = () => performance.now();
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const say = (line: unknown) => process.stdout.write(`${JSON.stringify(line)}\n`);
+const fail = (line: unknown): never => {
+  say(line);
+  process.exit(1);
+};
 
 const typist = () => {
   let text = '';
@@ -66,20 +74,26 @@ const typist = () => {
   return { heard, type };
 };
 
-const connect = (lane: Lane, frame: (bytes: Uint8Array) => void, closed: (code: number) => void): Promise<WebSocket> =>
+type Watch = {
+  readonly frame: (bytes: Uint8Array) => void;
+  readonly replied: (socket: WebSocket, reply: Reply) => void;
+  readonly closed: (code: number) => void;
+};
+
+const connect = (lane: Lane, watch: Watch): Promise<WebSocket> =>
   new Promise((ready) => {
     const socket = new WebSocket(lane.url);
     socket.binaryType = 'arraybuffer';
     socket.onopen = () => socket.send(JSON.stringify({ lane: lane.token }));
-    socket.onclose = (event) => closed(event.code);
+    socket.onclose = (event) => watch.closed(event.code);
     socket.onmessage = (event) => {
       if (typeof event.data !== 'string') {
         const read = readOutputFrame(new Uint8Array(event.data as ArrayBuffer));
-        if (read !== undefined) frame(read.bytes);
+        if (read !== undefined) watch.frame(read.bytes);
         return;
       }
-      const reply = JSON.parse(event.data) as { readonly t: string; readonly head?: string };
-      if (reply.t !== 'ready') return;
+      const reply = JSON.parse(event.data) as Reply;
+      if (reply.t !== 'ready') return watch.replied(socket, reply);
       socket.send(JSON.stringify({ t: 'follow', offset: reply.head }));
       ready(socket);
     };
@@ -89,15 +103,15 @@ const viaLane = async (lane: Lane) => {
   const { heard, type } = typist();
   const decoder = new TextDecoder();
   let typing = true;
-  const socket = await connect(
-    lane,
-    (bytes) => heard(decoder.decode(bytes, { stream: true })),
-    (code) => {
-      if (!typing) return;
-      say({ closed: code });
-      process.exit(1);
+  const socket = await connect(lane, {
+    frame: (bytes) => heard(decoder.decode(bytes, { stream: true })),
+    replied: (_socket, reply) => {
+      if (reply.t === 'ended' || (reply.t === 'receipt' && reply.answer?._tag !== 'InputAdmitted')) fail({ refused: reply });
     },
-  );
+    closed: (code) => {
+      if (typing) fail({ closed: code });
+    },
+  });
   await sleep(SETTLE_MS);
   let sequence = lane.next;
   const samples = await type((bytes) =>
@@ -123,26 +137,36 @@ const viaPty = async () => {
     env: SHELL_ENV,
     terminal: { cols: 80, rows: 24, data: (_terminal, bytes) => heard(decoder.decode(bytes, { stream: true })) },
   });
-  const terminal = shell.terminal;
-  if (terminal === undefined) throw new Error('Bun opened no terminal for the shell');
-  await sleep(STARTUP_MS);
-  const samples = await type((bytes) => terminal.write(bytes));
-  shell.kill('SIGKILL');
-  await shell.exited;
-  terminal.close();
-  return samples;
+  try {
+    const terminal = shell.terminal;
+    if (terminal === undefined) return fail({ refused: 'Bun opened no terminal for the shell' });
+    await sleep(STARTUP_MS);
+    return await type((bytes) => terminal.write(bytes));
+  } finally {
+    shell.kill('SIGKILL');
+    await shell.exited;
+    shell.terminal?.close();
+  }
 };
 
 const follow = async (lanes: ReadonlyArray<Lane>) => {
-  await Promise.all(
-    lanes.map((lane) =>
-      connect(
-        lane,
-        () => undefined,
-        () => undefined,
-      ),
-    ),
-  );
+  const watched = (lane: Lane): Promise<WebSocket> =>
+    connect(lane, {
+      frame: () => undefined,
+      replied: (socket, reply) => {
+        if (reply.t === 'ended') fail({ lost: 'ended' });
+        if (reply.t !== 'behind') return;
+        say({ behind: reply.retainedFrom });
+        socket.send(JSON.stringify({ t: 'follow', offset: reply.retainedFrom }));
+      },
+      closed: (code) => {
+        if (code !== LaneClose.slow) fail({ lost: code });
+        say({ dropped: code });
+        void watched(lane);
+      },
+    });
+  await Promise.all(lanes.map(watched));
+  say({ ready: lanes.length });
   await new Promise(() => undefined);
 };
 
@@ -151,6 +175,8 @@ const lanesOf = (argv: ReadonlyArray<string>): Lane[] => {
   for (let at = 0; at + 2 < argv.length; at += 3) lanes.push({ url: argv[at]!, token: argv[at + 1]!, next: Number(argv[at + 2]) });
   return lanes;
 };
+
+const argvOf = (lanes: ReadonlyArray<Lane>) => lanes.flatMap((lane) => [lane.url, lane.token, String(lane.next)]);
 
 const statsOf = (samples: ReadonlyArray<number>): Stats => {
   const sorted = [...samples].sort((one, other) => one - other);
@@ -168,28 +194,9 @@ const machine = () => ({
   efficiencyCores: Number(sysctl('hw.perflevel1.physicalcpu')),
 });
 
-const client = (mode: string, lanes: ReadonlyArray<Lane>) =>
-  Effect.promise(async () => {
-    const argv = [
-      process.execPath,
-      import.meta.path,
-      `--keys=${KEYS}`,
-      mode,
-      ...lanes.flatMap((lane) => [lane.url, lane.token, String(lane.next)]),
-    ];
-    const spawned = Bun.spawn(argv, {
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'inherit',
-    });
-    const said = await new Response(spawned.stdout).text();
-    if ((await spawned.exited) !== 0) throw new Error(`the ${mode} client failed: ${said}`);
-    return statsOf(JSON.parse(said) as ReadonlyArray<number>);
-  });
-
 const running = (argv: ReadonlyArray<string>) =>
   Effect.acquireRelease(
-    Effect.sync(() => Bun.spawn([...argv], { stdin: 'ignore', stdout: 'ignore', stderr: 'inherit' })),
+    Effect.sync(() => Bun.spawn([...argv], { stdin: 'ignore', stdout: 'pipe', stderr: 'inherit' })),
     (spawned) =>
       Effect.promise(async () => {
         spawned.kill('SIGKILL');
@@ -197,12 +204,25 @@ const running = (argv: ReadonlyArray<string>) =>
       }),
   );
 
-const drive = Effect.fnUntraced(
+const linesOf = (source: ReadableStream<Uint8Array>) =>
+  Stream.fromReadableStream({ evaluate: () => source, onError: (error) => new BenchFailed({ message: String(error) }) }).pipe(
+    Stream.decodeText(),
+    Stream.splitLines,
+  );
+
+const client = Effect.fn('terminalEcho.client')(function* (mode: '--lane' | '--direct', lanes: ReadonlyArray<Lane>) {
+  const spawned = yield* running([process.execPath, import.meta.path, `--keys=${KEYS}`, mode, ...argvOf(lanes)]);
+  const said = yield* Effect.promise(() => new Response(spawned.stdout).text());
+  if ((yield* Effect.promise(() => spawned.exited)) !== 0) return yield* new BenchFailed({ message: `the ${mode} client failed: ${said}` });
+  return statsOf(JSON.parse(said) as ReadonlyArray<number>);
+}, Effect.scoped);
+
+const drive = Effect.fn('terminalEcho.drive')(
   function* (directory: string) {
     const host = yield* benchClient(directory);
     yield* Effect.addFinalizer(() => Effect.ignore(host.shutdown(keyOf('bench-shutdown'))));
     const operator = principalOf('bench-operator');
-    const start = Effect.fnUntraced(function* (name: string, command: LaunchRequest['command']) {
+    const start = Effect.fn('terminalEcho.start')(function* (name: string, command: LaunchRequest['command']) {
       const started = yield* host.start(keyOf(name), {
         command,
         transport: { _tag: 'pty', geometry: { rows: 24, columns: 80 } },
@@ -213,21 +233,44 @@ const drive = Effect.fnUntraced(
         origin: operator,
         budget: {},
       });
-      if (started._tag !== 'Started') return yield* Effect.die(new Error(`${name} did not start: ${started._tag}`));
+      if (started._tag !== 'Started') return yield* new BenchFailed({ message: `${name} did not start: ${started._tag}` });
       const execution = started.execution;
       yield* Effect.addFinalizer(() => Effect.ignore(host.stop(keyOf(`${name}-stop`), execution, 'explicit-stop', 'signal')));
       return execution;
     });
-    const lane = Effect.fnUntraced(function* (execution: ExecutionRef) {
+    const lane = Effect.fn('terminalEcho.lane')(function* (execution: ExecutionRef) {
       const bound = yield* host.openBinding(operator);
-      if (bound._tag !== 'Bound') return yield* Effect.die(new Error(`no binding: ${bound._tag}`));
+      if (bound._tag !== 'Bound') return yield* new BenchFailed({ message: `no binding: ${bound._tag}` });
       const opened = yield* host.open(execution, { binding: bound.binding, principal: operator });
       return { url: `ws://127.0.0.1:${opened.port}${LANE_PATH}`, token: opened.token, next: opened.next } satisfies Lane;
     });
-    const measure = Effect.fnUntraced(function* (execution: ExecutionRef) {
+    const measure = Effect.fn('terminalEcho.measure')(function* (execution: ExecutionRef) {
       const endpoint = yield* client('--lane', [yield* lane(execution)]);
       const direct = yield* client('--direct', []);
       return { endpoint, direct };
+    });
+    const following = Effect.fn('terminalEcho.follow')(function* (lanes: ReadonlyArray<Lane>) {
+      const follower = yield* running([process.execPath, import.meta.path, '--follow', ...argvOf(lanes)]);
+      const ready = yield* Deferred.make<void, BenchFailed>();
+      const seen = { dropped: 0, behind: 0 };
+      yield* Effect.forkScoped(
+        Stream.runForEach(linesOf(follower.stdout), (line) => {
+          const said = JSON.parse(line) as Said;
+          if (said.ready !== undefined) return Deferred.succeed(ready, undefined);
+          return Effect.sync(() => {
+            if (said.dropped !== undefined) seen.dropped += 1;
+            if (said.behind !== undefined) seen.behind += 1;
+          });
+        }).pipe(Effect.andThen(Deferred.fail(ready, new BenchFailed({ message: 'the follower ended before its lanes stood' })))),
+      );
+      yield* Deferred.await(ready);
+      return {
+        seen: Effect.suspend(() =>
+          follower.exitCode === null
+            ? Effect.succeed(seen)
+            : Effect.fail(new BenchFailed({ message: `the follower lost its lanes: exit ${follower.exitCode}` })),
+        ),
+      };
     });
 
     const shell = yield* start('echo-shell', {
@@ -249,26 +292,20 @@ const drive = Effect.fnUntraced(
             yield* start(`echo-printer-${index}`, { program: '/usr/bin/perl', args: ['-e', PRINTER], environment: [], cwd: directory }),
           );
         }
-        const followed = yield* Effect.forEach(printing, (execution) => lane(execution));
-        yield* running([
-          process.execPath,
-          import.meta.path,
-          '--follow',
-          ...followed.flatMap((one) => [one.url, one.token, String(one.next)]),
-        ]);
+        const followed = yield* following(yield* Effect.forEach(printing, (execution) => lane(execution)));
         for (let index = 0; index < BURNERS; index += 1) yield* running(['/usr/bin/perl', '-e', BURNER]);
         yield* Effect.sleep(Duration.millis(WARMUP_MS));
         const measured = yield* measure(shell);
-        return { ...measured, loadAtStart, loadAtEnd: loadavg()[0] };
+        return { ...measured, follower: yield* followed.seen, loadAtStart, loadAtEnd: loadavg()[0] };
       }),
-    ).pipe(Effect.timeout(LOAD_CAP));
+    ).pipe(Effect.timeout(Duration.seconds(LOAD_SECONDS)));
 
     return {
       machine: machine(),
       load: { before: loadBefore, saturatedStart: saturated.loadAtStart, saturatedEnd: saturated.loadAtEnd },
       setup: { keys: KEYS, gapMs: GAP_MS, burners: BURNERS, printers: PRINTERS, warmupMs: WARMUP_MS },
       idle,
-      saturated: { endpoint: saturated.endpoint, direct: saturated.direct },
+      saturated: { endpoint: saturated.endpoint, direct: saturated.direct, follower: saturated.follower },
     };
   },
   Effect.scoped,
@@ -292,8 +329,10 @@ else {
   });
   try {
     console.log(JSON.stringify(await Effect.runPromise(drive(directory)), null, 2));
-  } finally {
+  } catch (failure) {
     holder.kill('SIGKILL');
+    throw failure;
+  } finally {
     await holder.exited;
     rmSync(directory, { recursive: true, force: true });
   }
