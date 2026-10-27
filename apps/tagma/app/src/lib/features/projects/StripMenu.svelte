@@ -37,6 +37,7 @@
         {#snippet lead()}<Swatch projectId={project.id} />{/snippet}
         {labelOf(project)}
       </DropdownMenu.Label>
+      <DropdownMenu.Separator />
       {#if !project.global}
         <DropdownMenu.Item icon={PencilLine} onSelect={() => renaming.ask(project)}>Rename…</DropdownMenu.Item>
       {/if}
