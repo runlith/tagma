@@ -24,6 +24,7 @@ const scope = await scopeOf(process.argv.slice(2), {
   session: true,
 });
 const { args, value, root, cache, graph, records, loads, changed, global, session, tests } = scope;
+const testbed = existsSync(join(root, 'packages/testbed/src/cli.ts')) ? root : TOOLKIT;
 const named = scope.named ?? 'no change';
 const all = args.includes('--full');
 const selection = all || global !== undefined ? undefined : graph.select(tests, changed);
@@ -204,7 +205,7 @@ const jobs = suites.map((suite, at) => {
   return {
     id: String(at),
     cwd: join(root, pkg.dir),
-    stages: [[process.execPath, join(TOOLKIT, 'packages/testbed/src/cli.ts'), ...runner]],
+    stages: [[process.execPath, join(testbed, 'packages/testbed/src/cli.ts'), ...runner]],
     need: suite.length,
     env: { ...process.env, RUNLITH_TEST_REPORT: report, RUNLITH_CHANGE_AUDIT: manifest, RUNLITH_CHANGE_CONFIG: config },
   };
@@ -247,7 +248,7 @@ for (const [at, suite] of suites.entries()) {
   const rows = outcome?.rows ?? [];
   const runRow = rows.findLast((row): row is RunRow => row.type === 'run');
   const fileRows = new Map(
-    rows.filter((row): row is FileRow => row.type === 'file').map((row) => [resolve(TOOLKIT, row.file), row] as const),
+    rows.filter((row): row is FileRow => row.type === 'file').map((row) => [resolve(testbed, row.file), row] as const),
   );
   const verdicts = new Map(
     rows.filter((row): row is FileVerdict => row.type === 'file-verdict').map((row) => [`${row.file}\0${row.run}`, row] as const),

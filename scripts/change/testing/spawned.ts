@@ -1,7 +1,11 @@
-import { appendFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
 const MODULE = /^\/\/ (\S+\.[cm]?[jt]sx?)$/gm;
+const fs = createRequire(import.meta.url)('node:fs') as typeof import('node:fs');
+const appendFileSync =
+  (fs.appendFileSync as unknown as Record<symbol, typeof fs.appendFileSync>)[Symbol.for('runlith.testbed.original')] ?? fs.appendFileSync;
 const record = process.env['RUNLITH_CHANGE_SPAWNED'];
 const root = process.env['RUNLITH_CHANGE_SPAWNED_ROOT'] ?? '';
 const modules = (path: string): string[] => [...readFileSync(path, 'utf8').matchAll(MODULE)].map((match) => match[1]!);
