@@ -123,10 +123,11 @@ export const stopQueued = Effect.fnUntraced(function* (
   execution: ExecutionId,
   cause: CancellationCause,
   action: StopAction,
+  trigger = `stop:${operation.operation}`,
 ) {
   const { held, queued, cancelling } = registry;
   const waiting = (yield* Ref.get(queued)).get(execution);
-  const trigger = `stop:${operation.operation}`;
+  trigger ||= `stop:${operation.operation}`;
   const given = waiting === undefined ? undefined : yield* endAccepted(registry, waiting, cause, trigger, { operation, action });
   if (waiting !== undefined && given === undefined) {
     yield* Ref.update(cancelling, (kept) => new Map(kept).set(waiting.operation.operation, { cause, trigger, ask: { operation, action } }));
@@ -255,7 +256,7 @@ export const cancelStart = Effect.fn('Executions.cancelStart')(function* (
     const stranded = (yield* Ref.get(orphans)).get(entry.execution);
     if (stranded !== undefined) {
       const asked = yield* takeCancellation(registry, operation);
-      if (asked !== undefined) yield* endOrphan(registry, entry.execution, cause);
+      if (asked !== undefined) yield* endOrphan(registry, entry.execution, asked.cause, asked.trigger, asked.ask);
     }
     return { _tag: 'Joined', operation, execution: ref } satisfies CancelAnswer;
   }

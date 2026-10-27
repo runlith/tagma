@@ -154,7 +154,7 @@ const measured = (
       ended.receipt !== undefined
         ? Effect.succeed(withEnding(result, ended.receipt))
         : ended.attached === true
-          ? stopping(road, operation, execution, declaredStop(cancellation.stop)).pipe(
+          ? stopping(road, operation, execution, declaredStop(cancellation.stop), cancellation.stop.stopped()?.message).pipe(
               Effect.map((again) => (again.receipt === undefined ? result : withEnding(result, again.receipt))),
             )
           : Effect.succeed(result),

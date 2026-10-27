@@ -22,7 +22,11 @@ import { ThreadRunLedger, type ThreadRunRef } from './ThreadRunLedger';
 import { ThreadRunSettlements } from './ThreadRunSettlements';
 export class ThreadRunStopped extends Error {
   constructor(readonly by: ThreadRunStoppedBy | null) {
-    super('Thread run stopped by user.');
+    super(
+      by === null
+        ? 'Thread run stopped.'
+        : `Thread run stopped by ${by === 'reader' ? 'the operator' : by === 'parent' ? 'the parent agent' : `the ${by}`}.`,
+    );
     this.name = 'ThreadRunStopped';
   }
 }

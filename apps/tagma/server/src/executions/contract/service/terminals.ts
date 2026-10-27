@@ -101,6 +101,7 @@ export class Terminals extends Context.Service<
       expected: CustodyRevision,
       cause: CancellationCause,
       action: StopAction,
+      trigger?: string,
     ) => Effect.Effect<StopReceipt, TerminalFailure>;
     readonly stopAsked: (execution: ExecutionRef) => Effect.Effect<boolean, TerminalFailure>;
     readonly lost: (record: TerminalRecord) => Effect.Effect<ExecutionState | null>;

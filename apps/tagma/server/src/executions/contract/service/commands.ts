@@ -183,6 +183,7 @@ export class ManagedCommands extends Context.Service<
       authority: CommandAuthority<StopPreparation>,
       cause: CancellationCause,
       action: StopAction,
+      trigger?: string,
     ) => Effect.Effect<StopReceipt, TerminalFailure>;
     readonly stopAll: (
       projectId: number,

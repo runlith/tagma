@@ -332,7 +332,7 @@ const spawn = Effect.fn('Executions.spawn')(function* (
     );
     const asked = yield* takeCancellation(registry, operation);
     if (asked !== undefined) {
-      yield* endOrphan(registry, ref.execution, asked.cause, asked.ask);
+      yield* endOrphan(registry, ref.execution, asked.cause, asked.trigger, asked.ask);
     }
     yield* Effect.ignore(
       store.settle({

@@ -120,6 +120,7 @@ export const makeTerminalStops = Effect.fnUntraced(function* ({ installation }: 
     expected: CustodyRevision,
     cause: CancellationCause,
     action: StopAction,
+    trigger?: string,
   ): Effect.fn.Return<StopReceipt, TerminalFailure> {
     const replaced = yield* dischargeOwner.dischargeReplaced(projectId, execution);
     if (replaced._tag === 'Discharged') return replacedReceipt(execution, key, cause, action);
@@ -127,7 +128,7 @@ export const makeTerminalStops = Effect.fnUntraced(function* ({ installation }: 
     const taken = yield* units.read((unit) => requestKeys.operation(unit, projectId, key.operationId));
     if (taken._tag !== 'Unknown') return yield* retaken(key, taken);
     yield* units.write(writes('stops.stop', [terminalRequestKey, terminalRequestKeyTally]), (unit) => requestKeys.register(unit, key));
-    const sent = yield* Effect.result(host.stop(ref(key.operationId), execution, cause, action));
+    const sent = yield* Effect.result(host.stop(ref(key.operationId), execution, cause, action, trigger));
     if (sent._tag === 'Failure') {
       const unsent = sent.failure._tag === 'WireUnavailable' && sent.failure.sent === false;
       yield* units.write(stopSettles, (unit) =>
@@ -159,6 +160,7 @@ export const makeTerminalStops = Effect.fnUntraced(function* ({ installation }: 
     authority: CommandAuthority<StopPreparation>,
     cause: CancellationCause,
     action: StopAction,
+    trigger?: string,
   ): Effect.fn.Return<StopReceipt, TerminalFailure> {
     if (!sameRef(authority.prepared.request.execution, execution)) {
       return yield* new TerminalRefused({
@@ -185,7 +187,7 @@ export const makeTerminalStops = Effect.fnUntraced(function* ({ installation }: 
       takeNotice(execution, notice?.thread),
       () =>
         Effect.gen(function* () {
-          const sent = yield* Effect.result(host.stop(ref(key.operationId), execution, cause, action));
+          const sent = yield* Effect.result(host.stop(ref(key.operationId), execution, cause, action, trigger));
           if (sent._tag === 'Failure') {
             const unsent = sent.failure._tag === 'WireUnavailable' && sent.failure.sent === false;
             yield* units.write(sentSettles, (unit) =>

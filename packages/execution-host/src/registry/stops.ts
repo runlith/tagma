@@ -30,6 +30,7 @@ export class ExecutionStop extends Context.Service<
       execution: ExecutionId,
       cause: CancellationCause,
       action: StopAction,
+      trigger?: string,
     ) => Effect.Effect<StopReceipt, ExecutionUnknown | ExecutionUnreadable | ExecutionUnrecorded | CustodianRefused | CustodyLost>;
     readonly endProcess: (
       claim: HostClaim,
@@ -55,12 +56,12 @@ export const executionStopOf = (registry: RegistryState) => {
   const control = Context.make(ProcessControl, registry.control);
   const native = registry.strays === undefined ? control : Context.add(control, Processes, registry.strays);
   return ExecutionStop.of({
-    stop: (claim, operation, execution, cause, action) =>
+    stop: (claim, operation, execution, cause, action, trigger) =>
       Effect.flatMap(commanding(registry, claim, 'end'), () =>
-        Effect.flatMap(stopQueued(registry, operation, execution, cause, action), (given) =>
+        Effect.flatMap(stopQueued(registry, operation, execution, cause, action, trigger), (given) =>
           given !== undefined
             ? Effect.succeed(given)
-            : Effect.flatMap(stopOrphan(registry, operation, execution, cause, action), (orphaned) =>
+            : Effect.flatMap(stopOrphan(registry, operation, execution, cause, action, trigger), (orphaned) =>
                 orphaned !== undefined
                   ? Effect.succeed(orphaned)
                   : !held.has(execution) && shelf.has(execution)
@@ -70,7 +71,7 @@ export const executionStopOf = (registry: RegistryState) => {
                     : Effect.flatMap(live(registry, execution), (found) =>
                         Effect.gen(function* () {
                           yield* calls
-                            .settle(found.operation, { _tag: 'Cancel', cause, trigger: `stop:${operation.operation}` })
+                            .settle(found.operation, { _tag: 'Cancel', cause, trigger: trigger || `stop:${operation.operation}` })
                             .pipe(Effect.catchTag('CallMissing', () => Effect.void));
                           const receipt = yield* found.execution.stop.stop(operation, cause, action);
                           yield* sweepAfter(registry, execution, receipt);

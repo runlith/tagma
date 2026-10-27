@@ -374,7 +374,8 @@ layer(fixture, { excludeTestServices: true })('a bounded command', (it) => {
         const execution = yield* accepted(open, 'command-orphaned', commandOf({ witness, wait: true }));
         yield* Deferred.await(gate.entered);
         yield* running(witness);
-        yield* stop(open, 'stop-orphaned', execution, 'signal');
+        const trigger = 'the command owner cancelled during acquisition';
+        yield* open.stops.stop(open.claim, keyOf('stop-orphaned'), execution, 'explicit-stop', 'signal', trigger);
         yield* Deferred.succeed(gate.held, undefined);
         expect((yield* settled(open, execution))?.state.phase).toBe('ended');
         expect(yield* witnessed(witness)).toBe('run');
@@ -382,6 +383,10 @@ layer(fixture, { excludeTestServices: true })('a bounded command', (it) => {
           execution: { execution },
           requested: 'signal',
           cause: 'explicit-stop',
+        });
+        expect(yield* open.requests.callResult(keyOf('command-orphaned'))).toMatchObject({
+          _tag: 'Settled',
+          result: { _tag: 'Decided', decision: { _tag: 'Cancelled', cause: 'explicit-stop', trigger } },
         });
       }),
     ),

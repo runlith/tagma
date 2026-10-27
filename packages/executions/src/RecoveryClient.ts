@@ -31,6 +31,7 @@ export class RecoveryClient extends Context.Service<
       execution: ExecutionRef,
       cause: CancellationCause,
       action: StopAction,
+      trigger?: string,
     ) => Effect.Effect<StopReceipt, ExecutionsFailure>;
     readonly shutdown: (operation: HostRequestRef) => Effect.Effect<ShutdownAnswer, ExecutionsFailure>;
     readonly fenceHost: (operation: HostRequestRef, expected: HostCustodyRevision) => Effect.Effect<AuthorityAnswer, ExecutionsFailure>;

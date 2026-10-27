@@ -485,12 +485,12 @@ export const executionSpawner = Effect.fnUntraced(function* (environment: Comman
       installation: operation.installation,
       operation: readOperation(`${operation.operation}:stop`),
     };
-    const request = (cause: CancellationCause) => executions.stop(stopKey, execution, cause, 'signal');
+    const request = (cause: CancellationCause, trigger?: string) => executions.stop(stopKey, execution, cause, 'signal', trigger);
 
     if (context.stop !== undefined) {
       yield* Effect.forkScoped(
         Effect.flatMap(context.stop.stopping, (said) =>
-          Effect.flatMap(Effect.exit(request(said.reason)), (asked) =>
+          Effect.flatMap(Effect.exit(request(said.reason, said.message)), (asked) =>
             asked._tag === 'Success'
               ? Effect.void
               : Effect.logWarning('the stop a call asked for did not reach its execution; its scope ends it on close', {
@@ -506,8 +506,16 @@ export const executionSpawner = Effect.fnUntraced(function* (environment: Comman
       operation: readOperation(`${operation.operation}:retire`),
     };
     yield* Effect.addFinalizer(() => {
-      const cause: CancellationCause = context.stop?.stopped()?.reason ?? 'scope-closed';
-      return Effect.ignore(request(cause).pipe(Effect.andThen(executions.retire(retireKey, execution))));
+      const said = context.stop?.stopped();
+      return request(said?.reason ?? 'scope-closed', said?.message).pipe(
+        Effect.andThen(executions.retire(retireKey, execution)),
+        Effect.catchTags({
+          WireLost: (failure) => Effect.logWarning('execution cleanup lost its host connection', { execution, reason: failure.reason }),
+          WireUnavailable: (failure) =>
+            Effect.logWarning('execution cleanup could not reach its host', { execution, reason: failure.reason }),
+        }),
+        Effect.orDie,
+      );
     });
     const lane =
       stdin === 'ignore'
@@ -569,7 +577,9 @@ export const executionSpawner = Effect.fnUntraced(function* (environment: Comman
       deadline: outcome.deadline,
       result: settled(operation, held),
       cancel: (cause, trigger) =>
-        Effect.asVoid(request(cause).pipe(Effect.tap(() => Effect.logDebug(`managed call ${operation.operation} cancelled: ${trigger}`)))),
+        Effect.asVoid(
+          request(cause, trigger).pipe(Effect.tap(() => Effect.logDebug(`managed call ${operation.operation} cancelled: ${trigger}`))),
+        ),
     };
     return withManagedCall(handle, companion);
   });

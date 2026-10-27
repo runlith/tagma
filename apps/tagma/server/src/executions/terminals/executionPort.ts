@@ -269,7 +269,7 @@ export const makeTerminalExecutions = ({
     listeners: (execution) => carried(evidence.ports(execution)),
     hostListeners: () => withheld("reading the listening surface of this installation's namespace"),
     cancelStart: (operation, cause, trigger, when = 'always') => host.port.cancelStart(operation, cause, trigger, when),
-    stop: Effect.fnUntraced(function* (operation, execution, cause, action) {
+    stop: Effect.fnUntraced(function* (operation, execution, cause, action, trigger) {
       const key = yield* keyFor(operation, 'stop', execution);
       const standing = yield* bound(execution, 'it cannot be stopped through this port');
       if (standing.projectId !== caller.projectId) {
@@ -278,7 +278,7 @@ export const makeTerminalExecutions = ({
           message: `${execution.execution} belongs to another project of this installation; this port ends only the work of the one it is bound to.`,
         });
       }
-      return yield* terminals.stop(caller.projectId, key, execution, standing.revision, cause, action);
+      return yield* terminals.stop(caller.projectId, key, execution, standing.revision, cause, action, trigger);
     }, carried),
     retire: (operation, execution) => carried(discharge.retire(caller.projectId, operation, execution)),
     input: Effect.fnUntraced(function* (execution, lane, request) {

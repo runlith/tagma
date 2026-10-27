@@ -94,7 +94,7 @@ const endingFor = Effect.fnUntraced(function* (
   const prevented = yield* Effect.result(road.executions.cancelStart(operation, cause, declaredTrigger(said), 'always'));
   if (prevented._tag === 'Success') {
     const outcome = prevented.success;
-    if (outcome._tag === 'Joined') return yield* stopping(road, operation, outcome.execution, cause);
+    if (outcome._tag === 'Joined') return yield* stopping(road, operation, outcome.execution, cause, declaredTrigger(said));
     if (outcome._tag === 'Attached') return { attached: true };
     if (outcome._tag === 'Prevented') return { unestablished: 'the send was cancelled before any child existed, so nothing ran' };
     if (outcome._tag === 'Refused') return { unestablished: `the cancellation of this command was refused: ${outcome.refusal.reason}` };
@@ -110,7 +110,7 @@ const endingFor = Effect.fnUntraced(function* (
       unestablished: `nothing stood under operation ${operation.operation} (${named.success._tag}) and the cancellation did not reach the host`,
     };
   }
-  return yield* stopping(road, operation, execution, cause);
+  return yield* stopping(road, operation, execution, cause, declaredTrigger(said));
 });
 
 export const stopping = Effect.fnUntraced(function* (
@@ -118,6 +118,7 @@ export const stopping = Effect.fnUntraced(function* (
   operation: HostRequestRef,
   execution: ExecutionRef,
   cause: DeclaredCancellationCause,
+  trigger?: string,
 ): Effect.fn.Return<Stopped> {
   const actor = road.binding.actor;
   const prepared = yield* Effect.result(road.access.prepare({ _tag: 'Stop', actor, scope: road.binding.projectId, execution }));
@@ -136,7 +137,7 @@ export const stopping = Effect.fnUntraced(function* (
     prepared: act,
     recheck: (unit) => road.access.recheck(unit, act),
   };
-  const ended = yield* Effect.result(road.managed.stop(road.binding.projectId, key, execution, authority, cause, 'signal'));
+  const ended = yield* Effect.result(road.managed.stop(road.binding.projectId, key, execution, authority, cause, 'signal', trigger));
   return ended._tag === 'Success'
     ? { receipt: ended.success }
     : { unestablished: `this command was not ended: ${refusalText(ended.failure)}` };

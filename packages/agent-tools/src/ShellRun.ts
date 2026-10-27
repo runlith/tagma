@@ -80,7 +80,7 @@ export type Settled = {
   readonly signalName: string | null;
   readonly cost: ProcessCost;
   readonly expired: boolean;
-  readonly aborted: boolean;
+  readonly aborted: string | null;
   readonly stopped: string | null;
   readonly notStarted: string | null;
   readonly unconfirmed: string | null;
@@ -94,7 +94,7 @@ export const localRunning: Settled = {
   signalName: null,
   cost: PLATFORM_COST,
   expired: false,
-  aborted: false,
+  aborted: null,
   stopped: null,
   notStarted: null,
   unconfirmed: null,
@@ -163,7 +163,7 @@ function settleCall(result: CallDecisionAnswer, timeoutSource: EndingSource): Se
   if (decision._tag === 'Cancelled') {
     if (decision.cause === 'not-started') return { ...measured, notStarted: decision.trigger };
     if (decision.cause === 'timeout') return { ...measured, source: timeoutSource, expired: true };
-    if (decision.cause === 'run-abort') return { ...measured, aborted: true };
+    if (decision.cause === 'run-abort') return { ...measured, aborted: decision.trigger };
     return { ...measured, stopped: `${decision.cause}: ${decision.trigger}` };
   }
   if (result.nativeExit === undefined) {
@@ -210,7 +210,7 @@ export function endingOf(settled: Settled): CommandExit {
   }
   if (settled.notStarted !== null) return { _tag: 'Unknown', detail: `it never started: ${settled.notStarted}` };
   if (settled.expired) return { _tag: 'Unknown', detail: 'it was stopped when its wait or life ran out, and no exit was read' };
-  if (settled.aborted) return { _tag: 'Unknown', detail: 'the run was aborted and no exit was read' };
+  if (settled.aborted !== null) return { _tag: 'Unknown', detail: `the run was aborted and no exit was read: ${settled.aborted}` };
   if (settled.stopped !== null) return { _tag: 'Unknown', detail: `ended by its owner: ${settled.stopped}` };
   return { _tag: 'Unknown', detail: settled.unconfirmed ?? 'no ending was read for this command' };
 }

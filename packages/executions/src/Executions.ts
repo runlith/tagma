@@ -81,6 +81,7 @@ export class Executions extends Context.Service<
       execution: ExecutionRef,
       cause: CancellationCause,
       action: StopAction,
+      trigger?: string,
     ) => Effect.Effect<StopReceipt, ExecutionsFailure>;
     readonly retire: (
       operation: HostRequestRef,

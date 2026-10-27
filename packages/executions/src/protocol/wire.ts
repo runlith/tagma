@@ -281,6 +281,7 @@ const requests = [
     execution: ExecutionRef,
     cause: CancellationCause,
     action: StopAction,
+    trigger: Schema.optional(Schema.String),
   }),
   Schema.Struct({ _tag: Schema.Literal('Retire'), operation: HostRequestRef, execution: ExecutionRef }),
   Schema.Struct({ _tag: Schema.Literal('Quiesce'), operation: HostRequestRef }),

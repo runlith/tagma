@@ -302,7 +302,7 @@ export const finishedAnswer = (
     meta.push(`This command never started: ${settled.notStarted}. Nothing ran, and the tree is unchanged.`);
   }
   if (settled.expired) meta.push(expiry.words);
-  if (settled.aborted) meta.push('User aborted the command');
+  if (settled.aborted !== null) meta.push(`The command was interrupted: ${settled.aborted}`);
   if (settled.stopped !== null) meta.push(`The command was ended by its execution owner — ${settled.stopped}.`);
   if (settled.signalDeath !== null) meta.push(settled.signalDeath);
   if (settled.unconfirmed !== null) meta.push(settled.unconfirmed);
@@ -321,7 +321,7 @@ export const finishedAnswer = (
         ? expiry.ending
         : settled.unconfirmed !== null
           ? 'unconfirmed'
-          : settled.aborted || settled.stopped !== null
+          : settled.aborted !== null || settled.stopped !== null
             ? 'stopped'
             : settled.signalDeath !== null
               ? 'killed'

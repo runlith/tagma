@@ -334,7 +334,7 @@ export const answer = (
         stale !== undefined
           ? refusedAs(stale)
           : stops
-              .stop(host, body.operation, readExecutionId(body.execution.execution), body.cause, body.action)
+              .stop(host, body.operation, readExecutionId(body.execution.execution), body.cause, body.action, body.trigger)
               .pipe(Effect.matchEffect({ onFailure: refused, onSuccess: (receipt) => answered({ _tag: 'Stop', receipt }) })),
       );
     }

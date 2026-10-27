@@ -19,7 +19,7 @@ import { climb, type LadderAim } from '@runlith/executions/stopLadder';
 import { killStray } from '../strayProcesses';
 import { workAim, type NativeExecution } from '../nativeLaunch';
 import { residualStanding, type ProvenSet } from '../ProvenSet';
-import { type HostClaim, type RegistryState, live, moved, commanding } from './state';
+import { type AcceptedAsk, type HostClaim, type RegistryState, live, moved, commanding } from './state';
 import { releaseSoon } from './retention';
 
 export const stopOf = (
@@ -40,7 +40,8 @@ export const endOrphan = Effect.fn('ExecutionStop.endOrphan')(function* (
   registry: RegistryState,
   execution: ExecutionId,
   cause: CancellationCause,
-  ask?: { readonly operation: HostRequestRef; readonly action: StopAction },
+  trigger?: string,
+  ask?: AcceptedAsk,
 ) {
   const { store, capacity, calls, orphans } = registry;
   const orphan = yield* Ref.modify(orphans, (kept) => {
@@ -52,7 +53,7 @@ export const endOrphan = Effect.fn('ExecutionStop.endOrphan')(function* (
   });
   if (orphan === undefined) return undefined;
   yield* calls
-    .settle(orphan.operation, { _tag: 'Cancel', cause, trigger: `orphan:${orphan.ref.execution}` })
+    .settle(orphan.operation, { _tag: 'Cancel', cause, trigger: trigger || `orphan:${orphan.ref.execution}` })
     .pipe(Effect.catchTag('CallMissing', () => Effect.void));
   const intent = yield* Effect.result(
     store.recordStop({
@@ -191,11 +192,12 @@ export const stopOrphan = Effect.fnUntraced(function* (
   execution: ExecutionId,
   cause: CancellationCause,
   action: StopAction,
+  trigger?: string,
 ) {
   const { orphans } = registry;
   const orphan = (yield* Ref.get(orphans)).get(execution);
   if (orphan === undefined) return undefined;
-  const ended = yield* endOrphan(registry, execution, cause, { operation, action });
+  const ended = yield* endOrphan(registry, execution, cause, trigger, { operation, action });
   if (ended === undefined) return undefined;
   if (ended.unrecorded.length > 0) {
     return yield* new ExecutionUnrecorded({ execution, reason: ended.unrecorded.join('; ') });

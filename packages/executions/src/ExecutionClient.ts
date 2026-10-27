@@ -282,8 +282,8 @@ const make = Effect.fnUntraced(function* ({ address, role, limits, budget = {}, 
             Effect.map((response) => response.outcome),
           ),
 
-        stop: (operation, execution, cause, action) =>
-          ask({ _tag: 'Stop', operation, execution, cause, action }).pipe(
+        stop: (operation, execution, cause, action, trigger) =>
+          ask({ _tag: 'Stop', operation, execution, cause, action, trigger }).pipe(
             Effect.flatMap((answer) => expect('Stop', answer)),
             Effect.map((response) => response.receipt),
           ),

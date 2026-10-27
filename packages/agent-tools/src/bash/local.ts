@@ -112,7 +112,11 @@ export const local = Effect.fn('BashTool.local')(function* (
     }),
   ).pipe(
     Effect.onExit((exit) =>
-      exit._tag === 'Success' ? Effect.void : shell.finish({ ...localRunning, aborted: true }).pipe(Effect.asVoid, Effect.uninterruptible),
+      exit._tag === 'Success'
+        ? Effect.void
+        : shell
+            .finish({ ...localRunning, aborted: ctx.progress?.stopped()?.message ?? 'The command call was interrupted.' })
+            .pipe(Effect.asVoid, Effect.uninterruptible),
     ),
   );
   const result = yield* shell.finish(settled).pipe(Effect.uninterruptible);

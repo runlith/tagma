@@ -21,7 +21,7 @@ describe('a command that was admitted and never started', () => {
     expect(settled.notStarted).toBe('queued 2000ms behind 6 of 6 slots granted');
     expect(settled.expired).toBe(false);
     expect(settled.stopped).toBeNull();
-    expect(settled.aborted).toBe(false);
+    expect(settled.aborted).toBeNull();
     expect(settled.code).toBeNull();
     expect(endingOf(settled)).toEqual({
       _tag: 'Unknown',
@@ -54,7 +54,7 @@ describe('a command whose leader exited while something it started outlived it',
     expect(settled.unconfirmed).toBeNull();
     expect(endingOf(settled)).toEqual({ _tag: 'Code', code: 0 });
     expect(settled.expired).toBe(false);
-    expect(settled.aborted).toBe(false);
+    expect(settled.aborted).toBeNull();
     expect(settled.stopped).toBeNull();
     expect(settled.notStarted).toBeNull();
   });
