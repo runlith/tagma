@@ -204,18 +204,21 @@ const changes: LinkKind<ChangeRef> = {
     icon: PanelRight,
     open: async (app, link) => {
       const target = link.target;
-      if (target.rootId === null && !(await app.resolve(FileOpener).showable({ path: target.path }, askOf(fileOf(link))))) return;
-      const changed = app.resolve(ThreadChanges);
-      const standing = changed.open;
-      const same =
-        standing !== null &&
-        standing.rootId === target.rootId &&
-        standing.path === target.path &&
-        standing.commit === target.commit &&
-        (standing.rootId === null || standing.lens === undefined);
-      if (!same) changed.open = { ...target };
-      if (!app.resolve(Beside).show({ content: changesPane, from: { ...link.from, thread: changed.threadId } }))
-        await changes.full.open(app, link);
+      const show = async (): Promise<void> => {
+        const changed = app.resolve(ThreadChanges);
+        const standing = changed.open;
+        const same =
+          standing !== null &&
+          standing.rootId === target.rootId &&
+          standing.path === target.path &&
+          standing.commit === target.commit &&
+          (standing.rootId === null || standing.lens === undefined);
+        if (!same) changed.open = { ...target };
+        if (!app.resolve(Beside).show({ content: changesPane, from: { ...link.from, thread: changed.threadId } }))
+          await changes.full.open(app, link);
+      };
+      if (target.rootId === null) await app.resolve(FileOpener).view({ path: target.path }, askOf(fileOf(link)), show);
+      else await show();
     },
   },
   full: {

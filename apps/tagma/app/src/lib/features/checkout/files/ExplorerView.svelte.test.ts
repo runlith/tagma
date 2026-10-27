@@ -26,6 +26,7 @@ import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { FileOps } from './FileOps.svelte.js';
 import { FileSearch } from './FileSearch.svelte.js';
 import { Tabs } from './Tabs.svelte.js';
+import { testDoor } from '$lib/wire/testing.js';
 
 let app: TestApp | undefined;
 
@@ -45,7 +46,7 @@ const entry = (name: string, kind: DirectoryEntry['kind'] = 'file'): DirectoryEn
 const LISTINGS: Record<string, readonly DirectoryEntry[]> = {
   '': [entry('src', 'directory'), entry('docs', 'directory'), entry('README.md')],
   src: [entry('deep', 'directory'), entry('a.ts'), entry('b.ts')],
-  docs: [entry('guide.md')],
+  docs: [entry('guide.md'), entry('manual.pdf')],
   'src/deep': [entry('x.ts')],
 };
 
@@ -93,6 +94,27 @@ async function draw(held: Promise<void> = Promise.resolve()) {
       return { status: 'ok', entries, total: entries.length, next: null };
     },
   };
+  const browsed: string[] = [];
+  const opener = new FileOpener(
+    Object.assign(testDoor(), {
+      perform: async (_id: string, input: { path: string }) => ({
+        entry: {
+          kind: 'file',
+          path: `/repo/${input.path}`,
+          bytes: 1,
+          mediaType: input.path.endsWith('.pdf') ? 'application/pdf' : 'text/plain',
+        },
+        place: { projectId: 1, checkout: 'root-1', root: '/repo', path: input.path },
+      }),
+    }) as never,
+    () => ({ projectId: 1, branch: null }),
+    {} as never,
+    {} as never,
+    {} as never,
+    { refusal: () => undefined } as never,
+    { open: (url) => void browsed.push(url) },
+    {} as never,
+  );
   app = mountShell(
     Layer.mergeAll(
       screen(),
@@ -110,7 +132,7 @@ async function draw(held: Promise<void> = Promise.resolve()) {
       ThreadNames,
       ReaderMarks,
       Layer.of(GraphDoor, door as never),
-      Layer.of(FileOpener, { open: () => Promise.resolve(), stand: () => () => undefined } as never),
+      Layer.of(FileOpener, opener),
       Layer.of(Workspace, { find: () => undefined } as never),
       Layer.of(Worktrees, testPlaces() as never),
       Layer.of(Outside, { local: false, editors: [], chosen: null } as never),
@@ -121,7 +143,7 @@ async function draw(held: Promise<void> = Promise.resolve()) {
   flushSync();
   feed.routes.get('checkout.subscribe')?.(row());
   await settle();
-  return { page, app: app.app, asked };
+  return { page, app: app.app, asked, browsed };
 }
 
 test('the root lists when the checkout is known, a folder lists when opened, and a changed file carries its git letter while its folder carries the bubble', async () => {
@@ -178,14 +200,28 @@ test('a click on a file opens it as the preview tab that the next click replaces
   await settle();
 
   page.querySelector<HTMLButtonElement>('[data-tree-path="src/a.ts"]')?.click();
-  flushSync();
+  await settle();
   expect(tabs.tabs.map((tab) => [tab.path, tab.state])).toEqual([['src/a.ts', 'preview']]);
 
   page.querySelector<HTMLButtonElement>('[data-tree-path="src/b.ts"]')?.click();
-  flushSync();
+  await settle();
   expect(tabs.tabs.map((tab) => [tab.path, tab.state])).toEqual([['src/b.ts', 'preview']]);
 
   page.querySelector<HTMLButtonElement>('[data-tree-path="src/b.ts"]')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-  flushSync();
+  await settle();
   expect(tabs.tabs.map((tab) => [tab.path, tab.state])).toEqual([['src/b.ts', 'open']]);
+});
+
+test('a PDF clicked in the tree goes to the browser by the file opener’s rule and opens no editor tab', async () => {
+  const { page, app: mounted, browsed } = await draw();
+  page.querySelector<HTMLButtonElement>('[data-tree-path="docs"]')?.click();
+  flushSync();
+  await settle();
+
+  page.querySelector<HTMLButtonElement>('[data-tree-path="docs/manual.pdf"]')?.click();
+  await settle();
+
+  expect(browsed).toHaveLength(1);
+  expect(browsed[0]).toContain('manual.pdf');
+  expect(mounted.resolve(Tabs).tabs).toEqual([]);
 });

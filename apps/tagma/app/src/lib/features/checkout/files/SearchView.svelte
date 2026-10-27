@@ -10,12 +10,14 @@
   import { cn } from '$lib/shared/utils.js';
   import { Column } from './Column.svelte.js';
   import { Explorer } from './Explorer.svelte.js';
+  import { FileOpener } from './FileOpener.svelte.js';
   import { FileSearch } from './FileSearch.svelte.js';
   import { kindFor } from './tab.js';
   import { Tabs } from './Tabs.svelte.js';
 
   const search = FileSearch.use();
   const tabs = Tabs.use();
+  const opener = FileOpener.use();
   const explorer = Explorer.use();
   const column = Column.use();
 
@@ -52,10 +54,12 @@
     if (rootId === null) return;
     const column = range?.start ?? 0;
     const length = range === undefined ? 0 : range.end - range.start;
-    tabs.open(
-      { rootId, path: file, kind: kindFor(file, true), goto: { line: line - 1, column, length: length > 0 ? length : undefined } },
-      'preview',
-    );
+    void opener.view({ path: file }, { project: tabs.projectId, root: rootId }, () => {
+      tabs.open(
+        { rootId, path: file, kind: kindFor(file, true), goto: { line: line - 1, column, length: length > 0 ? length : undefined } },
+        'preview',
+      );
+    });
   }
 
   function pieces(

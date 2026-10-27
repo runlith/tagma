@@ -129,10 +129,8 @@ export class FileOpener extends Service<FileOpener>()('FileOpener', { tier: 'app
     const aim = this.aim();
     if (aim === undefined) return;
     const key = GraphRung.keyOf(aim);
-    this.pending?.abort();
     this.waiting.clear();
-    const pending = new AbortController();
-    this.pending = pending;
+    const pending = this.begin();
     const current = (): boolean => !pending.signal.aborted && this.aim() !== undefined && GraphRung.keyOf(this.aim() as GraphAim) === key;
     try {
       const shown = await this.viewed(target, { ...ask, project: ask.project ?? aim.projectId }, pending.signal, current);
@@ -169,13 +167,22 @@ export class FileOpener extends Service<FileOpener>()('FileOpener', { tier: 'app
     }
   }
 
-  async showable(target: PathTarget, ask: OpenAsk = {}): Promise<boolean> {
+  async view(target: PathTarget, ask: OpenAsk, show: () => void | Promise<void>): Promise<void> {
+    const pending = this.begin();
     try {
-      return (await this.viewed(target, ask, undefined, () => true)) !== null;
+      if ((await this.viewed(target, ask, pending.signal, () => !pending.signal.aborted)) !== null) await show();
     } catch (error) {
-      this.notices.refusal(error);
-      return false;
+      if (!pending.signal.aborted) this.notices.refusal(error);
+    } finally {
+      if (this.pending === pending) this.pending = null;
     }
+  }
+
+  private begin(): AbortController {
+    this.pending?.abort();
+    const pending = new AbortController();
+    this.pending = pending;
+    return pending;
   }
 
   private async viewed(
