@@ -37,10 +37,6 @@
       "types": "./src/llm/protocols/gemini.ts",
       "default": "./src/llm/protocols/gemini.ts"
     },
-    "./protocols/devin/devin_pb": {
-      "types": "./src/llm/protocols/devin/devin_pb.ts",
-      "default": "./src/llm/protocols/devin/devin_pb.ts"
-    },
     "./protocols/openai-responses": {
       "types": "./src/llm/protocols/openai-responses.ts",
       "default": "./src/llm/protocols/openai-responses.ts"
@@ -65,9 +61,13 @@
       "types": "./src/llm/route/endpoint.ts",
       "default": "./src/llm/route/endpoint.ts"
     },
-    "./protocols/devin": {
-      "types": "./src/llm/protocols/devin.ts",
-      "default": "./src/llm/protocols/devin.ts"
+    "./route/protocol": {
+      "types": "./src/llm/route/protocol.ts",
+      "default": "./src/llm/route/protocol.ts"
+    },
+    "./route/transport/connect": {
+      "types": "./src/llm/route/transport/connect.ts",
+      "default": "./src/llm/route/transport/connect.ts"
     },
     "./vendorCall": {
       "types": "./src/vendorCall.ts",
@@ -338,9 +338,17 @@
       "types": "./src/llm/protocols/shared.ts",
       "default": "./src/llm/protocols/shared.ts"
     },
+    "./protocols/utils/lifecycle": {
+      "types": "./src/llm/protocols/utils/lifecycle.ts",
+      "default": "./src/llm/protocols/utils/lifecycle.ts"
+    },
     "./protocols/utils/tool-schema": {
       "types": "./src/llm/protocols/utils/tool-schema.ts",
       "default": "./src/llm/protocols/utils/tool-schema.ts"
+    },
+    "./protocols/utils/tool-stream": {
+      "types": "./src/llm/protocols/utils/tool-stream.ts",
+      "default": "./src/llm/protocols/utils/tool-stream.ts"
     },
     "./route/definition": {
       "types": "./src/llm/route/definition.ts",
@@ -361,7 +369,6 @@
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "2.15.0",
     "@effect/platform-bun": "catalog:",
     "@runlith/activity": "workspace:*",
     "@runlith/credential-file": "workspace:*",
@@ -375,7 +382,6 @@
     "sharp": "catalog:"
   },
   "devDependencies": {
-    "@bufbuild/protoc-gen-es": "2.15.0",
     "@runlith/effect-test": "workspace:*",
     "@types/bun": "catalog:"
   },
@@ -404,15 +410,20 @@
       "./profiles/vendorWeb",
       "./protocols/anthropic-messages",
       "./protocols/anthropic/stream",
-      "./protocols/devin",
       "./protocols/openai-compatible-chat",
       "./protocols/openai-images",
       "./protocols/openai-responses",
       "./protocols/shared",
+      "./protocols/utils/lifecycle",
+      "./protocols/utils/tool-stream",
       "./route/auth",
+      "./route/definition",
+      "./route/endpoint",
       "./route/executor",
       "./route/framing",
       "./route/notes",
+      "./route/protocol",
+      "./route/transport/connect",
       "./route/transport/verbatim",
       "./schema/errors",
       "./schema/events",
