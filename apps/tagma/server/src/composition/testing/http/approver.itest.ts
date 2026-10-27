@@ -273,6 +273,10 @@ layer(Layer.effect(Place, setup).pipe(Layer.provide(fixture)), { excludeTestServ
       const renames = ['20261013021000_graph_operation_names', '20261020030000_rule_operation_names'];
       const migrations = chain(fixtureMigrations).filter((row) => row.name !== undefined && renames.includes(row.name));
       if (migrations.length !== renames.length) return yield* Effect.die(new Error('an operation name migration is not shipped'));
+      const [ledger] = yield* db.all<{ readonly last: number | null }>(sql`select max(rowid) as last from "__drizzle_migrations"`);
+      yield* Effect.addFinalizer(() =>
+        db.run(sql`delete from "__drizzle_migrations" where rowid > ${ledger?.last ?? 0}`).pipe(Effect.orDie),
+      );
       for (const migration of migrations) yield* applyMigration(db, migration);
       expect((yield* mandate.approvesLineage(parent)).own).toEqual([
         'claim_block',
