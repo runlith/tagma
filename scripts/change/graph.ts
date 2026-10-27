@@ -270,10 +270,19 @@ export class Graph {
     return this.walk([file], file);
   }
 
+  offThread(file: string): ReadonlySet<string> {
+    return this.threads(this.walk([file], file).inputs);
+  }
+
   select(
     files: readonly string[],
     changed: readonly string[],
-  ): { readonly selected: Map<string, string>; readonly imports: number; readonly untraced: number } {
+  ): {
+    readonly selected: Map<string, string>;
+    readonly reached: ReadonlyMap<string, readonly string[]>;
+    readonly imports: number;
+    readonly untraced: number;
+  } {
     this.walk(files);
     const reverse = new Map<string, Set<string>>();
     const add = (to: string, from: string): void => {
@@ -298,30 +307,38 @@ export class Graph {
           }
       return found;
     };
-    const seeds = changed.flatMap((path) =>
+    const seedsOf = (path: string): string[] =>
       !sourceFile(path) || (!testFile(path) && (/\.fixture\.|\/fixtures?\//.test(path) || !reverse.has(path)))
         ? [path, `package:${this.package(path).dir}`]
-        : [path],
-    );
-    const imported = reach(seeds);
+        : [path];
+    const imported = reach(changed.flatMap(seedsOf));
     const selected = new Map<string, string>();
     for (const file of files)
       if (imported.has(file))
         selected.set(file, changed.includes(file) ? `test changed: ${file}` : 'import closure reaches a changed input');
     let untraced = 0;
     const tests = new Set(files);
+    const reached = new Map<string, string[]>();
+    for (const path of changed)
+      for (const file of reach(seedsOf(path)))
+        if (tests.has(file)) {
+          const paths = reached.get(file) ?? [];
+          paths.push(path);
+          reached.set(file, paths);
+        }
     const threaded = this.threads([...this.probes.keys()]);
     for (const importer of importers.sort()) {
       const site = this.unknown(importer)[0]!;
       for (const file of reach([importer])) {
         if (!tests.has(file) || this.settled(importer, file, threaded)) continue;
+        reached.set(file, [...changed]);
         if (!selected.has(file)) {
           untraced++;
           selected.set(file, `reaches a nonliteral import its run has not traced: ${importer}:${site.line} ${site.specifier}`);
         }
       }
     }
-    return { selected, imports: files.filter((file) => imported.has(file)).length, untraced };
+    return { selected, reached, imports: files.filter((file) => imported.has(file)).length, untraced };
   }
 
   save(): void {
