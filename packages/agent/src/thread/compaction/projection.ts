@@ -1,5 +1,6 @@
 import type { CompactionSummary } from '@runlith/llm/schema/compaction';
 import { Message } from '@runlith/llm/schema/messages';
+import { foldedReferences } from '../../agent/AgentDeferredTools';
 import { agentInputSkills, withAgentInputSkills, withAgentOrigin } from '../../agent/AgentSignal';
 import { pinnedOpening, type ThreadOpeningPin } from './prefix';
 
@@ -15,11 +16,15 @@ export function threadCheckpointHead(
   messages: readonly Message[],
   pin: ThreadOpeningPin,
 ): readonly Message[] {
+  const covered = Math.min(checkpoint.coveredMessageCount, messages.length);
   const head = [
-    withAgentOrigin(Message.user(checkpointMarker), 'summary'),
+    withAgentOrigin(
+      Message.make({ role: 'user', content: checkpointMarker, metadata: foldedReferences(messages.slice(0, covered)) }),
+      'summary',
+    ),
     withAgentOrigin(Message.make({ role: 'assistant', content: checkpoint.summary, compaction: checkpoint.context }), 'summary'),
   ];
-  for (let index = Math.min(checkpoint.coveredMessageCount, messages.length) - 1; index >= 0; index -= 1) {
+  for (let index = covered - 1; index >= 0; index -= 1) {
     const skills = agentInputSkills(messages[index]!);
     if (skills === null) continue;
     if (skills.size > 0) head[0] = withAgentInputSkills(head[0]!, skills);

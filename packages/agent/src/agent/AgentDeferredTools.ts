@@ -161,8 +161,9 @@ export function discoveredToolNames(messages: readonly Message[]): ReadonlySet<s
     for (const name of message.compaction?.toolReferences ?? []) revealed.add(name);
     for (const name of carriedReferences(message)) revealed.add(name);
     if (message.role !== 'assistant' && message.role !== 'tool') continue;
-    if (typeof message.content === 'string') continue;
-    for (const part of message.content) {
+    const content = message.content;
+    if (typeof content === 'string') continue;
+    for (const part of content) {
       if (part.type !== 'tool-result') continue;
       for (const name of part.toolReferences ?? []) revealed.add(name);
       for (const name of toolSearchReferences(part)) revealed.add(name);
