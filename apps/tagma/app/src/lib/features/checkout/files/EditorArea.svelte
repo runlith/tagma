@@ -11,8 +11,6 @@
   import { inCheckout } from './tab.js';
   import { Tabs } from './Tabs.svelte.js';
 
-  let { drill = false, onBack }: { drill?: boolean; onBack?: (() => void) | undefined } = $props();
-
   const tabs = Tabs.use();
   const keymap = Keymap.use();
 
@@ -36,23 +34,21 @@
             <Button size="sm" variant="outline" onclick={() => tabs.close(tab.id)}>Close the tab</Button>
           </div>
         {:else if tab.kind === 'diff' && inCheckout(tab)}
-          <GitDiff {tab} onBack={drill ? onBack : undefined} closable={!drill} />
+          <GitDiff {tab} />
         {:else if tab.kind === 'image'}
-          <ImageTab {tab} projectId={tabs.projectId} onBack={drill ? onBack : undefined} />
+          <ImageTab {tab} projectId={tabs.projectId} />
         {:else if tab.kind === 'compare'}
-          <CompareTab {tab} onBack={drill ? onBack : undefined} />
+          <CompareTab {tab} />
         {:else if tab.kind === 'preview'}
           <PreviewTab
             {tab}
             projectId={tabs.projectId}
-            onBack={drill ? onBack : undefined}
             onSource={() => tabs.open({ rootId: tab.rootId, branch: tab.branch, path: tab.path, kind: 'file' }, 'open')}
           />
         {:else}
           <FileTab
             {tab}
             projectId={tabs.projectId}
-            onBack={drill ? onBack : undefined}
             onSeen={(view) => {
               tabs.see(tab.id, view);
               tabs.arrived(tab.id);

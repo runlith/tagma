@@ -10,7 +10,7 @@
   import { CheckoutRepo } from './Repo.js';
   import { Checkout } from './Selection.svelte.js';
 
-  let { tab, onBack, closable = true }: { tab: CheckoutTab; onBack?: (() => void) | undefined; closable?: boolean } = $props();
+  let { tab }: { tab: CheckoutTab } = $props();
 
   const tabs = Tabs.use();
   const lists = GitLists.use();
@@ -75,8 +75,6 @@
   onSide={halves ? turn : undefined}
   lines={headLines}
   {mark}
-  {onBack}
-  {closable}
   onClose={() => tabs.close(tab.id)}
   onStep={walk === null ? undefined : step}
   onCommit={(picked) => tabs.aimDiff(tab.id, { commit: picked, side: picked === null ? side : null })}

@@ -2,7 +2,7 @@
   import { Router } from '@runlith/layer/Router';
   import { Seam } from '@runlith/seam/Seam.svelte';
   import SeamHandle from '@runlith/seam/SeamHandle.svelte';
-  import { tick, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { Column } from '$lib/features/checkout/files/Column.svelte.js';
   import ColumnTabs from '$lib/features/checkout/files/ColumnTabs.svelte';
   import { Documents } from '$lib/features/checkout/files/Documents.svelte.js';
@@ -19,8 +19,6 @@
   import { Checkout } from './Selection.svelte.js';
   import GitView from './GitView.svelte';
   import { CHECKOUT_SEAM } from './seams.js';
-
-  const DRILL_BELOW = 900;
 
   let { onBoard }: { onBoard?: (() => void) | undefined } = $props();
 
@@ -41,30 +39,6 @@
   const row = $derived(checkout.row);
 
   const seam = new Seam(seams.seam(CHECKOUT_SEAM), { onCommit: (size) => seams.set(CHECKOUT_SEAM, size) });
-
-  let windowWidth = $state(Number.POSITIVE_INFINITY);
-  const drill = $derived(windowWidth < DRILL_BELOW);
-
-  let list = $state<HTMLElement | null>(null);
-  let shown = $state(untrack(() => tabs.active !== null));
-  let seen = untrack(() => tabs.activeId);
-
-  $effect(() => {
-    const now = tabs.activeId;
-    if (now === seen) return;
-    seen = now;
-    shown = now !== null;
-  });
-
-  const covered = $derived(drill && shown && tabs.active !== null);
-
-  function back(): void {
-    const left = tabs.active;
-    shown = false;
-    if (left === null) return;
-    const path = CSS.escape(left.path);
-    void tick().then(() => list?.querySelector<HTMLElement>(`button[data-change-path="${path}"], [data-tree-path="${path}"]`)?.focus());
-  }
 
   function keys(event: KeyboardEvent): void {
     if (event.defaultPrevented || underOverlay(event.target)) return;
@@ -100,16 +74,10 @@
   }
 </script>
 
-<svelte:window bind:innerWidth={windowWidth} onkeydown={keys} />
+<svelte:window onkeydown={keys} />
 
-<div class="relative flex h-full min-h-0">
-  <aside
-    bind:this={list}
-    class={['flex min-h-0 flex-col overflow-hidden bg-chrome', drill ? 'flex-1' : 'shrink-0 border-r', covered && 'invisible']}
-    style:width={drill ? undefined : `${seam.size}px`}
-    inert={covered}
-    data-checkout-list
-  >
+<div class="flex h-full min-h-0">
+  <aside class="flex min-h-0 shrink-0 flex-col overflow-hidden border-r bg-chrome" style:width="{seam.size}px" data-checkout-list>
     {#if checkout.absent !== null}
       <p class="p-3 text-ui text-muted-foreground" data-checkout-absent={checkout.absent}>
         {checkout.absent === 'no-working-copy'
@@ -133,19 +101,15 @@
       {/if}
     {/if}
   </aside>
-  {#if !drill}
-    <SeamHandle {seam} label="Resize the files column" />
-  {/if}
+  <SeamHandle {seam} label="Resize the files column" contained />
 
-  {#if !drill || covered}
-    <main class={['flex min-h-0 min-w-0 flex-1 flex-col', covered && 'absolute inset-0 z-10']}>
-      {#if checkout.absent !== null}
-        <p class="grid flex-1 place-items-center px-6 text-center text-ui text-muted-foreground" data-checkout-pick>
-          Open tabs come back when this branch has a working copy again
-        </p>
-      {:else}
-        <EditorArea {drill} onBack={back} />
-      {/if}
-    </main>
-  {/if}
+  <main class="flex min-h-0 min-w-0 flex-1 flex-col">
+    {#if checkout.absent !== null}
+      <p class="grid flex-1 place-items-center px-6 text-center text-ui text-muted-foreground" data-checkout-pick>
+        Open tabs come back when this branch has a working copy again
+      </p>
+    {:else}
+      <EditorArea />
+    {/if}
+  </main>
 </div>

@@ -13,7 +13,7 @@
   import TabHead from './TabHead.svelte';
   import { Tabs } from './Tabs.svelte.js';
 
-  let { tab, onBack }: { tab: Tab; onBack?: (() => void) | undefined } = $props();
+  let { tab }: { tab: Tab } = $props();
 
   const documents = Documents.use();
   const door = GraphDoor.use();
@@ -74,7 +74,7 @@
   aria-label="Disk against your buffer: {tab.path}"
   data-compare-tab={tab.path}
 >
-  <TabHead path={tab.path} branch={tab.branch} {onBack}>
+  <TabHead path={tab.path} branch={tab.branch}>
     <span class="mr-1 shrink-0 rounded-sm bg-hover px-1.5 py-0.5 text-meta text-muted-foreground">Disk ↔ your buffer</span>
   </TabHead>
   {#if opened !== null}

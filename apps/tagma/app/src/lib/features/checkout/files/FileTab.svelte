@@ -30,7 +30,6 @@
   let {
     tab,
     projectId,
-    onBack,
     headed = true,
     onSeen,
     onPreview,
@@ -40,7 +39,6 @@
   }: {
     tab: Tab;
     projectId: number;
-    onBack?: (() => void) | undefined;
     headed?: boolean;
     staged?: boolean;
     onSeen?: ((view: Seen) => void) | undefined;
@@ -162,7 +160,7 @@
   onfocusin={held.front}
 >
   {#if headed}
-    <TabHead path={tab.path} branch={tab.branch} {onBack} onShow={staged ? show : undefined}>
+    <TabHead path={tab.path} branch={tab.branch} onShow={staged ? show : undefined}>
       {#if body.kind === 'text' && body.readOnly === 'undecodable'}
         <span class="mr-1 shrink-0 rounded-sm bg-hover px-1.5 py-0.5 text-meta text-muted-foreground" data-file-readonly
           >Read only · not UTF-8</span
