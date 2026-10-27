@@ -16,6 +16,7 @@
     open = null,
     lines = WELL_LINES,
     count,
+    rows = false,
     children,
   }: {
     id: string;
@@ -24,6 +25,7 @@
     open?: ChatLink | null;
     lines?: number;
     count?: string | null;
+    rows?: boolean;
     children?: Snippet;
   } = $props();
 
@@ -36,7 +38,7 @@
 </script>
 
 <div class="group/well relative min-w-0 rounded-lg bg-chat-sunken">
-  <Clamp {id} {lines} count={counted} class="px-3 py-2 leading-5">
+  <Clamp {id} {lines} count={counted} flush={rows} class={[rows ? 'p-1' : 'px-3 py-2', 'leading-5']}>
     {#if text !== null}
       <pre class="min-w-0 font-mono text-small leading-5 whitespace-pre-wrap break-words text-muted-foreground select-text">{text}</pre>
     {:else if children}

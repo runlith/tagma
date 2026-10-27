@@ -53,10 +53,10 @@
 {:else if result?.status === 'ok' && 'reads' in result}
   <div class="grid min-w-0 gap-1.5">
     {#each result.reads as read (read.name)}
-      <Well id={`${entry.id}:${read.name}`} copy={read.body.trim() === '' ? null : read.body}>
+      <Well id={`${entry.id}:${read.name}`} copy={read.body.trim() === '' ? null : read.body} rows>
         <BlockCard block={read} place={{ projectId: read.projectId, checkout: null }} />
         {#if read.body.trim()}
-          <div class="mt-1">{@render document(`${entry.id}:${read.name}`, read.body)}</div>
+          <div class="mt-1 px-1.5 pb-1">{@render document(`${entry.id}:${read.name}`, read.body)}</div>
         {/if}
       </Well>
     {/each}
@@ -67,7 +67,7 @@
   <Well id={entry.id} text={result.page} />
 {:else if result?.status === 'ok' && 'block' in result}
   <div class="grid min-w-0 gap-1.5">
-    <Well id={entry.id} copy={null}>
+    <Well id={entry.id} copy={null} rows>
       <BlockCard block={result.block} diff={wrote === null ? undefined : diffParam(wrote.range)} place={result.graphCopy} />
     </Well>
     {#if wrote !== null}
@@ -75,7 +75,7 @@
     {/if}
   </div>
 {:else if rows.length > 0}
-  <Well id={entry.id} copy={null} count={String(rows.length)}>
+  <Well id={entry.id} copy={null} count={String(rows.length)} rows>
     {#each rows as block (block.name)}
       <BlockCard {block} />
     {/each}

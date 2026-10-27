@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import type { ClassValue } from 'svelte/elements';
   import { clampFade } from '../clipFade';
   import { useChatRendering } from '../renderers';
   import { useChatStrings } from '../strings';
@@ -9,9 +10,18 @@
     lines,
     count = null,
     class: className = '',
+    flush = false,
     actions,
     children,
-  }: { id: string; lines: number; count?: string | null; class?: string; actions?: Snippet; children: Snippet } = $props();
+  }: {
+    id: string;
+    lines: number;
+    count?: string | null;
+    class?: ClassValue;
+    flush?: boolean;
+    actions?: Snippet;
+    children: Snippet;
+  } = $props();
 
   const strings = useChatStrings();
   const rendering = useChatRendering();
@@ -31,7 +41,7 @@
     <div class="min-w-0">{@render children()}</div>
   </div>
   {#if clipped || all || actions}
-    <div class="-ml-1.5 flex min-w-0 items-center gap-1 font-sans text-small">
+    <div class={[!flush && '-ml-1.5', 'flex min-w-0 items-center gap-1 font-sans text-small']}>
       {#if clipped || all}
         <button
           type="button"
