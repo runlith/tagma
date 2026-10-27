@@ -109,7 +109,7 @@ const isName = (node: ts.Identifier): boolean => {
   return (ts.isLabeledStatement(parent) || ts.isBreakStatement(parent) || ts.isContinueStatement(parent)) && parent.label === node;
 };
 
-const readScript = (script: Script, path: string, source: string): Symbols => {
+const readScript = (script: Script, path: string, source: string, lines?: ReadonlySet<number>): Symbols => {
   const { text, at: offset } = script;
   const kind = /(?:\.[jt]sx|\.[cm]?js)$/.test(path) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const rootName = `${path}.binding.${kind === ts.ScriptKind.TSX ? 'tsx' : 'ts'}`;
@@ -176,7 +176,29 @@ const readScript = (script: Script, path: string, source: string): Symbols => {
   const references: SymbolReference[] = [];
   const names: SymbolSpelling[] = [];
   const uses = new Set<string>();
+  const chosen = (node: ts.Node): boolean => lines === undefined || lines.has(position(node).line);
+  const note = (reference: SymbolReference, included = false): void => {
+    if (included || lines === undefined || lines.has(reference.line)) references.push(reference);
+  };
+  const use = (node: ts.Identifier): void => {
+    if (chosen(node)) uses.add(node.text);
+  };
   const imports = new Set<string>();
+  const changedImports = new Map<ts.Symbol, boolean>();
+  const changedImport = (symbol: ts.Symbol): boolean => {
+    const cached = changedImports.get(symbol);
+    if (cached !== undefined) return cached;
+    const changed = (symbol.declarations ?? []).some((declaration) => {
+      for (let node: ts.Node | undefined = declaration; node !== undefined; node = node.parent) {
+        if (ts.isImportDeclaration(node)) return chosen(node) || chosen(node.moduleSpecifier) || chosen(declaration);
+        if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference))
+          return chosen(node) || (node.moduleReference.expression !== undefined && chosen(node.moduleReference.expression));
+      }
+      return false;
+    });
+    changedImports.set(symbol, changed);
+    return changed;
+  };
   const ownerOf = (node: ts.Node): string => {
     const owners: string[] = [];
     for (let parent = node.parent; parent !== undefined && !ts.isSourceFile(parent); parent = parent.parent) {
@@ -251,7 +273,7 @@ const readScript = (script: Script, path: string, source: string): Symbols => {
       ts.isObjectBindingPattern(node.parent) &&
       ts.isIdentifier(node.name)
     )
-      uses.add(node.name.text);
+      use(node.name);
     if (ts.isIdentifier(node) && !isName(node)) {
       const meaning = meaningOf(node);
       const symbol = ts.isShorthandPropertyAssignment(node.parent)
@@ -278,8 +300,11 @@ const readScript = (script: Script, path: string, source: string): Symbols => {
           meaning: names.length === 0 ? 'all' : meaningOfName(held),
         };
       }
-      references.push({ name: node.text, ...position(node), meaning, definitions: found.definitions, imported });
-      uses.add(node.text);
+      note(
+        { name: node.text, ...position(node), meaning, definitions: found.definitions, imported },
+        imported !== undefined && symbol !== undefined && changedImport(symbol),
+      );
+      use(node);
     }
     ts.forEachChild(node, visit);
   };
@@ -300,13 +325,18 @@ const readScript = (script: Script, path: string, source: string): Symbols => {
     const clause = statement.importClause;
     const from = statement.moduleSpecifier.text;
     imports.add(from);
-    const note = (node: ts.Identifier, name: string, meaning: SymbolMeaning) =>
-      references.push({ name: node.text, ...position(node), meaning, definitions: [], imported: { from, name, meaning } });
-    if (clause?.name !== undefined) note(clause.name, 'default', clause.isTypeOnly ? 'type' : 'all');
+    const imported = (node: ts.Identifier, name: string, meaning: SymbolMeaning) => {
+      const symbol = checker.getSymbolAtLocation(node);
+      note(
+        { name: node.text, ...position(node), meaning, definitions: [], imported: { from, name, meaning } },
+        symbol !== undefined && changedImport(symbol),
+      );
+    };
+    if (clause?.name !== undefined) imported(clause.name, 'default', clause.isTypeOnly ? 'type' : 'all');
     if (clause?.namedBindings !== undefined && ts.isNamedImports(clause.namedBindings))
       for (const binding of clause.namedBindings.elements)
-        note(binding.name, (binding.propertyName ?? binding.name).text, clause.isTypeOnly || binding.isTypeOnly ? 'type' : 'all');
-    else if (clause?.namedBindings !== undefined) note(clause.namedBindings.name, '*', 'all');
+        imported(binding.name, (binding.propertyName ?? binding.name).text, clause.isTypeOnly || binding.isTypeOnly ? 'type' : 'all');
+    else if (clause?.namedBindings !== undefined) imported(clause.namedBindings.name, '*', 'all');
   }
   const exports: SymbolExport[] = [];
   const module = checker.getSymbolAtLocation(file);
@@ -357,8 +387,9 @@ const resolution = (specifier: string, from: string, tree: Tree) => {
 };
 
 export const symbolReader = (scripts: Scripts): SymbolReader => ({
-  read: (source, path) => {
-    const fragments = scripts(source, path).map((script) => readScript(script, path, source));
+  read: (source, path, lines) => {
+    const selected = lines === undefined ? undefined : new Set(lines);
+    const fragments = scripts(source, path).map((script) => readScript(script, path, source, selected));
     return {
       references: fragments.flatMap((one) => one.references),
       exports: fragments.flatMap((one) => one.exports),

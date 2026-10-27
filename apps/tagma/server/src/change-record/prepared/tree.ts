@@ -89,6 +89,7 @@ export type Planned<Row extends PreparedRow> =
       readonly text: string;
       readonly working: string;
       readonly positions: readonly SelectedSpan[];
+      readonly lines: readonly number[];
       readonly landed: Landed | null;
       readonly holders: readonly string[];
       readonly ids: readonly string[];
@@ -184,7 +185,7 @@ export const build = Effect.fn('prepared.build')(function* <Row extends Prepared
   const dependencyRoots = selected.flatMap((one): DependencyRoot[] => {
     const held = judgedByPath.get(one.path);
     return held?.shared === true && held.judged !== undefined
-      ? [{ path: one.path, working: one.working, selected: one.text, positions: one.positions, judged: held.judged }]
+      ? [{ path: one.path, working: one.working, selected: one.text, positions: one.positions, lines: one.lines, judged: held.judged }]
       : [];
   });
   if (plan.length > 0)
@@ -613,6 +614,7 @@ const cutOf = <Row extends PreparedRow>(
     text: chosen.text,
     working: contentText(now) ?? '',
     positions: chosen.positions,
+    lines: chosen.lines.flatMap((line) => (line.kind === 'added' ? [line.at] : [])),
     landed: { digest: contentDigest(chosen.text), head: head.digest, working: now.digest, pieces: chosen.pieces },
     holders: chosen.carried.holders,
     ids: chosen.rows,

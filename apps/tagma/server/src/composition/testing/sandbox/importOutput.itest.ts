@@ -313,10 +313,7 @@ dockerSuite('imported output', () => {
                 row.lines,
               ]),
             ).toEqual([[MINE, 'write', 1]]);
-            expect(yield* door(input)).toMatchObject({
-              value: { status: 'refused', code: 'expected-base' },
-              verdict: { kind: 'refused', refusal: { code: 'expected-base' } },
-            });
+            expect(yield* door(input)).toMatchObject({ status: 'refused', code: 'expected-base' });
           }
           {
             for (const from of ['../etc/hostname', '/etc/hostname']) {

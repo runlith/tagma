@@ -17,6 +17,7 @@ export type DependencyRoot = {
   readonly working: string;
   readonly selected: string;
   readonly positions: readonly SelectedSpan[];
+  readonly lines: readonly number[];
   readonly judged: Judged;
 };
 
@@ -90,7 +91,7 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
   for (const one of roots) {
     const peers = peersOf(one.judged, carriers, borne(one.path));
     if (peers.length === 0) continue;
-    const input = { root, path: one.path, working: one.working, selected: one.selected, peers, positions: one.positions };
+    const input = { root, path: one.path, working: one.working, selected: one.selected, peers, positions: one.positions, lines: one.lines };
     snapshots.set(one.path, input);
     yield* inspect(input);
   }
@@ -107,6 +108,7 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
       selected: probe.text,
       peers: [],
       positions: one.land === 'own' ? one.positions : undefined,
+      lines: one.land === 'own' ? one.lines : undefined,
     };
     snapshots.set(one.path, input);
     yield* inspect(input);

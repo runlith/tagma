@@ -19,6 +19,7 @@ export type DependencyInput = {
   readonly selected: string | null;
   readonly peers: readonly PeerLine[];
   readonly positions?: readonly SelectedSpan[];
+  readonly lines?: readonly number[];
   readonly uses?: readonly ImportedUse[];
   readonly facts?: BoundTexts;
 };
@@ -118,13 +119,18 @@ export const dependenciesOf = async (input: DependencyInput): Promise<Dependency
   if (adapter?.symbols === undefined) return { dependencies: [], imports: [], facts: undefined, parses: 0 };
   const reader = await adapter.symbols();
   let parses = 0;
-  const read = (text: string): Symbols => {
+  const read = (text: string, lines?: readonly number[]): Symbols => {
     parses += 1;
-    return reader.read(text, input.path);
+    return reader.read(text, input.path, lines);
   };
   const working = input.facts?.working ?? read(input.working);
   const selected =
-    input.facts?.selected ?? (input.selected === null ? EMPTY : input.selected === input.working ? working : read(input.selected));
+    input.facts?.selected ??
+    (input.selected === null
+      ? EMPTY
+      : input.selected === input.working && input.lines === undefined
+        ? working
+        : read(input.selected, input.lines));
   const peers = new Map(input.peers.map((one) => [one.line, one.holder]));
   const keptNames = new Set(selected.names.map((one) => `${one.owner}\0${one.name}`));
   const candidates =
