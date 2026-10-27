@@ -7,7 +7,7 @@
 - testbed writes one JSONL per run under `/tmp/runlith-test/reports/` (the summary prints the path; the newest 40 are kept). Rows: `file` (worker, sequence, kind, items load/world/tenant/body/guard as cpu and wall ms, children sqlite/git/other with count, cpu and unmeasured, residue), `test` (body, tenant and world per test), `world` (kind, key, built or taken, own reason, cost), `refusal` (a unit file's guarded call), `worker` (its file sequence), `run` (wall, CPU, items, children, worlds, seed).
 - Outcomes: under Vitest a `test` row carries its name and outcome. Under Bun the CLI joins junit afterwards into separate `outcome` rows (file, test, name, outcome) and one `file-verdict` per file. A file passed only when its `file-verdict` is `pass`: it fails on a leftover process (`residue`) or a test count that disagrees with junit even when every body passed.
 - A file's items sum to its total; a child's CPU sits inside the item it ran in and again under `children` ([[cd1e8244]]). Tenant work counts as body unless the fixture marks it with `span('tenant')` or `measure('tenant', fn)` from `@runlith/testbed/fixture`.
-- File rows and the run row can disagree for resource suites (one quiet reading: 2496 s in file rows against 2184 s run CPU). Compare like with like.
+- File rows and the run row can disagree for resource suites. Compare like with like.
 
 ## CPU, wall and load
 
