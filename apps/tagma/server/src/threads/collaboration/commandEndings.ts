@@ -146,7 +146,7 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
     obligation: CommandDeliveryObligation,
   ): Effect.fn.Return<EndingMessage | null | undefined, never> {
     if (obligation.text !== undefined) {
-      const notice = endingNotice(obligation.execution, yield* commandRecord(obligation.execution), null, null, null);
+      const notice = endingNotice(obligation.execution, yield* commandRecord(obligation.execution), null, null);
       return { text: obligation.text, notice };
     }
     const read = yield* Effect.result(terminals.wait(obligation.execution, READ_MS));
@@ -170,13 +170,13 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
     if (measured.success === null) return null;
     const record = yield* commandRecord(obligation.execution);
     if (answer._tag !== 'Decided') {
-      const notice = endingNotice(obligation.execution, record, null, null, null);
+      const notice = endingNotice(obligation.execution, record, null, null);
       return { text: unreadableText(notice, measured.success ?? ''), notice };
     }
     const decision = answer.summary.decision;
     const expired = decision?._tag === 'Cancelled' && decision.cause === 'timeout';
     const limit = expired ? yield* life(obligation.execution, record) : null;
-    const notice = endingNotice(obligation.execution, record, answer.summary, limit, yield* tail(obligation.execution));
+    const notice = endingNotice(obligation.execution, record, answer.summary, yield* tail(obligation.execution));
     return {
       notice,
       text: endingText(
@@ -242,7 +242,6 @@ const endingNotice = (
   execution: ExecutionRef,
   record: CommandRecord | null,
   summary: ExecutionSummary | null,
-  life: CommandLimit | null,
   tail: string | null,
 ): AgentCommandEnding => {
   const decision = summary?.decision;
@@ -252,7 +251,14 @@ const endingNotice = (
     execution: execution.execution,
     incarnation: execution.incarnation,
     command: record?.commandLine ?? record?.label ?? null,
-    ending: decision === undefined ? 'unknown' : decision._tag === 'Completed' ? 'completed' : life !== null ? 'expired' : 'stopped',
+    ending:
+      decision === undefined
+        ? 'unknown'
+        : decision._tag === 'Completed'
+          ? 'completed'
+          : decision._tag === 'Cancelled' && decision.cause === 'timeout'
+            ? 'expired'
+            : 'stopped',
     exit: exit === undefined ? null : exit._tag === 'Code' ? { kind: 'code', code: exit.code } : { kind: 'signal', signal: exit.signal },
     tail,
   };

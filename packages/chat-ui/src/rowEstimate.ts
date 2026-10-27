@@ -1,5 +1,6 @@
 import type { ToolDisplay } from '@runlith/agent/tool/display';
 import { type ActivityGroup, type ActivityRow, toolOpensByDefault } from './activity';
+import type { NoticeEntry } from './notices';
 import type { ChatTailSlot } from './timeline';
 
 export type ChatRowView = {
@@ -43,9 +44,14 @@ const capped = (px: number): number => Math.min(px, BLOCK_CEILING_PX);
 
 const lines = (text: string): number => text.split('\n').length;
 
-const clamped = (px: number, shown: number): number => (px > shown * LINE_PX ? shown * LINE_PX + CLAMP_FOOT_PX : px);
+const clamped = (px: number, shown: number, whole: boolean): number => {
+  if (px <= shown * LINE_PX) return px;
+  return (whole ? px : shown * LINE_PX) + CLAMP_FOOT_PX;
+};
 
-const wellHeight = (px: number): number => WELL_PAD_PX + clamped(px, WELL_LINES);
+const wellHeight = (px: number, whole: boolean): number => WELL_PAD_PX + clamped(px, WELL_LINES, whole);
+
+const shownWhole = (key: string, view: ChatRowView): boolean => view.expanded(`${key}:all`, false);
 
 export function markdownHeight(text: string, columns: number): number {
   let px = 0;
@@ -140,11 +146,12 @@ function toolBodyHeight(key: string, display: ToolDisplay | undefined, view: Row
 }
 
 function formBodyHeight(key: string, display: ToolDisplay, view: RowSizing): number {
+  const whole = shownWhole(key, view);
   switch (display.form) {
     case 'code':
-      return STEP_BODY_PX + wellHeight(lines(display.text) * FENCE_LINE_PX);
+      return STEP_BODY_PX + wellHeight(lines(display.text) * FENCE_LINE_PX, whole);
     case 'command':
-      return STEP_BODY_PX + wellHeight((lines(display.command) + (display.output ? lines(display.output) : 0)) * FENCE_LINE_PX);
+      return STEP_BODY_PX + wellHeight((lines(display.command) + (display.output ? lines(display.output) : 0)) * FENCE_LINE_PX, whole);
     case 'diff': {
       const shown = display.files.filter((file) => file.patch !== '');
       return (
@@ -152,13 +159,13 @@ function formBodyHeight(key: string, display: ToolDisplay, view: RowSizing): num
       );
     }
     case 'list':
-      return STEP_BODY_PX + wellHeight(display.items.length * LIST_ROW_PX);
+      return STEP_BODY_PX + wellHeight(display.items.length * LIST_ROW_PX, whole);
     case 'markdown':
-      return STEP_BODY_PX + wellHeight(view.markdown(`${key}:display`, display.text, BODY_COLUMNS));
+      return STEP_BODY_PX + wellHeight(view.markdown(`${key}:display`, display.text, BODY_COLUMNS), whole);
     case 'message':
-      return STEP_BODY_PX + clamped(view.markdown(`${key}:display`, display.text, BODY_COLUMNS), WORDS_LINES);
+      return STEP_BODY_PX + clamped(view.markdown(`${key}:display`, display.text, BODY_COLUMNS), WORDS_LINES, whole);
     case 'text':
-      return STEP_BODY_PX + wellHeight(lines(display.text) * FENCE_LINE_PX);
+      return STEP_BODY_PX + wellHeight(lines(display.text) * FENCE_LINE_PX, whole);
     default:
       return 0;
   }
@@ -178,7 +185,21 @@ export function rowOpen(row: ActivityRow, stretchOpen: boolean, view: ChatRowVie
   return view.expanded(entry.id, entry.kind === 'tool' && stretchOpen ? toolOpensByDefault(entry, view.toolOpen(entry.toolName)) : false);
 }
 
+function noticeHeight(entry: NoticeEntry, view: ChatRowView): number {
+  if (!view.expanded(`${entry.id}:notice`, false)) return STEP_PX;
+  const notice = entry.notice;
+  const text = notice.kind === 'command-ending' ? notice.tail : entry.text.trim();
+  if (text === null || text.trim() === '') return STEP_PX + STEP_BODY_PX;
+  return STEP_PX + STEP_BODY_PX + wellHeight(lines(text) * FENCE_LINE_PX, shownWhole(entry.id, view));
+}
+
 export function stepEstimate(row: ActivityRow, stretchOpen: boolean, view: RowSizing): number {
+  if (row.kind === 'notices') {
+    const [only] = row.entries;
+    if (row.entries.length === 1 && only !== undefined) return noticeHeight(only, view);
+    if (!view.expanded(row.key, false)) return STEP_PX;
+    return STEP_PX + FOLD_GAP_PX + row.entries.reduce((height, entry) => height + noticeHeight(entry, view), 0);
+  }
   if (row.kind !== 'step') {
     return rowOpen(row, stretchOpen, view) ? STEP_PX + FOLD_GAP_PX + row.entries.length * STEP_PX : STEP_PX;
   }

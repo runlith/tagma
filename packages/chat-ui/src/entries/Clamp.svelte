@@ -9,8 +9,9 @@
     lines,
     count = null,
     class: className = '',
+    actions,
     children,
-  }: { id: string; lines: number; count?: string | null; class?: string; children: Snippet } = $props();
+  }: { id: string; lines: number; count?: string | null; class?: string; actions?: Snippet; children: Snippet } = $props();
 
   const strings = useChatStrings();
   const rendering = useChatRendering();
@@ -27,17 +28,20 @@
     data-clamp={all ? undefined : ''}
     {@attach all ? undefined : clampFade((value) => (clipped = value))}
   >
-    {@render children()}
+    <div class="min-w-0">{@render children()}</div>
   </div>
-  {#if clipped || all}
-    <div class="-ml-1.5 flex min-w-0 items-baseline gap-2 font-sans text-small">
-      <button
-        type="button"
-        class="cursor-pointer rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
-        aria-expanded={all}
-        onclick={() => context.setExpanded(key, !all)}>{all ? strings.showLess() : strings.showAll()}</button
-      >
-      {#if count !== null}<span class="tabular-nums text-muted-foreground/60">{count}</span>{/if}
+  {#if clipped || all || actions}
+    <div class="-ml-1.5 flex min-w-0 items-center gap-1 font-sans text-small">
+      {#if clipped || all}
+        <button
+          type="button"
+          class="cursor-pointer rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
+          aria-expanded={all}
+          onclick={() => context.setExpanded(key, !all)}>{all ? strings.showLess() : strings.showAll()}</button
+        >
+        {#if count !== null}<span class="px-1.5 tabular-nums text-muted-foreground/60">{count}</span>{/if}
+      {/if}
+      {@render actions?.()}
     </div>
   {/if}
 </div>

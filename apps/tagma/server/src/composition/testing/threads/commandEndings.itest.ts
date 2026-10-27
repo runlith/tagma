@@ -234,6 +234,32 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
     }),
   );
 
+  it.effect('a timeout whose life cannot be read is still told as expired', () =>
+    Effect.gen(function* () {
+      const ref = execution('exec-life-unread');
+      yield* owe(ref, 'call-life-unread');
+      const killed: ExecutionSummary = {
+        ...decided(ref, { _tag: 'Signal', signal: 'SIGKILL' }),
+        decision: {
+          _tag: 'Cancelled',
+          operation: { installation: INSTALLATION, operation: HostRequestKey.make('op-2') },
+          execution: ref,
+          sequence: 0,
+          cause: 'timeout',
+          trigger: 'deadline',
+        },
+      };
+      const commands = Layer.mock(ManagedCommands, {
+        record: () => Effect.succeed(null),
+        deadline: () => Effect.succeed(null),
+        changes: () => Stream.empty,
+      });
+      const road = yield* deliveryOver(() => ({ _tag: 'Decided', summary: killed }), accepted, Effect.void, commands);
+      yield* road.delivery.deliver(ref);
+      expect(road.landed()[0]?.notice).toMatchObject({ kind: 'command-ending', ending: 'expired' });
+    }),
+  );
+
   it.effect('an unreadable ending delivers an unknown outcome without inventing an exit or output', () =>
     Effect.gen(function* () {
       const ref = execution('exec-unreadable');

@@ -44,7 +44,7 @@
   });
 
   const lineClass = $derived([
-    'flex min-w-0 gap-x-2 text-ui whitespace-nowrap tabular-nums',
+    'flex min-w-0 gap-x-2 overflow-hidden text-ui whitespace-nowrap tabular-nums',
     step ? 'items-baseline leading-5' : 'h-8 items-center px-2',
   ]);
 
@@ -76,7 +76,7 @@
   {#each threads as thread (thread.id)}
     <ThreadChip {thread} />
   {/each}
-  <span class={['shrink-0', step ? 'text-muted-foreground' : 'text-foreground']}>{words(notice)}</span>
+  <span class={['min-w-0', step ? 'text-muted-foreground' : 'text-foreground']} data-fade {@attach clipFade}>{words(notice)}</span>
   {#if notice.kind === 'command-ending' && notice.command !== null}
     <span class="min-w-0 font-mono text-small text-muted-foreground" data-fade {@attach clipFade}>{notice.command}</span>
   {/if}

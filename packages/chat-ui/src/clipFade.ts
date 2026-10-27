@@ -14,6 +14,8 @@ export function clampFade(report: (clipped: boolean) => void): (element: HTMLEle
     measure();
     const sized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     sized?.observe(element);
+    const content = element.firstElementChild;
+    if (content !== null) sized?.observe(content);
     return () => {
       sized?.disconnect();
       element.removeAttribute('data-clipped');

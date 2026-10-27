@@ -10,7 +10,8 @@ const kinds = builtinEntryKinds();
 const stretchDefault = (_key: string, newest: boolean) => newest;
 const markdown = (_key: string, text: string, columns: number) => markdownHeight(text, columns);
 const view = { expanded: (_key: string, fallback: boolean) => fallback, stretchDefault, toolOpen: () => undefined, markdown };
-const open = { expanded: () => true, stretchDefault, toolOpen: () => undefined, markdown };
+const open = { expanded: (key: string) => !key.endsWith(':all'), stretchDefault, toolOpen: () => undefined, markdown };
+const whole = { expanded: () => true, stretchDefault, toolOpen: () => undefined, markdown };
 
 const call = (display: ToolDisplay): ActivityRow => ({
   kind: 'step',
@@ -102,6 +103,12 @@ describe('what an open call is worth', () => {
 
     expect(stepEstimate(call(long), false, open)).toBeLessThanOrEqual(428);
     expect(stepEstimate(call(short), false, open)).toBeLessThan(stepEstimate(call(long), false, open));
+  });
+
+  test('a body shown whole is priced by all of its lines', () => {
+    const long = { form: 'code', text: Array.from({ length: 400 }, () => 'x').join('\n') } as ToolDisplay;
+
+    expect(stepEstimate(call(long), false, whole)).toBeGreaterThan(400 * 20);
   });
 
   test('a fold that stands open is priced by the rows it opened into', () => {
