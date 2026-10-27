@@ -1,12 +1,13 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
-import { Coverage } from './coverage.ts';
+import { Graph, testFile } from './graph.ts';
+import { workspacePaths } from './packages.ts';
 import { Hashes, type Inputs, type Variant } from './inputs.ts';
-import type { Load } from './loads.ts';
-import { Narrowing } from './narrow.ts';
-import type { Package } from './packages.ts';
-import { scopeOf } from './scope.ts';
+import { Loads, type Load } from './loads.ts';
+import { Records } from './records.ts';
+import { inSession, sessionPaths } from './session.ts';
 import { budgetOf, coresOf, memoryOf } from '@runlith/testbed/budget';
 import { kindOf } from '@runlith/testbed/kinds';
 import type { FileRow, Row } from '@runlith/testbed/ledger';
@@ -16,50 +17,108 @@ import { runJobs } from '@runlith/testbed/schedule';
 const started = performance.now();
 const ownCpu = process.cpuUsage();
 const TOOLKIT = resolve(import.meta.dir, '../..');
-const scope = await scopeOf(process.argv.slice(2), {
-  valued: ['--seed', '--adapter', '--report'],
-  switches: ['--plan', '--full', '--no-cache', '--isolated'],
-  usage:
+const args = process.argv.slice(2);
+const value = (name: string): string | undefined => {
+  const at = args.indexOf(name);
+  return at === -1 ? undefined : args[at + 1];
+};
+const flags = new Set(['--root', '--base', '--commit', '--paths-from', '--seed', '--adapter', '--package', '--file', '--report']);
+for (let at = 0; at < args.length; at++) {
+  if (flags.has(args[at]!)) {
+    if (args[at + 1] === undefined || args[at + 1]!.startsWith('--')) throw new Error(`${args[at]} needs a value`);
+    at++;
+  } else if (!['--plan', '--full', '--no-cache', '--isolated', '--help'].includes(args[at]!))
+    throw new Error(`Unknown option: ${args[at]}`);
+}
+if (args.includes('--help')) {
+  console.log(
     'bun run check:change [--base ref | --commit ref | --paths-from file] [--package path] [--file path] [--seed number] [--adapter kind] [--plan] [--no-cache] [--full] [--isolated] [--report file]',
-  session: true,
-});
-const { args, value, root, cache, graph, records, loads, changed, global, session, tests } = scope;
+  );
+  process.exit(0);
+}
+const root = resolve(value('--root') ?? process.cwd());
 const testbed = existsSync(join(root, 'packages/testbed/src/cli.ts')) ? root : TOOLKIT;
-const named = scope.named ?? 'no change';
+const git = (...command: string[]): string => {
+  const result = Bun.spawnSync(['git', '-C', root, ...command], { stdout: 'pipe', stderr: 'pipe' });
+  if (result.exitCode !== 0) throw new Error(`git ${command.join(' ')}: ${result.stderr.toString().trim()}`);
+  return result.stdout.toString();
+};
+const split = (text: string): string[] => text.split('\0').filter(Boolean);
+const tracked = workspacePaths(root);
+const declared = existsSync(join(root, 'tagma.config.ts'))
+  ? ((await import(join(root, 'tagma.config.ts'))) as { readonly default: import('@runlith/tagma/rules').Config }).default
+  : undefined;
+const inspection = declared?.inspections?.modules;
+const built =
+  inspection !== undefined && 'builtin' in inspection && inspection.builtin === 'modules'
+    ? ((inspection.params as import('@runlith/tagma/rules').ModulesParams).built ?? [])
+    : [];
+const identity = createHash('sha256')
+  .update(git('rev-parse', '--path-format=absolute', '--git-common-dir').trim())
+  .digest('hex')
+  .slice(0, 16);
+const cache = join(process.env['XDG_CACHE_HOME'] ?? join(homedir(), '.cache'), 'runlith', 'change-check', identity);
+mkdirSync(cache, { recursive: true });
+const records = new Records(cache);
+const loads = new Loads(cache);
+const graph = new Graph(root, tracked, new Map(built.map((entry) => [entry.output, entry.source])), records, loads);
+const commit = value('--commit');
+const askedBase = value('--base');
+if ([commit, askedBase, value('--paths-from')].filter((one) => one !== undefined).length > 1)
+  throw new Error('Choose one of --base, --commit or --paths-from');
+const session =
+  commit === undefined && askedBase === undefined && value('--paths-from') === undefined && inSession() ? sessionPaths(root) : undefined;
+let base = askedBase;
+if (base === undefined && commit === undefined && value('--paths-from') === undefined && session === undefined) {
+  const branch = git('branch', '--show-current').trim();
+  const main = git('for-each-ref', '--format=%(refname:short)', 'refs/heads/main', 'refs/heads/master')
+    .trim()
+    .split('\n')
+    .filter(Boolean)[0];
+  base = main !== undefined && branch !== '' && branch !== main ? git('merge-base', 'HEAD', main).trim() : 'HEAD';
+}
+let changed =
+  commit !== undefined
+    ? split(git('diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '-z', commit))
+    : value('--paths-from') !== undefined
+      ? readFileSync(resolve(value('--paths-from')!), 'utf8')
+          .split(/\r?\n/)
+          .filter(Boolean)
+      : session !== undefined
+        ? [...session.paths]
+        : [...split(git('diff', '--name-only', '-z', base!)), ...split(git('ls-files', '-z', '--others', '--exclude-standard'))];
+changed = [...new Set(changed)].filter((path) => !path.startsWith('archive/'));
+const named = commit ?? base ?? (session === undefined ? 'named paths' : `lines session ${session.session} holds`);
 const all = args.includes('--full');
+const global = changed.find(
+  (path) =>
+    /^(?:bun\.lock|bunfig\.toml|Cargo\.lock|tagma\.config\.ts)$/.test(path) ||
+    path.startsWith('packages/testbed/') ||
+    path.startsWith('patches/') ||
+    path.includes('/drizzle/'),
+);
+const tests = [...graph.files]
+  .filter(testFile)
+  .filter((file) => value('--package') === undefined || graph.package(file).dir === value('--package')!.replace(/\/$/, ''))
+  .filter((file) => value('--file') === undefined || file === value('--file'));
 const selection = all || global !== undefined ? undefined : graph.select(tests, changed);
 graph.save();
-const narrowing = selection === undefined ? undefined : new Narrowing(graph, new Coverage(cache));
-const dropped: { readonly file: string; readonly why: string }[] = [];
-type Selected = {
-  readonly file: string;
-  readonly pkg: Package;
-  readonly runner: 'bun' | 'vitest';
-  readonly why: string;
-  readonly map: string | undefined;
-};
+if (value('--file') !== undefined && !tests.includes(value('--file')!)) throw new Error(`No test file in scope: ${value('--file')}`);
+if (value('--package') !== undefined && !graph.packages.some((pkg) => pkg.dir === value('--package')!.replace(/\/$/, '')))
+  throw new Error(`No workspace package: ${value('--package')}`);
 const selected = tests
-  .flatMap((file): Selected[] => {
+  .flatMap((file) => {
     const pkg = graph.package(file);
-    const runner = graph.runner(file);
     const why = all
       ? 'full package layers requested'
       : global !== undefined
         ? `shared input changed: ${global}`
         : selection?.selected.get(file);
-    if (why === undefined) return [];
-    if (narrowing === undefined || runner !== 'bun' || why.startsWith('test changed')) return [{ file, pkg, runner, why, map: undefined }];
-    const verdict = narrowing.judge(file, selection!.reached.get(file) ?? []);
-    if (verdict.keep) return [{ file, pkg, runner, why, map: verdict.why }];
-    dropped.push({ file, why: verdict.why });
-    return [];
+    return why === undefined ? [] : [{ file, pkg, runner: graph.runner(file), why }];
   })
   .sort((a, b) => a.file.localeCompare(b.file));
-dropped.sort((a, b) => a.file.localeCompare(b.file));
 const counts =
-  selection === undefined
-    ? { imports: tests.length, untraced: undefined, dropped: 0 }
-    : { imports: selection.imports, untraced: selection.untraced, dropped: dropped.length };
+  selection === undefined ? { imports: tests.length, untraced: undefined } : { imports: selection.imports, untraced: selection.untraced };
 if (session !== undefined && changed.length === 0)
   console.error(
     `check:change: session ${session.session} holds no uncommitted lines in ${root}; name landed work with --commit <ref>, or other paths with --paths-from <file>`,
@@ -84,8 +143,7 @@ if (args.includes('--plan')) {
         seed: variant.seed,
         adapter: variant.adapter,
         counts,
-        selected: selected.map((item) => ({ file: item.file, runner: item.runner, package: item.pkg.dir, why: item.why, map: item.map })),
-        dropped,
+        selected: selected.map((item) => ({ file: item.file, runner: item.runner, package: item.pkg.dir, why: item.why })),
       },
       null,
       2,
@@ -124,10 +182,7 @@ const output = plans.map((plan) => ({
   selected: plan.why,
   key: plan.inputs.key,
 }));
-console.log(
-  `check:change: ${plans.length} files selected, ${dropped.length} dropped by coverage maps; base ${named}, seed ${variant.seed}, adapter ${variant.adapter}`,
-);
-for (const row of dropped) console.log(`dropped ${row.file}: ${row.why}`);
+console.log(`check:change: ${plans.length} files selected; base ${named}, seed ${variant.seed}, adapter ${variant.adapter}`);
 for (const row of output) console.log(`${row.action} ${row.file}: ${row.why}; ${row.selected}`);
 let cpu = 0;
 let code = 0;
@@ -336,7 +391,6 @@ const result = {
   seed: variant.seed,
   adapter: variant.adapter,
   files: output,
-  dropped,
   slow,
   reports: run,
 };

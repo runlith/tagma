@@ -80,7 +80,6 @@
   "type": "module",
   "scripts": {
     "check:change": "bun scripts/change/check.ts",
-    "check:map": "bun scripts/change/map.ts",
     "test:all": "testbed bun scripts/change/all.ts",
     "typecheck": "runlith-typecheck scripts",
     "patches:prove": "bun scripts/patches-prove.mjs",

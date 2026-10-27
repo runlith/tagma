@@ -148,64 +148,6 @@ test('a nonliteral import selects its tests until their run traces what it loade
   }
 });
 
-test('a coverage map drops only the candidates whose executed code and load the change leaves alone', async () => {
-  const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-map-')));
-  try {
-    expect(Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout }).exitCode).toBe(0);
-    writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'mapped', scripts: { test: 'bun test' } }));
-    const lib =
-      'export const LIMIT: number = 3;\nexport const values = [\n  1,\n];\n\nexport function used(x: number): number {\n  return x + 1;\n}\n';
-    const other = 'export function rare(x: number): number {\n  return x * 2;\n}\n';
-    const reads =
-      "import { expect, test } from 'bun:test'; import { LIMIT } from './lib.ts'; import './other.ts'; test('reads', () => expect(LIMIT).toBe(3));";
-    writeFileSync(join(checkout, 'lib.ts'), lib);
-    writeFileSync(join(checkout, 'other.ts'), other);
-    writeFileSync(join(checkout, 'wraps.ts'), "import { rare } from './other.ts';\nexport const twice = (x: number) => rare(x);\n");
-    writeFileSync(
-      join(checkout, 'calls.test.ts'),
-      "import { expect, test } from 'bun:test'; import { used } from './lib.ts'; import './wraps.ts'; test('calls', () => expect(used(1)).toBe(2));",
-    );
-    writeFileSync(join(checkout, 'reads.test.ts'), reads);
-    writeFileSync(
-      join(checkout, 'text.test.ts'),
-      "import { expect, test } from 'bun:test'; import { readFileSync } from 'node:fs'; import './wraps.ts'; test('text', () => expect(readFileSync(new URL('./other.ts', import.meta.url), 'utf8')).not.toContain('import'));",
-    );
-    const mapped = await ended(Bun.spawn(['bun', join(import.meta.dir, 'map.ts'), '--root', checkout], { stdout: 'pipe', stderr: 'pipe' }));
-    expect(mapped.code, mapped.stdout + mapped.stderr).toBe(0);
-    const plan = async (...changed: string[]) => {
-      writeFileSync(join(checkout, 'changed'), `${changed.join('\n')}\n`);
-      const { selected, dropped } = JSON.parse(await answer(checking(checkout, '--plan', '--paths-from', join(checkout, 'changed')))) as {
-        selected: { file: string }[];
-        dropped: { file: string }[];
-      };
-      return { selected: selected.map(({ file }) => file), dropped: dropped.map(({ file }) => file) };
-    };
-    const both = { selected: ['calls.test.ts', 'reads.test.ts'], dropped: [] };
-    writeFileSync(join(checkout, 'lib.ts'), lib.replace('x + 1', 'x + 2 - 1'));
-    writeFileSync(join(checkout, 'other.ts'), other.replace('x * 2', 'x * 3'));
-    expect(await plan('lib.ts')).toEqual({ selected: ['calls.test.ts'], dropped: ['reads.test.ts'] });
-    expect(await plan('other.ts')).toEqual({ selected: ['calls.test.ts', 'text.test.ts'], dropped: ['reads.test.ts'] });
-    writeFileSync(join(checkout, 'lib.ts'), `// the limit\n${lib.replace(': number = 3', ': 3 | 4 = 3')}`);
-    writeFileSync(join(checkout, 'other.ts'), other);
-    expect(await plan('lib.ts')).toEqual({ selected: [], dropped: ['calls.test.ts', 'reads.test.ts'] });
-    writeFileSync(join(checkout, 'lib.ts'), `${lib}globalThis.dispatchEvent?.(new Event('loaded'));\n`);
-    expect(await plan('lib.ts')).toEqual(both);
-    writeFileSync(join(checkout, 'lib.ts'), lib.replace('  1,\n', '  1,\n  2,\n'));
-    expect(await plan('lib.ts')).toEqual(both);
-    writeFileSync(join(checkout, 'lib.ts'), lib);
-    writeFileSync(join(checkout, 'other.ts'), 'export const spare = 1;\n');
-    expect(await plan('other.ts')).toEqual({ selected: ['calls.test.ts', 'reads.test.ts', 'text.test.ts'], dropped: [] });
-    writeFileSync(join(checkout, 'other.ts'), `import './lib.ts';\n${other}`);
-    expect(await plan('other.ts')).toEqual({ selected: ['text.test.ts'], dropped: ['calls.test.ts', 'reads.test.ts'] });
-    writeFileSync(join(checkout, 'other.ts'), other);
-    writeFileSync(join(checkout, 'reads.test.ts'), reads.replace("import './other.ts';", "import { used } from './lib.ts'; used(0);"));
-    writeFileSync(join(checkout, 'lib.ts'), lib.replace('x + 1', 'x + 2 - 1'));
-    expect(await plan('lib.ts')).toEqual(both);
-  } finally {
-    rmSync(checkout, { recursive: true, force: true });
-  }
-});
-
 test('inside a Tagma session the change is what the session holds in this checkout, and an unfinished judgement refuses', async () => {
   const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'change-session-')));
   const bin = realpathSync(mkdtempSync(join(tmpdir(), 'change-tagma-')));

@@ -1,7 +1,6 @@
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Deltas } from './deltas.ts';
 
 export type Load = { readonly type: 'load'; readonly file: string; readonly importer: string; readonly target: string };
 type Delta = {
@@ -18,14 +17,19 @@ const VERSION = createHash('sha256')
 export class Loads {
   private readonly targetsOf = new Map<string, Set<string>>();
   private readonly marks = new Map<string, Readonly<Record<string, string>>>();
-  private readonly deltas: Deltas<Delta> | undefined;
+  private readonly directory: string | undefined;
 
   constructor(cache?: string) {
-    this.deltas = cache === undefined ? undefined : new Deltas(join(cache, `loads-${VERSION}`));
-    if (this.deltas === undefined) return;
-    const { names, deltas } = this.deltas.read();
-    for (const delta of deltas) this.fold(delta);
-    if (names.length > COMPACT) this.deltas.replace(names, this.snapshot());
+    this.directory = cache === undefined ? undefined : join(cache, `loads-${VERSION}`);
+    if (this.directory === undefined) return;
+    mkdirSync(this.directory, { recursive: true });
+    const names = readdirSync(this.directory)
+      .filter((name) => name.endsWith('.json'))
+      .sort();
+    for (const name of names) this.fold(JSON.parse(readFileSync(join(this.directory, name), 'utf8')) as Delta);
+    if (names.length <= COMPACT) return;
+    this.write(`${names.at(-1)!.slice(0, -'.json'.length)}~.json`, this.snapshot());
+    for (const name of names) rmSync(join(this.directory, name), { force: true });
   }
 
   private fold(delta: Delta): void {
@@ -48,6 +52,13 @@ export class Loads {
       }),
       tests: Object.fromEntries(this.marks),
     };
+  }
+
+  private write(name: string, delta: Delta): void {
+    if (this.directory === undefined) return;
+    const staged = join(this.directory, `${name}.${process.pid}.${randomUUID()}.staged`);
+    writeFileSync(staged, JSON.stringify(delta));
+    renameSync(staged, join(this.directory, name));
   }
 
   targets(importer: string, stamp: string): readonly string[] {
@@ -74,6 +85,6 @@ export class Loads {
       tests: Object.fromEntries([...cleared.map((test) => [test, null] as const), ...traced]),
     };
     this.fold(delta);
-    this.deltas?.write(delta);
+    this.write(`${String(Date.now()).padStart(15, '0')}-${randomUUID()}.json`, delta);
   }
 }

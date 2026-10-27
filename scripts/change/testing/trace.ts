@@ -80,7 +80,7 @@ const tracer = (config: Audit, locate: Locate): Tracer => {
     const key = `${file}\0${reason}`;
     if (!reported.has(key)) {
       reported.add(key);
-      append(config.report, `${JSON.stringify({ type: 'input', file, reason, path: location?.path })}\n`);
+      append(config.report, `${JSON.stringify({ type: 'input', file, reason })}\n`);
     }
   };
   const watched = new Map(config.importers.map(({ path, literal }) => [resolve(base, path), new Set(literal)]));
