@@ -102,7 +102,7 @@ describe('a JSON-RPC exchange over newline-delimited bytes', () => {
       const exchange = makeExchange(scripted(`a log line escaped to stdout\n${response(1, 'late')}`));
       const refused = yield* Effect.flip(exchange.request('start'));
       expect(refused._tag).toBe('ExchangeFailed');
-      if (refused._tag === 'ExchangeFailed') expect(refused.detail).toContain('a log line escaped to stdout');
+      expect(refused.message).toContain('a log line escaped to stdout');
     }),
   );
 

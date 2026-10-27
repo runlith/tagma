@@ -13,11 +13,23 @@ export class ExchangeVendorError extends Data.TaggedError('ExchangeVendorError')
   readonly data?: unknown;
 }> {}
 
-export class ExchangeTimeout extends Data.TaggedError('ExchangeTimeout')<{ readonly detail: string }> {}
+export class ExchangeTimeout extends Data.TaggedError('ExchangeTimeout')<{ readonly detail: string }> {
+  override get message(): string {
+    return this.detail;
+  }
+}
 
-export class ExchangeEof extends Data.TaggedError('ExchangeEof')<{ readonly detail: string }> {}
+export class ExchangeEof extends Data.TaggedError('ExchangeEof')<{ readonly detail: string }> {
+  override get message(): string {
+    return this.detail;
+  }
+}
 
-export class ExchangeFailed extends Data.TaggedError('ExchangeFailed')<{ readonly detail: string }> {}
+export class ExchangeFailed extends Data.TaggedError('ExchangeFailed')<{ readonly detail: string }> {
+  override get message(): string {
+    return this.detail;
+  }
+}
 
 export class ExchangeOversized extends Data.TaggedError('ExchangeOversized')<{
   readonly start: bigint;

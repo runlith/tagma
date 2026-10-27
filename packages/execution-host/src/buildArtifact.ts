@@ -196,7 +196,7 @@ export const buildArtifact = Effect.fnUntraced(function* (
     [carrier.path, carrier.role],
     [evidence, 'evidence'],
     [yield* worker('sampler', 'src/posix/processes.worker.ts'), 'sampler'],
-    [yield* worker('terminals', 'src/posix/terminals.worker.ts'), 'terminals'],
+    [yield* worker('sampler', 'src/posix/terminals.worker.ts'), 'sampler'],
   ]);
   const bundling = input.bundling ?? {};
   const host = yield* bundled(path.join(input.source, 'src/main.ts'), HOST_ENTRY, 'host', beside, at, bundling, input.maps);
