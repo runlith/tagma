@@ -7,7 +7,7 @@
   import PencilLine from '@lucide/svelte/icons/pencil-line';
   import X from '@lucide/svelte/icons/x';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
-  import type { ContextAim } from '$lib/features/threads/contextAim.svelte.js';
+  import type { ContextAim } from '$lib/shared/contextAim.svelte.js';
   import { Visits } from '$lib/features/workspace/Visits.svelte.js';
   import { ProjectWindows } from '$lib/shared/desktop/ProjectWindows.js';
   import { ProjectRemoval } from './Removal.svelte.js';

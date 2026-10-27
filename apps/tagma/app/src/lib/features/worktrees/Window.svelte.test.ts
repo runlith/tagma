@@ -45,7 +45,7 @@ const row = (one: WorktreePlace): WorktreeRow => ({
   mergeFact: { state: 'untaken', head: null, base: null, baseTime: null, takenAt: null },
 });
 
-test('visible ranges retain only their facts while offscreen thread membership survives scrolling and metadata deltas', async () => {
+test('visible ranges follow the screen while an offscreen row keeps its last facts and thread membership survives metadata deltas', async () => {
   const subscriptions: Subscription[] = [];
   const live = {
     hold(open: (client: unknown) => unknown, frame: Subscription['frame']) {
@@ -109,9 +109,13 @@ test('visible ranges retain only their facts while offscreen thread membership s
     intersect([hit(first, false)], {} as IntersectionObserver);
     flushSync();
     expect(visible().map((held) => held.range)).toEqual([{ projectId: 1, start: 2, limit: 1 }]);
+    expect(window.rowOf('root-1')?.head).toBe('head-1');
+    const moved = { ...places[3]!, index: 2, threads: ['moved'] };
+    subscriptions[0]?.frame({ kind: 'places', upsert: [{ ...places[2]!, index: 1 }, moved], removed: [places[1]!.rootId] });
+    flushSync();
+    expect(worktrees.standingOf('moved')).toEqual({ kind: 'row', row: moved });
     expect(window.rowOf('root-1')).toBe(null);
-    subscriptions[0]?.frame({ kind: 'places', upsert: [{ ...places[3]!, threads: ['moved'] }], removed: [] });
-    expect(worktrees.standingOf('moved')).toEqual({ kind: 'row', row: { ...places[3]!, threads: ['moved'] } });
+    expect(window.rowOf('root-2')?.head).toBe('head-2');
     detachFirst?.();
     detachSecond?.();
   });

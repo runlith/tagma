@@ -21,7 +21,7 @@
   import { Squeeze, Stow } from './squeeze.svelte.js';
   import { ThreadFolds } from './threadFolds.svelte.js';
   import type { ThreadTreeNode } from './forest.js';
-  import type { ContextAim } from './contextAim.svelte.js';
+  import type { ContextAim } from '$lib/shared/contextAim.svelte.js';
   import { ArchivedThreadsOpen } from './ArchivedThreadsOpen.svelte.js';
   import ArchivedFoot from './ArchivedFoot.svelte';
   import type { ColumnLine } from './columnLines.js';

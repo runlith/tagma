@@ -4,6 +4,7 @@
   import PencilLine from '@lucide/svelte/icons/pencil-line';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import Trash2 from '@lucide/svelte/icons/trash-2';
+  import X from '@lucide/svelte/icons/x';
   import type { WorktreePlace } from '@tagma/server/worktrees/contract/wire/rows';
   import type { Snippet } from 'svelte';
   import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
@@ -62,6 +63,11 @@
       >
         Merge into {into}…
       </DropdownMenu.Item>
+      {#if row.pending?.state === 'stopped'}
+        <DropdownMenu.Item icon={X} disabled={busy} onSelect={pick(() => void finishing.cancelMerge(row))} data-finish-item="drop-stopped">
+          Drop the stopped merge
+        </DropdownMenu.Item>
+      {/if}
     {/if}
     {#if pullRequest === null}
       <DropdownMenu.Item

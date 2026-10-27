@@ -42,7 +42,7 @@
   import { chatNotice } from './notices.js';
   import { detachWithUndo } from './detach.js';
   import TransportChoice from './external/TransportChoice.svelte';
-  import type { ContextAim } from './contextAim.svelte.js';
+  import type { ContextAim } from '$lib/shared/contextAim.svelte.js';
   import { modeIcon } from './modeWords.js';
   import { ThreadOnScreen } from './OnScreen.svelte.js';
 

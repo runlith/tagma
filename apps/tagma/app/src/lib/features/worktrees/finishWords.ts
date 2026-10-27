@@ -6,13 +6,13 @@ import type { EndedExecution } from '@tagma/server/executions/contract/wire/root
 import { refusalLines } from '@runlith/agent/tool/refusal';
 
 export const ACT_WORDS: Record<WorktreeActKind | 'cancel', string> = {
-  delete: 'deleting',
-  merge: 'merging',
-  rename: 'renaming',
-  update: 'handing the update',
-  'pull-request': 'opening a pull request',
-  clean: 'cleaning up',
-  cancel: 'dropping the merge',
+  delete: 'Deleting',
+  merge: 'Merging',
+  rename: 'Renaming',
+  update: 'Handing the update',
+  'pull-request': 'Opening a pull request',
+  clean: 'Cleaning up',
+  cancel: 'Dropping the merge',
 };
 
 export const PHASE_WORDS: Record<WorktreeActPhase, string> = {
@@ -49,7 +49,7 @@ export function mergedAfterWords(after: AfterMerged): readonly string[] {
   return [];
 }
 
-const counted = (count: number, tag: string): string => `${count} ${count === 1 ? tag : `${tag}s`}`;
+export const counted = (count: number, tag: string): string => `${count} ${count === 1 ? tag : `${tag}s`}`;
 
 function kindWords(kind: GraphKindChanges): readonly string[] {
   const words: string[] = [];

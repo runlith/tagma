@@ -1,6 +1,7 @@
 <script lang="ts">
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import type { ClassValue } from 'svelte/elements';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import type { InFlight } from './Finishing.svelte.js';
   import { ACT_WORDS, PHASE_WORDS } from './finishWords.js';
 
@@ -26,7 +27,7 @@
   <Waiting class="size-3" />
   <span class="shrink-0">{ACT_WORDS[flight.act]}</span>
   {#if phase && flight.phase !== null}
-    <span class="-ml-0.5 min-w-0 truncate text-muted-foreground/70">{`· ${PHASE_WORDS[flight.phase]}`}</span>
+    <FadeText class="text-muted-foreground/70" text={PHASE_WORDS[flight.phase]} />
   {/if}
   {#if elapsed !== null}<span class="shrink-0 tabular-nums text-muted-foreground/60">{elapsed}</span>{/if}
 </span>

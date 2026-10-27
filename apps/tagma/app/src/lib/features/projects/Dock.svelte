@@ -8,7 +8,7 @@
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import { cn } from '$lib/shared/utils.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
-  import { ContextAim } from '$lib/features/threads/contextAim.svelte.js';
+  import { ContextAim } from '$lib/shared/contextAim.svelte.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { ShellOps, shellActs } from '$lib/features/workspace/ShellOps.js';
   import { labelOf } from '$lib/features/workspace/mark.js';

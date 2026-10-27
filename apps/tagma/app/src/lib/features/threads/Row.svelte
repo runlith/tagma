@@ -33,7 +33,7 @@
   import { STOWED, Stow, type Squeeze } from './squeeze.svelte.js';
   import type { ThreadFolds } from './threadFolds.svelte.js';
   import type { ThreadTreeNode } from './forest.js';
-  import { ContextAim } from './contextAim.svelte.js';
+  import { ContextAim } from '$lib/shared/contextAim.svelte.js';
 
   let {
     node,

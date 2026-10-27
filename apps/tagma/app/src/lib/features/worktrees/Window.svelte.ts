@@ -24,14 +24,13 @@ export class WorktreeWindow {
     private readonly failure: Failure,
   ) {
     $effect(() => {
-      const roots = new Set(this.visible.values());
-      const indices = [...roots]
+      const indices = [...new Set(this.visible.values())]
         .flatMap((rootId) => {
           const place = this.places.byRoot(rootId);
           return place === null ? [] : [place.index];
         })
         .sort((left, right) => left - right);
-      untrack(() => this.follow(indices, roots));
+      untrack(() => this.follow(indices));
     });
     $effect(() => () => this.close());
   }
@@ -66,7 +65,7 @@ export class WorktreeWindow {
     return attach;
   }
 
-  private follow(indices: readonly number[], roots: ReadonlySet<string>): void {
+  private follow(indices: readonly number[]): void {
     const ranges: Range[] = [];
     for (const index of indices) {
       const last = ranges.at(-1);
@@ -79,7 +78,7 @@ export class WorktreeWindow {
       held.unsubscribe();
       this.held.delete(key);
     }
-    this.rows = new Map([...this.rows].filter(([rootId]) => roots.has(rootId)));
+    this.rows = new Map([...this.rows].filter(([rootId]) => this.places.byRoot(rootId) !== null));
     for (const range of ranges) {
       const key = `${range.start}:${range.limit}`;
       if (this.held.has(key)) continue;

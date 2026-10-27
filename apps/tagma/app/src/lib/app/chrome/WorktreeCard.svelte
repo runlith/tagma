@@ -15,6 +15,7 @@
   import FinishItems from '$lib/features/worktrees/FinishItems.svelte';
   import { Finishing, LEAVING_ACTS } from '$lib/features/worktrees/Finishing.svelte.js';
   import OutcomeLine from '$lib/features/worktrees/OutcomeLine.svelte';
+  import { stepOf } from '$lib/features/worktrees/step.js';
   import WorktreeFacts from '$lib/features/worktrees/WorktreeFacts.svelte';
   import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
   import FadeText from '$lib/shared/FadeText.svelte';
@@ -39,21 +40,21 @@
   const into = $derived(baseName(row));
   const gone = $derived(row.missing);
 
-  type Step = { readonly label: string; readonly hint: string; readonly icon: Component; readonly run: () => void };
+  type Next = { readonly label: string; readonly hint: string; readonly icon: Component; readonly run: () => void };
 
-  const next = $derived.by<Step | null>(() => {
-    if (row.kind !== 'tagma') return null;
-    if (gone) return { label: 'Delete', hint: 'Delete this worktree', icon: Trash2, run: () => void finishing.remove(row) };
-    if (row.pending?.state === 'waiting')
-      return { label: 'Stop waiting', hint: `Stop waiting for ${into}`, icon: GitMerge, run: () => void finishing.cancelMerge(row) };
-    if (row.base?.branch == null || facts?.stateFact.state !== 'current' || facts.mergeFact.state !== 'current') return null;
-    if (facts.status === 'conflicts' || facts?.status === 'behind')
-      return { label: 'Update', hint: `Update from ${into}`, icon: RefreshCw, run: () => void finishing.update(row) };
-    if (facts?.status === 'ready')
-      return { label: 'Merge…', hint: `Merge into ${into}`, icon: GitMerge, run: () => finishing.askMerge(row) };
-    if (facts?.status === 'merged')
-      return { label: 'Delete', hint: 'Delete this worktree', icon: Trash2, run: () => void finishing.remove(row) };
-    return null;
+  const next = $derived.by<Next | null>(() => {
+    switch (stepOf(row, facts)) {
+      case 'delete':
+        return { label: 'Delete', hint: 'Delete this worktree', icon: Trash2, run: () => void finishing.remove(row) };
+      case 'stop':
+        return { label: 'Stop waiting', hint: `Stop waiting for ${into}`, icon: GitMerge, run: () => void finishing.cancelMerge(row) };
+      case 'update':
+        return { label: 'Update', hint: `Update from ${into}`, icon: RefreshCw, run: () => void finishing.update(row) };
+      case 'merge':
+        return { label: 'Merge…', hint: `Merge into ${into}`, icon: GitMerge, run: () => finishing.askMerge(row) };
+      case null:
+        return null;
+    }
   });
 
   const sub = $derived(row.kind === 'main' ? 'main checkout' : row.base === null ? null : `from ${into}`);
