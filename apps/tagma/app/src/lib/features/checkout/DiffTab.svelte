@@ -26,6 +26,7 @@
   import { Topics } from '$lib/shared/threads/Topics.svelte.js';
   import { isPicture } from './changeItem.js';
   import { CheckoutRepo } from './Repo.js';
+  import CodeFind from './CodeFind.svelte';
   import CommitHistory from './CommitHistory.svelte';
   import { endsOf } from './diffEnds.js';
   import { DiffReading } from './DiffReading.svelte.js';
@@ -377,7 +378,9 @@
           {wrap}
           onExpand={reading.width === 'patch' ? expand : undefined}
           onMark={(held) => void router.goto(addresses.thread(held.id))}
-        />
+        >
+          {#snippet find(control)}<CodeFind find={control} />{/snippet}
+        </Diff>
       </div>
     </div>
   {/if}

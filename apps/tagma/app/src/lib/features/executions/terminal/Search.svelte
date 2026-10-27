@@ -33,6 +33,7 @@
 
   export interface TerminalSearchOptions {
     caseSensitive?: boolean;
+    wholeWord?: boolean;
     regex?: boolean;
     incremental?: boolean;
     decorations?: {
@@ -44,16 +45,19 @@
       activeMatchColorOverviewRuler?: string;
     };
   }
+
+  export type TerminalSearchResults = { readonly resultIndex: number; readonly resultCount: number };
 </script>
 
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
+  import FindBar, { type FindTally } from '$lib/shared/ui/find/FindBar.svelte';
 
   export interface TerminalSearchAddon {
     findNext(term: string, options?: TerminalSearchOptions): boolean;
     findPrevious(term: string, options?: TerminalSearchOptions): boolean;
     clearDecorations(): void;
+    onDidChangeResults(listener: (results: TerminalSearchResults) => void): { dispose(): void };
   }
 
   let {
@@ -72,21 +76,39 @@
 
   let query = $state('');
   let caseSensitive = $state(false);
+  let wholeWord = $state(false);
   let regex = $state(false);
-  let input: HTMLInputElement | null = $state(null);
   let matched = $state<boolean | null>(null);
+  let results = $state.raw<TerminalSearchResults | null>(null);
+  let bar = $state<FindBar>();
+  let searchedWith = '';
 
-  const requestQuery = $derived(searchQueryTooLarge(query) ? null : query);
   const tooLong = $derived(searchQueryTooLarge(query));
-  const verdict = $derived<'too-long' | 'none' | null>(tooLong ? 'too-long' : query === '' ? null : matched === false ? 'none' : null);
+  const requestQuery = $derived(tooLong ? null : query);
+
+  const tally = $derived.by((): FindTally => {
+    if (tooLong) return { kind: 'refused', words: 'Query too long' };
+    if (query === '') return { kind: 'idle' };
+    if (results !== null && results.resultCount > 0)
+      return {
+        kind: 'counted',
+        total: results.resultCount,
+        current: results.resultIndex >= 0 ? results.resultIndex + 1 : null,
+        more: results.resultIndex < 0,
+      };
+    if (results !== null || matched === false) return { kind: 'counted', total: 0, current: null, more: false };
+    return { kind: 'idle' };
+  });
 
   function searchOptions(incremental: boolean): TerminalSearchOptions {
-    return { caseSensitive, regex, incremental, decorations: SEARCH_DECORATIONS };
+    return { caseSensitive, wholeWord, regex, incremental, decorations: SEARCH_DECORATIONS };
   }
 
   function clear(): void {
     if (!search) return;
     matched = null;
+    results = null;
+    searchedWith = '';
     search.clearDecorations();
     safeFind((term, options) => search.findNext(term, options), '', {}, onProblem);
   }
@@ -108,20 +130,35 @@
 
   $effect(() => {
     const addon = search;
+    if (!addon) return;
+    const heard = addon.onDidChangeResults((next) => (results = next));
+    return () => heard.dispose();
+  });
+
+  $effect(() => {
+    if (open) bar?.focus();
+  });
+
+  $effect(() => {
+    const addon = search;
     const shown = open;
     const wanted = requestQuery;
     const sensitive = caseSensitive;
+    const whole = wholeWord;
     const pattern = regex;
-    if (shown) input?.focus();
     if (!shown || !wanted || !addon) {
       clear();
       return;
     }
+    const options = `${sensitive}:${whole}:${pattern}`;
+    if (options !== searchedWith) addon.clearDecorations();
+    searchedWith = options;
     matched = safeFind(
       (term, options) => addon.findNext(term, options),
       wanted,
       {
         caseSensitive: sensitive,
+        wholeWord: whole,
         regex: pattern,
         incremental: true,
         decorations: SEARCH_DECORATIONS,
@@ -130,130 +167,37 @@
     );
   });
 
-  function navigateKey(event: KeyboardEvent): 'next' | 'previous' | null {
-    if (event.altKey) return null;
-    const held = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-    if (!held || event.key.toLowerCase() !== 'g' || !requestQuery) return null;
-    return event.shiftKey ? 'previous' : 'next';
-  }
-
-  function navigate(direction: 'next' | 'previous'): void {
-    if (direction === 'next') findNext();
-    else findPrevious();
-  }
-
   $effect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent): void => {
-      const direction = navigateKey(event);
-      if (!direction) return;
+      if (event.altKey) return;
+      const held = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      if (!held || event.key.toLowerCase() !== 'g' || !requestQuery) return;
       event.preventDefault();
-      navigate(direction);
+      if (event.shiftKey) findPrevious();
+      else findNext();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  function onInputKeyDown(event: KeyboardEvent): void {
-    const direction = navigateKey(event);
-    if (direction) {
-      event.preventDefault();
-      event.stopPropagation();
-      navigate(direction);
-      return;
-    }
-    event.stopPropagation();
-    if (event.key === 'Escape') close();
-    else if (event.key === 'Enter' && event.shiftKey) findPrevious();
-    else if (event.key === 'Enter') findNext();
-  }
-
   onDestroy(() => clear());
 </script>
 
 {#if open}
-  <div class="terminal-search" data-search-root role="search">
-    <input
-      data-search-input
-      type="text"
-      bind:value={query}
-      bind:this={input}
-      placeholder="Search..."
-      autocomplete="off"
-      spellcheck={false}
-      onkeydown={onInputKeyDown}
+  <div class="pointer-events-none absolute top-2 right-2 left-2 z-50 flex justify-end" data-search-root data-pane-prevent-terminal-focus>
+    <FindBar
+      bind:this={bar}
+      class="pointer-events-auto"
+      bind:search={query}
+      bind:caseSensitive
+      bind:wholeWord
+      bind:regexp={regex}
+      {tally}
+      apple={isMac}
+      onNext={findNext}
+      onPrevious={findPrevious}
+      onClose={close}
     />
-    {#if verdict !== null}
-      <span class="verdict" data-search-verdict={verdict}>{verdict === 'too-long' ? 'Query too long' : 'No matches'}</span>
-    {/if}
-    <Tooltip text="Case sensitive">
-      <button type="button" data-case-toggle aria-pressed={caseSensitive} onclick={() => (caseSensitive = !caseSensitive)}> Aa </button>
-    </Tooltip>
-    <Tooltip text="Regex">
-      <button type="button" data-regex-toggle aria-pressed={regex} onclick={() => (regex = !regex)}> .* </button>
-    </Tooltip>
-    <Tooltip text="Previous match">
-      <button type="button" data-prev onclick={findPrevious}>↑</button>
-    </Tooltip>
-    <Tooltip text="Next match">
-      <button type="button" data-next onclick={findNext}>↓</button>
-    </Tooltip>
-    <Tooltip text="Close">
-      <button type="button" data-close onclick={close}>✕</button>
-    </Tooltip>
   </div>
 {/if}
-
-<style>
-  .terminal-search {
-    position: absolute;
-    top: calc(var(--spacing) * 2);
-    right: calc(var(--spacing) * 2);
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    gap: var(--spacing);
-    width: 300px;
-    padding: var(--spacing) calc(var(--spacing) * 2);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border);
-    background: var(--popover);
-    box-shadow: var(--elevation-raised);
-  }
-  .terminal-search input {
-    min-width: 0;
-    flex: 1;
-    border: none;
-    background: transparent;
-    color: var(--popover-foreground);
-    font-size: var(--text-ui);
-    outline: none;
-  }
-  .terminal-search button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 24px;
-    height: 24px;
-    padding: 0 var(--spacing);
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--muted-foreground);
-    font-size: var(--text-small);
-    cursor: pointer;
-  }
-  .terminal-search button:hover {
-    color: var(--foreground);
-  }
-  .verdict {
-    flex: none;
-    color: var(--muted-foreground);
-    font-size: var(--text-meta);
-    white-space: nowrap;
-  }
-  .terminal-search button[aria-pressed='true'] {
-    background: var(--accent);
-    color: var(--accent-foreground);
-  }
-</style>

@@ -1,14 +1,11 @@
 <script lang="ts">
-  import CaseSensitive from '@lucide/svelte/icons/case-sensitive';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
-  import Regex from '@lucide/svelte/icons/regex';
-  import WholeWord from '@lucide/svelte/icons/whole-word';
   import { untrack } from 'svelte';
   import FileIcon from '$lib/shared/FileIcon.svelte';
   import PathText from '$lib/shared/PathText.svelte';
-  import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
+  import FindOptions from '$lib/shared/ui/find/FindOptions.svelte';
   import { Input } from '$lib/shared/ui/input/index.js';
   import { cn } from '$lib/shared/utils.js';
   import { Column } from './Column.svelte.js';
@@ -75,9 +72,6 @@
     if (at < preview.length) out.push({ text: preview.slice(at), hit: false });
     return out;
   }
-
-  const TOGGLE =
-    'grid size-5 shrink-0 place-items-center rounded-sm text-muted-foreground transition-colors hover:text-foreground aria-pressed:bg-selected aria-pressed:text-foreground';
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col" data-files-search>
@@ -92,39 +86,7 @@
         data-search-input
       />
       <span class="absolute inset-y-0 right-1 flex items-center gap-px">
-        <Tooltip text="Match case">
-          <button
-            type="button"
-            class={TOGGLE}
-            aria-pressed={search.caseSensitive}
-            aria-label="Match case"
-            onclick={() => (search.caseSensitive = !search.caseSensitive)}
-          >
-            <CaseSensitive class="size-3.5" />
-          </button>
-        </Tooltip>
-        <Tooltip text="Match whole word">
-          <button
-            type="button"
-            class={TOGGLE}
-            aria-pressed={search.wholeWord}
-            aria-label="Match whole word"
-            onclick={() => (search.wholeWord = !search.wholeWord)}
-          >
-            <WholeWord class="size-3.5" />
-          </button>
-        </Tooltip>
-        <Tooltip text="Use regular expression">
-          <button
-            type="button"
-            class={TOGGLE}
-            aria-pressed={search.regex}
-            aria-label="Use regular expression"
-            onclick={() => (search.regex = !search.regex)}
-          >
-            <Regex class="size-3.5" />
-          </button>
-        </Tooltip>
+        <FindOptions bind:caseSensitive={search.caseSensitive} bind:wholeWord={search.wholeWord} bind:regexp={search.regex} />
       </span>
     </div>
     <div class="flex items-center justify-between gap-2">

@@ -3,6 +3,7 @@
   import type { DiffLine } from '@runlith/code-editor/marks';
   import { displayLanguage } from '@runlith/utils/codeLanguage';
   import { untrack } from 'svelte';
+  import CodeFind from '../CodeFind.svelte';
   import { compareRows } from './compareRows.js';
   import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
   import { Documents } from './Documents.svelte.js';
@@ -84,7 +85,9 @@
   {/if}
   <div class="min-h-0 flex-1">
     {#key disk?.digest}
-      <Diff {rows} language={displayLanguage(tab.path)} />
+      <Diff {rows} language={displayLanguage(tab.path)}>
+        {#snippet find(control)}<CodeFind find={control} />{/snippet}
+      </Diff>
     {/key}
   </div>
 </section>

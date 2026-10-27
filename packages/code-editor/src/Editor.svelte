@@ -1,15 +1,15 @@
 <script lang="ts">
   import { Compartment, EditorState, type StateEffect } from '@codemirror/state';
   import { EditorView, lineNumbers } from '@codemirror/view';
-  import { untrack } from 'svelte';
+  import { type Snippet, untrack } from 'svelte';
   import type { TextDocument } from './document';
   import { detectIndent, editing, editingView } from './extensions/editing';
-  import { find } from './extensions/find';
   import { type Hooks, hooks, lineGutters, setConflicts, setLineMarkers, setStrips } from './extensions/gutters';
   import { type ColouringConfig, colouringConfig, highlight } from './extensions/highlight';
   import { ruler } from './extensions/ruler';
   import { theme } from './extensions/theme';
-  import type { Colouring, LineMarker, LineRange, Position, PressMark, Seen, Strip } from './marks';
+  import FindLayer, { FindBridge } from './FindLayer.svelte';
+  import type { Colouring, Find, LineMarker, LineRange, Position, PressMark, Seen, Strip } from './marks';
   import { sameConflicts, sameMarkers, sameStrips } from './settings';
 
   type Props = {
@@ -21,6 +21,7 @@
     readOnly?: boolean;
     wrap?: boolean;
     at?: Position | null;
+    find?: Snippet<[Find]>;
     onColouring?: (colouring: Colouring) => void;
     onMark?: PressMark;
     onView?: (seen: Seen) => void;
@@ -35,6 +36,7 @@
     readOnly = false,
     wrap = false,
     at = null,
+    find,
     onColouring,
     onMark,
     onView,
@@ -64,16 +66,19 @@
 
   const colourConfig = (settings: Settings) => colouringConfig.of({ language: settings.language, report });
 
+  const finds = new FindBridge(() => view);
+
   $effect(() => {
     const opened = document;
     const settings = untrack((): Settings => ({ language, readOnly, wrap, strips, markers, conflicts }));
+    const finding = untrack(() => finds.extension(find !== undefined));
     const indent = detectIndent(opened.doc);
     const made = untrack(() =>
       opened.mount(host, [
         lineNumbers(),
         lineGutters,
         editingView,
-        find,
+        finding,
         ruler,
         theme,
         highlight,
@@ -169,11 +174,19 @@
   });
 </script>
 
-<div class="editor" bind:this={host}></div>
+<div class="editor">
+  <div class="view" bind:this={host}></div>
+  <FindLayer bridge={finds} {find} />
+</div>
 
 <style>
   .editor {
+    position: relative;
     height: 100%;
     min-height: 0;
+  }
+
+  .view {
+    height: 100%;
   }
 </style>

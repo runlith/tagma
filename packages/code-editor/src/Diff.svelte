@@ -1,26 +1,27 @@
 <script lang="ts">
   import { Compartment, EditorState, type StateEffect } from '@codemirror/state';
   import { EditorView } from '@codemirror/view';
-  import { untrack } from 'svelte';
+  import { type Snippet, untrack } from 'svelte';
   import { diffView, expandable, type Expanding, expanding, initialRows, rowsChange, seenAfter, textOf } from './extensions/diff';
   import { editingView } from './extensions/editing';
-  import { find } from './extensions/find';
   import { type Hooks, hooks } from './extensions/gutters';
   import { type ColouringConfig, colouringConfig, highlight } from './extensions/highlight';
   import { ruler } from './extensions/ruler';
   import { theme } from './extensions/theme';
-  import type { Colouring, DiffLine, Expand, PressMark } from './marks';
+  import FindLayer, { FindBridge } from './FindLayer.svelte';
+  import type { Colouring, DiffLine, Expand, Find, PressMark } from './marks';
 
   type Props = {
     rows: readonly DiffLine[];
     language?: string;
     onExpand?: Expand;
     wrap?: boolean;
+    find?: Snippet<[Find]>;
     onColouring?: (colouring: Colouring) => void;
     onMark?: PressMark;
   };
 
-  let { rows, language, onExpand, wrap = false, onColouring, onMark }: Props = $props();
+  let { rows, language, onExpand, wrap = false, find, onColouring, onMark }: Props = $props();
 
   type Settings = { rows: readonly DiffLine[]; language: string | undefined; open: boolean; wrap: boolean };
 
@@ -38,8 +39,11 @@
 
   const colourConfig = (settings: Settings) => colouringConfig.of({ language: settings.language, report });
 
+  const finds = new FindBridge(() => view);
+
   $effect(() => {
     const settings = untrack((): Settings => ({ rows, language, open: onExpand !== undefined, wrap }));
+    const finding = untrack(() => finds.extension(find !== undefined));
     const made = new EditorView({
       parent: host,
       state: EditorState.create({
@@ -48,7 +52,7 @@
           initialRows(settings.rows),
           diffView,
           editingView,
-          find,
+          finding,
           ruler,
           theme,
           highlight,
@@ -99,11 +103,19 @@
   }
 </script>
 
-<div class="diff" bind:this={host}></div>
+<div class="diff">
+  <div class="view" bind:this={host}></div>
+  <FindLayer bridge={finds} {find} />
+</div>
 
 <style>
   .diff {
+    position: relative;
     height: 100%;
     min-height: 0;
+  }
+
+  .view {
+    height: 100%;
   }
 </style>

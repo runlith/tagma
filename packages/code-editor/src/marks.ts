@@ -40,3 +40,32 @@ export type Expand = (at: number, lines: number) => void | Promise<void>;
 export type PressMark = (mark: Mark) => void;
 
 export type Colouring = { readonly kind: 'coloured' | 'plain' } | { readonly kind: 'failed'; readonly message: string };
+
+export type FindQuery = {
+  readonly search: string;
+  readonly caseSensitive: boolean;
+  readonly wholeWord: boolean;
+  readonly regexp: boolean;
+  readonly replace: string;
+};
+
+export type FindMatches = { readonly total: number; readonly current: number | null; readonly more: boolean };
+
+export type FindField = 'search' | 'replace';
+
+export type FindFocus = { readonly field: FindField };
+
+export type Find = {
+  readonly query: FindQuery;
+  readonly matches: FindMatches | null;
+  readonly invalid: boolean;
+  readonly replaceable: boolean;
+  readonly focus: FindFocus;
+  set(patch: Partial<FindQuery>): void;
+  next(): void;
+  previous(): void;
+  selectAll(): void;
+  replace(): void;
+  replaceAll(): void;
+  close(): void;
+};

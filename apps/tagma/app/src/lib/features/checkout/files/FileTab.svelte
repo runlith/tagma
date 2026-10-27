@@ -13,6 +13,7 @@
   import { displayLanguage } from '@runlith/utils/codeLanguage';
   import { onDestroy, untrack } from 'svelte';
   import ReadingFailed from '$lib/shared/ReadingFailed.svelte';
+  import CodeFind from '../CodeFind.svelte';
   import Button from '$lib/shared/ui/button/button.svelte';
   import { formatBytes } from '$lib/shared/figures.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
@@ -207,7 +208,9 @@
           {wrap}
           {at}
           onView={onSeen}
-        />
+        >
+          {#snippet find(control)}<CodeFind find={control} />{/snippet}
+        </Editor>
       {/key}
     </div>
   {:else if body.kind === 'loading'}

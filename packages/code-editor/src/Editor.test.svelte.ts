@@ -1,9 +1,43 @@
 import { EditorView } from '@codemirror/view';
-import { flushSync, mount, unmount } from 'svelte';
+import { createRawSnippet, flushSync, mount, unmount } from 'svelte';
 import { expect, test } from 'vitest';
 import { TextDocument } from './document';
 import Editor from './Editor.svelte';
-import type { Seen } from './marks';
+import type { Find, Seen } from './marks';
+
+test('Mod-F finds the word under the caret, counts its matches and seeks as the query changes', () => {
+  const document = new TextDocument('asked = 1;\nthis.asked = 2;\nask(asked);\n', 'disk-1');
+  const target = window.document.body.appendChild(window.document.createElement('div'));
+  let find: Find | undefined;
+  const bar = createRawSnippet((control: () => Find) => ({
+    render: () => '<span></span>',
+    setup: () => {
+      find = control();
+    },
+  }));
+  const shown = mount(Editor, { target, props: { document, at: { line: 1, column: 7 }, find: bar } });
+  flushSync();
+  const view = EditorView.findFromDOM(target.querySelector('.cm-editor') as HTMLElement) as EditorView;
+
+  view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', keyCode: 70, ctrlKey: true, bubbles: true }));
+  flushSync();
+  expect(find?.query.search).toBe('asked');
+  expect(find?.matches).toEqual({ total: 3, current: 2, more: false });
+
+  find?.set({ search: 'ask' });
+  expect(find?.matches).toEqual({ total: 4, current: 2, more: false });
+
+  find?.set({ wholeWord: true });
+  const selected = view.state.selection.main;
+  expect([selected.from, selected.to]).toEqual([27, 30]);
+  expect(find?.matches).toEqual({ total: 1, current: 1, more: false });
+
+  find?.close();
+  flushSync();
+  expect(target.querySelector('.find')).toBeNull();
+  void unmount(shown);
+  flushSync();
+});
 
 test('an editor opens on the asked range and, torn down, reports its selection', () => {
   const document = new TextDocument('zero\none\ntwo\nthree four\n', 'disk-1');

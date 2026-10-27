@@ -36,9 +36,8 @@ export const theme = EditorView.theme({
     fontFamily: 'var(--font-sans)',
     fontSize: 'var(--text-ui)',
   },
-  '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--border)' },
-  '.cm-panel.cm-search': { padding: `${step(1.5)} ${step(3)}` },
-  '.cm-panel.cm-search label': { fontSize: 'var(--text-small)' },
+  '.cm-panels.cm-panels-top': { borderBottom: 'none' },
+  '.cm-panels-top .cm-dialog': { borderBottom: '1px solid var(--border)' },
   '.cm-textfield': {
     backgroundColor: 'var(--field)',
     color: 'var(--foreground)',

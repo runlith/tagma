@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, expect, test, vi } from 'vitest';
-import TerminalSearch, { safeFind, searchQueryTooLarge } from './Search.svelte';
+import TerminalSearch, { safeFind, searchQueryTooLarge, type TerminalSearchResults } from './Search.svelte';
 
 const SIX = {
   matchBackground: '#5c4a00',
@@ -13,10 +13,16 @@ const SIX = {
 };
 
 function addonOver() {
+  const heard: ((results: TerminalSearchResults) => void)[] = [];
   return {
+    heard,
     findNext: vi.fn((_term: string, _options?: unknown) => true),
     findPrevious: vi.fn((_term: string, _options?: unknown) => true),
     clearDecorations: vi.fn(),
+    onDidChangeResults: (listener: (results: TerminalSearchResults) => void) => {
+      heard.push(listener);
+      return { dispose: () => undefined };
+    },
   };
 }
 
@@ -42,7 +48,7 @@ function draw(addon: Addon, onClose: () => void = () => undefined, onProblem?: (
 }
 
 function inputOf(host: HTMLElement): HTMLInputElement {
-  const input = host.querySelector<HTMLInputElement>('[data-search-input]');
+  const input = host.querySelector<HTMLInputElement>('[data-find-search]');
   if (!input) throw new Error('No search input drawn.');
   return input;
 }
@@ -62,6 +68,7 @@ test('typing finds and selects the first match, incrementally', () => {
 
   expect(addon.findNext).toHaveBeenCalledWith('error', {
     caseSensitive: false,
+    wholeWord: false,
     regex: false,
     incremental: true,
     decorations: SIX,
@@ -89,7 +96,7 @@ test('close leaves no decoration and no active match', () => {
   const host = draw(addon, onClose);
   type(host, 'error');
 
-  host.querySelector<HTMLElement>('[data-close]')?.click();
+  host.querySelector<HTMLElement>('[data-find-close]')?.click();
   flushSync();
 
   expect(onClose).toHaveBeenCalledTimes(1);
@@ -200,33 +207,39 @@ test('Ctrl+G moves next and previous while open', () => {
   expect(addon.findPrevious).toHaveBeenCalledWith('error', expect.objectContaining({ incremental: false }));
 });
 
-test('the toggles flip case and regex for the next find', () => {
+test('the toggles start a fresh search with case and regex for the next find', () => {
   const addon = addonOver();
   const host = draw(addon);
   type(host, 'Error');
+  const cleared = addon.clearDecorations.mock.calls.length;
 
-  host.querySelector<HTMLElement>('[data-case-toggle]')?.click();
+  host.querySelector<HTMLElement>('[data-find-option="case"]')?.click();
   flushSync();
+  expect(addon.clearDecorations.mock.calls.length).toBe(cleared + 1);
   expect(addon.findNext).toHaveBeenLastCalledWith('Error', expect.objectContaining({ caseSensitive: true }));
 
-  host.querySelector<HTMLElement>('[data-regex-toggle]')?.click();
+  host.querySelector<HTMLElement>('[data-find-option="regexp"]')?.click();
   flushSync();
   expect(addon.findNext).toHaveBeenLastCalledWith('Error', expect.objectContaining({ regex: true }));
 });
 
-test('the bar clears its verdict on a match, and a query past the bound says so', () => {
+test('the bar counts what the addon reports, says when nothing matched, and refuses a query past the bound', () => {
   const addon = addonOver();
   addon.findNext.mockReturnValue(false);
   const host = draw(addon);
+  const tally = () => host.querySelector('[data-find-tally]')?.textContent;
 
   type(host, 'nothing here');
+  expect(tally()).toBe('No results');
 
   addon.findNext.mockReturnValue(true);
   type(host, 'error');
-  expect(host.querySelector('[data-search-verdict]')).toBe(null);
+  for (const listener of addon.heard) listener({ resultIndex: 1, resultCount: 5 });
+  flushSync();
+  expect(tally()).toBe('2 of 5');
 
   const long = 'x'.repeat(2 * 1024 + 1);
   type(host, long);
   expect(addon.findNext).not.toHaveBeenCalledWith(long, expect.anything());
-  expect(host.querySelector('[data-search-verdict]')?.textContent).toBe('Query too long');
+  expect(tally()).toBe('Query too long');
 });

@@ -1,6 +1,6 @@
 import { openSearchPanel, SearchQuery, setSearchQuery } from '@codemirror/search';
 import { EditorView } from '@codemirror/view';
-import { flushSync, mount, unmount } from 'svelte';
+import { createRawSnippet, flushSync, mount, unmount } from 'svelte';
 import { TextDocument } from '../src/document';
 import Editor from '../src/Editor.svelte';
 import type { Strip } from '../src/marks';
@@ -9,6 +9,8 @@ import { codeText, remoteDelta } from './fixture';
 type Spread = { count: number; p50: number; p95: number; p99: number; max: number };
 
 type Load = { strips?: number; find?: string };
+
+const findCard = createRawSnippet(() => ({ render: () => '<span></span>' }));
 
 const target = document.getElementById('probe') as HTMLElement;
 let shown: ReturnType<typeof mount> | undefined;
@@ -48,7 +50,7 @@ async function open(lines: number, load: Load = {}): Promise<{ lines: number; mo
   const started = performance.now();
   const document = new TextDocument(text, 'probe-0');
   const strips = load.strips === undefined ? [] : stripsOf(load.strips, lines);
-  shown = mount(Editor, { target, props: { document, language: 'typescript', strips } });
+  shown = mount(Editor, { target, props: { document, language: 'typescript', strips, find: findCard } });
   flushSync();
   const mounted = performance.now() - started;
   const firstFrame = (await painted()) - started;

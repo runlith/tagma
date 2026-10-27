@@ -114,7 +114,7 @@ test('a press on the pane takes the keyboard for the engine; a press on a contro
 
   stand.standing.searching = true;
   flushSync();
-  const input = host.querySelector<HTMLElement>('[data-search-input]');
+  const input = host.querySelector<HTMLElement>('[data-find-search]');
   if (input === null) throw new Error('the open search bar drew no input');
   input.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 

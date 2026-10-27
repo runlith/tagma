@@ -24,7 +24,7 @@
   import { ClosedPages } from './ClosedPages.svelte.js';
   import { DesktopPages } from './DesktopPages.svelte.js';
   import Downloads from './Downloads.svelte';
-  import FindBar from './FindBar.svelte';
+  import PageFind from './PageFind.svelte';
   import { OpenPages } from './OpenPages.svelte.js';
   import PageNotices from './PageNotices.svelte';
   import { Picks } from './pick/Picks.js';
@@ -309,7 +309,7 @@
   </div>
 
   {#if finding && native && current !== null && desktop.bridge !== null}
-    <FindBar bind:this={find} page={current.id} bridge={desktop.bridge} done={() => (finding = false)} />
+    <PageFind bind:this={find} page={current.id} bridge={desktop.bridge} done={() => (finding = false)} />
   {/if}
 
   {#if picking}
