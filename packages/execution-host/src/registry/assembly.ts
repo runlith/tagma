@@ -30,6 +30,8 @@ import { type Presentation, makePresentation } from '../Presentation';
 import { type RecordReaders, makeRecordReaders } from '../RecordReaders';
 import { adoptNative, launchNative, NativeSpawnUncertain, type NativeExecution } from '../nativeLaunch';
 import { killStray } from '../strayProcesses';
+import { makeLaneInputs } from '../LaneInputs';
+import { LaneUnserved, type TerminalEndpoint } from '../TerminalInputs';
 import { diskLookups } from '../ProgramMatch';
 import { Processes } from '../ProcessReader';
 import { type DefaultDeadline, type ProgramRules, watchReading, makeProgramRules } from '../ProgramRules';
@@ -252,15 +254,19 @@ export const assemble = Effect.fnUntraced(function* (
   const terminal = native.held.channels._tag === 'pty' ? native.held.channels.terminal : undefined;
   const ending = native.sink.end;
   const carried = adopted?.departure?.input;
-  const queue =
+  const lanes = makeLaneInputs();
+  const opened =
     terminal === undefined
-      ? yield* makeExecutionInput({
-          sink: { ...native.sink, resize: (geometry) => Effect.andThen(native.sink.resize(geometry), resized(geometry)) },
-          limits,
-          ref,
-          announce,
-          carried,
-        })
+      ? {
+          input: yield* makeExecutionInput({
+            sink: { ...native.sink, resize: (geometry) => Effect.andThen(native.sink.resize(geometry), resized(geometry)) },
+            limits,
+            ref,
+            announce,
+            carried,
+          }),
+          endpoint: undefined,
+        }
       : yield* terminals.open(terminal, {
           limits,
           ref,
@@ -271,7 +277,21 @@ export const assemble = Effect.fnUntraced(function* (
               ? ending.close()
               : Effect.fail(new InputWriteFailed({ reason: 'closed', detail: ending.refusal.detail })),
           resized,
+          output: (yield* record.positions('pty').pipe(Effect.orDie)).durableThrough,
+          admitted: (admission) => Effect.andThen(lanes.publish(admission), announce),
         });
+  const queue = opened.input;
+  const endpoint: Effect.Effect<TerminalEndpoint, LaneUnserved> =
+    opened.endpoint !== undefined
+      ? Effect.succeed(opened.endpoint)
+      : Effect.fail(
+          new LaneUnserved({
+            detail:
+              terminal === undefined
+                ? `execution ${ref.execution} runs over pipes and has no terminal to type into`
+                : 'the holder of this host serves no terminal endpoint',
+          }),
+        );
   input = queue;
   const interpretation =
     adopted !== undefined
@@ -369,6 +389,8 @@ export const assemble = Effect.fnUntraced(function* (
     presentation,
     geometry: { rows: limits.geometry.rows, columns: limits.geometry.columns },
     watching,
+    endpoint,
+    lanes,
   }).pipe(Effect.provideService(Bindings, bindings), Effect.provideService(Custodian, custodian));
 
   const reading = yield* Ref.make<Reading>({ fenced: false, reads: 0, readers: 0, settled: undefined });

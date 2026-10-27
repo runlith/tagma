@@ -1,4 +1,4 @@
-import { Data, Cause, Context, Effect, Layer, Option, Ref, Semaphore } from 'effect';
+import { Data, Cause, Context, Deferred, Effect, Exit, Layer, Option, Ref, Semaphore } from 'effect';
 import { ConnectionId, CustodianEpoch, HostCustody, type HostCustodyRevision, Role } from '@runlith/executions/protocol/registration';
 import { type Incarnation, HostRequestRef, HostRequestKey } from '@runlith/executions/protocol/execution';
 import { HostAdmission, type AdmissionRefused } from './HostAdmission';
@@ -72,6 +72,7 @@ export class Custodian extends Context.Service<
     readonly ended: (operation: HostRequestRef, connection: ConnectionId) => Effect.Effect<CustodyEnding, CustodyFailure>;
     readonly check: (epoch: CustodianEpoch, connection: ConnectionId) => Effect.Effect<HostCustody, CustodianRefused | CustodyLost>;
     readonly current: () => Effect.Effect<CustodianState>;
+    readonly moved: () => Effect.Effect<void>;
   }
 >()('@runlith/execution-host/Custodian') {
   static layer(incarnation: Incarnation) {
@@ -114,18 +115,29 @@ const make = Effect.fn('Custodian.make')(function* ({ incarnation }: CustodianIn
   const seed = yield* leftBehind(store, incarnation, yield* store.hostCustody());
   const state = yield* Ref.make<CustodianState>({ _tag: 'Settled', custody: seed });
   const handover = yield* Semaphore.make(1);
+  let moving = Deferred.makeUnsafe<void>();
+
+  const put = (change: (standing: CustodianState) => CustodianState) =>
+    Effect.andThen(
+      Ref.update(state, change),
+      Effect.sync(() => {
+        const standing = moving;
+        moving = Deferred.makeUnsafe<void>();
+        Deferred.doneUnsafe(standing, Exit.void);
+      }),
+    );
 
   const settled = (custody: HostCustody): CustodianState => ({ _tag: 'Settled', custody });
 
   const unresolved = (claim: HostRequestRef) =>
-    Ref.update(state, (standing): CustodianState => ({ _tag: 'Unresolved', operation: claim, last: held(standing) }));
+    put((standing): CustodianState => ({ _tag: 'Unresolved', operation: claim, last: held(standing) }));
 
   const settle = (claim: HostRequestRef, outcome: Effect.Effect<CustodyAcceptance, CustodyFailure>) =>
     outcome.pipe(
-      Effect.tap((acceptance) => Ref.set(state, settled(acceptance.standing))),
+      Effect.tap((acceptance) => put(() => settled(acceptance.standing))),
       Effect.tapError((failure) =>
         failure._tag === 'CustodyConflict'
-          ? Ref.set(state, settled(failure.standing))
+          ? put(() => settled(failure.standing))
           : failure._tag === 'CustodyLost'
             ? unresolved(claim)
             : Effect.void,
@@ -137,7 +149,7 @@ const make = Effect.fn('Custodian.make')(function* ({ incarnation }: CustodianIn
     const standing = yield* Ref.get(state);
     if (standing._tag === 'Settled') return standing.custody;
     const answer = yield* store.custodyAnswer(standing.operation);
-    yield* Ref.set(state, settled(answer.standing));
+    yield* put(() => settled(answer.standing));
     return answer.standing;
   });
 
@@ -222,5 +234,7 @@ const make = Effect.fn('Custodian.make')(function* ({ incarnation }: CustodianIn
       }),
 
     current: () => Ref.get(state),
+
+    moved: () => Deferred.await(moving),
   });
 });

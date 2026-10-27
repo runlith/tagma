@@ -513,6 +513,10 @@ const run = Effect.fnUntraced(function* (
       if (body._tag === 'Load') {
         return yield* delivered(session, body.subscription, { _tag: 'Load', reading: body.reading }, cost);
       }
+      if (body._tag === 'Inputs') {
+        const { binding, principal, receipt } = body;
+        return yield* delivered(session, body.subscription, { _tag: 'Inputs', input: { binding, principal, receipt } }, cost);
+      }
       return yield* delivered(session, body.subscription, { _tag: 'Screen', update: body.update }, cost);
     }
 

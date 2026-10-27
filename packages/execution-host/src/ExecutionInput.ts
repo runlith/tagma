@@ -135,6 +135,7 @@ export type ExecutionInput = {
   readonly pendingBytes: Effect.Effect<number>;
   readonly pendingActs: Effect.Effect<number>;
   readonly admit: (request: InputRequest, binding: Binding) => Effect.Effect<InputAnswer, InputFenced>;
+  readonly next: (binding: Binding) => Effect.Effect<InputSequence>;
   readonly closeIntake: () => Effect.Effect<void>;
   readonly halt: (within: Duration.Duration) => Effect.Effect<InputCarry>;
   readonly reply: (bytes: Uint8Array, settling: boolean) => Effect.Effect<ReplyAnswer, InputFenced>;
@@ -209,6 +210,10 @@ export const makeExecutionInput = Effect.fnUntraced(function* ({ sink, limits, r
               : resize(request, binding, request.act.geometry),
       ),
     );
+  }
+
+  function next(binding: Binding): Effect.Effect<InputSequence> {
+    return Effect.map(Ref.get(stateRef), (held) => (held.epoch === binding.epoch ? laneOf(held, binding).next : 0));
   }
 
   function closeIntake(): Effect.Effect<void> {
@@ -616,6 +621,7 @@ export const makeExecutionInput = Effect.fnUntraced(function* ({ sink, limits, r
       return Effect.map(Ref.get(stateRef), (held) => held.pending.length + held.writingActs);
     },
     admit: admit,
+    next: next,
     closeIntake: closeIntake,
     halt: halt,
     reply: reply,

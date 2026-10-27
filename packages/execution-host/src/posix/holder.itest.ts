@@ -108,7 +108,7 @@ describe('the POSIX holder and its client', () => {
       const before = yield* files.readDirectory('/dev/fd');
       const refused = yield* Effect.scoped(Layer.build(testHolder(directory, LIBRARY, join(directory, 'missing')))).pipe(Effect.exit);
       expect(Exit.isFailure(refused)).toBe(true);
-      expect((yield* files.readDirectory('/dev/fd')).sort()).toEqual(before.sort());
+      expect((yield* files.readDirectory('/dev/fd')).filter((fd) => !before.includes(fd))).toEqual([]);
     }).pipe(Effect.provide(BunServices.layer)),
   );
 

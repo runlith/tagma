@@ -1,10 +1,11 @@
-import { Data, Context, Effect, Layer, Ref } from 'effect';
+import { Data, Context, Deferred, Effect, Exit, Layer, Ref } from 'effect';
 import { BindingId, Principal } from '@runlith/executions/protocol/custody';
 import { ConnectionId, CustodianEpoch, HostCustody } from '@runlith/executions/protocol/registration';
 import { ExecutionId } from '@runlith/executions/protocol/execution';
 import { Custodian, type CustodianRefused } from './Custodian';
 import type { CustodyLost } from './store/errors';
 import { CapacityRefused, ExecutionCapacity } from './ExecutionCapacity';
+import { reportDeadFiber } from './hostTelemetry';
 
 export type Binding = {
   readonly id: BindingId;
@@ -66,6 +67,7 @@ export class Bindings extends Context.Service<
       into?: ExecutionId,
     ) => Effect.Effect<Binding, CustodianRefused | CustodyLost | BindingMissing | BindingRefused | PrincipalInvalid | LaneRefused>;
     readonly close: (binding: BindingId, principal: Principal) => Effect.Effect<ExecutionId | undefined>;
+    readonly released: (binding: BindingId) => Effect.Effect<void>;
     readonly endLanes: (execution: ExecutionId) => Effect.Effect<void>;
     readonly prune: () => Effect.Effect<number>;
   }
@@ -84,22 +86,58 @@ const make = Effect.gen(function* () {
   const capacity = yield* ExecutionCapacity;
   const limit = capacity.profile.host.bindings;
   const table = yield* Ref.make<ReadonlyMap<BindingId, Binding>>(new Map());
+  const endings = new Map<BindingId, Deferred.Deferred<void>>();
+  const ended: Deferred.Deferred<void>[] = [];
+
+  const settled = (before: ReadonlyMap<BindingId, Binding>, after: ReadonlyMap<BindingId, Binding>) => {
+    for (const id of before.keys()) {
+      if (after.has(id)) continue;
+      const ending = endings.get(id);
+      endings.delete(id);
+      if (ending !== undefined) ended.push(ending);
+    }
+    return after;
+  };
+
+  const announced = Effect.sync(() => {
+    for (const ending of ended.splice(0)) Deferred.doneUnsafe(ending, Exit.void);
+  });
 
   const sweep = (keep: (entry: Binding) => boolean) =>
     Ref.modify(table, (bindings) => {
       const kept = new Map<BindingId, Binding>();
       for (const [id, entry] of bindings) if (keep(entry)) kept.set(id, entry);
       const forgotten = bindings.size - kept.size;
-      return [forgotten, kept];
-    });
+      return [forgotten, settled(bindings, kept)];
+    }).pipe(Effect.ensuring(announced));
 
   const forget = (id: BindingId) =>
     Ref.update(table, (bindings) => {
       if (!bindings.has(id)) return bindings;
       const kept = new Map(bindings);
       kept.delete(id);
-      return kept;
-    });
+      return settled(bindings, kept);
+    }).pipe(Effect.ensuring(announced));
+
+  const prune = Effect.fnUntraced(function* () {
+    const standing = yield* custodian.current();
+    return yield* standing._tag === 'Unresolved'
+      ? sweep((entry) => entry.epoch >= standing.last.epoch)
+      : sweep((entry) => liveUnder(entry, standing.custody));
+  });
+
+  yield* Effect.forkScoped(
+    reportDeadFiber(
+      'binding-prune',
+      Effect.forever(
+        Effect.gen(function* () {
+          const moved = custodian.moved();
+          yield* prune();
+          yield* moved;
+        }),
+      ),
+    ),
+  );
 
   return Bindings.of({
     open: Effect.fnUntraced(function* (principal, connection, epoch) {
@@ -113,11 +151,15 @@ const make = Effect.gen(function* () {
         Ref.modify(table, (bindings): readonly [Effect.Effect<Binding, CapacityRefused>, ReadonlyMap<BindingId, Binding>] => {
           const kept = new Map([...bindings].filter(([, entry]) => liveUnder(entry, custody)));
           if (kept.size >= limit) {
-            return [Effect.fail(new CapacityRefused({ budget: 'host.bindings', requested: kept.size + 1, limit })), kept];
+            return [
+              Effect.fail(new CapacityRefused({ budget: 'host.bindings', requested: kept.size + 1, limit })),
+              settled(bindings, kept),
+            ];
           }
           kept.set(binding.id, binding);
-          return [Effect.succeed(binding), kept];
-        }),
+          endings.set(binding.id, Deferred.makeUnsafe<void>());
+          return [Effect.succeed(binding), settled(bindings, kept)];
+        }).pipe(Effect.ensuring(announced)),
       );
     }),
 
@@ -153,16 +195,17 @@ const make = Effect.gen(function* () {
         if (entry === undefined || entry.principal !== principal) return [undefined, bindings];
         const kept = new Map(bindings);
         kept.delete(id);
-        return [entry.execution, kept];
+        return [entry.execution, settled(bindings, kept)];
+      }).pipe(Effect.ensuring(announced)),
+
+    released: (id) =>
+      Effect.suspend(() => {
+        const ending = endings.get(id);
+        return ending === undefined ? Effect.void : Deferred.await(ending);
       }),
 
     endLanes: (execution) => Effect.asVoid(sweep((entry) => entry.execution !== execution)),
 
-    prune: Effect.fnUntraced(function* () {
-      const standing = yield* custodian.current();
-      return yield* standing._tag === 'Unresolved'
-        ? sweep((entry) => entry.epoch >= standing.last.epoch)
-        : sweep((entry) => liveUnder(entry, standing.custody));
-    }),
+    prune,
   });
 });

@@ -1,11 +1,13 @@
 import { Data, Deferred, Duration, Effect, Exit } from 'effect';
 import { TRANSFER_LIMIT } from '@runlith/executions/protocol/capacity';
 import type { ProcessWitness } from '@runlith/executions/protocol/evidence';
-import type { InputAnswer, InputFrontier } from '@runlith/executions/protocol/input';
+import type { InputAnswer, InputFrontier, InputSequence } from '@runlith/executions/protocol/input';
+import type { TerminalLane } from '@runlith/executions/protocol/lane';
+import { offsetValue } from '@runlith/executions/protocol/record';
 import { InputFenced, type ExecutionInput, type InputCarry, type InputOwed, type ReplyAnswer } from '../ExecutionInput';
 import { ChannelFailed, ForegroundRefused, TerminalInterruptRefused, type PendingEcho, type Terminal } from '../holder/Holder';
 import type { HeldTerminal } from '../holder-client/Link';
-import type { TerminalInputOptions, TerminalInputs } from '../TerminalInputs';
+import { LaneUnserved, type TerminalEndpoint, type TerminalInput, type TerminalInputOptions, type TerminalInputs } from '../TerminalInputs';
 import type { TerminalFacts } from './native';
 import type { Answer, Ask, Failure, InputAsk, ReplyAnswered, Request } from './terminals.worker';
 
@@ -126,6 +128,12 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
       case 'Announce': {
         const held = hosted.get(answer.handle);
         if (held !== undefined) run(held.options.announce);
+        return;
+      }
+      case 'Admitted': {
+        worker.postMessage({ _tag: 'Taken', handle: answer.handle } satisfies Request);
+        const held = hosted.get(answer.handle);
+        if (held !== undefined) run(Effect.forEach(answer.inputs, (input) => held.options.admitted(input), { discard: true }));
         return;
       }
       case 'Room': {
@@ -284,9 +292,14 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
           Effect.sync(() => hosted.delete(handle)),
         ),
       );
-      yield* ask({ _tag: 'OpenInput', handle, limits: options.limits, ref: options.ref, carried: options.carried }).pipe(
-        Effect.catch(threadDefect),
-      );
+      yield* ask({
+        _tag: 'OpenInput',
+        handle,
+        limits: options.limits,
+        ref: options.ref,
+        carried: options.carried,
+        output: offsetValue(options.output),
+      }).pipe(Effect.catch(threadDefect));
       const input = (body: InputAsk): Effect.Effect<unknown, Failure> => ask({ _tag: 'Input', handle, ask: body });
       const fenced = (failure: Failure): Effect.Effect<never, InputFenced> =>
         failure._tag === 'InputFenced'
@@ -297,7 +310,17 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
           Effect.map((value) => value as A),
           Effect.catch(threadDefect),
         );
-      return {
+      const endpoint: TerminalEndpoint = {
+        open: (binding) =>
+          input({ _tag: 'OpenLane', binding }).pipe(
+            Effect.map((value) => value as TerminalLane),
+            Effect.catch((failure) =>
+              failure._tag === 'LaneUnserved' ? Effect.fail(new LaneUnserved({ detail: detailOf(failure) })) : threadDefect(failure),
+            ),
+          ),
+        close: (binding) => settled<void>({ _tag: 'EndLane', binding }),
+      };
+      const queue = {
         ref: options.ref,
         get frontier() {
           return settled<InputFrontier>({ _tag: 'Frontier' });
@@ -313,6 +336,7 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
             Effect.map((value) => value as InputAnswer),
             Effect.catch(fenced),
           ),
+        next: (binding) => settled<InputSequence>({ _tag: 'Next', binding }),
         closeIntake: () => settled<void>({ _tag: 'CloseIntake' }),
         halt: (within) => settled<InputCarry>({ _tag: 'Halt', withinMs: Duration.toMillis(within) }),
         reply: (bytes, settling) =>
@@ -330,6 +354,7 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
         finish: () => settled<void>({ _tag: 'Finish' }),
         fence: (reason, detail) => settled<InputOwed>({ _tag: 'Fence', reason, detail }),
       } satisfies ExecutionInput;
+      return { input: queue, endpoint } satisfies TerminalInput;
     }),
   };
 

@@ -19,6 +19,7 @@ import {
 import { HostAuthority } from './HostAuthority';
 import { HostLifecycle } from './HostLifecycle';
 import { TerminalInput } from './TerminalInput';
+import { TerminalLanes } from './TerminalLanes';
 import { TerminalScreen } from './TerminalScreen';
 import type { HostRequestRef, Incarnation } from './protocol/execution';
 import type { InputRequest } from './protocol/input';
@@ -397,6 +398,32 @@ const make = Effect.fnUntraced(function* ({ address, role, limits, budget = {}, 
         closeBinding: (binding, principal) => authority({ _tag: 'CloseBinding', binding, principal }),
       }),
 
+      ...TerminalLanes.of({
+        open: (execution, claim) =>
+          ask({ _tag: 'OpenTerminalLane', claim, execution }).pipe(
+            Effect.flatMap((answer) => expect('OpenTerminalLane', answer)),
+            Effect.map(({ port, token, next }) => ({ port, token, next })),
+          ),
+
+        inputs: (execution) =>
+          subscribe({ _tag: 'Inputs', execution }, limits.credits).pipe(
+            Stream.takeWhile((delivery) => delivery._tag !== 'Ended' || delivery.ending !== 'completed'),
+            Stream.mapEffect((delivery) =>
+              delivery._tag === 'Inputs'
+                ? Effect.succeed(delivery.input)
+                : Effect.fail(
+                    new WireLost({
+                      reason:
+                        delivery._tag === 'Ended'
+                          ? `the input subscription ended: ${delivery.ending}`
+                          : `unexpected ${delivery._tag} on an input subscription`,
+                      sent: false,
+                    }),
+                  ),
+            ),
+          ),
+      }),
+
       ...ExecutionCustody.of({
         custody: (request, principal) =>
           ask({ _tag: 'Custody', request, principal }).pipe(
@@ -582,6 +609,7 @@ export const ExecutionClient = {
           Context.add(Commands, services),
           Context.add(ExecutionRecord, services),
           Context.add(TerminalScreen, services),
+          Context.add(TerminalLanes, services),
           Context.add(ExecutionCustody, services),
           Context.add(ExecutionEvidence, services),
           Context.add(HostAuthority, services),

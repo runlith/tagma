@@ -2162,5 +2162,746 @@
         "payload": ""
       }
     ]
+  },
+  "41": {
+    "frames": [
+      {
+        "side": "client",
+        "header": "{\"magic\":\"runlith.executions.wire\",\"wire\":{\"min\":41,\"max\":41}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"magic\":\"runlith.executions.wire\",\"wire\":{\"min\":41,\"max\":41}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Hello\",\"request\":0,\"installation\":\"installation-1\",\"protocol\":\"executions/1\",\"role\":\"custodian\",\"secret\":\"secret\",\"client\":{\"name\":\"@runlith/executions\",\"version\":\"41\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Welcome\",\"request\":0,\"connection\":\"connection-1\",\"role\":\"custodian\",\"installation\":\"installation-1\",\"incarnation\":1,\"phase\":\"open\",\"custody\":{\"revision\":0,\"epoch\":0},\"profile\":{\"version\":1,\"platform\":{\"os\":\"darwin\",\"arch\":\"arm64\"},\"runtime\":{\"name\":\"bun\",\"version\":\"1.4.2\"},\"native\":{\"crate\":\"execution-platform\",\"version\":\"0.1.0\",\"build\":\"local\"},\"transports\":[\"pipes\",\"pty\"],\"relations\":[\"leader\",\"work\"],\"execution\":{\"input\":{\"pendingBytes\":16384,\"chunkBytes\":16384,\"receipts\":32},\"output\":{\"landingBytes\":65536,\"segmentBytes\":65536,\"retainedBytes\":1048576},\"parser\":{\"pendingBytes\":4096,\"cellBytes\":1048576},\"geometry\":{\"columns\":500,\"rows\":200,\"scrollbackRows\":10000},\"read\":{\"chunkBytes\":65536,\"readerCredits\":4,\"readers\":8},\"frame\":{\"bytes\":262144,\"inFlight\":2},\"receipts\":64},\"host\":{\"bindings\":64,\"custodyReceipts\":64,\"tombstones\":1024},\"granted\":{\"share\":0.25,\"machineBytes\":6442844160,\"grantBytes\":1610711040},\"ceilings\":{\"executions\":64,\"terminals\":32,\"readers\":512,\"reads\":512,\"receipts\":4096,\"openFiles\":256,\"processes\":64,\"perTransport\":{\"pipes\":64,\"pty\":64}}},\"limits\":{\"frameBytes\":1048576,\"headerBytes\":16384,\"connections\":8,\"requests\":64,\"subscriptions\":32,\"credits\":1048576},\"capabilities\":[\"machine-load\",\"end-residual\",\"end-process\",\"named-signals\",\"pipe-graceful-stop\",\"pace-raise\",\"terminal-foreground\",\"terminal-survives-holder\",\"pipe-survives-holder\",\"holder-replaces-itself\"]}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":1,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Subscribe\",\"source\":{\"_tag\":\"Load\",\"serverPid\":4000,\"desktopPid\":4500},\"credits\":8192}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":1,\"body\":{\"_tag\":\"Subscribed\",\"subscription\":1}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":2,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"LoadInterest\",\"subscription\":1,\"interested\":true}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":2,\"body\":{\"_tag\":\"LoadInterest\",\"applied\":true}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":3,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"EndResidual\",\"origin\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1},\"pid\":4200}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":3,\"body\":{\"_tag\":\"EndResidual\",\"outcome\":{\"_tag\":\"Ended\",\"origin\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1},\"pid\":4200,\"steps\":[\"terminate\"]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Load\",\"subscription\":1,\"reading\":{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"machine-1\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"machine-1\"}},\"observedAt\":1790000000000,\"revision\":3,\"takenAtMicros\":5000000,\"overMicros\":1000000,\"cores\":12,\"cpu\":3.2,\"memory\":{\"_tag\":\"Measured\",\"totalBytes\":34359738368,\"usedBytes\":24000000000,\"availableBytes\":10359738368,\"source\":{\"adapter\":\"darwin\",\"probe\":\"host_statistics64\"},\"pressure\":{\"_tag\":\"Measured\",\"level\":\"normal\",\"source\":{\"adapter\":\"darwin\",\"probe\":\"kern.memorystatus_vm_pressure_level\"},\"value\":1}},\"groups\":[{\"owner\":{\"_tag\":\"Execution\",\"execution\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1},\"ended\":false},\"cores\":1.5,\"memoryBytes\":30000000,\"unread\":0,\"processes\":[{\"identity\":{\"pid\":4100,\"birth\":\"1789999995:900000\"},\"parent\":4000,\"name\":\"svelte-check\",\"command\":\"svelte-check --tsconfig ./tsconfig.json\",\"cores\":1.5,\"memoryBytes\":30000000,\"signal\":true}]},{\"owner\":{\"_tag\":\"Execution\",\"execution\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1},\"ended\":true},\"cores\":0.2,\"memoryBytes\":20000000,\"unread\":1,\"processes\":[{\"identity\":{\"pid\":4200,\"birth\":\"1789999995:800000\"},\"parent\":1,\"name\":\"node\",\"cores\":0.2,\"memoryBytes\":20000000,\"signal\":true},{\"identity\":{\"pid\":4201,\"birth\":\"1789999995:799000\"},\"parent\":4200,\"name\":\"node\",\"cores\":null,\"memoryBytes\":null,\"signal\":true,\"unread\":\"the native counter read answered errno 3\"}]},{\"owner\":{\"_tag\":\"Installation\"},\"cores\":0.5,\"memoryBytes\":50000000,\"unread\":0,\"processes\":[{\"identity\":{\"pid\":4000,\"birth\":\"1789999996:0\"},\"parent\":1,\"name\":\"bun\",\"cores\":0.5,\"memoryBytes\":50000000,\"signal\":false}]},{\"owner\":{\"_tag\":\"Program\",\"key\":\"/Applications/Google Chrome.app\",\"name\":\"Google Chrome\"},\"cores\":0.8,\"memoryBytes\":900000000,\"unread\":0,\"processes\":[{\"identity\":{\"pid\":7172,\"birth\":\"1789990000:0\"},\"parent\":1,\"name\":\"Google Chrome\",\"cores\":0.8,\"memoryBytes\":900000000,\"signal\":true}]},{\"owner\":{\"_tag\":\"Kernel\"},\"cores\":0.2,\"memoryBytes\":0,\"unread\":0,\"processes\":[]}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Ended\",\"subscription\":1,\"ending\":\"cancelled\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":4,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"EndProcess\",\"target\":{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"machine-1\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"machine-1\"}},\"identity\":{\"pid\":4300,\"birth\":\"1789999995:900000\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":4,\"body\":{\"_tag\":\"EndProcess\",\"outcome\":{\"_tag\":\"Ended\",\"target\":{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"machine-1\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"machine-1\"}},\"identity\":{\"pid\":4300,\"birth\":\"1789999995:900000\"}},\"steps\":[\"terminate\"]}}}}",
+        "payload": ""
+      }
+    ],
+    "arms": [
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":101,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Status\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":102,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"List\",\"after\":{\"installation\":\"'m8aC9\",\"execution\":\"!#|,*Qsxf\",\"incarnation\":18},\"limit\":2147483629}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":103,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Changes\",\"since\":1249844599,\"limit\":382575361}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":104,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"State\",\"execution\":{\"installation\":\"5'm8aC9W\",\"execution\":\"&\",\"incarnation\":22}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":105,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Ending\",\"execution\":{\"installation\":\"5'm8aC9W\",\"execution\":\"&\",\"incarnation\":22},\"remeasure\":false}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":106,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Command\",\"execution\":{\"installation\":\"5'm8aC9W\",\"execution\":\"&\",\"incarnation\":22}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":107,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Revise\",\"request\":{\"operation\":{\"installation\":\"5'm8aC9W\",\"operation\":\"&\"},\"execution\":{\"installation\":\"a\",\"execution\":\"P<K,D3K(w.I\",\"incarnation\":1193909417},\"expected\":1181478372,\"change\":{\"_tag\":\"Remaining\",\"remainingMs\":139549307},\"actor\":\"key\",\"cause\":\"U=b~\",\"exception\":{\"ceilingMs\":29,\"actor\":\"c\",\"cause\":\"gi$W+cC\"},\"wait\":\"background\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":108,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Commands\",\"query\":{\"scope\":\"*;\\\\pDtIOW]LS\",\"owner\":\"v:Jq_71>;\",\"cohort\":\"_\",\"phases\":[\"ended\",\"queued\",\"reserved\",\"running\",\"starting\",\"running\",\"stopping\",\"running\",\"ended\",\"running\",\"starting\",\"stopping\"],\"after\":{\"admittedAtMs\":11,\"execution\":\"call\",\"filters\":\"y!\"},\"limit\":29}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":109,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"CommandsAt\",\"refs\":[{\"installation\":\"'m8aC9\",\"execution\":\"]!#|\",\"incarnation\":642972074},{\"installation\":\"s\",\"execution\":\"fa]q\",\"incarnation\":1881040518},{\"installation\":\",D3\",\"execution\":\"(w.\",\"incarnation\":1118626656},{\"installation\":\"As\",\"execution\":\"1\",\"incarnation\":1519546679},{\"installation\":\"Z\",\"execution\":\"T:s?!\",\"incarnation\":1630351099},{\"installation\":\"b~O|K;L=YI\\\\F\",\"execution\":\"1K\",\"incarnation\":691174918},{\"installation\":\"$W+cC_A\",\"execution\":\"]Te8\",\"incarnation\":727794589},{\"installation\":\"@|OvZ.G\",\"execution\":\"rez7r\",\"incarnation\":355271212}]}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":110,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Operation\",\"operation\":{\"installation\":\"5'm8aC9W\",\"operation\":\"&\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":111,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"CallResult\",\"operation\":{\"installation\":\"5'm8aC9W\",\"operation\":\"&\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":112,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Start\",\"operation\":{\"installation\":\"B=uh#\\\\e,1SX\",\"operation\":\"U8Y0Ck gS{\"},\"launch\":{\"command\":{\"program\":\"'D*\\\"8{&\",\"args\":[\"(bmY#x\",\"k\",\"CS9O]TDKr-\",\"j`1T\"],\"environment\":[{\"name\":\"\\\"ws}\",\"value\":\"\"},{\"name\":\"oj\",\"value\":\"4cs\"},{\"name\":\"AFN[L0uV2\",\"value\":\"ULawQV)^=K\"}],\"cwd\":\"axe@PNelW-\"},\"transport\":{\"_tag\":\"pty\",\"geometry\":{\"rows\":26056380,\"columns\":1813117714}},\"purpose\":\"internal\",\"target\":{\"environment\":\"a:\\\"=N\",\"namespace\":\"Wr&/v~Z%n^\",\"cwd\":\"5p<V,j8bJ\",\"dependencies\":[\"{5px;+\",\"Mz^|(H$\",\"]&rd#N0|1Ql\",\"n}4g}q\",\"k6^z{/\\\"l*k\",\"yuns{h`;>\",\")_WGS\"]},\"holder\":\"zH^/^2\",\"origin\":\" ,!.\",\"paced\":true,\"lifetime\":\"command\",\"admission\":{\"origin\":{\"scope\":\"?fwGXx=\",\"owner\":\"\\\"G1}\",\"cohort\":\",!XpU\\\"Kd=aH\"},\"limits\":{\"executionMs\":2018414810,\"executionCeilingMs\":27,\"origin\":\"caller\",\"foregroundMs\":559079088},\"policyIdentity\":\".3.9wgo5,o\\\\\",\"tool\":\"~SB%\",\"requested\":\"none\",\"rules\":[{\"id\":\"ruY8G2T4\",\"machine\":true,\"through\":\"\",\"limitMs\":1821781037,\"writer\":\"u\",\"at\":\"\",\"words\":\"%[(1,y\\\"W\"},{\"id\":\"W:%>#%G?\",\"machine\":true,\"thread\":\"f_\",\"through\":\"^eGJrc\",\"limitMs\":640022860,\"writer\":\"nFzFc\",\"at\":\"|z0lB:7;s\",\"words\":\"\"},{\"id\":\" \",\"machine\":true,\"thread\":\"Z2}2\",\"limitMs\":1754652666,\"writer\":\"rY%F\",\"at\":\">\",\"words\":\"1T\"},{\"id\":\"b2T/\",\"machine\":true,\"thread\":\"FQ7^_2\",\"limitMs\":215732885,\"writer\":\"\",\"at\":\"*\",\"words\":\"T^7 ^Fz|O[\"},{\"id\":\"E'itjL\",\"machine\":true,\"thread\":\"NH2^VZYL!5\",\"limitMs\":902414869,\"writer\":\"@Cr_t\",\"at\":\"Se@V\\\\88Ds^\",\"words\":\"<c\"},{\"id\":\"hSJfFXBh)\",\"machine\":true,\"thread\":\"_\",\"through\":\"lz`das\",\"limitMs\":1326475389,\"writer\":\"><dw%lD`5\",\"at\":\"9G+aZ*\",\"words\":\"x2?H-`t5U;\"}],\"programs\":{\"root\":\"Ht b8%\",\"rules\":[{\"id\":\"`\",\"machine\":true,\"program\":{\"words\":[\"4\"],\"folder\":\"a{H80\"},\"limitMs\":1414218580,\"writer\":\"3A\",\"at\":\"(>5\",\"words\":\"5Ov!uNZ\"},{\"id\":\"Cx\",\"machine\":true,\"thread\":\"+$ELd4\",\"program\":{\"words\":[\"]\",\"se^b{\",\"xdfT\\\\}(\",\"f7Yj/Xjw$47\",\"O'>Vgk\",\"]VM>Gi\",\"fAdo=,\",\"u?8V2\",\"tQ)~}.)\\\\r\"],\"folder\":\"sfB~bo\"},\"limitMs\":423134944,\"writer\":\"k`Tu\",\"at\":\"y{Strin_\",\"words\":\"?!atp5nN:5\"},{\"id\":\"XLwT|x'z\",\"machine\":true,\"program\":{\"words\":[\"K#l^\"],\"folder\":\"&&oI\\\"? >\"},\"limitMs\":131896247,\"writer\":\"\",\"at\":\"UqTn9t%\",\"words\":\"eI_S\"},{\"id\":\"WO<kv>D$w\\\"i\",\"machine\":true,\"thread\":\"hR9y\\\\P%\",\"program\":{\"words\":[\"fS\\\"length\",\"t7\\\"On_bqM<(\",\"nqj_a n#GV\",\"bK.8,qv[X$.\",\"Uu6.\",\"3)~aMo.xn\",\"J]B7n#M~B\",\"$u^-gB7\",\"xl,&yp\"],\"folder\":\" 'R%Nm\"},\"limitMs\":2051713089,\"writer\":\"jGBv@<I&#z\",\"at\":\"1;^PH%\",\"words\":\"Uh4fJD\"}]}}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":113,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Start\",\"operation\":{\"installation\":\"5'm8aC9W\",\"operation\":\"&\"},\"launch\":{\"command\":{\"program\":\"call\",\"args\":[\"IW\"],\"environment\":[{\"name\":\"1\",\"value\":\"(yZF\"},{\"name\":\"s?!TU=b\",\"value\":\"\"}]},\"transport\":{\"_tag\":\"pipes\",\"stdin\":\"inherit\"},\"purpose\":\"command\",\"target\":{\"environment\":\"K$#C%#`\",\"namespace\":\"@|OvZ.G\",\"cwd\":\"r~\",\"dependencies\":[\"TL\\\"6{M=,?\"]},\"holder\":\"2r8WI\",\"origin\":\"bind\",\"paced\":true,\"lifetime\":\"call\",\"budget\":{\"timeoutMs\":10}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":114,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"CancelStart\",\"operation\":{\"installation\":\"5'm8aC9W\",\"operation\":\"&\"},\"cause\":\"run-abort\",\"trigger\":\"call\",\"when\":\"always\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":115,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Read\",\"cursor\":{\"ref\":{\"installation\":\"5'm8aC9W\",\"execution\":\"&\",\"incarnation\":22},\"stream\":\"stdout\",\"offset\":\"0\"},\"limit\":22}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":116,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Screen\",\"execution\":{\"installation\":\"5'm8aC9W\",\"execution\":\"&\",\"incarnation\":22},\"base\":29,\"cells\":false,\"scrollback\":2147483620}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":117,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Input\",\"execution\":{\"installation\":\"D\",\"execution\":\"|\",\"incarnation\":13},\"scope\":{\"binding\":\"__pro\",\"principal\":\"Wl`5kH\"},\"sequence\":2147483634,\"cause\":\"typed\",\"profile\":1918979781,\"act\":{\"_tag\":\"Resize\",\"geometry\":{\"rows\":18,\"columns\":2147483632}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":118,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Signal\",\"execution\":{\"installation\":\"5'm8aC9W\",\"execution\":\"&\",\"incarnation\":22},\"signal\":\"P<K,D3K(w.I\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":119,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Processes\",\"execution\":{\"installation\":\"5'm8aC9W\",\"execution\":\"&\",\"incarnation\":22}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":120,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Listeners\",\"execution\":{\"installation\":\"5'm8aC9W\",\"execution\":\"&\",\"incarnation\":22}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":121,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"ListenerInventory\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":122,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Custody\",\"request\":{\"operation\":{\"installation\":\"5'm8aC9W\",\"operation\":\"&\"},\"execution\":{\"installation\":\"a\",\"execution\":\"P<K,D3K(w.I\",\"incarnation\":1193909417},\"expected\":1181478372,\"act\":{\"_tag\":\"Transfer\",\"holder\":\"(yZFT:s?\"}},\"principal\":\"b~O|K;L=YI\\\\F\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":123,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Authority\",\"act\":{\"_tag\":\"ReleaseHost\",\"operation\":{\"installation\":\"yke\\\\ope\",\"operation\":\"cal\"},\"custody\":{\"revision\":14,\"epoch\":1894911407361537,\"holder\":{\"connection\":\"OD<,:%IV_\",\"incarnation\":9}}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":124,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Authority\",\"act\":{\"_tag\":\"CloseBinding\",\"binding\":\"KCD&>\",\"principal\":\"e_tIFSBzj\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":125,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Stop\",\"operation\":{\"installation\":\"5'm8aC9W\",\"operation\":\"&\"},\"execution\":{\"installation\":\"a\",\"execution\":\"P<K,D3K(w.I\",\"incarnation\":1193909417},\"cause\":\"not-started\",\"action\":\"signal\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":126,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Retire\",\"operation\":{\"installation\":\"5'm8aC9W\",\"operation\":\"&\"},\"execution\":{\"installation\":\"a\",\"execution\":\"P<K,D3K(w.I\",\"incarnation\":1193909417}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":127,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Quiesce\",\"operation\":{\"installation\":\"5'm8aC9W\",\"operation\":\"&\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":128,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Resume\",\"ticket\":\"5'm8aC9W\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":129,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Shutdown\",\"operation\":{\"installation\":\"5'm8aC9W\",\"operation\":\"&\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":130,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Pace\",\"pace\":\"lowest\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":131,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Disown\",\"disowned\":{\"owner\":\"'m8aC9\",\"scope\":\"&\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":132,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Retained\",\"execution\":{\"installation\":\"5'm8aC9W\",\"execution\":\"&\",\"incarnation\":22}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":134,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Subscribe\",\"source\":{\"_tag\":\"Bytes\",\"cursor\":{\"ref\":{\"installation\":\".fj\",\"execution\":\"}\",\"incarnation\":28},\"stream\":\"stdout\",\"offset\":\"0\"}},\"credits\":4096}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":135,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Subscribe\",\"source\":{\"_tag\":\"State\",\"execution\":{\"installation\":\".fj\",\"execution\":\"}\",\"incarnation\":28}},\"credits\":4096}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":136,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Subscribe\",\"source\":{\"_tag\":\"Screen\",\"execution\":{\"installation\":\"`\\\"UzMWL`\",\"execution\":\"{_KUznCyPnYY\",\"incarnation\":1078540757},\"base\":1627578839},\"credits\":4096}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":137,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Subscribe\",\"source\":{\"_tag\":\"Inventory\"},\"credits\":4096}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":139,\"body\":{\"_tag\":\"Status\",\"status\":{\"installation\":\"a\",\"incarnation\":1201752748,\"phase\":\"stopping\",\"holder\":{\"_tag\":\"Standing\"},\"custody\":{\"revision\":30,\"epoch\":9007199254740953,\"holder\":{\"connection\":\"u\",\"incarnation\":3}},\"executions\":2147483643,\"memory\":{\"granted\":{\"share\":4.327972442236261e-12,\"machineBytes\":21,\"grantBytes\":3},\"reserved\":1295701738,\"retained\":0,\"executions\":16,\"ceiling\":290766116},\"watch\":{\"rounds\":1594540702,\"delayed\":68158949,\"skipped\":1961200770,\"failed\":1193439766,\"lastRoundMs\":96799356,\"longestRoundMs\":2110444133},\"kept\":{\"records\":13,\"bytes\":1634802612,\"reserve\":27,\"available\":721015870}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":140,\"body\":{\"_tag\":\"Listed\",\"page\":{\"executions\":[{\"state\":{\"ref\":{\"installation\":\"}3/{r \",\"execution\":\"Lv&-EO\\\"{?29\",\"incarnation\":2147483632},\"transport\":\"pipes\",\"lifetime\":\"call\",\"purpose\":\"internal\",\"phase\":\"starting\",\"nativeExit\":{\"_tag\":\"Code\",\"code\":-1183570698},\"streams\":{\"stdout\":\"open\",\"stderr\":\"eof\",\"pty\":\"eof\"},\"cleanup\":\"unverifiable\",\"record\":\"unavailable\",\"unacquired\":\"z9 ~J}x\\\"#&\"},\"custody\":{\"revision\":1733674165,\"holder\":\"2[;yv6;wW0{\",\"origin\":\"_LA]c`%$Avb\",\"target\":{\"environment\":\"(9j\",\"namespace\":\"val\",\"cwd\":\"fo*kNM3.Gw-\",\"dependencies\":[\"{7d\",\"uBK]OX\",\"ref\",\"|r7-v4b ]O\",\"H?<h<zg:\",\"ar\",\" p}$OqfY&#\",\"YnDt\"]}},\"streams\":[{\"stream\":\"stdout\",\"retainedFrom\":\"0\",\"durableThrough\":\"0\",\"parsedThrough\":\"9263\",\"ending\":\"eof\"},{\"stream\":\"pty\",\"retainedFrom\":\"0\",\"durableThrough\":\"0\",\"parsedThrough\":\"0\",\"ending\":\"eof\"},{\"stream\":\"pty\",\"retainedFrom\":\"2727693372\",\"durableThrough\":\"4036\",\"parsedThrough\":\"0\",\"ending\":\"error\"},{\"stream\":\"stdout\",\"retainedFrom\":\"19\",\"durableThrough\":\"23949758641\",\"parsedThrough\":\"482\",\"ending\":\"error\"},{\"stream\":\"stderr\",\"retainedFrom\":\"123567702\",\"durableThrough\":\"635\",\"parsedThrough\":\"0\",\"ending\":\"open\"},{\"stream\":\"stdout\",\"retainedFrom\":\"0\",\"durableThrough\":\"3823\",\"parsedThrough\":\"0\",\"ending\":\"eof\"}],\"grid\":{\"rows\":1785193280,\"columns\":158617389},\"native\":{\"pid\":245557342,\"terminal\":\"u@t52+wSkmT\"},\"input\":{\"acceptedThrough\":\"933637\",\"pendingBytes\":8},\"decision\":{\"_tag\":\"Cancelled\",\"operation\":{\"installation\":\"o%B#9,r\",\"operation\":\">td\"},\"execution\":{\"installation\":\"j`VwWYxQ#~#\",\"execution\":\"2 g7_VB\",\"incarnation\":634827488},\"sequence\":1913941913,\"cause\":\"shutdown\",\"trigger\":\"kGVvuCGz\"},\"processes\":{\"members\":692721869,\"capped\":true,\"watched\":true,\"unwatched\":\"ended\",\"failures\":12,\"rulings\":[{\"_tag\":\"Unread\",\"pid\":443004058,\"process\":\"kdW\",\"fields\":[\"folder\",\"folder\",\"args\"]},{\"_tag\":\"Ending\",\"pid\":1720792991,\"process\":\"CsX;7H?Q]'\",\"rule\":{\"id\":\"E\",\"words\":[\"b%|wRk]:`8D'\",\"?FI)FjzB\",\"%(\",\"z/tu,jWxT-Lx\"],\"limitMs\":820465515}},{\"_tag\":\"Unverifiable\",\"pid\":-1862964200,\"process\":\"B#83<p!Bz\",\"rule\":{\"id\":\"yIG2/w\",\"words\":[\"v$@5}geot\",\">T5T!,Xdf,\",\",m\",\"ZW\",\"'+2Ch.F\",\"b-2_r6~-*cx1\",\",U\",\"mFo\",\"o!\",\"(h\\\\D}64<#`|\",\"M/=&\"],\"folder\":\"Q!]p=]PW> \",\"limitMs\":268109817},\"reason\":\"LD\"},{\"_tag\":\"Ended\",\"pid\":1970851453,\"process\":\"GDK6R]`~'C\",\"rule\":{\"id\":\"k_{WIg^YR\\\\B\",\"words\":[\"~>|mz\"],\"folder\":\" [RMNR\",\"limitMs\":869432054},\"step\":\"interrupt\"}],\"omitted\":2147483632}}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":141,\"body\":{\"_tag\":\"Listed\",\"page\":{\"executions\":[{\"state\":{\"ref\":{\"installation\":\"NL9xZ;pv%(:|\",\"execution\":\"H.Tc~8T/\",\"incarnation\":324415243},\"transport\":\"pipes\",\"lifetime\":\"held\",\"purpose\":\"internal\",\"phase\":\"starting\",\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"{*)p&<61\"},\"streams\":{\"stdout\":\"eof\",\"stderr\":\"open\",\"pty\":\"eof\"},\"cleanup\":\"unverifiable\",\"record\":\"available\",\"unacquired\":\"aXFJQqn0,\"},\"custody\":{\"revision\":1183087252,\"holder\":\"Q#Ht\",\"origin\":\"(;D<T\",\"target\":{\"environment\":\";m\\\\4s*C4m\",\"namespace\":\"?X?F{/\",\"cwd\":\"TF>D>d=\",\"dependencies\":[\"7w\"]}},\"streams\":[],\"grid\":{\"rows\":1227788886,\"columns\":1292546628},\"native\":{\"pid\":-756510341,\"terminal\":\",`.qD\\\"$=s7\"},\"input\":{\"acceptedThrough\":\"75570268956\",\"pendingBytes\":1728757755},\"decision\":{\"_tag\":\"Completed\",\"operation\":{\"installation\":\"F?,cpG\",\"operation\":\":,uOMJhJo5zj\"},\"execution\":{\"installation\":\"8VY6\",\"execution\":\"t#TVN|bm\",\"incarnation\":1722843749},\"sequence\":2084558797},\"processes\":{\"members\":1629204071,\"capped\":true,\"watched\":true,\"unwatched\":\"leader-unproven\",\"failures\":1764268391,\"rulings\":[{\"_tag\":\"Ended\",\"pid\":1123730799,\"process\":\"\\\"?C<_lJn\",\"rule\":{\"id\":\"p\",\"words\":[\"-\\\\$az[F\",\"fL];\",\";`quu%\\\"hzoI\",\"w]s6m8\",\"p+%8afF\",\"0\",\"vhvBJ\",\"puf\\\\\",\"S\",\"K.,PU;\",\"<Kx\\\\dmV>~?A\"],\"folder\":\"S\\\"\",\"limitMs\":462570270},\"step\":\"terminate\"},{\"_tag\":\"Survived\",\"pid\":-1590079556,\"process\":\"\",\"rule\":{\"id\":\"V$[\",\"words\":[\">Rsp{\"],\"folder\":\"*is\",\"limitMs\":368145335},\"steps\":[\"interrupt\",\"hang-up\",\"kill\",\"terminate\",\"hang-up\",\"interrupt\",\"terminate\",\"hang-up\"]},{\"_tag\":\"Ended\",\"pid\":-1534984084,\"process\":\"YU\",\"rule\":{\"id\":\"4\",\"words\":[\"x\",\"_<Im%\",\"7EYqzF\",\"p(7wm\",\"<n'0x3#\",\"f\",\"\\\"{'|H\"],\"folder\":\"v2Cx\",\"limitMs\":470021091},\"step\":\"interrupt\"},{\"_tag\":\"Ending\",\"pid\":922011053,\"process\":\"`P||vQ(*f\",\"rule\":{\"id\":\"l,\\\\}F\",\"words\":[\"Lc'\",\"IGfx\",\"4\\\\c>\",\"F;b&\",\"iZ-Q2=~`h\",\"#iJ9l!:\",\"D]\"],\"folder\":\"o^'FI3p4x6\",\"limitMs\":475349630}},{\"_tag\":\"Ending\",\"pid\":62716754,\"process\":\"hz\",\"rule\":{\"id\":\"cK}!VBW~\",\"words\":[\"#\",\"N\",\"xZ+3-&r)\",\"/Wqe/6^}0\",\"D\",\";\",\"_72?s:34\\\"XV6\",\"D<\"],\"folder\":\"N8qzXTn-b}K\",\"limitMs\":1430075114}},{\"_tag\":\"Unverifiable\",\"pid\":1501495662,\"process\":\"\",\"rule\":{\"id\":\"DG'RSR\",\"words\":[\";\",\"TIwy\"],\"folder\":\">.1[;T\",\"limitMs\":319489783},\"reason\":\"ax`l$+j_s\"}],\"omitted\":1433536888}}],\"after\":{\"installation\":\"Ap_V\",\"execution\":\"!\",\"incarnation\":1968995993}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":142,\"body\":{\"_tag\":\"Changes\",\"changes\":{\"_tag\":\"Changed\",\"revision\":39645317,\"executions\":[{\"state\":{\"ref\":{\"installation\":\"B,ag;G)A)Z\",\"execution\":\"$wa.:7Y\\\\\",\"incarnation\":1914059921},\"transport\":\"pipes\",\"lifetime\":\"held\",\"purpose\":\"command\",\"phase\":\"running\",\"streams\":{\"stdout\":\"error\",\"stderr\":\"eof\",\"pty\":\"error\"},\"cleanup\":\"residual\",\"record\":\"unavailable\",\"unacquired\":\" H\\\\`hCs\"},\"custody\":{\"revision\":416412532,\"holder\":\"&Rk[+S]$v71m\",\"origin\":\"`l:R8{GEAI\",\"target\":{\"environment\":\"n'+ \",\"namespace\":\"3fBaJ7:\",\"cwd\":\"7?X|_\",\"dependencies\":[\"`^\",\"mms^T#l\\\\\",\"2Ji5KAO]0_l\"]}},\"streams\":[{\"stream\":\"stdout\",\"retainedFrom\":\"0\",\"durableThrough\":\"0\",\"parsedThrough\":\"0\",\"ending\":\"open\"},{\"stream\":\"pty\",\"retainedFrom\":\"0\",\"durableThrough\":\"0\",\"parsedThrough\":\"0\",\"ending\":\"eof\"},{\"stream\":\"pty\",\"retainedFrom\":\"0\",\"durableThrough\":\"256\",\"parsedThrough\":\"19045531\",\"ending\":\"open\"},{\"stream\":\"stdout\",\"retainedFrom\":\"7\",\"durableThrough\":\"0\",\"parsedThrough\":\"0\",\"ending\":\"open\"}],\"grid\":{\"rows\":596089843,\"columns\":1428929521},\"native\":{\"pid\":-982785831,\"terminal\":\" :\"},\"input\":{\"sequence\":2010674578,\"acceptedThrough\":\"0\",\"pendingBytes\":77316526},\"decision\":{\"_tag\":\"Cancelled\",\"operation\":{\"installation\":\".SnK}y$ibW\",\"operation\":\"qO7ldzp]dG\"},\"execution\":{\"installation\":\"%YP`Of9.,~)\",\"execution\":\"WE>bJD\",\"incarnation\":1674498159},\"sequence\":984595897,\"cause\":\"run-abort\",\"trigger\":\">P;mW`p\"},\"processes\":{\"members\":1246800056,\"capped\":true,\"watched\":false,\"unwatched\":\"leader-unproven\",\"failures\":1720831005,\"rulings\":[{\"_tag\":\"Survived\",\"pid\":420536999,\"process\":\"\\\"\",\"rule\":{\"id\":\".FEt3L\",\"words\":[\"3 ?@&\",\"vFz;[(\",\"B$c+d(\",\"7;<GmfD[\\\"\",\"`+ux\"],\"limitMs\":221758019},\"steps\":[\"terminate\",\"terminate\"]},{\"_tag\":\"Unread\",\"pid\":-1688490803,\"process\":\"c1o$\",\"fields\":[\"args\",\"args\",\"args\",\"folder\",\"folder\"]},{\"_tag\":\"Unread\",\"pid\":-1147762687,\"process\":\")yy\",\"fields\":[\"folder\",\"folder\"]}],\"omitted\":622820031}}],\"left\":[{\"installation\":\"FzKn\",\"execution\":\"kI\",\"incarnation\":109548455},{\"installation\":\"h`\",\"execution\":\"*\",\"incarnation\":715875691},{\"installation\":\"a`@3[\",\"execution\":\"$>B-.4c-aG\",\"incarnation\":1746716391},{\"installation\":\"P~~KY|{#+5e\",\"execution\":\"2g^!6H?$\",\"incarnation\":1904007483}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":143,\"body\":{\"_tag\":\"Changes\",\"changes\":{\"_tag\":\"Changed\",\"revision\":854060670,\"executions\":[{\"state\":{\"ref\":{\"installation\":\"^L7'\",\"execution\":\"D6<( 4=<B\",\"incarnation\":2147004360},\"transport\":\"pipes\",\"lifetime\":\"command\",\"purpose\":\"command\",\"phase\":\"queued\",\"nativeExit\":{\"_tag\":\"Code\",\"code\":-512026762},\"streams\":{\"stdout\":\"open\",\"stderr\":\"eof\",\"pty\":\"open\"},\"cleanup\":\"pending\",\"record\":\"unavailable\",\"unacquired\":\"6MDk\"},\"custody\":{\"revision\":1630524168,\"holder\":\"V\\\\\",\"origin\":\"zl?~LE)\",\"target\":{\"environment\":\"\\\\\",\"namespace\":\"`\",\"cwd\":\"taWV$DU_N<\",\"dependencies\":[\"Q7moj\",\"hoPX3@\"]}},\"streams\":[],\"native\":{\"terminal\":\"7Wd>+Jma3^m\"},\"input\":{\"sequence\":48623106,\"acceptedThrough\":\"798001\",\"pendingBytes\":766462445},\"decision\":{\"_tag\":\"Completed\",\"operation\":{\"installation\":\"(!G\",\"operation\":\"c>Q)4m5\\\\U\"},\"execution\":{\"installation\":\"ds\",\"execution\":\"UpkSY8\",\"incarnation\":591088997},\"sequence\":350630347},\"processes\":{\"members\":766751764,\"capped\":true,\"watched\":false,\"unwatched\":\"leader-unproven\",\"failures\":1468046305,\"rulings\":[{\"_tag\":\"Unread\",\"pid\":-1260234273,\"process\":\"jNr\\\\p`rqvy\",\"fields\":[\"folder\",\"folder\",\"folder\",\"args\",\"args\",\"args\"]},{\"_tag\":\"Ended\",\"pid\":-1561986419,\"process\":\"Ii\",\"rule\":{\"id\":\"B1z\",\"words\":[\"^Oh\\\"vdn]\",\"a0xSkDA~@b\",\"B[9bdf[7b19\\\"\"],\"limitMs\":1608768406},\"step\":\"terminate\"},{\"_tag\":\"Ended\",\"pid\":808458532,\"process\":\"k4BU~`0\",\"rule\":{\"id\":\"4NRNPN4C'51z\",\"words\":[\"e=NKi5qla\",\"KyDg=\\\"L?';_5\",\"EExDQ\",\"hQ\",\"h|3MLqz\",\"[\"],\"folder\":\";MxU-2jkhT\",\"limitMs\":1867251856},\"step\":\"unsignalled\"},{\"_tag\":\"Unverifiable\",\"pid\":-839368443,\"process\":\"6\",\"rule\":{\"id\":\"\\\\_i^$NImn\",\"words\":[\"ku}qq9IW\",\"Q<~@ v\",\"Z\",\"rb\\\\$xH\\\\+\",\"_~2@\",\"(kDAN!\",\"TwYjv(\",\"%<g,D\\\"v!w$ls\",\"N#\",\"MztZb2v\"],\"folder\":\"/nW\",\"limitMs\":941557119},\"reason\":\"r3\\\".#BK\"},{\"_tag\":\"Ending\",\"pid\":1243625882,\"process\":\"^}*\",\"rule\":{\"id\":\"7\",\"words\":[\"=1t+$YH\",\"-8Dm?7\",\"8C|g\\\\7ic8BT\",\"I>KUdc\",\"g\",\"(?8\\\"\",\"r!yXEai\",\"(Pb\",\"Jb^YRX)P=\"],\"folder\":\"8\",\"limitMs\":164147890}}],\"omitted\":456028388}}],\"left\":[{\"installation\":\"+&b?\",\"execution\":\"076YV{<jb[h\",\"incarnation\":1589303327},{\"installation\":\"|9.sg%{v\",\"execution\":\"2I6yr\",\"incarnation\":1955023957},{\"installation\":\"EN>z1RT\",\"execution\":\"<A-6GE>&-\",\"incarnation\":2072946903},{\"installation\":\"bNWbI\\\"\",\"execution\":\"tc1me\",\"incarnation\":1045609806},{\"installation\":\" iSyb\",\"execution\":\"?CT.;5Oq\",\"incarnation\":1066738115},{\"installation\":\"iI/\\\\7G6sz>*5\",\"execution\":\"'s\",\"incarnation\":584565761}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":144,\"body\":{\"_tag\":\"Changes\",\"changes\":{\"_tag\":\"Reset\",\"revision\":24,\"reason\":\"overflow\",\"detail\":\"}\\\"\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":145,\"body\":{\"_tag\":\"State\",\"summary\":{\"state\":{\"ref\":{\"installation\":\"\\\"sFU\",\"execution\":\"IoWwaqO=Isu\",\"incarnation\":1971042374},\"transport\":\"pipes\",\"lifetime\":\"call\",\"purpose\":\"command\",\"phase\":\"reserved\",\"nativeExit\":{\"_tag\":\"Code\",\"code\":-1829196028},\"streams\":{\"stdout\":\"error\",\"stderr\":\"open\",\"pty\":\"open\"},\"cleanup\":\"residual\",\"record\":\"available\",\"unacquired\":\"+_q{\\\\`\"},\"custody\":{\"revision\":1972767396,\"holder\":\"\\\\d49\",\"origin\":\"E~#L>aD>.$\\\\G\",\"target\":{\"environment\":\"b9/'/0\",\"namespace\":\"RI\",\"cwd\":\"!\",\"dependencies\":[\"Ze>iGP~5D&{8\"]}},\"streams\":[{\"stream\":\"stdout\",\"retainedFrom\":\"321268954\",\"durableThrough\":\"6944\",\"parsedThrough\":\"0\",\"ending\":\"open\"},{\"stream\":\"stderr\",\"retainedFrom\":\"3148\",\"durableThrough\":\"52603449625\",\"parsedThrough\":\"0\",\"ending\":\"error\"}],\"grid\":{\"rows\":3856201,\"columns\":566187955},\"native\":{\"pid\":-569935567,\"terminal\":\"&\\\\zyZ4\"},\"input\":{\"sequence\":17,\"acceptedThrough\":\"28596892\",\"pendingBytes\":2147483628},\"decision\":{\"_tag\":\"Cancelled\",\"operation\":{\"installation\":\"zqP831wsV\",\"operation\":\";$6\"},\"execution\":{\"installation\":\"xLoz'Bin0\",\"execution\":\"ke&sE\",\"incarnation\":13048927},\"sequence\":10,\"cause\":\"run-abort\",\"trigger\":\"}$\"},\"processes\":{\"members\":34889996,\"capped\":false,\"watched\":true,\"failures\":709193262,\"rulings\":[{\"_tag\":\"Unread\",\"pid\":-1576275669,\"process\":\"\",\"fields\":[\"folder\",\"folder\",\"args\",\"folder\",\"args\",\"folder\",\"args\",\"args\",\"args\"]},{\"_tag\":\"Ended\",\"pid\":1576685100,\"process\":\"KaJ~Q*+oJ\",\"rule\":{\"id\":\"9pw[@)0Y\",\"words\":[\"ZJ/@?e5E5@l=\",\"IQ!\"],\"limitMs\":991375870},\"step\":\"kill\"},{\"_tag\":\"Ending\",\"pid\":1854728088,\"process\":\"&wrL-3\",\"rule\":{\"id\":\"=$1\",\"words\":[\"fJ\",\"+oY<u(:7Hdw\",\"V-FI+?ena|N\",\"NEu_MbIzv%^6\",\"2=d@#= J^k\",\"NjZ-M'o\",\"=S@n\"],\"folder\":\"M$r!k (U\",\"limitMs\":1167894636}},{\"_tag\":\"Survived\",\"pid\":188997972,\"process\":\"U&\",\"rule\":{\"id\":\"q\",\"words\":[\"!T4xYi8x#c.\",\"9Z\",\"NTq6Y=#\",\"Rd%x0KV`;n\",\"MAzQNN4+Y\",\"}UdV;Wc\",\"Y)-yMp:WP?\"],\"folder\":\"[37+Gr\",\"limitMs\":263820237},\"steps\":[\"hang-up\",\"terminate\"]},{\"_tag\":\"Unread\",\"pid\":-1175834380,\"process\":\"UnRlL\",\"fields\":[\"args\",\"folder\"]},{\"_tag\":\"Unverifiable\",\"pid\":-1218541690,\"process\":\"(JtbA\",\"rule\":{\"id\":\"$O-II)+OJy\",\"words\":[\"dHPVqrqK+(D\",\"jk_TV7\",\";]qLs)=\",\"ia>B6\\\\Lyo<\",\"r\",\"os(P>:qwT{\"],\"folder\":\">?\\\\iRp6\",\"limitMs\":414293050},\"reason\":\"~OeJ\"}],\"omitted\":63553986}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":146,\"body\":{\"_tag\":\"State\",\"summary\":{\"state\":{\"ref\":{\"installation\":\"1$3#\",\"execution\":\"ar\",\"incarnation\":1829436414},\"transport\":\"pipes\",\"lifetime\":\"held\",\"purpose\":\"command\",\"phase\":\"ended\",\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"(\"},\"streams\":{\"stdout\":\"error\",\"stderr\":\"error\",\"pty\":\"open\"},\"cleanup\":\"complete\",\"record\":\"gapped\",\"unacquired\":\"caller\"},\"custody\":{\"revision\":562761089,\"holder\":\"75\",\"origin\":\"ref\",\"target\":{\"environment\":\"{~~\",\"namespace\":\"key\",\"cwd\":\"0M~{\",\"dependencies\":[\"zW2? tft#vR\",\"P3\",\"Rj\",\">nq6Wl\",\"Ka2\",\"F1C!;1Qd\",\"i*hkaM}\"]}},\"streams\":[{\"stream\":\"stderr\",\"retainedFrom\":\"9\",\"durableThrough\":\"0\",\"parsedThrough\":\"0\",\"ending\":\"open\"},{\"stream\":\"pty\",\"retainedFrom\":\"0\",\"durableThrough\":\"0\",\"parsedThrough\":\"0\",\"ending\":\"error\"},{\"stream\":\"pty\",\"retainedFrom\":\"0\",\"durableThrough\":\"0\",\"parsedThrough\":\"3386\",\"ending\":\"error\"}],\"grid\":{\"rows\":1373366591,\"columns\":1385304021},\"native\":{\"pid\":-608555888,\"terminal\":\"call\"},\"input\":{\"acceptedThrough\":\"2\",\"pendingBytes\":8},\"decision\":{\"_tag\":\"Completed\",\"operation\":{\"installation\":\"X~\",\"operation\":\"WAOC@vk8e#U.\"},\"execution\":{\"installation\":\" z\",\"execution\":\"J}e\",\"incarnation\":0},\"sequence\":2147483640},\"processes\":{\"members\":1795152658,\"capped\":true,\"watched\":false,\"unwatched\":\"ended\",\"failures\":1796903103,\"rulings\":[{\"_tag\":\"Unverifiable\",\"pid\":-1324083733,\"process\":\"c;0v,&Q#7A\",\"rule\":{\"id\":\"?[eI=\",\"words\":[\"7.@_<mn3\",\"#Fk@t,>+#w&M\",\"|fNc\",\"7m{t/cg\"],\"limitMs\":668040104},\"reason\":\"f\"},{\"_tag\":\"Ending\",\"pid\":146302086,\"process\":\"!U`gxzMb\",\"rule\":{\"id\":\":zs68?V\",\"words\":[\"u]FQ$b^\\\"G?1\",\"`<ZFhBTAX\"],\"limitMs\":2125252601}},{\"_tag\":\"Unverifiable\",\"pid\":47103252,\"process\":\"gD&\",\"rule\":{\"id\":\"OC3tvM*#S9?\",\"words\":[\"tug?V7Ad_^Kr\",\". 2\",\"Lee\\\\\",\"p\",\"FxnW9rYO\\\\|\",\"<\",\"e\",\"9$!K\",\"qh4Vf\"],\"folder\":\":mVvjr[3AMX\",\"limitMs\":1930797187},\"reason\":\"-QmG/=1i\"}],\"omitted\":5}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":147,\"body\":{\"_tag\":\"Ending\",\"receipt\":{\"execution\":{\"installation\":\"!$zM#\\\"margu\",\"execution\":\"t\",\"incarnation\":2147483645},\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"rL\"},\"cost\":{\"_tag\":\"Unmeasured\",\"reason\":\"unknown\",\"detail\":\"_0\"},\"coverage\":[\"terminal\",\"ancestry\",\"ancestry\",\"ancestry\",\"leader\"],\"relation\":\"covered\",\"confirmed\":[{\"pid\":847164576,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Code\",\"code\":1620404437},\"step\":\"terminate\"},{\"pid\":-550394918,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Code\",\"code\":-809469853},\"step\":\"kill\"},{\"pid\":1155147431,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Code\",\"code\":2007687204},\"step\":\"hang-up\"},{\"pid\":-1174865779,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\".A{L\"},\"step\":\"terminate\"}],\"residual\":[{\"kind\":\"record\",\"detail\":\"MPe.a]<I\",\"pid\":29488201,\"relation\":\"terminal\"},{\"kind\":\"callback\",\"detail\":\"c_FDz\",\"pid\":-156160598,\"relation\":\"work\"},{\"kind\":\"pty\",\"detail\":\"S/);$~|Lg\",\"pid\":-822969094,\"relation\":\"ancestry\"},{\"kind\":\"process\",\"detail\":\"\\\"\",\"pid\":1666135384},{\"kind\":\"process\",\"detail\":\"Q\",\"pid\":-335719309,\"relation\":\"ancestry\"},{\"kind\":\"callback\",\"detail\":\"dt_uZ|dYQ\",\"pid\":972324334,\"relation\":\"ancestry\"},{\"kind\":\"record\",\"detail\":\"V-n]>j0eJe\",\"pid\":-2106033892},{\"kind\":\"callback\",\"detail\":\"^a/J#d.\",\"pid\":1925837737,\"relation\":\"ancestry\"},{\"kind\":\"record\",\"detail\":\"_h,_v&m m\",\"pid\":-799122567,\"relation\":\"leader\"}],\"unverifiable\":[{\"kind\":\"process\",\"detail\":\"z3Ce\",\"reason\":\"%\"}],\"streams\":[{\"stream\":\"stderr\",\"ending\":\"open\"},{\"stream\":\"stderr\",\"ending\":\"eof\"},{\"stream\":\"pty\",\"ending\":\"error\"},{\"stream\":\"stderr\",\"ending\":\"open\"}],\"cleanup\":\"residual\",\"retention\":\"partial\",\"abandonedOutput\":false,\"unacquired\":\"~~7L,36B\"},\"measurement\":\"remeasured\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":148,\"body\":{\"_tag\":\"Ending\",\"receipt\":{\"execution\":{\"installation\":\"6\",\"execution\":\"W:N\",\"incarnation\":769732731},\"nativeExit\":{\"_tag\":\"Code\",\"code\":-1420413592},\"cost\":{\"_tag\":\"Measured\",\"cpuMicros\":103673452,\"peakRssBytes\":426496856},\"coverage\":[],\"relation\":\"unknown\",\"confirmed\":[{\"pid\":-11,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Code\",\"code\":-439023605},\"step\":\"kill\"},{\"pid\":-6,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Code\",\"code\":-376011294},\"step\":\"unsignalled\"},{\"pid\":-818361226,\"relation\":\"work\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"<I\"},\"step\":\"hang-up\"}],\"residual\":[],\"unverifiable\":[{\"kind\":\"record\",\"detail\":\"1bDO`C3<\",\"reason\":\"YK.Z[C>U>\"},{\"kind\":\"record\",\"detail\":\"|)s2\",\"reason\":\"\"},{\"kind\":\"record\",\"detail\":\"An~q\",\"reason\":\"^=O\"}],\"streams\":[],\"cleanup\":\"complete\",\"retention\":\"retained\",\"abandonedOutput\":true,\"unacquired\":\"SFJ@!(Y1<\"},\"measurement\":\"recorded\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":149,\"body\":{\"_tag\":\"Command\",\"snapshot\":{\"admission\":{\"origin\":{\"scope\":\"U\",\"owner\":\":^C*p\",\"cohort\":\"\\\"^\"},\"limits\":{\"executionMs\":1716148977,\"executionCeilingMs\":1056445833,\"origin\":\"default\",\"foregroundMs\":1956481761},\"policyIdentity\":\"<@R%LVK6A\",\"tool\":\"c!D~U,|JPoQy\",\"requested\":\"none\",\"rules\":[{\"id\":\"@wv\",\"machine\":true,\"thread\":\"\\\"DCAc\",\"through\":\"(1R\",\"limitMs\":625993211,\"writer\":\".g.WP6\",\"at\":\":\",\"words\":\"dZa$t2oyF=\"}],\"programs\":{\"root\":\"*7F:_)#\",\"rules\":[{\"id\":\"LVKXZG=XM\",\"machine\":true,\"program\":{\"words\":[\"sXM84\",\"[o>;`\"],\"folder\":\"8J{pHp_\"},\"limitMs\":23,\"writer\":\"[]ZLKhs>\",\"at\":\"uBo\",\"words\":\"O}{,hQg\"},{\"id\":\"BYD]{7\",\"program\":{\"words\":[\"K~\",\"vh\",\"UH{}Xwk\",\"(Rmyb.<E5\",\"0}A\\\\G\",\";G;0/\"],\"folder\":\"Fg=sJTVK~)F\"},\"limitMs\":1482667354,\"writer\":\"RLQS!/XQ^}\",\"at\":\"]\",\"words\":\":V=N,@qH,\"},{\"id\":\"x\",\"machine\":true,\"thread\":\"s&nM}RI$\",\"program\":{\"words\":[\"QsSG-+Y*J%~\",\"@7u\",\"H\",\"Ei&P@sS$,^^\",\"m:D7u+kO\",\"A/V-d]2izZA\",\"M&bN$\",\">P\",\"AoaP\",\":minp\",\"!( YSaCm/Ui\"]},\"limitMs\":854082624,\"writer\":\"{<V2dI\",\"at\":\"x.g`4p*8\",\"words\":\"6o0_*j\"},{\"id\":\"bL\",\"machine\":true,\"thread\":\"uvNMAn/\",\"program\":{\"words\":[\"Y\",\". =1Jo\",\"k;az>ZGZ\",\":\",\"G+v:T({\",\" \"],\"folder\":\"G\"},\"limitMs\":1637710880,\"writer\":\"-?\\\"Zlk/x.P\",\"at\":\"EL7DoJl,sC\",\"words\":\"r%\"}]}},\"state\":{\"ref\":{\"installation\":\"Fdqu1\",\"execution\":\"`M`3KxR\",\"incarnation\":116092167},\"transport\":\"pty\",\"lifetime\":\"command\",\"purpose\":\"internal\",\"phase\":\"stopping\",\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"r]J= \"},\"streams\":{\"stdout\":\"error\",\"stderr\":\"eof\",\"pty\":\"open\"},\"cleanup\":\"residual\",\"record\":\"available\",\"unacquired\":\"=MjYt &\"},\"deadline\":{\"execution\":{\"installation\":\"/=\",\"execution\":\"%h;YiYxr!6td\",\"incarnation\":958948026},\"revision\":1981071598,\"executionMs\":717032555,\"ceilingMs\":2147483628,\"origin\":\"caller\",\"foregroundMs\":173014469,\"armed\":\"native-acquired\",\"elapsedMs\":7,\"expiresAt\":-146299686}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":150,\"body\":{\"_tag\":\"Revise\",\"outcome\":{\"_tag\":\"Ended\",\"operation\":{\"installation\":\"x<\",\"operation\":\"=n#v\"},\"state\":{\"ref\":{\"installation\":\"S,wyUe\",\"execution\":\"<mGBywDO.l;k\",\"incarnation\":21},\"transport\":\"pty\",\"lifetime\":\"call\",\"purpose\":\"command\",\"phase\":\"running\",\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"\\\">7+uM,\"},\"streams\":{\"stdout\":\"eof\",\"stderr\":\"eof\",\"pty\":\"eof\"},\"cleanup\":\"complete\",\"record\":\"unavailable\",\"unacquired\":\"\"},\"decision\":{\"_tag\":\"Cancelled\",\"operation\":{\"installation\":\"OEA$yUE9\",\"operation\":\"7qe\"},\"execution\":{\"installation\":\"!_\",\"execution\":\"P\",\"incarnation\":2147483630},\"sequence\":1218251724,\"cause\":\"caller-lost\",\"trigger\":\"a,ii\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":151,\"body\":{\"_tag\":\"Revise\",\"outcome\":{\"_tag\":\"Stale\",\"operation\":{\"installation\":\"NLpz5/\",\"operation\":\"\\\"`gu\"},\"deadline\":{\"execution\":{\"installation\":\"p\\\\q&4\",\"execution\":\"+OjJ U%N\",\"incarnation\":1051193894},\"revision\":7,\"executionMs\":8,\"ceilingMs\":29,\"origin\":\"default\",\"foregroundMs\":2147483634,\"armed\":\"native-acquired\",\"elapsedMs\":14,\"expiresAt\":4}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":152,\"body\":{\"_tag\":\"Revise\",\"outcome\":{\"_tag\":\"Ended\",\"operation\":{\"installation\":\"!%}?C\",\"operation\":\"apply\"},\"state\":{\"ref\":{\"installation\":\"&$'\",\"execution\":\";wLYr]a\",\"incarnation\":2},\"transport\":\"pty\",\"lifetime\":\"call\",\"purpose\":\"command\",\"phase\":\"running\",\"nativeExit\":{\"_tag\":\"Code\",\"code\":14},\"streams\":{\"stdout\":\"open\",\"stderr\":\"error\",\"pty\":\"eof\"},\"cleanup\":\"complete\",\"record\":\"unavailable\",\"unacquired\":\"\"},\"decision\":{\"_tag\":\"Completed\",\"operation\":{\"installation\":\"A\",\"operation\":\"Ft=u'*kg[=`\"},\"execution\":{\"installation\":\"Y<`6p!U\",\"execution\":\":m<3WU}|q\",\"incarnation\":19},\"sequence\":2147483639}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":153,\"body\":{\"_tag\":\"Revise\",\"outcome\":{\"_tag\":\"Refused\",\"operation\":{\"installation\":\"M\\\"|\",\"operation\":\"#lleruenamee\"},\"reason\":\"above-ceiling\",\"detail\":\"y]\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":154,\"body\":{\"_tag\":\"Commands\",\"inventory\":{\"_tag\":\"Page\",\"page\":{\"commands\":[],\"after\":{\"admittedAtMs\":634609904,\"execution\":\"~%\",\"filters\":\"/5rwG7\\\\\"},\"revision\":2147483627,\"memory\":{\"granted\":{\"share\":0.0005977532127872109,\"machineBytes\":2147483623,\"grantBytes\":955601944},\"reserved\":24,\"retained\":2147483625,\"executions\":98662706,\"ceiling\":2147483628},\"unmeasured\":[{\"region\":\"2UVc}lrTs\\\"R\",\"detail\":\"\"},{\"region\":\"_t\",\"detail\":\"L('Elv R\"},{\"region\":\"!U0I\",\"detail\":\")zBHOvx\"},{\"region\":\"A]\",\"detail\":\"S@{D8\"},{\"region\":\"M(3c]M+g\",\"detail\":\"!oE)\"},{\"region\":\"8AY8k&\",\"detail\":\"v$_4Ck\"},{\"region\":\"#Dr\",\"detail\":\"/UI'(FI'4\"},{\"region\":\"C\",\"detail\":\"V0fB\"},{\"region\":\"rys\",\"detail\":\"&u\"}]}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":155,\"body\":{\"_tag\":\"Commands\",\"inventory\":{\"_tag\":\"Refused\",\"reason\":\"filters-changed\",\"detail\":\"%,Vs\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":156,\"body\":{\"_tag\":\"CommandsAt\",\"batch\":{\"commands\":[],\"revision\":1065697016,\"unmeasured\":[{\"region\":\"ey\",\"detail\":\"6D51\"},{\"region\":\"-iteYHH+BP\",\"detail\":\"w-&s#L\"},{\"region\":\".&P.\",\"detail\":\"HYB=_.)an%\"},{\"region\":\"e\",\"detail\":\"{{k$\"},{\"region\":\"Vs~uRGSj\",\"detail\":\"!6my(eO5\"},{\"region\":\"X\",\"detail\":\"CanjXca\"},{\"region\":\"u~DRHc/@/\",\"detail\":\"A\"},{\"region\":\"!B'mLDa18=\\\\Z\",\"detail\":\".n6,7*\"},{\"region\":\"(b.Ah\",\"detail\":\"nkxqu\"}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":157,\"body\":{\"_tag\":\"Operation\",\"answer\":{\"_tag\":\"Uncertain\",\"effect\":{\"_tag\":\"StoreFailed\",\"operation\":{\"installation\":\"dA_7ae_\",\"operation\":\"}\"},\"execution\":{\"installation\":\";pw5T`\",\"execution\":\"_\",\"incarnation\":1731212419},\"phase\":\"queued\",\"cleanup\":\"none\",\"reason\":\"Pw%\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":158,\"body\":{\"_tag\":\"Operation\",\"answer\":{\"_tag\":\"Accepted\",\"operation\":{\"installation\":\"NLpz5/\",\"operation\":\"\\\"`gu\"},\"execution\":{\"installation\":\"&+&UNwq\\\"&p%w\",\"execution\":\"#f \",\"incarnation\":2147483617}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":159,\"body\":{\"_tag\":\"Operation\",\"answer\":{\"_tag\":\"Refused\",\"operation\":{\"installation\":\"Q[q\",\"operation\":\"bind\"},\"refusal\":{\"_tag\":\"OperationConflict\",\"reason\":\"\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":160,\"body\":{\"_tag\":\"Call\",\"answer\":{\"_tag\":\"Settled\",\"result\":{\"_tag\":\"Decided\",\"decision\":{\"_tag\":\"Cancelled\",\"operation\":{\"installation\":\"le\",\"operation\":\"AaL\"},\"execution\":{\"installation\":\"Q\",\"execution\":\"4^]c'EUnQ$\",\"incarnation\":2147483622},\"sequence\":1474330159,\"cause\":\"scope-closed\",\"trigger\":\"K&XNYi4)=!x6\"},\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"M\"},\"sources\":{\"stdout\":{\"completed\":false,\"offset\":\"0\"},\"stderr\":{\"completed\":true,\"offset\":\"0\"}},\"cleanup\":\"unverifiable\",\"retention\":\"lost\",\"cost\":{\"_tag\":\"Measured\",\"cpuMicros\":582113457,\"peakRssBytes\":360414835}}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":161,\"body\":{\"_tag\":\"Call\",\"answer\":{\"_tag\":\"Settled\",\"result\":{\"_tag\":\"Unavailable\",\"operation\":{\"installation\":\"p~=EY<\",\"operation\":\"k\"},\"execution\":{\"installation\":\"5s%- (<vl\",\"execution\":\"wvalueO\",\"incarnation\":2147483632},\"lastKnown\":{\"_tag\":\"Cancelled\",\"operation\":{\"installation\":\"\\\\t!zI 6{~#\",\"operation\":\"a\"},\"execution\":{\"installation\":\"$I^S^4?K \",\"execution\":\"__proto__\",\"incarnation\":2147483643},\"sequence\":18,\"cause\":\"run-abort\",\"trigger\":\"[^(L>*-+*Lj\"},\"reason\":\"[\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":162,\"body\":{\"_tag\":\"Call\",\"answer\":{\"_tag\":\"Pending\",\"operation\":{\"installation\":\"me\",\"operation\":\"#n;+\\\"uJXTZL#\"},\"execution\":{\"installation\":\"t8j*3SBng_Vb\",\"execution\":\"qBA~d|1 o\",\"incarnation\":1370475641}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":163,\"body\":{\"_tag\":\"Call\",\"answer\":{\"_tag\":\"Settled\",\"result\":{\"_tag\":\"Decided\",\"decision\":{\"_tag\":\"Completed\",\"operation\":{\"installation\":\"o%[QfcY_=\",\"operation\":\"uM`}?-\\\"hmEe^\"},\"execution\":{\"installation\":\" %k\",\"execution\":\"ib[#uppDNAh\",\"incarnation\":391961115},\"sequence\":703435},\"nativeExit\":{\"_tag\":\"Code\",\"code\":-1735644312},\"sources\":{\"stdout\":{\"completed\":true,\"offset\":\"921894839\"},\"stderr\":{\"completed\":false,\"offset\":\"85\"}},\"cleanup\":\"residual\",\"retention\":\"lost\",\"cost\":{\"_tag\":\"Unmeasured\",\"reason\":\"unsupported\",\"detail\":\"*\"}}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":164,\"body\":{\"_tag\":\"Start\",\"outcome\":{\"_tag\":\"Started\",\"operation\":{\"installation\":\"kCF\",\"operation\":\"7Cy\"},\"execution\":{\"installation\":\"c?KLbDbqXGHW\",\"execution\":\"\\\\`9axQ<AA\",\"incarnation\":1628139372},\"state\":{\"ref\":{\"installation\":\"<s^E\",\"execution\":\"{\",\"incarnation\":507417485},\"transport\":\"pipes\",\"lifetime\":\"call\",\"purpose\":\"internal\",\"phase\":\"starting\",\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"0\"},\"streams\":{\"stdout\":\"error\",\"stderr\":\"eof\",\"pty\":\"eof\"},\"cleanup\":\"residual\",\"record\":\"unavailable\",\"unacquired\":\"1r_{w\"},\"native\":{\"pid\":385053195,\"terminal\":\"key\"},\"deadline\":{\"execution\":{\"installation\":\":W<S\",\"execution\":\"name\",\"incarnation\":974966050},\"timeoutMs\":676590593,\"start\":\"native-acquired\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":165,\"body\":{\"_tag\":\"Start\",\"outcome\":{\"_tag\":\"Uncertain\",\"effect\":{\"_tag\":\"StoreFailed\",\"operation\":{\"installation\":\"0zCI^)!5FjC\",\"operation\":\"FlJGSg\\\\wQ~2P\"},\"execution\":{\"installation\":\"&Z\",\"execution\":\"{a\",\"incarnation\":2147483624},\"phase\":\"queued\",\"cleanup\":\"unknown\",\"reason\":\"key\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":166,\"body\":{\"_tag\":\"Start\",\"outcome\":{\"_tag\":\"Refused\",\"operation\":{\"installation\":\"me\",\"operation\":\"#n;+\\\"uJXTZL#\"},\"refusal\":{\"_tag\":\"CapacityExceeded\",\"reason\":\"t8j*\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":167,\"body\":{\"_tag\":\"Start\",\"outcome\":{\"_tag\":\"Accepted\",\"operation\":{\"installation\":\"$\\\\L7u#@z?\",\"operation\":\"HhOg}XnOFMZZ\"},\"execution\":{\"installation\":\";!Po}q]=Gd\",\"execution\":\"~6scS:IuRtd\",\"incarnation\":1348348747},\"state\":{\"ref\":{\"installation\":\"o=;-UR0s\",\"execution\":\"$}l, %%lVz\",\"incarnation\":2147483622},\"transport\":\"pipes\",\"lifetime\":\"call\",\"purpose\":\"internal\",\"phase\":\"running\",\"nativeExit\":{\"_tag\":\"Code\",\"code\":30595650},\"streams\":{\"stdout\":\"eof\",\"stderr\":\"open\",\"pty\":\"eof\"},\"cleanup\":\"residual\",\"record\":\"gapped\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":168,\"body\":{\"_tag\":\"CancelStart\",\"outcome\":{\"_tag\":\"Uncertain\",\"effect\":{\"_tag\":\"StoreFailed\",\"operation\":{\"installation\":\"0zCI^)!5FjC\",\"operation\":\"FlJGSg\\\\wQ~2P\"},\"execution\":{\"installation\":\"&Z\",\"execution\":\"{a\",\"incarnation\":2147483624},\"phase\":\"queued\",\"cleanup\":\"unknown\",\"reason\":\"key\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":169,\"body\":{\"_tag\":\"CancelStart\",\"outcome\":{\"_tag\":\"Joined\",\"operation\":{\"installation\":\"Q[q\",\"operation\":\"bind\"},\"execution\":{\"installation\":\"ref\",\"execution\":\"1ttl\",\"incarnation\":1361539590}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":170,\"body\":{\"_tag\":\"CancelStart\",\"outcome\":{\"_tag\":\"Refused\",\"operation\":{\"installation\":\"me\",\"operation\":\"#n;+\\\"uJXTZL#\"},\"refusal\":{\"_tag\":\"CapacityExceeded\",\"reason\":\"t8j*\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":171,\"body\":{\"_tag\":\"Read\",\"range\":{\"cursor\":{\"ref\":{\"installation\":\".A%,V\",\"execution\":\"}?C\",\"incarnation\":21},\"stream\":\"stderr\",\"offset\":\"0\"},\"next\":\"0\",\"retainedFrom\":\"0\",\"durableThrough\":\"0\",\"gap\":false,\"grid\":{\"rows\":1914891758,\"columns\":2025530858}},\"bytes\":403769234,\"modes\":{\"_tag\":\"Available\",\"revision\":176021758,\"profile\":\"xterm-256color-unicode11\",\"encoding\":\"utf-8\",\"terminal\":\"xterm-256color\",\"unicodeVersion\":\"11\",\"applicationCursor\":true,\"applicationKeypad\":false,\"bracketedPaste\":false,\"sendFocus\":true,\"mouseTracking\":\"none\",\"mouseEncoding\":\"sgr\",\"alternateScreen\":false,\"kittyKeyboardFlags\":29}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":172,\"body\":{\"_tag\":\"Subscribed\",\"subscription\":97511956}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":173,\"body\":{\"_tag\":\"Screen\",\"answer\":{\"_tag\":\"ScreenTextFrame\",\"provenance\":{\"ref\":{\"installation\":\"me\",\"execution\":\"#n;+\\\"uJXTZL#\",\"incarnation\":1434310411},\"revision\":1796753131,\"parsedThrough\":\"29\"},\"buffer\":\"normal\",\"geometry\":{\"rows\":1078257347,\"columns\":28,\"firstLine\":1594540702,\"viewportLine\":68158949},\"rows\":[{\"line\":27,\"wrapped\":true,\"text\":\"(+;\"},{\"line\":1634802612,\"wrapped\":true,\"text\":\"arg\"}],\"cursor\":{\"line\":1930566432,\"column\":190487042},\"input\":{\"_tag\":\"Available\",\"revision\":497654488,\"profile\":\"xterm-256color-unicode11\",\"encoding\":\"utf-8\",\"terminal\":\"xterm-256color\",\"unicodeVersion\":\"11\",\"applicationCursor\":false,\"applicationKeypad\":false,\"bracketedPaste\":false,\"sendFocus\":false,\"mouseTracking\":\"vt200\",\"mouseEncoding\":\"default\",\"alternateScreen\":true,\"kittyKeyboardFlags\":789818715},\"title\":\"l\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":174,\"body\":{\"_tag\":\"Screen\",\"answer\":{\"_tag\":\"ScreenFrame\",\"provenance\":{\"ref\":{\"installation\":\"&%{(P\",\"execution\":\"}\",\"incarnation\":2144030367},\"revision\":27,\"parsedThrough\":\"0\"},\"buffer\":\"normal\",\"geometry\":{\"rows\":1734237628,\"columns\":18,\"firstLine\":2147483622,\"viewportLine\":524122126},\"rows\":[],\"cursor\":{\"line\":2147483632,\"column\":1937678080},\"appearance\":{\"colors\":{\"palette\":[14,8131422,20,5039873,8,16777200,7640880,7,8130775,13,4092863,3437229,12,16777208,16,5768681,6060218,16777197,9570297,3254401,5,20,16777197,7,4636441,16777204,16736696,11271872,19,16777215,10014998,15,10564415,15703394,16,16777209,3261657,6057516,8,5752213,18,12746386,15911941,7392964,16777211,13962063,7127767,16299340,1767713,10588889,13071289,3578839,1510162,13298693,18,3640888,9062867,13,17,991082,1614559,9558648,11170314,4711978,7405229,13283159,14563547,14913665,20,16777194,3340837,15,15571542,1553426,4,8091562,8400232,4227180,12583060,16777198,1064756,3062996,12,14122920,16777197,6665901,12442071,14616819,16064664,10670819,2,6508606,10602422,0,3183690,7,15203337,1,16,9560297,16684178,13619063,6746740,1572382,16777200,16777214,16777212,1,2071553,20,6779937,3000682,16777208,4,7060976,11,3,23,6699173,10642582,1252569,16777196,16626548,13,12159384,10348976,16777213,13000906,11,1111923,5549944,3151932,1763715,14688019,6247377,16777193,11405901,1096547,8433895,1275468,16,10615624,1491893,623370,16777211,13974864,12258654,13715787,5048037,5,5902231,13830885,15097617,8962101,6811329,5695895,9457741,10,12,16777209,7,16777202,17,16777212,2751522,8821850,16777210,9690562,22,12973681,16777196,14571195,2286365,16777215,10161189,6695774,2110041,14482364,73809,15664077,1447630,11274557,1380204,9825468,7,2222842,15,16667495,16777201,16777196,15,21,1288129,5,18,14010129,4933207,2,16777207,21,7805505,13211517,9616646,8114239,18,23,544529,16777213,17,13,16777193,16777215,6116694,6814391,8318970,2446680,16,3242934,15829296,9,10410055,12060194,2434387,14,10227036,10415351,4524754,16777202,14003239,4991339,5051724,9944981,1330711,23,19,13443341,13527168,16777207,7479876,7673662,10965264,2081035,4,7350735,3307513,14001629,16777200,12591889,307255,9638467,17,1430277,7880869,16,6285781,0],\"foreground\":10856085,\"background\":16777211,\"cursor\":13276040},\"cursor\":{\"visible\":false,\"style\":\"underline\",\"blink\":true},\"title\":\"35MGqtL7\"},\"input\":{\"_tag\":\"Unavailable\",\"revision\":2147483639,\"reason\":\"K{k\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":175,\"body\":{\"_tag\":\"Screen\",\"answer\":{\"_tag\":\"ScreenUnavailable\",\"ref\":{\"installation\":\"r\",\"execution\":\"AaL\",\"incarnation\":1409861442},\"parsedThrough\":\"0\",\"reason\":\"closed\",\"ending\":\"closed\",\"detail\":\"4^]c\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":176,\"body\":{\"_tag\":\"Input\",\"outcome\":{\"_tag\":\"InputAdmitted\",\"receipt\":{\"execution\":{\"installation\":\"M\\\"|\",\"execution\":\"#lleruenamee\",\"incarnation\":22},\"sequence\":24,\"cause\":\"reply\",\"bytes\":1254515626,\"acceptedThrough\":\"0\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":177,\"body\":{\"_tag\":\"Input\",\"outcome\":{\"_tag\":\"InputBackpressure\",\"frontier\":{\"sequence\":1761512959,\"acceptedThrough\":\"0\",\"pendingBytes\":162564926},\"pendingBytes\":1731611511,\"limit\":306593777}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":178,\"body\":{\"_tag\":\"Input\",\"outcome\":{\"_tag\":\"InputUnsupported\",\"act\":\"resize\",\"reason\":\"no-character\",\"detail\":\"=Se\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":179,\"body\":{\"_tag\":\"Input\",\"outcome\":{\"_tag\":\"InputReceiptExpired\",\"sequence\":3,\"retainedFrom\":1760965373}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":180,\"body\":{\"_tag\":\"Signal\",\"outcome\":{\"_tag\":\"SignalUnavailable\",\"execution\":{\"installation\":\"!%}?C\",\"execution\":\"apply\",\"incarnation\":24},\"signal\":\"V(zI6\",\"reason\":\"unsupported\",\"detail\":\"-;wLYr]a1\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":181,\"body\":{\"_tag\":\"Processes\",\"report\":{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"e!MK+3e\"},\"network\":{\"_tag\":\"Foreign\",\"kind\":\"remote\",\"id\":\"uS:H!\\\"!\"}},\"source\":{\"adapter\":\"#!\",\"probe\":\"'T>=f,7NXa\"},\"observedAt\":23,\"completeness\":\"partial\",\"unmeasured\":[{\"region\":\"!`NT^PK?\",\"reason\":\"unknown\",\"detail\":\"<\\\\CV@OKV>\"},{\"region\":\"nox3\",\"reason\":\"timeout\",\"detail\":\"5/xg5{c5O5\"}],\"revision\":2147483621,\"subject\":{\"_tag\":\"Execution\",\"execution\":{\"installation\":\"z2KvG)Gc5p\",\"execution\":\"m\",\"incarnation\":921501370}},\"processes\":[{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"b'k!\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"$xW\"}},\"source\":{\"adapter\":\"=U`gc{a6Y\",\"probe\":\"$w#LYDe\"},\"observedAt\":1476164959,\"completeness\":\"unavailable\",\"unmeasured\":[{\"region\":\"RdpK%\",\"reason\":\"timeout\",\"detail\":\"hh0`u!V.a:\"},{\"region\":\"5lwr\",\"reason\":\"unknown\",\"detail\":\"'<-n\"},{\"region\":\"@/cMFWq]4nmM\",\"reason\":\"timeout\",\"detail\":\"\"},{\"region\":\";l_%gG==\",\"reason\":\"timeout\",\"detail\":\"BQ=!\"},{\"region\":\"FV[~:(<>yMw\",\"reason\":\"timeout\",\"detail\":\"[muVT\"},{\"region\":\"=XJQ;#Mcbl}!\",\"reason\":\"unsupported\",\"detail\":\"F&*;Zv@4E\"},{\"region\":\"xx.~;emBK<\",\"reason\":\"refused\",\"detail\":\"l&XFL\\\\wbXd\"}],\"identity\":{\"pid\":1112847104,\"birth\":\"751:978018\"},\"parent\":1706217501,\"work\":1187682616,\"terminal\":\"i?t\",\"state\":\"y\",\"command\":\"Z[#%Wk\",\"association\":{\"execution\":{\"installation\":\"U>i!u7*\",\"execution\":\"5V/vr62fdu?(\",\"incarnation\":1787408539},\"relation\":\"leader\",\"identity\":\"unknown\"}},{\"scope\":{\"host\":{\"_tag\":\"Foreign\",\"kind\":\"remote\",\"id\":\"#Obc\"},\"network\":{\"_tag\":\"Foreign\",\"kind\":\"guest\",\"id\":\"b[h$zFkqL2;\"}},\"source\":{\"adapter\":\"$\",\"probe\":\"P])s(\"},\"observedAt\":28,\"completeness\":\"complete\",\"unmeasured\":[{\"region\":\"BFhcv8=\",\"reason\":\"timeout\",\"detail\":\"_{D\"},{\"region\":\"gV5D\",\"reason\":\"refused\",\"detail\":\"z{c>V\\\"j\"},{\"region\":\"@hF<pH23g\",\"reason\":\"truncated\",\"detail\":\"5e2\"}],\"identity\":{\"pid\":1691007283,\"birth\":\"0:23000\"},\"parent\":545926697,\"work\":11,\"terminal\":\"_\",\"command\":\"bT{_*&\",\"association\":{\"execution\":{\"installation\":\"]<71\",\"execution\":\"K&)3Zs$ph-\",\"incarnation\":1},\"relation\":\"terminal\",\"identity\":\"different\"}}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":182,\"body\":{\"_tag\":\"Processes\",\"report\":{\"scope\":{\"host\":{\"_tag\":\"Foreign\",\"kind\":\"remote\",\"id\":\"n@Fh<\\\"UQS96?\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"}l0i&j\\\"vfh\"}},\"source\":{\"adapter\":\"zASk\",\"probe\":\"2'!,mewt=\"},\"observedAt\":1422554949,\"completeness\":\"unavailable\",\"unmeasured\":[{\"region\":\"vg>pmu\",\"reason\":\"truncated\",\"detail\":\"@\"},{\"region\":\"JZGx?||]\",\"reason\":\"refused\",\"detail\":\"&1\"}],\"revision\":4,\"subject\":{\"_tag\":\"Namespace\"},\"processes\":[]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":183,\"body\":{\"_tag\":\"Listeners\",\"report\":{\"scope\":{\"host\":{\"_tag\":\"Foreign\",\"kind\":\"guest\",\"id\":\"k^\\\"fLV\"},\"network\":{\"_tag\":\"Foreign\",\"kind\":\"remote\",\"id\":\"P\"}},\"source\":{\"adapter\":\"P:8\",\"probe\":\"jx-~DyZJM(\"},\"observedAt\":129505441,\"completeness\":\"complete\",\"unmeasured\":[{\"region\":\"X)O\",\"reason\":\"truncated\",\"detail\":\"/^S0VM\\\"[\"}],\"revision\":996780184,\"subject\":{\"_tag\":\"Execution\",\"execution\":{\"installation\":\"4m<Lj\",\"execution\":\"pyM\",\"incarnation\":461275669}},\"listeners\":[{\"scope\":{\"host\":{\"_tag\":\"Foreign\",\"kind\":\"guest\",\"id\":\"q.\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"`UpEcw\"}},\"source\":{\"adapter\":\"A|eY/%Ly1qqN\",\"probe\":\"81Tplm+fGb5T\"},\"observedAt\":156681028,\"completeness\":\"complete\",\"unmeasured\":[{\"region\":\"M}'(\",\"reason\":\"unsupported\",\"detail\":\"Jrzuy1`\"}],\"protocol\":\"tcp\",\"address\":\"-nbS:\",\"port\":32260,\"holder\":{\"pid\":836970340,\"birth\":\"507:784178\"},\"association\":{\"execution\":{\"installation\":\">DAZz\",\"execution\":\"b\",\"incarnation\":864718757},\"relation\":\"ancestry\",\"identity\":\"unknown\"},\"hint\":{\"url\":\"|!@q!\",\"source\":\"output\"}},{\"scope\":{\"host\":{\"_tag\":\"Foreign\",\"kind\":\"remote\",\"id\":\"T4$LJ;l\"},\"network\":{\"_tag\":\"Foreign\",\"kind\":\"guest\",\"id\":\"znyD\\\"&KgcmU\"}},\"source\":{\"adapter\":\"]/nxq2\",\"probe\":\"X*`X\"},\"observedAt\":1739694485,\"completeness\":\"unavailable\",\"unmeasured\":[{\"region\":\"fZ^YXh1k\",\"reason\":\"timeout\",\"detail\":\"5#Dtl\\\\)XJ\"},{\"region\":\"oIbuy{q^A\\\\y\",\"reason\":\"truncated\",\"detail\":\"lr9/&;#-\"}],\"protocol\":\"tcp\",\"address\":\"B&'~K6Rf\",\"port\":2,\"holder\":{\"pid\":10,\"birth\":\"621:270529\"},\"association\":{\"execution\":{\"installation\":\"o4R0U5(@B\",\"execution\":\"{__proto__\",\"incarnation\":2147483637},\"relation\":\"terminal\",\"identity\":\"different\"}},{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"`nv\\\\l\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"f@l\\\\U>bRDp^}\"}},\"source\":{\"adapter\":\"bq-x(8\",\"probe\":\"\\\\PF@Q,?\"},\"observedAt\":1492413210,\"completeness\":\"complete\",\"unmeasured\":[{\"region\":\"qnSOx\",\"reason\":\"failed\",\"detail\":\"Jn\\\\8Q07\"},{\"region\":\"qDUXdiM$\",\"reason\":\"failed\",\"detail\":\"B\"},{\"region\":\"A15GQ%Zwb8\",\"reason\":\"unknown\",\"detail\":\"Dby^\\\"zu;\"}],\"protocol\":\"udp\",\"address\":\"zU?)\\\",+w'6\",\"port\":31867,\"holder\":{\"pid\":172033578,\"birth\":\"303719:431000\"},\"hint\":{\"url\":\"w?xWro<d~FT\",\"source\":\"output\"}}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":184,\"body\":{\"_tag\":\"Listeners\",\"report\":{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"8\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"V!\"}},\"source\":{\"adapter\":\"Q\",\"probe\":\"4^]c'EUnQ$\"},\"observedAt\":888308041,\"completeness\":\"unavailable\",\"unmeasured\":[{\"region\":\"mDK&XNYi\",\"reason\":\"unsupported\",\"detail\":\"=!x6z\"},{\"region\":\"T4MD\",\"reason\":\"truncated\",\"detail\":\"-f~~\"},{\"region\":\"R<k]]'\",\"reason\":\"unknown\",\"detail\":\"\"},{\"region\":\" 0\",\"reason\":\"failed\",\"detail\":\"=\"},{\"region\":\"\\\"\",\"reason\":\"unsupported\",\"detail\":\"`AT\"}],\"revision\":15,\"subject\":{\"_tag\":\"Namespace\"},\"listeners\":[{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"constructor\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"Lpj^3U\"}},\"source\":{\"adapter\":\"x%7;\",\"probe\":\"[\"},\"observedAt\":23,\"completeness\":\"unavailable\",\"unmeasured\":[],\"protocol\":\"udp\",\"address\":\"%2\\\\kgi|$>z|\",\"port\":21640,\"holder\":{\"pid\":7,\"birth\":\"292:257069\"},\"association\":{\"execution\":{\"installation\":\"MA5}b=\",\"execution\":\"T#x#\",\"incarnation\":9},\"relation\":\"work\",\"identity\":\"same\"},\"hint\":{\"url\":\"7\",\"source\":\"output\"}},{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"WE,5`:jG\"},\"network\":{\"_tag\":\"Foreign\",\"kind\":\"remote\",\"id\":\"key\"}},\"source\":{\"adapter\":\"buO1J~ \",\"probe\":\"z\"},\"observedAt\":5,\"completeness\":\"partial\",\"unmeasured\":[{\"region\":\"%yIsEnu__def\",\"reason\":\"unsupported\",\"detail\":\"\"},{\"region\":\"##~9\",\"reason\":\"unsupported\",\"detail\":\"5\"},{\"region\":\"5&224%9\\\"\\\"ay\",\"reason\":\"truncated\",\"detail\":\"\\\"\"},{\"region\":\"3gH+3o: \\\\\",\"reason\":\"timeout\",\"detail\":\"39`[/\\\"$k3\"},{\"region\":\"N7c)~/9a&1t(\",\"reason\":\"unknown\",\"detail\":\"$sK%\"}],\"protocol\":\"tcp\",\"address\":\"O$!}asOwnP\",\"port\":60014,\"holder\":{\"pid\":6,\"birth\":\"0:7\"},\"association\":{\"execution\":{\"installation\":\"}$=8'bFRCML\",\"execution\":\"/4Qm,qquw\\\"\",\"incarnation\":2147483632},\"relation\":\"leader\",\"identity\":\"unknown\"},\"hint\":{\"url\":\"ref\",\"source\":\"output\"}}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":185,\"body\":{\"_tag\":\"ListenerInventory\",\"report\":{\"scope\":{\"host\":{\"_tag\":\"Foreign\",\"kind\":\"guest\",\"id\":\"e!MK+3e\"},\"network\":{\"_tag\":\"Foreign\",\"kind\":\"remote\",\"id\":\"uS:H!\\\"!\"}},\"source\":{\"adapter\":\"#!\",\"probe\":\"'T>=f,7NXa\"},\"observedAt\":23,\"completeness\":\"partial\",\"unmeasured\":[{\"region\":\"!`NT^PK?\",\"reason\":\"unknown\",\"detail\":\"<\\\\CV@OKV>\"},{\"region\":\"nox3\",\"reason\":\"timeout\",\"detail\":\"5/xg5{c5O5\"}],\"revision\":2147483621,\"subject\":{\"_tag\":\"Execution\",\"execution\":{\"installation\":\"z2KvG)Gc5p\",\"execution\":\"m\",\"incarnation\":921501370}},\"listeners\":[{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"b'k!\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"$xW\"}},\"source\":{\"adapter\":\"=U`gc{a6Y\",\"probe\":\"$w#LYDe\"},\"observedAt\":1476164959,\"completeness\":\"unavailable\",\"unmeasured\":[{\"region\":\"RdpK%\",\"reason\":\"timeout\",\"detail\":\"hh0`u!V.a:\"},{\"region\":\"5lwr\",\"reason\":\"unknown\",\"detail\":\"'<-n\"},{\"region\":\"@/cMFWq]4nmM\",\"reason\":\"timeout\",\"detail\":\"\"},{\"region\":\";l_%gG==\",\"reason\":\"timeout\",\"detail\":\"BQ=!\"},{\"region\":\"FV[~:(<>yMw\",\"reason\":\"timeout\",\"detail\":\"[muVT\"},{\"region\":\"=XJQ;#Mcbl}!\",\"reason\":\"unsupported\",\"detail\":\"F&*;Zv@4E\"},{\"region\":\"xx.~;emBK<\",\"reason\":\"refused\",\"detail\":\"l&XFL\\\\wbXd\"}],\"protocol\":\"udp\",\"address\":\"L_{L)=u(\",\"port\":31268,\"holder\":{\"pid\":1304555743},\"association\":{\"execution\":{\"installation\":\"i__d__prot_\",\"execution\":\"uZ-\",\"incarnation\":24130897},\"relation\":\"leader\",\"identity\":\"same\"},\"hint\":{\"url\":\"9kl-~U>i!u7\",\"source\":\"output\"}},{\"scope\":{\"host\":{\"_tag\":\"Foreign\",\"kind\":\"remote\",\"id\":\"v\"},\"network\":{\"_tag\":\"Foreign\",\"kind\":\"guest\",\"id\":\"[\\\"i%XOcm}[$F\"}},\"source\":{\"adapter\":\";_\",\"probe\":\"Q\"},\"observedAt\":17,\"completeness\":\"complete\",\"unmeasured\":[{\"region\":\"-mvO\",\"reason\":\"unsupported\",\"detail\":\"\"},{\"region\":\"cv\",\"reason\":\"unknown\",\"detail\":\"x \"}],\"protocol\":\"tcp\",\"address\":\"`gV5Dx~\",\"port\":43342,\"holder\":{\"pid\":12,\"birth\":\"1639:77588\"},\"hint\":{\"url\":\"r\\\"`\",\"source\":\"output\"}}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":186,\"body\":{\"_tag\":\"ListenerInventory\",\"report\":{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"=<6\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"valueOf\"}},\"source\":{\"adapter\":\"L\",\"probe\":\"y\\\":jI,\\\\+Q^\"},\"observedAt\":1147866065,\"completeness\":\"partial\",\"unmeasured\":[{\"region\":\"lzbLnb\",\"reason\":\"unsupported\",\"detail\":\")wp[.tC\"},{\"region\":\"~yM@h#Mx{&,\",\"reason\":\"timeout\",\"detail\":\"62!\"},{\"region\":\":arJFcztJ.g7\",\"reason\":\"refused\",\"detail\":\"ho+;Lv^&\"},{\"region\":\"$eDX|8\",\"reason\":\"refused\",\"detail\":\"OqkZxs7Zd|\"},{\"region\":\"*>\",\"reason\":\"failed\",\"detail\":\"\"},{\"region\":\"2s\",\"reason\":\"unsupported\",\"detail\":\"-\"},{\"region\":\"m?4)#QU|Xw=o\",\"reason\":\"unsupported\",\"detail\":\"W]I\"},{\"region\":\"]Ak!w):8A@Ch\",\"reason\":\"truncated\",\"detail\":\"Ug,|H\"},{\"region\":\"|LKEf8$MzgNn\",\"reason\":\"truncated\",\"detail\":\"(sUHWh\"}],\"revision\":0,\"subject\":{\"_tag\":\"Namespace\"},\"listeners\":[]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":187,\"body\":{\"_tag\":\"Custody\",\"outcome\":{\"_tag\":\"Standing\",\"receipt\":{\"operation\":{\"installation\":\"M\\\"|\",\"operation\":\"#lleruenamee\"},\"execution\":{\"installation\":\"gN=8yh]\",\"execution\":\"e\",\"incarnation\":23},\"custody\":{\"revision\":1836984997,\"holder\":\"zN|\",\"origin\":\"FKH+=?$\",\"target\":{\"environment\":\" D\",\"namespace\":\"d,}\",\"cwd\":\"&x 5\",\"dependencies\":[\"hXDrs6R>u$+\",\"s4Ltqh~CZz`\",\")fcXlOgxd\",\"3wUKf[Qx\",\"\\\\%ck@Kn&|I\",\"2u.<~k X|coh\"]}},\"frontier\":{\"sequence\":2098422114,\"acceptedThrough\":\"0\",\"pendingBytes\":2147483623}},\"custody\":{\"revision\":450523533,\"holder\":\"ca\",\"origin\":\"call\",\"target\":{\"environment\":\"?*{;EGD;)@dt\",\"namespace\":\".F\",\"cwd\":\"}\",\"dependencies\":[]}}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":188,\"body\":{\"_tag\":\"Custody\",\"outcome\":{\"_tag\":\"Uncertain\",\"effect\":{\"_tag\":\"StoreFailed\",\"operation\":{\"installation\":\"0zCI^)!5FjC\",\"operation\":\"FlJGSg\\\\wQ~2P\"},\"execution\":{\"installation\":\"&Z\",\"execution\":\"{a\",\"incarnation\":2147483624},\"phase\":\"queued\",\"cleanup\":\"unknown\",\"reason\":\"key\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":189,\"body\":{\"_tag\":\"Custody\",\"outcome\":{\"_tag\":\"Refused\",\"operation\":{\"installation\":\"me\",\"operation\":\"#n;+\\\"uJXTZL#\"},\"refusal\":{\"_tag\":\"CapacityExceeded\",\"reason\":\"t8j*\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":190,\"body\":{\"_tag\":\"Custody\",\"outcome\":{\"_tag\":\"RevisionStale\",\"execution\":{\"installation\":\"Q[q\",\"execution\":\"bind\",\"incarnation\":2147483628},\"expected\":2147483639,\"custody\":{\"revision\":51129691,\"holder\":\"a%&!\",\"origin\":\"#Local\",\"target\":{\"environment\":\"&#v__defineS\",\"namespace\":\"jO&Evb?p'Db\",\"cwd\":\"lr<4{[{Tfz,\",\"dependencies\":[\"yG\\\"L<=Ne{(\",\"C\",\"7SZ?4hBct\",\"MI[$z`nv\",\"l\"]}}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":191,\"body\":{\"_tag\":\"Authority\",\"outcome\":{\"_tag\":\"Stale\",\"expected\":9007199254740939,\"standing\":{\"revision\":9007199254740988,\"epoch\":14,\"holder\":{\"connection\":\"#n;+\\\"uJXTZL#\",\"incarnation\":1434310411}}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":192,\"body\":{\"_tag\":\"Authority\",\"outcome\":{\"_tag\":\"Granted\",\"granted\":{\"share\":2.382207389352189e-44,\"machineBytes\":1097293409,\"grantBytes\":9},\"reserved\":12,\"retained\":11,\"over\":416971663}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":193,\"body\":{\"_tag\":\"Authority\",\"outcome\":{\"_tag\":\"Held\",\"custody\":{\"revision\":9007199254740938,\"epoch\":32,\"holder\":{\"connection\":\"l(bX;\",\"incarnation\":24}}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":194,\"body\":{\"_tag\":\"Authority\",\"outcome\":{\"_tag\":\"Refused\",\"refusal\":{\"_tag\":\"IncarnationMismatch\",\"reason\":\"Lpz\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":195,\"body\":{\"_tag\":\"Stop\",\"receipt\":{\"execution\":{\"installation\":\"e\",\"execution\":\"call\",\"incarnation\":2147483634},\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"_\"},\"cost\":{\"_tag\":\"Measured\",\"cpuMicros\":1657570689,\"peakRssBytes\":14},\"coverage\":[\"ancestry\",\"terminal\"],\"relation\":\"leader\",\"confirmed\":[{\"pid\":22,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Code\",\"code\":1866981628},\"step\":\"interrupt\"},{\"pid\":1181587391,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"F!%\"},\"step\":\"terminate\"},{\"pid\":19,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"plna\"}},{\"pid\":2147483639,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Code\",\"code\":25},\"step\":\"interrupt\"},{\"pid\":-10,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"ij*/$xcmD]\"},\"step\":\"interrupt\"}],\"residual\":[{\"kind\":\"record\",\"detail\":\"@\",\"pid\":-9,\"relation\":\"work\"},{\"kind\":\"record\",\"detail\":\"xP)x\",\"pid\":-1024507514,\"relation\":\"terminal\"},{\"kind\":\"process\",\"detail\":\"}c\",\"pid\":-1152007633,\"relation\":\"leader\"}],\"unverifiable\":[{\"kind\":\"process\",\"detail\":\"=D#x$I%R\",\"reason\":\"-`v<hZF2F\"},{\"kind\":\"record\",\"detail\":\"vfe [C3j!O\",\"reason\":\"A\"},{\"kind\":\"record\",\"detail\":\"/3{+{}C9[@\",\"reason\":\"<Oz_r`!qB\"},{\"kind\":\"pty\",\"detail\":\"\",\"reason\":\"tc=K^]\"},{\"kind\":\"pty\",\"detail\":\"^d0}~\",\"reason\":\"fI@\"}],\"streams\":[{\"stream\":\"pty\",\"ending\":\"eof\"},{\"stream\":\"stderr\",\"ending\":\"open\"},{\"stream\":\"pty\",\"ending\":\"open\"},{\"stream\":\"stderr\",\"ending\":\"error\"},{\"stream\":\"stdout\",\"ending\":\"eof\"},{\"stream\":\"pty\",\"ending\":\"error\"},{\"stream\":\"pty\",\"ending\":\"eof\"}],\"cleanup\":\"pending\",\"retention\":\"lost\",\"abandonedOutput\":true,\"unacquired\":\"|i8\",\"operation\":{\"installation\":\"constructor\",\"operation\":\"YTyX\"},\"requested\":\"signal\",\"cause\":\"run-abort\",\"steps\":[\"kill\",\"terminate\"]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":196,\"body\":{\"_tag\":\"Stop\",\"receipt\":{\"execution\":{\"installation\":\"ref\",\"execution\":\"MLe~*Xzz>-U,\",\"incarnation\":2147483620},\"nativeExit\":{\"_tag\":\"Code\",\"code\":-9},\"cost\":{\"_tag\":\"Unmeasured\",\"reason\":\"failed\",\"detail\":\"F,219HB\"},\"coverage\":[\"ancestry\",\"terminal\"],\"relation\":\"covered\",\"confirmed\":[{\"pid\":-31,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Code\",\"code\":19}},{\"pid\":-1563689229,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"g1u3\"},\"step\":\"unsignalled\"},{\"pid\":1855598707,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Code\",\"code\":-104525468}},{\"pid\":-2106540413,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Code\",\"code\":42979616},\"step\":\"hang-up\"},{\"pid\":-15,\"relation\":\"work\",\"exit\":{\"_tag\":\"Code\",\"code\":819780042},\"step\":\"kill\"},{\"pid\":-2147483647,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Code\",\"code\":0},\"step\":\"kill\"},{\"pid\":-2089793072,\"relation\":\"work\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"call\"}},{\"pid\":2147483636,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"ref\"},\"step\":\"kill\"},{\"pid\":-29,\"relation\":\"ancestry\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"d\"},\"step\":\"interrupt\"}],\"residual\":[{\"kind\":\"record\",\"detail\":\"\\\\%ck@K\",\"pid\":-258961931,\"relation\":\"ancestry\"},{\"kind\":\"process\",\"detail\":\"zDo\",\"pid\":-14,\"relation\":\"leader\"}],\"unverifiable\":[{\"kind\":\"process\",\"detail\":\"#Xiu\\\\2nR\",\"reason\":\"Q-m\"},{\"kind\":\"callback\",\"detail\":\"N?\",\"reason\":\"{;EG\"},{\"kind\":\"callback\",\"detail\":\"@dtmgZ2Q.\",\"reason\":\"FH[)'\"},{\"kind\":\"record\",\"detail\":\"[\\\"-3oRe]`#\",\"reason\":\".\"},{\"kind\":\"process\",\"detail\":\"wu|GX*\",\"reason\":\"l[aeG*\"},{\"kind\":\"pty\",\"detail\":\"%0Fc>\",\"reason\":\",(tmPx1/H0\"},{\"kind\":\"process\",\"detail\":\".D,9y\",\"reason\":\",0Dq/a}8Cv\"},{\"kind\":\"record\",\"detail\":\"B8\",\"reason\":\"AZX*\"},{\"kind\":\"process\",\"detail\":\"H\\\"N\",\"reason\":\"\"}],\"streams\":[{\"stream\":\"pty\",\"ending\":\"error\"},{\"stream\":\"stderr\",\"ending\":\"open\"},{\"stream\":\"stdout\",\"ending\":\"open\"},{\"stream\":\"stdout\",\"ending\":\"eof\"},{\"stream\":\"pty\",\"ending\":\"eof\"},{\"stream\":\"stdout\",\"ending\":\"eof\"},{\"stream\":\"stdout\",\"ending\":\"error\"}],\"cleanup\":\"complete\",\"retention\":\"lost\",\"abandonedOutput\":false,\"unacquired\":\"!s$F}i%\",\"operation\":{\"installation\":\"G;^~\",\"operation\":\"key\"},\"requested\":\"destroy\",\"cause\":\"not-started\",\"steps\":[\"kill\",\"interrupt\",\"hang-up\",\"kill\",\"interrupt\",\"hang-up\"]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":197,\"body\":{\"_tag\":\"Retire\",\"outcome\":{\"_tag\":\"Refused\",\"execution\":{\"installation\":\"!%}?C\",\"execution\":\"apply\",\"incarnation\":24},\"reason\":\"cleanup-unproven\",\"detail\":\"'xnamellns\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":198,\"body\":{\"_tag\":\"Quiesce\",\"outcome\":{\"_tag\":\"RestartDeferred\",\"operation\":{\"installation\":\"!%}?C\",\"operation\":\"apply\"},\"ticket\":\"&$'\",\"pending\":[{\"execution\":{\"installation\":\"wLYr]a1(ffE?\",\"execution\":\"A8T`b\",\"incarnation\":1815113657},\"reason\":\"stop-running\"},{\"execution\":{\"installation\":\"mm\",\"execution\":\"e#&#Oi\",\"incarnation\":123889886},\"reason\":\"input-admitted\"},{\"execution\":{\"installation\":\"SWFt=u\",\"execution\":\"*kg[=`#mFY<`\",\"incarnation\":1210429032},\"reason\":\"call-open\"},{\"execution\":{\"installation\":\"E:m<\",\"execution\":\"WU\",\"incarnation\":1490866630},\"reason\":\"stop-running\"},{\"execution\":{\"installation\":\"?u4ri-6G|&\",\"execution\":\"h9\",\"incarnation\":1929884616},\"reason\":\"input-admitted\"},{\"execution\":{\"installation\":\".F~93V2\",\"execution\":\"Bl)y0\",\"incarnation\":313795751},\"reason\":\"start-in-flight\"},{\"execution\":{\"installation\":\".9wz#f:bi\",\"execution\":\"P{9uo\",\"incarnation\":271629020},\"reason\":\"start-in-flight\"},{\"execution\":{\"installation\":\"Y%B~IDh=DY,J\",\"execution\":\"^$#e/_x&Kh:#\",\"incarnation\":3125019},\"reason\":\"start-in-flight\"}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":199,\"body\":{\"_tag\":\"Quiesce\",\"outcome\":{\"_tag\":\"Refused\",\"operation\":{\"installation\":\"r\",\"operation\":\"AaL\"},\"refusal\":{\"_tag\":\"MemoryExhausted\",\"reason\":\"\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":200,\"body\":{\"_tag\":\"Resume\",\"outcome\":{\"_tag\":\"TicketUnknown\",\"ticket\":\"!%}?C\",\"phase\":\"open\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":201,\"body\":{\"_tag\":\"Shutdown\",\"outcome\":{\"_tag\":\"ShutdownIncomplete\",\"operation\":{\"installation\":\"uyV/g'\",\"operation\":\"O3,d6PuGua\"},\"executions\":[{\"execution\":{\"installation\":\"(J6-P{<v:e;J\",\"execution\":\"7P\",\"incarnation\":567610447},\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"H0\"},\"cost\":{\"_tag\":\"Measured\",\"cpuMicros\":813021565,\"peakRssBytes\":153217129},\"coverage\":[\"leader\",\"terminal\",\"ancestry\",\"leader\",\"work\",\"terminal\"],\"relation\":\"unknown\",\"confirmed\":[{\"pid\":2107843097,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"/xJ.2[4\"},\"step\":\"kill\"},{\"pid\":-841353259,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Code\",\"code\":210288419}},{\"pid\":-1134648199,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Code\",\"code\":1636615086}},{\"pid\":-742499973,\"relation\":\"work\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"E\"}}],\"residual\":[{\"kind\":\"callback\",\"detail\":\"p;&\",\"pid\":394073127,\"relation\":\"terminal\"},{\"kind\":\"pty\",\"detail\":\"P!\",\"relation\":\"terminal\"},{\"kind\":\"record\",\"detail\":\"=orGk\",\"pid\":-1392219532,\"relation\":\"ancestry\"}],\"unverifiable\":[{\"kind\":\"pty\",\"detail\":\"A{XBFPmQE\",\"reason\":\"WThW\"},{\"kind\":\"process\",\"detail\":\"5\",\"reason\":\"R+|<y\"},{\"kind\":\"record\",\"detail\":\"\",\"reason\":\"_z\"},{\"kind\":\"callback\",\"detail\":\"e,Y#v+\",\"reason\":\"xU.4[!<.kb\"},{\"kind\":\"pty\",\"detail\":\"rFp-L53~tb\",\"reason\":\"b[m\"}],\"streams\":[{\"stream\":\"stderr\",\"ending\":\"open\"},{\"stream\":\"stderr\",\"ending\":\"error\"}],\"cleanup\":\"unverifiable\",\"retention\":\"lost\",\"abandonedOutput\":false,\"unacquired\":\"Z0KsgB\",\"operation\":{\"installation\":\"1cs!\",\"operation\":\"T|\"},\"requested\":\"destroy\",\"cause\":\"shutdown\",\"steps\":[\"kill\",\"hang-up\",\"kill\",\"interrupt\",\"terminate\",\"interrupt\",\"interrupt\"]}],\"residual\":[{\"kind\":\"record\",\"detail\":\"~\",\"pid\":1182567806,\"relation\":\"work\"},{\"kind\":\"callback\",\"detail\":\"9\",\"relation\":\"work\"},{\"kind\":\"pty\",\"detail\":\"4\",\"relation\":\"work\"},{\"kind\":\"record\",\"detail\":\"\",\"pid\":1231988654,\"relation\":\"terminal\"},{\"kind\":\"record\",\"detail\":\"vdP)q\",\"relation\":\"terminal\"}],\"unverifiable\":[{\"kind\":\"record\",\"detail\":\"JMb\",\"reason\":\")\"},{\"kind\":\"callback\",\"detail\":\"b!m7\",\"reason\":\"X.)by\\\\)B)=\"}],\"reason\":\"VMG<\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":202,\"body\":{\"_tag\":\"Shutdown\",\"outcome\":{\"_tag\":\"Uncertain\",\"effect\":{\"_tag\":\"StoreFailed\",\"operation\":{\"installation\":\":C%2ftBc\\\">9 \",\"operation\":\"*toLocal\"},\"execution\":{\"installation\":\"/\\\">\",\"execution\":\"@I}?*\",\"incarnation\":1806713192},\"phase\":\"ended\",\"cleanup\":\"owned\",\"reason\":\"IIp^:$yc\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":203,\"body\":{\"_tag\":\"Shutdown\",\"outcome\":{\"_tag\":\"ShutdownComplete\",\"operation\":{\"installation\":\"c$\",\"operation\":\"arU:e|9\"},\"executions\":[{\"execution\":{\"installation\":\"gyF`Z`?^^p7E\",\"execution\":\"VG=\",\"incarnation\":322111538},\"nativeExit\":{\"_tag\":\"Code\",\"code\":382712577},\"cost\":{\"_tag\":\"Unmeasured\",\"reason\":\"unsupported\",\"detail\":\"A1I}rc:\"},\"coverage\":[\"terminal\",\"work\",\"ancestry\",\"leader\",\"work\",\"ancestry\",\"terminal\",\"ancestry\",\"work\"],\"relation\":\"leader\",\"confirmed\":[{\"pid\":1782018260,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"j?`QsBfro\"},\"step\":\"interrupt\"},{\"pid\":-579589,\"relation\":\"ancestry\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"{vH&\"},\"step\":\"terminate\"}],\"residual\":[{\"kind\":\"record\",\"detail\":\"'lSHJ <G/{\",\"relation\":\"ancestry\"},{\"kind\":\"pty\",\"detail\":\"^OEZ\",\"pid\":176319819},{\"kind\":\"record\",\"detail\":\"f1|\",\"pid\":704119691,\"relation\":\"leader\"},{\"kind\":\"process\",\"detail\":\"raZ-^Kda$\",\"pid\":783805121},{\"kind\":\"process\",\"detail\":\"H8qFZNFm7\",\"pid\":-820023074,\"relation\":\"ancestry\"},{\"kind\":\"pty\",\"detail\":\"HY6K!a\",\"pid\":1184948636,\"relation\":\"work\"},{\"kind\":\"callback\",\"detail\":\"sIa=ToCQ\",\"relation\":\"ancestry\"},{\"kind\":\"callback\",\"detail\":\"Z\",\"pid\":-1582236560,\"relation\":\"leader\"},{\"kind\":\"record\",\"detail\":\"j,[]NKs\",\"pid\":-1878058285,\"relation\":\"work\"},{\"kind\":\"record\",\"detail\":\"s9(LmrKW\",\"pid\":770314891,\"relation\":\"ancestry\"}],\"unverifiable\":[{\"kind\":\"process\",\"detail\":\"f3A\",\"reason\":\">2\"},{\"kind\":\"record\",\"detail\":\" '-!c(){ 4\",\"reason\":\"-5X4q5f^Iw\"},{\"kind\":\"record\",\"detail\":\"9v3VB^-n`\",\"reason\":\"?_LzAm\\\"W\"},{\"kind\":\"pty\",\"detail\":\"\",\"reason\":\"wiHV?\"},{\"kind\":\"record\",\"detail\":\"l-M\",\"reason\":\"g;R}QG\"},{\"kind\":\"pty\",\"detail\":\"w;\",\"reason\":\"Qu\"},{\"kind\":\"callback\",\"detail\":\"iI^ ~P0u\",\"reason\":\"sm ?(p[(\"},{\"kind\":\"pty\",\"detail\":\"\",\"reason\":\"Br!O\"},{\"kind\":\"pty\",\"detail\":\"*'\",\"reason\":\"VD2_xPuV[\"},{\"kind\":\"callback\",\"detail\":\"@{,RHcC\",\"reason\":\"\"}],\"streams\":[{\"stream\":\"stderr\",\"ending\":\"error\"},{\"stream\":\"stdout\",\"ending\":\"eof\"},{\"stream\":\"stdout\",\"ending\":\"open\"},{\"stream\":\"pty\",\"ending\":\"eof\"},{\"stream\":\"stderr\",\"ending\":\"eof\"},{\"stream\":\"pty\",\"ending\":\"eof\"},{\"stream\":\"stderr\",\"ending\":\"eof\"},{\"stream\":\"stderr\",\"ending\":\"open\"},{\"stream\":\"stderr\",\"ending\":\"open\"}],\"cleanup\":\"residual\",\"retention\":\"partial\",\"abandonedOutput\":true,\"unacquired\":\"@pX]UBF\",\"operation\":{\"installation\":\"C,V`B%#IA+i\",\"operation\":\"SJ\"},\"requested\":\"signal\",\"cause\":\"scope-closed\",\"steps\":[\"hang-up\",\"hang-up\",\"kill\",\"kill\",\"terminate\"]}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":204,\"body\":{\"_tag\":\"Shutdown\",\"outcome\":{\"_tag\":\"Refused\",\"operation\":{\"installation\":\"M\\\"|\",\"operation\":\"#lleruenamee\"},\"refusal\":{\"_tag\":\"CustodyConflict\",\"reason\":\"y]\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":205,\"body\":{\"_tag\":\"Pace\",\"report\":{\"_tag\":\"Applied\",\"pace\":\"lowest\",\"reached\":26,\"kept\":171954947,\"failed\":1205426162}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":206,\"body\":{\"_tag\":\"Disown\",\"report\":{\"retired\":97511956}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":207,\"body\":{\"_tag\":\"Refused\",\"refusal\":{\"_tag\":\"CustodyConflict\",\"reason\":\"!%}?\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":208,\"body\":{\"_tag\":\"Retained\",\"record\":{\"state\":{\"ref\":{\"installation\":\"\\\\B%y\",\"execution\":\"h\",\"incarnation\":1997665768},\"transport\":\"pty\",\"lifetime\":\"held\",\"purpose\":\"internal\",\"phase\":\"running\",\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"0<K^\"},\"streams\":{\"stdout\":\"open\",\"stderr\":\"error\",\"pty\":\"eof\"},\"cleanup\":\"unverifiable\",\"record\":\"gapped\",\"unacquired\":\"ch(EA\"},\"native\":{\"pid\":-8,\"terminal\":\"E?Z[+[%F2.Wc\"},\"target\":{\"environment\":\"&\",\"namespace\":\"E\",\"cwd\":\"w\",\"dependencies\":[]},\"final\":{\"execution\":{\"installation\":\"1\",\"execution\":\"[e<Kx0T\",\"incarnation\":1817008306},\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"%en\"},\"sources\":{\"stdout\":{\"completed\":true,\"offset\":\"0\"},\"stderr\":{\"completed\":true,\"offset\":\"80983\"}},\"cleanup\":\"complete\",\"retention\":\"retained\",\"confirmed\":[{\"pid\":-1204715192,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Code\",\"code\":-1892150005}},{\"pid\":1487097135,\"relation\":\"ancestry\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"xQr\"},\"step\":\"hang-up\"},{\"pid\":-1694838408,\"relation\":\"ancestry\",\"exit\":{\"_tag\":\"Code\",\"code\":-623687561},\"step\":\"interrupt\"},{\"pid\":1860816313,\"relation\":\"work\",\"exit\":{\"_tag\":\"Code\",\"code\":-766726817},\"step\":\"interrupt\"},{\"pid\":-506708843,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"jRDZBZYcnf\"},\"step\":\"kill\"},{\"pid\":598804421,\"relation\":\"work\",\"exit\":{\"_tag\":\"Code\",\"code\":-912867465}},{\"pid\":-1057006478,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Code\",\"code\":1940922179}}],\"residual\":[{\"kind\":\"record\",\"detail\":\"}\"},{\"kind\":\"callback\",\"detail\":\"NkfoBM\",\"pid\":-623299912,\"relation\":\"leader\"},{\"kind\":\"record\",\"detail\":\"U>xB*\",\"pid\":1517164875,\"relation\":\"ancestry\"},{\"kind\":\"record\",\"detail\":\".7\",\"pid\":331710159},{\"kind\":\"pty\",\"detail\":\"bZ4JG @\",\"pid\":-548392688,\"relation\":\"leader\"},{\"kind\":\"process\",\"detail\":\"{H7[~{#Bqh\",\"relation\":\"terminal\"},{\"kind\":\"pty\",\"detail\":\"_w>U_*+I\",\"pid\":1372024274,\"relation\":\"work\"},{\"kind\":\"record\",\"detail\":\"2k(8\",\"pid\":-1911807089,\"relation\":\"terminal\"},{\"kind\":\"process\",\"detail\":\"#-l\",\"pid\":2103089009,\"relation\":\"terminal\"},{\"kind\":\"record\",\"detail\":\"}t\",\"pid\":-736588276,\"relation\":\"leader\"}],\"unverifiable\":[{\"kind\":\"callback\",\"detail\":\"l>R1zre\",\"reason\":\"LDnu\"},{\"kind\":\"process\",\"detail\":\"<ns.\",\"reason\":\"\"},{\"kind\":\"record\",\"detail\":\"?\",\"reason\":\".k\"}],\"streams\":[{\"stream\":\"stdout\",\"ending\":\"eof\"},{\"stream\":\"pty\",\"ending\":\"eof\"}],\"relation\":\"unknown\",\"coverage\":[\"leader\"],\"abandonedOutput\":false,\"unacquired\":\"#?\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":209,\"body\":{\"_tag\":\"Retained\",\"record\":{\"state\":{\"ref\":{\"installation\":\"fG6f&t,Gv\",\"execution\":\"!^U3\",\"incarnation\":20},\"transport\":\"pty\",\"lifetime\":\"command\",\"purpose\":\"internal\",\"phase\":\"ended\",\"nativeExit\":{\"_tag\":\"Code\",\"code\":-1715083159},\"streams\":{\"stdout\":\"open\",\"stderr\":\"eof\",\"pty\":\"open\"},\"cleanup\":\"residual\",\"record\":\"unavailable\"},\"native\":{\"pid\":13,\"terminal\":\"*H\"},\"target\":{\"environment\":\"b]niPD$:r}]\",\"namespace\":\"x&XndA$co\",\"cwd\":\"YA9  )J!lzK~\",\"dependencies\":[\"#}~]j]Nc+<f`\",\"P_%\\\"I{vI(sNT\",\"OF`?{PJ nY0?\",\"CL%xvh6;V--[\",\"yFA2;z.=\",\"@aRB\"]},\"final\":{\"execution\":{\"installation\":\"length\",\"execution\":\"aui}>Y5AYM\",\"incarnation\":716754375},\"nativeExit\":{\"_tag\":\"Code\",\"code\":1512249636},\"sources\":{\"stdout\":{\"completed\":true,\"offset\":\"3\"},\"stderr\":{\"completed\":true,\"offset\":\"35\"}},\"cleanup\":\"unverifiable\",\"retention\":\"lost\",\"confirmed\":[{\"pid\":-715147182,\"relation\":\"ancestry\",\"exit\":{\"_tag\":\"Code\",\"code\":1161913001},\"step\":\"kill\"},{\"pid\":-1425866160,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Code\",\"code\":-1939947580},\"step\":\"unsignalled\"},{\"pid\":-1814277149,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"S/gQ\"},\"step\":\"terminate\"},{\"pid\":140038112,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Code\",\"code\":-182873135},\"step\":\"hang-up\"},{\"pid\":-378832906,\"relation\":\"leader\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"AyU}N17EIF`=\"},\"step\":\"interrupt\"},{\"pid\":1335549842,\"relation\":\"terminal\",\"exit\":{\"_tag\":\"Signal\",\"signal\":\"%W2IVf\"},\"step\":\"terminate\"}],\"residual\":[{\"kind\":\"pty\",\"detail\":\"\",\"pid\":-1867361479,\"relation\":\"work\"}],\"unverifiable\":[{\"kind\":\"pty\",\"detail\":\"^Y#vw#\",\"reason\":\"!6CG8sL@F\"},{\"kind\":\"process\",\"detail\":\"\",\"reason\":\".oXg6j0#uw\"}],\"streams\":[{\"stream\":\"pty\",\"ending\":\"error\"},{\"stream\":\"stdout\",\"ending\":\"eof\"},{\"stream\":\"stdout\",\"ending\":\"error\"},{\"stream\":\"stdout\",\"ending\":\"eof\"},{\"stream\":\"pty\",\"ending\":\"error\"},{\"stream\":\"stdout\",\"ending\":\"eof\"},{\"stream\":\"stderr\",\"ending\":\"eof\"},{\"stream\":\"stderr\",\"ending\":\"eof\"},{\"stream\":\"pty\",\"ending\":\"open\"}],\"relation\":\"unknown\",\"coverage\":[\"work\",\"leader\",\"work\",\"ancestry\",\"work\",\"work\",\"terminal\"],\"abandonedOutput\":true,\"unacquired\":\"]ev5\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Bytes\",\"subscription\":2032841726,\"range\":{\"cursor\":{\"ref\":{\"installation\":\"&,} \",\"execution\":\"%F{\",\"incarnation\":361971615},\"stream\":\"stdout\",\"offset\":\"79109453\"},\"next\":\"427540539\",\"retainedFrom\":\"72\",\"durableThrough\":\"0\",\"gap\":true,\"grid\":{\"rows\":9,\"columns\":2147483631}},\"bytes\":2147483617}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"State\",\"subscription\":757094952,\"summary\":{\"state\":{\"ref\":{\"installation\":\"_.(}cq@!j\",\"execution\":\"shoN%*or\",\"incarnation\":16826688},\"transport\":\"pty\",\"lifetime\":\"held\",\"purpose\":\"internal\",\"phase\":\"stopping\",\"nativeExit\":{\"_tag\":\"Signal\",\"signal\":\"n%\"},\"streams\":{\"stdout\":\"eof\",\"stderr\":\"error\",\"pty\":\"error\"},\"cleanup\":\"pending\",\"record\":\"gapped\",\"unacquired\":\"FllxWP|#\"},\"custody\":{\"revision\":2147483640,\"holder\":\"Zrj>-\",\"origin\":\"prope\",\"target\":{\"environment\":\"7(1`r\",\"namespace\":\"(H&oK?L-G{En\",\"cwd\":\"poYhE'CCI\\\\\",\"dependencies\":[\"aHu+g6;{-Yjx\",\"7Pa+\",\"PVo1Sf5\",\"M{+$\",\"kw?x]t06Uibg\",\"sdKbukF4W\",\"hD6Jy2fm\",\"agYc%>%Q2$)\",\"Sdp\"]}},\"streams\":[{\"stream\":\"stdout\",\"retainedFrom\":\"9938456184\",\"durableThrough\":\"0\",\"parsedThrough\":\"51009286225\",\"ending\":\"error\"}],\"grid\":{\"rows\":185407008,\"columns\":1039159990},\"native\":{\"pid\":2147483629,\"terminal\":\"K9ML]+7\\\"T\\\"\"},\"input\":{\"sequence\":13,\"acceptedThrough\":\"0\",\"pendingBytes\":1918334091},\"decision\":{\"_tag\":\"Completed\",\"operation\":{\"installation\":\"`$\\\\-!\",\"operation\":\";}r l#'X||\"},\"execution\":{\"installation\":\"6bin\",\"execution\":\"Y!x5;\",\"incarnation\":1271766969},\"sequence\":47313108},\"processes\":{\"members\":227513082,\"capped\":true,\"watched\":true,\"unwatched\":\"ended\",\"failures\":23,\"rulings\":[{\"_tag\":\"Unverifiable\",\"pid\":2141887450,\"process\":\"B&z7\",\"rule\":{\"id\":\"A86gD^`#>\",\"words\":[\"o>qsv[bzuCF\",\"r2eK@pW/b7\",\"5^[\",\"#IL\",\"`TGQjm&?b?\",\"DQAWMd(+\",\")TbKh[^d +%z\",\"o\\\"|p8\",\"ZgJ3\",\"vTFzi1H\"],\"limitMs\":58855499},\"reason\":\"DF}TT2OneY\"},{\"_tag\":\"Ended\",\"pid\":-1348814132,\"process\":\"\",\"rule\":{\"id\":\"dKBcyw1~\",\"words\":[\"b(HhxB(\",\"m_\",\":@\",\"lf)U%\",\":'-e#pYI5{\",\"7|:,\",\"@r+R\",\"^Z\",\"#I7QlDp`,E \",\"?}q/p;\\\\t\"],\"folder\":\"\\\\7oyn\",\"limitMs\":1254125167},\"step\":\"kill\"},{\"_tag\":\"Survived\",\"pid\":-813472338,\"process\":\"R-x\\\\\",\"rule\":{\"id\":\"nSfjfb$\",\"words\":[\"j\",\"G9(N$Z\",\"hd\",\"Y#zCAb\",\"eRZ91h0}~Z)\"],\"folder\":\" qp\",\"limitMs\":1165051421},\"steps\":[\"terminate\",\"interrupt\",\"terminate\",\"kill\",\"terminate\",\"kill\"]},{\"_tag\":\"Survived\",\"pid\":-904477297,\"process\":\"1O(3T#I{EZ\",\"rule\":{\"id\":\"tmaY\",\"words\":[\"Q7 )]NT=8\"],\"folder\":\"u+<e8\",\"limitMs\":1203623569},\"steps\":[\"kill\"]},{\"_tag\":\"Unread\",\"pid\":-1832032182,\"process\":\"Q-MM!\",\"fields\":[\"args\",\"args\",\"folder\",\"folder\",\"args\"]},{\"_tag\":\"Ending\",\"pid\":2062659765,\"process\":\"7r|8yS8\",\"rule\":{\"id\":\"6I&m'b\",\"words\":[\"D!tk.\",\"/GHg?hn\",\"~{sDt\",\"Ac<ym0eo\",\"T\",\"*3\",\"B$^\",\"H\",\",FiU&\",\"6{BIb]3LVK\"],\"folder\":\"]b}M?F\",\"limitMs\":1562916891}},{\"_tag\":\"Unread\",\"pid\":1772810465,\"process\":\"E\",\"fields\":[]}],\"omitted\":924303233}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"State\",\"subscription\":2032841726,\"summary\":{\"state\":{\"ref\":{\"installation\":\"&,} \",\"execution\":\"%F{\",\"incarnation\":361971615},\"transport\":\"pty\",\"lifetime\":\"call\",\"purpose\":\"internal\",\"phase\":\"queued\",\"nativeExit\":{\"_tag\":\"Code\",\"code\":-966017014},\"streams\":{\"stdout\":\"open\",\"stderr\":\"error\",\"pty\":\"eof\"},\"cleanup\":\"pending\",\"record\":\"available\",\"unacquired\":\"s#\"},\"custody\":{\"revision\":1751584845,\"holder\":\"@\",\"origin\":\"z~\",\"target\":{\"environment\":\"[/\",\"namespace\":\"cal__lo\",\"cwd\":\"4|(tN\",\"dependencies\":[\"DxW2PV9~l\",\"B&\",\"xHO!\",\"u$L\",\"!5Q%\"]}},\"streams\":[],\"native\":{\"pid\":-28,\"terminal\":\"<$Q!y%R\\\"I\\\"\"},\"input\":{\"acceptedThrough\":\"0\",\"pendingBytes\":1991483264},\"decision\":{\"_tag\":\"Cancelled\",\"operation\":{\"installation\":\"VaJ0u8B$k?D\",\"operation\":\"sabr8y1Rux8\"},\"execution\":{\"installation\":\"aa\",\"execution\":\"h\\\"#B<*mLS7!\",\"incarnation\":307119512},\"sequence\":1,\"cause\":\"not-started\",\"trigger\":\"`*3C'@6n|^\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Screen\",\"subscription\":1979326549,\"update\":{\"_tag\":\"ScreenProgramPatch\",\"provenance\":{\"ref\":{\"installation\":\"N$V!-}\",\"execution\":\"arguments%\",\"incarnation\":23},\"base\":296914750,\"revision\":1235468255,\"parsedThrough\":\"19006408\"},\"buffer\":\"alternate\",\"geometry\":{\"rows\":14,\"columns\":1858167059,\"firstLine\":1155704236,\"viewportLine\":1144963496},\"program\":{\"_tag\":\"PaintProgram\",\"steps\":[{\"_tag\":\"Write\",\"data\":\"key\"},{\"_tag\":\"Reset\"},{\"_tag\":\"Reset\"},{\"_tag\":\"Reset\"},{\"_tag\":\"Cursor\",\"cursor\":{\"visible\":true,\"style\":\"bar\",\"blink\":true}},{\"_tag\":\"Resize\",\"rows\":2050542674,\"columns\":11},{\"_tag\":\"Title\",\"title\":\"^:Slz\"},{\"_tag\":\"Cursor\",\"cursor\":{\"visible\":true,\"style\":\"bar\",\"blink\":false}}]},\"input\":{\"_tag\":\"Available\",\"revision\":465896033,\"profile\":\"xterm-256color-unicode11\",\"encoding\":\"utf-8\",\"terminal\":\"xterm-256color\",\"unicodeVersion\":\"11\",\"applicationCursor\":true,\"applicationKeypad\":false,\"bracketedPaste\":false,\"sendFocus\":false,\"mouseTracking\":\"none\",\"mouseEncoding\":\"default\",\"alternateScreen\":true,\"kittyKeyboardFlags\":887311080}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Screen\",\"subscription\":1082671889,\"update\":{\"_tag\":\"ScreenPatch\",\"provenance\":{\"ref\":{\"installation\":\"s\",\"execution\":\"Tmhuh\",\"incarnation\":8},\"base\":2147483627,\"revision\":1109937541,\"parsedThrough\":\"0\"},\"buffer\":\"alternate\",\"geometry\":{\"rows\":2147483628,\"columns\":23,\"firstLine\":7,\"viewportLine\":906069843},\"rows\":[],\"cursor\":{\"line\":1395812170,\"column\":1592773327},\"appearance\":{\"colors\":{\"palette\":[293895,14,10517329,317242,15,1,9863948,4548690,5504637,19,16,7555009,18,750014,0,777899,8935740,3,19,10,1866581,16777215,20,10259670,8538228,16777212,9576559,23,202492,14,10238670,1965086,12252591,16777200,2980693,16777203,20,16777204,9,5952485,10533399,16777199,9518272,10767187,16777194,11037365,8004697,16,16777210,8524131,23,9744833,22,21,6003326,3801902,10,16777201,2498264,16777215,1885056,6104056,11677464,16732377,16342580,13,20,16777206,16777207,16777206,22,4,7701749,9899297,2,11733255,2,19,13112882,7769709,12,16777195,1195770,4378135,13762503,9612242,16777212,16777195,8,15637217,9616154,1302791,12732064,6,16777207,2894648,9,11,8150702,5626110,1,14301431,3855039,7,4981492,2609785,10707997,2293442,21,4,16777197,16404610,7515540,7,2298501,2958632,15955664,11,6561692,16777201,9,16777206,16777213,14,6,12,13322232,9494514,4229549,13598401,11310990,16777193,16080157,9371201,320535,3560253,377463,12008769,3,5351081,16,15428275,19,4337295,2342796,12941056,2,8,19,5355962,21,10,13469511,22,23,9,9172232,15,1,16777204,1990357,16777192,23,9,6286882,23,3853881,13819195,17,8,10590091,16777199,16777194,16777195,15171044,6292952,10795914,15452244,16777213,3,15,6178648,3672709,17,2,284188,6297936,3,11699309,6150319,18,4217887,16777215,7,8669540,13984040,284895,16777199,6029084,10,0,7293699,16777192,16777207,0,16777210,12,64184,16777193,13123225,5821294,0,10563076,10062685,16777194,10879264,9905526,2459734,16079579,9,16777209,23,16777193,2,23,7618848,16612353,16777198,15899828,15968833,14200697,4263184,2,10150175,13284025,895425,16777210,12986999,16777205,6094939,23,2609031,16777200,16777213,8,16777199,15905155,1933508,8965026,10,16777214,16777208,2,9,0,16777211],\"foreground\":9,\"background\":15,\"cursor\":16777211},\"cursor\":{\"visible\":false,\"style\":\"underline\",\"blink\":true},\"title\":\"'N!<!C$#\"},\"input\":{\"_tag\":\"Unavailable\",\"revision\":1680381453,\"reason\":\"[3MXRM4B?\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Screen\",\"subscription\":2032841726,\"update\":{\"_tag\":\"ScreenUnavailable\",\"ref\":{\"installation\":\",k\",\"execution\":\"bind\",\"incarnation\":505879526},\"parsedThrough\":\"79975317\",\"reason\":\"engine\",\"ending\":\"closed\",\"detail\":\"s#\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Screen\",\"subscription\":2,\"update\":{\"_tag\":\"ScreenProgramFrame\",\"provenance\":{\"ref\":{\"installation\":\"+_'sW\",\"execution\":\"9Un6B?\",\"incarnation\":10},\"revision\":2071280735,\"parsedThrough\":\"0\"},\"buffer\":\"alternate\",\"geometry\":{\"rows\":1026000578,\"columns\":9,\"firstLine\":0,\"viewportLine\":1994943138},\"program\":{\"_tag\":\"PaintProgram\",\"steps\":[{\"_tag\":\"Theme\",\"colors\":{\"palette\":[12585449,14144078,10361462,16777209,16,9321214,7543623,16777209,17,19,21,12079915,13604056,0,364864,0,14694885,10995461,11559650,75049,9399422,14,16777198,16177227,1,1969981,10695805,3546976,13721156,10401993,13809626,16777203,6907676,5104095,15777544,8960513,5789617,12099230,1253869,12873480,22,16777201,12369314,6893642,2979378,16777202,13539437,16777193,10621652,16,6077194,4385138,4378207,8,16777196,16777207,12390264,7513531,15736193,4596301,12566870,7593461,12169636,15701421,15612019,13284488,3051221,16777213,8071976,19,16273182,2,9371269,3226830,16777210,13482603,13619742,3,14398576,16463544,6960549,9007546,22,4140432,11493019,11105773,5170464,3888439,14413960,12282784,14215589,7832468,23,3320070,8960293,13,16777206,20,11557320,2199426,19,13,12,10243492,15041117,21,11902279,13179721,5724287,7300444,14052613,2859004,6249345,13009092,989680,15671407,4331575,8309498,23,16636269,7659354,10753495,17,3503161,8918931,6,13062964,8494725,5859203,3194107,11068460,712335,8165725,14,8106120,8158160,4612888,3805725,11482307,22,16777213,14353186,6682680,12243394,23,10994838,3883067,11950886,16777210,6153744,978218,15981966,4175120,16,8625129,16777196,15792194,10374580,7892184,15829753,11659118,12523776,12,6,5337197,16777203,4447000,11929694,6374125,23,10294220,10672714,4671337,13475158,16777205,938312,11700917,2471525,4197382,7388741,10,16777214,685951,721407,7762997,1486911,12669464,15572017,2705103,8,722028,3,4034308,5870514,12974093,13607451,1077856,11067043,10507556,7783928,11574946,4,13188514,665766,15054379,16777194,854240,17,1,12898280,2687500,7508978,2757258,13860833,5185241,15120256,10887001,10979924,16777195,16464144,15057683,10112019,3111945,16777196,8840821,9,14,13105562,5706033,8572168,2019858,17,15704296,10993729,7,15414350,5572572,1571268,7902138,9289556,10,12008641,14492983,16777195,10217679,2902488,13795839,13375779,16777199,17,1,1476491,9504532,1080841,5294602,21],\"foreground\":8278247,\"background\":11555216,\"cursor\":7082873}},{\"_tag\":\"Reset\"}]},\"input\":{\"_tag\":\"Unavailable\",\"revision\":1989277396,\"reason\":\"p\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Inventory\",\"subscription\":532332187,\"update\":{\"_tag\":\"Moved\",\"revision\":2147483639,\"usage\":[{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"9{\"},\"network\":{\"_tag\":\"Foreign\",\"kind\":\"remote\",\"id\":\"h*y\"}},\"source\":{\"adapter\":\"s'<iF)9']n\",\"probe\":\"cXS9lHkh?\"},\"observedAt\":21,\"completeness\":\"unavailable\",\"unmeasured\":[{\"region\":\"yc.0N@K\",\"reason\":\"refused\",\"detail\":\"\"},{\"region\":\"x0\\\"<rH#6d[[\",\"reason\":\"truncated\",\"detail\":\"\"}],\"execution\":{\"installation\":\"arguments\",\"execution\":\"6Z(d1@'[|\",\"incarnation\":30},\"revision\":1678361078,\"takenAtMicros\":1085469042,\"coverage\":[\"leader\",\"leader\",\"terminal\",\"leader\",\"work\",\"terminal\",\"work\"],\"processes\":[{\"identity\":{\"pid\":1067846982,\"birth\":\"528:128579\"},\"parent\":1078722775,\"cpuMicros\":1142273990,\"residentBytes\":2134106329,\"memoryKind\":\"pss\",\"footprintBytes\":1081006020,\"association\":{\"execution\":{\"installation\":\"'g)z\",\"execution\":\"KqB}BW<`T?J\",\"incarnation\":2092458166},\"relation\":\"terminal\",\"identity\":\"different\"}}],\"cpu\":{\"_tag\":\"Measured\",\"cores\":382068046490673100000,\"overMicros\":572669108,\"population\":{\"matched\":1645629989,\"born\":36445618,\"departed\":767712949},\"completeness\":\"partial\",\"gaps\":[{\"reason\":\"identity-changed\",\"pid\":1603060956,\"detail\":\"r\"},{\"reason\":\"identity-unproven\",\"pid\":576579186,\"detail\":\"1\"},{\"reason\":\"first-sample\",\"pid\":281437575,\"detail\":\"TcpQgo+J\"},{\"reason\":\"population-changed\",\"pid\":2045372410,\"detail\":\"6?Ta#Og37d\"},{\"reason\":\"population-changed\",\"detail\":\"aym\"},{\"reason\":\"interval-empty\",\"detail\":\"xQ,T}/e`.\"}],\"basis\":\"interval\",\"detail\":\"!D\"},\"memory\":{\"_tag\":\"Unknown\",\"reason\":\"truncated\",\"detail\":\"E+<L}e r\"}}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Inventory\",\"subscription\":25,\"update\":{\"_tag\":\"Moved\",\"revision\":367226169,\"usage\":[{\"scope\":{\"host\":{\"_tag\":\"Foreign\",\"kind\":\"remote\",\"id\":\"$x1]oY`Bn4\"},\"network\":{\"_tag\":\"Foreign\",\"kind\":\"remote\",\"id\":\"p[}.!/\"}},\"source\":{\"adapter\":\"W]SY\",\"probe\":\"-!]\"},\"observedAt\":1726920928,\"completeness\":\"complete\",\"unmeasured\":[{\"region\":\"+&Ej2\\\"Kw&\",\"reason\":\"unknown\",\"detail\":\"o@*oR4\"},{\"region\":\"`~\",\"reason\":\"timeout\",\"detail\":\"\\\\VnV'3Xs,\"},{\"region\":\"'(\",\"reason\":\"unknown\",\"detail\":\"`\"},{\"region\":\"G1e%LB8)\",\"reason\":\"unsupported\",\"detail\":\"| >bql5h\"},{\"region\":\"q^=\",\"reason\":\"timeout\",\"detail\":\"iDKem,*(\"},{\"region\":\"^m#!K7ybS\",\"reason\":\"unsupported\",\"detail\":\"\"},{\"region\":\"-Q#k:PLx,_Jd\",\"reason\":\"unsupported\",\"detail\":\"\"},{\"region\":\"GJRwZPFoM\\\"\",\"reason\":\"refused\",\"detail\":\"w:p~x<\\\"O\"},{\"region\":\"CRX',Q:NV.b3\",\"reason\":\"truncated\",\"detail\":\"0\"}],\"execution\":{\"installation\":\"/KQ{d<4\\\"E5b\",\"execution\":\"/PpCli\",\"incarnation\":1518110099},\"revision\":1753890131,\"takenAtMicros\":1316865237,\"coverage\":[\"work\",\"ancestry\"],\"processes\":[{\"identity\":{\"pid\":1366698482,\"birth\":\"2133:556655\"},\"work\":296888872,\"cpuMicros\":1353816868,\"residentBytes\":1638223226,\"memoryKind\":\"resident\",\"footprintBytes\":334579418}],\"cpu\":{\"_tag\":\"Unknown\",\"reason\":\"identity-changed\",\"detail\":\"'Z`Fb\"},\"memory\":{\"_tag\":\"ResidentSum\",\"bytes\":1257731640,\"processes\":1237038783,\"kind\":\"private\",\"footprintBytes\":341564521}}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Inventory\",\"subscription\":1943721842,\"update\":{\"_tag\":\"Moved\",\"revision\":2147483646,\"usage\":[{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"!\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"eCD%weA+5N\"}},\"source\":{\"adapter\":\"s\",\"probe\":\"bind\"},\"observedAt\":731044956,\"completeness\":\"complete\",\"unmeasured\":[],\"execution\":{\"installation\":\"c1}s;Qmv0\",\"execution\":\"b\",\"incarnation\":51310702},\"revision\":101607010,\"takenAtMicros\":2147483644,\"coverage\":[\"terminal\",\"ancestry\",\"work\",\"work\",\"terminal\",\"leader\"],\"processes\":[],\"cpu\":{\"_tag\":\"Measured\",\"cores\":29746.431640625,\"overMicros\":520299041,\"population\":{\"matched\":2147483636,\"born\":1199840993,\"departed\":1652973921,\"dropped\":141760614},\"completeness\":\"complete\",\"gaps\":[{\"reason\":\"counter-reset\",\"detail\":\"`e\"},{\"reason\":\"interval-empty\",\"pid\":1455586902,\"detail\":\"gOwXU+\"},{\"reason\":\"population-changed\",\"pid\":1872338979,\"detail\":\"v]`\"},{\"reason\":\"identity-changed\",\"pid\":881741026,\"detail\":\"G\"},{\"reason\":\"counter-reset\",\"pid\":57340294,\"detail\":\"[rS#\"}],\"basis\":\"interval\",\"detail\":\"%#Mi!+!\"},\"memory\":{\"_tag\":\"Unknown\",\"reason\":\"failed\",\"detail\":\"&-\"}}]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Ended\",\"subscription\":1082671889,\"ending\":\"cancelled\"}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":101,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"EndResidual\",\"origin\":{\"installation\":\"\\\"|.*x.*5\",\"execution\":\"1rp.l\",\"incarnation\":13},\"pid\":22}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":102,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"EndResidual\",\"origin\":{\"installation\":\"l1#zV6=b8}\",\"execution\":\"~e#+\",\"incarnation\":2147483622},\"pid\":27}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":103,\"body\":{\"_tag\":\"EndResidual\",\"outcome\":{\"_tag\":\"Refused\",\"origin\":{\"installation\":\"^\",\"execution\":\"apply\",\"incarnation\":18},\"pid\":20,\"reason\":\"unreadable\",\"detail\":\"valueOf\",\"steps\":[\"interrupt\",\"interrupt\",\"kill\",\"kill\",\"terminate\",\"interrupt\",\"terminate\",\"kill\"]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":104,\"body\":{\"_tag\":\"EndResidual\",\"outcome\":{\"_tag\":\"Refused\",\"origin\":{\"installation\":\"y^T\",\"execution\":\"{4PQU:-i\",\"incarnation\":18},\"pid\":19,\"reason\":\"execution-unknown\",\"detail\":\"%_&k\",\"steps\":[\"kill\",\"terminate\",\"terminate\",\"terminate\"]}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":501,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Foreground\",\"execution\":{\"installation\":\"installation-1\",\"execution\":\"terminal-1\",\"incarnation\":1}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":501,\"body\":{\"_tag\":\"Foreground\",\"outcome\":{\"_tag\":\"Foreground\",\"process\":{\"pid\":123,\"birth\":\"1:0\"}}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":502,\"body\":{\"_tag\":\"Foreground\",\"outcome\":{\"_tag\":\"ForegroundRefused\",\"reason\":\"no-terminal\",\"detail\":\"this execution has no terminal\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":601,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"ScreenPoint\",\"execution\":{\"installation\":\"installation-1\",\"execution\":\"terminal-1\",\"incarnation\":1},\"scrollback\":5000}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":601,\"body\":{\"_tag\":\"ScreenPoint\",\"point\":{\"_tag\":\"ScreenPoint\",\"ref\":{\"installation\":\"installation-1\",\"execution\":\"terminal-1\",\"incarnation\":1},\"position\":\"128\",\"geometry\":{\"rows\":24,\"columns\":80}},\"bytes\":5}}}",
+        "payload": "G1s/MWg="
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":602,\"body\":{\"_tag\":\"ScreenPoint\",\"point\":{\"_tag\":\"ScreenUnavailable\",\"ref\":{\"installation\":\"installation-1\",\"execution\":\"terminal-1\",\"incarnation\":1},\"parsedThrough\":\"0\",\"reason\":\"transport\",\"detail\":\"this execution runs over pipes and has no terminal to interpret\"},\"bytes\":0}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":603,\"body\":{\"_tag\":\"Refused\",\"refusal\":{\"_tag\":\"InputYielding\",\"reason\":\"input is handing over\"}}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":300,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"OpenTerminalLane\",\"claim\":{\"binding\":\"binding-1\",\"principal\":\"principal-operator\"},\"execution\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":300,\"body\":{\"_tag\":\"OpenTerminalLane\",\"port\":50123,\"token\":\"bGFuZS1zZWNyZXQ\",\"next\":3}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":301,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Subscribe\",\"source\":{\"_tag\":\"Inputs\",\"execution\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1}},\"credits\":4096}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Inputs\",\"subscription\":7,\"binding\":\"binding-1\",\"principal\":\"principal-operator\",\"receipt\":{\"execution\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1},\"sequence\":3,\"cause\":\"typed\",\"bytes\":1,\"acceptedThrough\":\"42\"}}}}",
+        "payload": ""
+      }
+    ]
   }
 }

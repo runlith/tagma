@@ -7,6 +7,7 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { ExecutionRef, ExecutionId, InstallationId } from '@runlith/executions/protocol/execution';
 import type { LaunchRequest, LaunchTransport } from '@runlith/executions/protocol/launch';
 import { TRANSFER_LIMIT, type ExecutionLimits } from '@runlith/executions/protocol/capacity';
+import { byteOffset } from '@runlith/executions/protocol/record';
 import { ProcessControl } from './ProcessControl';
 import { Processes, type ProcessReader } from './ProcessReader';
 import { admit, runtimeProfile } from './runtimeFixture';
@@ -82,13 +83,16 @@ const terminalInput = Effect.fnUntraced(function* (native: Effect.Success<Return
   const terminal = yield* terminalOf(native);
   const inputs = yield* TerminalInputs;
   const ending = native.sink.end;
-  return yield* inputs.open(terminal, {
+  const opened = yield* inputs.open(terminal, {
     limits,
     ref,
     announce: Effect.void,
     end: () => (ending._tag === 'Closes' ? ending.close() : Effect.void),
     resized: () => Effect.void,
+    output: byteOffset(0n),
+    admitted: () => Effect.void,
   });
+  return opened.input;
 });
 const fillTerminal = Effect.fnUntraced(function* (native: Effect.Success<ReturnType<typeof launchNative>>) {
   const terminal = yield* terminalOf(native);

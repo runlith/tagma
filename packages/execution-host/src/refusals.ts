@@ -4,6 +4,7 @@ import { InputProfileConflict } from './InputModes';
 import { InterpretationUnavailable } from './Interpretation';
 import { StreamMissing } from './ExecutionRecord';
 import { InputFenced } from './ExecutionInput';
+import { LaneUnserved } from './TerminalInputs';
 
 const capacityReason = (failure: { readonly _tag: string }): string => {
   if (failure._tag === 'CapacityRefused' && 'budget' in failure && 'requested' in failure && 'limit' in failure) {
@@ -35,6 +36,7 @@ export const refusalOf = (failure: { readonly _tag: string }): Refusal => {
   if (failure instanceof StreamMissing) return { _tag: 'StreamMissing', reason: failure.message };
   if (failure instanceof InputFenced)
     return { _tag: failure.reason === 'yielding' ? 'InputYielding' : 'InputFenced', reason: failure.message };
+  if (failure instanceof LaneUnserved) return { _tag: 'UnsupportedCapability', reason: failure.detail };
   switch (failure._tag) {
     case 'ExecutionUnknown':
     case 'StoredExecutionMissing':

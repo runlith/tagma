@@ -1,6 +1,7 @@
-import { Effect, Semaphore } from 'effect';
+import { Effect, Semaphore, type Scope } from 'effect';
 import type { CustodyRequest } from '@runlith/executions/protocol/control';
 import type { BindingId, CustodyState, Principal } from '@runlith/executions/protocol/custody';
+import type { TerminalLane } from '@runlith/executions/protocol/lane';
 import type { ConnectionId, CustodianEpoch } from '@runlith/executions/protocol/registration';
 import type { CallDecision } from '@runlith/executions/protocol/call';
 import type { ExecutionRef, ExecutionState, ProcessCost } from '@runlith/executions/protocol/execution';
@@ -20,8 +21,10 @@ import type { SegmentRecord } from './ExecutionRecord';
 import type { ExecutionStop } from './ExecutionStop';
 import { InterpretationMissing, type Interpretation, type InterpretationUnavailable } from './Interpretation';
 import type { InputProfileConflict } from './InputModes';
+import type { LaneInputs, LaneWatch } from './LaneInputs';
 import type { Presentation } from './Presentation';
 import type { RecordReaders } from './RecordReaders';
+import type { LaneUnserved, TerminalEndpoint } from './TerminalInputs';
 
 export type AcceptedCustody = CustodyAccepted & { readonly frontier: InputFrontier };
 
@@ -54,6 +57,8 @@ export type Execution = {
     request: CustodyRequest,
   ) => Effect.Effect<AcceptedCustody, CustodianRefused | CustodyLost | CustodyMoveFailure>;
   readonly closeBinding: (binding: BindingId, principal: Principal) => Effect.Effect<void>;
+  readonly openLane: (claim: BindingClaim) => Effect.Effect<TerminalLane, AuthorityRefused | LaneUnserved>;
+  readonly inputs: Effect.Effect<LaneWatch, never, Scope.Scope>;
   readonly screen: (request?: ScreenRead) => Effect.Effect<ScreenAnswer>;
   readonly summary: (
     state: ExecutionState,
@@ -76,6 +81,8 @@ export type ExecutionParts = {
   readonly presentation: Presentation | undefined;
   readonly geometry: TerminalGeometry;
   readonly watching?: Effect.Effect<ProcessWatchReading>;
+  readonly endpoint: Effect.Effect<TerminalEndpoint, LaneUnserved>;
+  readonly lanes: LaneInputs;
 };
 
 export const makeExecution = Effect.fnUntraced(function* ({
@@ -89,10 +96,37 @@ export const makeExecution = Effect.fnUntraced(function* ({
   presentation,
   geometry,
   watching,
+  endpoint,
+  lanes,
 }: ExecutionParts) {
   const gate = yield* Semaphore.make(1);
   const bindings = yield* Bindings;
   const custodian = yield* Custodian;
+  const scope = yield* Effect.scope;
+  const watched = new Set<BindingId>();
+
+  const openLane = Effect.fn('Execution.openLane')(function* (claim: BindingClaim) {
+    const serving = yield* endpoint;
+    const binding = yield* bindings.authorize(claim, ref.execution);
+    const lane = yield* serving.open(binding);
+    if (!watched.has(binding.id)) {
+      watched.add(binding.id);
+      yield* lanes.track(binding.id);
+      yield* Effect.forkIn(
+        bindings.released(binding.id).pipe(
+          Effect.andThen(serving.close(binding.id)),
+          Effect.ensuring(
+            Effect.andThen(
+              lanes.forget(binding.id),
+              Effect.sync(() => watched.delete(binding.id)),
+            ),
+          ),
+        ),
+        scope,
+      );
+    }
+    return lane;
+  }, gate.withPermits(1));
   function admitInput(
     claim: BindingClaim,
     request: InputRequest,
@@ -190,6 +224,8 @@ export const makeExecution = Effect.fnUntraced(function* ({
     admitInput: admitInput,
     admitCustody: admitCustody,
     closeBinding: closeBinding,
+    openLane,
+    inputs: lanes.watch,
     screen: screen,
     summary: summary,
     processes: watching ?? Effect.succeed(undefined),

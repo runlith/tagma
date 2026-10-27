@@ -22,6 +22,7 @@ import { ExecutionCapacity } from './ExecutionCapacity';
 import { HostRequestKey, type Incarnation } from '@runlith/executions/protocol/execution';
 import type { Refusal } from '@runlith/executions/protocol/host';
 import type { InventoryFeedItem } from '@runlith/executions/protocol/inventory';
+import type { LaneInput } from '@runlith/executions/protocol/lane';
 import type { LoadReading } from '@runlith/executions/protocol/evidence';
 import type { ScreenFeedItem } from '@runlith/executions/protocol/presentation';
 import type { RecordRange } from '@runlith/executions/protocol/record';
@@ -116,6 +117,7 @@ export type Subscription = {
   readonly state: (summary: ExecutionSummary) => Effect.Effect<boolean>;
   readonly screen: (update: ScreenFeedItem) => Effect.Effect<boolean>;
   readonly inventory: (update: InventoryFeedItem) => Effect.Effect<boolean>;
+  readonly inputs: (input: LaneInput) => Effect.Effect<boolean>;
   readonly load: (reading: LoadReading) => Effect.Effect<boolean>;
   readonly end: (ending: SubscriptionEnding) => Effect.Effect<void>;
   readonly closed: Effect.Effect<void>;
@@ -286,6 +288,7 @@ const make = Effect.fn('HostConnections.make')(function* ({
       state: (summary) => push(entry, { _tag: 'State', subscription: entry.id, summary }, EMPTY_PAYLOAD),
       screen: (update) => push(entry, { _tag: 'Screen', subscription: entry.id, update }, EMPTY_PAYLOAD),
       inventory: (update) => push(entry, { _tag: 'Inventory', subscription: entry.id, update }, EMPTY_PAYLOAD),
+      inputs: (input) => push(entry, { _tag: 'Inputs', subscription: entry.id, ...input }, EMPTY_PAYLOAD),
       load: (reading) => push(entry, { _tag: 'Load', subscription: entry.id, reading }, EMPTY_PAYLOAD),
       end: Effect.fnUntraced(function* (ending) {
         if (yield* Deferred.isDone(entry.closed)) return;

@@ -6,6 +6,7 @@ import type { Refusal } from './protocol/host';
 import type { CancelAnswer, LaunchRequest, StartAnswer } from './protocol/launch';
 import type { ScreenFeedItem } from './protocol/presentation';
 import type { InputProfile } from './protocol/inputProfile';
+import type { LaneInput } from './protocol/lane';
 import type { LoadReading } from './protocol/evidence';
 import type { RecordRange } from './protocol/record';
 import type { ExecutionPage, ExecutionSummary, RetainedRecord } from './protocol/runtime';
@@ -51,6 +52,7 @@ export type ExecutionFeedItem =
   | { readonly _tag: 'State'; readonly summary: ExecutionSummary }
   | { readonly _tag: 'Screen'; readonly update: ScreenFeedItem }
   | { readonly _tag: 'Inventory'; readonly update: InventoryFeedItem }
+  | { readonly _tag: 'Inputs'; readonly input: LaneInput }
   | { readonly _tag: 'Load'; readonly reading: LoadReading }
   | { readonly _tag: 'Ended'; readonly ending: SubscriptionEnding };
 

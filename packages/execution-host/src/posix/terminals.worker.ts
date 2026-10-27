@@ -6,6 +6,7 @@ import type { ExecutionLimits } from '@runlith/executions/protocol/capacity';
 import type { BindingId, Principal } from '@runlith/executions/protocol/custody';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import type { InputAnswer, InputFrontier, InputRequest } from '@runlith/executions/protocol/input';
+import type { LaneInput } from '@runlith/executions/protocol/lane';
 import type { TerminalGeometry } from '@runlith/executions/protocol/record';
 import type { Binding } from '../Bindings';
 import {
@@ -20,6 +21,7 @@ import {
 import { ChannelFailed, type PendingEcho } from '../holder/Holder';
 import { terminalSink } from '../TerminalInputs';
 import { Descriptor } from './Descriptor';
+import { makeLanes } from './lanes';
 import { Descriptors } from './native';
 import { Reactor } from './Reactor';
 
@@ -34,6 +36,9 @@ export type InputAsk =
   | { readonly _tag: 'Reply'; readonly bytes: Uint8Array; readonly settling: boolean }
   | { readonly _tag: 'EndLanes' }
   | { readonly _tag: 'CloseLane'; readonly binding: BindingId; readonly principal: Principal }
+  | { readonly _tag: 'Next'; readonly binding: Binding }
+  | { readonly _tag: 'OpenLane'; readonly binding: Binding }
+  | { readonly _tag: 'EndLane'; readonly binding: BindingId }
   | { readonly _tag: 'Finish' }
   | { readonly _tag: 'Fence'; readonly reason: InputFenced['reason']; readonly detail: string }
   | { readonly _tag: 'Frontier' }
@@ -59,6 +64,7 @@ export type Ask =
       readonly limits: ExecutionLimits;
       readonly ref: ExecutionRef;
       readonly carried: InputCarry | undefined;
+      readonly output: bigint;
     }
   | { readonly _tag: 'Input'; readonly handle: number; readonly ask: InputAsk };
 
@@ -70,7 +76,8 @@ export type Request =
   | { readonly _tag: 'Close'; readonly handle: number }
   | { readonly _tag: 'Ask'; readonly id: number; readonly ask: Ask }
   | { readonly _tag: 'Cancel'; readonly id: number }
-  | { readonly _tag: 'Settled'; readonly id: number; readonly failure: Failure | undefined };
+  | { readonly _tag: 'Settled'; readonly id: number; readonly failure: Failure | undefined }
+  | { readonly _tag: 'Taken'; readonly handle: number };
 
 export type Answer =
   | { readonly _tag: 'Ready' }
@@ -80,6 +87,7 @@ export type Answer =
   | { readonly _tag: 'Failed'; readonly id: number; readonly failure: Failure }
   | { readonly _tag: 'Question'; readonly id: number; readonly handle: number; readonly question: Question }
   | { readonly _tag: 'Announce'; readonly handle: number }
+  | { readonly _tag: 'Admitted'; readonly handle: number; readonly inputs: ReadonlyArray<LaneInput> }
   | { readonly _tag: 'Room'; readonly handle: number; readonly room: number };
 
 export type ReplyAnswered =
@@ -97,6 +105,7 @@ const projected = (failure: unknown): Failure =>
     : { _tag: 'Defect', detail: String(failure) };
 
 type Held = {
+  readonly handle: number;
   readonly descriptor: Descriptor;
   readonly chunks: Uint8Array[];
   bytes: number;
@@ -108,6 +117,8 @@ type Held = {
 };
 
 type HostedInput = { readonly scope: Scope.Closeable; readonly queue: ExecutionInput };
+
+type Reported = { readonly pending: Map<BindingId, LaneInput>; sent: boolean };
 
 const stoppedFailure = () => new ChannelFailed({ reason: 'stopped', detail: 'reading was stopped on this terminal before it took a byte' });
 const unknownHandle = (handle: number) =>
@@ -148,6 +159,25 @@ const program = Effect.gen(function* () {
   const questions = new Map<number, Deferred.Deferred<void, Failure>>();
   let questioned = 0;
   let roomed = 0;
+  const reported = new Map<number, Reported>();
+  const report = (handle: number, held: Reported): void => {
+    held.sent = true;
+    send({ _tag: 'Admitted', handle, inputs: [...held.pending.values()] });
+    held.pending.clear();
+  };
+  const lanes = yield* makeLanes({
+    tail: 2 * READ_AHEAD_BYTES,
+    host: {
+      input: (handle) => inputs.get(handle)?.queue,
+      admitted: (handle, input) => {
+        const held = reported.get(handle) ?? { pending: new Map(), sent: false };
+        reported.set(handle, held);
+        held.pending.delete(input.binding);
+        held.pending.set(input.binding, input);
+        if (!held.sent) report(handle, held);
+      },
+    },
+  });
 
   const notify = (held: Held): void => {
     const standing = held.changed;
@@ -161,17 +191,22 @@ const program = Effect.gen(function* () {
       if (held.stopped) return;
       const read = yield* Effect.result(held.descriptor.read(TRANSFER_LIMIT));
       if (read._tag === 'Failure') {
-        if (read.failure.reason !== 'stopped') held.failure = read.failure;
+        if (read.failure.reason !== 'stopped') {
+          held.failure = read.failure;
+          lanes.ended(held.handle);
+        }
         notify(held);
         return;
       }
       if (read.success === undefined) {
         held.ended = true;
+        lanes.ended(held.handle);
         notify(held);
         return;
       }
       held.chunks.push(read.success);
       held.bytes += read.success.length;
+      lanes.pumped(held.handle, read.success);
       notify(held);
     }
   });
@@ -270,6 +305,7 @@ const program = Effect.gen(function* () {
       carried: ask.carried,
     }).pipe(Scope.provide(scope));
     inputs.set(handle, { scope, queue });
+    if (held.pump === undefined) lanes.feed(handle, ask.ref, ask.output);
   });
 
   const inputOf = (handle: number): Effect.Effect<ExecutionInput, ChannelFailed> =>
@@ -295,13 +331,19 @@ const program = Effect.gen(function* () {
 
   const inputAnswer = Effect.fnUntraced(function* (handle: number, ask: InputAsk) {
     if (ask._tag === 'Dispose') {
+      lanes.forget(handle);
+      reported.delete(handle);
       const hosted = inputs.get(handle);
       inputs.delete(handle);
       if (hosted !== undefined) yield* Scope.close(hosted.scope, Exit.void);
       return undefined;
     }
+    if (ask._tag === 'EndLane') return lanes.end(handle, ask.binding);
+    if (ask._tag === 'OpenLane') return yield* lanes.open(handle, ask.binding);
     const queue = yield* inputOf(handle);
     switch (ask._tag) {
+      case 'Next':
+        return yield* queue.next(ask.binding);
       case 'Admit':
         return (yield* queue.admit(ask.request, ask.binding)) satisfies InputAnswer;
       case 'CloseIntake':
@@ -311,8 +353,10 @@ const program = Effect.gen(function* () {
       case 'Reply':
         return yield* replied(handle, yield* queue.reply(ask.bytes, ask.settling));
       case 'EndLanes':
+        lanes.end(handle);
         return yield* queue.endLanes();
       case 'CloseLane':
+        lanes.end(handle, ask.binding, ask.principal);
         return yield* queue.closeLane(ask.binding, ask.principal);
       case 'Finish':
         return yield* queue.finish();
@@ -370,6 +414,7 @@ const program = Effect.gen(function* () {
     const held = terminals.get(handle);
     if (held === undefined) return;
     terminals.delete(handle);
+    lanes.forget(handle);
     if (held.pump !== undefined) yield* Fiber.interrupt(held.pump);
     held.descriptor.close();
     held.failure ??= new ChannelFailed({ reason: 'closed', detail: 'the descriptor was closed by this process' });
@@ -384,6 +429,7 @@ const program = Effect.gen(function* () {
         break;
       case 'Adopt':
         terminals.set(request.handle, {
+          handle: request.handle,
           descriptor: new Descriptor(native, reactor, request.fd),
           chunks: [],
           bytes: 0,
@@ -425,6 +471,13 @@ const program = Effect.gen(function* () {
       case 'Settled': {
         const settled = questions.get(request.id);
         if (settled !== undefined) Deferred.doneUnsafe(settled, request.failure === undefined ? Exit.void : Exit.fail(request.failure));
+        break;
+      }
+      case 'Taken': {
+        const held = reported.get(request.handle);
+        if (held === undefined) break;
+        held.sent = false;
+        if (held.pending.size > 0) report(request.handle, held);
         break;
       }
     }

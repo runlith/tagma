@@ -82,6 +82,11 @@ export const names: Builtin<'names', NamesParams> = {
             path: 'packages/code-facts/src/languages/js/declarations.ts',
             why: 'One subject: what one parse of a JavaScript or TypeScript module says about its top level — the declarations it exports and keeps, the names it imports, the tag literals and published types its body holds, and the outline digest; every reading walks the same program and script offsets.',
           },
+          {
+            lines: 655,
+            path: 'packages/execution-host/src/ExecutionInput.ts',
+            why: 'One subject: the input queue of one execution — admission per lane with its sequences and receipts, backpressure, the writer that drains it into the sink, interrupt flushing and the carry a departing logic hands on; every act reads and moves the same lane book and pending bytes.',
+          },
         ],
         lines: 650,
       },

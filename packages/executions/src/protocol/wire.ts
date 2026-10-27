@@ -20,6 +20,7 @@ import { ExecutionRef, Incarnation, InstallationId, HostRequestRef } from './exe
 import { Refusal } from './host';
 import { InputCause, InputAnswer, InputSequence } from './input';
 import { InputProfile, InputRevision } from './inputProfile';
+import { LaneInput, TerminalLane } from './lane';
 import { CancelAnswer, LaunchRequest, StartAnswer } from './launch';
 import { DisownReport, Disowned } from './keep';
 import { Pace, PaceReport } from './pace';
@@ -54,9 +55,9 @@ import {
   StopReceipt,
 } from './stop';
 
-export const WIRE_VERSION = 40;
+export const WIRE_VERSION = 41;
 export const PREVIOUS_RELEASE = {
-  version: 39,
+  version: 40,
   serves: [
     'machine-load',
     'end-residual',
@@ -186,6 +187,7 @@ export const SubscriptionSource = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal('State'), execution: ExecutionRef }),
   Schema.Struct({ _tag: Schema.Literal('Screen'), execution: ExecutionRef, base: Schema.optional(FrameRevision) }),
   Schema.Struct({ _tag: Schema.Literal('Inventory') }),
+  Schema.Struct({ _tag: Schema.Literal('Inputs'), execution: ExecutionRef }),
   needing('machine-load', Schema.Struct({ _tag: Schema.Literal('Load'), serverPid: Positive, desktopPid: Schema.optional(Positive) })),
 ]).pipe(Schema.toTaggedUnion('_tag'));
 export type SubscriptionSource = typeof SubscriptionSource.Type;
@@ -265,6 +267,7 @@ const requests = [
     profile: Schema.optional(InputRevision),
     act: InputFrame,
   }),
+  Schema.Struct({ _tag: Schema.Literal('OpenTerminalLane'), claim: BindingScope, execution: ExecutionRef }),
   Schema.Struct({ _tag: Schema.Literal('Signal'), execution: ExecutionRef, signal: Schema.NonEmptyString }),
   Schema.Struct({ _tag: Schema.Literal('Processes'), execution: ExecutionRef }),
   Schema.Struct({ _tag: Schema.Literal('Listeners'), execution: ExecutionRef }),
@@ -359,6 +362,7 @@ const answers = [
   Schema.Struct({ _tag: Schema.Literal('Subscribed'), subscription: SubscriptionId }),
   Schema.Struct({ _tag: Schema.Literal('Screen'), answer: ScreenAnswer }),
   Schema.Struct({ _tag: Schema.Literal('Input'), outcome: InputAnswer }),
+  Schema.Struct({ _tag: Schema.Literal('OpenTerminalLane'), ...TerminalLane.fields }),
   Schema.Struct({ _tag: Schema.Literal('Signal'), outcome: SignalAnswer }),
   Schema.Struct({ _tag: Schema.Literal('Processes'), report: Schema.optional(ProcessReport) }),
   Schema.Struct({ _tag: Schema.Literal('Listeners'), report: Schema.optional(ListenerReport) }),
@@ -396,6 +400,7 @@ const events = [
   Schema.Struct({ _tag: Schema.Literal('State'), subscription: SubscriptionId, summary: ExecutionSummary }),
   Schema.Struct({ _tag: Schema.Literal('Screen'), subscription: SubscriptionId, update: ScreenFeedItem }),
   Schema.Struct({ _tag: Schema.Literal('Inventory'), subscription: SubscriptionId, update: InventoryFeedItem }),
+  Schema.Struct({ _tag: Schema.Literal('Inputs'), subscription: SubscriptionId, ...LaneInput.fields }),
   needing('machine-load', Schema.Struct({ _tag: Schema.Literal('Load'), subscription: SubscriptionId, reading: LoadReading })),
   Schema.Struct({ _tag: Schema.Literal('Ended'), subscription: SubscriptionId, ending: SubscriptionEnding }),
 ] as const;

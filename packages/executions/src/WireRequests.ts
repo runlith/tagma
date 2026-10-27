@@ -9,6 +9,7 @@ export type Lane = 'control' | 'walk';
 
 const LANES: Record<Request['_tag'], Lane> = {
   Input: 'control',
+  OpenTerminalLane: 'control',
   Signal: 'control',
   Custody: 'control',
   Authority: 'control',

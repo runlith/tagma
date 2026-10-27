@@ -6,6 +6,7 @@ import type { Request, SubscriptionEnding } from '@runlith/executions/protocol/w
 import type { Executions } from './registry/launch';
 import type { HostCommands } from './registry/inventory';
 import type { ByteReadFailure, HostByteRecords, TerminalScreen } from './registry/reads';
+import type { InputLanes, LaneFollow } from './registry/control';
 import type { ProfiledRead } from './RetainedRecordReads';
 import type { ReaderId } from './RecordReaders';
 import type { Admitted, Subscription } from './HostConnections';
@@ -20,6 +21,7 @@ export const subscribe = (
   commands: HostCommands['Service'],
   records: HostByteRecords['Service'],
   screens: TerminalScreen['Service'],
+  lanes: InputLanes['Service'],
   usage: ProcessUsage | undefined,
   admitted: Admitted,
   body: Extract<Request, { readonly _tag: 'Subscribe' }>,
@@ -99,6 +101,29 @@ export const subscribe = (
   if (source._tag === 'Inventory') {
     return Effect.flatMap(span('Subscribe.Inventory', undefined, undefined, admitted.subscribe(body.credits)), (subscription) =>
       subscription === undefined ? Effect.void : tailed('subscribe-inventory', subscription, inventory(executions, usage, subscription)),
+    );
+  }
+  if (source._tag === 'Inputs') {
+    return Effect.scoped(
+      Effect.flatMap(
+        span(
+          'Subscribe.Inputs',
+          source.execution.execution,
+          undefined,
+          lanes.inputs(readExecutionId(source.execution.execution)).pipe(
+            Effect.matchEffect({
+              onFailure: (failure) => Effect.as(refused(failure), Effect.void),
+              onSuccess: (follow) =>
+                Effect.flatMap(admitted.subscribe(body.credits), (subscription) =>
+                  Effect.succeed(
+                    subscription === undefined ? Effect.void : tailed('subscribe-inputs', subscription, inputs(follow, subscription)),
+                  ),
+                ),
+            }),
+          ),
+        ),
+        (run) => run,
+      ),
     );
   }
   const execution = readExecutionId(source.cursor.ref.execution);
@@ -184,6 +209,14 @@ const states = Effect.fnUntraced(function* (
     }),
   );
 }, Effect.asVoid);
+
+const inputs = (follow: LaneFollow, subscription: Subscription): Effect.Effect<void> =>
+  Effect.raceFirst(
+    Effect.forever(
+      Effect.flatMap(follow.next, (input) => Effect.flatMap(subscription.inputs(input), (sent) => (sent ? Effect.void : Effect.interrupt))),
+    ),
+    Effect.andThen(follow.over, subscription.end('completed')),
+  );
 
 const inventory = Effect.fnUntraced(function* (
   executions: Executions['Service'],

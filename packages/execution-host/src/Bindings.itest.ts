@@ -158,15 +158,8 @@ describe('Bindings', () => {
           const first = yield* custodian.take(key('take-1'), 0, connection('server-1'), 'custodian');
           const held = yield* bindings.open(principal('agent'), connection('server-1'), first.standing.epoch);
           const second = yield* custodian.take(key('take-2'), first.standing.revision, connection('server-2'), 'custodian');
+          yield* bindings.released(held.id);
 
-          const invalidated = yield* Effect.result(
-            bindings.authorize({
-              binding: held.id,
-              principal: principal('agent'),
-              connection: connection('server-2'),
-              epoch: second.standing.epoch,
-            }),
-          );
           const forgotten = yield* Effect.result(
             bindings.authorize({
               binding: held.id,
@@ -191,11 +184,10 @@ describe('Bindings', () => {
             connection: connection('server-2'),
             epoch: second.standing.epoch,
           });
-          return { invalidated, forgotten, underOldEpoch, swept, live };
+          return { forgotten, underOldEpoch, swept, live };
         }),
       );
 
-      expect(tagOf(outcome.invalidated)).toBe('BindingRefused');
       expect(tagOf(outcome.forgotten)).toBe('BindingMissing');
       expect(tagOf(outcome.underOldEpoch)).toBe('CustodianRefused');
       expect(outcome.swept).toBe(0);
@@ -215,6 +207,7 @@ describe('Bindings', () => {
           const view = yield* bindings.open(principal('operator'), server, taken.standing.epoch);
 
           const released = yield* custodian.release(key('release-1'), server, taken.standing);
+          yield* bindings.released(view.id);
           const afterRelease = yield* Effect.result(
             bindings.authorize({
               binding: view.id,
@@ -229,6 +222,8 @@ describe('Bindings', () => {
           const agentRun = yield* bindings.open(principal('agent'), server, again.standing.epoch);
           const operatorView = yield* bindings.open(principal('operator'), server, again.standing.epoch);
           const fenced = yield* custodian.fence(key('fence-1'), again.standing.revision, connection('cli'), 'recovery');
+          yield* bindings.released(agentRun.id);
+          yield* bindings.released(operatorView.id);
           const ended = yield* Effect.result(
             bindings.authorize({
               binding: agentRun.id,
@@ -258,12 +253,12 @@ describe('Bindings', () => {
       );
 
       expect(tagOf(outcome.afterRelease)).toBe('CustodianRefused');
-      expect(outcome.freedByRelease).toBe(1);
+      expect(outcome.freedByRelease).toBe(0);
       expect(outcome.fenced.standing.epoch).toBe(outcome.again.standing.epoch + 1);
       expect(outcome.fenced.standing.holder).toBeUndefined();
       expect(tagOf(outcome.ended)).toBe('CustodianRefused');
       expect(tagOf(outcome.atFence)).toBe('CustodianRefused');
-      expect(outcome.freedByFence).toBe(2);
+      expect(outcome.freedByFence).toBe(0);
     }),
   );
 });

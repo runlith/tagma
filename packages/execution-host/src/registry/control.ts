@@ -1,5 +1,8 @@
-import { Context, Effect } from 'effect';
+import { Context, Deferred, Effect, type Scope } from 'effect';
+import { type TerminalLane } from '@runlith/executions/protocol/lane';
 import { type AuthorityRefused, type CustodyAuthority } from '../Execution';
+import { type LaneWatch } from '../LaneInputs';
+import { type LaneUnserved } from '../TerminalInputs';
 import { type BindingClaim } from '../Bindings';
 import { type BindingId, type Principal } from '@runlith/executions/protocol/custody';
 import { type CustodianRefused } from '../Custodian';
@@ -27,8 +30,15 @@ export class InputLanes extends Context.Service<
       ExecutionUnknown | AuthorityRefused | InputFenced | InterpretationUnavailable | InterpretationMissing | InputProfileConflict
     >;
     readonly close: (binding: BindingId, principal: Principal) => Effect.Effect<void>;
+    readonly open: (
+      execution: ExecutionId,
+      claim: BindingClaim,
+    ) => Effect.Effect<TerminalLane, ExecutionUnknown | AuthorityRefused | LaneUnserved>;
+    readonly inputs: (execution: ExecutionId) => Effect.Effect<LaneFollow, ExecutionUnknown, Scope.Scope>;
   }
 >()('@runlith/execution-host/InputLanes') {}
+
+export type LaneFollow = LaneWatch & { readonly over: Effect.Effect<void> };
 
 export class CustodyControl extends Context.Service<
   CustodyControl,
@@ -57,6 +67,11 @@ export const inputLanesOf = (registry: RegistryState) => {
           const found = execution === undefined ? undefined : held.get(execution);
           return found === undefined ? Effect.void : found.execution.closeBinding(binding, principal);
         }),
+      ),
+    open: (execution, claim) => Effect.flatMap(live(registry, execution), (found) => found.execution.openLane(claim)),
+    inputs: (execution) =>
+      Effect.flatMap(live(registry, execution), (found) =>
+        Effect.map(found.execution.inputs, (watch) => ({ next: watch.next, over: Deferred.await(found.worked) })),
       ),
   });
 };

@@ -37,6 +37,10 @@
       "types": "./src/TerminalInput.ts",
       "default": "./src/TerminalInput.ts"
     },
+    "./TerminalLanes": {
+      "types": "./src/TerminalLanes.ts",
+      "default": "./src/TerminalLanes.ts"
+    },
     "./ExecutionCustody": {
       "types": "./src/ExecutionCustody.ts",
       "default": "./src/ExecutionCustody.ts"

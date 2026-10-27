@@ -301,6 +301,20 @@ export const answer = (
       );
     }
 
+    case 'OpenTerminalLane': {
+      const stale = actingRefusal(body.execution, installation, incarnation);
+      return span(
+        'OpenTerminalLane',
+        body.execution.execution,
+        undefined,
+        stale !== undefined
+          ? refusedAs(stale)
+          : lanes
+              .open(readExecutionId(body.execution.execution), claimOf(body.claim))
+              .pipe(Effect.matchEffect({ onFailure: refused, onSuccess: (lane) => answered({ _tag: 'OpenTerminalLane', ...lane }) })),
+      );
+    }
+
     case 'Custody':
       return span(
         'Custody',
@@ -418,7 +432,7 @@ export const answer = (
       return authority(lanes, retirement, bindings, custodian, capacity, admission, admitted, body, span);
 
     case 'Subscribe':
-      return subscribe(executions, commands, records, screens, usage, admitted, body, chunk, refused, span);
+      return subscribe(executions, commands, records, screens, lanes, usage, admitted, body, chunk, refused, span);
 
     case 'State': {
       const generation = generationOf(body.execution, installation, incarnation);
