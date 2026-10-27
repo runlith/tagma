@@ -151,13 +151,28 @@ test('a pointer moving through the triangle keeps the submenu, and one that stop
   }
 });
 
-test('a pointer leaving the submenu trigger without heading toward the submenu highlights the item it moves onto at once', () => {
+test('a pointer crossing to a far submenu keeps it through steps that do not advance toward it', () => {
+  menu();
+  open();
+  pointer('pointermove', sub(), { clientX: 100, clientY: 50 });
+  vi.spyOn(document.querySelector<HTMLElement>('[data-sub]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(200, 0, 100, 200));
+  pointer('pointerleave', sub(), { clientX: 150, clientY: 50, bubbles: false });
+  pointer('pointermove', item('Omega'), { clientX: 160, clientY: 55 });
+  pointer('pointermove', item('Omega'), { clientX: 160, clientY: 60 });
+  pointer('pointermove', item('Omega'), { clientX: 159, clientY: 66 });
+  expect(sub().getAttribute('aria-expanded')).toBe('true');
+  expect(item('Omega').hasAttribute('data-highlighted')).toBe(false);
+  pointer('pointermove', document.querySelector<HTMLElement>('[data-sub]')!, { clientX: 210, clientY: 70 });
+  expect(sub().getAttribute('aria-expanded')).toBe('true');
+});
+
+test('a pointer leaving the submenu trigger out of the triangle highlights the item it moves onto at once', () => {
   menu();
   open();
   pointer('pointermove', sub(), { clientX: 100, clientY: 50 });
   vi.spyOn(document.querySelector<HTMLElement>('[data-sub]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(200, -800, 100, 1000));
   pointer('pointerleave', sub(), { clientX: 150, clientY: 50, bubbles: false });
-  pointer('pointermove', item('Omega'), { clientX: 150, clientY: 60 });
+  pointer('pointermove', item('Omega'), { clientX: 150, clientY: 100 });
   flushSync();
   expect(item('Omega').hasAttribute('data-highlighted')).toBe(true);
   expect(sub().getAttribute('aria-expanded')).toBe('false');

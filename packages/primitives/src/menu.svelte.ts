@@ -369,10 +369,9 @@ export class Menu {
   private readonly follow = (event: PointerEvent): void => {
     const aim = this.aim;
     if (aim === null) return;
-    const toward = (event.clientX - aim.point.x) * (aim.near[0].x - aim.apex.x) > 0;
     aim.point = { x: event.clientX, y: event.clientY };
     if (within(aim.box, aim.point)) this.endAim(false);
-    else if (!toward || !inTriangle(aim.point, aim.apex, aim.near[0], aim.near[1])) this.endAim(true);
+    else if (!inTriangle(aim.point, aim.apex, aim.near[0], aim.near[1])) this.endAim(true);
     else this.hold();
   };
 
