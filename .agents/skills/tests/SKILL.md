@@ -54,14 +54,14 @@ The suffix is the kind; testbed (`packages/testbed`) enforces it at the call sit
 - **One scenario per expensive setup**: tests sharing a world, a birth or a boot become one scenario with the same assertions.
 - **Drivers.** The door world starts none unless `drivers` names them (`drivers: ['rollout-shelving']`); a defect or race test names the drivers its real caller runs with.
 - **Waits end on a fact** — `Deferred`, `Queue`, a feed event, the projected row, a process exit (rule 7609a86c). Under `it.effect`, time moves only by `TestClock.adjust`.
-- **Doubles answer every call** the scenario makes and finish the ones it does not care about: a model double returning `Stream.never` passed while SQL was slow and hung once SQL got faster.
+- **Doubles answer every call** the scenario makes and finish the ones it does not care about: a double that never answers hangs the test as soon as the code around it gets faster.
 - **Observe cheaply**: read a store file read-only with `bun:sqlite` rather than opening a store layer per check.
 - **Build artifacts** (execution-host bundle, CLI) come from `cachedArtifact` in `packages/execution-host/src/buildArtifact.ts`, keyed by inputs across workers and runs; there is no second cache.
 
 ## Shared worlds under `--no-isolate`
 
 A worker keeps one module registry for all its files: module-level state lives for the worker.
-- State leaking between files is fixed at its owner — clear the shared double in `beforeEach`, open connections in the test's scope, unmount and clear `document.body` in `afterEach` — never by restoring isolation. Leaks found: a status double's health carried over, a live connection outliving its test, DOM left mounted, an absolute count over a shared module counter.
+- State leaking between files is fixed at its owner — clear the shared double in `beforeEach`, open connections in the test's scope, unmount and clear `document.body` in `afterEach` — never by restoring isolation; an assertion over a shared module counter compares before and after, never an absolute count.
 - Temp directories are made in a scope (`beforeAll`, a fixture directory), not at module top level: Bun imports the next file before the previous one leaves, so an import-time `mkdtempSync` lands in the previous file's root ([[131e63f6]]).
 - A shared world's machine — its machine and user settings, provider registry, accounts, model catalogs, plugins — serves every file of the worker. testbed gives each file its own HOME, XDG, TMPDIR and git config and restores `process.env` after it; it never resets a world.
 - Order: files can pass in one order and fail in another, so a test file you write or change runs on three seeds (Checking a change). A red in a batch is reproduced from the worker's file sequence in the report, run with `--parallel=1 --no-isolate`, and bisected.
