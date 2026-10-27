@@ -8,7 +8,7 @@ type Trie = { readonly children: Map<string, Trie>; readonly paths: string[] };
 export type TreeFile = { readonly blob: string; readonly mode: string };
 export type TreePathAt = Result.Result<TreeFile | null, GitUnreadable | GitAnswerInvalid>;
 const OID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
-const utf8 = new TextDecoder();
+const utf8 = new TextDecoder('utf-8', { ignoreBOM: true });
 const literalObjects = { GIT_NO_REPLACE_OBJECTS: '1', GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', GIT_LFS_SKIP_SMUDGE: '1' };
 const branch = (): Trie => ({ children: new Map(), paths: [] });
 
@@ -82,7 +82,14 @@ const failedBelow = (trie: Trie, failure: GitUnreadable, found: Map<string, Tree
   }
 };
 
-const descend = (dir: string, tree: Directory, object: GitObject, found: Map<string, TreePathAt>, next: Directory[]): void => {
+const descend = (
+  dir: string,
+  tree: Directory,
+  object: GitObject,
+  found: Map<string, TreePathAt>,
+  next: Directory[],
+  gitlinks = false,
+): void => {
   const bytes = object.bytes;
   const width = tree.oid.length / 2;
   let offset = 0;
@@ -116,7 +123,7 @@ const descend = (dir: string, tree: Directory, object: GitObject, found: Map<str
       const oid = Buffer.from(bytes.subarray(zero + 1, zero + width + 1)).toString('hex');
       if (mode === '40000') {
         if (child.children.size > 0) next.push({ oid, trie: child });
-      } else if (mode !== '160000') {
+      } else if (mode !== '160000' || gitlinks) {
         for (const path of child.paths) found.set(path, Result.succeed({ blob: oid, mode }));
       }
     }
@@ -170,11 +177,14 @@ export const treeBlobsAt = Effect.fn('Git.treeBlobs')(function* (
 const unreadable = (dir: string, reason: string): GitUnreadable =>
   new GitUnreadable({ command: commandFor(dir, ['cat-file', '--batch']), reason });
 
+export type TreePathOptions = { readonly gitlinks?: boolean; readonly relative?: 'root' | 'cwd' };
+
 export const treePathsAt = Effect.fn('Git.treePaths')(function* (
   git: Git['Service'],
   dir: string,
   revision: string,
   paths: readonly string[],
+  options: TreePathOptions = {},
 ): Effect.fn.Return<ReadonlyMap<string, TreePathAt>, never> {
   const found = new Map<string, TreePathAt>(paths.map((path) => [path, Result.succeed(null)]));
   if (paths.length === 0) return found;
@@ -194,6 +204,14 @@ export const treePathsAt = Effect.fn('Git.treePaths')(function* (
   const rootOid = yield* Effect.result(rootAt(git, dir, revision));
   if (rootOid._tag === 'Failure') return new Map(paths.map((path) => [path, Result.fail(rootOid.failure)]));
   let level: Directory[] = [{ oid: rootOid.success, trie: root }];
+  if (options.relative === 'cwd') {
+    const answer = (yield* objectsAt(git, dir, [`${rootOid.success}:./`], { env: literalObjects, extendEnv: true }))[0]!;
+    const reading = objectOf(dir, answer);
+    const next: Directory[] = [];
+    if (reading._tag === 'Failure') failedBelow(root, reading.failure, found);
+    else descend(dir, level[0]!, reading.success, found, next, options.gitlinks === true);
+    level = next;
+  }
   while (level.length > 0) {
     const oids = [...new Set(level.map((tree) => tree.oid))];
     const objects = yield* objectsAt(git, dir, oids, { env: literalObjects, extendEnv: true });
@@ -202,7 +220,7 @@ export const treePathsAt = Effect.fn('Git.treePaths')(function* (
     for (const tree of level) {
       const reading = reads.get(tree.oid)!;
       if (reading._tag === 'Failure') failedBelow(tree.trie, reading.failure, found);
-      else descend(dir, tree, reading.success, found, next);
+      else descend(dir, tree, reading.success, found, next, options.gitlinks === true);
     }
     level = next;
   }

@@ -14,6 +14,7 @@ import {
 } from './Git.js';
 
 const OID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+const isCwdTree = (name: string): boolean => name.endsWith(':./') && OID.test(name.slice(0, -3));
 const HEADER = /^([0-9a-f]{40}(?:[0-9a-f]{24})?) (blob|tree|commit|tag) (\d+)$/;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -137,7 +138,7 @@ const makeObjectReader = ({
     if (header === `${oid} missing`) return null;
     const matched = HEADER.exec(header);
     const size = Number(matched?.[3]);
-    if (matched === null || matched[1] !== oid || !Number.isSafeInteger(size) || size < 0) {
+    if (matched === null || (!isCwdTree(oid) && matched[1] !== oid) || !Number.isSafeInteger(size) || size < 0) {
       return yield* new GitEndingUnreadable({ command, reason: `cat-file returned an invalid object header: ${header}` });
     }
     const body = yield* take(size, capture === undefined ? size : Math.max(0, capture));
@@ -188,7 +189,9 @@ export const makeObjectSessions = Effect.gen(function* () {
         env: { ...options?.env, GIT_NO_REPLACE_OBJECTS: '1' },
         extendEnv: options?.env === undefined ? true : options.extendEnv,
       };
-      const found = oids.map((oid) => (held.store === undefined ? undefined : cached(`${held.store}\0${oid}`, options?.capture)));
+      const found = oids.map((oid) =>
+        held.store === undefined || isCwdTree(oid) ? undefined : cached(`${held.store}\0${oid}`, options?.capture),
+      );
       const missing = oids.flatMap((oid, at) => (found[at] === undefined ? [oid] : []));
       if (missing.length === 0) return found.map((one) => Result.succeed(one!));
       const reads = yield* held.lock.withPermit(readIn(held, dir, missing, configured));
@@ -225,11 +228,11 @@ export const makeObjectSessions = Effect.gen(function* () {
       }
       const pending: { oid: string; at: number }[] = [];
       for (const [at, oid] of oids.entries()) {
-        if (!OID.test(oid)) {
+        if (!OID.test(oid) && !isCwdTree(oid)) {
           answers[at] = Result.fail(new GitEndingUnreadable({ command, reason: `${oid} is not a full object id` }));
           continue;
         }
-        const object = cached(`${session.store}\0${oid}`, options?.capture);
+        const object = isCwdTree(oid) ? undefined : cached(`${session.store}\0${oid}`, options?.capture);
         if (object !== undefined) answers[at] = Result.succeed(object);
         else pending.push({ oid, at });
       }
@@ -266,7 +269,7 @@ export const makeObjectSessions = Effect.gen(function* () {
           }
           if (answer.success !== null) {
             if (answer.success.type === 'blob') blobs += 1;
-            remember(`${session.store}\0${one.oid}`, answer.success);
+            if (!isCwdTree(one.oid)) remember(`${session.store}\0${one.oid}`, answer.success);
           }
         }
       }

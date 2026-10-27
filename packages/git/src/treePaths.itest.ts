@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { treeBlobAt } from './treePaths.js';
+import { treeBlobAt, treePathsAt } from './treePaths.js';
 import { git, onGit, release, tempRepo } from './testing/fixture.js';
 
 afterAll(release);
@@ -30,4 +30,6 @@ test('a tree blob answers its bytes and mode, a link its target, and an absent p
   expect(await read('absent.jsonc')).toBeNull();
   expect(await read('module.jsonc')).toBeNull();
   expect(await read('folder.jsonc')).toBeNull();
+  const entry = await onGit((service) => treePathsAt(service, root, tree, ['module.jsonc'], { gitlinks: true }));
+  expect(entry.get('module.jsonc')).toMatchObject({ _tag: 'Success', success: { blob: head, mode: '160000' } });
 });

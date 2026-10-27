@@ -111,6 +111,55 @@ layer(layers, { excludeTestServices: true })('Holdings of one checkout', (it) =>
       expect(totals.get(THEIRS)).toEqual({ paths: 1, unproven: 0, outside: 0 });
     }),
   );
+  it.effect('a replaced HEAD tree does not replace the raw base of recorded lines', () =>
+    Effect.gen(function* () {
+      const world = yield* fixture;
+      const tree = yield* run(world.git, world.root, ['rev-parse', 'HEAD^{tree}']);
+      yield* written(world, 'kept.txt', 'replacement\n');
+      yield* run(world.git, world.root, ['add', 'kept.txt']);
+      const replacement = yield* run(world.git, world.root, ['write-tree']);
+      yield* run(world.git, world.root, ['read-tree', 'HEAD']);
+      yield* run(world.git, world.root, ['replace', tree, replacement]);
+      yield* written(world, 'kept.txt', GROWN);
+      yield* edited(world.mine, world.paths.join(world.root, 'kept.txt'), BORN, GROWN);
+      const judges = yield* judgesOf(world);
+      const holding = (yield* judges.judged(world.rootId, ['kept.txt'])).get('kept.txt')?.holding;
+      expect(holding?.lines).toEqual({ added: 1, removed: 0 });
+      expect(proven(holding)).toMatchObject({ hands: [{ holder: { kind: 'thread', thread: MINE }, added: 1, removed: 0 }], nobody: [] });
+    }),
+  );
+  it.effect('a registered subdirectory judges paths against its own prefix in the enclosing repository', () =>
+    Effect.gen(function* () {
+      const world = yield* fixture;
+      const sub = world.paths.join(world.root, 'sub');
+      yield* world.files.makeDirectory(sub);
+      yield* written(world, 'kept.txt', 'outer\n');
+      yield* written(world, 'sub/kept.txt', BORN);
+      yield* run(world.git, world.root, ['add', '-A']);
+      yield* run(world.git, world.root, ['commit', '-qm', 'nested root']);
+      const nested = yield* world.roots.register({ path: sub, provenance: { kind: 'adoption', id: 'nested' } });
+      yield* written(world, 'sub/kept.txt', GROWN);
+      const judges = yield* judgesOf(world);
+      const holding = (yield* judges.judged(nested.rootId, ['kept.txt'])).get('kept.txt')?.holding;
+      expect(holding?.lines).toEqual({ added: 1, removed: 0 });
+      expect(proven(holding).nobody).toMatchObject([{ added: 1, removed: 0 }]);
+    }),
+  );
+  it.effect('a leading U+FEFF belongs to the tracked filename', () =>
+    Effect.gen(function* () {
+      const world = yield* fixture;
+      const name = '\uFEFFkept.txt';
+      yield* written(world, name, BORN);
+      yield* run(world.git, world.root, ['add', '--', name]);
+      yield* run(world.git, world.root, ['commit', '-qm', 'literal name']);
+      yield* written(world, name, GROWN);
+      yield* edited(world.mine, world.paths.join(world.root, name), BORN, GROWN);
+      const judges = yield* judgesOf(world);
+      const holding = (yield* judges.judged(world.rootId, [name])).get(name)?.holding;
+      expect(holding?.lines).toEqual({ added: 1, removed: 0 });
+      expect(proven(holding)).toMatchObject({ hands: [{ holder: { kind: 'thread', thread: MINE }, added: 1, removed: 0 }], nobody: [] });
+    }),
+  );
   it.effect('a change two sessions’ commands overlapped names every one of those sessions, not the last to retain it', () =>
     Effect.gen(function* () {
       const world = yield* fixture;
