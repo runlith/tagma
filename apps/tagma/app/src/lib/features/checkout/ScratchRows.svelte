@@ -10,29 +10,39 @@
   import FileIcon from '$lib/shared/FileIcon.svelte';
   import { formatBytes } from '$lib/shared/figures.js';
   import { timeCompact } from '$lib/shared/time.js';
+  import { cn } from '$lib/shared/utils.js';
   import { insetOf } from './changeItem.js';
-  import { fileLink } from './links.js';
+  import { changeLink } from './links.js';
   import { entryPath } from './ScratchFolder.svelte.js';
   import ScratchNested from './ScratchNested.svelte';
+  import { ThreadChanges } from './ThreadChanges.svelte.js';
 
   let { frame, projectId, thread, path, depth }: { frame: FolderFrame; projectId: number; thread: string; path: string; depth: number } =
     $props();
 
   const opening = Opening.use();
+  const changes = ThreadChanges.use();
   const here = App.current();
   const expanded = new SvelteSet<string>();
 
   const hidden = $derived(frame.total - frame.entries.length);
+  const shown = $derived(changes.open?.rootId === null ? changes.open.path : null);
+
+  const absolute = (name: string): string => `${frame.directory}/${name}`;
 
   const opens = (name: string) =>
-    linkTarget(opening, () => fileLink({ path: `${frame.directory}/${name}` }, { thread, project: projectId }), here);
+    linkTarget(opening, () => changeLink({ projectId, rootId: null, path: absolute(name), commit: null }, { thread }), here);
 
   const when = (at: number): string => timeCompact(new Date(at).toISOString());
 </script>
 
 {#each frame.entries as entry (entry.name)}
+  {@const selected = entry.kind === 'file' && shown === absolute(entry.name)}
   <div
-    class="group/row relative flex h-6 min-w-0 items-center gap-1.5 rounded-md pr-2 text-ui text-foreground/90 transition-colors hover:bg-hover"
+    class={cn(
+      'group/row relative flex h-6 min-w-0 items-center gap-1.5 rounded-md pr-2 text-ui transition-colors',
+      selected ? 'bg-selected text-foreground' : 'text-foreground/90 hover:bg-hover',
+    )}
   >
     {#if entry.kind === 'directory'}
       {@const open = expanded.has(entry.name)}
@@ -56,6 +66,7 @@
         type="button"
         class="flex h-6 min-w-0 flex-1 items-center gap-1.5 text-left outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:inset-ring-1 focus-visible:after:inset-ring-ring"
         style:padding-left="{insetOf(depth)}px"
+        aria-current={selected ? 'true' : undefined}
         data-change-path={entryPath(path, entry.name)}
         {@attach opens(entry.name)}
       >

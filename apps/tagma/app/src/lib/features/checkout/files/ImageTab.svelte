@@ -6,7 +6,19 @@
   import type { Tab } from './tab.js';
   import TabHead from './TabHead.svelte';
 
-  let { tab, projectId, headed = true }: { tab: Tab; projectId: number; headed?: boolean } = $props();
+  let {
+    tab,
+    projectId,
+    headed = true,
+    onBack,
+    onClose,
+  }: {
+    tab: Tab;
+    projectId: number;
+    headed?: boolean;
+    onBack?: (() => void) | undefined;
+    onClose?: (() => void) | undefined;
+  } = $props();
 
   const door = Door.use();
   const address = $derived(
@@ -25,7 +37,7 @@
 
 <section class="flex h-full min-h-0 min-w-0 flex-col bg-background" aria-label={tab.path} data-image-tab={tab.path}>
   {#if headed}
-    <TabHead path={tab.path} branch={tab.branch}>
+    <TabHead path={tab.path} branch={tab.branch} {onBack} {onClose}>
       {#if size !== null}
         <span class="mr-1 shrink-0 font-mono text-meta tabular-nums text-muted-foreground" data-image-size>{size}</span>
       {/if}

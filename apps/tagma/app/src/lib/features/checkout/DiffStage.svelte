@@ -8,10 +8,10 @@
   import DiffTab from './DiffTab.svelte';
   import { groupedIn } from './grouping.js';
   import { fileLink } from './links.js';
-  import type { OpenedFile } from './opened.js';
+  import type { OpenedDiff } from './opened.js';
   import { entriesIn, ThreadChanges } from './ThreadChanges.svelte.js';
 
-  let { file }: { file: OpenedFile } = $props();
+  let { file, onBack }: { file: OpenedDiff; onBack?: (() => void) | undefined } = $props();
 
   const changes = ThreadChanges.use();
   const repo = CheckoutRepo.use();
@@ -81,6 +81,8 @@
     commit={file.commit ?? lens.range?.head ?? null}
     range={file.commit === null ? lens.range : null}
     {lines}
+    {onBack}
+    closable={onBack === undefined}
     onClose={() => (changes.open = null)}
     onCommit={(commit) => (changes.open = { projectId: file.projectId, rootId: file.rootId, path: file.path, commit, lens })}
   />
@@ -93,6 +95,8 @@
     {lines}
     mine={changes.threadId}
     {mark}
+    {onBack}
+    closable={onBack === undefined}
     onClose={() => (changes.open = null)}
     onStep={walk === null ? undefined : step}
     onCommit={(commit) => (changes.open = { projectId: file.projectId, rootId: file.rootId, path: file.path, commit })}

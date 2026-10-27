@@ -40,7 +40,9 @@ export type FileRef = PathTarget & {
 
 export type CommitRef = { readonly sha: string; readonly project: string; readonly subject?: string | undefined };
 
-export type ChangeRef = { readonly projectId: number; readonly rootId: RootId; readonly path: string; readonly commit: string | null };
+export type ChangeRef =
+  | { readonly projectId: number; readonly rootId: RootId; readonly path: string; readonly commit: string | null }
+  | { readonly projectId: number; readonly rootId: null; readonly path: string; readonly commit: null };
 
 export type ChangesRef = { readonly threadId: string; readonly summary?: string | undefined };
 
@@ -100,7 +102,7 @@ const files: LinkKind<FileRef> = {
 const placed = (app: Resolver, link: Link<FileRef>) => app.resolve(FileOpener).place(spotOf(link.target), askOf(link));
 
 const fileOf = (link: Link<ChangeRef>): Link<FileRef> =>
-  fileLink({ path: link.target.path, root: link.target.rootId }, { ...link.from, project: link.target.projectId });
+  fileLink({ path: link.target.path, root: link.target.rootId ?? undefined }, { ...link.from, project: link.target.projectId });
 
 const outsideActs = (app: Resolver, link: Link<FileRef>) => {
   const outside = app.resolve(Outside);
@@ -198,19 +200,19 @@ const changes: LinkKind<ChangeRef> = {
   kind: CHANGE_LINK,
   what: (_app, link) => nameOf(link.target.path),
   beside: {
-    words: 'Open diff beside',
+    words: (_app, link) => (link.target.rootId === null ? 'Open beside' : 'Open diff beside'),
     icon: PanelRight,
     open: async (app, link) => {
-      const { projectId, rootId, path, commit } = link.target;
+      const target = link.target;
       const changed = app.resolve(ThreadChanges);
       const standing = changed.open;
       const same =
         standing !== null &&
-        standing.rootId === rootId &&
-        standing.path === path &&
-        standing.commit === commit &&
-        standing.lens === undefined;
-      if (!same) changed.open = { projectId, rootId, path, commit };
+        standing.rootId === target.rootId &&
+        standing.path === target.path &&
+        standing.commit === target.commit &&
+        (standing.rootId === null || standing.lens === undefined);
+      if (!same) changed.open = { ...target };
       if (!app.resolve(Beside).show({ content: changesPane, from: { ...link.from, thread: changed.threadId } }))
         await changes.full.open(app, link);
     },

@@ -1,5 +1,8 @@
 <script lang="ts">
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
+  import FoldVertical from '@lucide/svelte/icons/fold-vertical';
+  import TextWrap from '@lucide/svelte/icons/text-wrap';
+  import UnfoldVertical from '@lucide/svelte/icons/unfold-vertical';
   import type { Snippet } from 'svelte';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
@@ -22,20 +25,21 @@
       <Ellipsis class="size-3.5" />
     </DropdownMenu.Trigger>
   </Tooltip>
-  <DropdownMenu.Content align="end" class="min-w-52">
+  <DropdownMenu.Content align="end" class="min-w-44">
+    {#if extra !== undefined}
+      {@render extra()}
+      <DropdownMenu.Separator />
+    {/if}
     <DropdownMenu.Group>
       <DropdownMenu.GroupHeading>Diff</DropdownMenu.GroupHeading>
       <DropdownMenu.RadioGroup value={width} onValueChange={(next) => marks.widths.set(DIFF_WIDTH, next)}>
-        <DropdownMenu.RadioItem value="patch">Changes only</DropdownMenu.RadioItem>
-        <DropdownMenu.RadioItem value="whole">Whole file</DropdownMenu.RadioItem>
+        <DropdownMenu.RadioItem value="patch" icon={FoldVertical}>Changes only</DropdownMenu.RadioItem>
+        <DropdownMenu.RadioItem value="whole" icon={UnfoldVertical}>Whole file</DropdownMenu.RadioItem>
       </DropdownMenu.RadioGroup>
-      <DropdownMenu.CheckboxItem checked={wrap} onCheckedChange={(next) => marks.wraps.set(DIFF_WRAP, next)}>
-        Wrap long lines
-      </DropdownMenu.CheckboxItem>
     </DropdownMenu.Group>
-    {#if extra !== undefined}
-      <DropdownMenu.Separator />
-      {@render extra()}
-    {/if}
+    <DropdownMenu.Separator />
+    <DropdownMenu.CheckboxItem icon={TextWrap} checked={wrap} onCheckedChange={(next) => marks.wraps.set(DIFF_WRAP, next)}>
+      Wrap long lines
+    </DropdownMenu.CheckboxItem>
   </DropdownMenu.Content>
 </DropdownMenu.Root>

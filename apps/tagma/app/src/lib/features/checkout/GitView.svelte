@@ -4,12 +4,14 @@
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import GitBranch from '@lucide/svelte/icons/git-branch';
   import LayoutList from '@lucide/svelte/icons/layout-list';
+  import ListChecks from '@lucide/svelte/icons/list-checks';
   import Minus from '@lucide/svelte/icons/minus';
   import Plus from '@lucide/svelte/icons/plus';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import Undo2 from '@lucide/svelte/icons/undo-2';
   import Upload from '@lucide/svelte/icons/upload';
+  import Users from '@lucide/svelte/icons/users';
   import X from '@lucide/svelte/icons/x';
   import type { CheckoutEntry, ComparedPath } from '@tagma/server/workspace/contract/wire/checkout';
   import { OPERATIONS } from '@tagma/server/composition/catalog';
@@ -288,8 +290,8 @@
   <DropdownMenuGroup>
     <DropdownMenuGroupHeading>Group changes</DropdownMenuGroupHeading>
     <DropdownMenuRadioGroup value={lists.threadMode ? 'thread' : 'status'} onValueChange={(next) => marks.grouping.set(BY_THREAD, next)}>
-      <DropdownMenuRadioItem value="status">By status</DropdownMenuRadioItem>
-      <DropdownMenuRadioItem value="thread">By holder</DropdownMenuRadioItem>
+      <DropdownMenuRadioItem value="status" icon={ListChecks}>By status</DropdownMenuRadioItem>
+      <DropdownMenuRadioItem value="thread" icon={Users}>By holder</DropdownMenuRadioItem>
     </DropdownMenuRadioGroup>
   </DropdownMenuGroup>
 {/snippet}

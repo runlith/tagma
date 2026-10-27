@@ -49,6 +49,7 @@ export class ReaderMarks extends Service<ReaderMarks>()('ReaderMarks', { tier: '
   readonly grouping: KeptRecord<string>;
   readonly widths: KeptRecord<string>;
   readonly wraps: KeptRecord<boolean>;
+  readonly layouts: KeptRecord<string>;
   readonly threadFolds: KeptRecord<string[]>;
   readonly openThreadStubs: KeptRecord<string[]>;
   readonly pinnedBandFolded: KeptRecord<boolean>;
@@ -66,6 +67,7 @@ export class ReaderMarks extends Service<ReaderMarks>()('ReaderMarks', { tier: '
     this.grouping = new KeptRecord(storage, 'tagma.pathGrouping');
     this.widths = new KeptRecord(storage, 'tagma.diffWidth');
     this.wraps = new KeptRecord(storage, 'tagma.diffWrap');
+    this.layouts = new KeptRecord(storage, 'tagma.layouts');
     this.threadFolds = new KeptRecord(storage, 'tagma.threadFolds');
     this.openThreadStubs = new KeptRecord(storage, 'tagma.openThreadStubs');
     this.pinnedBandFolded = new KeptRecord(storage, 'tagma.pinnedBandFolded');

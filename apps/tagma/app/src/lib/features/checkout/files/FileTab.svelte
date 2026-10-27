@@ -7,7 +7,6 @@
   import FileQuestion from '@lucide/svelte/icons/file-question-mark';
   import FileX from '@lucide/svelte/icons/file-x';
   import TextWrap from '@lucide/svelte/icons/text-wrap';
-  import X from '@lucide/svelte/icons/x';
   import Editor from '@runlith/code-editor/Editor.svelte';
   import type { Position, Seen } from '@runlith/code-editor/marks';
   import { displayLanguage } from '@runlith/utils/codeLanguage';
@@ -33,6 +32,7 @@
     headed = true,
     onSeen,
     onPreview,
+    onBack,
     onClose,
     onEdit,
     staged = false,
@@ -43,6 +43,7 @@
     staged?: boolean;
     onSeen?: ((view: Seen) => void) | undefined;
     onPreview?: (() => void) | undefined;
+    onBack?: (() => void) | undefined;
     onClose?: (() => void) | undefined;
     onEdit?: (() => void) | undefined;
   } = $props();
@@ -160,7 +161,7 @@
   onfocusin={held.front}
 >
   {#if headed}
-    <TabHead path={tab.path} branch={tab.branch} onShow={staged ? show : undefined}>
+    <TabHead path={tab.path} branch={tab.branch} onShow={staged ? show : undefined} {onBack} {onClose}>
       {#if body.kind === 'text' && body.readOnly === 'undecodable'}
         <span class="mr-1 shrink-0 rounded-sm bg-hover px-1.5 py-0.5 text-meta text-muted-foreground" data-file-readonly
           >Read only · not UTF-8</span
@@ -185,11 +186,6 @@
           <TextWrap class="size-3.5" />
         </button>
       </Tooltip>
-      {#if onClose !== undefined}
-        <Tooltip text="Close" keys={keymap.spell(keymap.bare('Escape'))}>
-          <button type="button" class={ICON} aria-label="Close" onclick={onClose}><X class="size-3.5" /></button>
-        </Tooltip>
-      {/if}
     </TabHead>
   {/if}
   {#if body.kind === 'text' && opened?.document}

@@ -11,7 +11,19 @@
   import { isSvg, type Tab } from './tab.js';
   import TabHead from './TabHead.svelte';
 
-  let { tab, projectId, onSource }: { tab: Tab; projectId: number; onSource: () => void } = $props();
+  let {
+    tab,
+    projectId,
+    onSource,
+    onBack,
+    onClose,
+  }: {
+    tab: Tab;
+    projectId: number;
+    onSource: () => void;
+    onBack?: (() => void) | undefined;
+    onClose?: (() => void) | undefined;
+  } = $props();
 
   const documents = Documents.use();
   const server = Door.use();
@@ -54,7 +66,7 @@
 </script>
 
 <section class="flex h-full min-h-0 min-w-0 flex-col bg-background" aria-label="Preview of {tab.path}" data-preview-tab={tab.path}>
-  <TabHead path={tab.path} branch={tab.branch}>
+  <TabHead path={tab.path} branch={tab.branch} {onBack} {onClose}>
     <Tooltip text="Open the source">
       <button
         type="button"

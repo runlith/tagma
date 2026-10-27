@@ -37,6 +37,12 @@ import { Beside } from '$lib/features/opening/Beside.js';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
 import { threadHolder } from '$lib/shared/panes/holder.js';
 import { CHANGES_PANE } from './paneContent.js';
+import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
+import { Seams } from '$lib/shared/seams/Seams.svelte.js';
+import Changes from './Changes.svelte';
+import { Documents } from './files/Documents.svelte.js';
+import { Outside } from './files/Outside.svelte.js';
+import { Tabs } from './files/Tabs.svelte.js';
 
 const MAIN = 'root-1' as RootId;
 const WORKTREE = 'root-2' as RootId;
@@ -139,7 +145,7 @@ afterEach(() => {
 
 let area = testArea([testKind(CHANGES_PANE)]);
 
-function draw(): HTMLElement {
+function draw(view: unknown = ChangesList): HTMLElement {
   area = testArea([testKind(CHANGES_PANE)]);
   const { panes } = area;
   const seats = new ThreadSeats(panes);
@@ -166,7 +172,19 @@ function draw(): HTMLElement {
         },
       } as never),
       Layer.of(FileOpener, { open: () => Promise.resolve(), stand: () => () => undefined } as never),
+      Layer.of(Tabs, { projectId: 1 } as never),
+      Layer.of(Outside, {
+        chosen: null,
+        editors: [],
+        local: false,
+        hold: () => ({ front: () => undefined, release: () => undefined }),
+      } as never),
+      Layer.of(Documents, {
+        hold: () => ({ document: { body: { kind: 'loading' }, revision: 0, leave: async () => undefined }, release: () => undefined }),
+      } as never),
       ReaderMarks,
+      Seams,
+      Keymap,
       Notices,
       ThreadNames,
       Layer.of(Worktrees, testPlaces() as never),
@@ -181,12 +199,13 @@ function draw(): HTMLElement {
           all: stubAll,
           reset: () => undefined,
         },
+        authorship: { name: 'authorship', key: () => stubSingle({}), all: stubAll, reset: () => undefined },
       } as never),
     ),
     Layer.mergeAll(Layer.of(Live, feed.live)),
     { thread: { id: 'thread-1' } },
   );
-  const mounted = app.draw(ChangesList as never);
+  const mounted = app.draw(view as never);
   flushSync();
   return mounted;
 }
@@ -316,6 +335,42 @@ test('a row clicked again keeps its diff open in the one Changes tab of its thre
 
   expect(app?.app.resolve(ThreadChanges).open).toEqual({ projectId: 1, rootId: MAIN, path: 'src/a.ts', commit: null });
   expect(area.layouts.layout(threadHolder('thread-1')).tabs.map((tab) => tab.kind)).toEqual([CHANGES_PANE]);
+});
+
+test('a Scratch file opens in the view of the thread’s Changes tab, not in a tab of its own', async () => {
+  const page = draw(Changes);
+  area.panes.seatMain({ projectId: 1, activeId: 'thread-1' });
+  sent(whole([checkout([])]));
+  feed.routes.get('scratch.subscribe')?.({
+    directory: '/scratch/thread-1',
+    entries: [{ name: 'notes.md', kind: 'file', bytes: 12, modifiedAt: 0 }],
+    total: 1,
+  });
+  flushSync();
+
+  press(page.querySelector('[data-change-path="notes.md"]'));
+  await until(() => area.layouts.layout(threadHolder('thread-1')).tabs.length > 0);
+
+  expect(app?.app.resolve(ThreadChanges).open).toEqual({ projectId: 1, rootId: null, path: '/scratch/thread-1/notes.md', commit: null });
+  expect(area.layouts.layout(threadHolder('thread-1')).tabs.map((tab) => tab.kind)).toEqual([CHANGES_PANE]);
+  expect(page.querySelector('[data-change-path="notes.md"]')?.getAttribute('aria-current')).toBe('true');
+  expect(page.querySelector('[data-changes-diff] [data-file-tab]')?.getAttribute('data-file-tab')).toBe('/scratch/thread-1/notes.md');
+});
+
+test('One column lays the opened diff over the list, and Back returns to the list', () => {
+  const page = draw(Changes);
+  sent(whole([checkout([held('src/a.ts')])]));
+  const list = page.querySelector('[data-files-column]')?.parentElement;
+
+  press(page.querySelector('button[aria-label="View options"]'));
+  press([...document.querySelectorAll('[role="menuitemradio"]')].find((item) => item.textContent?.trim() === 'One column'));
+  press(page.querySelector('[data-change-path="src/a.ts"]'));
+
+  expect(list?.inert).toBe(true);
+  expect(list?.style.visibility).toBe('hidden');
+  press(page.querySelector('[data-changes-diff] button[aria-label="Back"]'));
+  expect(app?.app.resolve(ThreadChanges).open).toBeNull();
+  expect(list?.inert).toBe(false);
 });
 
 test('a lone group is named only when it lies outside the thread’s project, and then by that project', () => {

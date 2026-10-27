@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Columns2 from '@lucide/svelte/icons/columns-2';
+  import RectangleVertical from '@lucide/svelte/icons/rectangle-vertical';
   import type { CheckoutLines, ComparedPath } from '@tagma/server/workspace/contract/wire/checkout';
   import type { ChangeCommit } from '@tagma/server/change-record/contract/wire/threadChanges';
   import type { RootId } from '@tagma/server/workspace/contract/wire/ids';
@@ -6,13 +8,15 @@
   import { carriedLink, linkTarget } from '$lib/features/opening/linkTarget.js';
   import { Opening } from '$lib/features/opening/Opening.svelte.js';
   import FadeText from '$lib/shared/FadeText.svelte';
+  import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
+  import { CHANGES_LAYOUT, layoutOf } from './layout.js';
   import { changeLink } from './links.js';
   import ChangesBody from './ChangesBody.svelte';
   import ChangeSection from './ChangeSection.svelte';
   import { insetOf } from './changeItem.js';
   import { sameLines } from './lineCount.js';
-  import type { ChangesLens, CommitRange } from './opened.js';
+  import { type ChangesLens, type CommitRange, diffOf } from './opened.js';
   import CommitList from './CommitList.svelte';
   import GroupingToggle from './GroupingToggle.svelte';
   import HistoryBody from './HistoryBody.svelte';
@@ -42,15 +46,17 @@
     ...(outside === null ? [] : [{ id: 'base' as const, label: `vs ${baseName(outside)}` }]),
   ]);
 
+  const diff = $derived(diffOf(changes.open));
+
   function aimLens(next: ChangesLens): void {
     if (next === changes.lens) return;
     changes.lens = next;
-    if (next !== 'base' && changes.open?.lens !== undefined) changes.open = null;
+    if (next !== 'base' && diff?.lens !== undefined) changes.open = null;
   }
 
   function showInLens(path: string, range: CommitRange | null, lines: CheckoutLines): void {
     if (outside === null) return;
-    const open = changes.open;
+    const open = diff;
     const same =
       open?.path === path &&
       open.commit === null &&
@@ -61,7 +67,7 @@
   }
 
   function countedInLens(lines: CheckoutLines): void {
-    const open = changes.open;
+    const open = diff;
     if (open?.lens === undefined || sameLines(open.lines, lines)) return;
     changes.open = { ...open, lines };
   }
@@ -75,12 +81,9 @@
   });
   const commitsAbroad = $derived(abroad(changes.commits, changes.projectId));
 
-  const working = $derived(changes.open?.commit === null && changes.open.lens === undefined ? changes.open : null);
-  const inCommit = $derived(
-    changes.open === null || changes.open.commit === null
-      ? null
-      : { rootId: changes.open.rootId, commit: changes.open.commit, path: changes.open.path },
-  );
+  const working = $derived(diff?.commit === null && diff.lens === undefined ? diff : null);
+  const inCommit = $derived(diff === null || diff.commit === null ? null : { rootId: diff.rootId, commit: diff.commit, path: diff.path });
+  const layout = $derived(layoutOf(marks.layouts.get(CHANGES_LAYOUT)));
 
   let list = $state<HTMLElement | null>(null);
 
@@ -109,6 +112,16 @@
     next.focus();
   }
 </script>
+
+{#snippet layoutChoice()}
+  <DropdownMenu.Group>
+    <DropdownMenu.GroupHeading>Layout</DropdownMenu.GroupHeading>
+    <DropdownMenu.RadioGroup value={layout} onValueChange={(next) => marks.layouts.set(CHANGES_LAYOUT, next)}>
+      <DropdownMenu.RadioItem value="split" icon={Columns2}>Side by side</DropdownMenu.RadioItem>
+      <DropdownMenu.RadioItem value="stacked" icon={RectangleVertical}>One column</DropdownMenu.RadioItem>
+    </DropdownMenu.RadioGroup>
+  </DropdownMenu.Group>
+{/snippet}
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <section
@@ -140,7 +153,7 @@
     </div>
     <span class="flex-1"></span>
     {#if lensShown !== 'history'}<GroupingToggle />{/if}
-    <ViewMenu />
+    <ViewMenu extra={layoutChoice} />
   </header>
 
   <div class="min-h-0 flex-1 overflow-y-auto py-1">
@@ -185,12 +198,12 @@
           {/if}
         </ChangeSection>
       {/if}
-      <HistoryBody selected={changes.open === null || changes.open.lens !== undefined ? null : changes.open} />
+      <HistoryBody selected={diff === null || diff.lens !== undefined ? null : diff} />
     {:else if lensShown === 'base' && outside !== null}
       <BaseLens
         row={outside}
         projectId={worktrees.aim.projectId}
-        selected={changes.open?.lens !== undefined && changes.open.commit === null ? changes.open.path : null}
+        selected={diff?.lens !== undefined && diff.commit === null ? diff.path : null}
         onOpen={showInLens}
         onCounts={countedInLens}
       />
