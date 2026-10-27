@@ -118,7 +118,7 @@ export const makeTerminalWriting = Effect.fnUntraced(function* ({
     const sent = hostRequest(request);
     const outcome = yield* terminalInput.input(execution, scope, sent);
     yield* witness.admitted(execution, scope, sent, outcome);
-    if (outcome._tag === 'InputAdmitted' && writers !== null && typedInto(scope.principal, road, request)) {
+    if (outcome._tag === 'InputAdmitted' && writers !== null && typedInto(scope.principal, road, request.cause, request.act._tag)) {
       yield* writers.admitted(execution, scope.principal, outcome.receipt);
     }
     return outcome;

@@ -44,7 +44,7 @@ it.live('an agent resize admitted while the server’s own resize is in flight i
     yield* Effect.sleep(5);
 
     expect(sent).toEqual([view, agent]);
-    expect(heard.at(-1)).toEqual({ decider: null });
+    expect(heard.at(-1)).toEqual({ decider: null, applied: agent });
     expect(grids.standing(execution)?.applied).toEqual(agent);
   }),
 );
@@ -100,7 +100,7 @@ it.live(
       yield* Effect.sleep(5);
 
       expect(sent).toEqual([boxA, agent, boxC]);
-      expect(heard.at(-1)).toEqual({ decider: ViewId.make('c') });
+      expect(heard.at(-1)).toEqual({ decider: ViewId.make('c'), applied: boxC });
       expect(grids.standing(execution)?.applied).toEqual(boxC);
     }),
 );
@@ -223,7 +223,10 @@ it.live('a decider’s box the host will not take is told to every view as the g
     yield* grids.report(execution, ViewId.make('view'), 1, huge);
     while (heard.length < 2) yield* Effect.sleep(1);
 
-    expect(heard).toEqual([{ decider: ViewId.make('view') }, { decider: null }]);
+    expect(heard).toEqual([
+      { decider: ViewId.make('view'), applied: small },
+      { decider: null, applied: small },
+    ]);
     expect(grids.standing(execution)?.applied).toEqual(small);
   }),
 );

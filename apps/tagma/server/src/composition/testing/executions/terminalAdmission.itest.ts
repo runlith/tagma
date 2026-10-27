@@ -25,6 +25,7 @@ import type { ExecutionRequest } from '@runlith/executions/ExecutionRequest';
 import type { HostAuthority } from '@runlith/executions/HostAuthority';
 import type { HostLifecycle } from '@runlith/executions/HostLifecycle';
 import type { TerminalInput } from '@runlith/executions/TerminalInput';
+import type { TerminalLanes } from '@runlith/executions/TerminalLanes';
 import type { TerminalScreen } from '@runlith/executions/TerminalScreen';
 import { HostRefused, WireLost, WireUnavailable } from '@runlith/executions/Executions';
 import { BindingId, Principal } from '@runlith/executions/protocol/custody';
@@ -107,6 +108,7 @@ type ControlledHost = {
     ExecutionFeed['Service'] &
     TerminalScreen['Service'] &
     TerminalInput['Service'] &
+    TerminalLanes['Service'] &
     ExecutionCustody['Service'] &
     ExecutionEvidence['Service'] &
     HostAuthority['Service'] &
@@ -180,6 +182,8 @@ const hostThat = (answers: HostAnswers): ControlledHost => {
       return answers.openBinding?.() ?? undeclared<AuthorityAnswer>('openBinding');
     },
     closeBinding: () => undeclared<never>('closeBinding'),
+    open: () => undeclared<never>('open'),
+    inputs: () => undeclared<never>('inputs'),
     quiesce: () => undeclared<never>('quiesce'),
     resume: () => undeclared<never>('resume'),
     prepare: () => undeclared<never>('prepare'),
@@ -197,6 +201,7 @@ const hostThat = (answers: HostAnswers): ControlledHost => {
     ExecutionFeed['Service'] &
     TerminalScreen['Service'] &
     TerminalInput['Service'] &
+    TerminalLanes['Service'] &
     ExecutionCustody['Service'] &
     ExecutionEvidence['Service'] &
     HostAuthority['Service'] &

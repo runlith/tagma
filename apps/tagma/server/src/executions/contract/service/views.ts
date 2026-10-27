@@ -1,18 +1,9 @@
 import { Context, type Effect, type Scope } from 'effect';
 import type { BindingId } from '@runlith/executions/protocol/custody';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
-import type { GateRefusal, RefusalBody } from '../../../platform/contract/wire/refusal.js';
+import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { TerminalActor } from '../wire/terminals.js';
-import type {
-  DeliveryMark,
-  LaneOpened,
-  TerminalBox,
-  TerminalDecider,
-  TerminalInputReceipt,
-  ViewerSource,
-  ViewLeaseId,
-  ViewId,
-} from '../wire/viewLeases.js';
+import type { DeliveryMark, LaneOpened, TerminalBox, TerminalDecider, ViewerSource, ViewLeaseId, ViewId } from '../wire/viewLeases.js';
 import type { TerminalRefused } from '../wire/refusals.js';
 import type { TerminalFailure } from './terminals.js';
 
@@ -35,22 +26,18 @@ export class ViewLanes extends Context.Service<
       projectId: number,
       execution: ExecutionRef,
       view: ViewId,
+      device: string | null,
     ) => Effect.Effect<LaneOpened, TerminalFailure | GateRefusal<'terminal-view-operator'>>;
     readonly close: (projectId: number, execution: ExecutionRef, binding: BindingId) => Effect.Effect<boolean>;
-    readonly listen: (
-      execution: ExecutionRef,
-      binding: BindingId,
-      emit: (receipt: TerminalInputReceipt) => void,
-    ) => Effect.Effect<void, never, Scope.Scope>;
-    readonly publish: (execution: ExecutionRef, binding: BindingId, receipt: TerminalInputReceipt) => void;
-    readonly turn: <A, R>(
-      execution: string,
-      incarnation: number,
-      binding: BindingId,
-      work: Effect.Effect<A, RefusalBody, R>,
-    ) => Effect.Effect<A, RefusalBody, R>;
+    readonly revoked: (device: string) => Effect.Effect<void>;
+    readonly hold: (execution: ExecutionRef, binding: BindingId) => Effect.Effect<void, never, Scope.Scope>;
   }
 >()('tagma/executions/ViewLanes') {}
+
+export class LaneEndpoint extends Context.Service<
+  LaneEndpoint,
+  { readonly address: (port: number) => Effect.Effect<string, GateRefusal<'terminal-endpoint-unserved'>> }
+>()('tagma/executions/LaneEndpoint') {}
 
 export class TerminalGrids extends Context.Service<
   TerminalGrids,

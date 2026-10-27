@@ -9,8 +9,6 @@ import type {
   TerminalDecider,
   TerminalGridReport,
   TerminalGridSubscription,
-  TerminalInputReceipt,
-  TerminalInputWrite,
   TerminalScreenPoint,
 } from '@tagma/server/executions/contract/wire/viewLeases';
 import type { RecordDelivery } from '@tagma/server/executions/contract/wire/viewLeases';
@@ -30,13 +28,20 @@ import type { DroppedPaths } from './fileDrop.js';
 import { TerminalRenderPolicy } from './RenderPolicy.js';
 import { TerminalHolders } from './Holders.svelte.js';
 import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
-import type { InputInput } from '../Repo.js';
+import { DROP, LaneEndpoint, admitted, backpressure, conflict, type LaneAct } from './testing/endpoint.js';
 
 const ADDRESS = { execution: 'x-1', incarnation: 0 };
 const FRESH = { execution: 'x-2', incarnation: 0 };
 const start = ByteOffset.make('0');
 
-type Sent = InputInput;
+type Sent = {
+  readonly execution: string;
+  readonly incarnation: number;
+  readonly binding: string;
+  readonly sequence: number;
+  readonly cause: string;
+  readonly act: { readonly _tag: 'Write'; readonly bytes: string } | { readonly _tag: 'Interrupt' };
+};
 
 type DoorOpts = {
   bytesBody?: string;
@@ -48,7 +53,6 @@ type DoorOpts = {
   startWith?: (operationId: string) => Promise<unknown>;
   operationFor?: (operationId: string) => unknown;
   inputWith?: (act: Sent) => Promise<unknown>;
-  laneOpenWith?: (opened: number) => Promise<unknown>;
   takeOverWith?: (operationId: string) => Promise<unknown>;
 };
 
@@ -60,21 +64,26 @@ function doorOver(replay: string, opts: DoorOpts = {}) {
   const bytesStreams: string[] = [];
   const recordCalls: unknown[] = [];
   const operationReads: string[] = [];
-  const backpressure = { armed: false };
-  const atGate = (act: Sent): Promise<unknown> => {
+  const pressure = { armed: false };
+  const lanes = new Map<string, { readonly execution: string; readonly incarnation: number }>();
+  const atGate = (call: LaneAct): Promise<unknown> => {
+    const at = lanes.get(call.binding) ?? { execution: '', incarnation: -1 };
+    const act: Sent = {
+      ...at,
+      binding: call.binding,
+      sequence: call.sequence,
+      cause: call.cause,
+      act: call.act._tag === 'Write' ? { _tag: 'Write', bytes: call.act.bytes ?? '' } : { _tag: 'Interrupt' },
+    };
     sent.push(act);
     if (opts.inputWith !== undefined) return opts.inputWith(act);
-    if (backpressure.armed) {
-      backpressure.armed = false;
-      return Promise.resolve({
-        _tag: 'InputBackpressure',
-        frontier: { acceptedThrough: start },
-        pendingBytes: 0,
-        limit: 16000,
-      });
+    if (pressure.armed) {
+      pressure.armed = false;
+      return Promise.resolve(backpressure(16000));
     }
-    return Promise.resolve({ _tag: 'InputAdmitted' });
+    return Promise.resolve(admitted(act.sequence));
   };
+  const endpoint = new LaneEndpoint(atGate);
   const body = opts.bytesBody ?? replay;
   const bytes = new TextEncoder().encode(body);
   const through = ByteOffset.make(opts.through ?? String(bytes.length));
@@ -91,7 +100,10 @@ function doorOver(replay: string, opts: DoorOpts = {}) {
     laneOpen: {
       run: (payload: { execution: string; incarnation: number; view: string }) => {
         laneOpens.push(payload);
-        return opts.laneOpenWith?.(laneOpens.length) ?? Promise.resolve({ binding: `lane-${laneOpens.length}` });
+        const binding = `lane-${laneOpens.length}`;
+        lanes.set(binding, { execution: payload.execution, incarnation: payload.incarnation });
+        endpoint.stand(`secret-${binding}`, binding);
+        return Promise.resolve({ binding, url: 'ws://127.0.0.1:9/terminal', token: `secret-${binding}`, next: 0 });
       },
     },
     laneClose: {
@@ -100,7 +112,6 @@ function doorOver(replay: string, opts: DoorOpts = {}) {
         return Promise.resolve({ closed: true });
       },
     },
-    input: { run: atGate },
     bytes: byteWindow('terminal'),
     commandBytes: byteWindow('command'),
     record: {
@@ -175,39 +186,15 @@ function doorOver(replay: string, opts: DoorOpts = {}) {
     laneOpens,
     laneCloses,
     takeOverCalls,
-    backpressure,
+    pressure,
+    endpoint,
   };
 }
 
-type SocketWrite = {
-  readonly execution: string;
-  readonly incarnation: number;
-  readonly binding: string;
-  readonly sequence: number;
-  readonly cause: Sent['cause'];
-  readonly act: TerminalInputWrite['act'];
-};
-
-const pageAct = (payload: SocketWrite): Sent => ({
-  execution: payload.execution,
-  incarnation: payload.incarnation,
-  binding: payload.binding,
-  sequence: payload.sequence,
-  cause: payload.cause,
-  act: payload.act._tag === 'Write' ? { _tag: 'Write', bytes: Buffer.from(payload.act.bytes).toString('base64') } : { _tag: 'Interrupt' },
-});
-
-const receiptOf = (act: Sent, outcome: unknown): TerminalInputReceipt => {
-  const held = outcome as { readonly _tag: string };
-  const kind = held._tag === 'InputAdmitted' ? 'applied' : held._tag === 'InputBackpressure' ? 'backpressure' : 'refused';
-  return { kind, sequence: act.sequence, outcome } as TerminalInputReceipt;
-};
-
-function feedOver(atGate: (act: Sent) => Promise<unknown>, screen?: TerminalScreenPoint) {
+function feedOver(endpoint: LaneEndpoint, screen?: TerminalScreenPoint) {
   const delivered: RecordDelivery[] = [];
   let deliver: ((delivery: RecordDelivery) => unknown) | null = null;
   let fail: ((failure: LiveFailure) => void) | null = null;
-  let receipts: ((receipt: TerminalInputReceipt) => void) | null = null;
   let applied: ((frame: TerminalDecider) => void) | null = null;
   const gridSubscriptions: TerminalGridSubscription[] = [];
   const gridReports: TerminalGridReport[] = [];
@@ -218,7 +205,7 @@ function feedOver(atGate: (act: Sent) => Promise<unknown>, screen?: TerminalScre
     'command.bytes.parsed': (payload: unknown) => Promise.resolve(payload),
     'terminal.screen.point': () =>
       Promise.resolve(screen ?? { _tag: 'ScreenUnavailable', reason: 'transport', detail: 'this suite opens on the record' }),
-    'terminal.input.receipts': (payload: unknown) => ({ road: 'receipts' as const, payload }),
+    'terminal.lane.hold': (payload: unknown) => ({ road: 'lease' as const, payload }),
     'terminal.grid.subscribe': (payload: TerminalGridSubscription) => {
       gridSubscriptions.push(payload);
       return { road: 'grid' as const, payload };
@@ -227,17 +214,10 @@ function feedOver(atGate: (act: Sent) => Promise<unknown>, screen?: TerminalScre
       gridReports.push(payload);
       return Promise.resolve({ acknowledged: true as const });
     },
-    'terminal.input.write': (payload: SocketWrite) => {
-      const act = pageAct(payload);
-      return atGate(act).then((outcome) => {
-        receipts?.(receiptOf(act, outcome));
-        return { acknowledged: true as const };
-      });
-    },
   };
   const feed = {
     hold: (open: (client: unknown) => unknown, onItem: (item: never) => unknown, onFailure?: (failure: LiveFailure) => void) => {
-      const opened = open(client) as { readonly road: 'bytes' | 'receipts' | 'grid' };
+      const opened = open(client) as { readonly road: 'bytes' | 'lease' | 'grid' };
       if (opened.road === 'grid') {
         const listener = onItem as (frame: TerminalDecider) => void;
         applied = listener;
@@ -247,15 +227,7 @@ function feedOver(atGate: (act: Sent) => Promise<unknown>, screen?: TerminalScre
           },
         };
       }
-      if (opened.road === 'receipts') {
-        const listener = onItem as (receipt: TerminalInputReceipt) => void;
-        receipts = listener;
-        return {
-          unsubscribe: () => {
-            if (receipts === listener) receipts = null;
-          },
-        };
-      }
+      if (opened.road === 'lease') return { unsubscribe: () => undefined };
       const listener = onItem as (delivery: RecordDelivery) => unknown;
       deliver = listener;
       fail = onFailure ?? null;
@@ -280,7 +252,9 @@ function feedOver(atGate: (act: Sent) => Promise<unknown>, screen?: TerminalScre
     gridSubscriptions,
     gridReports,
     apply: (frame: TerminalDecider) => applied?.(frame),
-    isHeld: () => deliver !== null,
+    isHeld: () => deliver !== null || endpoint.following() !== undefined,
+    laned: () => endpoint.following() !== undefined,
+    emit: (offset: number, text: string) => endpoint.following()?.write(offset, text),
     send: (delivery: RecordDelivery) => {
       delivered.push(delivery);
       deliver?.(delivery);
@@ -357,12 +331,12 @@ async function paneOver(
     attached?: boolean;
     holders?: TerminalHolders;
     source?: PaneSource;
+    serving?: boolean;
   } = {},
 ) {
   const {
     repo,
     sent,
-    atGate,
     startCalls,
     stopCalls,
     bytesCalls,
@@ -372,9 +346,11 @@ async function paneOver(
     laneOpens,
     laneCloses,
     takeOverCalls,
-    backpressure,
+    pressure,
+    endpoint,
   } = doorOver(replay, opts);
-  const { feed, delivered, gridSubscriptions, gridReports, apply, isHeld, send, refuse } = feedOver(atGate, opts.screen);
+  endpoint.serving = opts.serving ?? true;
+  const { feed, delivered, gridSubscriptions, gridReports, apply, isHeld, laned, emit, send, refuse } = feedOver(endpoint, opts.screen);
   const platform = new Host('tab', 'linux');
   const acted: string[] = [];
   const ground = {
@@ -412,6 +388,7 @@ async function paneOver(
       '/bin/zsh',
       repo as never,
       feed as never,
+      endpoint.channel,
       { road: () => () => Promise.resolve(null) } as never,
       opts.holders ?? new TerminalHolders(() => [], ThreadNames.make()),
       new TerminalOutput(opts.time ?? pageTime(), pageHidden, scope),
@@ -446,12 +423,14 @@ async function paneOver(
     laneOpens,
     laneCloses,
     takeOverCalls,
-    backpressure,
+    pressure,
     delivered,
     gridSubscriptions,
     gridReports,
     apply,
     isHeld,
+    laned,
+    emit,
     send,
     refuse,
   };
@@ -654,6 +633,7 @@ async function focusFresh(pane: TerminalPane, box: HTMLElement): Promise<void> {
 
 test('a refused feed of a shell that ended shows its exit, with nothing over the terminal', async () => {
   const env = await paneOver('', {
+    serving: false,
     recordFor: () => ({ record: { revision: 3 }, state: { phase: 'ended', nativeExit: { _tag: 'Code', code: 1 } } }),
   });
   await until(() => env.isHeld(), 'the live feed');
@@ -671,6 +651,7 @@ test('a refused feed of a shell that ended shows its exit, with nothing over the
 
 test('an Ended frame closes input, and Restart keeps the old record while opening a fresh pty and input lane in the same cwd', async () => {
   const env = await paneOver('hello from the old shell', {
+    serving: false,
     ceiling: { cols: 200, rows: 60 },
     recordFor: (at) =>
       at.execution === 'x-1' ? { record: { revision: 3 }, state: { nativeExit: { _tag: 'Code', code: 3 } } } : { record: { revision: 9 } },
@@ -717,8 +698,8 @@ test('a flowing feed costs the watchdog no IPC', async () => {
       },
     },
   });
-  await until(() => env.isHeld(), 'the live feed');
-  env.send(bytesChunk('hi', '2'));
+  await until(() => env.laned(), 'the live output on the lane');
+  env.emit(0, 'hi');
   const tick = runs[0];
   if (!tick) throw new Error('the watchdog never started');
   await tick();
@@ -776,7 +757,7 @@ test('a tail inside 100 ms of replacement is dropped and typing 200 ms later is 
   type(box, 'a', 65);
   await until(() => sent.some((act) => act.act._tag === 'Write' && act.execution === 'x-1'), 'control under the old execution');
 
-  env.backpressure.armed = true;
+  env.pressure.armed = true;
   type(box, 'x', 88);
   void pane.restart();
   await focusFresh(pane, box);
@@ -859,7 +840,7 @@ test('the interrupt typed to abandon a mangled line is not quarantined with the 
   type(box, 'a', 65);
   await until(() => sent.some((act) => act.act._tag === 'Write' && act.execution === 'x-1'), 'control');
 
-  env.backpressure.armed = true;
+  env.pressure.armed = true;
   type(box, 'x', 88);
   void pane.restart();
   await focusFresh(pane, box);
@@ -885,29 +866,22 @@ test('a quarantined act resent after a lost answer keeps the verdict it was firs
     lifecycle: { now: () => now, every: () => () => undefined },
     recordFor: (at) => (at.execution === 'x-2' ? { record: { revision: 9 } } : undefined),
     inputWith: (act) => {
-      if (act.execution === 'x-1') {
-        return Promise.resolve({
-          _tag: 'InputBackpressure',
-          frontier: { acceptedThrough: start },
-          pendingBytes: 0,
-          limit: 16000,
-        });
-      }
+      if (act.execution === 'x-1') return Promise.resolve(backpressure(16000));
       const key = `${act.binding}:${act.sequence}`;
       const prior = receipts.get(key);
       if (prior !== undefined) {
         return Promise.resolve(
           prior.act._tag === 'Write' && act.act._tag === 'Write' && prior.act.bytes === act.act.bytes
-            ? { _tag: 'InputAdmitted' }
-            : { _tag: 'InputConflict', sequence: act.sequence },
+            ? admitted(act.sequence)
+            : conflict(act.sequence),
         );
       }
       receipts.set(key, act);
       if (!lost) {
         lost = true;
-        return Promise.reject({ code: 'transport', reason: 'connection lost' });
+        return Promise.resolve(DROP);
       }
-      return Promise.resolve({ _tag: 'InputAdmitted' });
+      return Promise.resolve(admitted(act.sequence));
     },
   });
   const { pane, box, sent } = env;
@@ -928,14 +902,12 @@ test('a quarantined act resent after a lost answer keeps the verdict it was firs
   );
 });
 
-test('focus opens the bound pane’s input lane for typing and shell-quoted dropped paths', async () => {
+test('the bound pane opens its input lane as it binds, and types keystrokes and shell-quoted dropped paths into it', async () => {
   const env = await paneOver('');
-  await until(() => env.isHeld(), 'the live feed');
-  expect(env.laneOpens).toEqual([]);
+  await until(() => env.laneOpens.length === 1, 'the lane the bind opened');
+  expect(env.laneOpens[0]).toEqual({ ...ADDRESS, view: env.pane.view });
 
   env.box.querySelector('textarea')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-  await until(() => env.laneOpens.length === 1, 'the lane the focus opened');
-  expect(env.laneOpens[0]).toEqual({ ...ADDRESS, view: env.pane.view });
 
   type(env.box, 'l', 76);
   await until(() => env.sent.some((act) => act.act._tag === 'Write'), 'the keystroke at the input gate');
@@ -957,20 +929,20 @@ test('focus opens the bound pane’s input lane for typing and shell-quoted drop
 
 test('a dropped path finishes once the input lane has admitted it', async () => {
   const asked = Promise.withResolvers<void>();
-  const admitted = Promise.withResolvers<void>();
+  const answered = Promise.withResolvers<void>();
   const order: string[] = [];
   const env = await paneOver('', {
-    inputWith: async () => {
+    inputWith: async (act) => {
       asked.resolve();
-      await admitted.promise;
+      await answered.promise;
       order.push('admitted');
-      return { _tag: 'InputAdmitted' };
+      return admitted(act.sequence);
     },
   });
   await until(() => env.isHeld(), 'the live feed');
   const dropped = env.pane.pasteDropped(Promise.resolve({ paths: ['/tmp/a.txt'], problems: [] })).then(() => order.push('finished'));
   await asked.promise;
-  admitted.resolve();
+  answered.resolve();
   await dropped;
   expect(order).toEqual(['admitted', 'finished']);
   expect(env.sent.map((act) => act.act)).toEqual([{ _tag: 'Write', bytes: btoa('/tmp/a.txt ') }]);
@@ -1111,8 +1083,8 @@ test('a command recorded before the output stream shows its stdout, then its std
   expect([lines?.[0], lines?.length, lines?.at(-1)]).toEqual(['built', 3, 'warned']);
 });
 
-test('a view the server did not name lays its bytes out at the grid their record carries, and that grid is the one kept for the next birth', async () => {
-  const env = await paneOver('');
+test('a view the server did not name, following the record, lays its bytes out at the grid their record carries, and that grid is the one kept for the next birth', async () => {
+  const env = await paneOver('', { serving: false });
   await until(() => env.gridSubscriptions.length === 1, 'the view’s grid subscription');
   await until(() => env.isHeld(), 'the live feed');
   expect(env.gridSubscriptions[0]?.view).toBe(env.pane.view);
@@ -1120,13 +1092,21 @@ test('a view the server did not name lays its bytes out at the grid their record
   env.pane.onSettled((grid) => settledGrids.push(grid));
   const before = env.pane.measuredGrid();
 
-  env.apply({ decider: 'the-other-window' as TerminalDecider['decider'] });
+  env.apply({ decider: 'the-other-window' as TerminalDecider['decider'], applied: { rows: 43, columns: 132 } });
   expect(env.pane.measuredGrid()).toEqual(before);
   env.send(bytesChunk('', '0', { rows: 43, columns: 132 }));
   await until(() => env.pane.measuredGrid()?.cols === 132, 'the recorded grid on this engine');
   expect(env.pane.measuredGrid()).toEqual({ cols: 132, rows: 43 });
   expect(settledGrids).toEqual([{ cols: 132, rows: 43 }]);
   expect(env.sent).toEqual([]);
+});
+
+test('a view following its lane lays its engine out at the box the grid feed applied, since the record’s grids do not reach it', async () => {
+  const env = await paneOver('');
+  await until(() => env.laned(), 'the live output on the lane');
+  env.apply({ decider: 'the-other-window' as TerminalDecider['decider'], applied: { rows: 43, columns: 132 } });
+  await until(() => env.pane.measuredGrid()?.cols === 132, 'the applied grid on this engine');
+  expect(env.pane.measuredGrid()).toEqual({ cols: 132, rows: 43 });
 });
 
 test('an ended terminal read again lays its record out at the grid the record carries, and keeps no grid for the next birth', async () => {

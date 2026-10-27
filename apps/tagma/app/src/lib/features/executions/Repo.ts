@@ -52,13 +52,6 @@ export type StartInput =
 
 export type InputAct = { readonly _tag: 'Write'; readonly bytes: string } | { readonly _tag: 'Interrupt' };
 
-export type InputInput = ExecutionAddress & {
-  readonly binding: string;
-  readonly sequence: number;
-  readonly act: InputAct;
-  readonly cause: 'typed' | 'paste' | 'raw' | 'mouse' | 'interrupt';
-};
-
 export type LaneOpenInput = ExecutionAddress & { readonly view: string };
 
 export type LaneCloseInput = ExecutionAddress & { readonly binding: string };
@@ -143,11 +136,6 @@ export const ExecutionsRepo = Repo.define(
     wait: mutation({
       mutator: (input: ExecutionAddress & { readonly waitMs: number }, { signal }, door) =>
         door.perform('wait_terminal', { ...at(input), waitMs: input.waitMs }, { signal }).then(({ waited }) => waited),
-    }),
-
-    input: mutation({
-      mutator: ({ execution, incarnation, ...payload }: InputInput, { signal }, door) =>
-        door.perform('input_terminal', { execution, incarnation, ...payload }, { signal }).then((answered) => answered.answer),
     }),
 
     laneOpen: mutation({

@@ -3,7 +3,7 @@ import { Context, Effect, Layer } from 'effect';
 import { HttpRouter, HttpServer } from 'effect/http';
 import { RpcGroup } from 'effect/rpc';
 import { bindFeed, SocketOperations } from '../../invocation/contract/service/socketOperations.js';
-import { type FeedHandler, rpcOf } from '../../platform/contract/wire/live.js';
+import { type FeedBody, rpcOf } from '../../platform/contract/wire/live.js';
 import { type LiveHandlers, liveLayer } from '../../socket/live.js';
 import { CallLog } from '../../socket/rpc.js';
 import { makeDesktopChannel } from '../channel.js';
@@ -31,7 +31,7 @@ export const servedChannelOn = (port: number) =>
       const channel = Context.get(made, DesktopChannel);
       const declared = yield* desktopBrowser.live.handlers(Context.make(DesktopChannel, channel));
       const handlers = {
-        attach_browser_host: bindFeed(ATTACH_FEED, declared.attach_browser_host as FeedHandler),
+        attach_browser_host: bindFeed(ATTACH_FEED, declared.attach_browser_host as FeedBody),
       } as LiveHandlers<RpcGroup.Rpcs<typeof group>>;
       const served = HttpRouter.serve(Layer.mergeAll(liveLayer(group, handlers, {}, null), desktopReportRoute(channel)), {
         disableListenLog: true,

@@ -16,6 +16,7 @@ import type { ExecutionRequest } from '@runlith/executions/ExecutionRequest';
 import type { HostAuthority } from '@runlith/executions/HostAuthority';
 import type { HostLifecycle } from '@runlith/executions/HostLifecycle';
 import type { TerminalInput } from '@runlith/executions/TerminalInput';
+import type { TerminalLanes } from '@runlith/executions/TerminalLanes';
 import type { TerminalScreen } from '@runlith/executions/TerminalScreen';
 import { WireUnreadable, WireUnavailable } from '@runlith/executions/Executions';
 import { HostRegistration, type Publication, type RegistrationReadFailure } from '@runlith/executions/HostRegistration';
@@ -179,6 +180,7 @@ type ScriptedPort = {
     ExecutionFeed['Service'] &
     TerminalScreen['Service'] &
     TerminalInput['Service'] &
+    TerminalLanes['Service'] &
     ExecutionCustody['Service'] &
     ExecutionEvidence['Service'] &
     HostAuthority['Service'] &
@@ -240,6 +242,8 @@ const scripted = (script: PortScript): ScriptedPort => {
     grant: () => none<never>('grant'),
     openBinding: () => none<never>('openBinding'),
     closeBinding: () => none<never>('closeBinding'),
+    open: () => none<never>('open'),
+    inputs: () => none<never>('inputs'),
     retire: () => none<never>('retire'),
     quiesce: () => none<never>('quiesce'),
     resume: () => none<never>('resume'),
@@ -258,6 +262,7 @@ const scripted = (script: PortScript): ScriptedPort => {
     ExecutionFeed['Service'] &
     TerminalScreen['Service'] &
     TerminalInput['Service'] &
+    TerminalLanes['Service'] &
     ExecutionCustody['Service'] &
     ExecutionEvidence['Service'] &
     HostAuthority['Service'] &
@@ -336,6 +341,7 @@ it.live.each([false, true])('conditional prevention never widens into a stop acr
         ExecutionFeed['Service'] &
         TerminalScreen['Service'] &
         TerminalInput['Service'] &
+        TerminalLanes['Service'] &
         ExecutionCustody['Service'] &
         ExecutionEvidence['Service'] &
         HostAuthority['Service'] &

@@ -20,6 +20,7 @@ const reach: Reach = {
   site: () => ({ _tag: 'off' }),
   at: () => null,
   moved: Stream.never,
+  terminal: { origin: () => Effect.die('the pairing code reads only the origin of a ready door') },
 };
 
 it.effect('a pairing code answers again until it expires, then another code stands', () =>

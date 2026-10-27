@@ -168,6 +168,8 @@ import { ReservedNames } from '../projects/contract/service/names.js';
 import { Api } from '../http/contract/wire/Api.js';
 import { ARTIFACT_PREFIX } from '../http/contract/wire/served.js';
 import { type LocalSites, makeLocalSites } from './http/sites.js';
+import { localEndpoint } from './http/endpoint.js';
+import { LaneEndpoint } from '../executions/contract/service/views.js';
 import { McpServers } from '../mcp/contract/service/servers.js';
 import { mcp } from '../mcp/mcp.js';
 import { plugins } from '../plugins/plugins.js';
@@ -716,6 +718,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(WorktreeHome, { path: join(installationAnchor(store.path), WORKTREE_HOME) }),
     Context.make(HarnessOwner, { id: owner, build: options.installation?.manifest.identity.digest ?? owner }),
     Context.make(ViewSites, options.sites ?? (yield* Scope.provide(makeLocalSites(sandboxPort), stackScope))),
+    Context.make(LaneEndpoint, localEndpoint),
   );
   const stack = yield* Scope.provide(
     Layer.build(serving.pipe(Layer.provide(Layer.merge(Layer.succeedContext(servingInputs), BunFileSystem.layer)))),

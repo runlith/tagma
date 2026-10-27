@@ -115,7 +115,8 @@ const lending = () => {
         return {
           expose: (port, settled) => now().expose(port, settled),
           place: (asked, reserved, keep) => now().place(asked, reserved, keep),
-          withdraw: (port) => now().withdraw(port),
+          point: (asked, keep) => now().point(asked, keep),
+          withdraw: (port, pointed) => now().withdraw(port, pointed),
         };
       },
     },

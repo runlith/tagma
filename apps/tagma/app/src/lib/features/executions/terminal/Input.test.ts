@@ -1,12 +1,23 @@
 import { expect, test } from 'vitest';
-import type { TerminalInputReceipt } from '@tagma/server/executions/contract/wire/viewLeases';
 import { Host } from '@runlith/layer/Host';
-import type { LiveConnection, LiveFailure, LiveStatus } from '$lib/wire/Live.js';
+import type { LiveConnection, LiveStatus } from '$lib/wire/Live.js';
 import { commitComposition, newComposition } from './engineGuards.js';
 import { HOST_INPUT_ADMISSION_BYTES, IME_CHORD_ABANDON_MS, IME_NEWLINE_FALLBACK_MS, TerminalInput } from './Input.js';
 import type { Engine } from './terminalEngine.js';
 import { TerminalKeymap, type TerminalAct } from './Keymap.js';
 import type { Writer } from './Output.js';
+import {
+  DROP,
+  INPUT_ENDED,
+  LANE_CLOSED,
+  LaneEndpoint,
+  admitted,
+  backpressure,
+  conflict,
+  expired,
+  unsupported,
+  type LaneAct,
+} from './testing/endpoint.js';
 import type { ExecutionsRepo } from '../Repo.js';
 
 type Repo = ReturnType<typeof ExecutionsRepo.use>;
@@ -27,37 +38,9 @@ const drain = async () => {
 };
 const decode = (base64: string) => Buffer.from(base64, 'base64').toString('utf8');
 
-const admitted = (sequence = 0) => ({
-  _tag: 'InputAdmitted',
-  receipt: { execution: 'exec-1', sequence, cause: 'raw', bytes: 1, acceptedThrough: '1' },
-});
+type InputCall = LaneAct;
 
-type InputCall = {
-  readonly binding: string;
-  readonly sequence: number;
-  readonly act: { readonly _tag: string; readonly bytes?: string };
-  readonly cause: string;
-};
-
-type SocketCall = {
-  readonly projectId: number;
-  readonly execution: string;
-  readonly incarnation: number;
-  readonly binding: string;
-  readonly sequence: number;
-  readonly act: { readonly _tag: string; readonly bytes?: Uint8Array };
-  readonly cause: string;
-};
-
-const pageCall = (payload: SocketCall): InputCall => ({
-  binding: payload.binding,
-  sequence: payload.sequence,
-  cause: payload.cause,
-  act:
-    payload.act._tag === 'Write'
-      ? { _tag: 'Write', bytes: Buffer.from(payload.act.bytes ?? new Uint8Array()).toString('base64') }
-      : { _tag: 'Interrupt' },
-});
+const laneOf = (binding: string, next = 0) => ({ binding, url: 'ws://127.0.0.1:9/terminal', token: `secret-${binding}`, next });
 
 const terminalOver = () => {
   const held = {
@@ -117,10 +100,6 @@ type Behavior = {
 const repoOver = (behavior: Behavior = {}, admission = HOST_INPUT_ADMISSION_BYTES) => {
   const doorOpens: LaneCall[] = [];
   const doorCloses: LaneCall[] = [];
-  const inputCalls: InputCall[] = [];
-  const laneOpens: { readonly projectId: number; readonly execution: string; readonly incarnation: number; readonly binding: string }[] =
-    [];
-  const laneFailures: ((failure: LiveFailure) => void)[] = [];
   const typed = { count: 0 };
   let status: LiveStatus = 'open';
   const statuses = new Set<(status: LiveStatus) => void>();
@@ -128,50 +107,22 @@ const repoOver = (behavior: Behavior = {}, admission = HOST_INPUT_ADMISSION_BYTE
     status = next;
     for (const listener of statuses) listener(next);
   };
-  let laneListener: ((receipt: TerminalInputReceipt) => void) | null = null;
-  const receiptListeners: ((receipt: TerminalInputReceipt) => void)[] = [];
 
-  const outcomeFor = (call: InputCall): unknown => {
+  const endpoint = new LaneEndpoint((call) => {
     const bytes = call.act.bytes === undefined ? 0 : Buffer.from(call.act.bytes, 'base64').length;
-    if (bytes > admission) {
-      return {
-        _tag: 'InputBackpressure',
-        frontier: { acceptedThrough: '0', pendingBytes: 0 },
-        pendingBytes: 0,
-        limit: admission,
-      };
-    }
+    if (bytes > admission) return backpressure(admission);
     return behavior.input?.(call) ?? admitted(call.sequence);
-  };
-
-  const receiptOf = (call: InputCall, outcome: unknown): TerminalInputReceipt => {
-    const held = outcome as { readonly _tag: string };
-    const kind = held._tag === 'InputAdmitted' ? 'applied' : held._tag === 'InputBackpressure' ? 'backpressure' : 'refused';
-    return { kind, sequence: call.sequence, outcome } as TerminalInputReceipt;
-  };
-
-  const answer = (call: InputCall): Promise<unknown> => {
-    const outcome = outcomeFor(call);
-    return outcome instanceof Promise ? (outcome as Promise<unknown>) : Promise.resolve(outcome);
-  };
-
-  const client = {
-    'terminal.input.write': (payload: SocketCall) => {
-      const call = pageCall(payload);
-      inputCalls.push(call);
-      return answer(call).then((outcome) => {
-        laneListener?.(receiptOf(call, outcome));
-        return { acknowledged: true as const };
-      });
-    },
-    'terminal.input.receipts': (payload: unknown) => payload,
-  };
+  });
 
   const repo = {
     laneOpen: {
       run: (payload: LaneCall) => {
         doorOpens.push(payload);
-        return Promise.resolve(behavior.laneOpen?.(doorOpens.length) ?? { binding: `lane-${doorOpens.length}` });
+        return Promise.resolve(behavior.laneOpen?.(doorOpens.length) ?? laneOf(`lane-${doorOpens.length}`)).then((lane) => {
+          const opened = lane as ReturnType<typeof laneOf>;
+          endpoint.stand(opened.token, opened.binding);
+          return opened;
+        });
       },
     },
     laneClose: {
@@ -180,30 +131,13 @@ const repoOver = (behavior: Behavior = {}, admission = HOST_INPUT_ADMISSION_BYTE
         return Promise.resolve({ closed: true });
       },
     },
-    input: {
-      run: (payload: InputCall) => {
-        inputCalls.push(payload);
-        return answer(payload);
-      },
-    },
   } as unknown as Repo;
 
+  const client = { 'terminal.lane.hold': (payload: unknown) => payload };
   const live = {
-    call: (work: (client: unknown) => unknown) => Promise.resolve(work(client)),
-    hold: (
-      open: (client: unknown) => unknown,
-      onItem: (receipt: TerminalInputReceipt) => void,
-      onFailure: (failure: LiveFailure) => void,
-    ) => {
-      laneOpens.push(open(client) as (typeof laneOpens)[number]);
-      laneListener = onItem;
-      receiptListeners.push(onItem);
-      laneFailures.push(onFailure);
-      return {
-        unsubscribe: () => {
-          if (laneListener === onItem) laneListener = null;
-        },
-      };
+    hold: (open: (client: unknown) => unknown) => {
+      open(client);
+      return { unsubscribe: () => undefined };
     },
     subscribeStatus: (listener: (status: LiveStatus) => void) => {
       statuses.add(listener);
@@ -221,19 +155,7 @@ const repoOver = (behavior: Behavior = {}, admission = HOST_INPUT_ADMISSION_BYTE
     },
   } as unknown as Writer;
 
-  return {
-    repo,
-    live,
-    writer,
-    inputCalls,
-    doorOpens,
-    doorCloses,
-    receiptListeners,
-    laneOpens,
-    laneFailures,
-    typed,
-    connection,
-  };
+  return { repo, live, writer, endpoint, inputCalls: endpoint.acts, doorOpens, doorCloses, typed, connection };
 };
 
 const clipboardOver = () => {
@@ -313,17 +235,29 @@ const setup = (
   const admission = options.admission ?? HOST_INPUT_ADMISSION_BYTES;
   const repo = repoOver(behavior, admission);
   const composition = newComposition();
-  const input = new TerminalInput(engine, repo.repo, keymap, clipboard.clipboard, clock.clock, repo.live, repo.writer, 1, admission, {
-    osc52: options.osc52 ?? true,
-    replaying: options.replaying,
-    onProblem: (problem: string) => {
-      problems.push(problem);
+  const input = new TerminalInput(
+    engine,
+    repo.repo,
+    keymap,
+    clipboard.clipboard,
+    clock.clock,
+    repo.live,
+    repo.endpoint.channel,
+    repo.writer,
+    1,
+    admission,
+    {
+      osc52: options.osc52 ?? true,
+      replaying: options.replaying,
+      onProblem: (problem: string) => {
+        problems.push(problem);
+      },
+      onEnded: () => endings.push(1),
+      composition,
+      candidateKeysArrivePlain: options.candidateKeysArrivePlain,
+      focused: options.focused,
     },
-    onEnded: () => endings.push(1),
-    composition,
-    candidateKeysArrivePlain: options.candidateKeysArrivePlain,
-    focused: options.focused,
-  });
+  );
   input.onAct((act) => {
     acts.push(act);
     return options.taken?.(act) ?? true;
@@ -363,6 +297,18 @@ test('two hundred one-byte keystrokes become one write of two hundred bytes in o
   expect(t.inputCalls[0]?.cause).toBe('typed');
   expect(t.inputCalls[0]?.sequence).toBe(0);
   expect(t.inputCalls[0]?.binding).toBe('lane-1');
+});
+
+test('acts go into the lane’s connection numbered from the sequence its open named, and each receipt settles its act', async () => {
+  const t = setup({ laneOpen: () => laneOf('lane-1', 7) });
+  await drain();
+  t.held.data?.('a');
+  expect(await t.input.paste('b')).toBe(true);
+  expect(t.inputCalls.map((call) => [call.binding, call.sequence, call.cause, decode(call.act.bytes ?? '')])).toEqual([
+    ['lane-1', 7, 'typed', 'a'],
+    ['lane-1', 8, 'paste', 'b'],
+  ]);
+  expect(t.endpoint.sockets.map((socket) => socket.token)).toEqual(['secret-lane-1']);
 });
 
 test('a cursor report the engine composed reaches no write, and a keystroke beside it still does', async () => {
@@ -525,7 +471,7 @@ test('typing is cut to the admission too, and a multi-byte character is never sp
   const bodies = t.inputCalls.map((call) => decode(call.act.bytes ?? ''));
   expect(bodies.join('')).toBe('ééé');
   for (const body of bodies) expect(Buffer.byteLength(body, 'utf8')).toBeLessThanOrEqual(4);
-  expect(bodies.every((body) => !body.includes('\ufffd'))).toBe(true);
+  expect(bodies.every((body) => !body.includes('�'))).toBe(true);
 });
 
 test('an act the gate can never admit is a refusal, not pressure: one round, a problem, no retry', async () => {
@@ -538,6 +484,7 @@ test('an act the gate can never admit is a refusal, not pressure: one round, a p
     t.clipboard.clipboard,
     t.clock.clock,
     gate.live,
+    gate.endpoint.channel,
     gate.writer,
     1,
     64 * 1024,
@@ -557,23 +504,6 @@ test('an act the gate can never admit is a refusal, not pressure: one round, a p
   for (const call of gate.inputCalls.slice(before)) {
     expect(Buffer.from(call.act.bytes ?? '', 'base64').length).toBeLessThanOrEqual(16 * 1024);
   }
-});
-
-test('a paste the door answered nothing to is offered once, and the next intake offers it again under the same number', async () => {
-  let silent = true;
-  const t = setup({ input: (call) => (call.cause === 'paste' && silent ? Promise.resolve(undefined) : undefined) });
-  await drain();
-  const pasted = t.input.paste('ls');
-  await drain();
-  expect(t.inputCalls.filter((call) => call.cause === 'paste')).toHaveLength(1);
-
-  silent = false;
-  t.held.data?.('x');
-  await drain();
-  expect(await pasted).toBe(true);
-  const [first, again, typed] = t.inputCalls;
-  expect([again?.cause, again?.sequence]).toEqual(['paste', first?.sequence]);
-  expect(typed?.sequence).toBe((first?.sequence ?? 0) + 1);
 });
 
 test('a paste the gate never admits fails at thirty seconds and sends nothing more', async () => {
@@ -670,9 +600,9 @@ test('release closes the lane at the door once, and a second release sends nothi
 test('backpressure retries the same act under the same sequence', async () => {
   let refusals = 0;
   const t = setup({
-    input: () => {
+    input: (call) => {
       refusals += 1;
-      return refusals === 1 ? { _tag: 'InputBackpressure', frontier: null, pendingBytes: 0, limit: 64 * 1024 } : admitted(0);
+      return refusals === 1 ? backpressure(64 * 1024) : admitted(call.sequence);
     },
   });
   await drain();
@@ -686,7 +616,7 @@ test('backpressure retries the same act under the same sequence', async () => {
   expect(t.inputCalls.map((call) => call.sequence)).toEqual([0, 0]);
 });
 
-test('an attach to another execution opens a lane there at the next keystroke, counting from zero', async () => {
+test('an attach to another execution opens a lane there and types into it from its own first sequence', async () => {
   const t = setup();
   await drain();
   t.held.data?.('a');
@@ -702,7 +632,7 @@ test('an attach to another execution opens a lane there at the next keystroke, c
 });
 
 test('a keystroke into an ended shell does not stop typing into the shell that replaces it', async () => {
-  const t = setup({ input: () => ({ _tag: 'InputEnded' }) });
+  const t = setup({ input: () => INPUT_ENDED });
   await drain();
   t.held.data?.('a');
   await drain();
@@ -720,14 +650,9 @@ test('a keystroke into an ended shell does not stop typing into the shell that r
   expect(decode(t.inputCalls.at(-1)?.act.bytes ?? '')).toBe('b');
 });
 
-const noGrant = { code: 'terminal-no-grant', reason: 'this call was prepared without the live interactive grant it rides' };
-
 test('an interrupt the host cannot send falls back to the byte, and says nothing about it', async () => {
   const t = setup({
-    input: (call) =>
-      call.act._tag === 'Interrupt'
-        ? { _tag: 'InputUnsupported', act: 'interrupt', reason: 'isig-disabled', detail: 'the child turned ISIG off' }
-        : admitted(call.sequence),
+    input: (call) => (call.act._tag === 'Interrupt' ? unsupported('the child turned ISIG off') : admitted(call.sequence)),
   });
   await drain();
   expect(keydown(t.held, { key: 'c', code: 'KeyC', ctrlKey: true })).toBe(false);
@@ -842,58 +767,60 @@ test('a keystroke the input method consumed resolves to no chord', async () => {
 
 const connectionLost = { code: 'transport', reason: 'connection lost' };
 
-test.each(['before admission', 'after admission'])('connection loss %s recovers ordered input without duplicating it', async (failure) => {
-  const receipts = new Map<number, InputCall>();
-  const written: string[] = [];
-  let disconnected = false;
-  const t = setup({
-    input: (call) => {
-      const prior = receipts.get(call.sequence);
-      if (prior !== undefined) {
-        return JSON.stringify(prior) === JSON.stringify(call)
-          ? admitted(call.sequence)
-          : { _tag: 'InputConflict', sequence: call.sequence };
-      }
-      if (!disconnected && failure === 'before admission') {
-        disconnected = true;
-        return Promise.reject(connectionLost);
-      }
-      receipts.set(call.sequence, call);
-      written.push(decode(call.act.bytes ?? ''));
-      if (!disconnected) {
-        disconnected = true;
-        return Promise.reject(connectionLost);
-      }
-      return admitted(call.sequence);
-    },
-  });
-  await drain();
-  t.held.data?.('first');
-  await drain();
-  t.held.data?.('second');
-  await drain();
-  elapse(t.clock);
-  await drain();
-  expect(written.join('')).toBe('firstsecond');
-  expect(t.doorOpens).toHaveLength(1);
-  expect([...receipts.keys()]).toEqual([0, 1]);
-});
+const deduplicating = (written: string[], lose: (call: InputCall, fresh: boolean) => unknown) => {
+  const taken = new Map<number, string>();
+  return (call: InputCall): unknown => {
+    const bytes = call.act.bytes ?? '';
+    const prior = taken.get(call.sequence);
+    if (prior !== undefined) return prior === bytes ? admitted(call.sequence) : conflict(call.sequence);
+    const before = lose(call, false);
+    if (before !== undefined) return before;
+    taken.set(call.sequence, bytes);
+    written.push(decode(bytes));
+    return lose(call, true) ?? admitted(call.sequence);
+  };
+};
 
-test('repeated connection failures keep one paced recovery and release cancels it', async () => {
-  const t = setup({ input: () => Promise.reject(connectionLost) });
+test.each(['before admission', 'after admission'])(
+  'a connection lost %s comes back under the same secret and sends what it left unconfirmed again, never typing it twice',
+  async (failure) => {
+    const written: string[] = [];
+    let dropped = false;
+    const t = setup({
+      input: deduplicating(written, (_call, taken) => {
+        if (dropped || taken !== (failure === 'after admission')) return undefined;
+        dropped = true;
+        return DROP;
+      }),
+    });
+    await drain();
+    t.held.data?.('first');
+    await drain();
+    t.held.data?.('second');
+    await drain();
+    expect(written.join('')).toBe('firstsecond');
+    expect(t.doorOpens).toHaveLength(1);
+    expect(t.endpoint.sockets.map((socket) => socket.token)).toEqual(['secret-lane-1', 'secret-lane-1']);
+    expect(t.problems).toEqual([]);
+  },
+);
+
+test('a connection that keeps dropping before it answers comes back paced, and release stops it coming back', async () => {
+  const t = setup({ input: () => DROP });
   await drain();
   t.held.data?.('a');
   await drain();
-  expect(t.inputCalls).toHaveLength(1);
-  expect(t.clock.waits).toHaveLength(1);
+  expect(t.inputCalls).toHaveLength(2);
+  expect(t.clock.waits.map((wait) => wait.ms)).toEqual([100]);
   elapse(t.clock);
   await drain();
-  expect(t.inputCalls).toHaveLength(2);
-  expect(t.clock.waits).toHaveLength(1);
+  expect(t.inputCalls).toHaveLength(3);
+  expect(t.clock.waits.map((wait) => wait.ms)).toEqual([200]);
   await t.input.release();
   elapse(t.clock);
   await drain();
-  expect(t.inputCalls).toHaveLength(2);
+  expect(t.inputCalls).toHaveLength(3);
+  expect(t.endpoint.sockets.every((socket) => socket.closed)).toBe(true);
 });
 
 test('a late response from a replaced execution cannot change the new input sequence', async () => {
@@ -921,61 +848,24 @@ test('a late response from a replaced execution cannot change the new input sequ
 });
 
 test('a pane moved while its answer was lost still resends the act under the identity it left with', async () => {
-  const receipts = new Map<number, InputCall>();
   const written: string[] = [];
-  let disconnected = true;
-  const t = setup({
-    input: (call) => {
-      const prior = receipts.get(call.sequence);
-      if (prior !== undefined) {
-        return JSON.stringify(prior) === JSON.stringify(call)
-          ? admitted(call.sequence)
-          : { _tag: 'InputConflict', sequence: call.sequence };
-      }
-      receipts.set(call.sequence, call);
-      written.push(decode(call.act.bytes ?? ''));
-      if (disconnected) return Promise.reject(connectionLost);
-      return admitted(call.sequence);
-    },
-  });
+  let lost = true;
+  const t = setup({ input: deduplicating(written, (_call, taken) => (taken && lost ? new Promise(() => {}) : undefined)) });
   await drain();
   t.held.data?.('typed');
   await drain();
+  lost = false;
   t.input.detach();
   t.input.attach(address, VIEW);
   await drain();
-  disconnected = false;
-  elapse(t.clock);
-  await drain();
   expect(written).toEqual(['typed']);
-  expect(t.inputCalls.length).toBe(2);
+  expect(t.inputCalls.map((call) => [call.binding, call.sequence])).toEqual([
+    ['lane-1', 0],
+    ['lane-1', 0],
+  ]);
   t.held.data?.('more');
   await drain();
   expect(written).toEqual(['typed', 'more']);
-});
-
-test.each(['typed', 'paste'])('input %s held by a yielding logic continues in order when its successor admits it', async (cause) => {
-  let yielding = true;
-  const written: string[] = [];
-  const t = setup({
-    input: (call) => {
-      if (yielding) return Promise.reject({ code: 'terminal-host-refused-InputYielding', reason: 'logic handover' });
-      written.push(decode(call.act.bytes ?? ''));
-      return admitted(call.sequence);
-    },
-  });
-  const pasted = cause === 'paste' ? t.input.paste('first') : null;
-  if (cause === 'typed') t.held.data?.('first');
-  await drain();
-  yielding = false;
-  for (const wait of t.clock.waits.splice(0).filter((wait) => wait.ms === 20)) wait.resolve();
-  await drain();
-  if (pasted !== null) expect(await pasted).toBe(true);
-  t.held.data?.('second');
-  await drain();
-  expect(written).toEqual(['first', 'second']);
-  expect(t.endings).toEqual([]);
-  expect(t.problems).toEqual([]);
 });
 
 test.each(['open', 'closed'] as const)(
@@ -1002,7 +892,7 @@ test.each(['open', 'closed'] as const)(
 );
 
 test('an ended input refuses all later typing into that execution, and opens no lane again', async () => {
-  const t = setup({ input: () => ({ _tag: 'InputEnded' }) });
+  const t = setup({ input: () => INPUT_ENDED });
   await drain();
   t.held.data?.('a');
   await drain();
@@ -1015,116 +905,189 @@ test('an ended input refuses all later typing into that execution, and opens no 
   expect(t.endings).toEqual([1]);
 });
 
-test('a view opens nothing until it is focused or typed into, and what was typed first rides the lane it opened', async () => {
+test('a view opens its lane as it attaches, and what was typed before the lane stood rides it', async () => {
   const opened = Promise.withResolvers<unknown>();
   const t = setup({ laneOpen: () => opened.promise });
   await drain();
-  expect(t.doorOpens).toEqual([]);
+  expect(t.doorOpens).toEqual([{ ...address, view: VIEW }]);
   t.input.focused();
   t.held.data?.('ls');
   t.input.focused();
   await drain();
-  expect(t.doorOpens).toEqual([{ ...address, view: VIEW }]);
+  expect(t.doorOpens).toHaveLength(1);
   expect(t.inputCalls).toEqual([]);
 
-  opened.resolve({ binding: 'lane-1' });
+  opened.resolve(laneOf('lane-1'));
   await drain();
   expect(t.inputCalls.map((call) => [call.binding, call.sequence, decode(call.act.bytes ?? '')])).toEqual([['lane-1', 0, 'ls']]);
 });
 
-const laneRefusals: [string, (call: InputCall) => unknown][] = [
-  ['a grant the server no longer holds', () => Promise.reject(noGrant)],
-  ['a binding the host no longer holds', () => Promise.reject({ code: 'terminal-host-refused-HostConflict', reason: 'BindingUnknown' })],
-  ['a conflict at the gate', (call) => ({ _tag: 'InputConflict', sequence: call.sequence })],
-];
-
-test.each(laneRefusals)(
-  '%s reopens a lane that typed without a word, and the act it took nothing for goes on the new lane',
-  async (_refusal, refuse) => {
-    const typed: [string, number, string][] = [];
-    const t = setup({
-      input: (call) => {
-        if (call.binding === 'lane-1' && call.sequence > 0) return refuse(call);
-        typed.push([call.binding, call.sequence, decode(call.act.bytes ?? '')]);
-        return admitted(call.sequence);
-      },
-    });
-    await drain();
-    t.held.data?.('a');
-    await drain();
-    t.held.data?.('b');
-    await drain();
-    await drain();
-
-    expect(typed).toEqual([
-      ['lane-1', 0, 'a'],
-      ['lane-2', 0, 'b'],
-    ]);
-    expect(t.doorOpens).toHaveLength(2);
-    expect(t.problems).toEqual([]);
-  },
-);
-
-test('a reopened lane refused before it typed anything says the server’s sentence and stops; the next keystroke opens a lane again', async () => {
-  const typed: string[] = [];
+test('a conflict at the gate reopens the lane without a word, and the act it took nothing for goes on the new lane', async () => {
+  const typed: [string, number, string][] = [];
   const t = setup({
     input: (call) => {
-      if (call.binding !== 'lane-3') return Promise.reject(noGrant);
-      typed.push(decode(call.act.bytes ?? ''));
+      if (call.binding === 'lane-1' && call.sequence > 0) return conflict(call.sequence);
+      typed.push([call.binding, call.sequence, decode(call.act.bytes ?? '')]);
       return admitted(call.sequence);
     },
   });
   await drain();
   t.held.data?.('a');
   await drain();
-  await drain();
-  expect(t.doorOpens).toHaveLength(2);
-  expect(t.problems).toEqual([noGrant.reason]);
-
   t.held.data?.('b');
   await drain();
   await drain();
-  expect(t.doorOpens).toHaveLength(3);
-  expect(typed).toEqual(['b']);
+
+  expect(typed).toEqual([
+    ['lane-1', 0, 'a'],
+    ['lane-2', 0, 'b'],
+  ]);
+  expect(t.doorOpens).toHaveLength(2);
+  expect(t.problems).toEqual([]);
 });
 
-test('what a lost connection left unconfirmed is settled lost and said once when its lane is refused, and never typed on the new lane', async () => {
+test('a lane the host closed reopens through the server; what it left unanswered is settled lost and said once, and never typed on the new lane', async () => {
   const written: string[] = [];
-  let attempts = 0;
   const t = setup({
     input: (call) => {
-      if (attempts++ === 0) {
-        written.push(decode(call.act.bytes ?? ''));
-        return Promise.reject(connectionLost);
-      }
-      if (call.binding === 'lane-1') return Promise.reject(noGrant);
       written.push(decode(call.act.bytes ?? ''));
-      return admitted(call.sequence);
+      if (call.binding !== 'lane-1') return admitted(call.sequence);
+      t.endpoint.shut('secret-lane-1', LANE_CLOSED);
+      return new Promise(() => {});
     },
   });
   await drain();
   t.held.data?.('run\r');
   await drain();
-  t.held.data?.('stale tail');
-  elapse(t.clock);
-  await drain();
   await drain();
   expect(written).toEqual(['run\r']);
   expect(t.problems).toHaveLength(1);
+  expect(t.doorOpens).toHaveLength(2);
 
   t.held.data?.('fresh');
   await drain();
   expect(written).toEqual(['run\r', 'fresh']);
+  expect(t.inputCalls.at(-1)?.binding).toBe('lane-2');
+});
+
+test('an act resent after backpressure whose answer was lost is settled lost with its lane, and never typed again on the next one', async () => {
+  const written: [string, string][] = [];
+  let pressed = false;
+  const t = setup({
+    input: (call) => {
+      if (!pressed) {
+        pressed = true;
+        return backpressure(64 * 1024);
+      }
+      written.push([call.binding, decode(call.act.bytes ?? '')]);
+      if (call.binding !== 'lane-1') return admitted(call.sequence);
+      t.endpoint.shut('secret-lane-1', LANE_CLOSED);
+      return new Promise(() => {});
+    },
+  });
+  await drain();
+  t.held.data?.('a');
+  await drain();
+  elapse(t.clock);
+  await drain();
+  expect(t.problems).toHaveLength(1);
   expect(t.doorOpens).toHaveLength(2);
+
+  t.held.data?.('b');
+  await drain();
+  expect(written).toEqual([
+    ['lane-1', 'a'],
+    ['lane-2', 'b'],
+  ]);
+});
+
+test('a lost connection whose lane is gone when it comes back reopens through the server, settling what it left unanswered lost', async () => {
+  const written: string[] = [];
+  const t = setup({
+    input: (call) => {
+      written.push(decode(call.act.bytes ?? ''));
+      if (call.binding !== 'lane-1') return admitted(call.sequence);
+      t.endpoint.shut('secret-lane-1', DROP);
+      return new Promise(() => {});
+    },
+  });
+  await drain();
+  t.held.data?.('run\r');
+  await drain();
+  await drain();
+  expect(t.problems).toHaveLength(1);
+  expect(t.endpoint.sockets.map((socket) => socket.token)).toEqual(['secret-lane-1', 'secret-lane-1', 'secret-lane-2']);
+
+  t.held.data?.('fresh');
+  await drain();
+  expect(written).toEqual(['run\r', 'fresh']);
+});
+
+test('an address that stops answering after a drop sends the window back to the server for the lane, and typing goes on at the address it names', async () => {
+  const t = setup({ laneOpen: (opened) => ({ ...laneOf(`lane-${opened}`), url: `ws://127.0.0.1:${opened}/terminal` }) });
+  await drain();
+  t.held.data?.('a');
+  await drain();
+  t.endpoint.unreached.add('ws://127.0.0.1:1/terminal');
+  t.endpoint.sockets[0]?.drop(DROP);
+  await drain();
+  expect(t.doorOpens).toHaveLength(2);
+  expect(t.endpoint.sockets.map((socket) => socket.url)).toEqual([
+    'ws://127.0.0.1:1/terminal',
+    'ws://127.0.0.1:1/terminal',
+    'ws://127.0.0.1:2/terminal',
+  ]);
+
+  t.held.data?.('b');
+  await drain();
+  expect(t.inputCalls.map((call) => [call.binding, decode(call.act.bytes ?? '')])).toEqual([
+    ['lane-1', 'a'],
+    ['lane-2', 'b'],
+  ]);
+  expect(t.problems).toEqual([]);
+});
+
+test('a reopened lane closed before it typed anything says the host’s sentence and stops; the next keystroke opens a lane again', async () => {
+  const t = setup();
+  await drain();
+  t.endpoint.shut('secret-lane-1', LANE_CLOSED);
+  await drain();
+  expect(t.doorOpens).toHaveLength(2);
+  expect(t.problems).toEqual([]);
+  t.endpoint.shut('secret-lane-2', LANE_CLOSED);
+  await drain();
+  expect(t.doorOpens).toHaveLength(2);
+  expect(t.problems).toEqual([LANE_CLOSED.reason]);
+
+  t.held.data?.('b');
+  await drain();
+  expect(t.doorOpens).toHaveLength(3);
+  expect(t.inputCalls.map((call) => [call.binding, decode(call.act.bytes ?? '')])).toEqual([['lane-3', 'b']]);
+});
+
+test('a lane closed for a frame it could not read stops typing with the host’s sentence and reopens only for the next keystroke', async () => {
+  const t = setup({
+    input: (call) => (call.binding === 'lane-1' ? { close: 1008, reason: 'a frame this lane does not read' } : admitted(call.sequence)),
+  });
+  await drain();
+  t.held.data?.('a');
+  await drain();
+  expect(t.problems).toEqual(['typing stopped: a frame this lane does not read']);
+  expect(t.doorOpens).toHaveLength(1);
+
+  t.held.data?.('b');
+  await drain();
+  expect(t.inputCalls.map((call) => [call.binding, decode(call.act.bytes ?? '')])).toEqual([
+    ['lane-1', 'a'],
+    ['lane-2', 'b'],
+  ]);
 });
 
 test('an expired receipt settles the window lost, says it once, and typing goes on through a fresh lane', async () => {
   const typed: [string, string][] = [];
   const t = setup({
     input: (call) => {
-      if (call.binding === 'lane-1' && call.sequence === 1) {
-        return { _tag: 'InputReceiptExpired', sequence: 1, retainedFrom: 2 };
-      }
+      if (call.binding === 'lane-1' && call.sequence === 1) return expired(1, 2);
       typed.push([call.binding, decode(call.act.bytes ?? '')]);
       return admitted(call.sequence);
     },
@@ -1145,11 +1108,9 @@ test('an expired receipt settles the window lost, says it once, and typing goes 
   ]);
 });
 
-test('a lane refused for capacity at its open says the server’s sentence and drops what waited on it; the next keystroke asks again', async () => {
+test('a lane refused for capacity at its open says the server’s sentence, and the next keystroke asks again', async () => {
   const full = { code: 'terminal-capacity', reason: 'no binding fits on the host' };
   const t = setup({ laneOpen: (opened) => (opened === 1 ? Promise.reject(full) : undefined) });
-  await drain();
-  t.held.data?.('a');
   await drain();
   expect(t.problems).toEqual([full.reason]);
   expect(t.inputCalls).toEqual([]);
@@ -1159,16 +1120,18 @@ test('a lane refused for capacity at its open says the server’s sentence and d
   expect(t.inputCalls.map((call) => decode(call.act.bytes ?? ''))).toEqual(['b']);
 });
 
-test('a fenced input reads as the terminal ending: no lane reopens and later typing is refused', async () => {
+test('a lane closed on a fenced input reopens once, and the fence the server answers reads as the terminal ending', async () => {
+  const fenced = { code: 'terminal-host-refused-InputFenced', reason: 'input was not admitted: InputFenced ended' };
   const t = setup({
-    input: () => Promise.reject({ code: 'terminal-host-refused-InputFenced', reason: 'input was not admitted: InputFenced ended' }),
+    input: () => ({ close: 4410, reason: fenced.reason }),
+    laneOpen: (opened) => (opened === 1 ? undefined : Promise.reject(fenced)),
   });
   await drain();
   t.held.data?.('a');
   await drain();
   t.held.data?.('b');
   await drain();
-  expect(t.doorOpens).toHaveLength(1);
+  expect(t.doorOpens).toHaveLength(2);
   expect(t.inputCalls).toHaveLength(1);
   expect(await t.input.paste('c')).toBe(false);
   expect(t.endings).toEqual([1]);
@@ -1178,53 +1141,12 @@ test('a lane whose open answers after the view let go is closed at the door rath
   const opened = Promise.withResolvers<unknown>();
   const t = setup({ laneOpen: () => opened.promise });
   await drain();
-  t.input.focused();
-  await drain();
   await t.input.release();
-  opened.resolve({ binding: 'lane-late' });
+  opened.resolve(laneOf('lane-late'));
   await drain();
   expect(t.doorCloses).toEqual([{ ...address, binding: 'lane-late' }]);
   expect(t.inputCalls).toEqual([]);
-});
-
-test('what the engine reports while the view is not focused opens no lane', async () => {
-  const t = setup({}, { focused: () => false });
-  await drain();
-  t.held.data?.(`${ESC}[<35;10;5M`);
-  await drain();
-  expect(t.doorOpens).toEqual([]);
-  expect(t.inputCalls).toEqual([]);
-});
-
-test('an answer heard on a lane that was replaced settles nothing typed on the new one', async () => {
-  const hung = Promise.withResolvers<unknown>();
-  const t = setup({
-    input: (call) => {
-      if (call.binding === 'lane-1' && call.sequence > 0) return Promise.reject(noGrant);
-      if (call.binding === 'lane-2') return hung.promise;
-      return admitted(call.sequence);
-    },
-  });
-  await drain();
-  t.held.data?.('a');
-  await drain();
-  const pasted = t.input.paste('b');
-  await drain();
-  await drain();
-  expect(t.inputCalls.at(-1)?.binding).toBe('lane-2');
-  expect(t.inputCalls.at(-1)?.sequence).toBe(0);
-
-  const settledEarly = await Promise.race([
-    pasted,
-    (async () => {
-      t.receiptListeners[0]?.({ kind: 'applied', sequence: 0, outcome: admitted(0) } as unknown as TerminalInputReceipt);
-      await drain();
-      return 'unsettled' as const;
-    })(),
-  ]);
-  expect(settledEarly).toBe('unsettled');
-  hung.resolve(admitted(0));
-  expect(await pasted).toBe(true);
+  expect(t.endpoint.sockets).toEqual([]);
 });
 
 test('a hover over an unfocused view types nothing into its lane, while a wheel over it still does', async () => {
@@ -1240,16 +1162,7 @@ test('a hover over an unfocused view types nothing into its lane, while a wheel 
   expect(t.inputCalls.map((call) => decode(call.act.bytes ?? ''))).toEqual(['a', `${ESC}[<65;10;5M`]);
 });
 
-test('a wheel over an unfocused view that holds no lane yet opens one and reaches the program', async () => {
-  const t = setup({}, { focused: () => false });
-  await drain();
-  t.held.data?.(`${ESC}[<65;10;5M`);
-  await drain();
-  expect(t.doorOpens).toHaveLength(1);
-  expect(t.inputCalls.map((call) => decode(call.act.bytes ?? ''))).toEqual([`${ESC}[<65;10;5M`]);
-});
-
-test('focus reports and a hover go as raw, a click or wheel as mouse, and what the person typed as typed', async () => {
+test('focus reports, a hover, a click and a wheel go as raw, and what the person typed as typed', async () => {
   const t = setup();
   await drain();
   t.held.data?.(`${ESC}[I`);
@@ -1262,5 +1175,5 @@ test('focus reports and a hover go as raw, a click or wheel as mouse, and what t
   await drain();
   t.held.data?.(`${ESC}[I${ESC}[<0;10;5M`);
   await drain();
-  expect(t.inputCalls.map((call) => call.cause)).toEqual(['raw', 'typed', 'mouse', 'raw', 'mouse']);
+  expect(t.inputCalls.map((call) => call.cause)).toEqual(['raw', 'typed', 'raw', 'raw', 'raw']);
 });

@@ -19,6 +19,7 @@ import { TerminalKeymap } from '$lib/features/executions/terminal/Keymap.js';
 import { TerminalOutput, pageHidden, pageTime } from '$lib/features/executions/terminal/Output.js';
 import { TerminalRenderPolicy } from '$lib/features/executions/terminal/RenderPolicy.js';
 import { TerminalHolders } from '$lib/features/executions/terminal/Holders.svelte.js';
+import { LaneSockets } from '$lib/wire/LaneSockets.js';
 import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
 import { ExecutionsRepo, type ExecutionAddress } from '$lib/features/executions/Repo.js';
 import { TerminalViews } from '$lib/features/executions/terminal/Views.svelte.js';
@@ -71,7 +72,6 @@ function stand(reads: Reads = {}) {
     },
     operation: { key: () => ({ refresh: async () => ({ _tag: 'Whole', state: { _tag: 'Unknown', operation: {} } }) }) },
     bytes: { key: () => ({ refresh: async () => ({ bytes: '', nextOffset: '0', eof: true }) }) },
-    input: { run: async () => undefined },
     laneClose: { run: async () => ({ closed: true }) },
     start: { run: async () => undefined },
     stop: { run: async () => undefined },
@@ -138,6 +138,12 @@ function stand(reads: Reads = {}) {
           },
         } as never),
         Layer.of(Live, live as never),
+        Layer.of(
+          LaneSockets,
+          new LaneSockets(() => {
+            throw new Error('a terminal lane is not part of this case');
+          }),
+        ),
         Layer.of(Door, {} as never),
         Layer.of(ProjectDoor, { lens: () => ({ project: '1' }) } as never),
         Layer.of(TerminalOutput, new TerminalOutput(pageTime(), pageHidden, scope)),

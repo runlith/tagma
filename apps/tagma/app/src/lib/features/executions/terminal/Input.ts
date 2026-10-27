@@ -1,10 +1,12 @@
 import type { InputAnswer } from '@runlith/executions/protocol/input';
-import type { TerminalInputReceipt } from '@tagma/server/executions/contract/wire/viewLeases';
+import type { LaneCause } from '@runlith/executions/protocol/lane';
 import type { LiveConnection, LiveFailure } from '$lib/wire/Live.js';
 import { refusalOf } from '$lib/wire/refusal.js';
 import { composingNow, compositionOpen, newComposition, type Composition } from './engineGuards.js';
 import { markTerminalInput } from './terminalChainRecord.js';
 import { kittyKeyboardFlags } from './engineOptions.js';
+import { LaneConnection, type LaneClosure } from './LaneConnection.js';
+import type { LaneSockets } from '$lib/wire/LaneSockets.js';
 import type { Engine } from './terminalEngine.js';
 import type { LayoutCategory, TerminalAct, TerminalKeymap } from './Keymap.js';
 import type { Writer } from './Output.js';
@@ -22,15 +24,7 @@ export const BACKPRESSURE_WAIT_MS = 20;
 export const RETENTION_MAX_ITEMS = 1024;
 export const IME_NEWLINE_FALLBACK_MS = 200;
 export const IME_CHORD_ABANDON_MS = 10_000;
-const NO_GRANT = 'terminal-no-grant';
-const STALE = 'terminal-stale';
-const HOST_REFUSED = 'terminal-host-refused-';
-const INPUT_FENCED = `${HOST_REFUSED}InputFenced`;
-const INPUT_YIELDING = `${HOST_REFUSED}InputYielding`;
-const UNSUPPORTED = `${HOST_REFUSED}UnsupportedCapability`;
-
-const isLaneRefusal = (code: string): boolean =>
-  code === NO_GRANT || code === STALE || (code.startsWith(HOST_REFUSED) && code !== INPUT_FENCED && code !== UNSUPPORTED);
+const INPUT_FENCED = 'terminal-host-refused-InputFenced';
 
 export interface Clipboard {
   readText(): Promise<string>;
@@ -52,10 +46,13 @@ export interface TerminalInputOptions {
   readonly candidateKeysArrivePlain?: boolean;
   readonly beforeSend?: (act: InputAct) => InputAct;
   readonly focused?: () => boolean;
+  readonly onLane?: (lane: LaneConnection | null) => void;
 }
 
 export interface HeldLane {
   readonly binding: string;
+  readonly url: string;
+  readonly token: string;
   readonly sequence: number;
 }
 
@@ -65,7 +62,7 @@ export interface KeyContext {
 
 export type ActVerdict = 'applied' | 'refused' | 'lost';
 
-type WriteCause = 'typed' | 'raw' | 'mouse' | 'paste';
+type WriteCause = 'typed' | 'raw' | 'paste';
 
 interface PasteToken {
   cancelled: boolean;
@@ -89,14 +86,11 @@ interface InterruptItem {
 
 type QueueItem = WriteItem | InterruptItem;
 
-type ActRoad = 'socket' | 'http';
-
 interface SentAct {
   readonly act: InputAct;
   readonly consumed: readonly QueueItem[];
   readonly size: number;
-  readonly cause: WriteCause | 'interrupt';
-  readonly road: ActRoad;
+  readonly cause: LaneCause;
   owed: boolean;
 }
 
@@ -156,12 +150,11 @@ const MOUSE_MOTION = 32;
 const MOUSE_NO_BUTTON = 3;
 const MOUSE_WHEEL = 64;
 
-type Composed = 'hover' | 'report' | 'mouse' | 'typed';
+type Composed = 'hover' | 'raw' | 'typed';
 
 function composedBy(data: string): Composed {
   let offset = 0;
   let hover = true;
-  let acted = false;
   while (offset < data.length) {
     const rest = data.slice(offset);
     const focus = FOCUS_REPORT_RE.exec(rest);
@@ -179,13 +172,10 @@ function composedBy(data: string): Composed {
       code = rest.charCodeAt(X10_MOUSE.length) - 32;
       offset += X10_MOUSE.length + 3;
     } else return 'typed';
-    if ((code & MOUSE_MOTION) === 0 || (code & MOUSE_NO_BUTTON) !== MOUSE_NO_BUTTON || (code & MOUSE_WHEEL) !== 0) {
-      hover = false;
-      acted = true;
-    }
+    if ((code & MOUSE_MOTION) === 0 || (code & MOUSE_NO_BUTTON) !== MOUSE_NO_BUTTON || (code & MOUSE_WHEEL) !== 0) hover = false;
   }
   if (offset === 0) return 'typed';
-  return acted ? 'mouse' : hover ? 'hover' : 'report';
+  return hover ? 'hover' : 'raw';
 }
 
 function imeConsumed(event: KeyboardEvent): boolean {
@@ -270,16 +260,6 @@ const base64Of = (text: string): string => {
   return btoa(binary);
 };
 
-const bytesOf = (base64: string): Uint8Array => {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let at = 0; at < binary.length; at += 1) bytes[at] = binary.charCodeAt(at);
-  return bytes;
-};
-
-const wireAct = (act: InputAct): { readonly _tag: 'Write'; readonly bytes: Uint8Array } | { readonly _tag: 'Interrupt' } =>
-  act._tag === 'Write' ? { _tag: 'Write', bytes: bytesOf(act.bytes) } : { _tag: 'Interrupt' };
-
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 const sameAddress = (a: ExecutionAddress, b: ExecutionAddress | null): boolean =>
@@ -289,6 +269,8 @@ export class TerminalInput {
   private address: ExecutionAddress | null = null;
   private view: string | null = null;
   private binding: string | null = null;
+  private url: string | null = null;
+  private token: string | null = null;
   private sequence = 0;
   private epoch = 0;
   private opening: { readonly epoch: number; readonly done: Promise<void> } | null = null;
@@ -305,9 +287,8 @@ export class TerminalInput {
   private refusedAt: number | null = null;
   private stranded: { readonly sequence: number; readonly entry: SentAct }[] = [];
   private retry: number | null = null;
-  private parked = false;
-  private parkWake: (() => void) | null = null;
-  private answers: { readonly receipts: { unsubscribe: () => void }; readonly status: () => void } | null = null;
+  private connection: LaneConnection | null = null;
+  private lease: { unsubscribe(): void } | null = null;
 
   private disposables: { dispose(): void }[] = [];
   private readonly composition: Composition;
@@ -324,6 +305,7 @@ export class TerminalInput {
     private readonly clipboard: Clipboard,
     private readonly clock: Clock,
     private readonly live: LiveConnection,
+    private readonly sockets: LaneSockets,
     private readonly writer: Writer,
     private readonly projectId: number,
     private admission: number,
@@ -358,12 +340,14 @@ export class TerminalInput {
     this.view = view;
     if (this.binding === null && carried !== null) {
       this.binding = carried.binding;
+      this.url = carried.url;
+      this.token = carried.token;
       this.sequence = carried.sequence;
     }
     if (this.binding !== null) {
       this.listen();
       this.scheduleDrain();
-    } else if (this.queue.length > 0) void this.openLane();
+    } else if (!this.ended) void this.openLane();
   }
 
   observe(): void {
@@ -389,7 +373,7 @@ export class TerminalInput {
       }
       return;
     }
-    if (this.outstanding.size > 0 || this.stranded.length > 0 || this.parked) {
+    if (this.outstanding.size > 0 || this.stranded.length > 0) {
       this.renewing = true;
       return;
     }
@@ -397,17 +381,22 @@ export class TerminalInput {
   }
 
   lane(): HeldLane | null {
-    if (this.binding === null) return null;
+    const { binding, url, token } = this;
+    if (binding === null || url === null || token === null) return null;
     if (this.outstanding.size > 0 || this.stranded.length > 0) return null;
-    return { binding: this.binding, sequence: this.sequence };
+    return { binding, url, token, sequence: this.sequence };
   }
 
   private enter(address: ExecutionAddress): void {
-    this.detach();
+    this.loosen();
     const standing = this.address;
     if (standing !== null && !sameAddress(address, standing)) {
+      this.epoch += 1;
+      this.unlisten();
       this.sequence = 0;
       this.binding = null;
+      this.url = null;
+      this.token = null;
       this.reopened = false;
       this.renewing = false;
       this.ended = false;
@@ -424,10 +413,15 @@ export class TerminalInput {
   }
 
   detach(): void {
+    this.loosen();
+    this.epoch += 1;
+    this.unlisten();
+  }
+
+  private loosen(): void {
     this.attached = false;
     this.observing = false;
     this.setWritable(false);
-    this.epoch += 1;
     for (const drop of [...this.deferrals]) drop();
     for (const held of this.disposables) {
       try {
@@ -435,8 +429,6 @@ export class TerminalInput {
       } catch {}
     }
     this.disposables = [];
-    this.unlisten();
-    this.park();
   }
 
   async release(): Promise<void> {
@@ -597,7 +589,7 @@ export class TerminalInput {
     if (onlyQueryReplies(data)) return;
     const composed = composedBy(data);
     if (composed === 'hover' && this.options.focused?.() === false) return;
-    this.enqueueOrdinary(data, composed === 'typed' || composed === 'mouse' ? composed : 'raw');
+    this.enqueueOrdinary(data, composed === 'typed' ? 'typed' : 'raw');
   }
 
   private handleOsc52(data: string): boolean {
@@ -706,34 +698,14 @@ export class TerminalInput {
     let replaced = false;
     try {
       for (;;) {
-        const binding = this.binding;
-        const address = this.address;
-        if (binding === null || address === null || this.ended) return;
-        if (this.answers === null) return;
-        if (this.parked) {
-          if (this.outstanding.size === 0) {
-            this.parked = false;
-            continue;
-          }
-          if (this.live.status === 'paused') return;
-          await this.pace();
-          if (this.binding !== binding || !sameAddress(address, this.address)) {
-            replaced = true;
-            return;
-          }
-          if (this.outstanding.size === 0) {
-            this.parked = false;
-            continue;
-          }
-          this.resend(0);
-          continue;
-        }
+        const connection = this.connection;
+        if (connection === null || !connection.ready || this.ended) return;
         if (this.refusedAt !== null) return;
         if (this.retry !== null) {
           const from = this.retry;
           this.retry = null;
           await this.clock.wait(BACKPRESSURE_WAIT_MS);
-          if (this.binding !== binding || !sameAddress(address, this.address)) {
+          if (this.connection !== connection) {
             replaced = true;
             return;
           }
@@ -749,25 +721,8 @@ export class TerminalInput {
         this.dropCancelledHeads();
         const head = this.queue[0];
         if (head === undefined) return;
-        if (head.tag === 'write' && head.cause === 'paste') {
-          if (this.outstanding.size > 0) return;
-          this.queue.shift();
-          const sequence = this.sequence;
-          this.sequence += 1;
-          const entry = this.going({
-            act: { _tag: 'Write', bytes: base64Of(head.text) },
-            consumed: [head],
-            size: utf8Length(head.text),
-            cause: 'paste',
-            road: 'http',
-            owed: false,
-          });
-          this.outstanding.set(sequence, entry);
-          markTerminalInput({ stage: 'sent', sequence, binding, road: null, bytes: entry.size });
-          if (!(await this.sendPaste(sequence, entry))) return;
-          continue;
-        }
-        if (this.outstanding.size >= INPUT_WINDOW_ACTS) return;
+        const pasted = head.tag === 'write' && head.cause === 'paste';
+        if (pasted ? this.outstanding.size > 0 : this.outstanding.size >= INPUT_WINDOW_ACTS) return;
         this.queue.shift();
         this.send(this.sequence, this.build(head));
         this.sequence += 1;
@@ -780,7 +735,7 @@ export class TerminalInput {
 
   private build(head: QueueItem): SentAct {
     if (head.tag === 'interrupt') {
-      return this.going({ act: { _tag: 'Interrupt' }, consumed: [head], size: 0, cause: 'interrupt', road: 'socket', owed: false });
+      return this.going({ act: { _tag: 'Interrupt' }, consumed: [head], size: 0, cause: 'interrupt', owed: false });
     }
     if (head.token !== null || head.text.length > INPUT_COALESCE_MAX_CODE_UNITS) {
       return this.going({
@@ -788,7 +743,6 @@ export class TerminalInput {
         consumed: [head],
         size: utf8Length(head.text),
         cause: head.cause,
-        road: 'socket',
         owed: false,
       });
     }
@@ -817,7 +771,6 @@ export class TerminalInput {
       consumed: merged,
       size,
       cause: head.cause,
-      road: 'socket',
       owed: false,
     });
   }
@@ -834,88 +787,37 @@ export class TerminalInput {
   }
 
   private write(sequence: number, entry: SentAct): void {
-    const binding = this.binding;
-    const address = this.address;
-    if (binding === null || address === null) return;
-    markTerminalInput({ stage: 'sent', sequence, binding, road: null, bytes: entry.size });
-    if (entry.road === 'http') {
-      void this.sendPaste(sequence, entry);
-      return;
-    }
-    void this.live
-      .call((client) =>
-        client['terminal.input.write']({
-          projectId: this.projectId,
-          execution: address.execution,
-          incarnation: address.incarnation,
-          binding,
-          sequence,
-          act: wireAct(entry.act),
-          cause: entry.cause,
-        }),
-      )
-      .catch((error: unknown) => this.failed(sequence, entry, error));
+    const connection = this.connection;
+    if (connection === null || !connection.ready) return;
+    markTerminalInput({ stage: 'sent', sequence, binding: this.binding, road: null, bytes: entry.size });
+    entry.owed = false;
+    connection.act(sequence, entry.cause, entry.act);
   }
 
-  private async sendPaste(sequence: number, entry: SentAct): Promise<boolean> {
-    const binding = this.binding;
-    const address = this.address;
-    if (binding === null || address === null) return true;
-    try {
-      const outcome = await this.repo.input.run({ ...address, binding, sequence, act: entry.act, cause: 'paste' }, { throwOnError: true });
-      if (this.outstanding.get(sequence) !== entry) return true;
-      this.wake();
-      this.markReceipt(sequence, entry);
-      if (outcome === undefined) {
-        this.outstanding.delete(sequence);
-        this.queue.unshift(...entry.consumed);
-        this.sequence = sequence;
-        this.fail('unknown input answer');
-        return false;
-      }
-      if (outcome._tag === 'InputAdmitted') {
-        this.outstanding.delete(sequence);
-        this.landed(entry);
-        return true;
-      }
-      if (outcome._tag === 'InputBackpressure') {
-        this.pressured(sequence, entry, outcome);
-        return true;
-      }
-      this.outstanding.delete(sequence);
-      this.refused(sequence, entry, outcome);
-    } catch (error) {
-      this.failed(sequence, entry, error);
-    }
-    return true;
-  }
-
-  private onReceipt(receipt: TerminalInputReceipt): void {
-    this.wake();
-    if (this.refusedAt !== null && receipt.sequence > this.refusedAt) {
-      const stranded = this.outstanding.get(receipt.sequence);
+  private onReceipt(sequence: number, answer: InputAnswer): void {
+    if (this.refusedAt !== null && sequence > this.refusedAt) {
+      const stranded = this.outstanding.get(sequence);
       if (stranded !== undefined) {
-        this.outstanding.delete(receipt.sequence);
-        this.stranded.push({ sequence: receipt.sequence, entry: stranded });
+        this.outstanding.delete(sequence);
+        this.stranded.push({ sequence, entry: stranded });
         this.drained();
       }
       return;
     }
-    const entry = this.outstanding.get(receipt.sequence);
+    const entry = this.outstanding.get(sequence);
     if (entry === undefined) return;
-    this.markReceipt(receipt.sequence, entry);
-    switch (receipt.kind) {
-      case 'applied':
-        this.outstanding.delete(receipt.sequence);
+    this.markReceipt(sequence, entry);
+    switch (answer._tag) {
+      case 'InputAdmitted':
+        this.outstanding.delete(sequence);
         this.landed(entry);
         return;
-      case 'backpressure':
-        this.pressured(receipt.sequence, entry, receipt.outcome);
+      case 'InputBackpressure':
+        this.pressured(sequence, entry, answer);
         return;
-      case 'refused':
-        this.outstanding.delete(receipt.sequence);
-        this.refused(receipt.sequence, entry, receipt.outcome);
-        return;
+      default:
+        this.outstanding.delete(sequence);
+        this.refused(sequence, entry, answer);
     }
   }
 
@@ -1002,30 +904,12 @@ export class TerminalInput {
     this.scheduleDrain();
   }
 
-  private failed(sequence: number, entry: SentAct, error: unknown): void {
-    if (this.outstanding.get(sequence) !== entry) return;
-    const refusal = refusalOf(error);
-    if (refusal.code === 'transport') {
-      this.park();
+  private laneClosed(closure: LaneClosure): void {
+    if (closure._tag === 'Defect') {
+      this.stall(`typing stopped: ${closure.problem}`);
       return;
     }
-    if (refusal.code === INPUT_YIELDING) {
-      this.retryAct(sequence, entry);
-      return;
-    }
-    if (refusal.code === INPUT_FENCED) {
-      this.outstanding.delete(sequence);
-      this.settleWaiters(entry.consumed, 'lost');
-      this.end();
-      return;
-    }
-    if (isLaneRefusal(refusal.code)) {
-      this.laneRefused(sequence, refusal.reason, false);
-      return;
-    }
-    this.outstanding.delete(sequence);
-    this.settleWaiters(entry.consumed, 'lost');
-    this.stall(`typing stopped: ${refusal.reason}`);
+    this.laneRefused(Number.POSITIVE_INFINITY, closure.reason, false);
   }
 
   private laneRefused(sequence: number, problem: string, lost: boolean): void {
@@ -1043,7 +927,7 @@ export class TerminalInput {
   }
 
   private recover(refusedAt: number, lost: boolean): void {
-    const unanswered = lost || this.parked || [...this.outstanding].some(([sequence, entry]) => sequence < refusedAt && !entry.owed);
+    const unanswered = lost || [...this.outstanding].some(([sequence, entry]) => sequence < refusedAt && !entry.owed);
     const pairs: { readonly sequence: number; readonly entry: SentAct }[] = [
       ...[...this.outstanding.entries()].map(([sequence, entry]) => ({ sequence, entry })),
       ...this.stranded,
@@ -1062,34 +946,14 @@ export class TerminalInput {
     this.sequence = 0;
     this.unlisten();
     this.binding = null;
+    this.url = null;
+    this.token = null;
     void this.openLane();
-  }
-
-  private park(): void {
-    if (this.outstanding.size === 0) return;
-    this.parked = true;
-    this.scheduleDrain();
-  }
-
-  private pace(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      this.parkWake = resolve;
-      void this.clock.wait(BACKPRESSURE_WAIT_MS).then(() => this.wake());
-    });
-  }
-
-  private wake(): void {
-    const wake = this.parkWake;
-    this.parkWake = null;
-    wake?.();
   }
 
   private resend(from: number): void {
     const standing = [...this.outstanding.entries()].filter(([sequence]) => sequence >= from).sort((left, right) => left[0] - right[0]);
-    for (const [sequence, entry] of standing) {
-      if (this.outstanding.get(sequence) !== entry) continue;
-      this.write(sequence, entry);
-    }
+    for (const [sequence, entry] of standing) this.write(sequence, entry);
   }
 
   private clearWindow(): void {
@@ -1097,8 +961,6 @@ export class TerminalInput {
     this.stranded = [];
     this.refusedAt = null;
     this.retry = null;
-    this.parked = false;
-    this.wake();
   }
 
   private forget(): void {
@@ -1118,41 +980,60 @@ export class TerminalInput {
   }
 
   private listen(): void {
-    const address = this.address;
-    const binding = this.binding;
-    if (address === null || binding === null) return;
-    this.unlisten();
-    const receipts = this.live.hold(
+    const { address, binding, url, token } = this;
+    if (address === null || binding === null || url === null || token === null || this.connection !== null) return;
+    const lease = this.live.hold(
       (client) =>
-        client['terminal.input.receipts']({
+        client['terminal.lane.hold']({
           projectId: this.projectId,
           execution: address.execution,
           incarnation: address.incarnation,
           binding,
         }),
-      (receipt) => {
-        if (this.binding === binding) this.onReceipt(receipt);
+      () => undefined,
+      (failure) => {
+        if (this.lease === lease) this.leaseFailed(failure);
       },
-      (failure) => this.answersFailed(failure),
     );
-    const status = this.live.subscribeStatus((state) => {
-      if (state === 'open' || state === 'idle') this.scheduleDrain();
-    });
-    this.answers = { receipts, status };
+    const connection: LaneConnection = new LaneConnection(
+      this.sockets,
+      url,
+      token,
+      {
+        ready: () => {
+          if (this.connection === connection) this.connected();
+        },
+        receipt: (sequence, answer) => {
+          if (this.connection === connection) this.onReceipt(sequence, answer);
+        },
+        closed: (closure) => {
+          if (this.connection === connection) this.laneClosed(closure);
+        },
+      },
+      (ms) => this.clock.wait(ms),
+    );
+    this.lease = lease;
+    this.connection = connection;
+    this.options.onLane?.(connection);
+  }
+
+  private connected(): void {
+    this.resend(0);
+    this.scheduleDrain();
   }
 
   private unlisten(): void {
-    const answers = this.answers;
-    this.answers = null;
-    answers?.receipts.unsubscribe();
-    answers?.status();
+    const connection = this.connection;
+    this.lease?.unsubscribe();
+    this.lease = null;
+    this.connection = null;
+    if (connection === null) return;
+    connection.close();
+    this.options.onLane?.(null);
   }
 
-  private answersFailed(failure: LiveFailure): void {
-    if (failure.kind === 'connection') {
-      this.park();
-      return;
-    }
+  private leaseFailed(failure: LiveFailure): void {
+    if (failure.kind === 'connection') return;
     this.stall(`typing stopped: ${failure.message}`);
   }
 
@@ -1163,6 +1044,8 @@ export class TerminalInput {
     this.queue = [];
     this.sequence = 0;
     this.binding = null;
+    this.url = null;
+    this.token = null;
     this.reopened = false;
     this.renewing = false;
     if (problem !== null) this.fail(problem);
@@ -1177,13 +1060,17 @@ export class TerminalInput {
       } catch (error) {
         if (epoch !== this.epoch) return;
         const refusal = refusalOf(error);
+        if (refusal.code === INPUT_FENCED) {
+          this.end();
+          return;
+        }
         if (refusal.code !== 'transport') {
           this.stall(refusal.reason);
           return;
         }
         await this.clock.wait(BACKPRESSURE_WAIT_MS);
         if (epoch !== this.epoch) return;
-        await this.connected();
+        await this.liveOpen();
         if (epoch !== this.epoch) return;
       }
     }
@@ -1194,12 +1081,13 @@ export class TerminalInput {
     }
     if (this.opening?.epoch === epoch) this.opening = null;
     this.binding = answer.binding;
-    this.sequence = 0;
+    this.url = answer.url;
+    this.token = answer.token;
+    this.sequence = answer.next;
     this.listen();
-    void this.flush();
   }
 
-  private connected(): Promise<void> {
+  private liveOpen(): Promise<void> {
     return new Promise<void>((resolve) => {
       let off: (() => void) | null = null;
       let settled = false;

@@ -200,6 +200,8 @@ export const unreadHost: HostExecutions = {
   input: () => Effect.die('this fixture does not type into the host'),
   openBinding: () => Effect.die('this fixture does not open a host lane'),
   closeBinding: () => Effect.die('this fixture does not close a host lane'),
+  open: () => Effect.die('this fixture does not open a terminal endpoint lane'),
+  inputs: () => Effect.die('this fixture does not follow admitted input'),
   custody: () => Effect.die('this fixture does not transfer host custody'),
   processes: () => Effect.die('this fixture does not read host processes'),
   foreground: () => Effect.die('this fixture does not read the host foreground'),
@@ -237,7 +239,13 @@ export const hostTerminals = (over: Partial<FloorInput>) => {
     Context.add(CommandWaiters, input.waiters),
     Context.add(
       InputWitness,
-      input.witness ?? { admitted: () => Effect.void, ended: () => Effect.void, transferred: () => Effect.void, holdsLane: () => false },
+      input.witness ?? {
+        admitted: () => Effect.void,
+        reported: () => Effect.void,
+        ended: () => Effect.void,
+        transferred: () => Effect.void,
+        holdsLane: () => false,
+      },
     ),
     Context.add(TerminalWriters, input.writers ?? null),
   );

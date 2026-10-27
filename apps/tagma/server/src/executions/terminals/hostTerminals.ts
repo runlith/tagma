@@ -35,11 +35,13 @@ export const makeHostTerminals = Effect.fnUntraced(function* ({
   programVersion = UNVERSIONED,
   watched: givenWatched,
   displaced: givenDisplaced,
+  ready = Effect.void,
 }: {
   readonly installation: InstallationId;
   readonly programVersion?: string;
   readonly watched?: Queue.Enqueue<TerminalWatched>;
   readonly displaced?: Queue.Queue<TerminalDisplaced>;
+  readonly ready?: Effect.Effect<void>;
 }): Effect.fn.Return<
   HostTerminals,
   never,
@@ -60,7 +62,9 @@ export const makeHostTerminals = Effect.fnUntraced(function* ({
   const releasing = yield* makeTerminalDischarge({ installation });
   const discharge = Discharge.of(releasing);
   const custody = yield* makeTerminalCustody({ installation, gate, displaced });
-  const starts = yield* makeTerminalStart({ installation, programVersion, watched }).pipe(Effect.provideService(TerminalWriting, writing));
+  const starts = yield* makeTerminalStart({ installation, programVersion, watched, ready }).pipe(
+    Effect.provideService(TerminalWriting, writing),
+  );
   const stops = yield* makeTerminalStops({ installation }).pipe(Effect.provideService(Discharge, discharge));
   const evidence = yield* ExecutionEvidence;
   const terminals = Terminals.of({

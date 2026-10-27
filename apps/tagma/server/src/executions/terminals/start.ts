@@ -61,10 +61,12 @@ export const makeTerminalStart = Effect.fnUntraced(function* ({
   installation,
   programVersion,
   watched,
+  ready,
 }: {
   readonly installation: InstallationId;
   readonly programVersion: string;
   readonly watched: Queue.Enqueue<TerminalWatched>;
+  readonly ready: Effect.Effect<void>;
 }) {
   const units = yield* MachineUnits;
   const requestKeys = yield* RequestKeys;
@@ -120,6 +122,7 @@ export const makeTerminalStart = Effect.fnUntraced(function* ({
     const taken = yield* units.read((unit) => requestKeys.operation(unit, key.projectId, key.operationId));
     if (taken._tag !== 'Unknown') return yield* standing(key, taken);
 
+    yield* Effect.interruptible(ready);
     const acquired = yield* targets.acquire(request.target, consumer, requires);
     const launch = yield* launchOf(request, acquired, holder).pipe(
       Effect.tap((launch) => request.prepared?.(launch) ?? Effect.void),

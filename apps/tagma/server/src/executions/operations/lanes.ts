@@ -2,11 +2,9 @@ import { Effect } from 'effect';
 import { BindingId } from '@runlith/executions/protocol/custody';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { pair, type OperationPair } from '../../platform/contract/service/body.js';
-import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { CurrentProject } from '../../projects/contract/service/caller.js';
 import { readCommandFeed } from '../commands/feed.js';
 import { LANE_OPERATIONS as OPS, type LaneOperationId } from '../contract/wire/operations/lanes.js';
-import { TerminalRefused } from '../contract/wire/refusals.js';
 import { principalOf } from '../terminals/principals.js';
 import { type TerminalRecord } from '../contract/wire/terminals.js';
 import { ViewId } from '../contract/wire/viewLeases.js';
@@ -15,11 +13,9 @@ import { TerminalAdopters } from '../contract/service/adopters.js';
 import { CommandReader } from '../contract/service/commands.js';
 import { Custody } from '../contract/service/custody.js';
 import { ExecutionProcessEvidence } from '../contract/service/records.js';
-import { TERMINAL_PERMISSION_REVISION } from '../contract/service/subjectPolicy.js';
 import { TerminalTargets } from '../contract/service/targets.js';
 import { Terminals } from '../contract/service/terminals.js';
-import { ViewLanes } from '../contract/service/views.js';
-import { TerminalWriting } from '../contract/service/writing.js';
+import { LaneEndpoint, ViewLanes } from '../contract/service/views.js';
 import { refuseThreadView } from '../terminals/lanes.js';
 import { terminalBody } from './projection.js';
 import { actorOf, projected } from './terminalReads.js';
@@ -54,7 +50,13 @@ export const LANE_PAIRS: { readonly [K in LaneOperationId]: OperationPair<(typeo
         const call = yield* yield* CurrentProject;
         const record = yield* projected(caller, input.execution, input.incarnation);
         const actor = yield* actorOf(caller);
-        return yield* (yield* ViewLanes).open(actor, call.project.id, record.execution, ViewId.make(input.view));
+        const lanes = yield* ViewLanes;
+        const device = caller.actor.kind === 'operator' ? (caller.actor.deviceId ?? null) : null;
+        const opened = yield* lanes.open(actor, call.project.id, record.execution, ViewId.make(input.view), device);
+        const url = yield* (yield* LaneEndpoint)
+          .address(opened.lane.port)
+          .pipe(Effect.tapError(() => lanes.close(call.project.id, record.execution, opened.binding)));
+        return { binding: opened.binding, url, token: opened.lane.token, next: opened.lane.next };
       }),
     }),
   ),
@@ -99,60 +101,6 @@ export const LANE_PAIRS: { readonly [K in LaneOperationId]: OperationPair<(typeo
           operationId: HostRequestKey.make(input.operationId),
           execution: record.execution,
         });
-        return { answer };
-      }),
-    }),
-  ),
-
-  input_terminal: pair(
-    OPS.input_terminal,
-    terminalBody(OPS.input_terminal, {
-      execute: Effect.fnUntraced(function* (input, _prepared, caller) {
-        if (input.act._tag === 'Write' && (input.cause === 'interrupt' || input.cause === 'resize')) {
-          return yield* new GateRefusal('body-shape', `Write input cannot carry cause ${input.cause}`, [
-            'send the act the cause names: an Interrupt or a Resize',
-          ]);
-        }
-        const call = yield* yield* CurrentProject;
-        const projectId = call.project.id;
-        const record = yield* projected(caller, input.execution, input.incarnation);
-        const actor = yield* actorOf(caller);
-        const binding = BindingId.make(input.binding);
-        const decided = yield* (yield* TerminalAccess).prepare({
-          actor,
-          place: { _tag: 'Keyed', projectId, targetKey: record.targetKey },
-          owner: record.holder,
-          standing: standingOf(record),
-          act: { _tag: 'Input' },
-          subject: {
-            _tag: 'Input',
-            execution: record.execution,
-            actor: principalOf(actor),
-            binding,
-            command: record.program ?? 'unknown',
-          },
-          interactive: { binding, permissionRevision: TERMINAL_PERMISSION_REVISION, execution: record.execution },
-        });
-        const grant = decided.grant;
-        if (grant === undefined) {
-          return yield* new TerminalRefused({ reason: 'no-grant', message: 'This input holds no live lane grant.' });
-        }
-        const answer = yield* (yield* TerminalWriting).input(
-          record.execution,
-          { binding: grant.binding, principal: grant.actor },
-          {
-            sequence: input.sequence,
-            cause: input.cause,
-            profile: input.profile,
-            act:
-              input.act._tag === 'Write'
-                ? { _tag: 'Write', bytes: new Uint8Array(Buffer.from(input.act.bytes, 'base64')) }
-                : input.act._tag === 'Resize'
-                  ? { _tag: 'Resize', geometry: { rows: input.act.rows, columns: input.act.columns } }
-                  : { _tag: 'Interrupt' },
-          },
-          TERMINAL_PERMISSION_REVISION,
-        );
         return { answer };
       }),
     }),

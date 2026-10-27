@@ -6,7 +6,7 @@ import type { Connections } from '../socket/connections.js';
 import { LiveRpc } from './rpc.js';
 import type { FeedDeclaration } from '../platform/contract/wire/operation.js';
 import { bindFeed, SocketOperations } from '../invocation/contract/service/socketOperations.js';
-import type { FeedHandler } from '../platform/contract/wire/live.js';
+import type { FeedBody } from '../platform/contract/wire/live.js';
 import { OperationId } from '../platform/contract/wire/ids.js';
 import { COLLECTED_FEEDS } from './manifest.js';
 import { MODULES } from '@tagma/server/composition/modules';
@@ -67,7 +67,7 @@ const liveHandlers = (door: Context.Context<SocketDoor>): Effect.Effect<LiveHand
           handlers[feed.id] = performing(feed);
           continue;
         }
-        const handler = own[feed.id] as FeedHandler | undefined;
+        const handler = own[feed.id] as FeedBody | undefined;
         if (handler === undefined) unhandled.push(feed.id);
         else handlers[feed.id] = bindFeed(feed, handler);
       }

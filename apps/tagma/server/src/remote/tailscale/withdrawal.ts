@@ -2,7 +2,7 @@ import { Effect } from 'effect';
 import { WithdrawalRefused } from '../contract/service/exposure.js';
 import type { Blocked } from '../contract/wire/access.js';
 import { failureOf, locateCli, runCli, succeeded } from './cli.js';
-import { holderOf, servedPorts, withdrawArgs, targetOf } from './mapping.js';
+import { holderOf, pointsHome, servedPorts, withdrawArgs, targetOf } from './mapping.js';
 import { hostOf, readServeConfig, readStatus } from './tailnet.js';
 
 const refusedBy = (blocked: Blocked): WithdrawalRefused => new WithdrawalRefused({ reason: blocked.detail });
@@ -14,7 +14,7 @@ const switchOff = Effect.fn('tailscale.serveOff')(function* (binary: string, htt
   if (!succeeded(run)) return yield* new WithdrawalRefused({ reason: `https=${httpsPort} stays mapped: ${failureOf(run)}` });
 });
 
-export const withdraw = Effect.fn('Exposure.withdraw')(function* (ports: readonly number[]) {
+export const withdraw = Effect.fn('Exposure.withdraw')(function* (ports: readonly number[], pointed: readonly number[]) {
   const binary = yield* locateCli;
   if (binary === null) return;
   const status = yield* readStatus(binary).pipe(Effect.mapError(refusedBy));
@@ -22,8 +22,10 @@ export const withdraw = Effect.fn('Exposure.withdraw')(function* (ports: readonl
   if (host === null) return yield* new WithdrawalRefused({ reason: 'Tailscale reports no DNS name for this machine' });
   const config = yield* readServeConfig(binary).pipe(Effect.mapError(refusedBy));
   const targets = ports.map(targetOf);
-  const ours = servedPorts(config, host).filter((httpsPort) =>
-    targets.some((target) => holderOf([config], host, httpsPort, target)._tag === 'tagma'),
+  const ours = servedPorts(config, host).filter(
+    (httpsPort) =>
+      targets.some((target) => holderOf([config], host, httpsPort, target)._tag === 'tagma') ||
+      (pointed.includes(httpsPort) && pointsHome([config], host, httpsPort)),
   );
   yield* Effect.forEach(ours, (httpsPort) => switchOff(binary, httpsPort), { discard: true });
 });

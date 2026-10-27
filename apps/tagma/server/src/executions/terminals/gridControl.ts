@@ -14,6 +14,7 @@ export type InputWitness = {
     request: { readonly act: InputInstruction; readonly cause: InputCause },
     outcome: InputAnswer,
   ) => Effect.Effect<void>;
+  readonly reported: (execution: ExecutionRef, binding: BindingId, cause: InputCause) => Effect.Effect<void>;
   readonly ended: (execution: ExecutionRef) => Effect.Effect<void>;
   readonly transferred: (execution: ExecutionRef) => Effect.Effect<void>;
   readonly holdsLane: (execution: ExecutionRef) => boolean;
@@ -115,8 +116,27 @@ export const makeExecutionGrids = Effect.fnUntraced(function* ({
 
   const broadcast = (grid: Grid): void => {
     if (grid.applied === null) return;
-    const frame: TerminalDecider = { decider: grid.appliedBy };
+    const frame: TerminalDecider = { decider: grid.appliedBy, applied: grid.applied };
     for (const seen of grid.views.values()) seen.emit(frame);
+  };
+
+  const noted = (execution: ExecutionRef, binding: BindingId, cause: InputCause, resized: TerminalBox | null): Effect.Effect<void> => {
+    const view = viewOf(binding);
+    const typed = view !== undefined && TYPING.has(cause) ? view : undefined;
+    if (typed === undefined && resized === null) return Effect.void;
+    const grid = gridOf(execution);
+    const moved = typed !== undefined && (grid.typed !== typed || grid.standing);
+    if (typed !== undefined) {
+      grid.typed = typed;
+      grid.standing = false;
+    }
+    if (resized !== null) {
+      grid.applied = resized;
+      grid.appliedBy = view ?? null;
+      if (view === undefined) grid.standing = true;
+      broadcast(grid);
+    }
+    return moved || resized !== null ? evaluate(grid) : Effect.void;
   };
 
   const closeLane = (grid: Grid): Effect.Effect<void> => {
@@ -254,7 +274,7 @@ export const makeExecutionGrids = Effect.fnUntraced(function* ({
           const seen: Seen = { connection, box: box ?? null, emit };
           if (grid.views.size === 0) grid.standing = false;
           grid.views.set(view, seen);
-          if (grid.applied !== null) emit({ decider: grid.appliedBy });
+          if (grid.applied !== null) emit({ decider: grid.appliedBy, applied: grid.applied });
           return Effect.as(evaluate(grid), seen);
         }),
         (seen) =>
@@ -277,26 +297,12 @@ export const makeExecutionGrids = Effect.fnUntraced(function* ({
         return Effect.as(evaluate(grid), true);
       }),
     admitted: (execution, lane, request, outcome) =>
-      Effect.suspend(() => {
-        if (outcome._tag !== 'InputAdmitted') return Effect.void;
-        const act = request.act;
-        const view = viewOf(lane.binding);
-        const typed = view !== undefined && TYPING.has(request.cause) ? view : undefined;
-        if (typed === undefined && act._tag !== 'Resize') return Effect.void;
-        const grid = gridOf(execution);
-        const moved = typed !== undefined && (grid.typed !== typed || grid.standing);
-        if (typed !== undefined) {
-          grid.typed = typed;
-          grid.standing = false;
-        }
-        if (act._tag === 'Resize') {
-          grid.applied = act.geometry;
-          grid.appliedBy = view ?? null;
-          if (view === undefined) grid.standing = true;
-          broadcast(grid);
-        }
-        return moved || act._tag === 'Resize' ? evaluate(grid) : Effect.void;
-      }),
+      Effect.suspend(() =>
+        outcome._tag === 'InputAdmitted'
+          ? noted(execution, lane.binding, request.cause, request.act._tag === 'Resize' ? request.act.geometry : null)
+          : Effect.void,
+      ),
+    reported: (execution, binding, cause) => Effect.suspend(() => noted(execution, binding, cause, null)),
     ended: (execution) =>
       Effect.suspend(() => {
         const grid = grids.get(keyOf(execution));

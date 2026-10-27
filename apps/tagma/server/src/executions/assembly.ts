@@ -399,6 +399,7 @@ export const executionsLayer: Layer.Layer<
       viewOf: (binding: BindingId): ViewId | undefined => lanes.viewOf(binding),
       close: (binding, principal) => grants.closeOrKeep(binding, principal),
     });
+    const writers = yield* makeTerminalWriters().pipe(Effect.provideService(TerminalRows, terminalRows));
     const owners = hostServices(custody.guarded()).pipe(
       Context.add(RequestKeys, requestKeys),
       Context.add(TerminalIntents, intents),
@@ -411,12 +412,16 @@ export const executionsLayer: Layer.Layer<
       Context.add(TerminalInventory, cell),
       Context.add(CommandWaiters, waiters),
       Context.add(InputWitness, grids),
-      Context.add(TerminalWriters, yield* makeTerminalWriters().pipe(Effect.provideService(TerminalRows, terminalRows))),
+      Context.add(TerminalWriters, writers),
     );
-    const terminals = yield* makeHostTerminals({ installation: address.installation, watched, displaced, programVersion }).pipe(
-      Effect.provide(owners),
-    );
-    const lanes = yield* makeTerminalLanes({ writing: terminals, grants });
+    const terminals = yield* makeHostTerminals({
+      installation: address.installation,
+      watched,
+      displaced,
+      programVersion,
+      ready: custody.ready,
+    }).pipe(Effect.provide(owners));
+    const lanes = yield* makeTerminalLanes({ writing: terminals, grants, host: custody.guarded(), witness: grids, writers });
     yield* drive('terminal-grant-closes', grants.attendCloses(executionHandshakeMs));
     const endings = yield* makeTerminalEndings({ opened: watched, ended }).pipe(
       Effect.provide(

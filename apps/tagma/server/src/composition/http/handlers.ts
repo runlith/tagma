@@ -67,7 +67,8 @@ import { invocationAssembly } from '../../invocation/assembly.js';
 import { callOwnersOf } from '../callOwners.js';
 import { OwedCalls } from '../../threads/contract/service/owedCalls.js';
 import type { Access } from '../../remote/contract/service/access.js';
-import type { PlacedSites } from '../../remote/contract/service/sites.js';
+import type { PlacedSites, TerminalSite } from '../../remote/contract/service/sites.js';
+import type { LaneEndpoint } from '../../executions/contract/service/views.js';
 import type { Devices } from '../../remote/contract/service/devices.js';
 import type { Subscriptions } from '../../push/contract/service/subscriptions.js';
 
@@ -121,6 +122,8 @@ export type RuntimeDoor =
   | ThreadHarness
   | Access
   | PlacedSites
+  | TerminalSite
+  | LaneEndpoint
   | Devices
   | Subscriptions
   | RuntimeSocketDoor;

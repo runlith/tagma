@@ -2,12 +2,13 @@ import { hostname } from 'node:os';
 import { Cause, Duration, Effect, Exit, FiberHandle, Queue, Schedule, Scope, Stream } from 'effect';
 import { Settings } from '../settings/contract/service/values.js';
 import type { Access } from './contract/service/access.js';
-import { Exposure, type ExposureStep, type Listener, type WithdrawalRefused } from './contract/service/exposure.js';
-import type { PlacedSites } from './contract/service/sites.js';
+import { Exposure, type ExposureStep, type Listener, WithdrawalRefused } from './contract/service/exposure.js';
+import type { PlacedSites, TerminalSite } from './contract/service/sites.js';
 import type { AccessState } from './contract/wire/access.js';
 import { remoteEnabled } from './keys.js';
 import { makePlacements } from './placements.js';
 import { Ledger } from './store/ledger.js';
+import { makeTerminalSite, TERMINAL_SITE } from './terminalSite.js';
 
 const RETRY_PAUSE = Duration.seconds(5);
 
@@ -22,6 +23,7 @@ export type Reach = Access['Service'] &
     readonly origin: string | null;
     readonly ready: boolean;
     readonly name: string;
+    readonly terminal: TerminalSite['Service'];
   };
 
 export const makeReach = Effect.gen(function* () {
@@ -40,6 +42,8 @@ export const makeReach = Effect.gen(function* () {
   const ready = () => state._tag === 'ready';
 
   const parentOrigin = () => (enabled && (state._tag === 'certificate' || ready()) ? settled : null);
+
+  const terminal = yield* makeTerminalSite({ ready: () => parentOrigin() !== null });
 
   const machineName = () => machine ?? host;
 
@@ -62,7 +66,7 @@ export const makeReach = Effect.gen(function* () {
   const exposed = Effect.fnUntraced(function* (listener: Listener) {
     state = SETTING_UP;
     sandbox = SETTING_UP;
-    yield* Effect.addFinalizer(() => placements.forget);
+    yield* Effect.addFinalizer(() => Effect.andThen(placements.forget, terminal.forget));
     const scope = yield* Effect.scope;
     let opened = false;
     yield* Stream.runForEach(exposure.expose(listener.port, settled), (step) =>
@@ -106,7 +110,17 @@ export const makeReach = Effect.gen(function* () {
     state = OFF;
     sandbox = OFF;
     if (settled === null) return;
-    const withdrawn = exposure.withdraw(port).pipe(
+    const pointed = Effect.map(
+      Effect.mapError(
+        ledger.sites,
+        (failure) => new WithdrawalRefused({ reason: `the port of the terminal site could not be read: ${failure.message}` }),
+      ),
+      (ports): readonly number[] => {
+        const site = ports.get(TERMINAL_SITE);
+        return site === undefined ? [] : [site];
+      },
+    );
+    const withdrawn = Effect.flatMap(pointed, (sites) => exposure.withdraw(port, sites)).pipe(
       Effect.tapError((refused) =>
         Effect.logWarning(`the Tailscale Serve mapping to port ${port} stands; withdrawing it again`, refused.reason),
       ),
@@ -151,6 +165,7 @@ export const makeReach = Effect.gen(function* () {
     },
     at: (at) => (at === undefined || parentOrigin() === null ? null : placements.at(at)),
     moved: placements.moved,
+    terminal: terminal.site,
   };
   return reach;
 });

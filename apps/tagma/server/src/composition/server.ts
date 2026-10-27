@@ -80,6 +80,7 @@ import { Connections } from '../socket/connections.js';
 import { RESTARTING_CLOSE } from '../platform/contract/wire/live.js';
 import { remoteDriving, remoteListener, remoteServing } from './http/remote.js';
 import { Devices } from '../remote/contract/service/devices.js';
+import { ViewLanes } from '../executions/contract/service/views.js';
 import { Access } from '../remote/contract/service/access.js';
 import { serveLogBounding } from './serveLogBound.js';
 import { recordConsole } from './serveRecord.js';
@@ -649,9 +650,13 @@ const remote = Layer.effectDiscard(
       ),
     };
     yield* Effect.forkScoped(
-      remoteDriving(Context.get(tagma.door, Devices), Context.get(tagma.door, Access), listener, connections).pipe(
-        Effect.tapCause((cause) => Effect.logError('access from another network stopped', Cause.pretty(cause))),
-      ),
+      remoteDriving(
+        Context.get(tagma.door, Devices),
+        Context.get(tagma.door, Access),
+        Context.get(tagma.door, ViewLanes),
+        listener,
+        connections,
+      ).pipe(Effect.tapCause((cause) => Effect.logError('access from another network stopped', Cause.pretty(cause)))),
     );
   }),
 ).pipe(Layer.provide(frozen));

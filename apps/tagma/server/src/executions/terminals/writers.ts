@@ -36,15 +36,8 @@ type Held = {
 
 const keyOf = (execution: ExecutionRef): string => `${execution.installation}/${execution.execution}/${execution.incarnation}`;
 
-export const typedInto = (
-  writer: Principal,
-  road: GrantRoad | null,
-  request: { readonly act: InputInstruction; readonly cause: WriterCause },
-): boolean =>
-  road !== 'harness' &&
-  request.act._tag !== 'Resize' &&
-  !NOT_TYPING.has(request.cause) &&
-  !(writer === OPERATOR && request.cause === 'raw');
+export const typedInto = (writer: Principal, road: GrantRoad | null, cause: WriterCause, act: InputInstruction['_tag']): boolean =>
+  road !== 'harness' && act !== 'Resize' && !NOT_TYPING.has(cause) && !(writer === OPERATOR && cause === 'raw');
 
 export type TerminalWriters = Effect.Success<ReturnType<typeof makeTerminalWriters>>;
 

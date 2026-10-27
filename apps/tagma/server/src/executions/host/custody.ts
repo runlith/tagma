@@ -337,6 +337,7 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
       }
     }),
     ensure,
+    ready: Effect.andThen(ready, Effect.asVoid(ensure())),
     guarded: (): HostPort => ({
       ...served,
       start: starting,

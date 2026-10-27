@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     "./ProcessReader": "./src/ProcessReader.ts",
+    "./testing/laneClient": "./src/testing/laneClient.ts",
     "./composition/platform": {
       "types": "./src/composition/platform.ts",
       "bun": "./src/composition/platform.ts"

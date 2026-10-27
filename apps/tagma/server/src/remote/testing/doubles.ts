@@ -5,6 +5,8 @@ import { Ledger } from '../store/ledger.js';
 
 const SITE_PORT = 11_001;
 
+const POINTED_PORT = 12_001;
+
 const unread = () => Effect.die('the test reads this member of the ledger without giving it');
 
 export const unreadLedger = Ledger.of({
@@ -26,6 +28,7 @@ export const exposedAt = (
   machine = 'test-machine',
   sandbox: () => AccessState = () => ({ _tag: 'certificate', origin: `${origin}:8443` }),
   site: (at: string) => AccessState = (at) => ({ _tag: 'ready', origin: at }),
+  pointed: { port: number; target: number }[] = [],
 ): Layer.Layer<Exposure> =>
   Layer.succeed(
     Exposure,
@@ -55,6 +58,15 @@ export const exposedAt = (
               onFailure: (refused): SitePlaced => ({ name, port: placed, state: refused }),
               onSuccess: (): SitePlaced => ({ name, port: placed, state: site(`${origin}:${placed}`) }),
             });
+          });
+        }),
+      point: ({ name, port, target }, keep) =>
+        Effect.suspend(() => {
+          const placed = port ?? POINTED_PORT;
+          pointed.push({ port: placed, target });
+          return Effect.match(placed === port ? Effect.void : keep(name, placed), {
+            onFailure: (refused): SitePlaced => ({ name, port: placed, state: refused }),
+            onSuccess: (): SitePlaced => ({ name, port: placed, state: site(`${origin}:${placed}`) }),
           });
         }),
       withdraw: () => Effect.void,

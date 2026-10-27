@@ -192,26 +192,26 @@ const make = Effect.fnUntraced(function* ({ address, role, limits, budget = {}, 
 
     const authority = (act: AuthorityRequest) => Effect.flatMap(connect(), (session) => authorityOn(session, act));
 
-    const subscribe = (source: SubscriptionSource, credits: number): Stream.Stream<ExecutionFeedItem, ExecutionsFailure> =>
-      Stream.unwrap(
-        Effect.gen(function* () {
-          const connected = yield* connect();
-          const opened = yield* Effect.acquireRelease(reader(connected, source, Math.min(credits, connected.limits.credits)), (reader) =>
-            Effect.andThen(Effect.ignore(connected.unsubscribe(reader.subscription)), connected.readers.close(reader.subscription)),
-          );
-          const returned = Effect.fnUntraced(function* (cost: number) {
-            if (cost <= 0) return;
-            if (yield* connected.readers.grant(opened.subscription, cost)) {
-              yield* connected.credit(opened.subscription, cost);
-            }
-          });
-          return Stream.fromQueue(opened.queue).pipe(
-            Stream.flatMap((held: HeldDelivery) =>
-              Stream.concat(Stream.succeed(held.delivery), Stream.drain(Stream.fromEffect(returned(held.cost)))),
-            ),
-          );
-        }),
+    const subscribed = Effect.fnUntraced(function* (source: SubscriptionSource, credits: number) {
+      const connected = yield* connect();
+      const opened = yield* Effect.acquireRelease(reader(connected, source, Math.min(credits, connected.limits.credits)), (reader) =>
+        Effect.andThen(Effect.ignore(connected.unsubscribe(reader.subscription)), connected.readers.close(reader.subscription)),
       );
+      const returned = Effect.fnUntraced(function* (cost: number) {
+        if (cost <= 0) return;
+        if (yield* connected.readers.grant(opened.subscription, cost)) {
+          yield* connected.credit(opened.subscription, cost);
+        }
+      });
+      return Stream.fromQueue(opened.queue).pipe(
+        Stream.flatMap((held: HeldDelivery) =>
+          Stream.concat(Stream.succeed(held.delivery), Stream.drain(Stream.fromEffect(returned(held.cost)))),
+        ),
+      );
+    });
+
+    const subscribe = (source: SubscriptionSource, credits: number): Stream.Stream<ExecutionFeedItem, ExecutionsFailure> =>
+      Stream.unwrap(subscribed(source, credits));
 
     const decided = (operation: HostRequestRef, pending: CallAnswer, waitMs: number) => {
       if (pending._tag === 'Settled' || pending.execution === undefined) return Effect.succeed(pending);
@@ -406,20 +406,22 @@ const make = Effect.fnUntraced(function* ({ address, role, limits, budget = {}, 
           ),
 
         inputs: (execution) =>
-          subscribe({ _tag: 'Inputs', execution }, limits.credits).pipe(
-            Stream.takeWhile((delivery) => delivery._tag !== 'Ended' || delivery.ending !== 'completed'),
-            Stream.mapEffect((delivery) =>
-              delivery._tag === 'Inputs'
-                ? Effect.succeed(delivery.input)
-                : Effect.fail(
-                    new WireLost({
-                      reason:
-                        delivery._tag === 'Ended'
-                          ? `the input subscription ended: ${delivery.ending}`
-                          : `unexpected ${delivery._tag} on an input subscription`,
-                      sent: false,
-                    }),
-                  ),
+          Effect.map(subscribed({ _tag: 'Inputs', execution }, limits.credits), (deliveries) =>
+            deliveries.pipe(
+              Stream.takeWhile((delivery) => delivery._tag !== 'Ended' || delivery.ending !== 'completed'),
+              Stream.mapEffect((delivery) =>
+                delivery._tag === 'Inputs'
+                  ? Effect.succeed(delivery.input)
+                  : Effect.fail(
+                      new WireLost({
+                        reason:
+                          delivery._tag === 'Ended'
+                            ? `the input subscription ended: ${delivery.ending}`
+                            : `unexpected ${delivery._tag} on an input subscription`,
+                        sent: false,
+                      }),
+                    ),
+              ),
             ),
           ),
       }),

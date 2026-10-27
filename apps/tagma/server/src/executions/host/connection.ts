@@ -11,6 +11,7 @@ import { ExecutionRequest } from '@runlith/executions/ExecutionRequest';
 import type { HostAuthority } from '@runlith/executions/HostAuthority';
 import { HostLifecycle } from '@runlith/executions/HostLifecycle';
 import { TerminalInput } from '@runlith/executions/TerminalInput';
+import { TerminalLanes } from '@runlith/executions/TerminalLanes';
 import { TerminalScreen } from '@runlith/executions/TerminalScreen';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import type { HostAddress } from '@runlith/executions/hostAddress';
@@ -29,6 +30,7 @@ export type HostExecutions = Executions['Service'] &
   ExecutionFeed['Service'] &
   TerminalScreen['Service'] &
   TerminalInput['Service'] &
+  TerminalLanes['Service'] &
   ExecutionCustody['Service'] &
   ExecutionEvidence['Service'] &
   HostLifecycle['Service'];
@@ -59,6 +61,7 @@ export const hostServices = (port: HostExecutions) =>
     Context.add(ExecutionRequest, port),
     Context.add(HostLifecycle, port),
     Context.add(TerminalInput, port),
+    Context.add(TerminalLanes, port),
     Context.add(TerminalScreen, port),
   );
 

@@ -1,9 +1,8 @@
 import { Schema } from 'effect';
-import { InputAnswer } from '@runlith/executions/protocol/input';
 import { arms, operation } from '../../../../platform/contract/wire/operation.js';
 import { CommandFeedSnapshot, CommandFeedSubscription } from '../commandFeed.js';
 import { TERMINAL_REFUSALS } from '../refusals.js';
-import { TerminalLaneClosed, TerminalLaneOpened, TerminalTakeOverAnswer, ViewInputCause } from '../viewLeases.js';
+import { TerminalLaneClosed, TerminalLaneOpened, TerminalTakeOverAnswer } from '../viewLeases.js';
 import { OPERATOR_DOORS } from './shape.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../../platform/contract/wire/conditions.js';
 
@@ -31,6 +30,8 @@ const VIEW_REFUSALS = [
   'project-required',
 ] as const;
 
+const OPEN_REFUSALS = [...VIEW_REFUSALS, 'terminal-endpoint-unserved'] as const;
+
 const execution = Schema.String.check(Schema.isMinLength(1));
 const incarnation = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
@@ -51,14 +52,15 @@ export const LANE_OPERATIONS = {
   open_terminal_lane: operation('open_terminal_lane', {
     approval: ASKS_IN_REVIEW,
     ...write,
-    meaning: 'Open a lane through which one of the operator’s views types into an execution.',
+    meaning:
+      'Open a lane through which one of the operator’s views types into an execution and follows its output at the terminal endpoint of the execution host.',
     input: Schema.Struct({
       execution,
       incarnation,
       view: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
     }),
     answer: arms({ ok: TerminalLaneOpened.fields }),
-    refusals: VIEW_REFUSALS,
+    refusals: OPEN_REFUSALS,
     confirmation: (input) => ({ summary: `Open a lane into ${input.execution}?` }),
     confirmLabel: 'Open lane',
     presentation: { running: 'Opening a lane', done: 'Opened a lane' },
@@ -86,34 +88,6 @@ export const LANE_OPERATIONS = {
     confirmation: (input) => ({ summary: `Take over ${input.execution}?` }),
     confirmLabel: 'Take over',
     presentation: { running: 'Taking over a terminal', done: 'Took over a terminal' },
-  }),
-
-  input_terminal: operation('input_terminal', {
-    approval: ASKS_IN_REVIEW,
-    ...write,
-    meaning: 'Type into an execution through a live lane of one of the operator’s views, sequenced and paced by the host.',
-    input: Schema.Struct({
-      execution,
-      incarnation,
-      binding: Schema.String.check(Schema.isMinLength(1)),
-      sequence: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-      profile: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-      act: Schema.Union([
-        Schema.Struct({ _tag: Schema.Literal('Write'), bytes: Schema.String.check(Schema.isMinLength(1)) }),
-        Schema.Struct({ _tag: Schema.Literal('Interrupt') }),
-        Schema.Struct({
-          _tag: Schema.Literal('Resize'),
-          rows: Schema.Int.check(Schema.isGreaterThan(0)),
-          columns: Schema.Int.check(Schema.isGreaterThan(0)),
-        }),
-      ]).pipe(Schema.toTaggedUnion('_tag')),
-      cause: ViewInputCause,
-    }),
-    answer: arms({ ok: { answer: InputAnswer } }),
-    refusals: VIEW_REFUSALS,
-    confirmation: (input) => ({ summary: `Type into ${input.execution}?` }),
-    confirmLabel: 'Type',
-    presentation: { running: 'Typing into a terminal', done: 'Typed into a terminal' },
   }),
 };
 

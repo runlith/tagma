@@ -10,6 +10,8 @@ export type ExposureStep =
 
 export type SiteAsk = { readonly name: string; readonly port: number | null };
 
+export type PointAsk = SiteAsk & { readonly target: number };
+
 export type SitePlaced = { readonly name: string; readonly port: number | null; readonly state: AccessState };
 
 export type SiteKeeping = (name: string, port: number) => Effect.Effect<void, Blocked>;
@@ -21,7 +23,8 @@ export class Exposure extends Context.Service<
   {
     expose(port: number, settled: string | null): Stream.Stream<ExposureStep>;
     place(asked: readonly SiteAsk[], reserved: readonly number[], keep: SiteKeeping): Stream.Stream<SitePlaced>;
-    withdraw(port: number): Effect.Effect<void, WithdrawalRefused>;
+    point(asked: PointAsk, keep: SiteKeeping): Effect.Effect<SitePlaced>;
+    withdraw(port: number, pointed: readonly number[]): Effect.Effect<void, WithdrawalRefused>;
   }
 >()('tagma/remote/Exposure') {}
 

@@ -150,10 +150,8 @@ export const executionChannels = (input: { readonly executions: Context.Context<
   return {
     terminal: terminalChannel({
       terminals: Context.get(input.executions, Terminals),
-      writing: Context.get(input.executions, TerminalWriting),
       screens: Context.get(input.executions, TerminalScreens),
       records,
-      access: Context.get(input.executions, TerminalAccess),
       viewers,
       lanes: Context.get(input.executions, ViewLanes),
       grids: Context.get(input.executions, TerminalGrids),

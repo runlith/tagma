@@ -19,7 +19,9 @@ import type { Connections } from '../../socket/connections.js';
 import type { ArtifactStore } from '../../artifacts/contract/service/shelf.js';
 import { ListenerRefused, type Listener } from '../../remote/contract/service/exposure.js';
 import { Access } from '../../remote/contract/service/access.js';
-import { PlacedSites } from '../../remote/contract/service/sites.js';
+import { PlacedSites, TerminalSite } from '../../remote/contract/service/sites.js';
+import { LaneEndpoint, type ViewLanes } from '../../executions/contract/service/views.js';
+import { remoteEndpoint } from './endpoint.js';
 import type { Devices } from '../../remote/contract/service/devices.js';
 import {
   DEVICE_COOKIE,
@@ -199,7 +201,13 @@ export const remoteServing = (remote: RemoteDoor) =>
         artifactRoutes(remote.artifacts, { index: ARTIFACT_PREFIX, sandboxed: true }),
       ).pipe(
         Layer.provide(doorCompositionLayer),
-        Layer.provide(Layer.succeedContext(Context.add(remote.door, ViewSites, remoteSites(Context.get(remote.door, PlacedSites))))),
+        Layer.provide(
+          Layer.succeedContext(
+            Context.add(remote.door, ViewSites, remoteSites(Context.get(remote.door, PlacedSites))).pipe(
+              Context.add(LaneEndpoint, remoteEndpoint(Context.get(remote.door, TerminalSite))),
+            ),
+          ),
+        ),
       );
       const gate = remoteGate(admission, shell);
       return HttpRouter.serve(app, { disableLogger: true, middleware: (served) => requestLine(gate(served)) });
@@ -239,10 +247,18 @@ export const remoteListener = <E>(
   };
 };
 
-export const remoteDriving = (devices: Devices['Service'], access: Access['Service'], listener: Listener, connections: Connections) =>
+export const remoteDriving = (
+  devices: Devices['Service'],
+  access: Access['Service'],
+  lanes: ViewLanes['Service'],
+  listener: Listener,
+  connections: Connections,
+) =>
   Effect.andThen(
     Effect.forkScoped(
-      Stream.runForEach(devices.revoked, ({ deviceId }) => connections.revoke(deviceId, DEVICE_REVOKED_CLOSE, 'device-revoked')),
+      Stream.runForEach(devices.revoked, ({ deviceId }) =>
+        Effect.andThen(connections.revoke(deviceId, DEVICE_REVOKED_CLOSE, 'device-revoked'), lanes.revoked(deviceId)),
+      ),
     ),
     access.serve(listener),
   );

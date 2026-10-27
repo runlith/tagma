@@ -18,6 +18,7 @@ import type { WorktreeTerminals } from '../WorktreeTerminals.svelte.js';
 import { TerminalAppearance } from '../../appearance/Settings.svelte.js';
 import { TerminalHolders } from '../../terminal/Holders.svelte.js';
 import { TerminalKeymap } from '../../terminal/Keymap.js';
+import { LaneSockets } from '$lib/wire/LaneSockets.js';
 import { TerminalOutput, pageHidden, pageTime } from '../../terminal/Output.js';
 import type { TerminalPane } from '../../terminal/Pane.svelte.js';
 import { Terminals } from '../Terminals.svelte.js';
@@ -409,6 +410,12 @@ export async function stand(listings: readonly TerminalRow[], door: DoorStand = 
           },
         } as never),
         Layer.of(Live, live as never),
+        Layer.of(
+          LaneSockets,
+          new LaneSockets(() => {
+            throw new Error('a terminal lane is not part of this case');
+          }),
+        ),
         Layer.of(Door, {} as never),
         Layer.of(ProjectDoor, {} as never),
         Layer.of(TerminalOutput, new TerminalOutput(pageTime(), pageHidden, scope)),

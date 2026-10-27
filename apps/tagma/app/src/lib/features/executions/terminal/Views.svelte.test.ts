@@ -23,8 +23,10 @@ import { TerminalKeymap } from '$lib/features/executions/terminal/Keymap.js';
 import { TerminalOutput, pageHidden, pageTime } from '$lib/features/executions/terminal/Output.js';
 import { TerminalRenderPolicy } from '$lib/features/executions/terminal/RenderPolicy.js';
 import { TerminalHolders } from '$lib/features/executions/terminal/Holders.svelte.js';
+import { LaneSockets } from '$lib/wire/LaneSockets.js';
 import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
 import { ExecutionsRepo } from '$lib/features/executions/Repo.js';
+import { LaneEndpoint, admitted, type LaneAct } from './testing/endpoint.js';
 import { TerminalViews, type ViewBirth } from './Views.svelte.js';
 
 const HELD = 6;
@@ -40,7 +42,6 @@ function stand() {
   const repo = {
     record: { key: () => ({ refresh: async () => undefined }) },
     bytes: { key: () => ({ refresh: async () => ({ bytes: '', nextOffset: '0', eof: true }) }) },
-    input: { run: async () => undefined },
     laneClose: { run: async () => ({ closed: true }) },
     stop: { run: async () => undefined },
   };
@@ -92,6 +93,12 @@ function stand() {
             throw new Error('the socket lane is not part of this case');
           },
         } as never),
+        Layer.of(
+          LaneSockets,
+          new LaneSockets(() => {
+            throw new Error('a terminal lane is not part of this case');
+          }),
+        ),
         Layer.of(Door, {} as never),
         Layer.of(ProjectDoor, { lens: () => ({ project: '1' }) } as never),
         Layer.of(TerminalOutput, new TerminalOutput(pageTime(), pageHidden, scope)),
@@ -154,8 +161,6 @@ async function until(reached: () => boolean, what: string): Promise<void> {
   await waitFor(() => expect(reached(), what).toBe(true));
 }
 
-type Act = { readonly cause: string; readonly act: { readonly _tag: string } };
-
 function catalog() {
   return {
     entries: SETTING_KEYS.filter((key) => key.section === 'terminal').map((key) => ({
@@ -204,7 +209,8 @@ async function keyboard() {
       get: (held, key) => (key === 'clipboard' ? clipboard : Reflect.get(held, key, held)),
     }),
   );
-  const acts: Act[] = [];
+  const acts: LaneAct[] = [];
+  const endpoint = new LaneEndpoint((act) => (acts.push(act), admitted(act.sequence)));
   const body = 'hello from the cli';
   const repo = {
     record: { key: () => ({ refresh: async () => undefined }) },
@@ -222,8 +228,12 @@ async function keyboard() {
         }),
       }),
     },
-    input: { run: async (act: Act) => (acts.push(act), undefined) },
-    laneOpen: { run: async () => ({ binding: 'lane-1' }) },
+    laneOpen: {
+      run: async () => {
+        endpoint.stand('secret-lane-1', 'lane-1');
+        return { binding: 'lane-1', url: 'ws://127.0.0.1:9/terminal', token: 'secret-lane-1', next: 0 };
+      },
+    },
     laneClose: { run: async () => ({ closed: true }) },
     stop: { run: async () => undefined },
   };
@@ -275,6 +285,7 @@ async function keyboard() {
               'terminal.screen.point': () => ({ _tag: 'ScreenUnavailable', reason: 'transport', detail: 'this case opens on the record' }),
             }),
         } as never),
+        Layer.of(LaneSockets, endpoint.channel),
         Layer.of(Door, {} as never),
         Layer.of(ProjectDoor, { lens: () => ({ project: '1' }) } as never),
         Layer.of(TerminalOutput, new TerminalOutput(pageTime(), pageHidden, scope)),

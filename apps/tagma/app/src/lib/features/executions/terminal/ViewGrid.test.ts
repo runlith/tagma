@@ -50,7 +50,7 @@ const wireOver = (answer: (box: TerminalBox) => Promise<unknown> = () => Promise
     get held() {
       return held;
     },
-    decide: (decider: string | null) => heard?.({ decider } as TerminalDecider),
+    decide: (decider: string | null) => heard?.({ decider, applied: { rows: 24, columns: 80 } } as TerminalDecider),
     reopen: () => open?.(),
     refuse: () => {
       held = null;
@@ -69,6 +69,7 @@ const viewOver = (wire: ReturnType<typeof wireOver>, ceiling: Grid | null = null
     VIEW,
     (box) => drawn.push(box),
     () => recorded,
+    () => undefined,
     () => ceiling,
     () => new Promise<void>((done) => waits.push(done)),
   );

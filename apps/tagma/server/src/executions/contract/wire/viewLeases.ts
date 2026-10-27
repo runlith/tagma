@@ -1,15 +1,16 @@
 import * as Schema from 'effect/Schema';
 import { Incarnation } from '@runlith/executions/protocol/execution';
 import { Principal, BindingId, CustodyRevision } from '@runlith/executions/protocol/custody';
-import { InputAnswer, InputSequence } from '@runlith/executions/protocol/input';
+import { InputSequence } from '@runlith/executions/protocol/input';
 import { UncertainEffect } from '@runlith/executions/protocol/host';
 import { FrameRevision, ScreenFeedItem, ScreenPoint, ScreenUnavailable } from '@runlith/executions/protocol/presentation';
 import { ByteOffset, RecordRange, Stream as RecordStream } from '@runlith/executions/protocol/record';
 import { SubscriptionEnding } from '@runlith/executions/protocol/wire';
+import type { TerminalLane } from '@runlith/executions/protocol/lane';
 
 export type DeliveryMark = FrameRevision | ByteOffset;
 export type ViewerSource = RecordStream | 'screen';
-export type LaneOpened = { readonly binding: BindingId };
+export type LaneOpened = { readonly binding: BindingId; readonly lane: TerminalLane };
 
 export const ViewLeaseId = Schema.NonEmptyString.pipe(Schema.brand('ViewLeaseId'));
 export type ViewLeaseId = typeof ViewLeaseId.Type;
@@ -57,56 +58,6 @@ export type RecordDelivery = typeof RecordDelivery.Type;
 export const RecordParsed = Schema.Struct({ viewer: ViewLeaseId, offset: ByteOffset });
 export type RecordParsed = typeof RecordParsed.Type;
 
-export const ViewInputCause = Schema.Literals(['typed', 'paste', 'raw', 'mouse', 'interrupt', 'resize']);
-export type ViewInputCause = typeof ViewInputCause.Type;
-
-export const TerminalInputWrite = Schema.Struct({
-  projectId: Schema.Int.check(Schema.isGreaterThan(0)),
-  execution: Schema.String.check(Schema.isMinLength(1)),
-  incarnation: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  binding: Schema.String.check(Schema.isMinLength(1)),
-  sequence: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  profile: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-  act: Schema.Union([
-    Schema.Struct({ _tag: Schema.Literal('Write'), bytes: DeliveredBytes }),
-    Schema.Struct({ _tag: Schema.Literal('Interrupt') }),
-    Schema.Struct({
-      _tag: Schema.Literal('Resize'),
-      rows: Schema.Int.check(Schema.isGreaterThan(0)),
-      columns: Schema.Int.check(Schema.isGreaterThan(0)),
-    }),
-  ]).pipe(Schema.toTaggedUnion('_tag')),
-  cause: ViewInputCause,
-});
-export type TerminalInputWrite = typeof TerminalInputWrite.Type;
-
-export const TerminalInputReceipts = Schema.Struct({
-  projectId: Schema.Int.check(Schema.isGreaterThan(0)),
-  execution: Schema.String.check(Schema.isMinLength(1)),
-  incarnation: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  binding: Schema.String.check(Schema.isMinLength(1)),
-});
-export type TerminalInputReceipts = typeof TerminalInputReceipts.Type;
-
-export const TerminalInputReceipt = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal('applied'),
-    sequence: InputSequence,
-    outcome: InputAnswer,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal('backpressure'),
-    sequence: InputSequence,
-    outcome: InputAnswer,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal('refused'),
-    sequence: InputSequence,
-    outcome: InputAnswer,
-  }),
-]).pipe(Schema.toTaggedUnion('kind'));
-export type TerminalInputReceipt = typeof TerminalInputReceipt.Type;
-
 export const ViewId = Schema.NonEmptyString.check(Schema.isMaxLength(128)).pipe(Schema.brand('ViewId'));
 export type ViewId = typeof ViewId.Type;
 
@@ -129,11 +80,27 @@ export type TerminalGridSubscription = typeof TerminalGridSubscription.Type;
 export const TerminalGridReport = Schema.Struct({ ...viewedExecution, box: TerminalBox });
 export type TerminalGridReport = typeof TerminalGridReport.Type;
 
-export const TerminalDecider = Schema.Struct({ decider: Schema.NullOr(ViewId) });
+export const TerminalDecider = Schema.Struct({ decider: Schema.NullOr(ViewId), applied: TerminalBox });
 export type TerminalDecider = typeof TerminalDecider.Type;
 
-export const TerminalLaneOpened = Schema.Struct({ binding: BindingId });
+export const TerminalLaneOpened = Schema.Struct({
+  binding: BindingId,
+  url: Schema.NonEmptyString,
+  token: Schema.NonEmptyString,
+  next: InputSequence,
+});
 export type TerminalLaneOpened = typeof TerminalLaneOpened.Type;
+
+export const TerminalLaneHold = Schema.Struct({
+  projectId: Schema.Int.check(Schema.isGreaterThan(0)),
+  execution: Schema.String.check(Schema.isMinLength(1)),
+  incarnation: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  binding: Schema.String.check(Schema.isMinLength(1)),
+});
+export type TerminalLaneHold = typeof TerminalLaneHold.Type;
+
+export const TerminalLaneHeld = Schema.Struct({ held: Schema.Literal(true) });
+export type TerminalLaneHeld = typeof TerminalLaneHeld.Type;
 
 export const TerminalLaneClosed = Schema.Struct({ closed: Schema.Boolean });
 export type TerminalLaneClosed = typeof TerminalLaneClosed.Type;

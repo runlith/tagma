@@ -20,6 +20,8 @@ import { TerminalAppearance } from '../appearance/Settings.svelte.js';
 import { TerminalFit, type FitFrames, type FitGrid, type FitObservation } from './Fit.js';
 import { HOST_INPUT_ADMISSION_BYTES, TerminalInput, type Clipboard, type Clock, type HeldLane } from './Input.js';
 import { TerminalKeymap, detectLayoutCategory, type LayoutCategory, type TerminalAct } from './Keymap.js';
+import type { LaneConnection } from './LaneConnection.js';
+import { LaneSockets } from '$lib/wire/LaneSockets.js';
 import TerminalLinkTip from './LinkTip.svelte';
 import { createLinks, type LinkModifier, type LinkPress, type LinkTip, type TerminalLink } from './links.js';
 import { TerminalOutput, type PaneOutput, type Writer } from './Output.js';
@@ -93,6 +95,7 @@ export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPa
       birth.program,
       yield* ExecutionsRepo,
       yield* Live,
+      yield* LaneSockets,
       yield* PathRoads,
       yield* TerminalHolders,
       yield* TerminalOutput,
@@ -159,6 +162,7 @@ export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPa
   replayedTotal: number | null = $state(null);
   private input: TerminalInput | null = null;
   private stream: RecordStream | null = null;
+  private lane: LaneConnection | null = null;
   private releases: (() => void)[] = [];
   private reparenting: ScrollCapture | null = null;
   private locateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -184,6 +188,7 @@ export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPa
     private readonly program: string,
     private readonly repo: Repo,
     private readonly live: LiveConnection,
+    private readonly sockets: LaneSockets,
     private readonly roads: PathRoads,
     private readonly holders: TerminalHolders,
     private readonly output: TerminalOutput,
@@ -207,6 +212,7 @@ export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPa
         const recorded = this.recordedGrid();
         return recorded === null ? null : { rows: recorded.rows, columns: recorded.cols };
       },
+      (grid) => this.stream?.applied(grid),
       () => {
         const ceiling = this.ground.ceiling();
         return ceiling === null ? null : { rows: ceiling.rows, columns: ceiling.cols };
@@ -628,6 +634,7 @@ export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPa
       },
     );
     this.stream = stream;
+    stream.lane(this.lane);
     const done = from === undefined ? stream.start() : stream.reread(from);
     return done.then(() => {
       this.replayedAt ??= performance.now();
@@ -857,6 +864,7 @@ export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPa
       pageClipboard,
       pageClock,
       this.live,
+      this.sockets,
       writer,
       this.ground.projectId,
       HOST_INPUT_ADMISSION_BYTES,
@@ -873,6 +881,10 @@ export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPa
         candidateKeysArrivePlain: this.host.os === 'linux',
         beforeSend: (act) => this.quarantinedInput(act),
         focused: () => document.hasFocus() && engine.terminal.textarea !== undefined && engine.terminal.textarea === document.activeElement,
+        onLane: (lane) => {
+          this.lane = lane;
+          this.stream?.lane(lane);
+        },
       },
     );
     input.onAct((act) => this.ground.perform(act, this));

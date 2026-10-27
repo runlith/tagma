@@ -15,6 +15,7 @@ export const REFUSAL_WORDS = {
   'terminal-capacity': 'Terminal limit reached',
   'terminal-ceiling': 'Over the rule’s time limit',
   'terminal-destination': 'Cannot hand over to that thread',
+  'terminal-endpoint-unserved': 'Terminal not reachable from here yet',
   'terminal-foreign-project': 'Belongs to another project',
   'terminal-host-state': 'Execution host answered unexpectedly',
   'terminal-host-unavailable-absent': 'Execution host not installed',

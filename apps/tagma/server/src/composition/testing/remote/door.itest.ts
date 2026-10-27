@@ -15,6 +15,7 @@ import { TAGMA_SOCKET_PATH } from '../../../socket/rpc.js';
 import { Connections } from '../../../socket/connections.js';
 import { Access } from '../../../remote/contract/service/access.js';
 import { PlacedSites } from '../../../remote/contract/service/sites.js';
+import { ViewLanes } from '../../../executions/contract/service/views.js';
 import { Devices } from '../../../remote/contract/service/devices.js';
 import { type AccessState, DEVICE_COOKIE, DEVICE_REVOKED_CLOSE, PAIRING_ENDPOINT } from '../../../remote/contract/wire/access.js';
 import { exposedAt } from '../../../remote/testing/doubles.js';
@@ -37,6 +38,7 @@ const certified = Latch.makeUnsafe(true);
 let sandboxState: AccessState = { _tag: 'certificate', origin: `${ORIGIN}:8443` };
 let siteRefused = false;
 const SITE_REFUSAL: AccessState = { _tag: 'blocked', problem: 'refused', detail: 'tailscale serve failed once', command: null, link: null };
+const pointed: { port: number; target: number }[] = [];
 
 const forged = {
   [SESSION_HEADER]: 'claude-code:forged',
@@ -82,6 +84,7 @@ const setup = Effect.gen(function* () {
       'test-machine',
       () => sandboxState,
       (at) => (siteRefused ? SITE_REFUSAL : { _tag: 'ready', origin: at }),
+      pointed,
     ),
   });
   const files = yield* FileSystem.FileSystem;
@@ -117,15 +120,19 @@ const setup = Effect.gen(function* () {
   const port = yield* freePort;
   const listener = remoteListener(serving, connections, port);
   yield* Effect.forkScoped(
-    remoteDriving(Context.get(world.runtime.door, Devices), Context.get(world.runtime.door, Access), listener, connections).pipe(
-      Effect.scoped,
-    ),
+    remoteDriving(
+      Context.get(world.runtime.door, Devices),
+      Context.get(world.runtime.door, Access),
+      Context.get(world.runtime.door, ViewLanes),
+      listener,
+      connections,
+    ).pipe(Effect.scoped),
   );
   yield* switchedIn(world, project, true);
   yield* reachedIn(world, 'ready');
   yield* switchedIn(world, project, true);
   yield* reachedIn(world, 'ready');
-  return { world, port, project };
+  return { world, port, project, root };
 });
 
 class Remote extends Context.Service<Remote, Effect.Success<typeof setup>>()('testing/RemoteDoor') {}
@@ -350,6 +357,57 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
       expect(yield* socket(device.credential, { origin: site.origin })).toMatchObject({ opened: false });
       const read = yield* remote('/health', { credential: device.credential, origin: null, headers: { 'sec-fetch-site': 'same-site' } });
       expect(yield* refusal(read)).toEqual([403, 'origin-refused']);
+    }),
+  );
+
+  it.effect('a phone is handed the terminal endpoint at a Serve site of its own, pointed at the endpoint the machine is handed', () =>
+    Effect.gen(function* () {
+      const { world, project, root } = yield* Remote;
+      const device = yield* paired();
+      const started = yield* world.op(
+        'start_terminal',
+        {
+          operationId: 'remote-endpoint-start',
+          cwd: root,
+          label: 'remote-endpoint',
+          program: '/bin/sh',
+          transport: 'pty',
+          lifetime: 'held',
+          geometry: { rows: 24, columns: 80 },
+        },
+        `project=${project}`,
+      );
+      const settled = (started.body as { operation: { state: { execution?: { execution: string; incarnation: number } } } }).operation
+        .state;
+      expect(settled.execution, JSON.stringify(started.body)).toBeDefined();
+      const address = { execution: settled.execution!.execution, incarnation: settled.execution!.incarnation };
+      yield* Effect.addFinalizer(() =>
+        Effect.asVoid(
+          world.op('stop_terminal', { ...address, operationId: 'remote-endpoint-stop', cause: 'explicit-stop' }, `project=${project}`),
+        ),
+      );
+      const machine = yield* world.op('open_terminal_lane', { ...address, view: 'machine' }, `project=${project}`);
+      const local = new URL((machine.body as { url: string }).url);
+      expect([local.protocol, local.hostname, local.pathname]).toEqual(['ws:', '127.0.0.1', '/terminal']);
+      const phone = yield* remote(`/api/op/open_terminal_lane?project=${project}`, {
+        method: 'POST',
+        body: { ...address, view: 'phone' },
+        credential: device.credential,
+      });
+      expect(phone.status).toBe(200);
+      const handed = (yield* Effect.promise(() => phone.json())) as { url: string; token: string };
+      expect(handed.url).toBe(`wss://${new URL(ORIGIN).host}:12001/terminal`);
+      expect(pointed.at(-1)).toEqual({ port: 12_001, target: Number(local.port) });
+
+      const direct = new WebSocket(`ws://127.0.0.1:${local.port}/terminal`);
+      const closed = closedPromise(direct);
+      const ready = new Promise<string>((resolve) => {
+        direct.onmessage = (event) => resolve(String(event.data));
+      });
+      direct.onopen = () => direct.send(JSON.stringify({ lane: handed.token }));
+      expect(JSON.parse(yield* Effect.promise(() => ready))).toMatchObject({ t: 'ready' });
+      expect((yield* world.op('revoke_device', { device: device.id })).status).toBe(200);
+      expect(yield* Effect.promise(() => closed)).toBe(4410);
     }),
   );
 

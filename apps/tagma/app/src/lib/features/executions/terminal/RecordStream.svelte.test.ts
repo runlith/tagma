@@ -2,7 +2,9 @@ import { ByteOffset } from '@runlith/executions/protocol/record';
 import type { RecordDelivery } from '@tagma/server/executions/contract/wire/viewLeases';
 import { expect, test, vi } from 'vitest';
 import type { LiveConnection, LiveFailure } from '$lib/wire/Live.js';
+import { LaneConnection } from './LaneConnection.js';
 import { BYTE_GAP_RESET, RETAINED_GAP_LINE, RecordStream, notShownLine, type StreamFrame } from './RecordStream.svelte.js';
+import { DROP, LaneEndpoint } from './testing/endpoint.js';
 import { repoReads } from '../Repo.js';
 import type { ExecutionsRepo } from '../Repo.js';
 
@@ -258,6 +260,105 @@ test('the record is replayed whole before the first live byte, one chunk at a ti
   await settled();
   expect(pane.written).toEqual(['abc', 'def', 'ghi']);
   expect(pane.offsets).toEqual(['0', '3', '6']);
+});
+
+const laneOver = () => {
+  const endpoint = new LaneEndpoint();
+  endpoint.stand('secret', 'lane');
+  const link = new LaneConnection(
+    endpoint.channel,
+    'ws://127.0.0.1:9/terminal',
+    'secret',
+    { ready: () => undefined, receipt: () => undefined, closed: () => undefined },
+    () => new Promise<void>(() => undefined),
+  );
+  return { endpoint, link };
+};
+
+const parseAll = async (pane: ReturnType<typeof writerOver>) => {
+  await settled();
+  while (pane.parse() !== undefined) await settled();
+  await settled();
+};
+
+test('the live output takes over on the lane at the cursor the history reached: an overlap is cut, and a frame ahead reads the record up to it first', async () => {
+  const lane = laneOver();
+  const live = liveOver();
+  const pane = writerOver();
+  const repo = repoOver({ '0': chunk(0, 'abc', 3), '5': chunk(5, 'fg', 7) });
+  const stream = new RecordStream(
+    repoReads(repo),
+    live.live,
+    1,
+    address,
+    { kind: 'terminal', stream: 'pty' },
+    pane.writer,
+    () => undefined,
+  );
+  stream.lane(lane.link);
+  await settled();
+  stream.start();
+  await parseAll(pane);
+  const socket = lane.endpoint.following();
+  expect(socket?.follows).toEqual(['3']);
+  expect(live.at().opened).toEqual([]);
+
+  socket?.write(1, 'bcde');
+  socket?.write(7, 'hi');
+  await parseAll(pane);
+  socket?.write(7, 'hi');
+  await parseAll(pane);
+
+  expect(pane.written).toEqual(['abc', 'de', 'fg', 'hi']);
+  expect(pane.offsets).toEqual(['0', '3', '5', '7']);
+  expect(repo.asked).toEqual(['0', '5']);
+  expect(socket?.follows).toEqual(['3', '7']);
+  expect(live.at().opened).toEqual([]);
+});
+
+test('a lost lane hands the live output to the record subscription at the cursor and takes it back there when it stands again; behind reads the record, ended leaves the rest to the record', async () => {
+  const lane = laneOver();
+  const live = liveOver();
+  const pane = writerOver();
+  const repo = repoOver({ '0': chunk(0, 'abc', 3), '7': chunk(7, 'hij', 10) });
+  const stream = new RecordStream(
+    repoReads(repo),
+    live.live,
+    1,
+    address,
+    { kind: 'terminal', stream: 'pty' },
+    pane.writer,
+    () => undefined,
+  );
+  stream.lane(lane.link);
+  await settled();
+  stream.start();
+  await parseAll(pane);
+  const first = lane.endpoint.following();
+  first?.write(3, 'd');
+
+  lane.endpoint.serving = false;
+  first?.drop(DROP);
+  await settled();
+  expect(live.at().opened.map((held) => held.offset)).toEqual(['4']);
+  void live.at().push?.(delivery(4, 'ef'));
+  await parseAll(pane);
+
+  lane.endpoint.sockets.at(-1)?.onopen?.();
+  await settled();
+  const second = lane.endpoint.following();
+  expect(second?.follows).toEqual(['6']);
+  expect(live.at().push).toBeNull();
+  second?.write(6, 'g');
+  second?.say({ t: 'behind', retainedFrom: '9' });
+  await parseAll(pane);
+  expect(second?.follows).toEqual(['6', '10']);
+  second?.say({ t: 'ended' });
+  await settled();
+
+  expect(pane.written).toEqual(['abc', 'd', 'ef', 'g', 'hij']);
+  expect(pane.offsets).toEqual(['0', '3', '4', '6', '7']);
+  expect(live.at().opened.map((held) => held.offset)).toEqual(['4', '10']);
 });
 
 test('a live chunk is acknowledged once, and only once its writer has finished with it', async () => {

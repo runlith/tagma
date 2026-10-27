@@ -31,6 +31,7 @@ export class ViewGrid {
     view: string,
     private readonly draw: (grid: Grid) => void,
     private readonly recorded: () => Grid | null,
+    private readonly applied: (grid: Grid) => void,
     private readonly ceiling: () => Grid | null = () => null,
     private readonly wait: (ms: number) => Promise<void> = (ms) => new Promise((done) => setTimeout(done, ms)),
   ) {
@@ -89,8 +90,10 @@ export class ViewGrid {
           box: box ?? undefined,
         });
       },
-      () => {
-        if (this.held === held) this.retrying = null;
+      (frame) => {
+        if (this.held !== held) return;
+        this.retrying = null;
+        this.applied(frame.applied);
       },
       (failure) => {
         if (failure.kind !== 'subscription' || this.held !== held) return;

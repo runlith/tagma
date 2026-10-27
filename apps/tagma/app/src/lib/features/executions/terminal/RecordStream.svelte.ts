@@ -6,6 +6,7 @@ import type { RecordDelivery } from '@tagma/server/executions/contract/wire/view
 import type { LiveConnection } from '$lib/wire/Live.js';
 import { refusalOf } from '$lib/wire/refusal.js';
 import { markTerminalReplay } from './terminalChainRecord.js';
+import type { LaneConnection, LaneOutput } from './LaneConnection.js';
 import type { ExecutionAddress, RecordReads } from '../Repo.js';
 
 type Window = Awaited<ReturnType<RecordReads['terminalBytes']>>;
@@ -103,6 +104,18 @@ export class RecordStream {
   private apartShown = false;
   private stalled = false;
   private attempts = 0;
+  private link: LaneConnection | null = null;
+  private following: LaneConnection | null = null;
+  private aligned = false;
+  private outputEnded = false;
+  private decided: TerminalGeometry | undefined = undefined;
+  private readonly output: LaneOutput = {
+    ready: () => this.offered(),
+    frame: (offset, bytes) => this.frame(offset, bytes),
+    behind: () => this.overtaken(),
+    ended: () => this.drained(),
+    lost: () => this.fellBack(),
+  };
 
   constructor(
     private readonly reads: RecordReads,
@@ -132,6 +145,19 @@ export class RecordStream {
     this.generation += 1;
     this.release();
     this.writer.replaying(false);
+  }
+
+  lane(link: LaneConnection | null): void {
+    if (this.link === link) return;
+    this.fellBack();
+    this.link = link;
+    link?.watch(this.output);
+    this.offered();
+  }
+
+  applied(grid: TerminalGeometry): void {
+    this.decided = grid;
+    if (this.following !== null) void this.layGrid(grid);
   }
 
   private async follow(from: ByteOffset, boundTail: boolean): Promise<void> {
@@ -252,7 +278,7 @@ export class RecordStream {
     return read === 'read' ? 'read' : 'lost';
   }
 
-  private async replay(generation: number, boundTail: boolean, aim: RecordAim): Promise<Replayed> {
+  private async replay(generation: number, boundTail: boolean, aim: RecordAim, reported = true): Promise<Replayed> {
     const opened = boundTail ? await this.point(generation, aim) : 'none';
     if (opened === 'lost' || generation !== this.generation) return 'lost';
     let bounded = opened === 'pointed';
@@ -299,7 +325,7 @@ export class RecordStream {
       }
       if (total === null) {
         total = Math.max(0, Number(offsetValue(answer.range.durableThrough) - offsetValue(this.cursor)));
-        this.options.progress?.(0, total);
+        if (reported) this.options.progress?.(0, total);
       }
       await this.lay(answer.range);
       if (generation !== this.generation) return 'lost';
@@ -311,7 +337,7 @@ export class RecordStream {
         if (!reached) ahead = this.window(this.cursor, false, aim);
         await parsed;
         written += bytes.length;
-        this.options.progress?.(written, total);
+        if (reported) this.options.progress?.(written, total);
         markTerminalReplay({ stage: 'parse', offset: from, bytes: bytes.length });
       } else {
         this.cursor = answer.range.next;
@@ -361,6 +387,66 @@ export class RecordStream {
   }
 
   private open(generation: number): void {
+    const link = this.link;
+    if (link === null || !link.ready || this.outputEnded || !this.laned()) return this.subscribe(generation);
+    this.following = link;
+    this.aligned = false;
+    if (this.decided !== undefined) void this.layGrid(this.decided);
+    link.follow(this.cursor);
+  }
+
+  private laned(): boolean {
+    return this.aim.kind === 'terminal' && this.aim.stream === 'pty';
+  }
+
+  private offered(): void {
+    if (this.subscription === null || this.link === null || !this.link.ready || this.outputEnded || !this.laned()) return;
+    this.generation += 1;
+    this.release();
+    this.open(this.generation);
+  }
+
+  private frame(offset: bigint, bytes: Uint8Array): void {
+    if (this.following === null) return;
+    const cursor = offsetValue(this.cursor);
+    if (offset > cursor) {
+      if (!this.aligned) return;
+      this.following = null;
+      void this.catchUp(this.generation);
+      return;
+    }
+    this.aligned = true;
+    const end = offset + BigInt(bytes.length);
+    if (end <= cursor) return;
+    this.cursor = byteOffset(end);
+    this.feed(offset === cursor ? bytes : bytes.subarray(Number(cursor - offset)), noCredit, byteOffset(cursor));
+  }
+
+  private overtaken(): void {
+    if (this.following === null) return;
+    this.following = null;
+    void this.catchUp(this.generation);
+  }
+
+  private drained(): void {
+    if (this.following === null) return;
+    this.following = null;
+    this.outputEnded = true;
+    this.subscribe(this.generation);
+  }
+
+  private fellBack(): void {
+    if (this.following === null) return;
+    this.following = null;
+    this.subscribe(this.generation);
+  }
+
+  private async catchUp(generation: number): Promise<void> {
+    const read = await this.replay(generation, false, this.aim, false);
+    if (read === 'read' && generation === this.generation) this.open(generation);
+  }
+
+  private subscribe(generation: number): void {
     const held = this.live.hold(
       (client) => {
         this.pendingAck = null;
@@ -400,7 +486,6 @@ export class RecordStream {
       return this.follow(this.cursor, true);
     }
     if (chunk.range.gap) this.note(RETAINED_GAP_LINE);
-    this.cursor = chunk.range.next;
     const laying = this.lay(chunk.range);
     if (laying === undefined) return this.take(delivery.viewer, chunk, generation);
     return laying.then(() => (generation === this.generation ? this.take(delivery.viewer, chunk, generation) : undefined));
@@ -413,6 +498,7 @@ export class RecordStream {
   ): void | Promise<void> {
     const bytes = chunk.bytes;
     const offset = chunk.range.next;
+    this.cursor = offset;
     if (bytes.length === 0) return;
     return new Promise<void>((resolve) => {
       let credited = false;
@@ -519,6 +605,7 @@ export class RecordStream {
   private release(): void {
     this.subscription?.unsubscribe();
     this.subscription = null;
+    this.following = null;
   }
 }
 

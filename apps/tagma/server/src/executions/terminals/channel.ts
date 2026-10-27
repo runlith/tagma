@@ -1,7 +1,6 @@
 import { Effect, Queue, Stream } from 'effect';
 import type { Rpc } from 'effect/rpc';
 import { BindingId } from '@runlith/executions/protocol/custody';
-import type { InputAnswer } from '@runlith/executions/protocol/input';
 import type { ExecutionsFailure } from '@runlith/executions/Executions';
 import { refusing } from '../../platform/contract/service/body.js';
 import { GateRefusal, type RefusalBody } from '../../platform/contract/wire/refusal.js';
@@ -10,9 +9,8 @@ import type {
   TerminalDecider,
   TerminalGridReport,
   TerminalGridSubscription,
-  TerminalInputReceipt,
-  TerminalInputReceipts,
-  TerminalInputWrite,
+  TerminalLaneHeld,
+  TerminalLaneHold,
   TerminalScreenDelivery,
   TerminalScreenPainted,
   TerminalScreenPoint,
@@ -22,24 +20,19 @@ import type {
 } from '../contract/wire/viewLeases.js';
 import type { RecordParsed } from '../contract/wire/viewLeases.js';
 import { TerminalRefused } from '../contract/wire/refusals.js';
-import { principalOf } from './principals.js';
-import { actorOf } from './principals.js';
-import { TERMINAL_PERMISSION_REVISION } from '../contract/service/subjectPolicy.js';
 import { gatedRecords, gatedScreens } from './viewLeases.js';
 import type { RecordChunk, RecordDelivery } from '../contract/wire/viewLeases.js';
 import { terminalRefusal } from './refusal.js';
 import type { ExecutionRecords, TerminalScreens } from '../contract/service/records.js';
 import type { Terminals } from '../contract/service/terminals.js';
-import type { TerminalWriting } from '../contract/service/writing.js';
-import type { TerminalAccess } from '../contract/service/access.js';
 import type { TerminalGrids, ViewLanes, ViewLeases } from '../contract/service/views.js';
+
+const HELD: TerminalLaneHeld = { held: true };
 
 export const terminalChannel = (use: {
   readonly terminals: Terminals['Service'];
-  readonly writing: TerminalWriting['Service'];
   readonly screens: TerminalScreens['Service'];
   readonly records: ExecutionRecords['Service'];
-  readonly access: TerminalAccess['Service'];
   readonly viewers: ViewLeases['Service'];
   readonly lanes: ViewLanes['Service'];
   readonly grids: TerminalGrids['Service'];
@@ -127,86 +120,14 @@ export const terminalChannel = (use: {
           .pipe(Effect.mapError(leaseRefusal('record')), Effect.as({ acknowledged: true as const })),
       ),
 
-    'terminal.input.write': {
-      turn: <A, R>(params: TerminalInputWrite, work: Effect.Effect<A, RefusalBody, R>): Effect.Effect<A, RefusalBody, R> =>
-        use.lanes.turn(params.execution, params.incarnation, BindingId.make(params.binding), work),
-      handle: (
-        params: TerminalInputWrite,
-        call: { readonly client: Rpc.ServerClient },
-      ): Effect.Effect<{ readonly acknowledged: true }, RefusalBody> =>
-        refusing(
-          Effect.gen(function* () {
-            yield* Effect.annotateCurrentSpan({
-              execution: params.execution,
-              incarnation: params.incarnation,
-              sequence: params.sequence,
-            });
-            const record = yield* placed(use.terminals, params, 'input');
-            const actor = yield* actorOf({ kind: 'operator' }, record.projectId).pipe(Effect.mapError(asRefusal('input')));
-            const decision = yield* use.access
-              .prepare({
-                actor,
-                place: { _tag: 'Keyed', projectId: record.projectId, targetKey: record.targetKey },
-                owner: record.holder,
-                standing: { projectId: record.projectId, holder: record.holder },
-                act: { _tag: 'Input' },
-                subject: {
-                  _tag: 'Input',
-                  execution: record.execution,
-                  actor: principalOf(actor),
-                  binding: BindingId.make(params.binding),
-                  command: record.program ?? 'unknown',
-                },
-                interactive: {
-                  binding: BindingId.make(params.binding),
-                  permissionRevision: TERMINAL_PERMISSION_REVISION,
-                  execution: record.execution,
-                },
-              })
-              .pipe(Effect.mapError(asRefusal('input')));
-            const grant = decision.grant;
-            if (grant === undefined) {
-              return yield* new GateRefusal(
-                'terminal-no-grant',
-                'this call was prepared without the live right to type its lane rides; nothing was typed',
-                ['type again through a fresh lane into this terminal'],
-              );
-            }
-            const outcome = yield* use.writing
-              .input(
-                record.execution,
-                { binding: grant.binding, principal: grant.actor },
-                {
-                  sequence: params.sequence,
-                  cause: params.cause,
-                  profile: params.profile,
-                  act:
-                    params.act._tag === 'Write'
-                      ? { _tag: 'Write' as const, bytes: params.act.bytes }
-                      : params.act._tag === 'Resize'
-                        ? { _tag: 'Resize' as const, geometry: { rows: params.act.rows, columns: params.act.columns } }
-                        : { _tag: 'Interrupt' as const },
-                },
-                TERMINAL_PERMISSION_REVISION,
-              )
-              .pipe(Effect.mapError(asRefusal('input')));
-            use.lanes.publish(record.execution, BindingId.make(params.binding), receiptOf(params.sequence, outcome));
-            return { acknowledged: true as const };
-          }),
-        ),
-    },
-
-    'terminal.input.receipts': (params: TerminalInputReceipts): Stream.Stream<TerminalInputReceipt, RefusalBody> =>
+    'terminal.lane.hold': (params: TerminalLaneHold): Stream.Stream<TerminalLaneHeld, RefusalBody> =>
       spelled(
         Stream.unwrap(
           Effect.gen(function* () {
             yield* Effect.annotateCurrentSpan({ execution: params.execution, incarnation: params.incarnation });
-            const record = yield* placed(use.terminals, params, 'input');
-            return Stream.callback<TerminalInputReceipt>((queue) =>
-              use.lanes.listen(record.execution, BindingId.make(params.binding), (receipt) => {
-                Queue.offerUnsafe(queue, receipt);
-              }),
-            );
+            const record = yield* placed(use.terminals, params, 'lane');
+            yield* use.lanes.hold(record.execution, BindingId.make(params.binding));
+            return Stream.concat(Stream.succeed(HELD), Stream.never);
           }),
         ),
       ),
@@ -260,14 +181,7 @@ export const terminalChannel = (use: {
 
 const GRID_FRAMES = 4;
 
-const receiptOf = (sequence: number, outcome: InputAnswer): TerminalInputReceipt =>
-  outcome._tag === 'InputAdmitted'
-    ? { kind: 'applied', sequence, outcome }
-    : outcome._tag === 'InputBackpressure'
-      ? { kind: 'backpressure', sequence, outcome }
-      : { kind: 'refused', sequence, outcome };
-
-type Feed = 'screen' | 'record' | 'input' | 'grid';
+type Feed = 'screen' | 'record' | 'lane' | 'grid';
 
 const placed = Effect.fnUntraced(function* (
   terminals: Terminals['Service'],
@@ -323,7 +237,9 @@ const asRefusal =
         ? 'the interpreted screen of this execution could not be followed'
         : feed === 'grid'
           ? 'the grid of this execution could not be followed'
-          : 'the byte record of this execution could not be followed',
+          : feed === 'lane'
+            ? 'the lane into this execution could not be held'
+            : 'the byte record of this execution could not be followed',
       ['reopen the view: a reader is released with its stream and nothing is held for it'],
     );
   };

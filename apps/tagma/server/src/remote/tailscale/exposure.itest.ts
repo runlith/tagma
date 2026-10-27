@@ -79,7 +79,7 @@ const served = (): { TCP: Record<string, unknown>; Web: Record<string, { Handler
 
 const expose = (settled: string | null = null) => Effect.flatMap(Exposure, (exposure) => Stream.runCollect(exposure.expose(PORT, settled)));
 
-const withdraw = Effect.flatMap(Exposure, (exposure) => exposure.withdraw(PORT));
+const withdraw = Effect.flatMap(Exposure, (exposure) => exposure.withdraw(PORT, []));
 
 layer(Layer.merge(tailscaleExposure(SANDBOX), fakeTailscale), { excludeTestServices: true })('tailscale exposure', (it) => {
   it.effect('exposure opens a distinct sandbox origin, warms both and withdraws both owned mappings', () =>
@@ -178,6 +178,30 @@ layer(Layer.merge(tailscaleExposure(SANDBOX), fakeTailscale), { excludeTestServi
         yield* withdraw;
         expect(served().Web).toEqual(foreign.Web);
       }),
+  );
+
+  it.effect('a pointed site keeps its HTTPS port while its loopback target moves, and withdrawal takes it only when named', () =>
+    Effect.gen(function* () {
+      given({ TCP: {}, Web: {} });
+      const kept: [string, number][] = [];
+      const keep = (name: string, port: number) =>
+        Effect.sync(() => {
+          kept.push([name, port]);
+        });
+      const exposure = yield* Exposure;
+      const first = yield* exposure.point({ name: 'terminal', port: null, target: 6001 }, keep);
+      expect(first).toEqual({ name: 'terminal', port: 12_001, state: { _tag: 'ready', origin: `https://${HOST}:12001` } });
+      expect(kept).toEqual([['terminal', 12_001]]);
+      expect(served().Web[`${HOST}:12001`]).toEqual({ Handlers: { '/': { Proxy: target(6001) } } });
+      const moved = yield* exposure.point({ name: 'terminal', port: 12_001, target: 6002 }, keep);
+      expect(moved.port).toBe(12_001);
+      expect(kept).toHaveLength(1);
+      expect(served().Web[`${HOST}:12001`]).toEqual({ Handlers: { '/': { Proxy: target(6002) } } });
+      yield* withdraw;
+      expect(served().Web[`${HOST}:12001`]).toEqual({ Handlers: { '/': { Proxy: target(6002) } } });
+      yield* Effect.flatMap(Exposure, (standing) => standing.withdraw(PORT, [12_001]));
+      expect(served().Web).toEqual({});
+    }),
   );
 
   it.effect('withdrawal leaves a foreign mapping and foreground mappings standing', () =>

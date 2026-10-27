@@ -1,21 +1,16 @@
 import { it } from '@runlith/effect-test';
 import { expect } from 'bun:test';
-import { Deferred, Effect, Exit, Fiber, Stream } from 'effect';
-import { BindingId } from '@runlith/executions/protocol/custody';
+import { Effect, Fiber, Stream } from 'effect';
 import { ExecutionId, InstallationId } from '@runlith/executions/protocol/execution';
-import type { InputAnswer, InputRequest } from '@runlith/executions/protocol/input';
 import type { FrameRevision } from '@runlith/executions/protocol/presentation';
 import { ByteOffset } from '@runlith/executions/protocol/record';
 import type { Rpc } from 'effect/rpc';
 import type { RefusalBody } from '../../platform/contract/wire/refusal.js';
-import { ViewLeaseId, type TerminalInputWrite } from '../contract/wire/viewLeases.js';
-import { principalOf } from './principals.js';
+import { ViewLeaseId } from '../contract/wire/viewLeases.js';
 import { type TerminalRecord } from '../contract/wire/terminals.js';
 import { makeViewLeaseBook, type ViewLeaseBook } from './viewLeases.js';
 import type { RecordChunk } from '../contract/wire/viewLeases.js';
 import { terminalChannel } from './channel.js';
-import { makeTerminalLanes } from './lanes.js';
-import type { TerminalGrants } from '../contract/service/grants.js';
 
 const installation = InstallationId.make('socket-under-test');
 
@@ -132,98 +127,5 @@ it.live('a byte feed on an execution this project does not hold refuses before a
     );
     expect(failure.code).toBe('terminal-unknown');
     expect(viewers.held).toBe(0);
-  }),
-);
-
-it.live('two acts of one lane enter the gate in arrival order, whatever the first one’s gate takes', () =>
-  Effect.gen(function* () {
-    const entered: number[] = [];
-    const firstFree = Deferred.makeUnsafe<void>();
-    const preparing = yield* Deferred.make<void>();
-    let prepared = 0;
-    const admitted = (request: InputRequest): InputAnswer => ({
-      _tag: 'InputAdmitted',
-      receipt: {
-        execution: record.execution,
-        sequence: request.sequence,
-        cause: request.cause,
-        bytes: 1,
-        acceptedThrough: ByteOffset.make(String(request.sequence + 1)),
-      },
-    });
-    const faces = {
-      terminals: { record: () => Effect.succeed(record) },
-      writing: {
-        input: (_execution: unknown, _scope: unknown, request: InputRequest) =>
-          Effect.sync(() => {
-            entered.push(request.sequence);
-            return admitted(request);
-          }),
-      },
-      access: {
-        prepare: Effect.fnUntraced(function* () {
-          prepared += 1;
-          if (prepared === 1) {
-            yield* Deferred.succeed(preparing, undefined);
-            yield* Deferred.await(firstFree);
-          }
-          return {
-            grant: {
-              projectId: 1,
-              execution: record.execution,
-              actor: principalOf({ _tag: 'Operator' }),
-              targetKey: record.targetKey,
-              binding: BindingId.make('binding-1'),
-              permissionRevision: 0,
-            },
-          };
-        }),
-      },
-      viewers: yield* makeViewLeaseBook(),
-    } as unknown as ChannelUse;
-    let channel: ReturnType<typeof terminalChannel>;
-    const write = (sequence: number) => {
-      const params: TerminalInputWrite = {
-        projectId: 1,
-        execution: 'exec-1',
-        incarnation: 0,
-        binding: 'binding-1',
-        sequence,
-        act: { _tag: 'Write', bytes: new Uint8Array([97]) },
-        cause: 'typed',
-      };
-      const input = channel['terminal.input.write'];
-      return input.turn(params, input.handle(params, call));
-    };
-
-    yield* Effect.scoped(
-      Effect.gen(function* () {
-        const lanes = yield* makeTerminalLanes({
-          writing: faces.writing,
-          grants: { watch: () => () => {} } as unknown as TerminalGrants['Service'],
-        });
-        channel = terminalChannel({ ...faces, lanes });
-        const receipts = yield* Effect.forkChild(
-          Stream.runCollect(
-            Stream.take(channel['terminal.input.receipts']({ projectId: 1, execution: 'exec-1', incarnation: 0, binding: 'binding-1' }), 2),
-          ),
-        );
-        yield* Effect.yieldNow;
-        const first = yield* Effect.forkChild(write(0));
-        const second = yield* Effect.forkChild(write(1));
-        yield* Deferred.await(preparing);
-        expect(entered).toEqual([]);
-        expect(prepared).toBe(1);
-        Deferred.doneUnsafe(firstFree, Exit.void);
-        yield* Fiber.join(first);
-        yield* Fiber.join(second);
-        expect(entered).toEqual([0, 1]);
-        const answered = yield* Fiber.join(receipts);
-        expect(answered.map((receipt) => [receipt.kind, receipt.sequence])).toEqual([
-          ['applied', 0],
-          ['applied', 1],
-        ]);
-      }),
-    );
   }),
 );

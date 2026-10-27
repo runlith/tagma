@@ -5,7 +5,14 @@ import { ConnectionError, SqlError } from 'effect/sql/SqlError';
 import { TestClock } from 'effect/testing';
 import type { SettingKey } from '../platform/contract/wire/setting.js';
 import { Settings } from '../settings/contract/service/values.js';
-import { Exposure, type ExposureStep, ListenerRefused, WithdrawalRefused } from './contract/service/exposure.js';
+import {
+  Exposure,
+  type ExposureStep,
+  ListenerRefused,
+  type PointAsk,
+  type SiteKeeping,
+  WithdrawalRefused,
+} from './contract/service/exposure.js';
 import { WantedSites } from './contract/service/sites.js';
 import { remoteEnabled } from './keys.js';
 import { makeReach } from './reach.js';
@@ -31,6 +38,7 @@ const readied = (): Stream.Stream<ExposureStep> =>
 type Door = {
   readonly switches: Queue.Queue<boolean>;
   readonly expose?: Exposure['Service']['expose'];
+  readonly point?: Exposure['Service']['point'];
   readonly withdraw?: Exposure['Service']['withdraw'];
   readonly ledger?: Ledger['Service'];
   readonly sites?: ReadonlySet<string>;
@@ -51,12 +59,13 @@ const door = (given: Door) =>
       amend: unused,
     }),
   ).pipe(
-    Context.add(Ledger, given.ledger ?? Ledger.of({ ...unreadLedger, origin: Effect.succeed(ORIGIN) })),
+    Context.add(Ledger, given.ledger ?? Ledger.of({ ...unreadLedger, origin: Effect.succeed(ORIGIN), sites: Effect.succeed(new Map()) })),
     Context.add(
       Exposure,
       Exposure.of({
         expose: given.expose ?? (() => Stream.never),
         place: () => Stream.never,
+        point: given.point ?? (() => Effect.die('this door points no terminal site')),
         withdraw: given.withdraw ?? (() => Effect.void),
       }),
     ),
@@ -131,6 +140,63 @@ it.effect('a listener that cannot open leaves the door blocked with its reason',
       command: null,
       link: null,
     });
+  }),
+);
+
+it.effect('the terminal endpoint gets an HTTPS site of its own, follows the endpoint’s port on it, and is withdrawn with access', () =>
+  Effect.gen(function* () {
+    const switches = yield* Queue.unbounded<boolean>();
+    const exposed = yield* Deferred.make<void>();
+    const withdrawals = yield* Queue.unbounded<readonly [number, readonly number[]]>();
+    const kept = new Map<string, number>([['music', 11_001]]);
+    const asks: PointAsk[] = [];
+    const ledger = Ledger.of({
+      ...unreadLedger,
+      origin: Effect.succeed(ORIGIN),
+      sites: Effect.sync(() => new Map(kept)),
+      keepSite: (name, port) =>
+        Effect.sync(() => {
+          kept.set(name, port);
+        }),
+    });
+    const point: Exposure['Service']['point'] = Effect.fnUntraced(function* (asked: PointAsk, keep: SiteKeeping) {
+      asks.push(asked);
+      const port = asked.port ?? 12_001;
+      if (port !== asked.port) yield* Effect.orDie(keep(asked.name, port));
+      return { name: asked.name, port, state: { _tag: 'ready', origin: `${ORIGIN}:${port}` } as const };
+    });
+    const reach = yield* Effect.provide(
+      makeReach,
+      door({
+        switches,
+        ledger,
+        point,
+        expose: () => Stream.concat(readied(), Stream.drain(Stream.fromEffect(Deferred.succeed(exposed, undefined)))),
+        withdraw: (port, pointed) => Effect.asVoid(Queue.offer(withdrawals, [port, pointed] as const)),
+      }),
+    );
+    yield* Effect.forkScoped(reach.serve(listener));
+    expect(yield* Effect.flip(reach.terminal.origin(5801))).toMatchObject({ _tag: 'blocked' });
+    yield* Queue.offer(switches, true);
+    yield* Deferred.await(exposed);
+
+    expect(yield* reach.terminal.origin(5801)).toBe(`${ORIGIN}:12001`);
+    expect(yield* reach.terminal.origin(5801)).toBe(`${ORIGIN}:12001`);
+    expect(yield* reach.terminal.origin(5802)).toBe(`${ORIGIN}:12001`);
+    expect(asks.map(({ port, target }) => [port, target])).toEqual([
+      [null, 5801],
+      [12_001, 5802],
+    ]);
+    expect(kept).toEqual(
+      new Map([
+        ['music', 11_001],
+        [':terminal', 12_001],
+      ]),
+    );
+
+    yield* Queue.offer(switches, false);
+    expect(yield* Queue.take(withdrawals)).toEqual([PORT, [12_001]]);
+    expect(yield* Effect.flip(reach.terminal.origin(5802))).toMatchObject({ _tag: 'blocked' });
   }),
 );
 

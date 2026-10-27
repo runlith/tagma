@@ -11,17 +11,14 @@ import {
   TerminalDecider,
   TerminalGridReport,
   TerminalGridSubscription,
-  TerminalInputReceipt,
-  TerminalInputReceipts,
-  TerminalInputWrite,
+  TerminalLaneHeld,
+  TerminalLaneHold,
   TerminalScreenDelivery,
   TerminalScreenPainted,
   TerminalScreenPoint,
   TerminalScreenPointRead,
   TerminalScreenSubscription,
 } from './viewLeases.js';
-
-const INPUT_REFUSALS = [...TERMINAL_REFUSALS, 'terminal-input-turn-unavailable'];
 
 export const COMMANDS_FEED = feed('commands.subscribe', {
   input: CommandFeedSubscription,
@@ -93,19 +90,10 @@ export const TERMINAL_BYTES_PARSED = feed('terminal.bytes.parsed', {
   stream: false,
 });
 
-export const TERMINAL_INPUT_WRITE = feed('terminal.input.write', {
-  input: TerminalInputWrite,
-  event: TerminalAcknowledged,
-  refusals: INPUT_REFUSALS,
-  callers: 'operator',
-  graph: 'none',
-  stream: false,
-});
-
-export const TERMINAL_INPUT_RECEIPTS = feed('terminal.input.receipts', {
-  input: TerminalInputReceipts,
-  event: TerminalInputReceipt,
-  refusals: INPUT_REFUSALS,
+export const TERMINAL_LANE_HOLD = feed('terminal.lane.hold', {
+  input: TerminalLaneHold,
+  event: TerminalLaneHeld,
+  refusals: TERMINAL_REFUSALS,
   callers: 'operator',
   graph: 'none',
 });
@@ -155,8 +143,7 @@ export const EXECUTION_FEEDS = [
   TERMINAL_SCREEN_POINT,
   TERMINAL_BYTES_FEED,
   TERMINAL_BYTES_PARSED,
-  TERMINAL_INPUT_WRITE,
-  TERMINAL_INPUT_RECEIPTS,
+  TERMINAL_LANE_HOLD,
   TERMINAL_GRID_FEED,
   TERMINAL_GRID_REPORT,
 ] as const;

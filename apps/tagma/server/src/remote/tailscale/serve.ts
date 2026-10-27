@@ -1,13 +1,22 @@
 import { Effect, Layer, Semaphore, Stream } from 'effect';
-import { Exposure, type ExposureStep, type SiteAsk, type SiteKeeping, type SitePlaced } from '../contract/service/exposure.js';
+import {
+  Exposure,
+  type ExposureStep,
+  type PointAsk,
+  type SiteAsk,
+  type SiteKeeping,
+  type SitePlaced,
+} from '../contract/service/exposure.js';
 import type { AccessState, Blocked } from '../contract/wire/access.js';
 import { DNS_SETTINGS_LINK, DOWNLOAD_LINK, blocked, serveCommand, serveRefusal } from './blocks.js';
 import { locateCli, runCli, succeeded } from './cli.js';
 import {
   HTTPS_PORTS,
+  POINTED_PORTS,
   SITE_PORTS,
   holderOf,
   originOf,
+  pointsHome,
   sandboxPort,
   serveArgs,
   sessionsOf,
@@ -154,6 +163,7 @@ const expose = (port: number, proxyPort: number, settled: string | null): Stream
   );
 
 const plan = Effect.fnUntraced(function* (
+  writes: Semaphore.Semaphore,
   proxyPort: number,
   asked: readonly SiteAsk[],
   reserved: readonly number[],
@@ -187,7 +197,6 @@ const plan = Effect.fnUntraced(function* (
       moved: free !== port,
     });
   }
-  const writes = yield* Semaphore.make(1);
   const configure = Effect.fn('tailscale.serveSite')(function* (port: number) {
     yield* startServe(binary, port, target);
   }, writes.withPermit);
@@ -207,13 +216,14 @@ const settled = (configure: Configure, keep: SiteKeeping, site: Chosen): Effect.
 };
 
 const placeSites = (
+  writes: Semaphore.Semaphore,
   proxyPort: number,
   asked: readonly SiteAsk[],
   reserved: readonly number[],
   keep: SiteKeeping,
 ): Stream.Stream<SitePlaced> =>
   Stream.unwrap(
-    Effect.match(plan(proxyPort, asked, reserved), {
+    Effect.match(plan(writes, proxyPort, asked, reserved), {
       onFailure: (refusal) => Stream.fromIterable(asked.map(({ name, port }): SitePlaced => ({ name, port, state: refusal }))),
       onSuccess: ({ unplaced, chosen, configure }) =>
         Stream.concat(
@@ -226,12 +236,47 @@ const placeSites = (
     }),
   );
 
+const pointed = Effect.fn('Exposure.point')(function* (
+  writes: Semaphore.Semaphore,
+  asked: PointAsk,
+  keep: SiteKeeping,
+): Effect.fn.Return<SitePlaced, Blocked> {
+  const binary = yield* located;
+  const host = hostOf(yield* readStatus(binary));
+  if (host === null) return yield* Effect.fail(NO_DNS_NAME);
+  const sessions = sessionsOf(yield* readServeConfig(binary));
+  const target = targetOf(asked.target);
+  const ours = (port: number) => holderOf(sessions, host, port, target)._tag !== 'other' || pointsHome(sessions, host, port);
+  const port =
+    asked.port !== null && ours(asked.port)
+      ? asked.port
+      : POINTED_PORTS.find((candidate) => holderOf(sessions, host, candidate, target)._tag === 'free');
+  if (port === undefined) {
+    return yield* Effect.fail(
+      blocked('port-taken', `HTTPS ports ${POINTED_PORTS[0]}–${POINTED_PORTS.at(-1)} on ${host} already serve other mappings.`),
+    );
+  }
+  const origin = originOf(host, port);
+  if (port !== asked.port) yield* keep(asked.name, port);
+  if (holderOf(sessions, host, port, target)._tag !== 'tagma') yield* writes.withPermit(startServe(binary, port, target));
+  if (!(yield* originAnswers(origin))) return yield* Effect.fail(blocked('refused', `${origin} did not answer while it was being set up.`));
+  return { name: asked.name, port, state: { _tag: 'ready', origin } };
+});
+
 export const tailscaleExposure = (proxyPort: number): Layer.Layer<Exposure> =>
-  Layer.succeed(
+  Layer.effect(
     Exposure,
-    Exposure.of({
-      expose: (port, settled) => expose(port, proxyPort, settled),
-      place: (asked, reserved, keep) => placeSites(proxyPort, asked, reserved, keep),
-      withdraw: (port) => withdraw([port, proxyPort]),
+    Effect.gen(function* () {
+      const writes = yield* Semaphore.make(1);
+      return Exposure.of({
+        expose: (port, settled) => expose(port, proxyPort, settled),
+        place: (asked, reserved, keep) => placeSites(writes, proxyPort, asked, reserved, keep),
+        point: (asked, keep) =>
+          Effect.match(pointed(writes, asked, keep), {
+            onFailure: (state): SitePlaced => ({ name: asked.name, port: asked.port, state }),
+            onSuccess: (placed) => placed,
+          }),
+        withdraw: (port, sites) => withdraw([port, proxyPort], sites),
+      });
     }),
   );

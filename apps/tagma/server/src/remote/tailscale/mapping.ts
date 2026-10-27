@@ -5,6 +5,8 @@ export type HttpsPort = (typeof HTTPS_PORTS)[number];
 
 export const SITE_PORTS: readonly number[] = Array.from({ length: 999 }, (_, at) => 11_001 + at);
 
+export const POINTED_PORTS: readonly number[] = Array.from({ length: 99 }, (_, at) => 12_001 + at);
+
 export type Holder =
   | { readonly _tag: 'free' }
   | { readonly _tag: 'tagma'; readonly funnel: boolean }
@@ -23,6 +25,14 @@ export const holderOf = (sessions: readonly Session[], host: string, httpsPort: 
     if (held !== undefined) return { _tag: 'other', serves: root?.Proxy ?? root?.Path ?? held.TCPForward ?? null };
   }
   return { _tag: 'free' };
+};
+
+const LOOPBACK_TARGET = /^http:\/\/127\.0\.0\.1:\d+$/u;
+
+export const pointsHome = (sessions: readonly Session[], host: string, httpsPort: number): boolean => {
+  const site = `${host}:${httpsPort}`;
+  const proxy = sessions.find((session) => session.Web?.[site] != null)?.Web?.[site]?.Handlers?.['/']?.Proxy;
+  return proxy != null && LOOPBACK_TARGET.test(proxy);
 };
 
 export const servedPorts = (session: Session, host: string): readonly number[] =>
