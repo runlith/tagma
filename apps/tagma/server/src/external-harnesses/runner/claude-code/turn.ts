@@ -19,6 +19,7 @@ type Hold = { readonly words: readonly string[]; readonly done: Deferred.Deferre
 
 type Running = {
   readonly uuid: string;
+  readonly taken: Effect.Effect<void>;
   readonly done: Deferred.Deferred<PromptResult, AgentFault>;
   readonly halted: Deferred.Deferred<void>;
   readonly steers: Map<string, Deferred.Deferred<Steered, AgentFault>>;
@@ -79,6 +80,7 @@ export class Turn {
     const halted = yield* Deferred.make<void>();
     const running: Running = {
       uuid,
+      taken: input.taken,
       done,
       halted,
       steers: new Map(),
@@ -231,6 +233,7 @@ export class Turn {
     if (running === null || !running.sent) return;
     if (said.state === 'started') {
       running.begun.add(said.uuid);
+      if (said.uuid === running.uuid) yield* running.taken;
       if (said.uuid === running.opener) running.opener = null;
       if (running.cancelled) yield* this.halt(running);
       return;
@@ -246,6 +249,7 @@ export class Turn {
     if (running === null || uuid === undefined) return;
     const idle = running.inFlight === 0;
     running.begun.add(uuid);
+    if (uuid === running.uuid) yield* running.taken;
     if (uuid === running.opener) running.opener = null;
     else if (running.words.has(uuid)) yield* this.took(running, uuid);
     else {
@@ -299,6 +303,7 @@ export class Turn {
     if (running === null) return;
     running.inFlight = Math.max(0, running.inFlight - 1);
     if (!running.cancelled) {
+      yield* running.taken;
       const outcome = outcomeOf(result, running.error);
       running.ending =
         outcome._tag === 'Stopped'

@@ -114,6 +114,7 @@ export const makeOpenCodeCycle = Effect.fnUntraced(function* (door: HostedDoor, 
               tools: frozen.listed.tools,
               event: output.event.bind(output),
               call: relay.call.bind(relay),
+              taken: input.taken,
             });
             running.run = run;
             history = [];

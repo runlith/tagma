@@ -1,4 +1,4 @@
-import type { Fiber, Scope } from 'effect';
+import type { Effect, Fiber, Scope } from 'effect';
 import type { JsonSchema } from '@runlith/llm/schema/ids';
 import { ToolResultValue, type Message } from '@runlith/llm/schema/messages';
 import type { AgentGuidanceJournal, PendingRuntimeGuide } from '../../agent/AgentGuidanceJournal';
@@ -59,6 +59,8 @@ export type HostedTurn = {
   readonly prompt: string | null;
   readonly web: TransportWeb;
 };
+
+export type HostedOwing = (told: string, tx: ThreadWriteTx) => Effect.Effect<void, ThreadBorderFailed>;
 
 export type Hosted = {
   readonly runId: string;

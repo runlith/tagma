@@ -80,7 +80,10 @@ export class ProtocolHistory {
       ...freshRow(child, null, null),
       fork: at === null || facet.sessionKey === null ? null : { session: facet.sessionKey, prompt: at.address },
     });
-    if (at !== null) yield* turns.copy(unit, source, child, at.ordinal);
+    if (at === null) return;
+    yield* turns.copy(unit, source, child, at.ordinal);
+    const owed = cut.kind === 'all' ? yield* turns.owed(source, unit) : null;
+    if (owed !== null) yield* turns.owe(unit, child, owed);
   });
 
   readonly restore = Effect.fnUntraced(function* (this: ProtocolHistory, threadId: string, runIds: readonly string[]) {

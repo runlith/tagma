@@ -1,5 +1,7 @@
 import { Effect } from 'effect';
+import { bordered } from '@runlith/agent/thread/ThreadBorder';
 import { body, pair } from '../platform/contract/service/body.js';
+import type { WriteUnit } from '../platform/contract/service/units.js';
 import { nativeThreadIdOf } from '../platform/contract/wire/actor.js';
 import type { Caller } from '../platform/contract/wire/caller.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
@@ -85,11 +87,13 @@ export const hostedTurn = pair(
     execute: Effect.fnUntraced(function* (_input, _prepared, caller) {
       const threadId = yield* provenThread(caller);
       const agentId = yield* declaredRefusals(HOSTED_OPERATIONS.open_hosted_turn)(hostOf(threadId));
+      const openings = yield* HostedOpenings;
       const turn = yield* declaredRefusals(HOSTED_OPERATIONS.open_hosted_turn)(
-        (yield* ThreadHarness).runs.hosting().open(threadId, agentId),
+        (yield* ThreadHarness).runs
+          .hosting()
+          .open(threadId, agentId, (told, tx) => bordered(openings.owe(threadId, told, tx as unknown as WriteUnit<'machine'>))),
       );
-      const context = yield* (yield* HostedOpenings).opened(threadId, turn.context);
-      return { status: 'opened' as const, context, prompt: turn.prompt, web: turn.web };
+      return { status: 'opened' as const, context: yield* openings.owed(threadId), prompt: turn.prompt, web: turn.web };
     }),
   }),
 );

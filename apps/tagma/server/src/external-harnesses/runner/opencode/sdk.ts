@@ -420,6 +420,7 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
               yield* input.event({ type: 'phase', phase: 'calling' });
               sent = true;
               yield* Effect.tryPromise({ try: () => client.session.prompt({ sessionID: id, ...prompt }), catch: failed });
+              yield* input.taken;
               if (cancelled) yield* Effect.tryPromise({ try: () => client.session.interrupt({ sessionID: id }), catch: failed });
               yield* Effect.tryPromise({ try: () => client.session.wait({ sessionID: id }), catch: failed });
               return yield* Effect.raceFirst(Deferred.await(terminal), Fiber.join(events));

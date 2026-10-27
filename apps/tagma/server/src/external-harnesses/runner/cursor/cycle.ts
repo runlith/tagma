@@ -156,6 +156,7 @@ export const makeCursorCycle = Effect.fnUntraced(function* (door: HostedDoor, pr
               event: output.event.bind(output),
               call: relay.call.bind(relay),
             });
+            yield* input.taken;
             running.run = run;
             history = [];
             resumed = false;

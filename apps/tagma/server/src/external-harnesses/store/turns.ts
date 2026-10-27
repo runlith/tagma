@@ -204,24 +204,24 @@ export class VendorTurns {
     );
   }
 
-  readonly opened = Effect.fnUntraced(function* (this: VendorTurns, threadId: string, context: string | null) {
-    const { db } = this;
-    return yield* this.units.write(this.writes, (unit) =>
-      Effect.gen(function* () {
-        const standing = yield* unit.run(
-          db.select({ owed: vendorSession.owed }).from(vendorSession).where(eq(vendorSession.threadId, threadId)).get(),
-        );
-        const owed = [standing?.owed ?? null, context].filter((part): part is string => part !== null && part !== '');
-        const answer = owed.length === 0 ? null : owed.join('\n\n');
-        if (answer !== null)
-          yield* unit.run(
-            db
-              .insert(vendorSession)
-              .values({ threadId, account: null, replaced: null, origin: null, owed: answer })
-              .onConflictDoUpdate({ target: vendorSession.threadId, set: { owed: answer } }),
-          );
-        return answer;
-      }),
+  owed(threadId: string, unit?: Unit<'machine'>): Effect.Effect<string | null, StoreFailure> {
+    const read = (held: Unit<'machine'>) =>
+      Effect.map(
+        held.run(this.db.select({ owed: vendorSession.owed }).from(vendorSession).where(eq(vendorSession.threadId, threadId)).get()),
+        (row) => row?.owed ?? null,
+      );
+    return unit === undefined ? this.units.read(read) : read(unit);
+  }
+
+  readonly owe = Effect.fn('VendorTurns.owe')(function* (this: VendorTurns, unit: Unit<'machine'>, threadId: string, told: string) {
+    if (told === '') return;
+    const standing = yield* this.owed(threadId, unit);
+    const owed = standing === null ? told : `${standing}\n\n${told}`;
+    yield* unit.run(
+      this.db
+        .insert(vendorSession)
+        .values({ threadId, account: null, replaced: null, origin: null, owed })
+        .onConflictDoUpdate({ target: vendorSession.threadId, set: { owed } }),
     );
   });
 

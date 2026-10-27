@@ -21,7 +21,12 @@ export type Opening = {
 };
 
 export type Prepared = { readonly opened: HostedOpened; readonly listed: HostedListed };
-export type Input = { readonly id: string; readonly prompt: readonly ContentBlock[]; readonly context: string | null };
+export type Input = {
+  readonly id: string;
+  readonly prompt: readonly ContentBlock[];
+  readonly context: string | null;
+  readonly taken: Effect.Effect<void>;
+};
 
 export interface Session {
   readonly id: string;

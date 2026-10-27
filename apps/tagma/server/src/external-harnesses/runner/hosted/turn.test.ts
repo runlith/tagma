@@ -7,13 +7,13 @@ import type { Session } from './cycle.js';
 import type { HostedDoor } from './door.js';
 import { Turn } from './turn.js';
 
-const openedSession = (answer: Effect.Effect<PromptResult, AgentFault>, prepared: Effect.Effect<void>): Session => ({
+const openedSession = (answer: Effect.Effect<PromptResult, AgentFault>, prepared: Effect.Effect<void>, takes = true): Session => ({
   id: 'session',
   cwd: '/work',
   busy: () => false,
   configOptions: () => [],
   prepare: () => prepared,
-  start: () => Effect.succeed(answer),
+  start: (input) => Effect.succeed(Effect.andThen(takes ? input.taken : Effect.void, answer)),
   steer: () => Effect.die('this session gets no steer'),
   configure: () => Effect.die('this session is not configured'),
   cancel: () => Effect.void,
@@ -43,6 +43,11 @@ it.effect('a prompt answers that its opening reached the agent only once the age
       new Turn(openingDoor, openedSession(Effect.fail(fault), Effect.void)).prompt([{ type: 'text', text: 'go' }], undefined),
     );
     expect(failed.data).toMatchObject({ _meta: { 'tagma/opened': true } });
+    const withdrawn = yield* new Turn(openingDoor, openedSession(Effect.succeed({ stopReason: 'cancelled' }), Effect.void, false)).prompt(
+      [{ type: 'text', text: 'go' }],
+      undefined,
+    );
+    expect([withdrawn.stopReason, openedOf(withdrawn)]).toEqual(['cancelled', undefined]);
     const preparing = yield* Deferred.make<void>();
     const held = new Turn(
       openingDoor,

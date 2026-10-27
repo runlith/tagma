@@ -18,7 +18,8 @@ export type ProtocolSessions = {
 export class HostedOpenings extends Context.Service<
   HostedOpenings,
   {
-    opened(threadId: string, context: string | null): Effect.Effect<string | null, StoreFailure>;
+    owe(threadId: string, told: string, unit: WriteUnit<'machine'>): Effect.Effect<void, StoreFailure>;
+    owed(threadId: string): Effect.Effect<string | null, StoreFailure>;
   }
 >()('tagma/external-harnesses/HostedOpenings') {}
 

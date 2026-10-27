@@ -21,6 +21,7 @@ export type Sending = {
   readonly tools: readonly HostedToolWire[];
   readonly event: (event: OutputEvent) => Effect.Effect<void>;
   readonly call: (id: string, name: string, input: unknown) => Effect.Effect<Relayed>;
+  readonly taken: Effect.Effect<void>;
 };
 export interface Run {
   readonly wait: Effect.Effect<Outcome, AgentFault>;

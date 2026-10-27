@@ -409,7 +409,7 @@ describe('a prompt', () => {
       expect(first).toMatchObject({
         stopReason: 'end_turn',
         usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
-        _meta: { 'tagma/turn': { prompt: turn, last: 'a1' }, 'tagma/cost': { amount: 0.5, currency: 'USD' } },
+        _meta: { 'tagma/turn': { prompt: turn, last: 'a1' }, 'tagma/cost': { amount: 0.5, currency: 'USD' }, 'tagma/opened': true },
       });
       expect(session.sdk.first.received[0]?.uuid).toBe(turn);
 
@@ -535,7 +535,7 @@ describe('a prompt', () => {
         yield* handlers.loadSession!({ sessionId: 'earlier', cwd: '/work', mcpServers: [] });
         const resumed = yield* handlers.prompt({ sessionId: 'earlier', prompt: text('one') });
         expect(resumed.usage).toBeUndefined();
-        expect(Object.keys(resumed._meta ?? {})).toEqual(['tagma/turn']);
+        expect(Object.keys(resumed._meta ?? {})).toEqual(['tagma/turn', 'tagma/opened']);
         const next = yield* handlers.prompt({ sessionId: 'earlier', prompt: text('two') });
         expect(next._meta).toMatchObject({ 'tagma/cost': { currency: 'USD' } });
 
@@ -545,7 +545,7 @@ describe('a prompt', () => {
         >).sessionId;
         const first = yield* handlers.prompt({ sessionId: forked, prompt: text('three') });
         expect(first.usage).toBeUndefined();
-        expect(Object.keys(first._meta ?? {})).toEqual(['tagma/turn']);
+        expect(Object.keys(first._meta ?? {})).toEqual(['tagma/turn', 'tagma/opened']);
       }),
   );
 });
@@ -1118,13 +1118,15 @@ describe('cancel', () => {
     }),
   );
 
-  it.live('of a prompt Claude Code dropped before starting it answers at once', () =>
+  it.live('of a prompt Claude Code dropped before starting it answers at once, without saying the opening reached it', () =>
     Effect.gen(function* () {
       const session = yield* open({ onInterrupt: (channel) => ({ queued: [], dropped: [channel.received[0]!.uuid!] }) });
       const running = yield* started(session.prompt('one'));
       yield* session.sdk.first.arrived(1);
       yield* session.cancel();
-      expect((yield* Fiber.join(running)).stopReason).toBe('cancelled');
+      const answered = yield* Fiber.join(running);
+      expect(answered).toMatchObject({ stopReason: 'cancelled' });
+      expect(answered._meta).not.toHaveProperty('tagma/opened');
     }),
   );
 

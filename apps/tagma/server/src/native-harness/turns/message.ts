@@ -39,7 +39,7 @@ const TOLD = 'told';
 
 const GRAPH = 'graph';
 
-type GraphSpan = { readonly run: string; readonly from: number; readonly through: number };
+type GraphSpan = { readonly from: number; readonly through: number };
 
 type Heard = {
   readonly runs: ReadonlySet<string>;
@@ -60,23 +60,20 @@ const heardIn = (history: readonly Message[]): Heard => {
       for (const [id, digest] of Object.entries(told)) if (typeof digest === 'string' || digest === null) sections.set(id, digest);
     const span = message.metadata?.[GRAPH];
     if (Predicate.isObject(span) && typeof span.from === 'number' && typeof span.through === 'number')
-      graph.push({ run, from: span.from, through: span.through });
+      graph.push({ from: span.from, through: span.through });
   }
   return { runs, sections, graph };
 };
 
-const resumedAt = (order: readonly string[], heard: Heard): number => {
-  const kept = new Set(
-    order.slice(
-      0,
-      Math.max(
-        0,
-        order.findIndex((run) => !heard.runs.has(run)),
-      ),
-    ),
-  );
-  const spans = heard.graph.filter((span) => kept.has(span.run));
-  return spans.some((span) => span.from === 0) ? (spans.at(-1)?.through ?? 0) : 0;
+const resumedAt = (heard: Heard): number => {
+  const spans = [...heard.graph].sort((left, right) => left.from - right.from);
+  if (spans[0]?.from !== 0) return 0;
+  let covered = 0;
+  for (const span of spans) {
+    if (span.from > covered) break;
+    covered = Math.max(covered, span.through);
+  }
+  return covered;
 };
 
 export const nativeTurnContext = Effect.fn('native-harness.turnContext')(
@@ -101,7 +98,7 @@ export const nativeTurnContext = Effect.fn('native-harness.turnContext')(
     const standing = (stored.contextRuns ?? []).filter((run) => heard.runs.has(run));
 
     const read = deps.digest ? yield* deps.threads.graphCursor(deps.threadId) : null;
-    const cursor = read && lost ? { ...read, eventId: resumedAt(stored.contextRuns ?? [], heard) } : read;
+    const cursor = read && lost ? { ...read, eventId: resumedAt(heard) } : read;
 
     const digest = cursor
       ? yield* Effect.gen(function* () {

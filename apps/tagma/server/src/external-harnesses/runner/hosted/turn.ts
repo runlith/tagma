@@ -77,7 +77,10 @@ export class Turn {
       return { stopReason: 'cancelled', _meta: { 'tagma/turn': { prompt: id, last: null } } } satisfies PromptResult;
     }
     running.sent = true;
-    const started = yield* Effect.exit(this.session.start({ id, prompt, context: opened.value.value }));
+    const taken = yield* Deferred.make<void>();
+    const started = yield* Effect.exit(
+      this.session.start({ id, prompt, context: opened.value.value, taken: Effect.asVoid(Deferred.succeed(taken, undefined)) }),
+    );
     if (Exit.isFailure(started)) {
       this.running = null;
       this.session.turning?.(false);
@@ -94,7 +97,10 @@ export class Turn {
       this.running = null;
       this.session.turning?.(false);
     }
-    if (Exit.isFailure(result)) return yield* Effect.failCause(result.cause).pipe(Effect.mapError(heard));
+    const took = yield* Deferred.isDone(taken);
+    if (Exit.isFailure(result))
+      return yield* Effect.failCause(result.cause).pipe(Effect.mapError((fault) => (took ? heard(fault) : fault)));
+    if (!took) return result.value;
     const meta = Predicate.isObject(result.value._meta) ? result.value._meta : {};
     return { ...result.value, _meta: { ...meta, [OPENED]: true } } satisfies PromptResult;
   });

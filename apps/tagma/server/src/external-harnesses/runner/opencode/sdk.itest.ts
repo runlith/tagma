@@ -210,6 +210,7 @@ it.live(
         tools: [],
         event: () => Effect.void,
         call: () => Effect.die('No tools admitted'),
+        taken: Effect.void,
       });
       expect(yield* resumed.wait).toMatchObject({ status: 'finished' });
       yield* loaded.close;

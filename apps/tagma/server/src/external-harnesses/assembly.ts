@@ -477,7 +477,10 @@ export const externalHarnessesLayer = Layer.effectContext(
       Context.add(HarnessSpeech, harnessSpeech(records, threads, words, notices.wrote)),
       Context.add(ScreenAsks, screenTexts(records, threads, terminals, screens)),
       Context.add(ProtocolStates, protocolStates(records, threads, protocol.state)),
-      Context.add(HostedOpenings, HostedOpenings.of({ opened: (threadId, context) => turns.opened(threadId, context) })),
+      Context.add(
+        HostedOpenings,
+        HostedOpenings.of({ owe: (threadId, told, unit) => turns.owe(unit, threadId, told), owed: (threadId) => turns.owed(threadId) }),
+      ),
       Context.add(TransportSwitch, transportSwitch(records, lookup, store, yield* ThreadRebinding, registry, providers)),
       Context.add(HarnessImplementations, (name, retract) =>
         externalHarness(

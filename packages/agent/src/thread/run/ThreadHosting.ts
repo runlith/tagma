@@ -78,6 +78,7 @@ import {
   type HostedAgent,
   type HostedAnswer,
   type HostedCall,
+  type HostedOwing,
   type HostedReply,
   type HostedTools,
   type HostedTurn,
@@ -96,7 +97,7 @@ export class ThreadHosting extends Context.Service<
   {
     agent(threadId: string, agentId: string): Effect.Effect<HostedAgent, ThreadBorderFailed>;
     history(threadId: string, media?: 'hydrated' | 'referenced'): Effect.Effect<readonly Message[], ThreadBorderFailed>;
-    open(threadId: string, agentId: string): Effect.Effect<HostedTurn, ThreadBorderFailed>;
+    open(threadId: string, agentId: string, owing?: HostedOwing): Effect.Effect<HostedTurn, ThreadBorderFailed>;
     tools(threadId: string, agentId: string): Effect.Effect<HostedTools, ThreadBorderFailed>;
     display(threadId: string, name: string, reading: PartialJsonState): ToolDisplay | undefined;
     call(call: HostedCall): Effect.Effect<HostedReply, ThreadBorderFailed>;
@@ -646,7 +647,7 @@ export const threadHostingLayer = Layer.effect(
         Effect.flatMap(historyOf(threadId), (history) =>
           media === 'referenced' ? Effect.succeed(pairedForProvider(history)) : attachments.hydrate(threadId, pairedForProvider(history)),
         ),
-      open: Effect.fnUntraced(function* (threadId, agentId) {
+      open: Effect.fnUntraced(function* (threadId, agentId, owing) {
         const hosted = yield* hosting(threadId, agentId);
         if (hosted === null) return { context: null, prompt: null, web: 'none' as const };
         const run = yield* ledger.activeRun(threadId);
@@ -655,17 +656,18 @@ export const threadHostingLayer = Layer.effect(
           run === null || run.kind === 'keep-warm'
             ? null
             : yield* hosted.prepared.orient({ ...view(thread, agentId), transcript: yield* store.entriesOfRun(threadId, run.id) });
+        const owed = (told: string, commit?: (unit: ThreadWriteTx) => Effect.Effect<void, ThreadBorderFailed>) =>
+          commit === undefined && owing === undefined
+            ? {}
+            : {
+                participants: (unit: ThreadWriteTx) =>
+                  Effect.andThen(commit?.(unit) ?? Effect.void, owing === undefined ? Effect.void : owing(told, unit)),
+              };
         const opened: string[] = [];
         if (context !== null) {
-          const commit = context.commit;
-          yield* committed(
-            threadId,
-            hosted.runId,
-            commit === undefined ? {} : { participants: (unit: ThreadWriteTx) => commit(unit) },
-            [threadContextEvent(context)],
-            'context',
-          );
-          opened.push(messageText(context.message));
+          const told = messageText(context.message);
+          yield* committed(threadId, hosted.runId, owed(told, context.commit), [threadContextEvent(context)], 'context');
+          opened.push(told);
         }
         if (hosted.step === 0) {
           const composed = compositionEntry(
@@ -682,7 +684,8 @@ export const threadHostingLayer = Layer.effect(
           Effect.gen(function* () {
             const history = yield* historyOf(threadId);
             const step = yield* stepped(hosted, history);
-            if (step.events.length > 0) yield* committed(threadId, hosted.runId, {}, step.events, `guidance:step:${hosted.step}`);
+            if (step.events.length > 0)
+              yield* committed(threadId, hosted.runId, owed(step.texts.join('\n\n')), step.events, `guidance:step:${hosted.step}`);
             hosted.history = [...history, ...step.messages];
             hosted.step += 1;
             return step;
