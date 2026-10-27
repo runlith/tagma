@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Context, Effect, FileSystem, Option, Queue, Stream } from 'effect';
+import { PlatformError, SystemError } from 'effect/PlatformError';
 import { NamespaceId } from '@runlith/files/namespace';
 import { Git, gitVerb } from '@runlith/git/Git';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -49,6 +50,7 @@ export const listingWorld = Effect.fnUntraced(function* (count: number) {
     ...records.map((record): ProjectRoot => ({ projectId: 7, rootId: record.rootId, path: record.path, origin: 'worktree' })),
   ];
   const coverage: ProjectCoverage = { projectId: 7, namespaceId, rootPath, roots, withheld: [] };
+  const absent = new Set<string>();
   const heads = new Map(roots.map((root, index) => [root.rootId, index === 0 ? BASE : index.toString(16).padStart(40, '0')]));
   const stamps = new Map(roots.map((root) => [`${root.path}/.git/index`, 0]));
   const byId = new Map(roots.map((root) => [root.rootId, root]));
@@ -86,11 +88,15 @@ export const listingWorld = Effect.fnUntraced(function* (count: number) {
   const info = yield* (yield* FileSystem.FileSystem).stat(import.meta.path);
   const probes = yield* Queue.unbounded<string>();
   const files = FileSystem.makeNoop({
-    exists: () => Effect.succeed(true),
+    exists: (path) => Effect.succeed(!absent.has(String(path))),
     stat: (path) =>
       Effect.andThen(
         Queue.offer(probes, String(path)),
-        Effect.succeed({ ...info, mtime: Option.some(new Date(stamps.get(String(path)) ?? 0)) }),
+        [...absent].some((root) => String(path) === root || String(path).startsWith(`${root}/`))
+          ? Effect.fail(
+              new PlatformError(new SystemError({ _tag: 'NotFound', module: 'FileSystem', method: 'stat', cause: { code: 'ENOENT' } })),
+            )
+          : Effect.succeed({ ...info, mtime: Option.some(new Date(stamps.get(String(path)) ?? 0)) }),
       ),
   });
   const starts = yield* Queue.unbounded<string>();
@@ -162,6 +168,14 @@ export const listingWorld = Effect.fnUntraced(function* (count: number) {
         const verb = gitVerb(args);
         calls.git.set(verb, (calls.git.get(verb) ?? 0) + 1);
         const dir = args[args.indexOf('-C') + 1] ?? '.';
+        if (absent.has(dir))
+          return Effect.succeed({
+            status: 128,
+            stdout: '',
+            stderr: `fatal: cannot change to '${dir}': No such file or directory`,
+            overflow: false,
+            messageOverflow: false,
+          });
         let stdout = '';
         let status = 0;
         if (verb === 'worktree')
@@ -357,6 +371,10 @@ export const listingWorld = Effect.fnUntraced(function* (count: number) {
     },
     heldMoved: () => {
       for (const listener of heldListeners) listener(7);
+    },
+    missing: (rootId: RootId) => {
+      const root = byId.get(rootId);
+      if (root !== undefined) absent.add(root.path);
     },
     head: (rootId: RootId, head: string) => {
       heads.set(rootId, head);

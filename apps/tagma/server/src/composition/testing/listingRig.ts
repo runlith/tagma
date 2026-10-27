@@ -133,7 +133,10 @@ export const listingRig = (demo: DemoState) => {
   const headOf = (root: string) =>
     Effect.map(spawnedEffect(['git', 'rev-parse', 'HEAD'], { cwd: root }), (run) => run.stdout.toString().trim());
 
-  const next = Effect.fnUntraced(function* (frames: Queue.Queue<WorktreeFeedEvent>, matching: (event: WorktreeFeedEvent) => boolean) {
+  const next = Effect.fnUntraced(function* <E>(
+    frames: Queue.Dequeue<WorktreeFeedEvent, E>,
+    matching: (event: WorktreeFeedEvent) => boolean,
+  ) {
     for (;;) {
       const event = yield* Queue.take(frames);
       if (matching(event)) return event;

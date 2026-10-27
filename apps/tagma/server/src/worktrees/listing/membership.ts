@@ -157,7 +157,7 @@ export const makeFeedMembership = (input: {
     );
   });
   const measure = Effect.fnUntraced(function* (tree: Tree) {
-    if (tree.kind !== 'tagma' || !wanted(tree)) return;
+    if (tree.kind !== 'tagma' || !tree.sight.present || !wanted(tree)) return;
     const head = tree.sight.metadata?.head ?? null;
     if (head === null || tree.tip === null || tree.record.baseBranch === null) return;
     const verdict = yield* reads.verdict(tree.record.path, tree.tip, head, true);

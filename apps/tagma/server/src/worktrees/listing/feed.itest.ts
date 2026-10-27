@@ -25,7 +25,7 @@ const storage = unitsLayer(MachineUnits, MachineStore).pipe(
 const world = Layer.mergeAll(storage, BunFileSystem.layer, Layer.succeed(Capacity, serverCapacity(declarations)));
 const rowsOf = (event: WorktreeFeedEvent): readonly WorktreeRow[] =>
   event.kind === 'list' ? event.rows : event.kind === 'row' ? [event.row] : [];
-const next = Effect.fnUntraced(function* (frames: Queue.Queue<WorktreeFeedEvent>, matches: (event: WorktreeFeedEvent) => boolean) {
+const next = Effect.fnUntraced(function* <E>(frames: Queue.Dequeue<WorktreeFeedEvent, E>, matches: (event: WorktreeFeedEvent) => boolean) {
   for (;;) {
     const event = yield* Queue.take(frames);
     if (matches(event)) return event;
@@ -96,6 +96,37 @@ layer(world, { excludeTestServices: true })('worktree windows', (it) => {
           }),
         );
       }),
+  );
+
+  it.effect('a missing worktree stays in the live feed when another merge check finishes', () =>
+    Effect.gen(function* () {
+      const at = yield* listingWorld(2);
+      const missing = at.records[0];
+      const other = at.records[1];
+      if (missing === undefined || other === undefined) return yield* Effect.die('the fixture has no pair of worktrees');
+      const base = 'a'.repeat(40);
+      const tip = 'b'.repeat(40);
+      at.head(at.main.rootId, base);
+      at.head(other.rootId, tip);
+      const { listing, checks } = yield* at.open;
+      const frames = yield* Stream.toQueue(worktreeChannel(listing)['worktrees.subscribe']({ projectId: 7, start: 0, limit: 3 }), {
+        capacity: 'unbounded',
+      });
+      const settled = new Set<string>();
+      yield* next(frames, (frame) => {
+        for (const row of rowsOf(frame)) if (row.kind === 'tagma' && row.mergeFact.state === 'current') settled.add(row.rootId);
+        return settled.size === 2;
+      });
+      at.missing(missing.rootId);
+      at.moved();
+      yield* next(frames, (frame) => rowsOf(frame).some((row) => row.rootId === missing.rootId && row.status === 'missing'));
+      yield* checks.fresh(other.path, base, tip);
+      at.placed.push({ threadId: 'working-main', rootId: at.main.rootId, state: 'working', cleared: false, movedAt: new Date(1) });
+      at.threadsMoved();
+      const moved = yield* next(frames, (frame) => rowsOf(frame).some((row) => row.rootId === at.main.rootId && row.agents.working === 1));
+      expect(rowsOf(moved).find((row) => row.rootId === at.main.rootId)?.status).toBe('working');
+      expect((yield* listing.list(7, { limit: 3 })).rows.find((row) => row.rootId === missing.rootId)?.status).toBe('missing');
+    }),
   );
 
   it.effect('opening the same visible window starts the same git work with twenty and two hundred checkouts', () =>

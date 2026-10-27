@@ -2,7 +2,7 @@ import { RequestKey } from '../../platform/contract/wire/ids.js';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { rmSync, writeFileSync } from 'node:fs';
-import { Clock, Deferred, Effect, FileSystem, Layer, Path, Queue, Stream } from 'effect';
+import { Clock, Deferred, Effect, FileSystem, Layer, Path, Stream } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import type { Git } from '@runlith/git/Git';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -36,10 +36,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         const side = yield* worktrees.execute({ operationId, projectId, acquired });
         const sideRoot = side.rootId;
         if (sideRoot === null) return yield* Effect.die('the creation registered no root');
-        const frames = yield* Queue.unbounded<WorktreeFeedEvent>();
-        yield* Effect.forkScoped(
-          Stream.runForEach(listing.subscribe(projectId, { start: 0, limit: 3 }), (event) => Queue.offer(frames, event)),
-        );
+        const frames = yield* Stream.toQueue(listing.subscribe(projectId, { start: 0, limit: 3 }), { capacity: 'unbounded' });
         let shown: readonly WorktreeRow[] = [];
         yield* rig.next(frames, (event) => {
           if (event.kind === 'list') shown = event.rows;
@@ -111,10 +108,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             return yield* worktrees.execute({ operationId, projectId, acquired });
           });
 
-          const frames = yield* Queue.unbounded<WorktreeFeedEvent>();
-          yield* Effect.forkScoped(
-            Stream.runForEach(listing.subscribe(projectId, { start: 0, limit: 3 }), (event) => Queue.offer(frames, event)),
-          );
+          const frames = yield* Stream.toQueue(listing.subscribe(projectId, { start: 0, limit: 3 }), { capacity: 'unbounded' });
           yield* rig.next(frames, (event) => event.kind === 'list');
 
           const side = yield* make('side');
