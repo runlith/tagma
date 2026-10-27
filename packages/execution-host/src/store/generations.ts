@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, lte, sql } from 'drizzle-orm';
 import { Clock, type Context, Effect } from 'effect';
 import type { ExecutionId, Incarnation } from '@runlith/executions/protocol/execution';
 import {
@@ -25,6 +25,7 @@ import {
   type RetainedExecution,
   type RetiredGeneration,
   type RetiredLedgerEntry,
+  type ShelfLedger,
 } from './records';
 
 type Shape = Context.Service.Shape<typeof ExecutionStore>;
@@ -40,6 +41,8 @@ export const generations = (
   | 'evidenceOf'
   | 'oldestGeneration'
   | 'generationExecutions'
+  | 'shelfLedger'
+  | 'shelvedRecords'
   | 'retiredGenerations'
   | 'retiredLedger'
   | 'noteRecordPending'
@@ -221,6 +224,47 @@ export const generations = (
             .select({ position, execution: executionTable.executionId })
             .from(executionTable)
             .where(and(eq(executionTable.incarnation, incarnation), after === undefined ? undefined : gt(position, after)))
+            .orderBy(position)
+            .limit(limit);
+          const executions = yield* Effect.forEach(owned, (row) =>
+            decodeExecutionId(row.execution).pipe(Effect.mapError(unreadable('execution', row.execution))),
+          );
+          const last = owned.at(-1);
+          return { executions, next: owned.length === limit && last !== undefined ? last.position : undefined } satisfies GenerationPage;
+        }),
+      ),
+
+    shelfLedger: (incarnation) =>
+      unit(
+        Effect.gen(function* () {
+          const ledger = yield* db
+            .select({ bytes: generationLedgerTable.bytes })
+            .from(generationLedgerTable)
+            .where(eq(generationLedgerTable.incarnation, incarnation))
+            .limit(1);
+          const newest = yield* db.select({ position: sql<number | null>`max(rowid)` }).from(executionTable);
+          return { bytes: ledger[0]?.bytes ?? 0, through: newest[0]?.position ?? undefined } satisfies ShelfLedger;
+        }),
+      ),
+
+    shelvedRecords: (incarnation, after, through, limit) =>
+      unit(
+        Effect.gen(function* () {
+          const position = sql<number>`rowid`;
+          const owned = yield* db
+            .select({ position, execution: executionTable.executionId })
+            .from(executionTable)
+            .where(
+              and(
+                eq(executionTable.incarnation, incarnation),
+                after === undefined ? undefined : gt(position, after),
+                lte(position, through),
+                eq(executionTable.phase, 'ended'),
+                eq(executionTable.recordAvailability, 'available'),
+                eq(executionTable.lifetime, 'command'),
+                eq(executionTable.transport, 'pipes'),
+              ),
+            )
             .orderBy(position)
             .limit(limit);
           const executions = yield* Effect.forEach(owned, (row) =>

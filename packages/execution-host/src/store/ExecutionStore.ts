@@ -88,6 +88,7 @@ import {
   type RetainedExecution,
   type RetiredGeneration,
   type RetiredLedgerEntry,
+  type ShelfLedger,
 } from './records';
 
 export class ExecutionStore extends Context.Service<
@@ -271,6 +272,13 @@ export class ExecutionStore extends Context.Service<
     readonly generationExecutions: (
       incarnation: Incarnation,
       after: number | undefined,
+      limit: number,
+    ) => Effect.Effect<GenerationPage, StoreLost | StoreUnreadable | StoreFailure>;
+    readonly shelfLedger: (incarnation: Incarnation) => Effect.Effect<ShelfLedger, StoreLost | StoreFailure>;
+    readonly shelvedRecords: (
+      incarnation: Incarnation,
+      after: number | undefined,
+      through: number,
       limit: number,
     ) => Effect.Effect<GenerationPage, StoreLost | StoreUnreadable | StoreFailure>;
     readonly retiredGenerations: () => Effect.Effect<ReadonlyArray<RetiredGeneration>, StoreLost | StoreUnreadable | StoreFailure>;

@@ -30,9 +30,17 @@ it.live(
       pipeModes: { _tag: 'Unavailable', revision: 0, reason: 'pipes' },
       volumeOf: () => Effect.die('the release did not enter shelving'),
       retired: () => {},
+      live: () => false,
       inventoryWoken: Effect.void,
     }).pipe(
-      Effect.provideService(ExecutionStore, ExecutionStore.of({ ...unreadStore, retiredLedger: () => Effect.succeed([]) })),
+      Effect.provideService(
+        ExecutionStore,
+        ExecutionStore.of({
+          ...unreadStore,
+          retiredLedger: () => Effect.succeed([]),
+          shelfLedger: () => Effect.succeed({ bytes: 0, through: undefined }),
+        }),
+      ),
       Effect.provideService(FileSystem.FileSystem, FileSystem.makeNoop({})),
       Effect.provide(Path.layer),
     );

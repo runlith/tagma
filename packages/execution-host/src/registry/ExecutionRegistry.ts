@@ -19,6 +19,7 @@ const make = Effect.fnUntraced(function* (options: { readonly volumeOf: VolumeRe
   const registry = yield* openState(options);
   yield* Effect.forkIn(registry.shelf.evictGenerations, registry.registryScope);
   const unadopted = yield* adoptHeld(registry);
+  yield* Effect.forkIn(registry.shelf.evictKept, registry.registryScope);
   yield* Effect.forEach(
     unadopted,
     (refused) =>

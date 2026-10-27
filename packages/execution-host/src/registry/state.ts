@@ -156,6 +156,7 @@ export const openState = Effect.fnUntraced(function* ({ volumeOf }: { readonly v
   const entered = yield* store.incarnation();
   const records = path.join(entered.registration.state, 'records');
   const limits = capacity.profile.execution;
+  const handedOver = new Set<string>(holder.held.map((execution) => execution.id));
   const shelf = yield* makeRecordShelf({
     current: entered,
     records,
@@ -163,6 +164,7 @@ export const openState = Effect.fnUntraced(function* ({ volumeOf }: { readonly v
     pipeModes: PIPE_MODES,
     volumeOf,
     retired: (ref) => held.retired(ref),
+    live: (execution) => held.has(execution) || handedOver.has(execution),
     inventoryWoken,
   });
   const recounted = yield* Ref.make<number | undefined>(undefined);

@@ -52,6 +52,8 @@ export const unreadStore = ExecutionStore.of({
   evidenceOf: unused,
   oldestGeneration: unused,
   generationExecutions: unused,
+  shelfLedger: unused,
+  shelvedRecords: unused,
   retiredGenerations: unused,
   retiredLedger: unused,
   noteRecordPending: unused,
