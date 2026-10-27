@@ -40,6 +40,7 @@ import { CHANGES_PANE } from './paneContent.js';
 import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
 import { Seams } from '$lib/shared/seams/Seams.svelte.js';
 import Changes from './Changes.svelte';
+import { testDoor } from '$lib/wire/testing.js';
 import { Documents } from './files/Documents.svelte.js';
 import { Outside } from './files/Outside.svelte.js';
 import { Tabs } from './files/Tabs.svelte.js';
@@ -123,9 +124,11 @@ let asked: CommitKey[] = [];
 let app: TestApp | undefined;
 let history: TurnPath[] = [];
 let historyReads = 0;
+let browsed: string[] = [];
 
 beforeEach(() => {
   feed = liveFeed();
+  browsed = [];
   asked = [];
   history = [];
   historyReads = 0;
@@ -171,7 +174,29 @@ function draw(view: unknown = ChangesList): HTMLElement {
           return { status: 'ok', turns: history, total: history.length, next: null };
         },
       } as never),
-      Layer.of(FileOpener, { open: () => Promise.resolve(), stand: () => () => undefined } as never),
+      Layer.of(
+        FileOpener,
+        new FileOpener(
+          Object.assign(testDoor(), {
+            perform: async (_id: string, input: { path: string }) => ({
+              entry: {
+                kind: 'file',
+                path: input.path,
+                bytes: 1,
+                mediaType: input.path.endsWith('.pdf') ? 'application/pdf' : 'text/markdown',
+              },
+              place: null,
+            }),
+          }) as never,
+          () => ({ projectId: 1, branch: null }),
+          {} as never,
+          {} as never,
+          {} as never,
+          { refusal: () => undefined } as never,
+          { open: (url) => void browsed.push(url) },
+          besideOf(panes, seats),
+        ),
+      ),
       Layer.of(Tabs, { projectId: 1 } as never),
       Layer.of(Outside, {
         chosen: null,
@@ -355,6 +380,25 @@ test('a Scratch file opens in the view of the thread’s Changes tab, not in a t
   expect(area.layouts.layout(threadHolder('thread-1')).tabs.map((tab) => tab.kind)).toEqual([CHANGES_PANE]);
   expect(page.querySelector('[data-change-path="notes.md"]')?.getAttribute('aria-current')).toBe('true');
   expect(page.querySelector('[data-changes-diff] [data-file-tab]')?.getAttribute('data-file-tab')).toBe('/scratch/thread-1/notes.md');
+});
+
+test('a Scratch PDF goes to the browser by the file opener’s rule, never into the view as a binary file', async () => {
+  const page = draw(Changes);
+  area.panes.seatMain({ projectId: 1, activeId: 'thread-1' });
+  sent(whole([checkout([held('src/a.ts')])]));
+  feed.routes.get('scratch.subscribe')?.({
+    directory: '/scratch/thread-1',
+    entries: [{ name: 'report.pdf', kind: 'file', bytes: 12, modifiedAt: 0 }],
+    total: 1,
+  });
+  flushSync();
+
+  press(page.querySelector('[data-change-path="report.pdf"]'));
+  await until(() => browsed.length > 0);
+
+  expect(browsed[0]).toContain('report.pdf');
+  expect(app?.app.resolve(ThreadChanges).open).toBeNull();
+  expect(page.querySelector('[data-changes-diff] [data-file-tab]')).toBeNull();
 });
 
 test('One column lays the opened diff over the list, and Back returns to the list', () => {

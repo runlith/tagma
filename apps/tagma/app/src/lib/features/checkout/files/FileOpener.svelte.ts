@@ -135,27 +135,9 @@ export class FileOpener extends Service<FileOpener>()('FileOpener', { tier: 'app
     this.pending = pending;
     const current = (): boolean => !pending.signal.aborted && this.aim() !== undefined && GraphRung.keyOf(this.aim() as GraphAim) === key;
     try {
-      const { place, entry: file } = await this.resolve(
-        target.path,
-        ask.from,
-        pending.signal,
-        ask.project ?? aim.projectId,
-        ask.root,
-        ask.thread,
-      );
-      if (!current() || file?.kind !== 'file') return;
-      if (ask.picture !== undefined && file.mediaType.startsWith('image/') && file.mediaType !== 'image/svg+xml') {
-        ask.picture({
-          url: diskAddress(this.door, file.path),
-          name: file.path.slice(file.path.lastIndexOf('/') + 1),
-          mediaType: file.mediaType,
-        });
-        return;
-      }
-      if (file.mediaType === 'application/pdf') {
-        this.links.open(diskAddress(this.door, file.path));
-        return;
-      }
+      const shown = await this.viewed(target, { ...ask, project: ask.project ?? aim.projectId }, pending.signal, current);
+      if (shown === null) return;
+      const { place, file } = shown;
       const line = target.line ?? null;
       const column = line === null ? null : (target.column ?? null);
       const at = { line, column };
@@ -185,6 +167,38 @@ export class FileOpener extends Service<FileOpener>()('FileOpener', { tier: 'app
     } finally {
       if (this.pending === pending) this.pending = null;
     }
+  }
+
+  async showable(target: PathTarget, ask: OpenAsk = {}): Promise<boolean> {
+    try {
+      return (await this.viewed(target, ask, undefined, () => true)) !== null;
+    } catch (error) {
+      this.notices.refusal(error);
+      return false;
+    }
+  }
+
+  private async viewed(
+    target: PathTarget,
+    ask: OpenAsk,
+    signal: AbortSignal | undefined,
+    current: () => boolean,
+  ): Promise<{ readonly place: PlacedPath | null; readonly file: Extract<PathEntry, { kind: 'file' }> } | null> {
+    const { place, entry: file } = await this.resolve(target.path, ask.from, signal, ask.project, ask.root, ask.thread);
+    if (!current() || file?.kind !== 'file') return null;
+    if (ask.picture !== undefined && file.mediaType.startsWith('image/') && file.mediaType !== 'image/svg+xml') {
+      ask.picture({
+        url: diskAddress(this.door, file.path),
+        name: file.path.slice(file.path.lastIndexOf('/') + 1),
+        mediaType: file.mediaType,
+      });
+      return null;
+    }
+    if (file.mediaType === 'application/pdf') {
+      this.links.open(diskAddress(this.door, file.path));
+      return null;
+    }
+    return { place, file };
   }
 
   private besideShows(target: FileTarget, from: LinkFrom): boolean {

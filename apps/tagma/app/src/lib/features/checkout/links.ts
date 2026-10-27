@@ -204,6 +204,7 @@ const changes: LinkKind<ChangeRef> = {
     icon: PanelRight,
     open: async (app, link) => {
       const target = link.target;
+      if (target.rootId === null && !(await app.resolve(FileOpener).showable({ path: target.path }, askOf(fileOf(link))))) return;
       const changed = app.resolve(ThreadChanges);
       const standing = changed.open;
       const same =
