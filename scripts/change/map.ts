@@ -95,6 +95,14 @@ let cpu = 0;
 let failed = 0;
 let unstable = 0;
 let interrupted = 0;
+const inherited = { ...process.env };
+delete inherited['RUNLITH_CHANGE_SPAWNED_CHILD'];
+const options = (process.env['BUN_OPTIONS'] ?? '')
+  .split(' ')
+  .filter((option) => option !== '' && option !== `--preload=${preload}`)
+  .join(' ');
+if (options === '') delete inherited['BUN_OPTIONS'];
+else inherited['BUN_OPTIONS'] = options;
 const jobs = wanted.map(({ file }, at) => {
   const pkg = graph.package(file);
   const cwd = join(root, pkg.dir);
@@ -130,7 +138,7 @@ const jobs = wanted.map(({ file }, at) => {
     ],
     need: 1,
     env: {
-      ...process.env,
+      ...inherited,
       RUNLITH_CHANGE_AUDIT: `${dir}.audit.json`,
       RUNLITH_TEST_REPORT: `${dir}.jsonl`,
       RUNLITH_CHANGE_SPAWNED: `${dir}.spawned`,

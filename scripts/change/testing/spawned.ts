@@ -10,7 +10,7 @@ const record = process.env['RUNLITH_CHANGE_SPAWNED'];
 const root = process.env['RUNLITH_CHANGE_SPAWNED_ROOT'] ?? '';
 const modules = (path: string): string[] => [...readFileSync(path, 'utf8').matchAll(MODULE)].map((match) => match[1]!);
 if (record !== undefined)
-  if (process.env['RUNLITH_CHANGE_SPAWNED_CHILD'] === '1') {
+  if (process.env['RUNLITH_CHANGE_SPAWNED_CHILD'] === record) {
     const main = Bun.main;
     const own = main.startsWith(`${root}/`) && !main.includes('/node_modules/');
     const marked = !own && existsSync(main) ? modules(main) : [];
@@ -26,6 +26,8 @@ if (record !== undefined)
           ];
     appendFileSync(record, `${JSON.stringify({ main, bundled })}\n`);
   } else {
-    process.env['RUNLITH_CHANGE_SPAWNED_CHILD'] = '1';
-    process.env['BUN_OPTIONS'] = [process.env['BUN_OPTIONS'], `--preload=${import.meta.path}`].filter(Boolean).join(' ');
+    process.env['RUNLITH_CHANGE_SPAWNED_CHILD'] = record;
+    const preload = `--preload=${import.meta.path}`;
+    const options = process.env['BUN_OPTIONS'] ?? '';
+    if (!options.split(' ').includes(preload)) process.env['BUN_OPTIONS'] = [options, preload].filter(Boolean).join(' ');
   }
