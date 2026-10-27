@@ -1162,7 +1162,7 @@ test('a hover over an unfocused view types nothing into its lane, while a wheel 
   expect(t.inputCalls.map((call) => decode(call.act.bytes ?? ''))).toEqual(['a', `${ESC}[<65;10;5M`]);
 });
 
-test('focus reports, a hover, a click and a wheel go as raw, and what the person typed as typed', async () => {
+test('focus reports and a hover go as raw, a click or wheel as mouse, and what the person typed as typed', async () => {
   const t = setup();
   await drain();
   t.held.data?.(`${ESC}[I`);
@@ -1175,5 +1175,5 @@ test('focus reports, a hover, a click and a wheel go as raw, and what the person
   await drain();
   t.held.data?.(`${ESC}[I${ESC}[<0;10;5M`);
   await drain();
-  expect(t.inputCalls.map((call) => call.cause)).toEqual(['raw', 'typed', 'raw', 'raw', 'raw']);
+  expect(t.inputCalls.map((call) => call.cause)).toEqual(['raw', 'typed', 'mouse', 'raw', 'mouse']);
 });

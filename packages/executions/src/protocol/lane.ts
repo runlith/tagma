@@ -21,7 +21,7 @@ export type LaneInput = typeof LaneInput.Type;
 export const LaneHello = Schema.Struct({ lane: Schema.NonEmptyString });
 export type LaneHello = typeof LaneHello.Type;
 
-export const LaneCause = Schema.Literals(['typed', 'paste', 'raw', 'interrupt']);
+export const LaneCause = Schema.Literals(['typed', 'paste', 'raw', 'mouse', 'interrupt']);
 export type LaneCause = typeof LaneCause.Type;
 
 export const LaneAct = Schema.Union([

@@ -3,7 +3,7 @@ import { ExecutionRef } from './execution';
 import { InputRevision } from './inputProfile';
 import { ByteOffset, TerminalGeometry } from './record';
 
-export const InputCause = Schema.Literals(['typed', 'paste', 'raw', 'interrupt', 'resize', 'reply', 'end']);
+export const InputCause = Schema.Literals(['typed', 'paste', 'raw', 'mouse', 'interrupt', 'resize', 'reply', 'end']);
 export type InputCause = typeof InputCause.Type;
 
 export const InputSequence = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));

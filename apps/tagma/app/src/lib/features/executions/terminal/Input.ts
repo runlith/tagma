@@ -62,7 +62,7 @@ export interface KeyContext {
 
 export type ActVerdict = 'applied' | 'refused' | 'lost';
 
-type WriteCause = 'typed' | 'raw' | 'paste';
+type WriteCause = 'typed' | 'raw' | 'mouse' | 'paste';
 
 interface PasteToken {
   cancelled: boolean;
@@ -150,11 +150,12 @@ const MOUSE_MOTION = 32;
 const MOUSE_NO_BUTTON = 3;
 const MOUSE_WHEEL = 64;
 
-type Composed = 'hover' | 'raw' | 'typed';
+type Composed = 'hover' | 'report' | 'mouse' | 'typed';
 
 function composedBy(data: string): Composed {
   let offset = 0;
   let hover = true;
+  let acted = false;
   while (offset < data.length) {
     const rest = data.slice(offset);
     const focus = FOCUS_REPORT_RE.exec(rest);
@@ -172,10 +173,13 @@ function composedBy(data: string): Composed {
       code = rest.charCodeAt(X10_MOUSE.length) - 32;
       offset += X10_MOUSE.length + 3;
     } else return 'typed';
-    if ((code & MOUSE_MOTION) === 0 || (code & MOUSE_NO_BUTTON) !== MOUSE_NO_BUTTON || (code & MOUSE_WHEEL) !== 0) hover = false;
+    if ((code & MOUSE_MOTION) === 0 || (code & MOUSE_NO_BUTTON) !== MOUSE_NO_BUTTON || (code & MOUSE_WHEEL) !== 0) {
+      hover = false;
+      acted = true;
+    }
   }
   if (offset === 0) return 'typed';
-  return hover ? 'hover' : 'raw';
+  return acted ? 'mouse' : hover ? 'hover' : 'report';
 }
 
 function imeConsumed(event: KeyboardEvent): boolean {
@@ -589,7 +593,7 @@ export class TerminalInput {
     if (onlyQueryReplies(data)) return;
     const composed = composedBy(data);
     if (composed === 'hover' && this.options.focused?.() === false) return;
-    this.enqueueOrdinary(data, composed === 'typed' ? 'typed' : 'raw');
+    this.enqueueOrdinary(data, composed === 'typed' || composed === 'mouse' ? composed : 'raw');
   }
 
   private handleOsc52(data: string): boolean {

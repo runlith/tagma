@@ -298,7 +298,7 @@ describe('execution wire messages', () => {
 const BREAKING_SHAPES: Readonly<Record<number, string>> = {
   39: 'sha256:fa12df20f709d3276cc505258eb3ad38dbe9d170500b8bd3055eadc9d0fd4280',
   40: 'sha256:c75c666e3f46b9a203af0f593be2d6909ec926a42a32c702d5f6c9d901638bb2',
-  41: 'sha256:2eb9e3a8d475f71e26df1c2e544399a79410f4287defb8f4d564ebb5d9c27322',
+  41: 'sha256:722b05b228a9a63d162807aef8fadc83248fc3df879c7dbdab4ae565cf6ec1f0',
 };
 
 type Json = { readonly [key: string]: unknown };

@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Clock, Context, Effect, Layer, Queue, Schema } from 'effect';
+import { Clock, Context, Effect, Layer, Queue, Schedule, Schema } from 'effect';
 import { Principal } from '@runlith/executions/protocol/custody';
 import { TerminalWriting } from '../../../executions/contract/service/writing.js';
 import { TerminalGrids } from '../../../executions/contract/service/views.js';
@@ -14,10 +14,51 @@ const BLOCK_MS = 2000;
 const ECHO_MS = 100;
 const TYPIST = ViewId.make('endpoint-typist');
 const WATCHER = ViewId.make('endpoint-watcher');
+const CLICKER = ViewId.make('endpoint-clicker');
 const TYPIST_BOX = { rows: 30, columns: 100 };
 const WATCHER_BOX = { rows: 50, columns: 160 };
+const CLICK = Buffer.from('\u001b[<0;10;5M').toString('base64');
 
 class Page extends Context.Service<Page, Effect.Success<ReturnType<typeof makePageWorld>>>()('testing/TerminalEndpoint') {}
+
+const terminal = Effect.fnUntraced(function* (page: Page['Service'], label: string, program: string) {
+  const started = yield* page
+    .perform<unknown>('start_terminal', {
+      operationId: `${label}-start`,
+      cwd: page.checkout,
+      label,
+      program,
+      transport: 'pty',
+      lifetime: 'held',
+      geometry: { rows: 24, columns: 80 },
+    })
+    .pipe(Effect.flatMap(Schema.decodeUnknownEffect(TerminalOperationReading)));
+  const operation = started.operation;
+  if (operation._tag !== 'Whole' || operation.state._tag !== 'Settled' || operation.state.execution === undefined) {
+    return yield* Effect.die(new Error(`no terminal was started: ${JSON.stringify(started)}`));
+  }
+  const ref = operation.state.execution;
+  const address = { execution: ref.execution, incarnation: ref.incarnation };
+  yield* Effect.addFinalizer(() =>
+    page.perform('stop_terminal', { ...address, operationId: `${label}-stop`, cause: 'explicit-stop' }).pipe(Effect.orDie),
+  );
+  return { ref, address };
+});
+
+const acted = (url: string, token: string, act: unknown) =>
+  Effect.callback<Record<string, unknown>>((resume) => {
+    const socket = new WebSocket(url);
+    socket.onopen = () => socket.send(JSON.stringify({ lane: token }));
+    socket.onmessage = (event) => {
+      const reply = JSON.parse(String(event.data)) as Record<string, unknown>;
+      if (reply['t'] === 'ready') socket.send(JSON.stringify(act));
+      if (reply['t'] !== 'receipt') return;
+      resume(Effect.succeed(reply));
+      socket.close(1000);
+    };
+    socket.onclose = (event) => resume(Effect.succeed({ closed: event.code }));
+    return Effect.sync(() => socket.close());
+  });
 
 type Measured = {
   readonly started: number;
@@ -72,26 +113,7 @@ layer(Layer.effect(Page, makePageWorld()).pipe(Layer.provide(BunFileSystem.layer
       () =>
         Effect.gen(function* () {
           const page = yield* Page;
-          const started = yield* page
-            .perform<unknown>('start_terminal', {
-              operationId: 'terminal-endpoint-start',
-              cwd: page.checkout,
-              label: 'terminal-endpoint',
-              program: '/bin/sh',
-              transport: 'pty',
-              lifetime: 'held',
-              geometry: { rows: 24, columns: 80 },
-            })
-            .pipe(Effect.flatMap(Schema.decodeUnknownEffect(TerminalOperationReading)));
-          const operation = started.operation;
-          if (operation._tag !== 'Whole' || operation.state._tag !== 'Settled' || operation.state.execution === undefined) {
-            return yield* Effect.die(new Error(`no shell was started: ${JSON.stringify(started)}`));
-          }
-          const ref = operation.state.execution;
-          const address = { execution: ref.execution, incarnation: ref.incarnation };
-          yield* Effect.addFinalizer(() =>
-            page.perform('stop_terminal', { ...address, operationId: 'terminal-endpoint-stop', cause: 'explicit-stop' }).pipe(Effect.orDie),
-          );
+          const { ref, address } = yield* terminal(page, 'terminal-endpoint', '/bin/sh');
 
           const decided = yield* Queue.unbounded<TerminalDecider>();
           const grids = Context.get(page.world.runtime.door, TerminalGrids);
@@ -118,6 +140,23 @@ layer(Layer.effect(Page, makePageWorld()).pipe(Layer.provide(BunFileSystem.layer
           const typedBy = yield* Context.get(page.world.runtime.door, TerminalWriting).typedBy(ref, null);
           expect(typedBy.map((typed) => typed.writer)).toEqual([Principal.make('operator')]);
         }),
+    );
+
+    it.effect('a click the window sends through a lane marks the operator among those who typed', () =>
+      Effect.gen(function* () {
+        const page = yield* Page;
+        const { ref, address } = yield* terminal(page, 'terminal-endpoint-click', '/bin/cat');
+        const lane = yield* page
+          .perform<unknown>('open_terminal_lane', { ...address, view: CLICKER })
+          .pipe(Effect.flatMap(Schema.decodeUnknownEffect(TerminalLaneOpened)));
+        expect(
+          yield* acted(lane.url, lane.token, { t: 'act', sequence: lane.next, cause: 'mouse', act: { _tag: 'Write', bytes: CLICK } }),
+        ).toMatchObject({ t: 'receipt', answer: { _tag: 'InputAdmitted', receipt: { cause: 'mouse' } } });
+        const typedBy = yield* Context.get(page.world.runtime.door, TerminalWriting)
+          .typedBy(ref, null)
+          .pipe(Effect.repeat({ until: (typed) => typed.length > 0, schedule: Schedule.spaced('10 millis') }));
+        expect(typedBy.map((typed) => typed.writer)).toEqual([Principal.make('operator')]);
+      }),
     );
   },
 );

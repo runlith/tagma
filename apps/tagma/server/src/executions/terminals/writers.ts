@@ -1,13 +1,13 @@
 import { Clock, Context, Duration, Effect, Tracer } from 'effect';
 import { Principal } from '@runlith/executions/protocol/custody';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
-import type { InputInstruction, InputReceipt, InputRequest } from '@runlith/executions/protocol/input';
+import type { InputCause, InputInstruction, InputReceipt } from '@runlith/executions/protocol/input';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { terminalWriter } from '../store/terminal.js';
 import { executionPolicy } from '../host/policy.js';
 import type { GrantRoad } from '../contract/service/grants.js';
-import type { LaneRequest, TypedBy, WriterCause } from '../contract/service/writing.js';
+import type { TypedBy } from '../contract/service/writing.js';
 import { TerminalRows } from '../store/terminalRows.js';
 
 export const WRITER_PERSIST_MS = 60_000;
@@ -16,10 +16,7 @@ const REMEMBERED_RECEIPTS = executionPolicy.execution.input.receipts;
 
 const OPERATOR = Principal.make('operator');
 
-const NOT_TYPING: ReadonlySet<WriterCause> = new Set<WriterCause>(['resize', 'reply', 'end']);
-
-export const hostRequest = (request: LaneRequest): InputRequest =>
-  request.cause === 'mouse' ? { ...request, cause: 'raw' } : { ...request, cause: request.cause };
+const NOT_TYPING: ReadonlySet<InputCause> = new Set<InputCause>(['resize', 'reply', 'end']);
 
 type Mark = {
   at: number;
@@ -36,7 +33,7 @@ type Held = {
 
 const keyOf = (execution: ExecutionRef): string => `${execution.installation}/${execution.execution}/${execution.incarnation}`;
 
-export const typedInto = (writer: Principal, road: GrantRoad | null, cause: WriterCause, act: InputInstruction['_tag']): boolean =>
+export const typedInto = (writer: Principal, road: GrantRoad | null, cause: InputCause, act: InputInstruction['_tag']): boolean =>
   road !== 'harness' && act !== 'Resize' && !NOT_TYPING.has(cause) && !(writer === OPERATOR && cause === 'raw');
 
 export type TerminalWriters = Effect.Success<ReturnType<typeof makeTerminalWriters>>;

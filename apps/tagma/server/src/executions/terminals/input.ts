@@ -24,11 +24,11 @@ import type { InteractiveGrant } from '../contract/wire/terminals.js';
 import type { TerminalLaneRow } from '../contract/wire/viewLeases.js';
 import type { TerminalOperationKey } from '../contract/wire/requestKeys.js';
 import { TERMINAL_PERMISSION_REVISION } from '../contract/service/subjectPolicy.js';
-import { hostRequest, typedInto } from './writers.js';
+import { typedInto } from './writers.js';
 import { refusesLane } from './refusal.js';
 import type { GrantRoad } from '../contract/service/grants.js';
 import type { TerminalFailure } from '../contract/service/terminals.js';
-import type { BindingOpen, LaneRequest, OpenedBinding, PipeHandle, TypedBy } from '../contract/service/writing.js';
+import type { BindingOpen, OpenedBinding, PipeHandle, TypedBy } from '../contract/service/writing.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { terminalIntent, terminalRequestKey, terminalRequestKeyTally } from '../store/terminal.js';
 import { threadOf, agentLaneKey } from './refs.js';
@@ -86,7 +86,7 @@ export const makeTerminalWriting = Effect.fnUntraced(function* ({
   const input = Effect.fn('Terminals.input')(function* (
     execution: ExecutionRef,
     scope: { readonly binding: BindingId; readonly principal: Principal; readonly runId?: string; readonly decisionRevision?: number },
-    request: LaneRequest,
+    request: InputRequest,
     permissionRevision: number,
   ) {
     const road = yield* Effect.withSpan(
@@ -115,9 +115,8 @@ export const makeTerminalWriting = Effect.fnUntraced(function* ({
       }),
       'Terminals.input.gate',
     );
-    const sent = hostRequest(request);
-    const outcome = yield* terminalInput.input(execution, scope, sent);
-    yield* witness.admitted(execution, scope, sent, outcome);
+    const outcome = yield* terminalInput.input(execution, scope, request);
+    yield* witness.admitted(execution, scope, request, outcome);
     if (outcome._tag === 'InputAdmitted' && writers !== null && typedInto(scope.principal, road, request.cause, request.act._tag)) {
       yield* writers.admitted(execution, scope.principal, outcome.receipt);
     }
