@@ -50,7 +50,7 @@ layer(Layer.merge(watchProcessLayer, BunFileSystem.layer), { excludeTestServices
           directory: scratch,
           total: 3,
           entries: [
-            { name: 'report.md', kind: 'file', bytes: 6, modifiedAt: 3_000 },
+            { name: 'report.md', kind: 'file', bytes: 6, modifiedAt: 3_000, mediaType: 'text/markdown' },
             { name: 'runs', kind: 'directory', bytes: expect.any(Number), modifiedAt: 2_000 },
           ],
         });

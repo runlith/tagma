@@ -7,10 +7,11 @@ import { GIT_REFUSALS } from '../../../platform/contract/wire/refusal.js';
 import { PLACE_REFUSALS } from '../../../workspace/contract/wire/refusals.js';
 import { placeRole } from '../../../platform/contract/wire/place.js';
 
-export const DIRECTORY = family('directory', 1, 'json', { text: 64, json: 96 }, 500, () => ({
+export const DIRECTORY = family('directory', 1, 'json', { text: 64, json: 128 }, 500, () => ({
   name: 'x'.repeat(32),
-  kind: 'directory',
+  kind: 'file',
   ignored: false,
+  mediaType: 'text/javascript;charset=utf-8',
 }));
 
 export const DIRECTORY_REFUSALS = [
@@ -33,6 +34,7 @@ export const DirectoryEntry = Schema.Struct({
   kind: Schema.Literals(['file', 'directory', 'link']),
   ignored: Schema.Boolean,
   target: Schema.optional(LinkTarget),
+  mediaType: Schema.optional(Schema.String),
 });
 export type DirectoryEntry = typeof DirectoryEntry.Type;
 
@@ -68,6 +70,7 @@ export const DIRECTORY_OPERATIONS = {
       'Read one directory of a checkout for the file tree: its entries in the order the tree shows them, each with its kind and whether git ignores it.',
     grammar: `\`path\` is spelled relative to the checkout root; omitted or empty it is the root itself. Directories come first, then the other names, each group by name ignoring case with digit runs compared by value. The order is the server's because the server cuts the pages. \`.git\`, \`.DS_Store\` and the graph's own directory are never listed.
 A \`link\` names a symbolic link; its \`target\` says what it points at: \`directory\` and \`file\` inside the checkout, \`outside\` for a target beyond the checkout (shown, never opened), \`broken\` for a target that is gone. Only a \`directory\` target can be listed.
+A \`file\` entry, and a \`link\` whose target is a file, carries the \`mediaType\` its name implies.
 \`ignored\` is git's verdict on the entry. Pass \`ignored: true\` when the directory itself is already known to be ignored: every entry in it is ignored and git is not asked.
 \`limit\` and \`cursor\` page the listing; \`total\` counts every entry of the directory, and \`next\` continues a cut.`,
     input: Schema.Struct({

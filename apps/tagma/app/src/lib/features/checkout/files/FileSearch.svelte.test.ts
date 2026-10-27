@@ -43,6 +43,7 @@ test('a query is one pass of the stream: files list by name once it is over, the
   held[0]?.frame({
     kind: 'file',
     file: 'b.ts',
+    mediaType: 'text/javascript',
     matches: [
       {
         line: 1,
@@ -54,7 +55,12 @@ test('a query is one pass of the stream: files list by name once it is over, the
       },
     ],
   });
-  held[0]?.frame({ kind: 'file', file: 'a.ts', matches: [{ line: 3, preview: 'foo', ranges: [{ start: 0, end: 3 }] }] });
+  held[0]?.frame({
+    kind: 'file',
+    file: 'a.ts',
+    mediaType: 'text/javascript',
+    matches: [{ line: 3, preview: 'foo', ranges: [{ start: 0, end: 3 }] }],
+  });
   flushSync();
   expect(search.searching).toBe(true);
   expect(search.files).toBe(2);

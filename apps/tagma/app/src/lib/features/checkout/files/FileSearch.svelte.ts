@@ -12,9 +12,9 @@ export type SearchDone = Extract<SearchFrame, { readonly kind: 'done' }>;
 
 export type SearchRow =
   | { readonly kind: 'file'; readonly file: string; readonly count: number; readonly folded: boolean }
-  | { readonly kind: 'match'; readonly file: string; readonly match: SearchMatch };
+  | { readonly kind: 'match'; readonly file: string; readonly mediaType: string; readonly match: SearchMatch };
 
-type Found = { readonly file: string; readonly matches: readonly SearchMatch[] };
+type Found = { readonly file: string; readonly mediaType: string; readonly matches: readonly SearchMatch[] };
 
 const globs = (text: string): readonly string[] =>
   text
@@ -80,14 +80,14 @@ export class FileSearch extends Service<FileSearch>()('FileSearch', { tier: 'gra
   rows(limit: number): { readonly rows: readonly SearchRow[]; readonly more: boolean } {
     void this.arrivals;
     const rows: SearchRow[] = [];
-    for (const { file, matches } of this.found) {
+    for (const { file, mediaType, matches } of this.found) {
       if (rows.length >= limit) return { rows, more: true };
       const folded = this.folded.has(file);
       rows.push({ kind: 'file', file, count: matches.length, folded });
       if (folded) continue;
       for (const match of matches) {
         if (rows.length >= limit) return { rows, more: true };
-        rows.push({ kind: 'match', file, match });
+        rows.push({ kind: 'match', file, mediaType, match });
       }
     }
     return { rows, more: false };
@@ -134,7 +134,7 @@ export class FileSearch extends Service<FileSearch>()('FileSearch', { tier: 'gra
         }),
       (frame) => {
         if (frame.kind === 'file') {
-          this.found.push({ file: frame.file, matches: frame.matches });
+          this.found.push({ file: frame.file, mediaType: frame.mediaType, matches: frame.matches });
           this.arrivals += 1;
           return;
         }

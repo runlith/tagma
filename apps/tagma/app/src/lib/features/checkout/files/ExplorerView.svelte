@@ -24,6 +24,7 @@
   import { FileOps } from './FileOps.svelte.js';
   import { FileSearch } from './FileSearch.svelte.js';
   import { kindFor } from './tab.js';
+  import { Checkout } from '../Selection.svelte.js';
   import { FileOpener } from './FileOpener.svelte.js';
   import { Tabs } from './Tabs.svelte.js';
   import TreeMenu from './TreeMenu.svelte';
@@ -37,6 +38,7 @@
   const search = FileSearch.use();
   const tabs = Tabs.use();
   const opener = FileOpener.use();
+  const checkout = Checkout.use();
   const holdings = Holdings.use();
   const names = ThreadNames.use();
   const column = Column.use();
@@ -165,9 +167,9 @@
   function openFile(row: EntryRow, how: 'preview' | 'open'): void {
     const rootId = explorer.rootId;
     if (rootId === null || !readable(row)) return;
-    void opener.view({ path: row.path }, { project: tabs.projectId, root: rootId }, () => {
-      tabs.open({ rootId, path: row.path, kind: kindFor(row.path) }, how);
-    });
+    const root = checkout.row?.path;
+    if (row.mediaType !== undefined && root !== undefined && !opener.shows(`${root}/${row.path}`, row.mediaType)) return;
+    tabs.open({ rootId, path: row.path, kind: kindFor(row.path) }, how);
   }
 
   function activate(row: EntryRow, how: 'preview' | 'open'): void {

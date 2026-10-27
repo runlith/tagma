@@ -42,7 +42,7 @@ export type CommitRef = { readonly sha: string; readonly project: string; readon
 
 export type ChangeRef =
   | { readonly projectId: number; readonly rootId: RootId; readonly path: string; readonly commit: string | null }
-  | { readonly projectId: number; readonly rootId: null; readonly path: string; readonly commit: null };
+  | { readonly projectId: number; readonly rootId: null; readonly path: string; readonly commit: null; readonly mediaType: string };
 
 export type ChangesRef = { readonly threadId: string; readonly summary?: string | undefined };
 
@@ -196,6 +196,9 @@ const shas: LinkItems<CommitRef> = {
   acts: (_app, link) => [{ id: 'copy-sha', words: 'Copy SHA', icon: Copy, run: () => navigator.clipboard.writeText(link.target.sha) }],
 };
 
+const drawnIn = (app: Resolver, target: ChangeRef): boolean =>
+  target.rootId !== null || app.resolve(FileOpener).shows(target.path, target.mediaType);
+
 const changes: LinkKind<ChangeRef> = {
   kind: CHANGE_LINK,
   what: (_app, link) => nameOf(link.target.path),
@@ -204,21 +207,23 @@ const changes: LinkKind<ChangeRef> = {
     icon: PanelRight,
     open: async (app, link) => {
       const target = link.target;
-      const show = async (): Promise<void> => {
-        const changed = app.resolve(ThreadChanges);
-        const standing = changed.open;
-        const same =
-          standing !== null &&
-          standing.rootId === target.rootId &&
-          standing.path === target.path &&
-          standing.commit === target.commit &&
-          (standing.rootId === null || standing.lens === undefined);
-        if (!same) changed.open = { ...target };
-        if (!app.resolve(Beside).show({ content: changesPane, from: { ...link.from, thread: changed.threadId } }))
-          await changes.full.open(app, link);
-      };
-      if (target.rootId === null) await app.resolve(FileOpener).view({ path: target.path }, askOf(fileOf(link)), show);
-      else await show();
+      if (!drawnIn(app, target)) return;
+      const changed = app.resolve(ThreadChanges);
+      const standing = changed.open;
+      const same =
+        standing !== null &&
+        standing.rootId === target.rootId &&
+        standing.path === target.path &&
+        standing.commit === target.commit &&
+        (standing.rootId === null || standing.lens === undefined);
+      if (!same) {
+        changed.open =
+          target.rootId === null
+            ? { projectId: target.projectId, rootId: null, path: target.path, commit: null }
+            : { projectId: target.projectId, rootId: target.rootId, path: target.path, commit: target.commit };
+      }
+      if (!app.resolve(Beside).show({ content: changesPane, from: { ...link.from, thread: changed.threadId } }))
+        await changes.full.open(app, link);
     },
   },
   full: {
@@ -226,7 +231,7 @@ const changes: LinkKind<ChangeRef> = {
     icon: GitBranch,
     open: async (app, link) => {
       const { commit } = link.target;
-      if (commit === null) return files.full.open(app, fileOf(link));
+      if (commit === null) return drawnIn(app, link.target) ? files.full.open(app, fileOf(link)) : undefined;
       const project = app.resolve(Workspace).find(link.target.projectId);
       if (project !== null) await app.resolve(Router).goto(app.resolve(Addresses).commit(commit, project.name));
     },

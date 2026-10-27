@@ -14,7 +14,12 @@ export const SearchMatch = Schema.Struct({
 export type SearchMatch = typeof SearchMatch.Type;
 
 export const SearchFrame = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal('file'), file: Schema.NonEmptyString, matches: Schema.Array(SearchMatch) }),
+  Schema.Struct({
+    kind: Schema.Literal('file'),
+    file: Schema.NonEmptyString,
+    mediaType: Schema.String,
+    matches: Schema.Array(SearchMatch),
+  }),
   Schema.Struct({
     kind: Schema.Literal('done'),
     files: Schema.Int,

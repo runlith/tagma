@@ -30,8 +30,8 @@
 
   const absolute = (name: string): string => `${frame.directory}/${name}`;
 
-  const opens = (name: string) =>
-    linkTarget(opening, () => changeLink({ projectId, rootId: null, path: absolute(name), commit: null }, { thread }), here);
+  const opens = (name: string, mediaType: string) =>
+    linkTarget(opening, () => changeLink({ projectId, rootId: null, path: absolute(name), commit: null, mediaType }, { thread }), here);
 
   const when = (at: number): string => timeCompact(new Date(at).toISOString());
 </script>
@@ -68,7 +68,7 @@
         style:padding-left="{insetOf(depth)}px"
         aria-current={selected ? 'true' : undefined}
         data-change-path={entryPath(path, entry.name)}
-        {@attach opens(entry.name)}
+        {@attach opens(entry.name, entry.mediaType)}
       >
         <FileIcon path={entry.name} />
         <FadeText class="flex-1" text={entry.name} />

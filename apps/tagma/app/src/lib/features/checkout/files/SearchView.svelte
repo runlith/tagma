@@ -8,6 +8,7 @@
   import FindOptions from '$lib/shared/ui/find/FindOptions.svelte';
   import { Input } from '$lib/shared/ui/input/index.js';
   import { cn } from '$lib/shared/utils.js';
+  import { Checkout } from '../Selection.svelte.js';
   import { Column } from './Column.svelte.js';
   import { Explorer } from './Explorer.svelte.js';
   import { FileOpener } from './FileOpener.svelte.js';
@@ -18,6 +19,7 @@
   const search = FileSearch.use();
   const tabs = Tabs.use();
   const opener = FileOpener.use();
+  const checkout = Checkout.use();
   const explorer = Explorer.use();
   const column = Column.use();
 
@@ -49,17 +51,16 @@
 
   const shown = $derived(search.rows(limit));
 
-  function show(file: string, line: number, range: { readonly start: number; readonly end: number } | undefined): void {
+  function show(file: string, mediaType: string, line: number, range: { readonly start: number; readonly end: number } | undefined): void {
     const rootId = explorer.rootId;
-    if (rootId === null) return;
+    const root = checkout.row?.path;
+    if (rootId === null || root === undefined || !opener.shows(`${root}/${file}`, mediaType)) return;
     const column = range?.start ?? 0;
     const length = range === undefined ? 0 : range.end - range.start;
-    void opener.view({ path: file }, { project: tabs.projectId, root: rootId }, () => {
-      tabs.open(
-        { rootId, path: file, kind: kindFor(file, true), goto: { line: line - 1, column, length: length > 0 ? length : undefined } },
-        'preview',
-      );
-    });
+    tabs.open(
+      { rootId, path: file, kind: kindFor(file, true), goto: { line: line - 1, column, length: length > 0 ? length : undefined } },
+      'preview',
+    );
   }
 
   function pieces(
@@ -146,7 +147,7 @@
         <button
           type="button"
           class="flex h-6 w-full min-w-0 items-baseline gap-2 pr-2 pl-8 text-left text-small transition-colors hover:bg-hover"
-          onclick={() => show(row.file, row.match.line, row.match.ranges[0])}
+          onclick={() => show(row.file, row.mediaType, row.match.line, row.match.ranges[0])}
           data-search-match={row.match.line}
         >
           <span class="shrink-0 font-mono text-meta tabular-nums text-muted-foreground/60">{row.match.line}</span>

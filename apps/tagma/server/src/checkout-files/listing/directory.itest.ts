@@ -44,7 +44,7 @@ it.live('a directory lists directories first by name with digits by value, hides
 
     const before = spawned.length;
     const inside = yield* directories.list(place, { path: 'build', ignored: true, rows: 10, cursor: undefined });
-    expect(inside.rows).toEqual([{ name: 'out.js', kind: 'file', ignored: true }]);
+    expect(inside.rows).toEqual([{ name: 'out.js', kind: 'file', ignored: true, mediaType: 'text/javascript;charset=utf-8' }]);
     expect(spawned.length).toBe(before);
 
     const refused = yield* Effect.flip(directories.list(place, { path: '../elsewhere', ignored: false, rows: 10, cursor: undefined }));

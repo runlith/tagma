@@ -4,6 +4,7 @@ import { isAbsolute } from 'node:path';
 import { Effect } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import type { PathEntry } from './contract/wire/place.js';
+import { mediaTypeOf } from './mediaType.js';
 
 const ABSENT = new Set(['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM', 'ENAMETOOLONG', 'ELOOP', 'ENXIO', 'ERR_INVALID_ARG_VALUE']);
 
@@ -34,7 +35,7 @@ export const entryAt = (path: string): Effect.Effect<PathEntry | null, GateRefus
         const standing = await file.stat();
         if (standing.isDirectory()) return { kind: 'directory', path };
         if (!standing.isFile()) return null;
-        return { kind: 'file', path, bytes: standing.size, mediaType: Bun.file(path).type || 'application/octet-stream' };
+        return { kind: 'file', path, bytes: standing.size, mediaType: mediaTypeOf(path) };
       } finally {
         await file.close();
       }

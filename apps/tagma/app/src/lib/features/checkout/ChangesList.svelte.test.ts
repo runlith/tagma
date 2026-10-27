@@ -368,7 +368,7 @@ test('a Scratch file opens in the view of the thread’s Changes tab, not in a t
   sent(whole([checkout([])]));
   feed.routes.get('scratch.subscribe')?.({
     directory: '/scratch/thread-1',
-    entries: [{ name: 'notes.md', kind: 'file', bytes: 12, modifiedAt: 0 }],
+    entries: [{ name: 'notes.md', kind: 'file', bytes: 12, modifiedAt: 0, mediaType: 'text/markdown' }],
     total: 1,
   });
   flushSync();
@@ -388,7 +388,7 @@ test('a Scratch PDF goes to the browser by the file opener’s rule, never into 
   sent(whole([checkout([held('src/a.ts')])]));
   feed.routes.get('scratch.subscribe')?.({
     directory: '/scratch/thread-1',
-    entries: [{ name: 'report.pdf', kind: 'file', bytes: 12, modifiedAt: 0 }],
+    entries: [{ name: 'report.pdf', kind: 'file', bytes: 12, modifiedAt: 0, mediaType: 'application/pdf' }],
     total: 1,
   });
   flushSync();

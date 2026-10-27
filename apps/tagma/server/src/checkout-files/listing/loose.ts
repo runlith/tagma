@@ -5,6 +5,7 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { LooseFolders } from '../contract/service/folders.js';
 import type { FolderEntry, FolderFrame } from '../contract/wire/scratch.js';
 import type { FolderWatches } from '../documents/folders.js';
+import { mediaTypeOf } from '../mediaType.js';
 
 const READING = 16;
 
@@ -68,16 +69,12 @@ export const makeLooseFolders = Effect.fnUntraced(function* (input: { readonly f
   const entryOf = (directory: string, name: string): Effect.Effect<FolderEntry | null, GateRefusal<'files'>> => {
     const path = join(directory, name);
     return files.stat(path).pipe(
-      Effect.map((info): FolderEntry | null =>
-        info.type === 'File' || info.type === 'Directory'
-          ? {
-              name,
-              kind: info.type === 'File' ? 'file' : 'directory',
-              bytes: Number(info.size),
-              modifiedAt: Option.match(info.mtime, { onNone: () => 0, onSome: (at) => at.getTime() }),
-            }
-          : null,
-      ),
+      Effect.map((info): FolderEntry | null => {
+        const bytes = Number(info.size);
+        const modifiedAt = Option.match(info.mtime, { onNone: () => 0, onSome: (at) => at.getTime() });
+        if (info.type === 'File') return { name, kind: 'file', bytes, modifiedAt, mediaType: mediaTypeOf(name) };
+        return info.type === 'Directory' ? { name, kind: 'directory', bytes, modifiedAt } : null;
+      }),
       Effect.catchReasons('PlatformError', { NotFound: () => Effect.succeed(null), PermissionDenied: () => Effect.succeed(null) }),
       Effect.mapError(unreadable(path)),
     );

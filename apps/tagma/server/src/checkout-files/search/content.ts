@@ -7,6 +7,7 @@ import type { ProjectRoot } from '../../workspace/contract/wire/coverage.js';
 import { RipgrepBinary } from '../../platform/contract/service/ripgrep.js';
 import { Searches, type SearchAsk, type SearchRefusal } from '../contract/service/searches.js';
 import { SEARCH_MATCHES, type SearchFrame } from '../contract/wire/search.js';
+import { mediaTypeOf } from '../mediaType.js';
 
 const PREVIEW_COLUMNS = 500;
 
@@ -17,6 +18,7 @@ type Folding = { pending: Match[]; files: number; matches: number; readonly star
 const fileFrame = (path: string, matches: readonly Match[]): SearchFrame => ({
   kind: 'file',
   file: path,
+  mediaType: mediaTypeOf(path),
   matches: matches.map((match) => ({ line: match.line, preview: match.text, ranges: match.ranges })),
 });
 

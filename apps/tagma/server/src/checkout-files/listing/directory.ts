@@ -16,6 +16,7 @@ import type { RootId } from '../../workspace/contract/wire/ids.js';
 import type { RootResolutionFailure } from '../../workspace/contract/wire/roots.js';
 import { Directories, type DirectoryAsk, type DirectoryRefusal } from '../contract/service/directories.js';
 import { DIRECTORY, type DirectoryEntry, type LinkTarget, type TreeFrame } from '../contract/wire/directory.js';
+import { mediaTypeOf } from '../mediaType.js';
 import type { FilesWorker } from '../worker/client.js';
 import { compareRanked, type Ranked } from './order.js';
 import { framesOf } from './tree.js';
@@ -26,7 +27,7 @@ export const ORDERED_INLINE = 4096;
 
 export const PAGED_KEPT = 16;
 
-type Listed = { readonly name: string; readonly kind: DirectoryEntry['kind']; readonly target?: LinkTarget };
+type Listed = { readonly name: string; readonly kind: DirectoryEntry['kind']; readonly target?: LinkTarget; readonly mediaType?: string };
 
 type Paged = { readonly stamp: string; readonly rows: readonly Listed[] };
 
@@ -84,13 +85,16 @@ export const makeDirectoryListing = Effect.fnUntraced(function* (input: { readon
 
   const classified = (absolute: string, rootReal: string, one: Dirent): Effect.Effect<Listed> => {
     if (one.isDirectory()) return Effect.succeed({ name: one.name, kind: 'directory' });
-    if (!one.isSymbolicLink()) return Effect.succeed({ name: one.name, kind: 'file' });
+    if (!one.isSymbolicLink()) return Effect.succeed({ name: one.name, kind: 'file', mediaType: mediaTypeOf(one.name) });
     return Effect.promise(async (): Promise<Listed> => {
       const place = join(absolute, one.name);
       try {
         const [real, info] = await Promise.all([realpath(place), stat(place)]);
         const within = real === rootReal || real.startsWith(`${rootReal}/`);
-        return { name: one.name, kind: 'link', target: !within ? 'outside' : info.isDirectory() ? 'directory' : 'file' };
+        if (!within) return { name: one.name, kind: 'link', target: 'outside' };
+        return info.isDirectory()
+          ? { name: one.name, kind: 'link', target: 'directory' }
+          : { name: one.name, kind: 'link', target: 'file', mediaType: mediaTypeOf(one.name) };
       } catch (cause) {
         return { name: one.name, kind: 'link', target: GONE.has(codeOf(cause) ?? '') ? 'broken' : 'unreadable' };
       }

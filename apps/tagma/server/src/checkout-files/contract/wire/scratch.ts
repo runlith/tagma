@@ -2,12 +2,16 @@ import { Schema } from 'effect';
 import { feed } from '../../../platform/contract/wire/operation.js';
 import { PLACE_REFUSALS } from '../../../workspace/contract/wire/refusals.js';
 
-export const FolderEntry = Schema.Struct({
-  name: Schema.NonEmptyString,
-  kind: Schema.Literals(['file', 'directory']),
-  bytes: Schema.Number,
-  modifiedAt: Schema.Number,
-});
+export const FolderEntry = Schema.Union([
+  Schema.Struct({
+    name: Schema.NonEmptyString,
+    kind: Schema.Literal('file'),
+    bytes: Schema.Number,
+    modifiedAt: Schema.Number,
+    mediaType: Schema.String,
+  }),
+  Schema.Struct({ name: Schema.NonEmptyString, kind: Schema.Literal('directory'), bytes: Schema.Number, modifiedAt: Schema.Number }),
+]);
 export type FolderEntry = typeof FolderEntry.Type;
 
 export const FolderFrame = Schema.Struct({

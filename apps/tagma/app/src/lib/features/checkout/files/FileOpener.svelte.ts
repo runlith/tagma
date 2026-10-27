@@ -129,13 +129,30 @@ export class FileOpener extends Service<FileOpener>()('FileOpener', { tier: 'app
     const aim = this.aim();
     if (aim === undefined) return;
     const key = GraphRung.keyOf(aim);
+    this.pending?.abort();
     this.waiting.clear();
-    const pending = this.begin();
+    const pending = new AbortController();
+    this.pending = pending;
     const current = (): boolean => !pending.signal.aborted && this.aim() !== undefined && GraphRung.keyOf(this.aim() as GraphAim) === key;
     try {
-      const shown = await this.viewed(target, { ...ask, project: ask.project ?? aim.projectId }, pending.signal, current);
-      if (shown === null) return;
-      const { place, file } = shown;
+      const { place, entry: file } = await this.resolve(
+        target.path,
+        ask.from,
+        pending.signal,
+        ask.project ?? aim.projectId,
+        ask.root,
+        ask.thread,
+      );
+      if (!current() || file?.kind !== 'file') return;
+      if (ask.picture !== undefined && file.mediaType.startsWith('image/') && file.mediaType !== 'image/svg+xml') {
+        ask.picture({
+          url: diskAddress(this.door, file.path),
+          name: file.path.slice(file.path.lastIndexOf('/') + 1),
+          mediaType: file.mediaType,
+        });
+        return;
+      }
+      if (!this.drawn(file.path, file.mediaType)) return;
       const line = target.line ?? null;
       const column = line === null ? null : (target.column ?? null);
       const at = { line, column };
@@ -167,45 +184,17 @@ export class FileOpener extends Service<FileOpener>()('FileOpener', { tier: 'app
     }
   }
 
-  async view(target: PathTarget, ask: OpenAsk, show: () => void | Promise<void>): Promise<void> {
-    const pending = this.begin();
-    try {
-      if ((await this.viewed(target, ask, pending.signal, () => !pending.signal.aborted)) !== null) await show();
-    } catch (error) {
-      if (!pending.signal.aborted) this.notices.refusal(error);
-    } finally {
-      if (this.pending === pending) this.pending = null;
-    }
-  }
-
-  private begin(): AbortController {
+  shows(absolute: string, mediaType: string): boolean {
     this.pending?.abort();
-    const pending = new AbortController();
-    this.pending = pending;
-    return pending;
+    this.pending = null;
+    this.waiting.clear();
+    return this.drawn(absolute, mediaType);
   }
 
-  private async viewed(
-    target: PathTarget,
-    ask: OpenAsk,
-    signal: AbortSignal | undefined,
-    current: () => boolean,
-  ): Promise<{ readonly place: PlacedPath | null; readonly file: Extract<PathEntry, { kind: 'file' }> } | null> {
-    const { place, entry: file } = await this.resolve(target.path, ask.from, signal, ask.project, ask.root, ask.thread);
-    if (!current() || file?.kind !== 'file') return null;
-    if (ask.picture !== undefined && file.mediaType.startsWith('image/') && file.mediaType !== 'image/svg+xml') {
-      ask.picture({
-        url: diskAddress(this.door, file.path),
-        name: file.path.slice(file.path.lastIndexOf('/') + 1),
-        mediaType: file.mediaType,
-      });
-      return null;
-    }
-    if (file.mediaType === 'application/pdf') {
-      this.links.open(diskAddress(this.door, file.path));
-      return null;
-    }
-    return { place, file };
+  private drawn(absolute: string, mediaType: string): boolean {
+    if (mediaType !== 'application/pdf') return true;
+    this.links.open(diskAddress(this.door, absolute));
+    return false;
   }
 
   private besideShows(target: FileTarget, from: LinkFrom): boolean {

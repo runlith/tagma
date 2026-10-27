@@ -114,6 +114,22 @@ test('a file in a checkout of another project that its page lists under no branc
   expect(there).toEqual([]);
 });
 
+test('a file shown at once by its known type supersedes an open still waiting on its path', async () => {
+  let release = (): void => undefined;
+  const world = standing(
+    { projectId: 1, checkout: OWN, root: '/work/main', path: 'src/a.ts' },
+    { held: new Promise<void>((resolve) => (release = resolve)) },
+  );
+  const waiting = world.opener.open({ path: 'src/a.ts' }, { from: '/work/main' });
+
+  expect(world.opener.shows('/work/main/src/b.ts', 'text/plain')).toBe(true);
+  release();
+  await waiting;
+
+  expect(world.shown).toEqual([]);
+  expect(world.gone).toEqual([]);
+});
+
 test('an absent file opens nothing and produces no error toast', async () => {
   const world = standing(null);
 

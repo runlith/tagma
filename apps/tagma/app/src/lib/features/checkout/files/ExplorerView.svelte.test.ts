@@ -41,12 +41,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const entry = (name: string, kind: DirectoryEntry['kind'] = 'file'): DirectoryEntry => ({ name, kind, ignored: false });
+const entry = (name: string, kind: DirectoryEntry['kind'] = 'file', mediaType = 'text/plain'): DirectoryEntry =>
+  kind === 'file' ? { name, kind, ignored: false, mediaType } : { name, kind, ignored: false };
 
 const LISTINGS: Record<string, readonly DirectoryEntry[]> = {
   '': [entry('src', 'directory'), entry('docs', 'directory'), entry('README.md')],
   src: [entry('deep', 'directory'), entry('a.ts'), entry('b.ts')],
-  docs: [entry('guide.md'), entry('manual.pdf')],
+  docs: [entry('guide.md'), entry('manual.pdf', 'file', 'application/pdf')],
   'src/deep': [entry('x.ts')],
 };
 
@@ -95,17 +96,13 @@ async function draw(held: Promise<void> = Promise.resolve()) {
     },
   };
   const browsed: string[] = [];
+  const placed: unknown[] = [];
   const opener = new FileOpener(
     Object.assign(testDoor(), {
-      perform: async (_id: string, input: { path: string }) => ({
-        entry: {
-          kind: 'file',
-          path: `/repo/${input.path}`,
-          bytes: 1,
-          mediaType: input.path.endsWith('.pdf') ? 'application/pdf' : 'text/plain',
-        },
-        place: { projectId: 1, checkout: 'root-1', root: '/repo', path: input.path },
-      }),
+      perform: async (_id: string, input: unknown) => {
+        placed.push(input);
+        return { entry: null, place: null };
+      },
     }) as never,
     () => ({ projectId: 1, branch: null }),
     {} as never,
@@ -143,7 +140,7 @@ async function draw(held: Promise<void> = Promise.resolve()) {
   flushSync();
   feed.routes.get('checkout.subscribe')?.(row());
   await settle();
-  return { page, app: app.app, asked, browsed };
+  return { page, app: app.app, asked, browsed, placed };
 }
 
 test('the root lists when the checkout is known, a folder lists when opened, and a changed file carries its git letter while its folder carries the bubble', async () => {
@@ -192,36 +189,38 @@ test('a folder pointed at in Files stands open and selected, and an older point 
   expect(column.view).toBe('files');
 });
 
-test('a click on a file opens it as the preview tab that the next click replaces, and a double click keeps it', async () => {
-  const { page, app: mounted } = await draw();
+test('a click on a file opens it at once as the preview tab that the next click replaces, and a double click keeps it', async () => {
+  const { page, app: mounted, placed } = await draw();
   const tabs = mounted.resolve(Tabs);
   page.querySelector<HTMLButtonElement>('[data-tree-path="src"]')?.click();
   flushSync();
   await settle();
 
   page.querySelector<HTMLButtonElement>('[data-tree-path="src/a.ts"]')?.click();
-  await settle();
+  flushSync();
   expect(tabs.tabs.map((tab) => [tab.path, tab.state])).toEqual([['src/a.ts', 'preview']]);
 
   page.querySelector<HTMLButtonElement>('[data-tree-path="src/b.ts"]')?.click();
-  await settle();
+  flushSync();
   expect(tabs.tabs.map((tab) => [tab.path, tab.state])).toEqual([['src/b.ts', 'preview']]);
 
   page.querySelector<HTMLButtonElement>('[data-tree-path="src/b.ts"]')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-  await settle();
+  flushSync();
   expect(tabs.tabs.map((tab) => [tab.path, tab.state])).toEqual([['src/b.ts', 'open']]);
+  expect(placed).toEqual([]);
 });
 
 test('a PDF clicked in the tree goes to the browser by the file opener’s rule and opens no editor tab', async () => {
-  const { page, app: mounted, browsed } = await draw();
+  const { page, app: mounted, browsed, placed } = await draw();
   page.querySelector<HTMLButtonElement>('[data-tree-path="docs"]')?.click();
   flushSync();
   await settle();
 
   page.querySelector<HTMLButtonElement>('[data-tree-path="docs/manual.pdf"]')?.click();
-  await settle();
+  flushSync();
 
   expect(browsed).toHaveLength(1);
   expect(browsed[0]).toContain('manual.pdf');
   expect(mounted.resolve(Tabs).tabs).toEqual([]);
+  expect(placed).toEqual([]);
 });

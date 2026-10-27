@@ -41,6 +41,7 @@ export type TreeRow =
       readonly type: DirectoryEntry['kind'];
       readonly ignored: boolean;
       readonly target: DirectoryEntry['target'];
+      readonly mediaType: DirectoryEntry['mediaType'];
       readonly open: boolean;
       readonly loading: boolean;
     }
@@ -141,6 +142,7 @@ export class Explorer extends Service<Explorer>()('Explorer', { tier: 'graph' })
           type: entry.kind,
           ignored: entry.ignored,
           target: entry.target,
+          mediaType: entry.mediaType,
           open,
           loading: open && (this.listings.get(path)?.loading ?? true),
         });
