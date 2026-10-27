@@ -151,14 +151,13 @@ describe('kernel transition port', () => {
     }),
   );
   it.effect(
-    'a thread that moves under every preparation still commits once, on the retry it prepares inside its unit',
+    'a stale preparation commits inside its next unit even after its deadline',
     Effect.fnUntraced(function* () {
       const { memory, deps } = yield* world;
       memory.beforeUnit = Effect.sync(() => memory.touchFold(THREAD));
-      const now = yield* Clock.currentTimeMillis;
       const outcome = yield* transition(deps, THREAD, plan([message('e1', 'a')]), {
         key: keyed({ run: 'r', seq: 1 }, 'a'),
-        deadline: new Date(now + 200),
+        deadline: new Date(-1),
       });
       expect(outcome).toEqual({ committed: 'done' });
       expect(memory.units).toBe(2);
@@ -166,11 +165,11 @@ describe('kernel transition port', () => {
     }),
   );
   it.effect(
-    'a retry the deadline already passed answers stalled with nothing written',
+    'a redeclaration after the deadline answers stalled without recording the transition',
     Effect.fnUntraced(function* () {
       const { memory, deps } = yield* world;
-      memory.beforeUnit = Effect.sync(() => memory.touchFold(THREAD));
-      const outcome = yield* transition(deps, THREAD, plan([message('e1', 'a')]), {
+      const redeclaring = plan([message('e1', 'a')], () => ({ redeclare: [message('e2', 'b')] }));
+      const outcome = yield* transition(deps, THREAD, redeclaring, {
         key: keyed({ run: 'r', seq: 1 }, 'a'),
         deadline: new Date(-1),
       });

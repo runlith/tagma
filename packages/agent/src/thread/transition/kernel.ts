@@ -68,7 +68,7 @@ export function answerOf<A>(threadId: string, outcome: TransitionOutcome<A>): Ef
   return Effect.fail(
     new ThreadStorageFailed({
       call: 'transition',
-      cause: new Error(`Thread ${threadId}: the thread kept moving until the deadline, so nothing was written.`),
+      cause: new Error(`Thread ${threadId}: the transition was not recorded before its deadline.`),
     }),
   );
 }
@@ -127,7 +127,6 @@ export const transition = Effect.fnUntraced(function* <A, TWrite extends TTx, E 
   let declared = plan.declared;
   const place = deps.lane.place();
   for (let attempt = 0; ; attempt += 1) {
-    if (attempt > 0 && (yield* Clock.currentTimeMillis) >= call.deadline.getTime()) return { stalled: 'none' as const };
     const ahead =
       attempt === 0
         ? yield* prepareTransition(deps, threadId, declared).pipe(
@@ -152,7 +151,10 @@ export const transition = Effect.fnUntraced(function* <A, TWrite extends TTx, E 
     const step = admitted.ran;
     if (step === undefined) return yield* Effect.fail(new ThreadNotFoundError(threadId));
     if ('outcome' in step) return step.outcome;
-    if ('redeclare' in step) declared = step.redeclare;
+    if ('redeclare' in step) {
+      if ((yield* Clock.currentTimeMillis) >= call.deadline.getTime()) return { stalled: 'none' as const };
+      declared = step.redeclare;
+    }
   }
 });
 export const transitionIn = Effect.fnUntraced(function* <A, TWrite extends TTx, E = ThreadBorderFailed, TTx = unknown>(
