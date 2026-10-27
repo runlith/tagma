@@ -285,6 +285,10 @@ test('suites run side by side while the machine budget has room, and one at a ti
     expect(side.code, side.output).toBe(0);
     const alone = await invoke('alone.json', false, '--jobs', '1');
     expect(alone.code, alone.output).toBe(0);
+    const stages = [...alone.output.matchAll(/^test:all: (one|two):test(?: (pass|FAIL|CUT):[^\n]*)?$/gm)];
+    expect(stages.map((stage) => stage[2] ?? 'started')).toEqual(['started', 'pass', 'started', 'pass']);
+    expect(stages[0]?.[1]).toBe(stages[1]?.[1]);
+    expect(stages[2]?.[1]).toBe(stages[3]?.[1]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
