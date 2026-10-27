@@ -4,7 +4,7 @@ import { Effect } from 'effect';
 import { flushDirectoriesSync, isStaging, stagingOf, writeAtomicSync } from './atomicFile.js';
 import { exportGraphRows, groupConnections } from './export.js';
 import { BlockTreeUnreadable, renderBlockTree } from './layout.js';
-import type { ProjectionAnswer, ProjectionJob } from './projection.js';
+import type { ProjectionAnswer, ProjectionAsk, ProjectionJob, ProjectionReply } from './projection.js';
 
 declare const self: Worker;
 
@@ -71,22 +71,38 @@ const project = Effect.fnUntraced(function* (job: ProjectionJob) {
   return { ...applied, moved };
 });
 
-self.onmessage = (event: MessageEvent<ProjectionJob>) => {
-  const result = Effect.runSync(Effect.result(project(event.data)));
-  self.postMessage(
-    (result._tag === 'Success'
-      ? { state: 'projected', ...result.success }
-      : result.failure._tag === 'ExportFailed'
-        ? { state: 'failed', failure: { _tag: 'ExportFailed', message: result.failure.message } }
-        : {
-            state: 'failed',
-            failure: {
-              _tag: 'BlockTreeUnreadable',
-              reason: result.failure.reason,
-              path: result.failure.path,
-              message: result.failure.message,
-            },
-          }) satisfies ProjectionAnswer,
-  );
+const answerOf = (job: ProjectionJob): ProjectionAnswer => {
+  const result = Effect.runSync(Effect.result(project(job)));
+  return result._tag === 'Success'
+    ? { state: 'projected', ...result.success }
+    : result.failure._tag === 'ExportFailed'
+      ? { state: 'failed', failure: { _tag: 'ExportFailed', message: result.failure.message } }
+      : {
+          state: 'failed',
+          failure: {
+            _tag: 'BlockTreeUnreadable',
+            reason: result.failure.reason,
+            path: result.failure.path,
+            message: result.failure.message,
+          },
+        };
 };
-self.postMessage({ state: 'ready' });
+
+self.onmessage = (event: MessageEvent<ProjectionAsk>) => {
+  const { id, job } = event.data;
+  let answer: ProjectionAnswer;
+  try {
+    answer = answerOf(job);
+  } catch (defect) {
+    answer = {
+      state: 'failed',
+      failure: {
+        _tag: 'BlockTreeUnreadable',
+        reason: 'io',
+        path: job.treeRoot,
+        message: `the projection died: ${defect instanceof Error ? defect.message : String(defect)}`,
+      },
+    };
+  }
+  self.postMessage({ id, answer } satisfies ProjectionReply);
+};

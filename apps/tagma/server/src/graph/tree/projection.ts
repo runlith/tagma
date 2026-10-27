@@ -1,5 +1,6 @@
 import { type Stats, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, statSync } from 'node:fs';
 import { readFile, readdir, rm, rmdir, stat } from 'node:fs/promises';
+import { availableParallelism } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Effect } from 'effect';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
@@ -12,7 +13,7 @@ import { type ConnectionRows, type ExportBlockRow, ExportFailed, rowText } from 
 import { connectionRows, connectionsOf } from './connections.js';
 import { mintBlockId } from '../contract/wire/identity.js';
 import { ShadowGit } from './shadow.js';
-import { askOnce } from './oneShot.js';
+import { workerLink } from '@runlith/utils/worker';
 import type { Tags } from '../contract/service/vocabulary.js';
 import { writes } from '../../platform/contract/service/writes.js';
 
@@ -89,13 +90,39 @@ export type ProjectionAnswer =
           };
     };
 
+export type ProjectionAsk = { readonly id: number; readonly job: ProjectionJob };
+
+export type ProjectionReply = { readonly id: number; readonly answer: ProjectionAnswer };
+
+const MOST_LANES = 3;
+
+const lanes = Array.from({ length: Math.max(1, Math.min(MOST_LANES, availableParallelism() - 1)) }, () => ({
+  link: workerLink<ProjectionAsk, ProjectionReply>(
+    'graph projection worker',
+    () => new Worker(new URL('./projection.worker.ts', import.meta.url), { type: 'module' }),
+  ),
+  waiting: 0,
+}));
+
+const inLane = (job: ProjectionJob) =>
+  Effect.suspend(() => {
+    const lane = lanes.reduce((least, one) => (one.waiting < least.waiting ? one : least));
+    lane.waiting += 1;
+    return lane.link
+      .ask((id) => ({ id, job }))
+      .pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            lane.waiting -= 1;
+          }),
+        ),
+      );
+  });
+
 const renderFiles = (job: ProjectionJob): Effect.Effect<Projected, ExportFailed | BlockTreeUnreadable> =>
-  askOnce<ProjectionAnswer, BlockTreeUnreadable>(
-    new URL('./projection.worker.ts', import.meta.url),
-    job,
-    (message) => new BlockTreeUnreadable({ reason: 'io', path: job.treeRoot, message }),
-  ).pipe(
-    Effect.flatMap((answer): Effect.Effect<Projected, ExportFailed | BlockTreeUnreadable> => {
+  inLane(job).pipe(
+    Effect.mapError((gone) => new BlockTreeUnreadable({ reason: 'io', path: job.treeRoot, message: gone.reason })),
+    Effect.flatMap(({ answer }): Effect.Effect<Projected, ExportFailed | BlockTreeUnreadable> => {
       if (answer.state === 'projected') return Effect.succeed({ written: answer.written, removed: answer.removed, moved: answer.moved });
       if (answer.failure._tag === 'ExportFailed') return Effect.fail(new ExportFailed({ message: answer.failure.message }));
       const { reason, path, message } = answer.failure;
