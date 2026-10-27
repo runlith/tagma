@@ -257,7 +257,7 @@ export function nativeStrings(): ChatStrings {
     resendTurn: () => 'Send again',
     showLess: () => 'Show less',
     showAll: () => 'Show all',
-    showDetails: () => 'Details',
+    showDetails: () => 'Show details',
     lineCount: (count) => `${count.toLocaleString('en-US')} ${count === 1 ? 'line' : 'lines'}`,
     open: () => 'Open',
     copyAddress: () => 'Copy address',

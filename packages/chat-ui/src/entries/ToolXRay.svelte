@@ -38,7 +38,7 @@
       aria-expanded={rawOpen}
       onclick={() => context.setExpanded(rawKey, !rawOpen)}
     >
-      {strings.showDetails()}<ChevronRight class={['size-3 transition-transform', rawOpen && 'rotate-90']} />
+      {strings.details()}<ChevronRight class={['size-3 transition-transform', rawOpen && 'rotate-90']} />
     </button>
     {#if rawOpen}
       <div class="grid min-w-0 gap-1.5">
