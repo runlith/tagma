@@ -397,7 +397,7 @@
       <span class="shrink-0 text-small text-muted-foreground/60">+{chips.length - CHIPS_SHOWN}</span>
     {/if}
     {#if named || line.detail || said}
-      <span class={['min-w-0', chips.length > 0 && 'shrink-[1000]']} data-fade {@attach clipFade}
+      <span class={['min-w-0', chips.length > 0 && 'max-w-max flex-1']} data-fade {@attach clipFade}
         >{#if named}<span class={line.join === 'apart' ? 'ml-1.5 text-muted-foreground/45' : tone(entry)}>{@render inline(named)}</span
           >{/if}{#if line.detail}<span class="text-muted-foreground/70">{named ? ' ' : ''}{@render inline(line.detail)}</span
           >{/if}{#if said}<span class="text-muted-foreground/55">{line.detail ? ' — ' : named ? ' ' : ''}{@render inline(said)}</span
