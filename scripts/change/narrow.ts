@@ -1,8 +1,40 @@
+import { createHash } from 'node:crypto';
 import type { Coverage, Covered } from './coverage.ts';
 import { acts, editOf, script, type Edit } from './edits.ts';
 import { sourceFile, testFile, type Graph } from './graph.ts';
 
 export type Verdict = { readonly keep: boolean; readonly why: string };
+
+export class Listings {
+  private readonly sorted: readonly string[];
+  private readonly stamps = new Map<string, string>();
+
+  constructor(private readonly graph: Graph) {
+    this.sorted = [...graph.files].sort();
+  }
+
+  stamp(path: string): string {
+    let stamp = this.stamps.get(path);
+    if (stamp === undefined) {
+      if (this.graph.files.has(path)) stamp = this.graph.stamp(path);
+      else {
+        const prefix = `${path}/`;
+        let low = 0;
+        let high = this.sorted.length;
+        while (low < high) {
+          const middle = (low + high) >> 1;
+          if (this.sorted[middle]! < prefix) low = middle + 1;
+          else high = middle;
+        }
+        const below: string[] = [];
+        for (let at = low; at < this.sorted.length && this.sorted[at]!.startsWith(prefix); at++) below.push(this.sorted[at]!);
+        stamp = below.length === 0 ? 'missing' : `dir:${createHash('sha256').update(below.join('\0')).digest('hex')}`;
+      }
+      this.stamps.set(path, stamp);
+    }
+    return stamp;
+  }
+}
 
 export class Narrowing {
   private readonly closures = new Map<string, ReadonlySet<string>>();
@@ -11,11 +43,14 @@ export class Narrowing {
   private readonly edits = new Map<string, Edit>();
   private readonly acting = new Map<string, boolean>();
   private readonly ranges = new Map<string, readonly (readonly [number, number])[]>();
+  private readonly listings: Listings;
 
   constructor(
     private readonly graph: Graph,
     private readonly coverage: Coverage,
-  ) {}
+  ) {
+    this.listings = new Listings(graph);
+  }
 
   private current(path: string): string | undefined {
     return this.graph.files.has(path) ? this.graph.text(path) : undefined;
@@ -115,6 +150,9 @@ export class Narrowing {
 
   private within(test: string, covered: Covered, reached: readonly string[]): Verdict | undefined {
     for (const path of reached) if (!script(path)) return { keep: true, why: `${path} is not a JS or TS source` };
+    for (const path of reached)
+      for (const read of covered.read.keys())
+        if (path === read || path.startsWith(`${read}/`)) return { keep: true, why: `${path} is read as data by this file` };
     for (const path of reached) if (this.offThread(test).has(path)) return { keep: true, why: `${path} runs in a Worker this file starts` };
     if (reached.length > 0 && covered.opaque.length > 0)
       return { keep: true, why: `a child process ran ${covered.opaque[0]}, which the map cannot see into` };
@@ -138,6 +176,9 @@ export class Narrowing {
       if (hit === undefined) continue;
       return named.has(path) ? { keep: true, why: `${path} ${hit}` } : { keep: true, why: `stale coverage map: ${path} ${hit}` };
     }
+    for (const [path, stamp] of covered.read)
+      if (this.listings.stamp(path) !== stamp)
+        return { keep: true, why: `stale coverage map: ${path}, which this file reads as data, changed` };
     for (const [path, { stamp }] of covered.loaded)
       if (covered.closure.has(path) && !now.has(path) && this.acts(path, this.coverage.text(stamp)))
         return { keep: true, why: `${path} left the import closure and acted at load` };

@@ -160,11 +160,16 @@ test('a coverage map drops only the candidates whose executed code and load the 
       "import { expect, test } from 'bun:test'; import { LIMIT } from './lib.ts'; import './other.ts'; test('reads', () => expect(LIMIT).toBe(3));";
     writeFileSync(join(checkout, 'lib.ts'), lib);
     writeFileSync(join(checkout, 'other.ts'), other);
+    writeFileSync(join(checkout, 'wraps.ts'), "import { rare } from './other.ts';\nexport const twice = (x: number) => rare(x);\n");
     writeFileSync(
       join(checkout, 'calls.test.ts'),
-      "import { expect, test } from 'bun:test'; import { used } from './lib.ts'; import './other.ts'; test('calls', () => expect(used(1)).toBe(2));",
+      "import { expect, test } from 'bun:test'; import { used } from './lib.ts'; import './wraps.ts'; test('calls', () => expect(used(1)).toBe(2));",
     );
     writeFileSync(join(checkout, 'reads.test.ts'), reads);
+    writeFileSync(
+      join(checkout, 'text.test.ts'),
+      "import { expect, test } from 'bun:test'; import { readFileSync } from 'node:fs'; import './wraps.ts'; test('text', () => expect(readFileSync(new URL('./other.ts', import.meta.url), 'utf8')).not.toContain('import'));",
+    );
     const mapped = await ended(Bun.spawn(['bun', join(import.meta.dir, 'map.ts'), '--root', checkout], { stdout: 'pipe', stderr: 'pipe' }));
     expect(mapped.code, mapped.stdout + mapped.stderr).toBe(0);
     const plan = async (...changed: string[]) => {
@@ -179,7 +184,7 @@ test('a coverage map drops only the candidates whose executed code and load the 
     writeFileSync(join(checkout, 'lib.ts'), lib.replace('x + 1', 'x + 2 - 1'));
     writeFileSync(join(checkout, 'other.ts'), other.replace('x * 2', 'x * 3'));
     expect(await plan('lib.ts')).toEqual({ selected: ['calls.test.ts'], dropped: ['reads.test.ts'] });
-    expect(await plan('other.ts')).toEqual({ selected: ['calls.test.ts'], dropped: ['reads.test.ts'] });
+    expect(await plan('other.ts')).toEqual({ selected: ['calls.test.ts', 'text.test.ts'], dropped: ['reads.test.ts'] });
     writeFileSync(join(checkout, 'lib.ts'), `// the limit\n${lib.replace(': number = 3', ': 3 | 4 = 3')}`);
     writeFileSync(join(checkout, 'other.ts'), other);
     expect(await plan('lib.ts')).toEqual({ selected: [], dropped: ['calls.test.ts', 'reads.test.ts'] });
@@ -187,6 +192,12 @@ test('a coverage map drops only the candidates whose executed code and load the 
     expect(await plan('lib.ts')).toEqual(both);
     writeFileSync(join(checkout, 'lib.ts'), lib.replace('  1,\n', '  1,\n  2,\n'));
     expect(await plan('lib.ts')).toEqual(both);
+    writeFileSync(join(checkout, 'lib.ts'), lib);
+    writeFileSync(join(checkout, 'other.ts'), 'export const spare = 1;\n');
+    expect(await plan('other.ts')).toEqual({ selected: ['calls.test.ts', 'reads.test.ts', 'text.test.ts'], dropped: [] });
+    writeFileSync(join(checkout, 'other.ts'), `import './lib.ts';\n${other}`);
+    expect(await plan('other.ts')).toEqual({ selected: ['text.test.ts'], dropped: ['calls.test.ts', 'reads.test.ts'] });
+    writeFileSync(join(checkout, 'other.ts'), other);
     writeFileSync(join(checkout, 'reads.test.ts'), reads.replace("import './other.ts';", "import { used } from './lib.ts'; used(0);"));
     writeFileSync(join(checkout, 'lib.ts'), lib.replace('x + 1', 'x + 2 - 1'));
     expect(await plan('lib.ts')).toEqual(both);

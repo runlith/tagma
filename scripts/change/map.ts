@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, wr
 import { join, relative, resolve } from 'node:path';
 import { Batch, Coverage, rangesOf, type Loaded } from './coverage.ts';
 import { sourceFile, testFile } from './graph.ts';
-import { Narrowing } from './narrow.ts';
+import { Listings, Narrowing } from './narrow.ts';
 import { scopeOf } from './scope.ts';
 import { budgetOf, coresOf, memoryOf } from '@runlith/testbed/budget';
 import type { FileRow, Row } from '@runlith/testbed/ledger';
@@ -55,18 +55,20 @@ const cli = existsSync(join(root, 'packages/testbed/src/cli.ts'))
   ? join(root, 'packages/testbed/src/cli.ts')
   : join(TOOLKIT, 'packages/testbed/src/cli.ts');
 const preload = join(TOOLKIT, 'scripts/change/testing/spawned.ts');
+const trace = join(TOOLKIT, 'scripts/change/testing/trace.ts');
+const listings = new Listings(graph);
 const statOf = (path: string): string | undefined => {
   const info = statSync(join(root, path), { throwIfNoEntry: false });
   return info === undefined ? undefined : `${info.mtimeMs}:${info.size}`;
 };
-const read = new Map<string, { readonly stat: string; readonly stamp: string; readonly text: string }>();
+const texts = new Map<string, { readonly stat: string; readonly stamp: string; readonly text: string }>();
 const textOf = (path: string, stat: string): { readonly stamp: string; readonly text: string } | undefined => {
-  const held = read.get(path);
+  const held = texts.get(path);
   if (held?.stat === stat) return held;
   const text = readFileSync(join(root, path), 'utf8');
   if (statOf(path) !== stat) return undefined;
   const fresh = { stat, stamp: createHash('sha256').update(text).digest('hex'), text };
-  read.set(path, fresh);
+  texts.set(path, fresh);
   return fresh;
 };
 const lines = (path: string): string[] => (existsSync(path) ? readFileSync(path, 'utf8').split('\n').filter(Boolean) : []);
@@ -86,7 +88,8 @@ const before = new Map<
   string,
   { readonly at: number; readonly closure: ReadonlySet<string>; readonly stats: ReadonlyMap<string, string | undefined> }
 >();
-const batch = new Batch();
+const FLUSH = 100;
+let batch = new Batch();
 let mapped = 0;
 let cpu = 0;
 let failed = 0;
@@ -96,6 +99,16 @@ const jobs = wanted.map(({ file }, at) => {
   const pkg = graph.package(file);
   const cwd = join(root, pkg.dir);
   const dir = join(run, String(at));
+  writeFileSync(
+    `${dir}.audit.json`,
+    JSON.stringify({
+      root: real,
+      report: `${dir}.audit.jsonl`,
+      runner: 'bun',
+      importers: [],
+      entries: [{ file, packages: [], files: [] }],
+    }),
+  );
   return {
     id: String(at),
     cwd,
@@ -111,12 +124,14 @@ const jobs = wanted.map(({ file }, at) => {
         '--coverage-reporter=lcov',
         `--coverage-dir=${dir}`,
         `--preload=${preload}`,
+        `--preload=${trace}`,
         `./${relative(cwd, join(root, file))}`,
       ],
     ],
     need: 1,
     env: {
       ...process.env,
+      RUNLITH_CHANGE_AUDIT: `${dir}.audit.json`,
       RUNLITH_TEST_REPORT: `${dir}.jsonl`,
       RUNLITH_CHANGE_SPAWNED: `${dir}.spawned`,
       RUNLITH_CHANGE_SPAWNED_ROOT: real,
@@ -146,20 +161,37 @@ const settle = (file: string, job: (typeof jobs)[number], exit: number, output: 
   }
   const start = before.get(job.id)!;
   const loaded = new Map<string, Loaded>();
+  let moved: string | undefined;
   let current: string | undefined;
   let executed: number[] = [];
-  const hold = (path: string, lines: (text: string) => string): string | undefined => {
+  const steady = (path: string): { readonly stamp: string; readonly text: string } | undefined => {
     const stat = statOf(path);
     const held = start.stats.has(path)
       ? start.stats.get(path) === stat
       : (statSync(join(root, path), { throwIfNoEntry: false })?.ctimeMs ?? Infinity) < start.at;
-    const text = stat === undefined || !held ? undefined : textOf(path, stat);
+    return stat === undefined || !held ? undefined : textOf(path, stat);
+  };
+  const hold = (path: string, lines: (text: string) => string): string | undefined => {
+    const text = steady(path);
     if (text === undefined) return `${path} changed during the run`;
     coverage.keep(text.stamp, text.text);
     loaded.set(path, { stamp: text.stamp, lines: lines(text.text) });
     return undefined;
   };
-  let moved: string | undefined;
+  const read = new Map<string, string>();
+  for (const line of new Set(lines(`${dir}.audit.jsonl`))) {
+    const row = JSON.parse(line) as { readonly type: string; readonly path?: string };
+    const path = row.type !== 'input' || row.path === undefined ? '..' : relative(real, row.path);
+    if (moved !== undefined || path === '' || path.startsWith('..') || path.includes('node_modules/') || read.has(path)) continue;
+    if (!graph.files.has(path)) {
+      const listing = listings.stamp(path);
+      if (listing !== 'missing') read.set(path, listing);
+      continue;
+    }
+    const text = steady(path);
+    if (text === undefined) moved = `${path} changed during the run`;
+    else read.set(path, text.stamp);
+  }
   for (const line of lines(join(dir, 'lcov.info'))) {
     if (moved !== undefined) break;
     if (line.startsWith('SF:')) {
@@ -211,7 +243,12 @@ const settle = (file: string, job: (typeof jobs)[number], exit: number, output: 
     mains: [...mains].sort(),
     bundled,
     opaque: [...opaque].sort(),
+    read,
   });
+  if (batch.size >= FLUSH) {
+    coverage.record(batch);
+    batch = new Batch();
+  }
   const children = mains.size + opaque.size + (bundled.size === 0 ? 0 : 1);
   return `mapped ${loaded.size} loaded sources${children === 0 ? '' : `, child entries: ${mains.size} in the checkout, ${bundled.size} bundled sources, ${opaque.size} opaque`}`;
 };

@@ -320,6 +320,12 @@ type Records = {
   readonly stars: readonly string[];
 };
 
+const runtime = (declaration: Node): boolean =>
+  !['TSTypeAliasDeclaration', 'TSInterfaceDeclaration', 'TSDeclareFunction'].includes(declaration.type) &&
+  declaration['declare'] !== true &&
+  !(declaration.type === 'TSEnumDeclaration' && declaration['const'] === true) &&
+  !(declaration.type === 'TSModuleDeclaration' && declaration['declare'] === true);
+
 const recordsOf = (source: Source): Records => {
   const imports = new Map<string, string>();
   const exports = new Map<string, string>();
@@ -334,9 +340,19 @@ const recordsOf = (source: Source): Records => {
           imports.set(text(child(one['local'])), `${from}\0${one.type === 'ImportSpecifier' ? text(child(one['imported'])) : one.type}`);
     if (statement.type === 'ExportAllDeclaration' && statement['exportKind'] !== 'type')
       stars.push(`${from}\0${text(child(statement['exported']))}`);
-    if (statement.type === 'ExportNamedDeclaration' && child(statement['declaration']) === undefined && statement['exportKind'] !== 'type')
+    const declaration = child(statement['declaration']);
+    if (statement.type === 'ExportNamedDeclaration' && declaration === undefined && statement['exportKind'] !== 'type')
       for (const one of children(statement['specifiers']))
         if (one['exportKind'] !== 'type') exports.set(text(child(one['exported'])), `${from}\0${text(child(one['local']))}`);
+    if (
+      statement.type === 'ExportNamedDeclaration' &&
+      declaration !== undefined &&
+      statement['exportKind'] !== 'type' &&
+      runtime(declaration)
+    )
+      for (const name of declaredBy(declaration)) exports.set(name, `\0${name}`);
+    if (statement.type === 'ExportDefaultDeclaration' && (declaration === undefined || runtime(declaration)))
+      exports.set('default', '\0default');
   }
   return { imports, exports, stars: stars.sort() };
 };
@@ -483,6 +499,7 @@ export const editOf = (path: string, before: string, after: string | undefined):
   const oldBound = boundOf(old);
   const nextBound = boundOf(next);
   const spans: Span[] = [];
+  const gone = new Set<Node>();
   for (const hunk of hunks) {
     const at = hunk.a + 1;
     const [from, to] = spanOf(old, hunk.a, hunk.aEnd);
@@ -498,7 +515,12 @@ export const editOf = (path: string, before: string, after: string | undefined):
       for (const statement of overlapping(old, from, to)) {
         if (record(statement)) continue;
         if (acting(statement, oldBound)) return { kind: 'load', at, why: `a top-level ${statement.type} acts at load` };
-        spans.push({ from: lineAt(old.starts, statement.start), to: lineAt(old.starts, statement.end), at });
+        const names = declaredBy(statement.type.startsWith('Export') ? (child(statement['declaration']) ?? statement) : statement);
+        const removed = from <= statement.start && statement.end <= to && !names.some((name) => nextBound.has(name));
+        const dangling = removed ? names.find((name) => mentions(newCode, name)) : undefined;
+        if (dangling !== undefined) return { kind: 'load', at, why: `the top-level ${dangling} is gone while the module still names it` };
+        if (removed) gone.add(statement);
+        else spans.push({ from: lineAt(old.starts, statement.start), to: lineAt(old.starts, statement.end), at });
       }
     if (nextContext !== undefined) {
       const header = oldOf.get(nextContext.first);
@@ -516,7 +538,11 @@ export const editOf = (path: string, before: string, after: string | undefined):
         if (shadow !== undefined) return { kind: 'load', at, why: `the new top-level ${shadow} shadows a name the module already uses` };
       }
     for (let line = hunk.a + 1; line <= hunk.aEnd; line++)
-      if (overlapping(old, old.starts[line - 1]!, old.starts[line - 1]! + old.lines[line - 1]!.length).every((one) => !record(one)))
+      if (
+        overlapping(old, old.starts[line - 1]!, old.starts[line - 1]! + old.lines[line - 1]!.length).some(
+          (one) => !record(one) && !gone.has(one),
+        )
+      )
         spans.push({ from: line, to: line, at: line });
   }
   return spans.length === 0 ? { kind: 'inert' } : { kind: 'lines', spans };

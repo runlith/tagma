@@ -12,6 +12,7 @@ export type Covered = {
   readonly mains: readonly string[];
   readonly bundled: ReadonlySet<string>;
   readonly opaque: readonly string[];
+  readonly read: ReadonlyMap<string, string>;
 };
 type Encoded = {
   readonly run: string;
@@ -22,6 +23,7 @@ type Encoded = {
   readonly lines: readonly number[];
   readonly mains: readonly string[];
   readonly opaque: readonly string[];
+  readonly read: readonly (readonly [number, string])[];
 };
 type Delta = {
   readonly paths: readonly string[];
@@ -34,7 +36,12 @@ const code = new Bun.Transpiler({ loader: 'ts', target: 'bun' });
 const VERSION = createHash('sha256')
   .update(Bun.version)
   .update(
-    [import.meta.path, join(import.meta.dir, 'map.ts'), join(import.meta.dir, 'testing/spawned.ts')]
+    [
+      import.meta.path,
+      join(import.meta.dir, 'map.ts'),
+      join(import.meta.dir, 'testing/spawned.ts'),
+      join(import.meta.dir, 'testing/trace.ts'),
+    ]
       .map((path) => code.transformSync(readFileSync(path, 'utf8')))
       .join('\0'),
   )
@@ -74,6 +81,7 @@ type Held = {
   readonly lines: Int32Array;
   readonly mains: readonly string[];
   readonly opaque: readonly string[];
+  readonly read: readonly (readonly [number, string])[];
 };
 
 export class Batch {
@@ -124,6 +132,7 @@ export class Batch {
       lines: Int32Array.from(loaded, ([, lines]) => lines),
       mains: covered.mains,
       opaque: covered.opaque,
+      read: [...covered.read].map(([one, stamp]) => [path(one), stamp] as const),
     });
   }
 
@@ -142,6 +151,7 @@ export class Batch {
               lines: [...held.lines],
               mains: held.mains,
               opaque: held.opaque,
+              read: held.read,
             };
     return { paths: this.paths, sources: this.sources, variants: this.variants, tests };
   }
@@ -161,6 +171,7 @@ const decode = (delta: Delta, encoded: Encoded): Covered => {
     mains: encoded.mains,
     bundled: new Set(members(encoded.bundled).map((at) => delta.paths[at]!)),
     opaque: encoded.opaque,
+    read: new Map(encoded.read.map(([at, stamp]) => [delta.paths[at]!, stamp])),
   };
 };
 
