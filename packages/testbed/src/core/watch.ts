@@ -254,13 +254,14 @@ export const makeWatch = (options: WatchOptions) => {
 
   const suspects = (processes: Processes, token: string, root: string, mine: ReadonlySet<number>): Row[] => {
     const byPid = new Map(processes.rows([processes.facts(process.pid)?.pgid ?? process.pid, ...mine]).map((row) => [row.pid, row]));
+    const orphaned = (row: Row): boolean => row.ppid === 1 || (!byPid.has(row.ppid) && processes.facts(row.ppid) === undefined);
     if (since !== undefined) {
-      for (const row of processes.born(since)) if (row.ppid === 1 && !byPid.has(row.pid)) byPid.set(row.pid, row);
+      for (const row of processes.born(since)) if (!byPid.has(row.pid) && orphaned(row)) byPid.set(row.pid, row);
     }
     const table = [...byPid.values()];
     const under = (row: Row, set: ReadonlySet<number> | ReadonlyMap<number, unknown>): boolean => {
       for (let at: Row | undefined = row, steps = 0; at !== undefined && steps < 64; at = byPid.get(at.ppid), steps += 1) {
-        if (set.has(at.pid)) return true;
+        if (set.has(at.pid) || set.has(at.ppid)) return true;
       }
       return false;
     };
@@ -268,7 +269,7 @@ export const makeWatch = (options: WatchOptions) => {
     const unheld = table.filter((row) => row.pid !== process.pid && !row.zombie && !internal.has(row.pid) && !under(row, held));
     const owned = claimedBy(processes, unheld);
     const candidates = unheld.filter((row) => !under(row, owned));
-    const orphans = candidates.filter((row) => row.ppid === 1 && row.marks.length === 0).map((row) => row.pid);
+    const orphans = candidates.filter((row) => row.marks.length === 0 && orphaned(row)).map((row) => row.pid);
     const where = orphans.length === 0 ? new Map<number, string>() : processes.cwds(orphans);
     return candidates.filter(
       (row) =>
