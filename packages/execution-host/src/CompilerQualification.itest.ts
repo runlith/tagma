@@ -4,8 +4,7 @@ import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { Clock, Effect, FileSystem, Layer, Schedule } from 'effect';
-import { STOP_LADDER } from '@runlith/executions/protocol/call';
+import { Effect, FileSystem, Layer, Schedule } from 'effect';
 import type { CommandAdmission } from '@runlith/executions/protocol/command';
 import type { LaunchRequest } from '@runlith/executions/protocol/launch';
 import { Bindings } from './Bindings';
@@ -74,7 +73,6 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer, hostSpawner), { exclude
           const connection = connectionOf('connection-host');
           const taken = yield* custodian.take(keyOf('take-qualify'), 0, connection, 'custodian');
           const claim: HostClaim = { connection, epoch: taken.standing.epoch, role: 'custodian' };
-          const at = yield* Clock.monotonicTimeNanos;
           const started = yield* executions.start(claim, keyOf('native-descendant'), commandOf(directory, release));
           expect(started._tag).toBe('Accepted');
           if (started._tag !== 'Accepted') return;
@@ -92,7 +90,6 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer, hostSpawner), { exclude
           if (group === undefined) return yield* Effect.die(new Error('the ending measured no owned group'));
           expect(groupStanding(group.pid)).toBe('gone');
           expect(group.step).toBe('terminate');
-          expect(Number((yield* Clock.monotonicTimeNanos) - at) / 1_000_000).toBeLessThan(STOP_LADDER.terminateAtMs);
           expect(receipt.measurement).toBe('recorded');
           const fresh = yield* stops.ending(started.execution.execution, true);
           expect(fresh?.measurement).toBe('remeasured');

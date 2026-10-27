@@ -1,6 +1,7 @@
-import { expect, test } from 'bun:test';
+import { beforeAll, expect, test } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { promisify } from 'node:util';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,7 +13,13 @@ import { HelperAbsent } from '@runlith/audio/helper/channel';
 import { Deferred, Effect, FileSystem } from 'effect';
 import type { Socket } from 'effect/socket/Socket';
 
-const binary = fileURLToPath(new URL('../bin/audio-helper', import.meta.url));
+let binary: string;
+
+beforeAll(async () => {
+  const script = fileURLToPath(new URL('../scripts/build-native.mjs', import.meta.url));
+  const { stdout } = await promisify(execFile)('node', [script, '--print-path']);
+  binary = stdout.trim();
+});
 
 it.live('the built Swift helper conforms over a Unix socket', () =>
   Effect.gen(function* () {
