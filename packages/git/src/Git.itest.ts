@@ -1,10 +1,21 @@
 import { afterAll, expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, watch } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { Effect, Fiber } from 'effect';
 import { onGit, release, tempRepo, tempRoot } from './testing/fixture.js';
 
 afterAll(release);
+
+const marked = (path: string) =>
+  Effect.callback<void>((resume) => {
+    const ready = () => {
+      if (existsSync(path) && readFileSync(path, 'utf8').trim() !== '') resume(Effect.void);
+    };
+    const watcher = watch(dirname(path), ready);
+    watcher.on('error', (error) => resume(Effect.die(error)));
+    ready();
+    return Effect.sync(() => watcher.close());
+  });
 
 test('git drains stdout and stderr larger than the process pipe while it waits for exit', async () => {
   const repo = await tempRepo('git-output-');
@@ -52,13 +63,13 @@ test('a declared capture answers overflow rather than an answer that reads whole
 test('interrupting git terminates the child process group', async () => {
   const repo = await tempRepo('git-interrupt-');
   const marker = join(tempRoot('git-marker-'), 'child.pid');
-  const alias = `alias.block=!sh -c 'echo $$ > "$1"; exec sleep 30' -`;
+  const alias = `alias.block=!sh -c 'echo $$ > "$1"; exec tail -f /dev/null' -`;
 
   await onGit((git) =>
     Effect.scoped(
       Effect.gen(function* () {
         const child = yield* Effect.forkScoped(git.run(['-C', repo, '-c', alias, 'block', marker]));
-        while (!existsSync(marker)) yield* Effect.sleep('5 millis');
+        yield* marked(marker);
         yield* Fiber.interrupt(child);
       }),
     ),
@@ -72,13 +83,13 @@ test('interrupting git terminates the child process group', async () => {
 test('a child of git that ignores the terminate signal is dead once the interrupt returns', async () => {
   const repo = await tempRepo('git-stubborn-');
   const marker = join(tempRoot('git-stubborn-marker-'), 'child.pid');
-  const alias = `alias.stubborn=!sh -c 'trap "" TERM; sleep 30 & echo $! > "$1"; wait' -`;
+  const alias = `alias.stubborn=!sh -c 'trap "" TERM; echo $$ > "$1"; exec tail -f /dev/null' -`;
 
   await onGit((git) =>
     Effect.scoped(
       Effect.gen(function* () {
         const child = yield* Effect.forkScoped(git.run(['-C', repo, '-c', alias, 'stubborn', marker]));
-        while (!existsSync(marker) || readFileSync(marker, 'utf8').trim() === '') yield* Effect.sleep('5 millis');
+        yield* marked(marker);
         yield* Fiber.interrupt(child);
       }),
     ),
@@ -86,14 +97,13 @@ test('a child of git that ignores the terminate signal is dead once the interrup
 
   const pid = Number(readFileSync(marker, 'utf8').trim());
   expect(Number.isInteger(pid)).toBe(true);
-  const reaped = () => {
-    try {
-      process.kill(pid, 0);
-      return false;
-    } catch {
-      return true;
-    }
-  };
-  while (!reaped()) await Bun.sleep(5);
-  expect(reaped()).toBe(true);
+  const status = Bun.spawn(['/bin/ps', '-o', 'stat=', '-p', String(pid)], { stdout: 'pipe', stderr: 'pipe' });
+  const [standing, error, exit] = await Promise.all([
+    new Response(status.stdout).text(),
+    new Response(status.stderr).text(),
+    status.exited,
+  ]);
+  expect(error).toBe('');
+  expect([0, 1]).toContain(exit);
+  expect(standing.trim() === '' || standing.trim().startsWith('Z')).toBe(true);
 });

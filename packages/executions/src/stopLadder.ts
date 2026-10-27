@@ -1,4 +1,4 @@
-import { Effect, Fiber, Option } from 'effect';
+import { Clock, Effect, Fiber, Option } from 'effect';
 import { STOP_LADDER, type StopStep } from './protocol/call';
 import type { EndedAt } from './protocol/stop';
 
@@ -32,8 +32,6 @@ export type Climb = {
 const SETTLE_FIRST_MS = 5;
 const SETTLE_CAP_MS = 50;
 
-const settle = (ms: number) => Effect.promise(() => Bun.sleep(ms));
-
 export const climb = Effect.fn('executions.climb')(function* (
   first: Opening,
   aims: ReadonlyArray<LadderAim>,
@@ -51,7 +49,9 @@ export const climb = Effect.fn('executions.climb')(function* (
     return !standing;
   });
   const ladder = ladderFrom(first);
-  const started = performance.now();
+  const clock = yield* Clock.Clock;
+  const now = () => Number(clock.monotonicTimeNanosUnsafe()) / 1_000_000;
+  const started = now();
   const deadline = ladder[ladder.length - 1]![1];
   let opens: Fiber.Fiber<void> | undefined;
   let over = yield* read('unsignalled');
@@ -66,8 +66,8 @@ export const climb = Effect.fn('executions.climb')(function* (
     }
     if (index === 0) opens = yield* Effect.forkChild(opening);
     let wait = SETTLE_FIRST_MS;
-    while (!over && performance.now() - started < until) {
-      yield* settle(Math.max(1, Math.min(wait, until - (performance.now() - started))));
+    while (!over && now() - started < until) {
+      yield* Effect.sleep(Math.max(1, Math.min(wait, until - (now() - started))));
       wait = Math.min(wait * 2, SETTLE_CAP_MS);
       over = yield* read(step);
     }
@@ -76,6 +76,6 @@ export const climb = Effect.fn('executions.climb')(function* (
   const opened =
     opens === undefined
       ? false
-      : Option.isSome(yield* Fiber.await(opens).pipe(Effect.timeoutOption(Math.max(0, deadline - (performance.now() - started)))));
+      : Option.isSome(yield* Fiber.await(opens).pipe(Effect.timeoutOption(Math.max(0, deadline - (now() - started)))));
   return { steps, endedAt, opened };
 });

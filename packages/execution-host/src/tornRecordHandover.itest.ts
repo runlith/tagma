@@ -56,10 +56,10 @@ const claimed = Effect.fnUntraced(function* (name: string) {
 });
 
 const principal = principalOf('torn-handover');
-const PRINTS = 'printf first; sleep 0.3; printf torn; exec /usr/bin/perl -e "sleep while 1"';
+const PRINTS = 'printf first; read next; printf torn; exec tail -f /dev/null';
 const launchOf = (script: string): LaunchRequest => ({
   command: { program: '/bin/sh', args: ['-c', script], environment: [] },
-  transport: { _tag: 'pipes', stdin: 'ignore' },
+  transport: { _tag: 'pipes', stdin: 'pipe' },
   lifetime: 'held',
   purpose: 'command',
   target: { environment: 'e', namespace: 'n', cwd: '/tmp', dependencies: [] },
@@ -104,6 +104,24 @@ const handedOver = Effect.fnUntraced(function* (
     const claim = yield* claimed(`${prefix}leaving`);
     const started = yield* (yield* Executions).start(claim, keyOf(`${prefix}start`), launchOf(script));
     if (started._tag !== 'Started') return yield* Effect.die(new Error(`the command did not start: ${started._tag}`));
+    const records = yield* HostByteRecords;
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const reader = yield* records.openReader(started.execution.execution, 'stdout', byteOffset(0n));
+        yield* records.grant(started.execution.execution, reader, 5);
+        let first = '';
+        while (first.length < 5) {
+          if (!(yield* records.awaitBytes(started.execution.execution, reader)))
+            return yield* Effect.die(new Error('stdout ended before first'));
+          first += new TextDecoder().decode((yield* records.pull(started.execution.execution, reader)).bytes);
+        }
+        expect(first).toBe('first');
+      }),
+    );
+    const child = retained;
+    if (child?.channels._tag !== 'pipes' || child.channels.stdin === undefined)
+      return yield* Effect.die(new Error('the fixture has no stdin'));
+    expect(yield* child.channels.stdin.write(new TextEncoder().encode('next\n'))).toBe(5);
     yield* departing(started.execution.execution);
     const quiesced = yield* lifecycle.quiesce(claim, keyOf(`${prefix}quiesce`));
     if (quiesced._tag === 'Refused') return yield* Effect.die(new Error(`quiesce refused: ${quiesced.refusal._tag}`));

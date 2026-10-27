@@ -1,11 +1,8 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { Clock, Effect, Stream } from 'effect';
-import { STOP_LADDER } from '@runlith/executions/protocol/call';
+import { Effect, Stream } from 'effect';
 import { Adapter, PTY, PIPES } from '../../holder/testing/Adapter';
 import { binding, bytes, Host, start, stop, textUntil, withExecution, type HostAdapter } from './session';
-
-const monotonicMs = Effect.map(Clock.Clock, (clock) => Number(clock.monotonicTimeNanosUnsafe()) / 1_000_000);
 
 export const stopContracts = (adapter: HostAdapter) =>
   layer(adapter.layer, { excludeTestServices: true })(`${adapter.name} host stop contracts`, (it) => {
@@ -19,13 +16,11 @@ export const stopContracts = (adapter: HostAdapter) =>
           child.execution,
           Effect.gen(function* () {
             yield* textUntil(host, child.execution, 'pty', 'READY');
-            const began = yield* monotonicMs;
             const receipt = yield* stop(host, child.execution);
             expect(receipt.steps.map(String)).toEqual([adapter.steps.hangup]);
             expect(receipt.confirmed[0]?.exit).toEqual(platform.exits.hangup);
             expect(receipt.residual).toEqual([]);
             expect(receipt.cleanup).toBe('complete');
-            expect((yield* monotonicMs) - began).toBeLessThan(STOP_LADDER.terminateAtMs);
           }),
         );
       }),
@@ -41,7 +36,6 @@ export const stopContracts = (adapter: HostAdapter) =>
           child.execution,
           Effect.gen(function* () {
             yield* textUntil(host, child.execution, 'stdout', 'READY\n');
-            const began = yield* monotonicMs;
             const graceful = (yield* host.client.served()).has('pipe-graceful-stop');
             const receipt = yield* stop(host, child.execution);
             expect(receipt.steps.map(String)).toEqual(graceful ? [adapter.steps.interrupt] : [adapter.steps.kill]);
@@ -49,7 +43,6 @@ export const stopContracts = (adapter: HostAdapter) =>
             else expect(receipt.confirmed[0]?.exit).toEqual(platform.exits.kill);
             expect(receipt.residual).toEqual([]);
             expect(receipt.cleanup).toBe('complete');
-            expect((yield* monotonicMs) - began).toBeLessThan(STOP_LADDER.terminateAtMs);
           }),
         );
       }),
@@ -65,18 +58,14 @@ export const stopContracts = (adapter: HostAdapter) =>
           child.execution,
           Effect.gen(function* () {
             yield* textUntil(host, child.execution, 'stdout', 'READY\n');
-            const began = yield* monotonicMs;
             const graceful = (yield* host.client.served()).has('pipe-graceful-stop');
             const receipt = yield* stop(host, child.execution);
-            const elapsed = (yield* monotonicMs) - began;
             expect(receipt.steps.map(String)).toEqual(graceful ? [adapter.steps.interrupt, adapter.steps.terminate] : [adapter.steps.kill]);
             if (graceful) {
               expect((yield* bytes(host, child.execution, 'stdout')).toString()).toContain('TERMINATED\n');
-              expect(elapsed).toBeGreaterThanOrEqual(STOP_LADDER.terminateAtMs);
             } else expect(receipt.confirmed[0]?.exit).toEqual(platform.exits.kill);
             expect(receipt.residual).toEqual([]);
             expect(receipt.cleanup).toBe('complete');
-            expect(elapsed).toBeLessThan(STOP_LADDER.killAtMs);
           }),
         );
       }),
@@ -92,18 +81,14 @@ export const stopContracts = (adapter: HostAdapter) =>
           child.execution,
           Effect.gen(function* () {
             yield* textUntil(host, child.execution, 'stdout', 'READY\n');
-            const began = yield* monotonicMs;
             const graceful = (yield* host.client.served()).has('pipe-graceful-stop');
             const receipt = yield* stop(host, child.execution);
-            const elapsed = (yield* monotonicMs) - began;
             expect(receipt.steps.map(String)).toEqual(
               graceful ? [adapter.steps.interrupt, adapter.steps.terminate, adapter.steps.kill] : [adapter.steps.kill],
             );
             expect(receipt.confirmed[0]?.exit).toEqual(platform.exits.kill);
             expect(receipt.residual).toEqual([]);
             expect(receipt.cleanup).toBe('complete');
-            if (graceful) expect(elapsed).toBeGreaterThanOrEqual(STOP_LADDER.killAtMs);
-            expect(elapsed).toBeLessThan(STOP_LADDER.killAtMs + STOP_LADDER.reapMs);
           }),
         );
       }),

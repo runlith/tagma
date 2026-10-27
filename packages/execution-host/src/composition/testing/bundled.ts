@@ -59,6 +59,7 @@ export type Stand = {
   readonly output: () => string;
   readonly resumes: () => ReadonlyArray<string>;
   readonly custodyFound: () => ReadonlyArray<string>;
+  readonly endpointsFound: () => ReadonlyArray<string>;
   readonly dispose: () => Promise<void>;
 };
 
@@ -113,6 +114,16 @@ export const bundledStand = async (directory: string, executions: number): Promi
             : STORE_AHEAD;
       manifest = rewritten(root, manifest, host, new TextEncoder().encode(script));
     }
+    const host = manifest.parts.find((part) => part.role === 'host')!.path;
+    manifest = rewritten(
+      root,
+      manifest,
+      host,
+      new TextEncoder().encode(
+        `require('node:fs').appendFileSync(${JSON.stringify(join(directory, 'endpoints-found'))}, require('node:fs').existsSync(${JSON.stringify(registration.endpoint.path)}) ? 'named\\n' : 'absent\\n');\n` +
+          readFileSync(join(root, host), 'utf8'),
+      ),
+    );
     const boot = bootPath(directory, manifest.identity.digest);
     writeFileSync(
       boot,
@@ -277,6 +288,7 @@ export const bundledStand = async (directory: string, executions: number): Promi
       output: () => output,
       resumes: () => resumes,
       custodyFound: () => found,
+      endpointsFound: () => readFileSync(join(directory, 'endpoints-found'), 'utf8').trim().split('\n'),
       dispose: async () => {
         try {
           if (child.exitCode === null) await run(client.shutdown(operation()).pipe(Effect.ignore));

@@ -162,6 +162,7 @@ describe('a host whose logic changes twice, the second time with its holder', ()
     expect(stand.resumes()).toHaveLength(2);
     expect(stand.resumes()).not.toContain('Resumed');
     expect(stand.custodyFound()).toEqual(['free', 'free', 'free']);
+    expect(stand.endpointsFound()).toEqual(['absent', 'absent', 'absent']);
   });
 
   it('keeps the generation, the holder and every child with its pid under that holder', () => {
