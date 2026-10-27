@@ -143,8 +143,8 @@ export const cleanupWords = (cleanup: Cleanup): string | null =>
 
 export const outputFileWords = (file: OutputFile): string =>
   file.from === '0'
-    ? `Its whole output, stdout and stderr in the order printed, is in ${file.path}.`
-    : `Its output from byte ${file.from}, stdout and stderr in the order printed, is in ${file.path}; the ${file.from} bytes before it are gone.`;
+    ? `Its whole output, ${file.through} bytes of stdout and stderr in the order printed, is in ${file.path}.`
+    : `Its output from byte ${file.from} to byte ${file.through}, stdout and stderr in the order printed, is in ${file.path}; the ${file.from} bytes before it are gone.`;
 
 export const lifeEnded = (life: CommandLimit): string =>
   `Its life ran out (${lifeWords(life)}), so it was stopped. ${

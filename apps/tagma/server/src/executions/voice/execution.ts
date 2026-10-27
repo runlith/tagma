@@ -86,6 +86,8 @@ function* summaryLines(summary: ExecutionSummary, shown: Addressed): Generator<s
   for (const stream of summary.streams) {
     yield `${stream.stream}: bytes ${stream.retainedFrom}–${stream.durableThrough} retained, parsed through ${stream.parsedThrough}, ${stream.ending}`;
   }
+  if (summary.outputFile !== undefined)
+    yield `output: bytes ${summary.outputFile.from}–${summary.outputFile.through} kept in ${summary.outputFile.path}`;
   if (summary.grid !== undefined) yield `grid ${summary.grid.columns}×${summary.grid.rows}`;
   if (summary.input !== undefined)
     yield `input accepted through byte ${summary.input.acceptedThrough}${
