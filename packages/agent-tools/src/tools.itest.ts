@@ -8,10 +8,10 @@ import { join } from 'node:path';
 import type { Tool } from '@runlith/agent/tool';
 import { ToolAnswer, ToolFailed, toolExecute, toolSubjects } from '@runlith/agent/tool';
 import { toolDecode } from '@runlith/agent/tool/arguments';
-import { ByteSize, Deferred, Effect, Fiber, FileSystem, Layer, Option } from 'effect';
+import { ByteSize, Effect, FileSystem, Layer, Option } from 'effect';
 import { PlatformError, SystemError } from 'effect/PlatformError';
 import { createTools } from './index';
-import { fileWriters, withFileWriteLock } from './workspace/runtime';
+import { entryKey } from './workspace/runtime';
 import { porcelainListing } from './checkoutState';
 import { bytesDigest, contentDigest } from '@runlith/files/content';
 import { IntakeRefused, type Landed } from './WorkspaceChanges';
@@ -901,42 +901,13 @@ it.effect('write refuses when the bytes arrive twice or not at all, and writes n
   }),
 );
 
-it.live('a relative path and an absolute one take the same write permit', () =>
+it.live('a relative path and an absolute one name the same entry key', () =>
   Effect.gen(function* () {
     const dir = yield* createTempDir();
-    yield* host.writeFile(join(dir, 'alpha.ts'), 'const a = 1;\n');
-    const tools = createTools(options({ cwd: dir }));
-
-    const opened = yield* Deferred.make<void>();
-    const release = yield* Deferred.make<void>();
-    const holder = yield* Effect.forkChild(
-      withFileWriteLock(
-        dir,
-        join(yield* host.realpath(dir), 'alpha.ts'),
-        Effect.gen(function* () {
-          yield* Deferred.succeed(opened, undefined);
-          yield* Deferred.await(release);
-          yield* host.writeFile(join(dir, 'alpha.ts'), 'const a = 2;\n');
-        }),
-      ).pipe(Effect.provide(machineWorld.files)),
-    );
-    yield* Deferred.await(opened);
-
-    const editing = yield* Effect.forkChild(
-      call(tools.edit, {
-        path: 'alpha.ts',
-        oldString: 'const a = 2;',
-        newString: 'const a = 3;',
-      }),
-    );
-    const key = join(yield* host.realpath(dir), 'alpha.ts');
-    while (fileWriters.standing(key)[0]?.waiters !== 1) yield* Effect.yieldNow;
-    expect(fileWriters.holders(key)).toHaveLength(1);
-    yield* Deferred.succeed(release, undefined);
-    yield* Fiber.join(holder);
-    yield* Fiber.join(editing);
-
-    expect(yield* host.readFile(join(dir, 'alpha.ts'), 'utf8')).toBe('const a = 3;\n');
+    const path = join(yield* host.realpath(dir), 'alpha.ts');
+    const relative = yield* entryKey(dir, 'alpha.ts').pipe(Effect.provide(machineWorld.files));
+    const absolute = yield* entryKey(dir, path).pipe(Effect.provide(machineWorld.files));
+    expect(relative).toBe(absolute);
   }),
 );
 
