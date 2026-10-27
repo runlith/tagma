@@ -15,23 +15,22 @@ import type { CommandSignalSend } from './commandEndings.js';
 import type { NativeThreadState } from '../contract/service/state.js';
 import type { ThreadLookup } from '../contract/service/reads.js';
 
-export type IdleDelivery = (threadId: string) => Effect.Effect<'wake' | 'wait'>;
+export type IdleDelivery = (threadId: string) => Effect.Effect<'wake' | 'wake-completed' | 'wait'>;
 
 export const stayIdle: IdleDelivery = () => Effect.succeed('wait');
 
-export const wakeCompleted = (threads: ThreadLookup['Service']): IdleDelivery =>
+export const wakeUnlessStopped = (threads: ThreadLookup['Service']): IdleDelivery =>
   Effect.fnUntraced(
     function* (threadId) {
       const thread = yield* threads.summary(threadId);
-      if (thread === undefined || thread.archivedAt !== null) return 'wait' as const;
-      return thread.activeRun === null && thread.outcome?.status === 'completed' ? ('wake' as const) : ('wait' as const);
+      return thread === undefined || thread.archivedAt !== null ? ('wait' as const) : ('wake-completed' as const);
     },
     (work, threadId) =>
       Effect.catchCause(work, (cause) =>
-        Effect.logWarning('whether a notice may wake its idle thread could not be read; it waits for the next turn', {
+        Effect.logWarning('whether a notice is owed to an archived thread could not be read; its run state alone decides the wake', {
           threadId,
           reason: Cause.pretty(cause).split('\n', 1)[0],
-        }).pipe(Effect.as('wait' as const)),
+        }).pipe(Effect.as('wake-completed' as const)),
       ),
   );
 

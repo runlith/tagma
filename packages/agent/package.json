@@ -447,9 +447,9 @@
       "types": "./src/thread/conformance/hosting.ts",
       "default": "./src/thread/conformance/hosting.ts"
     },
-    "./thread/conformance/hostedCalls": {
-      "types": "./src/thread/conformance/hostedCalls.ts",
-      "default": "./src/thread/conformance/hostedCalls.ts"
+    "./thread/conformance/hostedWorld": {
+      "types": "./src/thread/conformance/hostedWorld.ts",
+      "default": "./src/thread/conformance/hostedWorld.ts"
     },
     "./thread/conformance/hostedTools": {
       "types": "./src/thread/conformance/hostedTools.ts",

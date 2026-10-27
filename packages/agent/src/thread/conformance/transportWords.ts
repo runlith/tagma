@@ -18,7 +18,44 @@ export type WordRig<R = never> = {
   reach(state: WordState): Effect.Effect<WordCase | Unreachable, unknown, Scope.Scope | R>;
 };
 
+export const ENDING_STATES = ['running', 'ending'] as const satisfies readonly WordState[];
+
+export type EndingCase = WordCase & {
+  end(id: string, text: string): Effect.Effect<unknown, unknown>;
+};
+
+export type EndingRig<R = never> = {
+  reach(state: WordState): Effect.Effect<EndingCase | Unreachable, unknown, Scope.Scope | R>;
+};
+
+export const ENDING_BEHAVIOR = { ifActive: 'deliver', ifIdle: 'wake-completed' } as const;
+
+export const endingSignal = (id: string, text: string) => ({ id, type: 'command-result', addressee: 'transport', text }) as const;
+
 const occurrences = (heard: string, word: string): number => heard.split(word).length - 1;
+
+export function describeTransportEndings<R>(
+  transport: string,
+  make: () => Effect.Effect<EndingRig<R>, unknown, Scope.Scope | R>,
+  test: Tester<Scope.Scope | R>,
+  states: readonly WordState[] = ENDING_STATES,
+): void {
+  describe(`${transport}: the ending of the agent's own work reaches it once, in the turn going or in the turn it opens`, () => {
+    for (const state of states)
+      test(
+        `an ending in the state ${state}`,
+        Effect.fnUntraced(function* () {
+          const rig = yield* make();
+          const reached = yield* rig.reach(state);
+          if ('unreachable' in reached) return;
+          const text = `ENDING-${state} words`;
+          yield* reached.during(Effect.asVoid(reached.end(`command:ending-${state}:1:call-1`, text)));
+          yield* reached.settle();
+          expect(occurrences(yield* reached.heard(), text)).toBe(1);
+        }),
+      );
+  });
+}
 
 export function describeTransportWords<R>(
   transport: string,

@@ -4,7 +4,7 @@ import { Deferred, Effect, Fiber } from 'effect';
 import { Message } from '@runlith/llm/schema/messages';
 import { threadToolSources } from '../ThreadPorts';
 import { openMemoryStorage } from '../conformance/memoryStorage';
-import { hosted } from '../conformance/hostedCalls';
+import { hosted } from '../conformance/hostedWorld';
 import { openedRun, OWNER, pump, startedTurn } from '../conformance/runLog/world';
 import { replyTurn, scriptedStep } from '../conformance/runLog/scripts';
 import { selectingCatalog, confirmingTurn, toolResultIds } from '../conformance/runLog/toolScripts';

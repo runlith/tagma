@@ -74,7 +74,7 @@ import { OwnWork } from './contract/service/ownWork.js';
 import { makeOwnWork } from './collaboration/ownWork.js';
 import type { CallAddress } from '@runlith/agent/callProgress';
 import { CUSTODY_NOTICE_PASS_MS, makeCustodyNotices, TERMINAL_CUSTODY_SIGNAL } from './collaboration/custodyNotices.js';
-import { commandNoticeTakeBack, commandSignalSend, stayIdle, wakeCompleted } from './collaboration/signals.js';
+import { commandNoticeTakeBack, commandSignalSend, stayIdle, wakeUnlessStopped } from './collaboration/signals.js';
 import { AGENT_IDLE_MS } from '@runlith/agent/callProgress';
 import { RECAP_MARGIN_MS, RECAP_WAIT_MS } from './contract/wire/rhythm.js';
 import { ThreadRecaps } from './contract/service/recaps.js';
@@ -329,13 +329,13 @@ export const threadsLayer = Layer.effectContext(
     });
     const mover = yield* makeThreadMover({ targets });
 
-    const delivery = yield* makeCommandDelivery({ send: commandSignalSend(threads, harness, wakeCompleted(threads)) });
+    const delivery = yield* makeCommandDelivery({ send: commandSignalSend(threads, harness, wakeUnlessStopped(threads)) });
     yield* Effect.forkScoped(delivery.attend());
     yield* Effect.forkScoped(Effect.asVoid(delivery.resume()));
     const owedRows = yield* makeOwedCallRows;
     const callEndings = yield* makeCallEndings({
       rows: owedRows,
-      send: commandSignalSend(threads, harness, wakeCompleted(threads), CALL_RESULT_SIGNAL),
+      send: commandSignalSend(threads, harness, wakeUnlessStopped(threads), CALL_RESULT_SIGNAL),
       ended: yield* Queue.unbounded<CallAddress>(),
       withdraw: (threadId, toolCallId, reason) => harness.runs.questions().withdraw(threadId, toolCallId, reason),
     });

@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { Effect } from 'effect';
 import { describeTransportStops } from '@runlith/agent/thread/conformance/transportStops';
 import { describeTransportRestarts } from '@runlith/agent/thread/conformance/transportRestarts';
-import { describeTransportWords } from '@runlith/agent/thread/conformance/transportWords';
+import { describeTransportEndings, describeTransportWords } from '@runlith/agent/thread/conformance/transportWords';
 import { claudeAgent } from './protocolAgents.js';
 import { LIBRARY, ProtocolRig, protocolFixture } from './protocolRig.js';
 import { protocolStopRig } from './protocolStopRig.js';
@@ -29,6 +29,11 @@ describe.skipIf(!existsSync(LIBRARY))('the transport conformance set on ACP with
       () => Effect.map(ProtocolRig, (rig) => protocolWordRig(rig, claudeAgent(rig))),
       it.effect,
       ['running'],
+    );
+    describeTransportEndings(
+      'acp (Claude runner)',
+      () => Effect.map(ProtocolRig, (rig) => protocolWordRig(rig, claudeAgent(rig), 'endings')),
+      it.effect,
     );
   });
 });

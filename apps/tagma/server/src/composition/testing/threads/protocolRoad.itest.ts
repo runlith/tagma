@@ -9,7 +9,7 @@ import { activityRecording } from '@runlith/activity/testing';
 import type { ThreadEntry, ThreadQuestionEntry } from '@runlith/agent/transcript/entries';
 import { describeTransportStops } from '@runlith/agent/thread/conformance/transportStops';
 import { describeTransportRestarts } from '@runlith/agent/thread/conformance/transportRestarts';
-import { describeTransportWords } from '@runlith/agent/thread/conformance/transportWords';
+import { describeTransportEndings, describeTransportWords } from '@runlith/agent/thread/conformance/transportWords';
 import { runEnd } from './protocolEnds.js';
 import { heard, LIBRARY, ProtocolRig, protocolFixture, scenario, until as readUntil, words, type Said } from './protocolRig.js';
 import { scriptedAgent } from './protocolAgents.js';
@@ -71,6 +71,11 @@ describe.skipIf(!existsSync(LIBRARY))('ACP adapter boundaries over one execution
       () => Effect.map(ProtocolRig, (rig) => protocolWordRig(rig, scriptedAgent(rig))),
       it.effect,
       ['running'],
+    );
+    describeTransportEndings(
+      'acp (scripted agent)',
+      () => Effect.map(ProtocolRig, (rig) => protocolWordRig(rig, scriptedAgent(rig), 'endings')),
+      it.effect,
     );
 
     it.effect('a live session copy answers through the ACP extension and is released when its process exits', () =>

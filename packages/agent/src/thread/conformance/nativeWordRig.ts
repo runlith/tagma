@@ -2,18 +2,19 @@ import { Effect } from 'effect';
 import { hold, opened, quiet, started } from './compactionWorld';
 import type { ThreadStorageFactory } from './storagePort';
 import type { Unreachable } from './transportStops';
-import type { WordCase, WordRig, WordState } from './transportWords';
+import { ENDING_BEHAVIOR, endingSignal, type EndingCase, type EndingRig, type WordState } from './transportWords';
 
 const unreached = (unreachable: string): Unreachable => ({ unreachable });
 
-export const nativeWordRig = <TTx, TWrite extends TTx = TTx, R = never>(open: ThreadStorageFactory<TTx, TWrite, R>): WordRig<R> => ({
+export const nativeWordRig = <TTx, TWrite extends TTx = TTx, R = never>(open: ThreadStorageFactory<TTx, TWrite, R>): EndingRig<R> => ({
   reach: Effect.fnUntraced(function* (state: WordState) {
     if (state === 'reopening') return unreached('a native thread holds no vendor session to reopen');
     const resting = new Set<string>();
     const { world, threadId, handle } = yield* opened(open, { resting });
     const answering = hold();
-    const wordCase = (during: WordCase['during'], woken: Effect.Effect<unknown, unknown> = Effect.void): WordCase => ({
+    const wordCase = (during: EndingCase['during'], woken: Effect.Effect<unknown, unknown> = Effect.void): EndingCase => ({
       send: (text) => handle.send(text),
+      end: (id, text) => handle.sendSignal(endingSignal(id, text), ENDING_BEHAVIOR),
       during,
       settle: Effect.fnUntraced(function* () {
         answering.release();

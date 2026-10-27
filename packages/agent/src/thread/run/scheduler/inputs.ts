@@ -67,7 +67,7 @@ export type ThreadSignalCondition<TWrite = ThreadWriteTx> = (tx: TWrite) => Effe
 
 export type ThreadSignalBehavior<TWrite = ThreadWriteTx> = {
   ifActive?: 'deliver' | 'persist' | 'discard';
-  ifIdle?: 'wake' | 'wait' | 'persist' | 'discard';
+  ifIdle?: 'wake' | 'wake-completed' | 'wait' | 'persist' | 'discard';
   condition?: ThreadSignalCondition<TWrite>;
 };
 
@@ -136,6 +136,9 @@ function sameAcceptance(standing: ThreadInboxItem, sent: ThreadInboxItemValues):
 }
 function waitingBeside(pending: readonly ThreadInboxItem[], itemId: string): readonly ThreadInboxItem[] {
   return pending.filter((each) => each.id !== itemId && each.state === 'queued' && waitsForTurn(each));
+}
+function waitingOf(item: ThreadInboxReadable): ThreadInboxReadable {
+  return item.kind === 'signal' ? { ...item, body: { ...item.body, waits: true } } : item;
 }
 function settledAs(item: ThreadInboxItem): ThreadSignalResult {
   if (item.deliveredToRunId === null) return { status: 'persisted' };
@@ -344,19 +347,24 @@ export const makeInputs = Effect.fnUntraced(function* ({
     if (onActive === 'discard') return { status: 'discarded' } satisfies ThreadSignalResult;
     if (onActive === 'deliver') {
       const delivery = yield* runInbox.enqueue({ id: activeRun.id, threadId: thread.id }, item, condition);
+      const handed = (status: 'delivered' | 'queued') =>
+        Effect.andThen(
+          snapshots.publish(thread.id),
+          Effect.as(
+            activeRun.kind === 'turn'
+              ? handover.deliver(thread, activeRun, [{ ...item, state: 'queued', deliveredToRunId: null }])
+              : Effect.void,
+            { status, runId: activeRun.id } satisfies ThreadSignalResult,
+          ),
+        );
       switch (delivery) {
         case 'declined':
           return { status: 'declined' } satisfies ThreadSignalResult;
         case 'already-read':
           return { status: 'delivered', runId: activeRun.id } satisfies ThreadSignalResult;
         case 'delivered':
-          yield* snapshots.publish(thread.id);
-          yield* handover.deliver(thread, activeRun, [{ ...item, state: 'queued', deliveredToRunId: null }]);
-          return { status: 'delivered', runId: activeRun.id } satisfies ThreadSignalResult;
         case 'queued':
-          yield* snapshots.publish(thread.id);
-          yield* handover.deliver(thread, activeRun, [{ ...item, state: 'queued', deliveredToRunId: null }]);
-          return { status: 'queued', runId: activeRun.id } satisfies ThreadSignalResult;
+          return yield* handed(delivery);
         case 'not-running':
           return yield* send(thread, item, behavior);
       }
@@ -539,7 +547,21 @@ export const makeInputs = Effect.fnUntraced(function* ({
     if (onIdle === 'discard') return Effect.succeed({ status: 'discarded' });
     if (onIdle === 'persist') return persist(thread, false, item, condition);
     if (onIdle === 'wait') return wait(thread, item, behavior, condition);
-    return wakeItem(thread, item, condition).pipe(
+    if (onIdle === 'wake-completed')
+      return Effect.flatMap(restsCompleted(thread.id), (completed) =>
+        completed ? woken(thread, item, behavior, condition) : wait(thread, item, behavior, condition, waitingOf(item)),
+      );
+    return woken(thread, item, behavior, condition);
+  };
+  const restsCompleted = (threadId: string): Effect.Effect<boolean, ThreadBorderFailed> =>
+    Effect.map(ledger.latestRun(threadId), (latest) => latest !== null && (latest.kind === 'keep-warm' || latest.status === 'completed'));
+  const woken = (
+    thread: ThreadMetadataRow,
+    item: ThreadInboxReadable,
+    behavior: ThreadSignalBehavior,
+    condition: ThreadSignalCondition | undefined,
+  ): Effect.Effect<ThreadSignalResult, ThreadBorderFailed> =>
+    wakeItem(thread, item, condition).pipe(
       Effect.matchEffect({
         onSuccess: (woke): Effect.Effect<ThreadSignalResult, ThreadBorderFailed> => {
           if (woke.status === 'woken') return Effect.succeed({ status: 'woken', runId: woke.runId });
@@ -551,7 +573,6 @@ export const makeInputs = Effect.fnUntraced(function* ({
           threadCauseOf(failure) instanceof ThreadRunConflictError ? send(thread, item, behavior) : Effect.fail(failure),
       }),
     );
-  };
   const persist = Effect.fnUntraced(function* (
     thread: ThreadMetadataRow,
     beside: boolean,
@@ -608,12 +629,13 @@ export const makeInputs = Effect.fnUntraced(function* ({
     item: ThreadInboxReadable,
     behavior: ThreadSignalBehavior,
     condition: ThreadSignalCondition | undefined,
+    stored: ThreadInboxReadable = item,
   ): Effect.fn.Return<ThreadSignalResult, ThreadBorderFailed> {
     const kept = yield* kernel.store.transaction(
       Effect.fnUntraced(function* (tx) {
         if ((yield* ledger.latestRun(thread.id, ['running'], tx)) !== null) return 'running' as const;
         if (condition !== undefined && !(yield* condition(tx))) return null;
-        return (yield* inbox.put(item, tx)).item;
+        return (yield* inbox.put(stored, tx)).item;
       }),
     );
     if (kept === 'running') return yield* send(thread, item, behavior);

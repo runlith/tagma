@@ -5,7 +5,7 @@ import { agentDeferredTools } from '../../agent/AgentDeferredTools';
 import { Tool } from '../../agent/tool';
 import type { ToolCatalog } from '../../agent/ToolCatalog';
 import { ASKS_NEVER } from '../../permissions/vocabulary';
-import { hosted } from './hostedCalls';
+import { hosted } from './hostedWorld';
 import type { ThreadStorageFactory } from './storagePort';
 export function describeHostedTools<TTx, TWrite extends TTx = TTx, R = never>(
   name: string,

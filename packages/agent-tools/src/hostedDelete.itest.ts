@@ -4,7 +4,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Effect, FileSystem } from 'effect';
 import { TestClock } from 'effect/testing';
 import { join } from 'node:path';
-import { hosted } from '@runlith/agent/thread/conformance/hostedCalls';
+import { hosted } from '@runlith/agent/thread/conformance/hostedWorld';
 import { openMemoryStorage } from '@runlith/agent/thread/conformance/memoryStorage';
 import { createDeleteTool } from './delete';
 import { options, recorder } from './testing/toolHarness';

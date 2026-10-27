@@ -129,7 +129,7 @@ import {
   commandNoticeTakeBack as commandNoticeTakeBackOver,
   commandSignalSend as commandSignalSendOver,
   stayIdle as stayIdleOver,
-  wakeCompleted as wakeCompletedOver,
+  wakeUnlessStopped as wakeUnlessStoppedOver,
 } from '../collaboration/signals.js';
 import type { IdleDelivery } from '../collaboration/signals.js';
 import { makeOwnWork } from '../collaboration/ownWork.js';
@@ -493,8 +493,8 @@ export const commandSignalSend = (...input: Parameters<typeof commandSignalSendO
 
 export const stayIdle = (...input: Parameters<typeof stayIdleOver>): ReturnType<typeof stayIdleOver> => stayIdleOver(...input);
 
-export const wakeCompleted = (...input: Parameters<typeof wakeCompletedOver>): ReturnType<typeof wakeCompletedOver> =>
-  wakeCompletedOver(...input);
+export const wakeUnlessStopped = (...input: Parameters<typeof wakeUnlessStoppedOver>): ReturnType<typeof wakeUnlessStoppedOver> =>
+  wakeUnlessStoppedOver(...input);
 
 export const assembliesOf = (...input: Parameters<typeof assembliesOfOver>): ReturnType<typeof assembliesOfOver> =>
   assembliesOfOver(...input);

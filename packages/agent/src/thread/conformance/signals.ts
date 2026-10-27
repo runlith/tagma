@@ -7,6 +7,8 @@ import { keepWarmSignalId } from '../../transcript/keepWarm';
 import { entryOf } from '../../transcript/kinds';
 import { SUMMARY, hold, opened, quiet, started, transcriptOf, until } from './compactionWorld';
 import { seeded } from './compactionRequests/support';
+import { hosted, RUN, SERVER } from './hostedWorld';
+import { OWNER, SCOPE } from './runLog/world';
 import type { ThreadStorageFactory } from './storagePort';
 const REPORT = { type: 'report', addressee: 'transport' } as const;
 export function describeThreadSignals<TTx, TWrite extends TTx = TTx, R = never>(
@@ -104,6 +106,28 @@ export function describeThreadSignals<TTx, TWrite extends TTx = TTx, R = never>(
         expect(world.requests).toHaveLength(1);
         expect(heard).toContain('the child cooled');
         expect(heard).not.toContain('the child ran');
+      }),
+    );
+    test(
+      'a signal that comes while a keep-warm run goes is not handed to its transport, and the turn after reads it',
+      Effect.fnUntraced(function* () {
+        const run = yield* hosted(open, {}, { kind: 'keep-warm', reads: true });
+        const id = 'command:exec-warm:1:call-1';
+        const handle = run.world.harness.threads.handle(run.thread.id, OWNER);
+        expect(
+          yield* handle.sendSignal(
+            { id, type: 'command-result', addressee: 'transport', text: 'the command ended' },
+            { ifActive: 'deliver', ifIdle: 'wake-completed' },
+          ),
+        ).toEqual({ status: 'queued', runId: RUN });
+        yield* run.apply(run.reports.ended(run.run, { kind: 'completed' }));
+        yield* until(() => Effect.map(run.storage.inbox.receipt(id), (item) => item?.deliveredToRunId != null));
+        const taken = yield* run.storage.inbox.receipt(id);
+        expect(taken?.deliveredToRunId).not.toBe(RUN);
+        expect(yield* run.storage.runs({ ownerId: SERVER, scope: SCOPE }).latestRun(run.thread.id)).toMatchObject({
+          id: taken?.deliveredToRunId,
+          kind: 'turn',
+        });
       }),
     );
     test(

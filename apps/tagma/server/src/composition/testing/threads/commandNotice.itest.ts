@@ -7,7 +7,7 @@ import { approvalModesLayer } from '@runlith/agent/modes/ApprovalModes';
 import { expect } from 'bun:test';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
-import { Clock, Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Queue, Stream } from 'effect';
+import { Clock, Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Queue, Schedule, Stream } from 'effect';
 import { Agent } from '@runlith/agent/Agent';
 import { type AgentRunner, makeAgentRunner } from '@runlith/agent/AgentRunner';
 import { stepLimit } from '@runlith/agent/AgentStep';
@@ -15,7 +15,7 @@ import type { ModelRequest } from '@runlith/agent/modelPort';
 import { SUB_AGENT_DEPTH } from '@runlith/agent/collaboration/CollaborationConfig';
 import { AgentHarness } from '@runlith/agent/thread/AgentHarness';
 import { NATIVE_CAPABILITIES } from '@runlith/agent/thread/record';
-import { wakeCompleted } from '../../../threads/testing/doubles.js';
+import { wakeUnlessStopped } from '../../../threads/testing/doubles.js';
 import { unmeasuredObservation } from '../../../threads/testing/doubles.js';
 import { threadAgentsLayer, threadCompactorLayer, threadFeaturesLayer, threadStorageLayer } from '@runlith/agent/thread/kernelPorts';
 import { threadHostLayer, type ThreadWriteTx } from '@runlith/agent/thread/ThreadPorts';
@@ -402,6 +402,11 @@ const setup = Effect.fn('testing.commandNotices')(function* () {
     yield* makeThreadLiveFeed<ThreadState>(),
   );
   harness = yield* Effect.acquireRelease(made, (opened) => opened.dispose());
+  const native = yield* harness.runs.transports().of({ adapter: 'native', profile: null, agent: 'tagma' }).pipe(Effect.orDie);
+  yield* harness.runs
+    .transports()
+    .register({ ...native, adapter: 'acp', runs: { ...native.runs, launch: () => Effect.void } })
+    .pipe(Effect.orDie);
   return {
     race,
     model,
@@ -462,9 +467,7 @@ layer(Layer.effect(World, setup()).pipe(Layer.provideMerge(storage)), { excludeT
   it.effect('a background command ending opens a follow-up on a completed idle Claude acp thread just as on native', () =>
     Effect.gen(function* () {
       const { harness, threadFixture, execution, owedThread, runsOf, deliveryTo, accepted, owed, units } = yield* World;
-      const native = yield* harness.runs.transports().of({ adapter: 'native', profile: null, agent: 'tagma' });
-      yield* harness.runs.transports().register({ ...native, adapter: 'acp', runs: { ...native.runs, launch: () => Effect.void } });
-      const idle = wakeCompleted(threadFixture.list);
+      const idle = wakeUnlessStopped(threadFixture.list);
       for (const acp of [false, true]) {
         const ref = execution(acp ? 'exec-idle-acp' : 'exec-idle-native');
         const recipient = yield* owedThread(ref, acp);
@@ -497,6 +500,68 @@ layer(Layer.effect(World, setup()).pipe(Layer.provideMerge(storage)), { excludeT
           unsubscribe();
         }
       }
+    }),
+  );
+  it.effect(
+    'an ending that comes while a turn runs reaches it once: a turn that steps reads it at its next step, and a turn that ends without reading it is followed by the turn it opens',
+    () =>
+      Effect.gen(function* () {
+        const { harness, threadFixture, model, threads, units, execution, owedThread, runsOf, deliveryTo, accepted, owed, waitForState } =
+          yield* World;
+        const idle = wakeUnlessStopped(threadFixture.list);
+        const stepped = execution('exec-running-native');
+        const steppedTo = yield* owedThread(stepped);
+        const held = { reached: yield* Deferred.make<void>(), go: yield* Deferred.make<void>() };
+        model.held = held;
+        yield* harness.threads.handle(steppedTo.thread, OWNER).send('leave a command running');
+        yield* Deferred.await(held.reached);
+        const turn = yield* runsOf(steppedTo.thread);
+        expect(yield* (yield* deliveryTo(stepped, idle)).deliver(stepped)).toEqual({ _tag: 'Settled' });
+        expect(yield* owed(stepped)).toBeNull();
+        yield* Deferred.succeed(held.go, undefined);
+        yield* waitForState(steppedTo.thread, (state) => state.latestRun !== null && state.latestRun.status !== 'running');
+        expect(yield* accepted(steppedTo.signal)).toMatchObject({ state: 'acknowledged', deliveredToRunId: turn?.id });
+        const transcript = (yield* threads.transcriptOf(steppedTo.thread)) ?? [];
+        expect(transcript.filter((entry) => entry.type === 'signal')).toHaveLength(1);
+
+        const hosted = execution('exec-running-acp');
+        const hostedTo = yield* owedThread(hosted, true);
+        const first = yield* harness.threads.handle(hostedTo.thread, OWNER).send('leave a command running');
+        expect(yield* (yield* deliveryTo(hosted, idle)).deliver(hosted)).toEqual({ _tag: 'Settled' });
+        const ended = harness.runs.reports().of('acp').ended({ id: first.runId, threadId: hostedTo.thread }, { kind: 'completed' });
+        yield* units.write('commandNotice.endedWithout', (unit) => ended.run(unit as unknown as ThreadWriteTx));
+        const settled = Effect.map(harness.reads.snapshot(hostedTo.thread), ({ latestRun }) =>
+          latestRun === null ? false : latestRun.id !== first.runId || latestRun.settledNotifiedAt !== null,
+        );
+        yield* settled.pipe(Effect.repeat({ while: (done) => !done, schedule: Schedule.spaced(10) }));
+        const next = (yield* runsOf(hostedTo.thread))?.id;
+        expect(next).not.toBe(first.runId);
+        expect(yield* accepted(hostedTo.signal)).toMatchObject({ state: 'acknowledged', deliveredToRunId: next });
+        if (next === undefined) return;
+        const closed = harness.runs.reports().of('acp').ended({ id: next, threadId: hostedTo.thread }, { kind: 'completed' });
+        yield* units.write('commandNotice.followupEnded', (unit) => closed.run(unit as unknown as ThreadWriteTx));
+      }),
+  );
+  it.effect('an ending that comes after its turn was stopped wakes nothing and is read once by the next turn', () =>
+    Effect.gen(function* () {
+      const { harness, threadFixture, model, threads, execution, owedThread, runsOf, deliveryTo, accepted, waitForState } = yield* World;
+      const stopped = execution('exec-after-stop');
+      const stoppedTo = yield* owedThread(stopped);
+      const handle = harness.threads.handle(stoppedTo.thread, OWNER);
+      const held = { reached: yield* Deferred.make<void>(), go: yield* Deferred.make<void>() };
+      model.held = held;
+      yield* handle.send('leave a command running');
+      yield* Deferred.await(held.reached);
+      yield* handle.stop();
+      const aborted = (yield* waitForState(stoppedTo.thread, (state) => state.latestRun?.status === 'aborted')).latestRun;
+      expect(yield* (yield* deliveryTo(stopped, wakeUnlessStopped(threadFixture.list))).deliver(stopped)).toEqual({ _tag: 'Settled' });
+      expect(yield* accepted(stoppedTo.signal)).toMatchObject({ state: 'queued', deliveredToRunId: null, body: { waits: true } });
+      expect((yield* runsOf(stoppedTo.thread))?.id).toBe(aborted?.id);
+      const next = yield* handle.send('go on');
+      yield* waitForState(stoppedTo.thread, (state) => state.latestRun?.id === next.runId && state.latestRun.status !== 'running');
+      expect(yield* accepted(stoppedTo.signal)).toMatchObject({ state: 'acknowledged', deliveredToRunId: next.runId });
+      const transcript = (yield* threads.transcriptOf(stoppedTo.thread)) ?? [];
+      expect(transcript.filter((entry) => entry.type === 'signal')).toHaveLength(1);
     }),
   );
   it.effect(

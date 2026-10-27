@@ -1935,10 +1935,10 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
   },
   {
     path: 'apps/tagma/server/src/threads/collaboration/signals.ts',
-    symbol: 'wakeCompleted',
+    symbol: 'wakeUnlessStopped',
     form: 'catchCause',
-    site: '92479320',
-    why: 'Advisory: an unreadable thread standing reads as wait, which is the safe default for a wake.',
+    site: '23c9111e',
+    why: 'Advisory: an unreadable archive mark leaves the wake to the kernel, which wakes only a thread resting after a completed turn.',
   },
   {
     path: 'apps/tagma/server/src/threads/journal/lane.ts',

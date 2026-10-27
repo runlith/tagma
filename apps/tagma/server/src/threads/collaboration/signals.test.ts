@@ -1,12 +1,12 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Clock, Effect } from 'effect';
+import { Effect } from 'effect';
 import { ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
 import { ThreadSignalConflictError } from '@runlith/agent/thread/run/scheduler/inputs';
 import type { AgentHarness } from '@runlith/agent/thread/AgentHarness';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
 import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
-import { commandSignalSend, stayIdle, wakeCompleted } from './signals.js';
+import { commandSignalSend, stayIdle, wakeUnlessStopped } from './signals.js';
 import type { NativeThreadState } from '../contract/service/state.js';
 import type { ThreadLookup } from '../contract/service/reads.js';
 
@@ -85,79 +85,17 @@ it.live('no such thread is owed nothing, and nothing is sent to invent a recipie
   }),
 );
 
-const MINUTE = 60_000;
-
-const resting = (
-  now: number,
-  overrides: {
-    readonly measuredAgoMs?: number;
-    readonly provider?: string;
-    readonly status?: 'completed' | 'failed' | 'aborted' | 'cut';
-    readonly archivedAt?: Date | null;
-    readonly harness?: object | null;
-    readonly activeRun?: object | null;
-  },
-) => {
-  const provider = overrides.provider ?? 'subscription';
-  return {
-    id: threadId,
-    provider,
-    model: 'claude-opus-5-5',
-    reasoning: null,
-    account: null,
-    archivedAt: overrides.archivedAt ?? null,
-    harness: overrides.harness ?? null,
-    activeRun: overrides.activeRun ?? null,
-    outcome: { status: overrides.status ?? 'completed' },
-    contextReading: {
-      usage: { inputTokens: 120_000 },
-      contextWindow: 200_000,
-      runId: 'run-1',
-      stepNumber: 4,
-      provider,
-      model: 'claude-opus-5-5',
-      measuredAt: new Date(now - (overrides.measuredAgoMs ?? MINUTE)).toISOString(),
-      cache: provider === 'subscription' ? { ttlSeconds: 300 } : undefined,
-      stale: false,
-    },
-  };
-};
-
-const UNPROMISED = 'an-unpromised-provider';
-
 const idleChoice = (row: unknown) => {
   const threads = { summary: () => Effect.succeed(row) } as unknown as ThreadLookup['Service'];
-  return wakeCompleted(threads)(threadId);
+  return wakeUnlessStopped(threads)(threadId);
 };
 
-it.live('an ending wakes a thread that finished its turn whatever its prompt cache: warm, expired or never promised', () =>
+it.live('an ending leaves the wake to its thread’s run state, except an archived or missing thread, which only keeps it', () =>
   Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    for (const harness of [null, { kind: 'claude-code', transport: 'acp' }]) {
-      expect(yield* idleChoice(resting(now, { measuredAgoMs: MINUTE, harness }))).toBe('wake');
-      expect(yield* idleChoice(resting(now, { measuredAgoMs: 10 * MINUTE, harness }))).toBe('wake');
-    }
-    expect(yield* idleChoice(resting(now, { provider: UNPROMISED, measuredAgoMs: MINUTE }))).toBe('wake');
-    expect(yield* idleChoice(resting(now, { provider: UNPROMISED, measuredAgoMs: 10 * MINUTE }))).toBe('wake');
-  }),
-);
-
-it.live('an ending never wakes a thread someone stopped, one whose turn broke, an archived one or a running one', () =>
-  Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    expect(yield* idleChoice(resting(now, { status: 'aborted' }))).toBe('wait');
-    expect(yield* idleChoice(resting(now, { status: 'failed' }))).toBe('wait');
-    expect(yield* idleChoice(resting(now, { status: 'cut' }))).toBe('wait');
-    expect(yield* idleChoice(resting(now, { archivedAt: new Date(1_000) }))).toBe('wait');
-    expect(yield* idleChoice(resting(now, { activeRun: { id: 'run-going' } }))).toBe('wait');
+    expect(yield* idleChoice({ id: threadId, archivedAt: null })).toBe('wake-completed');
+    expect(yield* idleChoice({ id: threadId, archivedAt: new Date(1_000) })).toBe('wait');
     expect(yield* idleChoice(undefined)).toBe('wait');
-  }),
-);
-
-it.live('a thread whose standing cannot be read keeps the ending for its next turn', () =>
-  Effect.gen(function* () {
-    const threads = { summary: () => Effect.die(new Error('the store is gone')) } as unknown as ThreadLookup['Service'];
-
-    expect(yield* wakeCompleted(threads)(threadId)).toBe('wait');
+    const unread = { summary: () => Effect.die(new Error('the store is gone')) } as unknown as ThreadLookup['Service'];
+    expect(yield* wakeUnlessStopped(unread)(threadId)).toBe('wake-completed');
   }),
 );

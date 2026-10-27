@@ -48,11 +48,6 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: enforcement judgement of a tree or HEAD, including selection, inspection outcomes, gate decisions and their recovery contract in the graph context that owns the law.',
           },
           {
-            lines: 799,
-            path: 'packages/agent/src/thread/conformance/hostedCalls.ts',
-            why: "One subject: the conformance suite of a call hosted by an ACP run, run against every thread storage; each of its describes judges that one call's life — recorded, waiting and stopping, taken to the background — through the same hosted-run fixture.",
-          },
-          {
             lines: 742,
             path: 'packages/agent/src/agent/door/ToolExecution.ts',
             why: "One subject: a tool call's life at the door from admission through permission, order and execution to its answer, foreground or carried to the background at any of those stages; every stage shares the same tracked call, its order claim and its ledger.",

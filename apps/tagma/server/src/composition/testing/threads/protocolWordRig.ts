@@ -1,21 +1,27 @@
 import { rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Effect } from 'effect';
-import type { WordCase, WordRig, WordState } from '@runlith/agent/thread/conformance/transportWords';
+import {
+  ENDING_BEHAVIOR,
+  endingSignal,
+  type EndingCase,
+  type EndingRig,
+  type WordState,
+} from '@runlith/agent/thread/conformance/transportWords';
 import type { RigAgent } from './protocolAgents.js';
 import type { ProtocolRig } from './protocolRig.js';
 import { CLAUDE, rigReads, staged, staging } from './protocolStopRig.js';
 
-export const protocolWordRig = (rig: ProtocolRig['Service'], agent: RigAgent): WordRig => {
+export const protocolWordRig = (rig: ProtocolRig['Service'], agent: RigAgent, label = 'words'): EndingRig => {
   const { rested, prompted } = rigReads(rig, agent);
   const reach = Effect.fnUntraced(function* (state: WordState) {
-    const report = staging(rig, `words-${state}`);
+    const report = staging(rig, `${label}-${state}`);
     yield* agent.install(report);
-    const threadId = `thread-words-${state}`;
+    const threadId = `thread-${label}-${state}`;
     yield* rig.openThread(threadId, CLAUDE);
     const resting = new Set<string>();
     const raised = yield* rig.floor([], { fails: 0, refuses: false, resting });
-    const driver = yield* raised.driver(`owner-words-${state}`);
+    const driver = yield* raised.driver(`owner-${label}-${state}`);
     const handle = raised.harness.threads.handle(threadId, 'operator');
     const hold = join(dirname(report), 'opening.hold');
     const release = () => writeFileSync(`${report}.release`, 'release');
@@ -24,8 +30,10 @@ export const protocolWordRig = (rig: ProtocolRig['Service'], agent: RigAgent): W
       Effect.sync(() => resting.add(threadId)),
       Effect.andThen(handle.stop(), driver.stop(threadId)),
     );
-    const wordCase = (during: WordCase['during'], woken: Effect.Effect<unknown, unknown> = Effect.void): WordCase => ({
+    const wordCase = (during: EndingCase['during'], woken: Effect.Effect<unknown, unknown> = Effect.void): EndingCase => ({
       send: (text) => Effect.suspend(() => raised.harness.threads.handle(threadId, 'operator').send(text)),
+      end: (id, text) =>
+        Effect.suspend(() => raised.harness.threads.handle(threadId, 'operator').sendSignal(endingSignal(id, text), ENDING_BEHAVIOR)),
       during,
       settle: Effect.fnUntraced(function* () {
         step();
