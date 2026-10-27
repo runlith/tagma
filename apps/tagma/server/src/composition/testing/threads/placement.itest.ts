@@ -226,7 +226,7 @@ const composed = Effect.fn('testing.rootPlacement')(function* (demo: EffectDemo)
   const opensIn = (thread: { readonly id: string }, projectId: number) =>
     Effect.map(
       contexts.of({ id: thread.id, projectId }, { kind: 'tools', runId: null, context: null }, (request) =>
-        worlds.of({ thread: { id: thread.id, hostKind: null, hostId: null }, at: request.at, root: request.root }),
+        worlds.of({ thread: { id: thread.id, hostKind: null, hostId: null }, ...request }),
       ),
       (admitted) => admitted.world.root,
     );

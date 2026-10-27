@@ -146,7 +146,7 @@ export const makeThreadMover = Effect.fnUntraced(function* ({ targets }: { reado
         },
         {
           kernel: { request: (_runId, ask) => harness.threads.handle(move.threadId, OPERATOR_PRINCIPAL).changeContext(ask) },
-          acquire: (request) => worlds.of({ thread: row, at: request.at, root: request.root }),
+          acquire: (request) => worlds.of({ thread: row, ...request }),
           homes,
         },
       )

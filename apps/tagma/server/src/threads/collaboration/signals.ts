@@ -68,9 +68,9 @@ export const commandSignalSend = (
   archivedIsGone = false,
 ): CommandSignalSend =>
   Effect.fnUntraced(
-    function* ({ threadId, id, text, notice, projectId, condition }) {
+    function* ({ threadId, id, text, notice, condition }) {
       const row = yield* threads.find(threadId, OPERATOR_PRINCIPAL);
-      if (!row || (projectId !== undefined && row.projectId !== projectId)) return { _tag: 'NoThread' } as const;
+      if (!row) return { _tag: 'NoThread' } as const;
       if (archivedIsGone && row.archivedAt != null) return { _tag: 'NoThread' } as const;
       const sent = yield* harness.threads
         .handle(threadId, OPERATOR_PRINCIPAL)

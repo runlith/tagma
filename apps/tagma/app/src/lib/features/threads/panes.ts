@@ -12,7 +12,7 @@ export const panes: PanesModule['panes'] = [
   {
     kind: THREAD_PANE,
     noun: 'thread',
-    view: () => import('./seats/ThreadView.svelte'),
+    view: () => import('./seats/ThreadPane.svelte'),
     title: ThreadTitle,
     keep: true,
     moves: true,

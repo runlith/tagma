@@ -14,7 +14,7 @@ export const makeSessionPlace = Effect.fnUntraced(function* () {
     if (!row) return yield* threadCallFailed(new Error(`Session ${threadId} is gone.`));
     const admitted = yield* targets
       .of({ id: row.id, projectId: row.projectId }, { kind: 'tools', runId: null, context: null }, (request) =>
-        worlds.of({ thread: row, at: request.at, root: request.root }),
+        worlds.of({ thread: row, ...request }),
       )
       .pipe(Effect.catchTag('WorldUnavailable', (cause) => Effect.fail(threadCallFailed(cause))));
     return {

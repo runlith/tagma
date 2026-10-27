@@ -4,6 +4,10 @@ import type { ThreadContextAsk } from '@runlith/agent/thread/run/ThreadRunContex
 import type { ThreadContextUse } from '@runlith/agent/thread/agents/ThreadAgent';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits, type WriteUnit } from '../../platform/contract/service/units.js';
+import { writes } from '../../platform/contract/service/writes.js';
+import { assignmentMembership, assignmentSelection } from '../../workspace/store/tables.js';
+import { makeThreadTargetOperationStore } from '../store/targetIntents.js';
+import { threadTargetOperation } from '../store/tables.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { GateRefusal, type Unblock } from '../../platform/contract/wire/refusal.js';
 import type { Assignment } from '../../workspace/contract/wire/assignments.js';
@@ -41,6 +45,7 @@ export const makeTargetContexts = Effect.gen(function* () {
   const assignments = yield* Assignments;
   const roots = yield* FileRoots;
   const projects = yield* Projects;
+  const operations = yield* makeThreadTargetOperationStore;
   const projectRoot = (projectId: number) => Effect.map(projects.byId(projectId), (project) => project.rootPath);
   const prepared = new Map<string, TargetSnapshot>();
 
@@ -58,13 +63,13 @@ export const makeTargetContexts = Effect.gen(function* () {
       const recorded = yield* units.read((unit) => targets.at(at, unit)).pipe(unreadable(at));
       if (recorded !== undefined) {
         settled(at, recorded.generation);
-        const acquired = yield* acquire({ at, root: recorded.workingRoot });
+        const acquired = yield* acquire({ at, root: recorded.workingRoot, projectId: recorded.work.projectId });
         return { target: recorded, world: acquired.world };
       }
       if (use.context !== null) {
         const unpublished = prepared.get(preparedKey(at));
         if (unpublished !== undefined && unpublished.generation === at.generation && unpublished.sourceKey === use.context.sourceKey) {
-          const acquired = yield* acquire({ at, root: unpublished.workingRoot });
+          const acquired = yield* acquire({ at, root: unpublished.workingRoot, projectId: unpublished.work.projectId });
           return { target: unpublished, world: acquired.world };
         }
         return yield* new GateRefusal(
@@ -74,7 +79,7 @@ export const makeTargetContexts = Effect.gen(function* () {
         );
       }
       const opening = yield* openTarget(thread);
-      const acquired = yield* acquire({ at, root: opening.root });
+      const acquired = yield* acquire({ at, root: opening.root, projectId: thread.projectId });
       const target = yield* record(at, {
         sourceKey: opening.sourceKey,
         workingRoot: acquired.world.root,
@@ -84,7 +89,7 @@ export const makeTargetContexts = Effect.gen(function* () {
         persist: use.runId !== null,
       });
       if (target.workingRoot === acquired.world.root) return { target, world: acquired.world };
-      return { target, world: (yield* acquire({ at, root: target.workingRoot })).world };
+      return { target, world: (yield* acquire({ at, root: target.workingRoot, projectId: target.work.projectId })).world };
     });
 
   const prepare: (change: TargetChange, acquire: WorldAcquire) => Effect.Effect<PreparedTarget, TargetFailure> = Effect.fn(
@@ -102,7 +107,7 @@ export const makeTargetContexts = Effect.gen(function* () {
       return yield* noDestination(change.thread, assignment);
     }
     const root = yield* units.read((unit) => roots.checked(rootId, home?.root.locationRevision, unit)).pipe(unregistered);
-    const acquired = yield* acquire({ at, root: root.path });
+    const acquired = yield* acquire({ at, root: root.path, projectId: change.thread.projectId });
     const target: TargetSnapshot = {
       work: { projectId: change.thread.projectId, threadId: change.thread.id },
       runId: at.runId,
@@ -143,6 +148,7 @@ export const makeTargetContexts = Effect.gen(function* () {
             }
             yield* targets.record(target, unit);
             if (home !== undefined) yield* home.shift(unit);
+            yield* operations.settle(threadId, change.requestId, { status: 'applied', generation: at.generation }, unit);
             settled(at, at.generation);
           },
           Effect.mapError((cause) => new ThreadCallBroke({ cause })),
@@ -243,7 +249,12 @@ export const makeTargetContexts = Effect.gen(function* () {
     const standing = prepared.get(preparedKey(at));
     if (standing !== undefined && standing.generation <= generation) prepared.delete(preparedKey(at));
   };
-  return TargetPreparation.of({ of, prepare, standing });
+  return TargetPreparation.of({
+    writes: writes('TargetContexts.commit', [assignmentMembership, assignmentSelection, threadTargetOperation], targets.writes),
+    of,
+    prepare,
+    standing,
+  });
 });
 
 const refusing = (code: string, reason: (detail: string) => string, unblock: Unblock) =>

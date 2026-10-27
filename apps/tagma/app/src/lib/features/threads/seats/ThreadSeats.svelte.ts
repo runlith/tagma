@@ -131,6 +131,11 @@ export class ThreadSeats extends Service<ThreadSeats>()('ThreadSeats', { tier: '
     this.panes.activate(key);
   }
 
+  retarget(key: string, thread: PaneThread): void {
+    if (this.panes.panes.some((standing) => standing.key === key && standing.kind === THREAD_PANE))
+      this.panes.point(key, threadPaneId(thread));
+  }
+
   private settle(key: string, thread: string | null): void {
     const pane = this.panes.panes.find((standing) => standing.key === key);
     if (pane === undefined || pane.kind !== THREAD_PANE) return;

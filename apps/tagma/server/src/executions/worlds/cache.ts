@@ -18,6 +18,7 @@ type WorldSources = {
   readonly checkout: (
     thread: WorldThread,
     root: string,
+    projectId: number,
     runId: string,
     lease: WorldLeasing,
   ) => Effect.Effect<ThreadWorld, WorldUnavailable, Scope.Scope>;
@@ -96,7 +97,7 @@ export const makeLeasedWorlds = Effect.fnUntraced(function* (sources: WorldSourc
   const open = (request: WorldRequest): Effect.Effect<ThreadWorld, WorldUnavailable, Scope.Scope> => {
     const { thread } = request;
     if (thread.hostKind === null) {
-      return sources.checkout(thread, request.root, request.at.runId, () => lease(request.at));
+      return sources.checkout(thread, request.root, request.projectId, request.at.runId, () => lease(request.at));
     }
     const host = hosts.get(thread.hostKind);
     if (host === undefined) {

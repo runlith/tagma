@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { Context, Effect } from 'effect';
 import { lazyLayer, liveOf, manifest } from '../platform/contract/service/manifest.js';
 import { RELOCATIONS } from '../platform/contract/service/relocation.js';
+import { HOME_FOLLOWERS } from '../thread-record/contract/service/homes.js';
 import { RECORDINGS } from './contract/service/recording.js';
 import { speechCapability } from './contract/wire/capability.js';
 import { Listenings } from './contract/service/listenings.js';
@@ -31,11 +32,14 @@ export const speech = manifest({
   },
   settings: SPEECH_SETTINGS,
   settingSections: SPEECH_SETTING_SECTIONS,
-  contributions: RELOCATIONS.of({
-    id: 'speech/recordings',
-    carried: (data) => [join(data, RECORDINGS)],
-    relocate: () => Effect.succeed([]),
-  }),
+  contributions: [
+    ...RELOCATIONS.of({
+      id: 'speech/recordings',
+      carried: (data) => [join(data, RECORDINGS)],
+      relocate: () => Effect.succeed([]),
+    }),
+    ...HOME_FOLLOWERS.of({ id: 'speech/followers', load: async () => (await import('./homes.js')).speechHomes }),
+  ],
   lifetimes: {
     installation: lazyLayer(
       () => import('./layer.js'),

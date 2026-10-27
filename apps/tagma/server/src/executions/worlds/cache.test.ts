@@ -96,6 +96,7 @@ const asking = (thread: typeof bound | typeof local, generation: number, root = 
   thread,
   at: at(thread.id, 'run-1', generation),
   root,
+  projectId: 1,
 });
 
 it.live(
@@ -190,7 +191,7 @@ it.live('a drop closes every world the thread held, and a host kind nothing moun
     expect(engine.closed()).toEqual([1, 2]);
 
     const refused = yield* Effect.flip(
-      worlds.of({ thread: { id: 't3', hostKind: 'vm', hostId: 'v1' }, at: at('t3', 'run-1', 0), root: '/repo' }),
+      worlds.of({ thread: { id: 't3', hostKind: 'vm', hostId: 'v1' }, at: at('t3', 'run-1', 0), root: '/repo', projectId: 1 }),
     );
     expect(refused._tag).toBe('WorldUnavailable');
     expect(refused.hostKind).toBe('vm');
@@ -257,7 +258,7 @@ it.live('a settled run lets go of every generation it worked in, and leaves anot
   Effect.gen(function* () {
     const worlds = yield* makeLeasedWorlds({ checkout, hosts: [], place });
     try {
-      const other = { thread: local, at: at(local.id, 'run-2', 0), root: '/repo' };
+      const other = { thread: local, at: at(local.id, 'run-2', 0), root: '/repo', projectId: 1 };
       const first = yield* worlds.of(asking(local, 0));
       yield* worlds.of(asking(local, 1));
       const survivor = yield* worlds.of(other);
@@ -275,7 +276,7 @@ const leasedWorlds = Effect.fnUntraced(function* () {
   const closed: string[] = [];
   const scopes = new Map<string, Scope.Scope>();
   const worlds = yield* makeLeasedWorlds({
-    checkout: Effect.fnUntraced(function* (thread, root, _runId, lease) {
+    checkout: Effect.fnUntraced(function* (thread, root, _projectId, _runId, lease) {
       scopes.set(thread.id, yield* Effect.scope);
       leases.set(thread.id, lease);
       yield* Effect.addFinalizer(() => Effect.sync(() => closed.push(root)));

@@ -87,6 +87,7 @@ const makeFixture = Effect.gen(function* () {
   const world = yield* checkoutWorldFor(
     { id: thread, hostKind: null, hostId: null },
     raised.checkout,
+    raised.projectId,
     'run-1',
     () => Effect.succeed({ scope, release: Effect.void }),
     {
@@ -99,7 +100,6 @@ const makeFixture = Effect.gen(function* () {
       targets: floor.targets,
       host: connection,
       access,
-      projectOf: () => Effect.succeed(raised.projectId),
       scratch: () => join(raised.caseHome, 'scratch'),
       world: machine,
     },

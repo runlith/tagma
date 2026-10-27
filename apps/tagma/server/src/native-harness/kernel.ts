@@ -32,6 +32,7 @@ import {
 import { kernelStorageWrites } from './rows/storageWrites.js';
 import { writes } from '../platform/contract/service/writes.js';
 import { ThreadHomes } from '../threads/contract/service/homes.js';
+import { TargetPreparation } from '../threads/contract/service/preparation.js';
 import { CallEpoch } from '../threads/contract/service/owedCalls.js';
 import { randomUUID } from 'node:crypto';
 import { makeSettledRelease } from './runs/settled.js';
@@ -122,6 +123,7 @@ export type NativeKernelRequirements =
   | ThreadEntryKinds
   | PluginPoints
   | ThreadHomes
+  | TargetPreparation
   | Scope.Scope;
 const WEB_MEMORY_CHARACTERS = 16 * 1024 * 1024;
 const WORKFLOW_LEASE_MS = 300_000;
@@ -182,7 +184,13 @@ export const assembleNativeKernel: Effect.Effect<NativeKernel['Service'], never,
   const units = yield* MachineUnits;
   const records = yield* ThreadRecords;
   const harnesses = yield* HarnessRegistry;
-  const transitionWrites = writes(kernelStorageWrites.operation, [], kernelStorageWrites, (yield* ThreadHomes).writes);
+  const transitionWrites = writes(
+    kernelStorageWrites.operation,
+    [],
+    kernelStorageWrites,
+    (yield* ThreadHomes).writes,
+    (yield* TargetPreparation).writes,
+  );
   const settings = yield* Settings;
   const models = yield* ModelAccess;
   const rollouts = yield* ThreadRollouts;

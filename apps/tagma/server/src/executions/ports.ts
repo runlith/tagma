@@ -55,7 +55,6 @@ export type WorldServices =
 export const executionWorlds = Effect.fnUntraced(function* (input: {
   readonly executions: Context.Context<WorldServices>;
   readonly preferences: WorldPreferences['Service'];
-  readonly projectOf: (threadId: string) => Effect.Effect<number | undefined, StoreFailure>;
   readonly scratch: (threadId: string) => string;
   readonly world: World;
   readonly commands?: (subject: LedgerKey) => Commands;
@@ -63,8 +62,8 @@ export const executionWorlds = Effect.fnUntraced(function* (input: {
   readonly place: (root: string) => Effect.Effect<ProvedRoot | null>;
 }) {
   return yield* makeLeasedWorlds({
-    checkout: (thread, root, runId, lease) =>
-      checkoutWorldFor(thread, root, runId, lease, {
+    checkout: (thread, root, projectId, runId, lease) =>
+      checkoutWorldFor(thread, root, projectId, runId, lease, {
         preferences: input.preferences,
         terminals: Context.get(input.executions, Terminals),
         writing: Context.get(input.executions, TerminalWriting),
@@ -74,7 +73,6 @@ export const executionWorlds = Effect.fnUntraced(function* (input: {
         targets: Context.get(input.executions, TerminalTargets),
         host: Context.get(input.executions, HostManagement).connection,
         access: Context.get(input.executions, CommandAccess),
-        projectOf: input.projectOf,
         scratch: input.scratch,
         world: input.world,
         commands: input.commands,

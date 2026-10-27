@@ -43,7 +43,7 @@ const setup = Effect.gen(function* () {
   const admitted = yield* Context.get(world.runtime.owners, TargetPreparation).of(
     { id: holder, projectId: project },
     { kind: 'tools', runId: null, context: null },
-    (request) => worlds.of({ thread: { id: holder, hostKind: null, hostId: null }, at: request.at, root: request.root }),
+    (request) => worlds.of({ thread: { id: holder, hostKind: null, hostId: null }, ...request }),
   );
   const caller: Caller = {
     actor: {

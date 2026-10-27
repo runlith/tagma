@@ -411,6 +411,7 @@ dockerSuite('sandbox worlds', () => {
                   generation: WorkspaceGeneration.make(use.context?.generation ?? 0),
                 },
                 root: checkout,
+                projectId,
               }),
               (acquired) =>
                 asThreadContext({
@@ -499,6 +500,7 @@ dockerSuite('sandbox worlds', () => {
                   generation: WorkspaceGeneration.make(use.context?.generation ?? 0),
                 },
                 root: checkout,
+                projectId,
               }),
               (acquired) =>
                 asThreadContext({

@@ -74,7 +74,7 @@ export const makeThreadDoors = (
     const admitted = yield* Context.get(world.runtime.owners, TargetPreparation).of(
       { id: threadId, projectId: project },
       { kind: 'tools', runId: null, context: null },
-      (request) => worlds.of({ thread: { id: threadId, hostKind: null, hostId: null }, at: request.at, root: request.root }),
+      (request) => worlds.of({ thread: { id: threadId, hostKind: null, hostId: null }, ...request }),
     );
     const place = { root: admitted.world.root, origin: originOf(admitted.target) };
     const caller: Caller = {

@@ -213,7 +213,7 @@ const registerRoot = (held: Owned, path: string) => held.roots.register({ path, 
 const acquire =
   (held: Owned, threadId: string): ReturnType<typeof asWorldAcquire> =>
   (request) =>
-    held.worlds.of({ thread: { id: threadId, hostKind: null, hostId: null }, at: request.at, root: request.root });
+    held.worlds.of({ thread: { id: threadId, hostKind: null, hostId: null }, ...request });
 
 const callerOf = (projectId: number) => ({ projectId, actor: operator });
 

@@ -134,36 +134,53 @@ it.live(
     }).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(fixture)),
 );
 
-it.live('an agent moves itself into another project mid-turn and its next step is told that project’s law', () =>
-  Effect.gen(function* () {
-    const ASK = 'Move yourself into the other project.';
-    const self: { thread: string; home: number } = { thread: '', home: 0 };
-    const told: string[] = [];
-    const answered = yield* Deferred.make<ModelStreamInput>();
-    const world = yield* DoorFixture;
-    yield* world.lend({
-      models: scripted((input, said) =>
-        Effect.gen(function* () {
-          if (!said.includes(ASK)) return answer;
-          told.push(said);
-          if (resultOf(input, 'reveal') === undefined) return call('reveal', 'tool_search', { query: 'select:move_thread' });
-          if (resultOf(input, 'move') === undefined) return call('move', 'move_thread', { threadId: self.thread, home: String(self.home) });
-          yield* Deferred.succeed(answered, input);
-          return answer;
-        }),
-      ),
-    });
-    const { from, to, thread, listed } = yield* projects;
-    self.thread = thread;
-    self.home = to.id;
-    yield* turnsOf(world.runtime.owners).send(thread, from.id, ASK);
-    const finished = yield* Deferred.await(answered);
-    expect(JSON.stringify(resultOf(finished, 'move'))).toContain('pending');
-    expect(told[0]).toContain(from.law);
-    expect(told[0]).not.toContain(to.law);
-    expect(told.at(-1)).toContain(to.law);
-    expect([yield* listed(from.id), yield* listed(to.id)]).toEqual(['place-mismatch', 1]);
-  }).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(fixture)),
+it.live(
+  'an agent moves itself into another project mid-turn: its next step works under that project’s law, its commands run as that project’s, and the move answers applied',
+  () =>
+    Effect.gen(function* () {
+      const ASK = 'Move yourself into the other project.';
+      const KEY = 'self-move';
+      const self: { thread: string; home: number } = { thread: '', home: 0 };
+      const told: string[] = [];
+      const answered = yield* Deferred.make<ModelStreamInput>();
+      const world = yield* DoorFixture;
+      yield* world.lend({
+        models: scripted((input, said) =>
+          Effect.gen(function* () {
+            if (!said.includes(ASK)) return answer;
+            told.push(said);
+            if (resultOf(input, 'reveal') === undefined) return call('reveal', 'tool_search', { query: 'select:move_thread' });
+            if (resultOf(input, 'move') === undefined) {
+              return call('move', 'move_thread', { threadId: self.thread, home: String(self.home), operationKey: KEY });
+            }
+            if (resultOf(input, 'where') === undefined)
+              return call('where', 'bash', { command: 'pwd', description: 'Print the working directory' });
+            yield* Deferred.succeed(answered, input);
+            return answer;
+          }),
+        ),
+      });
+      const { from, to, thread, listed } = yield* projects;
+      self.thread = thread;
+      self.home = to.id;
+      yield* turnsOf(world.runtime.owners).send(thread, from.id, ASK);
+      const finished = yield* Deferred.await(answered);
+      expect(JSON.stringify(resultOf(finished, 'move'))).toContain('pending');
+      expect(told[0]).toContain(from.law);
+      expect(told[0]).not.toContain(to.law);
+      expect(told.at(-1)).toContain(to.law);
+      expect(JSON.stringify(resultOf(finished, 'where'))).toContain(to.root);
+      const commands = (project: number) =>
+        Effect.map(
+          world.op('read_commands', { owner: `thread:${thread}`, limit: 10 }, `project=${project}`),
+          (read) => (read.body as { readings: readonly unknown[] }).readings.length,
+        );
+      expect([yield* commands(from.id), yield* commands(to.id)]).toEqual([0, 1]);
+      expect([yield* listed(from.id), yield* listed(to.id)]).toEqual(['place-mismatch', 1]);
+      expect((yield* world.op('move_thread', { threadId: thread, home: to.id, operationKey: KEY }, `project=${to.id}`)).body).toMatchObject(
+        { status: 'applied', projectId: to.id },
+      );
+    }).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(fixture)),
 );
 
 it.live('a thread whose command still runs in the background keeps its home until the command ends', () =>

@@ -11,11 +11,18 @@ import type { Assignment, AssignmentActor } from '../../workspace/contract/wire/
 import { SelectionRevision } from '../../workspace/contract/wire/assignments.js';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
 import { AssignmentRefused } from '../../workspace/contract/wire/assignments.js';
-import { RootConflict, RootInvalid, RootMissing, RootRefused, RootUnavailable } from '../../workspace/contract/wire/roots.js';
+import {
+  RootConflict,
+  RootInvalid,
+  RootMissing,
+  RootRefused,
+  RootUnavailable,
+  type RootBinding,
+} from '../../workspace/contract/wire/roots.js';
+import { LocationRevision } from '@runlith/files/resource';
 import { placementRefusal, type PlacementFailure } from './placementRefusal.js';
 import { ThreadTargetOperationKey } from '../contract/wire/target.js';
 import {
-  targetSourceKey,
   type ThreadTargetCaller,
   type ThreadTargetChange,
   type ThreadTargetChangeInput,
@@ -24,7 +31,7 @@ import {
 } from '../contract/wire/target.js';
 import { RootId } from '../../workspace/contract/wire/ids.js';
 import { WorkspaceGeneration } from '../../workspace/contract/wire/ids.js';
-import { TargetPreparation, type TargetThread, type WorldAcquire } from '../contract/service/preparation.js';
+import { TargetPreparation, type WorldAcquire } from '../contract/service/preparation.js';
 import { Assignments } from '../../workspace/contract/service/assignments.js';
 import { TargetSnapshots, type TargetStoreFailure } from '../contract/service/targetSnapshots.js';
 import {
@@ -95,6 +102,7 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
     ports: TargetEffects,
   ): Effect.fn.Return<ThreadTargetChange, ThreadTargetFailure> {
     const digest = digestOf(input);
+    const destination = input.home ?? caller.projectId;
     const home = crossing(caller, input);
     const homes = home === null ? undefined : ports.homes;
     if (home !== null && homes === undefined) {
@@ -110,27 +118,47 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
       ),
       (unit) => decide(caller, input, digest, unit, shift),
     );
-    if (decided.kind === 'replay') return yield* replay(caller, decided.row, digest, ports);
+    if (decided.kind === 'replay') return yield* replay(caller, decided.row, digest, destination, ports);
     if (decided.kind === 'idle') {
       return { status: 'selected', operationKey: input.operationKey, revision: decided.revision };
     }
-    const thread: TargetThread = { id: input.threadId, projectId: home ?? caller.projectId };
+    return yield* asking(
+      caller,
+      {
+        threadId: input.threadId,
+        operationKey: input.operationKey,
+        runId: decided.runId,
+        fromGeneration: decided.fromGeneration,
+        root: input.root,
+        revision: decided.revision,
+        from: caller.projectId,
+        to: home,
+      },
+      ports,
+    );
+  });
+
+  const asking = Effect.fn('ThreadTargets.asking')(function* (
+    caller: ThreadTargetCaller,
+    asked: Asked,
+    ports: TargetEffects,
+  ): Effect.fn.Return<ThreadTargetChange, ThreadTargetFailure> {
+    const homes = asked.to === null ? undefined : ports.homes;
+    if (asked.to !== null && homes === undefined) {
+      return yield* Effect.die(new Error('A move into another project reached the targets without the owner of thread homes.'));
+    }
+    const move: HomeMove | null = asked.to === null ? null : { threadId: asked.threadId, from: asked.from, to: asked.to };
     const prepared = yield* Effect.result(
       contexts.prepare(
         {
-          thread,
-          runId: decided.runId,
-          fromGeneration: decided.fromGeneration,
-          requestId: input.operationKey,
+          thread: { id: asked.threadId, projectId: asked.to ?? asked.from },
+          runId: asked.runId,
+          fromGeneration: asked.fromGeneration,
+          requestId: asked.operationKey,
           home:
-            shift === null
+            move === null || homes === undefined
               ? undefined
-              : {
-                  root: input.root,
-                  revision: decided.revision,
-                  actor: caller.actor,
-                  shift: (unit) => shift.homes.move(unit, shift.move),
-                },
+              : { root: asked.root, revision: asked.revision, actor: caller.actor, shift: (unit) => homes.move(unit, move) },
         },
         ports.acquire,
       ),
@@ -149,29 +177,26 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
               : String(failure)
             : undefined;
       if (detail === undefined) return yield* Effect.fail(failure as StoreFailure);
-      yield* units.write(writes('ThreadTargets.change', [threadTargetOperation]), (unit) =>
-        operations.settle(input.threadId, input.operationKey, { status: 'failed', detail }, unit),
-      );
-      return { status: 'failed', operationKey: input.operationKey, detail };
+      return yield* fail(asked.threadId, asked.operationKey, detail);
     }
-    const asked = yield* Effect.result(
-      ports.kernel.request(decided.runId, {
-        requestId: input.operationKey,
+    const answer = yield* Effect.result(
+      ports.kernel.request(asked.runId, {
+        requestId: asked.operationKey,
         sourceKey: prepared.success.ask.sourceKey,
         commit: prepared.success.ask.commit,
       }),
     );
-    return yield* resolveAsk(input.threadId, input.operationKey, decided.runId, asked);
+    return yield* resolveAsk(asked.threadId, asked.operationKey, asked.runId, answer);
   });
 
   const read: (
     caller: ThreadTargetCaller,
     input: ThreadTargetReadInput,
-    ports: Pick<TargetEffects, 'kernel'>,
+    ports: TargetEffects,
   ) => Effect.Effect<ThreadTargetRead, ThreadTargetFailure> = Effect.fn('ThreadTargets.read')(function* (
     caller: ThreadTargetCaller,
     input: ThreadTargetReadInput,
-    ports: Pick<TargetEffects, 'kernel'>,
+    ports: TargetEffects,
   ): Effect.fn.Return<ThreadTargetRead, ThreadTargetFailure> {
     const seen = yield* units.read(
       Effect.fnUntraced(function* (unit) {
@@ -204,7 +229,7 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
     if (seen.kind === 'effective') return { state: 'effective', target: seen.active.target };
     if (seen.kind === 'selection') return { state: 'selected', revision: seen.revision, rootId: seen.rootId };
     if (seen.kind === 'unavailable') return { state: 'failed', operationKey: null, detail: seen.detail };
-    return yield* replayRead(seen.row, ports);
+    return yield* replayRead(caller, seen.row, ports);
   });
 
   const decide = Effect.fn('ThreadTargets.decide')(function* (
@@ -325,11 +350,12 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
     caller: ThreadTargetCaller,
     row: ThreadTargetOperation,
     digest: string,
-    ports: Pick<TargetEffects, 'kernel'>,
+    destination: number,
+    ports: TargetEffects,
   ): Effect.fn.Return<ThreadTargetChange, ThreadTargetFailure> {
     yield* checkThread(caller, row.threadId);
     yield* units.read((unit) => checkActor(caller, row.threadId, unit));
-    if (row.payloadDigest !== digest) {
+    if (row.payloadDigest !== digest || (row.homeId ?? row.projectId) !== destination) {
       return yield* new GateRefusal(
         'changed-payload',
         `Operation ${row.operationKey} already decided a move of thread ${row.threadId}; carrying anything else under it refuses.`,
@@ -364,7 +390,7 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
           return { kind: 'settled-gone' as const };
         }
         const assignment = yield* assignments.read(unit, ThreadId.make(row.threadId)).pipe(refusing);
-        if (!crossed(row) && assignment.selection.revision !== row.selectionRevision) {
+        if (assignment.selection.revision !== row.selectionRevision) {
           return { kind: 'overtaken' as const };
         }
         return { kind: 'standing' as const, runId: active.target.runId };
@@ -376,18 +402,13 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
     if (live.kind === 'overtaken') {
       return yield* fail(row.threadId, key, 'The placement this move was prepared from has been overtaken by a newer selection.');
     }
-    const asked = yield* Effect.result(
-      ports.kernel.request(live.runId, {
-        requestId: row.operationKey,
-        sourceKey: targetSourceKey(RootId.make(row.rootId)),
-      }),
-    );
-    return yield* resolveAsk(row.threadId, key, live.runId, asked);
+    return yield* asking(caller, askedOf(row, key, live.runId), ports);
   });
 
   const replayRead = Effect.fn('ThreadTargets.replayRead')(function* (
+    caller: ThreadTargetCaller,
     row: ThreadTargetOperation,
-    ports: Pick<TargetEffects, 'kernel'>,
+    ports: TargetEffects,
   ): Effect.fn.Return<ThreadTargetRead, ThreadTargetFailure> {
     if (row.status === 'selected') {
       return {
@@ -433,19 +454,10 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
     if (live.kind === 'settled-gone') {
       return { state: 'failed', operationKey: key, detail: 'The run this move was asked of ended before another step boundary.' };
     }
-    const outcome = yield* ports.kernel
-      .request(live.runId, {
-        requestId: row.operationKey,
-        sourceKey: targetSourceKey(RootId.make(row.rootId)),
-      })
-      .pipe(
-        Effect.mapError((cause) =>
-          cause._tag === 'ThreadCallBroke' || cause._tag === 'ThreadStorageFailed' ? cause : new ThreadCallBroke({ cause }),
-        ),
-      );
-    if (outcome.status === 'published') {
+    const outcome = yield* asking(caller, askedOf(row, key, live.runId), ports);
+    if (outcome.status === 'applied') {
       const target = yield* units.read((unit) =>
-        snapshots.at({ threadId: row.threadId, runId: live.runId, generation: WorkspaceGeneration.make(outcome.generation) }, unit),
+        snapshots.at({ threadId: row.threadId, runId: live.runId, generation: outcome.generation }, unit),
       );
       return target === undefined
         ? {
@@ -455,9 +467,8 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
           }
         : { state: 'effective', target };
     }
-    if (outcome.status === 'denied') {
-      return { state: 'failed', operationKey: key, detail: outcome.detail };
-    }
+    if (outcome.status === 'failed') return { state: 'failed', operationKey: key, detail: outcome.detail };
+    if (outcome.status === 'selected') return { state: 'selected', revision: outcome.revision, rootId: RootId.make(row.rootId) };
     return { state: 'pending', operationKey: key, requestId: key, fromGeneration: live.generation };
   });
 
@@ -595,14 +606,33 @@ const digestOf = (input: ThreadTargetChangeInput): string =>
         expectedSelectionRevision: input.expectedSelectionRevision ?? null,
         expectedGeneration: input.expectedGeneration ?? null,
         creationOperationId: input.creationOperationId ?? null,
-        ...(input.home === undefined ? {} : { home: input.home }),
       }),
     )
     .digest('hex');
 
-const crossed = (row: ThreadTargetOperation): boolean => row.homeId !== null && row.homeId !== row.projectId;
-
 type HomeShift = { readonly homes: ThreadHomes['Service']; readonly move: HomeMove };
+
+type Asked = {
+  readonly threadId: string;
+  readonly operationKey: ThreadTargetOperationKey;
+  readonly runId: string;
+  readonly fromGeneration: WorkspaceGeneration;
+  readonly root: RootBinding;
+  readonly revision: SelectionRevision;
+  readonly from: number;
+  readonly to: number | null;
+};
+
+const askedOf = (row: ThreadTargetOperation, operationKey: ThreadTargetOperationKey, runId: string): Asked => ({
+  threadId: row.threadId,
+  operationKey,
+  runId,
+  fromGeneration: WorkspaceGeneration.make(row.fromGeneration ?? 0),
+  root: { rootId: RootId.make(row.rootId), locationRevision: LocationRevision.make(row.locationRevision) },
+  revision: SelectionRevision.make(row.selectionRevision),
+  from: row.projectId,
+  to: row.homeId === null || row.homeId === row.projectId ? null : row.homeId,
+});
 
 const refusedPlacement = (failure: PlacementFailure): GateRefusal => {
   if (failure instanceof AssignmentRefused) {

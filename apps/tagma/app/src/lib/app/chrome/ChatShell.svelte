@@ -38,7 +38,7 @@
     context: { scopeName: () => addresses.scope },
   });
   const unseat = seats.seatMain(host);
-  followHome(host, (thread) => void shell.openThread(thread, 'main'));
+  followHome(host, workspace, (thread, home) => void router.goto(addresses.thread(thread.threadId, home.name), { replaceState: true }));
 
   let routed: string | null | undefined;
   $effect(() => {

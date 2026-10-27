@@ -160,7 +160,7 @@ export function threadContext(
       const home = yield* projects.byId(recorded);
       yield* scratch.ensure(thread.id);
       const { target, world } = yield* targets.of({ id: thread.id, projectId: recorded, root: home.rootPath }, use, (request) =>
-        worlds.of({ thread, at: request.at, root: request.root }),
+        worlds.of({ thread, ...request }),
       );
       const projectId = target.work.projectId;
       const project = projectId === recorded ? home : yield* projects.byId(projectId);

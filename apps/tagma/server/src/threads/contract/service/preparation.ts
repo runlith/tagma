@@ -3,6 +3,7 @@ import type { ThreadContextUse } from '@runlith/agent/thread/agents/ThreadAgent'
 import { Context, type Effect } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { WriteUnit } from '../../../platform/contract/service/units.js';
+import type { WriteSet } from '../../../platform/contract/service/writes.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { TargetAt } from '../../../workspace/contract/wire/place.js';
 import type { WorkspaceGeneration } from '../../../workspace/contract/wire/ids.js';
@@ -15,7 +16,11 @@ export type TargetThread = { readonly id: string; readonly projectId: number; re
 
 export type TargetFailure = StoreFailure | GateRefusal | WorldUnavailable;
 
-export type WorldAcquire = (input: { readonly at: TargetAt; readonly root: string }) => Effect.Effect<WorldAcquisition, WorldUnavailable>;
+export type WorldAcquire = (input: {
+  readonly at: TargetAt;
+  readonly root: string;
+  readonly projectId: number;
+}) => Effect.Effect<WorldAcquisition, WorldUnavailable>;
 
 export type AdmittedTarget = {
   readonly target: TargetSnapshot;
@@ -51,6 +56,7 @@ export type PreparedTarget = {
 export class TargetPreparation extends Context.Service<
   TargetPreparation,
   {
+    readonly writes: WriteSet;
     of(thread: TargetThread, use: ThreadContextUse, acquire: WorldAcquire): Effect.Effect<AdmittedTarget, TargetFailure>;
     prepare(change: TargetChange, acquire: WorldAcquire): Effect.Effect<PreparedTarget, TargetFailure>;
     standing(thread: TargetThread): Effect.Effect<TargetStanding, StoreFailure | GateRefusal>;

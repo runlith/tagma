@@ -60,14 +60,14 @@ export const standingOf = (places: ThreadPlaces) =>
     const active = yield* places.units
       .read((unit) => places.snapshots.readActive(thread.id, unit))
       .pipe(Effect.mapError((failure) => (failure instanceof TargetStorageFailed ? unplaced(thread.id, failure) : failure)));
-    const acquire = (request: { readonly at: TargetAt; readonly root: string }) =>
-      places.worlds.of({ thread: row, at: request.at, root: request.root });
+    const acquire = (request: { readonly at: TargetAt; readonly root: string; readonly projectId: number }) =>
+      places.worlds.of({ thread: row, ...request });
     const admitted = yield* (
       active.state === 'admitted'
-        ? Effect.map(acquire({ at: atOf(active.target), root: active.target.workingRoot }), (acquired) => ({
-            target: active.target,
-            world: acquired.world,
-          }))
+        ? Effect.map(
+            acquire({ at: atOf(active.target), root: active.target.workingRoot, projectId: active.target.work.projectId }),
+            (acquired) => ({ target: active.target, world: acquired.world }),
+          )
         : places.targets.of(
             { id: thread.id, projectId: thread.projectId, root: thread.root },
             { kind: 'tools', runId: null, context: null },

@@ -59,7 +59,6 @@ export const makeCustodyNotices = Effect.fnUntraced(function* ({ send }: { reado
       }
       const sent = yield* send({
         threadId: notice.thread,
-        projectId: notice.projectId,
         id: custodySignalId(notice),
         text: custodyNoticeText(notice),
       });

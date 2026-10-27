@@ -35,10 +35,7 @@
     },
   });
   const unseat = screen.seat(host);
-  followHome(host, (thread) => {
-    const home = workspace.find(thread.projectId);
-    if (home !== null) void router.goto(addresses.thread(thread.threadId, home.name), { replaceState: true });
-  });
+  followHome(host, workspace, (thread, home) => void router.goto(addresses.thread(thread.threadId, home.name), { replaceState: true }));
 
   $effect(() => {
     const projectId = workspace.activeId;

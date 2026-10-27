@@ -42,29 +42,6 @@ it.live('a thread host that broke on anything else is unreachable, and the oblig
   }),
 );
 
-it.live('a signal naming a project reaches only a thread of that project', () =>
-  Effect.gen(function* () {
-    const sent: string[] = [];
-    const threads = { find: () => Effect.succeed({ id: threadId, projectId: 3 }) } as unknown as ThreadLookup['Service'];
-    const harness = {
-      threads: {
-        handle: () => ({
-          sendSignal: (signal: { readonly type: string }) =>
-            Effect.sync(() => {
-              sent.push(signal.type);
-              return { status: 'persisted' };
-            }),
-        }),
-      },
-    } as unknown as AgentHarness<NativeThreadState, Unit<'machine'>, WriteUnit<'machine'>>;
-    const send = commandSignalSend(threads, harness, stayIdle, 'terminal-custody');
-
-    expect((yield* send({ ...words, projectId: 4 }))._tag).toBe('NoThread');
-    expect((yield* send({ ...words, projectId: 3 }))._tag).toBe('Accepted');
-    expect(sent).toEqual(['terminal-custody']);
-  }),
-);
-
 it.live('an archived thread counts as gone only where the sender asks for it', () =>
   Effect.gen(function* () {
     const archived = { id: threadId, projectId: 3, archivedAt: new Date(1_000) };

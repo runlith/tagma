@@ -53,6 +53,7 @@ export type WorldRequest = {
   readonly thread: WorldThread;
   readonly at: TargetAt;
   readonly root: string;
+  readonly projectId: number;
 };
 
 export type WorldLease = {

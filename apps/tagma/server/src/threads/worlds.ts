@@ -10,13 +10,11 @@ import { Terminals } from '../executions/contract/service/terminals.js';
 import { TerminalWriting } from '../executions/contract/service/writing.js';
 import { CommandLedger, MachineWorld, WorldPreferences, Worlds } from '../executions/contract/service/worlds.js';
 import { GuestWorlds } from '../sandbox/contract/service/guests.js';
-import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import { WorkingOrigins } from '../workspace/contract/service/places.js';
 import { ScratchAreas } from './contract/service/scratch.js';
 
 export const threadWorldsLayer = Layer.unwrap(
   Effect.gen(function* () {
-    const records = yield* ThreadRecords;
     const scratch = yield* ScratchAreas;
     const guests = yield* GuestWorlds;
     const origins = yield* WorkingOrigins;
@@ -35,7 +33,6 @@ export const threadWorldsLayer = Layer.unwrap(
     return worldsLayer({
       executions,
       preferences,
-      projectOf: (threadId) => records.projectOf(threadId),
       scratch: (threadId) => scratch.scope(threadId).path,
       world: machine.world,
       commands: ledger._tag === 'Some' ? ledger.value.of : undefined,
@@ -46,7 +43,6 @@ export const threadWorldsLayer = Layer.unwrap(
 ) satisfies Layer.Layer<
   Worlds,
   never,
-  | ThreadRecords
   | ScratchAreas
   | GuestWorlds
   | WorkingOrigins

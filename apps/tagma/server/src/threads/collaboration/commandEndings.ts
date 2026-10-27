@@ -27,7 +27,6 @@ export type CommandSignalSend = (input: {
   readonly id: string;
   readonly text: string;
   readonly notice?: AgentSignalNotice;
-  readonly projectId?: number;
   readonly condition?: (unit: WriteUnit<'machine'>) => Effect.Effect<boolean, ThreadPortFailure>;
 }) => Effect.Effect<CommandSignalOutcome>;
 

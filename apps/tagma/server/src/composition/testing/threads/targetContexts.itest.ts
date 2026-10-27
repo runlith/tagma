@@ -134,7 +134,7 @@ const registerRoot = (held: Owned, path: string) => held.roots.register({ path, 
 const acquire =
   (held: Owned, thread: { id: string }): ReturnType<typeof asWorldAcquire> =>
   (request) =>
-    held.worlds.of({ thread: { id: thread.id, hostKind: null, hostId: null }, at: request.at, root: request.root });
+    held.worlds.of({ thread: { id: thread.id, hostKind: null, hostId: null }, ...request });
 
 const at = (threadId: string, runId: string, generation: number): TargetAt => ({
   threadId,
@@ -358,7 +358,7 @@ it.live(
         place: () => Effect.succeed(PROVEN),
       });
       const inGuest: ReturnType<typeof asWorldAcquire> = (request) =>
-        worlds.of({ thread: { id: threadId, hostKind: 'sandbox', hostId: 's1' }, at: request.at, root: request.root });
+        worlds.of({ thread: { id: threadId, hostKind: 'sandbox', hostId: 's1' }, ...request });
 
       const opened = yield* held.contexts.of(thread, { kind: 'run', runId: 'run-1', context: null }, inGuest);
       expect(opened.world.kind).toBe('sandbox');
@@ -367,7 +367,12 @@ it.live(
       expect(opened.target.place).toBeNull();
       expect(opened.target.sourceKey).toBe('intrinsic');
 
-      const here = yield* worlds.of({ thread: { id: 'local', hostKind: null, hostId: null }, at: at('local', 'run-1', 0), root: checkout });
+      const here = yield* worlds.of({
+        thread: { id: 'local', hostKind: null, hostId: null },
+        at: at('local', 'run-1', 0),
+        root: checkout,
+        projectId,
+      });
       expect(here.place).toEqual(PROVEN);
 
       const rebuilt = yield* held.contexts.of(thread, { kind: 'run', runId: 'run-1', context: null }, inGuest);
@@ -507,7 +512,7 @@ it.live(
         place: () => Effect.succeed(PROVEN),
       });
       const proving: ReturnType<typeof asWorldAcquire> = (request) =>
-        worlds.of({ thread: { id: threadId, hostKind: null, hostId: null }, at: request.at, root: request.root });
+        worlds.of({ thread: { id: threadId, hostKind: null, hostId: null }, ...request });
 
       yield* held.contexts.of(thread, { kind: 'run', runId: 'run-1', context: null }, proving);
       const root = yield* registerRoot(held, worktree);

@@ -38,7 +38,6 @@ export type CheckoutWorldServices = {
   readonly targets: TerminalTargets['Service'];
   readonly host: HostConnection;
   readonly access: CommandAccess['Service'];
-  readonly projectOf: (threadId: string) => Effect.Effect<number | undefined, StoreFailure>;
   readonly scratch: (threadId: string) => string;
   readonly world: World;
   readonly commands?: (subject: LedgerKey) => Commands;
@@ -47,21 +46,11 @@ export type CheckoutWorldServices = {
 export const checkoutWorldFor = Effect.fnUntraced(function* (
   thread: WorldThread,
   root: string,
+  projectId: number,
   runId: string,
   lease: WorldLeasing,
   deps: CheckoutWorldServices,
 ): Effect.fn.Return<ThreadWorld, WorldUnavailable, Scope.Scope> {
-  const projectId = yield* deps.projectOf(thread.id).pipe(
-    Effect.catch((failure) =>
-      Effect.fail(
-        new WorldUnavailable({
-          threadId: thread.id,
-          hostKind: null,
-          reason: `the thread's project could not be read: ${failure._tag}`,
-        }),
-      ),
-    ),
-  );
   const scratch = deps.scratch(thread.id);
   const ledger = (substrate: 'managed' | 'platform'): Commands | undefined =>
     deps.commands?.({
@@ -70,7 +59,6 @@ export const checkoutWorldFor = Effect.fnUntraced(function* (
       projectId: projectId,
     });
   const platform = () => checkoutWorld({ projectRoot: root, scratch, world: deps.world, ...bound(ledger('platform')) });
-  if (projectId === undefined) return platform();
   const setting = yield* deps.preferences.checkout().pipe(
     Effect.catch((failure) =>
       Effect.fail(
