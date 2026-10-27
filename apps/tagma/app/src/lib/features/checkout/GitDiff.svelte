@@ -86,7 +86,7 @@
         rootId: tab.rootId,
         branch: tab.branch,
         path: tab.path,
-        kind: kindFor(tab.path),
+        kind: kindFor(tab.path, line !== null),
         goto: line === null ? null : { line: Math.max(line - 1, 0), column: 0 },
       },
       'open',

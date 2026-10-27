@@ -136,7 +136,10 @@ export class Tabs extends Service<Tabs>()('Tabs', { tier: 'graph', eager: true }
   private show(located: Located, reveal: boolean): void {
     if (reveal) this.column.show('files');
     const goto = located.line === null ? null : { line: Math.max(located.line - 1, 0), column: Math.max((located.column ?? 1) - 1, 0) };
-    this.open({ rootId: located.rootId, branch: located.branch, path: located.path, kind: kindFor(located.path), goto }, 'open');
+    this.open(
+      { rootId: located.rootId, branch: located.branch, path: located.path, kind: kindFor(located.path, goto !== null), goto },
+      'open',
+    );
   }
 
   open(target: TabTarget, how: OpenHow): Tab {

@@ -121,7 +121,7 @@ export class FileOps extends Service<FileOps>()('FileOps', { tier: 'graph' }) {
       },
     });
     this.explorer.refresh([path]);
-    if (kind === 'file') this.tabs.open({ rootId: root, path, kind: kindFor(path) }, 'open');
+    if (kind === 'file') this.tabs.open({ rootId: root, path, kind: kindFor(path, true) }, 'open');
     await this.explorer.reveal(path);
     this.explorer.select(path, 'only');
     return true;

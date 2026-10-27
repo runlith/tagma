@@ -18,6 +18,7 @@
 
   const target = $derived(fileTargetOf(pane.id));
   const projectId = $derived(target?.projectId ?? aimed?.projectId ?? null);
+  const picture = $derived(target !== null && kindFor(target.path, target.at !== null) === 'preview');
   let preview = $state(false);
   let view = $state.raw<Seen | null>(null);
   let seenAt = $state<string | null>(null);
@@ -26,7 +27,7 @@
     void target;
     void graphKey;
     void panes.opened(pane.key);
-    preview = false;
+    preview = picture;
     view = null;
     seenAt = null;
   });
@@ -41,7 +42,7 @@
       rootId: target.rootId,
       branch: null,
       path: target.path,
-      kind: kindFor(target.path),
+      kind: kindFor(target.path, true),
       diff: null,
       state: 'open',
       view: saved,

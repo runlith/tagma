@@ -53,7 +53,7 @@
     const column = range?.start ?? 0;
     const length = range === undefined ? 0 : range.end - range.start;
     tabs.open(
-      { rootId, path: file, kind: kindFor(file), goto: { line: line - 1, column, length: length > 0 ? length : undefined } },
+      { rootId, path: file, kind: kindFor(file, true), goto: { line: line - 1, column, length: length > 0 ? length : undefined } },
       'preview',
     );
   }

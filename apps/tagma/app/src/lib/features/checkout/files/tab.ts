@@ -53,7 +53,7 @@ export const isPreviewable = (path: string): boolean => MARKDOWN_TYPES.test(path
 
 export const isImage = (path: string): boolean => IMAGE_TYPES.test(path);
 
-export const kindFor = (path: string): TabKind => (isImage(path) ? 'image' : 'file');
+export const kindFor = (path: string, atLine = false): TabKind => (isImage(path) ? 'image' : isSvg(path) && !atLine ? 'preview' : 'file');
 
 export const tabId = (target: { readonly rootId: RootId | null; readonly path: string; readonly kind: TabKind }): string =>
   `${target.kind}\u0000${target.rootId ?? ''}\u0000${target.path}`;
