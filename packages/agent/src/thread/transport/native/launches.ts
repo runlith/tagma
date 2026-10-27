@@ -35,10 +35,11 @@ export const makeLaunches = Effect.gen(function* () {
       return yield* Effect.die(new Error(`Run ${run.id} is not held by this process, so it has no stop to run under.`));
     const transcript = yield* store.entriesOfRun(thread.id, run.id);
     const stepsTaken = launch.fresh ? 0 : yield* readThreadRunStepsTaken(log, kinds, { id: run.id, threadId: thread.id });
+    const begun = stepsTaken > 0 || transcript.some((entry) => entry.type === 'context');
     const parts = yield* assembly.native(
       { thread, run, transcript, stepsTaken, stop },
       {
-        oriented: launch.oriented,
+        oriented: launch.oriented && !begun,
         ask: intake.ask,
         opened: launch.opened,
       },

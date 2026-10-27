@@ -100,7 +100,6 @@ export const makeQueues = Effect.fnUntraced(function* ({
         said.length > 0
           ? (runId: string) => threadUserMessageEvent({ id: runId }, { text: queuedTurnText(said), attachments: stored, reader, turnKey })
           : undefined,
-      oriented: turns.length > 0,
       facts: (runId) => [
         ...under(signals, stopped ? runId : source.runId, runId),
         ...tasked.map((item) => threadSignalEvent(threadSignalOfInboxItem(item), runId)),

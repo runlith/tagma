@@ -40,7 +40,13 @@ const answer: LLMEvent[] = [
   { type: 'finish', reason: 'stop', usage },
 ];
 
-type Asked = { readonly lane: string | undefined; readonly system: string | undefined; readonly messages: readonly Message[] };
+type Asked = {
+  readonly lane: string | undefined;
+  readonly stepped: boolean;
+  readonly system: string | undefined;
+  readonly tools: readonly string[];
+  readonly messages: readonly Message[];
+};
 
 const recording =
   (asked: Asked[]) =>
@@ -59,7 +65,13 @@ const recording =
         stream: (input: ModelStreamInput) =>
           Stream.unwrap(
             Effect.sync(() => {
-              asked.push({ lane: selection.lane, system: selection.instructions, messages: input.messages });
+              asked.push({
+                lane: selection.lane,
+                stepped: input.step !== undefined,
+                system: selection.instructions,
+                tools: Object.keys(input.tools),
+                messages: input.messages,
+              });
               return Stream.fromIterable(answer);
             }),
           ),
@@ -136,19 +148,20 @@ it.live(
       );
       if (started.status !== 'started') return yield* Effect.die(new Error(`the spawn was ${started.status}`));
       yield* idle(started.threadId, null);
+      yield* turn(source, 'Read it again.');
 
-      const of = (lane: string) => asked.filter((request) => request.lane === lane);
-      const [parent] = of(source);
+      const of = (lane: string) => asked.filter((request) => request.lane === lane && request.stepped);
+      const [parent, again] = of(source);
       const [opened, next] = of(branch);
       const [child] = of(started.threadId);
-      if (parent === undefined || opened === undefined || next === undefined || child === undefined) {
+      if (parent === undefined || again === undefined || opened === undefined || next === undefined || child === undefined) {
         return yield* Effect.die(new Error(`requests by thread: ${JSON.stringify(asked.map((request) => request.lane))}`));
       }
+      const copied = parent.messages.length + 1;
       for (const fork of [opened, child]) {
-        expect(fork.system).toBe(parent.system);
-        expect(wire(fork.messages.slice(0, parent.messages.length))).toEqual(wire(parent.messages));
-        expect(fork.messages[parent.messages.length]?.role).toBe('assistant');
-        expect(naming(fork.messages.slice(parent.messages.length + 1), source)).toBe(1);
+        expect([fork.system, fork.tools]).toEqual([again.system, again.tools]);
+        expect(wire(fork.messages.slice(0, copied))).toEqual(wire(again.messages.slice(0, copied)));
+        expect(naming(fork.messages.slice(copied), source)).toBe(1);
       }
       expect(wire(next.messages.slice(0, opened.messages.length))).toEqual(wire(opened.messages));
       expect(naming(next.messages.slice(opened.messages.length), source)).toBe(0);

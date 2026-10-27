@@ -71,7 +71,7 @@ export const makeAdoptions = Effect.gen(function* () {
       const latest = (yield* store.find(adopted.id)) ?? adopted;
       const opened = yield* Deferred.make<void, ThreadBorderFailed>();
       yield* launches
-        .launch(latest, run, { fresh: false, outputOptional: true, opened, oriented: false })
+        .launch(latest, run, { fresh: false, outputOptional: true, opened, oriented: true })
         .pipe(Effect.provideService(QuestionIntake, intake));
       yield* Deferred.await(opened).pipe(Effect.timeoutOption(lease.takeoverAfterMs));
       return 'adopted' as const;

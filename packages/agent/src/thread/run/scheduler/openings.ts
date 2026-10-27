@@ -170,7 +170,7 @@ export const makeOpenings = Effect.fnUntraced(function* ({
               {
                 thread: opened,
                 run,
-                oriented: request.oriented ?? turn !== null,
+                oriented: request.oriented ?? (request.kind ?? 'turn') === 'turn',
                 outputOptional: request.outputOptional === true,
                 seed,
                 compacts: request.compacts,

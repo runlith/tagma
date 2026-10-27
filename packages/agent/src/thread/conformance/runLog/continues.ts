@@ -6,10 +6,10 @@ import { Message, ToolCallPart } from '@runlith/llm/schema/messages';
 import { AgentRunBroke } from '../../../agent/AgentFailure';
 import type { ThreadStorageFactory } from '../storagePort';
 import { threadCauseOf } from '../../ThreadBorder';
-import { OWNER, SCOPE, scriptedWorld, pump, startedTurn } from './world';
+import { OWNER, SCOPE, openedRun, scriptedWorld, pump, startedTurn } from './world';
 import { heldTurn, processTurn, replyTurn, brokenTurn, scriptedStep } from './scripts';
 import { dyingToolTurn } from './toolScripts';
-import { request, standingOf, until } from './support';
+import { gate, request, standingOf, until } from './support';
 import { coreEntry } from '../../../transcript/kinds';
 const reply = (text: string) =>
   replyTurn({
@@ -105,6 +105,65 @@ export function describeThreadRunContinues<TTx, TWrite extends TTx = TTx, R = ne
         successor.plan.push(processTurn(Effect.never));
         expect(yield* successor.harness.runs.recoverNow()).toBe(1);
         expect(yield* runs.latestRun(thread.id)).toMatchObject({ id: stream.runId, status: progress === 'retry' ? 'cut' : 'running' });
+      }),
+    );
+    test(
+      'a run whose process died before it oriented is oriented by the process that takes it up, and a run that had oriented is not oriented twice',
+      Effect.fnUntraced(function* () {
+        const storage = yield* Effect.acquireRelease(open(), (storage) => storage.dispose());
+        const bare = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE });
+        const told = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE });
+        const orienting = gate();
+        const orientation = (thread: { readonly id: string; readonly transcript: readonly { readonly runId?: string }[] }, text: string) =>
+          Effect.succeed({
+            message: Message.user(text),
+            entry: { type: 'context' as const, id: `context:${thread.id}:${text}`, runId: thread.transcript.at(-1)?.runId, text },
+          });
+        const first = yield* scriptedWorld(storage, bare.agentId, {
+          orient: (thread) =>
+            thread.id === bare.id
+              ? Effect.andThen(Effect.sync(orienting.reach), Effect.never)
+              : orientation(thread, `Oriented ${thread.id}.`),
+        });
+        first.plan.push(processTurn(Effect.never));
+        yield* startedTurn(first, told.id, 'Begin there.');
+        yield* until(() => Effect.sync(() => first.replayed.length === 1));
+        yield* startedTurn(first, bare.id, 'Begin here.');
+        yield* orienting.reached;
+        const second = yield* scriptedWorld(storage, bare.agentId, {
+          orient: (thread) => orientation(thread, `Oriented ${thread.id} on resume.`),
+        });
+        second.plan.push(processTurn(Effect.never), processTurn(Effect.never));
+        let recovered = 0;
+        yield* until(() => Effect.map(second.harness.runs.recoverNow(), (taken) => (recovered += taken) === 2));
+        yield* until(() => Effect.sync(() => second.replayed.length === 2));
+        const heard = second.replayed.map((messages) => JSON.stringify(messages));
+        expect(heard.filter((said) => said.includes(`Oriented ${bare.id} on resume.`))).toHaveLength(1);
+        expect(heard.filter((said) => said.includes(`Oriented ${told.id} on resume.`))).toHaveLength(0);
+        expect(heard.filter((said) => said.includes(`Oriented ${told.id}.`))).toHaveLength(1);
+      }),
+    );
+    test(
+      'Continue over a run stopped before it oriented orients the run that takes the turn up',
+      Effect.fnUntraced(function* () {
+        const orienting = gate();
+        let orients = 0;
+        const { storage, world, thread } = yield* openedRun(open, {
+          orient: () =>
+            Effect.suspend(() =>
+              (orients += 1) === 1
+                ? Effect.andThen(Effect.sync(orienting.reach), Effect.never)
+                : Effect.succeed({ message: Message.user('Oriented on Continue.') }),
+            ),
+        });
+        yield* startedTurn(world, thread.id, 'Begin.');
+        yield* orienting.reached;
+        expect(yield* world.harness.threads.handle(thread.id, OWNER).stop()).toMatchObject({ status: 'stopped' });
+        yield* until(() => Effect.map(storage.aggregate.find(thread.id), (row) => row?.status === 'idle'));
+        world.plan.push(reply('Continued.'));
+        yield* world.harness.threads.handle(thread.id, OWNER).continue();
+        yield* until(() => Effect.sync(() => world.replayed.length === 1));
+        expect(JSON.stringify(world.replayed[0])).toContain('Oriented on Continue.');
       }),
     );
     test(
