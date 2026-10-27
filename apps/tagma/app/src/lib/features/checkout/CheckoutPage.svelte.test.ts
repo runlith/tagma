@@ -33,10 +33,17 @@ import { Tabs } from './files/Tabs.svelte.js';
 import { FileOpener } from '$lib/features/checkout/files/FileOpener.svelte.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { GitLists } from './GitLists.svelte.js';
-import { makeStorage } from '@runlith/layer/testing';
+import { makeRouter, makeStorage } from '@runlith/layer/testing';
 import { Host } from '@runlith/layer/Host';
 import { DECLARED_LINKS } from '$lib/app/opening/declaredLinks.js';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
+import type { Component } from 'svelte';
+import type { Router } from '@runlith/layer/Router';
+import { Bar } from '$lib/app/panes/Bar.svelte.js';
+import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
+import { Cleanup } from '$lib/features/worktrees/Cleanup.svelte.js';
+import { Finishing } from '$lib/features/worktrees/Finishing.svelte.js';
+import GitTab from './GitTab.svelte';
 
 const area = (entries: readonly CheckoutEntry[]): CheckoutArea => ({ entries, added: 0, removed: 0 });
 
@@ -83,10 +90,14 @@ afterEach(async () => {
   app = undefined;
 });
 
-function draw(over: { places?: Worktrees; history?: unknown } = {}): HTMLElement {
+function draw(over: { places?: Worktrees; history?: unknown; view?: Component; router?: Router } = {}): HTMLElement {
   app = mountShell(
     Layer.mergeAll(
       screen(),
+      Bar,
+      WallClock,
+      Layer.of(Finishing, { inFlight: () => null, outcomeOf: () => null, departed: [] } as never),
+      Layer.of(Cleanup, { show: () => undefined } as never),
       Checkout,
       Holdings,
       GitLists,
@@ -142,9 +153,9 @@ function draw(over: { places?: Worktrees; history?: unknown } = {}): HTMLElement
         write: stubMutation(),
       } as never),
     ),
-    { storage: makeStorage({ 'tagma.checkoutColumn': 'git' }) },
+    { storage: makeStorage({ 'tagma.checkoutColumn': 'git' }), router: over.router },
   );
-  const mounted = app.draw(CheckoutPage as never);
+  const mounted = app.draw((over.view ?? CheckoutPage) as never);
   flushSync();
   return mounted;
 }
@@ -294,6 +305,26 @@ test('the branch state selects publish, pull before push when both sides moved, 
 
   sent({ ...checkoutRow(), revision: 7, ahead: null, behind: null });
   expect(offered()).toBe('push');
+});
+
+test('the Git tab on main among several worktrees shows the checkout, and only view=board shows the worktree board', () => {
+  let url = $state(new URL('http://localhost/proj/checkout'));
+  const page = draw({
+    places: { ...testPlaces(), known: true, several: true } as never,
+    view: GitTab as never,
+    router: makeRouter({ url: () => url }),
+  });
+  sent(checkoutRow());
+
+  expect(page.querySelector('[data-checkout-head]')).not.toBeNull();
+  expect(page.querySelector('[data-checkout-board]')).not.toBeNull();
+  expect(page.querySelector('[data-worktree-board]')).toBeNull();
+
+  url = new URL('http://localhost/proj/checkout?view=board');
+  flushSync();
+
+  expect(page.querySelector('[data-worktree-board]')).not.toBeNull();
+  expect(page.querySelector('[data-checkout-head]')).toBeNull();
 });
 
 test('a checkout the server no longer registers is told once, and the window moves to the project’s main checkout', () => {

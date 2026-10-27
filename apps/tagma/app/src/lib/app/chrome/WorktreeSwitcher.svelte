@@ -362,10 +362,10 @@
               open = false;
               void router.goto(addresses.git('board', aimed));
             }}
-            data-worktree-manage
+            data-all-worktrees
           >
             <LayoutList class="size-3.5 text-muted-foreground" />
-            Manage
+            All worktrees
           </Button>
         {/if}
       </div>
