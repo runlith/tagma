@@ -72,6 +72,7 @@ export type Question = { readonly _tag: 'CloseInput' } | { readonly _tag: 'Resiz
 
 export type Request =
   | { readonly _tag: 'Open'; readonly path: string }
+  | { readonly _tag: 'Shutdown' }
   | { readonly _tag: 'Adopt'; readonly handle: number; readonly fd: number }
   | { readonly _tag: 'Close'; readonly handle: number }
   | { readonly _tag: 'Ask'; readonly id: number; readonly ask: Ask }
@@ -82,6 +83,7 @@ export type Request =
 export type Answer =
   | { readonly _tag: 'Ready' }
   | { readonly _tag: 'Opened'; readonly interactive: string | undefined }
+  | { readonly _tag: 'Closed' }
   | { readonly _tag: 'Refused'; readonly detail: string }
   | { readonly _tag: 'Answered'; readonly id: number; readonly value: unknown }
   | { readonly _tag: 'Failed'; readonly id: number; readonly failure: Failure }
@@ -426,6 +428,13 @@ const program = Effect.gen(function* () {
       case 'Open':
         send({ _tag: 'Opened', interactive: undefined });
         break;
+      case 'Shutdown':
+        yield* Effect.forEach([...asks.values()], Fiber.interrupt, { discard: true });
+        for (const handle of [...inputs.keys()]) yield* inputAnswer(handle, { _tag: 'Dispose' });
+        for (const handle of [...terminals.keys()]) yield* close(handle);
+        if (yield* reactor.retire) native.unload();
+        send({ _tag: 'Closed' });
+        return;
       case 'Adopt':
         terminals.set(request.handle, {
           handle: request.handle,

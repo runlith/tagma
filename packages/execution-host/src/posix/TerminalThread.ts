@@ -55,6 +55,8 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
   const services = yield* Effect.context<never>();
   const run = Effect.runForkWith(services);
   const opened = yield* Deferred.make<void, TerminalThreadUnavailable>();
+  const closed = yield* Deferred.make<void, TerminalThreadUnavailable>();
+  let isOpen = false;
   const waiting = new Map<number, (settled: Settled) => void>();
   const returned = new Map<number, Uint8Array[]>();
   const hosted = new Map<number, Hosted>();
@@ -68,6 +70,7 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
     lost = reason;
     worker.terminate();
     Deferred.doneUnsafe(opened, Exit.fail(reason));
+    Deferred.doneUnsafe(closed, Exit.fail(reason));
     const settles = [...waiting.values()];
     waiting.clear();
     for (const settle of settles) settle({ ok: false, failure: { _tag: 'ChannelFailed', reason: 'os', detail: reason.detail } });
@@ -91,6 +94,8 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
           run(Effect.logWarning('the terminal thread keeps the default scheduling class', { detail: answer.interactive }));
         }
         return void Deferred.doneUnsafe(opened, Exit.void);
+      case 'Closed':
+        return void Deferred.doneUnsafe(closed, Exit.void);
       case 'Refused':
         return end(worker, new TerminalThreadUnavailable({ detail: answer.detail }));
       case 'Answered':
@@ -152,7 +157,14 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
       worker.onmessage = (event: MessageEvent<Answer>) => answered(worker, event.data);
       return worker;
     }),
-    (worker) => Effect.sync(() => end(worker, new TerminalThreadUnavailable({ detail: 'the terminal thread was closed' }), true)),
+    (worker) =>
+      Effect.gen(function* () {
+        if (isOpen && lost === undefined) {
+          worker.postMessage({ _tag: 'Shutdown' } satisfies Request);
+          yield* Deferred.await(closed).pipe(Effect.orDie);
+        }
+        end(worker, new TerminalThreadUnavailable({ detail: 'the terminal thread was closed' }), true);
+      }),
   );
   yield* Deferred.await(opened).pipe(
     Effect.timeoutOrElse({
@@ -161,6 +173,7 @@ export const openTerminalThread = Effect.fn('posix.TerminalThread.open')(functio
     }),
     Effect.tapError((reason) => Effect.sync(() => end(worker, reason))),
   );
+  isOpen = true;
 
   const post = (request: Request): void => {
     if (lost === undefined) worker.postMessage(request);

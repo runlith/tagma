@@ -6,7 +6,7 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { ExecutionId } from '@runlith/executions/protocol/execution';
 import { ExecutionCapacity } from '../../ExecutionCapacity';
 import { fixtureFacts, fixtureMachine, hostProfile, hostTestRoot } from '../../hostFixture';
-import { Holder } from '../../holder/Holder';
+import { Holder, type HeldLaunch } from '../../holder/Holder';
 import { testHolder, HOLDER_LIBRARY } from '../../posix/testing/holder';
 import { loadLibrary } from '../../posix/Library';
 import { readStanding } from '../../posix/macos/standing';
@@ -21,6 +21,16 @@ it.live(
     yield* fs.makeDirectory(root, { recursive: true });
     const state = yield* fs.makeTempDirectoryScoped({ directory: root, prefix: 'terminal-capacity-' });
     const profile = hostProfile({ executions: 4, transports: ['pty'] });
+    const launch: HeldLaunch = {
+      id: 'owned',
+      path: '/bin/sh',
+      argv: ['sh', '-c', 'read line'],
+      env: [],
+      cwd: state,
+      transport: { _tag: 'pty', geometry: { rows: 24, columns: 80 } },
+      pace: 'full',
+    };
+    yield* Effect.scoped(Effect.flatMap(Holder, (holder) => holder.launch(launch))).pipe(Effect.provide(testHolder(state)));
     const result = yield* Effect.scoped(
       Effect.gen(function* () {
         const holder = yield* Holder;
@@ -36,15 +46,7 @@ it.live(
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, ownTerminals),
         );
         const before = yield* standing;
-        const child = yield* holder.launch({
-          id: 'owned',
-          path: '/bin/sh',
-          argv: ['sh', '-c', 'read line'],
-          env: [],
-          cwd: state,
-          transport: { _tag: 'pty', geometry: { rows: 24, columns: 80 } },
-          pace: 'full',
-        });
+        const child = yield* holder.launch(launch);
         yield* Effect.addFinalizer(() =>
           Effect.orDie(Effect.andThen(child.act('work', 'kill'), Effect.andThen(child.exit, Effect.andThen(child.reap, child.release)))),
         );
