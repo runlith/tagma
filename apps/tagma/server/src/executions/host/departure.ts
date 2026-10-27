@@ -58,7 +58,8 @@ export const prepareChange = Effect.fnUntraced(function* (
   const refused = (detail: string) => Effect.andThen(withdrawCandidate(files, state), Effect.fail(new HostUnprepared({ detail })));
   const placedBy = yield* candidateRestart(files, state).pipe(Effect.mapError(unprepared));
   if (placedBy !== restart) {
-    yield* Effect.logWarning(`a host candidate ${pending} stands that the successor of restart ${restart} did not place; it is withdrawn`);
+    const named = pending._tag === 'Unread' ? `this build cannot read (${pending.detail})` : pending.digest;
+    yield* Effect.logWarning(`a host candidate ${named} stands that the successor of restart ${restart} did not place; it is withdrawn`);
     yield* withdrawCandidate(files, state);
     return false;
   }

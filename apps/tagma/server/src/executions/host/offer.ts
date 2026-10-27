@@ -232,13 +232,24 @@ export const placeCandidate = Effect.fnUntraced(
   (effect, input) => Effect.onExit(effect, (exit) => (exit._tag === 'Failure' ? discard(input.files, input.own) : Effect.void)),
 );
 
-export const candidateOf = Effect.fnUntraced(function* (files: FileSystem.FileSystem, state: string) {
-  const next = yield* declared(files, hostBundleNext(state));
-  if (next !== undefined) return next;
+export type Candidate =
+  | { readonly _tag: 'Bundle'; readonly digest: Digest }
+  | { readonly _tag: 'Boot'; readonly digest: Digest }
+  | { readonly _tag: 'Unread'; readonly detail: string };
+
+export const candidateOf = Effect.fnUntraced(function* (
+  files: FileSystem.FileSystem,
+  state: string,
+): Effect.fn.Return<Candidate | undefined, HostPreparationRefused> {
+  const next = yield* Effect.result(Effect.provideService(readArtifact(hostBundleNext(state)), FileSystem.FileSystem, files));
+  if (next._tag === 'Success') return { _tag: 'Bundle', digest: next.success.identity.digest };
+  if (next.failure._tag !== 'ArtifactMissing') return { _tag: 'Unread', detail: refusedBy(next.failure) };
   const boot = yield* files
     .exists(hostBootNext(state))
     .pipe(Effect.mapError((failure) => refusing(`${hostBootNext(state)} could not be read: ${failure.message}`)));
-  return boot ? yield* declared(files, hostBundle(state)) : undefined;
+  if (!boot) return undefined;
+  const standing = yield* declared(files, hostBundle(state));
+  return standing === undefined ? undefined : { _tag: 'Boot', digest: standing };
 });
 
 export const withdrawCandidate = Effect.fnUntraced(function* (files: FileSystem.FileSystem, state: string) {

@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
@@ -39,7 +39,7 @@ const standing: RuntimeStatus = {
   },
 };
 
-const withCandidate = (name: string): string => {
+const withCandidate = (name: string, later?: string): string => {
   const state = join(root, name);
   const next = hostBundleNext(state);
   mkdirSync(next, { recursive: true });
@@ -55,29 +55,31 @@ const withCandidate = (name: string): string => {
     wire: { min: 1, max: 1 },
     parts,
   };
-  writeFileSync(
-    join(next, ARTIFACT_FILE),
-    Schema.encodeSync(Schema.fromJsonString(ArtifactManifest))({ identity: { digest: identityOf(declared), build: name }, ...declared }),
-  );
+  const manifest = Schema.encodeSync(Schema.fromJsonString(ArtifactManifest))({
+    identity: { digest: identityOf(declared), build: name },
+    ...declared,
+  });
+  if (later === undefined) writeFileSync(join(next, ARTIFACT_FILE), manifest);
+  else {
+    const bytes = new TextEncoder().encode(later);
+    writeFileSync(join(next, later), bytes);
+    const written = JSON.parse(manifest) as { parts: object[] };
+    written.parts.push({ role: later, path: later, bytes: bytes.length, digest: digestOf(bytes) });
+    writeFileSync(join(next, ARTIFACT_FILE), JSON.stringify(written));
+  }
   writeFileSync(hostCandidateRestart(state), RESTART);
   return state;
 };
 
 const unused = Effect.die('not reached by the handover');
 
-const handing = Effect.fnUntraced(function* (name: string) {
-  const files = yield* FileSystem.FileSystem;
-  const state = withCandidate(name);
-  const answering = yield* Ref.make(false);
-  const claim = yield* Ref.make<StateClaim>({ _tag: 'Held', holders: [1] });
-  const asked = yield* Deferred.make<void>();
-  const executions = HostLifecycle.of({
-    status: () =>
-      Effect.andThen(
-        Deferred.succeed(asked, undefined),
-        Effect.flatMap(Ref.get(answering), (up) => (up ? Effect.succeed(standing) : Effect.fail(absent))),
-      ),
-    prepare: (operation) => Effect.succeed({ _tag: 'Prepared', operation, checkpoints: 0, unquiet: 0 }),
+const lifecycle = (
+  status: HostLifecycle['Service']['status'],
+  prepare: HostLifecycle['Service']['prepare'] = (operation) => Effect.succeed({ _tag: 'Prepared', operation, checkpoints: 0, unquiet: 0 }),
+) =>
+  HostLifecycle.of({
+    status,
+    prepare,
     capabilities: () => unused,
     served: () => unused,
     generation: () => unused,
@@ -90,6 +92,19 @@ const handing = Effect.fnUntraced(function* (name: string) {
     endProcess: () => unused,
     endResidual: () => unused,
   });
+
+const handing = Effect.fnUntraced(function* (name: string) {
+  const files = yield* FileSystem.FileSystem;
+  const state = withCandidate(name);
+  const answering = yield* Ref.make(false);
+  const claim = yield* Ref.make<StateClaim>({ _tag: 'Held', holders: [1] });
+  const asked = yield* Deferred.make<void>();
+  const executions = lifecycle(() =>
+    Effect.andThen(
+      Deferred.succeed(asked, undefined),
+      Effect.flatMap(Ref.get(answering), (up) => (up ? Effect.succeed(standing) : Effect.fail(absent))),
+    ),
+  );
   const preparing = yield* Effect.forkChild(
     prepareChange(
       executions,
@@ -123,6 +138,30 @@ layer(BunServices.layer)('handing the host over to a successor', (it) => {
       yield* Ref.set(claim, { _tag: 'Free' });
       yield* TestClock.adjust('1 second');
       expect(yield* Fiber.join(preparing)).toBe(false);
+    }),
+  );
+
+  it.effect('a candidate naming a part role this build does not know is still handed to the host, whose refusal refuses the restart', () =>
+    Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const state = withCandidate('later-role', 'role-of-a-later-build');
+      const verdict = `bundle: ${hostBundleNext(state)}: Expected a known role at ["parts"][4]["role"]`;
+      const refused = yield* Effect.flip(
+        prepareChange(
+          lifecycle(
+            () => Effect.succeed(standing),
+            (operation) => Effect.succeed({ _tag: 'Unprepared', operation, reason: 'bundle', detail: verdict }),
+          ),
+          Effect.succeed({ _tag: 'Held', custody: standing.custody }),
+          files,
+          state,
+          INSTALLATION,
+          Effect.succeed({ _tag: 'Held', holders: [1] }),
+          RESTART,
+        ),
+      );
+      expect(refused.detail).toContain(verdict);
+      expect(existsSync(hostBundleNext(state))).toBe(false);
     }),
   );
 });
