@@ -79,6 +79,33 @@ const isolatedUsers = (input: EnvironmentInput) => {
   });
 };
 
+const spawnsOf = (binary: string, seen: (child: ReturnType<typeof Bun.spawn>) => void = () => undefined) =>
+  Effect.map(
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const previous = Bun.spawn;
+        const children: ReturnType<typeof Bun.spawn>[] = [];
+        const observed: typeof Bun.spawn = (...args: readonly unknown[]) => {
+          const child = Reflect.apply(previous, Bun, args);
+          if (Array.isArray(args[0]) && args[0][0] === binary) {
+            children.push(child);
+            seen(child);
+          }
+          return child;
+        };
+        Bun.spawn = observed;
+        return { previous, children };
+      }),
+      ({ previous, children }) =>
+        Effect.promise(async () => {
+          Bun.spawn = previous;
+          for (const child of children) if (child.exitCode === null) child.kill('SIGKILL');
+          await Promise.all(children.map((child) => child.exited));
+        }),
+    ),
+    ({ children }) => children,
+  );
+
 it.live('a probe still running when its reader leaves is reaped when the layer closes', () =>
   Effect.gen(function* () {
     const { home, local } = homeOf('interrupted');
@@ -88,28 +115,7 @@ it.live('a probe still running when its reader leaves is reaped when the layer c
     const users = isolatedUsers({ shell: shellFor(local, [], failedProfile), env: process.env, world: null, home });
     yield* users.ready;
     const started = yield* Effect.acquireRelease(Queue.unbounded<number>(), Queue.shutdown);
-    const children: ReturnType<typeof Bun.spawn>[] = [];
-    yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const previous = Bun.spawn;
-        const observed: typeof Bun.spawn = (...args: readonly unknown[]) => {
-          const child = Reflect.apply(previous, Bun, args);
-          if (Array.isArray(args[0]) && args[0][0] === binary) {
-            children.push(child);
-            Queue.offerUnsafe(started, child.pid);
-          }
-          return child;
-        };
-        Bun.spawn = observed;
-        return previous;
-      }),
-      (previous) =>
-        Effect.promise(async () => {
-          Bun.spawn = previous;
-          for (const child of children) if (child.exitCode === null) child.kill('SIGKILL');
-          await Promise.all(children.map((child) => child.exited));
-        }),
-    );
+    yield* spawnsOf(binary, (child) => Queue.offerUnsafe(started, child.pid));
     const pid = yield* Effect.scoped(
       Effect.gen(function* () {
         const installs = yield* installsOver(users);
@@ -291,7 +297,7 @@ it.live(
     }),
 );
 
-it.live('a hung first copy yields to an answering second, and a lone hung copy stays found with its version unread', () =>
+it.live('a hung first copy yields to an answering second, and a lone hung copy stays found with its version unread, each probed once', () =>
   Effect.gen(function* () {
     const { home, local } = homeOf('hung');
     yield* machine(home);
@@ -302,12 +308,18 @@ it.live('a hung first copy yields to an answering second, and a lone hung copy s
     const users = isolatedUsers({ shell: shellFor(local, [], failedProfile), env: process.env, world: null, home });
     yield* users.ready;
     process.env.PATH = `${early}:${process.env.PATH}`;
+    const hungGrok = yield* spawnsOf(join(early, 'grok'));
+    const hungGemini = yield* spawnsOf(join(early, 'gemini'));
     const installs = yield* installsOver(users, 1_000);
     yield* installs.program('grok');
     yield* installs.program('gemini');
     const rows = new Map((yield* installs.read).map((row) => [row.harness, row]));
     expect(rows.get('grok')).toMatchObject({ binary: join(local, 'grok'), version: 'grok 1.0.50' });
     expect(rows.get('gemini')).toMatchObject({ binary: join(early, 'gemini'), version: null });
+    expect(yield* installs.program('gemini')).toEqual({ path: join(early, 'gemini'), runtime: null });
+    yield* installs.program('grok');
+    yield* installs.read;
+    expect([hungGrok.length, hungGemini.length]).toEqual([1, 1]);
   }),
 );
 
