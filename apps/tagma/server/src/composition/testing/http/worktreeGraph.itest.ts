@@ -112,13 +112,14 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
         const repository = listed.repositories[0]?.binding;
         if (repository === undefined) return yield* Effect.die(new Error(`project ${project} covers no store`));
         const destination = join(yield* files.realPath(yield* world.directory('worktrees')), 'placed');
+        const operationId = world.uniqueName();
         const prepared = yield* world.op(
           'prepare_worktree',
-          { operationId: 'placed', repository, destination, mode: { kind: 'new-branch', branch: 'placed', start: 'HEAD' } },
+          { operationId, repository, destination, mode: { kind: 'new-branch', branch: 'placed', start: 'HEAD' } },
           `project=${project}`,
         );
         expect(prepared.status).toBe(200);
-        const created = yield* world.op('create_worktree', { operationId: 'placed' }, `project=${project}`);
+        const created = yield* world.op('create_worktree', { operationId }, `project=${project}`);
         expect(created.body).toMatchObject({ status: 'ok' });
         yield* files.writeFileString(join(destination, 'only-here.ts'), 'export const here = 1;\n');
         const worktreeLaw = yield* named({ tags: ['rule'], title: 'Law the worktree copy holds' }, destination);

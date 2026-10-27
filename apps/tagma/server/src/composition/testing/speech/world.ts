@@ -220,16 +220,13 @@ const makeStand = Effect.gen(function* () {
     opened: openedWith(),
     openedWith,
     registered,
-    reader:
-      (world: World, projectId: number, id: string) =>
-      (after: number, waitMs?: number, bytes = 50_000) =>
-        waitMs === undefined
-          ? awaited(
-              world.listenings.read({ projectId, id, after, limit: 50, bytes, waitMs: 0 }),
-              (page) => page.lines.length > 0 || page.state !== 'live',
-              'the transcript to change or end',
-            )
-          : world.listenings.read({ projectId, id, after, limit: 50, bytes, waitMs }),
+    reader: (world: World, projectId: number, id: string) =>
+      Effect.fnUntraced(function* (after: number, waitMs?: number, bytes = 50_000) {
+        for (;;) {
+          const page = yield* world.listenings.read({ projectId, id, after, limit: 50, bytes, waitMs: waitMs ?? 5_000 });
+          if (waitMs !== undefined || page.lines.length > 0 || page.state !== 'live') return page;
+        }
+      }),
   };
 });
 

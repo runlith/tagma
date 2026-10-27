@@ -118,12 +118,13 @@ layer(Layer.effect(Copied, setup).pipe(Layer.provideMerge(fixture)), {
       const repository = listed.repositories[0]?.binding;
       expect(repository, `project ${project} covers no store`).toBeDefined();
       const destination = join(yield* files.realPath(yield* world.directory('worktrees')), 'placed');
+      const operationId = world.uniqueName();
       yield* world.op(
         'prepare_worktree',
-        { operationId: 'placed', repository, destination, mode: { kind: 'new-branch', branch: 'placed', start: 'HEAD' } },
+        { operationId, repository, destination, mode: { kind: 'new-branch', branch: 'placed', start: 'HEAD' } },
         `project=${project}`,
       );
-      const worktree = yield* world.op('create_worktree', { operationId: 'placed' }, `project=${project}`);
+      const worktree = yield* world.op('create_worktree', { operationId }, `project=${project}`);
       yield* wrote(destination, 'src/core/view.ts', "import { panel } from '../ui/panel';\nexport const view = panel;\n");
       yield* suiteGit(destination, 'add', '-A');
       yield* suiteGit(destination, 'commit', '-qm', 'seed the debt on the branch');

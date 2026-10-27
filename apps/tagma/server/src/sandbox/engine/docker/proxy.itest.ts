@@ -52,7 +52,6 @@ for (const destination of ${JSON.stringify(destinations)}) {
   answers[destination] = await new Promise((resolve, reject) => {
     const socket = net.connect({ host: '127.0.0.1', port: ${PROXY_PORT} });
     let said = '';
-    socket.setTimeout(5000, () => socket.destroy(new Error('deadline')));
     socket.on('error', reject);
     socket.on('connect', () => socket.write('CONNECT ' + destination + ' HTTP/1.1\\r\\nHost: ' + destination + '\\r\\n\\r\\n'));
     socket.on('data', (bytes) => { said += bytes.toString(); });
