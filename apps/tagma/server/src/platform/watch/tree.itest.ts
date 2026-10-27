@@ -58,14 +58,8 @@ const withheldWorld = Effect.fnUntraced(function* () {
   const tree = join(root, 'tree');
   yield* Effect.promise(() => mkdir(join(tree, 'deep'), { recursive: true }));
   const tickets = watchTickets(8);
-  const watched = (at: string, heard: WatchEvent[]) =>
-    following(
-      Effect.provideService(
-        watchAll([{ at, recursive: true, required: true, listen: (event) => heard.push(event) }]),
-        WatchTickets,
-        tickets,
-      ),
-    );
+  const watched = (at: string, listen: (event: WatchEvent) => void) =>
+    following(Effect.provideService(watchAll([{ at, recursive: true, required: true, listen }]), WatchTickets, tickets));
   return { tree, tickets, watched };
 });
 
@@ -182,11 +176,11 @@ layer(watcherProcess, { excludeTestServices: true })('tree watching', (it) => {
       const { tree, tickets, watched } = yield* withheldWorld();
       const standingHeard: WatchEvent[] = [];
       const latecomerHeard: WatchEvent[] = [];
-      const standing = yield* watched(tree, standingHeard);
+      const standing = yield* watched(tree, (event) => standingHeard.push(event));
       const during = yield* withholding(
         [tree],
         Effect.gen(function* () {
-          const latecomer = yield* watched(join(tree, 'deep'), latecomerHeard);
+          const latecomer = yield* watched(join(tree, 'deep'), (event) => latecomerHeard.push(event));
           const seen = { handles: tickets.standing().active, standing: standing.watching(), latecomer: latecomer.watching() };
           yield* Effect.promise(() => rm(tree, { recursive: true }));
           return seen;
@@ -200,21 +194,41 @@ layer(watcherProcess, { excludeTestServices: true })('tree watching', (it) => {
   it.effect('a withheld tree that outlives its work is watched again, and its watcher is told to rescan what it missed', () =>
     Effect.gen(function* () {
       const { tree, tickets, watched } = yield* withheldWorld();
+      const files = yield* FileSystem.FileSystem;
       const heard: WatchEvent[] = [];
-      const standing = yield* watched(tree, heard);
-      yield* withholding([tree], Effect.void);
-      expect({ watching: standing.watching(), handles: tickets.standing().active, heard }).toEqual({
-        watching: true,
-        handles: 1,
-        heard: [{ rescan: 'unnamed' }],
+      const changes = yield* Queue.unbounded<WatchEvent>();
+      const standing = yield* watched(tree, (event) => {
+        heard.push(event);
+        Queue.offerUnsafe(changes, event);
       });
+      const missed = join(tree, 'deep', 'missed');
+      yield* withholding(
+        [tree],
+        Effect.gen(function* () {
+          expect({ watching: standing.watching(), handles: tickets.standing().active }).toEqual({ watching: false, handles: 0 });
+          yield* files.writeFileString(missed, 'during withholding');
+        }),
+      );
+      expect({ watching: standing.watching(), handles: tickets.standing().active }).toEqual({ watching: true, handles: 1 });
+      expect(heard).toContainEqual({ rescan: 'unnamed' });
+      const rescanned = yield* Effect.forEach(
+        heard.filter((event) => 'rescan' in event && event.rescan === 'unnamed'),
+        () => files.readDirectory(join(tree, 'deep')),
+      );
+      expect(rescanned.flat()).toContain('missed');
+      yield* files.writeFileString(join(tree, 'deep', 'after'), 'after withholding');
+      let changed: WatchEvent;
+      do {
+        changed = yield* Queue.take(changes);
+      } while (!changed.paths?.includes('deep/after'));
+      expect(changed.paths).toContain('deep/after');
     }),
   );
 
   it.effect('the watch reading names each watched place with its state and counts the rescans it delivered', () =>
     Effect.gen(function* () {
       const { tree, watched } = yield* withheldWorld();
-      yield* watched(tree, []);
+      yield* watched(tree, () => undefined);
       const mine = () => watchReading(WATCH_ROWS_ALL).places.filter((place) => place.at === tree);
       const during = yield* withholding([tree], Effect.sync(mine));
       expect(during).toMatchObject([{ recursive: true, state: 'parked', rescans: { unnamed: 0 } }]);
