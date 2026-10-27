@@ -132,7 +132,6 @@ const TAGMA = [
 const held: Array<() => void> = [];
 const steering = new Map<string, { readonly id: string | number; readonly words: string }>();
 let stepping: { readonly id: string | number; readonly sessionId: string } | null = null;
-let ending = false;
 let late = false;
 let trailing = false;
 let owed = false;
@@ -271,7 +270,6 @@ const extended = (message: Message): void => {
     case '_tagma/compact': {
       const instructions = said(message.params, 'instructions');
       if (message.params?.at === 'step') {
-        if (prompt !== null && ending) finish('end_turn');
         if (prompt !== null && instructions.includes('UNSTEPPED'))
           send({ id, error: { code: -32010, message: 'the agent could not arm compaction at the next step' } });
         else if (prompt !== null) {
@@ -575,8 +573,6 @@ const handle = (message: Message): void => {
       }
       if (mode === 'tagma' && text.includes('THINK'))
         update(sessionId, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'thinking' } });
-      ending = mode === 'tagma' && text.includes('END');
-      if (ending) return;
       if (mode === 'tagma' && text.includes('HOLD')) {
         held.push(() => finish('end_turn'));
         return;

@@ -63,7 +63,7 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: the declarations of the thread operations — their doors, callers, answers, refusals and the words agents read for each.',
           },
           {
-            lines: 725,
+            lines: 734,
             path: 'apps/tagma/server/src/composition/testing/threads/protocolRig.ts',
             why: 'One subject: the ACP conformance rig owns its project, execution host — including replacing it with its next generation — core harness, account and scratch context, its protocol rows and vendor turn map, and each scoped driver. Thread and scripted-agent events wake observations within those same lifetimes.',
           },

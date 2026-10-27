@@ -15,7 +15,7 @@ import { sql } from 'drizzle-orm';
 import type { ThreadEntry } from '@runlith/agent/transcript/entries';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import { hostAddress } from '@runlith/executions/hostAddress';
-import { InstallationId, type ExecutionRef } from '@runlith/executions/protocol/execution';
+import { HostRequestKey, InstallationId, type ExecutionRef } from '@runlith/executions/protocol/execution';
 import { Git } from '@runlith/git/Git';
 import { Cause, Clock, Context, Deferred, Effect, FileSystem, Layer, Queue, Ref, Schema, Scope, Stream } from 'effect';
 import type { ExecutionRecords } from '../../../executions/contract/service/records.js';
@@ -318,7 +318,8 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
   });
   const floor = Effect.fn('testing.protocolFloor')(function* (reported: Said[], options: Floor = { fails: 0, refuses: false }) {
     const address = yield* hostAddress(world.canonical, fixture);
-    const connection = yield* executionHost(address);
+    const connectionScope = yield* Scope.fork(yield* Effect.scope);
+    const connection = yield* executionHost(address).pipe(Scope.provide(connectionScope));
     const port = connection.port;
     const registration = yield* HostRegistration;
     const context = world.context;
@@ -340,6 +341,14 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
     });
     yield* Ref.set(connection.opened, custody.opened);
     yield* custody.ensure();
+    yield* Effect.addFinalizer(() =>
+      Effect.gen(function* () {
+        const { custody } = yield* port.status();
+        const answer = yield* port.release({ installation, operation: HostRequestKey.make(`release-${crypto.randomUUID()}`) }, custody);
+        if (answer._tag !== 'Held' || answer.custody.holder !== undefined)
+          return yield* Effect.die(new Error(`the protocol floor did not release host custody: ${JSON.stringify(answer)}`));
+      }).pipe(Effect.orDie),
+    );
     const watched = yield* watchedQueue();
     const {
       terminals,
