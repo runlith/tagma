@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { packagesOf } from './packages.ts';
@@ -170,7 +170,7 @@ test('all suites resume without replay and report an unconfigured workspace fail
   }
 });
 
-test('stopping test:all ends the stage a compound suite is running, not only its shell', async () => {
+test('stopping test:all preserves completed file output and ends the current stage of a compound suite', async () => {
   const root = mkdtempSync(join(tmpdir(), 'stop-suites-'));
   try {
     expect(Bun.spawnSync(['git', 'init', '-q', root]).exitCode).toBe(0);
@@ -179,22 +179,51 @@ test('stopping test:all ends the stage a compound suite is running, not only its
       join(root, 'package.json'),
       JSON.stringify({
         scripts: {
-          test: `true && bun -e "require('fs').writeFileSync(process.env.STAGE_MARK, String(process.pid)); setInterval(() => {}, 1000)"`,
+          test: `bun test --parallel=1 --no-isolate ./finished.itest.ts && bun -e "const fs = require('fs'); fs.watch(process.env.STAGE_ROOT, () => {}); fs.writeFileSync(process.env.STAGE_MARK, String(process.pid))"`,
         },
       }),
     );
-    const env: Record<string, string | undefined> = { ...process.env, STAGE_MARK: mark, TESTBED_BUDGET_ROOT: join(root, 'budget') };
-    delete env['RUNLITH_TEST_SLOT'];
-    const child = Bun.spawn([process.execPath, join(import.meta.dir, 'all.ts'), '--root', root, '--report', join(root, 'reading.json')], {
+    writeFileSync(
+      join(root, 'finished.itest.ts'),
+      "import { expect, test } from 'bun:test'; test('completed file', () => { console.log('finished stdout'); console.error('finished stderr'); expect(2 + 2).toBe(4); });",
+    );
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      STAGE_MARK: mark,
+      STAGE_ROOT: root,
+      TESTBED_BUDGET_ROOT: join(root, 'budget'),
+    };
+    const reached = Promise.withResolvers<void>();
+    const watcher = watch(root, () => {
+      if (existsSync(mark) && readFileSync(mark, 'utf8') !== '') reached.resolve();
+    });
+    const report = join(root, 'reading.json');
+    const child = Bun.spawn([process.execPath, 'run', 'test:all', '--root', root, '--jobs', '1', '--report', report], {
+      cwd: join(import.meta.dir, '../..'),
       stdout: 'pipe',
       stderr: 'pipe',
       env,
     });
-    while (!existsSync(mark) || readFileSync(mark, 'utf8') === '') await Bun.sleep(20);
-    const stage = Number(readFileSync(mark, 'utf8'));
-    child.kill('SIGTERM');
-    await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-    expect(() => process.kill(stage, 0)).toThrow();
+    const output = Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    void child.exited.then(() => reached.resolve());
+    try {
+      await reached.promise;
+      expect(existsSync(mark), existsSync(mark) ? '' : (await output).join('\n')).toBe(true);
+      const stage = Number(readFileSync(mark, 'utf8'));
+      const log = join(`${report}.d`, '.%3Atest.log');
+      const saved = existsSync(log) ? readFileSync(log, 'utf8') : '';
+      child.kill('SIGTERM');
+      await output;
+      expect(() => process.kill(stage, 0)).toThrow();
+      expect(saved).toContain('finished stdout');
+      expect(saved).toContain('finished stderr');
+      expect(saved).toContain('(pass) completed file');
+      expect(readFileSync(log, 'utf8')).toStartWith(saved);
+    } finally {
+      watcher.close();
+      child.kill('SIGTERM');
+      await output;
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

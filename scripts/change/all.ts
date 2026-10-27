@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { FileRow, Row } from '@runlith/testbed/ledger';
@@ -155,30 +155,37 @@ const ledgerOf = (suite: Suite): string => join(artifacts, `${encodeURIComponent
 const logOf = (suite: Suite): string => join(artifacts, `${encodeURIComponent(suite.id)}.log`);
 const byId = new Map(suites.map((suite) => [suite.id, suite]));
 const begun = new Map<string, number>();
-await runJobs(
-  suites
-    .filter((suite) => !done.has(suite.id))
-    .sort((a, b) => costOf(b) - costOf(a))
-    .map((suite) => ({
-      id: suite.id,
-      cwd: join(root, suite.directory),
-      stages: suite.stages.map((stage) => ['/bin/sh', '-c', `exec ${stage}`]),
-      need: needOf(suite),
-      env: {
-        ...process.env,
-        RUNLITH_TEST_REPORT: ledgerOf(suite),
-        ...(jobs === undefined ? {} : { TESTBED_JOBS: String(jobs) }),
-        PATH: `${join(toolkit, 'node_modules/.bin')}:${process.env['PATH'] ?? ''}`,
-      },
-    })),
-  {
-    budget,
-    serial: jobs !== undefined,
-    limit,
-    started: (job) => prepare(byId.get(job.id)!),
-    ended: (job, run) => settle(byId.get(job.id)!, run),
-  },
-);
+const logs = new Map<string, number>();
+try {
+  await runJobs(
+    suites
+      .filter((suite) => !done.has(suite.id))
+      .sort((a, b) => costOf(b) - costOf(a))
+      .map((suite) => ({
+        id: suite.id,
+        cwd: join(root, suite.directory),
+        stages: suite.stages.map((stage) => ['/bin/sh', '-c', `exec ${stage}`]),
+        need: needOf(suite),
+        env: {
+          ...process.env,
+          RUNLITH_TEST_REPORT: ledgerOf(suite),
+          ...(jobs === undefined ? {} : { TESTBED_JOBS: String(jobs) }),
+          PATH: `${join(toolkit, 'node_modules/.bin')}:${process.env['PATH'] ?? ''}`,
+        },
+      })),
+    {
+      budget,
+      serial: jobs !== undefined,
+      limit,
+      started: (job) => prepare(byId.get(job.id)!),
+      output: (job, chunk) => appendFileSync(logs.get(job.id)!, chunk),
+      ended: (job, run) => settle(byId.get(job.id)!, run),
+    },
+  );
+} finally {
+  for (const log of logs.values()) closeSync(log);
+  logs.clear();
+}
 
 function prepare(suite: Suite): void {
   const ledger = ledgerOf(suite);
@@ -218,6 +225,7 @@ function prepare(suite: Suite): void {
         log: result.log === path ? archived : result.log,
       }));
     }
+  logs.set(suite.id, openSync(log, 'w'));
   console.log(`test:all: ${suite.id}`);
   begun.set(suite.id, performance.now());
 }
@@ -226,9 +234,10 @@ function settle(suite: Suite, run: Ended): void {
   const { stdout, stderr, exit, interrupted } = run;
   const ledger = ledgerOf(suite);
   const log = logOf(suite);
+  closeSync(logs.get(suite.id)!);
+  logs.delete(suite.id);
   const before = begun.get(suite.id)!;
   if (run.alone) solo.add(suite.id);
-  writeFileSync(log, stdout + stderr);
   const rows = existsSync(ledger)
     ? readFileSync(ledger, 'utf8')
         .split('\n')

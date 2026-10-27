@@ -24,6 +24,7 @@ export type Schedule = {
   readonly serial: boolean;
   readonly limit?: number;
   readonly started?: (job: Job) => void;
+  readonly output?: (job: Job, chunk: Uint8Array) => void;
   readonly ended: (job: Job, run: Ended) => void;
 };
 
@@ -32,6 +33,8 @@ export const runJobs = async (jobs: readonly Job[], schedule: Schedule): Promise
   const running = new Map<string, Promise<void>>();
   const children = new Set<ReturnType<typeof Bun.spawn>>();
   let interrupted = false;
+  let failure: { readonly error: unknown } | undefined;
+  const failed = () => failure;
   const stop = (): void => {
     interrupted = true;
     for (const child of children) child.kill('SIGTERM');
@@ -52,50 +55,68 @@ export const runJobs = async (jobs: readonly Job[], schedule: Schedule): Promise
         if (interrupted) break;
         const child = Bun.spawn([...stage], { cwd: job.cwd, stdout: 'pipe', stderr: 'pipe', env: { ...job.env, [ADMITTED_ENV]: '1' } });
         children.add(child);
-        const errors = (async () => {
-          const reader = (child.stderr as ReadableStream<Uint8Array>).getReader();
+        const collect = async (stream: ReadableStream<Uint8Array>, grants: boolean): Promise<string> => {
+          const reader = stream.getReader();
           const decoder = new TextDecoder();
           let text = '';
           for (;;) {
             const read = await reader.read();
             if (read.done) break;
+            if (failure === undefined) {
+              try {
+                schedule.output?.(job, read.value);
+              } catch (error) {
+                failure = { error };
+                stop();
+              }
+            }
             text += decoder.decode(read.value, { stream: true });
-            if (GRANTED.test(text)) grant();
+            if (grants && GRANTED.test(text)) grant();
           }
           return text + decoder.decode();
-        })();
-        const [out, err, code] = await Promise.all([new Response(child.stdout).text(), errors, child.exited]);
+        };
+        const [out, err, code] = await Promise.all([collect(child.stdout, false), collect(child.stderr, true), child.exited]);
         children.delete(child);
         stdout += out;
         stderr += err;
         exit = code;
         if (code !== 0) break;
       }
+      const stopped = failed();
+      if (stopped !== undefined) throw stopped.error;
       grant();
       running.delete(job.id);
       schedule.ended(job, { exit, stdout, stderr, alone, interrupted });
     })();
     return { granted, finished };
   };
-  let started = 0;
-  while (!interrupted) {
-    if (started < (schedule.limit ?? Infinity) && waiting.length > 0 && running.size < (schedule.serial ? 1 : Infinity)) {
-      const free = running.size === 0 ? schedule.budget : freeUnits(budgetRoot(), schedule.budget);
-      const at = running.size === 0 ? 0 : waiting.findIndex((job) => Math.max(1, Math.min(job.need, schedule.budget)) <= free);
-      if (at !== -1) {
-        const job = waiting.splice(at, 1)[0]!;
-        const { granted, finished } = launch(job, running.size === 0);
-        running.set(job.id, finished);
-        started++;
-        await Promise.race([granted, finished]);
-        continue;
+  try {
+    let started = 0;
+    while (!interrupted) {
+      if (started < (schedule.limit ?? Infinity) && waiting.length > 0 && running.size < (schedule.serial ? 1 : Infinity)) {
+        const free = running.size === 0 ? schedule.budget : freeUnits(budgetRoot(), schedule.budget);
+        const at = running.size === 0 ? 0 : waiting.findIndex((job) => Math.max(1, Math.min(job.need, schedule.budget)) <= free);
+        if (at !== -1) {
+          const job = waiting.splice(at, 1)[0]!;
+          const { granted, finished } = launch(job, running.size === 0);
+          running.set(job.id, finished);
+          started++;
+          await Promise.race([granted, finished]);
+          continue;
+        }
       }
+      if (running.size === 0) break;
+      await Promise.race([...running.values(), Bun.sleep(POLL_MS)]);
     }
-    if (running.size === 0) break;
-    await Promise.race([...running.values(), Bun.sleep(POLL_MS)]);
+    await Promise.all(running.values());
+    return { interrupted };
+  } catch (error) {
+    stop();
+    await Promise.allSettled([...running.values(), ...[...children].map((child) => child.exited)]);
+    const stopped = failed();
+    throw stopped === undefined ? error : stopped.error;
+  } finally {
+    process.removeListener('SIGINT', stop);
+    process.removeListener('SIGTERM', stop);
   }
-  await Promise.all(running.values());
-  process.removeListener('SIGINT', stop);
-  process.removeListener('SIGTERM', stop);
-  return { interrupted };
 };
