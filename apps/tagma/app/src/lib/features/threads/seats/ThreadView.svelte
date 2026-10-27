@@ -6,17 +6,25 @@
   import { Visits } from '$lib/features/workspace/Visits.svelte.js';
   import PaneGraph from '$lib/app/panes/PaneGraph.svelte';
   import type { SidePane } from '$lib/shared/panes/pane.js';
+  import { Notices } from '$lib/features/notices/Service.svelte.js';
+  import { ShellOps, shellActs } from '$lib/features/workspace/ShellOps.js';
+  import { followHome } from '../followHome.svelte.js';
   import { threadSlot } from './threadSlot.svelte.js';
   import { ThreadSeats } from './ThreadSeats.svelte.js';
 
-  let { pane }: { pane: SidePane; close: () => void } = $props();
+  let { pane, close }: { pane: SidePane; close: () => void } = $props();
 
   const seats = ThreadSeats.use();
+  const shell = shellActs(ShellOps.use(), Notices.use());
   const workspace = Workspace.use();
   const visits = Visits.use();
   const key = untrack(() => pane.key);
   const framing = GraphRung.Source.use();
   const { host, home, projectId } = threadSlot(seats, () => pane);
+  followHome(host, (thread) => {
+    close();
+    void shell.openThread(thread, 'beside');
+  });
 
   const topic = seats.take(key);
   if (topic?.kind === 'block') host.draft.stageMentions([{ name: topic.name, title: topic.title, tag: topic.tag }]);

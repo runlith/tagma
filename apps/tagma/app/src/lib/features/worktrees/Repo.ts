@@ -135,8 +135,13 @@ export const WorktreesRepo = Repo.define(
     }),
 
     move: mutation({
-      mutator: (input: { projectId: number; threadId: string; worktree: string }, { signal }, door) =>
-        door.perform('move_thread', { threadId: ThreadId.make(input.threadId), worktree: input.worktree }, at(input.projectId), { signal }),
+      mutator: (input: { projectId: number; threadId: string; worktree: string; home?: number }, { signal }, door) =>
+        door.perform(
+          'move_thread',
+          { threadId: ThreadId.make(input.threadId), worktree: input.worktree, ...(input.home === undefined ? {} : { home: input.home }) },
+          at(input.projectId),
+          { signal },
+        ),
     }),
   }),
   { tier: 'app', door: Door },

@@ -3,7 +3,6 @@
   import { rank } from '@runlith/search-text/match';
   import Check from '@lucide/svelte/icons/check';
   import FolderMinus from '@lucide/svelte/icons/folder-minus';
-  import Network from '@lucide/svelte/icons/network';
   import PencilLine from '@lucide/svelte/icons/pencil-line';
   import Plus from '@lucide/svelte/icons/plus';
   import Search from '@lucide/svelte/icons/search';
@@ -18,7 +17,7 @@
   import { ProjectRemoval } from '$lib/features/projects/Removal.svelte.js';
   import { ProjectRenaming } from '$lib/features/projects/Renaming.svelte.js';
   import { ProjectStrip } from '$lib/features/projects/Strip.svelte.js';
-  import Swatch from '$lib/features/workspace/Swatch.svelte';
+  import ProjectGlyph from '$lib/features/workspace/ProjectGlyph.svelte';
   import { mentionOf } from '$lib/features/projects/mention.js';
   import { MentionDrops } from '$lib/features/threads/MentionDrops.svelte.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
@@ -127,7 +126,7 @@
     textValue={labelOf(project)}
   >
     {#snippet lead()}
-      {#if project.global}<Network class="size-3.5" />{:else}<Swatch projectId={project.id} />{/if}
+      <ProjectGlyph {project} />
     {/snippet}
     {#snippet tail()}
       {@const acts = windows !== undefined || !project.global}

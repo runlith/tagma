@@ -3,6 +3,7 @@
   import { App } from '@runlith/layer/svelte/App.svelte';
   import { onDestroy, untrack, type Snippet } from 'svelte';
   import { ThreadSlot } from '$lib/features/threads/ThreadSlot.svelte.js';
+  import { followHome } from '$lib/features/threads/followHome.svelte.js';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { Screen } from './Screen.svelte.js';
@@ -34,6 +35,10 @@
     },
   });
   const unseat = screen.seat(host);
+  followHome(host, (thread) => {
+    const home = workspace.find(thread.projectId);
+    if (home !== null) void router.goto(addresses.thread(thread.threadId, home.name), { replaceState: true });
+  });
 
   $effect(() => {
     const projectId = workspace.activeId;

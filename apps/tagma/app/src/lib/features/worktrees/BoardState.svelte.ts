@@ -169,11 +169,11 @@ export class Worktrees extends Service<Worktrees>()('Worktrees', { tier: 'projec
     return found;
   }
 
-  async move(threadId: string, rootId: string) {
+  async move(threadId: string, worktree: string, home?: number) {
     if (this.moving.includes(threadId)) return null;
     this.moving = [...this.moving, threadId];
     try {
-      const answer = await this.repo.move.run({ projectId: this.aim.projectId, threadId, worktree: rootId }, { throwOnError: true });
+      const answer = await this.repo.move.run({ projectId: this.aim.projectId, threadId, worktree, home }, { throwOnError: true });
       if (answer === undefined || this.scope.signal.aborted) return null;
       if (answer.status === 'failed') this.notices.error('Move', answer.detail);
       return answer;

@@ -3,6 +3,7 @@
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import Conversation from '$lib/features/threads/native/Conversation.svelte';
   import { ThreadSlot } from '$lib/features/threads/ThreadSlot.svelte.js';
+  import { followHome } from '$lib/features/threads/followHome.svelte.js';
   import ThreadHeading from '$lib/features/threads/Heading.svelte';
   import { SidePanes } from '../panes/SidePanes.svelte.js';
   import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
@@ -37,6 +38,7 @@
     context: { scopeName: () => addresses.scope },
   });
   const unseat = seats.seatMain(host);
+  followHome(host, (thread) => void shell.openThread(thread, 'main'));
 
   let routed: string | null | undefined;
   $effect(() => {

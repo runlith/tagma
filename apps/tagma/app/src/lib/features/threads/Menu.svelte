@@ -9,6 +9,7 @@
   import CornerDownRight from '@lucide/svelte/icons/corner-down-right';
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
   import FolderInput from '@lucide/svelte/icons/folder-input';
+  import Forward from '@lucide/svelte/icons/forward';
   import MessageSquareText from '@lucide/svelte/icons/message-square-text';
   import SquareTerminal from '@lucide/svelte/icons/square-terminal';
   import GitFork from '@lucide/svelte/icons/git-fork';
@@ -28,6 +29,9 @@
   import * as Dialog from '$lib/shared/ui/dialog/index.js';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import WorktreeSwatch from '$lib/features/worktrees/WorktreeSwatch.svelte';
+  import ProjectGlyph from '$lib/features/workspace/ProjectGlyph.svelte';
+  import { labelOf } from '$lib/features/workspace/mark.js';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import { stoppableOf } from './rowKind.js';
   import type { ThreadSlot } from './ThreadSlot.svelte.js';
   import type { ThreadList } from './List.svelte.js';
@@ -117,6 +121,14 @@
   const targets = $derived(
     places.several && row.projectId === host.projectId
       ? places.rows.filter((one) => one.rootId !== placed?.rootId && !one.missing && (one.kind === 'main' || one.branch !== null))
+      : [],
+  );
+  const destinations = $derived(
+    !archived && home === host.projectId
+      ? [
+          ...workspace.projects.filter((one) => one.id !== home && !one.global),
+          ...workspace.projects.filter((one) => one.id !== home && one.global),
+        ]
       : [],
   );
 
@@ -229,6 +241,19 @@
               <DropdownMenu.Item onSelect={() => void places.move(row.id, target.rootId)}>
                 {#snippet lead()}<WorktreeSwatch row={target} />{/snippet}
                 <span class="font-mono text-small">{target.branch ?? target.name}</span>
+              </DropdownMenu.Item>
+            {/each}
+          </DropdownMenu.SubContent>
+        </DropdownMenu.Sub>
+      {/if}
+      {#if destinations.length > 0}
+        <DropdownMenu.Sub>
+          <DropdownMenu.SubTrigger icon={Forward} disabled={places.moving.includes(row.id)}>Move to project</DropdownMenu.SubTrigger>
+          <DropdownMenu.SubContent class="max-h-80 min-w-56 overflow-y-auto">
+            {#each destinations as destination (destination.id)}
+              <DropdownMenu.Item onSelect={() => void places.move(row.id, 'main', destination.id)}>
+                {#snippet lead()}<ProjectGlyph project={destination} />{/snippet}
+                <FadeText class="min-w-0">{labelOf(destination)}</FadeText>
               </DropdownMenu.Item>
             {/each}
           </DropdownMenu.SubContent>
