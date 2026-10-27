@@ -4,7 +4,7 @@ import { unthreadedCaller } from './callers';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { fixtureMigrations } from './migrations.js';
 import { sessionIdentityLayer } from '../../external-harnesses/sessionPrefix.js';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Clock, Context, Effect, FileSystem, Layer, Schema, Scope, Semaphore } from 'effect';
 import { eq, getTableColumns, inArray } from 'drizzle-orm';
@@ -12,7 +12,7 @@ import { ToolAnswer, toolExecute, toolPrepare, type Tool } from '@runlith/agent/
 import { Git, GitUnavailable } from '@runlith/git/Git';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { unitsLayer } from '../../platform/store/units.js';
-import { runGit } from '../../platform/git/ownGit.js';
+import { runGit, runGitBytes } from '../../platform/git/ownGit.js';
 import { machineFileLayer } from '../../platform/store/open.js';
 import { workspaceChange } from '../../change-record/testing/doubles.js';
 import { workspaceChangeText } from '../../change-record/store/tables.js';
@@ -145,7 +145,9 @@ export const noRuleInPlay: ActChecks = { before: () => Effect.succeed(UNCHECKED)
 export const makeCheckout = Effect.fnUntraced(
   function* (directory?: string) {
     const files = yield* FileSystem.FileSystem;
-    const home = directory ?? (yield* files.makeTempDirectoryScoped({ prefix: 'tagma-checkout-' }));
+    const given = directory ?? (yield* files.makeTempDirectoryScoped({ prefix: 'tagma-checkout-' }));
+    yield* files.makeDirectory(given, { recursive: true });
+    const home = yield* files.realPath(given);
     const root = join(home, 'checkout');
     yield* files.makeDirectory(join(root, 'src'), { recursive: true });
     const pool = yield* heldPool;
@@ -215,6 +217,25 @@ export const makeCheckout = Effect.fnUntraced(
       yield* files.writeFileString(at, after);
       yield* record(threadId, before, after, options);
     });
+
+    const written = Effect.fnUntraced(function* (threadId: string, path: string, text: string) {
+      const at = join(root, path);
+      const before = (yield* files.exists(at)) ? yield* files.readFileString(at) : '';
+      yield* files.makeDirectory(dirname(at), { recursive: true });
+      yield* files.writeFileString(at, text);
+      yield* record(threadId, before, text, { path });
+    });
+
+    const based = Effect.fnUntraced(function* (texts: Readonly<Record<string, string>>) {
+      for (const [path, text] of Object.entries(texts)) {
+        yield* files.makeDirectory(dirname(join(root, path)), { recursive: true });
+        yield* files.writeFileString(join(root, path), text);
+      }
+      yield* run(['add', '--', ...Object.keys(texts)]);
+      yield* run(['commit', '-qm', 'base']);
+    });
+
+    const head = (path: string) => Effect.provide(runGitBytes(git, 'test', ['-C', root, 'show', `HEAD:${path}`]), context);
 
     const admission = makeLandingHolds();
     const producerOn = (dir: string, options: SubmitOptions) =>
@@ -380,6 +401,9 @@ export const makeCheckout = Effect.fnUntraced(
       git,
       record,
       wrote,
+      written,
+      based,
+      head,
       submitAs,
       builtAs,
       submit: submitAs,

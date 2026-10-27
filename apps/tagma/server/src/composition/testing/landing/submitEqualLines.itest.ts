@@ -1,9 +1,6 @@
 import { layer } from '@runlith/effect-test';
 import { expect } from 'bun:test';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { Effect } from 'effect';
-import { runGitBytes } from '../../../platform/git/ownGit.js';
 import { checkoutFixture, withCheckout, type CheckoutWorld } from '../checkoutFixture.js';
 
 const FIRST = 'equal-first';
@@ -21,17 +18,13 @@ const block = (name: string, calls: number) => [
   '}',
 ];
 
-const based = Effect.fnUntraced(function* (world: CheckoutWorld, path: string, lines: readonly string[]) {
-  writeFileSync(join(world.root, path), `${lines.join('\n')}\n`);
-  yield* world.run(['add', '--', path]);
-  yield* world.run(['commit', '-qm', `base ${path}`]);
-});
+const textOf = (lines: readonly string[]) => `${lines.join('\n')}\n`;
+const based = (world: CheckoutWorld, path: string, lines: readonly string[]) => world.based({ [path]: textOf(lines) });
 
 const landed = Effect.fnUntraced(function* (world: CheckoutWorld, path: string, order: readonly string[]) {
   for (const holder of order) expect(yield* world.submit(holder)).toMatchObject({ status: 'landed', committed: [path] });
-  return yield* Effect.provide(runGitBytes(world.git, 'test', ['-C', world.root, 'show', `HEAD:${path}`]), world.context);
+  return yield* world.head(path);
 });
-const textOf = (lines: readonly string[]) => `${lines.join('\n')}\n`;
 
 layer(checkoutFixture, { excludeTestServices: true })('equal lines across landings', (it) => {
   it.effect('a landing slices exactly when earlier landings rebuilt HEAD from the same working file', () =>
