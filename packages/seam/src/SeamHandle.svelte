@@ -18,8 +18,9 @@
   const thickness = $derived(line ?? 1);
 
   $effect(() => {
-    untrack(() => seam.measure());
-    return () => seam.dispose(grip);
+    const measured = seam;
+    untrack(() => measured.measure());
+    return () => measured.dispose(grip);
   });
 
   $effect(() => {

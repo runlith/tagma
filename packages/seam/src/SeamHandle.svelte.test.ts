@@ -90,3 +90,23 @@ test('handles drawing one seam light together, keep the light across a new seam,
   window.dispatchEvent(pointer('pointerup', 300));
   unmount(lower);
 });
+
+test('a handle its host takes down once the seam is gone ends the drag of the seam it measured', () => {
+  const seam = new Seam({ base: 240, min: 120, max: 480 });
+  let hosted: Seam | null = seam;
+  const props = {
+    get seam() {
+      return hosted as Seam;
+    },
+    label: 'Resize the area beside',
+  };
+  const app = mount(SeamHandle, { target: document.body, props });
+  flushSync();
+  document.body.querySelector<HTMLElement>('[role="separator"]')?.dispatchEvent(pointer('pointerdown', 240));
+  expect(seam.dragging).toBe(true);
+
+  hosted = null;
+  unmount(app);
+
+  expect(seam.dragging).toBe(false);
+});
