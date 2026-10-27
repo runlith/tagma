@@ -9,7 +9,7 @@ const START = Date.parse('2026-10-08T22:00:10.000Z');
 const endOf = (name: HarnessName, records: readonly unknown[], since: number = START): TailEnd => {
   const source = endsSource(harnessAdapter(name));
   if (source === null) throw new Error(`${name} has no transcript reader`);
-  const scan = new TailScan(source.reader, { since, offset: 0 });
+  const scan = new TailScan(source.reader, { since, offset: 0, turn: null });
   const steps = source.reader.records?.({ steps: records }) ?? records;
   scan.feed([...steps].reverse());
   return scan.finish();

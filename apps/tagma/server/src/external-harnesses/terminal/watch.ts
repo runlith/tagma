@@ -49,7 +49,7 @@ const finishedBy = (end: TailEnd): RunEnding | null => {
     case 'Aborted':
       return { kind: 'aborted', stoppedBy: 'reader' };
     case 'Failed':
-      return { kind: 'failed', reason: end.reason };
+      return { kind: 'failed', reason: end.reason, cause: end.cause };
     case 'Open':
       return null;
   }
@@ -248,7 +248,7 @@ export class TerminalWatch {
     return Effect.result(
       Effect.scoped(
         Effect.flatMap(sessionFiles(this.access, input, { kind: 'terminal-watch', id: input.execution.execution }), (files) =>
-          readTail(files, source, input, { since: Date.parse(turn.openedAt), offset: turn.offset }),
+          readTail(files, source, input, { since: Date.parse(turn.openedAt), offset: turn.offset, turn: turn.turn || null }),
         ),
       ),
     );

@@ -39,7 +39,7 @@ const readFrom = Effect.fnUntraced(function* (
   if (source === null) return yield* Effect.die(`${name} has no transcript reader`);
   const files = yield* FileSystem.FileSystem;
   yield* files.writeFileString(path, text);
-  return yield* readTail(files, source, input(path), window, chunk);
+  return yield* readTail(files, source, input(path), { ...window, turn: null }, chunk);
 });
 
 const line = (value: unknown) => `${JSON.stringify(value)}\n`;
@@ -100,10 +100,11 @@ layer(home)('transcript tails', (it) => {
       const located = { ...source, locate: () => ({ root, path }) };
       const files = yield* FileSystem.FileSystem;
       yield* files.writeFileString(path, document);
-      const read = yield* readTail(files, located, input(path), { since: START, offset: null });
+      const read = yield* readTail(files, located, input(path), { since: START, offset: null, turn: null });
       const absent = yield* readTail(files, { ...source, locate: () => ({ root, path: join(root, 'gone.json') }) }, input(path), {
         since: START,
         offset: null,
+        turn: null,
       });
       expect({ read, absent }).toEqual({ read: { _tag: 'Read', end: { _tag: 'Aborted' } }, absent: { _tag: 'Absent' } });
     }),

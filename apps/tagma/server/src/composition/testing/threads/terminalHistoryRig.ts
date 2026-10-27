@@ -30,10 +30,12 @@ for (const signal of ['SIGHUP', 'SIGTERM'])
   });
 let typed = '';
 let drawn = null;
+const mark = process.env.TUI_MARK ?? '❯';
+const idle = process.env.TUI_IDLE ?? '';
 const draw = () => {
   const draft = existsSync(keys + '.draft') ? readFileSync(keys + '.draft', 'utf8') : '';
-  const composer = (draft + typed).trim();
-  const screen = rule + '\\r\\n❯' + (composer === '' ? '' : ' ' + composer) + '\\r\\n' + rule + '\\r\\n';
+  const composer = (draft + typed).trim() || idle;
+  const screen = rule + '\\r\\n' + mark + (composer === '' ? '' : ' ' + composer) + '\\r\\n' + rule + '\\r\\n';
   if (screen === drawn) return;
   drawn = screen;
   process.stdout.write('\\x1b[2J\\x1b[H' + screen);
@@ -212,9 +214,10 @@ export const terminalHistoryWorld = Effect.gen(function* () {
                 ]
               : []),
           ];
+    const composer = harness === 'codex' ? `env TUI_MARK='›' TUI_IDLE='Ask Codex to do anything' ` : '';
     yield* files.writeFileString(
       join(bin, binary),
-      [...answering, `exec ${process.execPath} ${join(stage, 'tui.js')} ${report} ${keys} "$@"`].join('\n'),
+      [...answering, `exec ${composer}${process.execPath} ${join(stage, 'tui.js')} ${report} ${keys} "$@"`].join('\n'),
       { mode: 0o755 },
     );
     const cli = yield* rig.raised({ name, type: `harness:${harness}`, transcript: '', seeded: false });

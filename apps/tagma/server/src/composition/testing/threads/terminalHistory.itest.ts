@@ -426,6 +426,63 @@ describe.skipIf(!existsSync(LIBRARY))('terminal history', () => {
     );
 
     it.effect(
+      'a Codex turn its rollout ends on the usage limit, without Stop, closes failed on the rate limit at the next turn or at the prompt, and Restart agent continues it on a new CLI',
+      () =>
+        Effect.gen(function* () {
+          const { vendor, flow } = yield* World;
+          const fake = yield* vendor('codex-limit', 'codex');
+          yield* op('restart_thread', { threadId: fake.cli.threadId });
+          yield* booted(fake, 1);
+          const source = (yield* fake.cli.facet())!;
+          const root = harnessRoot('codex', source.session!.argv)!;
+          const at = (turn: string) => ({ session_id: root, turn_id: turn, transcript_path: fake.transcript });
+          const limitedTurn = Effect.fnUntraced(function* (turn: string) {
+            yield* fake.record({ type: 'event_msg', payload: { type: 'task_started', turn_id: turn } });
+            yield* fake.cli.hook('UserPromptSubmit', at(turn), { session: source.session!.id, prompt: `words of ${turn}` });
+            const run = yield* settledOn(Effect.map(fake.cli.facet(), (facet) => (facet?.turn?.turn === turn ? facet.turn.run : null)));
+            yield* fake.record({
+              type: 'event_msg',
+              payload: {
+                type: 'task_complete',
+                turn_id: turn,
+                last_agent_message: null,
+                error: { message: 'You’ve hit your usage limit.', codex_error_info: 'usage_limit_exceeded' },
+              },
+            });
+            return run;
+          });
+          const family = (run: string) =>
+            Effect.map(
+              flow
+                .db()
+                .get<{ readonly family: string | null }>(
+                  sql`select json_extract(failure, '$.reason.family') as family from thread_run where id = ${run}`,
+                ),
+              (row) => row?.family,
+            );
+          const first = yield* limitedTurn('t-first');
+          const limited = yield* limitedTurn('t-limited');
+          expect((yield* settledOn(flow.ended(first))).status).toBe('failed');
+          expect(yield* family(first)).toBe('rate-limit');
+          yield* fake.cli.quiesce();
+          yield* fake.cli.watch();
+          expect((yield* settledOn(flow.ended(limited))).status).toBe('failed');
+          expect(yield* family(limited)).toBe('rate-limit');
+          const continuing = String((yield* op('restart_thread', { threadId: fake.cli.threadId })).runId);
+          const boots = yield* booted(fake, 2);
+          const next = (yield* fake.cli.facet())!.session!;
+          yield* fake.cli.hook('UserPromptSubmit', at('t-continued'), { session: next.id, prompt: boots[1]!.at(-1)! });
+          yield* fake.record({
+            type: 'event_msg',
+            payload: { type: 'task_complete', turn_id: 't-continued', last_agent_message: 'Carried on.' },
+          });
+          yield* fake.cli.hook('Stop', at('t-continued'), { session: next.id, said: { last_assistant_message: 'Carried on.' } });
+          expect((yield* settledOn(flow.ended(continuing))).status).toBe('completed');
+          expect((yield* flow.runsOf(fake.cli.threadId)).at(-1)?.id).toBe(continuing);
+        }),
+    );
+
+    it.effect(
       'a Grok whole fork keeps copied run rows and commits its new root only when the idle SessionStart names the assigned id',
       () =>
         Effect.gen(function* () {

@@ -1,12 +1,13 @@
+import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import type { MetadataInput } from '../metadata/sources.js';
 
 export type TailEnd =
   | { readonly _tag: 'Completed'; readonly message: string | null }
   | { readonly _tag: 'Aborted' }
-  | { readonly _tag: 'Failed'; readonly reason: string }
+  | { readonly _tag: 'Failed'; readonly reason: string; readonly cause?: TransportFailure }
   | { readonly _tag: 'Open' };
 
-export type TailWindow = { readonly since: number; readonly offset: number | null };
+export type TailWindow = { readonly since: number; readonly offset: number | null; readonly turn: string | null };
 
 export type TailReader = {
   readonly shape: 'lines' | 'document';
@@ -14,7 +15,7 @@ export type TailReader = {
   readonly grain: number;
   readonly stampOf: (record: unknown) => number | null;
   readonly records?: (document: unknown) => readonly unknown[];
-  readonly judge: (newestFirst: readonly unknown[], exhausted: boolean) => TailEnd | null;
+  readonly judge: (newestFirst: readonly unknown[], exhausted: boolean, turn: string | null) => TailEnd | null;
 };
 
 export type TailLocation = { readonly root: string; readonly path: string };
@@ -83,7 +84,7 @@ export class TailScan {
   }
 
   private settle(exhausted: boolean): TailEnd | null {
-    const judged = this.reader.judge(this.seen, exhausted);
+    const judged = this.reader.judge(this.seen, exhausted, this.window.turn);
     if (judged !== null) this.ended = judged;
     else if (exhausted) this.ended = { _tag: 'Open' };
     return this.ended;
