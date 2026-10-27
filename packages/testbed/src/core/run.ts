@@ -113,7 +113,16 @@ export const sweepRuns = (processes: Processes): { readonly stranded: number; re
   const files = fs();
   const entries = files.readdirSync(BASE).filter((entry) => /^(?:run\.)?\d+\./.test(entry));
   const swept = sweep(processes, BASE, entries);
-  for (const root of swept.roots) pristine(files.rmSync)(root, { recursive: true, force: true });
+  for (const root of swept.roots) {
+    const claimed = join(BASE, `${process.pid}.swept.${randomUUID().slice(0, 8)}`);
+    try {
+      pristine(files.renameSync)(root, claimed);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw error;
+    }
+    pristine(files.rmSync)(claimed, { recursive: true, force: true });
+  }
   const ended = new Set(swept.roots.map((root) => basename(root)));
   const reports = files
     .readdirSync(REPORTS)
