@@ -56,6 +56,7 @@ const decodeMachine = Schema.decodeUnknownResult(
       }),
       host: Schema.Struct({ holds: Schema.NullOr(Schema.Struct({ terminals: Schema.Int, commands: Schema.Int })) }),
       restart: Schema.Struct({ stage: Schema.NullOr(Schema.String) }),
+      newHost: Schema.optional(Schema.Struct({ cause: Schema.String, build: Schema.NullOr(Schema.String) })),
     }),
   }),
 );
@@ -176,6 +177,7 @@ export type Work = {
   readonly commands: number | null;
   readonly calls: number | null;
   readonly busy: boolean;
+  readonly needsHost: string | null;
 };
 
 const some = (count: number | null): boolean => count === null || count > 0;
@@ -192,13 +194,14 @@ export async function machineWork(surfaceUrl: URL): Promise<Work | null> {
   if (answer === null || !answer.ok) return null;
   const read = decodeMachine(await answer.json().catch(() => null));
   if (read._tag === 'Failure') return null;
-  const { server, host, restart } = read.success.machine;
+  const { server, host, restart, newHost } = read.success.machine;
   return {
     agents: server.agents,
     terminals: host.holds?.terminals ?? null,
     commands: host.holds?.commands ?? null,
     calls: server.calls ?? null,
     busy: server.next.installing !== null || (restart.stage !== null && HANDING_OVER.has(restart.stage)),
+    needsHost: newHost?.cause === 'update' ? newHost.build : null,
   };
 }
 

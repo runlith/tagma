@@ -381,17 +381,20 @@ export class SurfaceLoader {
     if (served.digest === standing.digest) return null;
     const divergence = `${served.digest}>${standing.digest}`;
     if (this.asked === divergence) return null;
-    if ((await machineWork(this.surfaceUrl))?.busy === true) {
+    const work = await machineWork(this.surfaceUrl);
+    if (work?.busy === true) {
       while ((await machineWork(this.surfaceUrl))?.busy === true) await sleep(ASKED_EVERY_MS);
       return 'again';
     }
     this.asked = divergence;
+    if (work?.needsHost === standing.build) return null;
     this.stand({ why: 'starting' });
     const before = (await handover(places.data))?.id;
     const refused = await askRestart(this.surfaceUrl);
     if (refused === null) return standing.digest;
     const after = await handover(places.data);
     if (refused.code === 'unanswered' && after !== null && after.id !== before) return standing.digest;
+    if ((await machineWork(this.surfaceUrl))?.needsHost === standing.build) return null;
     this.window.told(`${CHANNEL.name} couldn't switch to ${standing.build}`, refused);
     return null;
   }

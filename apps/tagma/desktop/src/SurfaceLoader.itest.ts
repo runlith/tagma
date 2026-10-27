@@ -86,6 +86,8 @@ let database = '';
 let terminals = 0;
 let restarts = 0;
 let refusing: string | null = null;
+let unhosting: 'named' | 'unnamed' | null = null;
+let needsHost: string | null = null;
 let stalled: Stalled | null = null;
 let holder: ReturnType<typeof Bun.spawn> | null = null;
 let changes: EventEmitter;
@@ -156,11 +158,22 @@ const answering = (): void => {
             server: { agents: 0, calls: 0, next: { installing: null } },
             host: { holds: { terminals, commands: 0 } },
             restart: { stage: null },
+            newHost:
+              needsHost === null
+                ? undefined
+                : { cause: 'update', build: needsHost, host: served?.build ?? null, detail: 'the host refused', ends: [], back: null },
           },
         });
       if (path === '/api/op/restart_server') {
         restarts += 1;
         changes.emit('changed');
+        if (unhosting !== null) {
+          if (unhosting === 'named') needsHost = current();
+          return Response.json(
+            { code: 'host-unprepared', reason: 'the host refused; this server and its execution host keep running', unblock: [] },
+            { status: 409 },
+          );
+        }
         if (refusing !== null) {
           writeFileSync(join(data, RESTART_RECORD), restartRecord(process.pid, refusing));
           return Response.json({ status: 'restarting', restart: {} });
@@ -290,7 +303,7 @@ beforeEach(async () => {
   const probe = Bun.serve({ port: 0, fetch: () => new Response('') });
   port = probe.port!;
   await probe.stop(true);
-  [stub, served, terminals, restarts, refusing, stalled, holder] = [null, null, 0, 0, null, null, null];
+  [stub, served, terminals, restarts, refusing, unhosting, needsHost, stalled, holder] = [null, null, 0, 0, null, null, null, null, null];
 });
 
 afterEach(async () => {
@@ -737,6 +750,28 @@ test('a restart the server records as failed leaves the window on the server tha
   expect(restarts).toBe(1);
   expect(served).toEqual(bearing('0.1.0'));
 });
+
+test.each(['named', 'unnamed'] as const)(
+  'a restart the execution host refuses opens a newer application on the server that stays; a server that names the new host it needs gets no refusal shown and no second restart on the next opening (%s)',
+  async (said) => {
+    installed('0.1.0');
+    served = bearing('0.1.0');
+    unhosting = said;
+    answering();
+    const bundle = application(join(base, 'Downloads'), '0.2.0');
+    const first = windowOf(bundle);
+    first.loader.start();
+    await until(() => first.opened === 1);
+    const next = windowOf(bundle);
+    next.loader.start();
+    await until(() => next.opened === 1);
+
+    expect(served).toEqual(bearing('0.1.0'));
+    expect(current()).toBe('0.2.0');
+    expect([...first.told, ...next.told]).toEqual(said === 'named' ? [] : ['host-unprepared', 'host-unprepared']);
+    expect(restarts).toBe(said === 'named' ? 1 : 2);
+  },
+);
 
 test('quitting stops only the idle server of its own data directory, through the release the window carries', async () => {
   installed('0.2.0');
