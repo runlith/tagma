@@ -28,13 +28,15 @@ const coverage = new Coverage(cache);
 const narrowing = new Narrowing(graph, coverage);
 const scoped = tests.filter((file) => selection === undefined || selection.selected.has(file));
 const unmapped = scoped.filter((file) => graph.runner(file) !== 'bun');
+const weight = (file: string): number => (file.includes('.itest.') ? 1e6 : 0) + graph.closure(file).inputs.length;
 const wanted = scoped
   .filter((file) => graph.runner(file) === 'bun')
   .flatMap((file) => {
     const verdict = narrowing.judge(file, []);
-    return verdict.keep ? [{ file, why: verdict.why }] : [];
+    return verdict.keep ? [{ file, why: verdict.why, weight: weight(file) }] : [];
   })
-  .sort((a, b) => a.file.localeCompare(b.file));
+  .sort((a, b) => b.weight - a.weight || a.file.localeCompare(b.file))
+  .map(({ file, why }) => ({ file, why }));
 if (args.includes('--plan')) {
   console.log(
     JSON.stringify(
@@ -51,9 +53,7 @@ console.log(
 const runId = randomUUID();
 const run = join(cache, runId);
 mkdirSync(run);
-const cli = existsSync(join(root, 'packages/testbed/src/cli.ts'))
-  ? join(root, 'packages/testbed/src/cli.ts')
-  : join(TOOLKIT, 'packages/testbed/src/cli.ts');
+const cli = join(existsSync(join(root, 'packages/testbed/src/cli.ts')) ? root : TOOLKIT, 'packages/testbed/src/cli.ts');
 const preload = join(TOOLKIT, 'scripts/change/testing/spawned.ts');
 const trace = join(TOOLKIT, 'scripts/change/testing/trace.ts');
 const listings = new Listings(graph);

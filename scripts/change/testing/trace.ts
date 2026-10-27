@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { locate } from '@runlith/testbed/fixture';
+import * as toolkit from '@runlith/testbed/fixture';
 
 type Entry = { readonly file: string; readonly packages: readonly string[]; readonly files: readonly string[] };
 type Audit = {
@@ -12,6 +12,7 @@ type Audit = {
   readonly importers: readonly { readonly path: string; readonly literal: readonly string[] }[];
 };
 type Resolved = { readonly roots: readonly string[]; readonly files: ReadonlySet<string> };
+type Locate = typeof toolkit.locate;
 type Tracer = {
   readonly runner: 'bun' | 'vitest';
   readonly check: (input: unknown) => void;
@@ -25,8 +26,16 @@ const original = Symbol.for('runlith.testbed.original');
 const carried = Symbol.for('runlith.change.trace');
 const real = <F extends Function>(fn: F): F => (fn as unknown as Record<symbol, F>)[original] ?? fn;
 
-const tracer = (configPath: string): Tracer => {
-  const config = JSON.parse(real(fs.readFileSync)(configPath, 'utf8')) as Audit;
+const configOf = (configPath: string): Audit => JSON.parse(real(fs.readFileSync)(configPath, 'utf8')) as Audit;
+
+const locatorOf = async (root: string): Promise<Locate> => {
+  const own = join(root, 'packages/testbed/src/fixture.ts');
+  if (!fs.existsSync(own)) return toolkit.locate;
+  const fixture = (await import(own)) as { readonly locate?: Locate };
+  return fixture.locate ?? toolkit.locate;
+};
+
+const tracer = (config: Audit, locate: Locate): Tracer => {
   const append = real(fs.appendFileSync);
   const base = fs.realpathSync(config.root);
   const reported = new Set<string>();
@@ -121,7 +130,11 @@ const wrap = (trace: Tracer, object: Record<string, unknown>, names: readonly st
 const configPath = process.env['RUNLITH_CHANGE_AUDIT'];
 if (configPath !== undefined) {
   const carrier = globalThis as unknown as Record<symbol, Tracer | undefined>;
-  const trace = (carrier[carried] ??= tracer(configPath));
+  if (carrier[carried] === undefined) {
+    const config = configOf(configPath);
+    carrier[carried] = tracer(config, await locatorOf(config.root));
+  }
+  const trace = carrier[carried];
   const calls = ['readFile', 'readFileSync', 'open', 'openSync', 'createReadStream', 'readdir', 'readdirSync', 'readlink', 'readlinkSync'];
   wrap(trace, fs as unknown as Record<string, unknown>, calls);
   wrap(trace, fs.promises as unknown as Record<string, unknown>, ['readFile', 'open', 'readdir', 'readlink']);
