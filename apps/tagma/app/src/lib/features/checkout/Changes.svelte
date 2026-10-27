@@ -1,31 +1,31 @@
 <script lang="ts">
+  import { Seam } from '@runlith/seam/Seam.svelte';
+  import SeamHandle from '@runlith/seam/SeamHandle.svelte';
+  import { Seams } from '$lib/shared/seams/Seams.svelte.js';
   import ChangesList from './ChangesList.svelte';
   import DiffStage from './DiffStage.svelte';
+  import { CHANGES_SEAM } from './seams.js';
   import { ThreadChanges } from './ThreadChanges.svelte.js';
 
-  const LIST = 288;
-  const DIFF_MIN = 480;
-
   const changes = ThreadChanges.use();
+  const seams = Seams.use();
 
-  let width = $state(0);
-  const split = $derived(width >= LIST + DIFF_MIN);
+  const seam = new Seam(seams.seam(CHANGES_SEAM), { onCommit: (size) => seams.set(CHANGES_SEAM, size) });
   const file = $derived(changes.open);
-  const covered = $derived(file !== null && !split);
 </script>
 
-<div class="relative flex h-full min-h-0 min-w-0" bind:clientWidth={width} data-changes={split ? 'split' : 'stacked'}>
-  <div
-    class={['min-h-0 min-w-0', file !== null && split ? 'shrink-0 border-r' : 'flex-1']}
-    style:width={file !== null && split ? `${LIST}px` : undefined}
-    style:visibility={covered ? 'hidden' : undefined}
-    inert={covered}
-  >
+<div class="flex h-full min-h-0 min-w-0">
+  <div class="min-h-0 shrink-0 border-r" style:width="{seam.size}px">
     <ChangesList />
   </div>
-  {#if file !== null}
-    <div class={split ? 'min-h-0 min-w-0 flex-1' : 'absolute inset-0 min-h-0 min-w-0'} data-changes-diff>
-      <DiffStage {file} onBack={split ? undefined : () => (changes.open = null)} />
-    </div>
-  {/if}
+  <SeamHandle {seam} label="Resize the changes list" contained />
+  <div class="min-h-0 min-w-0 flex-1" data-changes-diff>
+    {#if file !== null}
+      <DiffStage {file} />
+    {:else if !changes.empty || changes.lens === 'base'}
+      <p class="grid h-full place-items-center px-6 text-center text-ui text-muted-foreground" data-changes-pick>
+        Select a file to see its diff
+      </p>
+    {/if}
+  </div>
 </div>

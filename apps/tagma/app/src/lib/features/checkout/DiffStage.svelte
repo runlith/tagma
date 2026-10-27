@@ -11,7 +11,7 @@
   import type { OpenedFile } from './opened.js';
   import { entriesIn, ThreadChanges } from './ThreadChanges.svelte.js';
 
-  let { file, onBack }: { file: OpenedFile; onBack?: (() => void) | undefined } = $props();
+  let { file }: { file: OpenedFile } = $props();
 
   const changes = ThreadChanges.use();
   const repo = CheckoutRepo.use();
@@ -81,8 +81,6 @@
     commit={file.commit ?? lens.range?.head ?? null}
     range={file.commit === null ? lens.range : null}
     {lines}
-    {onBack}
-    closable={onBack === undefined}
     onClose={() => (changes.open = null)}
     onCommit={(commit) => (changes.open = { projectId: file.projectId, rootId: file.rootId, path: file.path, commit, lens })}
   />
@@ -95,8 +93,6 @@
     {lines}
     mine={changes.threadId}
     {mark}
-    {onBack}
-    closable={onBack === undefined}
     onClose={() => (changes.open = null)}
     onStep={walk === null ? undefined : step}
     onCommit={(commit) => (changes.open = { projectId: file.projectId, rootId: file.rootId, path: file.path, commit })}
