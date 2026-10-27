@@ -16,6 +16,8 @@ import { dirname, join } from 'node:path';
 import { Graph, type Module } from './graph.ts';
 import { Hashes } from './inputs.ts';
 import { Records } from './records.ts';
+import { budgetOf, memoryOf } from '@runlith/testbed/budget';
+import { rendezvousSource } from './testing/rendezvous.ts';
 
 let root: string;
 const files = new Map<string, string>([
@@ -318,21 +320,7 @@ test('the files a change check selects in one package run side by side on the ma
       ['one', 'two'],
       ['two', 'one'],
     ] as const)
-      writeFileSync(
-        join(checkout, `${name}.itest.ts`),
-        `import { expect, test } from 'bun:test';
-import { existsSync, writeFileSync } from 'node:fs';
-test('meets the other file', async () => {
-  writeFileSync(${JSON.stringify(join(marks, `${name}.started`))}, '');
-  const until = Date.now() + 4000;
-  while (!existsSync(${JSON.stringify(join(marks, `${other}.started`))}) && Date.now() < until) await Bun.sleep(20);
-  const met = existsSync(${JSON.stringify(join(marks, `${other}.started`))}) && !existsSync(${JSON.stringify(join(marks, `${other}.ended`))});
-  await Bun.sleep(300);
-  writeFileSync(${JSON.stringify(join(marks, `${name}.ended`))}, '');
-  expect(met).toBe(true);
-});
-`,
-      );
+      writeFileSync(join(checkout, `${name}.itest.ts`), rendezvousSource(marks, name, other));
     writeFileSync(join(checkout, 'changed'), 'one.itest.ts\n');
     const report = join(marks, 'report.json');
     const env: Record<string, string | undefined> = {
@@ -340,6 +328,7 @@ test('meets the other file', async () => {
       PATH: `${tagma}:${process.env['PATH'] ?? ''}`,
       TESTBED_CORES: '12',
       TESTBED_BUDGET_ROOT: join(marks, 'budget'),
+      MEET: budgetOf(12, memoryOf()) > 1 ? '1' : '0',
     };
     delete env['RUNLITH_TEST_SLOT'];
     const run = Bun.spawn(

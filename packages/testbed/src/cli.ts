@@ -5,7 +5,7 @@ import { basename, join, resolve } from 'node:path';
 import type { FileRow, Row, TestRow, WorldRow } from './core/ledger.ts';
 import { openProcesses } from './core/processes.ts';
 import { openRun, REPORT_ENV, ROOT_ENV, sweepRuns } from './core/run.ts';
-import { acquireUnits, ADMITTED_ENV, budgetOf, budgetRoot, coresOf, NICE, SLOT_ENV } from './slots.ts';
+import { acquireUnits, ADMITTED_ENV, budgetOf, budgetRoot, coresOf, memoryOf, NICE, SLOT_ENV } from './slots.ts';
 import { junitOf, outcomesOf, runOf, slowOf, summary, verdictsOf, workersOf, worldsOf } from './report.ts';
 
 const REPO = resolve(import.meta.dir, '../../..');
@@ -20,7 +20,7 @@ if (command.length === 0) {
 const vitest = command.some((part) => ['vitest', 'vitest.mjs'].includes(basename(part)));
 const bunTest = basename(command[0]!) === 'bun' && command.find((part, index) => index > 0 && !part.startsWith('-')) === 'test';
 const runner = bunTest ? 'bun' : vitest ? 'vitest' : 'other';
-const budget = budgetOf(coresOf(process.env['TESTBED_CORES']));
+const budget = budgetOf(coresOf(process.env['TESTBED_CORES']), memoryOf());
 const options = (): number => (command.includes('--') ? command.indexOf('--') : command.length);
 
 const take = (flag: RegExp): number | undefined => {

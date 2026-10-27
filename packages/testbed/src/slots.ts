@@ -1,5 +1,5 @@
 import { closeSync, mkdirSync, openSync, readdirSync, renameSync, unlinkSync } from 'node:fs';
-import { availableParallelism } from 'node:os';
+import { availableParallelism, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { closeOnExec, lockExclusive } from '@runlith/file-lock/flock';
 import { BASE } from './core/run.ts';
@@ -24,7 +24,12 @@ export const coresOf = (override: string | undefined): number => {
   return cores;
 };
 
-export const budgetOf = (cores: number): number => Math.max(1, cores - Math.max(2, Math.floor(cores / 8)));
+export const memoryOf = (): number => Math.min(totalmem(), process.constrainedMemory() || Infinity);
+
+const WORKER_MEMORY = 2 * 1024 ** 3;
+
+export const budgetOf = (cores: number, memory: number): number =>
+  Math.max(1, Math.min(cores - Math.max(2, Math.floor(cores / 8)), Math.floor((cores * 2) / 3), Math.floor(memory / 2 / WORKER_MEMORY)));
 
 export const budgetRoot = (): string => process.env['TESTBED_BUDGET_ROOT'] ?? join(BASE, 'budget');
 

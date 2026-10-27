@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { FileRow, Row } from '@runlith/testbed/ledger';
 import type { FileVerdict, OutcomeRow, RunRow } from '@runlith/testbed/report';
-import { budgetOf, coresOf } from '@runlith/testbed/budget';
+import { budgetOf, coresOf, memoryOf } from '@runlith/testbed/budget';
 import { runJobs, type Ended } from '@runlith/testbed/schedule';
 import { packagesOf, workspacePaths } from './packages.ts';
 import { suitesOf, type Suite } from './suites.ts';
@@ -140,7 +140,7 @@ const save = (): Reading => {
   writeFileSync(report, JSON.stringify(reading, null, 2));
   return reading;
 };
-const budget = budgetOf(coresOf(process.env['TESTBED_CORES']));
+const budget = budgetOf(coresOf(process.env['TESTBED_CORES']), memoryOf());
 const history = value('--history') === undefined ? undefined : resolve(value('--history')!);
 const earlier = history === undefined || !existsSync(history) ? undefined : (JSON.parse(readFileSync(history, 'utf8')) as Reading);
 const spent = new Map<string, number>();

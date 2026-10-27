@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { budgetOf, SLOT_ENV } from './slots.ts';
+import { budgetOf, memoryOf, SLOT_ENV } from './slots.ts';
 
 const CLI = join(import.meta.dir, 'cli.ts');
 const CORES = 12;
@@ -64,9 +64,17 @@ const finish = async (runs: readonly Run[]): Promise<void> => {
   for (const run of runs) if (run.child.exitCode === null && run.child.signalCode === null) await run.child.exited;
 };
 
+test('worker families fit CPU and memory capacity without starving a small machine', () => {
+  const gib = 1024 ** 3;
+  expect(budgetOf(12, 32 * gib)).toBe(8);
+  expect(budgetOf(64, 8 * gib)).toBe(2);
+  expect(budgetOf(64, 256 * gib)).toBe(42);
+  expect(budgetOf(1, gib / 2)).toBe(1);
+});
+
 test('runs share the machine budget at entry, never exceed it, and get back the processes of a killed run', async () => {
   const { root, units, start } = pool();
-  const budget = budgetOf(CORES);
+  const budget = budgetOf(CORES, memoryOf());
   const runs: Run[] = [];
   try {
     const alone = start('alone');
@@ -79,15 +87,25 @@ test('runs share the machine budget at entry, never exceed it, and get back the 
     await Promise.all([first.line(/; waiting/), second.line(/; waiting/)]);
     alone.release();
     expect(await alone.child.exited).toBe(0);
-    const shares = await Promise.all([held(first), held(second)]);
-    expect(shares).toEqual([Math.ceil(budget / 2), Math.ceil(budget / 2)]);
-    expect(shares[0]! + shares[1]!).toBeLessThanOrEqual(budget);
+    const firstHeld = held(first);
+    const secondHeld = held(second);
+    if (budget === 1) {
+      const admitted = await Promise.race([firstHeld.then(() => first), secondHeld.then(() => second)]);
+      expect(await (admitted === first ? firstHeld : secondHeld)).toBe(1);
+      admitted.child.kill('SIGKILL');
+      await admitted.child.exited;
+      expect(await (admitted === first ? secondHeld : firstHeld)).toBe(1);
+    } else {
+      const shares = await Promise.all([firstHeld, secondHeld]);
+      expect([...shares].sort((a, b) => a - b)).toEqual([Math.floor(budget / 2), Math.ceil(budget / 2)]);
+      expect(shares[0]! + shares[1]!).toBeLessThanOrEqual(budget);
 
-    first.child.kill('SIGKILL');
-    await first.child.exited;
-    const next = start('next');
-    runs.push(next);
-    expect(await held(next)).toBe(budget - shares[1]!);
+      first.child.kill('SIGKILL');
+      await first.child.exited;
+      const next = start('next');
+      runs.push(next);
+      expect(await held(next)).toBe(budget - shares[1]!);
+    }
 
     const [priority, inherited] = readFileSync(join(root, 'alone', 'nice'), 'utf8')
       .split(' ')
@@ -100,18 +118,23 @@ test('runs share the machine budget at entry, never exceed it, and get back the 
   }
 });
 
-test('a run whose workers have finished gives their processes back while its last file still runs', async () => {
+test('a run gives back spare workers, and a single-worker run keeps its only place until it ends', async () => {
   const { start } = pool();
-  const budget = budgetOf(CORES);
+  const budget = budgetOf(CORES, memoryOf());
   const runs: Run[] = [];
   try {
     const tail = start('tail', (index) => index === 0);
     runs.push(tail);
     expect(await held(tail)).toBe(budget);
-    expect(await tail.line(/; 1 of \d+ processes kept/)).toBeTruthy();
+    if (budget > 1) expect(await tail.line(/; 1 of \d+ processes kept/)).toBeTruthy();
 
     const next = start('next');
     runs.push(next);
+    if (budget === 1) {
+      await next.line(/; waiting/);
+      tail.release();
+      expect(await tail.child.exited).toBe(0);
+    }
     expect(await held(next)).toBe(Math.ceil(budget / 2));
   } finally {
     await finish(runs);

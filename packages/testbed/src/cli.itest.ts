@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { FileVerdict, SlowRow } from './report.ts';
+import { budgetOf, memoryOf } from './slots.ts';
 
 const PRELOAD = join(import.meta.dir, 'bun.ts');
 const CLI = join(import.meta.dir, 'cli.ts');
@@ -40,7 +41,7 @@ export default class {
   const env: Record<string, string | undefined> = { ...process.env, TESTBED_CORES: '5', TESTBED_BUDGET_ROOT: join(root, 'units') };
   delete env['RUNLITH_TEST_SLOT'];
   for (const [override, expected] of [
-    [undefined, 3],
+    [undefined, budgetOf(5, memoryOf())],
     [1, 1],
   ] as const) {
     const child = Bun.spawn(

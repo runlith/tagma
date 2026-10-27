@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { packagesOf } from './packages.ts';
 import { suitesOf } from './suites.ts';
 import { vitestConfigsOf } from './vitestConfigs.ts';
+import { budgetOf, memoryOf } from '@runlith/testbed/budget';
+import { rendezvousSource } from './testing/rendezvous.ts';
 
 test('combined Vitest follows new workspace packages and extra configs while preserving the app cwd', () => {
   const files = new Map([
@@ -211,14 +213,27 @@ test('stopping test:all preserves completed file output and ends the current sta
       expect(existsSync(mark), existsSync(mark) ? '' : (await output).join('\n')).toBe(true);
       const stage = Number(readFileSync(mark, 'utf8'));
       const log = join(`${report}.d`, '.%3Atest.log');
-      const saved = existsSync(log) ? readFileSync(log, 'utf8') : '';
-      child.kill('SIGTERM');
-      await output;
-      expect(() => process.kill(stage, 0)).toThrow();
-      expect(saved).toContain('finished stdout');
-      expect(saved).toContain('finished stderr');
-      expect(saved).toContain('(pass) completed file');
-      expect(readFileSync(log, 'utf8')).toStartWith(saved);
+      const written = Promise.withResolvers<string>();
+      const readSaved = () => (existsSync(log) ? readFileSync(log, 'utf8') : '');
+      const checkSaved = () => {
+        const saved = readSaved();
+        if (['finished stdout', 'finished stderr', '(pass) completed file'].every((part) => saved.includes(part))) written.resolve(saved);
+      };
+      const logWatcher = watch(dirname(log), checkSaved);
+      try {
+        checkSaved();
+        const saved = await Promise.race([written.promise, child.exited.then(readSaved)]);
+        expect(child.exitCode).toBeNull();
+        child.kill('SIGTERM');
+        await output;
+        expect(() => process.kill(stage, 0)).toThrow();
+        expect(saved).toContain('finished stdout');
+        expect(saved).toContain('finished stderr');
+        expect(saved).toContain('(pass) completed file');
+        expect(readFileSync(log, 'utf8')).toStartWith(saved);
+      } finally {
+        logWatcher.close();
+      }
     } finally {
       watcher.close();
       child.kill('SIGTERM');
@@ -240,21 +255,7 @@ test('suites run side by side while the machine budget has room, and one at a ti
     ] as const) {
       mkdirSync(join(root, name));
       writeFileSync(join(root, name, 'package.json'), JSON.stringify({ scripts: { test: 'bun test ./meet.itest.ts' } }));
-      writeFileSync(
-        join(root, name, 'meet.itest.ts'),
-        `import { expect, test } from 'bun:test';
-import { existsSync, writeFileSync } from 'node:fs';
-test('meets the other suite', async () => {
-  writeFileSync(${JSON.stringify(join(root, `${name}.started`))}, '');
-  const until = Date.now() + 4000;
-  while (!existsSync(${JSON.stringify(join(root, `${other}.started`))}) && Date.now() < until) await Bun.sleep(20);
-  const met = existsSync(${JSON.stringify(join(root, `${other}.started`))}) && !existsSync(${JSON.stringify(join(root, `${other}.ended`))});
-  await Bun.sleep(300);
-  writeFileSync(${JSON.stringify(join(root, `${name}.ended`))}, '');
-  expect(met).toBe(process.env.MEET === '1');
-});
-`,
-      );
+      writeFileSync(join(root, name, 'meet.itest.ts'), rendezvousSource(root, name, other));
     }
     const env: Record<string, string | undefined> = {
       ...process.env,
@@ -263,7 +264,8 @@ test('meets the other suite', async () => {
     };
     delete env['RUNLITH_TEST_SLOT'];
     const invoke = async (report: string, meet: boolean, ...args: string[]) => {
-      for (const name of ['one', 'two']) for (const mark of ['started', 'ended']) rmSync(join(root, `${name}.${mark}`), { force: true });
+      for (const name of ['one', 'two'])
+        for (const mark of ['started', 'ready', 'ended']) rmSync(join(root, `${name}.${mark}`), { force: true });
       const child = Bun.spawn(
         [process.execPath, join(import.meta.dir, 'all.ts'), '--root', root, '--report', join(root, report), ...args],
         {
@@ -279,7 +281,7 @@ test('meets the other suite', async () => {
       ]);
       return { code, output: stdout + stderr };
     };
-    const side = await invoke('side.json', true);
+    const side = await invoke('side.json', budgetOf(12, memoryOf()) > 1);
     expect(side.code, side.output).toBe(0);
     const alone = await invoke('alone.json', false, '--jobs', '1');
     expect(alone.code, alone.output).toBe(0);

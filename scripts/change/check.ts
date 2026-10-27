@@ -7,7 +7,7 @@ import { moduleMapAt } from './modules.ts';
 import { workspacePaths } from './packages.ts';
 import { Hashes, type Inputs, type Variant } from './inputs.ts';
 import { Records } from './records.ts';
-import { budgetOf, coresOf } from '@runlith/testbed/budget';
+import { budgetOf, coresOf, memoryOf } from '@runlith/testbed/budget';
 import { kindOf } from '@runlith/testbed/kinds';
 import type { FileRow, Row } from '@runlith/testbed/ledger';
 import { slowLine, type FileVerdict, type RunRow, type SlowRow } from '@runlith/testbed/report';
@@ -188,7 +188,7 @@ for (const plan of plans.filter((plan) => !plan.cached)) {
   group.push(plan);
   groups.set(key, group);
 }
-const budget = budgetOf(coresOf(process.env['TESTBED_CORES']));
+const budget = budgetOf(coresOf(process.env['TESTBED_CORES']), memoryOf());
 const suites = [...groups.values()].sort(
   (a, b) =>
     b.reduce((total, plan) => total + (plan.previous?.cpu ?? 0), 0) - a.reduce((total, plan) => total + (plan.previous?.cpu ?? 0), 0),
