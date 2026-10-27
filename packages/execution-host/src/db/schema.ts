@@ -55,6 +55,16 @@ export const generationLedger = sqliteTable('generation_ledger', {
   pending: integer('pending').notNull().default(0),
 });
 
+export const recordRemoval = sqliteTable(
+  'record_removal',
+  {
+    executionId: text('execution_id').primaryKey(),
+    incarnation: integer('incarnation').notNull(),
+    ledgered: integer('ledgered'),
+  },
+  (table) => [index('record_removal_incarnation_idx').on(table.incarnation)],
+);
+
 export const hostCustody = sqliteTable('host_custody', {
   installation: text('installation').primaryKey(),
   revision: integer('revision').notNull(),

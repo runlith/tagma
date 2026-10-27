@@ -39,6 +39,7 @@ it.live(
           ...unreadStore,
           retiredLedger: () => Effect.succeed([]),
           shelfLedger: () => Effect.succeed({ bytes: 0, through: undefined }),
+          unfinishedRemovals: () => Effect.succeed([]),
         }),
       ),
       Effect.provideService(FileSystem.FileSystem, FileSystem.makeNoop({})),

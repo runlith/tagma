@@ -82,17 +82,19 @@ export const makeExecutionStop = Effect.fnUntraced(function* ({
   target,
   facts,
   ref,
+  ended: recorded,
 }: {
   readonly input: ExecutionInput;
   readonly target: StopTarget;
   readonly facts: RecordFacts;
   readonly ref: ExecutionRef;
+  readonly ended?: EndingReceipt;
 }) {
   const state = yield* Ref.make<StopState>({
     running: undefined,
     measuring: undefined,
     settled: undefined,
-    ended: undefined,
+    ended: recorded,
     steps: [],
     cause: undefined,
     unmeasurable: undefined,
@@ -100,6 +102,7 @@ export const makeExecutionStop = Effect.fnUntraced(function* ({
   const store = yield* ExecutionStore;
   const stateRef = state;
   const reachedValue = Deferred.makeUnsafe<EndingReceipt>();
+  if (recorded !== undefined) yield* Deferred.succeed(reachedValue, recorded);
   function readOutcome(): Effect.Effect<StopReceipt | undefined> {
     return Effect.map(Ref.get(stateRef), (held) => held.settled);
   }

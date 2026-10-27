@@ -4,6 +4,7 @@ import { ExecutionId, type ExecutionRef } from '@runlith/executions/protocol/exe
 import type { HostRequestRef } from '@runlith/executions/protocol/execution';
 import { type AdoptionRefusal, type UnadoptedExecution } from '@runlith/executions/protocol/runtime';
 import type { LaunchRequest } from '@runlith/executions/protocol/launch';
+import { recordedEnding } from '@runlith/executions/protocol/stop';
 import { makeSegmentRecord } from '../ExecutionRecord';
 import { restoreScreen } from '../screenRestore';
 import type { HeldExecution } from '../holder/Holder';
@@ -96,6 +97,11 @@ const one = Effect.fn('ExecutionRegistry.adopt')(
     const rules = yield* store.rulesOf(id).pipe(Effect.mapError(refusing('store-unreadable', ref)));
     const pace = yield* store.paceOf(id).pipe(Effect.mapError(refusing('store-unreadable', ref)));
     const intents = yield* store.stopRequestsOf(id).pipe(Effect.mapError(refusing('store-unreadable', ref)));
+    const final = yield* store.finalOf(id).pipe(Effect.mapError(refusing('store-unreadable', ref)));
+    const ending =
+      stored.state.phase === 'ended' && final?.cleanup === 'complete'
+        ? { ...recordedEnding(final), cost: held.reaped?.cost ?? recordedEnding(final).cost }
+        : undefined;
     const launch = launchOf(registry, stored, held, custody, call, pace !== undefined);
     if (launch === undefined) {
       return yield* new AdoptionRefused({ reason: 'no-admission', detail: 'a command execution holds no admission in the store', ref });
@@ -132,6 +138,7 @@ const one = Effect.fn('ExecutionRegistry.adopt')(
           pace,
           record,
           departure,
+          ending,
           retiring: Ref.get(taken),
           screen:
             stored.state.transport === 'pty'

@@ -244,6 +244,10 @@ function forgetLive(registry: RegistryState, execution: ExecutionId): Effect.Eff
       }
       const sources = yield* sourcesOf(found.execution.record);
       yield* found.close;
+      const intended = yield* Effect.result(store.beginRemoval(found.ref, undefined));
+      if (intended._tag === 'Failure') {
+        return yield* new ExecutionUnrecorded({ execution, reason: `the retirement was not recorded: ${intended.failure._tag}` });
+      }
       const unavailable = yield* Ref.updateAndGet(found.state, (state): ExecutionState => ({ ...state, record: 'unavailable' }));
       const unrecorded = yield* Effect.result(store.recordState(unavailable, yield* Ref.get(found.process)));
       if (unrecorded._tag === 'Failure') {
@@ -254,6 +258,10 @@ function forgetLive(registry: RegistryState, execution: ExecutionId): Effect.Eff
         return yield* new ExecutionUnrecorded({ execution, reason: `the retirement was not recorded: ${facts.failure._tag}` });
       }
       yield* fs.remove(found.execution.record.directory, { recursive: true, force: true }).pipe(Effect.orDie);
+      const ended = yield* Effect.result(store.endRemoval(execution));
+      if (ended._tag === 'Failure') {
+        yield* Effect.logWarning(`the finished removal of ${execution} stays listed; the next logic finishes it again`, ended.failure);
+      }
       held.release(found.ref);
       yield* moved(registry, found);
       yield* inventoryWoken;

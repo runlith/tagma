@@ -58,6 +58,11 @@ export type GenerationPage = {
   readonly next: number | undefined;
 };
 
+export type RecordRemoval = {
+  readonly execution: ExecutionId;
+  readonly ledgered: number | undefined;
+};
+
 export type ShelfLedger = {
   readonly bytes: number;
   readonly through: number | undefined;

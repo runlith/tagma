@@ -13,6 +13,7 @@ import {
   generationLedger as generationLedgerTable,
   incarnation as incarnationTable,
   operation as operationTable,
+  recordRemoval as recordRemovalTable,
   stopIntent as stopIntentTable,
 } from '../db/schema';
 import type { ExecutionStore, OpenedStore } from './ExecutionStore';
@@ -24,6 +25,7 @@ import {
   type GenerationPage,
   type RetainedExecution,
   type RetiredGeneration,
+  type RecordRemoval,
   type RetiredLedgerEntry,
   type ShelfLedger,
 } from './records';
@@ -43,11 +45,13 @@ export const generations = (
   | 'generationExecutions'
   | 'shelfLedger'
   | 'shelvedRecords'
+  | 'beginRemoval'
+  | 'endRemoval'
+  | 'unfinishedRemovals'
   | 'retiredGenerations'
   | 'retiredLedger'
   | 'noteRecordPending'
   | 'sealRecordBytes'
-  | 'releaseRecordBytes'
   | 'setGenerationBytes'
   | 'beginEviction'
   | 'evictGeneration'
@@ -77,6 +81,7 @@ export const generations = (
             .limit(1);
           const execution = next[0]?.executionId;
           if (execution === undefined) {
+            yield* db.delete(recordRemovalTable).where(eq(recordRemovalTable.incarnation, incarnation));
             yield* db.delete(generationLedgerTable).where(eq(generationLedgerTable.incarnation, incarnation));
             yield* db
               .delete(incarnationTable)
@@ -247,6 +252,46 @@ export const generations = (
         }),
       ),
 
+    beginRemoval: (ref, ledgered) =>
+      unit(
+        db
+          .insert(recordRemovalTable)
+          .values({ executionId: ref.execution, incarnation: ref.incarnation, ledgered: ledgered ?? null })
+          .onConflictDoUpdate({ target: recordRemovalTable.executionId, set: { ledgered: ledgered ?? null } }),
+      ).pipe(Effect.asVoid),
+
+    endRemoval: (execution) =>
+      unit(
+        Effect.gen(function* () {
+          const ended = yield* db
+            .delete(recordRemovalTable)
+            .where(eq(recordRemovalTable.executionId, execution))
+            .returning({ incarnation: recordRemovalTable.incarnation, ledgered: recordRemovalTable.ledgered });
+          const removal = ended[0];
+          if (removal === undefined || removal.ledgered === null) return;
+          yield* db
+            .update(generationLedgerTable)
+            .set({
+              bytes: sql`max(0, ${generationLedgerTable.bytes} - ${removal.ledgered})`,
+              pending: sql`max(0, ${generationLedgerTable.pending} - 1)`,
+            })
+            .where(eq(generationLedgerTable.incarnation, removal.incarnation));
+        }),
+      ),
+
+    unfinishedRemovals: (incarnation) =>
+      unit(
+        Effect.gen(function* () {
+          const rows = yield* db.select().from(recordRemovalTable).where(eq(recordRemovalTable.incarnation, incarnation));
+          return yield* Effect.forEach(rows, (row) =>
+            Effect.map(
+              decodeExecutionId(row.executionId).pipe(Effect.mapError(unreadable('record-removal', row.executionId))),
+              (execution): RecordRemoval => ({ execution, ledgered: row.ledgered ?? undefined }),
+            ),
+          );
+        }),
+      ),
+
     shelvedRecords: (incarnation, after, through, limit) =>
       unit(
         Effect.gen(function* () {
@@ -356,20 +401,6 @@ export const generations = (
             target: generationLedgerTable.incarnation,
             set: {
               bytes: sql`max(0, ${generationLedgerTable.bytes} + ${bytes})`,
-              pending: sql`max(0, ${generationLedgerTable.pending} - 1)`,
-            },
-          }),
-      ).pipe(Effect.asVoid),
-
-    releaseRecordBytes: (incarnation, bytes) =>
-      unit(
-        db
-          .insert(generationLedgerTable)
-          .values({ incarnation, bytes: 0, pending: 0 })
-          .onConflictDoUpdate({
-            target: generationLedgerTable.incarnation,
-            set: {
-              bytes: sql`max(0, ${generationLedgerTable.bytes} - ${bytes})`,
               pending: sql`max(0, ${generationLedgerTable.pending} - 1)`,
             },
           }),

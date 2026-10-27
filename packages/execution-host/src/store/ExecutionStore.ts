@@ -88,6 +88,7 @@ import {
   type RetainedExecution,
   type RetiredGeneration,
   type RetiredLedgerEntry,
+  type RecordRemoval,
   type ShelfLedger,
 } from './records';
 
@@ -275,6 +276,11 @@ export class ExecutionStore extends Context.Service<
       limit: number,
     ) => Effect.Effect<GenerationPage, StoreLost | StoreUnreadable | StoreFailure>;
     readonly shelfLedger: (incarnation: Incarnation) => Effect.Effect<ShelfLedger, StoreLost | StoreFailure>;
+    readonly beginRemoval: (ref: ExecutionRef, ledgered: number | undefined) => Effect.Effect<void, StoreLost | StoreFailure>;
+    readonly endRemoval: (execution: ExecutionId) => Effect.Effect<void, StoreLost | StoreFailure>;
+    readonly unfinishedRemovals: (
+      incarnation: Incarnation,
+    ) => Effect.Effect<ReadonlyArray<RecordRemoval>, StoreLost | StoreUnreadable | StoreFailure>;
     readonly shelvedRecords: (
       incarnation: Incarnation,
       after: number | undefined,
@@ -285,7 +291,6 @@ export class ExecutionStore extends Context.Service<
     readonly retiredLedger: () => Effect.Effect<ReadonlyArray<RetiredLedgerEntry>, StoreLost | StoreUnreadable | StoreFailure>;
     readonly noteRecordPending: (incarnation: Incarnation) => Effect.Effect<void, StoreLost | StoreFailure>;
     readonly sealRecordBytes: (incarnation: Incarnation, bytes: number) => Effect.Effect<void, StoreLost | StoreFailure>;
-    readonly releaseRecordBytes: (incarnation: Incarnation, bytes: number) => Effect.Effect<void, StoreLost | StoreFailure>;
     readonly setGenerationBytes: (incarnation: Incarnation, bytes: number) => Effect.Effect<void, StoreLost | StoreFailure>;
     readonly beginEviction: (incarnation: Incarnation) => Effect.Effect<void, StoreLost | StoreFailure>;
     readonly evictGeneration: (incarnation: Incarnation) => Effect.Effect<void, StoreLost | StoreFailure>;

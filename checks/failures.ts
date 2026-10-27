@@ -1101,13 +1101,6 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     why: 'A reclaim pass that fails is logged with its cause and leaves exhaustion undeclared, so the next shelving runs the pass again.',
   },
   {
-    path: 'packages/execution-host/src/RecordShelf.ts',
-    symbol: 'makeRecordShelf.removeKept',
-    form: 'ignore',
-    site: '370f41e3',
-    why: "The pending mark noted before the removal stays up, so the generation's bytes read as uncertain and are measured again.",
-  },
-  {
     path: 'packages/execution-host/src/RecordWriter.ts',
     symbol: 'RecordWriter.openSegment',
     form: 'ignore',

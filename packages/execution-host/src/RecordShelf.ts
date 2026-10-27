@@ -1,5 +1,5 @@
 import { freemem } from 'node:os';
-import { Clock, Deferred, Effect, FileSystem, Path, Semaphore, type PlatformError } from 'effect';
+import { Clock, Deferred, Effect, FileSystem, Path, Semaphore } from 'effect';
 import type { CommandDeadline } from '@runlith/executions/protocol/command';
 import type { ExecutionId, ExecutionRef, ExecutionState, Incarnation } from '@runlith/executions/protocol/execution';
 import type { InputProfile } from '@runlith/executions/protocol/inputProfile';
@@ -11,13 +11,15 @@ import type { SourceCompletion } from '@runlith/executions/protocol/call';
 import type { ExecutionSummary } from '@runlith/executions/protocol/runtime';
 import type { EndingReceipt, ProcessWatchReading } from '@runlith/executions/protocol/stop';
 import { makeSealedRecord, type SealedRecord } from '@runlith/executions/RecordFiles';
-import { RecordNameInvalid, recordFolder, type RecordSeal } from '@runlith/executions/recordFormat';
+import type { RecordSeal } from '@runlith/executions/recordFormat';
 import type { ReadFailure } from './ExecutionRecord';
 import { ExecutionStore } from './store/ExecutionStore';
-import type { IncarnationRecord, RetainedExecution } from './store/records';
+import type { IncarnationRecord } from './store/records';
 import { ExecutionUnknown, ExecutionUnrecorded } from './executionFailures';
 import { makeGenerationEviction, type RetentionRoom } from './GenerationEviction';
 import { makeGenerationReadLeases } from './GenerationReadLeases';
+import { INHERITED_PAGE, makeInheritedRecords } from './InheritedRecords';
+import { makeRecordMeasure } from './RecordMeasure';
 import type { VolumeReader } from './RecordVolume';
 import { makeRetainedRecordReads, sameRef, sealedRefusal, type ProfiledRead } from './RetainedRecordReads';
 
@@ -25,11 +27,6 @@ const VOLUME_RESERVE_SHARE = 20;
 const KEPT_SHARE = 20;
 const UNREAD_SHARE = 10;
 const UNREAD_GRACE_NANOS = 5n * 60n * 1_000_000_000n;
-const INHERITED_PAGE = 128;
-
-type RecordMeasurement =
-  | { readonly _tag: 'Measured'; readonly bytes: number }
-  | { readonly _tag: 'Unmeasured'; readonly failure: PlatformError.PlatformError };
 
 export type Shelving = {
   readonly ref: ExecutionRef;
@@ -53,12 +50,6 @@ type Released = Omit<Shelving, 'directory' | 'seal'> & {
   ledgered: number;
   readonly unreadUntil: bigint;
   readonly order: number;
-};
-
-type Inherited = {
-  readonly ref: ExecutionRef;
-  readonly evidence: RetainedExecution;
-  readonly bytes: number;
 };
 
 class ReleaseOrder {
@@ -132,28 +123,7 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
   const store = yield* ExecutionStore;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const recordBytes = Effect.fnUntraced(function* (directory: string): Effect.fn.Return<number, PlatformError.PlatformError> {
-    let bytes = 0;
-    const pending = [directory];
-    while (pending.length > 0) {
-      const next = pending.pop()!;
-      const info = yield* fs.stat(next);
-      if (info.type === 'Directory') {
-        const entries = yield* fs.readDirectory(next);
-        for (const entry of entries) pending.push(path.join(next, entry));
-      } else if (info.type === 'File') {
-        bytes += Number(info.size);
-      }
-    }
-    return bytes;
-  });
-  const measure = (directory: string): Effect.Effect<RecordMeasurement> =>
-    recordBytes(directory).pipe(
-      Effect.match({
-        onSuccess: (bytes): RecordMeasurement => ({ _tag: 'Measured', bytes }),
-        onFailure: (failure): RecordMeasurement => ({ _tag: 'Unmeasured', failure }),
-      }),
-    );
+  const measure = yield* makeRecordMeasure();
   const ledger = Effect.fnUntraced(function* (bytes: number): Effect.fn.Return<number> {
     const noted = yield* Effect.result(store.sealRecordBytes(current.incarnation, bytes));
     if (noted._tag === 'Success') return bytes;
@@ -186,62 +156,7 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
     leases: readLeases,
   });
 
-  const standing = yield* store.shelfLedger(current.incarnation);
-  let inheritedBytes = standing.through === undefined ? 0 : standing.bytes;
-  let inheritedAfter: number | undefined;
-  let inheritedPage: ExecutionId[] = [];
-  let inheritedDone = standing.through === undefined;
-  const inheritedRetry: ExecutionId[] = [];
   let inheritedPending = false;
-  const inheritedExhausted = () => inheritedDone && inheritedPage.length === 0 && inheritedRetry.length === 0;
-
-  const nextInherited = Effect.fnUntraced(function* (): Effect.fn.Return<Inherited | undefined> {
-    for (;;) {
-      if (inheritedPage.length === 0) {
-        if (inheritedDone || standing.through === undefined) return undefined;
-        const page = yield* Effect.result(store.shelvedRecords(current.incarnation, inheritedAfter, standing.through, INHERITED_PAGE));
-        if (page._tag === 'Failure') {
-          yield* Effect.logWarning(
-            `the records an earlier logic shelved were not listed: ${page.failure._tag}; the next decision lists them again`,
-          );
-          return undefined;
-        }
-        inheritedPage = [...page.success.executions];
-        inheritedAfter = page.success.next;
-        inheritedDone = page.success.next === undefined;
-        continue;
-      }
-      const execution = inheritedPage.shift()!;
-      if (released.has(execution) || releasing.has(execution) || live(execution)) continue;
-      const folder = recordFolder(execution);
-      if (folder instanceof RecordNameInvalid) continue;
-      const ref: ExecutionRef = { installation: current.installation, execution, incarnation: current.incarnation };
-      const evidence = yield* Effect.result(store.evidenceOf(ref));
-      if (evidence._tag === 'Failure') {
-        inheritedRetry.push(execution);
-        yield* Effect.logWarning(
-          `the record of ${execution} an earlier logic shelved was not read; the next decision reads it again`,
-          evidence.failure,
-        );
-        continue;
-      }
-      const { state } = evidence.success.record;
-      if (state.phase !== 'ended' || state.record !== 'available') continue;
-      const measurement = yield* measure(path.join(records, folder));
-      if (measurement._tag === 'Unmeasured' && measurement.failure.reason._tag === 'NotFound') {
-        return { ref, evidence: evidence.success, bytes: 0 };
-      }
-      if (measurement._tag === 'Unmeasured') {
-        inheritedRetry.push(execution);
-        yield* Effect.logWarning(
-          `the record of ${execution} an earlier logic shelved could not be measured; the next decision measures it again`,
-          measurement.failure,
-        );
-        continue;
-      }
-      return { ref, evidence: evidence.success, bytes: measurement.bytes };
-    }
-  });
 
   const readVolume = Effect.map(volumeOf(records), (read) => {
     volume = read === undefined ? undefined : { reserve: Math.floor(read.total / VOLUME_RESERVE_SHARE), available: read.available };
@@ -297,6 +212,11 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
         Effect.mapError((failure) => new ExecutionUnrecorded({ execution, reason: `the retirement was not recorded: ${failure._tag}` })),
       );
     yield* store
+      .beginRemoval(entry.ref, entry.ledgered)
+      .pipe(
+        Effect.mapError((failure) => new ExecutionUnrecorded({ execution, reason: `the retirement was not recorded: ${failure._tag}` })),
+      );
+    yield* store
       .recordState({ ...entry.state, record: 'unavailable' }, entry.process)
       .pipe(
         Effect.mapError((failure) => new ExecutionUnrecorded({ execution, reason: `the retirement was not recorded: ${failure._tag}` })),
@@ -324,38 +244,32 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
       return Deferred.await(drained);
     });
 
-  const evictInherited = Effect.fn('Host.evictInherited')(function* (inherited: Inherited): Effect.fn.Return<boolean> {
-    const { ref, evidence, bytes } = inherited;
-    yield* Effect.annotateCurrentSpan({ executionId: ref.execution, bytes });
-    const recorded = yield* Effect.result(
-      Effect.gen(function* () {
-        yield* store.noteRecordPending(ref.incarnation);
-        yield* store.recordState({ ...evidence.record.state, record: 'unavailable' }, evidence.record.native);
-        if (evidence.final !== undefined) yield* store.recordFinal({ ...evidence.final, retention: 'lost' });
-      }),
-    );
-    if (recorded._tag === 'Failure') {
-      inheritedRetry.push(ref.execution);
-      yield* Effect.logWarning(`the retirement of ${ref.execution} stays unrecorded; the next decision retires it again`, recorded.failure);
-      return false;
+  const removalEnded = Effect.fnUntraced(function* (execution: ExecutionId): Effect.fn.Return<void> {
+    const ended = yield* Effect.result(store.endRemoval(execution));
+    if (ended._tag === 'Failure') {
+      yield* Effect.logWarning(`the finished removal of ${execution} stays listed; the next logic finishes it again`, ended.failure);
     }
-    inheritedBytes = Math.max(0, inheritedBytes - bytes);
+  });
+
+  const finishRemoval = Effect.fnUntraced(function* (ref: ExecutionRef): Effect.fn.Return<boolean> {
     yield* readsDrained(ref.execution);
     const removed = yield* retainedReads.remove(ref.incarnation, ref.execution).pipe(
       Effect.as(true),
       Effect.catchTag('PlatformError', (failure) =>
-        Effect.as(
-          Effect.logWarning(`the retired record of ${ref.execution} was not removed; its ledger bytes stay pending`, failure),
-          false,
-        ),
+        Effect.as(Effect.logWarning(`the retired record of ${ref.execution} was not removed; its removal stays listed`, failure), false),
       ),
     );
-    if (!removed) return true;
-    const unledgered = yield* Effect.result(store.releaseRecordBytes(ref.incarnation, bytes));
-    if (unledgered._tag === 'Failure') {
-      yield* Effect.logWarning(`the byte ledger of generation ${ref.incarnation} keeps its pending mark: ${unledgered.failure._tag}`);
-    }
+    if (!removed) return false;
+    yield* removalEnded(ref.execution);
     return true;
+  });
+
+  const inherited = yield* makeInheritedRecords({
+    current,
+    records,
+    measure,
+    kept: (execution) => released.has(execution) || releasing.has(execution) || live(execution),
+    finishRemoval,
   });
 
   const removeKept = Effect.fnUntraced(function* (entry: Released): Effect.fn.Return<void> {
@@ -367,8 +281,11 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
         Effect.as(Effect.logWarning(`the record of ${execution} was not removed; its bytes stay counted`, failure), false),
       ),
     );
-    if (!removed) return;
-    yield* Effect.ignore(store.releaseRecordBytes(entry.ref.incarnation, entry.ledgered));
+    if (!removed) {
+      inherited.retryRemoval(execution, entry.ledgered);
+      return;
+    }
+    yield* removalEnded(execution);
   });
 
   const retire = (entry: Released): Effect.Effect<boolean> =>
@@ -382,6 +299,7 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
   const evictOver = Effect.fnUntraced(function* (reading: RetentionRoom | undefined): Effect.fn.Return<ReadonlyArray<Effect.Effect<void>>> {
     const removals: Array<Effect.Effect<void>> = [];
     inheritedPending = false;
+    yield* inherited.finishUnfinished();
     if (reading === undefined) return removals;
     for (const entry of [...unsized]) {
       const measurement = yield* measure(entry.record.directory);
@@ -392,9 +310,9 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
       unsized.delete(entry);
     }
     const short = reading.available < reading.reserve;
-    let excess = keptBytes + inheritedBytes - reading.available / KEPT_SHARE;
+    let excess = keptBytes + inherited.bytes() - reading.available / KEPT_SHARE;
     if (excess <= 0 && !(short && unsized.size > 0)) return removals;
-    let critical = keptBytes + inheritedBytes - reading.available / UNREAD_SHARE;
+    let critical = keptBytes + inherited.bytes() - reading.available / UNREAD_SHARE;
     const now = yield* Clock.monotonicTimeNanos;
     let freed = 0;
     const readingEntries: Released[] = [];
@@ -410,23 +328,21 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
         if (sealedReads.has(entry.ref.execution) || (unread.has(entry.ref.execution) && now < entry.unreadUntil)) continue;
         if (!(yield* evict(entry))) return removals;
       }
-      inheritedPage.unshift(...inheritedRetry.splice(0));
+      inherited.resume();
       for (let taken = 0; freed < excess; taken++) {
         if (taken === INHERITED_PAGE) {
           inheritedPending = true;
           return removals;
         }
-        const inherited = yield* nextInherited();
-        if (inherited === undefined) {
-          if (inheritedExhausted()) {
-            excess -= inheritedBytes;
-            critical -= inheritedBytes;
-            inheritedBytes = 0;
-          }
+        const next = yield* inherited.next();
+        if (next === undefined) {
+          const residue = inherited.settle();
+          excess -= residue;
+          critical -= residue;
           break;
         }
-        if (!(yield* evictInherited(inherited))) return removals;
-        freed += inherited.bytes;
+        if (!(yield* inherited.evict(next))) return removals;
+        freed += next.bytes;
       }
       while (freed < excess) {
         const entry = delivered.first();
@@ -627,7 +543,7 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
 
   const kept = (): KeptRecords => ({
     records: released.size,
-    bytes: keptBytes + inheritedBytes,
+    bytes: keptBytes + inherited.bytes(),
     reserve: volume === undefined ? undefined : volume.reserve,
     available: volume === undefined ? undefined : volume.available,
   });

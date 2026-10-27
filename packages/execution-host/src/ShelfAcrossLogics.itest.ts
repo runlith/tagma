@@ -3,10 +3,11 @@ import { it } from '@runlith/effect-test';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { join } from 'node:path';
-import { Context, Effect, FileSystem, Layer } from 'effect';
+import { Context, Deferred, Effect, FileSystem, Layer } from 'effect';
 import type { ExecutionId, ExecutionRef } from '@runlith/executions/protocol/execution';
 import type { LaunchRequest } from '@runlith/executions/protocol/launch';
 import { byteOffset } from '@runlith/executions/protocol/record';
+import { recordFolder } from '@runlith/executions/recordFormat';
 import { Bindings } from './Bindings';
 import { Custodian } from './Custodian';
 import { ExecutionCapacity } from './ExecutionCapacity';
@@ -27,8 +28,13 @@ const profile = runtimeProfile({ executions: 2, transports: ['pipes'] });
 const agent = principalOf('agent');
 const PLENTY: VolumeReading = { total: 1_000_000_000_000, available: 1_000_000_000_000 };
 
-const logicOver = <S>(directory: string, platform: Context.Context<S>, volume: { reading: VolumeReading }) =>
-  ExecutionRegistry.layer({ volumeOf: () => Effect.sync(() => volume.reading) }).pipe(
+const logicOver = <S>(directory: string, platform: Context.Context<S>, volume: { reading: VolumeReading }, files?: FileSystem.FileSystem) =>
+  (files === undefined
+    ? ExecutionRegistry.layer({ volumeOf: () => Effect.sync(() => volume.reading) })
+    : ExecutionRegistry.layer({ volumeOf: () => Effect.sync(() => volume.reading) }).pipe(
+        Layer.provide(Layer.succeed(FileSystem.FileSystem, files)),
+      )
+  ).pipe(
     Layer.provideMerge(Bindings.layer),
     Layer.provideMerge(
       Layer.unwrap(Effect.map(sharedPool, (pool) => hostState(join(directory, 'executions.sqlite'), registrationOf(directory), pool))).pipe(
@@ -80,6 +86,14 @@ const shelved = Effect.fnUntraced(function* (claim: HostClaim, name: string, tex
   }
 });
 
+const departed = Effect.fnUntraced(function* (claim: HostClaim) {
+  const lifecycle = yield* HostLifecycle;
+  const quiesced = yield* lifecycle.quiesce(claim, keyOf('leaving-quiesce'));
+  if (quiesced._tag === 'Refused') return yield* Effect.die(new Error(`quiesce refused: ${quiesced.refusal._tag}`));
+  yield* lifecycle.yield(quiesced.ticket);
+  yield* lifecycle.departed;
+});
+
 const stdout = (ref: ExecutionRef) => ({ ref, stream: 'stdout' as const, offset: byteOffset(0n) });
 const keptBytes = Effect.map(
   Effect.flatMap(HostLifecycle, (lifecycle) => lifecycle.status()),
@@ -97,11 +111,7 @@ it.live('records the previous logic of the generation shelved count against the 
       const claim = yield* claimed('leaving');
       const prior = yield* shelved(claim, 'prior-start', 'prior\n');
       const one = yield* keptBytes;
-      const lifecycle = yield* HostLifecycle;
-      const quiesced = yield* lifecycle.quiesce(claim, keyOf('leaving-quiesce'));
-      if (quiesced._tag === 'Refused') return yield* Effect.die(new Error(`quiesce refused: ${quiesced.refusal._tag}`));
-      yield* lifecycle.yield(quiesced.ticket);
-      yield* lifecycle.departed;
+      yield* departed(claim);
       return { prior, one };
     }).pipe(Effect.provide(leaving));
     yield* Effect.gen(function* () {
@@ -113,6 +123,49 @@ it.live('records the previous logic of the generation shelved count against the 
       expect(yield* Effect.flip(records.read(stdout(prior), 4096))).toMatchObject({ _tag: 'RecordReadFailed', act: 'missing' });
       expect((yield* (yield* ExecutionStop).ending(prior.execution))?.retention).toBe('lost');
       expect(new TextDecoder().decode((yield* records.read(stdout(fresh), 4096)).bytes)).toBe('fresh\n');
+    }).pipe(Effect.provide(logicOver(directory, platform, volume)));
+  }).pipe(Effect.provide(BunServices.layer)),
+);
+
+it.live('the next logic finishes removing a record whose removal its predecessor left when it departed', () =>
+  Effect.gen(function* () {
+    const files = yield* FileSystem.FileSystem;
+    const directory = yield* files.makeTempDirectoryScoped({ prefix: 'shelf-across-logics-' });
+    const records = join(directory, 'records');
+    const platform = yield* Layer.build(testHolder(directory).pipe(Layer.provide(hostSpawner)));
+    const volume = { reading: PLENTY };
+    const removal = { held: false, released: yield* Deferred.make<void>() };
+    const holding: FileSystem.FileSystem = {
+      ...files,
+      remove: (path, options) =>
+        removal.held && options?.recursive === true && path.startsWith(`${records}/`)
+          ? Deferred.await(removal.released)
+          : files.remove(path, options),
+    };
+    const leaving = yield* Layer.build(logicOver(directory, platform, volume, holding));
+    yield* Effect.addFinalizer(() => Deferred.succeed(removal.released, undefined));
+    const evicted = yield* Effect.gen(function* () {
+      const claim = yield* claimed('leaving');
+      const evicted = yield* shelved(claim, 'evicted-start', 'evicted\n');
+      yield* (yield* HostByteRecords).read(stdout(evicted), 4096);
+      const one = yield* keptBytes;
+      volume.reading = { total: 20 * 1024 * 1024, available: 20 * (one + Math.floor(one / 2)) };
+      removal.held = true;
+      const executions = yield* Executions;
+      const stops = yield* ExecutionStop;
+      yield* executions.start(claim, keyOf('kept-start'), printing('kept\n'));
+      for (;;) {
+        const wake = yield* executions.inventoryChanged();
+        if ((yield* stops.ending(evicted.execution))?.retention === 'lost') break;
+        yield* wake;
+      }
+      yield* departed(claim);
+      return evicted;
+    }).pipe(Effect.provide(leaving));
+    yield* Effect.gen(function* () {
+      volume.reading = PLENTY;
+      yield* shelved(yield* claimed('next'), 'next-start', 'next\n');
+      expect(yield* files.readDirectory(records)).not.toContain(recordFolder(evicted.execution));
     }).pipe(Effect.provide(logicOver(directory, platform, volume)));
   }).pipe(Effect.provide(BunServices.layer)),
 );

@@ -130,4 +130,33 @@ export const restartContracts = (adapter: HostAdapter, forgetStart: Forgetting) 
         expect((yield* host.client.state(child.execution))?.native.pid).toBe(child.native.pid);
       }),
     );
+
+    it.effect('keeps ended work it was handed retirable by its caller', () =>
+      Effect.gen(function* () {
+        const host = yield* Host;
+        const platform = yield* Adapter;
+        const started = yield* host.client.start(yield* operation(host), {
+          command: { program: '/bin/sh', args: ['-c', "printf 'held\\n'"], environment: [{ name: 'PATH', value: platform.searchPath }] },
+          transport: { _tag: 'pipes', stdin: 'ignore' },
+          lifetime: 'held',
+          purpose: 'command',
+          target: { environment: 'contract', namespace: 'contract', cwd: platform.directory, dependencies: [] },
+          holder: principal,
+          origin: principal,
+        });
+        if (started._tag !== 'Started') return yield* Effect.die(new Error(`the command was not started: ${started._tag}`));
+        const ref = started.execution;
+        yield* host.client.state(ref).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced(20),
+            until: (summary) => summary?.state.phase === 'ended' && summary.state.cleanup === 'complete',
+          }),
+        );
+        yield* host.control.yieldLogic;
+        expect(yield* host.client.retire(yield* operation(host), ref)).toMatchObject({ _tag: 'Retired' });
+        expect(yield* Effect.flip(host.client.read({ ref, stream: 'stdout', offset: byteOffset(0n) }, 4_096))).toMatchObject({
+          refusal: { _tag: 'HostConflict', reason: 'RecordReadFailed' },
+        });
+      }),
+    );
   });

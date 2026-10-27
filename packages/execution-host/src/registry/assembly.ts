@@ -13,7 +13,7 @@ import {
 } from '@runlith/executions/protocol/execution';
 import { type LaunchRequest, type NativeProcess } from '@runlith/executions/protocol/launch';
 import { type Stream as RecordStream, type TerminalGeometry } from '@runlith/executions/protocol/record';
-import { type ProcessWatchReading, type UnverifiableResource } from '@runlith/executions/protocol/stop';
+import { type EndingReceipt, type ProcessWatchReading, type UnverifiableResource } from '@runlith/executions/protocol/stop';
 import { type Execution, makeExecution } from '../Execution';
 import { makeExecutionCustody } from '../ExecutionCustody';
 import { ExecutionStore } from '../store/ExecutionStore';
@@ -99,6 +99,7 @@ export type Adopted = {
   readonly pace: PaceContinuation | undefined;
   readonly record: SegmentRecord;
   readonly departure: Departure | undefined;
+  readonly ending: EndingReceipt | undefined;
   readonly retiring: Effect.Effect<boolean>;
   readonly screen: ((reply: ReplySink) => Effect.Effect<Interpretation, InterpretationUnavailable, Scope.Scope>) | undefined;
 };
@@ -348,7 +349,7 @@ export const assemble = Effect.fnUntraced(function* (
             { kind: 'record' as const, detail: `execution state: ${moved.phase}`, reason: String(written.failure._tag) },
           ]),
     );
-  const stop = yield* makeExecutionStop({ input: queue, target: native.target, facts, ref }).pipe(
+  const stop = yield* makeExecutionStop({ input: queue, target: native.target, facts, ref, ended: adopted?.ending }).pipe(
     Effect.provideService(ExecutionStore, store),
   );
   const programs = launch.lifetime === 'command' ? launch.admission.programs : undefined;
