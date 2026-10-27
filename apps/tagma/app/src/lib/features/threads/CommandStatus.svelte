@@ -10,7 +10,7 @@
     unstartedNote,
     type ProcessLine,
   } from '$lib/features/executions/processes/lines.js';
-  import type { LoadExecution } from '@tagma/server/executions/contract/wire/load';
+  import { Readings } from '$lib/features/executions/load/Readings.svelte.js';
   import { percent } from '$lib/features/executions/load/rows.js';
   import Bar from '$lib/shared/ui/Bar.svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
@@ -22,17 +22,22 @@
     held = false,
     adjustable = false,
     foreground = true,
-    load = null,
+    figures = false,
   }: {
     line: ProcessLine;
     view: CommandView;
     held?: boolean;
     adjustable?: boolean;
     foreground?: boolean;
-    load?: LoadExecution | null;
+    figures?: boolean;
   } = $props();
 
+  const readings = Readings.use();
   const live = $derived(isLive(line));
+  const measuring = $derived(figures && live);
+  const load = $derived(measuring ? (readings.execution(line.owner.thread, line.key)?.execution ?? null) : null);
+
+  $effect(() => (measuring ? readings.hold() : undefined));
   const silence = $derived(view.unconfirmed(line));
   const now = $derived(view.now);
   const elapsed = $derived(elapsedMs(line, now));

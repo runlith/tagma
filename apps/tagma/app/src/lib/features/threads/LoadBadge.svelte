@@ -10,6 +10,8 @@
 
   const readings = Readings.use();
   const row = $derived(readings.agents.get(threadId));
+
+  $effect(() => readings.hold());
   const work = $derived(threadWork(row));
   const count = $derived(work.length);
   const key = $derived(threadPeeks.workKey(threadId));

@@ -10,7 +10,6 @@
   import EndedCallStatus from '../EndedCallStatus.svelte';
   import WaitStatus from '../WaitStatus.svelte';
   import type { EntryKinds } from '@runlith/chat-ui/EntryKinds.svelte';
-  import { Readings } from '$lib/features/executions/load/Readings.svelte.js';
   import type { ShownThread } from '../ShownThread.js';
   import type { TranscriptReading } from './TranscriptReading.svelte.js';
 
@@ -22,7 +21,6 @@
   }: { shown: ShownThread; kinds: EntryKinds; transcript: TranscriptReading; contributor: string } = $props();
 
   const calls = CallActivity.use();
-  const readings = Readings.use();
   const activity = $derived(transcript.activity);
 
   const status: ChatToolStatus = {
@@ -59,7 +57,7 @@
       view={activity.view}
       held={call !== null && call.mode === 'foreground' && call.endedAt === null}
       adjustable
-      load={readings.execution(line.owner.thread, line.key)?.execution ?? null}
+      figures
     />
   {:else}
     {@const awaited = activity.awaited(entry)}

@@ -22,10 +22,7 @@
   const workspace = Workspace.use();
   const settings = SettingsRepo.use();
 
-  $effect(() => {
-    readings.follow();
-  });
-  $effect(() => () => readings.release());
+  $effect(() => readings.hold());
 
   const shown = $derived.by(() => {
     const projectId = workspace.contextProject?.id;

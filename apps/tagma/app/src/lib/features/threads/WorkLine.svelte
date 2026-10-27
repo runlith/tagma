@@ -4,7 +4,7 @@
   import Square from '@lucide/svelte/icons/square';
   import SquareTerminal from '@lucide/svelte/icons/square-terminal';
   import Terminal from '@lucide/svelte/icons/terminal';
-  import type { LoadExecution, LoadRow } from '@tagma/server/executions/contract/wire/load';
+  import type { LoadExecution } from '@tagma/server/executions/contract/wire/load';
   import FadeText from '$lib/shared/FadeText.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
@@ -22,7 +22,6 @@
 
   let {
     execution,
-    row,
     line,
     view,
     open,
@@ -30,7 +29,6 @@
     onLeave,
   }: {
     execution: LoadExecution;
-    row: LoadRow;
     line: ProcessLine | null;
     view: CommandView;
     open: boolean;
@@ -142,7 +140,7 @@
             cwd={line.cwd}
           />
         {:else}
-          <NoOutput {line} load={{ execution, row }} class="rounded-md border border-vein" />
+          <NoOutput {line} class="rounded-md border border-vein" />
         {/if}
       {/if}
     </div>

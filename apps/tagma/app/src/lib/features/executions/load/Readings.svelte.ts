@@ -9,6 +9,7 @@ import {
 } from '@tagma/server/executions/contract/wire/load';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
+import { untrack } from 'svelte';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 import { formatSpan } from '$lib/shared/figures.js';
 import type { ExecutionLoad } from './rows.js';
@@ -41,6 +42,7 @@ export class Readings extends Service<Readings>()('LoadReadings', { tier: 'app' 
   private held = $state.raw<MachineLoadSnapshot | null>(null);
   private droppedAt = $state<number | null>(null);
   private interested = false;
+  private holders = 0;
 
   readonly state: MachineState;
   readonly view: LoadView | null;
@@ -87,11 +89,21 @@ export class Readings extends Service<Readings>()('LoadReadings', { tier: 'app' 
     return memory.pressure.level;
   }
 
-  follow(): void {
-    if (this.feed === null) this.subscribe();
+  hold(): () => void {
+    return untrack(() => {
+      this.holders += 1;
+      if (this.feed === null) this.subscribe();
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        this.holders -= 1;
+        if (this.holders === 0) this.release();
+      };
+    });
   }
 
-  release(): void {
+  private release(): void {
     this.feed?.unsubscribe();
     this.feed = null;
     this.held = null;

@@ -2,12 +2,19 @@
   import type { ClassValue } from 'svelte/elements';
   import FadeText from '$lib/shared/FadeText.svelte';
   import { formatBytes } from '$lib/shared/figures.js';
-  import { executionProcesses, percent, type ExecutionLoad } from '../load/rows.js';
+  import { Readings } from '../load/Readings.svelte.js';
+  import { executionProcesses, percent } from '../load/rows.js';
   import { isLive, type ProcessLine } from '../processes/lines.js';
 
-  let { line, load, class: className }: { line: ProcessLine; load: ExecutionLoad | null; class?: ClassValue } = $props();
+  let { line, class: className }: { line: ProcessLine; class?: ClassValue } = $props();
 
   const SHOWN = 6;
+
+  const readings = Readings.use();
+  const live = $derived(isLive(line));
+  const load = $derived(live ? readings.execution(line.owner.thread, line.key) : null);
+
+  $effect(() => (live ? readings.hold() : undefined));
 
   type Shown = {
     readonly pid: number | null;
@@ -35,7 +42,7 @@
   );
 </script>
 
-{#if isLive(line)}
+{#if live}
   <div class={['flex min-w-0 flex-col py-1', className]} data-no-output>
     <div class="flex h-6 items-center justify-between gap-3 px-3 text-small text-muted-foreground">
       <FadeText text={heading} />

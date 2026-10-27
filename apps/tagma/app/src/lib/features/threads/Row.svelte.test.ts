@@ -260,7 +260,7 @@ test("a thread wears the load badge while its agent row carries live work, with 
   const feed = liveFeed();
   const readings = new Readings(feed.live, Scope.make());
   const host = draw(entry(), [], undefined, null, feed, readings);
-  readings.follow();
+  readings.hold();
   const machine = feed.routes.get('load.machine');
   if (machine === undefined) throw new Error('The machine feed was not subscribed.');
   const execution = { installation: 'inst', execution: 'mine', incarnation: 0 };

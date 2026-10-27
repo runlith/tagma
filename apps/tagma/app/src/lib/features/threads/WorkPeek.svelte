@@ -126,7 +126,6 @@
         {#each work as execution (execution.key)}
           <WorkLine
             {execution}
-            {row}
             line={processes.line(execution.key)}
             view={processes}
             open={expanded === execution.key}
