@@ -37,6 +37,7 @@ export const awaitStart = Effect.fn('ServerStart.awaitStart')(function* <A>(
 ): Effect.fn.Return<Start<A>> {
   let announced: DirectoryHolder = null;
   for (;;) {
+    const left = ended(spawned);
     const saved = yield* progress;
     const held = holder();
     const startup = saved.startup;
@@ -45,7 +46,6 @@ export const awaitStart = Effect.fn('ServerStart.awaitStart')(function* <A>(
     }
     const answered = yield* probe;
     if (answered !== null) return { _tag: 'Answered', answered, raised: ended(spawned) === null };
-    const left = ended(spawned);
     if (left !== null && held === null && saved.restart?.underway !== true) return left;
     const pid = held;
     if (pid !== null && pid !== announced) {

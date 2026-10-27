@@ -5,7 +5,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { FixtureScope } from '../../../platform/testing/scope.js';
 import { digestOf } from '@runlith/executions/hostArtifacts';
-import { Context, Data, Effect, FileSystem, Layer, Schedule } from 'effect';
+import { Context, Data, Effect, Fiber, FileSystem, Layer, Queue, Schedule } from 'effect';
 import { openVersion, swapCurrent } from '../../../installation/testing/doubles.js';
 import { writeInstallation } from '../../../installation/testing/doubles.js';
 import { type InstallationPart, type InstallationRole, REQUIRED_ROLES } from '../../../installation/contract/wire/manifest.js';
@@ -15,6 +15,7 @@ import { CHANNELS } from '../../../installation/contract/wire/channel.js';
 import { junctionDirectory } from '../../../installation/contract/wire/junction.js';
 import { takeActive } from '../../../installation/setup/active.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
+import { dataDirectoryLocked } from '../../../platform/lock/holder.js';
 import { capturedEffect } from '../captured.js';
 
 const ENTRY = join(import.meta.dir, '../../entries/cli.ts');
@@ -147,9 +148,78 @@ const setup = Effect.fnUntraced(function* (root: string) {
   });
 
   const url = `http://127.0.0.1:${port}`;
-  const started = yield* Effect.all(
-    [tagma(['web', '--no-open'], { TAGMA_SERVER_URL: url }), tagma(['web', '--no-open'], { TAGMA_SERVER_URL: url })],
-    { concurrency: 2 },
+  const started = yield* Effect.scoped(
+    Effect.gen(function* () {
+      const probes = yield* Queue.unbounded<void>();
+      const initial = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const children: ReturnType<typeof Bun.spawn>[] = [];
+      let requested = 0;
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const previous = { spawn: Bun.spawn, fetch: globalThis.fetch };
+          Bun.spawn = (...args: readonly unknown[]) => {
+            const [argv, options] = args;
+            if (!Array.isArray(argv) || !argv.includes(ENTRY) || argv.at(-1) !== 'serve') return Reflect.apply(previous.spawn, Bun, args);
+            const child = Reflect.apply(previous.spawn, Bun, [
+              ['/bin/sh', '-c', 'kill -STOP $$; exec "$@"', 'start-gate', ...argv],
+              options,
+            ]);
+            children.push(child);
+            return child;
+          };
+          globalThis.fetch = Object.assign(
+            async (...args: Parameters<typeof fetch>) => {
+              if (String(args[0]) !== `${url}/health`) return previous.fetch(...args);
+              const first = requested++ < 2;
+              try {
+                return await previous.fetch(...args);
+              } catch (cause) {
+                if (first) {
+                  if (requested === 2) initial.resolve();
+                  await initial.promise;
+                } else {
+                  Queue.offerUnsafe(probes, undefined);
+                  await release.promise;
+                }
+                throw cause;
+              }
+            },
+            { preconnect: previous.fetch.preconnect },
+          );
+          return previous;
+        }),
+        (previous) =>
+          Effect.sync(() => {
+            Bun.spawn = previous.spawn;
+            globalThis.fetch = previous.fetch;
+            release.resolve();
+            for (const child of children) if (child.exitCode === null) process.kill(child.pid, 'SIGCONT');
+          }),
+      );
+      const clients = yield* Effect.forkScoped(
+        Effect.all([tagma(['web', '--no-open'], { TAGMA_SERVER_URL: url }), tagma(['web', '--no-open'], { TAGMA_SERVER_URL: url })], {
+          concurrency: 2,
+        }),
+      );
+      yield* Queue.take(probes);
+      yield* Queue.take(probes);
+      expect(dataDirectoryLocked(data)).toBeNull();
+      for (const child of children) {
+        yield* spawnedEffect(['ps', '-o', 'stat=', '-p', String(child.pid)], { stdin: 'ignore' }).pipe(
+          Effect.repeat({ schedule: Schedule.spaced('10 millis'), until: (state) => state.stdout.toString().includes('T') }),
+        );
+      }
+      const [winner, loser] = children;
+      process.kill(winner!.pid, 'SIGCONT');
+      yield* Effect.sync(() => dataDirectoryLocked(data)).pipe(
+        Effect.repeat({ schedule: Schedule.spaced('10 millis'), until: (holder) => holder === winner!.pid }),
+      );
+      process.kill(loser!.pid, 'SIGCONT');
+      expect(yield* Effect.promise(() => loser!.exited)).toBe(1);
+      release.resolve();
+      return yield* Fiber.join(clients);
+    }),
   );
   return {
     started,
@@ -217,7 +287,7 @@ layer(Layer.effect(Ensure, own(ensureWorld, {}, 'the server lifecycle is the sub
       const url = `http://127.0.0.1:${ensure.port}`;
       const answers = ensure.started;
       for (const answer of answers) {
-        expect(answer.code).toBe(0);
+        expect(answer.code, answer.err).toBe(0);
         expect(answer.out).toContain(url);
       }
       expect(answers.filter((answer) => answer.out.includes('started '))).toHaveLength(1);
