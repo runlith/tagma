@@ -25,7 +25,7 @@ export class PathRoads extends Service<PathRoads>()('PathRoads', { tier: 'app' }
 
   road(from: LinkFrom, base: PathBase = {}): PathRoad {
     return async (path, signal) => {
-      const { entry, place } = await this.opener.resolve(path, from.folder, signal, from.project, base.root);
+      const { entry, place } = await this.opener.resolve(path, from.folder, signal, from.project, base.root, from.thread);
       if (entry === null) return null;
       if (entry.kind === 'file') {
         return (code) => fileLink({ path: code.path, line: code.line, column: code.column, root: base.root, picture: base.picture }, from);

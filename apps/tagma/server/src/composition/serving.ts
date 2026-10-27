@@ -19,7 +19,10 @@ import { config } from '../config/config.js';
 import { checkoutFiles } from '../checkout-files/checkout-files.js';
 import { RipgrepBinary } from '../platform/contract/service/ripgrep.js';
 import { Renames } from '../checkout-files/contract/service/renames.js';
+import { ScratchFolders } from '../checkout-files/contract/service/scratch.js';
 import { ChangeRecord } from '../change-record/contract/service/record.js';
+import { GateRefusal } from '../platform/contract/wire/refusal.js';
+import { ScratchAreas } from '../threads/contract/service/scratch.js';
 import { ripgrepBinary } from './ripgrepBinary.js';
 import { graph } from '../graph/graph.js';
 import { ServingPool } from '../graph/serving/poolLayer.js';
@@ -268,8 +271,20 @@ const renames = Layer.effect(
   Effect.map(ChangeRecord, (record) => ({ movedTo: record.movedTo })),
 );
 
+const scratchFolders = Layer.effect(
+  ScratchFolders,
+  Effect.map(ScratchAreas, (areas) => ({
+    of: (threadId: string) =>
+      Effect.try({
+        try: () => areas.directory(threadId),
+        catch: (cause) => new GateRefusal('files', cause instanceof Error ? cause.message : String(cause), ['name a thread by its id']),
+      }),
+  })),
+);
+
 const filed = checkoutFiles.lifetimes.serving.pipe(
   Layer.provide(Layer.mergeAll(Layer.succeed(RipgrepBinary, ripgrepBinary), renames)),
+  Layer.provideMerge(scratchFolders),
   Layer.provideMerge(scheduled),
 );
 

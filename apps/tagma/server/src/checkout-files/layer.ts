@@ -15,6 +15,7 @@ import { CheckoutWatch } from '../workspace/contract/service/watch.js';
 import { Directories } from './contract/service/directories.js';
 import { Documents } from './contract/service/documents.js';
 import { Entries } from './contract/service/entries.js';
+import { LooseFolders } from './contract/service/folders.js';
 import { PathIndex } from './contract/service/pathIndex.js';
 import { Reveal } from './contract/service/reveal.js';
 import { Renames } from './contract/service/renames.js';
@@ -27,6 +28,7 @@ import { makeEntryRecord } from './entries/record.js';
 import { makeTreeEntries } from './entries/tree.js';
 import { makePathIndexes } from './finding/indexes.js';
 import { makeDirectoryListing } from './listing/directory.js';
+import { makeLooseFolders } from './listing/loose.js';
 import { makeContentSearches } from './search/content.js';
 import { makeCheckoutTrash } from './trash/bin.js';
 import { makeGitDirs, makeTrashActs } from './trash/place.js';
@@ -38,7 +40,7 @@ import { makeDocumentSaves } from './writing/document.js';
 const spawner = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 
 export const checkoutFilesServingLayer: Layer.Layer<
-  Directories | PathIndex | Searches | Documents | Entries | Reveal,
+  Directories | PathIndex | Searches | Documents | Entries | Reveal | LooseFolders,
   never,
   Git | CheckoutPaths | CheckoutWatch | GraphDirectory | RipgrepBinary | Intake | Renames | FileRoots | Maintenance | Capacity
 > = Layer.effectContext(
@@ -54,7 +56,8 @@ export const checkoutFilesServingLayer: Layer.Layer<
       Effect.sync(() => worker.close()),
     );
     const targets = yield* makeTargets({ graph });
-    const open = yield* makeOpenDocuments({ targets, worker, folders: makeFolderWatches() });
+    const folders = makeFolderWatches();
+    const open = yield* makeOpenDocuments({ targets, worker, folders });
     const saves = yield* makeDocumentSaves({ documents: open, targets, worker }).pipe(Effect.provideService(Git, git));
     const record = yield* makeEntryRecord({ worker }).pipe(Effect.provideService(Git, git));
     const gitDirs = yield* makeGitDirs().pipe(Effect.provideService(Git, git));
@@ -75,6 +78,7 @@ export const checkoutFilesServingLayer: Layer.Layer<
       }),
       Context.add(Entries, makeTreeEntries({ record, bin: makeCheckoutTrash({ record, targets, gitDirs, acts }), targets })),
       Context.add(Reveal, makeRevealInFiles({ targets, launch: launching(yield* ChildProcessSpawner.ChildProcessSpawner) })),
+      Context.add(LooseFolders, yield* makeLooseFolders({ folders })),
     );
   }),
 ).pipe(Layer.provide(Layer.mergeAll(spawner, BunFileSystem.layer)));

@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import { Documents } from '../contract/service/documents.js';
+import { ScratchFolders } from '../contract/service/scratch.js';
 import { makeTargets } from '../tree/target.js';
 import { CheckoutPaths } from '../../workspace/contract/service/checkoutPaths.js';
 import { CheckoutPlaces } from '../../workspace/contract/service/checkouts.js';
@@ -30,6 +31,7 @@ it.live(
             rootOf: () => Effect.succeed(place.rootId),
             placeOf: () => Effect.succeed(place),
           } as never),
+          Effect.provideService(ScratchFolders, { of: () => Effect.die('this scenario names no thread') }),
         );
 
       const absolute = yield* placed({ path: paths.join(root, 'src', 'a.ts') });

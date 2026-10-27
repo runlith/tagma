@@ -298,6 +298,11 @@
       "browser": "./src/checkout-files/contract/wire/place.ts",
       "default": "./src/checkout-files/contract/wire/place.ts"
     },
+    "./checkout-files/contract/wire/scratch": {
+      "types": "./src/checkout-files/contract/wire/scratch.ts",
+      "browser": "./src/checkout-files/contract/wire/scratch.ts",
+      "default": "./src/checkout-files/contract/wire/scratch.ts"
+    },
     "./change-record/contract/wire/changes": {
       "types": "./src/change-record/contract/wire/changes.ts",
       "browser": "./src/change-record/contract/wire/changes.ts",

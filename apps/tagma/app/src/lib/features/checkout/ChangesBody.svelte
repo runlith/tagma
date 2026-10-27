@@ -18,6 +18,7 @@
   import { changeLink } from './links.js';
   import { holderName } from '$lib/features/worktrees/holders.js';
   import { unprovenWords } from './holdingWords.js';
+  import ScratchSection from './ScratchSection.svelte';
   import { entriesIn, type EntryIn, type Section, ThreadChanges } from './ThreadChanges.svelte.js';
 
   let {
@@ -199,3 +200,5 @@
     {/if}
   {/if}
 {/if}
+
+<ScratchSection projectId={changes.projectId} thread={changes.threadId} />

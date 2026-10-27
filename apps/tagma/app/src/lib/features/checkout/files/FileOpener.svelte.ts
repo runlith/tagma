@@ -27,6 +27,7 @@ export type OpenAsk = {
   readonly project?: number | undefined;
   readonly from?: string | undefined;
   readonly root?: RootId | undefined;
+  readonly thread?: string | undefined;
   readonly beside?: LinkFrom | undefined;
   readonly reveal?: boolean | undefined;
   readonly picture?: ((picture: Picture) => void) | undefined;
@@ -100,13 +101,19 @@ export class FileOpener extends Service<FileOpener>()('FileOpener', { tier: 'app
     signal?: AbortSignal,
     project: number | undefined = this.aim()?.projectId,
     root?: RootId,
+    thread?: string,
   ): Promise<{ entry: PathEntry | null; place: PlacedPath | null }> {
     if (project === undefined) return { entry: null, place: null };
-    return this.door.perform('place_path', { path, from, root }, { project: String(project) }, signal === undefined ? {} : { signal });
+    return this.door.perform(
+      'place_path',
+      { path, from, root, thread },
+      { project: String(project) },
+      signal === undefined ? {} : { signal },
+    );
   }
 
   async place(target: PathTarget, ask: OpenAsk = {}, signal?: AbortSignal): Promise<PathPlace | null> {
-    const { place, entry: file } = await this.resolve(target.path, ask.from, signal, ask.project, ask.root);
+    const { place, entry: file } = await this.resolve(target.path, ask.from, signal, ask.project, ask.root, ask.thread);
     if (file?.kind !== 'file') return null;
     const line = target.line ?? null;
     return {
@@ -128,7 +135,14 @@ export class FileOpener extends Service<FileOpener>()('FileOpener', { tier: 'app
     this.pending = pending;
     const current = (): boolean => !pending.signal.aborted && this.aim() !== undefined && GraphRung.keyOf(this.aim() as GraphAim) === key;
     try {
-      const { place, entry: file } = await this.resolve(target.path, ask.from, pending.signal, ask.project ?? aim.projectId, ask.root);
+      const { place, entry: file } = await this.resolve(
+        target.path,
+        ask.from,
+        pending.signal,
+        ask.project ?? aim.projectId,
+        ask.root,
+        ask.thread,
+      );
       if (!current() || file?.kind !== 'file') return;
       if (ask.picture !== undefined && file.mediaType.startsWith('image/') && file.mediaType !== 'image/svg+xml') {
         ask.picture({

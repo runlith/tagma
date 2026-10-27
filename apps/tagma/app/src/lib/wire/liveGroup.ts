@@ -8,6 +8,7 @@ import { SPACE_SCAN_FEED } from '@tagma/server/worktrees/contract/wire/space';
 import { HOLDINGS_FEED } from '@tagma/server/change-record/contract/wire/holdings';
 import { TREE_FEED } from '@tagma/server/checkout-files/contract/wire/directory';
 import { DOCUMENT_FEED, LOOSE_DOCUMENT_FEED } from '@tagma/server/checkout-files/contract/wire/document';
+import { SCRATCH_FEED } from '@tagma/server/checkout-files/contract/wire/scratch';
 import { SEARCH_FEED } from '@tagma/server/checkout-files/contract/wire/search';
 import { THREAD_CHANGES_FEED } from '@tagma/server/change-record/contract/wire/threadChanges';
 import { PAGE_FEED, THREAD_PAGES_FEED } from '@tagma/server/artifacts/contract/wire/feed';
@@ -42,6 +43,7 @@ const USED = [
   SEARCH_FEED,
   DOCUMENT_FEED,
   LOOSE_DOCUMENT_FEED,
+  SCRATCH_FEED,
   THREAD_PAGES_FEED,
   PAGE_FEED,
   CALLS_FEED,

@@ -186,6 +186,8 @@ layer(demoGraphLayer({ repos: ['target'] }), { excludeTestServices: true })('for
             },
             { run: () => Stream.die(new Error('this scenario searches no content')) },
             documents,
+            { subscribe: () => Stream.die(new Error('this scenario lists no folder')) },
+            { of: () => Effect.die(new Error('this scenario reads no scratch')) },
           )['document.subscribe']({ projectId: home, root, path: 'doc.txt' });
           const shown = yield* Stream.runHead(document);
           expect(Option.getOrUndefined(shown)).toMatchObject({ kind: 'whole', text: 'operator\n' });

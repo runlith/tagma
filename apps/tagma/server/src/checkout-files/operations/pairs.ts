@@ -15,6 +15,7 @@ import { Documents } from '../contract/service/documents.js';
 import { Entries } from '../contract/service/entries.js';
 import { PathIndex } from '../contract/service/pathIndex.js';
 import { Reveal } from '../contract/service/reveal.js';
+import { ScratchFolders } from '../contract/service/scratch.js';
 import { WRITE_OPERATIONS as WRITES } from '../contract/wire/writes.js';
 import { DIRECTORY, DIRECTORY_OPERATIONS as DIRECTORIES } from '../contract/wire/directory.js';
 import { FIND_LIMIT, PATH_OPERATIONS as PATHS } from '../contract/wire/paths.js';
@@ -60,9 +61,13 @@ export const FILE_PAIRS = {
             ? ''
             : (yield* (yield* CheckoutPlaces).placeOf({ projectId: call.project.id, cwd: undefined }, undefined)).path);
         const absolute = isAbsolute(input.path) ? resolve(input.path) : resolve(base, input.path);
-        const entry = yield* entryAt(absolute);
+        const scratch =
+          input.thread === undefined || isAbsolute(input.path)
+            ? null
+            : resolve(yield* (yield* ScratchFolders).of(input.thread), input.path);
+        const entry = (yield* entryAt(absolute)) ?? (scratch === null ? null : yield* entryAt(scratch));
         if (entry === null) return { status: 'ok' as const, entry: null, place: null };
-        const placed = yield* (yield* Documents).placeOf(call.project.id, absolute);
+        const placed = yield* (yield* Documents).placeOf(call.project.id, entry.path);
         return {
           status: 'ok' as const,
           entry,

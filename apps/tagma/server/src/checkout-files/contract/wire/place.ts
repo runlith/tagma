@@ -46,7 +46,7 @@ export const PLACE_OPERATIONS = {
     answer: arms({ ok: { entry: Schema.NullOr(PathEntry), place: Schema.NullOr(PlacedPath) } }),
     meaning:
       'Tell the operator what stands at a path — a readable file or a directory — and the checkout of a registered project holding it when there is one.',
-    grammar: `\`path\` is absolute, or relative to \`from\`, an absolute directory such as the root a thread works in, or to the checkout \`root\` names; a relative path with neither is relative to the root of the caller's workspace, else to the project's own checkout.
+    grammar: `\`path\` is absolute, or relative to \`from\`, an absolute directory such as the root a thread works in, or to the checkout \`root\` names; a relative path with neither is relative to the root of the caller's workspace, else to the project's own checkout. With \`thread\`, a relative path where nothing readable stands is read again from that thread's scratch, where the bare names its agent hands Tagma's operations live.
 \`entry\` names what stands there by its absolute path, inside or outside every checkout: \`kind: file\` a readable regular file with its size and media type, \`kind: directory\` a readable directory. An absent or unreadable path, or anything else standing there, answers null. \`place\` names the checkout holding that entry — this project's first, else any registered project's on the machine — with its project, the deepest root and the path relative to it, or null when the entry stands outside every checkout or inside git's own directory or the graph's tree; such a file opens through \`file.subscribe\` and saves with write_file.`,
     input: Schema.Struct({
       path: Schema.NonEmptyString.annotate(placeRole('value')),
@@ -55,6 +55,12 @@ export const PLACE_OPERATIONS = {
         Schema.NonEmptyString.annotate({
           ...placeRole('value'),
           description: 'A registered root id whose checkout a relative path is read from.',
+        }),
+      ),
+      thread: Schema.optional(
+        Schema.NonEmptyString.annotate({
+          ...placeRole('value'),
+          description: 'A thread whose scratch a relative path is read from when nothing readable stands at it otherwise.',
         }),
       ),
     }),

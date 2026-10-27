@@ -2,8 +2,9 @@ import { expect } from 'bun:test';
 import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Effect, FileSystem, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
 import { PREVIEW_BYTES } from '../../../checkout-files/contract/wire/place.js';
+import { ScratchAreas } from '../../../threads/contract/service/scratch.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('file preview door', (it) => {
@@ -61,6 +62,34 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
       const sized = (full: boolean) => Effect.flatMap(read(path, full), (answer) => Effect.promise(() => answer.arrayBuffer()));
       expect((yield* sized(false)).byteLength).toBe(PREVIEW_BYTES);
       expect((yield* sized(true)).byteLength).toBe(long.length);
+    }),
+  );
+
+  it.effect("a bare name an agent left in its thread's scratch resolves from that thread only where nothing stands in the checkout", () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const checkout = yield* world.directory('checkout');
+      const project = yield* world.stealthProject(checkout);
+      yield* projectLeaving(world, project);
+      const areas = Context.get(world.runtime.door, ScratchAreas);
+      const thread = crypto.randomUUID();
+      const scratch = yield* areas.ensure(thread);
+      yield* Effect.addFinalizer(() => areas.release(thread));
+      yield* files.writeFileString(join(scratch, 'report.md'), '# Scratch');
+      const placed = (input: { readonly path: string; readonly thread?: string }) =>
+        Effect.map(world.op('place_path', { ...input, from: checkout }, `project=${project}`), (answer) => answer.body);
+
+      expect(yield* placed({ path: 'report.md', thread })).toMatchObject({
+        entry: { kind: 'file', path: join(scratch, 'report.md') },
+        place: null,
+      });
+      expect(yield* placed({ path: 'report.md' })).toMatchObject({ entry: null, place: null });
+      yield* files.writeFileString(join(checkout, 'report.md'), '# Checkout');
+      expect(yield* placed({ path: 'report.md', thread })).toMatchObject({
+        entry: { kind: 'file', path: join(checkout, 'report.md') },
+        place: { projectId: project, path: 'report.md' },
+      });
     }),
   );
 });

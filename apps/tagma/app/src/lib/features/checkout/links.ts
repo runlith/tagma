@@ -66,6 +66,7 @@ const askOf = (link: Link<FileRef>): OpenAsk => ({
   project: link.from?.project,
   from: link.from?.folder,
   root: link.target.root,
+  thread: link.from?.thread,
   picture: link.target.picture,
 });
 
