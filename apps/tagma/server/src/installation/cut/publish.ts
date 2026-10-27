@@ -229,10 +229,19 @@ export const publishRelease = (
       const git = yield* Git;
       const unreadable = unreadableIn('release');
       const cutStood = yield* cutStanding(cut);
-      const { release, commit } = cutStood.record;
+      const { release } = cutStood.record;
       const tag = tagOf(release);
 
       yield* writable(gh, repo, cut);
+      const resolved = yield* git
+        .run(['rev-parse', '--verify', '--quiet', `${cutStood.record.commit}^{commit}`], { cwd: checkout })
+        .pipe(Effect.mapError((failure) => refused('commit', failure.message, [AGAIN])));
+      if (resolved.status !== 0) {
+        return yield* refused('commit', `${cutStood.record.commit}, which ${release} was cut from, is no commit of ${checkout}`, [
+          'bun run tagma:release publish from the checkout the release was cut in',
+        ]);
+      }
+      const commit = resolved.stdout.trim();
       const sourceTag = yield* git
         .run(['tag', '--list', tag, '--format=%(objectname)'], { cwd: checkout })
         .pipe(Effect.mapError((failure) => refused('tag', failure.message, [AGAIN])));

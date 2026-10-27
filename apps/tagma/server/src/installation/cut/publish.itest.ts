@@ -210,7 +210,7 @@ it.live(
       const place = placeOf('journey');
       const firstCommit = committed(place.checkout);
       gh.pushed.add(firstCommit);
-      const first = cutInto(place.cut, firstCommit, '0.2.0');
+      const first = cutInto(place.cut, firstCommit.slice(0, 10), '0.2.0');
 
       gh.failing.upload = true;
       const broken = yield* run(publishRelease(gh.cli, notarizing, place));
@@ -232,12 +232,12 @@ it.live(
         ['0.2.0', { ...first.platforms['darwin-x64']!, archive: releaseFile(REPO, '0.2.0', first.platforms['darwin-x64']!.archive) }],
       ]);
       expect(one._tag === 'Success' && one.success.feed).toBe(releaseFile(REPO, '0.2.0', 'feed.json'));
-      expect(said(['-C', place.checkout, 'tag', '--list'])).toBe('v0.2.0');
+      expect(said(['-C', place.checkout, 'rev-parse', 'v0.2.0^{commit}'])).toBe(firstCommit);
       expect(readFileSync(join(place.kept, '0.2.0', 'http.js.map'), 'utf8')).toBe('{"release":"0.2.0"}');
 
       const secondCommit = committed(place.checkout);
       gh.pushed.add(secondCommit);
-      cutInto(place.cut, secondCommit, '0.2.1', true, [{ store: 'machine-store', release: '0.2.1' }]);
+      cutInto(place.cut, secondCommit.slice(0, 10), '0.2.1', true, [{ store: 'machine-store', release: '0.2.1' }]);
       const two = yield* run(publishRelease(gh.cli, notarizing, place));
       const published = structuredClone([...gh.releases.entries()]);
       const again = yield* run(publishRelease(gh.cli, notarizing, place));
