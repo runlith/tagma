@@ -33,6 +33,7 @@ import type { TreeScan } from '../../tree/scan.js';
 import type { CopyFailure } from '../wire/answers.js';
 import type { UnreadableCopy } from '../wire/titles.js';
 import type { ForeignBlocks } from './foreign.js';
+import type { SessionRef } from '../../../platform/contract/wire/session.js';
 
 export type DetachedCheckout = { readonly checkout: string; readonly main: string };
 
@@ -201,7 +202,7 @@ export type HeldTask = { readonly name: string; readonly title: string };
 export class TaskHolders extends Context.Service<
   TaskHolders,
   {
-    forHolders(threadIds: readonly string[]): Effect.Effect<ReadonlyMap<string, readonly HeldTask[]>, StoreFailure>;
+    forHolders(threadIds: readonly string[], writer?: SessionRef): Effect.Effect<ReadonlyMap<string, readonly HeldTask[]>, StoreFailure>;
   }
 >()('tagma/graph/TaskHolders') {}
 

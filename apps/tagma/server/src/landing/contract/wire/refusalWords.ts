@@ -19,4 +19,5 @@ export const REFUSAL_WORDS = {
   'reshape-unreadable': 'Hook or formatter changes unreadable',
   'source-dirty': 'Worktree has uncommitted changes',
   'source-held': 'Worktree lines held by another session',
+  'task-not-held': 'Declared task is not held by a committing session',
 } as const satisfies RefusalWords;

@@ -7,7 +7,8 @@ import { body, pair } from '../../platform/contract/service/body.js';
 import { actChecks, RuleChecks } from '../../enforcement/contract/service/ruleChecks.js';
 import { PreparedChanges } from '../../change-record/contract/service/prepared.js';
 import { type HeldTaskLabel, HeldTaskLabels } from '../../change-record/contract/service/taskLabels.js';
-import { OPERATOR, holderKey } from '../../workspace/contract/wire/checkout.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { BlockNames } from '../../graph/contract/service/acts.js';
 import { HolderStandings } from '../../graph/contract/service/holders.js';
 import type { HolderState } from '../../graph/contract/wire/holders.js';
 import type { LandedTask, SubmitReceipt, Unrecorded } from '../contract/wire/receipt.js';
@@ -20,7 +21,8 @@ import { LandingGit } from '../contract/service/servedGit.js';
 import { submitWork } from '../land/submit.js';
 import { selectCheckout } from '../../change-record/prepared/selection.js';
 import { submitLines } from '../voice.js';
-import { SignedCall } from '../../platform/contract/service/writers.js';
+import { SignedCall, SignedSession } from '../../platform/contract/service/writers.js';
+import { NATIVE_HARNESS, sessionToken } from '../../platform/contract/wire/session.js';
 import { completeSubmission, settleSubmission } from '../store/submissions.js';
 import { Git } from '@runlith/git/Git';
 import { custodianOf } from '../../executions/terminals/principals.js';
@@ -34,6 +36,7 @@ type SubmitOwners =
   | CurrentProject
   | LandingGit
   | HeldTaskLabels
+  | BlockNames
   | HolderStandings
   | PreparedChanges
   | MachineStore
@@ -41,8 +44,6 @@ type SubmitOwners =
   | RuleChecks
   | Git;
 
-const OPERATOR_KEY = holderKey(OPERATOR);
-const NO_TASKS: ReadonlyMap<string, readonly HeldTaskLabel[]> = new Map();
 const NO_STATES: ReadonlyMap<string, HolderState> = new Map();
 
 const known = <A>(
@@ -56,27 +57,18 @@ const known = <A>(
   });
 
 const withTasks = Effect.fn('submit_work.tasks')(function* (
-  labels: HeldTaskLabels['Service'],
   standings: HolderStandings['Service'],
   receipt: SubmitReceipt,
   held: ReadonlyMap<string, readonly HeldTaskLabel[]>,
   own: string | null,
   taken: readonly string[],
+  unnamed: readonly string[],
 ) {
   if (receipt.status !== 'landed') return receipt;
   const mine = own === null ? [] : [own];
-  const asked = new Set([...mine, ...taken]);
-  const peers = [...new Set(receipt.carried.flatMap((one) => one.holders))].filter(
-    (holder) => holder !== OPERATOR_KEY && !asked.has(holder),
-  );
-  const read = yield* known(
-    peers.length === 0 ? Effect.succeed(NO_TASKS) : labels.forHolders(peers),
-    NO_TASKS,
-    `the tasks of ${peers.join(', ')}`,
-  );
   const named = (holders: readonly string[], by: LandedTask['by'], found: ReadonlyMap<string, readonly HeldTaskLabel[]>) =>
     holders.flatMap((holder) => (found.get(holder) ?? []).map((task): LandedTask => ({ name: task.name, title: task.title, holder, by })));
-  const others = [...named(taken, 'taking', held), ...named(peers, 'carried', read.value)];
+  const others = named(taken, 'taking', held);
   const holders = [...new Set(others.map((task) => task.holder))];
   const states = yield* known(
     holders.length === 0 ? Effect.succeed(NO_STATES) : standings.of(holders),
@@ -90,10 +82,11 @@ const withTasks = Effect.fn('submit_work.tasks')(function* (
       return state === undefined ? task : { ...task, standing: state.standing };
     }),
   ];
-  const unread = [...read.unread, ...states.unread];
+  const unread = states.unread;
   return {
     ...receipt,
     tasks: tasks.length === 0 ? undefined : tasks,
+    unnamedTasks: unnamed.length === 0 ? undefined : unnamed,
     unrecorded: unread.length === 0 ? receipt.unrecorded : [...(receipt.unrecorded ?? []), ...unread],
   };
 });
@@ -120,7 +113,24 @@ export const SUBMIT_PAIRS = {
         if (refusal !== null) return yield* refusal;
         const labels = yield* HeldTaskLabels;
         const taken = taking.map((session) => session.threadId);
-        const held = yield* labels.forHolders(place.thread === null ? taken : [place.thread, ...taken]);
+        const signed = yield* SignedSession;
+        const writer = signed !== null && signed.harness !== NATIVE_HARNESS ? signed : undefined;
+        const own = place.thread ?? (writer === undefined ? null : sessionToken(writer));
+        const holding = yield* labels.forHolders(place.thread === null ? taken : [place.thread, ...taken], writer);
+        const heldNames = new Set([...holding.values()].flatMap((tasks) => tasks.map((task) => task.name)));
+        const selected = new Set<string>();
+        for (const name of input.tasks ?? []) {
+          const names = yield* BlockNames;
+          const task = yield* names.nameOf(yield* names.idOfName(name));
+          if (!heldNames.has(task))
+            return yield* new GateRefusal('task-not-held', `${name} is not held by this session or a holder in taking`, [
+              'claim the task before submitting its work, or include its holder in taking',
+              'remove it from tasks if this commit does not carry its work',
+            ]);
+          selected.add(task);
+        }
+        const held = new Map([...holding].map(([holder, tasks]) => [holder, tasks.filter((task) => selected.has(task.name))]));
+        const unnamed = input.tasks === undefined && own !== null ? (holding.get(own) ?? []).map((task) => task.name) : [];
         const carried = taking.map((session) => ({
           projectId: session.projectId,
           threadId: session.threadId,
@@ -140,7 +150,7 @@ export const SUBMIT_PAIRS = {
           actor instanceof TerminalRefused ? undefined : actor,
           {
             projectId: call.project.id,
-            tasks: place.thread === null ? [] : (held.get(place.thread) ?? []),
+            tasks: own === null ? [] : (held.get(own) ?? []),
             taking: carried,
             subject: input.subject,
             paths: input.paths,
@@ -150,7 +160,7 @@ export const SUBMIT_PAIRS = {
           ruleChecks,
           service,
         );
-        const receipt = yield* withTasks(labels, yield* HolderStandings, submitted, held, place.thread, taken);
+        const receipt = yield* withTasks(yield* HolderStandings, submitted, held, own, taken, unnamed);
         const callId = yield* SignedCall;
         const work = place.origin.work;
         const recorded =

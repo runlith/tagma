@@ -27,6 +27,9 @@ export function submitLines(report: SubmitReceipt): string[] {
       (task) =>
         `carries the work of ${task.name} “${task.title}” (held by ${task.by === 'session' ? 'this session' : `${task.holder}, ${task.by === 'taking' ? 'taken' : 'carried'}${task.standing === undefined ? '' : `, ${task.standing}`}`}) — finish_block ${task.name} with ${report.commit.slice(0, 10)} if this commit completes it`,
     ),
+    ...(report.unnamedTasks === undefined
+      ? []
+      : [`held tasks not attributed to this commit — tasks was omitted: ${report.unnamedTasks.join(', ')}`]),
     ...(report.left ?? []).map((path) => `  ${path} — lines of this session still stand uncommitted`),
     ...unattributedLines(report),
     ...(report.unsynced === undefined

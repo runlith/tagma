@@ -11,14 +11,16 @@ import type { HeldTask } from '../contract/service/serving.js';
 import { WORK } from '../contract/wire/tags/work.js';
 import { HOLDER, HOLDER_SLOT } from '../contract/wire/tags/holder.js';
 import { carriesContract, contractAt, slotValue } from '../vocabulary/projection.js';
+import { NATIVE_HARNESS } from '../../platform/contract/wire/session.js';
 
 export function heldTasks(
   table: TagTable,
   graph: Context.Service.Shape<typeof GraphStore>,
   projectId: number,
-  threadIds: readonly string[],
+  keys: readonly string[],
+  harness = NATIVE_HARNESS,
 ): Effect.Effect<ReadonlyMap<string, readonly HeldTask[]>, StoreFailure> {
-  if (threadIds.length === 0) return Effect.succeed(new Map());
+  if (keys.length === 0) return Effect.succeed(new Map());
   const fixed =
     2 +
     table.typesSupporting(WORK).length +
@@ -27,9 +29,9 @@ export function heldTasks(
   const size = Math.max(1, rowsPerStatement(1) - fixed);
   return Effect.gen(function* () {
     const held = new Map<string, HeldTask[]>();
-    for (const ids of chunk([...new Set(threadIds)], size)) {
+    for (const ids of chunk([...new Set(keys)], size)) {
       const rows = yield* graph.db
-        .select({ threadId: session.key, uuid: block.uuid, title: block.title })
+        .select({ key: session.key, uuid: block.uuid, title: block.title })
         .from(block)
         .innerJoin(session, eq(sql`cast(${slotValue(table, HOLDER, HOLDER_SLOT, block.id)} as integer)`, session.id))
         .where(
@@ -38,15 +40,15 @@ export function heldTasks(
             carriesContract(table, WORK, block.id),
             contractAt(table, WORK, 'active', block.id),
             isNull(block.deletedAt),
-            eq(session.harness, 'tagma'),
+            eq(session.harness, harness),
             inArray(session.key, ids),
           ),
         )
         .orderBy(block.title, block.uuid);
       for (const row of rows) {
-        const current = held.get(row.threadId) ?? [];
+        const current = held.get(row.key) ?? [];
         current.push({ name: blockName(row.uuid), title: row.title });
-        held.set(row.threadId, current);
+        held.set(row.key, current);
       }
     }
     return held as ReadonlyMap<string, readonly HeldTask[]>;

@@ -4,7 +4,7 @@ const when = (ctx: SectionContext) => {
   if (!ctx.autoCommit) return 'Commit only when the one who gave you the work asks; until then your report names the files you changed.';
   const landing = `Commit your ready work before your run ends, one ${ctx.op('submit_work')} per checkout holding your lines (\`multiple-checkouts\` names them; \`left\` names what remains). Follow a refusal's available exit; report the refusal and held paths only when no exit is available.`;
   return ctx.sharedCheckout
-    ? `${landing} A parent commits what a stopped child of its own left uncommitted, with \`taking\`, under the child's authorship. The answer of ${ctx.op('submit_work')} names the tasks of every holder whose lines it landed, and a hand-off names them; whoever lands a child's lines decides that child's tasks too, finishing each this commit completes.`
+    ? `${landing} A parent commits what a stopped child of its own left uncommitted, with \`taking\`, under the child's authorship. Pass \`tasks\` naming only the held tasks whose work this commit carries, including tasks of holders in \`taking\`; pass \`[]\` for unrelated work. The subject and answer attribute only those tasks. Omitting \`tasks\` leaves them unattributed and names this session’s held tasks separately in the answer. Whoever lands a child's lines decides that child's tasks too, finishing each this commit completes.`
     : landing;
 };
 

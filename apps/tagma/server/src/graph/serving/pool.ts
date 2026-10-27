@@ -20,6 +20,7 @@ import { commitOf } from '@runlith/git/repository';
 import { runGit } from '../../platform/git/ownGit.js';
 import { Tags } from '../contract/service/vocabulary.js';
 import { heldTasks } from '../work/tasksHeld.js';
+import { NATIVE_HARNESS, sessionToken } from '../../platform/contract/wire/session.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { ProjectChanges } from '../../projects/contract/service/changes.js';
 import { blocksRetiredKey } from '../contract/wire/storage.js';
@@ -412,7 +413,14 @@ export const makeGraphPool = Effect.gen(function* () {
                 context,
                 TaskHolders,
                 TaskHolders.of({
-                  forHolders: (threadIds) => Effect.flatMap(tags.of(row.id), (table) => heldTasks(table, graph, row.id, threadIds)),
+                  forHolders: Effect.fn('TaskHolders.forHolders')(function* (threadIds, writer) {
+                    const table = yield* tags.of(row.id);
+                    const held = yield* heldTasks(table, graph, row.id, threadIds);
+                    if (writer === undefined) return held;
+                    const own = yield* heldTasks(table, graph, row.id, [writer.key], writer.harness);
+                    const holder = writer.harness === NATIVE_HARNESS ? writer.key : sessionToken(writer);
+                    return new Map([...held, [holder, own.get(writer.key) ?? []]]);
+                  }),
                 }),
               ),
               git,

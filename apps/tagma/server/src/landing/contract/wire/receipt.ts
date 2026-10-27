@@ -72,6 +72,7 @@ export type SubmitReceipt =
       readonly committed: readonly string[];
       readonly carried: readonly SubmitCarry[];
       readonly tasks?: readonly LandedTask[];
+      readonly unnamedTasks?: readonly string[];
       readonly left?: readonly string[];
       readonly unattributed?: readonly string[];
       readonly unsynced?: readonly string[];
@@ -131,9 +132,13 @@ export const SubmitReceipt: Schema.Codec<SubmitReceipt> = Schema.Union([
         }),
       ).annotate({
         description:
-          'The tasks held by this session, by the sessions named in `taking` and by the holders named in `carried`, each with its holder, how that holder’s lines came in and, for another session, where the threads know it, its standing. Only the tasks of this session and of `taking` ride in the subject; the landing ends none: finish_block names this commit for each one it completes.',
+          'The tasks the caller declared this commit carries, held by this session or holders in taking. Each names its holder, how that holder’s lines came in and, where known, its standing. These tasks ride in the subject; the landing ends none: finish_block names this commit for each one it completes.',
       }),
     ),
+    unnamedTasks: Schema.optional(Schema.Array(Schema.String)).annotate({
+      description:
+        'This session’s held tasks, not attributed to this commit because the caller omitted tasks. Explicit tasks: [] suppresses this reminder.',
+    }),
     left: Schema.optional(
       Schema.Array(Schema.String).annotate({
         description: 'Paths where lines of this session, or of a session it took, still stand uncommitted after this commit.',

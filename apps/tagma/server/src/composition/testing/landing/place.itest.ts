@@ -280,13 +280,18 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
       expect(yield* out(target.root, ['rev-parse', 'HEAD'])).toBe(targetHead);
       const mine = BASE.replace('export const n0 = 0;', 'export const n0 = 100;   ');
       yield* write(target.root, mine);
+      yield* write(home.root, BASE.replace('export const n0 = 0;', 'export const n0 = 200;'));
+      expect(yield* native('submit_work', { tasks: [task], paths: ['shared.ts'] }).pipe(Effect.flip)).toMatchObject({
+        code: 'multiple-checkouts',
+      });
+      yield* write(home.root, BASE);
       const peerText = mine.replace('export const n5 = 5;', 'export const n5 = 500;');
       yield* write(target.root, peerText, peer);
       const both = peerText.replace('export const n10 = 10;', 'export const n10 = 1000;');
       expect(
         (yield* op('write_document', { path: 'shared.ts', text: both, base: contentDigest(peerText), write: 'operator-write' })).status,
       ).toBe(200);
-      const landed = yield* native('submit_work', { subject: 'foreign work', paths: ['shared.ts'] });
+      const landed = yield* native('submit_work', { subject: 'foreign work', paths: ['shared.ts'], tasks: [task] });
       expect(landed).toMatchObject({ submitted: { status: 'landed', committed: ['shared.ts'], carried: [] } });
       expect(yield* out(target.root, ['show', 'HEAD:shared.ts'])).toBe(mine.trimEnd().replace('100;   ', '100;'));
       expect(yield* files.readFileString(join(target.root, 'shared.ts'))).toBe(both.replace('100;   ', '100;'));
