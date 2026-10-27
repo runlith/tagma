@@ -92,6 +92,45 @@ test.each([
   expect(visited).toEqual([{ href: moved, replaced: true }]);
 });
 
+test.each([
+  ['/first/graph', '/renamed/graph', '/[project]/graph/[[id]]'],
+  ['/settings?project=first', '/settings?project=renamed', '/settings'],
+] as const)('a window at %s keeps the project the registry renames until its address catches up', async (at, moved, routeId) => {
+  let url = $state(new URL(at, 'http://localhost'));
+  const landing = Promise.withResolvers<void>();
+  const router = makeRouter({
+    url: () => url,
+    routeId,
+    get params(): Record<string, string> {
+      return routeId === '/settings' ? {} : { project: url.pathname.split('/')[1] ?? '' };
+    },
+    goto: () => landing.promise,
+  });
+  const standing = () => workspace.named(router.params.project ?? router.url.searchParams.get('project'));
+  const workspace = new Workspace(
+    {
+      list: stubSingle({
+        loadOrThrow: async () => projects,
+        refresh: async () => projects.map((project) => (project.id === 1 ? { ...project, name: 'renamed' } : project)),
+      }),
+    } as never,
+    router,
+    makePlatform({ local: makeStorage() }),
+    new Failure((error) => {
+      throw error;
+    }),
+  );
+  await waitUntil(() => workspace.loaded);
+
+  await workspace.refreshProjects();
+  expect(standing()?.id).toBe(1);
+
+  url = new URL(moved, 'http://localhost');
+  landing.resolve();
+  await landing.promise;
+  expect(standing()?.name).toBe('renamed');
+});
+
 test('a rename told while an older registry read is still in flight is followed once a read made after the news lands', async () => {
   const { router, visited } = makeRouterWithLog({
     url: new URL('/first/graph', 'http://localhost'),

@@ -21,6 +21,7 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   loaded = $state(false);
   readonly ready: Promise<void>;
   private remembered = $state<string | null>(null);
+  private formerly = $state.raw<ReadonlyMap<string, number>>(new Map());
   private refreshing: Promise<void> | null = null;
   private asked = 0;
   private readonly byId = $derived(new Map(this.projects.map((project) => [project.id, project])));
@@ -41,8 +42,15 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   }
 
   get active(): Project | null {
-    const name = this.router.params.project;
-    return this.projects.find((project) => project.name === name) ?? null;
+    return this.named(this.router.params.project);
+  }
+
+  named(name: string | null | undefined): Project | null {
+    if (name === null || name === undefined) return null;
+    const held = this.projects.find((project) => project.name === name);
+    if (held !== undefined) return held;
+    const renamed = this.formerly.get(name);
+    return renamed === undefined ? null : (this.byId.get(renamed) ?? null);
   }
 
   get activeId(): number | null {
@@ -59,7 +67,7 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
 
   entryProject(): Project | null {
     return (
-      this.named() ??
+      this.entered() ??
       this.projects.find((project) => String(project.id) === this.remembered) ??
       this.projects.find((project) => !project.global) ??
       this.projects[0] ??
@@ -68,10 +76,10 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   }
 
   resumed(): Project | null {
-    return this.named() ?? (this.empty ? null : this.entryProject());
+    return this.entered() ?? (this.empty ? null : this.entryProject());
   }
 
-  private named(): Project | undefined {
+  private entered(): Project | undefined {
     const entry = this.entry;
     return entry === undefined ? undefined : this.projects.find((project) => project.name === entry.project);
   }
@@ -154,13 +162,22 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   private adopt(projects: readonly Project[]): void {
     const before = this.byId;
     this.projects = projects;
-    const renamed = new Map(
-      projects.flatMap((project) => {
-        const was = before.get(project.id)?.name;
-        return was === undefined || was === project.name ? [] : [[was, project.name] as const];
-      }),
-    );
-    const href = renamed.size === 0 ? null : renamedHref(this.router, renamed);
-    if (href !== null) this.router.replace(asRoutePathname(href)).catch((error: unknown) => this.failure.report(error));
+    const renamed = new Map<string, Project>();
+    for (const project of projects) {
+      const was = before.get(project.id)?.name;
+      if (was === undefined || was === project.name) continue;
+      renamed.set(was, project);
+      for (const [name, id] of this.formerly) if (id === project.id && name !== project.name) renamed.set(name, project);
+    }
+    const href = renamed.size === 0 ? null : renamedHref(this.router, new Map([...renamed].map(([was, project]) => [was, project.name])));
+    if (href === null) return;
+    this.formerly = new Map([...this.formerly, ...[...renamed].map(([was, project]) => [was, project.id] as const)]);
+    this.router
+      .replace(asRoutePathname(href))
+      .catch((error: unknown) => this.failure.report(error))
+      .finally(() => {
+        const standing = [this.router.params.project, this.router.url.searchParams.get('project')];
+        this.formerly = new Map([...this.formerly].filter(([name]) => standing.includes(name)));
+      });
   }
 }

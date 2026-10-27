@@ -7,7 +7,7 @@
   import type { PageId } from '@tagma/server/browser/contract/wire/ids';
   import { Router } from '@runlith/layer/Router';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
-  import { Door } from '$lib/wire/Door.js';
+  import { ProjectDoor } from '$lib/features/workspace/ProjectDoor.js';
   import { Live } from '$lib/wire/Live.js';
   import { ProjectPages } from './ProjectPages.svelte.js';
   import CastView from './screencast/CastView.svelte';
@@ -17,10 +17,10 @@
 
   const workspace = Workspace.use();
   const live = Live.use();
-  const door = Door.use();
+  const door = ProjectDoor.use();
   const router = Router.use();
 
-  const projectId = $derived(workspace.active?.name === project ? workspace.activeId : null);
+  const projectId = $derived(workspace.activeId);
   let listing = $state.raw<ProjectPages | null>(null);
   $effect(() => {
     if (projectId === null) return;
@@ -46,10 +46,10 @@
     });
   }
 
-  const go = (page: PageId, to: 'back' | 'reload') => act(() => door.perform('navigate_page', { page, go: to }, { project }));
+  const go = (page: PageId, to: 'back' | 'reload') => act(() => door.perform('navigate_page', { page, go: to }));
 
   const reply = (page: PageId, accept: boolean) =>
-    act(() => door.perform('answer_page_dialog', { page, accept, text: accept ? answer : undefined }, { project }));
+    act(() => door.perform('answer_page_dialog', { page, accept, text: accept ? answer : undefined }));
 </script>
 
 <div class="flex h-full min-h-0 flex-1 flex-col bg-background">

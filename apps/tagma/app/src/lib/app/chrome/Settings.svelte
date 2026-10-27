@@ -17,7 +17,7 @@
   const column = SettingsColumn.use();
   const router = Router.use();
   const aimed = $derived(router.url.searchParams.get('project'));
-  const project = $derived(workspace.projects.find((one) => one.name === aimed) ?? workspace.contextProject);
+  const project = $derived(workspace.named(aimed) ?? workspace.contextProject);
 
   const section = App.section('settings', 'app');
   let catalogLife: ReturnType<typeof section.child> | null = null;
