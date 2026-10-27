@@ -397,7 +397,7 @@
       <span class="shrink-0 text-small text-muted-foreground/60">+{chips.length - CHIPS_SHOWN}</span>
     {/if}
     {#if named || line.detail || said}
-      <span class="min-w-0" data-fade {@attach clipFade}
+      <span class={['min-w-0', chips.length > 0 && 'shrink-[1000]']} data-fade {@attach clipFade}
         >{#if named}<span class={line.join === 'apart' ? 'ml-1.5 text-muted-foreground/45' : tone(entry)}>{@render inline(named)}</span
           >{/if}{#if line.detail}<span class="text-muted-foreground/70">{named ? ' ' : ''}{@render inline(line.detail)}</span
           >{/if}{#if said}<span class="text-muted-foreground/55">{line.detail ? ' — ' : named ? ' ' : ''}{@render inline(said)}</span
@@ -435,7 +435,9 @@
     {:else if toolQueued(entry)}
       <span class="ml-1.5 shrink-0 text-small text-muted-foreground/60">{strings.queued()}</span>
       {#if entry.execution?.state === 'queued' && entry.execution.reason}
-        <span class="min-w-0 text-small text-muted-foreground/50" data-fade {@attach clipFade}>— {entry.execution.reason}</span>
+        <span class="min-w-0 shrink-[1000] text-small text-muted-foreground/50" data-fade {@attach clipFade}
+          >— {entry.execution.reason}</span
+        >
       {/if}
     {:else if startedAt !== null && hold === null}
       <span class="ml-1.5 shrink-0 font-mono text-small tabular-nums text-muted-foreground/70"

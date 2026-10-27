@@ -250,7 +250,8 @@ const endingNotice = (
     kind: 'command-ending',
     execution: execution.execution,
     incarnation: execution.incarnation,
-    command: record?.commandLine ?? record?.label ?? null,
+    label: record?.label,
+    command: record?.commandLine ?? null,
     ending:
       decision === undefined
         ? 'unknown'
@@ -272,7 +273,7 @@ const endingText = (
   measured: string,
 ): string => {
   const where = `${notice.execution}:${notice.incarnation}`;
-  const named = notice.command;
+  const named = notice.command ?? notice.label ?? null;
   const ending =
     notice.ending === 'unknown'
       ? 'ended, and this installation holds no decision for it'

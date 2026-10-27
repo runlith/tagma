@@ -117,6 +117,7 @@ export const AgentCommandEnding = Schema.Struct({
   kind: Schema.tag('command-ending'),
   execution: Schema.String,
   incarnation: Schema.Int,
+  label: Schema.optional(Schema.String),
   command: Schema.NullOr(Schema.String),
   ending: Schema.Literals(['completed', 'stopped', 'expired', 'unknown']),
   exit: Schema.NullOr(AgentCommandExit),

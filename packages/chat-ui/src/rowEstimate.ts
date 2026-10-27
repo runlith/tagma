@@ -188,8 +188,11 @@ export function rowOpen(row: ActivityRow, stretchOpen: boolean, view: ChatRowVie
 function noticeHeight(entry: NoticeEntry, view: ChatRowView): number {
   if (!view.expanded(`${entry.id}:notice`, false)) return STEP_PX;
   const notice = entry.notice;
-  const text = notice.kind === 'command-ending' ? notice.tail : entry.text.trim();
-  if (text === null || text.trim() === '') return STEP_PX + STEP_BODY_PX;
+  const text =
+    notice.kind === 'command-ending'
+      ? [notice.command, notice.tail].filter((part) => part !== null && part.trim() !== '').join('\n')
+      : entry.text.trim();
+  if (text === '') return STEP_PX + STEP_BODY_PX;
   return STEP_PX + STEP_BODY_PX + wellHeight(lines(text) * FENCE_LINE_PX, shownWhole(entry.id, view));
 }
 

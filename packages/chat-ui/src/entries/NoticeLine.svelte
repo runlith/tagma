@@ -28,6 +28,7 @@
   const open = $derived(context.expanded(openKey));
   const threads = $derived(noticeThreads([notice], rendering.threadName));
   const share = $derived(notice.kind === 'child-update' ? warmShare(notice, at, now) : null);
+  const subject = $derived(notice.kind === 'command-ending' ? (notice.label ?? notice.command) : null);
   const readable = $derived(
     notice.kind === 'command-ending' || ((notice.kind !== 'child-update' || notice.event === 'tasks') && text.trim().length > 0),
   );
@@ -76,10 +77,10 @@
   {#each threads as thread (thread.id)}
     <ThreadChip {thread} />
   {/each}
-  <span class={['min-w-0', step ? 'text-muted-foreground' : 'text-foreground']} data-fade {@attach clipFade}>{words(notice)}</span>
-  {#if notice.kind === 'command-ending' && notice.command !== null}
-    <span class="min-w-0 font-mono text-small text-muted-foreground" data-fade {@attach clipFade}>{notice.command}</span>
-  {/if}
+  <span class={['min-w-0', step ? 'text-muted-foreground' : 'text-foreground']} data-fade {@attach clipFade}
+    >{words(notice)}{#if subject !== null}<span class={['ml-2', step ? 'text-foreground/80' : 'text-muted-foreground']}>{subject}</span
+      >{/if}</span
+  >
   {#if (notice.kind === 'child-update' || notice.kind === 'thread-event') && notice.forOperator}
     <span class="shrink-0 rounded-sm bg-selected px-1.5 text-meta text-foreground">{strings.yourWords()}</span>
   {/if}
@@ -115,10 +116,28 @@
 
 {#snippet body()}
   {#if notice.kind === 'command-ending'}
-    {#if notice.tail === null || notice.tail.trim() === ''}
+    {@const printed = notice.tail !== null && notice.tail.trim() !== '' ? notice.tail : null}
+    {#if notice.command !== null || printed !== null}
+      <Well
+        {id}
+        copy={[notice.command, printed].filter((part) => part !== null).join('\n')}
+        count={printed === null ? null : strings.lineCount(printed.split('\n').length)}
+      >
+        {#if notice.command !== null}
+          <pre
+            class="min-w-0 font-mono text-small leading-5 whitespace-pre-wrap break-words text-foreground select-text">{notice.command}</pre>
+        {/if}
+        {#if printed !== null}
+          <pre
+            class={[
+              'min-w-0 font-mono text-small leading-5 whitespace-pre-wrap break-words text-muted-foreground select-text',
+              notice.command !== null && 'mt-1',
+            ]}>{printed}</pre>
+        {/if}
+      </Well>
+    {/if}
+    {#if printed === null}
       <p class="text-small text-muted-foreground">{notice.tail === null ? strings.outputUnread() : strings.noOutput()}</p>
-    {:else}
-      <Well {id} text={notice.tail} />
     {/if}
   {:else}
     <Well {id} text={text.trim()} />
@@ -134,6 +153,6 @@
     <div class={lineClass}>{@render line()}</div>
   {/if}
   {#if open && readable}
-    <div class={step ? 'mt-1.5 mb-1' : 'px-2 pb-2'} transition:slide={{ duration: 160 }}>{@render body()}</div>
+    <div class={['grid min-w-0 gap-2', step ? 'mt-1.5 mb-1' : 'px-2 pb-2']} transition:slide={{ duration: 160 }}>{@render body()}</div>
   {/if}
 </div>

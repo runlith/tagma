@@ -189,7 +189,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
     }),
   );
 
-  it.effect('an expired command delivers its command line and native signal as a structured ending', () =>
+  it.effect('an expired command delivers its label beside its command line and native signal as a structured ending', () =>
     Effect.gen(function* () {
       const ref = execution('exec-life');
       yield* owe(ref, 'call-life');
@@ -215,6 +215,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
             targetKey: TargetKey.make('k'),
             holdings: {},
             admittedAt: 0,
+            label: 'Hold the lock for two hours',
             commandLine: 'sleep 7200',
           }),
         deadline: () => Effect.succeed({ execution: ref, revision: 1, executionMs: 120_000, origin: 'caller' }),
@@ -226,6 +227,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
         kind: 'command-ending',
         execution: ref.execution,
         incarnation: ref.incarnation,
+        label: 'Hold the lock for two hours',
         command: 'sleep 7200',
         ending: 'expired',
         exit: { kind: 'signal', signal: 'SIGKILL' },

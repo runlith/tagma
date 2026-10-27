@@ -44,7 +44,7 @@
     <span class="flex min-w-0 gap-x-3 text-muted-foreground transition group-hover/step:text-foreground" data-fade {@attach clipFade}>
       {#each noticeLead(notices, strings) as part, index (index)}<span class="shrink-0">{part}</span>{/each}
     </span>
-    <span class="flex min-w-0 gap-1" data-fade {@attach clipFade}>
+    <span class="flex min-w-0 shrink-[1000] gap-1" data-fade {@attach clipFade}>
       {#each noticeThreads(notices, rendering.threadName) as thread (thread.id)}
         <ThreadChip {thread} />
       {/each}
