@@ -1,12 +1,12 @@
-import { describe, expect } from 'bun:test';
+import { describe, expect, jest } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, watch } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Cause, Effect, Exit, Fiber, Scope } from 'effect';
+import { Cause, Deferred, Effect, Exit, Fiber, Scope } from 'effect';
 import { type McpPalette, McpPool } from './McpPool';
 import type { McpHttpServerDeclaration, McpStdioServerDeclaration } from './McpServerDeclaration';
 import type { McpSdkCallResult } from './sdk';
@@ -277,21 +277,37 @@ describe('McpPool', () => {
     Effect.fnUntraced(function* () {
       const scope = yield* Scope.fork(yield* Effect.scope);
       const pool = yield* McpPool.make().pipe(Scope.provide(scope));
-      const started = join(mkdtempSync(join(tmpdir(), 'mcp-interrupted-')), 'started');
-      yield* pool.reconcile([declare('frozen', [], { timeoutMs: 1_000, env: { MCP_TEST_HOLD_CALL: started } })]);
+      const directory = mkdtempSync(join(tmpdir(), 'mcp-interrupted-'));
+      const startedFile = join(directory, 'started');
+      const started = yield* Deferred.make<void>();
+      yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          watch(directory, () => {
+            if (existsSync(startedFile)) Deferred.doneUnsafe(started, Effect.void);
+          }),
+        ),
+        (watcher) => Effect.sync(() => watcher.close()),
+      );
+      yield* pool.reconcile([declare('frozen', [], { timeoutMs: 1_000, env: { MCP_TEST_HOLD_CALL: startedFile } })]);
       yield* pool.awaitHandshakes();
       expect(pool.states()).toMatchObject([{ name: 'frozen', status: 'connected' }]);
       const pid = Number(text(yield* pool.call('frozen', 'pid', {})));
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() => jest.useFakeTimers()),
+        () =>
+          Effect.gen(function* () {
+            const answered = yield* Effect.gen(function* () {
+              const calling = yield* Effect.forkScoped(pool.call('frozen', 'echo', { text: 'hi' }));
+              yield* Deferred.await(started);
+              process.kill(pid, 'SIGSTOP');
+              return yield* Fiber.interrupt(calling).pipe(Effect.andThen(Fiber.await(calling)));
+            }).pipe(Effect.ensuring(Effect.sync(() => process.kill(pid, 'SIGCONT'))));
 
-      const answered = yield* Effect.gen(function* () {
-        const calling = yield* Effect.forkScoped(pool.call('frozen', 'echo', { text: 'hi' }));
-        yield* until(() => existsSync(started));
-        process.kill(pid, 'SIGSTOP');
-        return yield* Fiber.interrupt(calling).pipe(Effect.andThen(Fiber.await(calling)));
-      }).pipe(Effect.ensuring(Effect.sync(() => process.kill(pid, 'SIGCONT'))));
-
-      expect(Exit.isFailure(answered) && Cause.hasInterruptsOnly(answered.cause)).toBe(true);
-      expect(pool.states().map((state) => [state.name, state.status])).toEqual([['frozen', 'connected']]);
+            expect(Exit.isFailure(answered) && Cause.hasInterruptsOnly(answered.cause)).toBe(true);
+            expect(pool.states().map((state) => [state.name, state.status])).toEqual([['frozen', 'connected']]);
+          }),
+        () => Effect.sync(() => jest.useRealTimers()),
+      );
 
       yield* Scope.close(scope, Exit.void);
     }),

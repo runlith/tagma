@@ -102,9 +102,34 @@ it.live('socket timeout and Effect cancellation both release requests waiting fo
 it.live('slow response consumers bound buffering and then receive every byte', () =>
   Effect.gen(function* () {
     const chunk = Buffer.alloc(64 * 1024, 7);
-    const total = 1024 * chunk.length;
+    const total = 16 * chunk.length;
+    const pressure = yield* Deferred.make<'paused' | 'ended' | 'closed'>();
+    const agent = yield* Effect.acquireRelease(
+      Effect.sync(() => new Agent({ keepAlive: true })),
+      (opened) => Effect.sync(() => opened.destroy()),
+    );
+    const reuse = agent.reuseSocket.bind(agent);
+    agent.reuseSocket = (socket, request) => {
+      request.once('response', (incoming) => {
+        let received = 0;
+        incoming.on('data', (chunk: Buffer) => {
+          received += chunk.byteLength;
+        });
+        incoming.on('pause', () => {
+          if (received > 0) Deferred.doneUnsafe(pressure, Effect.succeed(incoming.complete ? 'ended' : 'paused'));
+        });
+        incoming.once('end', () => Deferred.doneUnsafe(pressure, Effect.succeed('ended')));
+        incoming.once('close', () => Deferred.doneUnsafe(pressure, Effect.succeed('closed')));
+      });
+      reuse(socket, request);
+    };
     let written = 0;
-    const { port } = yield* listen((_request, response) => {
+    const { port } = yield* listen((request, response) => {
+      if (request.url === '/warm') {
+        response.end('warm');
+        return;
+      }
+      response.writeHead(200, { 'Content-Length': total, Connection: 'close' });
       const write = () => {
         while (written < total) {
           written += chunk.length;
@@ -119,8 +144,10 @@ it.live('slow response consumers bound buffering and then receive every byte', (
     });
     const bytes = yield* Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
+      const warm = yield* client.get(`http://127.0.0.1:${port}/warm`);
+      yield* warm.text;
       const response = yield* client.get(`http://127.0.0.1:${port}`);
-      expect(written).toBeLessThan(total);
+      expect(yield* Deferred.await(pressure)).toBe('paused');
       let read = 0;
       yield* Stream.runForEach(response.stream, (chunk) =>
         Effect.sync(() => {
@@ -128,7 +155,7 @@ it.live('slow response consumers bound buffering and then receive every byte', (
         }),
       );
       return read;
-    }).pipe(Effect.provide(layer));
+    }).pipe(Effect.provide(layer), Effect.provideService(RequestOptions, { agent }));
     expect(bytes).toBe(total);
   }),
 );
