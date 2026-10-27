@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { releaseAfter, type StoreMarks } from '../contract/wire/feed.js';
-import { irreversibleOf, unfoldedOf } from './pipeline.js';
+import { droppedOf, irreversibleOf } from './pipeline.js';
 import { feedEntry, type ReleaseRecord } from './stage.js';
 
 const STORES: StoreMarks = {
@@ -44,25 +44,25 @@ test('a feed entry flags the release irreversible only when it made a change its
   expect(carried.changes).toEqual([{ store: 'graph', release: '0.1.1' }]);
 });
 
-test('a release folds carried machine migrations beyond the baseline while retaining graph and journal steps', () => {
+test('a cut keeps every migration and step the published release carried, and adding new ones drops nothing', () => {
   const carried: StoreMarks = {
     'machine-store': ['20261010115509_baseline', '20261012000000_carried'],
     'host-store': STORES['host-store'],
     graph: ['decision-becomes-spec'],
     journal: ['20261010205500_place_guidance'],
   };
-  const standing: StoreMarks = {
-    'machine-store': ['20261010115509_baseline', '20261012000000_carried', '20261013000000_new'],
-    'host-store': STORES['host-store'],
-    graph: ['decision-becomes-spec', '20261017170000_new_step'],
-    journal: ['20261010205500_place_guidance', '20261017171000_new_form'],
+  const grown: StoreMarks = {
+    'machine-store': [...carried['machine-store'], '20261013000000_new'],
+    'host-store': [...carried['host-store'], '20261013000000_host'],
+    graph: [...carried.graph, '20261017170000_new_step'],
+    journal: [...carried.journal, '20261017171000_new_form'],
   };
 
-  expect(unfoldedOf(standing, carried, '20261010115509_baseline')).toEqual(['20261012000000_carried']);
-  expect(
-    unfoldedOf({ ...standing, 'machine-store': ['20261010115509_baseline', '20261013000000_new'] }, carried, '20261010115509_baseline'),
-  ).toEqual([]);
-  expect(unfoldedOf(standing, carried, null)).toEqual(['20261010115509_baseline', '20261012000000_carried']);
+  expect(droppedOf(grown, carried)).toEqual([]);
+  expect(droppedOf({ ...grown, 'machine-store': ['20261010115509_baseline', '20261013000000_new'], graph: [] }, carried)).toEqual([
+    'machine-store 20261012000000_carried',
+    'graph decision-becomes-spec',
+  ]);
 });
 
 test('the version after a published one raises its last number, and the first published through the feed is 0.2.0', () => {

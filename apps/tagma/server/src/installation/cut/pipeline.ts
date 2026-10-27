@@ -12,7 +12,6 @@ import { troubleOf } from '@runlith/git/repository';
 import { gitHubCli, type GitHubCli } from '@runlith/github/GitHubCli';
 import { developerLabels } from '@runlith/tagma/adapter/host-modules';
 import { gitCut, gitTree } from '../../platform/git/readings.js';
-import { baselineReceipt } from '../../platform/store/baseline.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import { EXECUTIONS_RUNTIME } from '../contract/wire/archive.js';
 import { compareReleases, FEED_REPOSITORY, isRelease, releaseAfter, type StoreMarks } from '../contract/wire/feed.js';
@@ -65,10 +64,8 @@ export const irreversibleOf = (release: string, stores: StoreMarks, previous: Pr
         })),
       ];
 
-export const unfoldedOf = (stores: StoreMarks, carried: StoreMarks, baseline: string | null): readonly string[] => {
-  const published = new Set(carried['machine-store']);
-  return stores['machine-store'].filter((name) => name !== baseline && published.has(name));
-};
+export const droppedOf = (stores: StoreMarks, carried: StoreMarks): readonly string[] =>
+  IRREVERSIBLE_STORES.flatMap((store) => carried[store].filter((name) => !stores[store].includes(name)).map((name) => `${store} ${name}`));
 
 type Machine = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | Git;
 
@@ -178,22 +175,13 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
   const signer = yield* releaseIdentity.pipe(Effect.mapError((failure) => refusal('signing', failure.detail, failure.unblock)));
 
   const stores = yield* storesOf(sourcePath, steps);
-  if (newest !== null) {
-    const receipt = yield* baselineReceipt(join(sourcePath, MIGRATIONS)).pipe(
-      Effect.mapError((failure) => refusal('fold', failure.message)),
+  const dropped = newest === null ? [] : droppedOf(stores, newest.stores);
+  if (newest !== null && dropped.length > 0) {
+    return yield* refuse(
+      'stores',
+      `${newest.release} is published with ${dropped.length} migrations and steps this cut lacks: ${dropped.slice(0, TOLD).join(', ')}`,
+      [`bring them back: a store ${newest.release} wrote reaches the newest form only through every migration and step it ran`],
     );
-    const unfolded = unfoldedOf(stores, newest.stores, receipt?.migration ?? null);
-    if (unfolded.length > 0) {
-      const last = unfolded.at(-1)!;
-      return yield* refuse(
-        'fold',
-        `${newest.release} already carries ${unfolded.length} machine-store migrations that still stand beyond the baseline: ${unfolded.join(', ')}`,
-        [
-          `fold the machine-store migrations through ${last} into a new baseline (apps/tagma/server/scripts/baseline.ts with release ${newest.release} and cut ${last}, then its install)`,
-          'then commit the fold and bun run tagma:release',
-        ],
-      );
-    }
   }
   const irreversible = irreversibleOf(release, stores, newest === null ? null : { stores: newest.stores, changes: newest.changes });
 
