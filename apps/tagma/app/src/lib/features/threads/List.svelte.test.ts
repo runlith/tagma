@@ -523,14 +523,6 @@ test('a child’s identity retains the parent address even when the list has nev
   expect(list.identityOf(shown.id, shown)?.parent).toEqual({ ...parent, title: 'Renamed again' });
 });
 
-test('a detached root retains the former parent’s home without its directory row', () => {
-  const list = open();
-  const detachedFrom = { id: 'former', projectId: 7, title: 'Former parent' };
-  const shown = { id: 'root', title: 'root', agentId: 'tagma', parentThreadId: null, detachedFrom } as WireThread;
-  expect(list.identityOf(shown.id, shown)?.detachedFrom).toEqual(detachedFrom);
-  expect(list.identityOf(shown.id, { ...shown, detachedFrom: undefined })?.detachedFrom).toBeUndefined();
-});
-
 test('an act on a team member homed in another project is addressed to that project, even after it left the window', async () => {
   const detached: { id: string; projectId: number }[] = [];
   const list = open({ detach: { run: async (input: { id: string; projectId: number }) => void detached.push(input) } });

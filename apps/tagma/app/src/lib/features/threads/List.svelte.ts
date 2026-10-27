@@ -34,7 +34,6 @@ export type ThreadIdentity = {
   readonly title: string;
   readonly parentThreadId: string | null;
   readonly parent?: ThreadParent;
-  readonly detachedFrom?: ThreadParent;
   readonly bornAs: string;
 };
 
@@ -288,8 +287,6 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
   identityOf(id: string | null, shown: WireThread | null): ThreadIdentity | null {
     const recorded = shown?.parent;
     const parent = recorded === undefined ? undefined : { ...recorded, title: this.row(recorded.id)?.title ?? recorded.title };
-    const former = shown?.detachedFrom;
-    const detachedFrom = former === undefined ? undefined : { ...former, title: this.row(former.id)?.title ?? former.title };
     const row = this.harnessRow(id);
     if (row !== null) {
       return {
@@ -297,7 +294,6 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
         title: row.title,
         parentThreadId: row.parentThreadId,
         ...(parent === undefined ? {} : { parent }),
-        ...(detachedFrom === undefined ? {} : { detachedFrom }),
         bornAs: row.profileId ?? row.agentId,
       };
     }
@@ -307,7 +303,6 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
       title: shown.title,
       parentThreadId: shown.parentThreadId,
       ...(parent === undefined ? {} : { parent }),
-      ...(detachedFrom === undefined ? {} : { detachedFrom }),
       bornAs: shown.profile?.id ?? shown.agentId,
     };
   }

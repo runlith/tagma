@@ -40,7 +40,6 @@
   const row = $derived(host.activeId === null ? undefined : list.row(host.activeId));
   const isRoot = $derived(thread === null || thread.parentThreadId === null);
   const parent = $derived(thread?.parent);
-  const detachedFrom = $derived(isRoot ? thread?.detachedFrom : undefined);
   const bornType = $derived(thread?.bornAs ?? null);
   const bornLabel = $derived(bornType === DEFAULT_THREAD_TYPE ? 'Tagma' : bornType);
   const title = $derived(isRoot ? thread?.title.trim() || 'Untitled' : (row?.name ?? bornLabel ?? 'Untitled'));
@@ -225,13 +224,6 @@
     {/if}
     {#if host.activeId}
       <WorksOn projectId={host.projectId} threadId={host.activeId} />
-    {/if}
-    {#if !parent && detachedFrom}
-      <Tooltip text={`Detached from ${detachedFrom.title.trim() || 'Untitled'}`} class="flex min-w-0">
-        <button type="button" class={CRUMB} onclick={() => openAtHome(detachedFrom.id, detachedFrom.projectId)}>
-          <FadeText text={`↖ ${detachedFrom.title.trim() || 'Untitled'}`} />
-        </button>
-      </Tooltip>
     {/if}
     {#if bornLabel !== null && bornType !== agents.defaultType}
       <Tooltip text="The agent this thread was born as — read its prompt">
