@@ -348,7 +348,7 @@ layer(BunServices.layer, { excludeTestServices: true })('native launch contracts
         const held = yield* holder.launch({
           id: 'attach-identity',
           path: '/bin/sh',
-          argv: ['asked-name', '-c', 'printf "%s:%s:%s:%s\\n" "$0" "$$" "$HOME" "$PWD"; exec sleep 20'],
+          argv: ['asked-name', '-c', 'printf "%s:%s:%s:%s\\n" "$0" "$$" "$HOME" "$PWD"; exec /usr/bin/perl -e "sleep while 1"'],
           env: [{ name: 'HOME', value: '/usr' }],
           cwd: '/',
           transport: TERMINAL,
@@ -589,7 +589,7 @@ while True: signal.pause()`;
   it.effect('destroys retained work after leader exit while reporting its original exit and measured cost', () =>
     nativeCase({
       use: Effect.fnUntraced(function* ({ holder }) {
-        const native = yield* launchNative(launch(PIPES, 'sleep 31 >/dev/null 2>&1 & exit 0'), ref, holder);
+        const native = yield* launchNative(launch(PIPES, '/usr/bin/perl -e "sleep while 1" >/dev/null 2>&1 & exit 0'), ref, holder);
         yield* native.exit;
         const ending = yield* native.target.end('destroy', undefined, 'stopping');
         expect(ending.exit).toEqual({ _tag: 'Code', code: 0 });
@@ -642,11 +642,16 @@ while True: signal.pause()`;
           Effect.provideService(Processes, strays),
           Effect.provideService(ProcessControl, processControl(strays)),
         );
-        const native = yield* launchNative(launch(PIPES, 'trap "" INT; printf armed; exec sleep 30'), ref, holder, tables);
+        const native = yield* launchNative(
+          launch(PIPES, 'trap "" INT; printf armed; exec /usr/bin/perl -e "sleep while 1"'),
+          ref,
+          holder,
+          tables,
+        );
         yield* through(native.sources[0]!, 'armed');
         leader = native.identity.pid ?? 0;
         const child = yield* spawner.spawn(
-          ChildProcess.make('/usr/bin/perl', ['-e', '$SIG{INT}="IGNORE"; $|=1; print "armed\\n"; sleep 30'], {
+          ChildProcess.make('/usr/bin/perl', ['-e', '$SIG{INT}="IGNORE"; $|=1; print "armed\\n"; sleep while 1'], {
             stdin: 'ignore',
             stdout: 'pipe',
             stderr: 'inherit',
@@ -677,7 +682,7 @@ while True: signal.pause()`;
         const native = yield* launchNative(
           launch(
             { _tag: 'pipes', stdin: 'pipe' },
-            'perl -e "use POSIX; POSIX::setsid(); exec(q{sleep}, q{30})" >/dev/null 2>&1 & printf "%s\\n" "$!"; read line',
+            'perl -e "use POSIX; POSIX::setsid(); sleep while 1" >/dev/null 2>&1 & printf "%s\\n" "$!"; read line',
           ),
           ref,
           holder,

@@ -260,9 +260,11 @@ describe('the live execution runtime', () => {
         Effect.gen(function* () {
           const absent = keyOf('prevent-absent');
           expect((yield* hostExecutions.cancelStart(claim, absent, 'explicit-stop', 'recovery', 'unadmitted'))._tag).toBe('Prevented');
-          expect((yield* hostExecutions.start(claim, absent, launchOf('/bin/sleep', ['30'], 'agent')))._tag).toBe('Cancelled');
+          expect((yield* hostExecutions.start(claim, absent, launchOf('/usr/bin/perl', ['-e', 'sleep while 1'], 'agent')))._tag).toBe(
+            'Cancelled',
+          );
           const live = keyOf('prevent-live');
-          const started = yield* hostExecutions.start(claim, live, launchOf('/bin/sleep', ['30'], 'agent'));
+          const started = yield* hostExecutions.start(claim, live, launchOf('/usr/bin/perl', ['-e', 'sleep while 1'], 'agent'));
           if (started._tag !== 'Started') return yield* Effect.die(new Error(`start failed: ${started._tag}`));
           expect((yield* hostExecutions.cancelStart(claim, live, 'explicit-stop', 'recovery', 'unadmitted'))._tag).toBe('Refused');
           expect((yield* hostExecutions.summary(started.execution.execution))?.state.phase).toBe('running');
@@ -278,10 +280,10 @@ describe('the live execution runtime', () => {
         Effect.gen(function* () {
           const key = keyOf('start-identity');
           const launch = {
-            ...launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'),
+            ...launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
             command: {
               program: '/bin/sh',
-              args: ['-c', 'sleep 5'],
+              args: ['-c', 'exec /usr/bin/perl -e "sleep while 1"'],
               environment: [
                 { name: 'PATH', value: '/usr/bin:/bin' },
                 { name: 'TOKEN', value: 'first-secret' },
@@ -343,7 +345,7 @@ describe('the live execution runtime', () => {
           const started = yield* hostExecutions.start(
             claim,
             keyOf('stdin-1'),
-            launchOf('/bin/sh', ['-c', 'cat; echo done; sleep 30'], 'principal-stdin'),
+            launchOf('/bin/sh', ['-c', 'cat; echo done; exec /usr/bin/perl -e "sleep while 1"'], 'principal-stdin'),
           );
           if (started._tag !== 'Started') return yield* Effect.die(new Error(`stdin child: ${started._tag}`));
           const ref = started.execution;
@@ -412,7 +414,11 @@ describe('the live execution runtime', () => {
     Effect.gen(function* () {
       const outcome = yield* withHost(({ hostExecutions, stops, claim }) =>
         Effect.gen(function* () {
-          const started = yield* hostExecutions.start(claim, keyOf('stop-1'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
+          const started = yield* hostExecutions.start(
+            claim,
+            keyOf('stop-1'),
+            launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+          );
           if (started._tag !== 'Started') return yield* Effect.die(new Error(`stop child: ${started._tag}`));
           const armed = yield* hostExecutions.changed(started.execution.execution);
           const receipt = yield* stops.stop(claim, keyOf('stop-op-1'), started.execution.execution, 'explicit-stop', 'destroy');
@@ -437,7 +443,11 @@ describe('the live execution runtime', () => {
           const started = yield* hostExecutions.start(
             claim,
             keyOf('stop-group-1'),
-            launchOf('/bin/sh', ['-c', 'trap "" INT; trap "exit 7" TERM; sleep 30 & printf "%s\\n" "$!"; wait'], 'agent'),
+            launchOf(
+              '/bin/sh',
+              ['-c', 'trap "" INT; trap "exit 7" TERM; /usr/bin/perl -e "sleep while 1" & printf "%s\\n" "$!"; wait'],
+              'agent',
+            ),
           );
           if (started._tag !== 'Started') return yield* Effect.die(new Error(`group child: ${started._tag}`));
           yield* outputWhen(byteRecords, started.execution, (text) => text.includes('\n'));
@@ -461,7 +471,7 @@ describe('the live execution runtime', () => {
           const started = yield* hostExecutions.start(
             claim,
             keyOf('destroy-group-1'),
-            launchOf('/bin/sh', ['-c', 'trap "exit 7" TERM; sleep 30 & printf "%s\\n" "$!"; wait'], 'agent'),
+            launchOf('/bin/sh', ['-c', 'trap "exit 7" TERM; /usr/bin/perl -e "sleep while 1" & printf "%s\\n" "$!"; wait'], 'agent'),
           );
           if (started._tag !== 'Started') return yield* Effect.die(new Error(`destroy child: ${started._tag}`));
           const announced = yield* outputWhen(byteRecords, started.execution, (text) => text.includes('\n'));
@@ -488,11 +498,7 @@ describe('the live execution runtime', () => {
             const started = yield* hostExecutions.start(
               claim,
               keyOf('stop-ancestry-1'),
-              launchOf(
-                '/bin/sh',
-                ['-c', "perl -e 'use POSIX; POSIX::setsid(); $|=1; print qq{$$\\n}; exec(q{sleep}, q{30})' & wait"],
-                'agent',
-              ),
+              launchOf('/bin/sh', ['-c', "perl -e 'use POSIX; POSIX::setsid(); $|=1; print qq{$$\\n}; sleep while 1' & wait"], 'agent'),
             );
             if (started._tag !== 'Started') return yield* Effect.die(new Error(`ancestry child: ${started._tag}`));
             const announced = yield* outputWhen(byteRecords, started.execution, (text) => text.includes('\n'));
@@ -570,7 +576,11 @@ describe('the live execution runtime', () => {
           Effect.gen(function* () {
             const files = yield* FileSystem.FileSystem;
             const records = join((yield* store.incarnation()).registration.state, 'records');
-            const started = yield* hostExecutions.start(claim, keyOf('capacity-1'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
+            const started = yield* hostExecutions.start(
+              claim,
+              keyOf('capacity-1'),
+              launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+            );
             if (started._tag !== 'Started') return yield* Effect.die(new Error(`capacity child: ${started._tag}`));
             const early = yield* retirement.forget(started.execution.execution);
             yield* stops.stop(claim, keyOf('capacity-stop'), started.execution.execution, 'explicit-stop', 'signal');
@@ -600,7 +610,7 @@ describe('the live execution runtime', () => {
         ({ hostExecutions, stops, byteRecords, retirement, capacity, claim }) =>
           Effect.gen(function* () {
             const started = yield* hostExecutions.start(claim, keyOf('retire-1'), {
-              ...launchOf('/bin/sh', ['-c', 'printf hello; sleep 5'], 'agent'),
+              ...launchOf('/bin/sh', ['-c', 'printf hello; exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
               lifetime: 'call',
             });
             if (started._tag !== 'Started') return yield* Effect.die(new Error(`reader child: ${started._tag}`));
@@ -639,7 +649,7 @@ describe('the live execution runtime', () => {
       const outcome = yield* withHost(({ hostExecutions, requests, claim }) =>
         Effect.gen(function* () {
           const started = yield* hostExecutions.start(claim, keyOf('deadline-1'), {
-            ...launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'),
+            ...launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
             lifetime: 'call',
             budget: { timeoutMs: 50 },
           });
@@ -672,7 +682,7 @@ describe('the live execution runtime', () => {
         ({ hostExecutions, requests, stops, retirement, capacity, claim }) =>
           Effect.gen(function* () {
             const started = yield* hostExecutions.start(claim, keyOf('cause-1'), {
-              ...launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'),
+              ...launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
               lifetime: 'call',
               budget: {},
             });
@@ -819,7 +829,11 @@ describe('the live execution runtime', () => {
         ({ hostExecutions, requests, claim, capacity }) =>
           Effect.gen(function* () {
             yield* capacity.regrant(1);
-            const live = yield* hostExecutions.start(claim, keyOf('exit-live'), launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'));
+            const live = yield* hostExecutions.start(
+              claim,
+              keyOf('exit-live'),
+              launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+            );
             const ended = yield* hostExecutions.start(claim, keyOf('exit-1'), {
               ...launchOf('/bin/echo', ['first'], 'agent'),
               lifetime: 'call',
@@ -900,8 +914,16 @@ describe('the live execution runtime', () => {
       const outcome = yield* withHost(
         ({ hostExecutions, claim }) =>
           Effect.gen(function* () {
-            const first = yield* hostExecutions.start(claim, keyOf('page-1'), launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'));
-            const second = yield* hostExecutions.start(claim, keyOf('page-2'), launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'));
+            const first = yield* hostExecutions.start(
+              claim,
+              keyOf('page-1'),
+              launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+            );
+            const second = yield* hostExecutions.start(
+              claim,
+              keyOf('page-2'),
+              launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+            );
             if (first._tag !== 'Started' || second._tag !== 'Started')
               return yield* Effect.die(new Error('the page children did not start'));
             const opening = yield* hostExecutions.list(undefined, 1);
@@ -1034,7 +1056,11 @@ describe('the live execution runtime', () => {
     Effect.gen(function* () {
       const outcome = yield* withHost(({ hostExecutions, stops, lifecycle, custodian, claim }) =>
         Effect.gen(function* () {
-          const started = yield* hostExecutions.start(claim, keyOf('recover-1'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
+          const started = yield* hostExecutions.start(
+            claim,
+            keyOf('recover-1'),
+            launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+          );
           if (started._tag !== 'Started') return yield* Effect.die(new Error(`recovery child: ${started._tag}`));
           const standing = yield* custodian.current();
           const revision = standing._tag === 'Settled' ? standing.custody.revision : standing.last.revision;
@@ -1058,11 +1084,19 @@ describe('the live execution runtime', () => {
     Effect.gen(function* () {
       const outcome = yield* withHost(({ hostExecutions, lifecycle, custodian, claim }) =>
         Effect.gen(function* () {
-          const before = yield* hostExecutions.start(claim, keyOf('fenced-1'), launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'));
+          const before = yield* hostExecutions.start(
+            claim,
+            keyOf('fenced-1'),
+            launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+          );
           const standing = yield* custodian.current();
           const revision = standing._tag === 'Settled' ? standing.custody.revision : standing.last.revision;
           yield* custodian.fence(keyOf('fence-op'), revision, connectionOf('connection-recovery'), 'recovery');
-          const after = yield* hostExecutions.start(claim, keyOf('fenced-2'), launchOf('/bin/sh', ['-c', 'sleep 5'], 'agent'));
+          const after = yield* hostExecutions.start(
+            claim,
+            keyOf('fenced-2'),
+            launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+          );
           const shutdown = yield* lifecycle.shutdown(claim, keyOf('fenced-shutdown'));
           return { before, after, shutdown };
         }),
@@ -1078,7 +1112,11 @@ describe('the live execution runtime', () => {
     Effect.gen(function* () {
       const outcome = yield* withHost(({ hostExecutions, lifecycle, claim }) =>
         Effect.gen(function* () {
-          yield* hostExecutions.start(claim, keyOf('shutdown-1'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
+          yield* hostExecutions.start(
+            claim,
+            keyOf('shutdown-1'),
+            launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+          );
           const shutdown = yield* lifecycle.shutdown(claim, keyOf('shutdown-op'));
           const status = yield* lifecycle.status();
           const refused = yield* hostExecutions.start(claim, keyOf('shutdown-2'), launchOf('/bin/sh', ['-c', 'sleep 1'], 'agent'));
@@ -1108,7 +1146,7 @@ describe('the live execution runtime', () => {
               hostExecutions.start(
                 claim,
                 keyOf(`deaf-${name}`),
-                launchOf('/bin/sh', ['-c', 'trap "" INT; printf armed; sleep 30'], 'agent'),
+                launchOf('/bin/sh', ['-c', 'trap "" INT; printf armed; exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
               ),
             );
             if (started.some((answer) => answer._tag !== 'Started')) return yield* Effect.die(new Error('the children did not start'));
@@ -1137,8 +1175,16 @@ describe('the live execution runtime', () => {
       const outcome = yield* withHost(
         ({ hostExecutions, stops, lifecycle, claim }) =>
           Effect.gen(function* () {
-            const first = yield* hostExecutions.start(claim, keyOf('unswept-1'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
-            const second = yield* hostExecutions.start(claim, keyOf('unswept-2'), launchOf('/bin/sh', ['-c', 'sleep 30'], 'agent'));
+            const first = yield* hostExecutions.start(
+              claim,
+              keyOf('unswept-1'),
+              launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+            );
+            const second = yield* hostExecutions.start(
+              claim,
+              keyOf('unswept-2'),
+              launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+            );
             if (first._tag !== 'Started' || second._tag !== 'Started') return yield* Effect.die(new Error('the children did not start'));
             const shutdown = yield* lifecycle.shutdown(claim, keyOf('unswept-shutdown'));
             const refused = yield* hostExecutions.start(claim, keyOf('unswept-3'), launchOf('/bin/sh', ['-c', 'sleep 1'], 'agent'));
@@ -1267,7 +1313,7 @@ describe('the live execution runtime', () => {
             const started = yield* hostExecutions.start(
               claim,
               keyOf('wedge-1'),
-              launchOf('/bin/sh', ['-c', 'trap "" INT TERM; printf armed; exec sleep 30'], 'agent'),
+              launchOf('/bin/sh', ['-c', 'trap "" INT TERM; printf armed; exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
             );
             if (started._tag !== 'Started') return yield* Effect.die(new Error(`the wedge did not start: ${started._tag}`));
             yield* outputWhen(byteRecords, started.execution, (text) => text === 'armed');
@@ -1305,7 +1351,7 @@ describe('the live execution runtime', () => {
             const started = yield* hostExecutions.start(
               claim,
               keyOf('join-1'),
-              launchOf('/bin/sh', ['-c', 'trap "" TERM; exec sleep 30'], 'agent'),
+              launchOf('/bin/sh', ['-c', 'trap "" TERM; exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
             );
             if (started._tag !== 'Started') return yield* Effect.die(new Error(`the joiner did not start: ${started._tag}`));
             const key = keyOf('join-shutdown');
@@ -1336,7 +1382,7 @@ describe('the live execution runtime', () => {
             const started = yield* hostExecutions.start(
               claim,
               keyOf('keys-1'),
-              launchOf('/bin/sh', ['-c', 'trap "" TERM; exec sleep 30'], 'agent'),
+              launchOf('/bin/sh', ['-c', 'trap "" TERM; exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
             );
             if (started._tag !== 'Started') return yield* Effect.die(new Error(`the keyed one did not start: ${started._tag}`));
             const fiber = yield* Effect.forkScoped(lifecycle.shutdown(claim, keyOf('keys-shutdown-a')));

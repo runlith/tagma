@@ -189,9 +189,10 @@ const openedWorld = Effect.fnUntraced(function* (shell: Shell['Service']) {
   const exec = Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) =>
-      shell.spawner
-        .spawn(command)
-        .pipe(Effect.tap((handle) => Effect.flatMap(executionOf(handle), (ref) => Deferred.succeed(opened, ref)))),
+      shell.spawner.spawn(command).pipe(
+        Effect.updateService(SpawnAnnotation, (annotation) => ({ ...annotation, budget: {} })),
+        Effect.tap((handle) => Effect.flatMap(executionOf(handle), (ref) => Deferred.succeed(opened, ref))),
+      ),
     ),
   );
   return { world: { ...shell.world, exec }, opened: Deferred.await(opened) } satisfies OpenedWorld;
@@ -202,7 +203,7 @@ layer(shellRig, { excludeTestServices: true })('bash over a managed execution ho
     Effect.gen(function* () {
       const { world, root } = yield* Shell;
       const ran = yield* answer(shellOf(world, root), {
-        command: `trap 'exit 0' INT TERM; sleep 30`,
+        command: `trap 'exit 0' INT TERM; /usr/bin/perl -e 'sleep while 1'`,
         description: 'Handle the signal and exit zero',
         lifeMs: 400,
       });
@@ -234,7 +235,10 @@ layer(shellRig, { excludeTestServices: true })('bash over a managed execution ho
       const execute = shellOf(ready.world, shell.root).execute;
       if (execute === undefined) return yield* Effect.die('bash declares no execute');
       const running = yield* Effect.forkChild(
-        execute({ command: 'sleep 20', description: 'Wait to be stopped', lifeMs: 30_000 }, { toolCallId: 'shell-call', messages: [] }),
+        execute(
+          { command: 'exec /usr/bin/perl -e "sleep while 1"', description: 'Wait to be stopped' },
+          { toolCallId: 'shell-call', messages: [] },
+        ),
       );
       const target = yield* ready.opened;
       const interrupting = yield* Effect.forkChild(Fiber.interrupt(running));
@@ -258,9 +262,8 @@ layer(shellRig, { excludeTestServices: true })('bash over a managed execution ho
       const ready = yield* openedWorld(shell);
       const running = yield* Effect.forkChild(
         answer(shellOf(ready.world, shell.root), {
-          command: 'sleep 20',
+          command: 'exec /usr/bin/perl -e "sleep while 1"',
           description: 'Wait to be stopped by another holder',
-          lifeMs: 30_000,
         }),
       );
       const target = yield* ready.opened;
@@ -280,8 +283,14 @@ layer(shellRig, { excludeTestServices: true })('bash over a managed execution ho
       const shell = yield* Shell;
       const { port } = shell;
       const ready = yield* openedWorld(shell);
+      const files = yield* FileSystem.FileSystem.pipe(Effect.provide(BunServices.layer));
+      const directory = yield* files.makeTempDirectoryScoped({ prefix: 'visible-command-' });
+      const release = join(directory, 'release');
       const running = yield* Effect.forkChild(
-        answer(shellOf(ready.world, shell.root), { command: 'sleep 3', description: 'Be visible', lifeMs: 30_000 }),
+        answer(shellOf(ready.world, shell.root), {
+          command: `while [ ! -f '${release}' ]; do sleep 0.01; done`,
+          description: 'Be visible',
+        }),
       );
       const target = yield* ready.opened;
 
@@ -290,6 +299,7 @@ layer(shellRig, { excludeTestServices: true })('bash over a managed execution ho
       expect(summary?.state.lifetime).toBe('call');
       expect(Number(summary?.native.pid ?? 0)).toBeGreaterThan(0);
 
+      yield* files.writeFileString(release, 'released');
       const ran = yield* Fiber.join(running);
       expect(fact(ran.display)).toEqual({ label: 'exit', value: '0' });
     }),
@@ -299,10 +309,10 @@ layer(shellRig, { excludeTestServices: true })('bash over a managed execution ho
     Effect.gen(function* () {
       const { spawner, port } = yield* Shell;
       const purposes = yield* Effect.gen(function* () {
-        const plain = yield* executionOf(yield* spawner.spawn(ChildProcess.make('/bin/sleep', ['2'])));
+        const plain = yield* executionOf(yield* spawner.spawn(ChildProcess.make('/usr/bin/perl', ['-e', 'sleep while 1'])));
         const noted = yield* executionOf(
           yield* spawner
-            .spawn(ChildProcess.make('/bin/sleep', ['2']))
+            .spawn(ChildProcess.make('/usr/bin/perl', ['-e', 'sleep while 1']))
             .pipe(Effect.provideService(SpawnAnnotation, { purpose: 'command', correlation: 'annotated' })),
         );
         const read = (ref: typeof plain) => Effect.map(port.state(ref), (summary) => summary?.state.purpose);
@@ -372,7 +382,7 @@ describe('bash over the ordinary platform world', () => {
       expect(ok.text).toContain('plain');
       expect(fact(ok.display)).toEqual({ label: 'exit', value: '0' });
 
-      const late = yield* answer(shell, { command: 'sleep 20', description: 'Outlast its life', lifeMs: 300 });
+      const late = yield* answer(shell, { command: 'exec /usr/bin/perl -e "sleep while 1"', description: 'Outlast its life', lifeMs: 300 });
       expect(fact(late.display)).toEqual({ label: 'ended', value: 'life ran out' });
     }).pipe(Effect.provide(BunServices.layer)),
   );

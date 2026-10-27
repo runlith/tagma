@@ -108,6 +108,7 @@ const killGroup = (pid: number): void => {
 };
 
 const openRig = Effect.gen(function* () {
+  const spawned = yield* Deferred.make<void>();
   const orphaned: number[] = [];
   const standing = yield* Effect.acquireRelease(Effect.promise(startHost), (host) =>
     Effect.promise(async () => {
@@ -134,9 +135,18 @@ const openRig = Effect.gen(function* () {
     root,
     executions: port,
     spawner,
+    spawned: Deferred.await(spawned),
     world: {
       files: machineWorld.files,
-      exec: Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      exec: Layer.succeed(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make((command) =>
+          spawner.spawn(command).pipe(
+            Effect.updateService(SpawnAnnotation, (annotation) => ({ ...annotation, budget: {} })),
+            Effect.tap(() => Deferred.succeed(spawned, undefined)),
+          ),
+        ),
+      ),
       git: machineWorld.git,
       working: machineWorld.working,
       environment: machineWorld.environment,
@@ -177,9 +187,9 @@ layer(services, { excludeTestServices: true })('a managed call whose host dies',
     Effect.gen(function* () {
       const rig = yield* openRig;
       const pending = yield* Effect.forkChild(
-        answer(shellOf(rig.world, rig.root), { command: 'sleep 20', description: 'Outlast its host', waitMs: 30_000, lifeMs: 30_000 }),
+        answer(shellOf(rig.world, rig.root), { command: 'exec /usr/bin/perl -e "sleep while 1"', description: 'Outlast its host' }),
       );
-      yield* waitForCommand(rig.executions);
+      yield* rig.spawned;
       yield* rig.killHost;
       const outcome = yield* Fiber.join(pending);
       expect(outcome).toMatchObject({ verdict: { kind: 'unknown' } });
@@ -193,11 +203,10 @@ layer(services, { excludeTestServices: true })('a managed call whose host dies',
       const pending = yield* Effect.forkChild(
         Effect.gen(function* () {
           const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-          const handle = yield* spawner.spawn(ChildProcess.make('/bin/sh', ['-c', 'sleep 20'])).pipe(
+          const handle = yield* spawner.spawn(ChildProcess.make('/usr/bin/perl', ['-e', 'sleep while 1'])).pipe(
             Effect.provideService(SpawnAnnotation, {
               purpose: 'command',
               correlation: 'death-result',
-              budget: { timeoutMs: 30_000 },
             }),
           );
           const call = managedCall(handle);
@@ -221,11 +230,10 @@ layer(services, { excludeTestServices: true })('a managed call whose host dies',
       const gate = yield* Scope.make();
       yield* Effect.gen(function* () {
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-        yield* spawner.spawn(ChildProcess.make('/bin/sh', ['-c', 'sleep 20'])).pipe(
+        yield* spawner.spawn(ChildProcess.make('/usr/bin/perl', ['-e', 'sleep while 1'])).pipe(
           Effect.provideService(SpawnAnnotation, {
             purpose: 'command',
             correlation: 'death-scope',
-            budget: { timeoutMs: 30_000 },
           }),
         );
       }).pipe(Scope.provide(gate), Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, rig.spawner));

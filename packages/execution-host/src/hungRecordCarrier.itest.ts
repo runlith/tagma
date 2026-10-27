@@ -111,7 +111,12 @@ it.live('a host yields while a resize waits on a grid journal write that never a
       { whenPathHas: JOURNAL_FILE, onCall: 2, held, entered },
       Effect.fnUntraced(function* ({ executions, lanes, lifecycle, bindings, claim }) {
         const started = yield* executions.start(claim, keyOf('hung-grid'), {
-          command: { program: '/bin/sleep', args: ['30'], environment: [{ name: 'TERM', value: 'xterm-256color' }], cwd: '/tmp' },
+          command: {
+            program: '/usr/bin/perl',
+            args: ['-e', 'sleep while 1'],
+            environment: [{ name: 'TERM', value: 'xterm-256color' }],
+            cwd: '/tmp',
+          },
           transport: { _tag: 'pty', geometry: { rows: 24, columns: 80 } },
           lifetime: 'held',
           purpose: 'command',

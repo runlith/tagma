@@ -86,7 +86,7 @@ export const terminalContracts = (name: string, services: Layer.Layer<Adapter | 
           child,
           Effect.gen(function* () {
             const channel = terminal(child);
-            yield* writeAll(channel, Buffer.from('sh -c \'echo RE""ADY; exec sleep 12\'\n'));
+            yield* writeAll(channel, Buffer.from('sh -c \'echo RE""ADY; exec /usr/bin/perl -e "sleep while 1"\'\n'));
             yield* ready(channel);
             yield* channel.interrupt();
             yield* writeAll(channel, Buffer.from('echo ST""ATUS=$? EN""D\n'));

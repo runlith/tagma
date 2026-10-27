@@ -412,7 +412,7 @@ it.live('a setsid escapee a round proved is ended through the set after its lead
     const reader = yield* processReader(library);
     const leader = yield* Effect.acquireRelease(
       Effect.sync(() =>
-        Bun.spawn(['/bin/sh', '-c', 'perl -e "use POSIX; POSIX::setsid(); exec(q{sleep}, q{13731})" & sleep 20'], {
+        Bun.spawn(['/bin/sh', '-c', '/usr/bin/perl -e "use POSIX; POSIX::setsid(); sleep while 1" & /usr/bin/perl -e "sleep while 1"'], {
           stdout: 'ignore',
           stderr: 'ignore',
           detached: true,
@@ -447,7 +447,10 @@ it.live('a setsid escapee a round proved is ended through the set after its lead
       );
       const members = yield* set.members;
       escapee = members.find(
-        (member) => member.facts?.args._tag === 'Read' && member.facts.args.value.join(' ') === 'sleep 13731' && member.work === member.pid,
+        (member) =>
+          member.facts?.args._tag === 'Read' &&
+          member.facts.args.value.includes('use POSIX; POSIX::setsid(); sleep while 1') &&
+          member.work === member.pid,
       )?.pid;
       return escapee;
     }).pipe(Effect.repeat({ schedule: Schedule.spaced(50), until: (pid) => pid !== undefined }));

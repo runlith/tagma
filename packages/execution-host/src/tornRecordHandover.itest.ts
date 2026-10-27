@@ -56,7 +56,7 @@ const claimed = Effect.fnUntraced(function* (name: string) {
 });
 
 const principal = principalOf('torn-handover');
-const PRINTS = 'printf first; sleep 0.3; printf torn; exec sleep 30';
+const PRINTS = 'printf first; sleep 0.3; printf torn; exec /usr/bin/perl -e "sleep while 1"';
 const launchOf = (script: string): LaunchRequest => ({
   command: { program: '/bin/sh', args: ['-c', script], environment: [] },
   transport: { _tag: 'pipes', stdin: 'ignore' },
