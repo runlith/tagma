@@ -22,6 +22,7 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   readonly ready: Promise<void>;
   private remembered = $state<string | null>(null);
   private refreshing: Promise<void> | null = null;
+  private asked = 0;
   private readonly byId = $derived(new Map(this.projects.map((project) => [project.id, project])));
   readonly contextId = $derived(this.contextProject?.id ?? null);
   private readonly sought = new Set<number>();
@@ -123,14 +124,22 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   }
 
   refreshProjects(): Promise<void> {
+    this.asked += 1;
     if (this.refreshing !== null) return this.refreshing;
-    const reading = this.repo.list.refresh({ throwOnError: true }).then((projects) => {
-      if (projects !== undefined) this.adopt(projects);
-    });
-    this.refreshing = reading;
-    return reading.finally(() => {
+    const reading = this.reread().finally(() => {
       if (this.refreshing === reading) this.refreshing = null;
     });
+    this.refreshing = reading;
+    return reading;
+  }
+
+  private async reread(): Promise<void> {
+    for (;;) {
+      const asked = this.asked;
+      const projects = await this.repo.list.refresh({ throwOnError: true });
+      if (projects !== undefined) this.adopt(projects);
+      if (this.asked === asked) return;
+    }
   }
 
   private async read(): Promise<void> {

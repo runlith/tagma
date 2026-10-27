@@ -5,6 +5,7 @@ import { Git } from '@runlith/git/Git';
 import { MachineStore, storeDirectory } from '../../platform/contract/service/store.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { runGit } from '../../platform/git/ownGit.js';
+import { replaceFile } from '../../platform/durable/files.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { type Relocated, relocatedPath, relocatedText } from '../../platform/contract/service/relocation.js';
 import { TREE_MERGES, TREE_ORIGINS, TREE_RETIRED, TREE_SERVED } from '../contract/wire/storage.js';
@@ -14,6 +15,8 @@ import { graphHome, graphsHome, MIRROR_FILES, mirrorFile, mirrorHome, mirrorsHom
 import { namedStorage } from './namedStorage.js';
 
 const STEP = '20261027000000_storage_by_id';
+const STAGED = `${STEP}:staged`;
+const MOVING = '.moving';
 const marking = writes('GraphSteps.storageById', [meta]);
 
 type StoredProject = { readonly id: number; readonly name: string };
@@ -40,11 +43,20 @@ export const storageById = Effect.fn('GraphSteps.storageById')(
       if (from === to || !(yield* files.exists(from)) || (yield* files.exists(to))) return;
       yield* files.rename(from, to);
     });
+    const replaced = (path: string, text: string, mode?: number) =>
+      replaceFile(path, text, mode).pipe(
+        Effect.mapError(
+          (failure) =>
+            new GateRefusal('graph-pool', `${failure.path} could not be rewritten: ${failure.reason}`, [
+              'correct the reported storage failure, then start the server again',
+            ]),
+        ),
+      );
     const relocate = Effect.fnUntraced(function* (path: string, places: readonly Relocated[]) {
       if (!(yield* files.exists(path))) return;
       const before = yield* files.readFileString(path);
       const after = relocatedText(before, places);
-      if (after !== before) yield* files.writeFileString(path, after);
+      if (after !== before) yield* replaced(path, after, (yield* files.stat(path)).mode);
     });
     const real = Effect.fnUntraced(function* (path: string) {
       return (yield* files.exists(path)) ? yield* files.realPath(path) : path;
@@ -54,30 +66,31 @@ export const storageById = Effect.fn('GraphSteps.storageById')(
       return (yield* files.stat(path)).type !== 'Directory' || (yield* files.readDirectory(path)).length > 0;
     });
 
-    let pending = rows.flatMap((row) => {
+    const into = Effect.fnUntraced(function* (from: string, to: string) {
+      if (!(yield* files.exists(from))) return;
+      if (yield* occupied(to))
+        return yield* new GateRefusal('graph-pool', `${from} cannot move into occupied ${to}`, [
+          `keep both copies: move ${to} aside, then start the server again`,
+        ]);
+      yield* files.makeDirectory(dirname(to), { recursive: true });
+      yield* files.rename(from, to);
+    });
+    const homes = rows.flatMap((row) => {
       const named = namedStorage(appHome, row.name);
       return [
-        { from: named.graph, to: graphHome(appHome, row.id) },
-        { from: named.mirror, to: mirrorHome(appHome, row.id) },
+        { from: named.graph, root: graphsHome(appHome), id: String(row.id) },
+        { from: named.mirror, root: mirrorsHome(appHome), id: String(row.id) },
       ];
     });
-    while (pending.length > 0) {
-      const blocked: Relocated[] = [];
-      for (const move of pending) {
-        if (!(yield* files.exists(move.from))) continue;
-        if (yield* occupied(move.to)) {
-          blocked.push(move);
-          continue;
-        }
-        yield* files.makeDirectory(dirname(move.to), { recursive: true });
-        yield* files.rename(move.from, move.to);
-      }
-      const [first] = blocked;
-      if (first !== undefined && blocked.length === pending.length)
-        return yield* new GateRefusal('graph-pool', `${first.from} cannot move into occupied ${first.to}`, [
-          `keep both copies: move ${first.to} aside, then start the server again`,
-        ]);
-      pending = blocked;
+    if ((yield* store.db.select().from(meta).where(eq(meta.key, STAGED)).get()) === undefined) {
+      for (const home of homes) yield* into(home.from, join(`${home.root}${MOVING}`, home.id));
+      yield* store.transaction(marking, () => store.db.insert(meta).values({ key: STAGED, value: 'done' }));
+    }
+    for (const home of homes) yield* into(join(`${home.root}${MOVING}`, home.id), join(home.root, home.id));
+    for (const root of [graphsHome(appHome), mirrorsHome(appHome)]) {
+      const moving = `${root}${MOVING}`;
+      if ((yield* files.exists(moving)) && (yield* files.readDirectory(moving)).length === 0)
+        yield* files.remove(moving, { recursive: true });
     }
 
     const graphs = yield* real(graphsHome(appHome));
@@ -133,7 +146,7 @@ export const storageById = Effect.fn('GraphSteps.storageById')(
         if (root === null) continue;
         yield* mirrorMoved(former, root);
         const target = join(gitDir, TREE_RETIRED, keyOf(root));
-        if (!(yield* files.exists(target))) yield* files.writeFileString(target, root);
+        if (!(yield* files.exists(target))) yield* replaced(target, root, (yield* files.stat(path)).mode);
         yield* files.remove(path);
       }
       for (const recovery of yield* listed(join(graph, 'recovery'))) {
@@ -159,7 +172,9 @@ export const storageById = Effect.fn('GraphSteps.storageById')(
       for (const failure of identified.unread)
         yield* Effect.logWarning('a mirror kept the identity it had under the project name', failure);
     }
-    yield* store.transaction(marking, () => store.db.insert(meta).values({ key: STEP, value: 'done' }));
+    yield* store.transaction(marking, () =>
+      Effect.andThen(store.db.insert(meta).values({ key: STEP, value: 'done' }), store.db.delete(meta).where(eq(meta.key, STAGED))),
+    );
   },
   (effect) =>
     effect.pipe(

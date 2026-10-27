@@ -92,6 +92,33 @@ test.each([
   expect(visited).toEqual([{ href: moved, replaced: true }]);
 });
 
+test('a rename told while an older registry read is still in flight is followed once a read made after the news lands', async () => {
+  const { router, visited } = makeRouterWithLog({
+    url: new URL('/first/graph', 'http://localhost'),
+    routeId: '/[project]/graph/[[id]]',
+    params: { project: 'first' },
+  });
+  const older = Promise.withResolvers<readonly Project[]>();
+  const answers = [
+    older.promise,
+    Promise.resolve(projects.map((project) => (project.id === 1 ? { ...project, name: 'renamed' } : project))),
+  ];
+  const workspace = new Workspace(
+    { list: stubSingle({ loadOrThrow: async () => projects, refresh: () => answers.shift()! }) } as never,
+    router,
+    makePlatform({ local: makeStorage() }),
+    new Failure((error) => {
+      throw error;
+    }),
+  );
+  await waitUntil(() => workspace.loaded);
+  const reading = workspace.refreshProjects();
+  const told = workspace.refreshProjects();
+  older.resolve(projects);
+  await Promise.all([reading, told]);
+  expect(visited).toEqual([{ href: '/renamed/graph', replaced: true }]);
+});
+
 test('a project registered after the registry was read is found by one re-read, however many readers ask for it', async () => {
   const later: Project = { ...projects[0]!, id: 3, name: 'polygon', repoKey: 'polygon', rootPath: '/projects/polygon' };
   let reads = 0;
