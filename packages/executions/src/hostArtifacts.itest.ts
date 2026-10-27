@@ -40,6 +40,7 @@ const bundle = (): string => {
     wrote(root, 'carrier', 'sqlite-process.js', 'export const carrier = true;\n'),
     wrote(root, 'evidence', 'worker.js', 'export const evidence = true;\n'),
     wrote(root, 'sampler', 'usageSampler.js', 'export const sampler = true;\n'),
+    wrote(root, 'terminals', 'terminals.js', 'export const terminals = true;\n'),
     wrote(root, 'recovery', 'recovery.js', 'export const recover = () => undefined;\n'),
   ];
   const declared = {
@@ -196,6 +197,7 @@ layer(Layer.merge(BunServices.layer, Layer.sync(Pinned, bundle)), { excludeTestS
         wrote(root, 'carrier', 'sqlite-process.js', 'export const carrier = true;\n'),
         wrote(root, 'evidence', 'worker.js', 'export const evidence = true;\n'),
         wrote(root, 'sampler', 'usageSampler.js', 'export const sampler = true;\n'),
+        wrote(root, 'terminals', 'terminals.js', 'export const terminals = true;\n'),
       ];
       const declared = {
         protocol: 'executions/1' as const,

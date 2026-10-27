@@ -188,17 +188,15 @@ export const buildArtifact = Effect.fnUntraced(function* (
     .pipe(
       Effect.catchTag('PlatformError', (error) => refuse(EVIDENCE_ENTRY, `the worker source could not be resolved: ${error.reason._tag}`)),
     );
-  const sampler = yield* files
-    .realPath(path.join(input.source, 'src/posix/processes.worker.ts'))
-    .pipe(
-      Effect.catchTag('PlatformError', (error) =>
-        refuse('sampler', `the process worker source could not be resolved: ${error.reason._tag}`),
-      ),
-    );
+  const worker = (role: ArtifactRole, relative: string) =>
+    files
+      .realPath(path.join(input.source, relative))
+      .pipe(Effect.catchTag('PlatformError', (error) => refuse(role, `${relative} could not be resolved: ${error.reason._tag}`)));
   const beside = new Map<string, ArtifactRole>([
     [carrier.path, carrier.role],
     [evidence, 'evidence'],
-    [sampler, 'sampler'],
+    [yield* worker('sampler', 'src/posix/processes.worker.ts'), 'sampler'],
+    [yield* worker('terminals', 'src/posix/terminals.worker.ts'), 'terminals'],
   ]);
   const bundling = input.bundling ?? {};
   const host = yield* bundled(path.join(input.source, 'src/main.ts'), HOST_ENTRY, 'host', beside, at, bundling, input.maps);

@@ -36,6 +36,7 @@ const SYMBOLS = {
   execution_platform_fd_interrupt: { args: [FFIType.i32], returns: FFIType.i32 },
   execution_platform_fd_terminal: { args: [FFIType.i32, FFIType.i32, FFIType.ptr], returns: FFIType.i32 },
   execution_platform_fd_foreground: { args: [FFIType.i32, FFIType.ptr], returns: FFIType.i32 },
+  execution_platform_thread_interactive: { args: [], returns: FFIType.i32 },
   execution_platform_reactor_open: { args: [FFIType.ptr], returns: FFIType.ptr },
   execution_platform_reactor_arm: { args: [FFIType.ptr, FFIType.i32, FFIType.u64, FFIType.i32, FFIType.i32], returns: FFIType.i32 },
   execution_platform_reactor_take: { args: [FFIType.ptr, FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
@@ -156,6 +157,10 @@ export class Descriptors {
         external: external !== 0,
       },
     };
+  }
+
+  interactive(): NativeStatus {
+    return this.status(this.library.symbols.execution_platform_thread_interactive());
   }
 
   openReactor(callback: JSCallback): { readonly reactor: ReactorHandle } | Refused {

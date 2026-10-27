@@ -6,11 +6,11 @@ import { Context, Data, Effect, FileSystem, Layer, Option, Schedule, Schema, Str
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { ExecutionRef, ExecutionId, InstallationId } from '@runlith/executions/protocol/execution';
 import type { LaunchRequest, LaunchTransport } from '@runlith/executions/protocol/launch';
-import { TRANSFER_LIMIT } from '@runlith/executions/protocol/capacity';
+import { TRANSFER_LIMIT, type ExecutionLimits } from '@runlith/executions/protocol/capacity';
 import { ProcessControl } from './ProcessControl';
 import { Processes, type ProcessReader } from './ProcessReader';
-import { makeExecutionInput } from './ExecutionInput';
 import { admit, runtimeProfile } from './runtimeFixture';
+import { TerminalInputs } from './TerminalInputs';
 import { Holder, HolderRefused } from './holder/Holder';
 import { launchNative, type NativeSource } from './nativeLaunch';
 import { loadLibrary, type LoadedLibrary } from './posix/Library';
@@ -22,6 +22,7 @@ import { makeProcessTables } from './ProvenSet';
 import { terminalFacts } from './posix/testing/terminal';
 import { Descriptors } from './posix/native';
 import { Descriptor } from './posix/Descriptor';
+import { isThreadTerminal } from './posix/TerminalThread';
 
 const ref = ExecutionRef.make({
   installation: InstallationId.make('native-launch'),
@@ -71,9 +72,26 @@ const command = Effect.fnUntraced(function* (argv: readonly [string, ...string[]
   expect(Number(yield* child.exitCode)).toBe(0);
   return stdout.trim();
 }, Effect.scoped);
-const fillTerminal = Effect.fnUntraced(function* (native: Effect.Success<ReturnType<typeof launchNative>>) {
+const terminalOf = (native: Effect.Success<ReturnType<typeof launchNative>>) => {
   const terminal = native.held.channels._tag === 'pty' ? native.held.channels.terminal : undefined;
-  if (!(terminal instanceof Descriptor)) return yield* new FixtureFailed({ message: 'the launch provided no POSIX terminal' });
+  return terminal instanceof Descriptor || (terminal !== undefined && isThreadTerminal(terminal))
+    ? Effect.succeed(terminal)
+    : Effect.fail(new FixtureFailed({ message: 'the launch provided no POSIX terminal' }));
+};
+const terminalInput = Effect.fnUntraced(function* (native: Effect.Success<ReturnType<typeof launchNative>>, limits: ExecutionLimits) {
+  const terminal = yield* terminalOf(native);
+  const inputs = yield* TerminalInputs;
+  const ending = native.sink.end;
+  return yield* inputs.open(terminal, {
+    limits,
+    ref,
+    announce: Effect.void,
+    end: () => (ending._tag === 'Closes' ? ending.close() : Effect.void),
+    resized: () => Effect.void,
+  });
+});
+const fillTerminal = Effect.fnUntraced(function* (native: Effect.Success<ReturnType<typeof launchNative>>) {
+  const terminal = yield* terminalOf(native);
   const descriptors = yield* Effect.acquireRelease(Effect.try({ try: () => Descriptors.load(HOLDER_LIBRARY), catch: failed }), (loaded) =>
     Effect.sync(() => loaded.unload()),
   );
@@ -440,7 +458,7 @@ while True: signal.pause()`;
         yield* through(native.sources[0]!, 'ready');
         yield* fillTerminal(native);
         const limits = runtimeProfile({ inputPendingBytes: 65536 }).execution;
-        const input = yield* makeExecutionInput({ sink: native.sink, limits, ref, announce: Effect.void });
+        const input = yield* terminalInput(native, limits);
         expect(
           (yield* admit(input, {
             sequence: 0,
@@ -484,7 +502,7 @@ while True: signal.pause()`;
         yield* through(native.sources[0]!, 'ready');
         yield* fillTerminal(native);
         const limits = runtimeProfile({ inputPendingBytes: 65536 }).execution;
-        const input = yield* makeExecutionInput({ sink: native.sink, limits, ref, announce: Effect.void });
+        const input = yield* terminalInput(native, limits);
         for (let sequence = 0; sequence < 2; sequence++) {
           expect(
             (yield* admit(input, {

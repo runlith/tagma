@@ -26,6 +26,7 @@ import { Processes } from '../ProcessReader';
 import { PlatformFacts } from '../PlatformFacts';
 import { ProcessControl } from '../ProcessControl';
 import { Holder } from '../holder/Holder';
+import { TerminalInputs } from '../TerminalInputs';
 import type { HolderLoss, UnadoptedExecution } from '@runlith/executions/protocol/runtime';
 import { type NativeExecution } from '../nativeLaunch';
 import { type ProcessWatch, makeProcessWatch } from '../ProcessWatch';
@@ -114,6 +115,7 @@ type Quiescence = { readonly ticket: QuiescenceTicket; readonly operation: HostR
 
 export const openState = Effect.fnUntraced(function* ({ volumeOf }: { readonly volumeOf: VolumeReader }) {
   const holder = yield* Holder;
+  const terminals = yield* TerminalInputs;
   const store = yield* ExecutionStore;
   const admission = yield* HostAdmission;
   const custodian = yield* Custodian;
@@ -182,6 +184,7 @@ export const openState = Effect.fnUntraced(function* ({ volumeOf }: { readonly v
     spawner,
     platform,
     holder,
+    terminals,
     strays,
     control,
     residuals,

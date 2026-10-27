@@ -21,6 +21,7 @@ export const ArtifactRole = Schema.Literals([
   'carrier',
   'evidence',
   'sampler',
+  'terminals',
   'recovery',
   'metadata',
 ]);
@@ -34,6 +35,7 @@ export const REQUIRED_ROLES: ReadonlyArray<ArtifactRole> = [
   'carrier',
   'evidence',
   'sampler',
+  'terminals',
   'recovery',
 ];
 

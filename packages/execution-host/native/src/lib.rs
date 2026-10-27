@@ -326,6 +326,20 @@ pub unsafe extern "C" fn execution_platform_fd_foreground(fd: i32, values: *mut 
     })
 }
 
+unsafe extern "C" {
+    fn pthread_set_qos_class_self_np(class: u32, relative: i32) -> i32;
+}
+
+const QOS_CLASS_USER_INTERACTIVE: u32 = 0x21;
+
+#[unsafe(no_mangle)]
+pub extern "C" fn execution_platform_thread_interactive() -> i32 {
+    status(|| match unsafe { pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0) } {
+        0 => Ok(()),
+        errno => Err(Refusal::Failed(format!("pthread_set_qos_class_self_np: {}", std::io::Error::from_raw_os_error(errno)))),
+    })
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn execution_platform_reactor_open(callback: Option<unsafe extern "C" fn()>) -> *mut Reactor {
     pointer(ptr::null_mut(), || {

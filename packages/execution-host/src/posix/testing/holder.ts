@@ -13,7 +13,8 @@ import { loadLibrary, type LibraryUnavailable } from '../Library';
 import { Holder } from '../../holder/Holder';
 import { Descriptors } from '../native';
 import { HolderUnavailable } from '../../holder-client/Connection';
-import { openHolder } from '../PosixHolder';
+import { openPosixHolder } from '../PosixHolder';
+import { TerminalInputs } from '../../TerminalInputs';
 import { isolatedProcess, type FixtureProcess } from './isolated';
 
 const RELEASE = resolve(import.meta.dir, '../../../native/target/release');
@@ -35,8 +36,7 @@ export const testHolder = (
   HolderUnavailable | LibraryUnavailable,
   FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
 > => {
-  const held = Layer.effect(
-    Holder,
+  const held = Layer.effectContext(
     Effect.gen(function* () {
       const native = yield* Effect.acquireRelease(
         Effect.try({ try: () => Descriptors.load(library), catch: (error) => unavailable(`${library}: ${String(error)}`) }),
@@ -102,12 +102,12 @@ export const testHolder = (
           `the holder handed no control descriptor (${JSON.stringify(received)}, exit ${child.exitCode() ?? 'pending'})`,
         );
       }
-      const holder = yield* openHolder(library, control);
+      const { holder, inputs } = yield* openPosixHolder(library, control);
       yield* Effect.addFinalizer(() =>
         Effect.flatMap(Effect.exit(holder.vacate), (vacated) => (Exit.isFailure(vacated) ? child.kill : Effect.void)).pipe(Effect.orDie),
       );
       connected = true;
-      return holder;
+      return Context.make(Holder, holder).pipe(Context.add(TerminalInputs, inputs));
     }),
   );
   return Layer.effectContext(

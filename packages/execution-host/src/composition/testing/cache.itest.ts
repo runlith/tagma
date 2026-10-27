@@ -28,6 +28,7 @@ it.live('reuses a bundle after a test report changes, invalidates build inputs a
     yield* write('src/b.ts', 'export const value = "config-b";');
     yield* write('src/recovery.ts', 'console.log("recovery");');
     yield* write('src/posix/processes.worker.ts', 'export {};');
+    yield* write('src/posix/terminals.worker.ts', 'export {};');
     yield* files.writeFileString(join(directory, 'packages/performance/src/store/worker.ts'), 'export {};');
     yield* write('drizzle/001.sql', 'select 1;');
     yield* files.writeFileString(report, '{ "elapsed": 1 }');

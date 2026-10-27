@@ -124,6 +124,7 @@ layer(fixture, { excludeTestServices: true })('a bundle this repository produces
         'recovery',
         'runtime',
         'sampler',
+        'terminals',
       ]);
       for (const part of verified.parts) expect(Number((yield* files.stat(join(built.root, part.path))).size)).toBe(part.bytes);
       const schema = verified.parts.filter((part) => part.path.startsWith(`${MIGRATIONS}/`));

@@ -12,12 +12,12 @@ import {
   type StreamEnding,
 } from '@runlith/executions/protocol/execution';
 import { type LaunchRequest, type NativeProcess } from '@runlith/executions/protocol/launch';
-import { type Stream as RecordStream } from '@runlith/executions/protocol/record';
+import { type Stream as RecordStream, type TerminalGeometry } from '@runlith/executions/protocol/record';
 import { type ProcessWatchReading, type UnverifiableResource } from '@runlith/executions/protocol/stop';
 import { type Execution, makeExecution } from '../Execution';
 import { makeExecutionCustody } from '../ExecutionCustody';
 import { ExecutionStore } from '../store/ExecutionStore';
-import { type ExecutionInput, InputActUnsupported, type InputSink, makeExecutionInput } from '../ExecutionInput';
+import { type ExecutionInput, InputActUnsupported, InputWriteFailed, makeExecutionInput } from '../ExecutionInput';
 import { makeSegmentRecord, type SegmentRecord } from '../ExecutionRecord';
 import { type ExecutionStop, type RecordFacts, makeExecutionStop } from '../ExecutionStop';
 import { makeInterpretation, type Interpretation, type InterpretationUnavailable, type ReplySink } from '../Interpretation';
@@ -110,8 +110,25 @@ export const assemble = Effect.fnUntraced(function* (
   accepted?: Accepted,
   adopted?: Adopted,
 ) {
-  const { store, custodian, bindings, capacity, fs, path, holder, strays, tables, watch, pacing, calls, reclaim, held, records, limits } =
-    registry;
+  const {
+    store,
+    custodian,
+    bindings,
+    capacity,
+    fs,
+    path,
+    holder,
+    terminals,
+    strays,
+    tables,
+    watch,
+    pacing,
+    calls,
+    reclaim,
+    held,
+    records,
+    limits,
+  } = registry;
   const over = Deferred.makeUnsafe<void>();
   yield* Effect.addFinalizer(() => Effect.asVoid(Deferred.succeed(over, undefined)));
   const transport = launch.transport._tag;
@@ -208,39 +225,53 @@ export const assemble = Effect.fnUntraced(function* (
                   },
         );
 
-  const sink: InputSink = {
-    initiallyClosed: native.sink.initiallyClosed,
-    write: native.sink.write,
-    stop: native.sink.stop,
-    interrupt: native.sink.interrupt,
-    end: native.sink.end,
-    resize: Effect.fn('ExecutionRegistry.resize')(function* (geometry) {
-      yield* native.sink.resize(geometry);
-      const at = yield* record
-        .regrid(geometry)
-        .pipe(Effect.mapError((failure) => new InputActUnsupported({ act: 'resize', reason: 'unreadable', detail: failure.detail })));
-      if (interpreting === undefined) return;
-      yield* interpreting.resize(geometry, at).pipe(
-        Effect.mapError(
-          (failure): InputActUnsupported =>
-            new InputActUnsupported({
-              act: 'resize',
-              reason: failure.reason === 'budget' || failure.reason === 'profile' ? 'geometry' : 'unreadable',
-              detail: failure.detail,
-            }),
-        ),
-      );
-      yield* reclaim.measure(ref.execution);
-      if (presentation !== undefined) yield* presentation.invalidate();
-    }),
-  };
+  const resized = Effect.fn('ExecutionRegistry.resize')(function* (geometry: TerminalGeometry) {
+    const at = yield* record
+      .regrid(geometry)
+      .pipe(Effect.mapError((failure) => new InputActUnsupported({ act: 'resize', reason: 'unreadable', detail: failure.detail })));
+    if (interpreting === undefined) return;
+    yield* interpreting.resize(geometry, at).pipe(
+      Effect.mapError(
+        (failure): InputActUnsupported =>
+          new InputActUnsupported({
+            act: 'resize',
+            reason: failure.reason === 'budget' || failure.reason === 'profile' ? 'geometry' : 'unreadable',
+            detail: failure.detail,
+          }),
+      ),
+    );
+    yield* reclaim.measure(ref.execution);
+    if (presentation !== undefined) yield* presentation.invalidate();
+  });
   const announce = Effect.suspend(() =>
     Effect.flatMap(Ref.getAndSet(changed, Deferred.makeUnsafe<void>()), (standing) => {
       held.touched(ref.execution);
       return Effect.asVoid(Deferred.succeed(standing, undefined));
     }),
   );
-  const queue = yield* makeExecutionInput({ sink, limits, ref, announce, carried: adopted?.departure?.input });
+  const terminal = native.held.channels._tag === 'pty' ? native.held.channels.terminal : undefined;
+  const ending = native.sink.end;
+  const carried = adopted?.departure?.input;
+  const queue =
+    terminal === undefined
+      ? yield* makeExecutionInput({
+          sink: { ...native.sink, resize: (geometry) => Effect.andThen(native.sink.resize(geometry), resized(geometry)) },
+          limits,
+          ref,
+          announce,
+          carried,
+        })
+      : yield* terminals.open(terminal, {
+          limits,
+          ref,
+          announce,
+          carried,
+          end: () =>
+            ending._tag === 'Closes'
+              ? ending.close()
+              : Effect.fail(new InputWriteFailed({ reason: 'closed', detail: ending.refusal.detail })),
+          resized,
+        });
   input = queue;
   const interpretation =
     adopted !== undefined

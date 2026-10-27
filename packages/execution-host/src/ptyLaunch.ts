@@ -5,6 +5,7 @@ import type { NativeExit, ProcessCost } from '@runlith/executions/protocol/execu
 import type { EndedAt, ResidualResource, StopAction, UnverifiableResource } from '@runlith/executions/protocol/stop';
 import { climb, type LadderAim } from '@runlith/executions/stopLadder';
 import { InputActUnsupported, InputWriteFailed, type InputSink } from './ExecutionInput';
+import { terminalSink } from './TerminalInputs';
 import type { EndingReason, NativeEnding, StopTarget } from './ExecutionStop';
 import type { HeldExecution, Terminal } from './holder/Holder';
 import { type ProvenSet, type Descendant, type ProcessTables, makeProvenSet } from './ProvenSet';
@@ -23,7 +24,6 @@ import {
   stepOf,
   unmeasured,
   withAncestry,
-  writeOnce,
   type NativeExecution,
 } from './nativeLaunch';
 
@@ -195,35 +195,26 @@ const ending = Effect.fnUntraced(function* (
   );
 });
 
-const sinkOf = (terminal: Terminal | undefined, held: HeldExecution): InputSink => ({
-  initiallyClosed: terminal === undefined,
-  write: terminal === undefined ? () => Effect.fail(closedTerminal()) : writeOnce(terminal),
-  stop: terminal === undefined ? Effect.void : terminal.stopWriting,
-  interrupt: (onFlush) =>
-    terminal === undefined
-      ? Effect.fail(
-          new InputActUnsupported({ act: 'interrupt', reason: 'unreadable', detail: 'the terminal of this execution was closed' }),
-        )
-      : terminal
-          .interrupt(onFlush)
-          .pipe(
-            Effect.mapError((failure) =>
-              failure._tag === 'TerminalInterruptRefused'
-                ? new InputActUnsupported({ act: 'interrupt', reason: failure.reason, detail: failure.detail })
-                : new InputWriteFailed({ reason: failure.reason === 'os' ? 'os' : 'closed', detail: failure.detail }),
-            ),
+const closeInput = (held: HeldExecution) => () =>
+  held.closeInput.pipe(Effect.mapError((failure) => new InputWriteFailed({ reason: 'closed', detail: failure.detail })));
+
+const sinkOf = (terminal: Terminal | undefined, held: HeldExecution): InputSink =>
+  terminal !== undefined
+    ? terminalSink(terminal, closeInput(held), () => Effect.void)
+    : {
+        initiallyClosed: true,
+        write: () => Effect.fail(closedTerminal()),
+        stop: Effect.void,
+        interrupt: () =>
+          Effect.fail(
+            new InputActUnsupported({ act: 'interrupt', reason: 'unreadable', detail: 'the terminal of this execution was closed' }),
           ),
-  resize: (next) =>
-    terminal === undefined
-      ? Effect.fail(new InputActUnsupported({ act: 'resize', reason: 'unreadable', detail: 'the terminal of this execution was closed' }))
-      : terminal
-          .resize(next.rows, next.columns)
-          .pipe(Effect.mapError((failure) => new InputActUnsupported({ act: 'resize', reason: 'unreadable', detail: failure.detail }))),
-  end: {
-    _tag: 'Closes',
-    close: () => held.closeInput.pipe(Effect.mapError((failure) => new InputWriteFailed({ reason: 'closed', detail: failure.detail }))),
-  },
-});
+        resize: () =>
+          Effect.fail(
+            new InputActUnsupported({ act: 'resize', reason: 'unreadable', detail: 'the terminal of this execution was closed' }),
+          ),
+        end: { _tag: 'Closes', close: closeInput(held) },
+      };
 
 export const retirePty = Effect.fnUntraced(function* (held: HeldExecution, tables: ProcessTables | undefined): Effect.fn.Return<void> {
   if (held.reaped === undefined) {

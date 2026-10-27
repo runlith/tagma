@@ -1,16 +1,18 @@
-import { Effect, FileSystem, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
 import { Holder } from '../holder/Holder';
 import { connect, HolderUnavailable } from '../holder-client/Connection';
 import type { Link } from '../holder-client/Link';
+import { TerminalInputs } from '../TerminalInputs';
 import { Descriptor } from './Descriptor';
 import { Descriptors } from './native';
 import { Reactor } from './Reactor';
+import { openTerminalThread } from './TerminalThread';
 import { prepareLaunch } from './launch';
 
 export const CONTROL_VARIABLE = 'EXECUTION_HOLDER_FD';
 const RECEIVE_DESCRIPTORS = 64;
 
-export const openHolder = Effect.fn('posix.openHolder')(function* (library: string, control: number) {
+export const openPosixHolder = Effect.fn('posix.openHolder')(function* (library: string, control: number) {
   const files = yield* FileSystem.FileSystem;
   const { native, reactor } = yield* Effect.acquireRelease(
     Effect.gen(function* () {
@@ -29,6 +31,7 @@ export const openHolder = Effect.fn('posix.openHolder')(function* (library: stri
         if (yield* reactor.retire) native.unload();
       }),
   );
+  const thread = yield* openTerminalThread(library).pipe(Effect.mapError((failure) => new HolderUnavailable({ detail: failure.detail })));
   const channel = new Descriptor(native, reactor, control);
   const slots = new Int32Array(RECEIVE_DESCRIPTORS);
   const link: Link = {
@@ -44,7 +47,7 @@ export const openHolder = Effect.fn('posix.openHolder')(function* (library: stri
     discard: (fd) => {
       native.close(fd);
     },
-    terminal: (fds) => new Descriptor(native, reactor, fds[0]!),
+    terminal: (fds) => thread.adopt(fds[0]!),
     pipe: (fd) => new Descriptor(native, reactor, fd),
     workState: (work, leader, exited) => {
       const read = native.groupState(work, leader, exited);
@@ -52,17 +55,20 @@ export const openHolder = Effect.fn('posix.openHolder')(function* (library: stri
     },
     prepare: (launch) => prepareLaunch(launch, native).pipe(Effect.provideService(FileSystem.FileSystem, files)),
   };
-  return yield* connect(link);
+  return { holder: yield* connect(link), inputs: thread.inputs };
 });
 
+export const openHolder = (library: string, control: number) => Effect.map(openPosixHolder(library, control), (opened) => opened.holder);
+
 export const holderLayer = (library: string) =>
-  Layer.effect(
-    Holder,
+  Layer.effectContext(
     Effect.suspend(() => {
       const named = process.env[CONTROL_VARIABLE];
       const control = named === undefined ? Number.NaN : Number(named);
       return Number.isInteger(control) && control >= 0
-        ? openHolder(library, control)
+        ? Effect.map(openPosixHolder(library, control), (opened) =>
+            Context.make(Holder, opened.holder).pipe(Context.add(TerminalInputs, opened.inputs)),
+          )
         : Effect.fail(new HolderUnavailable({ detail: `${CONTROL_VARIABLE} names no descriptor; this logic was not started by a holder` }));
     }),
   );
