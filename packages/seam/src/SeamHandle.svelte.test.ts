@@ -60,3 +60,33 @@ test('a drag keeps its grip while every frame rewrites the split the seam reads'
   expect(commits).toEqual([140 / SPAN_PX]);
   unmount(app);
 });
+
+test('handles drawing one seam light together, keep the light across a new seam, and one leaving spares the drag of the other', () => {
+  const pane = { base: 240, min: 120, max: 480 };
+  const top = $state({ seam: new Seam(pane), label: 'Resize the column' });
+  const below = $state({ seam: top.seam, label: 'Resize the column' });
+  const upper = mount(SeamHandle, { target: document.body, props: top });
+  const lower = mount(SeamHandle, { target: document.body, props: below });
+  flushSync();
+  const [upperButton, lowerButton] = document.body.querySelectorAll<HTMLElement>('[role="separator"]');
+  if (upperButton === undefined || lowerButton === undefined) throw new Error('Two handles were not drawn.');
+
+  upperButton.dispatchEvent(new PointerEvent('pointerenter'));
+  flushSync();
+  expect(lowerButton.classList.contains('lit')).toBe(true);
+
+  const next = new Seam({ ...pane, size: 300 });
+  top.seam = next;
+  below.seam = next;
+  flushSync();
+  expect(lowerButton.classList.contains('lit')).toBe(true);
+
+  lowerButton.dispatchEvent(pointer('pointerdown', 300));
+  unmount(upper);
+  flushSync();
+  expect(next.dragging).toBe(true);
+  expect(next.hovered).toBe(false);
+
+  window.dispatchEvent(pointer('pointerup', 300));
+  unmount(lower);
+});

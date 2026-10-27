@@ -37,9 +37,8 @@
 
   $effect(() => {
     if (!panes.showing) return;
-    const shown = seam.size;
-    untrack(() => frame.dock(shown));
-    return () => untrack(() => frame.dock(0));
+    const shown = seam;
+    return untrack(() => frame.show('area', shown));
   });
 </script>
 

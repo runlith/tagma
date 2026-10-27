@@ -12,6 +12,7 @@ import { ThreadChats } from './ThreadChats.js';
 import { ModelDefaults } from './ModelDefaults.svelte.js';
 import { keyedBy, liveFeed, mountShell, screen, threadsRepo, type TestApp } from '$lib/app/testing.js';
 import { testThreadSlot } from '$lib/app/slotWorld.js';
+import { AreaFrame } from '$lib/app/panes/AreaFrame.svelte.js';
 import { PaneRegistry } from '$lib/app/panes/PaneRegistry.js';
 import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
 import { ExecutionActs } from '$lib/features/executions/acts.svelte.js';
@@ -99,6 +100,7 @@ function mounted(): HTMLElement {
       MentionDrops,
       WorkLines,
       Seams,
+      AreaFrame,
       ReaderMarks,
       WallClock,
       Notices,

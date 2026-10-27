@@ -22,6 +22,7 @@
   import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
   import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
   import TabStrip from '$lib/app/panes/TabStrip.svelte';
+  import SeamHandle from '@runlith/seam/SeamHandle.svelte';
   import { App } from '@runlith/layer/svelte/App.svelte';
   import { ColumnRegistry } from './ColumnRegistry.js';
   import { Bar } from '../panes/Bar.svelte.js';
@@ -81,6 +82,8 @@
   const docked = $derived(inProject && panes.showing && frame.docked > 0);
   const searchHere = $derived(!(column?.open === true && column.search));
   const columns = $derived(`${roomy ? `${left}px` : 'fit-content(40%)'} minmax(0, 1fr)${docked ? ` ${frame.docked}px` : ''}`);
+  const columnSeam = $derived(frame.column !== null && (roomy || frame.column.dragging) ? frame.column : null);
+  const areaSeam = $derived(docked ? frame.area : null);
 
   const ZONE = 'flex h-full min-w-0 items-center gap-1';
 
@@ -190,6 +193,17 @@
       {#key projectKey}
         <TabStrip class="self-stretch" />
       {/key}
+    </div>
+  {/if}
+
+  {#if columnSeam !== null}
+    <div class="absolute top-0 -bottom-px flex" style:left="{left}px">
+      <SeamHandle seam={columnSeam} label="Resize the {column?.label ?? 'column'}" />
+    </div>
+  {/if}
+  {#if areaSeam !== null}
+    <div class="absolute top-0 -bottom-px flex" style:left="{width - frame.docked}px">
+      <SeamHandle seam={areaSeam} label="Resize the area beside" />
     </div>
   {/if}
 </header>

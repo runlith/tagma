@@ -6,6 +6,7 @@
   import { Seam } from '@runlith/seam/Seam.svelte';
   import SeamHandle from '@runlith/seam/SeamHandle.svelte';
   import { Router } from '@runlith/layer/Router';
+  import { AreaFrame } from '$lib/app/panes/AreaFrame.svelte.js';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
   import { SIDEBAR_SEAM } from '$lib/features/graph/sidebar/seams.js';
@@ -42,6 +43,8 @@
     onCommit: (size) => seams.set(SIDEBAR_SEAM, size),
     onCollapse: () => sidebar.toggle(),
   });
+  const frame = AreaFrame.use();
+  $effect(() => frame.show('column', seam));
 
   const project = $derived(workspace.contextProject);
   const rows = $derived([...projectTree.blocks.values()]);

@@ -5,6 +5,7 @@
   import { Overlay } from '@runlith/primitives/Overlay.svelte';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
+  import { AreaFrame } from '$lib/app/panes/AreaFrame.svelte.js';
   import { Palette } from '$lib/app/panes/palette.js';
   import { Seam } from '@runlith/seam/Seam.svelte';
   import SeamHandle from '@runlith/seam/SeamHandle.svelte';
@@ -72,6 +73,8 @@
   }
 
   const seam = new Seam(seams.seam(THREADS_SEAM), { onCommit: (size) => seams.set(THREADS_SEAM, size), onCollapse: () => onCollapse?.() });
+  const frame = AreaFrame.use();
+  $effect(() => frame.show('column', seam));
 
   const ROW_MENU =
     'absolute right-2 top-1 grid h-[18px] w-5 translate-y-0.5 place-items-center rounded-md text-muted-foreground opacity-0 transition-[opacity,transform,color,background-color] duration-150 ease-instrument hover:bg-hover hover:text-foreground group-hover:translate-y-0 group-hover:opacity-100 group-has-[:focus-visible]:translate-y-0 group-has-[:focus-visible]:opacity-100 group-has-[[data-state=open]]:translate-y-0 group-has-[[data-state=open]]:opacity-100';

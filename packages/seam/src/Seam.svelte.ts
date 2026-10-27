@@ -1,4 +1,5 @@
 import { clamp } from '@runlith/utils/number';
+import { untrack } from 'svelte';
 
 export type SeamAxis = 'x' | 'y';
 
@@ -33,12 +34,14 @@ type Gesture = {
   readonly fill: number;
   readonly at: number;
   readonly release: (() => void) | undefined;
+  readonly grip: object | undefined;
 };
 
 export class Seam {
   dragging = $state(false);
   willCollapse = $state(false);
 
+  private pointers = $state(0);
   private wish = $state(0);
   private sized = $state(false);
   private viewport = $state(0);
@@ -65,6 +68,14 @@ export class Seam {
 
   get axis(): SeamAxis {
     return this.pane.axis ?? 'x';
+  }
+
+  get side(): SeamSide {
+    return this.pane.side ?? 'end';
+  }
+
+  get hovered(): boolean {
+    return this.pointers > 0;
   }
 
   get min(): number {
@@ -97,14 +108,14 @@ export class Seam {
     };
   }
 
-  grab(event: PointerEvent): void {
+  grab(event: PointerEvent, grip?: object): void {
     if (event.button !== 0) return;
     event.preventDefault();
     this.measure();
     this.cancel();
     const from = this.size;
     const fill = !this.sized || this.split ? (this.pane.fill ?? this.fillOf(from)) : this.fillOf(from);
-    this.gesture = { pointerId: event.pointerId, from, fill, at: this.along(event), release: this.report.onGrab?.() };
+    this.gesture = { pointerId: event.pointerId, from, fill, at: this.along(event), release: this.report.onGrab?.(), grip };
     this.wish = from;
     this.dragging = true;
     this.userSelect = document.body.style.userSelect;
@@ -151,12 +162,19 @@ export class Seam {
     this.report.onReset?.();
   }
 
-  dispose(): void {
-    this.cancel();
+  point(): () => void {
+    untrack(() => (this.pointers += 1));
+    let pointed = true;
+    return () => {
+      if (!pointed) return;
+      pointed = false;
+      untrack(() => (this.pointers -= 1));
+    };
   }
 
-  private get side(): SeamSide {
-    return this.pane.side ?? 'end';
+  dispose(grip?: object): void {
+    if (grip !== undefined && this.gesture?.grip !== grip) return;
+    this.cancel();
   }
 
   private get split(): boolean {

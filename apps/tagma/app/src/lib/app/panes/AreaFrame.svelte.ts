@@ -1,10 +1,13 @@
 import { Service } from '@runlith/layer/key';
+import type { Seam } from '@runlith/seam/Seam.svelte';
 import { Seams } from '$lib/shared/seams/Seams.svelte.js';
 import { AREA_SEAM } from './seams.js';
 
 const AREA = AREA_SEAM.pane;
 
 export const MAIN_MIN = 480;
+
+export type FramePlace = 'column' | 'area';
 
 export class AreaFrame extends Service<AreaFrame>()('AreaFrame', { tier: 'app' }) {
   static *make() {
@@ -13,7 +16,7 @@ export class AreaFrame extends Service<AreaFrame>()('AreaFrame', { tier: 'app' }
 
   private measured = $state(0);
 
-  private dockedWidth = $state(0);
+  private shown = $state<Record<FramePlace, Seam | null>>({ column: null, area: null });
 
   constructor(private readonly seams: Seams) {
     super();
@@ -24,7 +27,15 @@ export class AreaFrame extends Service<AreaFrame>()('AreaFrame', { tier: 'app' }
   }
 
   get docked(): number {
-    return this.dockedWidth;
+    return this.shown.area?.size ?? 0;
+  }
+
+  get column(): Seam | null {
+    return this.shown.column;
+  }
+
+  get area(): Seam | null {
+    return this.shown.area;
   }
 
   get width(): number {
@@ -40,8 +51,11 @@ export class AreaFrame extends Service<AreaFrame>()('AreaFrame', { tier: 'app' }
     this.measured = stage;
   }
 
-  dock(width: number): void {
-    this.dockedWidth = width;
+  show(place: FramePlace, seam: Seam): () => void {
+    this.shown[place] = seam;
+    return () => {
+      if (this.shown[place] === seam) this.shown[place] = null;
+    };
   }
 
   resize(width: number): void {

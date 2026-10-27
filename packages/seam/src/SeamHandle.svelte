@@ -12,12 +12,18 @@
   let { seam, label, contained = false, line }: Props = $props();
 
   let handle = $state<HTMLButtonElement | null>(null);
+  let pointed = $state(false);
+  const grip = {};
 
   const thickness = $derived(line ?? 1);
 
   $effect(() => {
     untrack(() => seam.measure());
-    return () => seam.dispose();
+    return () => seam.dispose(grip);
+  });
+
+  $effect(() => {
+    if (pointed) return seam.point();
   });
 
   $effect(() => {
@@ -36,16 +42,20 @@
   class="seam"
   class:dragging={seam.dragging}
   class:collapsing={seam.willCollapse}
+  class:lit={seam.hovered}
   class:standing={line !== undefined}
   style:--seam-thickness="{thickness}px"
   data-axis={seam.axis}
+  data-side={seam.side}
   role="separator"
   aria-label={label}
   aria-orientation={seam.axis === 'x' ? 'vertical' : 'horizontal'}
   aria-valuenow={seam.size}
   aria-valuemin={seam.min}
   aria-valuemax={seam.max}
-  onpointerdown={(event) => seam.grab(event)}
+  onpointerenter={() => (pointed = true)}
+  onpointerleave={() => (pointed = false)}
+  onpointerdown={(event) => seam.grab(event, grip)}
   onkeydown={(event) => seam.key(event)}
   ondblclick={() => seam.reset()}
 ></button>
@@ -64,6 +74,7 @@
     border: 0;
     background: transparent;
     outline: none;
+    -webkit-app-region: no-drag;
   }
 
   .seam[data-axis='x'] {
@@ -76,6 +87,14 @@
     height: calc(var(--seam-thickness) + 8px);
     margin-block: calc(-4px - var(--seam-thickness)) -4px;
     cursor: row-resize;
+  }
+
+  .seam[data-axis='x'][data-side='start'] {
+    margin-inline: -4px calc(-4px - var(--seam-thickness));
+  }
+
+  .seam[data-axis='y'][data-side='start'] {
+    margin-block: -4px calc(-4px - var(--seam-thickness));
   }
 
   .seam.standing[data-axis='x'] {
@@ -106,7 +125,7 @@
     width: 100%;
   }
 
-  .seam:hover::after {
+  .seam.lit::after {
     opacity: 0.3;
   }
 
@@ -126,7 +145,7 @@
     height: var(--seam-thickness);
   }
 
-  .seam.standing:hover::after,
+  .seam.standing.lit::after,
   .seam.standing.dragging::after {
     background: var(--seam-line-active, var(--seam-line, var(--foreground, currentColor)));
   }
