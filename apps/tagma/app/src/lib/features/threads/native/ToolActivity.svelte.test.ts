@@ -62,6 +62,7 @@ const running: ProcessLine = {
   unstarted: null,
   place: null,
   current: null,
+  currentPid: null,
 };
 
 const open: ChatEntry = { id: 'call', runId: 'run', kind: 'tool', toolCallId: 'call', toolName: 'bash', toolState: 'input-available' };

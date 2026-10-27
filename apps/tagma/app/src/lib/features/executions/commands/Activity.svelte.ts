@@ -624,5 +624,6 @@ function terminalLine(listing: TerminalRow, owner: ProcessOwner, outer: boolean,
     unstarted: null,
     place: record.rootId ?? null,
     current: null,
+    currentPid: null,
   };
 }

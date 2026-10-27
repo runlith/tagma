@@ -15,7 +15,7 @@ const group = (owner: LoadGroup['owner'], cores: number, pid: number): LoadGroup
   cores,
   memoryBytes: 100,
   unread: 0,
-  processes: [{ identity: { pid, birth: `${pid}:0` }, name: `p${pid}`, cores, memoryBytes: 100, signal: true }],
+  processes: [{ identity: { pid, birth: `${pid}:0` }, parent: 1, name: `p${pid}`, cores, memoryBytes: 100, signal: true }],
 });
 
 const reading = (groups: readonly LoadGroup[], usedBytes = 1): LoadReading => ({
@@ -61,7 +61,7 @@ const named: Named = {
   unread: undefined,
 };
 
-test('an agent row holds every execution of its thread with its own label, CPU and memory, what they left running, and the rows add up to the machine', () => {
+test('an agent row holds every execution of its thread with its own label, CPU, memory and processes, what they left running, and the rows add up to the machine', () => {
   const { view } = new LoadList().compose(
     reading([
       group({ _tag: 'Execution', execution: ref('typecheck'), ended: false }, 3, 11),
@@ -85,6 +85,10 @@ test('an agent row holds every execution of its thread with its own label, CPU a
     })),
   ).toEqual([{ execution: 'typecheck', label: 'Typecheck tagma', share: 0.3, memoryBytes: 100 }]);
   expect(agent?.work?.residuals).toEqual([{ origin: ref('earlier'), pid: 12 }]);
+  expect(agent?.processes.map(({ pid, parent, execution }) => ({ pid, parent, execution }))).toEqual([
+    { pid: 11, parent: 1, execution: 'typecheck:1' },
+    { pid: 12, parent: 1, execution: undefined },
+  ]);
   expect(view.rows.reduce((sum, row) => sum + row.share, 0)).toBeCloseTo(view.share ?? 0, 9);
   expect(view.rows[0]?.key).toBe(agent?.key);
   expect(view.top).toMatchObject({ key: agent?.key, title: 'release-publish' });

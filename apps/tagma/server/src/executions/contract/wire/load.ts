@@ -27,6 +27,10 @@ export type LoadInterestTaken = typeof LoadInterestTaken.Type;
 export const LoadProcess = Schema.Struct({
   pid: Pid,
   birth: Schema.NonEmptyString,
+  parent: Schema.optional(Pid),
+  execution: Schema.optional(Schema.NonEmptyString).annotate({
+    description: 'The key of the live command or terminal this process belongs to, as its row work lists it.',
+  }),
   name: Schema.NonEmptyString,
   command: Schema.optional(Schema.String),
   role: Schema.optional(InstallationRole).annotate({ description: 'Which part of Tagma this process is, on the installation row.' }),

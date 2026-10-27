@@ -10,9 +10,11 @@
     unstartedNote,
     type ProcessLine,
   } from '$lib/features/executions/processes/lines.js';
+  import type { LoadExecution } from '@tagma/server/executions/contract/wire/load';
+  import { percent } from '$lib/features/executions/load/rows.js';
   import Bar from '$lib/shared/ui/Bar.svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
-  import { formatLimit, formatSpan, UNMEASURED } from '$lib/shared/figures.js';
+  import { formatBytes, formatLimit, formatSpan, UNMEASURED } from '$lib/shared/figures.js';
 
   let {
     line,
@@ -20,7 +22,15 @@
     held = false,
     adjustable = false,
     foreground = true,
-  }: { line: ProcessLine; view: CommandView; held?: boolean; adjustable?: boolean; foreground?: boolean } = $props();
+    load = null,
+  }: {
+    line: ProcessLine;
+    view: CommandView;
+    held?: boolean;
+    adjustable?: boolean;
+    foreground?: boolean;
+    load?: LoadExecution | null;
+  } = $props();
 
   const live = $derived(isLive(line));
   const silence = $derived(view.unconfirmed(line));
@@ -35,6 +45,7 @@
   $effect(() => (live ? view.watch() : undefined));
 
   const FACT = 'shrink-0 font-mono text-meta text-muted-foreground/60';
+  const FIGURE = 'shrink-0 font-mono text-meta tabular-nums text-muted-foreground/90';
 </script>
 
 {#snippet clock()}
@@ -89,6 +100,10 @@
     {/if}
     {#if foreground && line.current !== null && !isQueued(line)}
       <FadeText class={[FACT, 'max-w-48 text-muted-foreground/80']} text={line.current} title={line.current} />
+    {/if}
+    {#if load !== null && !isQueued(line)}
+      {#if load.share !== null}<span class={FIGURE} data-command-cpu>{percent(load.share)}</span>{/if}
+      {#if load.memoryBytes > 0}<span class={FIGURE} data-command-memory>{formatBytes(load.memoryBytes)}</span>{/if}
     {/if}
   {:else if line.exit !== null}
     <span class={[FACT, line.exit._tag === 'Code' && line.exit.code === 0 ? 'text-muted-foreground/90' : 'text-destructive']}

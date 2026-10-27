@@ -68,6 +68,34 @@ const NO_WORK: readonly LoadExecution[] = [];
 export const threadWork = (row: LoadRow | undefined): readonly LoadExecution[] =>
   row?.work?.executions.filter((one) => !one.session) ?? NO_WORK;
 
+export type ProcessBranch = { readonly process: LoadProcess; readonly depth: number };
+
+export type ExecutionLoad = { readonly execution: LoadExecution; readonly row: LoadRow };
+
+const NO_BRANCHES: readonly ProcessBranch[] = [];
+
+export const executionProcesses = (row: LoadRow, key: string): readonly ProcessBranch[] => {
+  const own = row.processes.filter((one) => one.execution === key);
+  if (own.length === 0) return NO_BRANCHES;
+  const pids = new Set(own.map((one) => one.pid));
+  const children = new Map<number | null, LoadProcess[]>();
+  for (const one of own) {
+    const parent = one.parent !== undefined && pids.has(one.parent) ? one.parent : null;
+    const held = children.get(parent);
+    if (held === undefined) children.set(parent, [one]);
+    else held.push(one);
+  }
+  const branches: ProcessBranch[] = [];
+  const walk = (parent: number | null, depth: number): void => {
+    for (const one of (children.get(parent) ?? []).toSorted((left, right) => left.pid - right.pid)) {
+      branches.push({ process: one, depth });
+      walk(one.pid, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return branches;
+};
+
 export type Background = LoadView['background'][number];
 
 export const workDone = (work: Background): string =>

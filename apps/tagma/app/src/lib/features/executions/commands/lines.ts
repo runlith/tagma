@@ -47,6 +47,7 @@ export function commandLine(reading: CommandReading, owner: ProcessOwner, root: 
     unstarted: entry?.ending?.unacquired ?? null,
     place: view.rootId ?? null,
     current: reading.current?.command ?? null,
+    currentPid: reading.current?.identity.pid ?? null,
   };
 }
 

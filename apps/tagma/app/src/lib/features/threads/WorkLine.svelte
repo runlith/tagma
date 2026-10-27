@@ -4,7 +4,7 @@
   import Square from '@lucide/svelte/icons/square';
   import SquareTerminal from '@lucide/svelte/icons/square-terminal';
   import Terminal from '@lucide/svelte/icons/terminal';
-  import type { LoadExecution } from '@tagma/server/executions/contract/wire/load';
+  import type { LoadExecution, LoadRow } from '@tagma/server/executions/contract/wire/load';
   import FadeText from '$lib/shared/FadeText.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
@@ -12,6 +12,7 @@
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import type { CommandView } from '$lib/features/executions/commands/Activity.svelte.js';
   import { ExecutionActs } from '$lib/features/executions/acts.svelte.js';
+  import NoOutput from '$lib/features/executions/commands/NoOutput.svelte';
   import { percent } from '$lib/features/executions/load/rows.js';
   import { isLive, type ProcessLine } from '$lib/features/executions/processes/lines.js';
   import TerminalView from '$lib/features/executions/terminal/View.svelte';
@@ -21,6 +22,7 @@
 
   let {
     execution,
+    row,
     line,
     view,
     open,
@@ -28,6 +30,7 @@
     onLeave,
   }: {
     execution: LoadExecution;
+    row: LoadRow;
     line: ProcessLine | null;
     view: CommandView;
     open: boolean;
@@ -127,16 +130,20 @@
         <span class="text-muted-foreground">{line?.note ? `${line.note} $` : '$'}</span>
         {line?.command ?? execution.label}
       </p>
-      {#if line !== null && line.transport === 'pipes' && printed !== false}
-        <TerminalView
-          class="h-56 rounded-md border border-vein"
-          key={line.key}
-          projectId={execution.projectId}
-          address={line.address}
-          program={title}
-          source={{ _tag: 'Output', record: line.kind }}
-          cwd={line.cwd}
-        />
+      {#if line !== null && line.transport === 'pipes'}
+        {#if printed !== false}
+          <TerminalView
+            class="h-56 rounded-md border border-vein"
+            key={line.key}
+            projectId={execution.projectId}
+            address={line.address}
+            program={title}
+            source={{ _tag: 'Output', record: line.kind }}
+            cwd={line.cwd}
+          />
+        {:else}
+          <NoOutput {line} load={{ execution, row }} class="rounded-md border border-vein" />
+        {/if}
       {/if}
     </div>
   {/if}

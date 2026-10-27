@@ -30,6 +30,7 @@ const line = (over: Partial<ProcessLine> = {}): ProcessLine => ({
   unstarted: null,
   place: null,
   current: null,
+  currentPid: null,
   ...over,
 });
 

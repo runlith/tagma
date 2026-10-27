@@ -95,10 +95,13 @@ export class LoadList {
       row.cores += group.cores;
       row.memoryBytes += group.memoryBytes;
       row.unread += group.unread;
+      const execution = group.owner._tag === 'Execution' && !group.owner.ended ? commandKey(group.owner.execution) : undefined;
       for (const one of group.processes)
         row.processes.push({
           pid: one.identity.pid,
           birth: one.identity.birth,
+          parent: one.parent,
+          execution,
           name: one.name,
           command: one.command,
           role: one.role,

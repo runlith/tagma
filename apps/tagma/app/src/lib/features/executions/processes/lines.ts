@@ -60,6 +60,7 @@ export type ProcessLine = {
   readonly unstarted: string | null;
   readonly place: string | null;
   readonly current: string | null;
+  readonly currentPid: number | null;
 };
 
 export const UNSTARTED_WORDS = {

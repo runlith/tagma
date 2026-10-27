@@ -11,6 +11,7 @@ import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 import { formatSpan } from '$lib/shared/figures.js';
+import type { ExecutionLoad } from './rows.js';
 
 export type ReadingState =
   | { readonly _tag: 'Connection'; readonly since: number }
@@ -72,6 +73,12 @@ export class Readings extends Service<Readings>()('LoadReadings', { tier: 'app' 
       if (this.state._tag === 'Lost') return { _tag: 'Lost', reason: this.state.reason, since: this.state.since };
       return null;
     });
+  }
+
+  execution(thread: string | null, key: string): ExecutionLoad | null {
+    const row = thread === null ? undefined : this.agents.get(thread);
+    const execution = row?.work?.executions.find((one) => one.key === key);
+    return row === undefined || execution === undefined ? null : { execution, row };
   }
 
   get pressed(): 'warning' | 'critical' | null {
