@@ -2,7 +2,7 @@ import type { ToolDisplay } from '@runlith/agent/tool/display';
 import { describe, expect, test } from 'vitest';
 import type { ActivityRow } from './activity';
 import type { ChatEntry } from './entries';
-import { markdownHeight, stepEstimate, TextHeights } from './rowEstimate';
+import { markdownHeight, stepEstimate, TextHeights, WELL_LINES } from './rowEstimate';
 import { builtinEntryKinds } from './builtinKinds';
 
 const kinds = builtinEntryKinds();
@@ -93,7 +93,7 @@ describe('what an open call is worth', () => {
     const opened = stepEstimate(call(display), false, open);
 
     expect(closed).toBeLessThan(40);
-    expect(opened).toBeGreaterThan(closed + 400);
+    expect(opened).toBeGreaterThan(closed + WELL_LINES * 20);
   });
 
   test('a body taller than its block reserves the ceiling', () => {

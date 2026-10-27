@@ -43,7 +43,7 @@ function counted<K>(keys: readonly K[], keyOf: (key: K) => string, threads: (key
   return [...held.values()].map(([key, seen]) => [key, seen.size]);
 }
 
-export function noticeLead(notices: readonly AgentSignalNotice[], strings: ChatStrings): string {
+export function noticeLead(notices: readonly AgentSignalNotice[], strings: ChatStrings): readonly string[] {
   const children = notices.flatMap((notice) => (notice.kind === 'child-update' ? [notice] : []));
   const calls = notices.flatMap((notice) => (notice.kind === 'call-ending' ? [notice] : []));
   const commands = notices.flatMap((notice) => (notice.kind === 'command-ending' ? [notice] : []));
@@ -81,7 +81,7 @@ export function noticeLead(notices: readonly AgentSignalNotice[], strings: ChatS
     );
     parts.push(strings.threadEvents(counts.map(([notice, count]) => ({ event: notice.event, count }))));
   }
-  return parts.join(' · ');
+  return parts;
 }
 
 export function noticeThread(thread: AgentThreadRef, threadName: ThreadName): NoticeThread {

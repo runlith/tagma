@@ -79,6 +79,7 @@
   --hand-4: oklch(0.52 0.16 275);
 
   --chat-raised: var(--raised);
+  --chat-sunken: var(--sunken);
   --chat-chrome: var(--chrome);
   --chat-field: var(--field);
   --chat-live: var(--status-in-work);

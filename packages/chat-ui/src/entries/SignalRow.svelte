@@ -3,9 +3,10 @@
   import { messageTime } from '../chatTime';
   import type { ChatAttachedDoc } from '../entries';
   import { type ChatEntryContext, type ChatEntryOf, useChatRendering } from '../renderers';
+  import { WORDS_LINES } from '../rowEstimate';
   import { useChatStrings } from '../strings';
   import AttachedDocsRow from './AttachedDocsRow.svelte';
-  import CollapsibleText from './CollapsibleText.svelte';
+  import Clamp from './Clamp.svelte';
   import EntryDisclosure from './EntryDisclosure.svelte';
 
   type Props = {
@@ -29,6 +30,7 @@
   {/if}
 {:else if context.verbose}
   <EntryDisclosure
+    id={rawKey}
     label={entry.signalType}
     mono
     occurredAt={entry.occurredAt}
@@ -37,26 +39,19 @@
     onToggle={() => context.setExpanded(rawKey, !context.expanded(rawKey))}
   />
 {:else}
-  <div class="mr-auto w-full min-w-0 max-w-feed">
+  <div class="mr-auto grid w-full min-w-0 max-w-feed gap-1">
     <p class="flex items-center gap-1.5 text-small text-muted-foreground/70">
       <span>{strings.fromAgent()}</span>
       {#if entry.occurredAt}<span class="text-muted-foreground/50">{messageTime(entry.occurredAt, strings.locale)}</span>{/if}
     </p>
-    <CollapsibleText
-      text={entry.text}
-      textClass="mt-1 min-w-0"
-      expanded={context.expanded(entry.id)}
-      onToggle={() => context.setExpanded(entry.id, !context.expanded(entry.id))}
-      content={authored}
-    />
+    <Clamp id={entry.id} lines={WORDS_LINES} class="leading-5">
+      {@render rendering.markdown({
+        cacheKey: entry.id,
+        size: 'ui',
+        class: 'text-muted-foreground',
+        text: entry.text,
+        onRendered: () => context.contentRendered(entry.id),
+      })}
+    </Clamp>
   </div>
 {/if}
-
-{#snippet authored(text: string)}
-  {@render rendering.markdown({
-    cacheKey: entry.id,
-    class: 'text-muted-foreground',
-    text,
-    onRendered: () => context.contentRendered(entry.id),
-  })}
-{/snippet}

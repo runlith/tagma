@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Well from './entries/Well.svelte';
   import { useChatRendering } from './renderers';
 
   let {
@@ -71,9 +72,9 @@
 {#if mounted}
   <div class="overflow-hidden ease-out" style={`height:${height}px;transition:height ${DURATION_MS}ms ease-out`}>
     <div bind:this={shell} class="box-border pt-2">
-      <div class="max-h-64 overflow-auto rounded-lg border border-border/60 bg-background/60 p-3">
-        {@render markdown({ class: 'text-body leading-6 text-foreground/90', cacheKey, text })}
-      </div>
+      <Well id={cacheKey} copy={text}>
+        {@render markdown({ size: 'small', class: 'text-muted-foreground', cacheKey, text })}
+      </Well>
     </div>
   </div>
 {/if}

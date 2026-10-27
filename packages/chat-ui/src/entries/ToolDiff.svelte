@@ -232,7 +232,7 @@
               </DiffRow>
             {:else if row}
               <DiffRow index={item.index} top={item.start} class={`flex items-baseline ${WASH[row.line.kind]}`} {measure} {wrap}>
-                <span class="sticky left-0 z-10 flex shrink-0 items-baseline gap-x-2 bg-background px-2 select-none">
+                <span class="sticky left-0 z-10 flex shrink-0 items-baseline gap-x-2 bg-chat-sunken px-2 select-none">
                   <span
                     class={['text-right', row.line.after === null ? 'text-chat-diff-removed/40' : 'text-muted-foreground/35']}
                     style={`width:${digits}ch`}>{row.line.after ?? row.line.before ?? ''}</span

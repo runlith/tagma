@@ -3,7 +3,8 @@
   import { type ChatEntryContext, type ChatEntryOf, useChatRendering } from '../renderers';
   import { useChatStrings } from '../strings';
   import AttachmentStrip from './AttachmentStrip.svelte';
-  import CollapsibleText from './CollapsibleText.svelte';
+  import { WORDS_LINES } from '../rowEstimate';
+  import Clamp from './Clamp.svelte';
   import MessageMeta from './MessageMeta.svelte';
   import UserMessageActions from './UserMessageActions.svelte';
   import WordsSender from './WordsSender.svelte';
@@ -27,13 +28,15 @@
   {/if}
   {#if entry.text}
     <div class="min-w-0 max-w-full overflow-hidden rounded-lg rounded-br-sm bg-chat-raised px-4 py-2 text-foreground">
-      <CollapsibleText
-        text={entry.text}
-        textClass={entry.sender === null ? 'whitespace-pre-wrap text-body leading-6' : 'min-w-0'}
-        expanded={context.expanded(entry.id)}
-        onToggle={() => context.setExpanded(entry.id, !context.expanded(entry.id))}
-        content={entry.sender === null ? textContent : authored}
-      />
+      <Clamp id={entry.id} lines={WORDS_LINES} class="text-body leading-6">
+        {#if entry.sender !== null}
+          {@render authored(entry.text)}
+        {:else}
+          <div class="whitespace-pre-wrap">
+            {#if textContent}{@render textContent(entry.text)}{:else}{entry.text}{/if}
+          </div>
+        {/if}
+      </Clamp>
     </div>
   {/if}
   {#if entry.unconfirmed}

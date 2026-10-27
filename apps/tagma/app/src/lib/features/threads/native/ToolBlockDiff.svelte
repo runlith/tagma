@@ -15,7 +15,7 @@
 </script>
 
 {#if lens && there}
-  <DiffBox class="rounded-lg border border-border/60 bg-background/60">
+  <DiffBox class="rounded-lg bg-sunken">
     <BlockDiffCard diff={lens.diff} marks={lens.marks} blocks={lens.blocks} {there} />
   </DiffBox>
 {/if}

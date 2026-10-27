@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import type { AgentSignalNotice } from '@runlith/agent/contracts';
   import { slide } from 'svelte/transition';
   import { messageTime } from '../chatTime';
@@ -8,17 +9,28 @@
   import { useChatRendering } from '../renderers';
   import { useChatStrings } from '../strings';
   import ThreadChip from './ThreadChip.svelte';
+  import Well from './Well.svelte';
 
-  let { notice, at, text }: { notice: AgentSignalNotice; at: string | undefined; text: string } = $props();
+  let {
+    id,
+    notice,
+    at,
+    text,
+    step = false,
+  }: { id: string; notice: AgentSignalNotice; at: string | undefined; text: string; step?: boolean } = $props();
 
   const rendering = useChatRendering();
   const strings = useChatStrings();
+  const context = $derived(rendering.context);
   let now = $state(Date.now());
-  let open = $state(false);
 
+  const openKey = $derived(`${id}:notice`);
+  const open = $derived(context.expanded(openKey));
   const threads = $derived(noticeThreads([notice], rendering.threadName));
   const share = $derived(notice.kind === 'child-update' ? warmShare(notice, at, now) : null);
-  const readable = $derived((notice.kind !== 'child-update' || notice.event === 'tasks') && text.trim().length > 0);
+  const readable = $derived(
+    notice.kind === 'command-ending' || ((notice.kind !== 'child-update' || notice.event === 'tasks') && text.trim().length > 0),
+  );
 
   $effect(() => {
     if (notice.kind !== 'child-update' || notice.cost.kind !== 'warm') return;
@@ -31,10 +43,32 @@
     return () => clearInterval(timer);
   });
 
+  const lineClass = $derived([
+    'flex min-w-0 gap-x-2 text-ui whitespace-nowrap tabular-nums',
+    step ? 'items-baseline leading-5' : 'h-8 items-center px-2',
+  ]);
+
+  function toggle(): void {
+    context.setExpanded(openKey, !open);
+  }
+
   function keyed(event: KeyboardEvent): void {
     if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
     event.preventDefault();
-    open = !open;
+    toggle();
+  }
+
+  function words(shown: AgentSignalNotice): string {
+    switch (shown.kind) {
+      case 'child-update':
+        return strings.childUpdate(shown);
+      case 'thread-event':
+        return strings.threadEvent(shown);
+      case 'call-ending':
+        return strings.callEnding(shown);
+      case 'command-ending':
+        return strings.commandEnding(shown);
+    }
   }
 </script>
 
@@ -42,56 +76,64 @@
   {#each threads as thread (thread.id)}
     <ThreadChip {thread} />
   {/each}
-  <span class="min-w-0 flex-1 whitespace-nowrap text-foreground" data-fade {@attach clipFade}
-    >{notice.kind === 'child-update'
-      ? strings.childUpdate(notice)
-      : notice.kind === 'thread-event'
-        ? strings.threadEvent(notice)
-        : notice.kind === 'command-ending'
-          ? strings.commandEnding(notice)
-          : strings.callEnding(notice)}{#if at !== undefined}<span class="text-muted-foreground">
-        · {messageTime(at, strings.locale)}</span
-      >{/if}{#if (notice.kind === 'child-update' || notice.kind === 'thread-event') && notice.forOperator}<span
-        class="ml-1.5 rounded-full bg-selected px-1.5 text-meta text-foreground">{strings.yourWords()}</span
-      >{/if}</span
-  >
+  <span class={['shrink-0', step ? 'text-muted-foreground' : 'text-foreground']}>{words(notice)}</span>
+  {#if notice.kind === 'command-ending' && notice.command !== null}
+    <span class="min-w-0 font-mono text-small text-muted-foreground" data-fade {@attach clipFade}>{notice.command}</span>
+  {/if}
+  {#if (notice.kind === 'child-update' || notice.kind === 'thread-event') && notice.forOperator}
+    <span class="shrink-0 rounded-sm bg-selected px-1.5 text-meta text-foreground">{strings.yourWords()}</span>
+  {/if}
+  {#if notice.kind === 'command-ending' && notice.exit !== null}
+    <span class="shrink-0 font-mono text-meta text-muted-foreground/60">{strings.commandExit(notice.exit)}</span>
+  {/if}
   {#if notice.kind === 'child-update'}
     {@const cost = notice.cost}
     {#if cost.tokens !== null}
-      <span class="shrink-0 whitespace-nowrap">{strings.childContext(formatContextTokens(cost.tokens, strings.locale))}</span>
+      <span class="shrink-0 whitespace-nowrap text-small text-muted-foreground/70"
+        >{strings.childContext(formatContextTokens(cost.tokens, strings.locale))}</span
+      >
     {/if}
     {#if cost.kind === 'warm' || cost.kind === 'cold'}
       {@const warm = cost.kind === 'warm' && share !== null && share > 0}
-      <span class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-        <span class="relative h-1 w-8 overflow-hidden rounded-full bg-border">
-          {#if warm}<span class="absolute inset-y-0 left-0 rounded-full bg-chat-live" style:width={`${(share ?? 0) * 100}%`}></span>{/if}
+      <span class="inline-flex shrink-0 items-center gap-1.5 self-center whitespace-nowrap text-small text-muted-foreground/70">
+        <span class="relative h-1 w-8 overflow-hidden bg-border">
+          {#if warm}<span class="absolute inset-y-0 left-0 bg-chat-live" style:width={`${(share ?? 0) * 100}%`}></span>{/if}
         </span>
         {cost.kind === 'warm' && warm ? strings.warmTill(messageTime(cost.until, strings.locale)) : strings.childCache('cold')}
       </span>
     {:else if cost.kind !== 'unknown'}
-      <span class="shrink-0 whitespace-nowrap">{strings.childCache(cost.kind)}</span>
+      <span class="shrink-0 whitespace-nowrap text-small text-muted-foreground/70">{strings.childCache(cost.kind)}</span>
     {/if}
+  {/if}
+  {#if at !== undefined}
+    <span class="shrink-0 font-mono text-meta tabular-nums text-muted-foreground/60">{messageTime(at, strings.locale)}</span>
+  {/if}
+  {#if readable}
+    <ChevronRight class={['size-3 shrink-0 self-center text-muted-foreground/40 transition-transform', open && 'rotate-90']} />
   {/if}
 {/snippet}
 
-<div class={['grid rounded-md', open ? 'bg-hover' : 'hover:bg-hover']}>
+{#snippet body()}
+  {#if notice.kind === 'command-ending'}
+    {#if notice.tail === null || notice.tail.trim() === ''}
+      <p class="text-small text-muted-foreground">{notice.tail === null ? strings.outputUnread() : strings.noOutput()}</p>
+    {:else}
+      <Well {id} text={notice.tail} />
+    {/if}
+  {:else}
+    <Well {id} text={text.trim()} />
+  {/if}
+{/snippet}
+
+<div class={['grid min-w-0', !step && ['rounded-md', open ? 'bg-hover' : readable && 'hover:bg-hover']]}>
   {#if readable}
-    <div
-      role="button"
-      tabindex="0"
-      aria-expanded={open}
-      class="flex h-8 min-w-0 cursor-pointer items-center gap-3 px-2 text-ui tabular-nums text-muted-foreground"
-      onclick={() => (open = !open)}
-      onkeydown={keyed}
-    >
+    <div role="button" tabindex="0" aria-expanded={open} class={[lineClass, 'cursor-pointer']} onclick={toggle} onkeydown={keyed}>
       {@render line()}
     </div>
   {:else}
-    <div class="flex h-8 min-w-0 items-center gap-3 px-2 text-ui tabular-nums text-muted-foreground">{@render line()}</div>
+    <div class={lineClass}>{@render line()}</div>
   {/if}
-  {#if open}
-    <div class="min-w-0 px-2 pb-2 text-small whitespace-pre-wrap break-words text-muted-foreground" transition:slide={{ duration: 160 }}>
-      {text}
-    </div>
+  {#if open && readable}
+    <div class={step ? 'mt-1.5 mb-1' : 'px-2 pb-2'} transition:slide={{ duration: 160 }}>{@render body()}</div>
   {/if}
 </div>

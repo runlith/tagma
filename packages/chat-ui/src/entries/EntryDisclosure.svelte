@@ -4,8 +4,10 @@
   import { slide } from 'svelte/transition';
   import { messageTime } from '../chatTime';
   import { useChatStrings } from '../strings';
+  import Well from './Well.svelte';
 
   type Props = {
+    id: string;
     label: string;
     mono?: boolean;
     occurredAt?: string;
@@ -15,7 +17,7 @@
     body?: Snippet;
   };
 
-  let { label, mono = false, occurredAt, text, open, onToggle, body }: Props = $props();
+  let { id, label, mono = false, occurredAt, text, open, onToggle, body }: Props = $props();
   const strings = useChatStrings();
 </script>
 
@@ -31,14 +33,11 @@
     {#if occurredAt}<span class="text-muted-foreground/50">{messageTime(occurredAt, strings.locale)}</span>{/if}
   </button>
   {#if open}
-    <div transition:slide={{ duration: 160 }}>
+    <div class="mt-2" transition:slide={{ duration: 160 }}>
       {#if body}
-        <div class="mt-2 max-h-80 overflow-auto rounded-lg border border-border/60 bg-background/60 px-3 py-2">
-          {@render body()}
-        </div>
+        <Well {id} copy={text}>{@render body()}</Well>
       {:else}
-        <pre
-          class="mt-2 max-h-80 overflow-auto rounded-lg border border-border/60 bg-background/60 p-3 text-small leading-5 whitespace-pre-wrap text-muted-foreground">{text}</pre>
+        <Well {id} {text} />
       {/if}
     </div>
   {/if}

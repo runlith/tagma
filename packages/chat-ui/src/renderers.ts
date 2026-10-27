@@ -28,10 +28,13 @@ export type ChatEntryContext = {
   contentRendered(entryId: string): void;
 };
 
+export type ChatTextSize = 'body' | 'ui' | 'small';
+
 export type ChatMarkdownBody = {
   text: string;
   cacheKey: string;
   streaming?: boolean;
+  size?: ChatTextSize;
   class?: string;
   onRendered?(): void;
 };

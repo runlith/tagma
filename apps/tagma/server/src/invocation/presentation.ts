@@ -68,7 +68,7 @@ export const presentationOf = (catalog: OperationCatalog['Service'], id: Operati
     negative: module?.negative ?? null,
     settled: (input, answer): ToolDisplay | undefined =>
       refusedAnswer(answer)
-        ? { form: 'text', title: called?.(input as Partial<Record<string, unknown>>).title, text: refusalText(answer) }
+        ? { form: 'none', title: called?.(input as Partial<Record<string, unknown>>).title }
         : display === undefined
           ? settled?.(input, answer)
           : display(answer),

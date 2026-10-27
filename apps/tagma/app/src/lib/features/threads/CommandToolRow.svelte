@@ -15,7 +15,7 @@
   <ToolRow {entry} />
   {#if line !== null && view !== null && line.transport === 'pipes' && line.printed !== false}
     <TerminalView
-      class="h-56 rounded-md border border-vein"
+      class="h-44 overflow-hidden rounded-lg border border-vein"
       key={line.key}
       {projectId}
       address={line.address}

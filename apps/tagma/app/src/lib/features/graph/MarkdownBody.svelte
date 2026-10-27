@@ -1,3 +1,7 @@
+<script lang="ts" module>
+  export type MarkdownSize = 'body' | 'ui' | 'small';
+</script>
+
 <script lang="ts">
   import { fallbackBlock, type MarkdownHtml } from '@runlith/markdown/render';
   import { getAllContexts, untrack } from 'svelte';
@@ -23,6 +27,7 @@
 
   let {
     text,
+    size = 'body',
     class: className = '',
     cacheKey,
     streaming = false,
@@ -35,6 +40,7 @@
     onRendered,
   }: {
     text: string;
+    size?: MarkdownSize;
     class?: string;
     cacheKey?: string;
     streaming?: boolean;
@@ -46,6 +52,12 @@
     from?: LinkFrom | undefined;
     onRendered?: () => void;
   } = $props();
+
+  const SIZES: Record<MarkdownSize, string> = {
+    body: 'text-body leading-6',
+    ui: 'text-ui leading-5',
+    small: 'text-small leading-5',
+  };
 
   const origin = ServerOrigin.use();
   const addresses = Addresses.use();
@@ -176,7 +188,11 @@
   }
 </script>
 
-<div class={['markdown-body text-body leading-6', className]} data-open-paths={paths === undefined ? undefined : ''}>
+<div
+  class={['markdown-body', SIZES[size], className]}
+  data-size={size === 'body' ? undefined : 'compact'}
+  data-open-paths={paths === undefined ? undefined : ''}
+>
   {#each blocks as block (block.key)}
     <div
       class="markdown-block"

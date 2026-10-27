@@ -1,5 +1,6 @@
 :root {
   --chat-raised: var(--card);
+  --chat-sunken: var(--muted);
   --chat-chrome: var(--background);
   --chat-field: var(--background);
 
@@ -95,6 +96,7 @@
   }
 
   --color-chat-raised: var(--chat-raised);
+  --color-chat-sunken: var(--chat-sunken);
   --color-chat-chrome: var(--chat-chrome);
   --color-chat-field: var(--chat-field);
   --color-chat-live: var(--chat-live);

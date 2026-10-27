@@ -84,10 +84,11 @@ export type ChatStrings = {
   sendingAnswer(): string;
   forgetTurn(): string;
   resendTurn(): string;
-  showMore(): string;
   showLess(): string;
   showAll(): string;
   showDetails(): string;
+  lineCount(count: number): string;
+  open(): string;
   copyAddress(): string;
   openThread(): string;
   openFile(path: string): string;

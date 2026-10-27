@@ -5,6 +5,7 @@
   import { performanceText } from '@tagma/server/performance/voice';
   import type { ChatEntryOf, ChatMarkdownBody } from '@runlith/chat-ui/renderers';
   import ToolRow from '@runlith/chat-ui/entries/ToolRow.svelte';
+  import Well from '@runlith/chat-ui/entries/Well.svelte';
   import type { Snippet } from 'svelte';
   import { diffParam } from '$lib/features/workspace/address.js';
   import Told from '$lib/shared/Told.svelte';
@@ -24,7 +25,7 @@
   const retainedFact = $derived(
     retained === null
       ? null
-      : `${byteText(retained.byteLength)} · ${retained.lineCount} ${retained.lineCount === 1 ? 'line' : 'lines'} · whole value retained`,
+      : `${byteText(retained.byteLength)} in ${retained.lineCount} ${retained.lineCount === 1 ? 'line' : 'lines'}, kept whole`,
   );
   const result = $derived(entry.toolOutput as GraphToolAnswer | PerformanceAnswer | undefined);
   const rows = $derived(result?.status !== 'ok' ? [] : 'blocks' in result ? result.blocks : 'tasks' in result ? result.tasks : []);
@@ -36,55 +37,49 @@
   );
 </script>
 
+{#snippet document(cacheKey: string, text: string)}
+  {@render markdown({ cacheKey, size: 'small', class: 'text-muted-foreground', text })}
+{/snippet}
+
 {#if retained !== null}
   <div class="grid min-w-0 gap-1.5">
-    <div class="text-small text-muted-foreground/50">{retainedFact}</div>
-    <pre
-      class="max-h-96 overflow-auto rounded-lg border border-border/60 bg-background/60 px-3 py-2 font-mono text-small leading-5 whitespace-pre-wrap text-muted-foreground/80">{retained.preview}</pre>
+    <div class="text-small text-muted-foreground/60">{retainedFact}</div>
+    <Well id={entry.id} text={retained.preview} />
   </div>
 {:else if result?.status === 'refused'}
-  <div class="rounded-lg border border-border/60 bg-background/60 px-3 py-2">
-    <Told told={refusalOf(result).told} detailsLabel="What the agent was told" />
-  </div>
+  <Told told={refusalOf(result).told} detailsLabel="What the agent was told" />
 {:else if result?.status === 'ok' && 'overview' in result}
-  <div class="max-h-96 overflow-auto rounded-lg border border-border/60 bg-background/60 px-3 py-2">
-    {@render markdown({ cacheKey: entry.id, text: result.overview })}
-  </div>
+  <Well id={entry.id} copy={result.overview}>{@render document(entry.id, result.overview)}</Well>
 {:else if result?.status === 'ok' && 'reads' in result}
   <div class="grid min-w-0 gap-1.5">
     {#each result.reads as read (read.name)}
-      <BlockCard block={read} place={{ projectId: read.projectId, checkout: null }} />
-      {#if read.body.trim()}
-        <div class="max-h-96 overflow-auto rounded-lg border border-border/60 bg-background/60 px-3 py-2">
-          {@render markdown({ cacheKey: `${entry.id}:${read.name}`, text: read.body })}
-        </div>
-      {/if}
+      <Well id={`${entry.id}:${read.name}`} copy={read.body.trim() === '' ? null : read.body}>
+        <BlockCard block={read} place={{ projectId: read.projectId, checkout: null }} />
+        {#if read.body.trim()}
+          <div class="mt-1">{@render document(`${entry.id}:${read.name}`, read.body)}</div>
+        {/if}
+      </Well>
     {/each}
   </div>
 {:else if result?.status === 'ok' && 'performance' in result}
-  <div class="max-h-96 overflow-auto rounded-lg border border-border/60 bg-background/60 px-3 py-2">
-    <pre class="font-mono text-small leading-5 whitespace-pre-wrap text-muted-foreground/80">{performanceText(
-        result.performance,
-        result.artifact,
-      )}</pre>
-  </div>
+  <Well id={entry.id} text={performanceText(result.performance, result.artifact)} />
 {:else if result?.status === 'ok' && 'page' in result}
-  <div class="max-h-96 overflow-auto rounded-lg border border-border/60 bg-background/60 px-3 py-2">
-    <pre class="font-mono text-small leading-5 whitespace-pre-wrap text-muted-foreground/80">{result.page}</pre>
-  </div>
+  <Well id={entry.id} text={result.page} />
 {:else if result?.status === 'ok' && 'block' in result}
   <div class="grid min-w-0 gap-1.5">
-    <BlockCard block={result.block} diff={wrote === null ? undefined : diffParam(wrote.range)} place={result.graphCopy} />
+    <Well id={entry.id} copy={null}>
+      <BlockCard block={result.block} diff={wrote === null ? undefined : diffParam(wrote.range)} place={result.graphCopy} />
+    </Well>
     {#if wrote !== null}
       <ToolBlockDiff name={wrote.name} range={wrote.range} />
     {/if}
   </div>
 {:else if rows.length > 0}
-  <div class="grid gap-1">
+  <Well id={entry.id} copy={null} count={String(rows.length)}>
     {#each rows as block (block.name)}
       <BlockCard {block} />
     {/each}
-  </div>
+  </Well>
 {:else}
   <ToolRow {entry} />
 {/if}

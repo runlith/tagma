@@ -33,7 +33,7 @@
 </script>
 
 <div
-  class={['code-body max-h-96 overflow-auto rounded-lg border border-border/60 bg-background/60', className]}
+  class={['code-body overflow-x-auto', className]}
   data-gutter={firstLine === undefined ? undefined : ''}
   style={firstLine === undefined ? undefined : `--code-first-line:${firstLine - 1}`}
 >
@@ -43,7 +43,7 @@
 <style>
   .code-body :global(pre) {
     margin: 0;
-    padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+    padding: 0;
     background: transparent !important;
     font-size: var(--text-small);
     line-height: 1.25rem;
@@ -66,7 +66,7 @@
     content: counter(code-line);
     display: inline-block;
     width: 2.5rem;
-    margin-right: calc(var(--spacing) * 4);
+    margin-right: calc(var(--spacing) * 3);
     color: color-mix(in oklch, var(--muted-foreground), transparent 55%);
     text-align: right;
     user-select: none;

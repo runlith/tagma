@@ -6,7 +6,8 @@
   import UserMessageActions from './UserMessageActions.svelte';
   import AttachedDocsRow from './AttachedDocsRow.svelte';
   import AttachmentStrip from './AttachmentStrip.svelte';
-  import CollapsibleText from './CollapsibleText.svelte';
+  import { WORDS_LINES } from '../rowEstimate';
+  import Clamp from './Clamp.svelte';
   import MessageMeta from './MessageMeta.svelte';
 
   type Props = {
@@ -39,13 +40,11 @@
   {/if}
   {#if entry.text && !isAutoAttachedDocText(entry.text, docs)}
     <div class="min-w-0 max-w-full overflow-hidden rounded-lg rounded-br-sm bg-chat-raised px-4 py-2 text-foreground">
-      <CollapsibleText
-        text={entry.text}
-        textClass="whitespace-pre-wrap text-body leading-6"
-        expanded={context.expanded(entry.id)}
-        onToggle={() => context.setExpanded(entry.id, !context.expanded(entry.id))}
-        content={textContent}
-      />
+      <Clamp id={entry.id} lines={WORDS_LINES} class="text-body leading-6">
+        <div class="whitespace-pre-wrap">
+          {#if textContent}{@render textContent(entry.text)}{:else}{entry.text}{/if}
+        </div>
+      </Clamp>
     </div>
   {/if}
   {#if entry.unconfirmed && entry.turnKey !== undefined}

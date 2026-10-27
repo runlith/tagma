@@ -4,11 +4,13 @@
   import type { ChatAttachment } from '../entries';
   import type { ChatEntryContext, ChatEntryOf } from '../renderers';
   import { useChatRendering } from '../renderers';
-  import { patchBodyHeight } from '../rowEstimate';
+  import { patchBodyHeight, WORDS_LINES } from '../rowEstimate';
   import { useChatStrings } from '../strings';
+  import type { ChatLink } from '../surface';
   import AttachmentStrip from './AttachmentStrip.svelte';
-  import ClampedText from './ClampedText.svelte';
+  import Clamp from './Clamp.svelte';
   import ToolDiff from './ToolDiff.svelte';
+  import Well from './Well.svelte';
 
   let { entry, context }: { entry: ChatEntryOf<'tool'>; context?: ChatEntryContext } = $props();
 
@@ -16,9 +18,6 @@
   const strings = useChatStrings();
 
   const display = $derived(entry.display);
-
-  const BLOCK = 'max-h-96 overflow-auto rounded-lg border border-border/60 bg-background/60';
-  const MONO = 'font-mono text-small leading-5';
 
   const interrupted = $derived.by(() => {
     const raw = entry.toolInputRaw;
@@ -36,6 +35,12 @@
 
   const readable = $derived(readableOutput(entry, (name, output) => rendering.kinds.toolModelText(name, output)));
 
+  const file = $derived<ChatLink | null>(
+    rendering.navigation.files && display?.form === 'code' && display.path !== undefined
+      ? { kind: 'file', path: display.path, line: display.firstLine }
+      : null,
+  );
+
   const pictures = $derived<readonly ChatAttachment[]>(
     (display?.images ?? []).map((image) => ({
       mime: image.mediaType,
@@ -43,70 +48,86 @@
       filename: image.label,
     })),
   );
+
+  const lineCount = (text: string): string => strings.lineCount(text.split('\n').length);
 </script>
 
 <div class="grid min-w-0 gap-2">
   {#if interrupted}
-    <div class={[MONO, 'flex min-w-0 gap-x-3 text-muted-foreground/60']}>
+    <div class="flex min-w-0 gap-x-3 font-mono text-small leading-5 text-muted-foreground/60">
       <span class="shrink-0">{strings.interrupted()}</span>
       <span class="shrink-0">{strings.characters(interrupted.size)}</span>
       {#if interrupted.where}<span class="min-w-0" data-fade {@attach clipFade}>{interrupted.where}</span>{/if}
     </div>
   {/if}
   {#if display?.form === 'message' && display.text}
-    <div class="border-l-2 border-border/60 pl-3">
-      {@render rendering.markdown({ cacheKey: entry.id, class: 'text-foreground/90', text: display.text })}
-    </div>
+    <Clamp id={entry.id} lines={WORDS_LINES} class="leading-5">
+      {@render rendering.markdown({ cacheKey: entry.id, size: 'ui', class: 'text-foreground/85', text: display.text })}
+    </Clamp>
   {:else if display?.form === 'code' && display.text}
-    {@render rendering.code({
-      cacheKey: entry.id,
-      text: display.text,
-      ...(display.language ? { language: display.language } : {}),
-      ...(display.firstLine === undefined ? {} : { firstLine: display.firstLine }),
-    })}
+    <Well id={entry.id} copy={display.text} open={file} count={lineCount(display.text)}>
+      {@render rendering.code({
+        cacheKey: entry.id,
+        text: display.text,
+        ...(display.language ? { language: display.language } : {}),
+        ...(display.firstLine === undefined ? {} : { firstLine: display.firstLine }),
+      })}
+    </Well>
   {:else if display?.form === 'command'}
-    <div class="grid gap-2">
-      <ClampedText text={display.command} id={`${entry.id}:command`} code />
+    <Well
+      id={entry.id}
+      copy={display.output ? `${display.command}\n${display.output}` : display.command}
+      count={display.output ? lineCount(display.output) : null}
+    >
+      <pre
+        class="min-w-0 font-mono text-small leading-5 whitespace-pre-wrap break-words text-foreground select-text">{display.command}</pre>
       {#if display.output}
-        <pre class={[BLOCK, MONO, 'p-3 whitespace-pre-wrap text-muted-foreground']}>{display.output}</pre>
+        <pre
+          class="mt-1 min-w-0 font-mono text-small leading-5 whitespace-pre-wrap break-words text-muted-foreground select-text">{display.output}</pre>
       {/if}
-    </div>
+    </Well>
   {:else if display?.form === 'diff'}
-    {#each display.files as file, index (index)}
-      {#if file.patch}
-        <div class={[BLOCK, 'flex']} style={`height:${patchBodyHeight(file.patch)}px`}>
+    {#each display.files as patched, index (index)}
+      {#if patched.patch}
+        <div class="flex min-w-0 overflow-hidden rounded-lg bg-chat-sunken py-1" style={`height:${patchBodyHeight(patched.patch)}px`}>
           <ToolDiff
-            patch={file.patch}
-            path={file.path}
-            language={file.language}
+            patch={patched.patch}
+            path={patched.path}
+            language={patched.language}
             highlight={rendering.highlight}
-            timedOut={file.timedOut === true}
+            timedOut={patched.timedOut === true}
           />
         </div>
       {/if}
     {/each}
   {:else if display?.form === 'list' && display.items.length > 0}
-    <ul class={[BLOCK, 'grid gap-0.5 px-3 py-2']}>
-      {#each display.items as item, index (index)}
-        <li class="flex min-w-0 items-baseline gap-2">
-          <span class={[MONO, 'shrink-0 text-muted-foreground']}>{item.label}</span>
-          {#if item.detail}
-            <span class={[MONO, 'min-w-0 flex-1 text-muted-foreground/50']} data-fade {@attach clipFade}>{item.detail}</span>
-          {/if}
-        </li>
-      {/each}
-      {#if listOverflow > 0}
-        <li class="pt-1 text-small text-muted-foreground/50">{strings.andMore(listOverflow)}</li>
-      {/if}
-    </ul>
+    <Well
+      id={entry.id}
+      copy={display.items.map((item) => (item.detail ? `${item.label}  ${item.detail}` : item.label)).join('\n')}
+      count={display.total === undefined ? null : String(display.total)}
+    >
+      <ul class="grid min-w-0">
+        {#each display.items as item, index (index)}
+          <li class="flex h-6 min-w-0 items-baseline gap-2 font-mono text-small leading-6">
+            <span class="shrink-0 text-foreground/80">{item.label}</span>
+            {#if item.detail}
+              <span class="min-w-0 flex-1 text-muted-foreground" data-fade {@attach clipFade}>{item.detail}</span>
+            {/if}
+          </li>
+        {/each}
+        {#if listOverflow > 0}
+          <li class="h-6 font-sans text-small leading-6 text-muted-foreground/60">{strings.andMore(listOverflow)}</li>
+        {/if}
+      </ul>
+    </Well>
   {:else if display?.form === 'markdown' && display.text}
-    <div class={[BLOCK, 'px-3 py-2']}>
-      {@render rendering.markdown({ cacheKey: entry.id, text: display.text })}
-    </div>
+    <Well id={entry.id} copy={display.text} count={strings.characters(display.text.length)}>
+      {@render rendering.markdown({ cacheKey: entry.id, size: 'small', class: 'text-muted-foreground', text: display.text })}
+    </Well>
   {:else if display?.form === 'text' && display.text}
-    <pre class={[BLOCK, MONO, 'p-3 whitespace-pre-wrap text-muted-foreground']}>{display.text}</pre>
+    <Well id={entry.id} text={display.text} />
   {:else if readable !== null}
-    <pre class={[BLOCK, MONO, 'p-3 whitespace-pre-wrap text-muted-foreground']}>{readable}</pre>
+    <Well id={entry.id} text={readable} />
   {/if}
   {#if pictures.length > 0}
     <AttachmentStrip entryId={entry.id} attachments={pictures} {context} align="start" />

@@ -15,6 +15,7 @@
   import { clipFade } from './clipFade';
   import { inStep } from './inStep';
   import NoticeLine from './entries/NoticeLine.svelte';
+  import Well from './entries/Well.svelte';
   import { noticeLead, noticeThreads } from './notices';
   import WordsSender from './entries/WordsSender.svelte';
   import FileChip from './FileChip.svelte';
@@ -211,8 +212,10 @@
       <div class="grid min-w-0 gap-2 pr-2 pb-2 pl-8">
         {#if item.text && item.sender !== null}
           <div class="min-w-0 text-foreground">
-            {@render rendering.markdown({ cacheKey: item.id, text: item.text })}
+            {@render rendering.markdown({ cacheKey: item.id, size: 'ui', text: item.text })}
           </div>
+        {:else if item.text && group === 'mail'}
+          <Well id={item.id} text={item.text} />
         {:else if item.text}
           <div class="min-w-0 whitespace-pre-wrap break-words text-ui text-foreground">
             {#if rendering.userText}{@render rendering.userText(item.text)}{:else}{item.text}{/if}
@@ -287,14 +290,20 @@
           {#if mailOpen}
             <span class="flex-1"></span>
           {:else}
-            <span class="min-w-0 flex-1 text-foreground/80" data-fade {@attach clipFade}>
-              {#each mailParts as item, index (item.id)}{#if index > 0}<span class="text-muted-foreground/60">
-                    ·
-                  </span>{/if}{#if item.notice === null}{@render line(mailLabel(item))}{:else}{@const notices = noticed.get(
-                    item.notice.kind,
-                  )?.notices ?? [item.notice]}{@const names = noticeNames(notices)}<span class="font-medium text-foreground"
-                    >{noticeLead(notices, strings)}</span
-                  >{#if names}<span class="text-muted-foreground/60"> · </span>{names}{/if}{/if}{/each}
+            <span class="flex min-w-0 flex-1 gap-x-3 text-foreground/80" data-fade {@attach clipFade}>
+              {#each mailParts as item (item.id)}
+                {#if item.notice === null}
+                  <span class="shrink-0">{@render line(mailLabel(item))}</span>
+                {:else}
+                  {@const notices = noticed.get(item.notice.kind)?.notices ?? [item.notice]}
+                  {@const names = noticeNames(notices)}
+                  <span class="flex shrink-0 gap-x-1.5">
+                    {#each noticeLead(notices, strings) as part, index (index)}<span class="font-medium text-foreground">{part}</span
+                      >{/each}
+                    {#if names}<span class="text-muted-foreground">{names}</span>{/if}
+                  </span>
+                {/if}
+              {/each}
             </span>
           {/if}
           <ChevronDown class={['size-3.5 shrink-0 transition-transform', mailOpen && 'rotate-180']} />
@@ -304,7 +313,7 @@
             {#if item.notice === null}
               {@render row(item, 'mail')}
             {:else}
-              <NoticeLine notice={item.notice} at={item.at || undefined} text={item.text} />
+              <NoticeLine id={item.id} notice={item.notice} at={item.at || undefined} text={item.text} />
             {/if}
           {/each}
         {/if}

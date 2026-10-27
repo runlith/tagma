@@ -49,7 +49,7 @@
   role={view.href === null ? 'link' : undefined}
   tabindex={view.href === null ? 0 : undefined}
   {@attach linkTarget(opening, () => blockLink({ name: block.name, copy, diff }), here)}
-  class="group/card flex min-w-0 items-center gap-2 rounded-lg border bg-raised/60 px-3 py-1.5 text-ui transition-colors hover:border-input"
+  class="-mx-1.5 flex h-7 min-w-0 items-center gap-2 rounded-md px-1.5 text-ui transition-colors select-none hover:bg-hover"
 >
   <TagIcon tag={tags.tagOf(block)} class="size-3.5 shrink-0 text-muted-foreground" />
   <FadeText class="min-w-0 flex-1" text={block.title} />

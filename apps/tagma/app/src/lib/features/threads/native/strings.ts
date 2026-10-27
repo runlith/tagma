@@ -144,7 +144,7 @@ export function nativeStrings(): ChatStrings {
     worked: () => 'Worked',
     workedFor: (duration) => `Worked for ${duration}`,
     stepsCount: (count) => `${count} ${count === 1 ? 'step' : 'steps'}`,
-    thoughtsCount: (count) => `Thought · ${count} steps`,
+    thoughtsCount: (count) => `${count} thoughts`,
     failed: () => 'Failed',
     interrupted: () => 'Cut off',
     characters: (count) => `${count.toLocaleString('en-US')} characters`,
@@ -180,10 +180,10 @@ export function nativeStrings(): ChatStrings {
           const who = index > 0 ? String(count) : count === 1 ? 'Agent' : `${count} agents`;
           return `${who} ${CHILD_EVENTS[event]}`;
         })
-        .join(' · '),
+        .join(', '),
     childUpdate: (update) =>
       update.event === 'model-changed'
-        ? `changed model · ${update.from.provider}/${update.from.model ?? 'default'} ${update.from.reasoning ?? 'default'} → ${update.to.provider}/${update.to.model ?? 'default'} ${update.to.reasoning ?? 'default'}`
+        ? `changed model ${update.from.provider}/${update.from.model ?? 'default'} ${update.from.reasoning ?? 'default'} → ${update.to.provider}/${update.to.model ?? 'default'} ${update.to.reasoning ?? 'default'}`
         : update.event === 'ran'
           ? update.forOperator
             ? 'answered you'
@@ -202,7 +202,7 @@ export function nativeStrings(): ChatStrings {
               : `${count} agents started`
             : `${count === 1 ? tool : `${count} × ${tool}`} ${CALL_OUTCOMES[outcome]} in the background`,
         )
-        .join(' · '),
+        .join(', '),
     callEnding: (ending) => `${ending.tool} ${CALL_OUTCOMES[ending.outcome]}`,
     commandEndings: (counts) => {
       const total = counts.reduce((sum, { count }) => sum + count, 0);
@@ -222,7 +222,7 @@ export function nativeStrings(): ChatStrings {
           const who = index > 0 ? String(count) : count === 1 ? 'Thread' : `${count} threads`;
           return `${who} ${THREAD_EVENTS[event]}`;
         })
-        .join(' · '),
+        .join(', '),
     threadEvent: (notice) => THREAD_EVENTS[notice.event],
     childContext: (tokens) => `${tokens} context`,
     childCache: (kind) => ({ cold: 'cold', 'likely-warm': 'likely warm', 'estimated-cold': 'likely cold' })[kind],
@@ -230,7 +230,7 @@ export function nativeStrings(): ChatStrings {
     yourWords: () => 'your words',
     toolDoneCount: (toolName, count) => {
       const presentation = toolPresentation(toolName);
-      return presentation.many?.(count) ?? `${presentation.done} · ${count}`;
+      return presentation.many?.(count) ?? `${presentation.done} ${count} times`;
     },
 
     openingThread: () => 'Opening this thread',
@@ -255,10 +255,11 @@ export function nativeStrings(): ChatStrings {
     sendingAnswer: () => 'Sending your answer',
     forgetTurn: () => 'Remove and return to draft',
     resendTurn: () => 'Send again',
-    showMore: () => 'Show more',
     showLess: () => 'Show less',
     showAll: () => 'Show all',
-    showDetails: () => 'Show details',
+    showDetails: () => 'Details',
+    lineCount: (count) => `${count.toLocaleString('en-US')} ${count === 1 ? 'line' : 'lines'}`,
+    open: () => 'Open',
     copyAddress: () => 'Copy address',
     openThread: () => 'Open thread',
     openFile: (path) => `Open ${path}`,

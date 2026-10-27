@@ -215,6 +215,12 @@
       "svelte": "./src/entries/ToolRow.svelte",
       "default": "./src/entries/ToolRow.svelte"
     },
+    "./entries/Well.svelte": {
+      "types": "./src/entries/Well.svelte",
+      "browser": "./src/entries/Well.svelte",
+      "svelte": "./src/entries/Well.svelte",
+      "default": "./src/entries/Well.svelte"
+    },
     "./entryProjection": {
       "types": "./src/entryProjection.ts",
       "browser": "./src/entryProjection.ts",

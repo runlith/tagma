@@ -12,9 +12,10 @@
 
 {#snippet contextRow(entry: ChatEntryOf<'context'>, view: ChatEntryContext)}
   {#snippet body()}
-    <ChatMarkdown body={{ cacheKey: entry.id, class: 'text-muted-foreground', text: entry.text }} />
+    <ChatMarkdown body={{ cacheKey: entry.id, size: 'small', class: 'text-muted-foreground', text: entry.text }} />
   {/snippet}
   <EntryDisclosure
+    id={entry.id}
     label={strings.context()}
     occurredAt={entry.occurredAt}
     text={entry.text}

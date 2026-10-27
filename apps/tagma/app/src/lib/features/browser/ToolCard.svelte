@@ -4,6 +4,7 @@
   import type { ChatEntryOf } from '@runlith/chat-ui/renderers';
   import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
   import { diskAddress } from '$lib/features/checkout/files/disk.js';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
   import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
   import { Door } from '$lib/wire/Door.js';
@@ -36,20 +37,20 @@
 {#if entry.toolRefusal}
   <p class="text-ui leading-snug break-words text-muted-foreground">{entry.toolRefusal.reason}</p>
 {/if}
-<div class="grid min-w-0 gap-2 rounded-lg border border-border/60 bg-background/60 px-3 py-2" data-browser-tool={entry.toolName}>
-  <div class="flex min-w-0 items-center gap-2">
+<div class="grid min-w-0 gap-1.5 rounded-lg border bg-raised p-1.5" data-browser-tool={entry.toolName}>
+  <div class="flex h-7 min-w-0 items-center gap-2 px-1.5">
     <Globe class="size-3.5 shrink-0 text-muted-foreground" />
-    <div class="grid min-w-0 flex-1">
-      <span class="truncate text-ui">{seen?.title || seen?.url || asked.url || (page === null ? 'Page' : `Page ${page.slice(-8)}`)}</span>
-      {#if what !== '' || (seen?.url && seen.title)}
-        <span class="truncate text-small text-muted-foreground">{what || seen?.url}</span>
-      {/if}
-    </div>
+    <FadeText class="shrink text-ui" text={seen?.title || seen?.url || asked.url || (page === null ? 'Page' : `Page ${page.slice(-8)}`)} />
+    {#if what !== '' || (seen?.url && seen.title)}
+      <FadeText class="flex-1 text-small text-muted-foreground" text={what || seen?.url} />
+    {:else}
+      <span class="flex-1"></span>
+    {/if}
     {#if page !== null}
-      <Button size="sm" variant="ghost" onclick={() => showPage(panes, { project, page: page as PageId })}>Show</Button>
+      <Button size="xs" variant="ghost" onclick={() => showPage(panes, { project, page: page as PageId })}>Show</Button>
     {/if}
   </div>
   {#if frame !== null}
-    <img src={frame} alt="What the page showed" class="max-h-96 w-full rounded-md border border-border/60 object-contain object-left-top" />
+    <img src={frame} alt="What the page showed" class="max-h-96 w-full rounded-md object-contain object-left-top" />
   {/if}
 </div>

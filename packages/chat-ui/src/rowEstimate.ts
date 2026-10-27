@@ -14,8 +14,11 @@ const PARAGRAPH_GAP_PX = 11;
 const HEADING_PX = 48;
 const FENCE_LINE_PX = 20;
 const BLOCK_CEILING_PX = 384;
-const CLAMPED_LINES = 3;
-const CLAMP_ACTIONS_PX = 24;
+const WELL_PAD_PX = 16;
+const LIST_ROW_PX = 24;
+const CLAMP_FOOT_PX = 24;
+export const WELL_LINES = 8;
+export const WORDS_LINES = 6;
 export const BODY_COLUMNS = 78;
 export const USER_COLUMNS = 72;
 const PROSE_PER_CH = 1.31;
@@ -39,6 +42,10 @@ export const TOOL_VIEW_ROW_PX = STEP_PX + TOOL_VIEW_GAP_PX + TOOL_VIEW_PX;
 const capped = (px: number): number => Math.min(px, BLOCK_CEILING_PX);
 
 const lines = (text: string): number => text.split('\n').length;
+
+const clamped = (px: number, shown: number): number => (px > shown * LINE_PX ? shown * LINE_PX + CLAMP_FOOT_PX : px);
+
+const wellHeight = (px: number): number => WELL_PAD_PX + clamped(px, WELL_LINES);
 
 export function markdownHeight(text: string, columns: number): number {
   let px = 0;
@@ -135,14 +142,9 @@ function toolBodyHeight(key: string, display: ToolDisplay | undefined, view: Row
 function formBodyHeight(key: string, display: ToolDisplay, view: RowSizing): number {
   switch (display.form) {
     case 'code':
-      return STEP_BODY_PX + capped(lines(display.text) * FENCE_LINE_PX);
+      return STEP_BODY_PX + wellHeight(lines(display.text) * FENCE_LINE_PX);
     case 'command':
-      return (
-        STEP_BODY_PX +
-        Math.min(lines(display.command), CLAMPED_LINES) * FENCE_LINE_PX +
-        CLAMP_ACTIONS_PX +
-        (display.output ? capped(lines(display.output) * FENCE_LINE_PX) : 0)
-      );
+      return STEP_BODY_PX + wellHeight((lines(display.command) + (display.output ? lines(display.output) : 0)) * FENCE_LINE_PX);
     case 'diff': {
       const shown = display.files.filter((file) => file.patch !== '');
       return (
@@ -150,12 +152,13 @@ function formBodyHeight(key: string, display: ToolDisplay, view: RowSizing): num
       );
     }
     case 'list':
-      return STEP_BODY_PX + capped(display.items.length * LINE_PX);
+      return STEP_BODY_PX + wellHeight(display.items.length * LIST_ROW_PX);
     case 'markdown':
+      return STEP_BODY_PX + wellHeight(view.markdown(`${key}:display`, display.text, BODY_COLUMNS));
     case 'message':
-      return STEP_BODY_PX + capped(view.markdown(`${key}:display`, display.text, BODY_COLUMNS));
+      return STEP_BODY_PX + clamped(view.markdown(`${key}:display`, display.text, BODY_COLUMNS), WORDS_LINES);
     case 'text':
-      return STEP_BODY_PX + capped(lines(display.text) * FENCE_LINE_PX);
+      return STEP_BODY_PX + wellHeight(lines(display.text) * FENCE_LINE_PX);
     default:
       return 0;
   }

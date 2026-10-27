@@ -10,7 +10,7 @@ import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
 import { BlockTitles } from '$lib/features/graph/BlockTitles.svelte.js';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
 import { SessionNaming } from '$lib/wire/SessionNaming.svelte.js';
-import ToolResultRow from './ToolResultRow.svelte';
+import ToolResultRow from './ToolResultRow.fixture.svelte';
 
 const pointer = {
   truncated: true,

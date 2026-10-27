@@ -234,6 +234,7 @@
 {#snippet markdown(body: ChatMarkdownBody)}
   <MarkdownBody
     text={body.text}
+    size={body.size ?? 'body'}
     class={body.class ?? ''}
     cacheKey={body.cacheKey}
     streaming={body.streaming ?? false}

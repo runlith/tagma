@@ -44,6 +44,16 @@
   font-size: var(--text-ui);
 }
 
+.markdown-body[data-size='compact'] :is(h1, h2, h3, h4, h5, h6) {
+  margin: calc(var(--spacing) * 3) 0 calc(var(--spacing) * 1);
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.markdown-body[data-size='compact'] :is(p, ul, ol, pre, .markdown-code-block, table, blockquote) {
+  margin-block: 0 calc(var(--spacing) * 2);
+}
+
 .markdown-body p {
   margin: 0 0 0.7rem;
 }
@@ -107,7 +117,6 @@
 .markdown-body pre {
   margin: 0.85rem 0;
   overflow-x: auto;
-  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 12px 16px;
   background: var(--sunken);
@@ -133,7 +142,6 @@
   position: relative;
   border-radius: var(--radius-lg);
   background: var(--sunken);
-  border: 1px solid var(--border);
   margin: 0.85rem 0;
 }
 

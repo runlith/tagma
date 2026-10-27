@@ -30,6 +30,7 @@
   import SignalRow from './entries/SignalRow.svelte';
   import ToolRow from './entries/ToolRow.svelte';
   import UserMessageRow from './entries/UserMessageRow.svelte';
+  import Well from './entries/Well.svelte';
   import WordsRow from './entries/WordsRow.svelte';
   import ImageViewer from './ImageViewer.svelte';
   import PinnedRegion from './PinnedRegion.svelte';
@@ -330,9 +331,7 @@
 
 {#snippet signalEntry(entry: ChatEntryOf<'signal'>, context: ChatEntryContext)}
   {#if entry.addressee === 'transport'}
-    <div class="border-l-2 border-border/60 pl-3">
-      {@render rendering.markdown({ cacheKey: entry.id, class: 'text-foreground/90', text: entry.text })}
-    </div>
+    <Well id={entry.id} text={entry.text} />
   {:else}
     <SignalRow {entry} {context} />
   {/if}
@@ -341,6 +340,7 @@
 {#snippet reasoningStep(entry: ChatEntryOf<'reasoning'>, context: ChatEntryContext)}
   {@render rendering.markdown({
     cacheKey: entry.id,
+    size: 'ui',
     class: 'text-muted-foreground',
     streaming: entry.reasoningState === 'streaming',
     text: entry.text,
@@ -349,12 +349,7 @@
 {/snippet}
 
 {#snippet guidanceStep(entry: ChatEntryOf<'runtime-guidance'>)}
-  {@render stepText(entry.runtimeGuidance.texts.join('\n\n'))}
-{/snippet}
-
-{#snippet stepText(text: string)}
-  <pre
-    class="max-h-80 overflow-auto rounded-lg border border-border/60 bg-background/60 p-3 text-small leading-5 whitespace-pre-wrap text-muted-foreground">{text}</pre>
+  <Well id={entry.id} text={entry.runtimeGuidance.texts.join('\n\n')} />
 {/snippet}
 
 {#snippet readyAnswersRow(entry: ChatEntryOf<'ready-answers'>, context: ChatEntryContext)}
@@ -395,6 +390,7 @@
 
 {#snippet systemPromptRow(entry: ChatEntryOf<'system-prompt'>, context: ChatEntryContext)}
   <EntryDisclosure
+    id={entry.id}
     label={strings.systemPrompt()}
     occurredAt={entry.occurredAt}
     text={entry.text}
@@ -405,6 +401,7 @@
 
 {#snippet contextStep(entry: ChatEntryOf<'context'>, context: ChatEntryContext)}
   <EntryDisclosure
+    id={entry.id}
     label={strings.context()}
     occurredAt={entry.occurredAt}
     text={entry.text}
