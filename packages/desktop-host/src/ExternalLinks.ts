@@ -4,13 +4,13 @@ import { shell } from 'electron';
 const SYSTEM_SETTINGS = 'x-apple.systempreferences:';
 
 export function installExternalLinks(input: {
-  readonly appOrigins: readonly string[];
+  readonly appOrigins: () => readonly string[];
   readonly page: (url: URL) => boolean;
   readonly webContents: WebContents;
 }): void {
   const own = (url: string): boolean => {
     const origin = originFor(url);
-    return origin !== null && input.appOrigins.includes(origin);
+    return origin !== null && input.appOrigins().includes(origin);
   };
   input.webContents.setWindowOpenHandler(({ url }) => {
     if (own(url) && input.page(new URL(url))) return { action: 'deny' };

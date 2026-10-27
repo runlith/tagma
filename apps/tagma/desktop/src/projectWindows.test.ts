@@ -84,10 +84,27 @@ mock.module('electron', () => ({
 const { ProjectWindows } = await import('./projectWindows.js');
 const { SurfaceLoader } = await import('./SurfaceLoader.js');
 const { WINDOWS } = await import('./channels.js');
+const { Fronts } = await import('./fronts.js');
 
 const surface = new URL('http://127.0.0.1:5173/');
+const vite = new URL('http://localhost:5641/');
 
-const compose = () => {
+const devPort = () => {
+  const seen = { badges: 0, fell: [] as string[] };
+  return {
+    seen,
+    start: async () => vite,
+    badge: () => {
+      seen.badges += 1;
+      return () => void (seen.badges -= 1);
+    },
+    fell: (_window: unknown, reason: string) => void seen.fell.push(reason),
+    leave: () => true,
+    moved: () => undefined,
+  };
+};
+
+const compose = (dev: ReturnType<typeof devPort> | null = null) => {
   let windows: InstanceType<typeof ProjectWindows> | undefined;
   const loader = new SurfaceLoader(
     surface,
@@ -103,7 +120,7 @@ const compose = () => {
       fell: async () => 'left',
     },
   );
-  windows = new ProjectWindows(surface, '/preload.cjs', '/nowhere/placement.json', loader, null, () => undefined);
+  windows = new ProjectWindows(new Fronts(surface), '/preload.cjs', '/nowhere/placement.json', loader, null, () => undefined, dev);
   windows.install();
   return windows;
 };
@@ -169,6 +186,44 @@ test('once the surface opens again each window returns to its own place, and ⌘
     `${surface.origin}/runlith/chat`,
     `${surface.origin}/tagma/graph/x1?branch=dev`,
   ]);
+});
+
+test('one window moves to the dev surface on its own path, the dev origin is trusted only while it stands there, and a failed dev load brings it back on that path with the reason', async () => {
+  const dev = devPort();
+  const windows = compose(dev);
+  windows.create(surface);
+  await settled();
+  windows.create(new URL('/runlith/chat', surface));
+  const [first, second] = open();
+  first!.webContents.emit('did-navigate-in-page', {}, `${surface.origin}/tagma/graph/x1?branch=dev`, true);
+
+  asked(`${vite.origin}/tagma/chat`, '/runlith/chat/one');
+  expect(await windows.use(first as never, 'dev')).toBeNull();
+  asked(`${vite.origin}/tagma/chat`, '/runlith/chat/two');
+
+  expect(open().map(last)).toEqual([
+    `${vite.origin}/tagma/graph/x1?branch=dev`,
+    `${surface.origin}/runlith/chat`,
+    `${surface.origin}/runlith/chat/two`,
+  ]);
+  expect(dev.seen.badges).toBe(1);
+
+  first!.webContents.emit('did-fail-load', {}, -3, 'ERR_ABORTED', `${vite.origin}/tagma/graph/x1?branch=dev`, true);
+  expect(last(first!)).toBe(`${vite.origin}/tagma/graph/x1?branch=dev`);
+  first!.webContents.emit('did-fail-load', {}, -102, 'ERR_CONNECTION_REFUSED', `${vite.origin}/tagma/graph/x1?branch=dev`, true);
+  expect(last(first!)).toBe(`${surface.origin}/tagma/graph/x1?branch=dev`);
+  expect(dev.seen.badges).toBe(1);
+  first!.webContents.emit('did-start-navigation', { url: last(first!), isMainFrame: true, isSameDocument: false });
+
+  expect(dev.seen.badges).toBe(0);
+  expect(dev.seen.fell).toEqual(['The dev surface did not load: ERR_CONNECTION_REFUSED.']);
+  const opened = open().length;
+  asked(`${vite.origin}/tagma/chat`, '/runlith/chat/three');
+  expect(open()).toHaveLength(opened);
+
+  await windows.use(first as never, 'dev');
+  first!.destroy();
+  expect(dev.seen.badges).toBe(0);
 });
 
 test('a question is asked once, over the window in focus, never over one not yet focused, and over the one focused before once it closes', async () => {

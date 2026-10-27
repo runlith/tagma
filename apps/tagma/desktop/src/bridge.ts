@@ -115,6 +115,15 @@ export interface DesktopFiles {
   pathOf(file: File): string;
 }
 
+export type SurfaceKind = 'built' | 'dev';
+
+export type SurfaceRefusal = { readonly code: string; readonly reason: string; readonly said: string | null };
+
+export interface DesktopSurface {
+  current(): Promise<SurfaceKind>;
+  use(surface: SurfaceKind): Promise<SurfaceRefusal | null>;
+}
+
 export interface DesktopApi {
   readonly operatingSystem: OperatingSystemKind;
   readonly dictation: DesktopDictation;
@@ -125,6 +134,8 @@ export interface DesktopApi {
   readonly browser: DesktopBrowser;
   //! A desktop shell built before this member serves the newer app the server sends, and lacks it.
   readonly files?: DesktopFiles;
+  //! Only a project window of a build from a checkout, opened on no named address, carries it.
+  readonly surface?: DesktopSurface;
 }
 
 declare global {

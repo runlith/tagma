@@ -17,7 +17,9 @@ import { Swipes } from './swipe.js';
 import { Folders } from './folders.js';
 import { ProjectWindows } from './projectWindows.js';
 import { ViewWindows } from './viewWindows.js';
-import { bundleOf, carriedBy, carriedIn, keptApplication, leaseRelease, standingIn } from './release.js';
+import { DevSurface } from './devSurface.js';
+import { Fronts } from './fronts.js';
+import { bundleOf, carriedBy, carriedIn, keptApplication, leaseRelease, numbered, standingIn } from './release.js';
 import { DESKTOP_DATA, dataDirectory, installationsRoot, serveLogPath } from '@tagma/server/installation/contract/wire/layout';
 import { isRelease } from '@tagma/server/installation/contract/wire/feed';
 import { CHANNEL } from '@tagma/server/composition/channel';
@@ -335,7 +337,8 @@ class PillWindow implements Pill {
   }
 }
 
-function serveBrowser(surfaceUrl: URL, data: string, projects: ProjectWindows): void {
+function serveBrowser(fronts: Fronts, data: string, projects: ProjectWindows): void {
+  const surfaceUrl = fronts.built;
   const userData = app.getPath('userData');
   const hostId = hostIdIn(userData);
   let host: BrowserHost | undefined;
@@ -344,12 +347,9 @@ function serveBrowser(surfaceUrl: URL, data: string, projects: ProjectWindows): 
     window: (contents) => host?.window(contents) ?? null,
   });
   host = new BrowserHost(profiles, identity, {
-    newWindow: (from) => {
-      const at = from.webContents.getURL();
-      projects.create(URL.canParse(at) && new URL(at).origin === surfaceUrl.origin ? new URL(at) : surfaceUrl);
-    },
+    newWindow: (from) => projects.create(fronts.placed(from.webContents.getURL()) ?? surfaceUrl),
   });
-  new Panels(surfaceUrl, host, hostId, userData, identity).install();
+  new Panels(fronts, host, hostId, userData, identity).install();
   const ours = async () => (await reach(surfaceUrl, data)).at === 'ours';
   browserServing = Effect.runFork(serveHost({ surface: surfaceUrl, ours, host: hostId, executor: host }));
 }
@@ -364,6 +364,9 @@ app.whenReady().then(() => {
   if (!first) return;
   const surfaceUrl = resolveSurfaceUrl(process.argv, process.env);
   const named = namedSurfaceUrl(process.argv, process.env) !== undefined;
+  const own = bundle === null ? null : carriedBy(bundle);
+  const fronts = new Fronts(surfaceUrl);
+  const dev = named || own === null || numbered(own) ? null : new DevSurface(surfaceUrl, fronts, () => void reportProblem());
   quitting = new Quitting(
     surfaceUrl,
     named || installRoot === null || serveLog === null || data === null
@@ -373,25 +376,28 @@ app.whenReady().then(() => {
     shownWindow,
     () => void reportProblem(),
     () => loader?.leave(),
+    dev?.menu() ?? [],
   );
   quitting.install();
-  dictation = new Dictation((down) => new PillWindow(surfaceUrl, down), inputHelperIn(app.getPath('exe')));
+  dictation = new Dictation((down) => new PillWindow(surfaceUrl, down), inputHelperIn(app.getPath('exe')), fronts);
   dictation.install();
-  serveTabKeys();
+  serveTabKeys(fronts);
   loader = surfaceLoader(surfaceUrl);
   const projects = new ProjectWindows(
-    surfaceUrl,
+    fronts,
     PRELOAD,
     join(app.getPath('userData'), WINDOW_PLACEMENT_FILE),
     loader,
     Swipes.start(),
     () => void reportProblem(),
+    dev,
   );
   windows = projects;
   projects.install();
-  new ViewWindows(surfaceUrl, PRELOAD, projects).install();
-  new Folders(surfaceUrl).install();
-  if (data !== null) serveBrowser(surfaceUrl, data, projects);
+  dev?.install(projects);
+  new ViewWindows(fronts, PRELOAD, projects).install();
+  new Folders(fronts).install();
+  if (data !== null) serveBrowser(fronts, data, projects);
   projects.create(surfaceUrl);
 
   app.on('activate', () => {

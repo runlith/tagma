@@ -3,9 +3,6 @@ import { VIEW_WINDOW_PATH } from './bridge.js';
 
 const DESKTOP_ONLY = '/_desktop/';
 
-export const fromSurface = (surface: URL, sender: string | undefined): boolean =>
-  sender !== undefined && URL.canParse(sender) && new URL(sender).origin === surface.origin;
-
 export function viewWindowUrl(surface: URL, path: unknown): URL | null {
   if (typeof path !== 'string' || !path.startsWith(VIEW_WINDOW_PATH)) return null;
   const url = new URL(path, surface);

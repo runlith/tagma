@@ -71,6 +71,7 @@ import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { DesktopBrowser } from '$lib/shared/desktop/DesktopBrowser.js';
 import { DesktopDictation } from '$lib/shared/desktop/DesktopDictation.js';
 import { DesktopFolders } from '$lib/shared/desktop/DesktopFolders.js';
+import { DesktopSurface } from '$lib/shared/desktop/DesktopSurface.js';
 import { DesktopSwipe } from '$lib/shared/desktop/DesktopSwipe.js';
 import { DesktopTabs } from '$lib/shared/desktop/DesktopTabs.js';
 import { MainWindow } from '$lib/shared/desktop/MainWindow.js';
@@ -129,6 +130,16 @@ export function appLayers(desktop: DesktopApi | undefined) {
     Layer.provide(
       MainWindow,
       bridged((bridge) => bridge.windows),
+    ),
+    Layer.when(
+      () => desktop?.surface !== undefined,
+      Layer.provide(
+        DesktopSurface,
+        bridged((bridge) => {
+          if (bridge.surface === undefined) throw new Error('This desktop window switches no surface');
+          return bridge.surface;
+        }),
+      ),
     ),
   );
 

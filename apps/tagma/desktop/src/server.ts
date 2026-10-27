@@ -44,6 +44,7 @@ const refusalShape = Schema.Struct({
   words: Schema.optional(Schema.Struct({ text: Schema.String })),
 });
 const decodeRefusal = Schema.decodeUnknownResult(refusalShape);
+const decodeDevSurface = Schema.decodeUnknownResult(Schema.Struct({ url: Schema.String, started: Schema.Boolean }));
 const decodeRefusalText = Schema.decodeUnknownResult(Schema.fromJsonString(refusalShape));
 const decodeMachine = Schema.decodeUnknownResult(
   Schema.Struct({
@@ -211,6 +212,19 @@ export async function askRestart(surfaceUrl: URL): Promise<Refusal | null> {
   const body: unknown = await answer.json().catch(() => null);
   if (answer.ok && (body as { status?: unknown } | null)?.status === 'restarting') return null;
   return refusalOf(decodeRefusal(body), `the restart answered ${answer.status}`);
+}
+
+export async function startDevSurface(surfaceUrl: URL): Promise<URL | Refusal> {
+  const answer = await fetch(new URL('/api/op/start_dev_surface', surfaceUrl), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  }).catch((error: unknown) => (error instanceof Error ? error : new Error(String(error))));
+  if (answer instanceof Error) return { code: 'unanswered', reason: `the dev surface was not answered: ${answer.message}`, said: null };
+  const body: unknown = await answer.json().catch(() => null);
+  const started = decodeDevSurface(body);
+  if (answer.ok && started._tag === 'Success' && URL.canParse(started.success.url)) return new URL(started.success.url);
+  return refusalOf(decodeRefusal(body), `the dev surface answered ${answer.status}`);
 }
 
 export type Ran = { readonly code: number | null; readonly out: string };

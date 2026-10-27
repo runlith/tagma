@@ -2,19 +2,15 @@ import { homedir } from 'node:os';
 import { dirname } from 'node:path';
 import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, type OpenDialogOptions } from 'electron';
 import { FOLDERS } from './channels.js';
+import type { Fronts } from './fronts.js';
 
 export class Folders {
   private place = homedir();
 
-  constructor(private readonly surface: URL) {}
+  constructor(private readonly fronts: Fronts) {}
 
   install(): void {
-    ipcMain.handle(FOLDERS.choose, (event) => (this.ours(event) ? this.choose(event) : null));
-  }
-
-  private ours(event: IpcMainInvokeEvent): boolean {
-    const url = event.senderFrame?.url;
-    return url !== undefined && URL.canParse(url) && new URL(url).origin === this.surface.origin;
+    ipcMain.handle(FOLDERS.choose, (event) => (this.fronts.trusts(event.senderFrame?.url) ? this.choose(event) : null));
   }
 
   private async choose(event: IpcMainInvokeEvent): Promise<string | null> {

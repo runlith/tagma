@@ -42,6 +42,13 @@ export const BROWSER = {
   chooseIdentity: 'browser:choose-identity',
 } as const;
 
+export const SURFACE = {
+  current: 'surface:current',
+  use: 'surface:use',
+} as const;
+
+export const DEV_SURFACE_ARGUMENT = '--tagma-dev-surface';
+
 export const WINDOWS = {
   open: 'windows:open',
   openProject: 'windows:open-project',

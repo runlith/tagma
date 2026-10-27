@@ -1,7 +1,7 @@
 import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, ipcMain, type WebContents } from 'electron';
 import type { BrowserIdentity, Chord, FramedChord, Identities, PageRect, PageShown } from '../bridge.js';
 import { BROWSER } from '../channels.js';
-import { fromSurface } from '../viewWindowUrl.js';
+import type { Fronts } from '../fronts.js';
 import type { BrowserHost } from './host.js';
 import { chooseIdentity, chosenIdentity } from './identity.js';
 
@@ -31,7 +31,7 @@ export class Panels {
   private readonly found = new WeakMap<WebContents, string>();
 
   constructor(
-    private readonly surface: URL,
+    private readonly fronts: Fronts,
     private readonly host: BrowserHost,
     private readonly hostId: string,
     private readonly userData: string,
@@ -95,7 +95,7 @@ export class Panels {
   }
 
   private ours(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
-    return fromSurface(this.surface, event.senderFrame?.url);
+    return this.fronts.trusts(event.senderFrame?.url);
   }
 
   private window(event: IpcMainEvent): BrowserWindow | null {

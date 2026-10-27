@@ -5,6 +5,7 @@ import type {
   DesktopDictation,
   DesktopFiles,
   DesktopFolders,
+  DesktopSurface,
   DesktopSwipe,
   DesktopTabs,
   DesktopWindows,
@@ -15,11 +16,13 @@ import type {
   PageKey,
   PageShown,
   Stroke,
+  SurfaceKind,
+  SurfaceRefusal,
   SwipeDirection,
   SwipePhase,
   TabCommand,
 } from './bridge.js';
-import { BROWSER, DICTATION, FOLDERS, SWIPE, TABS, WINDOWS } from './channels.js';
+import { BROWSER, DEV_SURFACE_ARGUMENT, DICTATION, FOLDERS, SURFACE, SWIPE, TABS, WINDOWS } from './channels.js';
 
 function isMainFrame(): boolean {
   try {
@@ -110,6 +113,11 @@ const files: DesktopFiles = {
   },
 };
 
+const surface: DesktopSurface = {
+  current: () => ipcRenderer.invoke(SURFACE.current) as Promise<SurfaceKind>,
+  use: (kind) => ipcRenderer.invoke(SURFACE.use, kind) as Promise<SurfaceRefusal | null>,
+};
+
 const api: DesktopApi = {
   operatingSystem: resolveOperatingSystem(process.platform),
   dictation,
@@ -119,6 +127,7 @@ const api: DesktopApi = {
   folders,
   browser,
   files,
+  ...(process.argv.includes(DEV_SURFACE_ARGUMENT) ? { surface } : {}),
 };
 
 if (isMainFrame()) {

@@ -31,7 +31,7 @@ function install(): { open: OpenHandler; navigate: NavigateHandler } {
       if (event === 'will-navigate') navigate = handler;
     },
   } as unknown as WebContents;
-  installExternalLinks({ appOrigins: [APP_ORIGIN, API_ORIGIN], page: (url) => !url.pathname.startsWith('/api/'), webContents });
+  installExternalLinks({ appOrigins: () => [APP_ORIGIN, API_ORIGIN], page: (url) => !url.pathname.startsWith('/api/'), webContents });
   if (!open || !navigate) throw new Error('External-link handlers were not installed.');
   return { open, navigate };
 }

@@ -40,6 +40,7 @@ export class Quitting {
     private readonly parent: () => BrowserWindow | undefined,
     private readonly report: () => void,
     private readonly ending: () => void,
+    private readonly view: readonly MenuItemConstructorOptions[],
   ) {}
 
   install(): void {
@@ -74,7 +75,24 @@ export class Quitting {
         },
         { role: 'fileMenu' },
         { role: 'editMenu' },
-        { role: 'viewMenu' },
+        this.view.length === 0
+          ? { role: 'viewMenu' }
+          : {
+              label: 'View',
+              submenu: [
+                { role: 'reload' },
+                { role: 'forceReload' },
+                { role: 'toggleDevTools' },
+                { type: 'separator' },
+                { role: 'resetZoom' },
+                { role: 'zoomIn' },
+                { role: 'zoomOut' },
+                { type: 'separator' },
+                { role: 'togglefullscreen' },
+                { type: 'separator' },
+                ...this.view,
+              ],
+            },
         { role: 'windowMenu' },
         { role: 'help', submenu: [{ label: 'Report a Problem…', click: () => this.report() }] },
       ]),

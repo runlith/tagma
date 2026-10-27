@@ -3,6 +3,7 @@ import type { DesktopAccessibilityState, DesktopHold, DesktopInputHost, HoldBind
 import { app, BrowserWindow, clipboard, ipcMain, type WebContents } from 'electron';
 import type { GlobalState, HeldKey, Stroke } from './bridge.js';
 import { DICTATION } from './channels.js';
+import type { Fronts } from './fronts.js';
 import { bindingOf } from './keyCodes.js';
 
 const RESTART_AFTER_MS = 60_000;
@@ -34,12 +35,17 @@ export class Dictation {
   constructor(
     private readonly open: (down: (reason: string | null) => void) => Pill,
     private readonly helper: string,
+    private readonly fronts: Fronts,
   ) {}
 
   install(): void {
-    ipcMain.on(DICTATION.arm, (_event, key: HeldKey | null) => void this.arm(key));
-    ipcMain.handle(DICTATION.state, () => this.state);
-    ipcMain.on(DICTATION.prompt, () => this.input?.promptAccessibility());
+    ipcMain.on(DICTATION.arm, (event, key: HeldKey | null) => {
+      if (this.fronts.trusts(event.senderFrame?.url)) void this.arm(key);
+    });
+    ipcMain.handle(DICTATION.state, (event) => (this.fronts.trusts(event.senderFrame?.url) ? this.state : { kind: 'off' }));
+    ipcMain.on(DICTATION.prompt, (event) => {
+      if (this.fronts.trusts(event.senderFrame?.url)) this.input?.promptAccessibility();
+    });
     ipcMain.on(DICTATION.ready, (event) => {
       if (!this.fromPill(event.sender)) return;
       this.pillReady = true;

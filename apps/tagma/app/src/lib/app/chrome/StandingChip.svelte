@@ -18,6 +18,7 @@
   import { Restart } from '$lib/wire/Restart.svelte.js';
   import { LIVE_TROUBLE } from './liveTrouble.js';
   import { Standing } from './Standing.svelte.js';
+  import SurfaceRow from './SurfaceRow.svelte';
   import { WireState } from './WireState.svelte.js';
 
   const standing = Standing.use();
@@ -681,6 +682,8 @@
           {/if}
         </div>
       {/if}
+
+      <SurfaceRow {dot} button={BUTTON} />
     </div>
 
     <div
