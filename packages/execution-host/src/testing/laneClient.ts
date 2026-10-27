@@ -69,9 +69,10 @@ const type = (bytes: string): { readonly sequence: number; readonly at: number }
 
 process.on('SIGUSR2', () => {
   setTimeout(async () => {
-    cursor = text.length;
-    const command = type('echo $((40+2))EP\n');
+    const from = (cursor = text.length);
+    const command = type('stty size; echo $((40+2))EP\n');
     const answered = await expect('42EP');
+    const size = /(\d+ \d+)\r\n42EP/.exec(text.slice(from))?.[1];
     cursor = text.length;
     const echoes = [...KEYS].map((key) => expect(key));
     const keys = [...KEYS].map((key) => type(key));
@@ -80,6 +81,7 @@ process.on('SIGUSR2', () => {
       started: command.at,
       finished: seen.at(-1),
       command: answered - command.at,
+      size,
       keys: keys.map((key, index) => seen[index]! - key.at),
       receipts: [command, ...keys].map((sent) => (receipts.get(sent.sequence) ?? Number.NaN) - sent.at),
     });

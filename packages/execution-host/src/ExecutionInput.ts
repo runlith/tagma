@@ -1,5 +1,6 @@
-import { Data, Deferred, Effect, Exit, Fiber, Ref, Semaphore, type Duration } from 'effect';
+import { Data, Deferred, Effect, Exit, Fiber, Ref, type Duration } from 'effect';
 import type { BindingId, Principal } from '@runlith/executions/protocol/custody';
+import { permits } from '@runlith/held/Permits';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import type {
   InputCause,
@@ -14,6 +15,7 @@ import type { ExecutionLimits } from '@runlith/executions/protocol/capacity';
 import { byteOffset, offsetValue, type ByteOffset, type TerminalGeometry } from '@runlith/executions/protocol/record';
 import type { Binding } from './Bindings';
 import { reportDeadFiber } from './hostTelemetry';
+import { makeInputAdmission } from './inputAdmission';
 import {
   keptLanes,
   laneOf,
@@ -23,6 +25,7 @@ import {
   trimReceipts,
   withLane,
   type Lane,
+  type LaneBook,
   type ReceiptKey,
   type Retained,
 } from './inputReceipts';
@@ -120,7 +123,6 @@ type InputState = {
   readonly fenced: InputFenced | undefined;
   readonly waiting: Deferred.Deferred<void> | undefined;
   readonly room: Deferred.Deferred<void> | undefined;
-  readonly intake: boolean;
   readonly halted: boolean;
 };
 
@@ -174,10 +176,13 @@ export const makeExecutionInput = Effect.fnUntraced(function* ({ sink, limits, r
     fenced: undefined,
     waiting: undefined,
     room: undefined,
-    intake: true,
     halted: false,
   });
-  const admitting = yield* Semaphore.make(1);
+  const admission = makeInputAdmission({
+    closed: () => new InputFenced({ reason: 'yielding', detail: 'this host is yielding its place to the next logic' }),
+  });
+  const resizing = permits(1);
+  const interrupting = permits(1);
   const drained = yield* Deferred.make<void>();
   let flushEpoch = 0;
   let flushing = false;
@@ -189,25 +194,19 @@ export const makeExecutionInput = Effect.fnUntraced(function* ({ sink, limits, r
     writing?.interruptUnsafe();
   };
   function admit(request: InputRequest, binding: Binding): Effect.Effect<InputAnswer, InputFenced> {
-    return admitting.withPermits(1)(
+    return admission.enter(
+      binding.id,
       Effect.andThen(
-        Effect.flatten(
-          Ref.modify(stateRef, (held): readonly [Effect.Effect<void, InputFenced>, InputState] =>
-            !held.intake
-              ? [Effect.fail(new InputFenced({ reason: 'yielding', detail: 'this host is yielding its place to the next logic' })), held]
-              : [
-                  Effect.void,
-                  held.epoch === binding.epoch ? held : { ...held, epoch: binding.epoch, lanes: new Map(), receipts: new Map() },
-                ],
-          ),
+        Ref.update(stateRef, (held) =>
+          held.epoch === binding.epoch ? held : { ...held, epoch: binding.epoch, lanes: new Map(), receipts: new Map() },
         ),
         request.act._tag === 'Write'
           ? enqueue(request, binding, request.act.bytes, request.cause)
           : request.act._tag === 'End'
             ? close(request, binding)
             : request.act._tag === 'Interrupt'
-              ? interrupt(request, binding)
-              : resize(request, binding, request.act.geometry),
+              ? interrupting.within(interrupt(request, binding))
+              : resizing.within(resize(request, binding, request.act.geometry)),
       ),
     );
   }
@@ -217,7 +216,7 @@ export const makeExecutionInput = Effect.fnUntraced(function* ({ sink, limits, r
   }
 
   function closeIntake(): Effect.Effect<void> {
-    return admitting.withPermits(1)(Ref.update(stateRef, (held) => ({ ...held, intake: false })));
+    return admission.close;
   }
 
   const halt = Effect.fnUntraced(function* (within: Duration.Duration): Effect.fn.Return<InputCarry> {
@@ -296,7 +295,7 @@ export const makeExecutionInput = Effect.fnUntraced(function* ({ sink, limits, r
     return yield* sink.resize(geometry).pipe(
       Effect.flatMap(() =>
         decide((held) => {
-          const standing = judge(held, request, binding, EMPTY, false);
+          const standing = held.epoch === binding.epoch ? judge(held, request, binding, EMPTY, false) : (held.fenced ?? OPEN);
           return standing._tag === 'Open' ? accepted(held, request, binding, EMPTY, 'resize', 'none') : settled(held, binding, standing);
         }),
       ),
@@ -447,29 +446,11 @@ export const makeExecutionInput = Effect.fnUntraced(function* ({ sink, limits, r
       acceptedThrough: byteOffset(acceptedThrough),
     };
     const retained = exactly(bytes);
-    const clock = held.clock + 1;
-    const lanes = new Map(held.lanes);
-    const lane = laneOf(held, binding);
-    lanes.set(binding.id, {
-      ...lane,
-      next: sequence + 1,
-      active: clock,
-      pressureRefusedAt: undefined,
-    });
-    const receipts = new Map(held.receipts).set(receiptKey(binding.id, sequence), {
-      binding: binding.id,
-      sequence,
-      receipt,
-      bytes: retained,
-    });
-    trimReceipts(lanes, receipts, binding.id, limits.input.receipts);
     return [
       Effect.as(woken(held), { _tag: 'InputAdmitted', receipt } satisfies InputAnswer),
       {
         ...held,
-        lanes,
-        clock,
-        receipts,
+        ...booked(held, binding, receipt, retained),
         pending:
           queue === 'end'
             ? [...held.pending, { _tag: 'End' as const }]
@@ -482,6 +463,25 @@ export const makeExecutionInput = Effect.fnUntraced(function* ({ sink, limits, r
         waiting: undefined,
       },
     ];
+  }
+
+  function booked(held: InputState, binding: Binding, receipt: InputReceipt, bytes: Uint8Array): LaneBook {
+    if (held.epoch !== binding.epoch) return { lanes: held.lanes, clock: held.clock, receipts: held.receipts };
+    const clock = held.clock + 1;
+    const lanes = new Map(held.lanes).set(binding.id, {
+      ...laneOf(held, binding),
+      next: receipt.sequence + 1,
+      active: clock,
+      pressureRefusedAt: undefined,
+    });
+    const receipts = new Map(held.receipts).set(receiptKey(binding.id, receipt.sequence), {
+      binding: binding.id,
+      sequence: receipt.sequence,
+      receipt,
+      bytes,
+    });
+    trimReceipts(lanes, receipts, binding.id, limits.input.receipts);
+    return { lanes, clock, receipts };
   }
 
   const drain = Effect.fnUntraced(

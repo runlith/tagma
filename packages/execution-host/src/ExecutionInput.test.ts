@@ -371,6 +371,85 @@ describe('the input queue answers for what it owes', () => {
     ),
   );
 
+  it.live('holds the next act of a lane behind its own resize in flight, and no act of another lane', () =>
+    Effect.gen(function* () {
+      const resizing = yield* Deferred.make<void>();
+      const resized = yield* Deferred.make<void>();
+      yield* withInput(
+        {
+          ...unendableSink(),
+          resize: () => Effect.andThen(Deferred.succeed(resizing, undefined), Deferred.await(resized)),
+        },
+        Effect.fnUntraced(function* (input) {
+          const grid = laneBinding('operator', 'grid');
+          const typing = laneBinding('operator', 'typing');
+          const resize = yield* Effect.forkChild(
+            admit(input, { sequence: 0, cause: 'resize', act: { _tag: 'Resize', geometry: { rows: 12, columns: 40 } } }, grid),
+          );
+          yield* Deferred.await(resizing);
+          const after = yield* Effect.forkChild(admit(input, write(1, 'after'), grid));
+          expect((yield* admit(input, write(0, 'typed'), typing))._tag).toBe('InputAdmitted');
+          yield* Deferred.succeed(resized, undefined);
+          expect([(yield* Fiber.join(resize))._tag, (yield* Fiber.join(after))._tag]).toEqual(['InputAdmitted', 'InputAdmitted']);
+        }),
+        lanesLimits,
+      );
+    }),
+  );
+
+  it.live('refuses the next act of a lane at once when intake closes behind its resize, and closes once that resize settles', () =>
+    Effect.gen(function* () {
+      const resizing = yield* Deferred.make<void>();
+      const resized = yield* Deferred.make<void>();
+      yield* withInput(
+        {
+          ...unendableSink(),
+          resize: () => Effect.andThen(Deferred.succeed(resizing, undefined), Deferred.await(resized)),
+        },
+        Effect.fnUntraced(function* (input) {
+          const grid = laneBinding('operator', 'grid');
+          const resize = yield* Effect.forkChild(
+            admit(input, { sequence: 0, cause: 'resize', act: { _tag: 'Resize', geometry: { rows: 12, columns: 40 } } }, grid),
+          );
+          yield* Deferred.await(resizing);
+          const closing = yield* Effect.forkChild(input.closeIntake(), { startImmediately: true });
+          expect((yield* Effect.flip(admit(input, write(1, 'late'), grid))).reason).toBe('yielding');
+          yield* Deferred.succeed(resized, undefined);
+          expect((yield* Fiber.join(resize))._tag).toBe('InputAdmitted');
+          yield* Fiber.join(closing);
+        }),
+        lanesLimits,
+      );
+    }),
+  );
+
+  it.live('admits a resize that settles after the epoch moved, and leaves the lanes of the new epoch to their own sequences', () =>
+    Effect.gen(function* () {
+      const resizing = yield* Deferred.make<void>();
+      const resized = yield* Deferred.make<void>();
+      yield* withInput(
+        {
+          ...unendableSink(),
+          resize: () => Effect.andThen(Deferred.succeed(resizing, undefined), Deferred.await(resized)),
+        },
+        Effect.fnUntraced(function* (input) {
+          const earlier = laneBinding('operator', 'earlier');
+          const later = { ...laneBinding('operator', 'later'), epoch: earlier.epoch + 1 };
+          expect((yield* admit(input, write(0, 'before'), earlier))._tag).toBe('InputAdmitted');
+          const resize = yield* Effect.forkChild(
+            admit(input, { sequence: 1, cause: 'resize', act: { _tag: 'Resize', geometry: { rows: 12, columns: 40 } } }, earlier),
+          );
+          yield* Deferred.await(resizing);
+          expect((yield* admit(input, write(0, 'later'), later))._tag).toBe('InputAdmitted');
+          yield* Deferred.succeed(resized, undefined);
+          expect((yield* Fiber.join(resize))._tag).toBe('InputAdmitted');
+          expect(yield* input.next(later)).toBe(1);
+        }),
+        lanesLimits,
+      );
+    }),
+  );
+
   it.live('drops a closed lane and its receipts only for the principal that opened it', () =>
     withInput(
       unendableSink(),

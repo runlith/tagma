@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import * as BunServices from '@effect/platform-bun/BunServices';
-import { Clock, Deferred, Effect, Exit, FileSystem, Layer, Queue, Schedule, Schema } from 'effect';
+import { Clock, Effect, Fiber, FileSystem, Layer, Queue, Schedule } from 'effect';
 import type { LaunchRequest } from '@runlith/executions/protocol/launch';
-import { LANE_PATH, LaneReplyText, readOutputFrame, type LaneReply } from '@runlith/executions/protocol/lane';
+import { LANE_PATH, type LaneReply } from '@runlith/executions/protocol/lane';
 import { byteOffset, offsetValue } from '@runlith/executions/protocol/record';
 import { Bindings } from './Bindings';
 import { Custodian } from './Custodian';
@@ -21,11 +21,13 @@ import { hostState } from './hostState';
 import { hostSpawner } from './hostSpawner';
 import { testHolder } from './posix/testing/holder';
 import { runtimeProfile } from './runtimeFixture';
+import { laneViewer } from './testing/laneViewer';
 
 const CLIENT = join(import.meta.dir, 'testing/laneClient.ts');
 const BLOCK_MS = 2000;
 const ECHO_MS = 100;
 const QUEUE_SLACK_MS = 10;
+const GRID = { rows: 30, columns: 100 };
 
 const shell: LaunchRequest = {
   command: {
@@ -51,6 +53,7 @@ type Measured = {
   readonly started: number;
   readonly finished: number;
   readonly command: number;
+  readonly size: string | undefined;
   readonly keys: ReadonlyArray<number>;
   readonly receipts: ReadonlyArray<number>;
 };
@@ -91,33 +94,6 @@ const client = Effect.fnUntraced(function* (url: string, token: string, next: nu
     }),
   );
   return { pid: child.pid, line: Effect.map(Queue.take(lines), (line) => JSON.parse(line) as Record<string, unknown>) };
-});
-
-const viewer = Effect.fnUntraced(function* (url: string, token: string) {
-  const replies = yield* Queue.unbounded<string>();
-  const frames = yield* Queue.unbounded<{ readonly offset: bigint; readonly bytes: Uint8Array }>();
-  const closed = yield* Deferred.make<number>();
-  const socket = yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const opened = new WebSocket(url);
-      opened.binaryType = 'arraybuffer';
-      opened.onopen = () => opened.send(JSON.stringify({ lane: token }));
-      opened.onmessage = (event) => {
-        if (typeof event.data === 'string') return Queue.offerUnsafe(replies, event.data);
-        const frame = readOutputFrame(new Uint8Array(event.data as ArrayBuffer));
-        if (frame !== undefined) Queue.offerUnsafe(frames, { offset: frame.offset, bytes: frame.bytes.slice() });
-      };
-      opened.onclose = (event) => Deferred.doneUnsafe(closed, Exit.succeed(event.code));
-      return opened;
-    }),
-    (opened) => Effect.sync(() => opened.close()),
-  );
-  return {
-    reply: Effect.flatMap(Queue.take(replies), (text) => Schema.decodeUnknownEffect(LaneReplyText)(text)),
-    frame: Queue.take(frames),
-    closed: Deferred.await(closed),
-    send: (said: unknown) => Effect.sync(() => socket.send(JSON.stringify(said))),
-  };
 });
 
 const withTerminalHost = Effect.fnUntraced(
@@ -164,9 +140,27 @@ describe('the terminal endpoint', () => {
 
         const typist = yield* client(url, lane.token, lane.next);
         expect(yield* typist.line).toHaveProperty('ready');
+        const grid = yield* bindings.open(principal, connection, claim.epoch);
+        yield* Effect.yieldNow;
+        const resizing = yield* Effect.forkChild(
+          Effect.zip(
+            lanes.admit(
+              ref.execution,
+              { binding: grid.id, principal, connection, epoch: claim.epoch },
+              { sequence: 0, cause: 'resize', act: { _tag: 'Resize', geometry: GRID } },
+            ),
+            Clock.currentTimeMillis,
+          ),
+          { startImmediately: true },
+        );
         const blocked = yield* blocking(typist.pid);
         const measured = (yield* typist.line) as Measured;
         const said = JSON.stringify(measured);
+        const [resized, resizedAt] = yield* Fiber.join(resizing);
+        expect(measured.size, said).toBe(`${GRID.rows} ${GRID.columns}`);
+        expect(resizedAt).toBeGreaterThanOrEqual(blocked.to);
+        expect(resized).toMatchObject({ _tag: 'InputAdmitted', receipt: { sequence: 0, cause: 'resize' } });
+        expect((yield* executions.summary(ref.execution))?.grid).toEqual(GRID);
         expect(measured.started, said).toBeGreaterThanOrEqual(blocked.from);
         expect(measured.finished, said).toBeLessThanOrEqual(blocked.to);
         expect(measured.command, said).toBeLessThan(ECHO_MS);
@@ -175,7 +169,7 @@ describe('the terminal endpoint', () => {
         expect(measured.keys[19]!, said).toBeLessThan(measured.keys[0]! + QUEUE_SLACK_MS);
         expect(measured.receipts.every(Number.isFinite), said).toBe(true);
 
-        const watching = yield* viewer(url, lane.token);
+        const watching = yield* laneViewer(url, lane.token);
         const ready = (yield* watching.reply) as Extract<LaneReply, { readonly t: 'ready' }>;
         expect(ready).toMatchObject({ t: 'ready', execution: ref.execution });
         const from = offsetValue(ready.head) / 3n;
@@ -219,7 +213,7 @@ describe('the terminal endpoint', () => {
 
         const later = yield* bindings.open(principal, connection, claim.epoch);
         const other = yield* lanes.open(ref.execution, { binding: later.id, principal, connection, epoch: claim.epoch });
-        const stale = yield* viewer(url, other.token);
+        const stale = yield* laneViewer(url, other.token);
         expect(yield* stale.reply).toMatchObject({ t: 'ready' });
         const successor = connectionOf('connection-lane-next');
         const retaken = yield* custodian.take(keyOf('take-lane-next'), taken.standing.revision, successor, 'custodian');
