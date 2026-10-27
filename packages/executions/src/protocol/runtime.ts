@@ -17,7 +17,7 @@ export const ExecutionSummary = Schema.Struct({
   streams: Schema.Array(StreamPositions),
   grid: Schema.optional(TerminalGeometry),
   native: NativeProcess,
-  input: InputFrontier,
+  input: Schema.optional(InputFrontier),
   decision: Schema.optional(CallDecision),
   cost: Schema.optional(ProcessCost),
   processes: Schema.optional(ProcessWatchReading),

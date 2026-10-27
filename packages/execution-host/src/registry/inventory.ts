@@ -156,18 +156,20 @@ const filterKey = (query: CommandQuery): string =>
     .digest('hex')
     .slice(0, 16);
 
-const unacquiredSummary = Effect.fn('Executions.unacquiredSummary')(function* (registry: RegistryState, execution: ExecutionId) {
+const recordedSummary = Effect.fn('Executions.unacquiredSummary')(function* (registry: RegistryState, execution: ExecutionId) {
   const { store } = registry;
   const record = yield* store.executionOf(execution);
-  if (record.state.phase !== 'ended' || record.native.pid !== undefined) return undefined;
+  if (record.state.phase !== 'ended') return undefined;
   const final = yield* store.finalOf(execution);
-  if (final?.unacquired === undefined) return undefined;
+  if (final === undefined || (final.unacquired === undefined && record.state.record === 'unavailable')) return undefined;
+  const operation = yield* store.startOf(execution);
   return {
     state: { ...record.state, unacquired: final.unacquired },
     custody: yield* store.custodyOf(execution),
     streams: [],
     native: record.native,
-    input: { acceptedThrough: byteOffset(0n), pendingBytes: 0 },
+    input: final.unacquired === undefined ? undefined : { acceptedThrough: byteOffset(0n), pendingBytes: 0 },
+    decision: operation === undefined ? undefined : yield* store.decisionOf(operation),
   } satisfies ExecutionSummary;
 });
 
@@ -178,12 +180,12 @@ export const summary = Effect.fnUntraced(function* (registry: RegistryState, exe
   const kept = shelf.get(execution);
   if (kept !== undefined) return kept.summary;
   if ((yield* Ref.get(queued)).has(execution)) return undefined;
-  return yield* unacquiredSummary(registry, execution).pipe(
+  return yield* recordedSummary(registry, execution).pipe(
     Effect.matchEffect({
       onFailure: (failure) =>
         failure._tag === 'StoredExecutionMissing'
           ? Effect.succeed(undefined)
-          : Effect.as(Effect.logWarning(`the unacquired state of ${execution} could not be read`, failure), undefined),
+          : Effect.as(Effect.logWarning(`the recorded state of ${execution} could not be read`, failure), undefined),
       onSuccess: Effect.succeed,
     }),
   );

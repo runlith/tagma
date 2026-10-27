@@ -624,7 +624,9 @@ const until = <A>(
 const room = (held: Watch, refused: InputFrontier, owed: number) =>
   until(held, 'stdin', (summary) =>
     summary.state.phase === 'ended' ||
-    (offsetValue(summary.input.acceptedThrough) >= offsetValue(refused.acceptedThrough) && summary.input.pendingBytes <= owed)
+    (summary.input !== undefined &&
+      offsetValue(summary.input.acceptedThrough) >= offsetValue(refused.acceptedThrough) &&
+      summary.input.pendingBytes <= owed)
       ? true
       : undefined,
   );

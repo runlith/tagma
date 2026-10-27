@@ -1441,7 +1441,7 @@ describe('the live execution runtime', () => {
       );
       expect(outcome.admitted._tag).toBe('InputAdmitted');
       expect(outcome.retried).toEqual(outcome.admitted);
-      expect(String(outcome.after?.input.acceptedThrough)).toBe('19');
+      expect(String(outcome.after?.input?.acceptedThrough)).toBe('19');
       expect(outcome.neighbourTyped._tag).toBe('InputAdmitted');
       expect(outcome.afterNeighbourClosed._tag).toBe('InputAdmitted');
       expect(outcome.closedNeighbour._tag).toBe('Failure');

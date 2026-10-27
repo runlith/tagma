@@ -87,9 +87,10 @@ function* summaryLines(summary: ExecutionSummary, shown: Addressed): Generator<s
     yield `${stream.stream}: bytes ${stream.retainedFrom}–${stream.durableThrough} retained, parsed through ${stream.parsedThrough}, ${stream.ending}`;
   }
   if (summary.grid !== undefined) yield `grid ${summary.grid.columns}×${summary.grid.rows}`;
-  yield `input accepted through byte ${summary.input.acceptedThrough}${
-    summary.input.pendingBytes > 0 ? `, ${summary.input.pendingBytes} bytes of it not yet written to the child` : ''
-  }`;
+  if (summary.input !== undefined)
+    yield `input accepted through byte ${summary.input.acceptedThrough}${
+      summary.input.pendingBytes > 0 ? `, ${summary.input.pendingBytes} bytes of it not yet written to the child` : ''
+    }`;
   if (summary.decision !== undefined)
     yield `${summary.decision._tag === 'Cancelled' ? `cancelled: ${summary.decision.cause} (${summary.decision.trigger})` : 'completed'} by host operation ${summary.decision.operation.operation}`;
   const spent = `${costWords(summary.cost)}${processWords(summary.processes)}`.replace(/^, /u, '');
