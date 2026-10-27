@@ -19,6 +19,7 @@ import { gitEffect } from '../graphFixture.js';
 
 const CALL = 'background-diff';
 const ASK = 'Leave the diff running.';
+const PRINTED = 'printed-before-the-handover';
 const finished: readonly LLMEvent[] = [
   { type: 'text-start', id: 'reply' },
   { type: 'text-delta', id: 'reply', text: 'Checked.' },
@@ -61,7 +62,11 @@ it.live('a background bash ending after logic handover agrees with read_command 
                     type: 'tool-call',
                     id: CALL,
                     name: 'bash',
-                    input: { command: `read ready < '${gate}'; exec git diff --stat`, waitMs: 0, description: 'Read the working diff' },
+                    input: {
+                      command: `read ready < '${gate}'; echo ${PRINTED}; exec git diff --stat`,
+                      waitMs: 0,
+                      description: 'Read the working diff',
+                    },
                   },
                   { type: 'step-finish', index: 0, reason: 'tool-calls' },
                   { type: 'finish', reason: 'tool-calls' },
@@ -152,11 +157,13 @@ it.live('a background bash ending after logic handover agrees with read_command 
     );
     expect(read.status).toBe(200);
     const answer = yield* Schema.decodeUnknownEffect(knownAnswer(COMMAND_OPERATIONS.read_command.answer))(read.body);
-    expect(answer.live).toMatchObject({
-      _tag: 'Held',
-      entry: { state: { phase: 'ended', nativeExit: { _tag: 'Code', code: 0 }, cleanup: 'complete' } },
-    });
+    expect(answer.live).toMatchObject({ _tag: 'Held', entry: { state: { phase: 'ended', nativeExit: { _tag: 'Code', code: 0 } } } });
+    expect(answer.live._tag === 'Held' ? answer.live.entry.state.cleanup : undefined).not.toBe('pending');
     expect(notice).toContain('exit 0');
+    expect(notice).toContain(PRINTED);
+    expect((yield* host.port.state(execution))?.streams).toContainEqual(
+      expect.objectContaining({ stream: 'stdout', durableThrough: String(PRINTED.length + 1), ending: 'eof' }),
+    );
     expect(notice).toContain(`${execution.execution}:${execution.incarnation}`);
   }).pipe(Effect.provide(BunServices.layer)),
 );

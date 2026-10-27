@@ -507,6 +507,7 @@ export const makeRecordShelf = Effect.fnUntraced(function* (options: ShelfInput)
     sealed,
     kept,
     retained: retainedReads.evidence,
+    positions: retainedReads.positions,
     evictGenerations,
   };
 });

@@ -1,9 +1,9 @@
-import { Effect, FileSystem, Path } from 'effect';
+import { Data, Effect, FileSystem, Path } from 'effect';
 import type { HoldCut, HoldStalled } from '@runlith/held/failures';
 import { ExecutionUnknown, ExecutionUnreadable } from './executionFailures';
 import type { ExecutionId, ExecutionRef, Incarnation, StreamEnding, Transport } from '@runlith/executions/protocol/execution';
 import type { InputProfile } from '@runlith/executions/protocol/inputProfile';
-import type { ByteCursor } from '@runlith/executions/protocol/record';
+import type { ByteCursor, StreamPositions } from '@runlith/executions/protocol/record';
 import type { RetainedRecord } from '@runlith/executions/protocol/runtime';
 import { RecordFiles, type RecordReadFailure, type SealedRecord } from '@runlith/executions/RecordFiles';
 import { RecordNameInvalid, recordFolder } from '@runlith/executions/recordFormat';
@@ -19,6 +19,15 @@ type Retained = {
   readonly record: SealedRecord;
   readonly transport: Transport;
 };
+
+export class RecordUnopened extends Data.TaggedError('RecordUnopened')<{
+  readonly act: 'open' | 'missing';
+  readonly detail: string;
+}> {
+  override get message(): string {
+    return this.detail;
+  }
+}
 
 const RETIRED_MODES: InputProfile = {
   _tag: 'Unavailable',
@@ -62,63 +71,79 @@ export const makeRetainedRecordReads = Effect.fnUntraced(function* (options: Ret
   const files = yield* Effect.provide(RecordFiles, RecordFiles.layer);
   const opened = new Map<string, Retained>();
 
-  const open = Effect.fnUntraced(function* (cursor: ByteCursor) {
-    const evidence = yield* store.evidenceOf(cursor.ref).pipe(
-      Effect.mapError((failure) =>
-        failure._tag === 'StoredExecutionMissing'
-          ? new ExecutionUnknown({ execution: cursor.ref.execution })
-          : new RecordReadFailed({
-              stream: cursor.stream,
-              act: 'open',
-              detail: `the retired generation's rows did not answer: ${failure._tag}`,
-            }),
-      ),
-    );
+  const open = Effect.fnUntraced(function* (ref: ExecutionRef) {
+    const evidence = yield* store
+      .evidenceOf(ref)
+      .pipe(
+        Effect.mapError((failure) =>
+          failure._tag === 'StoredExecutionMissing'
+            ? new ExecutionUnknown({ execution: ref.execution })
+            : new RecordUnopened({ act: 'open', detail: `the retired generation's rows did not answer: ${failure._tag}` }),
+        ),
+      );
     if (evidence.record.state.record === 'unavailable') {
-      return yield* new RecordReadFailed({
-        stream: cursor.stream,
+      return yield* new RecordUnopened({
         act: 'missing',
         detail: 'the generation that wrote this record gave its bytes back before it ended',
       });
     }
-    const record = yield* files.open(records, cursor.ref).pipe(
+    const record = yield* files.open(records, ref).pipe(
       Effect.mapError(
         (failure) =>
-          new RecordReadFailed({
-            stream: cursor.stream,
+          new RecordUnopened({
             act: failure._tag === 'RecordSealMissing' ? 'missing' : 'open',
             detail: `${failure._tag === 'RecordUnreadable' ? `${failure._tag} ${failure.reason}` : failure._tag}: the record of a retired generation`,
           }),
       ),
     );
-    const retained = {
-      ref: cursor.ref,
-      record,
-      transport: evidence.record.state.transport,
-    };
-    opened.set(keyOf(cursor.ref.incarnation, cursor.ref.execution), retained);
+    const retained = { ref, record, transport: evidence.record.state.transport };
+    opened.set(keyOf(ref.incarnation, ref.execution), retained);
     return retained;
   });
 
-  const read = (cursor: ByteCursor, limit: number): Effect.Effect<ProfiledRead, ExecutionUnknown | ReadFailure | HoldStalled | HoldCut> =>
-    cursor.ref.installation !== current.installation || cursor.ref.incarnation > current.incarnation
-      ? Effect.fail(new ExecutionUnknown({ execution: cursor.ref.execution }))
+  const retainedOf = (ref: ExecutionRef): Effect.Effect<Retained, ExecutionUnknown | RecordUnopened> =>
+    Effect.suspend(() => {
+      const hit = opened.get(keyOf(ref.incarnation, ref.execution));
+      return hit !== undefined && sameRef(hit.ref, ref) ? Effect.succeed(hit) : open(ref);
+    });
+
+  const leased = <A, E>(ref: ExecutionRef, use: Effect.Effect<A, E>): Effect.Effect<A, E | ExecutionUnknown | HoldStalled | HoldCut> =>
+    ref.installation !== current.installation || ref.incarnation > current.incarnation
+      ? Effect.fail(new ExecutionUnknown({ execution: ref.execution }))
       : Effect.acquireUseRelease(
-          leases.admitRetainedRead(cursor.ref),
-          () =>
-            Effect.gen(function* () {
-              const hit = opened.get(keyOf(cursor.ref.incarnation, cursor.ref.execution));
-              const retained = hit !== undefined && sameRef(hit.ref, cursor.ref) ? hit : yield* open(cursor);
-              const bytes = yield* retained.record
-                .read(cursor, Math.min(limit, chunkBytes))
-                .pipe(Effect.mapError(sealedRefusal(cursor, retained.transport)));
-              return {
-                ...bytes,
-                modes: retained.transport === 'pipes' ? pipeModes : RETIRED_MODES,
-              };
-            }),
-          () => leases.releaseRetainedRead(cursor.ref.incarnation),
+          leases.admitRetainedRead(ref),
+          () => use,
+          () => leases.releaseRetainedRead(ref.incarnation),
         );
+
+  const read = (cursor: ByteCursor, limit: number): Effect.Effect<ProfiledRead, ExecutionUnknown | ReadFailure | HoldStalled | HoldCut> =>
+    leased(
+      cursor.ref,
+      Effect.gen(function* () {
+        const retained = yield* retainedOf(cursor.ref).pipe(
+          Effect.mapError((failure) =>
+            failure._tag === 'RecordUnopened'
+              ? new RecordReadFailed({ stream: cursor.stream, act: failure.act, detail: failure.detail })
+              : failure,
+          ),
+        );
+        const bytes = yield* retained.record
+          .read(cursor, Math.min(limit, chunkBytes))
+          .pipe(Effect.mapError(sealedRefusal(cursor, retained.transport)));
+        return {
+          ...bytes,
+          modes: retained.transport === 'pipes' ? pipeModes : RETIRED_MODES,
+        };
+      }),
+    );
+
+  const positions = (
+    ref: ExecutionRef,
+  ): Effect.Effect<ReadonlyArray<StreamPositions>, ExecutionUnknown | RecordUnopened | HoldStalled | HoldCut> =>
+    leased(
+      ref,
+      Effect.map(retainedOf(ref), (retained) => retained.record.seal.streams.map((stream) => stream.positions)),
+    );
 
   const evidence = Effect.fnUntraced(function* (ref: ExecutionRef): Effect.fn.Return<RetainedRecord | undefined, ExecutionUnreadable> {
     const found = yield* store.evidenceOf(ref).pipe(
@@ -147,5 +172,5 @@ export const makeRetainedRecordReads = Effect.fnUntraced(function* (options: Ret
           });
     });
 
-  return { read, evidence, remove };
+  return { read, positions, evidence, remove };
 });

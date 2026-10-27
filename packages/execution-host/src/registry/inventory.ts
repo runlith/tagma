@@ -156,6 +156,13 @@ const filterKey = (query: CommandQuery): string =>
     .digest('hex')
     .slice(0, 16);
 
+const sealedPositions = Effect.fn('Executions.sealedPositions')(function* (registry: RegistryState, ref: ExecutionRef) {
+  const read = yield* Effect.result(registry.shelf.positions(ref));
+  if (read._tag === 'Success') return read.success;
+  yield* Effect.logWarning(`the sealed record of ${ref.execution} could not be read; its state names no stream positions`, read.failure);
+  return [];
+});
+
 const recordedSummary = Effect.fn('Executions.unacquiredSummary')(function* (registry: RegistryState, execution: ExecutionId) {
   const { store } = registry;
   const record = yield* store.executionOf(execution);
@@ -166,7 +173,8 @@ const recordedSummary = Effect.fn('Executions.unacquiredSummary')(function* (reg
   return {
     state: { ...record.state, unacquired: final.unacquired },
     custody: yield* store.custodyOf(execution),
-    streams: [],
+    streams:
+      final.unacquired === undefined && record.state.record !== 'unavailable' ? yield* sealedPositions(registry, record.state.ref) : [],
     native: record.native,
     input: final.unacquired === undefined ? undefined : { acceptedThrough: byteOffset(0n), pendingBytes: 0 },
     decision: operation === undefined ? undefined : yield* store.decisionOf(operation),
