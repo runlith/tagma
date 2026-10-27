@@ -54,6 +54,7 @@ export type ExecutionFeedItem =
   | { readonly _tag: 'Inventory'; readonly update: InventoryFeedItem }
   | { readonly _tag: 'Inputs'; readonly input: LaneInput }
   | { readonly _tag: 'Load'; readonly reading: LoadReading }
+  | { readonly _tag: 'ScreenSettled' }
   | { readonly _tag: 'Ended'; readonly ending: SubscriptionEnding };
 
 export class Executions extends Context.Service<

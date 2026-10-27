@@ -189,6 +189,7 @@ export const SubscriptionSource = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal('Inventory') }),
   Schema.Struct({ _tag: Schema.Literal('Inputs'), execution: ExecutionRef }),
   needing('machine-load', Schema.Struct({ _tag: Schema.Literal('Load'), serverPid: Positive, desktopPid: Schema.optional(Positive) })),
+  needing('screen-settled', Schema.Struct({ _tag: Schema.Literal('ScreenSettled'), execution: ExecutionRef, quietMs: Positive })),
 ]).pipe(Schema.toTaggedUnion('_tag'));
 export type SubscriptionSource = typeof SubscriptionSource.Type;
 
@@ -402,6 +403,7 @@ const events = [
   Schema.Struct({ _tag: Schema.Literal('Inventory'), subscription: SubscriptionId, update: InventoryFeedItem }),
   Schema.Struct({ _tag: Schema.Literal('Inputs'), subscription: SubscriptionId, ...LaneInput.fields }),
   needing('machine-load', Schema.Struct({ _tag: Schema.Literal('Load'), subscription: SubscriptionId, reading: LoadReading })),
+  needing('screen-settled', Schema.Struct({ _tag: Schema.Literal('ScreenSettled'), subscription: SubscriptionId })),
   Schema.Struct({ _tag: Schema.Literal('Ended'), subscription: SubscriptionId, ending: SubscriptionEnding }),
 ] as const;
 export const Event = Schema.Union(events).pipe(Schema.toTaggedUnion('_tag'));

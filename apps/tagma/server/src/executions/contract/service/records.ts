@@ -38,6 +38,7 @@ export class TerminalScreens extends Context.Service<
     readonly screen: (execution: ExecutionRef, request?: ScreenRead) => Effect.Effect<ScreenAnswer, TerminalFailure>;
     readonly point: (execution: ExecutionRef, request: ScreenPointRead) => Effect.Effect<ScreenPointed, TerminalFailure>;
     readonly screens: (execution: ExecutionRef, base?: FrameRevision) => Stream.Stream<ScreenFeedItem, TerminalFailure>;
+    readonly settled: (execution: ExecutionRef, quietMs: number) => Stream.Stream<void, TerminalFailure>;
   }
 >()('tagma/executions/TerminalScreens') {}
 

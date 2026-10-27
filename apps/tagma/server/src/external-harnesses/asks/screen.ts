@@ -1,5 +1,5 @@
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { Cause, Effect, Fiber, Scope } from 'effect';
+import { Cause, Effect, Fiber, Queue, Scope, Stream } from 'effect';
 import { declare } from '@runlith/held/Held';
 import { Holding } from '@runlith/held/holding';
 import type { ScreenAnswer } from '@runlith/executions/protocol/presentation';
@@ -9,7 +9,8 @@ import { readsScreen, sameScreenAsk, widgetStands } from '../adapter/screenAsk.j
 import { harnessAdapter } from '../contract/service/table.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { harnessSessionActive } from '../../threads/contract/wire/harness/session.js';
-import type { Terminals } from '../../executions/contract/service/terminals.js';
+import type { TerminalFailure, Terminals } from '../../executions/contract/service/terminals.js';
+import type { HarnessExecutionRef } from '../../threads/contract/wire/harness/observation.js';
 import type { TerminalScreens } from '../../executions/contract/service/records.js';
 import { HarnessSessionStore } from '../store/sessions.js';
 import type { TerminalAsks } from './terminal.js';
@@ -17,6 +18,8 @@ import type { StoreFailure } from '../../platform/contract/service/store.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 
 type Job = { readonly key: string; fiber: Fiber.Fiber<void> | null };
+
+const outdated = (failure: TerminalFailure): boolean => failure._tag === 'HostRefused' && failure.refusal._tag === 'UnsupportedCapability';
 
 type Seen = { previous: ScreenAsk | null; announced: ScreenAsk | null; on: string | null; unswept: boolean };
 
@@ -106,15 +109,18 @@ export class HarnessScreenAsks {
       readsScreen(harnessAdapter(facet.name));
     const key = eligible ? JSON.stringify([facet.session!.id, facet.execution]) : null;
     if (prior !== undefined && prior.key === key) return;
-    if (prior !== undefined) {
-      this.jobs.delete(threadId);
-      if (prior.fiber !== null) yield* Fiber.interrupt(prior.fiber);
+    if (prior !== undefined) this.jobs.delete(threadId);
+    const old = prior?.fiber ?? null;
+    const ending = old === null ? Effect.void : Fiber.interrupt(old);
+    const execution = facet.execution;
+    if (key === null || execution === null) {
+      yield* Effect.forkIn(ending, this.scope);
+      return;
     }
-    if (key === null) return;
     const job: Job = { key, fiber: null };
     this.jobs.set(threadId, job);
     job.fiber = yield* Effect.forkIn(
-      this.watch(threadId, job)
+      Effect.andThen(ending, this.watch(threadId, job, execution))
         .pipe(
           Effect.ensuring(
             Effect.sync(() => {
@@ -128,24 +134,58 @@ export class HarnessScreenAsks {
     );
   });
 
-  private watch(threadId: string, job: Job): Effect.Effect<void> {
+  private watch(threadId: string, job: Job, execution: HarnessExecutionRef): Effect.Effect<void> {
     const seen: Seen = { previous: null, announced: null, on: null, unswept: true };
-    return this.looking(threadId, job, seen).pipe(
+    return Effect.scoped(
+      Effect.flatMap(Queue.sliding<void>(1), (stilled) =>
+        Effect.andThen(Effect.forkScoped(this.following(threadId, execution, stilled)), this.looking(threadId, job, seen, stilled)),
+      ),
+    ).pipe(
       Effect.tapCause((cause) => Effect.logWarning('screen ask observation could not continue', { threadId, cause: Cause.pretty(cause) })),
       Effect.orDie,
     );
   }
 
-  private readonly looking = Effect.fnUntraced(function* (this: HarnessScreenAsks, threadId: string, job: Job, seen: Seen) {
+  private readonly following = Effect.fnUntraced(function* (
+    this: HarnessScreenAsks,
+    threadId: string,
+    execution: HarnessExecutionRef,
+    stilled: Queue.Queue<void>,
+  ) {
+    const { screens } = this;
+    const followed = Effect.flatMap(this.terminals.record(execution.execution, execution.incarnation), (record) =>
+      record === null
+        ? Effect.void
+        : Stream.runForEach(screens.settled(record.execution, CONFIRM_BEAT_MS), () => Queue.offer(stilled, undefined)),
+    );
+    for (;;) {
+      const ended = yield* Effect.result(followed);
+      if (ended._tag === 'Failure' && !outdated(ended.failure))
+        yield* Effect.logWarning('screen ask observation lost the screen; it follows it again after a quiet beat', {
+          threadId,
+          failure: String(ended.failure),
+        });
+      yield* Effect.sleep(QUIET_BEAT_MS);
+    }
+  });
+
+  private readonly looking = Effect.fnUntraced(function* (
+    this: HarnessScreenAsks,
+    threadId: string,
+    job: Job,
+    seen: Seen,
+    stilled: Queue.Queue<void>,
+  ) {
+    const next = (beat: number) => Effect.race(Effect.sleep(beat), Queue.take(stilled));
     while (true) {
       const beat = yield* Effect.result(this.beat(threadId, job, seen));
       if (beat._tag === 'Failure') {
         yield* Effect.logWarning('screen ask observation will look again', { threadId, failure: String(beat.failure) });
-        yield* Effect.sleep(QUIET_BEAT_MS);
+        yield* next(QUIET_BEAT_MS);
       } else if (beat.success === null) {
         return;
       } else {
-        yield* Effect.sleep(beat.success);
+        yield* next(beat.success);
       }
     }
   });

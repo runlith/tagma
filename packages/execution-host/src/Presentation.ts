@@ -1,4 +1,4 @@
-import { Data, Deferred, Effect, Ref, Schema, Scope } from 'effect';
+import { Clock, Data, Deferred, Effect, Ref, Schema, Scope } from 'effect';
 import type { ScreenAppearance } from '@runlith/executions/protocol/appearance';
 import type { ExecutionLimits } from '@runlith/executions/protocol/capacity';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
@@ -70,6 +70,7 @@ type Screen = {
   readonly viewers: ReadonlyMap<ScreenViewerId, Viewer>;
   readonly revision: number;
   readonly moved: number;
+  readonly movedAt: number;
   readonly records: ReadonlyMap<FrameRevision, RevisionRecord>;
   readonly produced: ReadonlyMap<FrameRevision | 'none', CachedProduce>;
   readonly ended: boolean;
@@ -81,6 +82,7 @@ export type Presentation = {
   readonly grant: (viewer: ScreenViewerId, frames: number) => Effect.Effect<number, ViewerUnknown | FrameCreditRefused>;
   readonly await: (viewer: ScreenViewerId) => Effect.Effect<boolean, ViewerUnknown>;
   readonly next: (viewer: ScreenViewerId) => Effect.Effect<ScreenFeedItem | undefined, ViewerUnknown>;
+  readonly settled: (viewer: ScreenViewerId, quietMs: number) => Effect.Effect<boolean, ViewerUnknown>;
   readonly invalidate: () => Effect.Effect<void>;
   readonly ended: () => Effect.Effect<void>;
   readonly read: (request: ScreenRead) => Effect.Effect<ScreenAnswer>;
@@ -100,6 +102,7 @@ export const makePresentation = Effect.fnUntraced(function* ({
     viewers: new Map(),
     revision: 0,
     moved: 0,
+    movedAt: 0,
     ended: false,
     records: new Map(),
     produced: new Map(),
@@ -198,18 +201,35 @@ export const makePresentation = Effect.fnUntraced(function* ({
     );
   }
 
+  const settled = Effect.fnUntraced(function* (viewer: ScreenViewerId, quietMs: number): Effect.fn.Return<boolean, ViewerUnknown> {
+    if (!(yield* awaitFrame(viewer))) return false;
+    for (;;) {
+      const now = yield* Clock.currentTimeMillis;
+      const left = yield* decide<number | 'ended', never>(viewer, (held, screen) => {
+        if (screen.ended) return [Effect.succeed('ended' as const), held];
+        const left = screen.movedAt + quietMs - now;
+        return left > 0 ? [Effect.succeed(left), held] : [Effect.succeed(0), { ...held, shownAt: held.stale }];
+      });
+      if (left === 'ended') return false;
+      if (left === 0) return true;
+      yield* Effect.sleep(left);
+    }
+  });
+
   function invalidate(): Effect.Effect<void> {
     return Effect.flatMap(
-      Ref.modify(state, (screen) => {
-        const waiting: Deferred.Deferred<boolean>[] = [];
-        const viewers = new Map<ScreenViewerId, Viewer>();
-        const moved = screen.moved + 1;
-        for (const [id, held] of screen.viewers) {
-          if (held.waiting !== undefined) waiting.push(held.waiting);
-          viewers.set(id, { ...held, stale: moved, waiting: undefined });
-        }
-        return [waiting, { ...screen, viewers, moved }] as const;
-      }),
+      Effect.flatMap(Clock.currentTimeMillis, (now) =>
+        Ref.modify(state, (screen) => {
+          const waiting: Deferred.Deferred<boolean>[] = [];
+          const viewers = new Map<ScreenViewerId, Viewer>();
+          const moved = screen.moved + 1;
+          for (const [id, held] of screen.viewers) {
+            if (held.waiting !== undefined) waiting.push(held.waiting);
+            viewers.set(id, { ...held, stale: moved, waiting: undefined });
+          }
+          return [waiting, { ...screen, viewers, moved, movedAt: now }] as const;
+        }),
+      ),
       (waiting) => Effect.forEach(waiting, (deferred) => Deferred.succeed(deferred, true), { discard: true }),
     );
   }
@@ -467,6 +487,7 @@ export const makePresentation = Effect.fnUntraced(function* ({
     grant: grant,
     await: awaitFrame,
     next: next,
+    settled: settled,
     invalidate: invalidate,
     ended: ended,
     read: read,

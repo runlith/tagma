@@ -63,6 +63,32 @@ export const subscribe = (
       ),
     );
   }
+  if (source._tag === 'ScreenSettled') {
+    const watched = readExecutionId(source.execution.execution);
+    return Effect.scoped(
+      Effect.flatMap(
+        span(
+          'Subscribe.ScreenSettled',
+          source.execution.execution,
+          undefined,
+          screens.openStillness(watched).pipe(
+            Effect.matchEffect({
+              onFailure: (failure) => Effect.as(refused(failure), Effect.void),
+              onSuccess: (viewer) =>
+                Effect.flatMap(admitted.subscribe(body.credits), (subscription) =>
+                  Effect.succeed(
+                    subscription === undefined
+                      ? Effect.void
+                      : tailed('subscribe-settled', subscription, stillness(screens, watched, viewer, source.quietMs, subscription)),
+                  ),
+                ),
+            }),
+          ),
+        ),
+        (run) => run,
+      ),
+    );
+  }
   if (source._tag === 'State') {
     const watched = readExecutionId(source.execution.execution);
     return Effect.flatMap(
@@ -299,6 +325,21 @@ const frames = Effect.fnUntraced(function* (
     }),
   );
 }, Effect.asVoid);
+
+const stillness = Effect.fnUntraced(function* (
+  screens: TerminalScreen['Service'],
+  execution: ExecutionId,
+  viewer: ScreenViewerId,
+  quietMs: number,
+  subscription: Subscription,
+): Effect.fn.Return<void> {
+  for (;;) {
+    const still = yield* screens.settled(execution, viewer, quietMs).pipe(Effect.result);
+    if (still._tag === 'Failure') return yield* subscription.end(endingOf(still.failure));
+    if (!still.success) return yield* subscription.end('completed');
+    if (!(yield* subscription.settled())) return;
+  }
+});
 
 const sealedPump = Effect.fnUntraced(function* (
   records: HostByteRecords['Service'],

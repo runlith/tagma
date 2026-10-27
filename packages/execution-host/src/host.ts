@@ -225,6 +225,7 @@ const servedBy = (profile: CapabilityProfile, measured: Measuring, platform: Rea
     ...platform,
     'end-residual',
     'screen-point',
+    'screen-settled',
     ...(profile.usage !== undefined && measured?.native !== undefined ? ['machine-load' as const, 'end-process' as const] : []),
   ]);
 

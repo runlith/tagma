@@ -101,7 +101,7 @@ export const makeHostTerminals = Effect.fnUntraced(function* ({
       disownGone: releasing.disownGone,
     }),
     ...records,
-    ...TerminalScreens.of({ screen: reading.screen, point: reading.point, screens: reading.screens }),
+    ...TerminalScreens.of({ screen: reading.screen, point: reading.point, screens: reading.screens, settled: reading.settled }),
     ...ExecutionProcessEvidence.of({
       foreground: evidence.foreground,
       processes: stops.processes,

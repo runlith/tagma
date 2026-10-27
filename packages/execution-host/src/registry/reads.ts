@@ -145,6 +145,11 @@ const openViewer = (registry: RegistryState, execution: ExecutionId, base?: Fram
   );
 };
 
+const openStillness = (registry: RegistryState, execution: ExecutionId) =>
+  Effect.flatMap(live(registry, execution), (found) =>
+    found.execution.presentation === undefined ? Effect.fail(new ScreenRefused({ execution })) : found.execution.presentation.openViewer(),
+  );
+
 const grantFrame = (registry: RegistryState, execution: ExecutionId, viewer: ScreenViewerId, frames: number) => {
   return Effect.flatMap(live(registry, execution), (found) =>
     found.execution.presentation === undefined
@@ -160,6 +165,16 @@ const awaitFrame = (registry: RegistryState, execution: ExecutionId, viewer: Scr
     found.execution.presentation === undefined
       ? Effect.fail(new ViewerMissing({ viewer }))
       : found.execution.presentation.await(viewer).pipe(Effect.catchTag('ViewerUnknown', () => Effect.fail(new ViewerMissing({ viewer })))),
+  );
+};
+
+const settled = (registry: RegistryState, execution: ExecutionId, viewer: ScreenViewerId, quietMs: number) => {
+  return Effect.flatMap(live(registry, execution), (found) =>
+    found.execution.presentation === undefined
+      ? Effect.fail(new ViewerMissing({ viewer }))
+      : found.execution.presentation
+          .settled(viewer, quietMs)
+          .pipe(Effect.catchTag('ViewerUnknown', () => Effect.fail(new ViewerMissing({ viewer })))),
   );
 };
 
@@ -224,12 +239,18 @@ export class TerminalScreen extends Context.Service<
       execution: ExecutionId,
       base?: FrameRevision,
     ) => Effect.Effect<ScreenViewerId, ExecutionUnknown | ScreenRefused | ReaderOpenFailure, Scope.Scope>;
+    readonly openStillness: (execution: ExecutionId) => Effect.Effect<ScreenViewerId, ExecutionUnknown | ScreenRefused, Scope.Scope>;
     readonly grantFrame: (
       execution: ExecutionId,
       viewer: ScreenViewerId,
       frames: number,
     ) => Effect.Effect<number, ExecutionUnknown | ViewerMissing | FrameCreditRefused>;
     readonly awaitFrame: (execution: ExecutionId, viewer: ScreenViewerId) => Effect.Effect<boolean, ExecutionUnknown | ViewerMissing>;
+    readonly settled: (
+      execution: ExecutionId,
+      viewer: ScreenViewerId,
+      quietMs: number,
+    ) => Effect.Effect<boolean, ExecutionUnknown | ViewerMissing>;
     readonly nextFrame: (
       execution: ExecutionId,
       viewer: ScreenViewerId,
@@ -259,7 +280,9 @@ export const terminalScreenOf = (registry: RegistryState) =>
     screen: (execution, request) => screen(registry, execution, request),
     point: (execution, request) => point(registry, execution, request),
     openViewer: (execution, base) => openViewer(registry, execution, base),
+    openStillness: (execution) => openStillness(registry, execution),
     grantFrame: (execution, viewer, frames) => grantFrame(registry, execution, viewer, frames),
     awaitFrame: (execution, viewer) => awaitFrame(registry, execution, viewer),
+    settled: (execution, viewer, quietMs) => settled(registry, execution, viewer, quietMs),
     nextFrame: (execution, viewer) => nextFrame(registry, execution, viewer),
   });

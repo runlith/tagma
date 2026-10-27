@@ -47,6 +47,39 @@ export const presentationContracts = (adapter: HostAdapter) =>
       }),
     );
 
+    it.effect('reports a screen once it stands still, and again once it stands still after it moved', () =>
+      Effect.gen(function* () {
+        const host = yield* Host;
+        const child = yield* start(PTY, 'echo', 1_024);
+        yield* withExecution(
+          host,
+          child.execution,
+          Effect.gen(function* () {
+            yield* textUntil(host, child.execution, 'pty', 'READY\n');
+            const settled = yield* Stream.toPull(
+              host.client.subscribe({ _tag: 'ScreenSettled', execution: child.execution, quietMs: 200 }, host.credits),
+            );
+            const shown = Effect.flatMap(host.client.screen(child.execution), (answer) =>
+              answer._tag === 'ScreenTextFrame'
+                ? Effect.succeed(answer.rows.map((row) => row.text).join('\n'))
+                : Effect.die(new Error('the terminal screen is unavailable')),
+            );
+            expect(yield* settled).toEqual([{ _tag: 'ScreenSettled' }]);
+            expect(yield* shown).toContain('READY');
+            const lane = yield* binding(host, child.execution);
+            for (const [sequence, typed] of ['Y', 'Z'].entries())
+              yield* host.client.input(child.execution, lane, {
+                sequence,
+                cause: 'raw',
+                act: { _tag: 'Write', bytes: Buffer.from(typed) },
+              });
+            expect(yield* settled).toEqual([{ _tag: 'ScreenSettled' }]);
+            expect(yield* shown).toContain('YZ');
+          }),
+        );
+      }),
+    );
+
     for (const transport of [PTY, PIPES]) {
       const stream = transport._tag === 'pty' ? 'pty' : 'stdout';
       it.effect(`${transport._tag}: carries fragmented UTF-8 input beyond one admission and drains every output byte`, () =>

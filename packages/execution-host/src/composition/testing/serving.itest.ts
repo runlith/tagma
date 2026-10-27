@@ -16,5 +16,6 @@ servingContracts(
     'holder-replaces-itself',
     'terminal-foreground',
     'screen-point',
+    'screen-settled',
   ]),
 );

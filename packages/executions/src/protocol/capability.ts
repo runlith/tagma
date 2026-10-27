@@ -12,6 +12,7 @@ export const Capability = Schema.Literals([
   'pipe-survives-holder',
   'holder-replaces-itself',
   'screen-point',
+  'screen-settled',
 ]);
 export type Capability = typeof Capability.Type;
 

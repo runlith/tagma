@@ -310,6 +310,12 @@ export const makeTerminalReads = Effect.fnUntraced(function* ({ installation }: 
       Stream.filter((update): update is ScreenFeedItem => update !== null),
     );
 
+  const settled = (execution: ExecutionRef, quietMs: number): Stream.Stream<void, TerminalFailure> =>
+    executionFeed.subscribe({ _tag: 'ScreenSettled', execution, quietMs }, executionWireLimits.credits).pipe(
+      Stream.takeWhile((delivery) => delivery._tag === 'ScreenSettled'),
+      Stream.as(undefined),
+    );
+
   const records = (cursor: ByteCursor): Stream.Stream<RecordChunk, TerminalFailure> =>
     Stream.unwrap(
       Effect.map(lostWithHost(cursor.ref), (lost): Stream.Stream<RecordChunk, TerminalFailure> =>
@@ -366,6 +372,7 @@ export const makeTerminalReads = Effect.fnUntraced(function* ({ installation }: 
     screen,
     point,
     screens,
+    settled,
     records,
   };
 });
