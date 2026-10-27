@@ -46,7 +46,6 @@ import {
   bornElsewhere,
   spawnAgentInput,
   spawnAsk,
-  spawnCopy,
   spawnSubscription,
   plainRaised,
   worktreeRaised,
@@ -204,19 +203,17 @@ export function collaborationTools(agents: ThreadPlaneAccess): ToolCatalog {
         ),
       settleEffect: (call) =>
         hostCall(
-          Effect.map(
-            agents.spawnSettlement(call.caller, call.toolCallId, spawnCopy(call.toolInput), spawnSubscription(call.toolInput)),
-            (settled) =>
-              settled.status === 'completed'
-                ? {
-                    status: 'completed',
-                    output: new Tool.ToolAnswer(
-                      settled.output,
-                      undefined,
-                      told({ json: doorAsked(call.toolInput, 'json') }, startedText(settled.output)),
-                    ),
-                  }
-                : settled,
+          Effect.map(agents.spawnSettlement(call.caller, call.toolCallId, spawnSubscription(call.toolInput)), (settled) =>
+            settled.status === 'completed'
+              ? {
+                  status: 'completed',
+                  output: new Tool.ToolAnswer(
+                    settled.output,
+                    undefined,
+                    told({ json: doorAsked(call.toolInput, 'json') }, startedText(settled.output)),
+                  ),
+                }
+              : settled,
           ),
         ),
       mutates: true,

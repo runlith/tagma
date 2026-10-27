@@ -49,6 +49,20 @@ export function scratchSection(scratch: string): PackedWorldStateSection {
   });
 }
 
+const forkOrigin = Schema.Struct({ thread: Schema.String, at: Schema.String });
+
+export function forkSection(origin: typeof forkOrigin.Type | null): PackedWorldStateSection {
+  const told = (current: typeof forkOrigin.Type) =>
+    `This thread is a fork of thread ${current.thread}, made ${current.at}: the history before then is not yours. Agents started in it report to the thread that started them, not here; the tasks claimed, lines changed and reports owed in it stay with their thread.`;
+  return worldStateSection({
+    id: 'fork',
+    codec: forkOrigin,
+    read: () => origin ?? withdrawn,
+    baseline: told,
+    update: (_previous, current) => told(current),
+  });
+}
+
 const standing = Schema.Struct({ worktree: Schema.NullOr(Schema.String), path: Schema.String });
 
 const spelled = (path: string): string => {

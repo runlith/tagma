@@ -23,7 +23,6 @@ import type {
   ThreadChildStopped,
   ThreadChildSummarizer,
   ThreadSendAnswer,
-  SpawnCopy,
   SpawnSubscription,
   ThreadSpawnAsk,
   ThreadSpawnResult,
@@ -397,13 +396,6 @@ export function spawnAsk(input: SpawnInput, requestId: string, asked: readonly R
     plain: input.plain,
     subscribe: input.subscribe,
   };
-}
-
-const isCopyAsk = Schema.is(Schema.Struct({ fork: spawnAgentInput.fields.fork, forkFrom: spawnAgentInput.fields.forkFrom }));
-
-export function spawnCopy(input: unknown): SpawnCopy | null {
-  if (!isCopyAsk(input) || (input.fork === undefined && input.forkFrom === undefined)) return null;
-  return { from: input.forkFrom };
 }
 
 const isSubscribingAsk = Schema.is(Schema.Struct({ subscribe: spawnAgentInput.fields.subscribe }));

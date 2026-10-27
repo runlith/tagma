@@ -42,6 +42,15 @@ export type WorldStateRecord = {
   readonly contextRuns: readonly string[] | null;
 };
 
+export type ForkOrigin = {
+  readonly thread: string;
+  readonly at: Date;
+};
+
+export type WorldStateReading = WorldStateRecord & {
+  readonly fork: ForkOrigin | null;
+};
+
 export type StalledRun = {
   readonly threadId: string;
   readonly projectId: number;
@@ -214,15 +223,21 @@ export const makeNativeThreadRows = Effect.fnUntraced(function* ({ threads }: { 
       if (harness !== null && input.agentId !== HARNESS_AGENT_ID) {
         yield* records.harnessed(tx, input.threadId, { harness: harness.facet.name, agentId: HARNESS_AGENT_ID });
       }
-      if (input.carried === 'all' && context !== undefined && projectId === context.projectId) {
+      if (input.carried === 'all' || input.carried === 'turns' || input.carried === 'before') {
+        const told = input.carried === 'all' && context !== undefined && projectId === context.projectId ? context : null;
         yield* tx.run(
           db
             .update(thread)
             .set({
-              contextEventId: context.contextEventId,
-              worldStateSnapshot: context.worldStateSnapshot,
-              worldStateCheckpointId: context.worldStateCheckpointId,
-              contextRuns: context.contextRuns,
+              forkOf: input.contextFrom ?? input.fromThreadId,
+              ...(told === null
+                ? {}
+                : {
+                    contextEventId: told.contextEventId,
+                    worldStateSnapshot: told.worldStateSnapshot,
+                    worldStateCheckpointId: told.worldStateCheckpointId,
+                    contextRuns: told.contextRuns,
+                  }),
             })
             .where(eq(thread.id, input.threadId)),
         );
@@ -262,7 +277,7 @@ export const makeNativeThreadRows = Effect.fnUntraced(function* ({ threads }: { 
             .get(),
         ),
       ),
-    worldStateSnapshot: (id: string): Effect.Effect<WorldStateRecord, StoreFailure> =>
+    worldStateSnapshot: (id: string): Effect.Effect<WorldStateReading, StoreFailure> =>
       units.read((unit) =>
         unit
           .run(
@@ -271,8 +286,11 @@ export const makeNativeThreadRows = Effect.fnUntraced(function* ({ threads }: { 
                 snapshot: thread.worldStateSnapshot,
                 checkpointId: thread.worldStateCheckpointId,
                 contextRuns: thread.contextRuns,
+                forkOf: thread.forkOf,
+                bornAt: recordFacts.createdAt,
               })
               .from(thread)
+              .leftJoin(recordFacts, eq(recordFacts.id, thread.id))
               .where(eq(thread.id, id))
               .get(),
           )
@@ -281,6 +299,7 @@ export const makeNativeThreadRows = Effect.fnUntraced(function* ({ threads }: { 
               snapshot: row?.snapshot ?? {},
               checkpointId: row?.checkpointId ?? null,
               contextRuns: row?.contextRuns ?? null,
+              fork: row?.forkOf == null || row.bornAt == null ? null : { thread: row.forkOf, at: row.bornAt },
             })),
           ),
       ),

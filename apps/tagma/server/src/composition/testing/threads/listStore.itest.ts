@@ -363,7 +363,7 @@ it.live(
 );
 
 it.live(
-  'a whole-conversation branch inherits the source cursors; a fresh child and a cut branch start at zero',
+  'a whole-conversation branch inherits the source cursors; a fresh child and a cut branch start at zero; only branches name their source',
   Effect.fnUntraced(function* () {
     const demo = yield* threadStoreFixture;
     const { store, threads, ids } = yield* project(demo, 1);
@@ -390,11 +390,17 @@ it.live(
     });
     const whole = yield* told(yield* born('all'));
     expect(whole.cursor).toMatchObject({ eventId: 41 });
-    expect(whole.world).toEqual({ snapshot: { skills: ['a', 'b'] }, checkpointId: 'ckpt-1', contextRuns: ['run-1'] });
+    expect(whole.world).toMatchObject({
+      snapshot: { skills: ['a', 'b'] },
+      checkpointId: 'ckpt-1',
+      contextRuns: ['run-1'],
+      fork: { thread: source },
+    });
     for (const carried of ['turns', 'fresh'] as const) {
       const again = yield* told(yield* born(carried));
       expect(again.cursor).toMatchObject({ eventId: 0 });
-      expect(again.world).toEqual({ snapshot: {}, checkpointId: null, contextRuns: null });
+      expect(again.world).toMatchObject({ snapshot: {}, checkpointId: null, contextRuns: null });
+      expect(again.world.fork?.thread ?? null).toBe(carried === 'turns' ? source : null);
     }
   }),
 );

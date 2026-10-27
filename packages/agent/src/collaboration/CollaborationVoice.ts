@@ -149,9 +149,8 @@ export function collaborationBirth(input: {
   child: ThreadRecord;
   depth: ThreadSpawnDepth;
   messaging: boolean;
-  forkedFrom?: string;
 }): string {
-  const { parent, child, depth, messaging, forkedFrom } = input;
+  const { parent, child, depth, messaging } = input;
   const root = child.parentThreadId === null;
   return agentSignalMarkup({
     type: COLLABORATION_BIRTH_MARKUP,
@@ -179,12 +178,6 @@ export function collaborationBirth(input: {
             child.name === null
               ? `You were given no name: this team addresses you by your thread id, ${child.id}.`
               : `Your name in this team is ${child.name}; peers address you by it or by ${child.id}.`,
-          ]),
-      ...(forkedFrom === undefined
-        ? []
-        : [
-            `The history before this is copied from thread ${forkedFrom}: the tasks it claimed, the lines it changed and the`,
-            'reports it owes stay that thread’s, and none of them is yours.',
           ]),
       ...(messaging
         ? [

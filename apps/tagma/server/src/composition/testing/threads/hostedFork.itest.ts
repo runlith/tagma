@@ -2,7 +2,7 @@ import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { existsSync } from 'node:fs';
 import { eq, sql } from 'drizzle-orm';
-import { Context, Effect, Schema } from 'effect';
+import { Context, Effect, FileSystem, Schema } from 'effect';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
@@ -46,30 +46,48 @@ describe.skipIf(!existsSync(LIBRARY))('a fork of a Claude Code thread on ACP', (
   layer(protocolWorld({ name: 'hosted-fork', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }), {
     excludeTestServices: true,
   })('protocol world', (it) => {
-    it.effect('a spawn forks the source’s vendor session instead of opening a new one from the journal', () =>
-      Effect.gen(function* () {
-        const { world, projectId, agent, birth } = yield* ProtocolWorld;
-        const report = yield* agent('fork');
-        const source = yield* birth();
-        const parent = (yield* birthsOf(world.runtime.owners).create({ projectId, createdBySessionId: null, approvalMode: 'bypass' }))
-          .thread.id;
-        yield* completed(report, (yield* turnsOf(world.runtime.owners).send(source, projectId, 'Read the module.')).runId);
-        const spawn = (input: object) =>
-          world.op('spawn_agent', input, `project=${projectId}`, { [GRANT_HEADER]: grantFor(parent), [APPROVAL_WAIT_HEADER]: '0' });
-        const ask = { agentId: 'tagma', task: 'Say what it does.', fork: 'all', forkFrom: source };
-        const first = (yield* spawn(ask)).body;
-        const answered = Schema.is(refusalSchema)(first) && first.code === 'instructions-unread' ? (yield* spawn(ask)).body : first;
-        const started = yield* decodeSpawn(answered);
-        if (started.status !== 'started') return yield* Effect.die(new Error(`the fork was ${started.status}`));
-        const kernel = Context.get(world.runtime.owners, ThreadHarness);
-        yield* Effect.addFinalizer(() => {
-          const child = kernel.threads.handle(started.threadId, 'operator');
-          return Effect.andThen(child.stop(), child.release()).pipe(Effect.orDie);
-        });
-        const prompts = yield* framed(report, 'session/prompt', 2, 'the fork reached the agent');
-        expect(prompts.filter((line) => line.method === '_tagma/fork').map((line) => line.params)).toMatchObject([{ sessionId: 'sess-1' }]);
-        expect(prompts.filter((line) => line.method === 'session/prompt').at(-1)?.params).toMatchObject({ sessionId: 'sess-fork' });
-      }),
+    it.effect(
+      'a spawn forks the source’s vendor session instead of opening a new one from the journal, and its first turn alone names the source',
+      () =>
+        Effect.gen(function* () {
+          const { world, projectId, agent, birth } = yield* ProtocolWorld;
+          const report = yield* agent('fork');
+          const source = yield* birth();
+          const parent = (yield* birthsOf(world.runtime.owners).create({ projectId, createdBySessionId: null, approvalMode: 'bypass' }))
+            .thread.id;
+          yield* completed(report, (yield* turnsOf(world.runtime.owners).send(source, projectId, 'Read the module.')).runId);
+          const spawn = (input: object) =>
+            world.op('spawn_agent', input, `project=${projectId}`, { [GRANT_HEADER]: grantFor(parent), [APPROVAL_WAIT_HEADER]: '0' });
+          const ask = { agentId: 'tagma', task: 'HOLD the turn and say what it does.', fork: 'all', forkFrom: source };
+          const first = (yield* spawn(ask)).body;
+          const answered = Schema.is(refusalSchema)(first) && first.code === 'instructions-unread' ? (yield* spawn(ask)).body : first;
+          const started = yield* decodeSpawn(answered);
+          if (started.status !== 'started') return yield* Effect.die(new Error(`the fork was ${started.status}`));
+          const kernel = Context.get(world.runtime.owners, ThreadHarness);
+          yield* Effect.addFinalizer(() => {
+            const child = kernel.threads.handle(started.threadId, 'operator');
+            return Effect.andThen(child.stop(), child.release()).pipe(Effect.orDie);
+          });
+          const prompts = yield* framed(report, 'session/prompt', 2, 'the fork reached the agent');
+          expect(prompts.filter((line) => line.method === '_tagma/fork').map((line) => line.params)).toMatchObject([
+            { sessionId: 'sess-1' },
+          ]);
+          expect(prompts.filter((line) => line.method === 'session/prompt').at(-1)?.params).toMatchObject({ sessionId: 'sess-fork' });
+          const files = yield* FileSystem.FileSystem;
+          const opened = () =>
+            Effect.map(
+              world.op('open_hosted_turn', {}, `project=${projectId}`, { [GRANT_HEADER]: grantFor(started.threadId) }),
+              (answer) => String((answer.body as { readonly context: string | null }).context ?? '').split(source).length - 1,
+            );
+          expect(yield* opened()).toBe(1);
+          const held = (yield* kernel.reads.snapshot(started.threadId)).latestRun?.id ?? '';
+          yield* files.writeFileString(`${report}.release`, 'release');
+          yield* completed(report, held);
+          yield* files.remove(`${report}.release`);
+          yield* turnsOf(world.runtime.owners).send(started.threadId, projectId, 'HOLD the turn and say it again.');
+          yield* framed(report, 'session/prompt', 3, 'the second turn of the fork reached the agent');
+          expect(yield* opened()).toBe(0);
+        }),
     );
 
     it.effect(

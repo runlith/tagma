@@ -13,6 +13,7 @@ import { Digest } from '../../graph/contract/service/orientation.js';
 import { block } from '../../graph/store/tables.js';
 import { eq } from 'drizzle-orm';
 import { inventoryChars, type StartPieces } from '../agents/start.js';
+import { forkSection } from './worldState.js';
 
 type TurnFailure = StoreFailure | GateRefusal;
 
@@ -87,7 +88,8 @@ export const nativeTurnContext = Effect.fn('native-harness.turnContext')(
         })
       : null;
 
-    const world = yield* renderWorldState([...deps.sections], prior);
+    const fork = stored.fork === null ? null : { thread: stored.fork.thread, at: stored.fork.at.toISOString() };
+    const world = yield* renderWorldState([forkSection(fork), ...deps.sections], prior);
 
     const occurredAt = new Date(yield* Clock.currentTimeMillis).toISOString();
     const parts: string[] = [];

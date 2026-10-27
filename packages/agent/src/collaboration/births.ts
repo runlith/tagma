@@ -66,7 +66,6 @@ export type Provision = {
   readonly itemId: string;
   readonly task: string;
   readonly lowered?: ThreadSpawnResult['lowered'];
-  readonly forkedFrom?: string;
   readonly subscribe?: SpawnSubscription;
 };
 
@@ -122,10 +121,7 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
     const depth = yield* spawnAccess.depth(child);
     const text = child.plain
       ? provision.task
-      : [
-          collaborationBirth({ parent, child, depth, messaging: child.capabilities.messaging, forkedFrom: provision.forkedFrom }),
-          provision.task,
-        ]
+      : [collaborationBirth({ parent, child, depth, messaging: child.capabilities.messaging }), provision.task]
           .filter((part) => part.trim() !== '')
           .join('\n\n');
     const deadline = (yield* request(provision.itemId)).deadline;
@@ -186,10 +182,8 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
       const asked = birthRequest(input, project, source);
       const itemId = spawnRequestId(parent.id, input.requestId);
       const standing = yield* threads.readBirth(parent.id, parent.principal, asked);
-      if (standing.status === 'born') {
-        const forkedFrom = input.fork === undefined ? undefined : source.id;
-        return yield* answer(parent, standing.thread, { itemId, task: input.task, forkedFrom, subscribe: input.subscribe });
-      }
+      if (standing.status === 'born')
+        return yield* answer(parent, standing.thread, { itemId, task: input.task, subscribe: input.subscribe });
       if (standing.status === 'spent') return yield* spawnSpent(input.requestId);
       const there = project === undefined ? {} : { project };
       const offer = yield* types.resolve({ caller: 'agent', under: parent, typeId: input.agentId, ...there });
@@ -283,7 +277,6 @@ export const makeBirths = Effect.fnUntraced(function* ({ request }: { readonly r
           itemId,
           task: input.task,
           lowered: selection?.lowered,
-          forkedFrom: input.fork === undefined ? undefined : source.id,
           subscribe: input.subscribe,
         });
       });

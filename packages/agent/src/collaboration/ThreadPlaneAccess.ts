@@ -96,8 +96,6 @@ export type ThreadChildMoved = ThreadTarget & {
   readonly lowered?: ThreadSpawnResult['lowered'];
 };
 
-export type SpawnCopy = { readonly from?: string };
-
 export type SpawnSubscription = { readonly wakes?: readonly WakingThreadEvent[] };
 
 export type ThreadSpawnAsk = {
@@ -165,7 +163,6 @@ export type ThreadPlaneAccess = {
   spawnSettlement(
     caller: ToolCaller,
     requestId: string,
-    copied: SpawnCopy | null,
     subscribe: SpawnSubscription | undefined,
   ): Effect.Effect<ToolEffectSettlement<ThreadSpawnResult>, ThreadPlaneFailure>;
 };

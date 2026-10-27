@@ -166,21 +166,14 @@ export const threadPlanesLayer = Layer.effect(
               }),
               rewind: (ask) => acting.rewind(calling, ask),
             })),
-          spawnSettlement: Effect.fnUntraced(function* (caller, requestId, copied, subscribe) {
+          spawnSettlement: Effect.fnUntraced(function* (caller, requestId, subscribe) {
             const { thread: calling } = yield* callingThread(threads, caller);
             const provisioned = yield* inbox.receipt(spawnRequestId(calling.id, requestId));
             if (provisioned?.kind !== 'task') return { status: 'aborted' } as const;
             const child = yield* threads.find(provisioned.threadId, calling.principal);
             const creator = child === null ? null : (child.parentThreadId ?? child.createdBy);
             if (child === null || creator !== calling.id) return { status: 'aborted' } as const;
-            const source = copied?.from === undefined ? calling : yield* resolveThread(threads, calling, copied.from);
-            const forkedFrom = copied === null ? undefined : source?.id;
-            const output = yield* tree.answer(calling, child, {
-              itemId: provisioned.id,
-              task: provisioned.body.text,
-              forkedFrom,
-              subscribe,
-            });
+            const output = yield* tree.answer(calling, child, { itemId: provisioned.id, task: provisioned.body.text, subscribe });
             return { status: 'completed', output } as const;
           }),
         } satisfies ThreadPlaneAccess;

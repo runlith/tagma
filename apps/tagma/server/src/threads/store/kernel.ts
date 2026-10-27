@@ -58,6 +58,7 @@ export const thread = sqliteTable(
     worldStateSnapshot: text('world_state_snapshot', { mode: 'json' }).notNull().$type<Record<string, unknown>>().default({}),
     worldStateCheckpointId: text('world_state_checkpoint_id'),
     contextRuns: text('context_runs', { mode: 'json' }).$type<readonly string[]>(),
+    forkOf: text('fork_of'),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
       .notNull()
       .$defaultFn(() => new Date()),
