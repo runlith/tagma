@@ -12,7 +12,9 @@ import {
 } from '@runlith/executions/protocol/inventory';
 import { ExecutionId, type ExecutionRef } from '@runlith/executions/protocol/execution';
 import { type ExecutionPage, type ExecutionSummary, type RuntimeStatus } from '@runlith/executions/protocol/runtime';
-import { byteOffset } from '@runlith/executions/protocol/record';
+import { byteOffset, type StreamPositions } from '@runlith/executions/protocol/record';
+import { RecordNameInvalid, recordFolder } from '@runlith/executions/recordFormat';
+import { OUTPUT_FILE } from '../RecordWriter';
 import { type AdmittedCommand } from '../store/records';
 import { ExecutionUnreadable, ExecutionUnknown, ExecutionUnrecorded } from '../executionFailures';
 import { type EndedExecution, type ObservedExecution } from '../ProcessEvidence';
@@ -170,15 +172,41 @@ const recordedSummary = Effect.fn('Executions.unacquiredSummary')(function* (reg
   const final = yield* store.finalOf(execution);
   if (final === undefined || (final.unacquired === undefined && record.state.record === 'unavailable')) return undefined;
   const operation = yield* store.startOf(execution);
+  const streams =
+    final.unacquired === undefined && record.state.record !== 'unavailable' ? yield* sealedPositions(registry, record.state.ref) : [];
   return {
     state: { ...record.state, unacquired: final.unacquired },
     custody: yield* store.custodyOf(execution),
-    streams:
-      final.unacquired === undefined && record.state.record !== 'unavailable' ? yield* sealedPositions(registry, record.state.ref) : [],
+    streams,
     native: record.native,
     input: final.unacquired === undefined ? undefined : { acceptedThrough: byteOffset(0n), pendingBytes: 0 },
     decision: operation === undefined ? undefined : yield* store.decisionOf(operation),
+    outputFile: yield* keptOutput(registry, execution, streams),
   } satisfies ExecutionSummary;
+});
+
+const keptOutput = Effect.fn('Executions.keptOutput')(function* (
+  registry: RegistryState,
+  execution: ExecutionId,
+  streams: ReadonlyArray<StreamPositions>,
+) {
+  const output = streams.find((positions) => positions.stream === 'output');
+  const folder = recordFolder(execution);
+  if (
+    output === undefined ||
+    output.ending !== 'eof' ||
+    output.durableThrough === output.retainedFrom ||
+    folder instanceof RecordNameInvalid
+  ) {
+    return undefined;
+  }
+  const file = registry.path.join(registry.records, folder, OUTPUT_FILE);
+  const standing = yield* Effect.result(registry.fs.exists(file));
+  if (standing._tag === 'Failure') {
+    yield* Effect.logWarning(`the kept output of ${execution} could not be looked up`, standing.failure);
+    return undefined;
+  }
+  return standing.success ? { path: file, from: output.retainedFrom, through: output.durableThrough } : undefined;
 });
 
 export const summary = Effect.fnUntraced(function* (registry: RegistryState, execution: ExecutionId) {

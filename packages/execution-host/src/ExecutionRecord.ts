@@ -24,6 +24,7 @@ import {
   sameGeometry,
   type ByteCursor,
   type GridEntry,
+  type OutputFile,
   type RecordRange,
   type RecordTail,
   type StreamPositions,
@@ -290,6 +291,8 @@ export const makeSegmentRecord = Effect.fnUntraced(function* (opening: Opening) 
   const gridding = yield* Semaphore.make(1);
   const reading: HandleCount = { open: 0 };
   let suspended = false;
+  let settling: Deferred.Deferred<void> | undefined;
+  let kept: OutputFile | undefined;
   const teeing = streams.has(OUTPUT);
   const turns = new Map<number, Deferred.Deferred<void>>();
   let issued = 0;
@@ -704,14 +707,45 @@ export const makeSegmentRecord = Effect.fnUntraced(function* (opening: Opening) 
         : [Effect.void, held],
     );
 
-  const settleOutput = Effect.flatMap(Ref.get(state), (current) => {
-    if (current.streams.get(OUTPUT)?.ending !== 'open') return Effect.void;
-    const sources = [...current.streams.values()].filter((held) => held.stream !== OUTPUT);
-    if (sources.some((held) => held.ending === 'open')) return Effect.void;
-    return endOne(OUTPUT, sources.some((held) => held.ending === 'error') ? 'error' : 'eof').pipe(
-      Effect.catchTag('StreamMissing', () => Effect.void),
-    );
-  });
+  const keepOutput = Effect.fnUntraced(function* (rebuild: boolean) {
+    const held = (yield* Ref.get(state)).streams.get(OUTPUT);
+    if (held === undefined || held.ending !== 'eof' || held.failure !== undefined || held.durableThrough === held.retainedFrom) return;
+    const standing = rebuild ? yield* Effect.result(writer.keptOutput) : undefined;
+    if (standing !== undefined && Result.isFailure(standing)) {
+      yield* Effect.logWarning(`the kept output of ${ref.execution} could not be looked up`, standing.failure);
+      return;
+    }
+    const written =
+      standing?.success === undefined
+        ? yield* Effect.result(writer.keepOutput(held.segments, held.retainedFrom))
+        : Result.succeed(standing.success);
+    if (Result.isFailure(written)) {
+      yield* Effect.logWarning(`the output of ${ref.execution} was not kept as a file`, written.failure);
+      return;
+    }
+    kept = { path: written.success, from: byteOffset(held.retainedFrom), through: byteOffset(held.durableThrough) };
+  }, Effect.uninterruptible);
+
+  const settleOutput = Effect.flatten(
+    Ref.modify(state, (current): readonly [Effect.Effect<void>, RecordState] => {
+      const output = current.streams.get(OUTPUT);
+      if (output === undefined) return [Effect.void, current];
+      const sources = [...current.streams.values()].filter((held) => held.stream !== OUTPUT);
+      if (sources.some((held) => held.ending === 'open')) return [Effect.void, current];
+      if (settling !== undefined) return [Deferred.await(settling), current];
+      if (output.ending !== 'open') return [Effect.void, current];
+      const settled = Deferred.makeUnsafe<void>();
+      settling = settled;
+      return [
+        endOne(OUTPUT, sources.some((held) => held.ending === 'error') ? 'error' : 'eof').pipe(
+          Effect.catchTag('StreamMissing', () => Effect.void),
+          Effect.andThen(keepOutput(false)),
+          Effect.ensuring(Deferred.succeed(settled, undefined)),
+        ),
+        current,
+      ];
+    }),
+  );
 
   const endStream = (stream: Stream, ending: StreamEnding): Effect.Effect<void, StreamMissing> =>
     stream === OUTPUT ? endOne(stream, ending) : Effect.andThen(endOne(stream, ending), settleOutput);
@@ -993,7 +1027,10 @@ export const makeSegmentRecord = Effect.fnUntraced(function* (opening: Opening) 
     (effect) => Effect.andThen(writer.hurry(), effect),
   );
 
-  if (opening.mode === 'reopen') yield* settleOutput;
+  if (opening.mode === 'reopen') {
+    yield* settleOutput;
+    if (kept === undefined) yield* keepOutput(true);
+  }
   yield* Effect.addFinalizer(() => (suspended ? Effect.void : Effect.asVoid(seal())));
   return {
     ref,
@@ -1024,6 +1061,7 @@ export const makeSegmentRecord = Effect.fnUntraced(function* (opening: Opening) 
       const output = current.streams.get(OUTPUT);
       return output === undefined ? undefined : output.durableThrough > 0n;
     }),
+    outputFile: Effect.sync(() => kept),
     availability: Effect.map(Ref.get(state), (current): RecordAvailability => {
       const held = [...current.streams.values()].filter((stream) => stream.stream !== OUTPUT);
       if (held.some((stream) => stream.failure !== undefined)) return 'unavailable';

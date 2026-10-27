@@ -14,6 +14,8 @@ const settlement = (verdicts: readonly CommandVerdict[]): ShellSettlement => ({
   settled: { ...localRunning, code: 7 },
   stdout,
   stderr,
+  cut: false,
+  outputFile: null,
   outputUnavailable: null,
   moved: names,
   head: null,

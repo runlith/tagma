@@ -10,8 +10,9 @@ export const recordTail = Effect.fn('CommandOutput.recordTail')(function* (
   records: ExecutionRecords['Service'],
   execution: ExecutionRef,
   bytesPerStream: number,
-): Effect.fn.Return<string, TerminalFailure> {
+): Effect.fn.Return<{ readonly text: string; readonly cut: boolean }, TerminalFailure> {
   const parts: string[] = [];
+  let cut = false;
   for (const stream of OUTPUT_STREAMS) {
     const bounds = yield* records.bytes({ ref: execution, stream, offset: ByteOffset.make('0') }, 0, { withPositions: true });
     const retainedFrom = offsetValue(bounds.range.retainedFrom);
@@ -19,12 +20,13 @@ export const recordTail = Effect.fn('CommandOutput.recordTail')(function* (
     const window = BigInt(bytesPerStream);
     const wanted = durable > window ? durable - window : 0n;
     const from = wanted < retainedFrom ? retainedFrom : wanted;
+    if (from > 0n) cut = true;
     if (durable <= from) continue;
     const bytes = yield* readRange(records.bytes, { ref: execution, stream, offset: byteOffset(from) }, durable);
     const text = decodeUtf8(bytes);
     if (text !== '') parts.push(text);
   }
-  return parts.join('\n');
+  return { text: parts.join('\n'), cut };
 });
 
 export const readRange = Effect.fn('CommandOutput.readRange')(function* (

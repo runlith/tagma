@@ -625,7 +625,7 @@ export const executionsLayer: Layer.Layer<
           CommandReader,
           CommandReader.of({
             ...commandReader,
-            ...makeCommandOutput({ commands: terminals.commands, reader: commandReader, waiters }),
+            ...makeCommandOutput({ commands: terminals.commands, reader: commandReader, waiters, terminals }),
             ...(yield* makeOutputSearch({ commands: terminals.commands, reader: commandReader })),
             follow: feeds.follow,
           }),

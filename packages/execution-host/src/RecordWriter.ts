@@ -22,6 +22,8 @@ import type { ExecutionRef, Transport } from '@runlith/executions/protocol/execu
 import { Stream, type TerminalGeometry } from '@runlith/executions/protocol/record';
 import { JournalInvalid, makeRecordJournal } from './RecordJournal';
 
+export const OUTPUT_FILE = 'output.log';
+
 export type RecordOptions = {
   readonly actMs?: number;
   readonly grid?: TerminalGeometry;
@@ -313,6 +315,41 @@ export const makeRecordWriter = Effect.fnUntraced(function* (opening: Opening) {
       ),
     );
 
+  const keptPath = path.join(directory, OUTPUT_FILE);
+
+  const keepOutput = (segments: ReadonlyArray<RecordSegment>, from: bigint): Effect.Effect<string, RecordWriteFailed> => {
+    const draft = `${keptPath}.next`;
+    const failed = (detail: string) => new RecordWriteFailed({ stream: 'output', act: 'segment', detail });
+    const copy = Effect.scoped(
+      Effect.gen(function* () {
+        const file = yield* fs.open(draft, { flag: 'w', mode: 0o600 });
+        for (const segment of segments) {
+          const first = segment.first > from ? segment.first : from;
+          if (segment.end <= first) continue;
+          const bytes = yield* fs.readFile(segmentPath('output', segment.first));
+          const end = Number(segmentPosition(segment.first, segment.end));
+          if (bytes.length < end)
+            return yield* failed(`segment ${segment.first} holds ${bytes.length} of the ${end} bytes its bounds name`);
+          yield* file.writeAll(bytes.subarray(Number(segmentPosition(segment.first, first)), end));
+        }
+      }),
+    ).pipe(
+      Effect.andThen(fs.rename(draft, keptPath)),
+      Effect.as(keptPath),
+      Effect.catchTag('PlatformError', (error) => failed(error.message)),
+    );
+    return bounded('output', 'segment', copy);
+  };
+
+  const keptOutput: Effect.Effect<string | undefined, RecordWriteFailed> = bounded(
+    'output',
+    'open',
+    fs.exists(keptPath).pipe(
+      Effect.map((standing) => (standing ? keptPath : undefined)),
+      Effect.catchTag('PlatformError', (error) => new RecordWriteFailed({ stream: 'output', act: 'open', detail: error.message })),
+    ),
+  );
+
   const writeSeal = Effect.fnUntraced(function* (seal: RecordSeal) {
     const text = yield* encodeSeal(seal).pipe(
       Effect.catchTag('SchemaError', (error) => new RecordWriteFailed({ act: 'seal', detail: error.message })),
@@ -372,6 +409,8 @@ export const makeRecordWriter = Effect.fnUntraced(function* (opening: Opening) {
     openSegment: (stream: Stream, first: bigint) => openSegment(stream, first, bounded),
     closeSegment: (stream: Stream) => closeSegment(stream, bounded),
     writeSeal,
+    keepOutput,
+    keptOutput,
   };
 });
 

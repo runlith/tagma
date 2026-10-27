@@ -6,7 +6,7 @@ import { ExecutionRef, NativeExit } from '@runlith/executions/protocol/execution
 import { CommandEntry, InventoryRevision, UnmeasuredCoverage } from '@runlith/executions/protocol/inventory';
 import { ProcessIdentity } from '@runlith/executions/protocol/evidence';
 import { HostMemory } from '@runlith/executions/protocol/runtime';
-import { ByteOffset } from '@runlith/executions/protocol/record';
+import { ByteOffset, OutputFile } from '@runlith/executions/protocol/record';
 import { PageCursor } from '@runlith/paging';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import { RootId } from '../../../workspace/contract/wire/ids.js';
@@ -258,6 +258,7 @@ export const CommandOutputReading = Schema.Struct({
   skippedBytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   first: Schema.Boolean,
   evicted: Schema.optional(Schema.Boolean),
+  outputFile: Schema.optional(OutputFile),
   measurement: Schema.optional(Schema.NonEmptyString),
 });
 export type CommandOutputReading = typeof CommandOutputReading.Type;

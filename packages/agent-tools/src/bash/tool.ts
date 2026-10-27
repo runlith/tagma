@@ -92,7 +92,7 @@ export function createBashTool(options: ToolFactoryOptions): Tool {
       tmp: environment.tmp,
       maxLines: TOOL_OUTPUT_MAX_LINES,
       maxBytes: TOOL_OUTPUT_MAX_BYTES,
-      managed: commandWork !== undefined,
+      retainedBytes: commandWork === undefined ? null : commandWork.retainedBytes,
     }),
     refusals: REFUSALS,
     parameters: bashInputSchema,

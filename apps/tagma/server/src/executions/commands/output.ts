@@ -7,7 +7,7 @@ import { commandSignalId } from '../contract/wire/commands.js';
 import type { CommandOutputReading, CommandReading } from '../contract/wire/commands.js';
 import type { CommandOutputRequest, CommandReader, CommandWaiters } from '../contract/service/commands.js';
 import type { ManagedCommands } from '../contract/service/commands.js';
-import type { TerminalFailure } from '../contract/service/terminals.js';
+import type { TerminalFailure, Terminals } from '../contract/service/terminals.js';
 import { decodeUtf8, lastLines, readRange } from './outputTail.js';
 import { OUTPUT_STREAMS, type OutputStream } from '../contract/wire/commands.js';
 
@@ -19,10 +19,12 @@ export const makeCommandOutput = ({
   commands,
   reader,
   waiters,
+  terminals,
 }: {
   readonly commands: ManagedCommands['Service'];
   readonly reader: Pick<CommandReader['Service'], 'one'>;
   readonly waiters: CommandWaiters['Service'];
+  readonly terminals: Terminals['Service'];
 }) => {
   const positions = new Map<string, Positions>();
 
@@ -38,11 +40,12 @@ export const makeCommandOutput = ({
     request: CommandOutputRequest,
     key: string,
     remembered: Positions | undefined,
-  ): Effect.fn.Return<{ readonly output: string; readonly skipped: bigint }, TerminalFailure> {
+  ): Effect.fn.Return<{ readonly output: string; readonly skipped: bigint; readonly whole: boolean }, TerminalFailure> {
     const { execution, authority } = request;
     const parts: string[] = [];
     const next: Positions = { stdout: 0n, stderr: 0n };
     let skipped = 0n;
+    let whole = remembered === undefined;
     for (const stream of OUTPUT_STREAMS) {
       const bounds = yield* commands.bytes({ ref: execution, stream, offset: ByteOffset.make('0') }, 0, authority, {
         withPositions: true,
@@ -57,6 +60,7 @@ export const makeCommandOutput = ({
         from = durable - widest;
       }
       skipped += from > wanted ? from - wanted : 0n;
+      if (from > 0n) whole = false;
       if (durable <= from) {
         next[stream] = durable;
         continue;
@@ -71,7 +75,19 @@ export const makeCommandOutput = ({
       if (text !== '') parts.push(text);
     }
     remember(key, next);
-    return { output: lastLines(parts.join('\n'), request.tail ?? TOOL_OUTPUT_MAX_LINES), skipped };
+    const joined = parts.join('\n');
+    const output = lastLines(joined, request.tail ?? TOOL_OUTPUT_MAX_LINES);
+    return { output, skipped, whole: whole && output === joined };
+  });
+
+  const kept = Effect.fn('CommandOutput.kept')(function* (execution: ExecutionRef) {
+    const read = yield* Effect.result(terminals.state(execution));
+    if (read._tag === 'Success') return read.success?.outputFile;
+    yield* Effect.logInfo('the summary of an ended command could not be read for the file of its output', {
+      execution: execution.execution,
+      reason: read.failure._tag,
+    });
+    return undefined;
   });
 
   const take = Effect.fn('CommandOutput.take')(function* (execution: ExecutionRef, thread: ThreadId) {
@@ -122,8 +138,8 @@ export const makeCommandOutput = ({
         reading.live._tag !== 'Unheld' &&
         reading.live._tag !== 'Unavailable' &&
         reading.live.entry.ending?.retention === 'lost';
-      const shown = evicted ? Effect.succeed({ output: '', skipped: 0n }) : window(request, key, remembered);
-      const { output, skipped } = yield* owner === undefined
+      const shown = evicted ? Effect.succeed({ output: '', skipped: 0n, whole: true }) : window(request, key, remembered);
+      const { output, skipped, whole } = yield* owner === undefined
         ? shown
         : Effect.acquireUseRelease(
             take(execution, owner.thread),
@@ -135,6 +151,7 @@ export const makeCommandOutput = ({
                   ? unread(execution)
                   : Effect.void,
           );
+      const file = status.phase === 'ended' && !evicted ? yield* kept(execution) : undefined;
       return {
         execution,
         label: reading.command.label,
@@ -144,6 +161,7 @@ export const makeCommandOutput = ({
         skippedBytes: Number(skipped),
         first: remembered === undefined,
         evicted: evicted ? true : undefined,
+        outputFile: file !== undefined && (!whole || file.from !== '0') ? file : undefined,
         measurement: typeof measured === 'string' && measured !== '' ? measured : undefined,
       };
     }),

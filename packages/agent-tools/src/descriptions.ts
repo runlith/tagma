@@ -44,16 +44,18 @@ export function shellDescription(runtime: {
   readonly tmp: string;
   readonly maxLines: number;
   readonly maxBytes: number;
-  readonly managed: boolean;
+  readonly retainedBytes: number | null;
 }): string {
+  const kept = runtime.retainedBytes === null ? null : `${Math.round(runtime.retainedBytes / 1024 / 1024)} MiB`;
   return [
     `Runs one command through ${runtime.shell} on ${runtime.platform} and returns its output as text: the last ${runtime.maxLines} lines and ${Math.round(runtime.maxBytes / 1024)} KB, with a non-zero exit status reported.`,
     runtime.fenced
       ? `Commands run in ${runtime.workspace}; \`workdir\` (never \`cd\`) must stay inside it. Temporary work goes to \`${runtime.tmp}\`.`
       : `Commands run in ${runtime.workspace}; \`workdir\` (never \`cd\`) may name any directory on this machine. Temporary work goes to \`${runtime.tmp}\`.`,
     SHELL_STANDING_RULES,
-    runtime.managed
-      ? `A command has a wait and a life. The wait (\`waitMs\`) is how long this call holds it; when it passes, the command moves to the background unharmed and its result arrives as a notice — never run it again or wait for it with sleep. The life (\`lifeMs\`) is how long it may run at all, here or in the background; when it runs out, the command is killed and a notice says so. Hold work whose result you need now; start with \`waitMs: 0\` work whose result you need later, instead of a trailing \`&\`, which leaves a program running unwatched; a process that must keep living, such as a server or a watcher, is a terminal (start_terminal). Command rules the user wrote may shorten either.`
+    kept !== null
+      ? `A command has a wait and a life. The wait (\`waitMs\`) is how long this call holds it; when it passes, the command moves to the background unharmed and its result arrives as a notice — never run it again or wait for it with sleep. The life (\`lifeMs\`) is how long it may run at all, here or in the background; when it runs out, the command is killed and a notice says so. Hold work whose result you need now; start with \`waitMs: 0\` work whose result you need later, instead of a trailing \`&\`, which leaves a program running unwatched; a process that must keep living, such as a server or a watcher, is a terminal (start_terminal). Command rules the user wrote may shorten either.
+The user sees a command's output as it prints, and Tagma keeps it: while the command runs, read_output and search_output read it; once it ends, an answer that does not carry all of it names the file holding its last ${kept}. Never redirect output to keep it — that takes it from the user; write a file only for an artifact of the program itself (a report, JSON) or for output needed whole beyond ${kept}.`
       : 'A command lives only as long as its call: it is killed when its wait (`waitMs`) or its life (`lifeMs`) passes, whichever comes first, and `waitMs: 0` is refused.',
   ].join('\n');
 }

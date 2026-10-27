@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import { Effect, FileSystem, Fiber, Layer, Option, type Scope, Stream } from 'effect';
+import { Effect, FileSystem, Fiber, Layer, Option, type Result, type Scope, Stream } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import type { Git } from '@runlith/git/Git';
 import type { workingAt } from '@runlith/files/working';
@@ -8,9 +8,10 @@ import type { CallProgress } from '@runlith/agent/callProgress';
 import type { CallDecision, CallDecisionAnswer, CallRetention, SourceCompletion } from '@runlith/executions/protocol/call';
 import type { CommandClass, CommandExit } from '@runlith/executions/protocol/command';
 import type { Cleanup, NativeExit, ProcessCost } from '@runlith/executions/protocol/execution';
+import type { OutputFile } from '@runlith/executions/protocol/record';
 import { CheckoutBaselines, headMove, type HeadMove, type Place } from './CheckoutBaselines';
 import { movedPaths, placeOf, readingNow, unkept, type Measured, type Reading, type Seen } from './checkoutState';
-import { cleanupWords, type CommandRun, type RuledAnswer } from './CommandWork';
+import { cleanupWords, type CommandRun, type CommandUnreadable, type RuledAnswer } from './CommandWork';
 import type { ProcessRuling, RuleNamed } from '@runlith/executions/protocol/stop';
 import type {
   CommandBase,
@@ -32,6 +33,11 @@ export class OutputTail {
   private start = 0;
   private length = 0;
   private newlines = 0;
+  private cut = false;
+
+  get dropped(): boolean {
+    return this.cut;
+  }
 
   append(chunk: Uint8Array): void {
     for (const byte of chunk) {
@@ -59,6 +65,7 @@ export class OutputTail {
 
   private drop(): void {
     if (this.length === 0) return;
+    this.cut = true;
     if (this.bytes[this.start] === 0x0a) this.newlines -= 1;
     this.start = (this.start + 1) % this.bytes.length;
     this.length -= 1;
@@ -215,10 +222,14 @@ export function endingOf(settled: Settled): CommandExit {
   return { _tag: 'Unknown', detail: settled.unconfirmed ?? 'no ending was read for this command' };
 }
 
+export type KeptOutput = Result.Result<OutputFile | undefined, CommandUnreadable>;
+
 export type ShellSettlement = {
   readonly settled: Settled;
   readonly stdout: string;
   readonly stderr: string;
+  readonly cut: boolean;
+  readonly outputFile: KeptOutput | null;
   readonly outputUnavailable: string | null;
   readonly moved: readonly string[];
   readonly head: HeadMove | null;
@@ -373,6 +384,7 @@ export class ShellRun {
   private openedAt: number | null = null;
   private release: (() => void) | null = null;
   private inspection: string | null = null;
+  private file: KeptOutput | null = null;
   public elsewhere: string | null = null;
 
   constructor(
@@ -475,10 +487,9 @@ export class ShellRun {
     }
     const decided = settleManaged(answer.success, 'owner');
     const settled = decided.notStarted === null ? decided : { ...decided, notStarted: `${decided.notStarted}. ${run.inspect}` };
-    if (settled.code !== null || settled.signalDeath !== null) {
-      return yield* this.finish(yield* this.joinCollector(collector, settled));
-    }
-    return yield* this.finish(settled);
+    const joined = settled.code !== null || settled.signalDeath !== null ? yield* this.joinCollector(collector, settled) : settled;
+    this.file = yield* Effect.result(run.outputFile);
+    return yield* this.finish(joined);
   });
 
   readonly finish = (
@@ -541,6 +552,8 @@ export class ShellRun {
       settled,
       stdout,
       stderr,
+      cut: this.out.dropped || this.errors.dropped,
+      outputFile: this.file,
       outputUnavailable: null,
       moved: moved.filter((name) => changed.has(name)),
       head: headMove(before, afterRead),
@@ -572,6 +585,8 @@ export const observerLost = (reason: string): ShellSettlement => ({
   },
   stdout: '',
   stderr: '',
+  cut: false,
+  outputFile: null,
   outputUnavailable: `The output of this command is unavailable: ${reason}.`,
   moved: [],
   head: null,

@@ -5,7 +5,7 @@ import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import type { ExecutionSummary } from '@runlith/executions/protocol/runtime';
 import type { WriteUnit } from '../../platform/contract/service/units.js';
-import { cleanupWords, lifeEnded, type CommandLimit } from '@runlith/agent-tools/CommandWork';
+import { cleanupWords, lifeEnded, outputFileWords, type CommandLimit } from '@runlith/agent-tools/CommandWork';
 import type { CommandDelivery as CommandDeliveryObligation, CommandRecord } from '../../executions/contract/wire/commands.js';
 import { copyHead } from '../../executions/commands/ruleResolution.js';
 import { lastLines, recordTail } from '../../executions/commands/outputTail.js';
@@ -176,7 +176,9 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
     const decision = answer.summary.decision;
     const expired = decision?._tag === 'Cancelled' && decision.cause === 'timeout';
     const limit = expired ? yield* life(obligation.execution, record) : null;
-    const notice = endingNotice(obligation.execution, record, answer.summary, yield* tail(obligation.execution));
+    const printed = yield* tail(obligation.execution);
+    const notice = endingNotice(obligation.execution, record, answer.summary, printed === null ? null : printed.text);
+    const file = answer.summary.outputFile;
     return {
       notice,
       text: endingText(
@@ -185,6 +187,7 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
         cleanupWords(answer.summary.state.cleanup),
         decision?._tag === 'Cancelled' ? `${decision.cause}: ${decision.trigger}` : null,
         measured.success ?? '',
+        file !== undefined && (printed === null || !printed.whole || file.from !== '0') ? outputFileWords(file) : null,
       ),
     };
   });
@@ -221,7 +224,9 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
     return row.success;
   });
 
-  const tail = Effect.fn('CommandDelivery.tail')(function* (execution: ExecutionRef): Effect.fn.Return<string | null, never> {
+  const tail = Effect.fn('CommandDelivery.tail')(function* (
+    execution: ExecutionRef,
+  ): Effect.fn.Return<{ readonly text: string; readonly whole: boolean } | null, never> {
     const read = yield* Effect.result(recordTail(records, execution, ENDING_TAIL_BYTES));
     if (read._tag === 'Failure') {
       yield* Effect.logInfo('the tail of an ended command could not be read for its ending notice', {
@@ -230,7 +235,8 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
       });
       return null;
     }
-    return lastLines(read.success, ENDING_TAIL_LINES);
+    const text = lastLines(read.success.text, ENDING_TAIL_LINES);
+    return { text, whole: !read.success.cut && text === read.success.text };
   });
   return { attend, resume, deliver };
 });
@@ -271,6 +277,7 @@ const endingText = (
   cleanup: string | null,
   stopped: string | null,
   measured: string,
+  kept: string | null,
 ): string => {
   const where = `${notice.execution}:${notice.incarnation}`;
   const named = notice.command ?? notice.label ?? null;
@@ -293,6 +300,7 @@ const endingText = (
     ...(tail === null ? ['(its output could not be read)'] : tail === '' ? ['(no output)'] : [tail]),
     ``,
     ...(measured === '' ? [] : [measured, ``]),
+    ...(kept === null ? [] : [kept]),
     `execution: ${where} — read_output reads the rest of what it printed.`,
   ].join('\n');
 };

@@ -404,7 +404,8 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
     return yield* Effect.gen(function* () {
       const commands = yield* ManagedCommands;
       const reader = yield* CommandReader;
-      return yield* commandOutputReader({ commands, reader, waiters }).output({
+      const terminals = yield* Terminals;
+      return yield* commandOutputReader({ commands, reader, waiters, terminals }).output({
         projectId: 1,
         reader: holder,
         thread: holder,
@@ -416,6 +417,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
         Layer.mergeAll(
           Layer.mock(ManagedCommands, { bytes: commandBytes, changes: () => Stream.empty }),
           Layer.mock(CommandReader, { one: () => Effect.succeed(endedReading(ref)), follow: () => Stream.empty }),
+          Layer.mock(Terminals, { state: () => Effect.succeed(undefined) }),
         ),
       ),
     );

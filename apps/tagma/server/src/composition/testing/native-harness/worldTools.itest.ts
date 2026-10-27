@@ -72,6 +72,7 @@ const environment = (key: string, value: string) =>
   );
 
 const cannedWork = (exit: number, started: Effect.Effect<void> = Effect.void, ending: 'ended' | 'running' = 'ended'): CommandWork => ({
+  retainedBytes: 4096,
   start: (request, observe) => {
     const execution = { installation: 'install-test', execution: 'exec-test', incarnation: 1 } as ExecutionRef;
     const run: CommandRun = {
@@ -106,6 +107,7 @@ const cannedWork = (exit: number, started: Effect.Effect<void> = Effect.void, en
       ),
       stdout: Stream.empty,
       stderr: Stream.empty,
+      outputFile: Effect.succeed(undefined),
     };
     return Effect.succeed({ run, observed: observe(run) });
   },

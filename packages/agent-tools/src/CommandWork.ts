@@ -5,6 +5,7 @@ import type { CallDecisionAnswer, CallStopping } from '@runlith/executions/proto
 import type { LimitProvenance } from '@runlith/executions/protocol/command';
 import type { ProcessRuling } from '@runlith/executions/protocol/stop';
 import type { Cleanup, ExecutionRef, HostRequestKey, HostRequestRef } from '@runlith/executions/protocol/execution';
+import type { OutputFile } from '@runlith/executions/protocol/record';
 
 export const COMMAND_WAIT = { defaultMs: 2 * 60_000, ceilingMs: LONGEST_ACT_MS } as const;
 
@@ -67,6 +68,7 @@ export type CommandRun = {
   readonly measured: (words: string) => Effect.Effect<void, CommandUnreadable>;
   readonly stdout: Stream.Stream<Uint8Array, CommandUnreadable>;
   readonly stderr: Stream.Stream<Uint8Array, CommandUnreadable>;
+  readonly outputFile: Effect.Effect<OutputFile | undefined, CommandUnreadable>;
 };
 
 export type CommandObservation<A> = (run: CommandRun) => Effect.Effect<A>;
@@ -78,6 +80,7 @@ export type CommandAcceptance<A> = {
 
 export type CommandWork = {
   readonly start: <A>(request: CommandRequest, observe: CommandObservation<A>) => Effect.Effect<CommandAcceptance<A>, CommandRefused>;
+  readonly retainedBytes: number;
 };
 
 export type CommandLimit = {
@@ -137,6 +140,11 @@ export const cleanupWords = (cleanup: Cleanup): string | null =>
       : cleanup === 'unverifiable'
         ? 'Whether every process of this command is gone could not be verified.'
         : null;
+
+export const outputFileWords = (file: OutputFile): string =>
+  file.from === '0'
+    ? `Its whole output, stdout and stderr in the order printed, is in ${file.path}.`
+    : `Its output from byte ${file.from}, stdout and stderr in the order printed, is in ${file.path}; the ${file.from} bytes before it are gone.`;
 
 export const lifeEnded = (life: CommandLimit): string =>
   `Its life ran out (${lifeWords(life)}), so it was stopped. ${

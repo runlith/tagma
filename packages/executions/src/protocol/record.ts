@@ -27,6 +27,13 @@ export const StreamPositions = Schema.Struct({
 });
 export type StreamPositions = typeof StreamPositions.Type;
 
+export const OutputFile = Schema.Struct({
+  path: Schema.NonEmptyString,
+  from: ByteOffset,
+  through: ByteOffset,
+});
+export type OutputFile = typeof OutputFile.Type;
+
 export const RecordTail = Schema.Literals(['complete', 'lost', 'unmeasured']);
 export type RecordTail = typeof RecordTail.Type;
 

@@ -664,11 +664,13 @@ layer(Layer.effect(World, setup()).pipe(Layer.provideMerge(storage)), { excludeT
           }),
         follow: () => Stream.empty,
       }),
+      Layer.mock(Terminals, { state: () => Effect.succeed(undefined) }),
     );
     return yield* Effect.gen(function* () {
       const commands = yield* ManagedCommands;
       const reader = yield* CommandReader;
-      return yield* commandOutputReader({ commands, reader, waiters }).output({
+      const terminals = yield* Terminals;
+      return yield* commandOutputReader({ commands, reader, waiters, terminals }).output({
         projectId,
         reader: thread,
         thread,

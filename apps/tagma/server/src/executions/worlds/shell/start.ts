@@ -20,6 +20,7 @@ import type {
 import type { CommandCreator, CommandWaitMode } from '../../contract/wire/commands.js';
 import type { CommandSubject } from '../../contract/wire/commandSubject.js';
 import { TerminalRefused } from '../../contract/wire/refusals.js';
+import { OUTPUT_RETAINED_BYTES } from '../../contract/wire/terminalBehavior.js';
 import type { ResolvedExecutionTarget } from '../../contract/wire/targets.js';
 import type { TerminalActor } from '../../contract/wire/terminals.js';
 import type { CommandAccess, LaunchPreparation } from '../../contract/service/access.js';
@@ -131,6 +132,7 @@ export const makeShellCommands = ({
   });
 
   return {
+    retainedBytes: OUTPUT_RETAINED_BYTES,
     start: Effect.fnUntraced(function* <A>(request: CommandRequest, observe: CommandObservation<A>) {
       if (request.stop !== undefined && request.stop.stopped() !== null) {
         return yield* new CommandRefused({

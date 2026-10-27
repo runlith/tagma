@@ -370,7 +370,10 @@ it.live('interrupting a local command finalizes it as aborted instead of leaking
     yield* child.disconnected;
 
     expect(finished).toHaveLength(1);
-    expect(finished[0]?.exit).toEqual({ _tag: 'Unknown', detail: 'the run was aborted and no exit was read' });
+    expect(finished[0]?.exit).toEqual({
+      _tag: 'Unknown',
+      detail: 'the run was aborted and no exit was read: The command call was interrupted.',
+    });
   }),
 );
 

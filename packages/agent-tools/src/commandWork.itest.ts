@@ -18,6 +18,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { ChildProcess } from 'effect/process';
 import type { CallDecisionAnswer } from '@runlith/executions/protocol/call';
 import type { Cleanup, ExecutionRef, HostRequestRef } from '@runlith/executions/protocol/execution';
+import { byteOffset, type OutputFile } from '@runlith/executions/protocol/record';
 import { type StoppableProgress, stoppableProgress } from './testing/progress';
 
 import { createTools } from './index';
@@ -108,6 +109,7 @@ type FakeOptions = {
   readonly failStream?: 'stdout' | 'stderr';
   readonly stopOnSignal?: boolean;
   readonly stopGate?: Deferred.Deferred<void>;
+  readonly outputFile?: OutputFile;
 };
 
 const builtOwner = Effect.fnUntraced(function* (options: FakeOptions) {
@@ -125,6 +127,7 @@ const builtOwner = Effect.fnUntraced(function* (options: FakeOptions) {
   const foregrounded: string[] = [];
   const measurements: string[] = [];
   const work: CommandWork = {
+    retainedBytes: 4096,
     start: Effect.fnUntraced(
       function* <A>(request: CommandRequest, observe: (run: CommandRun) => Effect.Effect<A>) {
         started += 1;
@@ -238,6 +241,7 @@ const builtOwner = Effect.fnUntraced(function* (options: FakeOptions) {
             options.failStream === 'stderr'
               ? Stream.fail(new CommandUnreadable({ reason: 'the record evicted bytes this reader had not reached' }))
               : handle.stderr.pipe(Stream.mapError(() => new CommandUnreadable({ reason: 'stderr' }))),
+          outputFile: Effect.succeed(options.outputFile),
         };
         const settled = yield* Deferred.make<A, CommandUnreadable>();
         yield* Effect.forkIn(
@@ -861,6 +865,27 @@ it.live('a failed output stream discloses that the printed output may be incompl
     const answer = yield* run(bash, { command: 'printf hello', description: 'Print a word' });
     expect(answer.text).toContain('may not be everything the command wrote');
     expect(answer.text).toContain('the record evicted bytes');
+  }),
+);
+
+it.live('an answer that cannot carry the whole output names the file the host kept it in, and one that carries it names none', () =>
+  Effect.gen(function* () {
+    const root = yield* createTempDir();
+    const kept: OutputFile = { path: join(root, 'record', 'output.log'), from: byteOffset(0n), through: byteOffset(40_000n) };
+    const owner = yield* fakeOwner({ outputFile: kept });
+    const bash = shellOf(createTools(options({ cwd: root, world: worldWith(owner.work) })));
+    const lost = yield* fakeOwner({ outputFile: { ...kept, from: byteOffset(4096n) } });
+    const partial = shellOf(createTools(options({ cwd: root, world: worldWith(lost.work) })));
+
+    const long = yield* run(bash, { command: 'seq 1 9000', description: 'Print many lines' });
+    const short = yield* run(bash, { command: 'printf hello', description: 'Print a word' });
+    const gone = yield* run(partial, { command: 'printf hello', description: 'Print a word' });
+    expect(long.text).toContain(kept.path);
+    expect(long.text).toContain('9000');
+    expect(short.text).toContain('hello');
+    expect(short.text).not.toContain(kept.path);
+    expect(gone.text).toContain(kept.path);
+    expect(gone.text).toContain('4096');
   }),
 );
 

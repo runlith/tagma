@@ -209,7 +209,7 @@ ${SILENCES}`,
     tool: { capability: 'shell', direct: true, needs: ['shared'] },
     answer: arms({ ok: CommandOutputReading.fields }),
     meaning: 'Read what a command printed: the output since you last read it, and whether it is still running.',
-    grammar: `The one read of a command's output an agent makes. Name the command by the execution and incarnation its launch answered. The first read answers the tail of what stands; every later read answers only what arrived since your previous one, so a running command is read in steps and nothing is read twice. stdout comes first and stderr after it, under the same window a foreground command's answer keeps. It answers at once: the ending of a command you started reaches you as a notice, and one this read already answered whole, with the checkout measured after it, is not sent again.
+    grammar: `The one read of a command's output an agent makes. Name the command by the execution and incarnation its launch answered. The first read answers the tail of what stands; every later read answers only what arrived since your previous one, so a running command is read in steps and nothing is read twice. stdout comes first and stderr after it, under the same window a foreground command's answer keeps. A read of an ended command that does not carry all of its output names the file holding its last ${OUTPUT_RETAINED_BYTES / 1024 / 1024} MiB, stdout and stderr in the order printed. It answers at once: the ending of a command you started reaches you as a notice, and one this read already answered whole, with the checkout measured after it, is not sent again.
 \`tail\` keeps only the last so many lines of what this read would answer.
 ${RECOVERY_FREE}`,
     input: Schema.Struct({

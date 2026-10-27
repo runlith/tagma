@@ -847,7 +847,9 @@ const ownersOf = Effect.fnUntraced(function* (floor: Floor, host: ControlledHost
   const reading = readingFixture(
     reader,
     search,
-    output === undefined ? undefined : commandOutputReader({ commands: floor.terminals.commands, reader, waiters: output }),
+    output === undefined
+      ? undefined
+      : commandOutputReader({ commands: floor.terminals.commands, reader, waiters: output, terminals: floor.terminals }),
   );
   return Context.merge(
     yield* Effect.context<Services>(),
@@ -2070,15 +2072,17 @@ layer(Layer.provideMerge(Layer.effect(Fixture, seeded), environment), { excludeT
         );
         const record = yield* makeSealedRecord({ directory, seal: { ref: admitted, transport: 'pipes', streams } });
         const ended = endedState(admitted, { _tag: 'Code', code });
+        const kept = { path: join(directory, 'output.log'), from: byteOffset(0n), through: byteOffset(BigInt(total + stderr.length)) };
         const host = hostThat({
           start: acceptedAs(admitted),
           state: () =>
-            Effect.succeed(
-              summaryOf(
+            Effect.succeed({
+              ...summaryOf(
                 ended,
                 streams.map((stream) => stream.positions),
               ),
-            ),
+              outputFile: kept,
+            }),
           status: statusOf(admitted),
           commandsAt: batchOf(projectId, admitted, ended, 3_000),
           ending: () => Effect.succeed(endingOf(admitted)),
@@ -2108,6 +2112,7 @@ layer(Layer.provideMerge(Layer.effect(Fixture, seeded), environment), { excludeT
         );
         yield* delivery.deliver(admitted);
         expect(notices[0]).toContain(summary.trim());
+        expect(notices[0]).toContain(kept.path);
         const expected = new TextDecoder().decode(stdout.subarray(total - 50 * 1024)) + '\n' + new TextDecoder().decode(stderr);
         expect(yield* outputOf(catalog, admitted, { tail, wait: code === 1 ? 60 : undefined })).toMatchObject({
           status: 'ok',
@@ -2116,6 +2121,7 @@ layer(Layer.provideMerge(Layer.effect(Fixture, seeded), environment), { excludeT
           output: expected,
           first: true,
           skippedBytes: 0,
+          outputFile: kept,
         });
         expect(yield* outputOf(catalog, admitted, { tail })).toMatchObject({ status: 'ok', output: '', first: false });
       }
@@ -2529,6 +2535,7 @@ layer(Layer.provideMerge(Layer.effect(Fixture, seeded), environment), { excludeT
             } as unknown as CommandReading),
         },
         waiters,
+        terminals: floor.terminals,
       }).output({ projectId, reader: holder, thread: holder, execution: admitted, authority: {} as never });
       expect(read.phase).toBe('ended');
       expect(yield* deliveryOf(admitted)).not.toBeNull();

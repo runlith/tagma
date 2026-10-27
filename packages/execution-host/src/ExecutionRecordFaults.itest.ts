@@ -609,6 +609,41 @@ layer(shared, { excludeTestServices: true })('a record over storage that fails',
     }),
   );
 
+  it.effect('a kept output file the device never answers holds no ending, names no path, and its successor writes it whole', () =>
+    Effect.gen(function* () {
+      const real = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = path.join(yield* real.makeTempDirectoryScoped({ prefix: 'record-kept-output-' }), 'state');
+      const execution = ref('kept-output');
+      const fs = faulty(real, { whenPathHas: 'output.log', onCall: 1, held: yield* Deferred.make<void>() });
+      const chunk = (text: string) => Effect.succeed(new TextEncoder().encode(text));
+      const cut = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const record = yield* makeSegmentRecord({
+            mode: 'create',
+            records: root,
+            ref: execution,
+            transport: 'pipes',
+            limits,
+            actMs: 50,
+          }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+          yield* record.capture('stdout', 16, chunk('abcd'));
+          yield* record.capture('stderr', 16, chunk('wxyz'));
+          yield* record.endStream('stdout', 'eof');
+          yield* record.endStream('stderr', 'eof');
+          const named = yield* record.outputFile;
+          yield* record.suspend();
+          return { named, ending: (yield* record.positions('output')).ending };
+        }),
+      );
+      const record = yield* makeSegmentRecord({ mode: 'reopen', records: root, ref: execution, transport: 'pipes', limits });
+      const kept = yield* record.outputFile;
+      expect(cut).toEqual({ named: undefined, ending: 'eof' });
+      expect(kept).toMatchObject({ from: byteOffset(0n), through: byteOffset(8n) });
+      expect(kept === undefined ? undefined : yield* real.readFileString(kept.path)).toBe('abcdwxyz');
+    }),
+  );
+
   it.effect('an output write that fails ends output in error for its readers and its successor, and stdout capture goes on', () =>
     Effect.gen(function* () {
       const outcome = yield* Effect.gen(function* () {

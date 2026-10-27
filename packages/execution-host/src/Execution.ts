@@ -209,6 +209,7 @@ export const makeExecution = Effect.fnUntraced(function* ({
       cost: cost,
       processes: processes,
       printed: yield* record.printed,
+      outputFile: yield* record.outputFile,
     } satisfies ExecutionSummary;
   });
 

@@ -9,6 +9,7 @@ import {
   IN_BACKGROUND,
   lifeEnded,
   lifeWords,
+  outputFileWords,
   waitWords,
   type CommandAcceptance,
   type CommandLimit,
@@ -282,20 +283,8 @@ export const finishedAnswer = (
     printedTail.appendText(result.stderr);
   }
   const printed = printedTail.text();
-  const answer = new OutputTail();
   const isManaged = named !== null && result.inspect !== null;
-  if (result.unread.length > 0) {
-    const unread = isManaged ? result.unread.slice(0, 1) : result.unread;
-    answer.appendText(`Unread paths (${unread.length} of ${result.unread.length}): ${JSON.stringify(unread)}\n\n`);
-  }
-  answer.appendText(printed !== '' ? printed : (result.outputUnavailable ?? '(no output)'));
   const measured = measurement(result, elsewhere, false);
-  if (measured !== '') answer.appendText(`\n\n${measured}`);
-  if (isManaged && result.unread.length > 0) {
-    answer.appendText(
-      `\nRead retained unread-path details with read_output(execution="${named.execution.execution}", incarnation=${named.execution.incarnation}).`,
-    );
-  }
 
   const meta: string[] = [];
   if (settled.notStarted !== null) {
@@ -310,9 +299,33 @@ export const finishedAnswer = (
   if (settled.code !== null && settled.code !== 0) meta.push(`Command exited with status ${settled.code}.`);
   if (note !== null) meta.push(note);
 
-  if (meta.length > 0) {
-    answer.appendText(`\n\n<shell_metadata>\n${meta.join('\n')}\n</shell_metadata>`);
-  }
+  const compose = (kept: string | null): OutputTail => {
+    const tail = new OutputTail();
+    if (result.unread.length > 0) {
+      const unread = isManaged ? result.unread.slice(0, 1) : result.unread;
+      tail.appendText(`Unread paths (${unread.length} of ${result.unread.length}): ${JSON.stringify(unread)}\n\n`);
+    }
+    tail.appendText(printed !== '' ? printed : (result.outputUnavailable ?? '(no output)'));
+    if (measured !== '') tail.appendText(`\n\n${measured}`);
+    if (isManaged && result.unread.length > 0) {
+      tail.appendText(
+        `\nRead retained unread-path details with read_output(execution="${named.execution.execution}", incarnation=${named.execution.incarnation}).`,
+      );
+    }
+    const lines = kept === null ? meta : [kept, ...meta];
+    if (lines.length > 0) tail.appendText(`\n\n<shell_metadata>\n${lines.join('\n')}\n</shell_metadata>`);
+    return tail;
+  };
+  const whole = compose(null);
+  const kept = result.outputFile;
+  const file = kept !== null && kept._tag === 'Success' ? kept.success : undefined;
+  const cut = result.cut || printedTail.dropped || whole.dropped;
+  const answer =
+    file !== undefined && (cut || file.from !== '0')
+      ? compose(outputFileWords(file))
+      : cut && kept !== null && kept._tag === 'Failure'
+        ? compose(`The file holding its whole output could not be read: ${kept.failure.reason}.`)
+        : whole;
 
   const ending =
     settled.notStarted !== null

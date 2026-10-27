@@ -7,7 +7,7 @@ import { Refusal, UncertainEffect } from './host';
 import { InputFrontier } from './input';
 import { KeptRecords } from './keep';
 import { NativeProcess } from './launch';
-import { StreamPositions, TerminalGeometry } from './record';
+import { OutputFile, StreamPositions, TerminalGeometry } from './record';
 import { AdmissionPhase, HostCustody } from './registration';
 import { FinalFacts, ProcessWatchReading } from './stop';
 
@@ -22,6 +22,7 @@ export const ExecutionSummary = Schema.Struct({
   cost: Schema.optional(ProcessCost),
   processes: Schema.optional(ProcessWatchReading),
   printed: Schema.optional(Schema.Boolean),
+  outputFile: Schema.optional(OutputFile),
 });
 export type ExecutionSummary = typeof ExecutionSummary.Type;
 
