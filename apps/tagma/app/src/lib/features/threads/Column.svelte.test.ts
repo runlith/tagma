@@ -32,9 +32,13 @@ import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
 import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
+import { AgentsColumn } from './AgentsColumn.svelte.js';
+import SeatedFrame from './AgentsFrame.fixture.svelte';
 import { ArchivedThreadsOpen } from './ArchivedThreadsOpen.svelte.js';
 import { CallActivity } from './CallActivity.svelte.js';
 import Column from './Column.svelte';
+import { ThreadSeats } from './seats/ThreadSeats.svelte.js';
+import type { ThreadSlot } from './ThreadSlot.svelte.js';
 import { threadPeeks } from './threadPeek.svelte.js';
 import { ThreadList } from './List.svelte.js';
 import { FolderActs } from './FolderActs.js';
@@ -90,8 +94,8 @@ const row = (index: number): ThreadListRow => ({
   updatedAt: '2026-01-01T00:00:00.000Z',
 });
 
-function mounted(): HTMLElement {
-  app = mountShell(
+function shell(): { shown: TestApp; host: ThreadSlot } {
+  const shown = mountShell(
     Layer.mergeAll(
       ThreadList,
       FolderActs,
@@ -109,6 +113,8 @@ function mounted(): HTMLElement {
       CallActivity,
       screen(),
       SidePanes,
+      ThreadSeats,
+      AgentsColumn,
       Layer.of(PaneRegistry, new PaneRegistry([])),
       Readings,
       View,
@@ -144,20 +150,23 @@ function mounted(): HTMLElement {
       Layer.of(Finishing, { departed: [] } as never),
     ),
   );
-  const list = app.app.resolve(ThreadList);
-  const host = testThreadSlot({ list }, {}, app.app.scopeOf('app'));
-  const target = app.draw(Column as never, { host });
+  app = shown;
+  const list = shown.app.resolve(ThreadList);
+  return { shown, host: testThreadSlot({ list }, {}, shown.app.scopeOf('app')) };
+}
+
+const listed = (rows: readonly ThreadListRow[]): void =>
+  feed.routes.get('threads.subscribe')?.({ type: 'list', rows, roots: rows.length, windowBefore: null });
+
+function mounted(): HTMLElement {
+  const { shown, host } = shell();
+  const target = shown.draw(Column as never, { host });
   flushSync();
   const scroller = target.querySelector<HTMLElement>('[data-drop="loose"]');
   if (scroller === null) throw new Error('The column drew no list.');
   Object.defineProperty(scroller, 'clientHeight', { value: 27 });
   scroller.dispatchEvent(new Event('scroll'));
-  feed.routes.get('threads.subscribe')?.({
-    type: 'list',
-    rows: Array.from({ length: 40 }, (_unused, index) => row(index)),
-    roots: 40,
-    windowBefore: null,
-  });
+  listed(Array.from({ length: 40 }, (_unused, index) => row(index)));
   flushSync();
   return target;
 }
@@ -222,4 +231,18 @@ test('the column windows its rows, keeps a row being renamed across scrolls, and
   await app?.unmount();
   app = undefined;
   expect(threadPeeks.openId).toBeNull();
+});
+
+test('the agents column leaves when the page gives up the main seat in the same update that redraws its rows', () => {
+  const { shown, host } = shell();
+  const page = $state({ open: true });
+  const target = shown.draw(SeatedFrame as never, { host, page });
+  listed([row(0), row(1)]);
+  flushSync();
+  expect(target.querySelector('a[data-thread="t-0"]')).not.toBeNull();
+
+  listed([row(0), row(1)].map((line) => ({ ...line, title: `${line.title} renamed` })));
+  page.open = false;
+  flushSync();
+  expect(target.querySelector('aside[aria-label="Agents"]')).toBeNull();
 });

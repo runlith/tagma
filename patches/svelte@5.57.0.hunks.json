@@ -29,6 +29,10 @@
     "09-carried-removal": {
       "markers": ["#carried()", "#removed_by("],
       "tests": [{ "package": "packages/layer", "file": "src/svelte/branch-removal.svelte.test.ts" }]
+    },
+    "10-commit-teardown": {
+      "markers": ["teardown at commit", "flush_eager_block_effects", "outer_block_effects"],
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/seat-release.svelte.test.ts" }, { "package": "apps/tagma/app", "file": "src/lib/features/threads/Column.svelte.test.ts", "names": "leaves when the page" }]
     }
   }
 }

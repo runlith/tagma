@@ -189,7 +189,7 @@ const TEST_MS = 60_000;
 function runnerOf(testPackage) {
   const script = JSON.parse(readFileSync(join(root, testPackage, 'package.json'), 'utf8')).scripts?.test ?? '';
   if (!/\bvitest\b/.test(script)) return { kind: 'bun' };
-  const base = ['vite.config.ts', 'vite.config.mjs', 'vite.config.js', 'vitest.config.ts']
+  const base = ['vitest.config.ts', 'vitest.config.mjs', 'vitest.config.js', 'vite.config.ts', 'vite.config.mjs', 'vite.config.js']
     .map((file) => join(root, testPackage, file))
     .find(existsSync);
   if (base === undefined) throw new Error(`${testPackage}: its test script runs vitest and no vite config stands beside it`);

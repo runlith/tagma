@@ -226,8 +226,8 @@ build is what would fail. Both are named here rather than given a trap that cann
 
 ## `svelte@5.57.0.patch`
 
-Seven hunks. 1, 2, 5 and 6 are carried from shop `core-refactor` at `8c71394ba0`, 7 and 8 from shop
-`release` at `9de9eb1deb`, 9 is runlith's own. Three of the first four are about one thing: the
+Eight hunks. 1, 2, 5 and 6 are carried from shop `core-refactor` at `8c71394ba0`, 7 and 8 from shop
+`release` at `9de9eb1deb`, 9 and 10 are runlith's own. Three of the first four are about one thing: the
 graph's services live in detached roots (`detachedRoot` in `packages/layer/src/svelte/App.svelte.ts`),
 their effects stand outside the component tree, and Svelte's batch scheduler in async mode does not
 count them as its own at time travel and at commit. On 5.57.0 `batch.js` is byte-identical to 5.56.10;
@@ -360,6 +360,34 @@ Trap: `packages/layer/src/svelte/branch-removal.svelte.test.ts`, the column's sh
 nearest-decision rule has no trap: a third batch intersecting a removal and a nearer return merges into
 the return once its own `await` ends, so a wrong skip only delays it; a scheduler trace shows the skip.
 
+### 10 · `batch.js`, `#process`: a teardown at commit updates the blocks it marks first
+
+In async mode a branch an `{#if}`, `{#each}` or `{#key}` leaves is destroyed by the batch's commit
+callbacks, after `current_batch` was cleared and before the render and user effects the traversal
+collected run. A teardown there — `onDestroy`, an effect cleanup, an attachment's — that writes state
+opens the next batch, which marks the block guarding on that value but runs only after this one. The
+committing batch's own queue then runs its collected effects that the write dirtied, inside a branch
+the next batch is about to remove: a child reading `host.activeId` through a prop after
+`{#if host !== null}` became false throws. `flush_queued_effects` already answers the same write made
+by a queued effect: `eager_block_effects` collects the marked blocks and runs them, ancestors first,
+before the next effect. The hunk opens that collection for the commit callbacks as well and runs it at
+the start of the queue flush; the loop moved into `flush_eager_block_effects`, shared by both. A
+`flushSync` inside such a teardown or inside an eager update processes another batch with its own
+collection: `#process` restores the collector it replaced once it ends, and the flush walks the set it
+started with, so the nested flush neither drops the outer collection nor clears it under the walk. A
+write during the traversal itself stays as upstream has it. Pristine 5.57.0 and upstream `main` run the commit
+callbacks the same way; no upstream issue reports it.
+
+Symptom: the agents column of the Tagma window fell into its error boundary with
+`Cannot read properties of null (reading 'activeId')` when a project the window stood on was renamed:
+the stack ends in a row's template effect run by `flush`; the batch that removed the thread page had
+reached the column's rows, and the page's teardown released the main seat (`ThreadSeats.page`) the
+column is guarded on.
+
+Traps: `packages/layer/src/svelte/seat-release.svelte.test.ts`, the shape alone and with a `flushSync`
+in the guarded branch's teardown; the column itself in
+`apps/tagma/app/src/lib/features/threads/Column.svelte.test.ts -t "leaves when the page"`.
+
 ### Tried and rejected
 
 | variant | result |
@@ -394,5 +422,7 @@ bun run --cwd packages/primitives test
 6. PR #18896 landed, or #18895 is closed otherwise — hunk 8 goes, its trap stays.
 7. A batch's traversal no longer enters a branch an intersecting earlier batch removes — hunk 9 goes, its
    trap stays.
-8. While none of this is done, the patch is regenerated for the new version by the method above,
+8. A write by a teardown at commit no longer lets the committing batch run effects under a block it
+   marked — hunk 10 goes, its traps stay.
+9. While none of this is done, the patch is regenerated for the new version by the method above,
    `patches:prove` is green whole, and the e2e trap of hunk 2 is green in shop.
