@@ -13,7 +13,7 @@
 
 - Wall follows load; CPU much less, but load still inflates it through contention and cold caches. Compare only adjacent alternating runs (A B A B) of the same files at similar load (`uptime`), and record machine, load, seed and whether each file built or took its world.
 - A standalone cold run of a file that normally takes a ready world repays the world build and the module load: it is not comparable to a shared-worker baseline, and a ratio between the two proves nothing.
-- The whole suite: `bun run test:all [--jobs cap] [--randomize] [--seed N] [--package path] [--script test|test:integration] [--report file] [--resume] [--plan]` runs every suite through testbed and prints wall and CPU per suite and the red files; `--resume` continues one report across command lifetimes; `--jobs` caps the processes testbed would otherwise take from the budget, so two readings are compared at the same cap.
+- The whole suite: `bun run test:all [--jobs cap] [--randomize] [--seed N] [--package path] [--script test|test:integration] [--report file] [--plan]` runs every suite through testbed and prints wall and CPU per suite and the red files. A suite that does not fit a command's life is made cheaper at the source of its cost, never split or resumed in parts (rule 5c30294c). `--jobs` caps the processes testbed would otherwise take from the budget, so two readings are compared at the same cap.
 - Seeds: `--randomize` makes testbed print the seed and `--seed=N` repeats the order; for Vitest testbed turns `--randomize` into `--sequence.shuffle --sequence.seed`.
 
 ## Git per call site
