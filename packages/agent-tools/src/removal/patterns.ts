@@ -1,7 +1,8 @@
 import { homedir } from 'node:os';
 import { ToolFailed } from '@runlith/agent/tool';
 import { Effect } from 'effect';
-import { Minimatch, type ParseReturnFiltered } from 'minimatch';
+import type { ParseReturnFiltered } from 'minimatch';
+import { pathMatcher } from '../patterns';
 
 export type PathPattern = {
   readonly prefix: string;
@@ -82,7 +83,7 @@ export const removalPatterns = Effect.fnUntraced(function* (
     if (problem !== undefined) return yield* new ToolFailed({ code: 'bad-pattern', reason: `${operand}: ${problem}` });
     const matcher = yield* Effect.try({
       try: () =>
-        new Minimatch(pattern, {
+        pathMatcher(pattern, {
           nonegate: true,
           nocomment: true,
           noext: true,
@@ -98,14 +99,7 @@ export const removalPatterns = Effect.fnUntraced(function* (
       if (problem !== undefined) return yield* new ToolFailed({ code: 'bad-pattern', reason: `${operand}: ${problem}` });
     }
     const patterns: PathPattern[] = [];
-    for (const [index, row] of matcher.set.entries()) {
-      const source = matcher.globParts[index] ?? [];
-      if (
-        row.some(
-          (part, at) => typeof part === 'string' && part.startsWith('.') && !source[at]?.startsWith('.') && !source[at]?.startsWith('\\.'),
-        )
-      )
-        continue;
+    for (const row of matcher.set) {
       const parts = [...row];
       const directoryOnly = parts.at(-1) === '';
       while (parts.length > 1 && parts.at(-1) === '') parts.pop();

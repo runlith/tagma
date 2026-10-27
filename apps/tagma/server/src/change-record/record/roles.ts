@@ -1,10 +1,17 @@
 import { isAbsolute, relative } from 'node:path';
-import { impliedBy, type CommandFacts, type CommandPart } from '@runlith/agent-tools/WorkspaceChanges';
+import {
+  impliedBy,
+  literalGlob,
+  namedBy,
+  type CommandFacts,
+  type CommandPart,
+  type CommandPath,
+} from '@runlith/agent-tools/WorkspaceChanges';
 
 export type Role =
   | { readonly kind: 'writer' }
   | { readonly kind: 'reader'; readonly implicit: readonly string[] }
-  | { readonly kind: 'named'; readonly paths: readonly string[]; readonly implicit: readonly string[] };
+  | { readonly kind: 'named'; readonly paths: readonly CommandPath[]; readonly implicit: readonly string[] };
 
 export const WRITER: Role = { kind: 'writer' };
 
@@ -34,7 +41,7 @@ const taught = (part: CommandPart, learned: Learned | null): CommandPart =>
       : part;
 
 export const roleOf = (facts: CommandFacts, tree: string, learned: (signature: string) => Learned | null): Role => {
-  const paths: string[] = [];
+  const paths: CommandPath[] = [];
   const implicit: string[] = [];
   let named = false;
   for (const given of facts.parts) {
@@ -43,8 +50,8 @@ export const roleOf = (facts: CommandFacts, tree: string, learned: (signature: s
     const part = signature === null ? given : taught(given, learned(signature));
     if (part.named === null) return WRITER;
     for (const path of part.named) {
-      const name = within(tree, path);
-      if (name !== null) paths.push(name);
+      const name = typeof path === 'string' ? within(tree, path) : within(literalGlob(tree), path.glob);
+      if (name !== null) paths.push(typeof path === 'string' ? name : { glob: name });
     }
     if (part.listed) implicit.push(...part.implicit);
     else named = true;
@@ -55,7 +62,7 @@ export const roleOf = (facts: CommandFacts, tree: string, learned: (signature: s
 export const covers = (role: Role, name: string): boolean => {
   if (role.kind === 'writer') return true;
   if (impliedBy(role.implicit, name)) return true;
-  return role.kind === 'named' && role.paths.some((path) => path === '' || name === path || name.startsWith(`${path}/`));
+  return role.kind === 'named' && namedBy(role.paths, name);
 };
 
 export const explains = (role: Role, name: string): boolean => role.kind !== 'writer' && covers(role, name);

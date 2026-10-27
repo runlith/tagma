@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { CommandPart } from '@runlith/agent-tools/WorkspaceChanges';
-import { roleOf } from './roles.js';
+import { covers, explains, roleOf } from './roles.js';
 
 const TREE = '/repo';
 const part = (over: Partial<CommandPart>): CommandPart => ({
@@ -12,6 +12,26 @@ const part = (over: Partial<CommandPart>): CommandPart => ({
   ...over,
 });
 const role = (...parts: CommandPart[]) => roleOf({ readsOnly: false, parts }, TREE, () => null);
+
+test('shell patterns name matching entries and their subtrees without crossing a slash or a leading dot', () => {
+  const one = role(
+    part({ named: [{ glob: '/repo/dist/*.js' }, { glob: '/repo/dist/*.map' }, { glob: '/repo/logs/[ab]?.log' }, { glob: '/repo/out/*' }] }),
+  );
+  for (const name of ['dist/a.js', 'dist/a.map', 'logs/a1.log', 'out/tree/.hidden']) {
+    expect(covers(one, name)).toBe(true);
+    expect(explains(one, name)).toBe(true);
+  }
+  for (const name of ['dist/a.ts', 'dist/.hidden.js', 'dist/deeper/a.js', 'logs/c1.log', 'logs/a12.log', 'logs/.a.log', 'elsewhere/a.js'])
+    expect(explains(one, name)).toBe(false);
+  const ordinaryStars = role(part({ named: [{ glob: '/repo/**/*.js' }] }));
+  expect(explains(ordinaryStars, 'dist/a.js')).toBe(true);
+  expect(explains(ordinaryStars, 'dist/deeper/a.js')).toBe(false);
+  const dotClass = role(part({ named: [{ glob: '/repo/dist/[.]hidden.js' }] }));
+  expect(explains(dotClass, 'dist/.hidden.js')).toBe(false);
+  const literal = role(part({ named: ['/repo/dist/*.js'] }));
+  expect(explains(literal, 'dist/a.js')).toBe(false);
+  expect(explains(literal, 'dist/*.js')).toBe(true);
+});
 
 test('a check is a reader whose output outside the checkout makes it no writer, and one inside names that path', () => {
   expect(role(part({ listed: true, named: ['/tmp/log.txt'], implicit: ['*.snap'] }))).toEqual({ kind: 'reader', implicit: ['*.snap'] });

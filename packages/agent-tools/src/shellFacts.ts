@@ -1,8 +1,10 @@
 import { basename, resolve } from 'node:path';
+import { braceExpand } from 'minimatch';
 import { shellCommands, type ShellCommand, type ShellWord } from './shellCommands';
 import { type Listing, listingOf, outputFlagsOf, plainProgram } from './shellReaders';
 import { gitOperation, inPlaceOperands, shellPartReads } from './shellShapes';
-import type { CommandFacts, CommandPart } from './WorkspaceChanges';
+import { findMutation } from './shellFind';
+import { literalGlob, type CommandFacts, type CommandPart, type CommandPath } from './WorkspaceChanges';
 
 const UNKNOWN: CommandPart = { readsOnly: false, named: null, signature: null, listed: false, implicit: [] };
 const QUIET: CommandPart = { readsOnly: true, named: [], signature: null, listed: false, implicit: [] };
@@ -425,7 +427,27 @@ function gitPathspecs(operation: string, args: readonly ShellWord[]): readonly S
   return [...operands, ...after];
 }
 
-function mutatedPaths(found: Program, cwd: string | null): readonly string[] | null | undefined {
+function operandPaths(operands: readonly ShellWord[], cwd: string | null): readonly CommandPath[] | null {
+  if (
+    operands.length === 0 ||
+    operands.some(
+      (word) =>
+        (!word.literal && word.glob === undefined) ||
+        word.text === '' ||
+        word.text.startsWith('~') ||
+        (word.glob !== undefined && /[*?[\]{}].*\/\.\.(?:\/|$)/.test(word.glob)) ||
+        (cwd === null && !word.text.startsWith('/')),
+    )
+  )
+    return null;
+  return operands.flatMap((word): CommandPath[] =>
+    word.glob === undefined
+      ? [resolve(cwd ?? '/', word.text)]
+      : braceExpand(word.glob).map((glob) => ({ glob: resolve(literalGlob(cwd ?? '/'), glob) })),
+  );
+}
+
+function mutatedPaths(found: Program, cwd: string | null): readonly CommandPath[] | null | undefined {
   const { name, words } = found;
   const sub = words.slice(1).find((word) => !word.text.startsWith('-'))?.text;
   if (name === 'git') {
@@ -444,13 +466,18 @@ function mutatedPaths(found: Program, cwd: string | null): readonly string[] | n
     if (pathspecs.some((word) => unresolvable(base)(word) || word.text.startsWith(':'))) return null;
     return pathspecs.map((word) => resolve(base ?? '/', word.text));
   }
+  if (name === 'find') {
+    const { roots } = findMutation(words);
+    return roots === null ? null : operandPaths(roots, cwd);
+  }
   if (sub !== undefined && INSTALLS[name]?.has(sub) === true) return null;
   if (MUTATORS.has(name)) return null;
   if (!OPERANDS_WRITE.has(name) && !TARGET_WRITE.has(name)) return undefined;
   if (words.some((word) => word.text === '-t' || word.text.startsWith('--target-directory'))) return null;
   const operands = operandsOf(words, 1);
+  if (OPERANDS_WRITE.has(name)) return operandPaths(operands, cwd);
   if (operands.length === 0 || operands.some(unresolvable(cwd))) return null;
-  const chosen = OPERANDS_WRITE.has(name) || name === 'mv' ? operands : operands.slice(-1);
+  const chosen = name === 'mv' ? operands : operands.slice(-1);
   return chosen.map((word) => resolve(cwd ?? '/', word.text));
 }
 

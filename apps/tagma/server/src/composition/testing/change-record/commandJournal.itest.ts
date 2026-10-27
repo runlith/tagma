@@ -267,56 +267,54 @@ layer(Layer.mergeAll(commandWalksLayer, BunFileSystem.layer, checkoutFixture), {
         }),
       ),
     );
-    it.effect(
-      'a command’s role survives a restart: the writer naming the path beside another session’s reader is decided the writer again',
-      () =>
-        withCheckout((checkout) =>
-          Effect.gen(function* () {
-            const w = checkout;
-            yield* w.namedAgent(MINE, { name: MINE, task: 'owned lines' });
-            yield* w.namedAgent(THEIRS, { name: THEIRS, task: 'their lines' });
-            const base = readFileSync(w.file, 'utf8');
-            const after = 'export const generated = 1;\n';
-            writeFileSync(w.file, after);
-            const journal = yield* journalOf(w.store, w.units, yield* CommandWalks);
-            const at = (yield* Clock.currentTimeMillis) - 10000;
-            const window = (thread: string, role: Role) => ({
-              id: `window-${thread}`,
-              projectId: w.projectId,
-              threadId: thread,
-              runHint: null,
-              checkout: 'repo-root',
-              spelling: w.root,
-              openedAt: at,
-              role,
-              signatures: [],
-              team: null,
-            });
-            const move = {
-              name: 'src/a.ts',
-              before: contentDigest(base),
-              after: contentDigest(after),
-              present: true,
-              existed: true,
-              written: { from: at + 550, to: at + 550 },
-              bytes: null,
-              link: false,
-              mode: 0o100644,
-            };
-            yield* Effect.all([
-              journal.opened(window(MINE, TREE)),
-              journal.settled(`window-${MINE}`, { start: at + 500, end: at + 600 }, { from: at + 450, to: at + 650 }, [move]),
-              journal.opened(window(THEIRS, { kind: 'reader', implicit: [] })),
-              journal.settled(`window-${THEIRS}`, { start: at + 100, end: at + 5_000 }, { from: at + 50, to: at + 5_050 }, [move]),
-            ]);
-            const restarted = yield* server(w);
-            yield* restarted.restart();
-            yield* restarted.commands.decided({ projectId: w.projectId, threadId: MINE });
-            const held = yield* restarted.record.held({ kind: 'path', projectId: w.projectId, place: testPlace('src/a.ts') });
-            expect(held.map((row) => row.threadId)).toEqual([MINE]);
-            expect(restarted.record.unattributed({ projectId: w.projectId, threadId: THEIRS })).toEqual([]);
-          }),
-        ),
+    it.effect('a command’s glob role survives a restart and names its write beside another session’s opaque writer', () =>
+      withCheckout((checkout) =>
+        Effect.gen(function* () {
+          const w = checkout;
+          yield* w.namedAgent(MINE, { name: MINE, task: 'owned lines' });
+          yield* w.namedAgent(THEIRS, { name: THEIRS, task: 'their lines' });
+          const base = readFileSync(w.file, 'utf8');
+          const after = 'export const generated = 1;\n';
+          writeFileSync(w.file, after);
+          const journal = yield* journalOf(w.store, w.units, yield* CommandWalks);
+          const at = (yield* Clock.currentTimeMillis) - 10000;
+          const window = (thread: string, role: Role) => ({
+            id: `window-${thread}`,
+            projectId: w.projectId,
+            threadId: thread,
+            runHint: null,
+            checkout: 'repo-root',
+            spelling: w.root,
+            openedAt: at,
+            role,
+            signatures: [],
+            team: null,
+          });
+          const move = {
+            name: 'src/a.ts',
+            before: contentDigest(base),
+            after: contentDigest(after),
+            present: true,
+            existed: true,
+            written: { from: at + 550, to: at + 550 },
+            bytes: null,
+            link: false,
+            mode: 0o100644,
+          };
+          yield* Effect.all([
+            journal.opened(window(MINE, { kind: 'named', paths: [{ glob: 'src/*.ts' }], implicit: [] })),
+            journal.settled(`window-${MINE}`, { start: at + 500, end: at + 600 }, { from: at + 450, to: at + 650 }, [move]),
+            journal.opened(window(THEIRS, WRITER)),
+            journal.settled(`window-${THEIRS}`, { start: at + 100, end: at + 5_000 }, { from: at + 50, to: at + 5_050 }, [move]),
+          ]);
+          const restarted = yield* server(w);
+          yield* restarted.restart();
+          yield* restarted.commands.decided({ projectId: w.projectId, threadId: MINE });
+          const held = yield* restarted.record.held({ kind: 'path', projectId: w.projectId, place: testPlace('src/a.ts') });
+          expect(held.map((row) => row.threadId)).toEqual([MINE]);
+          expect(restarted.record.unattributed({ projectId: w.projectId, threadId: THEIRS })).toEqual([]);
+        }),
+      ),
     );
     it.effect('a command’s team survives a restart: two writers of one thread tree leave the write to that tree again', () =>
       withCheckout((checkout) =>

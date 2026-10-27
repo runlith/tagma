@@ -1,15 +1,54 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Deferred, Effect } from 'effect';
+import { Deferred, Effect, Fiber } from 'effect';
 import { eq } from 'drizzle-orm';
 import { bytesDigest, contentDigest, versionContentLimit } from '@runlith/files/content';
 import { journalOf, workspaceChange } from '../../../change-record/testing/doubles.js';
 import { call, MINE, THEIRS } from '../checkoutFixture.js';
-import { base, CommandWalks, commandLayer, commandWorld } from './commandWorld.js';
+import { base, CommandWalks, commandLayer, commandWorld, fileReady } from './commandWorld.js';
 
 layer(commandLayer, { excludeTestServices: true })('command moves', (it) => {
+  it.effect('shell globs and find deletion roots own their deletions beside an opaque peer, without claiming unmatched paths', () =>
+    Effect.gen(function* () {
+      const s = yield* commandWorld();
+      const named = [
+        'dist/a.js',
+        'run.log',
+        'build/nested/a.map',
+        'negative/a-b.js',
+        'quoted/{a,b}1.js',
+        'classes/a.js',
+        'classes/!.js',
+        'classes/^.js',
+        'dash/-.js',
+      ];
+      const outside = ['dist/a.txt', 'dist/.hidden.js', 'dist/deeper/b.js', 'negative/a/b.js', 'quoted/a1.js', 'classes/b.js', 'dash/m.js'];
+      for (const dir of ['dist/deeper', 'build/nested', 'negative/a', 'quoted', 'classes', 'dash'])
+        mkdirSync(join(s.w.root, dir), { recursive: true });
+      for (const name of [...named, ...outside]) writeFileSync(join(s.w.root, name), `${name}\n`);
+      yield* s.w.run(['add', '--', 'dist', 'build', 'run.log', 'negative', 'quoted', 'classes', 'dash']);
+      yield* s.w.run(['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'deletion inputs']);
+      const peer = yield* Effect.forkChild(
+        call(s.theirs.bash, {
+          command: `exec bun -e 'const fs = require("node:fs"); await new Promise(resolve => { const check = () => { if (!fs.existsSync("dist/a.js") && !fs.existsSync("build/nested/a.map")) { observer.close(); resolve(); } }; const observer = fs.watch(".", {recursive:true}, check); fs.writeFileSync("running", "ready"); check(); }); for (const name of ${JSON.stringify(outside)}) fs.unlinkSync(name);'`,
+          description: 'Wait for both deletions and remove unmatched files',
+        }),
+      );
+      yield* fileReady(join(s.w.root, 'running'));
+      yield* call(s.mine.bash, {
+        command: String.raw`rm -f dist/*.js *.log negative/a[!x]b.js quoted/'{a,b}'*.js classes/[\!a].js classes/[\^a].js dash/[a\-z].js`,
+        description: 'Remove shell matches',
+      });
+      yield* call(s.mine.bash, { command: "find build -name '*.map' -delete", description: 'Remove maps under build' });
+      yield* Fiber.join(peer);
+      yield* Effect.all([s.decided(MINE), s.decided(THEIRS)]);
+      for (const name of named) expect(yield* s.held(name)).toEqual([[MINE, contentDigest(`${name}\n`), null]]);
+      for (const name of outside) expect(yield* s.held(name)).toEqual([]);
+    }),
+  );
+
   it.effect('a file past the text limit written by a command is held by its thread at the digest of its bytes', () =>
     Effect.gen(function* () {
       const s = yield* commandWorld();

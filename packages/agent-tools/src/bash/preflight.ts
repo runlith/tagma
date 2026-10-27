@@ -52,9 +52,14 @@ export const commandClaims = Effect.fn('BashTool.commandClaims')(function* (reso
   const facts = shellFacts(params.command, workdir);
   if (facts.readsOnly) return everyClaim('read');
   const unknown = (part: (typeof facts.parts)[number]) =>
-    part.named === null || part.implicit.length > 0 || (!part.readsOnly && part.named.length === 0);
+    part.named === null ||
+    part.named.some((path) => typeof path !== 'string') ||
+    part.implicit.length > 0 ||
+    (!part.readsOnly && part.named.length === 0);
   if (facts.parts.some(unknown)) return everyClaim('write');
-  const named = facts.parts.flatMap((part) => (part.readsOnly ? [] : (part.named ?? [])));
+  const named = facts.parts.flatMap((part) =>
+    part.readsOnly ? [] : (part.named ?? []).filter((path): path is string => typeof path === 'string'),
+  );
   return [...everyClaim('read'), ...(yield* pathClaims(resolved, named, 'write', true))];
 });
 

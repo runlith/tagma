@@ -1,6 +1,9 @@
+import { literalGlob } from './WorkspaceChanges';
+
 export type ShellWord = {
   readonly text: string;
   readonly literal: boolean;
+  readonly glob?: string;
 };
 
 export type ShellRedirect = {
@@ -140,6 +143,8 @@ class Reader {
   private word = '';
   private started = false;
   private literal = true;
+  private pattern: string | null = '';
+  private magic = false;
   private pendingRedirect: { fd: number | 'all'; op: '>' | '>>' } | null = null;
   private pendingHeredocs: Heredoc[] = [];
   private failed = false;
@@ -244,7 +249,8 @@ class Reader {
         i = this.openRedirect(i + 1, fd, this.text[i + 1] === '>' ? '>>' : '>');
         continue;
       }
-      this.take(ch, ch !== '*' && ch !== '?' && ch !== '[' && ch !== ']' && ch !== '{' && ch !== '}');
+      const magic = '*?[]{}'.includes(ch);
+      this.take(ch, !magic, true);
       i += 1;
     }
     if (this.failed) return null;
@@ -261,28 +267,42 @@ class Reader {
     this.word = '';
     this.started = false;
     this.literal = true;
+    this.pattern = '';
+    this.magic = false;
     return fd;
   }
 
-  private take(ch: string, literal: boolean): void {
-    if (!this.started && ch === '~') literal = false;
+  private take(ch: string, literal: boolean, raw = false): void {
+    if (raw && !this.started && ch === '~') {
+      literal = false;
+      this.pattern = null;
+    }
     this.word += ch;
+    if (this.pattern !== null) this.pattern += raw ? ch : literalGlob(ch);
+    this.magic ||= raw && !literal;
     this.started = true;
     if (!literal) this.literal = false;
   }
 
   private takeRun(run: string, literal: boolean): void {
     this.word += run;
+    this.pattern = literal && this.pattern !== null ? this.pattern + literalGlob(run) : null;
     this.started = true;
     if (!literal) this.literal = false;
   }
 
   private endWord(): void {
     if (!this.started) return;
-    const word: ShellWord = { text: this.word, literal: this.literal };
+    const word: ShellWord = {
+      text: this.word,
+      literal: this.literal,
+      glob: this.magic && this.pattern !== null ? this.pattern : undefined,
+    };
     this.word = '';
     this.started = false;
     this.literal = true;
+    this.pattern = '';
+    this.magic = false;
     if (this.pendingRedirect !== null) {
       this.current.redirects.push({ ...this.pendingRedirect, target: word });
       this.pendingRedirect = null;

@@ -1,4 +1,6 @@
 import { Data, type Effect } from 'effect';
+import type { Minimatch } from 'minimatch';
+import { pathMatcher } from './patterns';
 import type { ChangeTarget, WorkspaceChange } from '@runlith/files/change';
 
 export class IntakeRefused extends Data.TaggedError('IntakeRefused')<{
@@ -59,9 +61,45 @@ export type CommandLife = {
   readonly forget: () => void;
 };
 
+export type CommandPath = string | { readonly glob: string };
+
+export const literalGlob = (text: string): string => text.replace(/[\\*?[\]{},!^-]/g, '\\$&');
+
+const matchers = new WeakMap<object, Minimatch>();
+
+export const namedBy = (paths: readonly CommandPath[], name: string): boolean => {
+  const parts = name.split('/');
+  return paths.some((path) => {
+    if (typeof path === 'string') return path === '' || name === path || name.startsWith(`${path}/`);
+    if (path.glob === '') return true;
+    let matcher = matchers.get(path);
+    if (matcher === undefined) {
+      matcher = pathMatcher(path.glob, {
+        noext: true,
+        noglobstar: true,
+        nobrace: true,
+        nonegate: true,
+        nocomment: true,
+        dot: false,
+        optimizationLevel: 0,
+        platform: 'linux',
+      });
+      matchers.set(path, matcher);
+    }
+    return matcher.set.some(
+      (row) =>
+        row.length <= parts.length &&
+        row.every((part, at) => {
+          const value = parts[at] as string;
+          return typeof part === 'string' ? part === value : part instanceof RegExp && part.test(value);
+        }),
+    );
+  });
+};
+
 export type CommandPart = {
   readonly readsOnly: boolean;
-  readonly named: readonly string[] | null;
+  readonly named: readonly CommandPath[] | null;
   readonly signature: string | null;
   readonly listed: boolean;
   readonly implicit: readonly string[];

@@ -34,6 +34,30 @@ test('an editor names the paths it changes from the directory the line moved to,
   expect(shape('bun test > /tmp/log.txt')[0]).toEqual({ role: 'listed', named: ['/tmp/log.txt'], signature: 'bun test' });
 });
 
+test('shell operands preserve glob syntax and quoting, find names its roots, and dynamic paths stay opaque', () => {
+  expect(shape('rm dist/*.js *.log')[0]?.named).toEqual([{ glob: '/repo/dist/*.js' }, { glob: '/repo/*.log' }]);
+  expect(shape('rmdir build/{one,two}?')[0]?.named).toEqual([{ glob: '/repo/build/one?' }, { glob: '/repo/build/two?' }]);
+  expect(shape('touch dist/[ab].js')[0]?.named).toEqual([{ glob: '/repo/dist/[ab].js' }]);
+  expect(shape('rm "dist/*.js" dist/\\*.log')[0]?.named).toEqual(['/repo/dist/*.js', '/repo/dist/*.log']);
+  expect(shape('rm "dist/["*.js')[0]?.named).toEqual([{ glob: '/repo/dist/\\[*.js' }]);
+  expect(shape("find -L build cache -name '*.map' -delete")[0]?.named).toEqual(['/repo/build', '/repo/cache']);
+  expect(shape("find -name '*.map' -delete")[0]?.named).toEqual(['/repo']);
+  expect(shape('find -f build -delete')[0]?.named).toEqual(['/repo/build']);
+  expect(shape("find build -name '-delete'")[0]?.role).toBe('reads');
+  expect(shape("find build -name '-exec' -delete")[0]?.named).toEqual(['/repo/build']);
+  expect(shape('find -files0-from roots -delete')[0]?.named).toBeNull();
+  expect(shape('rm dist/missing*/../a.js')[0]?.named).toBeNull();
+  for (const command of [
+    'rm $ROOT/*.js',
+    'rm "${ROOT}"/*.js',
+    'rm ~/dist/*.js',
+    'rm $(pwd)/*.js',
+    'find "$ROOT" -delete',
+    'find build -delete -exec touch /elsewhere \\;',
+  ])
+    expect(shape(command)[0]?.named).toBeNull();
+});
+
 test('git names the working files its pathspecs change, and nothing for an index-only change', () => {
   expect(shape('git -C src checkout HEAD -- a.ts b')[0]?.named).toEqual(['/repo/src/a.ts', '/repo/src/b']);
   expect(shape('git mv -k old.ts lib/new.ts')[0]?.named).toEqual(['/repo/old.ts', '/repo/lib/new.ts']);

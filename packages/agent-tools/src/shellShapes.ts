@@ -1,5 +1,6 @@
 import { basename, isAbsolute } from 'node:path';
 import { shellCommands, type ShellCommand, type ShellWord } from './shellCommands';
+import { findMutation } from './shellFind';
 
 export type ShellSweepShape = {
   readonly code: 'shared-checkout';
@@ -409,8 +410,6 @@ const READERS = new Set([
   '[',
 ]);
 
-const FIND_WRITES = new Set(['-delete', '-exec', '-execdir', '-ok', '-okdir', '-fprint', '-fprint0', '-fprintf', '-fls']);
-
 const GIT_READS = new Set([
   'blame',
   'cat-file',
@@ -452,7 +451,7 @@ function reads(words: readonly ShellWord[]): boolean {
   if (verb === 'sort')
     return !args.some((word) => /^-[A-Za-z]*[oT]/.test(word.text) || /^--(?:output|temporary-directory|compress-program)/.test(word.text));
   if (verb === 'rg') return !args.some((word) => /^--(?:pre|hostname-bin)(?:=|$)/.test(word.text));
-  if (verb === 'find') return !args.some((word) => FIND_WRITES.has(word.text));
+  if (verb === 'find') return !findMutation(words).writes;
   if (verb === 'sed') return sedReads(args);
   if (verb !== 'git') return false;
   const found = gitOperation(words);
