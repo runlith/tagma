@@ -1,67 +1,54 @@
 <script lang="ts">
-  import type { DesktopBrowser, PageRect } from '@tagma/desktop/bridge';
+  import type { DesktopBrowser, PageRect, PageShown } from '@tagma/desktop/bridge';
   import type { PageId } from '@tagma/server/browser/contract/wire/ids';
   import { overlayLayers } from '@runlith/primitives/OverlayLayers.svelte';
+  import { tick } from 'svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
+  import { followDrags } from './drags.js';
+
+  const FRESH_MS = 1000;
 
   let { page, panel, bridge }: { page: PageId; panel: string; bridge: DesktopBrowser } = $props();
 
   let area = $state<HTMLDivElement>();
+  let box = $state.raw<PageRect | null>(null);
   let elsewhere = $state(false);
-  let frozen = $state(false);
-  let snapshot = $state<string | null>(null);
-  const id = $derived(page);
-  const key = $derived(panel);
+  let dragging = $state(false);
+  let parked = $state(false);
+  let frame = $state<string | null>(null);
+  let shot = $state<HTMLImageElement>();
+  let primed: { readonly at: number; readonly frame: Promise<string | null> } | null = null;
+  const shown = $derived<PageShown>({ page, panel });
 
-  const overlapped = $derived.by(() => {
-    const rects = overlayLayers.rects;
-    const element = area;
-    if (element === undefined || rects.length === 0) return false;
-    const box = element.getBoundingClientRect();
-    return rects.some(
-      (rect) => rect.x < box.right && rect.x + rect.width > box.left && rect.y < box.bottom && rect.y + rect.height > box.top,
-    );
-  });
+  const crosses = (rect: (typeof overlayLayers.rects)[number], over: PageRect): boolean =>
+    rect.x < over.x + over.width && rect.x + rect.width > over.x && rect.y < over.y + over.height && rect.y + rect.height > over.y;
 
-  $effect(() => {
-    if (!overlapped || elsewhere) return;
-    const shot = id;
-    let gone = false;
-    void bridge.capture(shot).then(
-      (url) => {
-        if (gone) return;
-        snapshot = url;
-        frozen = true;
-      },
-      (error: unknown) => {
-        console.error(`[tagma] page ${shot} was not captured under a menu`, error);
-        if (!gone) frozen = true;
-      },
-    );
-    return () => {
-      gone = true;
-      frozen = false;
-      requestAnimationFrame(() => {
-        if (!frozen) snapshot = null;
-      });
-    };
+  const covered = $derived.by(() => {
+    const over = box;
+    return over !== null && overlayLayers.rects.some((rect) => crosses(rect, over));
   });
+  const frozen = $derived(covered || dragging);
+
+  const snap = (id: PageId): Promise<string | null> =>
+    bridge.capture(id).catch((error: unknown) => {
+      console.error(`[tagma] page ${id} was not captured to stand under a layer`, error);
+      return null;
+    });
+
+  const painted = (): Promise<void> => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
 
   $effect(() => {
     const element = area;
-    if (element === undefined || elsewhere || frozen) return;
-    const shown = { page: id, panel: key };
-    let placed: PageRect | null = null;
-    const place = () => {
-      const box = element.getBoundingClientRect();
-      const rect = { x: box.left, y: box.top, width: box.width, height: box.height };
+    if (element === undefined) return;
+    let last: PageRect | null = null;
+    const measure = () => {
+      const rect = element.getBoundingClientRect();
       if (rect.width < 1 || rect.height < 1) return;
-      if (placed !== null && placed.x === rect.x && placed.y === rect.y && placed.width === rect.width && placed.height === rect.height)
-        return;
-      placed = rect;
-      bridge.show(shown, rect);
+      if (last !== null && last.x === rect.left && last.y === rect.top && last.width === rect.width && last.height === rect.height) return;
+      last = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+      box = last;
     };
-    const observer = new ResizeObserver(place);
+    const observer = new ResizeObserver(measure);
     const row = element.closest('[data-side-pane]')?.parentElement ?? null;
     const watch = () => {
       observer.disconnect();
@@ -70,21 +57,67 @@
     };
     const rows = new MutationObserver(() => {
       watch();
-      place();
+      measure();
     });
     if (row !== null) rows.observe(row, { childList: true });
     watch();
-    window.addEventListener('resize', place);
-    const lost = bridge.onElsewhere((gone) => {
-      if (gone.page === shown.page && gone.panel === shown.panel) elsewhere = true;
-    });
-    place();
+    window.addEventListener('resize', measure);
+    measure();
     return () => {
       observer.disconnect();
       rows.disconnect();
-      window.removeEventListener('resize', place);
-      lost();
-      bridge.hide(shown);
+      window.removeEventListener('resize', measure);
+    };
+  });
+
+  $effect(() => followDrags((held) => (dragging = held)));
+
+  $effect(() =>
+    bridge.onElsewhere((lost) => {
+      if (lost.page === page && lost.panel === panel) elsewhere = true;
+    }),
+  );
+
+  $effect(() => {
+    if (elsewhere) return;
+    const at = shown;
+    $effect(() => {
+      if (box !== null) bridge.show(at, box);
+    });
+    return () => bridge.hide(at);
+  });
+
+  $effect(() => {
+    if (elsewhere || parked) return;
+    return overlayLayers.onIntent(() => {
+      primed = { at: performance.now(), frame: snap(page) };
+    });
+  });
+
+  $effect(() => {
+    if (!frozen || elsewhere) return;
+    const at = shown;
+    const ready = primed !== null && performance.now() - primed.at < FRESH_MS ? primed.frame : snap(page);
+    primed = null;
+    let gone = false;
+    let sent = false;
+    void (async () => {
+      const url = await ready;
+      if (gone) return;
+      frame = url;
+      await tick();
+      if (url !== null && shot !== undefined)
+        await shot.decode().catch((error: unknown) => console.error(`[tagma] frame of ${at.page} did not decode`, error));
+      await painted();
+      if (gone) return;
+      sent = true;
+      parked = true;
+      bridge.freeze(at, true);
+    })();
+    return () => {
+      gone = true;
+      parked = false;
+      if (sent) bridge.freeze(at, false);
     };
   });
 </script>
@@ -97,7 +130,7 @@
         <Button size="sm" onclick={() => (elsewhere = false)}>Show here</Button>
       </div>
     </div>
-  {:else if snapshot !== null}
-    <img src={snapshot} alt="" class="size-full object-cover object-left-top" draggable="false" />
+  {:else if frame !== null}
+    <img bind:this={shot} src={frame} alt="" class="size-full object-cover object-left-top" draggable="false" />
   {/if}
 </div>

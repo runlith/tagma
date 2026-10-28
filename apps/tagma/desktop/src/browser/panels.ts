@@ -7,6 +7,8 @@ import { chooseIdentity, chosenIdentity } from './identity.js';
 
 const ZOOM = { least: 0.25, most: 5 } as const;
 
+const FRAME_QUALITY = 90;
+
 const isRect = (value: unknown): value is PageRect => {
   const rect = value as Partial<PageRect> | null;
   return [rect?.x, rect?.y, rect?.width, rect?.height].every((number) => typeof number === 'number' && Number.isFinite(number));
@@ -57,6 +59,12 @@ export class Panels {
       const held = window === null || !isShown(shown) ? undefined : this.host.page(shown.page);
       if (window !== null && held !== undefined) this.host.placement.hide(held.placed, window, (shown as PageShown).panel);
     });
+    ipcMain.on(BROWSER.freeze, (event, shown: unknown, frozen: unknown) => {
+      const window = this.window(event);
+      const held = window === null || !isShown(shown) || typeof frozen !== 'boolean' ? undefined : this.host.page(shown.page);
+      if (window !== null && held !== undefined)
+        this.host.placement.freeze(held.placed, window, (shown as PageShown).panel, frozen as boolean);
+    });
     ipcMain.on(BROWSER.keys, (event, chords: unknown, framed: unknown) => {
       if (!this.ours(event) || !Array.isArray(chords) || !chords.every(isChord)) return;
       this.host.keys(event.sender, chords, Array.isArray(framed) && framed.every(isFramed) ? framed : []);
@@ -90,7 +98,7 @@ export class Panels {
       const held = this.pageOf(event, page);
       if (held === undefined || held.contents.isDestroyed()) return null;
       const image = await held.contents.capturePage();
-      return image.isEmpty() ? null : image.toDataURL();
+      return image.isEmpty() ? null : `data:image/jpeg;base64,${image.toJPEG(FRAME_QUALITY).toString('base64')}`;
     });
   }
 

@@ -12,7 +12,7 @@ export type Placed = {
   readonly view: WebContentsView;
   home: Home | null;
   parking: BaseWindow | null;
-  shown: { readonly window: BrowserWindow; readonly panel: string; rect: Rectangle } | null;
+  shown: { readonly window: BrowserWindow; readonly panel: string; rect: Rectangle; frozen: boolean } | null;
   size: { width: number; height: number };
   readonly holds: Set<number>;
   shownAt: number;
@@ -43,10 +43,11 @@ export class Placement {
 
   show(placed: Placed, window: BrowserWindow, panel: string, rect: Rectangle): void {
     const before = placed.shown;
-    if (before !== null && (before.window !== window || before.panel !== panel) && !before.window.isDestroyed()) {
+    const same = before !== null && before.window === window && before.panel === panel;
+    if (before !== null && !same && !before.window.isDestroyed()) {
       this.elsewhere(before.window, before.panel, placed);
     }
-    placed.shown = { window, panel, rect };
+    placed.shown = { window, panel, rect, frozen: same && before.frozen };
     placed.size = { width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) };
     placed.shownAt = Date.now();
     this.watch(window);
@@ -56,6 +57,12 @@ export class Placement {
   hide(placed: Placed, window: BrowserWindow, panel: string): void {
     if (placed.shown?.window !== window || placed.shown.panel !== panel) return;
     placed.shown = null;
+    this.settle(placed);
+  }
+
+  freeze(placed: Placed, window: BrowserWindow, panel: string, frozen: boolean): void {
+    if (placed.shown?.window !== window || placed.shown.panel !== panel || placed.shown.frozen === frozen) return;
+    placed.shown.frozen = frozen;
     this.settle(placed);
   }
 
@@ -83,7 +90,8 @@ export class Placement {
     if (placed.view.webContents.isDestroyed()) return;
     const shown = placed.shown;
     if (shown !== null && shown.window.isDestroyed()) placed.shown = null;
-    const window = placed.shown === null || (placed.holds.size > 0 && !visible(placed.shown.window)) ? null : placed.shown.window;
+    const window =
+      placed.shown === null || placed.shown.frozen || (placed.holds.size > 0 && !visible(placed.shown.window)) ? null : placed.shown.window;
     if (window === null) {
       this.park(placed);
       return;

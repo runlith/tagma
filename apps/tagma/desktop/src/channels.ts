@@ -29,6 +29,7 @@ export const BROWSER = {
   host: 'browser:host',
   show: 'browser:show',
   hide: 'browser:hide',
+  freeze: 'browser:freeze',
   elsewhere: 'browser:elsewhere',
   keys: 'browser:keys',
   key: 'browser:key',

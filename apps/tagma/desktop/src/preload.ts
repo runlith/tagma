@@ -91,6 +91,7 @@ const browser: DesktopBrowser = {
   host: () => ipcRenderer.invoke(BROWSER.host) as Promise<string | null>,
   show: (shown, rect) => ipcRenderer.send(BROWSER.show, shown, rect),
   hide: (shown) => ipcRenderer.send(BROWSER.hide, shown),
+  freeze: (shown, frozen) => ipcRenderer.send(BROWSER.freeze, shown, frozen),
   onElsewhere: (listener) => listen<PageShown>(BROWSER.elsewhere, listener),
   keys: (chords, framed) => ipcRenderer.send(BROWSER.keys, chords, framed),
   onKey: (listener) => listen<PageKey>(BROWSER.key, listener),
