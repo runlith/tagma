@@ -92,6 +92,6 @@ export function renderBody(
   input: { key: string | undefined; streaming: boolean },
   origin: ServerOrigin,
   addresses: Addresses,
-): Promise<MarkdownHtml[]> {
+): MarkdownHtml[] {
   return rendererOf(origin, addresses).render({ text: markdown, key: input.key, streaming: input.streaming });
 }

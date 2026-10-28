@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { MarkdownHtml } from '@runlith/markdown/render';
+import { codeColours, type MarkdownHtml } from '@runlith/markdown/render';
 import { makeRouter } from '@runlith/layer/testing';
 import { expect, test } from 'vitest';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
@@ -24,9 +24,31 @@ function refs(html: MarkdownHtml[]) {
   }));
 }
 
+test('a body answers its parsed blocks at once, and colouring patches its code in place with the same text', async () => {
+  const text = '# Title\n\n- one\n- two\n\n```ts\nconst a = 1;\n```\n\n```ansi\n\u001b[31mred\u001b[0m\n```\n';
+  const blocks = renderBody(text, { key: 'drawn-at-once', streaming: false }, origin, addresses);
+  const root = document.createElement('div');
+  root.innerHTML = blocks.map((block) => block.html).join('');
+  const parsed = () => [...root.querySelectorAll('h1, li, pre > code')].map((node) => node.textContent);
+  const code = [...root.querySelectorAll('pre > code')];
+
+  expect(parsed()).toEqual(['Title', 'one', 'two', 'const a = 1;', 'red']);
+  await new Promise<void>((resolve) => {
+    const done = new MutationObserver(() => {
+      if (root.querySelectorAll('pre > code span[style]').length < 2) return;
+      done.disconnect();
+      resolve();
+    });
+    done.observe(root, { childList: true, subtree: true });
+    for (const block of blocks) codeColours(block)(root);
+  });
+  expect(parsed()).toEqual(['Title', 'one', 'two', 'const a = 1;', 'red']);
+  expect([...root.querySelectorAll('pre > code')]).toEqual(code);
+});
+
 test('a labelled reference inside a table cell is one link, and the row keeps its columns', async () => {
   const table = ['| зона | что это |', '| --- | --- |', '| inbox | [[5b386d76|Один durable inbox]] |'];
-  const html = await renderBody(table.join('\n'), { key: 'ref-in-table', streaming: false }, origin, addresses);
+  const html = renderBody(table.join('\n'), { key: 'ref-in-table', streaming: false }, origin, addresses);
 
   const row = [...tree(html).querySelectorAll('tbody td')].map((cell) => cell.textContent);
   expect(row).toEqual(['inbox', 'Один durable inbox']);
@@ -34,7 +56,7 @@ test('a labelled reference inside a table cell is one link, and the row keeps it
 });
 
 test('a label is inline markdown rendered inside its one link', async () => {
-  const html = await renderBody(
+  const html = renderBody(
     '- [[8208c42d|**С *smo* нельзя начинать фразу.**]] дальше',
     { key: 'formatted-label', streaming: false },
     origin,
@@ -46,21 +68,21 @@ test('a label is inline markdown rendered inside its one link', async () => {
 });
 
 test('a URL inside a label stays text of the reference, never a nested link', async () => {
-  const html = await renderBody('[[8208c42d|see https://example.com]]', { key: 'url-in-label', streaming: false }, origin, addresses);
+  const html = renderBody('[[8208c42d|see https://example.com]]', { key: 'url-in-label', streaming: false }, origin, addresses);
 
   expect(tree(html).querySelectorAll('a')).toHaveLength(1);
   expect(refs(html)).toEqual([{ name: '8208c42d', labelled: true, text: 'see https://example.com', inCode: false }]);
 });
 
 test('a reference addressed to another project is one link keeping its address', async () => {
-  const html = await renderBody('shop ([[7/4642091b|Shop follow-up]]) открыта', { key: 'addressed', streaming: false }, origin, addresses);
+  const html = renderBody('shop ([[7/4642091b|Shop follow-up]]) открыта', { key: 'addressed', streaming: false }, origin, addresses);
 
   expect(refs(html)).toEqual([{ name: '7/4642091b', labelled: true, text: 'Shop follow-up', inCode: false }]);
   expect(blockRefView(addresses, '7/4642091b', null, { title: 'Follow-up', project: 'shop', branch: null }).href).toBe('/shop/b/4642091b');
 });
 
 test('a code span that is exactly one block reference is the reference', async () => {
-  const html = await renderBody(
+  const html = renderBody(
     'See `[[56d609f9]]` and `[[56d609f9|seven owners]]`.',
     { key: 'code-span-is-ref', streaming: false },
     origin,
@@ -83,7 +105,7 @@ test('a reference to a thread id is one link to that thread, beside block refere
     '| --- | --- |',
     `| [[${thread}|left \\| right]] | x |`,
   ];
-  const html = await renderBody(text.join('\n'), { key: 'thread-ref', streaming: false }, origin, addresses);
+  const html = renderBody(text.join('\n'), { key: 'thread-ref', streaming: false }, origin, addresses);
 
   const threads = [...tree(html).querySelectorAll('a[data-thread-ref]')].map((el) => ({
     id: el.getAttribute('data-thread-ref'),
@@ -101,7 +123,7 @@ test('a reference to a thread id is one link to that thread, beside block refere
 });
 
 test('a project reference is one link to that project, labelled or not, and a block reference beside it stays a block', async () => {
-  const html = await renderBody(
+  const html = renderBody(
     'Compare [[project:5|runlith]] with [[project:12]] and [[5b386d76]].',
     { key: 'project-ref', streaming: false },
     origin,
@@ -126,7 +148,7 @@ test('file paths in prose preserve their spelling and locations without turning 
     'See [source](src/main.ts:4:2), file:///tmp/report%20one.md and C:\\work\\report.md:7.',
     'Keep /tmp/report(final).md and https://example.com/docs/a.md beside [src/label.ts](https://example.com).',
   ].join('\n');
-  const html = await renderBody(text, { key: 'prose-paths', streaming: false }, origin, addresses);
+  const html = renderBody(text, { key: 'prose-paths', streaming: false }, origin, addresses);
   const body = tree(html);
   expect(
     [...body.querySelectorAll('[data-path]')].map((node) => ({
@@ -153,10 +175,10 @@ test('path placeholders stay literal in live, finished and reopened bodies while
   const paths = ['/posters/<w>/<s>.png', 'C:\\posters\\<scene>.png'];
   const text = `Before.\n\nRead ${paths.join(' and ')}.\n\nAfter <s>old</s>, **new** and src/main.ts<br>Next.\n\nRead /tmp/<s>**kept**</s>.`;
   const key = 'path-placeholders';
-  await renderBody('Before.\n\nRead /posters/<w>/<s', { key, streaming: true }, origin, addresses);
-  const live = await renderBody(text, { key, streaming: true }, origin, addresses);
-  const finished = await renderBody(text, { key, streaming: false }, origin, addresses);
-  const reopened = await renderBody(text, { key: `${key}:reopened`, streaming: false }, origin, addresses);
+  renderBody('Before.\n\nRead /posters/<w>/<s', { key, streaming: true }, origin, addresses);
+  const live = renderBody(text, { key, streaming: true }, origin, addresses);
+  const finished = renderBody(text, { key, streaming: false }, origin, addresses);
+  const reopened = renderBody(text, { key: `${key}:reopened`, streaming: false }, origin, addresses);
 
   for (const html of [live, finished, reopened]) {
     const body = tree(html);
@@ -189,17 +211,17 @@ test.each([
   ['raw markup open across blocks', 'Intro.\n\n<div>\n\nHello <b>bold\n\nstill</b>\n\n</div>\n\nAfter.'],
 ])('a body finished after streaming draws the same HTML as the same text drawn whole: %s', async (name, text) => {
   for (let end = 1; end < text.length; end += 5) {
-    await renderBody(text.slice(0, end), { key: `streamed:${name}`, streaming: true }, origin, addresses);
+    renderBody(text.slice(0, end), { key: `streamed:${name}`, streaming: true }, origin, addresses);
   }
-  const finished = await renderBody(text, { key: `streamed:${name}`, streaming: false }, origin, addresses);
-  const whole = await renderBody(text, { key: `whole:${name}`, streaming: false }, origin, addresses);
+  const finished = renderBody(text, { key: `streamed:${name}`, streaming: false }, origin, addresses);
+  const whole = renderBody(text, { key: `whole:${name}`, streaming: false }, origin, addresses);
 
   expect(finished.length).toBeGreaterThan(1);
   expect(tree(finished).body.innerHTML).toBe(tree(whole).body.innerHTML);
 });
 
 test('a code span that holds a reference and other text stays code', async () => {
-  const html = await renderBody(
+  const html = renderBody(
     'The syntax is `[[56d609f9|label]] plus words`.',
     { key: 'code-span-with-extra', streaming: false },
     origin,

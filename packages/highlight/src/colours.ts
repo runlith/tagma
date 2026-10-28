@@ -346,7 +346,26 @@ export async function* highlightLineSlices(code: string, language: string | unde
 export function plainCodeHtml(code: string, language: string | undefined): string {
   const normalized = normalizeCodeLanguage(language);
   const className = normalized === 'text' ? '' : ` class="language-${escapeAttribute(normalized)}"`;
-  return `<pre><code${className}>${escapeHtml(code)}</code></pre>`;
+  return `<pre><code${className}>${escapeHtml(visibleCode(code, normalized))}</code></pre>`;
+}
+
+const ESCAPE = '\u001b';
+
+export function visibleCode(code: string, language: string | undefined): string {
+  if (normalizeCodeLanguage(language) !== 'ansi' || !code.includes(ESCAPE)) return code;
+  return code.split('\n').map(visibleAnsi).join('\n');
+}
+
+function visibleAnsi(line: string): string {
+  let shown = '';
+  let read = 0;
+  for (;;) {
+    const at = line.indexOf(ESCAPE, read);
+    const close = at >= 0 && line[at + 1] === '[' ? line.indexOf('m', at) : -1;
+    if (close < 0) return shown + line.slice(read);
+    shown += line.slice(read, at);
+    read = close + 1;
+  }
 }
 
 function sliceEnd(lines: readonly string[], start: number): number {

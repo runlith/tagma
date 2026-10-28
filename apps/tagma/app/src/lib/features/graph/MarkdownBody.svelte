@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-  import { fallbackBlock, type MarkdownHtml } from '@runlith/markdown/render';
+  import { codeColours, type MarkdownHtml } from '@runlith/markdown/render';
   import { getAllContexts, untrack } from 'svelte';
   import type { Attachment } from 'svelte/attachments';
   import { App } from '@runlith/layer/svelte/App.svelte';
@@ -71,10 +71,7 @@
     return typeof release === 'function' ? release : () => undefined;
   };
 
-  let settledText = $state<string>();
-  const settled = $derived(!streaming && settledText === text);
-
-  const pathLinks = $derived(new PathLinks(opening, streaming || settledText !== text ? undefined : paths, here));
+  const pathLinks = $derived(new PathLinks(opening, streaming ? undefined : paths, here));
 
   $effect(() => {
     const links = pathLinks;
@@ -88,26 +85,10 @@
     };
   }
 
-  let blocks = $state.raw<MarkdownHtml[]>([]);
-  let renderRevision = 0;
+  const blocks = $derived(/\S/.test(text) ? renderBody(text, { key: cacheKey, streaming }, origin, addresses) : []);
 
   $effect(() => {
-    const source = text;
-    const key = cacheKey;
-    const live = streaming;
-    const revision = ++renderRevision;
-    if (!/\S/.test(source)) {
-      blocks = [];
-      return;
-    }
-    if (untrack(() => blocks.length === 0)) blocks = [fallbackBlock(source)];
-    void (async () => {
-      const next = await renderBody(source, { key, streaming: live }, origin, addresses);
-      if (revision !== renderRevision) return;
-      blocks = next;
-      settledText = live ? undefined : source;
-      onRendered?.();
-    })();
+    if (blocks.length > 0) untrack(() => onRendered?.());
   });
 
   function blockRefs(block: MarkdownHtml, resolver: BlockRefs | undefined): Attachment<HTMLElement> {
@@ -196,13 +177,14 @@
   {#each blocks as block (block.key)}
     <div
       class="markdown-block"
+      {@attach codeColours(block)}
       {@attach blockRefs(block, refs)}
       {@attach threadRefs(block, threadOf)}
       {@attach projectRefs(block)}
       {@attach siteRefs(block)}
       {@attach settingChips(block, settings)}
       {@attach pathLinks.attachment(block.html.includes('data-path'))}
-      {@attach commitAnchors(block.html.includes('data-commit') ? commits : undefined, addresses, settled, (anchor, peer) =>
+      {@attach commitAnchors(block.html.includes('data-commit') ? commits : undefined, addresses, !streaming, (anchor, peer) =>
         linked(anchor, commitLink({ sha: peer.sha, project: peer.project, subject: peer.subject }, from)),
       )}
     >
