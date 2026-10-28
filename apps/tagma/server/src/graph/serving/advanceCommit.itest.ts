@@ -8,6 +8,8 @@ import { runGit } from '../../platform/git/ownGit.js';
 import { CHECKOUT_DIRECTORY } from '../contract/wire/storage.js';
 import { shippedSteps } from '../steps/sequence.js';
 import { TreeCommits, treeCommits } from '../tree/commits.js';
+import { commitJournal } from '../tree/message.js';
+import { testSessionIdentity } from '../../platform/testing/identity.js';
 import { projectToTree } from '../tree/projection.js';
 import { openFormat } from './format.js';
 import { advanceTree } from './advance.js';
@@ -37,7 +39,13 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph format delivery', 
               git: graph.git,
               checkout,
               treeRoot,
-              db: graph.graphStore.db,
+              journal: commitJournal({
+                store: graph.graphStore,
+                tags: graph.tags,
+                identity: testSessionIdentity,
+                projectId,
+                scope: 'team',
+              }),
               permit: (effect) => effect,
               policy: Effect.succeed('auto'),
               fork: (work) => fork(Effect.andThen(work, Queue.offer(landed, undefined))),

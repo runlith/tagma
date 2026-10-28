@@ -50,6 +50,7 @@ import type { ShadowGit } from '../tree/shadow.js';
 import { treeConflicts } from '../tree/conflicts.js';
 import { TreeCommits } from '../tree/commits.js';
 import { treeCommits } from '../tree/commits.js';
+import { commitJournal, startCommitJournals, type TreeScope } from '../tree/message.js';
 import { blocksRetiredKey, CHECKOUT_DIRECTORY, FORMAT_FILE } from '../contract/wire/storage.js';
 import { graphCommit } from '../settings.js';
 import { type StealthLayout, type StorageLayout, stealthBeside, storageHomes } from '../storage/layout.js';
@@ -286,13 +287,21 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
               );
               const format = yield* refused(openFormat(layout.treeRoot, steps).pipe(Effect.provide(opening)));
               const fork = yield* FiberSet.makeRuntime<never, void, never>().pipe(Effect.provideService(Scope.Scope, runtime.scope));
+              const journalOf = (scope: TreeScope) =>
+                commitJournal({
+                  store: Context.get(opening, GraphStore),
+                  tags: Context.get(opening, Tags),
+                  identity,
+                  projectId: row.id,
+                  scope,
+                });
               const commits =
                 layout.mode === 'team' && !temporary
                   ? treeCommits({
                       git,
                       checkout,
                       treeRoot: layout.treeRoot,
-                      db: Context.get(opening, GraphStore).db,
+                      journal: journalOf('team'),
                       permit: overTree(gates, layout.treeRoot),
                       policy: Effect.map(Context.get(machine, Settings).read(graphCommit, row.id), (resolved) => resolved.value),
                       fork,
@@ -392,6 +401,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                       git,
                       checkout,
                       treeRoot: layout.treeRoot,
+                      journal: journalOf('whole'),
                       unmerged,
                       overTree: overTree(gates, layout.treeRoot),
                       overRepository: overRepository(gates, layout),
@@ -409,6 +419,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                     git,
                     checkout,
                     treeRoot: place.treeRoot,
+                    journal: journalOf('stealth'),
                     unmerged: tracked,
                     overTree: overTree(gates, place.treeRoot),
                     overRepository: overRepository(gates, place),
@@ -453,22 +464,20 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                 if (batches !== null) yield* batches.carry([FORMAT_FILE]);
                 if (commits !== undefined) yield* commits.carry([FORMAT_FILE]);
               }
-              const write = writeThrough(
-                { identity },
-                {
-                  projectId: row.id,
-                  layout,
-                  stealth,
-                  ledger,
-                  commits,
-                  batches,
-                  unmerged,
-                  store,
-                  tags: Context.get(poolContext, Tags),
-                  settled: input.settled,
-                  format,
-                },
-              );
+              if (!temporary) yield* refused(startCommitJournals(store));
+              const write = writeThrough({
+                projectId: row.id,
+                layout,
+                stealth,
+                ledger,
+                commits,
+                batches,
+                unmerged,
+                store,
+                tags: Context.get(poolContext, Tags),
+                settled: input.settled,
+                format,
+              });
               const reach = (projectId: number): Effect.Effect<Context.Context<GraphServices | GraphStore>, GateRefusal<OpenRefusal>> =>
                 projectId === row.id ? Effect.succeed(served) : input.resolveProject(projectId);
               const served = Context.omit(CurrentGraph)(
@@ -643,7 +652,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
     build,
     level,
     prepare,
-    writeThrough: (bind) => writeThrough({ identity }, bind),
+    writeThrough: (bind) => writeThrough(bind),
     syncRegistry: (context) => syncRegistry(machine, syncedRegistry, context),
     registrySynced: (context) => registrySynced(machine, syncedRegistry, context),
     forgetRegistry: (context) => forgetRegistry(syncedRegistry, context),

@@ -28,6 +28,7 @@ import type { ProjectPolicyRow } from '../contract/wire/serving.js';
 import type { GraphContext } from '../contract/service/serving.js';
 import { projectToTree, syncProject } from '../tree/projection.js';
 import { treeHeadStamp } from '../tree/stamp.js';
+import { coverCommitJournals } from '../tree/message.js';
 import { ShadowGit } from '../tree/shadow.js';
 import type { BlockTreeUnreadable } from '../tree/layout.js';
 import { treeHoldsAny } from '../tree/scan.js';
@@ -181,6 +182,7 @@ export const travelMirror = Effect.fnUntraced(function* (
     const store = Context.get(yield* runtime.contextEffect, GraphStore);
     const stamp = treeHeadStamp();
     yield* (head === null ? stamp.clearStamp : stamp.writeStamp(head)).pipe(Effect.provideService(GraphStore, store));
+    yield* coverCommitJournals(store);
   }).pipe(Effect.scoped);
 });
 

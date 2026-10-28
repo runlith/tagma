@@ -4,7 +4,7 @@ import { gitAnswer } from '../../platform/git/ownGit.js';
 import type { UnmergedTracker } from '../../platform/git/unmerged.js';
 import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { captureTree, commitCapture, treeBranch } from '../tree/batch.js';
-import { GraphBatch, shapeOf } from '../tree/message.js';
+import { type CommitJournal, landedAt, messageOf, shapeOf } from '../tree/message.js';
 import type { TreeBatches } from '../contract/service/serving.js';
 import { refused } from './refusal.js';
 import type { PermitHold } from './permits.js';
@@ -13,17 +13,11 @@ const RETRY_FIRST_MS = 1_000;
 const RETRY_CAP_MS = 300_000;
 const MAINTENANCE_EVERY = 100;
 
-type Pending = {
-  readonly paths: Set<string>;
-  readonly batch: GraphBatch;
-};
-
-const nothing = (): Pending => ({ paths: new Set(), batch: new GraphBatch() });
-
 export const treeCommitter = ({
   git,
   checkout,
   treeRoot,
+  journal,
   unmerged,
   overTree,
   overRepository,
@@ -33,56 +27,56 @@ export const treeCommitter = ({
   readonly git: Git['Service'];
   readonly checkout: string;
   readonly treeRoot: string;
+  readonly journal: CommitJournal;
   readonly unmerged: UnmergedTracker;
   readonly overTree: PermitHold;
   readonly overRepository: PermitHold;
   readonly fork: (effect: Effect.Effect<void>) => unknown;
   readonly committed: () => void;
 }): TreeBatches => {
-  let pending = nothing();
+  let pending = new Set<string>();
   let driving = false;
   let failures = 0;
   let published = 0;
 
-  const take = () => {
-    const batch = pending;
-    pending = nothing();
-    return batch;
-  };
-
-  const restore = (batch: Pending) => {
+  const restore = (paths: Set<string>) => {
     const later = pending;
-    pending = batch;
-    for (const path of later.paths) batch.paths.add(path);
-    batch.batch.absorb(later.batch);
+    pending = paths;
+    for (const path of later) paths.add(path);
   };
 
   const publish = Effect.fn('TreeCommitter.publish', { root: true })(function* (capturing: PermitHold) {
-    let batch = nothing();
+    let paths = new Set<string>();
     return yield* Effect.gen(function* () {
       const branch = yield* refused(treeBranch(treeRoot));
       if (!('ref' in branch)) return 'held' as const;
-      const capture = yield* capturing(
+      yield* refused(journal.recover(landedAt(git, treeRoot)));
+      const [capture, words] = yield* capturing(
         Effect.suspend(() => {
-          batch = take();
-          return refused(captureTree(treeRoot, batch.paths, () => false));
+          paths = pending;
+          pending = new Set();
+          return Effect.zip(refused(captureTree(treeRoot, paths, () => false)), refused(journal.words));
         }),
       );
-      if (capture.files.size === 0 && capture.gone.size === 0) return 'published' as const;
+      if (capture.files.size === 0 && capture.gone.size === 0) {
+        yield* refused(journal.committed(words.reach));
+        return 'published' as const;
+      }
       const shape = yield* refused(shapeOf(git, checkout));
+      const at = new Date(yield* Clock.currentTimeMillis);
       const made = yield* Effect.uninterruptible(
-        refused(
-          commitCapture(git, treeRoot, capture, {
-            ref: branch.ref,
-            from: `${branch.ref}^0`,
-            message: batch.batch.message(shape, batch.batch.position),
-            at: new Date(yield* Clock.currentTimeMillis),
-          }),
-        ),
+        Effect.gen(function* () {
+          yield* refused(journal.landing(words.reach));
+          const commit = yield* refused(
+            commitCapture(git, treeRoot, capture, { ref: branch.ref, from: `${branch.ref}^0`, message: messageOf(words, shape), at }),
+          );
+          yield* refused(journal.committed(words.reach));
+          return commit;
+        }),
       );
       yield* Effect.annotateCurrentSpan({
-        acts: batch.batch.acts,
-        paths: batch.paths.size,
+        acts: words.lines.length,
+        paths: paths.size,
         files: capture.files.size,
         gone: capture.gone.size,
       });
@@ -109,7 +103,7 @@ export const treeCommitter = ({
         );
       }
       return 'published' as const;
-    }).pipe(Effect.onError(() => Effect.sync(() => restore(batch))));
+    }).pipe(Effect.onError(() => Effect.sync(() => restore(paths))));
   });
 
   const drive = () => {
@@ -117,7 +111,7 @@ export const treeCommitter = ({
     driving = true;
     fork(
       Effect.gen(function* () {
-        while (pending.paths.size > 0) {
+        while (pending.size > 0) {
           const round = yield* Effect.exit(overRepository(publish(overTree)));
           if (round._tag === 'Success') {
             failures = 0;
@@ -146,19 +140,12 @@ export const treeCommitter = ({
   };
 
   return {
-    land: (landed) =>
-      Effect.sync(() => {
-        if (landed.paths.length === 0) return;
-        for (const path of landed.paths) pending.paths.add(path);
-        pending.batch.add(landed.act);
-        drive();
-      }),
     carry: (paths) =>
       Effect.sync(() => {
         if (paths.length === 0) return;
-        for (const path of paths) pending.paths.add(path);
+        for (const path of paths) pending.add(path);
         drive();
       }),
-    flush: Effect.suspend(() => (pending.paths.size === 0 ? Effect.void : Effect.asVoid(publish((work) => work)))),
+    flush: Effect.suspend(() => (pending.size === 0 ? Effect.void : Effect.asVoid(publish((work) => work)))),
   };
 };

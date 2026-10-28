@@ -89,6 +89,18 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
     }),
   );
 
+  it.effect('an act a storage move already published is not named again by the next commit of the moved graph', () =>
+    Effect.gen(function* () {
+      const { world, project, created } = yield* teamProject('moving', ['feat(core): seed the code']);
+      yield* created({ title: 'Carried by the move' });
+      expect((yield* world.op('set_project_storage', { ref: String(project), mode: 'stealth' })).status).toBe(200);
+      const after = yield* created({ title: 'After the move' });
+      yield* world.runtime.pool.releaseProject(project);
+      const log = (yield* world.op('read_block_log', { project, blockId: after })).body as { log: readonly { message: string }[] };
+      expect(log.log[0]?.message).toBe('docs(graph): add note "After the move"');
+    }),
+  );
+
   it.effect('the stealth graph commits through the same assembler, and the team commit of a mixed act names only team blocks', () =>
     Effect.gen(function* () {
       const { world, root, project, created } = yield* teamProject('stealth', ['feat(core): seed the code']);
