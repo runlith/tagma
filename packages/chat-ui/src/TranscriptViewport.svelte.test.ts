@@ -550,7 +550,7 @@ describe('which message of the operator the feed is on', () => {
 
     expect(root.scrollTop).toBe(10 * ROW_PX - 12);
     expect(viewport.following).toBe(false);
-    expect(viewport.currentMessageId('row-190')).toBe('row-10');
+    expect(viewport.currentMessageId).toBe('row-10');
     viewport.dispose();
   });
 
@@ -563,7 +563,7 @@ describe('which message of the operator the feed is on', () => {
     await frames();
 
     expect(root.scrollTop).toBe(10 * ROW_PX - 12);
-    expect(viewport.currentMessageId('row-190')).toBe('row-10');
+    expect(viewport.currentMessageId).toBe('row-10');
     viewport.dispose();
   });
 
@@ -577,7 +577,7 @@ describe('which message of the operator the feed is on', () => {
     await frames();
 
     expect(root.scrollTop).toBe(13 * ROW_PX - 12);
-    expect(viewport.currentMessageId('row-190')).toBe('row-10');
+    expect(viewport.currentMessageId).toBe('row-10');
     viewport.dispose();
   });
 
@@ -587,11 +587,11 @@ describe('which message of the operator the feed is on', () => {
 
     scroll(root, 117 * ROW_PX);
     await frames();
-    expect(viewport.currentMessageId('row-190')).toBe('row-10');
+    expect(viewport.currentMessageId).toBe('row-10');
 
     scroll(root, 125 * ROW_PX);
     await frames();
-    expect(viewport.currentMessageId('row-190')).toBe('row-120');
+    expect(viewport.currentMessageId).toBe('row-120');
     viewport.dispose();
   });
 
@@ -600,7 +600,7 @@ describe('which message of the operator the feed is on', () => {
     await frames();
 
     expect(viewport.following).toBe(true);
-    expect(viewport.currentMessageId('row-190')).toBe('row-190');
+    expect(viewport.currentMessageId).toBe('row-190');
     viewport.dispose();
   });
 });

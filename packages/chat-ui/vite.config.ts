@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 
 const isolatedUnit = [
   'src/ChatSurface.escape.svelte.test.ts',
+  'src/ChatSurface.rail.svelte.test.ts',
   'src/ChatSurface.stalled.svelte.test.ts',
   'src/ChatSurface.still.svelte.test.ts',
   'src/Composer.svelte.test.ts',

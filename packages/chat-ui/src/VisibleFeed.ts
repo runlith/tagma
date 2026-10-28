@@ -88,24 +88,6 @@ export class VisibleFeed {
     return this.confirmationsHeld;
   }
 
-  get activeMessage(): string | undefined {
-    const run = this.run;
-    const users = this.users;
-    if (run === null) return users.at(-1)?.id;
-    let first = -1;
-    this.input.eachBack((entry, index) => {
-      if (entry.runId === run.id) {
-        if (this.shown.has(entry.id) || this.running.has(entry.id)) first = index;
-        return true;
-      }
-      return !(entry.runId !== undefined && first >= 0);
-    });
-    for (let index = users.length - 1; index >= 0; index -= 1) {
-      if (first < 0 || this.input.indexOf(users[index]!.id) < first) return users[index]!.id;
-    }
-    return undefined;
-  }
-
   since(revision: number): readonly FeedDelta[] | null {
     return this.log.since(revision);
   }

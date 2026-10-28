@@ -1,14 +1,3 @@
-export function resolveCurrentMessageId(input: {
-  activeId?: string;
-  cursorId?: string;
-  following: boolean;
-  pinnedId?: string;
-}): string | undefined {
-  if (input.pinnedId) return input.pinnedId;
-  if (input.following) return input.activeId ?? input.cursorId;
-  return input.cursorId;
-}
-
 export type MessageOffsetTarget = { kind: 'message'; id: string } | { kind: 'latest' } | { kind: 'none' };
 
 export function messageOffsetTarget(input: { currentId?: string; ids: readonly string[]; offset: number }): MessageOffsetTarget {

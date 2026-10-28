@@ -104,10 +104,6 @@
     return feed.users;
   });
   const newestLive = $derived(tail?.kind === 'step' ? tail.entry.id : null);
-  const activeMessage = $derived.by(() => {
-    feedEpoch;
-    return feed.activeMessage;
-  });
   const activeRunId = $derived(verdict?.runId ?? null);
   const working = $derived(verdict?.pulse ?? false);
   const pulse = $derived(liveStatus?.pulse ?? false);
@@ -198,7 +194,6 @@
       awaitingConfirmation,
     }),
   );
-  const currentMessageId = $derived(viewport.currentMessageId(activeMessage));
   const bodiesRendered = new WeakSet<ChatTimelineItem>();
   let bodiesVersion = $state(0);
 
@@ -299,9 +294,12 @@
   });
 
   $effect(() => {
-    clearance;
+    const height = clearance;
     pinnedHeight;
-    untrack(() => viewport.scrollToBottom(viewport.following));
+    untrack(() => {
+      viewport.syncClearance(height);
+      viewport.scrollToBottom(viewport.following);
+    });
   });
 
   $effect(() => {
@@ -347,7 +345,6 @@
     viewport.navigate(
       event.key === '[' ? -1 : 1,
       users.map((entry) => entry.id),
-      activeMessage,
     );
   }
 
@@ -579,6 +576,6 @@
     class="pointer-events-none absolute top-0 left-3 z-20 hidden flex-col justify-center @min-[56rem]/feed:flex"
     style:bottom="var(--chat-composer-clearance)"
   >
-    <MessageNav {users} currentId={currentMessageId} onSelect={(id) => viewport.select(id)} />
+    <MessageNav {users} currentId={viewport.currentMessageId} onSelect={(id) => viewport.select(id)} />
   </div>
 </div>

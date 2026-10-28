@@ -2,11 +2,10 @@ import { canScroll, type ScrollState, wheelCrossesOut, wheelDistance } from '@ru
 import { FollowingViewport, type Hold, type ScrollOutcome } from '@runlith/scroll-follow/FollowingViewport.svelte';
 import { tick } from 'svelte';
 import type { FeedMemory } from './FeedMemory';
-import { transcriptCursorMessageId } from './transcriptCursor';
+import { readingLine, transcriptCursorMessageId } from './transcriptCursor';
 import { TRANSCRIPT_END_THRESHOLD_PX, TranscriptVirtualizer } from './TranscriptVirtualizer.svelte';
-import { messageOffsetTarget, resolveCurrentMessageId } from './transcriptMessageNavigation';
+import { messageOffsetTarget } from './transcriptMessageNavigation';
 
-const CURSOR_LINE_OFFSET_PX = 100;
 const HEAD_REACH_PX = 200;
 const GESTURE_WINDOW_MS = 250;
 const SCROLL_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
@@ -20,6 +19,7 @@ export class TranscriptViewport {
   private scrolled: (() => void) | undefined;
   private gestured: (() => void) | undefined;
   private landed: ((entryId: string) => void) | undefined;
+  private clearance = 0;
   private gestureAt = Number.NEGATIVE_INFINITY;
   private inputAt = Number.NEGATIVE_INFINITY;
   private historyRequested = false;
@@ -192,8 +192,8 @@ export class TranscriptViewport {
     this.followingViewport.scheduleState(root);
   }
 
-  navigate(offset: number, ids: readonly string[], activeId: string | undefined): void {
-    const target = messageOffsetTarget({ currentId: this.currentMessageId(activeId), ids, offset });
+  navigate(offset: number, ids: readonly string[]): void {
+    const target = messageOffsetTarget({ currentId: this.currentMessageId, ids, offset });
     if (target.kind === 'none') return;
     if (target.kind === 'latest') {
       this.resume();
@@ -202,13 +202,15 @@ export class TranscriptViewport {
     this.select(target.id, 'auto');
   }
 
-  currentMessageId(activeId: string | undefined): string | undefined {
-    return resolveCurrentMessageId({
-      activeId,
-      cursorId: this.cursorId,
-      following: this.following,
-      pinnedId: this.pinnedId,
-    });
+  get currentMessageId(): string | undefined {
+    return this.pinnedId ?? this.cursorId;
+  }
+
+  syncClearance(clearance: number): void {
+    if (clearance === this.clearance) return;
+    this.clearance = clearance;
+    const root = this.viewport;
+    if (root) this.followingViewport.scheduleState(root);
   }
 
   async contentChanged(entryCount: number, activeRunId: string | null | undefined): Promise<void> {
@@ -359,7 +361,13 @@ export class TranscriptViewport {
   }
 
   private readCursor(root: HTMLElement): string | undefined {
-    const row = this.window.rowAt(root.scrollTop + CURSOR_LINE_OFFSET_PX);
+    const line = readingLine({
+      scrollTop: root.scrollTop,
+      scrollHeight: root.scrollHeight,
+      clientHeight: root.clientHeight,
+      clearance: this.clearance,
+    });
+    const row = this.window.rowAt(line);
     if (row === undefined) return undefined;
     return transcriptCursorMessageId({ messages: this.messages(), rowOf: (id) => this.window.rowOf(id), row });
   }

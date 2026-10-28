@@ -199,7 +199,6 @@ describe('attached context in the visible feed', () => {
       users: feed.users,
       confirmations: feed.confirmations,
       trailing: feed.trailing,
-      activeMessage: feed.activeMessage,
     });
     for (const verbose of [false, true]) {
       const store = new ChatFold();
