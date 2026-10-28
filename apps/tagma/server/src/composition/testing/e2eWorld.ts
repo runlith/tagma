@@ -3,10 +3,11 @@ import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
 import { ActivityStore } from '@runlith/activity/store';
 import { ACTIVITY_FIELDS } from '@runlith/activity/store/query';
 import { ActivityRecord } from '@runlith/activity/store/record';
+import type { threadSendSchema } from '@runlith/agent/protocol/realtime';
 import { subscriptionDescription } from '@runlith/builtin-catalog/subscription/description';
 import { onFailure } from '@runlith/e2e/artifacts';
 import { kind, shared, world as workerWorld } from '@runlith/testbed/worlds';
-import { Clock, Context, Effect, FileSystem, Layer, Schema } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Queue, Schema, Stream } from 'effect';
 import { FetchHttpClient, HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { HttpApiClient } from 'effect/http-api';
 import { join } from 'node:path';
@@ -18,8 +19,10 @@ import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
 import { knownAnswer } from '../../platform/contract/wire/operation.js';
 import type { ModelAccess } from '../../providers/contract/service/access.js';
 import { websocketHttpTracing } from '../../socket/live.js';
+import { ThreadHarness } from '../../threads/contract/service/engine.js';
 import { threadCreateSchema } from '../../threads/contract/wire/creation.js';
 import { ROUTE_OPERATIONS } from '../../threads/contract/wire/operations/routes.js';
+import { TURN_OPERATIONS } from '../../threads/contract/wire/operations/turns.js';
 import { artifactRoutes } from '../http/artifacts.js';
 import { doorLayer, socketOperationsLayer } from '../http/door.js';
 import { liveServing } from '../socketBinding.js';
@@ -87,6 +90,7 @@ const built = Effect.fnUntraced(
     );
     yield* Layer.build(serving);
     const door = yield* HttpApiClient.make(Api, { baseUrl: origin }).pipe(Effect.provide(FetchHttpClient.layer));
+    const harness = Context.get(world.runtime.owners, ThreadHarness);
     const tenant = Effect.gen(function* () {
       const checkout = yield* world.directory('e2e');
       const projectId = yield* world.stealthProject(checkout);
@@ -104,7 +108,42 @@ const built = Effect.fnUntraced(
         );
         return answer.snapshot.thread;
       });
-      return { projectId, projectName, checkout, perform, thread };
+      const turn = Effect.fn('testing.E2eWorld.turn')(function* (threadId: string, input: typeof threadSendSchema.Type) {
+        const ended = yield* Queue.unbounded<string>();
+        yield* harness.runs.settlements().subscribe({
+          name: `e2e turn ${threadId}/${input.key}`,
+          at: 'after-stages',
+          handle: (event) => (event.threadId === threadId ? Queue.offer(ended, event.runId).pipe(Effect.asVoid) : Effect.void),
+        });
+        const { runId } = yield* Schema.decodeUnknownEffect(knownAnswer(TURN_OPERATIONS.start_turn.answer))(
+          yield* perform('start_turn', { threadId, ...input }),
+        );
+        const run = yield* harness.runs.ledger().runById(runId);
+        if (run === null) return yield* Effect.die(new Error(`the e2e turn lost run ${runId} after its start`));
+        if (run.status === 'running')
+          yield* Stream.runDrain(
+            Stream.take(
+              Stream.filter(Stream.fromQueue(ended), (id) => id === runId),
+              1,
+            ),
+          );
+        return { runId };
+      }, Effect.scoped);
+      const upload = Effect.fn('testing.E2eWorld.upload')(function* (
+        threadId: string,
+        bytes: Uint8Array,
+        mediaType: string,
+        name?: string,
+      ) {
+        const { id } = yield* door.threads.upload({
+          params: { id: threadId },
+          query: { project: String(projectId), name },
+          headers: { 'content-type': mediaType },
+          payload: bytes,
+        });
+        return { id };
+      });
+      return { projectId, projectName, checkout, perform, thread, turn, upload };
     });
     const context = yield* world.runtime.runtime.contextEffect;
     const store = Context.get(context, ActivityStore);
