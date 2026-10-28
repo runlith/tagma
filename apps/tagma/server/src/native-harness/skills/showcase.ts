@@ -41,19 +41,28 @@ The subject can be anything: a web app, a desktop app, a CLI, a library, a servi
 
 ## 4. Capture
 
-A headless browser (Playwright or equivalent) with a **persistent profile** in scratch; delete the profile to reset it.
+Capture in the **browser built into Tagma** when you hold its tools: the reader can watch the run beside the thread, and you bring no automation stack of your own.
 
-- Viewport 1440×900 at device scale 2. One theme throughout: the reader's own if known, dark otherwise.
+- Open the subject with \`open_page\` in a profile of its own (\`create_profile\`), so sign-ins and storage start clean; delete the profile to reset it.
+- \`emulate_page\` with device \`laptop\` (1440×900 at scale 2) and one \`scheme\` throughout: the reader's own if known, dark otherwise.
+- Act with \`act_on_page\` on references from \`snapshot_page\`, and \`wait_for_page\` for the text or element a frame needs before shooting it.
+- \`capture_page\` keeps the frame on the server and names its path. A page keeps only its last 20 captures and deletes them when it closes: copy each frame into scratch under its frame name right after the shot.
+
+A sub-second state needs a burst that a sequence of tool calls cannot take, and an agent without the browser tools has none. There, use a headless browser (Playwright or equivalent) with a **persistent profile** in scratch, viewport 1440×900 at device scale 2:
+
 - If the automation library's own browser build is missing, point it at an installed Chromium through \`executablePath\` rather than installing a new one.
 - **One script per step**, each taking \`(page, shot)\`, run by a small runner that opens the context, calls the step, and on failure saves an \`_error\` frame and prints the message. Make each step idempotent against remembered UI state, so a retake is one command.
+
+Either way:
+
 - **Frame names**: \`NNx-what.png\` in story order, \`-0 … -9\` for bursts, and an \`x-\` prefix for evidence frames that will not go on the page. The page spec selects frames by name, so a retake replaces a file without touching the page.
-- Every step script prints the text of the region it shot (\`innerText\` of the panel). A log line is how you know what a frame shows without opening it.
+- Record the text of the region each frame shows — from the snapshot, or \`innerText\` of the panel in a script. A log line is how you know what a frame shows without opening it.
 
 **Settle before shooting.** Measured waits that worked:
 
 | After | Wait |
 | --- | --- |
-| Navigation | \`goto(url, { waitUntil: 'networkidle' })\`, then 1.5–3 s (live data over sockets arrives after networkidle) |
+| Navigation | the load (\`wait_for_page\` \`load\`, \`waitUntil: 'networkidle'\` in a script), then 1.5–3 s (live data over sockets arrives after it) |
 | Opening a menu or popover | 400–600 ms |
 | A dialog opening, a tab loading | 1.5–3 s |
 | A server act the UI reflects | 2.5–4 s, or poll the reflected text |
@@ -71,7 +80,7 @@ for (let i = 0; i < 10; i++) {
 
 A burst also exposes inconsistencies between panels during a transition. Those are findings.
 
-**Selectors that hold up:**
+**Selectors that hold up** in a script; in the built-in browser a snapshot reference replaces them:
 - Rows whose order moves: never by index. Filter by text, then find the control inside the row: \`locator('tr, [role=row]').filter({ hasText: name }).locator('[aria-label="…"]')\`.
 - Icon buttons that \`getByRole('button', { name })\` misses: \`locator('[aria-label="…"]')\`.
 - A control whose label changes with context: probe it in each context first. The probe prints every button's role, aria-label, text and box.
@@ -81,7 +90,7 @@ A burst also exposes inconsistencies between panels during a transition. Those a
 - Checkboxes and folds: read the state (\`isChecked()\`, the content's visibility) and act only if needed. Toggling blind flips a remembered state the wrong way.
 - Toasts and notifications over the subject: wait for them to fade or dismiss them before the shot.
 
-**Small subjects**: pair the full frame with a 2× crop (\`locator.screenshot()\`, or \`clip\` from the element's bounding box) when the point is a chip, a badge or a line of text. Full window is the default; it keeps the reader oriented.
+**Small subjects**: pair the full frame with a 2× crop (\`capture_page\` of the element's reference; in a script \`locator.screenshot()\`, or \`clip\` from the element's bounding box) when the point is a chip, a badge or a line of text. Full window is the default; it keeps the reader oriented.
 
 **Pointing**: when the subject is not obvious in a full frame, inject a temporary outline or a numbered callout on the element before the shot (a style on the element, removed after), instead of hoping the reader finds it.
 

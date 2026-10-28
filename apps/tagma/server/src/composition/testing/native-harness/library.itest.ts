@@ -308,6 +308,18 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       ),
     ),
   );
+  it.effect('the default agent holds the built-in browser and is told when to take it', () =>
+    withDemo((demo) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { library } = yield* world(demo);
+          const shown = yield* library.preview(demo.projectId, { id: 'tagma' });
+          expect(shown.capabilities).toContain('browser');
+          expect(shown.prompt.sections.map((section) => section.id)).toContain('browser-pages');
+        }),
+      ),
+    ),
+  );
   it.effect('a native file source is read in the bound world while the declaration is saved by its library owner', () =>
     withDemo((demo) =>
       Effect.scoped(
