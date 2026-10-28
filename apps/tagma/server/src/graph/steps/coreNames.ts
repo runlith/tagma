@@ -83,10 +83,10 @@ export const coreNames = Effect.fn('GraphStep.coreNames')(function* (project: Pr
       yield* projection.derive([...changed], ['tags']);
       yield* vocabulary.forget(project.id);
       const table = yield* vocabulary.of(project.id);
-      const fieldsOf = yield* storedFields(table, documents, properties({ contract, tags: each(reference) }), fieldName);
+      const fieldsOf = storedFields(table, documents, fieldName);
       for (const row of rows) {
         const tags = row.tags.map((tag) => reference(tag) as string);
-        yield* save(row, yield* fieldsOf(table.tagsOf({ tags }), row.fields), tags);
+        yield* save(row, fieldsOf(table.tagsOf({ tags }), row.fields), tags);
       }
       yield* projection.derive([...changed], ['tags']);
       yield* db

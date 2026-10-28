@@ -13,7 +13,6 @@ import { HOLDER } from '../../../../graph/contract/wire/tags/holder.js';
 import { SPEC } from '../../../../graph/contract/wire/tags/spec.js';
 import { CONTAINER } from '../../../../graph/contract/wire/tags/container.js';
 import { ENFORCED, LAW } from '../../../../graph/contract/wire/tags/lawContracts.js';
-import { AMENDMENT } from '../../../../graph/contract/wire/tags/amendment.js';
 import { LEAF } from '../../../../graph/contract/wire/tags/leaf.js';
 import { OBSERVATION } from '../../../../graph/contract/wire/tags/observation.js';
 
@@ -26,7 +25,6 @@ const CONTRACT_OF_ROLE: Record<Role, ContractId> = {
   spec: SPEC,
   container: CONTAINER,
   law: LAW,
-  amendment: AMENDMENT,
   leaf: LEAF,
   observation: OBSERVATION,
   enforcement: ENFORCED,

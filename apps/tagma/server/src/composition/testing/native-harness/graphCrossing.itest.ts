@@ -233,30 +233,6 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
       expect((yield* graph.edges.farOf(ctx.projectId)).filter((row) => row.fromId === source.id)).toMatchObject([
         { kind: 'relates', graph: root.uuid, uuid: target.uuid },
       ]);
-      expect(
-        yield* answerWith(seamed, 'apply_batch', {
-          project: ctx.projectId,
-          ops: [
-            {
-              op: 'propose',
-              amendsId: fromId,
-              title: 'Stored address',
-              ops: [{ op: 'update', id: `${ctx.projectId}/${fromId}`, body: 'x' }],
-            },
-          ],
-        }),
-      ).toMatchObject({ status: 'refused', code: 'bad-document' });
-      expect(
-        yield* refusedWith(seamed, 'create_block', { project: ctx.projectId, title: 'Wrong amended project', amendsId: toId }),
-      ).toMatchObject({
-        code: 'place-mismatch',
-      });
-      expect(
-        yield* answerWith(seamed, 'apply_batch', {
-          project: ctx.projectId,
-          ops: [{ op: 'create', title: 'Wrong amended project', amendsId: toId }],
-        }),
-      ).toMatchObject({ status: 'refused', code: 'place-mismatch' });
     }),
   );
 

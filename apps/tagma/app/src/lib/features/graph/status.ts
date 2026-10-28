@@ -3,9 +3,6 @@ const STATUS_TEXT: Record<string, string> = {
   in_work: 'text-status-in-work',
   done: 'text-status-done',
   closed: 'text-status-closed',
-  applied: 'text-status-done',
-  rejected: 'text-status-closed',
-  upheld: 'text-status-done',
 };
 
 export function statusText(status: string): string {
@@ -17,9 +14,6 @@ const STATUS_COLOR: Record<string, string> = {
   in_work: 'var(--status-in-work)',
   done: 'var(--status-done)',
   closed: 'var(--status-closed)',
-  applied: 'var(--status-done)',
-  rejected: 'var(--status-closed)',
-  upheld: 'var(--status-done)',
 };
 
 export const STATUS_NONE_VAR = 'var(--status-none)';

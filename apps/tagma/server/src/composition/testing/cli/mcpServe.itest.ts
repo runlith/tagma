@@ -147,11 +147,9 @@ layer(Layer.effect(Bridges, setup), { excludeTestServices: true })('MCP CLI', (i
       const { gemini, call } = yield* Bridges;
       const page = yield* mcpListTools(gemini, call);
       expect(page.tools.map((tool) => tool.name)).toEqual(['list_operations', 'call_operation']);
-      const listed = yield* documentOf(yield* called(gemini, 'list_operations', { match: 'amendment', json: true }));
+      const listed = yield* documentOf(yield* called(gemini, 'list_operations', { match: 'create_block', json: true }));
       const ids = (listed.operations as ReadonlyArray<{ id: string }>).map((entry) => entry.id);
-      expect(ids.length).toBeGreaterThan(0);
-      expect(ids.every((id) => id.includes('amendment'))).toBe(true);
-      expect(ids).toContain('accept_amendment');
+      expect(ids).toEqual(['create_block']);
       const found = yield* textOf(yield* called(gemini, 'list_operations', { match: 'create_block' }));
       expect(found).toContain('create_block — ');
       expect(found).toMatch(/input: \{[^}]*title: string/u);

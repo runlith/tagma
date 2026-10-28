@@ -1,7 +1,6 @@
-import type { AmendmentOp } from '@tagma/server/graph/contract/wire/batch';
 import type { BlockQuery, ViewLayout } from '@tagma/server/graph/contract/wire/query';
 import { VIEW_LAYOUT, VIEW_QUERY } from '@tagma/server/graph/contract/wire/query';
-import { rests, standsInOutline } from '@tagma/server/graph/contract/wire/standing';
+import { rests } from '@tagma/server/graph/contract/wire/standing';
 import {
   type StatusPhase,
   type Tagged,
@@ -10,7 +9,6 @@ import {
   initialStatus,
   statusTargets,
   statusWords,
-  terminalStatuses,
 } from '@tagma/server/graph/contract/wire/tags/roles';
 import type { Vocabulary } from '@tagma/server/graph/contract/wire/tags/table';
 import type { TagReading } from '@tagma/server/graph/contract/wire/tags/reading';
@@ -18,7 +16,6 @@ import { ServedTags } from '@tagma/server/graph/contract/wire/tags/served';
 import type { ContractId } from '@tagma/server/graph/contract/wire/tags/behaviour';
 import { moveOwners, type NodeActions } from '@tagma/server/graph/contract/wire/tags/actions';
 import { LIFECYCLE, lifecycleOf } from '@tagma/server/graph/contract/wire/tags/lifecycle';
-import { AMENDMENT, amendmentOf } from '@tagma/server/graph/contract/wire/tags/amendment';
 import { OBSERVATION } from '@tagma/server/graph/contract/wire/tags/observation';
 import { WORK } from '@tagma/server/graph/contract/wire/tags/work';
 import { REFLECTION, reflectionOf } from '@tagma/server/graph/contract/wire/tags/reflection';
@@ -44,7 +41,6 @@ const TAG_PLURAL: Record<string, string> = {
   task: 'Tasks',
   rule: 'Rules',
   idea: 'Ideas',
-  proposal: 'Proposals',
   reflection: 'Reflections',
   research: 'Research',
   view: 'Views',
@@ -163,7 +159,7 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app
   }
 
   standsInOutline(row: MarkedRow): boolean {
-    return this.served && row.actions.revision === this.table.revision().revision && standsInOutline(this.table, row);
+    return this.served && row.actions.revision === this.table.revision().revision;
   }
 
   showsInOutline(row: MarkedRow, hidden: ReadonlySet<RestingState>): boolean {
@@ -232,11 +228,6 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app
     const tag = this.table.bindingTag(row, LIFECYCLE);
     const status = this.statusOf(row);
     return tag !== null && status !== null && activeStatuses(tag).includes(status);
-  }
-
-  verdictsOf(row: Tagged): readonly string[] {
-    const tag = this.table.bindingTag(row, AMENDMENT);
-    return tag === null ? [] : terminalStatuses(tag);
   }
 
   statusVar(row: MarkedRow): string {
@@ -330,13 +321,6 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app
     if (slots === null) return null;
     const [command, expected, actual] = [row.fields[slots.command], row.fields[slots.expected], row.fields[slots.actual]];
     return typeof command === 'string' && typeof expected === 'string' && typeof actual === 'string' ? { command, expected, actual } : null;
-  }
-
-  opsOf(row: Tagged): readonly AmendmentOp[] {
-    const tag = this.table.bindingTag(row, AMENDMENT);
-    const name = tag === null ? undefined : amendmentOf(tag)?.ops;
-    const ops = name === undefined ? undefined : row.fields[name];
-    return Array.isArray(ops) ? (ops as readonly AmendmentOp[]) : [];
   }
 
   queryOf(row: Tagged): BlockQuery | null {

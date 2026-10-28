@@ -1,6 +1,6 @@
 import { Effect, Layer } from 'effect';
 import * as Hex from 'effect/encoding/Hex';
-import type { AmendmentOp, BatchRef } from '../contract/wire/batch.js';
+import type { DocumentOp, BatchRef } from '../contract/wire/batch.js';
 import type { BlockQuery } from '../contract/wire/query.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { FieldType, Tag } from '../contract/wire/tags/declaration.js';
@@ -23,9 +23,8 @@ import { ActState } from '../contract/service/transaction.js';
 import { blockName } from '../contract/wire/references.js';
 import { Trash } from '../contract/service/blocks.js';
 import {
-  Amendments,
-  type AcceptedRefusal,
-  type AmendmentOpRefusal,
+  Documents,
+  type DocumentOpRefusal,
   type BatchAnswer,
   type DocumentRefRefusal,
   type DocumentReferences,
@@ -36,9 +35,9 @@ import {
 import { writes } from '../../platform/contract/service/writes.js';
 import { projecting, referencing } from '../store/actWrites.js';
 
-const amending = writes('Amendments.runDocument', [block], projecting, referencing);
+const applying = writes('Documents.runDocument', [block], projecting, referencing);
 
-export const handleId = (handles: Handles, name: string): number | undefined => handles.declared.get(name) ?? handles.outer?.get(name);
+export const handleId = (handles: Handles, name: string): number | undefined => handles.declared.get(name);
 
 const textEncoder = new TextEncoder();
 
@@ -104,24 +103,12 @@ function opAddress(index: number, op: string): string {
   return `ops[${index}] (${op})`;
 }
 
-function acceptedFailure(failure: GateRefusal<AmendmentOpRefusal | DocumentRefusal>): Effect.Effect<never, GateRefusal<AcceptedRefusal>> {
-  switch (failure.code) {
-    case 'amends-missing':
-    case 'anchor-empty':
-    case 'batch-shape':
-    case 'no-root':
-      return Effect.die(`accepted amendment reached precluded gate ${failure.code}: ${failure.reason}`);
-    default:
-      return new GateRefusal(failure.code, failure.reason, failure.unblock, failure.inputFile);
-  }
-}
-
-export const amendmentsLayer: Layer.Layer<
-  Amendments,
+export const documentsLayer: Layer.Layer<
+  Documents,
   never,
   GraphStore | Act | Blocks | Edges | Trash | Tags | BlockRows | BlockNames | BlockProjection | BlockReferences
 > = Layer.effect(
-  Amendments,
+  Documents,
   Effect.gen(function* () {
     const { db } = yield* GraphStore;
     const act = yield* Act;
@@ -135,7 +122,7 @@ export const amendmentsLayer: Layer.Layer<
     const vocabulary = yield* Tags;
     const assertFieldTargets = yield* fieldTargetGuard;
 
-    const assertAwaited = Effect.fn('Amendments.assertAwaited')(function* (
+    const assertAwaited = Effect.fn('Documents.assertAwaited')(function* (
       awaited: ReadonlyMap<number, { readonly index: number; readonly op: string }>,
     ): Effect.fn.Return<void, StoreFailure | GateRefusal<'field-target' | 'not-found'>> {
       for (const [id, { index, op }] of awaited) {
@@ -151,7 +138,7 @@ export const amendmentsLayer: Layer.Layer<
       }
     });
 
-    const resolveHandleRefs = Effect.fn('Amendments.rewriteHandles')(function* (
+    const resolveHandleRefs = Effect.fn('Documents.rewriteHandles')(function* (
       actId: string,
       graphId: number | undefined,
       handles: Handles,
@@ -164,7 +151,7 @@ export const amendmentsLayer: Layer.Layer<
         writtenBlocks: written.length,
       });
       const named = new Map<number, string>();
-      const reachable = [...new Set([...handles.declared.values(), ...(handles.outer?.values() ?? [])])];
+      const reachable = [...handles.declared.values()];
       if (reachable.length > 0) {
         const rows = yield* db.select({ id: block.id, uuid: block.uuid }).from(block).where(inArray(block.id, reachable));
         for (const row of rows) named.set(row.id, blockName(row.uuid));
@@ -215,10 +202,9 @@ export const amendmentsLayer: Layer.Layer<
       }
     });
 
-    const runDocument = Effect.fn('Amendments.runDocument')(function* <Op extends { op: string }, Code extends string>(
+    const runDocument = Effect.fn('Documents.runDocument')(function* <Op extends { op: string }, Code extends string>(
       ops: readonly Op[],
       dispatch: (op: Op, handles: Handles, index: number) => Effect.Effect<OpOutcome, StoreFailure | GateRefusal<Code>, ActState>,
-      enclosing?: ReadonlyMap<string, number>,
       bodyFiles?: ReadonlyMap<number, string | undefined>,
       references?: DocumentReferences,
     ): Effect.fn.Return<BatchAnswer, StoreFailure | GateRefusal<Code | DocumentRefusal>> {
@@ -231,7 +217,6 @@ export const amendmentsLayer: Layer.Layer<
       }
       const handles: Handles = {
         declared: new Map(),
-        outer: enclosing?.size === 0 ? undefined : enclosing,
         minted: mintedHandles(ops),
         awaiting: new Set(),
         references: references ?? {
@@ -240,10 +225,9 @@ export const amendmentsLayer: Layer.Layer<
         },
       };
       const mintedNames = new Map([...handles.minted].map(([handle, uuid]) => [blockName(uuid), handle] as const));
-      const enclosingUnborn = yield* Unborn;
       const unborn = (name: string): boolean => {
         const handle = mintedNames.get(name);
-        return (handle !== undefined && !handles.declared.has(handle)) || enclosingUnborn(name);
+        return handle !== undefined && !handles.declared.has(handle);
       };
       const results: BatchAnswer['ops'] = [];
       const named: Record<string, string> = {};
@@ -257,7 +241,7 @@ export const amendmentsLayer: Layer.Layer<
       }> = [];
       const awaited = new Map<number, { readonly index: number; readonly op: string }>();
       yield* act.unit(
-        amending,
+        applying,
         Effect.gen(function* () {
           yield* Effect.gen(function* () {
             for (const [index, op] of ops.entries()) {
@@ -269,7 +253,7 @@ export const amendmentsLayer: Layer.Layer<
                   }
                   return result;
                 }).pipe(
-                  Effect.withSpan('Amendments.op', {
+                  Effect.withSpan('Documents.op', {
                     attributes: { actId, opKind: op.op, opIndex: index },
                   }),
                 ),
@@ -311,7 +295,7 @@ export const amendmentsLayer: Layer.Layer<
             yield* Effect.annotateCurrentSpan({ bodyBytes: bytes });
             return bytes;
           }).pipe(
-            Effect.withSpan('Amendments.project', {
+            Effect.withSpan('Documents.project', {
               attributes: {
                 actId,
                 graphId,
@@ -331,7 +315,7 @@ export const amendmentsLayer: Layer.Layer<
       return { ops: results, ids: named };
     });
 
-    const nameOfRef = Effect.fn('Amendments.nameOfRef')(function* (
+    const nameOfRef = Effect.fn('Documents.nameOfRef')(function* (
       handles: Handles,
       value: string,
     ): Effect.fn.Return<{ readonly name: string; readonly unborn: boolean }, StoreFailure | GateRefusal<'batch-ref'>> {
@@ -347,7 +331,7 @@ export const amendmentsLayer: Layer.Layer<
       ]);
     });
 
-    const resolveQueryRefs = Effect.fn('Amendments.resolveQueryRefs')(function* (
+    const resolveQueryRefs = Effect.fn('Documents.resolveQueryRefs')(function* (
       handles: Handles,
       query: BlockQuery,
     ): Effect.fn.Return<BlockQuery, StoreFailure | GateRefusal<DocumentRefRefusal>> {
@@ -368,7 +352,7 @@ export const amendmentsLayer: Layer.Layer<
       };
     });
 
-    const resolveFieldRefs = Effect.fn('Amendments.resolveFieldRefs')(function* (
+    const resolveFieldRefs = Effect.fn('Documents.resolveFieldRefs')(function* (
       handles: Handles,
       table: TagTable,
       tags: readonly Tag[],
@@ -397,11 +381,11 @@ export const amendmentsLayer: Layer.Layer<
       return { fields: resolved, unborn };
     });
 
-    const applyOp = Effect.fn('Amendments.applyOp')(function* (
-      op: AmendmentOp,
+    const applyOp = Effect.fn('Documents.applyOp')(function* (
+      op: DocumentOp,
       handles: Handles,
       projectId: number,
-    ): Effect.fn.Return<OpOutcome, StoreFailure | GateRefusal<AmendmentOpRefusal>, ActState> {
+    ): Effect.fn.Return<OpOutcome, StoreFailure | GateRefusal<DocumentOpRefusal>, ActState> {
       switch (op.op) {
         case 'create': {
           const table = yield* vocabulary.of(projectId);
@@ -431,7 +415,6 @@ export const amendmentsLayer: Layer.Layer<
                 ? undefined
                 : linked.flatMap((link) => ('near' in link.target ? [{ kind: link.kind, to: link.target.near }] : [])),
             farEdges: linked.flatMap((link) => ('far' in link.target ? [{ kind: link.kind, end: link.target.far }] : [])),
-            amendsId: yield* optionalRef(handles, op.amendsId),
           });
           if (written.unborn) handles.awaiting.add(row.id);
           yield* register(handles, op.$id, row.id);
@@ -470,11 +453,9 @@ export const amendmentsLayer: Layer.Layer<
       }
     });
 
-    return Amendments.of({
+    return Documents.of({
       runDocument,
       applyOp,
-      apply: (ops, projectId, enclosing) =>
-        runDocument(ops, (op, handles) => applyOp(op, handles, projectId), enclosing).pipe(Effect.catchTag('GateRefusal', acceptedFailure)),
     });
   }),
 );

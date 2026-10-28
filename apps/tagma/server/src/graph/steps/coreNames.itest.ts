@@ -11,7 +11,6 @@ layer(demoGraphLayer(), { excludeTestServices: true })('core names', (it) => {
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, projectId, root } = demo;
-        const rootName = yield* demo.nameOf(root);
         const reflection = yield* graph.blocks.create({
           projectId,
           parentId: root,
@@ -47,38 +46,6 @@ layer(demoGraphLayer(), { excludeTestServices: true })('core names', (it) => {
             },
           },
         });
-        const savedName = yield* demo.nameOf(saved.id);
-        const proposal = yield* graph.blocks.create({
-          projectId,
-          contract: 'core/amendment',
-          amendsId: root,
-          title: 'deferred creation',
-          fields: {
-            ops: [
-              {
-                op: 'create',
-                parentId: rootName,
-                contract: 'core/selection',
-                title: 'shipped:lode/view',
-                body: 'lode/law',
-                fields: {
-                  query: { tags: ['shipped:core/reflection'], anchorPaths: ['shipped:lode/view'], sort: { by: 'created', order: 'asc' } },
-                },
-              },
-              {
-                op: 'update',
-                id: savedName,
-                fields: {
-                  query: {
-                    selector: { kind: 'supports', contract: 'core/observation' },
-                    anchorPaths: ['shipped:lode/view'],
-                    sort: { by: 'created', order: 'asc' },
-                  },
-                },
-              },
-            ],
-          },
-        });
         const { db } = graph.graphStore;
         const rows = yield* db.select().from(block).where(eq(block.projectId, projectId));
         for (const row of rows) {
@@ -105,29 +72,6 @@ layer(demoGraphLayer(), { excludeTestServices: true })('core names', (it) => {
         });
         expect((yield* graph.blocks.blockById(sighting.id)).fields.contract).toBe('lode/example');
         expect((yield* graph.blocks.blockById(saved.id)).fields.query).toMatchObject({ withoutAnchorPaths: ['shipped:lode/reflection'] });
-        expect((yield* graph.blocks.blockById(proposal.id)).fields.ops).toEqual([
-          {
-            op: 'create',
-            parentId: rootName,
-            contract: 'core/selection',
-            title: 'shipped:lode/view',
-            body: 'lode/law',
-            fields: {
-              query: { tags: ['shipped:core/reflection'], anchorPaths: ['shipped:lode/view'], sort: { by: 'created', order: 'asc' } },
-            },
-          },
-          {
-            op: 'update',
-            id: savedName,
-            fields: {
-              query: {
-                selector: { kind: 'supports', contract: 'core/observation' },
-                anchorPaths: ['shipped:lode/view'],
-                sort: { by: 'created', order: 'asc' },
-              },
-            },
-          },
-        ]);
         expect(table.identities.typeOf('reflection')?.id).toBe('shipped:core/reflection');
         expect(table.supports({ tags: ['sighting'] }, 'core/observation')).toBe(true);
         expect((yield* graph.blocks.blockById(custom.id)).fields.extends).toBe('shipped:core/reflection');

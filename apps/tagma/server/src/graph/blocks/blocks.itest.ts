@@ -24,24 +24,6 @@ layer(demoGraphLayer(), { excludeTestServices: true })('blocks', (it) => {
     ),
   );
 
-  it.effect('a status-operation refusal names the verb that owns the word on this tag', () =>
-    withDemo(({ graph, projectId, nameOf, refusal, table, root }) =>
-      Effect.gen(function* () {
-        const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'amended', body: 'the old line', parentId: root });
-        const filed = yield* graph.review.propose({
-          projectId,
-          amendsId: target.id,
-          title: 'a finding',
-          ops: [{ op: 'edit', id: yield* nameOf(target.id), old: 'the old line', new: 'the new line' }],
-        });
-        const refused = yield* refusal(graph.blocks.update({ id: filed.id, status: 'applied' }));
-        expect(refused.code).toBe('status-operation');
-        expect(refused.unblock[0]).toBe(`accept_amendment on ${yield* nameOf(filed.id)}`);
-        expect((yield* table()).statusOf(yield* graph.review.accept({ id: filed.id }))).toBe('applied');
-      }),
-    ),
-  );
-
   it.effect('a spec refuses in_work and done, and reads as building while an implementing task is claimed', () =>
     withDemo(({ graph, projectId, refusal, root }) =>
       Effect.gen(function* () {

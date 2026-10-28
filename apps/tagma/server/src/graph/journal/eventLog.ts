@@ -64,10 +64,6 @@ export function blocksOf(row: ActEntry): Concerned {
     case 'disable':
     case 'enforce':
     case 'remeasure':
-    case 'accept':
-    case 'reject':
-    case 'uphold':
-    case 'revise':
       return { ids: own, unreadable: null };
   }
 }

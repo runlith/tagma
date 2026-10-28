@@ -1,5 +1,5 @@
 import { Effect, Layer } from 'effect';
-import { rests, standsInOutline } from '../contract/wire/standing.js';
+import { rests } from '../contract/wire/standing.js';
 import { type ViewResults } from '../contract/wire/reads.js';
 import { type ZonePage, type ZoneSection, zonePage } from '../voice/zonePage.js';
 import { aliasedTable, and, eq, inArray, isNull } from 'drizzle-orm';
@@ -23,7 +23,7 @@ import { Tags } from '../contract/service/vocabulary.js';
 import { answeredNames, crossable, elsewhereNames } from './names.js';
 import type { RefElsewhere } from '../contract/wire/far.js';
 import { Projects } from '../../projects/contract/service/registry.js';
-import { Review, Tasks } from '../contract/service/work.js';
+import { Tasks } from '../contract/service/work.js';
 import { GraphJournal } from '../contract/service/journal.js';
 import { Sources } from '../contract/service/sources.js';
 import { appendTagPrompts, tagPrompts, tagPromptText } from '../orientation/tagPrompts.js';
@@ -34,7 +34,7 @@ export const ZONE_PAGE_BUDGET = 20_000;
 export const blockReadsLayer: Layer.Layer<
   BlockReads,
   never,
-  GraphStore | GraphUnits | BlockNames | BlockAnswers | BlockRows | Selection | Sources | GraphJournal | Review | Tasks | Projects | Tags
+  GraphStore | GraphUnits | BlockNames | BlockAnswers | BlockRows | Selection | Sources | GraphJournal | Tasks | Projects | Tags
 > = Layer.effect(
   BlockReads,
   Effect.gen(function* () {
@@ -49,7 +49,6 @@ export const blockReadsLayer: Layer.Layer<
     const projects = yield* Projects;
     const sources = yield* Sources;
     const journal = yield* GraphJournal;
-    const review = yield* Review;
     const tasks = yield* Tasks;
     const lawGraph = yield* Effect.context<GraphStore | Tags>();
 
@@ -85,7 +84,6 @@ export const blockReadsLayer: Layer.Layer<
       const standing: (BlockRow & { superseded: boolean; answered: boolean })[] = [];
       for (const kid of kids) {
         const table = yield* tableOf(kid);
-        if (!standsInOutline(table, kid)) continue;
         if (all || !rests(table, kid)) {
           standing.push(kid);
           continue;
@@ -109,7 +107,6 @@ export const blockReadsLayer: Layer.Layer<
       const ids = measured.map((row) => row.id);
       const readProject = records.get(rootId)?.projectId;
       const measuredBy = yield* sources.byBlock(ids);
-      const verdicts = yield* review.verdicts(measured);
       const endings = yield* tasks.endings(measured);
       const authors = yield* journal.authors(ids);
       const answers = yield* blockAnswers.answersOf(measured.flatMap((row) => (table.supports(row, OBSERVATION) ? [row.id] : [])));
@@ -137,7 +134,6 @@ export const blockReadsLayer: Layer.Layer<
         .from(edge)
         .innerJoin(outTarget, eq(outTarget.id, edge.toId))
         .where(and(inArray(edge.fromId, ids), isNull(outTarget.deletedAt)))) {
-        if (item.row.kind === 'amends' && !standsInOutline(table, item)) continue;
         const near = records.get(item.blockId);
         if (near === undefined) continue;
         const grouped = edgesOut.get(item.blockId) ?? [];
@@ -196,10 +192,9 @@ export const blockReadsLayer: Layer.Layer<
       const edgesIn = new Map<number, BlockDetail['edgesIn']>();
       const restingEdges = new Map<number, BlockDetail['edgesIn']>();
       for (const item of edgeRows) {
-        if (item.row.kind === 'amends' && !standsInOutline(table, item)) continue;
         const near = records.get(item.blockId);
         if (near === undefined) continue;
-        const into = item.row.kind !== 'amends' && resting.has(item.farId) ? restingEdges : edgesIn;
+        const into = resting.has(item.farId) ? restingEdges : edgesIn;
         const grouped = into.get(item.blockId) ?? [];
         grouped.push({ ...item.row, fromUuid: item.farUuid, toUuid: near.uuid });
         into.set(item.blockId, grouped);
@@ -295,7 +290,6 @@ export const blockReadsLayer: Layer.Layer<
           shape,
           sources: measuredBy.get(row.id) ?? [],
           reach: reachOf(row.id),
-          verdict: verdicts.get(row.id) ?? null,
           ending: endings.get(row.id) ?? null,
           author: authors.get(row.id) ?? null,
           answeredBy: answeredBy ?? null,

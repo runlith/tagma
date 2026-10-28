@@ -71,8 +71,8 @@ layer(demoGraphLayer(), { excludeTestServices: true })('selection queries', (it)
     ),
   );
 
-  it.effect('resting work and decided proposals require an explicit historical selection', () =>
-    withLens(({ graph, projectId, make, nameOf, found }) =>
+  it.effect('resting work requires an explicit historical selection', () =>
+    withLens(({ graph, make, found }) =>
       Effect.gen(function* () {
         const open = yield* make('task', 'open');
         const done = yield* make('task', 'done');
@@ -80,26 +80,10 @@ layer(demoGraphLayer(), { excludeTestServices: true })('selection queries', (it)
         yield* graph.tasks.finish({ id: done });
         const replacement = yield* make('task', 'replacement');
         yield* graph.standing.supersede({ oldId: done, withId: replacement });
-        const target = yield* make('idea', 'target');
-        const targetName = yield* nameOf(target);
-        const propose = (title: string, changed: string) =>
-          graph.review.propose({ projectId, amendsId: target, title, ops: [{ op: 'update', id: targetName, title: changed }] });
-        const pending = yield* propose('pending', 'changed once');
-        const decided = yield* propose('decided', 'changed twice');
-        yield* graph.review.accept({ id: decided.id });
-        expect(yield* found({ tags: ['task', 'proposal'], sort: created })).toEqual([open, replacement, pending.id]);
-        expect(yield* found({ tags: ['task', 'proposal'], fields: { status: ['done', 'applied'] }, sort: created })).toEqual([
-          done,
-          decided.id,
-        ]);
+        expect(yield* found({ tags: ['task'], sort: created })).toEqual([open, replacement]);
+        expect(yield* found({ tags: ['task'], fields: { status: ['done'] }, sort: created })).toEqual([done]);
         expect(yield* found({ tags: ['task'], superseded: true, sort: created })).toEqual([done]);
-        expect(yield* found({ tags: ['task', 'proposal'], includeResting: true, sort: created })).toEqual([
-          open,
-          done,
-          replacement,
-          pending.id,
-          decided.id,
-        ]);
+        expect(yield* found({ tags: ['task'], includeResting: true, sort: created })).toEqual([open, done, replacement]);
       }),
     ),
   );

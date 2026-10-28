@@ -85,15 +85,6 @@ export function graphSettledDisplay(input: GraphToolInput, result: GraphToolAnsw
     return { form: 'none', facts: [{ label: 'events', value: String(result.events.length) }] };
   }
   if ('batches' in result) return { form: 'none', facts: [{ label: 'batches', value: String(result.batches.length) }] };
-  if ('proposals' in result) {
-    return {
-      form: 'none',
-      facts: [
-        { label: result.decided ? 'decided' : 'open', value: String(result.proposals.length) },
-        ...(result.conflicts.length === 0 ? [] : [{ label: 'conflicts', value: String(result.conflicts.length) }]),
-      ],
-    };
-  }
   if ('block' in result) {
     return {
       form: 'none',

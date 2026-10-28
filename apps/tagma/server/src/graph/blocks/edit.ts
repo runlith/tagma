@@ -41,9 +41,7 @@ export const blockEdit = Effect.fnUntraced(function* (update: Blocks['Service'][
           return yield* new GateRefusal(
             'anchor-not-found',
             `the text stands in the title of ${blockName(current.uuid)}, and an anchored edit rewrites the body alone`,
-            [
-              `update_block on ${blockName(current.uuid)} with the whole new title — in a batch or a proposal, an \`update\` op with \`title\``,
-            ],
+            [`update_block on ${blockName(current.uuid)} with the whole new title — in a batch, an \`update\` op with \`title\``],
           );
         }
         if (occurrences === 0) {

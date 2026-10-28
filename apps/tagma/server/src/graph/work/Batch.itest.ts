@@ -53,26 +53,18 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
     ),
   );
 
-  it.effect('a payload accepted in the same document resolves that document’s handles', () =>
+  it.effect('a body resolves handles created by the same document', () =>
     withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
-        const amended = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'the amended doc' })).id;
-        const amendedName = yield* nameOf(amended);
+        const existing = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'the existing doc' })).id;
         const result = yield* graph.batch.apply(
           batchDocument([
-            { op: 'create', $id: 'target', tags: ['idea'], title: 'the block the payload names', parentId: yield* nameOf(root) },
-            {
-              op: 'propose',
-              $id: 'p',
-              amendsId: amendedName,
-              title: 'names a block of the document around it',
-              ops: [{ op: 'update', id: amendedName, body: 'Read [[$target]] beside this.' }],
-            },
-            { op: 'accept', id: '$p', reason: 'the finding stands' },
+            { op: 'create', $id: 'target', tags: ['idea'], title: 'the block the body names', parentId: yield* nameOf(root) },
+            { op: 'update', id: yield* nameOf(existing), body: 'Read [[$target]] beside this.' },
           ]),
           projectId,
         );
-        expect((yield* graph.blocks.blockById(amended)).body).toBe(`Read [[${result.ids.target}]] beside this.`);
+        expect((yield* graph.blocks.blockById(existing)).body).toBe(`Read [[${result.ids.target}]] beside this.`);
       }),
     ),
   );
@@ -248,12 +240,12 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             projectId,
           )
           .pipe(Effect.withTracer(tracer));
-        const root = spans.find((span) => span.name === 'Amendments.runDocument');
-        const rewrite = spans.find((span) => span.name === 'Amendments.rewriteHandles');
-        const projection = spans.find((span) => span.name === 'Amendments.project');
-        const operations = spans.filter((span) => span.name === 'Amendments.op');
+        const root = spans.find((span) => span.name === 'Documents.runDocument');
+        const rewrite = spans.find((span) => span.name === 'Documents.rewriteHandles');
+        const projection = spans.find((span) => span.name === 'Documents.project');
+        const operations = spans.filter((span) => span.name === 'Documents.op');
         if (root === undefined || rewrite === undefined || projection === undefined) {
-          return yield* Effect.fail('the Amendments phase tree is incomplete');
+          return yield* Effect.fail('the Documents phase tree is incomplete');
         }
         const descendsFrom = (span: Tracer.Span, ancestor: Tracer.Span): boolean => {
           let parent = Option.getOrUndefined(span.parent);
@@ -291,7 +283,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
     ),
   );
 
-  it.effect('unknown creation fields at either document depth refuse instead of dropping relations', () =>
+  it.effect('unknown creation fields refuse instead of dropping relations', () =>
     withDemo(({ graph, projectId, nameOf, refusal, root }) =>
       Effect.gen(function* () {
         const target = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'target' });
@@ -305,8 +297,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         };
         for (const op of [
           { ...create, implementsId: name },
-          { op: 'propose', amendsId: name, title: 'nested intent', ops: [{ ...create, discoveredFromId: name }] },
-          { op: 'propose', amendsId: name, title: 'deferred claim', ops: [{ ...create, claim: true }] },
+          { ...create, discoveredFromId: name },
         ]) {
           expect((yield* refusal(graph.batch.apply(batchDocument([op]), projectId))).code).toBe('bad-document');
           expect(yield* graph.blocks.childrenOf(target.id)).toEqual([]);
@@ -352,7 +343,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
     ),
   );
 
-  it.effect('relative bodies are read at application or filing, and accepted proposals survive their file’s removal', () =>
+  it.effect('relative bodies are read when their document is applied', () =>
     withDemo(({ graph, projectId, fixture, root: top, nameOf }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -367,28 +358,8 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           ]),
         );
         const inline = yield* graph.batch.apply({ file }, projectId);
-        const amendedName = inline.ids.d!;
-        expect((yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(amendedName))).body).toBe(text);
-
-        const body = 'The child body, written as a file.';
-        yield* fs.writeFileString(join(root, 'child.md'), body);
-        yield* fs.writeFileString(
-          file,
-          batchSource([
-            {
-              op: 'propose',
-              $id: 'p',
-              amendsId: amendedName,
-              title: 'adds a child',
-              ops: [{ op: 'create', tags: ['idea'], title: 'the proposed child', parentId: amendedName, body: { file: 'child.md' } }],
-            },
-          ]),
-        );
-        const result = yield* graph.batch.apply({ file }, projectId);
-        yield* fs.remove(join(root, 'child.md'));
-        yield* graph.review.accept({ id: yield* graph.blockNames.idOfName(result.ids.p!) });
-        const [child] = (yield* graph.ranking.search({ query: 'the proposed child', projectId })).items;
-        expect((yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(child!.name))).body).toBe(body);
+        const id = yield* graph.blockNames.idOfName(inline.ids.d!);
+        expect((yield* graph.blocks.blockById(id)).body).toBe(text);
       }),
     ),
   );

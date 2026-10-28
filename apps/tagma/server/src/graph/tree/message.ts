@@ -80,10 +80,6 @@ const VERBS: Record<Exclude<GraphEventOp, 'create'>, string> = {
   disable: 'disable',
   enforce: 'enforce',
   remeasure: 'remeasure',
-  accept: 'accept',
-  reject: 'reject',
-  uphold: 'uphold',
-  revise: 'revise',
   answer: 'answer',
   unanswer: 'unanswer',
 };

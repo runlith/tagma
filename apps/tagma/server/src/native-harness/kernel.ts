@@ -67,7 +67,6 @@ import { ModelChanges } from '../threads/contract/service/modelChanges.js';
 import { ThreadRollouts } from '../threads/contract/service/rollouts.js';
 import { RestedRollouts } from '../threads/contract/service/rested.js';
 import { WorkSpells } from '../thread-record/contract/service/spells.js';
-import { ThreadGraphs } from './contract/service/graphs.js';
 import { makeDeclaredAgents, type DeclaredAgents } from '../threads/library/declared.js';
 import type { AgentDeclaration } from './agents/declaration.js';
 import { agentFilesOf } from './agents/declared/agentFiles.js';
@@ -91,7 +90,6 @@ import { McpBoundTools } from './tools/mcpRule.js';
 import { makeRestedFolds, type RestedFolds } from './transcript/restedFolds.js';
 import { makeInputRecovery, type InputRecoveryInput } from './turns/inputRecovery.js';
 import { makeWorkflowRuns, type WorkflowRuns } from './workflows/runStorage.js';
-import { workflowSeams } from './workflows/seams.js';
 import { readWorkflowLibrary } from './workflows/sources.js';
 import type { AgentRecovery } from '@runlith/agent/AgentRecovery';
 import type { ThreadTransitionStorage } from '@runlith/agent/thread/transition/port';
@@ -109,7 +107,6 @@ export type NativeKernelRequirements =
   | ThreadRollouts
   | RestedRollouts
   | WorkSpells
-  | ThreadGraphs
   | Projects
   | ScratchAreas
   | InstalledHarnesses
@@ -171,7 +168,6 @@ export class NativeKernel extends Context.Service<
         readonly thread: string;
         readonly id: string;
       }) => Effect.Effect<Effect.Success<ReturnType<typeof readWorkflowLibrary>>, ThreadCallBroke>;
-      readonly seams: ReturnType<typeof workflowSeams>;
       readonly leaseMs: number;
       readonly stepDeadlineMs: number;
     };
@@ -195,7 +191,6 @@ export const assembleNativeKernel: Effect.Effect<NativeKernel['Service'], never,
   const models = yield* ModelAccess;
   const rollouts = yield* ThreadRollouts;
   const spells = yield* WorkSpells;
-  const graphs = yield* ThreadGraphs;
   const projects = yield* Projects;
   const installed = yield* InstalledHarnesses;
   const calibrationOption = yield* Effect.serviceOption(CalibrationProfiles);
@@ -310,7 +305,6 @@ export const assembleNativeKernel: Effect.Effect<NativeKernel['Service'], never,
         },
         (effect, run) => effect.pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause }))),
       ),
-      seams: workflowSeams({ records, graphFor: graphs.graphFor }),
       leaseMs: WORKFLOW_LEASE_MS,
       stepDeadlineMs: WORKFLOW_STEP_DEADLINE_MS,
     },
@@ -332,7 +326,7 @@ const nativeEngine = (kernel: NativeKernel['Service']) =>
     Context.add(NativeWorkflow, {
       runs: kernel.runs,
       library: kernel.workflow.library,
-      seams: kernel.workflow.seams,
+      seams: {},
       conditions: {},
       leaseMs: kernel.workflow.leaseMs,
       stepDeadlineMs: kernel.workflow.stepDeadlineMs,

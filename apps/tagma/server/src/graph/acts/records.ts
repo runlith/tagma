@@ -13,11 +13,6 @@ import type { Edges } from '../contract/service/blocks.js';
 import type { Tags } from '../contract/service/vocabulary.js';
 import { advanceLaw, shapesLaw } from '../store/lawRevision.js';
 
-export function verdictReason(reason: string | undefined): string | null {
-  const text = reason?.trim() ?? '';
-  return text.length > 0 ? text : null;
-}
-
 export function actRecords(db: GraphStore['Service']['db'], sessions: WriterRegister['Service'], tags: Tags['Service']) {
   const record: Act['Service']['record'] = Effect.fn('Act.record')(function* (
     op: GraphEventOp,

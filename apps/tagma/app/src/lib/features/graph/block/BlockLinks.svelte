@@ -47,7 +47,6 @@
     'waits-on': 'Waits for',
     'discovered-from': 'Discovered from',
     supersedes: 'Supersedes',
-    amends: 'Amends',
     validates: 'Validates',
     relates: 'Related',
   };
@@ -56,7 +55,6 @@
     'waits-on': 'Blocks',
     'discovered-from': 'Led to',
     supersedes: 'Superseded by',
-    amends: 'Amended by',
     validates: 'Validated by',
     relates: 'Related',
   };

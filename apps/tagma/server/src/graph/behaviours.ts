@@ -5,7 +5,6 @@ import { spec } from './work/tasks/specBehaviour.js';
 import { container } from './orientation/containerBehaviour.js';
 import { explanation } from './orientation/explanationBehaviour.js';
 import { observation, reflection } from './work/reflectionBehaviours.js';
-import { amendment } from './work/proposals/amendmentBehaviour.js';
 import { leaf } from './blocks/leafBehaviour.js';
 import { selection } from './reading/selectionBehaviour.js';
 
@@ -18,7 +17,6 @@ export const graphBehaviours: readonly Behaviour[] = [
   explanation,
   observation,
   reflection,
-  amendment,
   leaf,
   selection,
 ];

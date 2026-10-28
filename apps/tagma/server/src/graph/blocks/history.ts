@@ -12,7 +12,7 @@ import { GraphJournal } from '../contract/service/journal.js';
 import { type HistoryRefusal, History, Selection } from '../contract/service/reads.js';
 import { blockName } from '../contract/wire/references.js';
 
-const ROLE_VERBS: readonly GraphEventOp[] = ['claim', 'release', 'done', 'close', 'accept', 'reject', 'uphold'];
+const ROLE_VERBS: readonly GraphEventOp[] = ['claim', 'release', 'done', 'close'];
 
 const decoded = <A>(read: Result.Result<A, JournalPayloadUnreadable>) => Effect.mapError(Effect.fromResult(read), journalUnreadable);
 
@@ -279,18 +279,6 @@ function changeOf(entry: ActEntry): Changes {
         kind: 'remeasure',
         label: `Re-measured: ${p.retired?.length ?? 0} debt retired, ${p.escaped?.length ?? 0} escape(s) recorded, ${p.fixed?.length ?? 0} gone`,
         peerId: null,
-      }));
-    case 'accept':
-      return labelled(readJournal.ending(entry), (p) => ({ kind: 'accept', label: 'Proposal applied', peerId: p.amends ?? null }));
-    case 'reject':
-      return labelled(readJournal.ending(entry), (p) => ({ kind: 'reject', label: 'Proposal rejected', peerId: p.amends ?? null }));
-    case 'uphold':
-      return labelled(readJournal.ending(entry), (p) => ({ kind: 'uphold', label: 'Proposal upheld', peerId: p.amends ?? null }));
-    case 'revise':
-      return labelled(readJournal.revise(entry), (p) => ({
-        kind: 'revise',
-        label: `Payload revised: ${p.ops ?? 0} ops`,
-        peerId: p.amends ?? null,
       }));
     case 'settle':
       return plain('settle', 'Settled into a doc');

@@ -5,7 +5,7 @@ import type { CallRecorded } from '../contract/wire/callRange.js';
 import type { SessionIdentity } from '../../platform/contract/wire/session.js';
 import { startLines } from '../../platform/contract/wire/start.js';
 import { blockLine, crowdedLine, pageFooter, refsInLine, syncLine, underParent } from './lines.js';
-import { blockPageText, payloadLines } from './blockPage.js';
+import { blockPageText } from './blockPage.js';
 import type { TagReading } from '../contract/wire/tags/reading.js';
 import type { GraphReport, IdleSpecAnswer, Moved } from '../contract/wire/answers.js';
 import type { FarHold } from '../contract/wire/far.js';
@@ -28,15 +28,6 @@ function queryOrderWords(result: object): string | undefined {
   if (by === 'ended' && order === 'desc') return 'most recently ended first';
   return undefined;
 }
-
-const QUEUE_EMPTY = {
-  ready_work: 'no ready work',
-  read_amendments: 'no open amendments',
-  read_amendments_decided: 'nothing decided here',
-} as const;
-
-const queueEmpty = (operation: string | undefined, fallback: keyof typeof QUEUE_EMPTY): string =>
-  QUEUE_EMPTY[(operation ?? fallback) as keyof typeof QUEUE_EMPTY] ?? QUEUE_EMPTY[fallback];
 
 export function graphText(
   table: TagReading,
@@ -137,26 +128,6 @@ function graphContent(table: TagReading, result: GraphToolAnswer, identity: Sess
     });
   }
   if ('session' in result) return writerLine(result.session);
-  if ('proposals' in result) {
-    const fights = result.conflicts.map((fight) => `${fight.a} × ${fight.b} · ${fight.region}`);
-    const unread = result.unread.map((one) => `${one.name} · operations unread: ${one.reason}`);
-    return toolPageText({
-      rows: result.proposals.map((row) => ({
-        label: [`${blockLine(table, row)}${underParent(row.parentName)}`, ...payloadLines(table, row)].join('\n'),
-      })),
-      total: result.total,
-      order: 'freshest first',
-      next: result.next === null ? undefined : `read_amendments(cursor="${result.next}")`,
-      empty: result.decided ? QUEUE_EMPTY.read_amendments_decided : queueEmpty(operation, 'read_amendments'),
-      note:
-        result.totalConflicts === 0 && unread.length === 0
-          ? undefined
-          : [
-              ...(result.totalConflicts === 0 ? [] : [`fights: ${fights.length} of ${result.totalConflicts} touch this page`, ...fights]),
-              ...unread,
-            ].join('\n'),
-    });
-  }
   if ('block' in result) {
     const written = 'refsIn' in result.block && Array.isArray(result.block.refsIn) ? (result.block.refsIn as readonly string[]) : [];
     const refsIn = [...new Set([...(result.refsIn ?? []), ...written])];
@@ -218,7 +189,7 @@ function graphContent(table: TagReading, result: GraphToolAnswer, identity: Sess
       total: result.total,
       order: 'oldest first',
       next: result.next === null ? undefined : `ready_work(cursor="${result.next}")`,
-      empty: queueEmpty(operation, 'ready_work'),
+      empty: 'no ready work',
       note:
         result.idle === undefined && result.workless === undefined
           ? undefined

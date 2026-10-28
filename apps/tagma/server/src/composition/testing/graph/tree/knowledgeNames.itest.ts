@@ -133,25 +133,6 @@ layer(demoGraphLayer(), { excludeTestServices: true })('knowledge migration', (i
             title: 'thoughts',
             fields: { query: { selector: { kind: 'descendants', types: [oldType('note')] }, sort } },
           });
-          const meetingName = yield* demo.nameOf(meeting.id);
-          const proposal = yield* graph.blocks.create({
-            projectId,
-            contract: 'core/amendment',
-            amendsId: meeting.id,
-            title: 'another meeting',
-            fields: {
-              ops: [
-                {
-                  op: 'create',
-                  parentId: meetingName,
-                  tags: [oldType('meeting')],
-                  title: 'follow-up',
-                  fields: { [fieldIdOf(oldType('meeting'), 'held')]: '2026-10-21', attendees: [personName] },
-                },
-                { op: 'create', parentId: meetingName, tags: [oldType('note')], title: 'follow-up thought', body: 'still editable' },
-              ],
-            },
-          });
           const project = yield* graph.projects.byId(projectId);
           yield* knowledgeNames(project);
           const localCatalog = yield* graph.blocks.create({
@@ -212,7 +193,20 @@ layer(demoGraphLayer(), { excludeTestServices: true })('knowledge migration', (i
           yield* graph.blocks.edit({ id: recipe.id, old: 'one', new: 'two' });
           expect((yield* graph.blocks.blockById(note.id)).fields).toEqual({ topic: 'migration' });
           expect((yield* graph.blocks.blockById(recipe.id)).body).toBe('two step');
-          yield* graph.review.accept({ id: proposal.id });
+          yield* graph.blocks.create({
+            projectId,
+            parentId: meeting.id,
+            tags: [newType('meeting')],
+            title: 'follow-up',
+            fields: { [fieldIdOf(newType('meeting'), 'held')]: '2026-10-21', attendees: [personName] },
+          });
+          yield* graph.blocks.create({
+            projectId,
+            parentId: meeting.id,
+            tags: [localType(noteType.uuid)],
+            title: 'follow-up thought',
+            body: 'still editable',
+          });
           const children = yield* graph.blocks.childrenOf(meeting.id);
           const followup = children.find((row) => row.title === 'follow-up');
           const thought = children.find((row) => row.title === 'follow-up thought');

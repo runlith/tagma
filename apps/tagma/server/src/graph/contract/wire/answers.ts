@@ -137,10 +137,3 @@ export const eventRowSchema = Schema.Struct({
   writer: Schema.NullOr(Schema.String),
 });
 export type EventRow = typeof eventRowSchema.Type;
-
-export const proposalConflictSchema = Schema.Struct({
-  a: BlockName,
-  b: BlockName,
-  region: Schema.String,
-});
-export type ProposalConflict = typeof proposalConflictSchema.Type;

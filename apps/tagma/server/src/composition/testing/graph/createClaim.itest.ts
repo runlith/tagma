@@ -156,21 +156,11 @@ layer(demoGraphLayer())('atomic native create claims', (it) => {
           ['waiting', 'ended'],
           ['busy', 'waiting'],
         ]);
-        const target = (yield* create({ tags: ['idea'], title: 'Amendment target' })).block.name;
         const attempts = [
           [call('create_block', { parentId: rootName, tags: ['idea'], title: 'Cannot hold', claim: true }), 'no-holder'],
           [
             call('create_block', { parentId: rootName, tags: ['gated-assignment'], title: 'Blocked claim', claim: true }),
             'illegal-transition',
-          ],
-          [
-            call('create_block', {
-              tags: ['proposal'],
-              title: 'Deferred hold',
-              amendsId: target,
-              fields: { ops: [{ op: 'create', parentId: target, tags: ['task'], title: 'Deferred task', claim: true }] },
-            }),
-            'field-invalid',
           ],
           [
             call('apply_batch', {

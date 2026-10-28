@@ -4,7 +4,6 @@ import { CONTAINER } from './container.js';
 import { LAW } from './lawContracts.js';
 import { SPEC } from './spec.js';
 import { WORK } from './work.js';
-import { AMENDMENT } from './amendment.js';
 import { OBSERVATION } from './observation.js';
 import { LEAF } from './leaf.js';
 
@@ -13,12 +12,11 @@ const BOUND: readonly (readonly [PageRole, ContractId])[] = [
   ['law', LAW],
   ['spec', SPEC],
   ['work', WORK],
-  ['amendment', AMENDMENT],
   ['observation', OBSERVATION],
   ['leaf', LEAF],
 ];
 
-export const PAGE_ROLES = ['container', 'law', 'spec', 'work', 'amendment', 'observation', 'leaf', 'knowledge'] as const;
+export const PAGE_ROLES = ['container', 'law', 'spec', 'work', 'observation', 'leaf', 'knowledge'] as const;
 export type PageRole = (typeof PAGE_ROLES)[number];
 
 export const SCREEN_ROWS = 20;

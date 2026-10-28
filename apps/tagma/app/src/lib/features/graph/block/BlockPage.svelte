@@ -10,7 +10,6 @@
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import type { BlockDiff, BlockMark } from '@tagma/server/graph/contract/wire/reads';
   import type { Block, BlockRead, TreeBlock } from '@tagma/server/graph/contract/wire/rows';
-  import { AMENDMENT } from '@tagma/server/graph/contract/wire/tags/amendment';
   import { LEAF } from '@tagma/server/graph/contract/wire/tags/leaf';
   import { SPEC } from '@tagma/server/graph/contract/wire/tags/spec';
   import { WORK } from '@tagma/server/graph/contract/wire/tags/work';
@@ -29,7 +28,6 @@
   import TagIcon from '$lib/features/graph/TagIcon.svelte';
   import MarkdownBody from '$lib/features/graph/MarkdownBody.svelte';
   import Outline from '$lib/features/graph/outline/Tree.svelte';
-  import ProposalsSection from '$lib/features/graph/block/ProposalsSection.svelte';
   import BlockFacts from '$lib/features/graph/block/BlockFacts.svelte';
   import BlockLinks, { hasLinks } from '$lib/features/graph/block/BlockLinks.svelte';
   import StatusChip from '$lib/features/graph/StatusChip.svelte';
@@ -423,8 +421,6 @@
           {:else if read.ending}
             <WriterBadge writer={read.ending.writer} />
           {/if}
-        {:else if tags.supports(rootBlock, AMENDMENT) && read.author}
-          <WriterBadge writer={sessions.writerOf(read.author)} />
         {/if}
         {#if reading}
           <Tooltip text="The system this reading measured, and which state of it">
@@ -522,8 +518,6 @@
       <BlockFacts {read} {enforcement} />
 
       {#if placed}
-        <ProposalsSection {read} {store} />
-
         {#if tags.supports(rootBlock, LEAF)}
           {@const query = tags.queryOf(read)}
           {#if read.results && query}

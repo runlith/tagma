@@ -6,33 +6,16 @@ import type { SessionRef } from '../../../platform/contract/wire/session.js';
 import type { HeldTask } from './serving.js';
 import type { FloorRefusal, GateRefusal, GitRefusal, OpenRefusal, ReferenceRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { BlockRecord, BlockRow, BlockWrite, SourceRow } from './acts.js';
-import type {
-  AmendmentPayloadRefusal,
-  BlockCreateRefusal,
-  StorageRefusal,
-  BlockEditRefusal,
-  EdgeRefusal,
-  FieldWriteRefusal,
-  RetagRefusal,
-  TagWriteRefusal,
-  LinkTarget,
-  BlockLink,
-} from './blocks.js';
-import type { BlockPosition, SelectionRefusal } from './reads.js';
+import type { BlockCreateRefusal, BlockEditRefusal, EdgeRefusal, RetagRefusal, LinkTarget, BlockLink } from './blocks.js';
+import type { BlockPosition } from './reads.js';
 import type { PageSlice } from '@runlith/paging';
-import type { PlacementRefusal } from './sources.js';
-import type { TransitionRefusal } from '../wire/lifecycle.js';
-import type { SourceInput } from '../wire/sources.js';
-import type { AmendmentOp, BatchInput } from '../wire/batch.js';
+import type { DocumentOp, BatchInput } from '../wire/batch.js';
 import type { ActState } from './transaction.js';
-import type { CreationDefaultRefusal } from '../wire/tags/profile.js';
 import type { HeldWork } from '../wire/operations/shared.js';
 import type { ThreadAct } from '../wire/threadWork.js';
 import type { ProjectRefusal } from '../../../projects/contract/wire/project.js';
 import type { EdgeKind } from '../wire/edges.js';
 import type { Crowded } from '../wire/answers.js';
-
-export type Accepted = BlockRecord & { readonly born: readonly BlockRecord[] };
 
 export type BlockEnding = {
   status: string;
@@ -165,178 +148,6 @@ export type WorklessSpecs = { readonly projectId: number } & (
   | { readonly scopeId?: number | undefined }
 );
 
-export type ProposalVerdictRow = {
-  status: string;
-  writer: WriterRef;
-  reason: string | null;
-  by: string[];
-  at: Date;
-  unreadable?: string;
-};
-
-export type ProposalListRow = BlockRecord & { sources: SourceRow[] };
-
-export type ReviewConflict = {
-  a: string;
-  b: string;
-  region: { kind: 'text'; blockName: string } | { kind: 'code'; anchor: string };
-};
-
-export type ConflictFilter = {
-  readonly projectId: number;
-  readonly scopeId?: number;
-  readonly names?: readonly string[];
-};
-
-export type ReviewConflicts = {
-  readonly found: readonly ReviewConflict[];
-  readonly total: number;
-  readonly unread: readonly { readonly name: string; readonly reason: string }[];
-};
-
-export class Review extends Context.Service<
-  Review,
-  {
-    propose(input: {
-      projectId: number;
-      amendsId: number;
-      title: string;
-      body?: string;
-      ops: readonly AmendmentOp[];
-      sources?: readonly SourceInput[];
-      parentId?: number;
-    }): Effect.Effect<
-      BlockWrite,
-      | StoreFailure
-      | GateRefusal<
-          | BlockCreateRefusal
-          | 'cross-project'
-          | 'amends-an-amendment'
-          | 'amendment-shape'
-          | CreationDefaultRefusal
-          | 'creation-contract'
-          | 'amendment-empty'
-          | 'amendment-op'
-          | 'amendment-ref'
-          | 'amendment-outside'
-          | 'leaf'
-          | 'not-found'
-          | 'bad-name'
-          | 'ambiguous-name'
-          | 'body-capped'
-          | 'body-address'
-        >
-    >;
-    revise(input: {
-      id: number;
-      ops: readonly AmendmentOp[];
-    }): Effect.Effect<
-      BlockRecord,
-      | StoreFailure
-      | GateRefusal<
-          | FloorRefusal
-          | 'not-found'
-          | 'deleted'
-          | 'not-an-amendment'
-          | 'verdict-standing'
-          | CreationDefaultRefusal
-          | 'creation-contract'
-          | 'amendment-empty'
-          | 'amendment-op'
-          | 'amendment-ref'
-          | 'amendment-outside'
-          | 'parent-required'
-          | 'leaf'
-          | 'bad-name'
-          | 'ambiguous-name'
-          | 'body-capped'
-          | 'body-address'
-        >
-    >;
-    accept(input: {
-      id: number;
-      reason?: string;
-      enclosing?: ReadonlyMap<string, number>;
-    }): Effect.Effect<
-      Accepted,
-      | StoreFailure
-      | GateRefusal<
-          | FloorRefusal
-          | 'not-found'
-          | 'deleted'
-          | 'not-an-amendment'
-          | 'no-status'
-          | 'illegal-status'
-          | 'illegal-transition'
-          | CreationDefaultRefusal
-          | 'creation-contract'
-          | 'amendment-empty'
-          | 'amendment-op'
-          | 'amendment-ref'
-          | 'amendment-outside'
-          | 'leaf'
-          | 'bad-name'
-          | 'ambiguous-name'
-          | AcceptedRefusal
-          | 'anchor-not-found'
-          | 'field-invalid'
-        >
-    >;
-    reject(input: {
-      id: number;
-      reason?: string;
-    }): Effect.Effect<
-      BlockRecord,
-      | StoreFailure
-      | GateRefusal<
-          | FloorRefusal
-          | 'not-found'
-          | 'deleted'
-          | 'not-an-amendment'
-          | 'no-status'
-          | 'illegal-status'
-          | 'illegal-transition'
-          | 'reason-required'
-        >
-    >;
-    uphold(input: {
-      id: number;
-      reason?: string;
-      by: readonly number[];
-    }): Effect.Effect<
-      BlockRecord,
-      | StoreFailure
-      | GateRefusal<
-          | FloorRefusal
-          | 'not-found'
-          | 'deleted'
-          | 'not-an-amendment'
-          | 'no-status'
-          | 'illegal-status'
-          | 'illegal-transition'
-          | 'reason-required'
-          | 'self-answer'
-          | 'cross-project'
-        >
-    >;
-    verdicts(rows: readonly BlockRow[]): Effect.Effect<ReadonlyMap<number, ProposalVerdictRow>, StoreFailure>;
-    obstacles(proposalId: number): Effect.Effect<string[], StoreFailure>;
-    conflicts(filter: ConflictFilter): Effect.Effect<ReviewConflicts, StoreFailure>;
-    proposals(filter: ProposalFilter): Effect.Effect<ProposalListRow[], StoreFailure | GateRefusal<SelectionRefusal>>;
-    proposalsPage(
-      filter: ProposalFilter,
-      after: BlockPosition | undefined,
-      rows: number,
-    ): Effect.Effect<PageSlice<ProposalListRow, number>, StoreFailure | GateRefusal<SelectionRefusal>>;
-  }
->()('tagma/graph/Review') {}
-
-export type ProposalFilter = {
-  readonly projectId?: number | undefined;
-  readonly scopeId?: number | undefined;
-  readonly decided?: boolean | undefined;
-};
-
 export type AnswerInput = { readonly id: number } & (
   | { readonly byId: number }
   | { readonly commit: string }
@@ -443,7 +254,6 @@ export type BatchAnswer = {
 
 export type Handles = {
   readonly declared: Map<string, number>;
-  readonly outer?: ReadonlyMap<string, number>;
   readonly minted: ReadonlyMap<string, string>;
   readonly awaiting: Set<number>;
   readonly references: DocumentReferences;
@@ -478,7 +288,7 @@ export type DocumentReferences = {
 
 export type DocumentRefusal = FloorRefusal | 'batch-shape' | 'batch-ref' | 'body-capped' | 'field-target' | 'not-found';
 
-export type AmendmentOpRefusal =
+export type DocumentOpRefusal =
   | DocumentRefRefusal
   | BlockCreateRefusal
   | BlockEditRefusal
@@ -488,72 +298,21 @@ export type AmendmentOpRefusal =
   | 'no-edge'
   | 'project-root'
   | 'catalog-member'
-  | 'deleted'
-  | 'verdict-standing';
+  | 'deleted';
 
-export type AcceptedOpRefusal =
-  | GitRefusal
-  | 'tree-not-measured'
-  | CreationDefaultRefusal
-  | 'creation-contract'
-  | 'no-holder'
-  | 'claimed-elsewhere'
-  | DocumentRefRefusal
-  | FloorRefusal
-  | TagWriteRefusal
-  | EdgeRefusal
-  | PlacementRefusal
-  | FieldWriteRefusal
-  | TransitionRefusal
-  | 'not-found'
-  | 'deleted'
-  | 'cross-project-parent'
-  | 'leaf'
-  | 'amends-shape'
-  | 'body-capped'
-  | 'body-address'
-  | 'source-required'
-  | 'source-outside'
-  | 'no-edge'
-  | 'project-root'
-  | 'catalog-member'
-  | 'status-operation'
-  | 'tree-cycle'
-  | 'superseded'
-  | 'carriers-invalid'
-  | 'unknown-project'
-  | 'anchor-noop'
-  | 'anchor-not-found'
-  | 'anchor-ambiguous'
-  | AmendmentPayloadRefusal
-  | 'cross-project'
-  | 'amends-an-amendment'
-  | 'amendment-shape'
-  | 'verdict-standing'
-  | StorageRefusal
-  | RetagRefusal;
-export type AcceptedDocumentRefusal = FloorRefusal | 'batch-ref' | 'body-capped' | 'field-target' | 'not-found';
-export type AcceptedRefusal = AcceptedOpRefusal | AcceptedDocumentRefusal;
-
-export class Amendments extends Context.Service<
-  Amendments,
+export class Documents extends Context.Service<
+  Documents,
   {
-    apply(
-      ops: readonly AmendmentOp[],
-      projectId: number,
-      enclosing?: ReadonlyMap<string, number>,
-    ): Effect.Effect<BatchAnswer, StoreFailure | GateRefusal<AcceptedRefusal>>;
     runDocument<Op extends { op: string }, Code extends string>(
       ops: readonly Op[],
       dispatch: (op: Op, handles: Handles, index: number) => Effect.Effect<OpOutcome, StoreFailure | GateRefusal<Code>, ActState>,
-      enclosing?: ReadonlyMap<string, number>,
       bodyFiles?: ReadonlyMap<number, string | undefined>,
       references?: DocumentReferences,
     ): Effect.Effect<BatchAnswer, StoreFailure | GateRefusal<Code | DocumentRefusal>>;
     applyOp(
-      op: AmendmentOp,
+      op: DocumentOp,
       handles: Handles,
       projectId: number,
-    ): Effect.Effect<OpOutcome, StoreFailure | GateRefusal<AmendmentOpRefusal>, ActState>;
+    ): Effect.Effect<OpOutcome, StoreFailure | GateRefusal<DocumentOpRefusal>, ActState>;
   }
->()('tagma/graph/Amendments') {}
+>()('tagma/graph/Documents') {}

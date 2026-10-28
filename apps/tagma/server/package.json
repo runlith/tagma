@@ -559,11 +559,6 @@
       "browser": "./src/graph/contract/wire/tags/spec.ts",
       "default": "./src/graph/contract/wire/tags/spec.ts"
     },
-    "./graph/contract/wire/tags/amendment": {
-      "types": "./src/graph/contract/wire/tags/amendment.ts",
-      "browser": "./src/graph/contract/wire/tags/amendment.ts",
-      "default": "./src/graph/contract/wire/tags/amendment.ts"
-    },
     "./graph/contract/wire/tags/observation": {
       "types": "./src/graph/contract/wire/tags/observation.ts",
       "browser": "./src/graph/contract/wire/tags/observation.ts",

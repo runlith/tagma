@@ -3,7 +3,7 @@ import type { BlockListRow } from './reads.js';
 import type { BlockQuery } from './query.js';
 import type { BlockRead } from './rows.js';
 import type { VoiceAck, VoiceRefused } from '../../../platform/contract/wire/voiceAnswer.js';
-import type { BlockAnswer, BlockResultAnswer, Crowded, IdleSpecAnswer } from './answers.js';
+import type { BlockResultAnswer, Crowded, IdleSpecAnswer } from './answers.js';
 import type { ReadyTaskAnswer } from './operations/reads.js';
 import type { CallRecorded } from './callRange.js';
 import type { JournalPageBody } from './journal.js';
@@ -107,19 +107,6 @@ export type ToolEvents = {
 
 export type ToolJournal = JournalPageBody & { readonly status: 'ok' };
 
-export type ToolProposal = {
-  readonly status: 'ok';
-  readonly decided: boolean;
-  readonly proposals: readonly (BlockAnswer & { readonly fields: BlockRead['fields'] })[];
-  readonly total: number;
-  readonly shown: number;
-  readonly next: string | null;
-  readonly complete: boolean;
-  readonly conflicts: readonly { readonly a: string; readonly b: string; readonly region: string }[];
-  readonly totalConflicts: number;
-  readonly unread: readonly { readonly name: string; readonly reason: string }[];
-};
-
 export type GraphToolAnswer =
   | VoiceRefused
   | BlockResultAnswer
@@ -136,6 +123,5 @@ export type GraphToolAnswer =
   | ToolSync
   | ToolEvents
   | ToolJournal
-  | ToolProposal
   | ToolWriters
   | ToolWriter;

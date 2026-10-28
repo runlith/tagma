@@ -1,9 +1,9 @@
 import { Schema } from 'effect';
-import { SOURCE_KINDS, sourceInputSchema } from './sources.js';
+import { SOURCE_KINDS } from './sources.js';
 import { edgeNameSchema } from './edges.js';
 import { creationFields } from './creation.js';
 
-import { body, documentRef, fieldsField, line, oldText, place, tagsField, title } from './fields.js';
+import { body, fieldsField, line, oldText, place, tagsField, title } from './fields.js';
 import { BLOCK_ADDRESS } from './references.js';
 import { STORAGE_MODES } from '../../../projects/contract/wire/project.js';
 
@@ -12,7 +12,7 @@ export const batchRefSchema = Schema.String.check(Schema.isPattern(new RegExp(`^
 export type BatchRef = typeof batchRefSchema.Type;
 
 export const BATCH_OPERATION_ID_HELP =
-  'Batch operations use their own reference fields: update/edit/claim/release/finish/close/unsupersede/delete/restore/accept/reject/uphold use `id` (not a standalone tool’s `blockId`); anchor/unanchor use `blockId`; link/unlink use `fromId` and `toId`; supersede uses `oldId` and `withId`. Operation references accept a block name, `<project id>/<name>` or `$handle`. Subjects stay in the document project; link/unlink `toId` and create `edges[].to` may name another project. Stored fields and deferred proposal ops use bare names or handles.';
+  'Batch operations use their own reference fields: update/edit/claim/release/finish/close/unsupersede/delete/restore use `id` (not a standalone tool’s `blockId`); anchor/unanchor use `blockId`; link/unlink use `fromId` and `toId`; supersede uses `oldId` and `withId`. Operation references accept a block name, `<project id>/<name>` or `$handle`. Subjects stay in the document project; link/unlink `toId` and create `edges[].to` may name another project. Stored fields use bare names or handles.';
 
 export const batchCreateOpSchema = Schema.Struct({
   op: Schema.Literal('create'),
@@ -20,8 +20,6 @@ export const batchCreateOpSchema = Schema.Struct({
   ...creationFields(batchRefSchema, batchRefSchema),
 });
 type BatchCreateOp = typeof batchCreateOpSchema.Type;
-const { claim: _claim, ...deferredFields } = creationFields(documentRef, documentRef);
-const amendmentCreateOpSchema = Schema.Struct({ op: Schema.Literal('create'), $id: Schema.optional(Schema.String), ...deferredFields });
 
 const mutationSchemas = (reference: Schema.String) => ({
   update: Schema.Struct({
@@ -48,10 +46,13 @@ export const deleteOpSchema = mutations.delete;
 export const linkOpSchema = mutations.link;
 export const unlinkOpSchema = mutations.unlink;
 
-export const AMENDMENT_OPS = ['create', 'edit', 'update', 'delete', 'link', 'unlink'] as const;
-const AMENDMENT_VERBS = Schema.Union(Object.values(mutationSchemas(documentRef))).pipe(Schema.toTaggedUnion('op'));
-export const amendmentOpSchema = Schema.Union([amendmentCreateOpSchema, AMENDMENT_VERBS]);
-export type AmendmentOp = typeof amendmentOpSchema.Type;
+export type DocumentOp =
+  | BatchCreateOp
+  | typeof updateOpSchema.Type
+  | typeof editOpSchema.Type
+  | typeof deleteOpSchema.Type
+  | typeof linkOpSchema.Type
+  | typeof unlinkOpSchema.Type;
 
 export const claimOpSchema = Schema.Struct({ op: Schema.Literal('claim'), id: batchRefSchema });
 export const releaseOpSchema = Schema.Struct({ op: Schema.Literal('release'), id: batchRefSchema });
@@ -89,7 +90,7 @@ export const storageOpSchema = Schema.Struct({
   storage: Schema.Literals(STORAGE_MODES),
 });
 
-type GraphMutationOp =
+export type BatchOp =
   | BatchCreateOp
   | typeof updateOpSchema.Type
   | typeof editOpSchema.Type
@@ -107,24 +108,6 @@ type GraphMutationOp =
   | typeof restoreOpSchema.Type
   | typeof storageOpSchema.Type;
 
-export const proposeOpSchema = Schema.Struct({
-  op: Schema.Literal('propose'),
-  $id: Schema.optional(Schema.String),
-  amendsId: batchRefSchema,
-  title,
-  body: Schema.optional(body),
-  ops: Schema.Array(amendmentOpSchema).check(Schema.isMinLength(1)),
-  sources: Schema.optional(Schema.Array(sourceInputSchema)),
-});
-export const acceptOpSchema = Schema.Struct({ op: Schema.Literal('accept'), id: batchRefSchema, reason: Schema.optional(line) });
-export const rejectOpSchema = Schema.Struct({ op: Schema.Literal('reject'), id: batchRefSchema, reason: line });
-export const upholdOpSchema = Schema.Struct({
-  op: Schema.Literal('uphold'),
-  id: batchRefSchema,
-  reason: line,
-  by: Schema.Array(batchRefSchema).check(Schema.isMinLength(1)),
-});
-
 const BATCH_VERBS = Schema.Union([
   updateOpSchema,
   editOpSchema,
@@ -141,10 +124,6 @@ const BATCH_VERBS = Schema.Union([
   deleteOpSchema,
   restoreOpSchema,
   storageOpSchema,
-  proposeOpSchema,
-  acceptOpSchema,
-  rejectOpSchema,
-  upholdOpSchema,
 ]).pipe(Schema.toTaggedUnion('op'));
 
 export const batchOpSchema = Schema.Union([batchCreateOpSchema, BATCH_VERBS]);
@@ -154,12 +133,6 @@ export const batchInputSchema = Schema.Struct({
   source: Schema.optional(Schema.String),
 });
 export type BatchInput = typeof batchInputSchema.Type;
-export type BatchOp =
-  | GraphMutationOp
-  | typeof proposeOpSchema.Type
-  | typeof acceptOpSchema.Type
-  | typeof rejectOpSchema.Type
-  | typeof upholdOpSchema.Type;
 
 export function batchSource(ops: readonly unknown[]): string {
   return `${JSON.stringify({ ops }, null, 2)}\n`;

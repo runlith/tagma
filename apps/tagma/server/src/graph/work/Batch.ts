@@ -1,17 +1,15 @@
 import { dirname, isAbsolute } from 'node:path';
 import { Effect, Layer, Result, Schema, SchemaIssue } from 'effect';
-import { AMENDMENT_OPS, batchSchema, type AmendmentOp, type BatchInput, type BatchOp } from '../contract/wire/batch.js';
+import { batchSchema, type BatchInput, type BatchOp } from '../contract/wire/batch.js';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { BatchSourceUnreadable, BatchFiles } from './batchFiles.js';
 import { type Unblock, GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { optionalRef, refOf, register } from './amendmentOps.js';
+import { optionalRef, refOf } from './document.js';
 import {
-  Amendments,
+  Documents,
   Batch,
-  Review,
   Supersession,
   Tasks,
-  type Accepted,
   type BatchAnswer,
   type DocumentScope,
   type BlockEnd,
@@ -50,12 +48,6 @@ function bodyHolders(rawOps: readonly unknown[]): readonly BodyHolder[] {
     const op = plainObject(raw);
     if (op === undefined) continue;
     holders.push({ index, holder: op });
-    const nested = op['ops'];
-    if (!Array.isArray(nested)) continue;
-    for (const rawNested of nested) {
-      const inner = plainObject(rawNested);
-      if (inner !== undefined) holders.push({ index, holder: inner });
-    }
   }
   return holders;
 }
@@ -160,31 +152,18 @@ function batchDocumentOps(document: unknown): Effect.Effect<readonly unknown[], 
 export const batchLayer: Layer.Layer<
   Batch,
   never,
-  | BlockRows
-  | BlockNames
-  | Amendments
-  | BatchFiles
-  | Sources
-  | Tasks
-  | Supersession
-  | Review
-  | Trash
-  | Tags
-  | InstalledCatalogs
-  | Blocks
-  | GraphStore
+  BlockRows | BlockNames | Documents | BatchFiles | Sources | Tasks | Supersession | Trash | Tags | InstalledCatalogs | Blocks | GraphStore
 > = Layer.effect(
   Batch,
   Effect.gen(function* () {
     const blockRows = yield* BlockRows;
     const blocks = yield* Blocks;
     const names = yield* BlockNames;
-    const amendments = yield* Amendments;
+    const operations = yield* Documents;
     const documents = yield* BatchFiles;
     const sources = yield* Sources;
     const tasks = yield* Tasks;
     const standing = yield* Supersession;
-    const review = yield* Review;
     const trash = yield* Trash;
     const vocabulary = yield* Tags;
     const catalogs = yield* InstalledCatalogs;
@@ -221,8 +200,8 @@ export const batchLayer: Layer.Layer<
         yield* op.op === 'link' ? scope.link(input) : scope.unlink(input);
         return { ok: true };
       }
-      if ((AMENDMENT_OPS as readonly string[]).includes(op.op)) {
-        return yield* amendments.applyOp(op as AmendmentOp, handles, projectId);
+      if (op.op === 'create' || op.op === 'edit' || op.op === 'update' || op.op === 'delete' || op.op === 'link' || op.op === 'unlink') {
+        return yield* operations.applyOp(op, handles, projectId);
       }
       switch (op.op) {
         case 'claim':
@@ -248,33 +227,6 @@ export const batchLayer: Layer.Layer<
         case 'unanchor':
           yield* sources.unanchor({ blockId: yield* refOf(handles, op.blockId), kind: op.kind, ref: op.ref, symbol: op.symbol });
           return { ok: true };
-        case 'propose': {
-          const target = yield* blockRows.blockById(yield* refOf(handles, op.amendsId));
-          const row = yield* review.propose({
-            projectId: target.projectId,
-            title: op.title,
-            body: op.body,
-            amendsId: target.id,
-            ops: op.ops,
-            sources: op.sources,
-          });
-          yield* register(handles, op.$id, row.id);
-          return row;
-        }
-        case 'accept':
-          return yield* review.accept({
-            id: yield* refOf(handles, op.id),
-            reason: op.reason,
-            enclosing: handles.declared,
-          });
-        case 'reject':
-          return yield* review.reject({ id: yield* refOf(handles, op.id), reason: op.reason });
-        case 'uphold':
-          return yield* review.uphold({
-            id: yield* refOf(handles, op.id),
-            reason: op.reason,
-            by: yield* Effect.forEach(op.by, (ref) => refOf(handles, ref)),
-          });
         case 'supersede':
           return yield* standing.supersede({ oldId: yield* refOf(handles, op.oldId), withId: yield* refOf(handles, op.withId) });
         case 'unsupersede':
@@ -357,7 +309,7 @@ export const batchLayer: Layer.Layer<
           Effect.mapError((error) => batchDocumentRefusal(error, rawOps)),
         );
         if (decoded.ops.some((op) => (op.op === 'create' || op.op === 'storage') && op.storage === 'stealth')) yield* attachedStealth();
-        const ran = yield* amendments.runDocument(
+        const ran = yield* operations.runDocument(
           decoded.ops,
           (op, handles, index) =>
             applyOp(op, handles, projectId, operator, scope).pipe(
@@ -376,7 +328,6 @@ export const batchLayer: Layer.Layer<
                 );
               }),
             ),
-          undefined,
           bodyFiles,
           scope?.references,
         );
@@ -385,7 +336,6 @@ export const batchLayer: Layer.Layer<
         const placed = decoded.ops.flatMap((op, index): readonly Placed[] => {
           const outcome = ran.ops[index];
           if (outcome === undefined) return [];
-          if (op.op === 'accept' && 'born' in outcome) return (outcome as Accepted).born;
           const moved = op.op === 'create' || (op.op === 'update' && (op.parentId != null || op.tags !== undefined));
           return moved && 'parentId' in outcome && 'tags' in outcome ? [outcome] : [];
         });

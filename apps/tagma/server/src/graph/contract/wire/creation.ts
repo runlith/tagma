@@ -25,9 +25,6 @@ export const creationFields = <Ref extends Schema.Top, Target extends Schema.Top
     description:
       'Outgoing relations born with the node: relates or discovered-from, which every block carries, or a kind its tags declare; a target in another project is linked into its graph.',
   }),
-  amendsId: Schema.optional(reference).annotate({
-    description: 'The block an amendment is about; it is born under it, with the amends edge.',
-  }),
   sources: Schema.optional(Schema.Array(sourceInputSchema)).annotate({
     description: 'Anchors attached at creation. Exact sources on the direct parent transfer atomically to the child.',
   }),

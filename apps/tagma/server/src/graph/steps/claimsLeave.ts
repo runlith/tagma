@@ -11,7 +11,6 @@ import { block, source } from '../store/tables.js';
 const stepping = writes('Tree.step.claimsLeave', [block, source]);
 
 const CLAIM = 'claim';
-const PROPOSAL = 'proposal';
 
 type Raw = Record<string, unknown>;
 
@@ -64,9 +63,6 @@ export const claimsLeave = Effect.fn('GraphStep.claimsLeave')(function* (project
       .filter((row) => row.tags.includes(CLAIM) || (row.tags.includes(TAG_DECLARATION.id) && row.fields.id === CLAIM))
       .map((row) => row.id),
   );
-  for (const row of rows) {
-    if (row.parentId !== null && doomed.has(row.parentId) && row.tags.includes(PROPOSAL)) doomed.add(row.id);
-  }
   const gone = new Set(rows.flatMap((row) => (doomed.has(row.id) && row.uuid !== null ? [blockName(row.uuid)] : [])));
   yield* store.transaction(stepping, () =>
     Effect.gen(function* () {

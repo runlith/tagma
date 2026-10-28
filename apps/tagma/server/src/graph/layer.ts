@@ -12,7 +12,7 @@ import { ownGitLayer } from '../platform/git/ownGit.js';
 import { BlockRows } from './acts/rows.js';
 import { actLayer } from './acts/unit.js';
 import { Act, BlockNames, BlockProjection, BlockReferences } from './contract/service/acts.js';
-import { amendmentsLayer } from './work/amendmentOps.js';
+import { documentsLayer } from './work/document.js';
 import { batchLayer } from './work/Batch.js';
 import { batchFilesLayer } from './work/batchFiles.js';
 import { blocksLayer } from './blocks/update.js';
@@ -35,7 +35,6 @@ import { rankingLayer } from './search/ranking.js';
 import { blockReadsLayer } from './reading/block.js';
 import { reflectionsLayer } from './work/filedReflections.js';
 import { sourceProjectLayer } from './serving/sourceProject.js';
-import { reviewLayer } from './work/proposals/listing.js';
 import { selectionLayer } from './search/selection.js';
 import { settingsLayer } from '../settings/layer.js';
 import { settingReactionLayer } from './vocabulary/settingsReaction.js';
@@ -108,8 +107,8 @@ const assembled = <R>(source: Layer.Layer<SettingsServices, never, R>, role: Gra
   const tasks = tasksLayer.pipe(Layer.provideMerge(indexes));
   const writing = Layer.mergeAll(blocksLayer, historyLayer).pipe(Layer.provideMerge(tasks));
   const ending = supersessionLayer.pipe(Layer.provideMerge(writing));
-  const lifecycle = Layer.mergeAll(amendmentsLayer, graphFeedLayer).pipe(Layer.provideMerge(ending));
-  const judging = Layer.mergeAll(reviewLayer, reflectionsLayer, sourceProjectLayer, Layer.effect(GraphSource, GraphSource)).pipe(
+  const lifecycle = Layer.mergeAll(documentsLayer, graphFeedLayer).pipe(Layer.provideMerge(ending));
+  const judging = Layer.mergeAll(reflectionsLayer, sourceProjectLayer, Layer.effect(GraphSource, GraphSource)).pipe(
     Layer.provideMerge(lifecycle),
   );
   const batchFiles = batchFilesLayer.pipe(Layer.provide(BunFileSystem.layer));

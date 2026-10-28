@@ -31,33 +31,6 @@ layer(demoGraphLayer(), { excludeTestServices: true })('record blocks', (it) => 
           graph.batch.apply(batchDocument([{ op: 'create', tags: ['task'], title: 'batched', parentId: name }]), projectId),
         );
         expect(batched.code).toBe('leaf');
-        const filed = yield* refusal(
-          graph.batch.apply(
-            batchDocument([
-              {
-                op: 'propose',
-                amendsId: name,
-                title: 'a finding',
-                ops: [{ op: 'create', tags: ['task'], title: 'proposed', parentId: name }],
-              },
-            ]),
-            projectId,
-          ),
-        );
-        expect(filed.code).toBe('leaf');
-        const amendment = yield* graph.batch.apply(
-          batchDocument([
-            {
-              op: 'propose',
-              amendsId: name,
-              title: 'the slice is too wide',
-              ops: [{ op: 'update', id: name, title: 'open tasks of this area' }],
-            },
-          ]),
-          projectId,
-        );
-        const proposalId = (amendment.ops[0] as { id: number }).id;
-        expect((yield* graph.reading.show(saved, 1)).children.map((child) => child.id)).toEqual([proposalId]);
       }),
     ),
   );
@@ -208,13 +181,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('record blocks', (it) => 
           [{ ...core, tags: ['reflection'], fields: { ...facts, actual: '  ' } }, 'field-invalid'],
           [{ ...core, tags: ['research'] }, 'field-required'],
           [{ ...core, tags: ['research'], fields: { source: { name: 'codex' } } }, 'field-invalid'],
-          [{ ...core, tags: ['proposal'] }, 'field-required'],
-          [{ ...core, tags: ['proposal'], fields: { ops: [{ op: 'create', title: 'child' }] } }, 'amends-missing'],
           [{ ...core, tags: ['invoice'] }, 'tag-undeclared'],
         ] as const)
           expect((yield* refusal(graph.blocks.create(input))).code).toBe(code);
-        const born = yield* graph.blocks.create({ ...core, tags: ['idea'] });
-        expect((yield* refusal(graph.blocks.create({ ...core, tags: ['idea'], amendsId: born.id }))).code).toBe('amends-shape');
       }),
     ),
   );
@@ -263,9 +232,8 @@ layer(demoGraphLayer(), { excludeTestServices: true })('record blocks', (it) => 
   );
 
   it.effect('a stored document that no longer fits refuses the acts that read it and rolls them back', () =>
-    withDemo(({ graph, projectId, nameOf, refusal, root }) =>
+    withDemo(({ graph, projectId, refusal, root }) =>
       Effect.gen(function* () {
-        const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'target', body: 'before', parentId: root });
         const saved = yield* graph.blocks.create({
           projectId,
           tags: ['view'],
@@ -273,32 +241,16 @@ layer(demoGraphLayer(), { excludeTestServices: true })('record blocks', (it) => 
           parentId: root,
           fields: { query: { sort: { by: 'updated', order: 'desc' } } },
         });
-        const filed = yield* graph.review.propose({
-          projectId,
-          amendsId: target.id,
-          title: 'proposal',
-          ops: [{ op: 'edit', id: yield* nameOf(target.id), old: 'before', new: 'after' }],
-        });
         yield* graph.graphStore.db
           .update(block)
           .set({ fields: { query: { tags: ['task'] } } })
           .where(eq(block.id, saved.id));
-        yield* graph.graphStore.db
-          .update(block)
-          .set({ fields: { status: 'open', ops: [] } })
-          .where(eq(block.id, filed.id));
         const before = yield* graph.blocks.blockById(saved.id);
         const journal = yield* graph.journal.events({ blockId: saved.id });
         expect((yield* refusal(graph.reading.show(saved.id, 0))).code).toBe('field-invalid');
         expect((yield* refusal(graph.blocks.update({ id: saved.id, fields: { query: { tags: ['task'] } } }))).code).toBe('field-invalid');
         expect(yield* graph.blocks.blockById(saved.id)).toEqual(before);
         expect(yield* graph.journal.events({ blockId: saved.id })).toEqual(journal);
-        const filedBefore = yield* graph.blocks.blockById(filed.id);
-        const filedJournal = yield* graph.journal.events({ blockId: filed.id });
-        expect((yield* refusal(graph.review.accept({ id: filed.id }))).code).toBe('field-invalid');
-        expect((yield* graph.review.obstacles(filed.id)).length).toBeGreaterThan(0);
-        expect(yield* graph.blocks.blockById(filed.id)).toEqual(filedBefore);
-        expect(yield* graph.journal.events({ blockId: filed.id })).toEqual(filedJournal);
       }),
     ),
   );

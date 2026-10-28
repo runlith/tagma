@@ -6,19 +6,7 @@ import { type Section, shippedSections, tagSectionsSchema } from './sections.js'
 import { type ContractBindings, contractBindingsSchema } from './behaviour.js';
 import { type CatalogProfile, catalogProfileSchema } from './profile.js';
 
-export const ROLES = [
-  'status',
-  'holder',
-  'work',
-  'spec',
-  'container',
-  'law',
-  'amendment',
-  'leaf',
-  'observation',
-  'enforcement',
-  'delivery',
-] as const;
+export const ROLES = ['status', 'holder', 'work', 'spec', 'container', 'law', 'leaf', 'observation', 'enforcement', 'delivery'] as const;
 export type Role = (typeof ROLES)[number];
 
 export const SCALAR_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'session'] as const;
@@ -28,7 +16,6 @@ export const FIELD_SCHEMA_NAMES = [
   'line',
   'blockQuery',
   'viewLayout',
-  'amendmentOps',
   'researchSource',
   'tagFields',
   'tagEdges',
@@ -112,14 +99,6 @@ export const statusBindingSchema = Schema.Struct({
 });
 export type StatusBinding = typeof statusBindingSchema.Type;
 
-export const amendmentBindingSchema = Schema.Struct({
-  field: Schema.NonEmptyString,
-  run: Schema.NonEmptyString,
-  declined: Schema.NonEmptyString,
-  answered: Schema.NonEmptyString,
-});
-export type AmendmentBinding = typeof amendmentBindingSchema.Type;
-
 const roleBindings = {
   status: Schema.optional(statusBindingSchema),
   holder: Schema.optional(Schema.NonEmptyString),
@@ -127,7 +106,6 @@ const roleBindings = {
   spec: Schema.optional(Schema.Literal(true)),
   container: Schema.optional(Schema.Literal(true)),
   law: Schema.optional(Schema.NonEmptyString),
-  amendment: Schema.optional(amendmentBindingSchema),
   leaf: Schema.optional(Schema.Literal(true)),
   observation: Schema.optional(Schema.Literal(true)),
   enforcement: Schema.optional(Schema.NonEmptyString),
@@ -137,7 +115,7 @@ const roleBindings = {
 export const tagRolesSchema = Schema.Struct(roleBindings);
 export type TagRoles = typeof tagRolesSchema.Type;
 
-export const OWNED_ROLES = ['status', 'holder', 'law', 'amendment', 'enforcement', 'delivery'] as const;
+export const OWNED_ROLES = ['status', 'holder', 'law', 'enforcement', 'delivery'] as const;
 export type OwnedRole = (typeof OWNED_ROLES)[number];
 
 export const tagSchema = Schema.Struct({

@@ -1,7 +1,6 @@
 import type { TagTable } from './table.js';
 import type { Role, Tag } from './declaration.js';
 import { lifecycleOf } from './lifecycle.js';
-import { amendmentOf } from './amendment.js';
 
 export type Tagged = {
   readonly tags: readonly string[];
@@ -62,13 +61,6 @@ export function endingStatus(tag: Tag, outcome: 'done' | 'closed'): string | nul
   const binding = lifecycleOf(tag);
   if (binding === null) return null;
   return (outcome === 'done' ? binding.done : binding.closed) ?? null;
-}
-
-export const AMENDMENT_VERDICTS = ['run', 'declined', 'answered'] as const;
-export type AmendmentVerdict = (typeof AMENDMENT_VERDICTS)[number];
-
-export function verdictStatus(tag: Tag, verdict: AmendmentVerdict): string | null {
-  return amendmentOf(tag)?.[verdict] ?? null;
 }
 
 export const STATUS_PHASES = ['initial', 'active', 'open', 'terminal'] as const;

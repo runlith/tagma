@@ -226,15 +226,7 @@ layer(Layer.effect(Place, setup).pipe(Layer.provide(fixture)), { excludeTestServ
           .pipe(Effect.orDie),
       );
       const at = new Date(yield* Clock.currentTimeMillis);
-      yield* mandate.setApproves(parent, [
-        'claim_task',
-        'held-elsewhere',
-        'finish_block',
-        'accept_proposal',
-        'enforce_law',
-        'set_law_delivery',
-        'claim_task',
-      ]);
+      yield* mandate.setApproves(parent, ['claim_task', 'held-elsewhere', 'finish_block', 'enforce_law', 'set_law_delivery', 'claim_task']);
       const saved = yield* db
         .insert(setting)
         .values({
@@ -282,7 +274,6 @@ layer(Layer.effect(Place, setup).pipe(Layer.provide(fixture)), { excludeTestServ
         'claim_block',
         'held-elsewhere',
         'finish_block',
-        'accept_amendment',
         'enforce_rule',
         'set_rule_delivery',
         'claim_block',

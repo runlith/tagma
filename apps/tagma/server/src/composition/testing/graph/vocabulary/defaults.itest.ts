@@ -4,7 +4,6 @@ import { Effect } from 'effect';
 import { type EffectDemo, demoGraphLayer, withDemo } from '../../graphFixture.js';
 import { fileReflection, filedReflections } from '../../../../reflections/filing.js';
 import { localTypeId, shippedTypeId, CORE_LIBRARY } from '../../../../graph/contract/wire/tags/identity.js';
-import { AMENDMENT } from '../../../../graph/contract/wire/tags/amendment.js';
 import { REFLECTION } from '../../../../graph/contract/wire/tags/reflection.js';
 import { SELECTION } from '../../../../graph/contract/wire/tags/selection.js';
 import type { CreationDefault } from '../../../../graph/contract/wire/tags/profile.js';
@@ -90,23 +89,6 @@ layer(demoGraphLayer({ projects: ['elsewhere'] }))('creation defaults', (it) => 
         const selection = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(batch.ids.selection!));
         expect(selection.fields.query).toEqual({ ...query, scope: [batch.ids.work] });
         expect((yield* graph.reading.show(selection.id, 0)).results?.items.map((row) => row.name)).toEqual([batch.ids.work!]);
-        const refused = yield* demo.refusal(
-          graph.review.propose({
-            projectId,
-            amendsId: selection.id,
-            title: 'nested finding',
-            ops: [
-              {
-                op: 'create',
-                contract: AMENDMENT,
-                title: 'deferred finding',
-                parentId: batch.ids.selection,
-                fields: { ops: [{ op: 'edit', id: batch.ids.selection, old: 'x', new: 'y' }] },
-              },
-            ],
-          }),
-        );
-        expect(refused.code).toBe('amendment-op');
       }),
     ),
   );
@@ -136,36 +118,6 @@ layer(demoGraphLayer({ projects: ['elsewhere'] }))('creation defaults', (it) => 
         );
         const current = yield* graph.selection.query(projectId, { sort: query.sort });
         expect(current.items.filter((row) => row.title === carrier.title)).toEqual([]);
-      }),
-    ),
-  );
-
-  it.effect('review filing chooses a compatible local amendment and keeps its bound payload and verdict', () =>
-    withDemo((demo) =>
-      Effect.gen(function* () {
-        const { graph, projectId, root } = demo;
-        const id = yield* localType(demo, projectId, 'finding', {
-          fields: {
-            state: { type: 'enum', values: ['waiting', 'accepted', 'declined', 'answered'] },
-            changes: { type: 'schema', name: 'amendmentOps' },
-          },
-          gates: [
-            { gate: 'required', field: 'changes' },
-            ...['accepted', 'declined', 'answered'].map((to) => ({ gate: 'transition', field: 'state', from: 'waiting', to })),
-          ],
-          contracts: {
-            'core/lifecycle': { slots: { status: 'state' }, words: { initial: 'waiting' } },
-            [AMENDMENT]: { slots: { ops: 'changes' }, words: { run: 'accepted', declined: 'declined', answered: 'answered' } },
-          },
-        });
-        yield* profile(demo, projectId, [{ contract: AMENDMENT, type: id, override: true }]);
-        const target = yield* graph.blocks.create({ projectId, parentId: root, title: 'under review', body: 'before' });
-        const ops = [{ op: 'edit' as const, id: yield* demo.nameOf(target.id), old: 'before', new: 'after' }];
-        const proposed = yield* graph.review.propose({ projectId, amendsId: target.id, title: 'local finding', ops });
-        expect(proposed.tags).toEqual(['finding']);
-        expect(proposed.fields.changes).toEqual(ops);
-        expect((yield* graph.review.accept({ id: proposed.id })).fields.state).toBe('accepted');
-        expect((yield* graph.blocks.blockById(target.id)).body).toBe('after');
       }),
     ),
   );

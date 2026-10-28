@@ -355,31 +355,6 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
     }),
   );
 
-  it.effect('a finding is filed and corrected one at a time, through the same gates a batch faces', () =>
-    Effect.gen(function* () {
-      const { call, rootName } = yield* GraphTools;
-      const target = (yield* call('create_block', { parentId: yield* rootName(), tags: ['idea'], title: 'Under review' })) as {
-        block: { name: string };
-      };
-      const filed = (yield* call('create_block', {
-        tags: ['proposal'],
-        title: 'The claim moved',
-        amendsId: target.block.name,
-        fields: { ops: [{ op: 'edit', id: target.block.name, old: 'Under review', new: 'Read' }] },
-      })) as { status: string; block: { name: string; tags: readonly string[]; parentName: string } };
-      expect(filed.status).toBe('ok');
-      expect(filed.block.tags).toEqual(['proposal']);
-      expect(filed.block.parentName).toBe(target.block.name);
-      expect(
-        yield* call('revise_amendment', { blockId: filed.block.name, ops: [{ op: 'update', id: target.block.name, title: 'Read' }] }),
-      ).toMatchObject({ status: 'ok' });
-      yield* call('reject_amendment', { blockId: filed.block.name, reason: 'the claim is right as it stands' });
-      expect(
-        yield* call('revise_amendment', { blockId: filed.block.name, ops: [{ op: 'update', id: target.block.name, title: 'Read' }] }),
-      ).toMatchObject({ status: 'refused' });
-    }),
-  );
-
   it.effect(
     'a graph act settles from the journal after a death: landed with what it wrote, or aborted; an act the journal does not record reads nothing back from it',
     () =>

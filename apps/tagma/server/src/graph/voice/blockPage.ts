@@ -103,11 +103,6 @@ export function blockPageText(
   if (view.refsIn.length > 0) lines.push(`refs ← ${view.refsIn.join(', ')}`);
   const resting = restingLine(view.restingIn, view.name);
   if (resting !== null) lines.push(resting);
-  if (view.verdict) {
-    lines.push(
-      `verdict: ${view.verdict.status} by ${writerName(view.verdict.writer, identity)}${view.verdict.reason ? ` — ${view.verdict.reason}` : ''}`,
-    );
-  }
   if (view.ending) {
     const commit = view.ending.commit ? `, commit ${view.ending.commit}` : '';
     lines.push(
