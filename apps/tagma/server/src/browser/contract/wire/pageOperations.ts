@@ -1,13 +1,14 @@
 import { placedCursor } from '../../../platform/contract/wire/place.js';
 import { Schema } from 'effect';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
-import { limitOf } from '../../../platform/contract/wire/pageFamily.js';
+import { ceilingOf, limitOf } from '../../../platform/contract/wire/pageFamily.js';
 import { DEVICE_NAMES, Emulation, SCHEMES, Viewport } from './emulation.js';
 import { PageId, ProfileId, Ref } from './ids.js';
 import { Download, Glance, Page } from './page.js';
 import {
   CONSOLE_LEVELS,
   CONSOLE_ROWS,
+  CONSOLE_STACK_ROWS,
   ConsoleEntry,
   DOWNLOAD_ROWS,
   NETWORK_ROWS,
@@ -223,7 +224,7 @@ export const PAGE_OPERATIONS = {
     ...READING,
     meaning: 'Read the console messages and exceptions of a page, newest last, with the total held.',
     grammar:
-      'Capture follows the profile: `auto` on loopback and private-network pages, and on any page from its first console read on; `always`; `never` refuses `console-off`. `level` keeps that level and more severe ones; `match` keeps entries whose text or address holds it; `after` reads past a `seq` already seen. `dropped` counts entries the buffer let go.',
+      'Capture follows the profile: `auto` on loopback and private-network pages, and on any page from its first console read on; `always`; `never` refuses `console-off`. Text reads as the DevTools console shows it: objects from their previews, format specifiers applied; a message logged before capture began shows objects by class name. `level` keeps that level and more severe ones; `match` keeps entries whose text or address holds it; `after` reads past a `seq` already seen. `dropped` counts entries the buffer let go.',
     input: Schema.Struct({
       project,
       page,
@@ -231,6 +232,10 @@ export const PAGE_OPERATIONS = {
       match: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
       after: Schema.optional(Schema.Int),
       limit: limitOf(CONSOLE_ROWS),
+      seq: Schema.optional(Schema.Int).annotate({ description: 'Answer only the entry with this `seq`, whatever the filters.' }),
+      stack: Schema.optional(Schema.Boolean).annotate({
+        description: `Add each entry's stack; such a read answers ${CONSOLE_STACK_ROWS.defaultRows} rows by default and ${ceilingOf(CONSOLE_STACK_ROWS)} at most.`,
+      }),
     }),
     answer: arms({
       read: {

@@ -268,14 +268,25 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
           yield* drive.syncRuntime(state, attached);
           const floor = query.level === undefined ? CONSOLE_LEVELS.length - 1 : severity(query.level);
           const match = query.match;
-          const read = state.console.read({
-            limit: query.limit,
-            after: query.after,
-            keep: (entry) =>
-              severity(entry.level) <= floor && (match === undefined || entry.text.includes(match) || (entry.url ?? '').includes(match)),
-          });
+          const named = query.seq === undefined ? undefined : state.console.at(query.seq);
+          const read =
+            query.seq === undefined
+              ? state.console.read({
+                  limit: query.limit,
+                  after: query.after,
+                  keep: (entry) =>
+                    severity(entry.level) <= floor &&
+                    (match === undefined || entry.text.includes(match) || (entry.url ?? '').includes(match)),
+                })
+              : {
+                  entries: named === undefined ? [] : [{ seq: query.seq, entry: named }],
+                  total: named === undefined ? 0 : 1,
+                  dropped: state.console.dropped,
+                };
           return {
-            entries: read.entries.map(({ seq, entry }) => ({ ...entry, seq })),
+            entries: read.entries.map(({ seq, entry: { stack, ...entry } }) =>
+              query.stack ? { ...entry, seq, stack: stack ?? null } : { ...entry, seq },
+            ),
             total: read.total,
             dropped: read.dropped,
             capturing: attached.runtime !== null,

@@ -6,14 +6,22 @@ export type ConsoleLevel = (typeof CONSOLE_LEVELS)[number];
 
 export const ENTRY_CHARS = 2_000;
 
+export const STACK_FRAMES = 10;
+
 export const ConsoleEntry = Schema.Struct({
   seq: Schema.Int,
   level: Schema.Literals(CONSOLE_LEVELS),
   source: Schema.String,
+  kind: Schema.NullOr(Schema.String).annotate({
+    description: 'The console call that wrote it — log, table, trace, dir, startGroup, assert, count, timeEnd…; null for other sources.',
+  }),
   text: Schema.String,
   url: Schema.NullOr(Schema.String),
   line: Schema.NullOr(Schema.Int),
   at: Schema.String,
+  stack: Schema.optional(Schema.NullOr(Schema.String)).annotate({
+    description: `Present when asked: the stack of the error it carries, else of the call, ${STACK_FRAMES} frames at most; null when none was recorded.`,
+  }),
 });
 export type ConsoleEntry = typeof ConsoleEntry.Type;
 
@@ -32,14 +40,22 @@ export const NetworkEntry = Schema.Struct({
 });
 export type NetworkEntry = typeof NetworkEntry.Type;
 
-export const CONSOLE_ROWS = family('page-console', 1, 'json', { text: 420, json: 420 }, 50, () => ({
+const consoleSample = () => ({
   seq: 1_204,
   level: 'error',
   source: 'console',
+  kind: 'error',
   text: 'x'.repeat(240),
   url: `http://127.0.0.1:5173/${'x'.repeat(40)}.js`,
   line: 412,
   at: '2026-10-17T03:10:36.514Z',
+});
+
+export const CONSOLE_ROWS = family('page-console', 1, 'json', { text: 440, json: 440 }, 50, consoleSample);
+
+export const CONSOLE_STACK_ROWS = family('page-console-stacks', 1, 'json', { text: 1_400, json: 1_400 }, 10, () => ({
+  ...consoleSample(),
+  stack: Array.from({ length: STACK_FRAMES }, () => `at ${'x'.repeat(16)} (http://127.0.0.1:5173/${'x'.repeat(40)}.js:412:18)`).join('\n'),
 }));
 
 export const NETWORK_ROWS = family('page-network', 1, 'json', { text: 360, json: 360 }, 50, () => ({

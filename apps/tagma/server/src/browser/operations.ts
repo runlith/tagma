@@ -13,12 +13,21 @@ import { COOKIE_OPERATIONS as COOKIE, type CookieOperationId } from './contract/
 import { type ActionName, PAGE_OPERATIONS as PAGE, type PageOperationId } from './contract/wire/pageOperations.js';
 import { cookieSources, importCookies, type Origin } from './cookies.js';
 import { PROFILE_OPERATIONS as PROFILE, type ProfileOperationId } from './contract/wire/profileOperations.js';
-import { CONSOLE_ROWS, DOWNLOAD_ROWS, NETWORK_ROWS, PAGE_ROWS, PICTURE_BYTES, SNAPSHOT_LINES } from './contract/wire/rows.js';
+import {
+  CONSOLE_ROWS,
+  CONSOLE_STACK_ROWS,
+  DOWNLOAD_ROWS,
+  NETWORK_ROWS,
+  PAGE_ROWS,
+  PICTURE_BYTES,
+  SNAPSHOT_LINES,
+} from './contract/wire/rows.js';
 
 const PAGE_CEILING = ceilingOf(PAGE_ROWS);
 const DOWNLOAD_CEILING = ceilingOf(DOWNLOAD_ROWS);
 const SNAPSHOT_CEILING = ceilingOf(SNAPSHOT_LINES);
 const CONSOLE_CEILING = ceilingOf(CONSOLE_ROWS);
+const CONSOLE_STACK_CEILING = ceilingOf(CONSOLE_STACK_ROWS);
 const NETWORK_CEILING = ceilingOf(NETWORK_ROWS);
 
 const threadOf = (caller: Caller): string | null => (caller.actor.kind === 'thread' ? caller.actor.threadId : null);
@@ -266,7 +275,16 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         const { page, thread } = yield* pageOf(caller, input.page);
         const read = yield* (yield* Automation).console(
           page,
-          { level: input.level, match: input.match, after: input.after, limit: pageRows(input.limit, CONSOLE_ROWS, CONSOLE_CEILING) },
+          {
+            level: input.level,
+            match: input.match,
+            after: input.after,
+            limit: input.stack
+              ? pageRows(input.limit, CONSOLE_STACK_ROWS, CONSOLE_STACK_CEILING)
+              : pageRows(input.limit, CONSOLE_ROWS, CONSOLE_CEILING),
+            seq: input.seq,
+            stack: input.stack === true,
+          },
           thread,
         );
         return {

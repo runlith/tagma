@@ -54,6 +54,8 @@ export type ConsoleQuery = {
   readonly match: string | undefined;
   readonly after: number | undefined;
   readonly limit: number;
+  readonly seq: number | undefined;
+  readonly stack: boolean;
 };
 
 export type ConsoleRead = {

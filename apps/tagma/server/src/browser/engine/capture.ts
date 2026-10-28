@@ -1,8 +1,8 @@
 import { Ring } from '@runlith/cdp/ring';
 import { type CdpEvent, eventParams } from '@runlith/cdp/session';
-import type { Protocol } from 'devtools-protocol';
 import { Effect } from 'effect';
 import { ENTRY_CHARS, type ConsoleEntry, type ConsoleLevel, type NetworkEntry } from '../contract/wire/rows.js';
+import { errorStack, said, spoken, traced } from './console.js';
 import type { Attached, Paged } from './drive.js';
 
 const CONSOLE_BYTES = 512 * 1024;
@@ -11,7 +11,8 @@ const REQUESTS_HELD = 4_096;
 
 export type Request = { readonly seq: number; readonly started: number; readonly id: string; readonly target: string | undefined };
 
-const weighConsole = (entry: ConsoleEntry): number => 96 + entry.text.length + (entry.url?.length ?? 0);
+const weighConsole = (entry: ConsoleEntry): number =>
+  96 + entry.text.length + (entry.url?.length ?? 0) + (entry.kind?.length ?? 0) + (entry.stack?.length ?? 0);
 const weighNetwork = (entry: NetworkEntry): number => 128 + entry.url.length + (entry.failure?.length ?? 0);
 
 export const consoleRing = (): Ring<ConsoleEntry> => new Ring(CONSOLE_BYTES, weighConsole);
@@ -28,13 +29,6 @@ const CONSOLE_LEVEL: Readonly<Record<string, ConsoleLevel>> = {
   verbose: 'debug',
 };
 
-const said = (value: Protocol.Runtime.RemoteObject): string =>
-  value.value !== undefined
-    ? typeof value.value === 'string'
-      ? value.value
-      : JSON.stringify(value.value)
-    : (value.unserializableValue ?? value.description ?? value.type);
-
 const targetOf = (attached: Attached, child: string | undefined): string | undefined =>
   child === undefined ? undefined : (attached.children.get(child) ?? child);
 
@@ -50,25 +44,31 @@ export const capture = Effect.fnUntraced(function* (state: Paged, attached: Atta
     case 'Runtime.consoleAPICalled': {
       const called = yield* eventParams('Runtime.consoleAPICalled', event);
       const top = called.stackTrace?.callFrames[0];
+      const text = spoken(called.args);
       pushConsole(state, {
         level: CONSOLE_LEVEL[called.type] ?? 'log',
         source: 'console',
-        text: clip(called.args.map(said).join(' ')),
+        kind: called.type,
+        text: clip(called.type === 'assert' ? `Assertion failed: ${text}` : text),
         url: top?.url || null,
         line: top === undefined ? null : top.lineNumber + 1,
         at: new Date(called.timestamp).toISOString(),
+        stack: errorStack(called.args) ?? traced(called.stackTrace),
       });
       return;
     }
     case 'Runtime.exceptionThrown': {
       const { exceptionDetails: details, timestamp } = yield* eventParams('Runtime.exceptionThrown', event);
+      const thrown = details.exception;
       pushConsole(state, {
         level: 'error',
         source: 'exception',
-        text: clip(details.exception?.description ?? details.text),
+        kind: null,
+        text: clip(thrown === undefined ? details.text : `${details.text} ${said(thrown)}`),
         url: details.url ?? null,
         line: details.lineNumber + 1,
         at: new Date(timestamp).toISOString(),
+        stack: traced(details.stackTrace) ?? (thrown === undefined ? null : errorStack([thrown])),
       });
       return;
     }
@@ -77,10 +77,12 @@ export const capture = Effect.fnUntraced(function* (state: Paged, attached: Atta
       pushConsole(state, {
         level: CONSOLE_LEVEL[entry.level] ?? 'log',
         source: entry.source,
+        kind: null,
         text: clip(entry.text),
         url: entry.url ?? null,
         line: entry.lineNumber === undefined ? null : entry.lineNumber + 1,
         at: new Date(entry.timestamp).toISOString(),
+        stack: traced(entry.stackTrace),
       });
       return;
     }

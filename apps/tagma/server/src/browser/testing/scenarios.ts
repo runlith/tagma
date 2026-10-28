@@ -41,6 +41,18 @@ const PAGES: Readonly<Record<string, string>> = {
     </div><script>addEventListener('load', () => { scrollTo(0, 600); parent.postMessage('Child scroll ' + scrollY, '*'); });</script>`,
   '/console': `<!doctype html><title>Console</title><p id="state">loading</p>
     <script>console.error('boom from the page'); fetch('/data').then((r) => r.text()).then(() => { document.getElementById('state').textContent = 'loaded'; });</script>`,
+  '/console-shapes': `<!doctype html><title>Console shapes</title><button id="report" onclick="report()">Report</button><p id="state">waiting</p>
+    <script>function report() {
+      console.log('tagma: hello from the agent', { links: 382, nested: { deep: true } }, [1, 'two', null]);
+      console.log('%s has %d items at %f %cstyled %o', 'cart', 3.7, 1.5, 'color: red', { id: 7 });
+      console.log(new Map([['k', 1]]), new Set([2]), document.getElementById('report'), function shout(word) { return word; });
+      console.table([{ a: 1, b: 'x' }]);
+      console.trace('traced here');
+      console.error(new TypeError('bad input'));
+      console.log('%s!', '%s %s', 'Hello', 'World');
+      console.log('%f|%f', Infinity, -Infinity, function pick({ x }) { return x; }, { '[[PromiseState]]': 'pending', tab: 'a\\tb' });
+      setTimeout(() => { document.getElementById('state').textContent = 'reported'; throw new RangeError('thrown later'); });
+    }</script>`,
   '/confirm': `<!doctype html><title>Confirm</title>
     <button id="ask" onclick="document.getElementById('said').textContent = confirm('Proceed?') ? 'yes' : 'no'">Ask</button><p id="said">none</p>`,
   '/inner': `<!doctype html><title>Inner</title>
@@ -341,6 +353,40 @@ export const engineScenarios = (input: EngineHost): void => {
         if (network.status !== 'read') return;
         expect(network.total).toBe(1);
         expect(network.requests[0]?.status).toBe(200);
+      }),
+    );
+
+    it.effect('console reads render previews, format specifiers, call kinds and stacks as DevTools shows them', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/console-shapes');
+        const read = (input: { readonly after?: number; readonly seq?: number; readonly stack?: boolean }) =>
+          calling(PAGE.read_page_console.body.execute({ page, ...input }, undefined, agent));
+        const before = (yield* read({})).entries.at(-1)?.seq ?? 0;
+        yield* act(page, { action: 'click', ref: refIn(yield* snapshot(page), /button "Report"/) });
+        yield* calling(PAGE.wait_for_page.body.execute({ page, until: 'text', value: 'reported', timeoutMs: 10_000 }, undefined, agent));
+        const plain = yield* read({ after: before });
+        expect(plain.entries.map(({ kind, text }) => [kind, text])).toEqual([
+          ['log', "tagma: hello from the agent {links: 382, nested: {…}} (3) [1, 'two', null]"],
+          ['log', 'cart has 3 items at 1.5 styled {id: 7}'],
+          ['log', "Map(1) {'k' => 1} Set(1) {2} button#report ƒ shout(word)"],
+          ['table', "[{a: 1, b: 'x'}]"],
+          ['trace', 'traced here'],
+          ['error', 'TypeError: bad input'],
+          ['log', 'Hello World!'],
+          ['log', "Infinity|-Infinity ƒ pick({ x }) {[[PromiseState]]: 'pending', tab: 'a\\tb'}"],
+          [null, 'Uncaught RangeError: thrown later'],
+        ]);
+        expect(plain.entries.every((entry) => entry.stack === undefined)).toBe(true);
+        const one = yield* read({ seq: before + 2 });
+        expect([one.total, one.entries.map((entry) => entry.text)]).toEqual([1, [plain.entries[1]!.text]]);
+        const stacked = yield* read({ after: before + 4, stack: true });
+        expect(stacked.entries.map((entry) => entry.stack?.split('\n')[0])).toEqual([
+          `at report (${at('/console-shapes')}:7:15)`,
+          `at report (${at('/console-shapes')}:8:21)`,
+          `at report (${at('/console-shapes')}:9:15)`,
+          `at report (${at('/console-shapes')}:10:15)`,
+          expect.stringMatching(new RegExp(`^at <anonymous> \\(${at('/console-shapes')}:11:\\d+\\)$`)),
+        ]);
       }),
     );
 

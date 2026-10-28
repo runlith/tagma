@@ -12,4 +12,5 @@ test('the ring keeps the newest entries within its byte limit, counts what it le
   const capped = ring.read({ limit: 1 });
   expect(capped.entries.map((held) => held.entry)).toEqual(['dd']);
   expect(capped.total).toBe(2);
+  expect([ring.at(2), ring.at(3), ring.at(4), ring.at(5)]).toEqual([undefined, 'cccc', 'dd', undefined]);
 });

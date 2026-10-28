@@ -46,6 +46,15 @@ export class Ring<T> {
     }
   }
 
+  get dropped(): number {
+    return this.#dropped;
+  }
+
+  at(seq: number): T | undefined {
+    const first = this.#held[this.#start];
+    return first == null ? undefined : (this.#held[this.#start + seq - first.seq]?.entry ?? undefined);
+  }
+
   read(options: { readonly limit: number; readonly after?: number; readonly keep?: (entry: T) => boolean }): RingRead<T> {
     const keep = options.keep ?? (() => true);
     const after = options.after ?? 0;
