@@ -146,7 +146,15 @@ export const REGISTRY_OPERATIONS = {
     place: 'machine',
     ...act('Move this project’s graph to another storage?', 'Move', 'Moved a project’s storage'),
     meaning: 'Move a project’s block tree to another storage mode.',
-    input: Schema.Struct({ ref, mode: Schema.Literals(STORAGE_MODES) }),
+    grammar:
+      'To stealth, every block goes into the stealth tree, a team project’s stealth blocks under the parents they stand under. To team, every block goes into `.tagma` except the subtrees `keep` names: they stay stealth, with the stealth tree’s history and graph remote, and a team block that depends on one of them refuses the move as `stealth-dependency` naming both.',
+    input: Schema.Struct({
+      ref,
+      mode: Schema.Literals(STORAGE_MODES),
+      keep: Schema.optional(Schema.Array(Schema.String.check(Schema.isMinLength(1)))).annotate({
+        description: 'With mode team: the blocks whose subtrees stay stealth, by name.',
+      }),
+    }),
     answer: arms({ ok: { project: projectSchema, treeRoot: Schema.String } }),
     subjects: noSubjects,
     raises: (_input: unknown, raised?: readonly Raised[]) => raised ?? [],
@@ -159,6 +167,12 @@ export const REGISTRY_OPERATIONS = {
       'detached-checkout',
       'tree-missing',
       'target-holds-tree',
+      'storage-keep',
+      'stealth-dependency',
+      'stealth-supersede',
+      'stealth-module',
+      'bad-name',
+      'ambiguous-name',
     ],
   }),
 

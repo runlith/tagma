@@ -134,6 +134,16 @@ export function forgetRegistry(synced: Map<string, RegistryStamp>, context: Grap
   });
 }
 
+const headOf = Effect.fnUntraced(function* (git: Git['Service'], treeRoot: string) {
+  const read = yield* Effect.result(runGit(git, 'head', ['-C', treeRoot, 'rev-parse', 'HEAD']));
+  if (read._tag === 'Success') return read.success;
+  yield* Effect.logWarning('the head of the tree this store moved to could not be read, so its stamp is cleared', {
+    tree: treeRoot,
+    reason: read.failure.message,
+  });
+  return null;
+});
+
 export const travelMirror = Effect.fnUntraced(function* (
   git: Git['Service'],
   machine: MachineStore['Service'],
@@ -141,7 +151,7 @@ export const travelMirror = Effect.fnUntraced(function* (
   synced: Map<string, RegistryStamp>,
   from: string,
   to: string,
-  treeRoot: string,
+  treeRoot: string | null,
 ) {
   if (!existsSync(from)) return;
   const release = (path: string, reason: string) =>
@@ -164,14 +174,7 @@ export const travelMirror = Effect.fnUntraced(function* (
     yield* db.run(sql`VACUUM INTO ${to}`);
   }).pipe(Effect.scoped, Effect.andThen(release(from, `the store moves to ${to}`)));
   for (const suffix of MIRROR_FILES) rmSync(`${from}${suffix}`, { recursive: true, force: true });
-  const read = yield* Effect.result(runGit(git, 'head', ['-C', treeRoot, 'rev-parse', 'HEAD']));
-  if (read._tag === 'Failure') {
-    yield* Effect.logWarning('the head of the tree this store moved to could not be read, so its stamp is cleared', {
-      tree: treeRoot,
-      reason: read.failure.message,
-    });
-  }
-  const head = read._tag === 'Success' ? read.success : null;
+  const head = treeRoot === null ? null : yield* headOf(git, treeRoot);
   yield* Effect.gen(function* () {
     const runtime = ManagedRuntime.make(mirrorStoreLayer(to, migrations).pipe(Layer.provide(Layer.succeed(MachineStore, machine))));
     yield* Effect.addFinalizer(() => Effect.promise(() => runtime.dispose()));

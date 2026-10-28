@@ -231,6 +231,51 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
     }),
   );
 
+  it.effect('a stealth graph moves to team keeping the named subtrees stealth, and back to stealth losing no block', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.realPath(yield* world.directory('keeping'));
+      yield* suiteGit(root, 'init', '-q', '-b', 'main');
+      const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'stealth' });
+      const project = (born.body as { project: { id: number } }).project.id;
+      yield* projectLeaving(world, project);
+      const created = (input: Record<string, unknown>) =>
+        Effect.map(world.op('create_block', { project, ...input }), (answer) => (answer.body as Written).block.name);
+      const roadmap = yield* created({ title: 'Roadmap' });
+      const deals = yield* created({ title: 'Deals' });
+      const terms = yield* created({ title: 'Acme terms', parentId: deals });
+      const pointer = yield* created({ title: 'Pointer', body: `see [[${deals}]]` });
+      const move = (mode: string, keep?: readonly string[]) => world.op('set_project_storage', { ref: String(project), mode, keep });
+
+      const refused = yield* move('team', [deals]);
+      expect((refused.body as { code: string; reason: string }).code).toBe('stealth-dependency');
+      expect((refused.body as { reason: string }).reason).toContain(pointer);
+      expect((yield* world.op('update_block', { project, blockId: pointer, body: 'kept apart' })).status).toBe(200);
+      expect((yield* move('team', [deals])).status).toBe(200);
+      const published = yield* suiteGit(root, 'status', '--porcelain', '--untracked-files=all', '--', '.tagma');
+      expect([
+        published.includes('roadmap'),
+        published.includes('pointer'),
+        published.includes('deals'),
+        published.includes('acme'),
+      ]).toEqual([true, true, false, false]);
+      const stealthOf = (name: string) =>
+        Effect.map(world.op('read_block', { project, blockIds: [name] }), (answer) =>
+          JSON.stringify(answer.body).includes('"stealth":true'),
+        );
+      expect([yield* stealthOf(roadmap), yield* stealthOf(deals), yield* stealthOf(terms)]).toEqual([false, true, true]);
+
+      expect((yield* move('stealth')).status).toBe(200);
+      expect(yield* suiteGit(root, 'status', '--porcelain', '--untracked-files=all', '--', '.tagma')).toBe('');
+      const titles = yield* world.op('query_blocks', { project, sort: { by: 'created', order: 'asc' } });
+      expect((titles.body as { blocks: readonly { title: string }[] }).blocks.map((row) => row.title)).toEqual(
+        expect.arrayContaining(['Roadmap', 'Deals', 'Acme terms', 'Pointer']),
+      );
+      expect([yield* stealthOf(deals), yield* stealthOf(terms)]).toEqual([false, false]);
+    }),
+  );
+
   it.effect('a team parent removed by a commit made elsewhere leaves its stealth child standing, and Tagma writes no file for it', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;

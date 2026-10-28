@@ -78,18 +78,17 @@ export const legacyHome = (appHome: string): string => {
 
 export type StealthLayout = Extract<StorageLayout, { readonly mode: 'stealth' }>;
 
+export type LayerPlace = { readonly treeRoot: string; readonly gitDir: string };
+
+export const layerAt = (place: { readonly projectId: number; readonly appHome: string; readonly worktree: string }): LayerPlace => {
+  const home = graphHome(place.appHome, place.projectId);
+  return { treeRoot: join(home, 'layers', stealthTreeName(place.worktree)), gitDir: join(home, 'layer.git') };
+};
+
 export const stealthBeside = (
   team: Extract<StorageLayout, { readonly mode: 'team' }>,
   place: { readonly projectId: number; readonly appHome: string; readonly worktree: string },
-): StealthLayout => {
-  const home = graphHome(place.appHome, place.projectId);
-  return {
-    mode: 'stealth',
-    treeRoot: join(home, 'layers', stealthTreeName(place.worktree)),
-    gitDir: join(home, 'layer.git'),
-    mirrorPath: team.mirrorPath,
-  };
-};
+): StealthLayout => ({ mode: 'stealth', ...layerAt(place), mirrorPath: team.mirrorPath });
 
 export function resolveStorageLayout(input: StorageLayoutInput): Effect.Effect<StorageLayout, StorageLayoutInvalid> {
   if (input.worktree === undefined) {

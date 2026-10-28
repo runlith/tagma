@@ -103,6 +103,7 @@ export const REFUSAL_WORDS = {
   'source-required': 'Source required',
   'status-operation': 'Status set by its own action',
   'storage-unavailable': 'Storage not available here',
+  'storage-keep': 'Subtree cannot stay stealth',
   'storage-unchanged': 'Already stored that way',
   'successor-superseded': 'Replacement was itself replaced',
   superseded: 'Replaced by another block',

@@ -347,13 +347,29 @@ export type FreshnessInit = {
   readonly scope: Scope.Scope;
 };
 
+export type KeptRefusal =
+  | 'stealth-dependency'
+  | 'stealth-supersede'
+  | 'stealth-module'
+  | 'storage-keep'
+  | 'bad-name'
+  | 'not-found'
+  | 'ambiguous-name';
+
+export type StorageMove = { readonly projectId: number; readonly mode: StorageMode; readonly keep?: readonly string[] };
+
 export type ServingMoveBindings = {
   readonly releaseProject: (projectId: number) => Effect.Effect<void>;
   readonly resolveFresh: (projectId: number) => Effect.Effect<void, GateRefusal<OpenRefusal>>;
+  readonly kept: (
+    projectId: number,
+    names: readonly string[],
+  ) => Effect.Effect<ReadonlySet<string>, GateRefusal<OpenRefusal | KeptRefusal>>;
 };
 
 export type StorageMoveRefusal =
   | OpenRefusal
+  | KeptRefusal
   | 'not-found'
   | 'storage-unchanged'
   | 'checkout-holds-tree'
@@ -399,10 +415,9 @@ export class ServedGraphs extends Context.Service<
     birth(projectId: number): Effect.Effect<void, GateRefusal<OpenRefusal>>;
     branches(projectId: number): Effect.Effect<readonly ProjectBranch[], GateRefusal<'not-found' | 'graph-pool'>>;
     dispose(): Effect.Effect<void>;
-    moveProjectStorage(input: {
-      projectId: number;
-      mode: StorageMode;
-    }): Effect.Effect<{ readonly row: ProjectPolicyRow; readonly treeRoot: string }, GateRefusal<StorageMoveRefusal>>;
+    moveProjectStorage(
+      input: StorageMove,
+    ): Effect.Effect<{ readonly row: ProjectPolicyRow; readonly treeRoot: string }, GateRefusal<StorageMoveRefusal>>;
     release(place: CopyPlace): Effect.Effect<void>;
   } & ForeignBlocks
 >()('tagma/graph/ServedGraphs') {}
@@ -445,7 +460,7 @@ export class MirrorBuilder extends Context.Service<
     readonly syncRegistry: (context: GraphContext) => Effect.Effect<void, StoreFailure>;
     readonly registrySynced: (context: GraphContext) => Effect.Effect<boolean>;
     readonly forgetRegistry: (context: GraphContext) => Effect.Effect<void>;
-    readonly travelMirror: (from: string, to: string, treeRoot: string) => Effect.Effect<void, StoreOpenFailure>;
+    readonly travelMirror: (from: string, to: string, treeRoot: string | null) => Effect.Effect<void, StoreOpenFailure>;
   }
 >()('tagma/graph/MirrorBuilder') {}
 
@@ -460,7 +475,7 @@ export class ServingSwitch extends Context.Service<
     }) => Effect.Effect<ServedPlace, GateRefusal<CallerRefusal>>;
     readonly branches: (projectId: number) => Effect.Effect<readonly ProjectBranch[], GateRefusal<'not-found' | 'graph-pool'>>;
     readonly move: (
-      input: { readonly projectId: number; readonly mode: StorageMode },
+      input: StorageMove,
       bindings: ServingMoveBindings,
     ) => Effect.Effect<{ readonly row: ProjectPolicyRow; readonly treeRoot: string }, GateRefusal<StorageMoveRefusal>>;
   }

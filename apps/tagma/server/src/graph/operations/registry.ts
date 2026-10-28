@@ -195,7 +195,7 @@ export const REGISTRY_PAIRS = {
             'run the move against the tagma server, which holds the graphs it would move',
           ]);
         }
-        const moved = yield* pool.moveProjectStorage({ projectId: row.id, mode: input.mode });
+        const moved = yield* pool.moveProjectStorage({ projectId: row.id, mode: input.mode, keep: input.keep });
         return { status: 'ok' as const, project: yield* wiredOne(moved.row), treeRoot: moved.treeRoot };
       }),
     }),

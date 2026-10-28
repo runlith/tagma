@@ -11,7 +11,7 @@ import { Git } from '@runlith/git/Git';
 import { type GitWorktree, checkoutAt, checkoutsOf } from '../../workspace/checkouts/git.js';
 import { MirrorBuilder, ProjectPolicy, ServingSwitch } from '../contract/service/serving.js';
 import type { ProjectBranch } from '../contract/wire/rows.js';
-import { resolveStorageLayout, storageHomes } from '../storage/layout.js';
+import { layerAt, resolveStorageLayout, storageHomes } from '../storage/layout.js';
 import { moveStorage, treeContent } from '../storage/move.js';
 import { refusal, refused } from './refusal.js';
 import { canon } from '../tree/shadow.js';
@@ -136,21 +136,35 @@ export const makeServingSwitch = Effect.gen(function* () {
         const homes = storageHomes(machineStore.path);
         const layoutOf = (mode: StorageMode, worktree: string) =>
           refused(resolveStorageLayout({ mode, projectId: row.id, ...homes, worktree }));
+        const layerOf = (worktree: string) => layerAt({ projectId: row.id, ...homes, worktree });
+        const keep = input.keep ?? [];
+        if (keep.length > 0 && input.mode !== 'team') {
+          return yield* new GateRefusal('storage-keep', 'subtrees stay stealth only when a stealth graph moves to team', [
+            'drop keep — a move to stealth takes every block into the stealth tree',
+          ]);
+        }
         const from = yield* layoutOf(row.storage, row.rootPath);
         const to = yield* layoutOf(input.mode, row.rootPath);
+        const layer = layerOf(row.rootPath);
         const canonical = yield* canon(row.rootPath);
         for (const other of yield* standingCheckouts(row)) {
           if (other.path === canonical) continue;
-          const held = yield* layoutOf(row.storage, other.path);
-          if ((yield* refused(treeContent(held.treeRoot))).length === 0) continue;
-          return yield* new GateRefusal('checkout-holds-tree', `${other.path} holds its own tree at ${held.treeRoot}`, [
-            `merge branch "${other.branch}" into the canonical checkout, then drop that tree`,
-            'move the project once every checkout but the canonical one is empty',
-          ]);
+          const trees = [(yield* layoutOf(row.storage, other.path)).treeRoot];
+          if (row.storage === 'team') trees.push(layerOf(other.path).treeRoot);
+          for (const tree of trees) {
+            if ((yield* refused(treeContent(tree))).length === 0) continue;
+            return yield* new GateRefusal('checkout-holds-tree', `${other.path} holds its own tree at ${tree}`, [
+              `merge branch "${other.branch}" into the canonical checkout, then drop that tree`,
+              'move the project once every checkout but the canonical one is empty',
+            ]);
+          }
         }
+        const kept = keep.length === 0 ? new Set<string>() : yield* bindings.kept(row.id, keep);
         yield* bindings.releaseProject(row.id);
-        yield* refused(moveStorage({ git, from, to, checkout: row.rootPath, origin: row.graphRemote }));
-        yield* refused(builder.travelMirror(from.mirrorPath, to.mirrorPath, to.treeRoot));
+        const reshaped = yield* refused(
+          moveStorage({ git, from, to, checkout: row.rootPath, origin: row.graphRemote, layers: { layer, kept } }),
+        );
+        yield* refused(builder.travelMirror(from.mirrorPath, to.mirrorPath, reshaped ? null : to.treeRoot));
         const moved = yield* refused(policy.setStorage({ id: row.id, mode: input.mode }));
         yield* bindings.releaseProject(row.id);
         yield* bindings.resolveFresh(row.id);

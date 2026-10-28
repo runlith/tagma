@@ -2,10 +2,10 @@ import { Effect } from 'effect';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
-import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { GateRefusal, type Unblock } from '../../platform/contract/wire/refusal.js';
 import { pagesOf } from '../../platform/store/binds.js';
 import type { ActEntry, BlockNames } from '../contract/service/acts.js';
-import { ServedStorage } from '../contract/service/serving.js';
+import { type KeptRefusal, ServedStorage } from '../contract/service/serving.js';
 import type { Tags } from '../contract/service/vocabulary.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
 import { blockName } from '../contract/wire/references.js';
@@ -63,18 +63,21 @@ const holderTags = (table: TagTable): readonly string[] =>
       : [],
   );
 
-const dependency = (crossings: readonly Crossing[]) =>
+const dependency = (
+  crossings: readonly Crossing[],
+  unblock: Unblock = [
+    `set_block_storage ${crossings[0]?.team ?? '<team block>'} stealth — the dependent block goes stealth too`,
+    `set_block_storage ${crossings[0]?.stealth ?? '<stealth block>'} team — publish what it depends on`,
+    'drop the dependency — unlink the edge, edit the reference or the field — in the same apply_batch as the move',
+  ],
+) =>
   new GateRefusal(
     'stealth-dependency',
     `a team block would depend on a stealth block, and a clone of the repository would read it broken: ${crossings
       .slice(0, NAMED)
       .map((one) => `${one.team} → ${one.stealth} (${one.via})`)
       .join('; ')}${crossings.length > NAMED ? `; +${crossings.length - NAMED}` : ''}`,
-    [
-      `set_block_storage ${crossings[0]?.team ?? '<team block>'} stealth — the dependent block goes stealth too`,
-      `set_block_storage ${crossings[0]?.stealth ?? '<stealth block>'} team — publish what it depends on`,
-      'drop the dependency — unlink the edge, edit the reference or the field — in the same apply_batch as the move',
-    ],
+    unblock,
   );
 
 export const judgeLayers = Effect.fnUntraced(function* (
@@ -123,6 +126,41 @@ export const judgeLayers = Effect.fnUntraced(function* (
   }
 });
 
+export const judgeKept = Effect.fnUntraced(function* (
+  db: StoreDb<'graph'>,
+  tags: Tags['Service'],
+  names: BlockNames['Service'],
+  projectId: number,
+  kept: readonly string[],
+): Effect.fn.Return<ReadonlySet<string>, StoreFailure | GateRefusal<KeptRefusal>> {
+  const ids: number[] = [];
+  for (const name of kept) ids.push(yield* names.idOfName(name));
+  if (ids.length === 0) return new Set();
+  const subtree = yield* subtreeOf(db, ids);
+  const members: Row[] = [];
+  for (const page of pages([...subtree.keys()])) members.push(...(yield* db.select().from(block).where(inArray(block.id, page))));
+  const outside = members.find((row) => row.projectId !== projectId || row.parentId === null);
+  if (outside !== undefined) {
+    return yield* new GateRefusal(
+      'storage-keep',
+      outside.parentId === null
+        ? `${blockName(outside.uuid)} is the project root, which moves with the project`
+        : `${blockName(outside.uuid)} belongs to another project`,
+      ['name the subtrees under the root of this project that stay stealth'],
+    );
+  }
+  const table = yield* tags.of(projectId);
+  yield* judgeStealth(db, table, members);
+  const crossings = yield* incoming(db, table, names, projectId, ids);
+  if (crossings.length > 0) {
+    return yield* dependency(crossings, [
+      `name ${crossings[0]?.team ?? 'the dependent block'} in keep too — it stays stealth beside what it depends on`,
+      'drop the dependency — unlink the edge, edit the reference or the field — then move',
+    ]);
+  }
+  return new Set(subtree.values());
+});
+
 const movedInto = (recorded: readonly ActEntry[], rows: readonly Row[]): readonly number[] => {
   const hidden = new Set(rows.filter((row) => row.stealth).map((row) => row.id));
   return recorded.flatMap((entry) => {
@@ -140,14 +178,16 @@ const judgeStealth = Effect.fnUntraced(function* (db: StoreDb<'graph'>, table: T
       `set_block_storage ${blockName(module.uuid)} team — the module map judges every clone and CI alike`,
     ]);
   }
-  for (const page of pages(rows.map((row) => row.id))) {
-    const replaced = yield* db
-      .select({ from: block.uuid, to: parent.uuid })
+  const inside = new Set(rows.map((row) => row.id));
+  for (const page of pages([...inside])) {
+    const replaced = (yield* db
+      .select({ target: parent.id, from: block.uuid, to: parent.uuid })
       .from(edge)
       .innerJoin(block, eq(block.id, edge.fromId))
       .innerJoin(parent, eq(parent.id, edge.toId))
-      .where(and(inArray(edge.fromId, page), eq(edge.kind, 'supersedes'), eq(parent.stealth, false)))
-      .get();
+      .where(and(inArray(edge.fromId, page), eq(edge.kind, 'supersedes'), eq(parent.stealth, false)))).find(
+      (one) => !inside.has(one.target),
+    );
     if (replaced !== undefined) {
       return yield* new GateRefusal(
         'stealth-supersede',
@@ -229,21 +269,13 @@ const outgoing = Effect.fnUntraced(function* (
   return crossings;
 });
 
-const incoming = Effect.fnUntraced(function* (
-  db: StoreDb<'graph'>,
-  table: TagTable,
-  names: BlockNames['Service'],
-  projectId: number,
-  moved: readonly number[],
-) {
-  const crossings: Crossing[] = [];
-  if (moved.length === 0) return crossings;
+const subtreeOf = Effect.fnUntraced(function* (db: StoreDb<'graph'>, roots: readonly number[]) {
   const subtree = new Map<number, string>();
-  for (const page of pages(moved)) {
+  for (const page of pages(roots)) {
     for (const one of yield* db.select({ id: block.id, uuid: block.uuid }).from(block).where(inArray(block.id, page)))
       subtree.set(one.id, one.uuid);
   }
-  for (let frontier = [...moved]; frontier.length > 0;) {
+  for (let frontier = [...roots]; frontier.length > 0;) {
     const next: number[] = [];
     for (const page of pages(frontier)) {
       for (const child of yield* db
@@ -258,22 +290,56 @@ const incoming = Effect.fnUntraced(function* (
     }
     frontier = next;
   }
+  return subtree;
+});
+
+const incoming = Effect.fnUntraced(function* (
+  db: StoreDb<'graph'>,
+  table: TagTable,
+  names: BlockNames['Service'],
+  projectId: number,
+  moved: readonly number[],
+) {
+  const crossings: Crossing[] = [];
+  if (moved.length === 0) return crossings;
+  const subtree = yield* subtreeOf(db, moved);
   for (const page of pages([...subtree.keys()])) {
     for (const one of yield* db
-      .select({ team: block.uuid, stealth: parent.uuid, kind: edge.kind })
+      .select({ from: block.id, team: block.uuid, stealth: parent.uuid, kind: edge.kind })
       .from(edge)
       .innerJoin(block, eq(block.id, edge.fromId))
       .innerJoin(parent, eq(parent.id, edge.toId))
       .where(and(inArray(edge.toId, page), eq(block.stealth, false), isNull(block.deletedAt)))) {
-      crossings.push({ team: blockName(one.team), stealth: blockName(one.stealth), via: `edge ${one.kind}` });
+      if (!subtree.has(one.from)) crossings.push({ team: blockName(one.team), stealth: blockName(one.stealth), via: `edge ${one.kind}` });
     }
     for (const one of yield* db
-      .select({ team: block.uuid, stealth: parent.uuid })
+      .select({ from: block.id, team: block.uuid, stealth: parent.uuid })
       .from(ref)
       .innerJoin(block, eq(block.id, ref.fromId))
       .innerJoin(parent, eq(parent.id, ref.toId))
       .where(and(inArray(ref.toId, page), eq(block.stealth, false), isNull(block.deletedAt)))) {
-      crossings.push({ team: blockName(one.team), stealth: blockName(one.stealth), via: 'reference in the body' });
+      if (!subtree.has(one.from))
+        crossings.push({ team: blockName(one.team), stealth: blockName(one.stealth), via: 'reference in the body' });
+    }
+  }
+  const declared = new Set(
+    (yield* db
+      .select({ id: block.id, fields: block.fields })
+      .from(block)
+      .innerJoin(blockTag, eq(blockTag.blockId, block.id))
+      .where(and(eq(block.projectId, projectId), eq(blockTag.tag, TAG_DECLARATION.id), isNull(block.deletedAt)))).flatMap((row) =>
+      subtree.has(row.id) && typeof row.fields.id === 'string' ? [row.fields.id] : [],
+    ),
+  );
+  if (declared.size > 0) {
+    for (const one of yield* db
+      .selectDistinct({ id: block.id, uuid: block.uuid, tag: blockTag.tag })
+      .from(block)
+      .innerJoin(blockTag, eq(blockTag.blockId, block.id))
+      .where(
+        and(eq(block.projectId, projectId), eq(block.stealth, false), isNull(block.deletedAt), inArray(blockTag.tag, [...declared])),
+      )) {
+      if (!subtree.has(one.id)) crossings.push({ team: blockName(one.uuid), stealth: `#${one.tag}`, via: 'its tag is declared stealth' });
     }
   }
   const holders = holderTags(table);
@@ -284,7 +350,7 @@ const incoming = Effect.fnUntraced(function* (
     .innerJoin(blockTag, eq(blockTag.blockId, block.id))
     .where(
       and(eq(block.projectId, projectId), eq(block.stealth, false), isNull(block.deletedAt), inArray(blockTag.tag, [...holders])),
-    )).map((one) => one.row);
+    )).flatMap((one) => (subtree.has(one.row.id) ? [] : [one.row]));
   const named = yield* fieldNames(table, team);
   if (named.length === 0) return crossings;
   const found = yield* names.idsOfNames(named.map((one) => one.name));

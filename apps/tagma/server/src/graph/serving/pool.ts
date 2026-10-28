@@ -14,6 +14,8 @@ import { meta } from '../store/tables.js';
 import { canon, ShadowGit } from '../tree/shadow.js';
 import { resolveStorageLayout, type StorageLayout, storageHomes } from '../storage/layout.js';
 import { actingTrees, closedTrees, heldFlush, servedStealth, sharedLayer } from './stealth.js';
+import { judgeKept } from '../blocks/layerLaw.js';
+import { BlockNames } from '../contract/service/acts.js';
 import type { ProjectPolicyRow } from '../contract/wire/serving.js';
 import { GateRefusal, refusalBody, type OpenRefusal } from '../../platform/contract/wire/refusal.js';
 import { Git } from '@runlith/git/Git';
@@ -665,6 +667,14 @@ export const makeGraphPool = Effect.gen(function* () {
           resolveFresh: Effect.fnUntraced(function* (projectId: number) {
             const served = yield* within(projectId, null);
             yield* served.settled(true);
+          }),
+          kept: Effect.fnUntraced(function* (projectId: number, names: readonly string[]) {
+            const served = yield* within(projectId, null);
+            yield* served.settled(true);
+            const judged = Effect.gen(function* () {
+              return yield* judgeKept((yield* GraphStore).db, yield* Tags, yield* BlockNames, projectId, names);
+            });
+            return yield* refused(Effect.provide(judged, served.context));
           }),
         });
       },
