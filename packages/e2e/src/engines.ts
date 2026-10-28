@@ -49,6 +49,7 @@ const launch = async (lane: Exclude<Lane, 'electron'>, home: string): Promise<Br
   const context = await (lane === 'chromium' ? chromium : webkit).launchPersistentContext(join(home, 'profile'), {
     executablePath: lane === 'chromium' ? cachedExecutable() : undefined,
     headless: true,
+    ignoreDefaultArgs: lane === 'chromium' ? ['--hide-scrollbars'] : undefined,
     timeout: 0,
     args: lane === 'chromium' ? ['--use-mock-keychain', '--password-store=basic'] : [],
     env: { ...process.env, BREAKPAD_DUMP_LOCATION: join(home, 'crashes') },
