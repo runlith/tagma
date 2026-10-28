@@ -2,8 +2,10 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join } from 'node:path';
-import { Effect, FileSystem, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
 import { graphHome, stealthTreeName } from '../../../graph/storage/layout.js';
+import { Coverage } from '../../../workspace/contract/service/roots.js';
+import type { CoveredRepositoriesAnswer } from '../../../workspace/contract/wire/repositories.js';
 import { doorFixture, DoorFixture, projectLeaving } from '../doorFixture.js';
 import { suiteGit } from '../suiteGit.js';
 
@@ -152,6 +154,81 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const hidden = yield* suiteGit(tree, 'ls-tree', '-r', '--name-only', 'HEAD');
       expect(hidden).toContain('/deals.md');
       expect(hidden).toContain('/pricing.md');
+    }),
+  );
+
+  it.effect('a stealth block written in a worktree reaches main with merge_worktree of its branch, not before', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.realPath(yield* world.directory('branching'));
+      yield* suiteGit(root, 'init', '-q', '-b', 'main');
+      yield* files.writeFileString(join(root, 'seed.txt'), 'seed\n');
+      yield* suiteGit(root, 'add', '-A');
+      yield* suiteGit(root, 'commit', '-qm', 'seed');
+      const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
+      const project = (born.body as { project: { id: number } }).project.id;
+      yield* projectLeaving(world, project);
+      yield* Context.get(world.runtime.workspace, Coverage).cover(project);
+      const at = (cwd: string) => `project=${project}&cwd=${encodeURIComponent(cwd)}`;
+      expect((yield* world.op('sync_graph', {}, at(root))).status).toBe(200);
+      const repository = ((yield* world.op('read_repositories', {}, at(root))).body as CoveredRepositoriesAnswer).repositories[0]!.binding;
+      const destination = join(yield* files.realPath(yield* world.directory('worktrees')), 'side');
+      const operationId = world.uniqueName();
+      const mode = { kind: 'new-branch', branch: 'side', start: 'HEAD' };
+      expect((yield* world.op('prepare_worktree', { operationId, repository, destination, mode }, at(root))).status).toBe(200);
+      const created = yield* world.op('create_worktree', { operationId }, at(root));
+      expect(created.status).toBe(200);
+      const rootId = (created.body as { operation: { rootId: string } }).operation.rootId;
+
+      const plan = yield* world.op('create_block', { title: 'Launch plan', storage: 'stealth' }, at(destination));
+      expect(plan.status).toBe(200);
+      const name = (plan.body as Written).block.name;
+      const seen = (cwd: string) =>
+        Effect.map(world.op('search_blocks', { query: name }, at(cwd)), (answer) => (answer.body as { total: number }).total);
+      yield* files.writeFileString(join(destination, 'launch.txt'), 'launch\n');
+      yield* suiteGit(destination, 'add', '-A');
+      yield* suiteGit(destination, 'commit', '-qm', 'launch');
+      expect(yield* seen(destination)).toBe(1);
+      expect(yield* seen(root)).toBe(0);
+
+      expect((yield* world.op('merge_worktree', { rootId }, at(root))).status).toBe(200);
+      expect(yield* seen(root)).toBe(1);
+      expect(yield* suiteGit(root, 'ls-tree', '-r', '--name-only', 'HEAD')).not.toContain('launch-plan');
+    }),
+  );
+
+  it.effect('a team parent removed by a commit made elsewhere leaves its stealth child standing, and Tagma writes no file for it', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.realPath(yield* world.directory('displaced'));
+      yield* suiteGit(root, 'init', '-q', '-b', 'main');
+      const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
+      const project = (born.body as { project: { id: number } }).project.id;
+      yield* projectLeaving(world, project);
+      const partner = ((yield* world.op('create_block', { project, title: 'Partner' })).body as Written).block.name;
+      expect((yield* world.op('sync_graph', { project })).status).toBe(200);
+      const terms = yield* world.op('create_block', { project, title: 'Partner terms', parentId: partner, storage: 'stealth' });
+      const child = (terms.body as Written).block.name;
+      yield* world.runtime.pool.releaseProject(project);
+      const seen = (name = child) =>
+        Effect.map(world.op('search_blocks', { project, query: name }), (answer) => (answer.body as { total: number }).total);
+      expect(yield* seen()).toBe(1);
+      const tree = join(graphHome(world.dataHome, project), 'layers', stealthTreeName(root));
+      const layer = () =>
+        Effect.all([suiteGit(tree, 'rev-parse', 'HEAD'), suiteGit(tree, 'status', '--porcelain', '--untracked-files=all')]);
+      const before = yield* layer();
+
+      const file = (yield* suiteGit(root, 'ls-files', '--', '.tagma')).split('\n').find((path) => path.endsWith('/partner.md'));
+      expect(file).toBeDefined();
+      yield* suiteGit(root, 'rm', '-q', '--', file!);
+      yield* suiteGit(root, 'commit', '-qm', 'drop the partner');
+      yield* world.runtime.pool.releaseProject(project);
+      expect(yield* seen(partner)).toBe(0);
+      expect(yield* seen()).toBe(1);
+      expect(yield* layer()).toEqual(before);
+      expect(yield* suiteGit(root, 'status', '--porcelain', '--untracked-files=all')).toBe('');
     }),
   );
 });

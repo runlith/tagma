@@ -13,7 +13,7 @@ import { MachineStore, GraphStore } from '../../platform/contract/service/store.
 import { meta } from '../store/tables.js';
 import { canon, ShadowGit } from '../tree/shadow.js';
 import { resolveStorageLayout, type StorageLayout, storageHomes } from '../storage/layout.js';
-import { actingTrees, closedTrees, heldFlush, servedStealth } from './stealth.js';
+import { actingTrees, closedTrees, heldFlush, servedStealth, sharedLayer } from './stealth.js';
 import type { ProjectPolicyRow } from '../contract/wire/serving.js';
 import { GateRefusal, refusalBody, type OpenRefusal } from '../../platform/contract/wire/refusal.js';
 import { Git } from '@runlith/git/Git';
@@ -392,6 +392,16 @@ export const makeGraphPool = Effect.gen(function* () {
         return yield* restore(
           Effect.gen(function* () {
             const { stealth, both, unregister } = yield* servedStealth(freshnessGate, { checkout, row, layout, built });
+            const layer =
+              stealth === null || detached
+                ? null
+                : sharedLayer(stealth, () =>
+                    copies
+                      .all()
+                      .flatMap((copy) =>
+                        copy.graph.projectId === row.id && copy.graph.readOnly === undefined ? [copy.graph.stealth] : [],
+                      ),
+                  );
             yield* freshnessGate.settled(layout.treeRoot);
             if (!detached) remotes.opened(row, layout);
             const graph = Context.get(built.context, GraphStore);
@@ -410,12 +420,7 @@ export const makeGraphPool = Effect.gen(function* () {
                     return new Map([...held, [holder, own.get(writer.key) ?? []]]);
                   }),
                 }),
-              ).pipe(
-                Context.add(
-                  ServedStorage,
-                  layout.mode === 'stealth' ? { mode: 'stealth' } : { mode: 'team', stealth: detached ? null : stealth },
-                ),
-              ),
+              ).pipe(Context.add(ServedStorage, layout.mode === 'stealth' ? { mode: 'stealth' } : { mode: 'team', stealth: layer })),
               git,
               layout,
               stealth,

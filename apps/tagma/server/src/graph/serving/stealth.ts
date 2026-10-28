@@ -60,6 +60,17 @@ export const actingTrees = (
   };
 };
 
+export const sharedLayer = (own: StealthHold, others: () => readonly (StealthHold | null)[]): StealthHold => ({
+  ...own,
+  attach: Effect.tap(own.attach, () =>
+    Effect.forEach(
+      others().filter((other): other is StealthHold => other !== null && other.tree() === null),
+      (other) => other.attach,
+      { discard: true },
+    ),
+  ),
+});
+
 export const servedStealth = Effect.fnUntraced(function* (
   gate: Gate,
   place: { readonly checkout: string; readonly row: ProjectPolicyRow; readonly layout: StorageLayout; readonly built: MirrorBuilt },
