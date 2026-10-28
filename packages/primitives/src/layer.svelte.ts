@@ -11,6 +11,7 @@ export type ReturnFocus = false | (() => HTMLElement | null);
 
 export interface LayerConduct {
   readonly modal?: boolean;
+  readonly announced?: boolean;
   readonly dismissable?: boolean;
   readonly returnFocus?: () => ReturnFocus | undefined;
   readonly trapFocus?: () => boolean | undefined;
@@ -63,7 +64,7 @@ export class OverlayLayer {
 
   open(by?: OpenedBy): void {
     if (this.opened) return;
-    if (this.modal && this.cause === undefined) this.stack.intend();
+    if (this.modal && this.cause === undefined && this.conduct.announced !== true) this.stack.intend();
     this.opened = true;
     this.openedBy = by ?? this.cause;
     this.cause = undefined;

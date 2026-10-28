@@ -266,7 +266,7 @@ export class Overlay extends Service<Overlay>()('Overlay', { tier: 'app' }) {
   ): Materialized {
     switch (key.as) {
       case 'dialog':
-        return this.dialogs.open(view, props, { ...key.definition.dialog, ...options.dialog, key: key.id });
+        return this.dialogs.open(view, props, { ...key.definition.dialog, ...options.dialog, key: key.id, announced: true });
       case 'launcher':
         return this.launchers.open(view, props, { key: key.id });
     }

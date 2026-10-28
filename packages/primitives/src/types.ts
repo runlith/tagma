@@ -49,6 +49,7 @@ export interface DialogOpenOptions {
   motion?: DialogMotion;
   overlayClass?: string;
   scrim?: boolean;
+  announced?: boolean;
 }
 
 export type OverlayHandle<Result = unknown> = {

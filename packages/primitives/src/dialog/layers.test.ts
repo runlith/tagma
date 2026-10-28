@@ -8,6 +8,7 @@ import { afterEach, expect, it } from 'vitest';
 
 import { Dialogs } from '../DialogRegistry.svelte.js';
 import { layers } from '../layers.js';
+import { overlayLayers } from '../OverlayLayers.svelte.js';
 import DialogStack from '../test-utils/DialogStack.svelte';
 import Probe from '../test-utils/Probe.svelte';
 
@@ -36,6 +37,16 @@ async function menuInDialog(): Promise<{ dialog: HTMLElement; menu: () => HTMLEl
     trigger: document.querySelector<HTMLElement>('[data-trigger="menu"]')!,
   };
 }
+
+it('announces a host dialog’s opening once, before it is drawn', async () => {
+  const drawn: boolean[] = [];
+  const stop = overlayLayers.onIntent(() => drawn.push(document.querySelector('[data-runlith-dialog-content]') !== null));
+  teardowns.push(async () => stop());
+
+  await menuInDialog();
+
+  expect(drawn).toEqual([false]);
+});
 
 it('closes a menu inside a dialog on a press beside it, and leaves the dialog open', async () => {
   const { dialog, menu } = await menuInDialog();

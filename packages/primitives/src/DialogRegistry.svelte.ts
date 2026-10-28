@@ -4,6 +4,7 @@ import { Service } from '@runlith/layer/key';
 import { SvelteMap } from 'svelte/reactivity';
 
 import { createOverlaySignals } from './overlay-signals.js';
+import { overlayLayers } from './OverlayLayers.svelte.js';
 
 import type { DialogHandle, DialogOpenOptions, DialogMotion, EscapeKeydownBehavior, InteractOutsideBehavior } from './types.js';
 
@@ -119,6 +120,7 @@ export class Dialogs extends Service<Dialogs>()('Dialogs', { tier: 'app' }) {
     const interactOutsideBehavior = options?.interactOutsideBehavior ?? 'close';
     const escapeKeydownBehavior = options?.escapeKeydownBehavior ?? 'close';
     const motion = options?.motion;
+    if (options?.announced !== true) overlayLayers.intend();
 
     const id = this.createId();
 
