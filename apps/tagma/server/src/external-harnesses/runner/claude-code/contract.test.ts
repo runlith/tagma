@@ -952,6 +952,21 @@ describe('withdraw', () => {
     }),
   );
 
+  it.live('takes back operator words the host names by their inbox id, which is no uuid', () =>
+    Effect.gen(function* () {
+      const session = yield* open({});
+      const running = yield* started(session.prompt('one'));
+      yield* session.sdk.first.arrived(1);
+      const input = `input:reader:${crypto.randomUUID()}`;
+      const steering = yield* started(session.refused(STEER, { prompt: text('more'), input }));
+      yield* session.sdk.first.arrived(2);
+      session.sdk.first.emit(resultOf(1, 1, 0.1, { queued_turn_count: 1 }));
+      expect(yield* session.extension(WITHDRAW, { input })).toEqual({ withdrawn: true });
+      expect((yield* Fiber.join(steering)).code).toBe(CANCELLED);
+      expect((yield* Fiber.join(running)).stopReason).toBe('end_turn');
+    }),
+  );
+
   it.live('fails with the channel fault when Claude Code offers no way to take words back, and the steer still waits for its echo', () =>
     Effect.gen(function* () {
       const session = yield* open({ withdraws: 'absent' });

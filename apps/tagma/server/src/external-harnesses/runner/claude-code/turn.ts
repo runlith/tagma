@@ -179,8 +179,8 @@ export class Turn {
   readonly withdraw = Effect.fnUntraced(function* (this: Turn, input: string) {
     const { lifecycle } = this;
     const running = this.running;
-    const uuid = uuidOf(input);
-    if (running === null || uuid === null || !running.steers.has(uuid)) return { withdrawn: false } as Withdrawn;
+    const uuid = running === null ? undefined : [...running.inputs].find(([, given]) => given === input)?.[0];
+    if (running === null || uuid === undefined || !running.steers.has(uuid)) return { withdrawn: false } as Withdrawn;
     const early = running.early.findIndex((message) => message.uuid === uuid);
     if (early >= 0) running.early.splice(early, 1);
     else if (!(yield* Effect.flatMap(lifecycle.channel(), (channel) => channel.withdraw(uuid)))) return { withdrawn: false } as Withdrawn;
