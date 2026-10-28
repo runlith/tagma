@@ -41,7 +41,7 @@ import { agentPrompt, canLoadSkills, instructionAudience } from './effectiveAgen
 import { parseAgentFile } from './declared/files.js';
 import type { AgentFile } from '../../threads/contract/wire/agentLibrary.js';
 import { DECLARED_BASE_ID } from './declared/base.js';
-import { CHECKOUT_FACTS, MachineWorld } from '../../executions/contract/service/worlds.js';
+import { MachineWorld } from '../../executions/contract/service/worlds.js';
 import { createTools } from '@runlith/agent-tools';
 import { unruledTimes } from '@runlith/agent-tools/CommandWork';
 import { LONGEST_ACT_MS } from '@runlith/agent/callProgress';
@@ -56,6 +56,7 @@ import type { StartCosts, StartPricing } from '../../platform/contract/service/s
 import type { StartMoves, StartPrice } from '../../platform/contract/wire/start.js';
 import type { Capability } from '../capabilities/contract.js';
 import { inventoryChars, startCost } from './start.js';
+import { capabilityInventory } from '../capabilities/inventory.js';
 
 const unmeasured = (failure: unknown): string =>
   failure instanceof GateRefusal ? `${failure.code}: ${failure.reason}` : failure instanceof Error ? failure.message : String(failure);
@@ -147,7 +148,6 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
     const found = yield* types.filesOf(projectId);
     const floors = yield* types.directoriesOf(projectId);
     const comments = yield* settings.value(commentPolicy, projectId);
-    const { offers } = capabilityOffers;
     return {
       definitions: [
         ...declarations.filter((entry) => entry.id !== DECLARED_BASE_ID).map((entry) => builtinDefinition(entry, held(entry))),
@@ -158,13 +158,10 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
       capabilities: capabilities.list().map((capability) => ({
         id: capability.id,
         description: capability.description,
-        tools: [
-          ...[...(capability.toolNames ?? []), ...(capability.source?.names ?? [])].map((name) => ({
-            name,
-            description: capability.description,
-          })),
-          ...offers(capability.id, definitionFacts(comments)).map((offered) => ({ name: offered.id, description: offered.meaning })),
-        ],
+        tools: capabilityInventory(capability, capabilityOffers, definitionFacts(comments)).tools.map(({ name, description }) => ({
+          name,
+          description,
+        })),
         runtimeSources: capability.runtimeSources ?? [],
       })),
     };
@@ -288,7 +285,8 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
       base.id,
       effective,
       (capability) => !disabled.has(capability.id),
-      CHECKOUT_FACTS,
+      capabilityOffers,
+      definitionFacts(yield* settings.value(commentPolicy, projectId)),
       {
         checkout: yield* settings.value(checkoutMode, projectId),
         autoCommit: yield* settings.value(autoCommit, projectId),

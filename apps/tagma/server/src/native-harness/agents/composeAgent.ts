@@ -153,7 +153,8 @@ function composed(
         declaration.id,
         definitions.effective(declaration, overlay),
         (capability) => capabilityEnabled(capability, ctx),
-        ctx.world.facts,
+        ctx.offers,
+        { world: ctx.world.facts, comments: ctx.comments(), images: ctx.images },
         {
           checkout: ctx.checkout,
           autoCommit: ctx.autoCommit,

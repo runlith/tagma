@@ -308,7 +308,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       ),
     ),
   );
-  it.effect('the default agent holds the built-in browser and is told when to take it', () =>
+  it.effect('a tools whitelist narrows capability sections while preserving standing sources and the built-in composition', () =>
     withDemo((demo) =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -316,6 +316,17 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           const shown = yield* library.preview(demo.projectId, { id: 'tagma' });
           expect(shown.capabilities).toContain('browser');
           expect(shown.prompt.sections.map((section) => section.id)).toContain('browser-pages');
+          const narrowed = yield* library.preview(demo.projectId, { source: '---\nextends: tagma\ntools: [bash]\n---\n' });
+          const ids = narrowed.prompt.sections.map((section) => section.id);
+          expect(ids).toContain('the-shared-checkout');
+          expect(ids).toContain('keep-warm');
+          expect(ids).toContain('mcp-servers');
+          expect(ids).toContain('plugins');
+          expect(ids).not.toContain('browser-pages');
+          expect(ids).not.toContain('held-processes');
+          expect(narrowed.toolCatalog?.tools.map((tool) => tool.name)).toEqual(['ask_user', 'bash', 'tool_search']);
+          const browser = yield* library.preview(demo.projectId, { source: '---\nextends: tagma\ntools: [open_page]\n---\n' });
+          expect(browser.prompt.sections.map((section) => section.id)).toContain('browser-pages');
         }),
       ),
     ),
