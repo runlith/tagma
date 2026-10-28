@@ -158,17 +158,17 @@
   const reading = $derived(read === null ? null : tags.readingOf(read));
 
   let baseline = $state<string | undefined>(undefined);
-  let baselineFor: string | null = null;
+  let arrived: string | null = null;
 
   $effect(() => {
     const current = rootBlock;
     if (!current) return;
-    if (baselineFor !== current.name) {
-      baselineFor = current.name;
+    if (arrived !== current.name) {
+      arrived = current.name;
       baseline = untrack(() => readState.seenAt(current.name));
+      if (blockName !== undefined) readState.visited(current.name);
     }
     readState.markRead(current.name, current.updatedAt);
-    if (blockName !== undefined) readState.visited(current.name);
   });
 
   const ancestors = $derived.by(() => {
