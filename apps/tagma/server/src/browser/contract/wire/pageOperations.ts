@@ -43,11 +43,33 @@ export const GOES = ['back', 'forward', 'reload', 'stop'] as const;
 
 const Point = { x: Schema.optional(Schema.Finite), y: Schema.optional(Schema.Finite) };
 
+export const ActionStep = Schema.Struct({
+  action: Schema.Literals(ACTIONS),
+  ref: Schema.optional(Ref),
+  ...Point,
+  text: Schema.optional(Schema.String),
+  key: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  values: Schema.optional(Schema.Array(Schema.String)),
+  to: Schema.optional(Schema.Struct({ ref: Schema.optional(Ref), ...Point })),
+  dx: Schema.optional(Schema.Finite),
+  dy: Schema.optional(Schema.Finite),
+  files: Schema.optional(Schema.Array(Schema.String.check(Schema.isMinLength(1)))),
+});
+export type ActionStep = typeof ActionStep.Type;
+
+export const ActionRun = Schema.Struct({
+  page: Glance,
+  completed: Schema.Int,
+  stopped: Schema.NullOr(Schema.Int),
+});
+export type ActionRun = typeof ActionRun.Type;
+
 export const WAIT_CEILING_MS = 120_000;
 
 export const PAGE_OPERATIONS = {
   open_page: operation('open_page', {
     ...ACTING,
+    tool: { ...ACTING.tool, companions: ['snapshot_page', 'capture_page'] },
     meaning: 'Open a page of the browser built into Tagma in this project and answer its id and state.',
     grammar:
       'Without `profile` a thread opens in the `browser.agentProfile` setting and the operator in `browser.userProfile`. A profile whose host is not connected refuses `host-away` naming the profiles of connected hosts; nothing is opened in another profile instead. The page this call opens becomes the page this thread works with by default.',
@@ -122,26 +144,13 @@ export const PAGE_OPERATIONS = {
   act_on_page: operation('act_on_page', {
     ...ACTING,
     meaning:
-      'Act on a page as a person would: click, double-click, hover, fill, type, press a key, select, check, uncheck, scroll, drag, upload or focus.',
+      'Run an ordered sequence of browser actions: click, double-click, hover, fill, type, press, select, check, uncheck, scroll, drag, upload or focus.',
     grammar:
-      'Aim with `ref` from a snapshot or with `x`/`y` in CSS pixels of the viewport. Before a click the element is scrolled into view, and a point covered by another element refuses `element-obscured` naming it. `fill` replaces the value with `text`; `type` inserts `text` at the caret; `press` takes `key` like `Enter`, `Tab` or `Control+A` (US layout); `select` takes option `values` or labels; `scroll` takes `dx`/`dy`, or scrolls `ref` into view; `drag` goes to `to`; `upload` sets `files`, paths in this checkout. Input never takes the focus of the operator’s screen. The answer carries the page as the action left it: its address, title, an opened dialog, and whether a navigation started.',
-    input: Schema.Struct({
-      project,
-      page,
-      action: Schema.Literals(ACTIONS),
-      ref: Schema.optional(Ref),
-      ...Point,
-      text: Schema.optional(Schema.String),
-      key: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-      values: Schema.optional(Schema.Array(Schema.String)),
-      to: Schema.optional(Schema.Struct({ ref: Schema.optional(Ref), ...Point })),
-      dx: Schema.optional(Schema.Finite),
-      dy: Schema.optional(Schema.Finite),
-      files: Schema.optional(Schema.Array(Schema.String.check(Schema.isMinLength(1)))),
-    }),
-    answer: arms({ acted: { page: Glance } }),
+      'Send `steps`, a nonempty list; one action is a one-item list. The sequence holds the page queue once, so other calls cannot interleave. It stops at the first refusal or opened dialog, without undoing earlier steps. A refusal keeps its code and recovery guidance; its reason names the 1-based stopping step and how many steps completed. Otherwise `completed` counts finished steps and `stopped` names the 1-based step that opened the dialog in `page`, or is null. The stopping step may have had effects; an unknown outcome is not retried. Aim with `ref` from a snapshot or viewport `x`/`y` in CSS pixels. A click scrolls the element into view and refuses `element-obscured` if covered. `fill` replaces with `text`; `type` inserts at the caret; `press` takes `key` like Enter, Tab or Control+A (US layout); `select` takes `values` or labels; `scroll` takes `dx`/`dy` or a `ref` to reveal; `drag` goes to `to`; `upload` sets checkout `files`. Input never takes the operator’s screen focus. The answer carries the final page state.',
+    input: Schema.Struct({ project, page, steps: Schema.NonEmptyArray(ActionStep) }),
+    answer: arms({ acted: ActionRun.fields }),
     refusals: [...DRIVE_REFUSALS, 'stale-ref', 'element-obscured', 'action-shape'],
-    confirmation: (input) => ({ summary: `${input.action} on the page?` }),
+    confirmation: (input) => ({ summary: `Run ${input.steps.length} steps on the page?` }),
     confirmLabel: 'Act on page',
     presentation: { running: 'Acting on the page', done: 'Acted on the page' },
   }),

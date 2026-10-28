@@ -71,6 +71,7 @@ export type Refusal = StoreFailure | GateRefusal<DriveRefusal>;
 export type DriveOptions<A> = {
   readonly opened?: (page: PageId) => Effect.Effect<A>;
   readonly recovers?: true;
+  readonly replays?: false;
 };
 
 export const makeDrive = Effect.fnUntraced(function* (input: {
@@ -450,16 +451,15 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
   };
 
   const guard = Effect.fnUntraced(function* <A, E>(
-    page: PageId,
+    state: Paged,
     thread: string | null,
     attaching: boolean,
     work: (state: Paged, attached: Attached | null) => Effect.Effect<A, E>,
+    recovers: boolean,
     options: DriveOptions<A> = {},
   ): Effect.fn.Return<A, Exclude<E, CommandFailure> | Refusal, Scope.Scope> {
-    const state = yield* paged(page);
+    const page = state.page;
     const moves = yield* pages.moves(page);
-    const initial = pages.live(page);
-    const recovers = options.recovers === true && (initial?.responsive === false || initial?.crashed === true);
     const blocked = Stream.runHead(
       moves.pipe(
         Stream.map((move) => ({ move, frame: frameRefusal(state) })),
@@ -481,39 +481,51 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         return options.opened === undefined ? Effect.fail(unknownPage(page)) : options.opened(page);
       }),
     );
-    const guarded = state.queue.withPermits(1)(
-      Effect.gen(function* () {
-        const attempt = Effect.gen(function* () {
-          yield* gate(state, recovers);
-          const live = pages.live(page);
-          const unavailable = live?.responsive === false || live?.crashed === true;
-          const attached = unavailable ? null : attaching ? yield* attach(state, thread) : state.attached;
-          state.used = yield* Clock.currentTimeMillis;
-          if (thread !== null) state.driver = thread;
-          if (attached === null) return yield* work(state, attached);
-          if (thread !== null) yield* drove(state, thread);
-          groups += 1;
-          const group = `engine-${groups}`;
-          attached.group = group;
-          return yield* work(state, attached).pipe(Effect.ensuring(Effect.forkIn(release(attached, group), attached.scope)));
-        });
-        const swapped = (failure: unknown): boolean =>
-          attaching &&
-          isCommandFailure(failure) &&
-          failure._tag === 'SessionEnded' &&
-          failure.end === 'detached' &&
-          failure.child === undefined &&
-          pages.live(page) !== undefined;
-        return yield* attempt.pipe(
-          Effect.catchIf(swapped, () => Effect.andThen(detach(state), attempt)),
-          Effect.catch((failure): Effect.Effect<never, Exclude<E, CommandFailure> | GateRefusal<DriveRefusal>> =>
-            isCommandFailure(failure) ? ended(page, failure) : Effect.fail(failure as Exclude<E, CommandFailure>),
-          ),
-        );
-      }),
-    );
+    const guarded = Effect.gen(function* () {
+      const attempt = Effect.gen(function* () {
+        yield* gate(state, recovers);
+        const live = pages.live(page);
+        const unavailable = live?.responsive === false || live?.crashed === true;
+        const attached = unavailable ? null : attaching ? yield* attach(state, thread) : state.attached;
+        state.used = yield* Clock.currentTimeMillis;
+        if (thread !== null) state.driver = thread;
+        if (attached === null) return yield* work(state, attached);
+        if (thread !== null) yield* drove(state, thread);
+        groups += 1;
+        const group = `engine-${groups}`;
+        attached.group = group;
+        return yield* work(state, attached).pipe(Effect.ensuring(Effect.forkIn(release(attached, group), attached.scope)));
+      });
+      const swapped = (failure: unknown): boolean =>
+        options.replays !== false &&
+        attaching &&
+        isCommandFailure(failure) &&
+        failure._tag === 'SessionEnded' &&
+        failure.end === 'detached' &&
+        failure.child === undefined &&
+        pages.live(page) !== undefined;
+      return yield* attempt.pipe(
+        Effect.catchIf(swapped, () => Effect.andThen(detach(state), attempt)),
+        Effect.catch((failure): Effect.Effect<never, Exclude<E, CommandFailure> | GateRefusal<DriveRefusal>> =>
+          isCommandFailure(failure) ? ended(page, failure) : Effect.fail(failure as Exclude<E, CommandFailure>),
+        ),
+      );
+    });
+    return yield* Effect.raceFirst(guarded, blocked);
+  });
+
+  const run = Effect.fnUntraced(function* <A, E>(
+    page: PageId,
+    thread: string | null,
+    attaching: boolean,
+    work: (state: Paged, attached: Attached | null) => Effect.Effect<A, E>,
+    options: DriveOptions<A> = {},
+  ): Effect.fn.Return<A, Exclude<E, CommandFailure> | Refusal> {
+    const state = yield* paged(page);
+    const initial = pages.live(page);
+    const recovers = options.recovers === true && (initial?.responsive === false || initial?.crashed === true);
     state.busy += 1;
-    return yield* Effect.raceFirst(guarded, blocked).pipe(
+    return yield* Effect.scoped(state.queue.withPermits(1)(guard(state, thread, attaching, work, recovers, options))).pipe(
       Effect.ensuring(
         Effect.sync(() => {
           state.busy -= 1;
@@ -521,14 +533,6 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       ),
     );
   });
-
-  const run = <A, E>(
-    page: PageId,
-    thread: string | null,
-    attaching: boolean,
-    work: (state: Paged, attached: Attached | null) => Effect.Effect<A, E>,
-    options: DriveOptions<A> = {},
-  ): Effect.Effect<A, Exclude<E, CommandFailure> | Refusal> => Effect.scoped(guard(page, thread, attaching, work, options));
 
   const sweep = Effect.fnUntraced(function* () {
     const now = yield* Clock.currentTimeMillis;

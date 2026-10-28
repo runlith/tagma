@@ -117,7 +117,11 @@ layer(fixture, { excludeTestServices: true })('the managed host', (it) => {
         if (profile === INSTALLED) expect(told.page[1]).toContain('Google Chrome');
         const shot = yield* calling(PAGE.snapshot_page.body.execute({ page: opened.page.id }, undefined, agent));
         yield* calling(
-          PAGE.act_on_page.body.execute({ page: opened.page.id, action: 'click', ref: refIn(shot.text, /button "Add"/) }, undefined, agent),
+          PAGE.act_on_page.body.execute(
+            { page: opened.page.id, steps: [{ action: 'click', ref: refIn(shot.text, /button "Add"/) }] },
+            undefined,
+            agent,
+          ),
         );
         expect(yield* evaluate(opened.page.id, 'document.querySelectorAll("li").length')).toBe(1);
         const navigated = yield* calling(PAGE.navigate_page.body.execute({ page: opened.page.id, url: at('/second') }, undefined, agent));
@@ -154,7 +158,9 @@ layer(fixture, { excludeTestServices: true })('the managed host', (it) => {
         Effect.map(Pages, (pages) => (pages.live(page)?.loading === false ? true : undefined)),
       );
       const shot = yield* calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent));
-      yield* calling(PAGE.act_on_page.body.execute({ page, action: 'click', ref: refIn(shot.text, /link "Report"/) }, undefined, agent));
+      yield* calling(
+        PAGE.act_on_page.body.execute({ page, steps: [{ action: 'click', ref: refIn(shot.text, /link "Report"/) }] }, undefined, agent),
+      );
       const done = yield* settled(
         page,
         calling(PAGE.read_page_downloads.body.execute({ page }, undefined, agent)).pipe(

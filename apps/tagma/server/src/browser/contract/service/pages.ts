@@ -9,8 +9,8 @@ import type { Host, HostFailure, Moved } from './hosts.js';
 export type PageRefusal = 'page-unknown' | 'host-away' | 'profile-unknown' | 'host-refused' | 'outcome-unknown';
 
 export const outcomeUnknown = (message: string): GateRefusal<'outcome-unknown'> =>
-  new GateRefusal('outcome-unknown', `the call reached the page host, which went away before answering: ${message}`, [
-    'snapshot_page once the host is back — see whether the call took effect before making it again',
+  new GateRefusal('outcome-unknown', `the call reached the page host, but its outcome is unknown: ${message}`, [
+    'snapshot_page — reconnect and see whether the call took effect before making it again',
   ]);
 
 export const hostRefusal = (failure: HostFailure): GateRefusal<'host-refused' | 'outcome-unknown' | 'host-away'> =>

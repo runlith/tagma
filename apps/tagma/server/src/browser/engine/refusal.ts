@@ -48,8 +48,13 @@ export const ended = (page: PageId, failure: CommandFailure): Effect.Effect<neve
             'read the page again with snapshot_page and act on what it shows',
           ]),
         );
-      if (failure.end === 'detached') return Effect.fail(unknownPage(page));
       if (failure.pending) return Effect.fail(outcomeUnknown(failure.message));
+      if (failure.end === 'detached')
+        return Effect.fail(
+          new GateRefusal('host-refused', `the browser session of page ${page} detached: ${failure.message}`, [
+            'snapshot_page — reconnect and read the page before continuing',
+          ]),
+        );
       if (failure.end === 'taken') return Effect.fail(devtoolsOpen(page));
       return Effect.fail(
         new GateRefusal('host-away', `the browser host of page ${page} stopped answering: ${failure.message}`, ['make the call again']),

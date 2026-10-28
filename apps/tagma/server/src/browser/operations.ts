@@ -3,14 +3,15 @@ import { Effect } from 'effect';
 import { body, type OperationPair, pair } from '../platform/contract/service/body.js';
 import type { Caller } from '../platform/contract/wire/caller.js';
 import { ceilingOf } from '../platform/contract/wire/pageFamily.js';
+import { saidLines } from '../platform/contract/service/presentation.js';
 import { cursorRefusal, GateRefusal } from '../platform/contract/wire/refusal.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
-import { type Action, type Aim, Automation } from './contract/service/automation.js';
+import { type Aim, Automation, type PlannedAction } from './contract/service/automation.js';
 import type { Navigation } from './contract/wire/host.js';
 import { type Opener, Pages } from './contract/service/pages.js';
 import { Profiles } from './contract/service/profiles.js';
 import { COOKIE_OPERATIONS as COOKIE, type CookieOperationId } from './contract/wire/cookieOperations.js';
-import { type ActionName, PAGE_OPERATIONS as PAGE, type PageOperationId } from './contract/wire/pageOperations.js';
+import { type ActionName, type ActionStep, PAGE_OPERATIONS as PAGE, type PageOperationId } from './contract/wire/pageOperations.js';
 import { cookieSources, importCookies, type Origin } from './cookies.js';
 import { PROFILE_OPERATIONS as PROFILE, type ProfileOperationId } from './contract/wire/profileOperations.js';
 import {
@@ -45,8 +46,6 @@ const pageOf = Effect.fnUntraced(function* (caller: Caller, page: Parameters<Pag
 
 const shape = (reason: string) => new GateRefusal('action-shape', reason, ['send the fields this action takes']);
 
-type ActInput = (typeof PAGE.act_on_page)['input']['Type'];
-
 const aimOf = (ref: string | undefined, x: number | undefined, y: number | undefined): Aim | null =>
   ref !== undefined ? { ref } : x !== undefined && y !== undefined ? { x, y } : null;
 
@@ -62,7 +61,7 @@ const NEEDS_AIM: ReadonlySet<ActionName> = new Set([
   'upload',
 ]);
 
-const actionOf = (input: ActInput, caller: Caller): Action | GateRefusal<'action-shape'> => {
+const actionOf = (input: ActionStep, caller: Caller): PlannedAction => {
   const aim = aimOf(input.ref, input.x, input.y);
   if (aim === null && NEEDS_AIM.has(input.action)) return shape(`${input.action} needs \`ref\` or both \`x\` and \`y\``);
   const aimed = aim as Aim;
@@ -114,6 +113,12 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
   open_page: pair(
     PAGE.open_page,
     body(PAGE.open_page, {
+      voice: saidLines((answer) => [
+        `Opened ${answer.page.id} ${answer.page.state}${answer.page.live.loading ? ' loading' : ''} ${answer.page.url}${answer.page.title === '' ? '' : ` ${JSON.stringify(answer.page.title)}`}`,
+        ...(answer.page.live.dialog === null ? [] : [`Dialog: ${JSON.stringify(answer.page.live.dialog)}`]),
+        `snapshot_page ${JSON.stringify({ project: answer.page.projectId, page: answer.page.id, limit: SNAPSHOT_CEILING })}`,
+        `capture_page ${JSON.stringify({ project: answer.page.projectId, page: answer.page.id })}`,
+      ]),
       execute: Effect.fnUntraced(function* (input, _prepared, caller) {
         const opener = yield* openerOf(caller);
         const pages = yield* Pages;
@@ -202,10 +207,13 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
     PAGE.act_on_page,
     body(PAGE.act_on_page, {
       execute: Effect.fnUntraced(function* (input, _prepared, caller) {
-        const action = actionOf(input, caller);
-        if (action instanceof GateRefusal) return yield* action;
         const { page, thread } = yield* pageOf(caller, input.page);
-        return { status: 'acted' as const, page: yield* (yield* Automation).act(page, action, thread) };
+        const run = yield* (yield* Automation).act(
+          page,
+          input.steps.map((step) => actionOf(step, caller)),
+          thread,
+        );
+        return { status: 'acted' as const, ...run };
       }),
     }),
   ),

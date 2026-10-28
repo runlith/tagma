@@ -19,6 +19,12 @@ const PAGES: Readonly<Record<string, string>> = {
     <label>Notes <textarea id="notes"></textarea></label>
     <button id="add" onclick="const li = document.createElement('li'); li.textContent = 'Item ' + (document.querySelectorAll('li').length + 1); document.getElementById('list').append(li)">Add</button>
     <ul id="list"></ul><a href="/second">Second</a>`,
+  '/sequence': `<!doctype html><title>Dependent form</title>
+    <form onsubmit="event.preventDefault(); document.getElementById('saved').textContent = JSON.stringify([document.getElementById('name').value, document.getElementById('code').value])">
+      <label>Name <input id="name" oninput="document.getElementById('code').disabled = this.value !== 'Ada'"></label>
+      <label>Code <input id="code" disabled oninput="document.getElementById('save').disabled = this.value !== '42'"></label>
+      <button id="save" disabled>Save</button>
+    </form><output id="saved"></output>`,
   '/second': '<!doctype html><title>Second</title><h1>Second page</h1>',
   '/covered': `<!doctype html><title>Covered</title>
     <button id="under" style="position:absolute;left:20px;top:20px;width:120px;height:40px">Under</button>
@@ -177,8 +183,9 @@ export const engineScenarios = (input: EngineHost): void => {
   });
   const snapshot = (page: PageId) =>
     calling(PAGE.snapshot_page.body.execute({ page }, undefined, agent)).pipe(Effect.map((shot) => shot.text));
-  const act = (page: PageId, action: Omit<Parameters<typeof PAGE.act_on_page.body.execute>[0], 'page'>) =>
-    calling(PAGE.act_on_page.body.execute({ ...action, page }, undefined, agent));
+  const act = (page: PageId, action: Parameters<typeof PAGE.act_on_page.body.execute>[0]['steps'][number]) =>
+    calling(PAGE.act_on_page.body.execute({ steps: [action], page }, undefined, agent));
+
   const evaluate = (page: PageId, expression: string) =>
     calling(PAGE.evaluate_in_page.body.execute({ page, expression }, undefined, agent)).pipe(
       Effect.map((answer) => ('value' in answer ? (JSON.parse(answer.value) as unknown) : answer.exception)),
@@ -209,6 +216,61 @@ export const engineScenarios = (input: EngineHost): void => {
         yield* loaded(page);
         expect(refIn(yield* snapshot(page), /heading "Second page"/)).toMatch(/^e\d+$/);
         expect((yield* refusalOf(act(page, { action: 'click', ref }))).code).toBe('stale-ref');
+      }),
+    );
+
+    it.effect('one sequence fills dependent fields and submits in order', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/sequence');
+        const shot = yield* snapshot(page);
+        const answer = yield* calling(
+          PAGE.act_on_page.body.execute(
+            {
+              page,
+              steps: [
+                { action: 'fill', ref: refIn(shot, /textbox "Name"/), text: 'Ada' },
+                { action: 'fill', ref: refIn(shot, /textbox "Code"/), text: '42' },
+                { action: 'click', ref: refIn(shot, /button "Save"/) },
+              ],
+            },
+            undefined,
+            agent,
+          ),
+        );
+        expect(answer).toMatchObject({ status: 'acted', completed: 3, stopped: null });
+        expect(yield* evaluate(page, 'document.getElementById("saved").textContent')).toBe('["Ada","42"]');
+      }),
+    );
+
+    it.effect('a sequence reports its first refusal and leaves later steps untouched', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/sequence');
+        const shot = yield* snapshot(page);
+        const refused = yield* refusalOf(
+          calling(
+            PAGE.act_on_page.body.execute(
+              {
+                page,
+                steps: [
+                  { action: 'fill', ref: refIn(shot, /textbox "Name"/), text: 'Ada' },
+                  { action: 'check', ref: refIn(shot, /textbox "Name"/) },
+                  { action: 'fill', ref: refIn(shot, /textbox "Code"/), text: '42' },
+                  { action: 'click', ref: refIn(shot, /button "Save"/) },
+                ],
+              },
+              undefined,
+              agent,
+            ),
+          ),
+        );
+        expect(refused.code).toBe('action-failed');
+        expect(refused.reason).toContain('step 2 stopped after 1 completed');
+        expect(
+          yield* evaluate(
+            page,
+            '[document.getElementById("name").value, document.getElementById("code").value, document.getElementById("saved").textContent]',
+          ),
+        ).toEqual(['Ada', '', '']);
       }),
     );
 
@@ -404,8 +466,22 @@ export const engineScenarios = (input: EngineHost): void => {
       Effect.gen(function* () {
         const page = yield* open('/confirm');
         const shot = yield* snapshot(page);
-        const asked = yield* act(page, { action: 'click', ref: refIn(shot, /button "Ask"/) });
-        expect(asked.page.dialog?.kind).toBe('confirm');
+        const ref = refIn(shot, /button "Ask"/);
+        const asked = yield* calling(
+          PAGE.act_on_page.body.execute(
+            {
+              page,
+              steps: [
+                { action: 'focus', ref },
+                { action: 'click', ref },
+                { action: 'press', key: 'Enter' },
+              ],
+            },
+            undefined,
+            agent,
+          ),
+        );
+        expect(asked).toMatchObject({ status: 'acted', completed: 1, stopped: 2, page: { dialog: { kind: 'confirm' } } });
         expect((yield* refusalOf(act(page, { action: 'click', ref: refIn(shot, /button "Ask"/) }))).code).toBe('dialog-open');
         yield* calling(PAGE.answer_page_dialog.body.execute({ page, accept: true }, undefined, agent));
         expect(yield* evaluate(page, 'document.getElementById("said").textContent')).toBe('yes');

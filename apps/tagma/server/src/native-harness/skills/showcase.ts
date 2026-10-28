@@ -45,7 +45,7 @@ Capture in the **browser built into Tagma** when you hold its tools: the reader 
 
 - Open the subject with \`open_page\` in a profile of its own (\`create_profile\`), so sign-ins and storage start clean; delete the profile to reset it.
 - \`emulate_page\` with device \`laptop\` (1440×900 at scale 2) and one \`scheme\` throughout: the reader's own if known, dark otherwise.
-- Act with \`act_on_page\` on references from \`snapshot_page\`, and \`wait_for_page\` for the text or element a frame needs before shooting it.
+- Act with \`act_on_page\`: \`steps: [{action: "click", ref: "e12"}]\` uses a reference from \`snapshot_page\`; several steps run in order and stop at the first refusal or opened dialog. Use \`wait_for_page\` for the text or element a frame needs before shooting it.
 - \`capture_page\` keeps the frame on the server and names its path. A page keeps only its last 20 captures and deletes them when it closes: copy each frame into scratch under its frame name right after the shot.
 
 A sub-second state needs a burst that a sequence of tool calls cannot take, and an agent without the browser tools has none. There, use a headless browser (Playwright or equivalent) with a **persistent profile** in scratch, viewport 1440×900 at device scale 2:

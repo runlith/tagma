@@ -3,6 +3,7 @@ import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { Emulation, Viewport } from '../wire/emulation.js';
 import type { PageId } from '../wire/ids.js';
+import type { ActionRun } from '../wire/pageOperations.js';
 import type { Glance } from '../wire/page.js';
 import type { Picked } from '../wire/pick.js';
 import type { ConsoleEntry, ConsoleLevel, NetworkEntry } from '../wire/rows.js';
@@ -20,6 +21,8 @@ export type Action =
   | { readonly kind: 'scroll'; readonly aim: Aim | null; readonly dx: number; readonly dy: number }
   | { readonly kind: 'drag'; readonly aim: Aim; readonly to: Aim }
   | { readonly kind: 'upload'; readonly aim: Aim; readonly files: readonly string[] };
+
+export type PlannedAction = Action | GateRefusal<'action-shape'>;
 
 export type DriveRefusal = PageRefusal | 'page-unresponsive' | 'page-crashed' | 'devtools-open' | 'dialog-open' | 'action-failed';
 
@@ -89,9 +92,9 @@ export class Automation extends Context.Service<
     ): Effect.Effect<Snapshotted, Drive<'stale-ref'>>;
     act(
       page: PageId,
-      action: Action,
+      steps: readonly PlannedAction[],
       thread: string | null,
-    ): Effect.Effect<Glance, Drive<'stale-ref' | 'element-obscured' | 'action-shape'>>;
+    ): Effect.Effect<ActionRun, Drive<'stale-ref' | 'element-obscured' | 'action-shape'>>;
     emulate(
       page: PageId,
       change: EmulationChange,

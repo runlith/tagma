@@ -7,6 +7,7 @@ import { hostRefusal, Pages } from '../contract/service/pages.js';
 import { BrowserPlace, capturesOf } from '../contract/service/place.js';
 import { Profiles } from '../contract/service/profiles.js';
 import type { PageId } from '../contract/wire/ids.js';
+import type { ActionRun } from '../contract/wire/pageOperations.js';
 import type { Picked } from '../contract/wire/pick.js';
 import { BODY_CHARS, CONSOLE_LEVELS, type ConsoleEntry, EVALUATED_CHARS } from '../contract/wire/rows.js';
 import { perform } from './act.js';
@@ -131,18 +132,46 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
         Effect.map(snapshot(state, attached, options.within, options.limit), (shot) => ({ page: pages.glance(page, false), ...shot })),
       );
     }),
-    act: Effect.fn('Automation.act')(function* (page, action, thread) {
-      return yield* drive.drive(
-        page,
-        thread,
-        (state, attached) =>
-          Effect.gen(function* () {
-            const before = attached.navigations;
-            yield* perform(state, attached, action);
-            return pages.glance(page, navigatedSince(attached, before));
+    act: Effect.fn('Automation.act')(function* (page, steps, thread) {
+      let completed = 0;
+      let step = 1;
+      let navigation: { readonly attached: Attached; readonly before: number } | null = null;
+      const answer = (stopped: number | null): ActionRun => ({
+        page: pages.glance(page, navigation !== null && navigatedSince(navigation.attached, navigation.before)),
+        completed,
+        stopped,
+      });
+      return yield* drive
+        .drive(
+          page,
+          thread,
+          (state, attached) =>
+            Effect.gen(function* () {
+              navigation = { attached, before: attached.navigations };
+              for (const action of steps) {
+                step = completed + 1;
+                if (action instanceof GateRefusal) return yield* action;
+                yield* perform(state, attached, action);
+                if (pages.live(page)?.dialog != null) return answer(step);
+                completed += 1;
+              }
+              return answer(null);
+            }),
+          { opened: () => Effect.sync(() => answer(step)), replays: false },
+        )
+        .pipe(
+          Effect.mapError((failure) => {
+            if (!(failure instanceof GateRefusal)) return failure;
+            const left = pages.live(page) === undefined ? 'the page closed' : `the page stands at ${JSON.stringify(pages.urlOf(page))}`;
+            return new GateRefusal(
+              failure.code,
+              `step ${step} stopped after ${completed} completed; ${left}: ${failure.reason}`,
+              failure.unblock,
+              failure.inputFile,
+              failure.words,
+            );
           }),
-        { opened: (opened) => Effect.succeed(pages.glance(opened, false)) },
-      );
+        );
     }),
     emulate: Effect.fn('Automation.emulate')(function* (page, change, thread) {
       return yield* drive.drive(page, thread, (state, attached) =>
