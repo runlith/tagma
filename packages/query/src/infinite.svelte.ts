@@ -17,6 +17,7 @@ import type { Scope } from '@runlith/layer/Scope';
 
 import { createSubscriber } from 'svelte/reactivity';
 
+import { deliver } from './core/deliver.svelte.js';
 import { defineHiddenGetters, fetchFresh, isAbortError, toUndefined } from './core/utils.js';
 import type { BaseQueryOptions, InfQuery, QueryLoadOptions } from './types.js';
 
@@ -164,6 +165,9 @@ export function createInfiniteQuery<TData, TError = DefaultError, TPageParam = n
     return observer;
   };
 
+  const queryHash = hashKey(queryKey);
+  const pending = () => queryClient.getQueryCache().get<InfiniteData<TData, TPageParam>, TError>(queryHash)?.promise;
+
   const buildFetchOptions = (options?: QueryLoadOptions): FetchInfiniteQueryOptions<TData, TError, TData, QueryKey, TPageParam> => {
     const resolvedStaleTime = options?.refresh === true ? 0 : staleTime;
 
@@ -242,7 +246,7 @@ export function createInfiniteQuery<TData, TError = DefaultError, TPageParam = n
   const cacheVersion = createSubscriber((update) => {
     const hash = hashKey(queryKey);
     return queryClient.getQueryCache().subscribe((event) => {
-      if (event.query.queryHash === hash) update();
+      if (event.query.queryHash === hash) deliver(update);
     });
   });
 
@@ -358,12 +362,16 @@ export function createInfiniteQuery<TData, TError = DefaultError, TPageParam = n
     async fetchNextPage() {
       if (scope.closed) return;
       ensureObserved();
-      await observer?.fetchNextPage().catch(() => undefined);
+      await ensureObserver()
+        ?.fetchNextPage()
+        .catch(() => undefined);
     },
     async fetchPreviousPage() {
       if (scope.closed) return;
       ensureObserved();
-      await observer?.fetchPreviousPage().catch(() => undefined);
+      await ensureObserver()
+        ?.fetchPreviousPage()
+        .catch(() => undefined);
     },
   } satisfies QueryCore;
 
@@ -388,16 +396,13 @@ export function createInfiniteQuery<TData, TError = DefaultError, TPageParam = n
   defineHiddenGetters(query, {
     promise: () => {
       scope.assertOpen();
-
       autoAttach();
 
-      const current = ensureObserver();
-      if (!current) scope.assertOpen();
-      const query = current!.getCurrentQuery();
-      if (query.promise) return query.promise;
+      const held = pending();
+      if (held) return held;
 
       const fetchPromise = queryClient.fetchInfiniteQuery(buildFetchOptions());
-      return current!.getCurrentQuery().promise ?? fetchPromise;
+      return pending() ?? fetchPromise;
     },
     hasNextPage: () => {
       ensureObserved();

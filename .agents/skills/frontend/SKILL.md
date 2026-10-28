@@ -1,6 +1,6 @@
 ---
 name: frontend
-description: Use before writing, changing, reviewing or testing code in apps/tagma/app, packages/chat-ui, or any client app built on @runlith/layer and @runlith/query — a service, a feature layer, a repo, a query or mutation, a live subscription, a call to the server, a read of the browser or the desktop bridge, a route load, a component that takes a service, an effect that writes shared state, effect_update_depth_exceeded, a test that mounts the graph. Carries how the app is assembled on Layer, how data flows through Door, Live and Query repos, how effects write shared state without looping, where the environment (Host, Platform, Router, desktop bridge, browser globals) may be read, the SvelteKit bindings, the test entries, and which rules bind each part.
+description: Use before writing, changing, reviewing or testing code in apps/tagma/app, packages/chat-ui, or any client app built on @runlith/layer and @runlith/query — a service, a feature layer, a repo, a query or mutation, a live subscription, a call to the server, a read of the browser or the desktop bridge, a route load, a component that takes a service, an effect that writes shared state, effect_update_depth_exceeded, state_unsafe_mutation, a test that mounts the graph. Carries how the app is assembled on Layer, how data flows through Door, Live and Query repos, how effects write shared state without looping and why reads never write, where the environment (Host, Platform, Router, desktop bridge, browser globals) may be read, the SvelteKit bindings, the test entries, and which rules bind each part.
 ---
 
 # Frontend on Layer and Query
@@ -59,6 +59,14 @@ A service on `app` or a rung tier is shared by every component that takes it, an
 - The same holds beyond one flush: two windows answering each other's storage `watch`, or two instances each replacing the address with their own, trade the write forever without even the depth error to stop them.
 - Diagnosis. In a development build, which tests run, the depth error is preceded by the stacks of the writes that kept the flush going: the producer is named there. In production the error goes to the boundary of the last effect scheduled, so the pane showing the failure need not be the one whose effect loops; several panes failing together point to instances contesting one service.
 
+## Reads never write
+
+Svelte refuses any state write while a `$derived`, a template expression or a block (`{#if}`, `{#each}`, `{#await}`, `{#key}`) computes: `state_unsafe_mutation`, whatever the compile mode. `untrack` lifts the refusal and a plain `$effect` may write. So everything a component may read there — a getter, a query's `.data` or `.promise`, a service's answer — writes no state, directly or through work it starts.
+- A read changes nothing it reads from: no re-configuring an observer, no "sync and notify" on the way out. A read that moves its own source reruns itself forever.
+- A bridge from an outside source into Svelte state — a query-core cache listener, a socket, an emitter — counts on the source calling back synchronously inside the stack that triggered it, which may be a reader's derived. It delivers synchronously when `$effect.tracking()` is false and in a microtask otherwise (`deliver` in `packages/query/src/core/deliver.svelte.ts`). Outside work a read must start goes into `createSubscriber`'s start, which Svelte runs untracked.
+- A method that changes state — `load`, `refresh`, `setCache`, `reset`, a mutation's `run` — is called from a handler, an `$effect` or after an `await`, never from markup or a derived.
+- Diagnosis. The stack of `state_unsafe_mutation` runs from Svelte's `set` down to the reader. The first frame of our code above `set` is the producer to fix; the component at the bottom only read.
+
 ## Environment
 
 **Owners.** Environment facts and capabilities reach a feature only as keys:
@@ -112,6 +120,7 @@ Legitimate direct reads (one API in every shell): `navigator.clipboard`; `naviga
 - A consumer of `Door` or of a repo takes a double under that key. A test that runs the real `Door` hands it its transport, never a stubbed global: `testDoor(fetch)` from `lib/wire/testing.ts` (`features/graph/BlocksRepo.svelte.test.ts`), or `makePlatform({ fetch })` and `ServerOrigin.of(...)` in a graph's boot (`features/graph/GraphFeed.svelte.test.ts`), and awaits `loadOperations()`; a `LiveConnection` takes its socket factory and origin the same way (`wire/liveClose.test.ts`). `mountShell` boots a `ServerOrigin`.
 - The unit projects default to `environment: 'node'` (`apps/tagma/app/vitest.config.ts`), where no `$effect` runs: a test of effects or components starts with `// @vitest-environment jsdom`.
 - A component or service that writes shared state from an effect is tested with two instances mounted at once on different subjects, then a live update to one of them (`features/graph/block/BlockPage.svelte.test.ts`): one instance alone cannot show a contest.
+- A read that must stay pure is tested inside a `$derived` under `$effect.root` and `flushSync`, with the other readers of the same source already standing (`packages/query/src/promise.svelte.test.ts`). A forbidden write then throws at once; a mounted page around it may stall instead of failing.
 - Whether a test exists, its kind and its cost: the `tests` skill.
 
 ## Don't
