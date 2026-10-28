@@ -237,7 +237,7 @@ export const planModules = Effect.fn('enforcement.planModules')(function* (input
       rootName ??= blockName((yield* blocks.rootBlockOf(input.projectId)).uuid);
       faults.unplaced(
         ask.id,
-        `send \`parent\`: the module holding it — its part — or ${rootName}, the root named explicitly while the root's modules fit a screen`,
+        `send \`parent\`: the module card whose root holds its code, else its part — a page for one area of what the user gets — or ${rootName}, the root named explicitly while the root's modules fit a screen`,
       );
     }
     const under = ask.under instanceof GateRefusal || sideFault !== undefined ? undefined : ask.under;
