@@ -8,6 +8,7 @@ import { BODY_FILE_FIELD, GRAPH_ACT, GRAPH_DIRECT_ACT, noSubjects, graphInput } 
 import { creationFields } from '../creation.js';
 import { placeRole } from '../../../../platform/contract/wire/place.js';
 import { STORAGE_MODES } from '../../../../projects/contract/wire/project.js';
+import { BlockName } from '../references.js';
 
 const CREATE_GRAMMAR = `An untagged note may carry file, directory or symbol sources, which support ownership and navigation, and the edges every block carries: \`relates\` and \`discovered-from\`. To deliver a note to file readers and writers, use a type supporting \`core/explanation\`. What a tagged node carries — its fields, edges, sources and the word it is born at — is its tags' declaration in your instructions; a proposal is born under \`amendsId\` with deferred \`ops\` (create/edit/update/delete/link/unlink) restricted to that subtree, and a move amends the moving block.`;
 
@@ -336,7 +337,17 @@ A \`parentId\` in another project’s graph moves the block with its subtree and
       "A block under a stealth block is stealth too, so a block moves to team only under a team parent. The project root moves only with the whole project, by set_project_storage. A stealth project has no team storage. Moving to stealth hides the block's future versions: what the repository already committed of it stays in its history.",
     input: graphInput({ blockId: blockRef, storage: Schema.Literals(STORAGE_MODES) }),
     refusals: ['not-found', 'deleted', 'project-root', 'storage-unchanged', 'storage-unavailable', 'stealth-dependency'],
-    answer: arms({ ok: blockResultFields }),
+    answer: arms({
+      ok: {
+        ...blockResultFields,
+        published: Schema.optional(Schema.Array(BlockName)).annotate({
+          description: 'Blocks moved to stealth whose files the repository already committed: those versions stay in its history.',
+        }),
+        publishedUnread: Schema.optional(Schema.String).annotate({
+          description: 'Why the repository’s committed files could not be read; the move landed regardless.',
+        }),
+      },
+    }),
     confirmation: (input) => ({
       summary: `Move ${input.blockId} and everything under it to ${input.storage} storage?`,
       consequence:

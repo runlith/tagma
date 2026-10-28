@@ -28,6 +28,7 @@ import type { Moved } from '../contract/wire/answers.js';
 import { cross, link, linkTarget, scoped, targeted, unlink } from './crossing.js';
 import { relocate } from './relocation.js';
 import { GraphCall } from '../contract/service/serving.js';
+import { type Published, publishedOf } from './published.js';
 
 const READS = READ_OPERATIONS;
 
@@ -251,10 +252,16 @@ const BLOCK_WRITE_ROUTED = {
       (input: (typeof W.set_block_storage)['input']['Type']) => input.blockId,
       Effect.fnUntraced(function* (input: (typeof W.set_block_storage)['input']['Type']) {
         const row = yield* scoped(input.blockId);
-        return yield* priced(lawPricing(row.projectId, true), (yield* Blocks).setStorage({ id: row.id, storage: input.storage }));
+        const blocks = yield* Blocks;
+        const leaving = input.storage === 'stealth' ? [row, ...(yield* blocks.collectDescendants(row.id))] : [];
+        const moved = yield* priced(lawPricing(row.projectId, true), blocks.setStorage({ id: row.id, storage: input.storage }));
+        return { moved, published: yield* publishedOf(leaving) };
       }),
     ),
-    answer: pricedBlockResult,
+    answer: (raw: { readonly moved: Priced<BlockWrite>; readonly published: Published }) => ({
+      ...pricedBlockResult(raw.moved),
+      ...raw.published,
+    }),
   }),
 
   delete_block: routed(W.delete_block, {

@@ -63,12 +63,14 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const project = (born.body as { project: { id: number } }).project.id;
       yield* projectLeaving(world, project);
       const roadmap = ((yield* world.op('create_block', { project, title: 'Roadmap' })).body as Written).block.name;
-      expect((yield* world.op('create_block', { project, title: 'Quarter plan', parentId: roadmap })).status).toBe(200);
+      const quarter = ((yield* world.op('create_block', { project, title: 'Quarter plan', parentId: roadmap })).body as Written).block.name;
       expect((yield* world.op('sync_graph', { project })).status).toBe(200);
       const inTeam = () => Effect.map(suiteGit(root, 'ls-files', '--', '.tagma'), (listed) => listed.includes('roadmap'));
       expect(yield* inTeam()).toBe(true);
 
-      expect((yield* world.op('set_block_storage', { project, blockId: roadmap, storage: 'stealth' })).status).toBe(200);
+      const hiding = yield* world.op('set_block_storage', { project, blockId: roadmap, storage: 'stealth' });
+      expect(hiding.status).toBe(200);
+      expect([...((hiding.body as { published?: readonly string[] }).published ?? [])].sort()).toEqual([quarter, roadmap].sort());
       expect((yield* world.op('sync_graph', { project })).status).toBe(200);
       expect(yield* inTeam()).toBe(false);
       const unchanged = yield* world.op('set_block_storage', { project, blockId: roadmap, storage: 'stealth' });
