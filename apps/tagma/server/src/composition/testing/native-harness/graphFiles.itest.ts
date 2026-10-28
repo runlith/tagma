@@ -4,6 +4,7 @@ import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { ToolAnswer, ToolFailed, toolExecute, toolPrepare, toolSettleEffect } from '@runlith/agent/tool';
 import { openToolDoor, ToolJudge } from '@runlith/agent/door/openToolDoor';
+import { toolDisplayOpensByDefault } from '@runlith/agent/tool/display';
 import { builtinMode } from '../modes.js';
 import { createWriteTool } from '@runlith/agent-tools/write';
 import { Effect, FileSystem } from 'effect';
@@ -431,6 +432,23 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
       expect(diff.body).toContain('<ins>');
       const read = yield* callAt('call-ranged-read', 'read_block', { blockIds: [born.block.name] });
       expect(read.journal).toBeUndefined();
+    }),
+  );
+
+  it.effect('a step that wrote a block’s title or body opens in the feed, and a step that only moved it stays folded', () =>
+    Effect.gen(function* () {
+      const { answer } = yield* GraphTools;
+      const step = Effect.fnUntraced(function* (name: string, input: Record<string, unknown>) {
+        const answered = yield* answer(name, input);
+        if (!(answered instanceof ToolAnswer) || answered.display === undefined)
+          return yield* Effect.die(`The tool ${name} answered no form.`);
+        return { block: (answered.value as { block: { name: string } }).block.name, opens: toolDisplayOpensByDefault(answered.display) };
+      });
+      const born = yield* step('create_block', { tags: ['idea'], title: 'Unfolded where it was written', body: 'The first body.' });
+      expect(born.opens).toBe(true);
+      expect((yield* step('edit_block', { blockId: born.block, oldString: 'first', newString: 'second' })).opens).toBe(true);
+      expect((yield* step('update_block', { blockId: born.block, title: 'Retitled where it was written' })).opens).toBe(true);
+      expect((yield* step('update_block', { blockId: born.block, ord: 7 })).opens).toBe(false);
     }),
   );
 });

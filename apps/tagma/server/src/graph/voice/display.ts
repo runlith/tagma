@@ -17,9 +17,15 @@ export type GraphToolInput = {
   readonly symbol?: string;
   readonly query?: string;
   readonly title?: string;
+  readonly body?: string;
+  readonly bodyFile?: string;
+  readonly oldString?: string;
   readonly type?: string;
   readonly name?: string;
 };
+
+const writesText = (input: GraphToolInput): boolean =>
+  input.title !== undefined || input.body !== undefined || input.bodyFile !== undefined || input.oldString !== undefined;
 
 function blockSubject(block: { readonly name: string; readonly title: string }): string {
   return block.title ? `${block.name} — ${block.title}` : block.name;
@@ -92,6 +98,7 @@ export function graphSettledDisplay(input: GraphToolInput, result: GraphToolAnsw
     return {
       form: 'none',
       title: blockSubject(result.block),
+      opens: result.journal !== undefined && writesText(input) ? true : undefined,
       facts: result.journalUnreadable === undefined ? undefined : [{ label: 'journal', value: `unreadable: ${result.journalUnreadable}` }],
       details: [
         ...(result.journal?.chars === undefined
