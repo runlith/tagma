@@ -11,7 +11,7 @@ index 15e92aa..9e62ac8 100644
  export { raf } from './timing.js';
  export { proxy } from './proxy.js';
 diff --git a/src/internal/client/reactivity/batch.js b/src/internal/client/reactivity/batch.js
-index 8251f79..b567275 100644
+index 8251f79..5f870af 100644
 --- a/src/internal/client/reactivity/batch.js
 +++ b/src/internal/client/reactivity/batch.js
 @@ -321,6 +321,11 @@ export class Batch {
@@ -69,7 +69,17 @@ index 8251f79..b567275 100644
  	}
  
  	/**
-@@ -966,16 +979,16 @@ export class Batch {
+@@ -451,6 +464,9 @@ export class Batch {
+ 					effects.push(effect);
+ 				} else if (async_mode_flag && (flags & (RENDER_EFFECT | MANAGED_EFFECT)) !== 0) {
+ 					render_effects.push(effect);
++				} else if (!async_mode_flag && eager_block_effects !== null && eager_block_effects.size > 0 && under_marked_block(effect, eager_block_effects)) {
++					// A write in this traversal marked a block above it: it runs after the queue flush updates that block, if it still stands
++					render_effects.push(effect);
+ 				} else if (is_dirty(effect)) {
+ 					if ((flags & BLOCK_EFFECT) !== 0) this.#maybe_dirty_effects.add(effect);
+ 					update_effect(effect);
+@@ -966,16 +982,16 @@ export class Batch {
  			}
  
  			if ((flags & (ROOT_EFFECT | BRANCH_EFFECT)) !== 0) {
@@ -92,7 +102,7 @@ index 8251f79..b567275 100644
  	}
  
  	#unlink() {
-@@ -1086,6 +1099,9 @@ export let eager_block_effects = null;
+@@ -1086,6 +1102,9 @@ export let eager_block_effects = null;
   * @returns {void}
   */
  function flush_queued_effects(effects) {
@@ -102,7 +112,7 @@ index 8251f79..b567275 100644
  	var length = effects.length;
  	if (length === 0) return;
  
-@@ -1117,39 +1133,50 @@ function flush_queued_effects(effects) {
+@@ -1117,39 +1136,62 @@ function flush_queued_effects(effects) {
  
  			// If update_effect() has a flushSync() in it, we may have flushed another flush_queued_effects(),
  			// which already handled this logic and did set eager_block_effects to null.
@@ -137,6 +147,19 @@ index 8251f79..b567275 100644
 -				}
 +	eager_block_effects = null;
 +}
+ 
+-				eager_block_effects.clear();
++/**
++ * Whether a collected block above `effect` is marked and not updated since
++ * @param {Effect} effect
++ * @param {Set<Effect>} blocks
++ */
++function under_marked_block(effect, blocks) {
++	for (var parent = effect.parent; parent !== null; parent = parent.parent) {
++		if ((parent.f & (DIRTY | MAYBE_DIRTY)) !== 0 && blocks.has(parent)) return true;
++	}
++	return false;
++}
 +
 +/**
 + * Runs the block effects a write marked while `eager_block_effects` collected them, ancestors first
@@ -145,8 +168,7 @@ index 8251f79..b567275 100644
 +	// A flushSync inside an update replaces or clears the collector: this flush keeps walking the set it started with
 +	var blocks = eager_block_effects;
 +	if (blocks === null || blocks.size === 0) return;
- 
--				eager_block_effects.clear();
++
 +	old_values.clear();
 +
 +	for (const e of blocks) {
@@ -180,7 +202,7 @@ index 8251f79..b567275 100644
  }
  
  /**
-@@ -1237,7 +1264,9 @@ function depends_on(reaction, sources, checked) {
+@@ -1237,7 +1279,9 @@ function depends_on(reaction, sources, checked) {
   * @returns {void}
   */
  export function schedule_effect(effect) {

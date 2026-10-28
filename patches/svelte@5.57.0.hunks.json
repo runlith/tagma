@@ -35,7 +35,7 @@
       "off": "experimental.async is off: a branch held by an earlier batch exists only in async mode, and the trap's await does not compile without it"
     },
     "10-commit-teardown": {
-      "markers": ["teardown at commit", "flush_eager_block_effects", "outer_block_effects"],
+      "markers": ["teardown at commit", "flush_eager_block_effects", "outer_block_effects", "under_marked_block"],
       "tests": [
         { "package": "packages/layer", "file": "src/svelte/nested-eager-flush.svelte.test.ts" },
         { "package": "packages/layer", "file": "src/svelte/seat-release.svelte.test.ts" },

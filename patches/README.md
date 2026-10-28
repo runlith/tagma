@@ -393,7 +393,11 @@ branch switch from waiting for the commit. The flush skips a collected block tha
 since a block later in the tree is updated by the traversal itself after the write marked it, and it
 takes each block out of the set as it reaches it: a block whose teardown clears a guard the walk has
 already updated marks that guard again, and the walk reaches it once more instead of leaving it marked
-under the batch's effects.
+under the batch's effects. When the cleared guard stands above the removed branch, the traversal is
+still inside it: from there on it runs no render, block or pre effect under a collected block that is
+still marked, and queues it with the render effects instead, which the sync traversal otherwise leaves
+empty. The queue flush updates the blocks first and then runs what still stands; the effect is not
+asked whether it is dirty before that, since asking recomputes the deriveds it reads.
 
 Symptom: the agents column of the Tagma window fell into its error boundary with
 `Cannot read properties of null (reading 'activeId')` when a project the window stood on was renamed:
@@ -406,7 +410,8 @@ section column and the right area, whose teardowns clear those seams in `AreaFra
 
 Traps: `packages/layer/src/svelte/nested-eager-flush.svelte.test.ts`, the nested flush in sync mode;
 `packages/layer/src/svelte/passed-guard.svelte.test.ts`, a guard the sync traversal passed, cleared by
-the teardown of a later branch, and cleared once more by a block the walk runs after it;
+the teardown of a later branch, cleared once more by a block the walk runs after it, and cleared by a
+teardown inside the guarded branch;
 `packages/layer/src/svelte/seat-release.svelte.test.ts`, the shape alone and with a `flushSync` in the
 guarded branch's teardown; the column itself in
 `apps/tagma/app/src/lib/features/threads/Column.svelte.test.ts -t "leaves when the page"`. The last two
