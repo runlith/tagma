@@ -54,6 +54,9 @@ export const blockAnswerSchema = Schema.Struct({
   parentName: Schema.NullOr(BlockName),
   superseded: Schema.Boolean,
   blocked: Schema.Boolean,
+  stealth: Schema.optional(Schema.Literal(true)).annotate({
+    description: "Kept in stealth storage: Tagma's data directory, never the repository.",
+  }),
   updatedAt: Schema.String,
 });
 export type BlockAnswer = typeof blockAnswerSchema.Type;

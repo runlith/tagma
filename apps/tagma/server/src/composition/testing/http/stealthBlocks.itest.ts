@@ -44,8 +44,76 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       expect(committed.split('\n').some((path) => path.endsWith('/vendor-terms/clause.md'))).toBe(true);
 
       const found = yield* world.op('search_blocks', { project, query: 'Clause' });
-      expect(JSON.stringify(found.body)).toContain('Clause');
+      expect(JSON.stringify(found.body)).toContain('"stealth":true');
+      const kept = yield* world.op('query_blocks', { project, stealth: true, sort: { by: 'created', order: 'asc' } });
+      expect((kept.body as { blocks: readonly { title: string }[] }).blocks.map((row) => row.title)).toEqual(['Vendor terms', 'Clause']);
       expect(yield* suiteGit(root, 'status', '--porcelain', '--untracked-files=all', '--', '.tagma')).toBe('');
+    }),
+  );
+
+  it.effect('set_block_storage carries a whole subtree out of .tagma into the stealth tree and back', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.realPath(yield* world.directory('moving'));
+      yield* suiteGit(root, 'init', '-q', '-b', 'main');
+      const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
+      const project = (born.body as { project: { id: number } }).project.id;
+      yield* projectLeaving(world, project);
+      const roadmap = ((yield* world.op('create_block', { project, title: 'Roadmap' })).body as Written).block.name;
+      expect((yield* world.op('create_block', { project, title: 'Quarter plan', parentId: roadmap })).status).toBe(200);
+      expect((yield* world.op('sync_graph', { project })).status).toBe(200);
+      const inTeam = () => Effect.map(suiteGit(root, 'ls-files', '--', '.tagma'), (listed) => listed.includes('roadmap'));
+      expect(yield* inTeam()).toBe(true);
+
+      expect((yield* world.op('set_block_storage', { project, blockId: roadmap, storage: 'stealth' })).status).toBe(200);
+      expect((yield* world.op('sync_graph', { project })).status).toBe(200);
+      expect(yield* inTeam()).toBe(false);
+      const unchanged = yield* world.op('set_block_storage', { project, blockId: roadmap, storage: 'stealth' });
+      expect((unchanged.body as { code: string }).code).toBe('storage-unchanged');
+      yield* world.runtime.pool.releaseProject(project);
+      const tree = join(graphHome(world.dataHome, project), 'layers', stealthTreeName(root));
+      const hidden = yield* suiteGit(tree, 'ls-tree', '-r', '--name-only', 'HEAD');
+      expect(hidden).toContain('/roadmap/quarter-plan.md');
+
+      expect((yield* world.op('set_block_storage', { project, blockId: roadmap, storage: 'team' })).status).toBe(200);
+      expect((yield* world.op('sync_graph', { project })).status).toBe(200);
+      expect(yield* inTeam()).toBe(true);
+      expect(yield* suiteGit(root, 'ls-files', '--', '.tagma')).toContain('roadmap/quarter-plan.md');
+    }),
+  );
+
+  it.effect('one apply_batch creates the first stealth block of a project and moves another block into it', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.realPath(yield* world.directory('batch'));
+      yield* suiteGit(root, 'init', '-q', '-b', 'main');
+      const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
+      const project = (born.body as { project: { id: number } }).project.id;
+      yield* projectLeaving(world, project);
+      const pricing = ((yield* world.op('create_block', { project, title: 'Pricing' })).body as Written).block.name;
+      const batch = yield* world.op('apply_batch', {
+        project,
+        source: JSON.stringify({
+          ops: [
+            { op: 'create', $id: 'deals', title: 'Deals', storage: 'stealth' },
+            { op: 'storage', id: pricing, storage: 'stealth' },
+            { op: 'create', title: 'Changelog' },
+          ],
+        }),
+      });
+      expect(batch.status).toBe(200);
+      expect((yield* world.op('sync_graph', { project })).status).toBe(200);
+      const tracked = yield* suiteGit(root, 'ls-files', '--', '.tagma');
+      expect(tracked).toContain('changelog.md');
+      expect(tracked).not.toContain('pricing');
+      expect(tracked).not.toContain('deals');
+      yield* world.runtime.pool.releaseProject(project);
+      const tree = join(graphHome(world.dataHome, project), 'layers', stealthTreeName(root));
+      const hidden = yield* suiteGit(tree, 'ls-tree', '-r', '--name-only', 'HEAD');
+      expect(hidden).toContain('/deals.md');
+      expect(hidden).toContain('/pricing.md');
     }),
   );
 });

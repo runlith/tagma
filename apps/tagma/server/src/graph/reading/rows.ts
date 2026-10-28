@@ -45,6 +45,7 @@ export function wireTreeBlock(row: Omit<BlockRecord, 'body'>): TreeBlock {
     blocked: row.blocked,
     building: row.building,
     answered: row.answered,
+    stealth: row.stealth ? true : undefined,
     deletedAt: maybeAt(row.deletedAt),
     createdAt: at(row.createdAt),
     updatedAt: at(row.updatedAt),

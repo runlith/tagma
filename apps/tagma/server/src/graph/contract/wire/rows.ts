@@ -46,6 +46,9 @@ const treeBlockFields = {
   blocked: Schema.Boolean,
   building: Schema.Boolean,
   answered: Schema.Boolean,
+  stealth: Schema.optional(Schema.Literal(true)).annotate({
+    description: "Kept in stealth storage: Tagma's data directory, never the repository.",
+  }),
   deletedAt: Schema.NullOr(Schema.String),
   createdAt: Schema.String,
   updatedAt: Schema.String,

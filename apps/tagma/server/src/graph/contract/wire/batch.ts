@@ -5,6 +5,7 @@ import { creationFields } from './creation.js';
 
 import { body, documentRef, fieldsField, line, oldText, place, tagsField, title } from './fields.js';
 import { BLOCK_ADDRESS } from './references.js';
+import { STORAGE_MODES } from '../../../projects/contract/wire/project.js';
 
 export const batchRefSchema = Schema.String.check(Schema.isPattern(new RegExp(`^(?:\\$\\S+|${BLOCK_ADDRESS.source.slice(1, -1)})$`, 'u')));
 
@@ -82,6 +83,11 @@ export const unanchorOpSchema = Schema.Struct({
 export const supersedeOpSchema = Schema.Struct({ op: Schema.Literal('supersede'), oldId: batchRefSchema, withId: batchRefSchema });
 export const unsupersedeOpSchema = Schema.Struct({ op: Schema.Literal('unsupersede'), id: batchRefSchema });
 export const restoreOpSchema = Schema.Struct({ op: Schema.Literal('restore'), id: batchRefSchema });
+export const storageOpSchema = Schema.Struct({
+  op: Schema.Literal('storage'),
+  id: batchRefSchema,
+  storage: Schema.Literals(STORAGE_MODES),
+});
 
 type GraphMutationOp =
   | BatchCreateOp
@@ -98,7 +104,8 @@ type GraphMutationOp =
   | typeof supersedeOpSchema.Type
   | typeof unsupersedeOpSchema.Type
   | typeof deleteOpSchema.Type
-  | typeof restoreOpSchema.Type;
+  | typeof restoreOpSchema.Type
+  | typeof storageOpSchema.Type;
 
 export const proposeOpSchema = Schema.Struct({
   op: Schema.Literal('propose'),
@@ -133,6 +140,7 @@ const BATCH_VERBS = Schema.Union([
   unsupersedeOpSchema,
   deleteOpSchema,
   restoreOpSchema,
+  storageOpSchema,
   proposeOpSchema,
   acceptOpSchema,
   rejectOpSchema,

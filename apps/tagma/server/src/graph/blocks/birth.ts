@@ -5,6 +5,7 @@ import { gitRefusal } from '../../platform/git/readings.js';
 import { checkoutAt, standsAside } from '../../workspace/checkouts/git.js';
 import { ServedStorage, measuredRoot } from '../contract/service/serving.js';
 import type { StorageMode } from '../../projects/contract/wire/project.js';
+import { attachedStealth } from './storage.js';
 import { Tasks } from '../contract/service/work.js';
 import { type BlockCreateRefusal, Edges, type FarLink } from '../contract/service/blocks.js';
 import { type BlockCreate } from '../contract/wire/creation.js';
@@ -95,19 +96,8 @@ export const bornStealth = Effect.fnUntraced(function* (
     ]);
   }
   const stealth = asked === undefined ? parent.stealth : asked === 'stealth';
-  if (!stealth || parent.stealth) return stealth;
-  if (storage === null || storage.stealth === null) {
-    return yield* new GateRefusal(
-      'storage-unavailable',
-      'this copy of the graph keeps no stealth tree, so it cannot hold a stealth block',
-      ['act from a checkout that stands on a branch — its copy keeps the stealth tree beside .tagma'],
-    );
-  }
-  yield* Effect.mapError(
-    storage.stealth.attach,
-    (refused) => new GateRefusal('storage-unavailable', `the stealth tree could not be attached: ${refused.reason}`, refused.unblock),
-  );
-  return true;
+  if (stealth && !parent.stealth) yield* attachedStealth();
+  return stealth;
 });
 
 export function bornFields(tags: readonly Tag[], written: Readonly<Record<string, unknown>>): Record<string, unknown> {

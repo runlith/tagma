@@ -22,7 +22,8 @@ import { BlockRows } from '../acts/rows.js';
 import { BlockNames } from '../contract/service/acts.js';
 import type { HeldWork } from '../contract/wire/operations/shared.js';
 import { ActState } from '../contract/service/transaction.js';
-import { Trash } from '../contract/service/blocks.js';
+import { Blocks, Trash } from '../contract/service/blocks.js';
+import { attachedStealth } from '../blocks/storage.js';
 import { InstalledCatalogs, Tags } from '../contract/service/vocabulary.js';
 import { resolveTypes } from '../contract/wire/tags/profile.js';
 import { aboutBody } from '../blocks/bodyFile.js';
@@ -157,11 +158,12 @@ function batchDocumentOps(document: unknown): Effect.Effect<readonly unknown[], 
 export const batchLayer: Layer.Layer<
   Batch,
   never,
-  BlockRows | BlockNames | Amendments | BatchFiles | Sources | Tasks | Supersession | Review | Trash | Tags | InstalledCatalogs
+  BlockRows | BlockNames | Amendments | BatchFiles | Sources | Tasks | Supersession | Review | Trash | Tags | InstalledCatalogs | Blocks
 > = Layer.effect(
   Batch,
   Effect.gen(function* () {
     const blockRows = yield* BlockRows;
+    const blocks = yield* Blocks;
     const names = yield* BlockNames;
     const amendments = yield* Amendments;
     const documents = yield* BatchFiles;
@@ -264,6 +266,8 @@ export const batchLayer: Layer.Layer<
           return yield* standing.unsupersede({ id: yield* refOf(handles, op.id) });
         case 'restore':
           return yield* trash.restore({ id: yield* refOf(handles, op.id) });
+        case 'storage':
+          return yield* blocks.setStorage({ id: yield* refOf(handles, op.id), storage: op.storage });
         default:
           return yield* new GateRefusal('batch-shape', `unknown op "${(op as { op?: unknown }).op}"`, [
             'every op of the document mirrors an operation by name; apply_batch states the grammar',
@@ -337,6 +341,7 @@ export const batchLayer: Layer.Layer<
         const decoded = yield* Schema.decodeUnknownEffect(batchSchema)(document, { ...closedParsing, errors: 'all' }).pipe(
           Effect.mapError((error) => batchDocumentRefusal(error, rawOps)),
         );
+        if (decoded.ops.some((op) => (op.op === 'create' || op.op === 'storage') && op.storage === 'stealth')) yield* attachedStealth();
         const ran = yield* amendments.runDocument(
           decoded.ops,
           (op, handles, index) =>

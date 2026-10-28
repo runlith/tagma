@@ -45,6 +45,7 @@ import { blockBirth } from './birth.js';
 import { blockArrival } from './arrival.js';
 import { blockEdit } from './edit.js';
 import { blockLaw } from './law.js';
+import { blockStorage } from './storage.js';
 import { blockModules } from './modules.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { projecting, referencing } from '../store/actWrites.js';
@@ -357,6 +358,7 @@ export const blocksLayer: Layer.Layer<
       edit: yield* blockEdit(update),
       setEnabled,
       setDelivery,
+      setStorage: (yield* blockStorage).setStorage,
       setEnforcement,
       moduleCards,
       writeModules,

@@ -227,6 +227,7 @@ export const selectionLayer: Layer.Layer<Selection, never, GraphStore | BlockNam
         conditions.push(slotIn(table, HOLDER, HOLDER_SLOT, [String(q.assigneeSessionId)], block.id));
       }
       if (q.since !== undefined) conditions.push(sql`${block.updatedAt} >= ${new Date(q.since).getTime()}`);
+      if (q.stealth !== undefined) conditions.push(eq(block.stealth, q.stealth));
       for (const fact of MEASURED_FACTS) {
         const wanted = q[fact];
         if (wanted === undefined) continue;
@@ -298,6 +299,7 @@ export const selectionLayer: Layer.Layer<Selection, never, GraphStore | BlockNam
           createdAt: row.createdAt.toISOString(),
           updatedAt: row.updatedAt.toISOString(),
           ...marks,
+          ...(row.stealth ? { stealth: true as const } : {}),
         };
       });
     });

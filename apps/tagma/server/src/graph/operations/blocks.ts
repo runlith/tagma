@@ -246,6 +246,17 @@ const BLOCK_WRITE_ROUTED = {
     answer: () => ({ status: 'ok' as const }),
   }),
 
+  set_block_storage: routed(W.set_block_storage, {
+    ...targeted(
+      (input: (typeof W.set_block_storage)['input']['Type']) => input.blockId,
+      Effect.fnUntraced(function* (input: (typeof W.set_block_storage)['input']['Type']) {
+        const row = yield* scoped(input.blockId);
+        return yield* priced(lawPricing(row.projectId, true), (yield* Blocks).setStorage({ id: row.id, storage: input.storage }));
+      }),
+    ),
+    answer: pricedBlockResult,
+  }),
+
   delete_block: routed(W.delete_block, {
     ...targeted(
       (input: (typeof W.delete_block)['input']['Type']) => input.blockId,

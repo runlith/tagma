@@ -11,11 +11,13 @@ export type BlockLine = Tagged & {
   readonly building?: boolean;
   readonly answered?: boolean;
   readonly deletedAt?: unknown;
+  readonly stealth?: boolean;
 };
 
 export function blockLine(table: TagReading, row: BlockLine): string {
   const law = table.lawProjection(row);
   const marks = [
+    row.stealth === true ? 'stealth' : '',
     row.superseded === true ? 'superseded' : '',
     row.answered === true ? 'answered' : '',
     row.blocked === true ? 'blocked' : '',

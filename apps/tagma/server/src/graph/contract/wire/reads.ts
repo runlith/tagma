@@ -25,6 +25,9 @@ export const blockListRowSchema = Schema.Struct({
   blocked: Schema.optional(Schema.Boolean),
   building: Schema.optional(Schema.Boolean),
   answered: Schema.optional(Schema.Boolean),
+  stealth: Schema.optional(Schema.Literal(true)).annotate({
+    description: "Kept in stealth storage: Tagma's data directory, never the repository.",
+  }),
 });
 export type BlockListRow = typeof blockListRowSchema.Type;
 

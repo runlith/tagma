@@ -7,6 +7,7 @@ import { edgeNameSchema } from '../edges.js';
 import { BODY_FILE_FIELD, GRAPH_ACT, GRAPH_DIRECT_ACT, noSubjects, graphInput } from './shared.js';
 import { creationFields } from '../creation.js';
 import { placeRole } from '../../../../platform/contract/wire/place.js';
+import { STORAGE_MODES } from '../../../../projects/contract/wire/project.js';
 
 const CREATE_GRAMMAR = `An untagged note may carry file, directory or symbol sources, which support ownership and navigation, and the edges every block carries: \`relates\` and \`discovered-from\`. To deliver a note to file readers and writers, use a type supporting \`core/explanation\`. What a tagged node carries — its fields, edges, sources and the word it is born at — is its tags' declaration in your instructions; a proposal is born under \`amendsId\` with deferred \`ops\` (create/edit/update/delete/link/unlink) restricted to that subtree, and a move amends the moving block.`;
 
@@ -324,6 +325,27 @@ A \`parentId\` in another project’s graph moves the block with its subtree and
     confirmation: (input) => ({ summary: `Remove the ${input.kind} edge ${input.fromId} → ${input.toId}?` }),
     confirmLabel: 'Unlink',
     presentation: { running: 'Unlinking blocks', done: 'Unlinked blocks' },
+    subjects: noSubjects,
+  }),
+
+  set_block_storage: operation('set_block_storage', {
+    ...GRAPH_ACT,
+    meaning:
+      "Move a block with its whole subtree to team storage — .tagma, which the repository carries — or to stealth storage — Tagma's data directory beside it, which the repository never carries.",
+    grammar:
+      "A block under a stealth block is stealth too, so a block moves to team only under a team parent. The project root moves only with the whole project, by set_project_storage. A stealth project has no team storage. Moving to stealth hides the block's future versions: what the repository already committed of it stays in its history.",
+    input: graphInput({ blockId: blockRef, storage: Schema.Literals(STORAGE_MODES) }),
+    refusals: ['not-found', 'deleted', 'project-root', 'storage-unchanged', 'storage-unavailable', 'stealth-dependency'],
+    answer: arms({ ok: blockResultFields }),
+    confirmation: (input) => ({
+      summary: `Move ${input.blockId} and everything under it to ${input.storage} storage?`,
+      consequence:
+        input.storage === 'team'
+          ? 'The subtree lands in .tagma and rides the repository with its next graph commit.'
+          : 'The subtree leaves .tagma and stays in this machine’s data directory.',
+    }),
+    confirmLabel: 'Move',
+    presentation: { running: 'Moving a block between storages', done: 'Moved a block between storages' },
     subjects: noSubjects,
   }),
 

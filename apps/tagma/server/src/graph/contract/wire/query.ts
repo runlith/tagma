@@ -42,6 +42,9 @@ const queryFields = (ref: Schema.String) => ({
   superseded: Schema.optional(Schema.Boolean),
   building: Schema.optional(Schema.Boolean),
   answered: Schema.optional(Schema.Boolean),
+  stealth: Schema.optional(Schema.Boolean).annotate({
+    description: "true: only blocks in stealth storage, Tagma's data directory; false: only blocks the repository carries.",
+  }),
   sort: Schema.Struct({
     by: Schema.Literals(BLOCK_SORT_KEYS),
     order: Schema.Literals(['asc', 'desc']),

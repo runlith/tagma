@@ -18,6 +18,7 @@ import type { ContractId } from '../wire/tags/behaviour.js';
 import type { farEdge } from '../../store/tables.js';
 import type { SessionRef } from '../../../platform/contract/wire/session.js';
 import type { SourceInput } from '../wire/sources.js';
+import type { StorageMode } from '../../../projects/contract/wire/project.js';
 
 export type BlockEdit = {
   id: number;
@@ -87,6 +88,8 @@ export type BlockCreateRefusal =
   | StorageRefusal;
 
 export type StorageRefusal = 'storage-unavailable' | 'stealth-dependency';
+
+export type SetStorageRefusal = FloorRefusal | StorageRefusal | 'not-found' | 'deleted' | 'project-root' | 'storage-unchanged';
 
 export type BlockUpdateRefusal =
   | FloorRefusal
@@ -186,6 +189,10 @@ export class Blocks extends Context.Service<
     edit(input: BlockEdit): Effect.Effect<BlockWrite, StoreFailure | GateRefusal<BlockEditRefusal>>;
     setEnabled(input: { id: number; enabled: boolean }): Effect.Effect<BlockRecord, StoreFailure | GateRefusal<SwitchRefusal>>;
     setDelivery(input: { id: number; delivery: Delivery | null }): Effect.Effect<BlockRecord, StoreFailure | GateRefusal<DeliveryRefusal>>;
+    setStorage(input: {
+      readonly id: number;
+      readonly storage: StorageMode;
+    }): Effect.Effect<BlockWrite, StoreFailure | GateRefusal<SetStorageRefusal>>;
     setEnforcement(input: EnforcementWrite): Effect.Effect<BlockRecord, StoreFailure | GateRefusal<EnforceRefusal>>;
     moduleCards(projectId: number): Effect.Effect<readonly ModuleCard[], StoreFailure>;
     writeModules(

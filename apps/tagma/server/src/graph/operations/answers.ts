@@ -44,6 +44,7 @@ export function blockSummary(row: BlockRecord): BlockAnswer {
     parentName: row.parentId === null ? null : blockName((row as { parentUuid?: string | null }).parentUuid ?? ''),
     superseded: row.superseded,
     blocked: row.blocked,
+    stealth: row.stealth ? true : undefined,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
