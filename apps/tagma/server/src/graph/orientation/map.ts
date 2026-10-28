@@ -22,7 +22,7 @@ export type MapRow = {
   readonly superseded: number;
 };
 
-export function drawsRegion(table: TagTable, row: MapRow): boolean {
+function drawsRegion(table: TagTable, row: MapRow): boolean {
   return row.superseded === 0 && table.supports(row, CONTAINER);
 }
 
@@ -53,7 +53,8 @@ function nearestRegion(
   return undefined;
 }
 
-function regions(byId: ReadonlyMap<number, MapRow>, table: TagTable, rootId: number): ReadonlySet<number> {
+export function mapRegions(table: TagTable, rows: readonly MapRow[], rootId: number): ReadonlySet<number> {
+  const byId = new Map(rows.map((row) => [row.id, row]));
   const drawn = new Set<number>();
   for (const row of byId.values()) {
     if (!drawsRegion(table, row)) continue;
@@ -77,14 +78,13 @@ function regions(byId: ReadonlyMap<number, MapRow>, table: TagTable, rootId: num
 }
 
 export function mapNodes(
-  table: TagTable,
   rows: readonly MapRow[],
+  drawn: ReadonlySet<number>,
   rootId: number,
   places: ReadonlyMap<number, readonly string[]>,
   kinds: ReadonlyMap<number, string> = new Map(),
 ): MapNode[] {
   const byId = new Map(rows.map((row) => [row.id, row]));
-  const drawn = regions(byId, table, rootId);
   const above = new Map<number, number | null>();
   const parentOf = (row: MapRow): number | null => {
     const known = above.get(row.id);

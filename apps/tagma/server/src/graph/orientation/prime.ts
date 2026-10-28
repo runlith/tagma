@@ -8,7 +8,7 @@ import { WriterRegister } from '../../platform/contract/service/writers.js';
 import { SessionIdentity, sessionName } from '../../platform/contract/wire/session.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { GLOBAL_PROJECT } from '../../projects/contract/wire/project.js';
-import { drawsRegion, mapHeading, mapLines, mapNodes, regionAbove, type MapNode, type MapRow } from './map.js';
+import { mapHeading, mapLines, mapNodes, mapRegions, regionAbove, type MapNode, type MapRow } from './map.js';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { block, edge, source } from '../store/tables.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
@@ -65,7 +65,8 @@ const orientationReads = Effect.fnUntraced(function* (law: LawReads) {
     table: TagTable,
     rootId: number,
   ): Effect.fn.Return<readonly MapNode[], StoreFailure> {
-    const drawn = rows.filter((row) => drawsRegion(table, row));
+    const regions = mapRegions(table, rows, rootId);
+    const drawn = rows.filter((row) => regions.has(row.id));
     const held = drawn.map((row) => row.id);
     if (held.length === 0) return [];
     const places = new Map<number, string[]>();
@@ -80,7 +81,7 @@ const orientationReads = Effect.fnUntraced(function* (law: LawReads) {
       const kind = row.fields['kind'];
       if (typeof kind === 'string') kinds.set(row.id, kind);
     }
-    return mapNodes(table, rows, rootId, places, kinds);
+    return mapNodes(rows, regions, rootId, places, kinds);
   });
 
   const render = Effect.fn('Orientation.render')(function* (input: {

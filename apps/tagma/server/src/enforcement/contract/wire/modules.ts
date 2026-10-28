@@ -61,7 +61,7 @@ export const ModuleSet = Schema.Struct({
   parent: Schema.optional(
     blockRef.annotate({
       description:
-        'Where the card stands: its part — a page for one area of what the user gets — or the project root named explicitly. A new card names it; a standing one moves there.',
+        'Where the card stands: its part — a page for one area of what the user gets —, the card of the application it makes up as a whole, or the project root named explicitly. A new card names it; a standing one moves there.',
     }),
   ),
   remove: Schema.optional(

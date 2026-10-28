@@ -146,6 +146,14 @@ layer(demoGraphLayer(), { excludeTestServices: true })('prime', (it) => {
         const scoped = yield* graph.orientation.render({ projectId, scopeId: engine });
         expect(scoped).toContain('src/engine');
         expect(scoped).not.toContain('src/store');
+        const part = (yield* graph.blocks.create({
+          projectId,
+          title: 'Payments',
+          parentId: area,
+          sources: [{ kind: 'dir', ref: 'src/pay' }],
+        })).id;
+        yield* region(projectId, 'ledger', 'src/pay/ledger', part);
+        expect(yield* graph.orientation.render({ projectId, scopeId: part })).toMatch(/Payments · src\/pay(\s|$)/m);
       }),
     ),
   );

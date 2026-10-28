@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { softwareDevelopment } from '../../../../catalogs/contract/wire/softwareDevelopment.js';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
-import { mapLines, mapNodes, regionAbove, type MapNode, type MapRow } from '../../../../graph/orientation/map.js';
+import { mapLines, mapNodes, mapRegions, regionAbove, type MapNode, type MapRow } from '../../../../graph/orientation/map.js';
 import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
 
 const table = new TagIndex([...softwareDevelopment.tags], BEHAVIOUR_REGISTRY);
@@ -67,18 +67,19 @@ test('a map exposes paths only along its focused branch', () => {
 });
 
 test('mapNodes projects kind and sources under the nearest standing container or the page holding it', () => {
+  const rows = [
+    row(1, null, 'Substrate'),
+    row(2, 1, 'A decision about the substrate', { tags: ['spec'] }),
+    row(3, 2, 'Executions'),
+    row(4, 1, 'The old shape', { superseded: 1 }),
+    row(5, 4, 'Git'),
+    row(6, null, 'Agents', { tags: [] }),
+    row(7, 6, 'Threads'),
+    row(8, null, 'Notes', { tags: [] }),
+  ];
   const projected = mapNodes(
-    table,
-    [
-      row(1, null, 'Substrate'),
-      row(2, 1, 'A decision about the substrate', { tags: ['spec'] }),
-      row(3, 2, 'Executions'),
-      row(4, 1, 'The old shape', { superseded: 1 }),
-      row(5, 4, 'Git'),
-      row(6, null, 'Agents', { tags: [] }),
-      row(7, 6, 'Threads'),
-      row(8, null, 'Notes', { tags: [] }),
-    ],
+    rows,
+    mapRegions(table, rows, 9),
     9,
     new Map([
       [1, ['packages/git', 'packages/git-cut.ts']],
@@ -117,7 +118,8 @@ test('a reading aimed at a task opens the region that task stands in', () => {
     row(5, null, 'the old shape', { superseded: 1 }),
     row(6, 5, 'grind', { tags: ['task'] }),
   ];
-  const above = (all: readonly MapRow[], blockId: number | null) => regionAbove(all, mapNodes(table, all, 9, new Map()), 9, blockId);
+  const above = (all: readonly MapRow[], blockId: number | null) =>
+    regionAbove(all, mapNodes(all, mapRegions(table, all, 9), 9, new Map()), 9, blockId);
   expect(above(rows, 4)).toBe(2);
   expect(above(rows, 2)).toBe(2);
   expect(above(rows, 6)).toBeUndefined();
