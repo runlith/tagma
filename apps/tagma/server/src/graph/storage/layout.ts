@@ -32,7 +32,19 @@ export function storageHomes(storePath: string): { appHome: string } {
   return { appHome: storeDirectory(storePath) };
 }
 
-export const MIRROR_FILES = ['', '-wal', '-shm', '.snapshot.json', '.snapshots', '.watch-0', '.watch-1', '.watch-2'] as const;
+export const MIRROR_FILES = [
+  '',
+  '-wal',
+  '-shm',
+  '.snapshot.json',
+  '.snapshots',
+  '.watch-0',
+  '.watch-1',
+  '.watch-2',
+  '.stealth.watch-0',
+  '.stealth.watch-1',
+  '.stealth.watch-2',
+] as const;
 
 export const removeMirror = Effect.fn('Mirrors.remove')(function* (path: string) {
   const files = yield* FileSystem.FileSystem;
@@ -62,6 +74,21 @@ export const setAsideHome = (appHome: string, projectId: number, at: Date): stri
 export const legacyHome = (appHome: string): string => {
   const name = basename(appHome);
   return join(dirname(appHome), name.length > 1 && name.startsWith('.') ? name.slice(1) : 'tagma');
+};
+
+export type StealthLayout = Extract<StorageLayout, { readonly mode: 'stealth' }>;
+
+export const stealthBeside = (
+  team: Extract<StorageLayout, { readonly mode: 'team' }>,
+  place: { readonly projectId: number; readonly appHome: string; readonly worktree: string },
+): StealthLayout => {
+  const home = graphHome(place.appHome, place.projectId);
+  return {
+    mode: 'stealth',
+    treeRoot: join(home, 'layers', stealthTreeName(place.worktree)),
+    gitDir: join(home, 'layer.git'),
+    mirrorPath: team.mirrorPath,
+  };
 };
 
 export function resolveStorageLayout(input: StorageLayoutInput): Effect.Effect<StorageLayout, StorageLayoutInvalid> {

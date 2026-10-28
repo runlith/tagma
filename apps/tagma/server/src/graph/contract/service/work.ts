@@ -9,6 +9,7 @@ import type { BlockRecord, BlockRow, BlockWrite, SourceRow } from './acts.js';
 import type {
   AmendmentPayloadRefusal,
   BlockCreateRefusal,
+  StorageRefusal,
   BlockEditRefusal,
   EdgeRefusal,
   FieldWriteRefusal,
@@ -524,6 +525,7 @@ export type AcceptedOpRefusal =
   | 'amends-an-amendment'
   | 'amendment-shape'
   | 'verdict-standing'
+  | StorageRefusal
   | RetagRefusal;
 export type AcceptedDocumentRefusal = FloorRefusal | 'batch-ref' | 'body-capped' | 'field-target' | 'not-found';
 export type AcceptedRefusal = AcceptedOpRefusal | AcceptedDocumentRefusal;

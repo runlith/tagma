@@ -44,6 +44,7 @@ export const fixtureServedGraphs = (context: Context.Context<GraphServices | Gra
           projectId,
           checkout: cwd ?? project.rootPath,
           shadow: null,
+          stealth: null,
           fresh: () => Effect.void,
           copyFailures: () => Effect.succeed([]),
           settled: () => Effect.void,

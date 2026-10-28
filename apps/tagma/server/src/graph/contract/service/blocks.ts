@@ -83,7 +83,10 @@ export type BlockCreateRefusal =
   | AmendmentPayloadRefusal
   | 'cross-project'
   | 'amends-an-amendment'
-  | 'amendment-shape';
+  | 'amendment-shape'
+  | StorageRefusal;
+
+export type StorageRefusal = 'storage-unavailable' | 'stealth-dependency';
 
 export type BlockUpdateRefusal =
   | FloorRefusal

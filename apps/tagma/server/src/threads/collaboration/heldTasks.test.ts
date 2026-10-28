@@ -103,6 +103,7 @@ const setup = Effect.gen(function* () {
       projectId: 1,
       checkout,
       shadow: null,
+      stealth: null,
       git: { run: () => Effect.die('held task decisions do not run git') },
       layout: { mode: 'team', treeRoot: checkout, mirrorPath: `${checkout}/mirror` },
       context: Context.makeUnsafe(new Map([[Tasks.key, tasks]])),

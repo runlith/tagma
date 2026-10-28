@@ -74,6 +74,8 @@ layer(demoGraphLayer({ repos: ['topology'] }).pipe(Layer.provideMerge(BunFileSys
                 checkout: sibling,
                 row,
                 layout: failed,
+                roots: { root: failed.treeRoot, stealth: null },
+                prefix: '',
                 shadow,
                 poolContext: context,
                 ledger: yield* treeLedger({ root: failed.treeRoot, stealth: null }, row.id),

@@ -95,6 +95,8 @@ export const REFLECTION_FILING_OPERATIONS = {
       'amendment-op',
       'amendment-ref',
       'amendment-outside',
+      'storage-unavailable',
+      'stealth-dependency',
       'tree-not-measured',
       'source-required',
       'source-outside',

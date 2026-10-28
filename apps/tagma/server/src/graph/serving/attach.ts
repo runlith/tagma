@@ -34,7 +34,7 @@ import { treeHoldsAny } from '../tree/scan.js';
 import { syncTopology } from '../tree/topology.js';
 import { treeBranch } from '../tree/batch.js';
 import type { GraphSteps } from '../contract/service/steps.js';
-import { MIRROR_FILES, type StorageLayout } from '../storage/layout.js';
+import { MIRROR_FILES, type StealthLayout, type StorageLayout } from '../storage/layout.js';
 
 type Machine = Context.Context<GraphServices | GraphStore | GraphUnits | MachineStore | MachineUnits>;
 
@@ -181,6 +181,20 @@ export const travelMirror = Effect.fnUntraced(function* (
   }).pipe(Effect.scoped);
 });
 
+export const attachShadowTree = Effect.fnUntraced(function* (
+  git: Git['Service'],
+  row: ProjectPolicyRow,
+  checkout: string,
+  layout: StealthLayout,
+  steps: GraphSteps['Service'],
+) {
+  const shadow = yield* ShadowGit.open(layout.gitDir, git, row.graphRemote);
+  const repo = yield* treeBranch(checkout);
+  if ('held' in repo && repo.held === 'no-repository') yield* shadow.attach(layout.treeRoot, 'main');
+  else yield* syncTopology(shadow, checkout, layout.treeRoot, steps, { absorb: false });
+  return shadow;
+});
+
 export const attachTree = Effect.fnUntraced(function* (
   git: Git['Service'],
   row: ProjectPolicyRow,
@@ -192,14 +206,7 @@ export const attachTree = Effect.fnUntraced(function* (
     mkdirSync(layout.treeRoot, { recursive: true });
     return { shadow: null, twinned: false };
   }
-  const shadow = yield* ShadowGit.open(layout.gitDir, git, row.graphRemote);
-  const repo = yield* treeBranch(checkout);
-  if ('held' in repo && repo.held === 'no-repository') {
-    yield* shadow.attach(layout.treeRoot, 'main');
-    return { shadow, twinned: true };
-  }
-  yield* syncTopology(shadow, checkout, layout.treeRoot, steps, { absorb: false });
-  return { shadow, twinned: true };
+  return { shadow: yield* attachShadowTree(git, row, checkout, layout, steps), twinned: true };
 });
 
 export function treeHoldsBlocks(treeRoot: string): Effect.Effect<boolean, BlockTreeUnreadable> {

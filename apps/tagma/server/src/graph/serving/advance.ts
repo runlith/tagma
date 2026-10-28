@@ -24,6 +24,7 @@ const midOperation = Effect.fnUntraced(function* (git: Git['Service'], treeRoot:
 export const advanceTree = Effect.fn('Graph.advanceTree')(function* (input: {
   readonly project: ProjectPolicyRow;
   readonly treeRoot: string;
+  readonly stealth?: string | null;
   readonly checkout?: string;
   readonly shadow: ShadowGit | null;
   readonly git: Git['Service'];
@@ -48,7 +49,7 @@ export const advanceTree = Effect.fn('Graph.advanceTree')(function* (input: {
     },
     (progress) =>
       Effect.gen(function* () {
-        if (!input.fromTree) yield* absorbMirror(input.scan ?? (yield* scanTree(input.treeRoot)), input.project.id);
+        if (!input.fromTree) yield* absorbMirror(input.scan ?? (yield* scanTree(input.treeRoot, input.stealth ?? null)), input.project.id);
         for (const step of pending) {
           yield* progress.stage(step.id);
           yield* step.run(input.project);
@@ -56,7 +57,7 @@ export const advanceTree = Effect.fn('Graph.advanceTree')(function* (input: {
         }
         yield* progress.stage('Publishing graph format');
         yield* (yield* Tags).forget(input.project.id);
-        yield* projectToTree({ projectId: input.project.id, treeRoot: input.treeRoot });
+        yield* projectToTree({ projectId: input.project.id, treeRoot: input.treeRoot, stealth: input.stealth ?? null });
         yield* indexMirror(input.project.id);
         input.format.reach();
         yield* input.format.stamp;

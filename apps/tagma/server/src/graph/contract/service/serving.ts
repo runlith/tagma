@@ -23,7 +23,9 @@ import type { Git } from '@runlith/git/Git';
 import type { ProjectBranch } from '../wire/rows.js';
 import type { GraphServices } from './services.js';
 import type { TopologySync } from '../../tree/topology.js';
-import type { StorageLayout } from '../../storage/layout.js';
+import type { StealthLayout, StorageLayout } from '../../storage/layout.js';
+import type { TreeRoots } from '../../tree/layout.js';
+import type { STEALTH_PREFIX } from '../wire/storage.js';
 import type { ShadowGit } from '../../tree/shadow.js';
 import type { TreeLedger } from '../../tree/ledger.js';
 import type { TreeCommits } from '../../tree/commits.js';
@@ -208,10 +210,29 @@ export class TaskHolders extends Context.Service<
 
 export type GraphContext = Context.Context<GraphServices | GraphStore | GraphUnits>;
 
+export type StealthTree = {
+  readonly layout: StealthLayout;
+  readonly shadow: ShadowGit;
+  readonly batches: TreeBatches | null;
+  readonly unmerged: UnmergedTracker;
+  readonly topology: TopologySync | null;
+};
+
+export type StealthHold = {
+  readonly root: string;
+  readonly tree: () => StealthTree | null;
+  readonly attach: Effect.Effect<StealthTree, GateRefusal<OpenRefusal>>;
+};
+
+export type ServedStorage = { readonly mode: 'stealth' } | { readonly mode: 'team'; readonly stealth: StealthHold | null };
+
+export const ServedStorage = Context.Reference<ServedStorage | null>('tagma/graph/ServedStorage', { defaultValue: () => null });
+
 export type ServedGraph = CopyWriting & {
   readonly context: Context.Context<GraphServices | GraphStore | GraphUnits | TaskHolders>;
   readonly git: Git['Service'];
   readonly layout: StorageLayout;
+  readonly stealth: StealthHold | null;
   readonly projectId: number;
   readonly checkout: string;
   readonly shadow: ShadowGit | null;
@@ -281,6 +302,7 @@ export type MirrorBuilt = {
   readonly context: GraphContext;
   readonly poolContext: GraphContext;
   readonly shadow: ShadowGit | null;
+  readonly stealth: StealthHold | null;
   readonly ledger: TreeLedger;
   readonly batches: TreeBatches | null;
   readonly topology: TopologySync | null;
@@ -291,6 +313,7 @@ export type MirrorBuilt = {
 export type WriteBindings = {
   readonly projectId: number;
   readonly layout: StorageLayout;
+  readonly stealth: StealthHold | null;
   readonly ledger: TreeLedger;
   readonly commits: Context.Service.Shape<typeof TreeCommits>;
   readonly batches: TreeBatches | null;
@@ -312,6 +335,8 @@ export type FreshnessInit = {
   readonly checkout: string;
   readonly row: ProjectPolicyRow;
   readonly layout: StorageLayout;
+  readonly roots: TreeRoots;
+  readonly prefix: '' | typeof STEALTH_PREFIX;
   readonly shadow: ShadowGit | null;
   readonly poolContext: GraphContext;
   readonly ledger: TreeLedger;

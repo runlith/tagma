@@ -2,7 +2,7 @@ import { GraphUnits, MachineUnits } from '../../platform/contract/service/units.
 import { Handover } from '@runlith/sqlite-process/SqliteProcess';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { Clock, Context, Effect, FiberSet, FileSystem, Layer, ManagedRuntime, Scope, type Semaphore, Tracer } from 'effect';
+import { Clock, Context, Effect, FiberSet, FileSystem, Layer, ManagedRuntime, Scope, Semaphore, Tracer } from 'effect';
 import { unmergedTracker } from '../../platform/git/unmerged.js';
 import { treeCommitter } from './committer.js';
 import { STAGING_PATHSPEC } from '../tree/atomicFile.js';
@@ -51,7 +51,7 @@ import { TreeCommits } from '../tree/commits.js';
 import { treeCommits } from '../tree/commits.js';
 import { blocksRetiredKey, CHECKOUT_DIRECTORY, FORMAT_FILE } from '../contract/wire/storage.js';
 import { graphCommit } from '../settings.js';
-import type { StorageLayout } from '../storage/layout.js';
+import { type StealthLayout, type StorageLayout, stealthBeside, storageHomes } from '../storage/layout.js';
 import { scanTree, type TreeScan } from '../tree/scan.js';
 import { Git } from '@runlith/git/Git';
 import { overMirror, overRepository, overTree } from './permits.js';
@@ -67,6 +67,8 @@ import {
   type TwinLevelInput,
   type GraphLevelInput,
   type PreparedGraph,
+  type StealthHold,
+  type StealthTree,
 } from '../contract/service/serving.js';
 import { openFormat } from './format.js';
 import { adoptIdentities } from './identities.js';
@@ -75,6 +77,7 @@ import { GraphSteps } from '../contract/service/steps.js';
 import { HolderStandings } from '../contract/service/holders.js';
 import { refusal, refused } from './refusal.js';
 import {
+  attachShadowTree,
   attachTree,
   forgetRegistry,
   registrySynced,
@@ -104,6 +107,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
     context: GraphContext,
     row: ProjectPolicyRow,
     layout: StorageLayout,
+    stealthRoot: string | null,
     shadow: ShadowGit | null,
     standing: 'standing' | 'switched' | 'virgin',
     initialScan?: TreeScan,
@@ -169,7 +173,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
         'restore the tree from its git remote or a backup, then retry',
       ]);
     }
-    const scan = initialScan ?? (yield* scanTree(layout.treeRoot));
+    const scan = initialScan ?? (yield* scanTree(layout.treeRoot, stealthRoot));
     if (scan.blocks.length === 0) {
       return yield* new GateRefusal(
         'tree-empty',
@@ -229,6 +233,20 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                   }),
                 );
             const shadow = opened.shadow;
+            const stealthLayout =
+              layout.mode === 'team' && !temporary
+                ? stealthBeside(layout, {
+                    projectId: row.id,
+                    ...storageHomes(Context.get(machine, MachineStore).path),
+                    worktree: checkout,
+                  })
+                : null;
+            const stealthShadow =
+              stealthLayout !== null && existsSync(stealthLayout.gitDir)
+                ? yield* overRepository(gates, stealthLayout)(refused(attachShadowTree(git, row, checkout, stealthLayout, steps)))
+                : null;
+            const stealthRoot = stealthLayout?.treeRoot ?? null;
+            const roots = { root: layout.treeRoot, stealth: stealthRoot };
             const runtime = ManagedRuntime.make(
               Layer.mergeAll(
                 mirrorGraphLayer(Context.pick(Settings, SettingDeclarations, SettingChanges, ManagedWrite)(machine)),
@@ -281,12 +299,13 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                     })
                   : undefined;
               const poolContext = Context.add(Context.add(opening, VocabularyFormat, format), TreeCommits, commits);
-              const filled = yield* refused(fill(poolContext, row, layout, shadow, opened.standing, input.scan));
+              const filled = yield* refused(fill(poolContext, row, layout, stealthRoot, shadow, opened.standing, input.scan));
               const advance = (fromTree: boolean) =>
                 refused(
                   advanceTree({
                     project: row,
                     treeRoot: layout.treeRoot,
+                    stealth: stealthRoot,
                     checkout,
                     shadow,
                     git,
@@ -318,12 +337,39 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                 if (synced.merges.some((merge) => merge.merged !== null)) {
                   yield* format.read;
                   yield* refused(
-                    Effect.flatMap(scanTree(layout.treeRoot), (scan) => rebuildMirror(scan, row.id)).pipe(Effect.provide(poolContext)),
+                    Effect.flatMap(scanTree(layout.treeRoot, stealthRoot), (scan) => rebuildMirror(scan, row.id)).pipe(
+                      Effect.provide(poolContext),
+                    ),
                   );
                   yield* advance(true);
                 }
               }
-              const ledger = yield* treeLedger({ root: layout.treeRoot, stealth: null }, row.id);
+              const stealthTopology =
+                stealthShadow === null || stealthLayout === null
+                  ? null
+                  : yield* overRepository(
+                      gates,
+                      stealthLayout,
+                    )(
+                      Effect.gen(function* () {
+                        const siblings = yield* input.siblings({ layout: stealthLayout, shadow: stealthShadow });
+                        return yield* refused(
+                          syncTopology(stealthShadow, checkout, stealthLayout.treeRoot, steps, {
+                            blocked: siblings.blocked,
+                            retired: mirrors.departed(row.id),
+                            treeHold: (tree) => overTree(gates, tree),
+                          }),
+                        );
+                      }),
+                    );
+              if (stealthTopology?.merges.some((merge) => merge.merged !== null) === true) {
+                yield* refused(
+                  Effect.flatMap(scanTree(layout.treeRoot, stealthRoot), (scan) => rebuildMirror(scan, row.id)).pipe(
+                    Effect.provide(poolContext),
+                  ),
+                );
+              }
+              const ledger = yield* treeLedger(roots, row.id);
               const tree = {
                 treeRoot: layout.treeRoot,
                 ownGit: shadow !== null,
@@ -351,6 +397,49 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                       fork,
                       committed: input.committed,
                     });
+              const stealthTree = (place: StealthLayout, held: ShadowGit, synced: TopologySync | null): StealthTree => {
+                const tracked = unmergedTracker(git, place.treeRoot);
+                return {
+                  layout: place,
+                  shadow: held,
+                  unmerged: tracked,
+                  topology: synced,
+                  batches: treeCommitter({
+                    git,
+                    treeRoot: place.treeRoot,
+                    unmerged: tracked,
+                    overTree: overTree(gates, place.treeRoot),
+                    overRepository: overRepository(gates, place),
+                    fork,
+                    committed: input.committed,
+                  }),
+                };
+              };
+              let attached =
+                stealthShadow === null || stealthLayout === null ? null : stealthTree(stealthLayout, stealthShadow, stealthTopology);
+              const attaching = Semaphore.makeUnsafe(1);
+              const stealth: StealthHold | null =
+                stealthLayout === null
+                  ? null
+                  : {
+                      root: stealthLayout.treeRoot,
+                      tree: () => attached,
+                      attach: attaching.withPermits(1)(
+                        Effect.suspend(() =>
+                          attached !== null
+                            ? Effect.succeed(attached)
+                            : overRepository(
+                                gates,
+                                stealthLayout,
+                              )(
+                                Effect.map(refused(attachShadowTree(git, row, checkout, stealthLayout, steps)), (held) => {
+                                  attached = stealthTree(stealthLayout, held, null);
+                                  return attached;
+                                }),
+                              ),
+                        ),
+                      ),
+                    };
               const stamped = yield* Effect.result(format.stamp);
               if (stamped._tag === 'Failure')
                 yield* Effect.logWarning('the tree is served without writes, its format marker could not be written', {
@@ -367,6 +456,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                 {
                   projectId: row.id,
                   layout,
+                  stealth,
                   ledger,
                   commits,
                   batches,
@@ -409,6 +499,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                 context: served,
                 poolContext,
                 shadow,
+                stealth,
                 ledger,
                 batches,
                 topology,

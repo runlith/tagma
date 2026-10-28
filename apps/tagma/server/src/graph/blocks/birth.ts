@@ -3,7 +3,8 @@ import { Git } from '@runlith/git/Git';
 import { CallerAim } from '../../platform/contract/service/place.js';
 import { gitRefusal } from '../../platform/git/readings.js';
 import { checkoutAt, standsAside } from '../../workspace/checkouts/git.js';
-import { measuredRoot } from '../contract/service/serving.js';
+import { ServedStorage, measuredRoot } from '../contract/service/serving.js';
+import type { StorageMode } from '../../projects/contract/wire/project.js';
 import { Tasks } from '../contract/service/work.js';
 import { type BlockCreateRefusal, Edges, type FarLink } from '../contract/service/blocks.js';
 import { type BlockCreate } from '../contract/wire/creation.js';
@@ -70,6 +71,44 @@ export function resolveTags(
   }
   return Effect.succeed(tags);
 }
+
+export const bornStealth = Effect.fnUntraced(function* (
+  parent: { readonly uuid: string; readonly stealth: boolean },
+  asked: StorageMode | undefined,
+): Effect.fn.Return<boolean, GateRefusal<'storage-unavailable' | 'stealth-dependency'>> {
+  const storage = yield* ServedStorage;
+  if (storage?.mode === 'stealth') {
+    if (asked !== 'team') return false;
+    return yield* new GateRefusal(
+      'storage-unavailable',
+      'this project keeps its whole graph stealth, so no block of it rides the repository',
+      [
+        'omit storage — every block of a stealth project is stealth',
+        'set_project_storage team, naming the subtrees that stay stealth — the project then rides the repository',
+      ],
+    );
+  }
+  if (asked === 'team' && parent.stealth) {
+    return yield* new GateRefusal('stealth-dependency', `block ${blockName(parent.uuid)} is stealth, so a block under it is stealth too`, [
+      'omit storage — the block is born stealth under its stealth parent',
+      'name a team parent for a team block',
+    ]);
+  }
+  const stealth = asked === undefined ? parent.stealth : asked === 'stealth';
+  if (!stealth || parent.stealth) return stealth;
+  if (storage === null || storage.stealth === null) {
+    return yield* new GateRefusal(
+      'storage-unavailable',
+      'this copy of the graph keeps no stealth tree, so it cannot hold a stealth block',
+      ['act from a checkout that stands on a branch — its copy keeps the stealth tree beside .tagma'],
+    );
+  }
+  yield* Effect.mapError(
+    storage.stealth.attach,
+    (refused) => new GateRefusal('storage-unavailable', `the stealth tree could not be attached: ${refused.reason}`, refused.unblock),
+  );
+  return true;
+});
 
 export function bornFields(tags: readonly Tag[], written: Readonly<Record<string, unknown>>): Record<string, unknown> {
   const fields: Record<string, unknown> = { ...written };
@@ -168,7 +207,9 @@ export const blockBirth = Effect.gen(function* () {
       if (!amends && table.supports(parent, LEAF)) return yield* leafRefusal(`${blockName(parent.uuid)}`);
     }
     const named = input.amendsId ?? input.parentId;
-    const parentId = named ?? (yield* blockRows.rootBlockOf(input.projectId)).id;
+    const parentRow = named === undefined ? yield* blockRows.rootBlockOf(input.projectId) : yield* blockRows.blockById(named);
+    const parentId = parentRow.id;
+    const stealth = yield* bornStealth(parentRow, input.storage);
     const future = { tags: ids, projectId: input.projectId, uuid };
     const near: { readonly kind: string; readonly to: number }[] = [];
     const far: FarLink[] = [...(input.farEdges ?? [])];
@@ -198,6 +239,7 @@ export const blockBirth = Effect.gen(function* () {
             fields,
             title: input.title,
             body: layered.prompt ?? input.body ?? '',
+            stealth,
             createdAt: now,
             updatedAt: now,
           })

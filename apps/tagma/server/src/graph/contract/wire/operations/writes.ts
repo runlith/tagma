@@ -64,6 +64,8 @@ export const WRITE_OPERATIONS = {
       'amendment-outside',
       'amendment-shape',
       'cross-project-parent',
+      'storage-unavailable',
+      'stealth-dependency',
       'project-root',
       'no-root',
       'source-outside',
@@ -202,6 +204,8 @@ A \`parentId\` in another project’s graph moves the block with its subtree and
       'amends-an-amendment',
       'amendment-shape',
       'verdict-standing',
+      'storage-unavailable',
+      'stealth-dependency',
     ],
     answer: arms({ ok: blockResultFields }),
     confirmation: (input) => ({

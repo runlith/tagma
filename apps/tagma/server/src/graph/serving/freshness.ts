@@ -10,7 +10,9 @@ import type { BlockTreeUnreadable } from '../tree/layout.js';
 import type { MirrorFailed, MirrorRefused } from '../tree/mirror.js';
 import type { ProjectPolicyRow } from '../contract/wire/serving.js';
 import { type StorageLayout } from '../storage/layout.js';
-import { applyTree, readTree, type StoredBasis, type TreeMark, type TreeReading } from '../tree/freshness.js';
+import { applyTree, readTree, type StoredBasis, type TreeChange, type TreeMark, type TreeReading } from '../tree/freshness.js';
+import type { TreeRoots } from '../tree/layout.js';
+import { STEALTH_PREFIX } from '../contract/wire/storage.js';
 import { FileWatcher } from '../../platform/contract/service/watch.js';
 import { rebuildMirror, repairMirror } from '../tree/mirror.js';
 import { treeHeadStamp } from '../tree/stamp.js';
@@ -28,6 +30,7 @@ import {
   FreshnessGate,
   MirrorBuilder,
   VocabularyFormat,
+  type FreshnessInit,
   type GraphContext,
   type TreeBatches,
   type SiblingPlace,
@@ -69,6 +72,8 @@ type EntryState = {
   readonly checkout: string;
   readonly row: ProjectPolicyRow;
   readonly layout: StorageLayout;
+  readonly roots: TreeRoots;
+  readonly prefix: FreshnessInit['prefix'];
   readonly shadow: ShadowGit | null;
   readonly poolContext: GraphContext;
   readonly ledger: TreeLedger;
@@ -104,6 +109,11 @@ const notServed = (treeRoot: string) =>
 const watching = (state: EntryState): boolean => state.watch !== null && state.watch.watching();
 
 const twinned = (state: EntryState): boolean => state.shadow !== null && state.layout.mode === 'stealth';
+
+const inMirror = (state: EntryState, paths: readonly string[]): string[] => paths.map((path) => `${state.prefix}${path}`);
+
+const changesInMirror = (state: EntryState, changes: readonly TreeChange[]): TreeChange[] =>
+  changes.map((change) => ({ status: change.status, path: `${state.prefix}${change.path}` }));
 
 const name = (state: EntryState, paths: readonly string[]): void => {
   if (state.named === null) return;
@@ -148,6 +158,7 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
   const prepareTopology = (place: TopologyPlace): Effect.Effect<TopologySync | null, GateRefusal<'graph-pool'>> => {
     const { shadow, layout, checkout, row } = place;
     if (shadow === null || layout.mode !== 'stealth') return Effect.succeed(null);
+    const levelled = entries.get(layout.treeRoot)?.prefix !== STEALTH_PREFIX;
     return overRepositoryAndTree(
       gates,
       layout,
@@ -159,7 +170,7 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
             blocked: reading.blocked,
             retired: mirrors.departed(row.id),
             treeHold: (tree) => overTree(gates, tree),
-            level: (twin) => builder.level({ row, checkout, shadow, twin, target: layout.treeRoot }),
+            level: levelled ? (twin) => builder.level({ row, checkout, shadow, twin, target: layout.treeRoot }) : undefined,
           }),
         );
         return { ...synced, copyFailures: reading.copyFailures.length === 0 ? undefined : reading.copyFailures };
@@ -221,7 +232,7 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
     const filed = watcher.marking === 'refresh' || state.lasting;
     const slot = SLOTS.find((one) => one !== state.mark?.slot && one !== state.fallback?.slot) ?? 0;
     const position = yield* watcher
-      .mark(state.layout.treeRoot, `${state.layout.mirrorPath}.watch-${slot}`, [], state.lasting)
+      .mark(state.layout.treeRoot, `${state.layout.mirrorPath}${state.prefix === '' ? '' : '.stealth'}.watch-${slot}`, [], state.lasting)
       .pipe(Effect.catchTag('WatchRefused', () => Effect.succeed(null)));
     return position === null ? null : { position, slot, filed };
   });
@@ -275,16 +286,17 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
               const absorbed = yield* refused(
                 applyTree<MirrorReadFailure, GraphStore | Act | BlockProjection | BlockReferences | Tags | WriterRegister>(reading, {
                   writeStamp: stamp.writeStamp,
-                  unreflected: (changed) => ledger.unreflected(changed),
-                  rebuild: Effect.flatMap(scanTree(layout.treeRoot), (scan) => rebuildMirror(scan, row.id)),
-                  repair: (changed) => repairMirror({ root: layout.treeRoot, stealth: null }, changed, row.id),
+                  unreflected: (changed) => ledger.unreflected(changesInMirror(state, changed)),
+                  rebuild: Effect.flatMap(scanTree(state.roots.root, state.roots.stealth), (scan) => rebuildMirror(scan, row.id)),
+                  repair: (changed) => repairMirror(state.roots, changed, row.id),
                 }).pipe(Effect.provide(poolContext)),
               );
-              if (format === null) return absorbed;
+              if (format === null || state.prefix !== '') return absorbed;
               const stepped = yield* refused(
                 advanceTree({
                   project: row,
                   treeRoot: layout.treeRoot,
+                  stealth: state.roots.stealth,
                   checkout: state.checkout,
                   shadow: state.shadow,
                   git,
@@ -419,7 +431,7 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
     if ('rescan' in shift) {
       if (shift.movement === 'tree' && shift.rescan === 'rename' && shift.paths !== undefined && shift.paths.length > 0) {
         name(state, shift.paths);
-        if (state.ledger.echoes(shift.paths)) return;
+        if (state.ledger.echoes(inMirror(state, shift.paths))) return;
       } else state.named = null;
       state.topologyStale = twinned(state);
       observe(state);
@@ -428,7 +440,7 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
     }
     if (shift.movement === 'tree') {
       name(state, shift.paths);
-      if (state.ledger.echoes(shift.paths)) return;
+      if (state.ledger.echoes(inMirror(state, shift.paths))) return;
       observe(state);
     } else if (shift.movement === 'head' && twinned(state)) {
       refsMoved(state);
@@ -517,11 +529,13 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
         checkout: init.checkout,
         row: init.row,
         layout: init.layout,
+        roots: init.roots,
+        prefix: init.prefix,
         shadow: init.shadow,
         poolContext: init.poolContext,
         ledger: init.ledger,
         batches: init.batches,
-        stamp: treeHeadStamp(),
+        stamp: treeHeadStamp(init.prefix !== ''),
         fork,
         watcher: Option.getOrNull(yield* Effect.serviceOption(FileWatcher)),
         watch: null,

@@ -216,6 +216,8 @@ const WORK_ACTS = {
       'amends-an-amendment',
       'amendment-shape',
       'verdict-standing',
+      'storage-unavailable',
+      'stealth-dependency',
       'tree-not-measured',
       'anchor-ambiguous',
       'anchor-noop',

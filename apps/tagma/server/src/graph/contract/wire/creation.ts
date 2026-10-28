@@ -3,6 +3,7 @@ import { body, fieldsField, tagsField, title } from './fields.js';
 import { edgeNameSchema } from './edges.js';
 import { sourceInputSchema } from './sources.js';
 import { contractIdSchema } from './tags/behaviour.js';
+import { STORAGE_MODES } from '../../../projects/contract/wire/project.js';
 
 export const creationFields = <Ref extends Schema.Top, Target extends Schema.Top>(reference: Ref, target: Target) => ({
   title,
@@ -26,6 +27,10 @@ export const creationFields = <Ref extends Schema.Top, Target extends Schema.Top
   }),
   sources: Schema.optional(Schema.Array(sourceInputSchema)).annotate({
     description: 'Anchors attached at creation. Exact sources on the direct parent transfer atomically to the child.',
+  }),
+  storage: Schema.optional(Schema.Literals(STORAGE_MODES)).annotate({
+    description:
+      "Where the block is kept: team rides the repository in .tagma, stealth stays in Tagma's data directory beside it. Absent, the parent's; under a stealth block, stealth.",
   }),
 });
 

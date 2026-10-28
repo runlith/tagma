@@ -13,6 +13,7 @@ import { MachineStore, GraphStore } from '../../platform/contract/service/store.
 import { meta } from '../store/tables.js';
 import { canon, ShadowGit } from '../tree/shadow.js';
 import { resolveStorageLayout, type StorageLayout, storageHomes } from '../storage/layout.js';
+import { actingTrees, closedTrees, heldFlush, servedStealth } from './stealth.js';
 import type { ProjectPolicyRow } from '../contract/wire/serving.js';
 import { GateRefusal, refusalBody, type OpenRefusal } from '../../platform/contract/wire/refusal.js';
 import { Git } from '@runlith/git/Git';
@@ -29,6 +30,7 @@ import {
   MirrorBuilder,
   ProjectPolicy,
   ServedGraphs,
+  ServedStorage,
   ServingSwitch,
   TaskHolders,
   type CopyAim,
@@ -107,21 +109,12 @@ export const makeGraphPool = Effect.gen(function* () {
       Deferred.doneUnsafe(settled.done, Effect.void);
     });
 
-  const flushedHeld = Effect.fnUntraced(function* (treeRoot: string, entry: HeldGraph) {
-    if (entry.batches === null) return;
-    const flushed = yield* Effect.exit(entry.batches.flush);
-    if (flushed._tag === 'Failure') {
-      yield* Effect.logWarning('a closing tree kept acts its last batch could not commit; its next open carries them', {
-        tree: treeRoot,
-        cause: flushed.cause,
-      });
-    }
-  });
+  const flushedHeld = heldFlush(gate);
 
   const flushed = (treeRoot: string, entry: HeldGraph) => overRepositoryAndTree(gate, entry.layout)(flushedHeld(treeRoot, entry));
 
   const closeCopy = Effect.fn('GraphPool.close')(function* (copy: Copy) {
-    yield* freshnessGate.close(copy.treeRoot);
+    yield* closedTrees(freshnessGate, copy.treeRoot, copy.graph);
     yield* overRepositoryAndTree(gate, copy.graph.layout)(Effect.andThen(flushedHeld(copy.treeRoot, copy.graph), copy.graph.dispose()));
   });
 
@@ -369,6 +362,11 @@ export const makeGraphPool = Effect.gen(function* () {
             )
           : undefined;
         if (prepared !== undefined) layout = prepared.layout;
+        const acting = actingTrees(gate, freshnessGate, layout, {
+          projectId: row.id,
+          ...storageHomes(machineStore.path),
+          worktree: checkout,
+        });
         const built =
           prepared?.built ??
           (yield* restore(
@@ -377,8 +375,8 @@ export const makeGraphPool = Effect.gen(function* () {
               row,
               checkout,
               layout,
-              guard: overTree(gate, layout.treeRoot),
-              settled: freshnessGate.beforeAct(layout.treeRoot),
+              guard: acting.guard,
+              settled: acting.settled,
               siblings: freshnessGate.siblings,
               resolveProject: Effect.fnUntraced(function* (projectId: number) {
                 const served = yield* resolve({ projectId });
@@ -393,17 +391,7 @@ export const makeGraphPool = Effect.gen(function* () {
         const context = built.context;
         return yield* restore(
           Effect.gen(function* () {
-            const registration = yield* freshnessGate.register(layout.treeRoot, {
-              checkout,
-              row,
-              layout,
-              shadow: built.shadow,
-              poolContext: built.poolContext,
-              ledger: built.ledger,
-              batches: built.batches,
-              topology: built.topology,
-              scope: built.scope,
-            });
+            const { stealth, both, unregister } = yield* servedStealth(freshnessGate, { checkout, row, layout, built });
             yield* freshnessGate.settled(layout.treeRoot);
             if (!detached) remotes.opened(row, layout);
             const graph = Context.get(built.context, GraphStore);
@@ -422,20 +410,26 @@ export const makeGraphPool = Effect.gen(function* () {
                     return new Map([...held, [holder, own.get(writer.key) ?? []]]);
                   }),
                 }),
+              ).pipe(
+                Context.add(
+                  ServedStorage,
+                  layout.mode === 'stealth' ? { mode: 'stealth' } : { mode: 'team', stealth: detached ? null : stealth },
+                ),
               ),
               git,
               layout,
+              stealth,
               projectId: row.id,
               readOnly: detached ? { checkout, main: row.rootPath } : undefined,
               shadow: built.shadow,
               checkout,
               project: { repoKey: row.repoKey, rootPath: row.rootPath, storage: row.storage },
               batches: built.batches,
-              fresh: () => freshnessGate.fresh(layout.treeRoot),
+              fresh: () => both((treeRoot) => freshnessGate.fresh(treeRoot)),
               copyFailures: () => freshnessGate.copyFailures(layout.treeRoot),
-              settled: (force = false) => freshnessGate.settled(layout.treeRoot, force),
+              settled: (force = false) => both((treeRoot) => freshnessGate.settled(treeRoot, force)),
               dispose: Effect.fnUntraced(function* () {
-                registration.unregister();
+                unregister();
                 yield* release;
               }),
             };
@@ -648,7 +642,7 @@ export const makeGraphPool = Effect.gen(function* () {
       copyIndexReader.close();
       const failures: unknown[] = [];
       for (const copy of copies.all()) {
-        yield* freshnessGate.close(copy.treeRoot);
+        yield* closedTrees(freshnessGate, copy.treeRoot, copy.graph);
         yield* flushed(copy.treeRoot, copy.graph);
         const ended = yield* Effect.exit(copy.graph.dispose());
         if (Exit.isFailure(ended)) failures.push(Cause.squash(ended.cause));
