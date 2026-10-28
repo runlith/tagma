@@ -8,6 +8,8 @@ import type { ReadyTaskAnswer } from './operations/reads.js';
 import type { CallRecorded } from './callRange.js';
 import type { JournalPageBody } from './journal.js';
 import type { WriterSession } from './operations/history.js';
+import type { DeclaredAnswer } from '../../../platform/contract/wire/operation.js';
+import type { WRITE_OPERATIONS } from './operations/writes.js';
 
 export type ToolWriters = {
   readonly status: 'ok';
@@ -121,6 +123,7 @@ export type ToolProposal = {
 export type GraphToolAnswer =
   | VoiceRefused
   | BlockResultAnswer
+  | DeclaredAnswer<(typeof WRITE_OPERATIONS)['set_block_storage']['answer']>
   | ToolBlockRead
   | ToolZonePage
   | ToolOverview

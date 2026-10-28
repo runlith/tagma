@@ -164,6 +164,12 @@ function graphContent(table: TagReading, result: GraphToolAnswer, identity: Sess
       `${blockLine(table, result.block)}${underParent(result.block.parentName)}`,
       ...(refsIn.length === 0 ? [] : [refsInLine(refsIn)]),
       ...('moved' in result && result.moved !== undefined ? movedLines(result.moved) : []),
+      ...('published' in result
+        ? (result.published ?? []).map((name) => `already committed: ${name} — those versions stay in the repository's history`)
+        : []),
+      ...('publishedUnread' in result && result.publishedUnread !== undefined
+        ? [`committed files unreadable: ${result.publishedUnread}; the move landed regardless`]
+        : []),
       ...('crowded' in result && result.crowded !== undefined ? [crowdedLine(result.crowded)] : []),
       ...(result.debt ?? []).map(
         (debt) =>
