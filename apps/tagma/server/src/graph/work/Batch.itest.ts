@@ -433,4 +433,26 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       }),
     ),
   );
+
+  it.effect('a replaced record is corrected in one document and stays replaced, or the whole correction rolls back', () =>
+    withDemo(({ graph, projectId, nameOf, refusal }) =>
+      Effect.gen(function* () {
+        const old = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'draft', body: 'keeps the token s3cret here' });
+        const successor = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'accepted' });
+        yield* graph.standing.supersede({ oldId: old.id, withId: successor.id });
+        const [oldName, successorName] = [yield* nameOf(old.id), yield* nameOf(successor.id)];
+        const correction = (text: string) =>
+          batchDocument([
+            { op: 'unsupersede', id: oldName },
+            { op: 'edit', id: oldName, old: text, new: '' },
+            { op: 'supersede', oldId: oldName, withId: successorName },
+          ]);
+        expect((yield* refusal(graph.batch.apply(correction(' absent'), projectId))).code).toBe('anchor-not-found');
+        expect(yield* graph.standing.successorOf(old.id)).toBe(successor.id);
+        yield* graph.batch.apply(correction(' s3cret'), projectId);
+        expect((yield* graph.blocks.blockById(old.id)).body).toBe('keeps the token here');
+        expect(yield* graph.standing.successorOf(old.id)).toBe(successor.id);
+      }),
+    ),
+  );
 });

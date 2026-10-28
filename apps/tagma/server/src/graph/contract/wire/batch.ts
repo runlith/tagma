@@ -11,7 +11,7 @@ export const batchRefSchema = Schema.String.check(Schema.isPattern(new RegExp(`^
 export type BatchRef = typeof batchRefSchema.Type;
 
 export const BATCH_OPERATION_ID_HELP =
-  'Batch operations use their own reference fields: update/edit/claim/release/finish/close/delete/restore/accept/reject/uphold use `id` (not a standalone tool’s `blockId`); anchor/unanchor use `blockId`; link/unlink use `fromId` and `toId`; supersede uses `oldId` and `withId`. Operation references accept a block name, `<project id>/<name>` or `$handle`. Subjects stay in the document project; link/unlink `toId` and create `edges[].to` may name another project. Stored fields and deferred proposal ops use bare names or handles.';
+  'Batch operations use their own reference fields: update/edit/claim/release/finish/close/unsupersede/delete/restore/accept/reject/uphold use `id` (not a standalone tool’s `blockId`); anchor/unanchor use `blockId`; link/unlink use `fromId` and `toId`; supersede uses `oldId` and `withId`. Operation references accept a block name, `<project id>/<name>` or `$handle`. Subjects stay in the document project; link/unlink `toId` and create `edges[].to` may name another project. Stored fields and deferred proposal ops use bare names or handles.';
 
 export const batchCreateOpSchema = Schema.Struct({
   op: Schema.Literal('create'),
@@ -80,6 +80,7 @@ export const unanchorOpSchema = Schema.Struct({
   symbol: Schema.optional(place),
 });
 export const supersedeOpSchema = Schema.Struct({ op: Schema.Literal('supersede'), oldId: batchRefSchema, withId: batchRefSchema });
+export const unsupersedeOpSchema = Schema.Struct({ op: Schema.Literal('unsupersede'), id: batchRefSchema });
 export const restoreOpSchema = Schema.Struct({ op: Schema.Literal('restore'), id: batchRefSchema });
 
 type GraphMutationOp =
@@ -95,6 +96,7 @@ type GraphMutationOp =
   | typeof anchorOpSchema.Type
   | typeof unanchorOpSchema.Type
   | typeof supersedeOpSchema.Type
+  | typeof unsupersedeOpSchema.Type
   | typeof deleteOpSchema.Type
   | typeof restoreOpSchema.Type;
 
@@ -128,6 +130,7 @@ const BATCH_VERBS = Schema.Union([
   anchorOpSchema,
   unanchorOpSchema,
   supersedeOpSchema,
+  unsupersedeOpSchema,
   deleteOpSchema,
   restoreOpSchema,
   proposeOpSchema,

@@ -260,6 +260,8 @@ export const batchLayer: Layer.Layer<
           });
         case 'supersede':
           return yield* standing.supersede({ oldId: yield* refOf(handles, op.oldId), withId: yield* refOf(handles, op.withId) });
+        case 'unsupersede':
+          return yield* standing.unsupersede({ id: yield* refOf(handles, op.id) });
         case 'restore':
           return yield* trash.restore({ id: yield* refOf(handles, op.id) });
         default:

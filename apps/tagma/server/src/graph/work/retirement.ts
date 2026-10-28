@@ -18,5 +18,6 @@ export const assertStanding = Effect.fnUntraced(function* (
   return yield* new GateRefusal('superseded', `${name} was replaced by ${heir}, so it cannot ${attempt}`, [
     `read_block ${heir} — the block that stands in its place`,
     `read_block ${name} — the replaced block, which stays readable as history`,
+    `to correct this record itself, such as text that must not be kept: unsupersede_block ${name}, change it, then supersede_block ${name} with ${heir} — the three as one apply_batch`,
   ]);
 });

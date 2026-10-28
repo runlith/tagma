@@ -127,7 +127,7 @@ export const supersessionLayer: Layer.Layer<
             `${blockName(row.uuid)} was not replaced, so there is no retirement to withdraw`,
             [
               `read_block ${blockName(row.uuid)} — a replaced block names the successor that took its place`,
-              'a block that became right again is corrected on the block that STANDS, or replaced by a new one — this act is for a replacement written by mistake',
+              'a block that stands is corrected in place with edit_block, or replaced by a new one — this act brings back a block that was replaced',
             ],
           );
         }

@@ -29,6 +29,7 @@ Exact fields per op (?, optional):
   anchor    {op, blockId, kind, ref, symbol?, fromId?}
   unanchor  {op, blockId, kind, ref, symbol?}
   supersede {op, oldId, withId}
+  unsupersede {op, id}
   delete    {op, id}
   restore   {op, id}
   propose   {op, $id?, amendsId, title, body?, ops, sources?}
@@ -44,7 +45,7 @@ const batchOpSchema = Schema.StructWithRest(
   Schema.Struct({
     op: Schema.String.annotate({
       description:
-        'The graph verb: create, update, edit, claim, release, finish, close, link, unlink, anchor, unanchor, supersede, delete, restore, propose, accept, reject or uphold.',
+        'The graph verb: create, update, edit, claim, release, finish, close, link, unlink, anchor, unanchor, supersede, unsupersede, delete, restore, propose, accept, reject or uphold.',
     }),
     tags: Schema.optional(tagsField).annotate({
       description:
@@ -400,7 +401,8 @@ const WORK_ACTS = {
 
   unsupersede_block: operation('unsupersede_block', {
     ...GRAPH_ACT,
-    meaning: 'Undo a mistaken supersede: remove the retirement edge and restore the block with its references, sources and status intact.',
+    meaning:
+      'Bring a replaced block back to stand: remove the retirement edge and restore the block with its references, sources and status intact. For a replacement taken in error, or to correct the replaced record itself — then supersede_block retires it again, in one apply_batch when it must not stand meanwhile.',
     confirmation: (input) => ({
       summary: `Withdraw the replacement that retired ${input.blockId}?`,
       consequence: 'It stands again as it stood, and its successor keeps everything it says.',
