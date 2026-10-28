@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { softwareDevelopment } from '../../../../catalogs/contract/wire/softwareDevelopment.js';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
-import { containerAbove, mapLines, mapNodes, type MapNode, type MapRow } from '../../../../graph/orientation/map.js';
+import { mapLines, mapNodes, regionAbove, type MapNode, type MapRow } from '../../../../graph/orientation/map.js';
 import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
 
 const table = new TagIndex([...softwareDevelopment.tags], BEHAVIOUR_REGISTRY);
@@ -66,7 +66,7 @@ test('a map exposes paths only along its focused branch', () => {
   for (const path of nodes.slice(1).flatMap((one) => one.places)) expect(aimed).toContain(path);
 });
 
-test('mapNodes projects kind and sources under the nearest standing container', () => {
+test('mapNodes projects kind and sources under the nearest standing container or the page holding it', () => {
   const projected = mapNodes(
     table,
     [
@@ -75,6 +75,9 @@ test('mapNodes projects kind and sources under the nearest standing container', 
       row(3, 2, 'Executions'),
       row(4, 1, 'The old shape', { superseded: 1 }),
       row(5, 4, 'Git'),
+      row(6, null, 'Agents', { tags: [] }),
+      row(7, 6, 'Threads'),
+      row(8, null, 'Notes', { tags: [] }),
     ],
     9,
     new Map([
@@ -87,6 +90,8 @@ test('mapNodes projects kind and sources under the nearest standing container', 
     [1, null, 'kit', ['packages/git', 'packages/git-cut.ts']],
     [3, 1, null, ['packages/executions']],
     [5, 1, null, []],
+    [6, null, null, []],
+    [7, 6, null, []],
   ]);
 });
 
@@ -112,11 +117,11 @@ test('a reading aimed at a task opens the region that task stands in', () => {
     row(5, null, 'the old shape', { superseded: 1 }),
     row(6, 5, 'grind', { tags: ['task'] }),
   ];
-  expect(containerAbove(table, rows, 9, 4)).toBe(2);
-  expect(containerAbove(table, rows, 9, 2)).toBe(2);
-  expect(containerAbove(table, rows, 9, 6)).toBeUndefined();
-  expect(containerAbove(table, rows, 9, null)).toBeUndefined();
-  expect(containerAbove(table, [...rows, row(9, null, 'the project', { tags: [] })], 9, 9)).toBeUndefined();
-  const circular = [row(7, 8, 'a', { tags: ['task'] }), row(8, 7, 'b', { tags: ['task'] })];
-  expect(containerAbove(table, circular, 9, 7)).toBeUndefined();
+  const above = (all: readonly MapRow[], blockId: number | null) => regionAbove(all, mapNodes(table, all, 9, new Map()), 9, blockId);
+  expect(above(rows, 4)).toBe(2);
+  expect(above(rows, 2)).toBe(2);
+  expect(above(rows, 6)).toBeUndefined();
+  expect(above(rows, null)).toBeUndefined();
+  expect(above([...rows, row(9, null, 'the project', { tags: [] })], 9)).toBeUndefined();
+  expect(above([row(7, 8, 'a', { tags: ['task'] }), row(8, 7, 'b', { tags: ['task'] })], 7)).toBeUndefined();
 });
