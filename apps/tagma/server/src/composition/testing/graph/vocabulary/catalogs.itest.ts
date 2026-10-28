@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Effect, Layer, Schema } from 'effect';
+import { Context, Effect, Layer, Schema } from 'effect';
 import { eq } from 'drizzle-orm';
 import { ensureVocabulary } from '../../../../graph/serving/birth.js';
 import { block } from '../../../../graph/store/tables.js';
@@ -15,6 +15,8 @@ import { shippedTypeId } from '../../../../graph/contract/wire/tags/identity.js'
 import { isEnabled } from '../../../../graph/contract/wire/tags/law.js';
 import { blockName } from '../../../../graph/contract/wire/references.js';
 import { softwareDevelopment } from '../../../../catalogs/contract/wire/softwareDevelopment.js';
+import { Catalogs } from '../../../../graph/contract/wire/catalogs.js';
+import { catalogWriter } from '../../../../graph/vocabulary/install.js';
 import { demoGraphLayer, withDemo } from '../../graphFixture.js';
 import { tagNodeFields } from '../../../../graph/vocabulary/declarationRules.js';
 import base from './base.json';
@@ -260,6 +262,35 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         yield* graph.trash.delete({ id: idea.id });
         expect((yield* (yield* InstalledCatalogs).read(projectId)).filter((entry) => entry.id === softwareDevelopment.id)).toEqual([]);
         expect(yield* showsIdea()).toBe(false);
+      }),
+    ),
+  );
+
+  it.effect('a release dropping an export frees its declaration for deletion and keeps the other catalog members', () =>
+    withDemo(({ graph, projectId, root, context, table, nameOf }) =>
+      Effect.gen(function* () {
+        const previous = {
+          ...softwareDevelopment,
+          tags: [
+            ...softwareDevelopment.tags,
+            { id: 'retired', fields: {}, edges: [], gates: [], roles: {}, body: { shape: 'content' as const }, prompt: '' },
+          ],
+        };
+        const shipped = Catalogs.of({
+          ...SHIPPED_CATALOGS,
+          byId: (id) => (id === previous.id ? previous : SHIPPED_CATALOGS.byId(id)),
+        });
+        yield* (yield* catalogWriter(Context.add(context, Catalogs, shipped), projectId))([previous.id]);
+        const retired = yield* declarationOf(projectId, 'retired');
+        const local = yield* graph.blocks.create({ projectId, parentId: root, tags: ['tag'], title: 'Local', fields: { id: 'local' } });
+        const catalog = yield* softwareDevelopmentIn(projectId);
+        const id = yield* graph.blockNames.idOfName(catalog.name);
+        const members = [...catalog.tags, yield* nameOf(local.id)];
+        yield* graph.blocks.update({ id, fields: { tags: members } });
+        yield* ensureVocabulary('machine');
+        yield* graph.trash.delete({ id: retired.id });
+        expect((yield* table()).tagById('retired')).toBeNull();
+        expect((yield* softwareDevelopmentIn(projectId)).tags).toEqual(members.filter((name) => name !== blockName(retired.uuid)));
       }),
     ),
   );

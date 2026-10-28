@@ -96,8 +96,8 @@ const current = Effect.fnUntraced(function* (
   if (rows.some((row) => withoutWhy(row) !== row)) return false;
   const installed = installedOf(rows);
   if (installed.catalogs.some((catalog) => catalog.release?.blocked !== undefined)) return false;
-  if (!releasesCurrent(installed, road.shipped, catalogIds)) return false;
   const table = yield* road.tags.of(projectId);
+  if (!releasesCurrent(table, installed, road.shipped, catalogIds)) return false;
   return (
     !shippedIdentityMissing(table, installed) &&
     !carryMissing(table, installed, road.shipped, catalogIds) &&
