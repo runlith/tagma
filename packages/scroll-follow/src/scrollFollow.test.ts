@@ -3,9 +3,7 @@ import { describe, expect, test } from 'vitest';
 import {
   applyOverflowAnchor,
   canScroll,
-  createAutoMark,
   isAtBottom,
-  isAutoMark,
   readScrollState,
   selectionInside,
   wheelCrossesOut,
@@ -52,14 +50,6 @@ describe('tail-following scroll policy', () => {
       jump: false,
       overflow: false,
     });
-  });
-
-  test('identifies scroll events caused by auto-follow', () => {
-    const mark = createAutoMark({ clientHeight: 400, scrollHeight: 1000, scrollTop: 560 }, 1000);
-
-    expect(isAutoMark(mark, { clientHeight: 400, scrollHeight: 1000, scrollTop: 600 }, 1100)).toBe(true);
-    expect(isAutoMark(mark, { clientHeight: 400, scrollHeight: 1000, scrollTop: 560 }, 1100)).toBe(false);
-    expect(isAutoMark(mark, { clientHeight: 400, scrollHeight: 1000, scrollTop: 600 }, 2601)).toBe(false);
   });
 
   test('detects selection inside the feed', () => {

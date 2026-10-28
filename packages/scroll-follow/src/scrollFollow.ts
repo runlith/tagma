@@ -4,18 +4,12 @@ export type ScrollMetrics = {
   scrollTop: number;
 };
 
-export type AutoMark = {
-  time: number;
-  top: number;
-};
-
 export type ScrollState = {
   bottom: boolean;
   jump: boolean;
   overflow: boolean;
 };
 
-export const AUTO_MARK_TTL_MS = 1500;
 export const BOTTOM_THRESHOLD = 12;
 
 export function wheelDistance(input: { deltaY: number; deltaMode: number; rootHeight: number }): number {
@@ -56,14 +50,6 @@ export function readScrollState(metrics: ScrollMetrics): ScrollState {
     jump: overflow && distance > jumpThreshold(metrics.clientHeight),
     overflow,
   };
-}
-
-export function createAutoMark(metrics: ScrollMetrics, now = Date.now()): AutoMark {
-  return { time: now, top: Math.max(0, metrics.scrollHeight - metrics.clientHeight) };
-}
-
-export function isAutoMark(mark: AutoMark | undefined, metrics: ScrollMetrics, now = Date.now()): boolean {
-  return Boolean(mark && now - mark.time <= AUTO_MARK_TTL_MS && Math.abs(metrics.scrollTop - mark.top) < 2);
 }
 
 export type OverflowAnchoring = 'dynamic' | 'none';

@@ -6,13 +6,11 @@
     language,
     firstLine,
     class: className = '',
-    onRendered,
   }: {
     text: string;
     language?: string;
     firstLine?: number;
     class?: string;
-    onRendered?: () => void;
   } = $props();
 
   let html = $state('');
@@ -27,7 +25,6 @@
       const next = await highlightCode(source, lang);
       if (revision !== renderRevision) return;
       html = next;
-      onRendered?.();
     })();
   });
 </script>

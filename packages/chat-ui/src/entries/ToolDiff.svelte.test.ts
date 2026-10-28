@@ -11,6 +11,7 @@ let drawn: Record<string, unknown> | undefined;
 let target: HTMLElement | undefined;
 
 beforeAll(() => {
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => VIEWPORT_PX });
   Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
     configurable: true,
     get(this: HTMLElement) {

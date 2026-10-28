@@ -42,7 +42,7 @@ test('a pin is handed the limit the region itself holds, and a new one when the 
   document.body.append(surface);
   const app = mount(PinnedRegion, {
     target: surface,
-    props: { pins: [{ id: 'pin', body }], context: {} as ChatEntryContext, onHeight: () => undefined },
+    props: { pins: [{ id: 'pin', body }], context: {} as ChatEntryContext },
   });
   flushSync();
   const region = surface.querySelector<HTMLElement>('[data-pinned-region]');

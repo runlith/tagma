@@ -1,17 +1,22 @@
 const KEYBOARD_PX = 120;
+const ZOOMED = 1.01;
 
 export class Viewport {
-  height = $state(0);
-  top = $state(0);
-  keyboard = $state(false);
-
-  watch(): () => void {
+  watch(shell: HTMLElement): () => void {
     const seen = window.visualViewport;
+    let applied = '';
     const measure = (): void => {
-      const layout = document.documentElement.clientHeight;
-      this.height = seen?.height ?? window.innerHeight;
-      this.top = seen?.offsetTop ?? 0;
-      this.keyboard = layout - this.height > KEYBOARD_PX;
+      if ((seen?.scale ?? 1) > ZOOMED) return;
+      const height = seen?.height ?? window.innerHeight;
+      const top = seen?.offsetTop ?? 0;
+      const keyboard = document.documentElement.clientHeight - height > KEYBOARD_PX;
+      const next = `${height}:${top}:${keyboard}`;
+      if (next === applied) return;
+      applied = next;
+      shell.style.height = `${height}px`;
+      shell.style.transform = top > 0 ? `translateY(${top}px)` : '';
+      shell.classList.toggle('safe-bottom', !keyboard);
+      shell.toggleAttribute('data-keyboard', keyboard);
     };
     measure();
     seen?.addEventListener('resize', measure);

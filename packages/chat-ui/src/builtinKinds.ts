@@ -9,7 +9,7 @@ import {
   type EntryRenderer,
   type EntryTraits,
 } from './EntryKinds.svelte';
-import { ATTACHMENTS_PX, BODY_COLUMNS, BUBBLE_PX, DISCLOSURE_BODY_PX, DISCLOSURE_PX, META_PX, STEP_PX, USER_COLUMNS } from './rowEstimate';
+import { attachmentsHeight, BUBBLE_PX, DISCLOSURE_BODY_PX, DISCLOSURE_PX, META_PX, STEP_PX } from './rowEstimate';
 
 export type BuiltinRenderers = { [K in BuiltinKindName]?: EntryRenderer<ChatEntryOf<K>> };
 
@@ -31,21 +31,24 @@ export function registerBuiltinKinds(kinds: EntryKinds, render: BuiltinRenderers
     kinds.registerDefault(
       BUILTIN,
       builtin('assistant', render, {
-        estimate: (entry, view) => view.markdown(entry.id, entry.text, BODY_COLUMNS, appendedFrom(entry)) + META_PX,
+        estimate: (entry, view) => view.markdown(entry.id, entry.text, view.metrics.body, appendedFrom(entry)) + META_PX,
       }),
     ),
     kinds.registerDefault(
       BUILTIN,
       builtin('reasoning', render, {
         classify: () => META,
-        estimate: (entry, view) => view.markdown(entry.id, entry.text, BODY_COLUMNS, appendedFrom(entry)),
+        estimate: (entry, view) => view.markdown(entry.id, entry.text, view.metrics.words, appendedFrom(entry)),
       }),
     ),
     kinds.registerDefault(
       BUILTIN,
       builtin('user', render, {
         estimate: (entry, view) =>
-          view.markdown(entry.id, entry.text, USER_COLUMNS) + BUBBLE_PX + META_PX + (entry.attachments?.length ? ATTACHMENTS_PX : 0),
+          view.markdown(entry.id, entry.text, view.metrics.bubble) +
+          BUBBLE_PX +
+          META_PX +
+          attachmentsHeight(entry.attachments?.length ?? 0, view.metrics),
       }),
     ),
     kinds.registerDefault(
@@ -80,11 +83,11 @@ export function registerBuiltinKinds(kinds: EntryKinds, render: BuiltinRenderers
       BUILTIN,
       builtin('words', render, {
         estimate: (entry, view) =>
-          view.markdown(entry.id, entry.text, USER_COLUMNS) +
+          view.markdown(entry.id, entry.text, view.metrics.bubble) +
           BUBBLE_PX +
           META_PX +
           (entry.sender === null ? 0 : META_PX) +
-          (entry.attachments?.length ? ATTACHMENTS_PX : 0),
+          attachmentsHeight(entry.attachments?.length ?? 0, view.metrics),
       }),
     ),
     kinds.registerDefault(BUILTIN, builtin('error', render)),

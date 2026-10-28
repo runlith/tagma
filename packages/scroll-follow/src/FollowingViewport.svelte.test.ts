@@ -11,7 +11,12 @@ function feed() {
   Object.defineProperty(root, 'scrollHeight', { get: () => height });
   Object.defineProperty(root, 'clientHeight', { value: 600 });
   root.scrollTop = 3400;
-  const viewport = new FollowingViewport({ autoFollows: () => true });
+  const viewport = new FollowingViewport({
+    autoFollows: () => true,
+    toTail: (owner) => {
+      owner.scrollTop = owner.scrollHeight;
+    },
+  });
   viewport.attach(root);
   return {
     root,

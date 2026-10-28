@@ -25,7 +25,6 @@ export type ChatEntryContext = {
   readyAnswerPick(entryId: string): number | undefined;
   openImage(image: ChatAttachment): void;
   readAttachment?(url: string, signal: AbortSignal): Promise<string>;
-  contentRendered(entryId: string): void;
 };
 
 export type ChatTextSize = 'body' | 'ui' | 'small';
@@ -36,7 +35,6 @@ export type ChatMarkdownBody = {
   streaming?: boolean;
   size?: ChatTextSize;
   class?: string;
-  onRendered?(): void;
 };
 
 export type ChatCodeBody = {
@@ -44,7 +42,6 @@ export type ChatCodeBody = {
   cacheKey: string;
   language?: string;
   firstLine?: number;
-  onRendered?(): void;
 };
 
 export type ChatControl = 'attach' | 'submit' | 'stop' | 'confirm' | 'cancel' | 'mode';

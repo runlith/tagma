@@ -4,7 +4,7 @@
 
 <script lang="ts">
   import { codeColours, type MarkdownHtml } from '@runlith/markdown/render';
-  import { getAllContexts, untrack } from 'svelte';
+  import { getAllContexts } from 'svelte';
   import type { Attachment } from 'svelte/attachments';
   import { App } from '@runlith/layer/svelte/App.svelte';
   import { type BlockRefs, blockRefView } from '$lib/features/graph/blockRefView.js';
@@ -37,7 +37,6 @@
     threadOf,
     paths,
     from,
-    onRendered,
   }: {
     text: string;
     size?: MarkdownSize;
@@ -50,7 +49,6 @@
     threadOf?: (id: string) => OwnerWords | null | undefined;
     paths?: PathRoad | undefined;
     from?: LinkFrom | undefined;
-    onRendered?: () => void;
   } = $props();
 
   const SIZES: Record<MarkdownSize, string> = {
@@ -86,10 +84,6 @@
   }
 
   const blocks = $derived(/\S/.test(text) ? renderBody(text, { key: cacheKey, streaming }, origin, addresses) : []);
-
-  $effect(() => {
-    if (blocks.length > 0) untrack(() => onRendered?.());
-  });
 
   function blockRefs(block: MarkdownHtml, resolver: BlockRefs | undefined): Attachment<HTMLElement> {
     return (root) => {

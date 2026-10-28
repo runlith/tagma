@@ -29,7 +29,6 @@ export class ChatEntryView implements ChatEntryContext {
   private copiedKey = $state<string | null>(null);
   private opened = $state<ChatAttachment | null>(null);
   private copiedTimer: ReturnType<typeof setTimeout> | undefined;
-  private report: ((entryId: string) => void) | undefined;
   private verboseEnabled: boolean;
   private stretchesDefault: ChatStretchDefault;
   private heldStretches = $state<Record<string, true>>({});
@@ -168,14 +167,6 @@ export class ChatEntryView implements ChatEntryContext {
 
   readAttachment(url: string, signal: AbortSignal): Promise<string> {
     return this.foldOf().readAttachment(url, signal);
-  }
-
-  useContentRendered(report: (entryId: string) => void): void {
-    this.report = report;
-  }
-
-  contentRendered(entryId: string): void {
-    this.report?.(entryId);
   }
 
   dispose(): void {

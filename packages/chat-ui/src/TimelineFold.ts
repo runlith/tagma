@@ -14,6 +14,7 @@ import type { EntryKinds } from './EntryKinds.svelte';
 import type { FeedChange } from './feedChanges';
 import {
   type ChatRowView,
+  DESKTOP_METRICS,
   FEED_GAP_PX,
   liveStatusEstimate,
   rewindEstimate,
@@ -47,6 +48,7 @@ const DAY_BOUNDARY_PX = 34;
 const LIVE_STATUS_KEY = 'live:status';
 
 const UNTOUCHED: ChatRowView = {
+  metrics: DESKTOP_METRICS,
   expanded: (_key, fallback) => fallback,
   stretchDefault: (_key, newest) => newest,
   toolOpen: () => undefined,

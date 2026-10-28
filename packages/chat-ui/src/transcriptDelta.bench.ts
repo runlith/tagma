@@ -5,7 +5,7 @@ import { builtinEntryKinds } from './builtinKinds';
 import { ChatEntryView } from './ChatEntryView.svelte';
 import { ChatFold } from './ChatFold.svelte';
 import { FeedMemory } from './FeedMemory';
-import type { ChatRowView } from './rowEstimate';
+import { type ChatRowView, DESKTOP_METRICS } from './rowEstimate';
 import { FeedReader } from './session/FeedReader';
 import { at, openEvent, snapshotEvent } from './testing/chatHarness.svelte';
 import { TimelineFold } from './TimelineFold';
@@ -27,7 +27,12 @@ const LARGE_REWOUND: Scale = { ...SMALL, history: 10_000, rewound: true };
 const LARGE_LIVE: Scale = { ...SMALL, live: 200 };
 const LARGE_BODY: Scale = { ...SMALL, body: 100_000 };
 
-const view: ChatRowView = { expanded: (_key, fallback) => fallback, stretchDefault: (_key, newest) => newest, toolOpen: () => undefined };
+const view: ChatRowView = {
+  metrics: DESKTOP_METRICS,
+  expanded: (_key, fallback) => fallback,
+  stretchDefault: (_key, newest) => newest,
+  toolOpen: () => undefined,
+};
 
 function settledRun(index: number, rewound: boolean): ThreadTranscriptEntry[] {
   const runId = `run-${index}`;

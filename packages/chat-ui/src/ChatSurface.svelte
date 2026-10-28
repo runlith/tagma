@@ -63,7 +63,6 @@
   const strings = useChatStrings();
 
   let clearance = $state(0);
-  let pinnedHeight = $state(0);
   let dock: ReturnType<typeof ComposerDock> | undefined = $state();
 
   const thread = $derived(turns.target);
@@ -108,7 +107,6 @@
   }
 
   const viewport = new TranscriptViewport(untrack(() => memory));
-  view.useContentRendered((entryId) => viewport.contentRendered(entryId));
   let feedEpoch = $state(0);
   const trailingReadyAnswers = $derived.by(() => {
     feedEpoch;
@@ -337,14 +335,13 @@
   {/if}
 {/snippet}
 
-{#snippet reasoningStep(entry: ChatEntryOf<'reasoning'>, context: ChatEntryContext)}
+{#snippet reasoningStep(entry: ChatEntryOf<'reasoning'>)}
   {@render rendering.markdown({
     cacheKey: entry.id,
     size: 'ui',
     class: 'text-muted-foreground',
     streaming: entry.reasoningState === 'streaming',
     text: entry.text,
-    onRendered: () => context.contentRendered(entry.id),
   })}
 {/snippet}
 
@@ -447,7 +444,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="@container relative isolate flex h-full min-h-0 flex-col overflow-hidden" onkeydown={escape} {@attach intake.surface}>
-  <PinnedRegion pins={rendering.regions.pins} context={view} onHeight={(height) => (pinnedHeight = height)} />
+  <PinnedRegion pins={rendering.regions.pins} context={view} />
 
   <div class="relative min-h-0 flex-1">
     <ChatTranscript
@@ -468,7 +465,6 @@
       emptyStateDetail={opening?.copy.detail}
       starters={opening?.copy.starters ?? []}
       {clearance}
-      {pinnedHeight}
       hasOlder={session?.hasOlder ?? false}
       loadOlder={() => turns.run(turns.loadOlder(), false)}
       {viewport}

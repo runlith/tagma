@@ -1,12 +1,9 @@
 import {
-  type AutoMark,
   applyOverflowAnchor,
   bottomDistance,
   BOTTOM_THRESHOLD,
   canScroll,
-  createAutoMark,
   isAtBottom,
-  isAutoMark,
   type OverflowAnchoring,
   readScrollState,
   type ScrollMetrics,
@@ -14,27 +11,27 @@ import {
   selectionInside,
 } from './scrollFollow';
 
-const AUTO_SCROLL_CLAIM_MS = 1_500;
-
 export type ScrollOutcome = 'no-overflow' | 'at-bottom' | 'auto' | 'reader-moved';
 
 export type Hold = 'press' | 'selection';
 
 export type FollowingViewportOptions = {
   autoFollows(): boolean;
+  toTail(root: HTMLElement): void;
   bottomThreshold?: number;
   overflowAnchor?: OverflowAnchoring;
   movedByReader?(): boolean;
+  listens?: boolean;
   onScroll?(outcome: ScrollOutcome): void;
   onMeasure?(root: HTMLElement): void;
+  onAnchor?(anchored: boolean): void;
 };
 
 export class FollowingViewport {
   private root = $state<HTMLElement | undefined>();
   private isFollowing = $state(true);
   private scrollState = $state<ScrollState>({ bottom: true, jump: false, overflow: false });
-  private autoMark: AutoMark | undefined;
-  private autoTimer: ReturnType<typeof setTimeout> | undefined;
+  private ownTop: number | undefined;
   private stateFrame: number | undefined;
   private stateTarget: HTMLElement | undefined;
   private scrollFrame: number | undefined;
@@ -42,12 +39,16 @@ export class FollowingViewport {
   private readonly holds = new Set<Hold>();
   private previousTop = 0;
   private readerDirection = 0;
+  private anchoredNow = true;
   private readonly autoFollows: () => boolean;
+  private readonly toTail: (root: HTMLElement) => void;
   private readonly bottomThreshold: number;
   private readonly overflowAnchor: OverflowAnchoring;
   private readonly movedByReader: () => boolean;
+  private readonly listens: boolean;
   private readonly report: ((outcome: ScrollOutcome) => void) | undefined;
   private readonly onMeasure: ((root: HTMLElement) => void) | undefined;
+  private readonly onAnchor: ((anchored: boolean) => void) | undefined;
   private readonly onScroll = () => {
     const outcome = this.handleScroll();
     this.report?.(outcome);
@@ -56,11 +57,14 @@ export class FollowingViewport {
 
   constructor(options: FollowingViewportOptions) {
     this.autoFollows = options.autoFollows;
+    this.toTail = options.toTail;
     this.bottomThreshold = options.bottomThreshold ?? BOTTOM_THRESHOLD;
     this.overflowAnchor = options.overflowAnchor ?? 'dynamic';
     this.movedByReader = options.movedByReader ?? (() => true);
+    this.listens = options.listens ?? true;
     this.report = options.onScroll;
     this.onMeasure = options.onMeasure;
+    this.onAnchor = options.onAnchor;
   }
 
   get viewport(): HTMLElement | undefined {
@@ -79,15 +83,19 @@ export class FollowingViewport {
     return this.holds.size > 0;
   }
 
+  get anchored(): boolean {
+    return this.isFollowing && this.holds.size === 0;
+  }
+
   attach(root: HTMLElement | undefined): void {
     this.root = root;
     if (root === this.listening) return;
     this.cancelScroll();
     this.previousTop = root?.scrollTop ?? 0;
     this.readerDirection = 0;
-    this.listening?.removeEventListener('scroll', this.onScroll);
+    if (this.listens) this.listening?.removeEventListener('scroll', this.onScroll);
     this.listening = root;
-    root?.addEventListener('scroll', this.onScroll, { passive: true });
+    if (this.listens) root?.addEventListener('scroll', this.onScroll, { passive: true });
   }
 
   syncAnchor(): void {
@@ -97,6 +105,12 @@ export class FollowingViewport {
     this.scheduleState(root);
   }
 
+  scrolled(): ScrollOutcome {
+    const outcome = this.handleScroll();
+    this.report?.(outcome);
+    return outcome;
+  }
+
   handleScroll(): ScrollOutcome {
     const root = this.root;
     if (!root) return 'no-overflow';
@@ -104,18 +118,19 @@ export class FollowingViewport {
     const current = this.metrics(root);
     const movedUp = current.scrollTop < this.previousTop;
     this.previousTop = current.scrollTop;
-    const reader = this.holds.size > 0 || this.movedByReader();
+    const own = this.ownTop !== undefined && Math.abs(current.scrollTop - this.ownTop) < 2;
+    const reader = this.holds.size > 0 || (!own && this.movedByReader());
     this.scheduleState(root);
     if (!canScroll(current)) {
-      this.isFollowing = true;
+      this.setFollowing(true);
       return 'no-overflow';
     }
-    if (this.isFollowing && isAutoMark(this.autoMark, current)) {
+    if (this.isFollowing && own) {
       if (bottomDistance(current) >= 2) this.scrollToBottom(false);
       return 'auto';
     }
     if (bottomDistance(current) < 1) {
-      this.isFollowing = true;
+      this.setFollowing(true);
       return 'at-bottom';
     }
     if (reader && (this.readerDirection < 0 || movedUp)) {
@@ -123,7 +138,7 @@ export class FollowingViewport {
       return 'reader-moved';
     }
     if (isAtBottom(current, this.bottomThreshold) && (this.isFollowing || reader)) {
-      this.isFollowing = true;
+      this.setFollowing(true);
       return 'at-bottom';
     }
     if (!reader) return 'auto';
@@ -133,7 +148,7 @@ export class FollowingViewport {
   }
 
   scrollToBottom(force: boolean): void {
-    if (force) this.isFollowing = true;
+    if (force) this.setFollowing(true);
     if (!this.isFollowing) return;
     this.scrollForced ||= force;
     if (this.scrollFrame !== undefined) return;
@@ -144,14 +159,8 @@ export class FollowingViewport {
       const root = this.root;
       if (!root) return;
       if (!this.isFollowing || this.holds.size > 0 || (!forced && !this.autoFollows())) return;
-      if (bottomDistance(this.metrics(root)) < 2) {
-        this.markAutoScroll(root);
-        this.previousTop = root.scrollTop;
-        this.scheduleState(root);
-        return;
-      }
-      this.markAutoScroll(root);
-      root.scrollTop = root.scrollHeight;
+      this.toTail(root);
+      this.ownTop = Math.max(0, root.scrollHeight - root.clientHeight);
       this.previousTop = root.scrollTop;
       this.scheduleState(root);
     });
@@ -168,32 +177,36 @@ export class FollowingViewport {
     const root = this.root;
     if (!root) return;
     if (!canScroll(this.metrics(root))) {
-      this.isFollowing = true;
+      this.setFollowing(true);
       return;
     }
-    this.isFollowing = false;
+    this.setFollowing(false);
   }
 
   follow(): void {
     this.cancelScroll();
     this.holds.clear();
     this.readerDirection = 0;
-    this.isFollowing = true;
+    this.setFollowing(true);
   }
 
   gesture(delta: number): void {
+    this.ownTop = undefined;
     this.readerDirection = Math.sign(delta);
     if (delta < 0) this.pause();
-    else if (delta > 0 && this.root && isAtBottom(this.metrics(this.root), this.bottomThreshold)) this.isFollowing = true;
+    else if (delta > 0 && this.root && isAtBottom(this.metrics(this.root), this.bottomThreshold)) this.setFollowing(true);
   }
 
   hold(reason: Hold): void {
     this.cancelScroll();
     this.holds.add(reason);
+    this.settle();
   }
 
   release(reason: Hold): void {
-    if (!this.holds.delete(reason) || this.holds.size > 0) return;
+    if (!this.holds.delete(reason)) return;
+    this.settle();
+    if (this.holds.size > 0) return;
     this.scrollToBottom(false);
   }
 
@@ -202,7 +215,7 @@ export class FollowingViewport {
     if (!root) return;
     if (!this.isFollowing && this.holds.size === 0) {
       const current = this.metrics(root);
-      if (!canScroll(current) || bottomDistance(current) < 1) this.isFollowing = true;
+      if (!canScroll(current) || bottomDistance(current) < 1) this.setFollowing(true);
     }
     this.scheduleState(root);
   }
@@ -226,20 +239,29 @@ export class FollowingViewport {
   }
 
   dispose(): void {
-    this.listening?.removeEventListener('scroll', this.onScroll);
+    if (this.listens) this.listening?.removeEventListener('scroll', this.onScroll);
     this.listening = undefined;
     this.cancelScroll();
     if (this.stateFrame !== undefined) cancelAnimationFrame(this.stateFrame);
-    if (this.autoTimer) clearTimeout(this.autoTimer);
+  }
+
+  private setFollowing(following: boolean): void {
+    this.isFollowing = following;
+    this.settle();
+  }
+
+  private settle(): void {
+    const anchored = this.isFollowing && this.holds.size === 0;
+    if (anchored === this.anchoredNow) return;
+    this.anchoredNow = anchored;
+    this.onAnchor?.(anchored);
   }
 
   private cancelScroll(): void {
     if (this.scrollFrame !== undefined) cancelAnimationFrame(this.scrollFrame);
     this.scrollFrame = undefined;
     this.scrollForced = false;
-    this.autoMark = undefined;
-    if (this.autoTimer) clearTimeout(this.autoTimer);
-    this.autoTimer = undefined;
+    this.ownTop = undefined;
   }
 
   private metrics(element: HTMLElement): ScrollMetrics {
@@ -248,14 +270,5 @@ export class FollowingViewport {
       scrollHeight: element.scrollHeight,
       scrollTop: element.scrollTop,
     };
-  }
-
-  private markAutoScroll(element: HTMLElement): void {
-    this.autoMark = createAutoMark(this.metrics(element));
-    if (this.autoTimer) clearTimeout(this.autoTimer);
-    this.autoTimer = setTimeout(() => {
-      this.autoMark = undefined;
-      this.autoTimer = undefined;
-    }, AUTO_SCROLL_CLAIM_MS);
   }
 }

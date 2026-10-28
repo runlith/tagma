@@ -127,7 +127,7 @@ test('a commit id in code or text links to that commit in its project once confi
 });
 
 test('path resolution waits for the closed entry and reads only its final rendered text', async () => {
-  const props = $state({ text: '`Good', streaming: true, rendered: 0 });
+  const props = $state({ text: '`Good', streaming: true });
   const requested: string[] = [];
   const opened: Link[] = [];
   const target = document.createElement('div');
@@ -145,19 +145,16 @@ test('path resolution waits for the closed entry and reads only its final render
         requested.push(path);
         return true;
       }),
-      onRendered: () => {
-        props.rendered += 1;
-      },
     },
     opened,
   );
   try {
-    await waitUntil(() => props.rendered === 1);
+    flushSync();
     expect(target.querySelector('code')?.textContent).toBe('Good');
     expect(requested).toEqual([]);
 
     props.text = '`Good day,';
-    await waitUntil(() => props.rendered === 2);
+    flushSync();
     expect(target.querySelector('code')?.textContent).toBe('Good day,');
     expect(requested).toEqual([]);
     expect(target.querySelector('[role="link"]')).toBeNull();
@@ -174,7 +171,7 @@ test('path resolution waits for the closed entry and reads only its final render
 });
 
 test('a streamed body keeps its settled DOM while reference reading moves from pending through refusal to resolution', async () => {
-  const props = $state({ text: 'First [[5b386d76]] here.\n\nSecond.\n\nThi', rendered: 0 });
+  const props = $state({ text: 'First [[5b386d76]] here.\n\nSecond.\n\nThi' });
   const peers = $state<Record<string, BlockRefPeer>>({});
   const opened: Link[] = [];
   const names = () => opened.map((link) => (link.target as { name: string }).name);
@@ -188,14 +185,10 @@ test('a streamed body keeps its settled DOM while reference reading moves from p
       cacheKey: 'streamed-body',
       streaming: true,
       refs: { peer: (name: string) => peers[name], open: async () => undefined },
-      onRendered: () => {
-        props.rendered += 1;
-      },
     },
     opened,
   );
 
-  await waitUntil(() => props.rendered === 1);
   flushSync();
   const first = target.querySelector('p');
   expect(first?.textContent).toBe('First 5b386d76 here.');
@@ -227,7 +220,6 @@ test('a streamed body keeps its settled DOM while reference reading moves from p
   expect(names()).toEqual(['5b386d76', '5b386d76', '5b386d76']);
 
   props.text = 'First [[5b386d76]] here.\n\nSecond.\n\nThird.\n\nFour';
-  await waitUntil(() => props.rendered === 2);
   flushSync();
 
   const paragraphs = [...target.querySelectorAll('p')];

@@ -1,5 +1,6 @@
 import type { ToolDisplay } from '@runlith/agent/tool/display';
 import { describe, expect, test } from 'vitest';
+import { DESKTOP_METRICS } from './rowEstimate';
 import type { ActivityEntry } from './activity';
 import type { ChatEntry } from './entries';
 import { CHAT_TAIL_ITEMS, type ChatTimelineItem, stretchOnScreen, timelineBodyArrivesLate } from './timeline';
@@ -92,6 +93,7 @@ const guidance = (id: string, runId = 'run-1'): ChatEntry => ({
 
 function reader(expanded: (key: string) => boolean, stretches: 'newest' | 'all' = 'newest') {
   return {
+    metrics: DESKTOP_METRICS,
     expanded: (key: string) => expanded(key),
     stretchDefault: (_key: string, newest: boolean) => stretches === 'all' || newest,
     toolOpen: () => undefined,
@@ -100,6 +102,7 @@ function reader(expanded: (key: string) => boolean, stretches: 'newest' | 'all' 
 
 function untouched(stretches: 'newest' | 'all' = 'newest') {
   return {
+    metrics: DESKTOP_METRICS,
     expanded: (_key: string, fallback: boolean) => fallback,
     stretchDefault: (_key: string, newest: boolean) => stretches === 'all' || newest,
     toolOpen: () => undefined,

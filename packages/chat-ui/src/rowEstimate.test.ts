@@ -2,16 +2,27 @@ import type { ToolDisplay } from '@runlith/agent/tool/display';
 import { describe, expect, test } from 'vitest';
 import type { ActivityRow } from './activity';
 import type { ChatEntry } from './entries';
-import { markdownHeight, stepEstimate, TextHeights, WELL_LINES } from './rowEstimate';
+import {
+  attachmentsHeight,
+  DESKTOP_METRICS,
+  feedMetrics,
+  markdownHeight,
+  type Prose,
+  stepEstimate,
+  TextHeights,
+  WELL_LINES,
+} from './rowEstimate';
 import { builtinEntryKinds } from './builtinKinds';
 
 const kinds = builtinEntryKinds();
 
 const stretchDefault = (_key: string, newest: boolean) => newest;
-const markdown = (_key: string, text: string, columns: number) => markdownHeight(text, columns);
-const view = { expanded: (_key: string, fallback: boolean) => fallback, stretchDefault, toolOpen: () => undefined, markdown };
-const open = { expanded: (key: string) => !key.endsWith(':all'), stretchDefault, toolOpen: () => undefined, markdown };
-const whole = { expanded: () => true, stretchDefault, toolOpen: () => undefined, markdown };
+const markdown = (_key: string, text: string, prose: Prose) => markdownHeight(text, prose);
+const metrics = DESKTOP_METRICS;
+const view = { metrics, expanded: (_key: string, fallback: boolean) => fallback, stretchDefault, toolOpen: () => undefined, markdown };
+const open = { metrics, expanded: (key: string) => !key.endsWith(':all'), stretchDefault, toolOpen: () => undefined, markdown };
+const whole = { metrics, expanded: () => true, stretchDefault, toolOpen: () => undefined, markdown };
+const body = metrics.body;
 
 const call = (display: ToolDisplay): ActivityRow => ({
   kind: 'step',
@@ -32,19 +43,19 @@ describe('what a markdown body is worth', () => {
     const list = ['- one', '- two', '- three', '- four', '- five'].join('\n');
     const sentence = 'one two three four five';
 
-    expect(markdownHeight(list, 78)).toBeGreaterThan(markdownHeight(sentence, 78) * 4);
+    expect(markdownHeight(list, body)).toBeGreaterThan(markdownHeight(sentence, body) * 4);
   });
 
   test('a heading carries its own air, and a paragraph break is not a line', () => {
-    expect(markdownHeight('## a heading', 78)).toBeGreaterThan(markdownHeight('a heading', 78));
-    expect(markdownHeight('one\n\ntwo', 78)).toBeLessThan(markdownHeight('one\nmid\ntwo', 78));
+    expect(markdownHeight('## a heading', body)).toBeGreaterThan(markdownHeight('a heading', body));
+    expect(markdownHeight('one\n\ntwo', body)).toBeLessThan(markdownHeight('one\nmid\ntwo', body));
   });
 
   test('fenced lines are counted at the code line box, not the body one', () => {
     const fenced = ['```ts', 'const a = 1;', 'const b = 2;', '```'].join('\n');
     const prose = ['x', 'const a = 1;', 'const b = 2;', 'x'].join('\n');
 
-    expect(markdownHeight(fenced, 78)).toBeLessThan(markdownHeight(prose, 78));
+    expect(markdownHeight(fenced, body)).toBeLessThan(markdownHeight(prose, body));
   });
 
   test("the model's words carry their meta line; a thought does not", () => {
@@ -53,6 +64,22 @@ describe('what a markdown body is worth', () => {
     const thought = kinds.estimate({ id: 'r1', kind: 'reasoning', text } as ChatEntry, view);
 
     expect(assistant).toBeGreaterThan(thought);
+  });
+});
+
+describe('what the feed width does to an estimate', () => {
+  test('the same answer is priced about as much taller in a phone column as its lines are shorter', () => {
+    const phone = feedMetrics(360, { body: 14, ui: 13, small: 12, spacing: 4 });
+    const text = 'a sentence of an answer that wraps '.repeat(20);
+
+    expect(markdownHeight(text, phone.body)).toBeGreaterThan(markdownHeight(text, DESKTOP_METRICS.body) * 1.7);
+  });
+
+  test('images wrap into as many bands as the bubble holds thumbnails in a row', () => {
+    const phone = feedMetrics(360, { body: 14, ui: 13, small: 12, spacing: 4 });
+
+    expect(attachmentsHeight(5, phone)).toBe(2 * attachmentsHeight(1, phone));
+    expect(attachmentsHeight(5, DESKTOP_METRICS)).toBe(attachmentsHeight(1, DESKTOP_METRICS));
   });
 });
 
@@ -74,15 +101,15 @@ describe('a growing body is priced as the whole text is', () => {
     ];
     for (const piece of pieces) {
       text += piece;
-      expect(heights.markdown('a1', text, 78)).toBe(markdownHeight(text, 78));
+      expect(heights.markdown('a1', text, body)).toBe(markdownHeight(text, body));
     }
-    expect(heights.markdown('a1', 'rewritten', 78)).toBe(markdownHeight('rewritten', 78));
+    expect(heights.markdown('a1', 'rewritten', body)).toBe(markdownHeight('rewritten', body));
   });
 
   test('a replacement of the same length is priced as the new text, not as growth', () => {
     const heights = new TextHeights();
-    expect(heights.markdown('a1', '# h\nsame', 78)).toBe(markdownHeight('# h\nsame', 78));
-    expect(heights.markdown('a1', 'aaa\nsame\nmore', 78)).toBe(markdownHeight('aaa\nsame\nmore', 78));
+    expect(heights.markdown('a1', '# h\nsame', body)).toBe(markdownHeight('# h\nsame', body));
+    expect(heights.markdown('a1', 'aaa\nsame\nmore', body)).toBe(markdownHeight('aaa\nsame\nmore', body));
   });
 });
 
