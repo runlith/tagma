@@ -159,30 +159,28 @@
       class={cn(passthrough && 'opacity-45', mark && `border-l-2 ${MARK_EDGE[mark]} pl-1.5`)}
     >
       {#snippet leading()}
-        {#if mark && MARK_SIGN[mark]}
-          <Tooltip text={MARK_LABEL[mark]}>
-            <span class={cn('stamp relative mt-1 mr-1 w-3 shrink-0 text-center', MARK_TEXT[mark])}>
-              {MARK_SIGN[mark]}
-            </span>
-          </Tooltip>
-        {/if}
-        {#if hasChildren && !store.readingLens.active}
-          <Tooltip
-            text={expanded ? 'Collapse' : 'Expand'}
-            hints={[{ keys: spellModifier('alt', apple), words: 'click for the whole branch' }]}
-            class="absolute top-[5px] -left-5"
-          >
-            <button
-              type="button"
-              class="grid h-full w-full place-items-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
-              onclick={(event) => (event.altKey ? store.setBranch(name, !expanded) : store.toggle(name))}
-              aria-label={expanded ? 'Collapse' : 'Expand'}
-              aria-expanded={expanded}
+        <span class="pointer-events-none relative -ml-2 grid h-6 w-4 shrink-0 place-items-center">
+          {#if mark && MARK_SIGN[mark]}
+            <Tooltip text={MARK_LABEL[mark]}>
+              <span class={cn('stamp pointer-events-auto', MARK_TEXT[mark])}>{MARK_SIGN[mark]}</span>
+            </Tooltip>
+          {:else if hasChildren && !store.readingLens.active}
+            <Tooltip
+              text={expanded ? 'Collapse' : 'Expand'}
+              hints={[{ keys: spellModifier('alt', apple), words: 'click for the whole branch' }]}
             >
-              <ChevronRight class={cn('size-3.5 transition-transform duration-150 ease-instrument', expanded && 'rotate-90')} />
-            </button>
-          </Tooltip>
-        {/if}
+              <button
+                type="button"
+                class="pointer-events-auto grid size-4 place-items-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
+                onclick={(event) => (event.altKey ? store.setBranch(name, !expanded) : store.toggle(name))}
+                aria-label={expanded ? 'Collapse' : 'Expand'}
+                aria-expanded={expanded}
+              >
+                <ChevronRight class={cn('size-3.5 transition-transform duration-150 ease-instrument', expanded && 'rotate-90')} />
+              </button>
+            </Tooltip>
+          {/if}
+        </span>
       {/snippet}
 
       {#snippet title()}
@@ -190,7 +188,7 @@
           <div
             bind:this={titleEl}
             class={cn(
-              'title py-px text-body leading-6 outline-none',
+              'title text-body leading-6 outline-none',
               edit !== null ? 'relative cursor-text break-words whitespace-pre-wrap' : 'select-none',
               (resting || off) && 'text-muted-foreground',
               tags.restingState(block) === 'closed' && 'line-through decoration-muted-foreground/40',
@@ -220,7 +218,7 @@
     </BlockRow>
 
     {#if (expanded || store.readingLens.active) && hasChildren}
-      <div class="branch ml-2 border-l border-vein pl-6 transition-colors duration-150 ease-instrument">
+      <div class="branch ml-4 border-l border-vein pl-2 transition-colors duration-150 ease-instrument">
         {#each store.visibleChildren(name) as childName (childName)}
           <OutlineRow {store} name={childName} />
         {/each}

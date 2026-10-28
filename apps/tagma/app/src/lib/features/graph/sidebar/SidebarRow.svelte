@@ -37,7 +37,7 @@
   {#snippet title()}
     <FadeText
       class={cn(
-        'pointer-events-none flex-1 py-px text-body leading-6',
+        'pointer-events-none flex-1 text-body leading-6',
         (tags.isResting(block) || !block.title.trim()) && 'text-muted-foreground',
       )}
       text={label}

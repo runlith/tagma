@@ -39,16 +39,16 @@
     {/if}
   </div>
 {:else}
-  <div class="pl-6">
+  <div class="-ml-2">
     {#each rootChildren as name (name)}
       <OutlineRow {store} {name} />
     {/each}
 
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
-        class="group/add -mx-2 mt-0.5 flex h-8 items-center gap-1.5 rounded-lg px-2 text-ui text-muted-foreground/70 transition-colors hover:bg-hover hover:text-foreground data-[state=open]:bg-selected data-[state=open]:text-foreground"
+        class="group/add -mx-2 mt-0.5 flex h-8 items-center rounded-lg pr-2 pl-4 text-ui text-muted-foreground/70 transition-colors hover:bg-hover hover:text-foreground data-[state=open]:bg-selected data-[state=open]:text-foreground"
       >
-        <span class="mr-1.5 grid size-4 place-items-center rounded-full border border-dashed border-current">
+        <span class="mr-2 grid size-4 place-items-center rounded-full border border-dashed border-current">
           <Plus class="size-3" />
         </span>
         Add block
@@ -67,10 +67,10 @@
       <div class="mt-3 border-t border-vein pt-2">
         <button
           type="button"
-          class="-mx-2 flex h-7 items-center gap-1.5 rounded-lg px-2 text-small text-muted-foreground/60 transition-colors hover:bg-hover hover:text-foreground"
+          class="-mx-2 flex h-7 items-center gap-2 rounded-lg pr-2 pl-4 text-small text-muted-foreground/60 transition-colors hover:bg-hover hover:text-foreground"
           onclick={() => (trashOpen = true)}
         >
-          <Trash2 class="size-3" />
+          <span class="grid w-4 place-items-center"><Trash2 class="size-3" /></span>
           Trash
           <span class="stamp tabular">{store.trashRoots.length}</span>
         </button>
