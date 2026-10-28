@@ -1245,6 +1245,7 @@
     "start": "bun src/composition/server.ts",
     "test": "testbed bun test src --no-isolate",
     "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "test:e2e": "testbed e2e --no-isolate",
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
@@ -1277,6 +1278,7 @@
     "@runlith/browser-cookies": "workspace:*",
     "@runlith/bundle": "workspace:*",
     "@runlith/cdp": "workspace:*",
+    "@runlith/chrome-for-testing": "workspace:*",
     "@runlith/code-facts": "workspace:*",
     "@runlith/codesign": "workspace:*",
     "@runlith/credential-file": "workspace:*",
@@ -1317,6 +1319,7 @@
   },
   "devDependencies": {
     "@runlith/builtin-catalog": "workspace:*",
+    "@runlith/e2e": "workspace:*",
     "@runlith/effect-test": "workspace:*",
     "@runlith/testbed": "workspace:*",
     "@types/bun": "catalog:",

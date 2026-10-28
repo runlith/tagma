@@ -493,7 +493,7 @@ export const referenceIn = (source: Source, name: string, imported: ImportedRefe
 export const sitesIn = (path: string, text: string, source: Source, imported: ImportedReference): readonly Site[] => {
   const starts = startsOf(text);
   const sites: (Site & { readonly offset: number })[] = [];
-  const test = /\.(?:test|itest|stest)\.ts$/.test(path);
+  const test = /\.(?:test|itest|e2e|stest)\.ts$/.test(path);
   const { scripts, everyScope } = source;
   for (const { script, program, scopes } of scripts) {
     const generators = new Set<Node>();

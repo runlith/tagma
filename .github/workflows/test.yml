@@ -68,3 +68,65 @@ jobs:
             echo "TAGMA_${name}_SHA256=$(shasum -a 256 "$binary" | cut -d' ' -f1)" >> "$GITHUB_ENV"
           done
       - run: ${{ matrix.run }}
+
+  e2e:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      E2E_LANES: chromium,webkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          native: 'true'
+      - run: bun apps/tagma/server/scripts/fetch-browser.ts
+      - run: bun --cwd packages/e2e x playwright-core install webkit
+      - run: bun run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          path: /tmp/runlith-test/reports
+
+  e2e-electron:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      E2E_LANES: electron
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          native: 'true'
+      - name: hidden Electron fixture
+        run: bun run --cwd packages/e2e test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-electron-report
+          path: /tmp/runlith-test/reports
+
+  e2e-ios:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      E2E_LANES: ios
+      E2E_IOS_RUNTIMES: '26'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          native: 'true'
+      - name: native Simulator input driver
+        run: |
+          brew install facebook/fb/idb-companion
+          python3 -m venv "$RUNNER_TEMP/idb"
+          "$RUNNER_TEMP/idb/bin/pip" install fb-idb==1.1.7
+          echo "$RUNNER_TEMP/idb/bin" >> "$GITHUB_PATH"
+      - run: xcrun simctl list runtimes
+      - run: bun run test:e2e --parallel=1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-ios-report
+          path: /tmp/runlith-test/reports

@@ -8,7 +8,17 @@ type PlatformsParams = (typeof BUILTINS)['platforms']['params']['Encoded'];
 const JS_EXTENSIONS = ['.ts', '.mts', '.cts', '.tsx', '.js', '.mjs', '.cjs', '.jsx', '.svelte'];
 
 const SOURCES = {
-  exclude: ['**/*.test.*', '**/*.itest.*', '**/*.stest.*', '**/*.spec.*', '**/*.bench.*', '**/*.d.ts', '**/*.d.mts', '**/*.d.cts'],
+  exclude: [
+    '**/*.test.*',
+    '**/*.itest.*',
+    '**/*.e2e.*',
+    '**/*.stest.*',
+    '**/*.spec.*',
+    '**/*.bench.*',
+    '**/*.d.ts',
+    '**/*.d.mts',
+    '**/*.d.cts',
+  ],
   extensions: JS_EXTENSIONS,
 };
 
@@ -107,6 +117,7 @@ export const names: Builtin<'names', NamesParams> = {
         '**/*.d.ts',
         '**/*.test.*',
         '**/*.itest.*',
+        '**/*.e2e.*',
         '**/*.stest.*',
         '**/*.spec.*',
         '**/*.bench.*',

@@ -1,4 +1,5 @@
 import { Deferred, Effect, Exit, FileSystem, Path, Schema, Stream } from 'effect';
+import { RELEASE as CHROME_RELEASE, platformOf, executableIn, type Platform } from '@runlith/chrome-for-testing/build';
 import { HttpClient, HttpClientRequest } from 'effect/http';
 import { ChildProcess, type ChildProcessSpawner } from 'effect/process';
 import { Background } from '../../platform/contract/service/background.js';
@@ -6,30 +7,12 @@ import { ManagedPlace } from '../contract/service/place.js';
 import { type Build, BuildUnavailable } from './build.js';
 import { chromeArgs } from './chrome.js';
 
-export const CHROME_RELEASE = '151.0.7922.71';
-
 const releaseUrl = (release: string) => `https://googlechromelabs.github.io/chrome-for-testing/${release}.json`;
 
 const Downloads = Schema.Struct({
   version: Schema.String,
   downloads: Schema.Struct({ chrome: Schema.Array(Schema.Struct({ platform: Schema.String, url: Schema.String })) }),
 });
-
-type Platform = 'mac-arm64' | 'mac-x64' | 'linux64' | 'win64' | 'win32';
-
-const platformOf = (os: string, arch: string): Platform | null => {
-  if (os === 'darwin') return arch === 'arm64' ? 'mac-arm64' : 'mac-x64';
-  if (os === 'linux' && arch === 'x64') return 'linux64';
-  if (os === 'win32') return arch === 'x64' ? 'win64' : 'win32';
-  return null;
-};
-
-const executableIn = (path: Path.Path, dir: string, platform: Platform): string => {
-  const unpacked = path.join(dir, `chrome-${platform}`);
-  if (platform.startsWith('mac'))
-    return path.join(unpacked, 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing');
-  return path.join(unpacked, platform.startsWith('win') ? 'chrome.exe' : 'chrome');
-};
 
 export const makeChromeForTesting = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
@@ -106,18 +89,18 @@ export const makeChromeForTesting = Effect.gen(function* () {
     const unpacked =
       process.platform === 'darwin' ? yield* run('ditto', ['-x', '-k', zip, partial]) : yield* run('unzip', ['-q', zip, '-d', partial]);
     if (unpacked.code !== 0) return yield* unavailable(`the archive did not unpack: ${unpacked.said.trim()}`);
-    const executable = executableIn(path, partial, target);
+    const executable = executableIn(partial, target);
     const reported = yield* run(executable, ['--version']);
     if (reported.code !== 0 || !reported.said.includes(CHROME_RELEASE)) {
       return yield* unavailable(`the unpacked browser reports ${JSON.stringify(reported.said.trim())}`);
     }
     yield* files.remove(zip).pipe(Effect.mapError((failure) => unavailable(failure.message)));
     yield* files.rename(partial, dir).pipe(Effect.mapError((failure) => unavailable(failure.message)));
-    return executableIn(path, dir, target);
+    return executableIn(dir, target);
   });
 
   const verified = Effect.fn('chromeForTesting.verified')(function* (target: Platform) {
-    const standing = executableIn(path, dir, target);
+    const standing = executableIn(dir, target);
     if (yield* files.exists(standing).pipe(Effect.mapError((failure) => unavailable(failure.message)))) {
       const reported = yield* run(standing, ['--version']).pipe(
         Effect.catchTag('BuildUnavailable', () => Effect.succeed({ code: -1, said: '' })),

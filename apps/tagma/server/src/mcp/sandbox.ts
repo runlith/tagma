@@ -1,6 +1,7 @@
 import { McpAppCsp, viewCsp } from '@runlith/mcp/apps';
 import { Option, Schema } from 'effect';
 import { HttpServerResponse } from 'effect/http';
+import type { URLSearchParams } from 'node:url';
 
 const decodeCsp = Schema.decodeUnknownOption(Schema.fromJsonString(McpAppCsp));
 

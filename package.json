@@ -10,7 +10,7 @@
       "scripts"
     ],
     "catalog": {
-      "@tanstack/virtual-core": "^3.17.8",
+      "@tanstack/virtual-core": "^3.19.8",
       "typescript": "^6.0.3",
       "oxc-parser": "^0.151.0",
       "@types/bun": "^1.4.4",
@@ -81,6 +81,7 @@
   "scripts": {
     "check:change": "bun scripts/change/check.ts",
     "test:all": "testbed bun scripts/change/all.ts",
+    "test:e2e": "testbed e2e --no-isolate",
     "typecheck": "runlith-typecheck scripts",
     "patches:prove": "bun scripts/patches-prove.mjs",
     "test:integration": "testbed bun test $(find checks -path checks/law -prune -o -name '*.itest.ts' -print | sed 's|^|./|')",

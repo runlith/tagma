@@ -1,0 +1,20 @@
+{
+  "name": "@runlith/chrome-for-testing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./build": {
+      "types": "./src/build.ts",
+      "default": "./src/build.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "runlith-typecheck"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

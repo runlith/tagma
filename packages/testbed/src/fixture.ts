@@ -3,7 +3,7 @@ import type { Bed } from './core/bed.ts';
 import type { Item, Meter, WorldTaken } from './core/ledger.ts';
 import type { Hold } from './core/watch.ts';
 import { pristine } from './core/pristine.ts';
-import { locate as locationOf, type PathLocation } from './core/run.ts';
+import { locate as locationOf, type PathLocation, REPORT_ENV, ROOT_ENV } from './core/run.ts';
 
 const files = createRequire(import.meta.url)('node:fs') as typeof import('node:fs');
 
@@ -34,7 +34,9 @@ export const meter = (): Meter | undefined => bed()?.ledger.meter();
 
 export const worldTaken = (taken: WorldTaken): void => bed()?.world(taken);
 
-export const runRoot = (): string | undefined => bed()?.run?.root || undefined;
+export const runRoot = (): string | undefined => bed()?.run?.root || process.env[ROOT_ENV] || undefined;
+
+export const reportPath = (): string | undefined => bed()?.run?.report || process.env[REPORT_ENV] || undefined;
 
 export const locate = (path: string): PathLocation => locationOf(path);
 

@@ -1,0 +1,44 @@
+{
+  "name": "@runlith/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./browser": {
+      "types": "./src/browser.ts",
+      "bun": "./src/browser.ts"
+    },
+    "./engines": {
+      "types": "./src/engines.ts",
+      "bun": "./src/engines.ts"
+    },
+    "./artifacts": {
+      "types": "./src/artifacts.ts",
+      "bun": "./src/artifacts.ts"
+    },
+    "./stand": {
+      "types": "./src/stand.ts",
+      "bun": "./src/stand.ts"
+    }
+  },
+  "scripts": {
+    "test:e2e": "testbed e2e",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@runlith/chrome-for-testing": "workspace:*",
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/testbed": "workspace:*",
+    "appium-remote-debugger": "18.0.3",
+    "effect": "catalog:",
+    "playwright-core": "catalog:",
+    "vite": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "electron": "catalog:",
+    "typescript": "catalog:"
+  }
+}

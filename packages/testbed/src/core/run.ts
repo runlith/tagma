@@ -126,13 +126,23 @@ export const sweepRuns = (processes: Processes): { readonly stranded: number; re
   const ended = new Set(swept.roots.map((root) => basename(root)));
   const reports = files
     .readdirSync(REPORTS)
+    .filter((entry) => entry.endsWith('.jsonl'))
     .filter((entry) => ended.has(entry.replace(/\.jsonl$/, '')) || !files.existsSync(join(BASE, entry.replace(/\.jsonl$/, ''))))
     .flatMap((entry) => {
       const at = modified(files, join(REPORTS, entry));
       return at === undefined ? [] : [{ path: join(REPORTS, entry), at }];
     })
     .sort((left, right) => right.at - left.at);
-  for (const old of reports.slice(KEPT_REPORTS)) pristine(files.rmSync)(old.path, { force: true });
+  for (const old of reports.slice(KEPT_REPORTS)) {
+    const claimed = join(BASE, `${process.pid}.swept.${randomUUID().slice(0, 8)}`);
+    try {
+      pristine(files.renameSync)(old.path.replace(/\.jsonl$/, ''), claimed);
+      pristine(files.rmSync)(claimed, { recursive: true, force: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    pristine(files.rmSync)(old.path, { force: true });
+  }
   return { stranded: swept.stranded, roots: swept.roots.length };
 };
 

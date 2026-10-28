@@ -1,6 +1,6 @@
 ---
 name: tests
-description: Write, change, review, delete or run tests in runlith — which tests to run after a change and when a wide run (`check:change`, `test:all`) is allowed, whether a test should exist, `*.test.ts` vs `*.itest.ts`, fixtures and worlds under `testing/`, `@runlith/testbed`, Vitest configs, a slow, flaky, order-dependent or red test. Carries the gate a test passes, junk shapes and how to review them, the port a test goes through, what makes a test expensive, worlds and tenants, shared-world traps under `--no-isolate`.
+description: Write, change, review, delete or run tests in runlith — which tests to run after a change and when a wide run (`check:change`, `test:all`) is allowed, whether a test should exist, `*.test.ts`, `*.itest.ts` and `*.e2e.ts`, real-engine lanes, fixtures and worlds under `testing/`, `@runlith/testbed`, Vitest configs, a slow, flaky, order-dependent or red test. Carries the gate a test passes, junk shapes and how to review them, the port a test goes through, what makes a test expensive, worlds and tenants, shared-world traps under `--no-isolate`.
 ---
 
 # Tests in runlith
@@ -18,11 +18,12 @@ A junk test is worse than none: it stays green while the product breaks, freezes
 
 A weak answer means no test. Assert state, output or a typed failure through the owner's public operation (rule 4f387de2); a defect test goes through the real caller's door and fails first (rule 571311f8). The cheaper real signal where no test earns its place: typecheck and removing the impossible state for a shape change; nothing for copy, layout or prompt wording; the boundary owner's real request building for an external payload; the real parser, store or migration with representative data for persistence; for UI, only a non-trivial projection or intent forwarding.
 
-## Kind: unit or itest
+## Kind: unit, integration or e2e
 
 The suffix is the kind; testbed (`packages/testbed`) enforces it at the call site.
 - `*.test.ts` — unit. Guards refuse a process, a disk write, a socket (loopback too) and SQLite at the test process's builtins; external network is refused there for every file. Outside the guards: what a child process does, and, under Vitest on Bun, an external dependency importing a builtin as ESM ([[37f542a9]]). Over 1 s it is slow.
-- `*.itest.ts` — real git, SQLite, processes and disk; over 10 s it is slow. It has two possible subjects: an adapter's conformance on its real resource, or one end-to-end path through the real door (a defect test per rule 571311f8). Every test file is one of the two.
+- `*.itest.ts` — real git, SQLite, processes and disk; over 10 s it is slow. It has two possible subjects: an adapter's conformance on its real resource, or one end-to-end path through the real door (a defect test per rule 571311f8). An integration test does not launch a browser.
+- `*.e2e.ts` — a real engine driving a product outcome through its real door. It may use sockets, processes and disk; over 10 s is slow. `testbed e2e [files/options]` discovers only e2e files, and `test:e2e` calls it; ordinary `test`, `test:integration` and `check:change` do not select them. Screenshots are failure evidence, never assertions about copy or layout.
 - A test fails only on its own fact, never on time or machine load. testbed's one deadline is a 3-minute hang guard on every test and hook, set in every file; a slow test passes, and the run report names it `slow` with its CPU and its children's, the wall that measured CPU does not cover, its world and tenant time and its file's processes — the cue to cheapen it at its owner.
 - Logic reached only through a real resource is a missing port, not an itest. It becomes a unit test through the owner's public operation over fast adapters:
   - disk: `@runlith/testbed/memory` — `Effect.provide(program, Memory.layer)`; one layer build is one volume; host permissions and watcher ordering stay itest ([[e9f3c3e0]]);
@@ -32,6 +33,14 @@ The suffix is the kind; testbed (`packages/testbed`) enforces it at the call sit
 - SQLite stays real SQL. A test that needs SQL is an itest and opens its store on `sharedPool` or `heldPool` (`@runlith/sqlite-process/testing/pool`: in process, no child); a store opened without a pool spawns child processes. A test whose subject is a child-process property — reader-lane removal, store isolation, handover, process loss — takes `childHosting` ([[a6950a0e]]).
 - Every fast adapter has one conformance suite, run on the real adapter in an itest and on the fast one in a unit file: `packages/testbed/src/conformance/fileSystem.ts` (`fileSystem.itest.ts`, `memory.test.ts`), `worktrees/testing/refContract.ts` (`refs.itest.ts`, `refs.test.ts`). Green on fast and red on real is a divergence: fix the adapter and add the case to the suite.
 - Count before building a port (git-site preload, reference `measuring`); where a port turns no file into a unit test, cut births, opens and acts, merge scenarios and delete covered paths instead.
+
+## Real-engine fixtures
+
+`@runlith/e2e/browser` supplies `e2e(name, async ({ page, context, browser, lane, cdp, artifacts }) => …, { lanes, context })`; `e2e.effect` takes a scoped Effect body. Lanes default to Chromium; a file names Chromium and WebKit explicitly when it proves both. `E2E_LANES` selects a run's lanes. Chromium uses the managed browser's pinned Chrome for Testing cache (`bun apps/tagma/server/scripts/fetch-browser.ts`); WebKit uses `playwright-core install webkit`. Each engine has its own temporary disk profile, each test a fresh ephemeral context; Chromium uses the mock keychain. Playwright waits have timeout 0: wait on a page fact, never give a browser wait its own deadline. An uncaught Error fails the flow; browser error events without an error value remain diagnostic only. A failure keeps trace, screenshot, console and registered `onFailure` artifacts beside the run report.
+
+One active engine is held per worker, and an e2e worker takes two machine-budget units (one on a one-unit machine). Group scenarios by lane to avoid relaunching engines between alternating tests. Electron takes the test's `electron` launch options (or a lazy factory of them), restarts for its single persistent context, and exposes `electron` as the Playwright application; `E2E_ELECTRON_EXECUTABLE` is its executable default. Its app must keep every window hidden for a headless check; a visible-window scenario is a live check.
+
+A component stand uses `stand(configFile)` from `@runlith/e2e/stand`; its file-level build hook produces the Vite bundle once per run, serves it on loopback, and `served.url(path)` addresses it. Product e2e uses `makeE2eWorld` in server `composition/testing/e2eWorld.ts`: its door runtime, built app and real HTTP/WebSocket share one loopback origin; take a fresh tenant, seed through product operations, and lend a scripted model. Standalone measuring commands use `testbed e2e --program stand/bench.ts [args]`, `serveStand` and `session` in an Effect scope with `own` reasons so servers and browsers close normally; program mode holds the browser budget and report root but has no test hooks or hang guard.
 
 ## What makes a test expensive
 

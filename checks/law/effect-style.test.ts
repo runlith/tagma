@@ -307,11 +307,11 @@ test('local objects, foreign imports, type-only values and lexical shadows do no
   expect(judge(files).violations).toEqual([]);
 });
 
-test('runner families are judged only in test, integration and system files, called, aliased or passed', () => {
+test('runner families are judged in unit, integration, e2e and system files, called, aliased or passed', () => {
   const code =
     imports +
     'Effect.runPromiseExit(work); Effect.runSyncExit(work); ManagedRuntime.make(layer); const run = Effect.runPromise; await run(work); done.pipe(Effect.runSync);';
-  for (const suffix of ['test', 'itest', 'stest']) {
+  for (const suffix of ['test', 'itest', 'e2e', 'stest']) {
     expect(judge({ [`src/file.${suffix}.ts`]: code }).violations.map((one) => one.specifier)).toEqual([
       'test-runner',
       'test-runner',
