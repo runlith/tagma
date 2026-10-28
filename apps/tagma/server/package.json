@@ -1319,6 +1319,7 @@
   },
   "devDependencies": {
     "@runlith/builtin-catalog": "workspace:*",
+    "@runlith/chat-ui": "workspace:*",
     "@runlith/e2e": "workspace:*",
     "@runlith/effect-test": "workspace:*",
     "@runlith/testbed": "workspace:*",
@@ -1327,6 +1328,7 @@
     "drizzle-kit": "1.0.0-rc.5-ab785fc",
     "electron": "catalog:",
     "esbuild": "catalog:",
+    "playwright-core": "catalog:",
     "typescript": "catalog:"
   }
 }

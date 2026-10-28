@@ -359,6 +359,61 @@
       "svelte": "./src/testing/pendingShelf.ts",
       "default": "./src/testing/pendingShelf.ts"
     },
+    "./testing/stand/recording": {
+      "types": "./stand/recording.ts",
+      "bun": "./stand/recording.ts",
+      "default": "./stand/recording.ts"
+    },
+    "./testing/stand/evidence": {
+      "types": "./stand/evidence.ts",
+      "bun": "./stand/evidence.ts",
+      "default": "./stand/evidence.ts"
+    },
+    "./testing/stand/displacement": {
+      "types": "./stand/displacement.ts",
+      "bun": "./stand/displacement.ts",
+      "default": "./stand/displacement.ts"
+    },
+    "./testing/stand/momentum": {
+      "types": "./stand/momentum.fixture.ts",
+      "bun": "./stand/momentum.fixture.ts",
+      "default": "./stand/momentum.fixture.ts"
+    },
+    "./testing/stand/trace": {
+      "types": "./stand/trace.ts",
+      "bun": "./stand/trace.ts",
+      "default": "./stand/trace.ts"
+    },
+    "./testing/stand/scenario": {
+      "types": "./stand/scenario.ts",
+      "bun": "./stand/scenario.ts",
+      "default": "./stand/scenario.ts"
+    },
+    "./testing/stand/scenarios": {
+      "types": "./stand/scenarios.ts",
+      "bun": "./stand/scenarios.ts",
+      "default": "./stand/scenarios.ts"
+    },
+    "./testing/stand/controls": {
+      "types": "./stand/controls.ts",
+      "bun": "./stand/controls.ts",
+      "default": "./stand/controls.ts"
+    },
+    "./testing/stand/port": {
+      "types": "./stand/port.ts",
+      "bun": "./stand/port.ts",
+      "default": "./stand/port.ts"
+    },
+    "./testing/stand/corpus": {
+      "types": "./stand/corpus.ts",
+      "bun": "./stand/corpus.ts",
+      "default": "./stand/corpus.ts"
+    },
+    "./testing/stand/appFeed": {
+      "types": "./stand/appFeed.ts",
+      "bun": "./stand/appFeed.ts",
+      "default": "./stand/appFeed.ts"
+    },
     "./theme.css": "./src/theme.css",
     "./timeline": {
       "types": "./src/timeline.ts",
@@ -375,7 +430,11 @@
   },
   "scripts": {
     "test": "testbed vitest run src",
-    "typecheck": "runlith-typecheck"
+    "test:e2e": "testbed e2e --no-isolate ./stand/feed.e2e.ts",
+    "typecheck": "runlith-typecheck",
+    "stand": "vite --config stand/vite.config.ts",
+    "bench": "testbed e2e --program stand/frames.bench.ts",
+    "baseline": "testbed e2e --program stand/baseline.bench.ts"
   },
   "dependencies": {
     "@lucide/svelte": "1.16.0",
@@ -388,14 +447,23 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
+    "@runlith/e2e": "workspace:*",
     "@runlith/effect-test": "workspace:*",
     "@runlith/llm": "workspace:*",
+    "@runlith/markdown": "workspace:*",
     "@runlith/testbed": "workspace:*",
     "@runlith/testing": "workspace:*",
+    "@runlith/vite-browser-guard": "workspace:*",
     "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@tailwindcss/vite": "catalog:",
     "jsdom": "catalog:",
+    "playwright-core": "catalog:",
     "svelte": "catalog:",
     "svelte-check": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

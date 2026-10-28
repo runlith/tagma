@@ -108,6 +108,16 @@ export const names: Builtin<'names', NamesParams> = {
             path: 'packages/execution-host/src/ExecutionInput.ts',
             why: 'One subject: the input queue of one execution — admission per lane with its sequences and receipts, backpressure, the writer that drains it into the sink, interrupt flushing and the carry a departing logic hands on; every act reads and moves the same lane book and pending bytes.',
           },
+          {
+            lines: 684,
+            path: 'packages/chat-ui/stand/displacement.ts',
+            why: 'One subject: the DOM displacement proof oracle — shared frame-pair witnesses establish quiet anchor flow, conserved gesture paths and calibrated momentum limits against the same independent recordings.',
+          },
+          {
+            lines: 747,
+            path: 'packages/chat-ui/stand/recorder.ts',
+            why: 'One subject: a DOM recording lifecycle — trusted input and command evidence, row measurements, anchor history and final ResizeObserver samples share the same pending capture and frame boundary.',
+          },
         ],
         lines: 650,
       },

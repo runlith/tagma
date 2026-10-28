@@ -1,0 +1,143 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+@import '@runlith/chat-ui/theme.css';
+@source "../src";
+@source "./*.svelte";
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --chrome: oklch(0.105 0 0);
+  --background: oklch(0.14 0 0);
+  --field: oklch(0.16 0 0);
+  --raised: oklch(0.2 0 0);
+  --popover: oklch(0.16 0 0);
+  --sunken: oklch(0.09 0 0);
+  --foreground: oklch(0.94 0 0);
+  --primary: var(--foreground);
+  --primary-foreground: var(--background);
+  --muted: oklch(0.21 0 0);
+  --muted-foreground: oklch(0.63 0 0);
+  --border: oklch(1 0 0 / 0.1);
+  --input: oklch(1 0 0 / 0.14);
+  --hover: oklch(1 0 0 / 0.05);
+  --selected: oklch(1 0 0 / 0.085);
+  --destructive: oklch(0.7 0.19 20);
+  --status-open: oklch(0.72 0.14 264);
+  --status-in-work: oklch(0.78 0.14 68);
+  --status-done: oklch(0.74 0.14 152);
+  --brand: oklch(0.755 0.105 88);
+  --chat-raised: var(--raised);
+  --chat-sunken: var(--sunken);
+  --chat-field: var(--field);
+  --chat-chrome: var(--chrome);
+  --chat-here: var(--brand);
+  --chat-aim: var(--status-open);
+  --chat-live: var(--status-in-work);
+  --chat-live-mark: var(--status-in-work);
+  --chat-success: var(--status-done);
+  --chat-failure: var(--destructive);
+  --chat-refused: var(--destructive);
+  --chat-scrim: color-mix(in oklch, var(--background) 85%, transparent);
+  --syntax-keyword: oklch(0.76 0.085 300);
+  --syntax-string: oklch(0.8 0.07 182);
+  --syntax-function: oklch(0.82 0.065 212);
+  --syntax-type: oklch(0.78 0.075 332);
+  --syntax-text: oklch(0.9 0 0);
+  --syntax-declaration: oklch(0.95 0 0);
+  --syntax-property: oklch(0.84 0 0);
+  --syntax-punctuation: oklch(0.6 0 0);
+  --syntax-operator: oklch(0.66 0 0);
+  --syntax-comment: oklch(0.58 0 0);
+}
+
+@theme inline {
+  --font-sans: 'Geist Variable', system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--foreground);
+  --color-field: var(--field);
+  --color-raised: var(--raised);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-destructive: var(--destructive);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --text-meta: 0.6875rem;
+  --text-meta--line-height: 1rem;
+  --text-small: 0.75rem;
+  --text-small--line-height: 1rem;
+  --text-ui: 0.8125rem;
+  --text-ui--line-height: 1.25rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.375rem;
+  --text-page: 1.0625rem;
+  --text-page--line-height: 1.3;
+  --text-title: 1.375rem;
+  --text-title--line-height: 1.25;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+#stand {
+  width: 100%;
+  height: 100%;
+}
+.stand-markdown {
+  overflow-wrap: anywhere;
+}
+.stand-markdown :is(p, pre, table, ul, ol, blockquote) {
+  margin-block: calc(var(--spacing) * 3);
+}
+.stand-markdown :is(h1, h2, h3) {
+  margin-block: calc(var(--spacing) * 4);
+  font-size: var(--text-page);
+  font-weight: 620;
+}
+.stand-markdown pre {
+  padding: calc(var(--spacing) * 3);
+  background: var(--sunken);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  line-height: calc(var(--spacing) * 5);
+}
+.stand-markdown :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+}
+.stand-markdown :is(th, td) {
+  padding: calc(var(--spacing) * 2);
+  border: 1px solid var(--border);
+}
+.stand-markdown ul {
+  padding-left: calc(var(--spacing) * 5);
+  list-style: disc;
+}
+.stand-markdown blockquote {
+  padding-left: calc(var(--spacing) * 3);
+  border-left: 1px solid var(--border);
+}
