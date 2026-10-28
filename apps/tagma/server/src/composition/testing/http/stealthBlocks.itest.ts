@@ -83,6 +83,44 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
     }),
   );
 
+  it.effect('no team block depends on a stealth block, and a stealth block replaces no team block', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.realPath(yield* world.directory('law'));
+      yield* suiteGit(root, 'init', '-q', '-b', 'main');
+      const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
+      const project = (born.body as { project: { id: number } }).project.id;
+      yield* projectLeaving(world, project);
+      const code = (answer: { readonly body: unknown }) => (answer.body as { code?: string }).code;
+      const created = (input: Record<string, unknown>) =>
+        Effect.map(world.op('create_block', { project, ...input }), (answer) => (answer.body as Written).block.name);
+      const secret = yield* created({ title: 'Secret', storage: 'stealth' });
+      const plan = yield* created({ title: 'Plan' });
+
+      expect(code(yield* world.op('create_block', { project, title: 'Leak', body: `see [[${secret}]]` }))).toBe('stealth-dependency');
+      expect(code(yield* world.op('link_blocks', { project, fromId: plan, kind: 'relates', toId: secret }))).toBe('stealth-dependency');
+      expect((yield* world.op('link_blocks', { project, fromId: secret, kind: 'relates', toId: plan })).status).toBe(200);
+      expect(code(yield* world.op('supersede_block', { project, oldId: plan, withId: secret }))).toBe('stealth-supersede');
+
+      const roadmap = yield* created({ title: 'Roadmap' });
+      const pointer = yield* created({ title: 'Pointer', body: `the plan is [[${roadmap}]]` });
+      const hiding = yield* world.op('set_block_storage', { project, blockId: roadmap, storage: 'stealth' });
+      expect(code(hiding)).toBe('stealth-dependency');
+      expect((hiding.body as { reason: string }).reason).toContain(pointer);
+      const together = yield* world.op('apply_batch', {
+        project,
+        source: JSON.stringify({
+          ops: [
+            { op: 'update', id: pointer, body: 'the plan is kept apart' },
+            { op: 'storage', id: roadmap, storage: 'stealth' },
+          ],
+        }),
+      });
+      expect(together.status).toBe(200);
+    }),
+  );
+
   it.effect('one apply_batch creates the first stealth block of a project and moves another block into it', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;

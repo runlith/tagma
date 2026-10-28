@@ -93,7 +93,10 @@ export type FloorRefusal =
   | 'project-retired'
   | 'vocabulary-newer'
   | 'vocabulary-older'
-  | 'detached-checkout';
+  | 'detached-checkout'
+  | 'stealth-dependency'
+  | 'stealth-supersede'
+  | 'stealth-module';
 
 export type CatalogRefusal =
   | 'unknown-catalog'
@@ -149,6 +152,9 @@ const FIELD_REFUSAL = {
   'project-retired': 'Project removed',
   'vocabulary-newer': 'Graph is newer than this Tagma',
   'vocabulary-older': 'Graph needs an upgrade',
+  'stealth-dependency': 'Team block would depend on a stealth one',
+  'stealth-supersede': 'Stealth block cannot replace a team one',
+  'stealth-module': 'A module card is never stealth',
   'unknown-catalog': 'Unknown catalog',
   'no-root': 'No root block',
   'field-invalid': 'Invalid field',

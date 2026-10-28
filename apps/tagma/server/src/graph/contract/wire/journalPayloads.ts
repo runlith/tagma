@@ -1,5 +1,6 @@
 import { Data, Result, Schema } from 'effect';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
+import { STORAGE_MODES } from '../../../projects/contract/wire/project.js';
 
 export const bodySpanSchema = Schema.Struct({ at: Schema.Number, del: Schema.String, ins: Schema.String });
 export type BodySpan = typeof bodySpanSchema.Type;
@@ -35,6 +36,8 @@ const SHAPES = {
     chars: Schema.optional(Schema.Number),
     wasChars: Schema.optional(Schema.Number),
     delta: Schema.optional(Schema.Array(bodySpanSchema)),
+    storage: Schema.optional(Schema.Literals(STORAGE_MODES)),
+    blocks: Schema.optional(Schema.Number),
   }),
   ending: Schema.Struct(ending),
   verdict: Schema.Struct({ ...ending, by: Schema.optional(Schema.Array(Schema.Number)) }),

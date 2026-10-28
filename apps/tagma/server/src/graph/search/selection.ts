@@ -299,7 +299,7 @@ export const selectionLayer: Layer.Layer<Selection, never, GraphStore | BlockNam
           createdAt: row.createdAt.toISOString(),
           updatedAt: row.updatedAt.toISOString(),
           ...marks,
-          ...(row.stealth ? { stealth: true as const } : {}),
+          stealth: row.stealth ? (true as const) : undefined,
         };
       });
     });

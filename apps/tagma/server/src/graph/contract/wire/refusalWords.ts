@@ -102,7 +102,6 @@ export const REFUSAL_WORDS = {
   'source-outside': 'Path outside the project',
   'source-required': 'Source required',
   'status-operation': 'Status set by its own action',
-  'stealth-dependency': 'Team block would depend on a stealth one',
   'storage-unavailable': 'Storage not available here',
   'storage-unchanged': 'Already stored that way',
   'successor-superseded': 'Replacement was itself replaced',

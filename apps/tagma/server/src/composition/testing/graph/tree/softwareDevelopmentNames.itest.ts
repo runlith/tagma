@@ -89,7 +89,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('software-development nam
         const proposal = yield* graph.blocks.create({
           projectId,
           contract: 'core/amendment',
-          amendsId: work.id,
+          amendsId: (yield* graph.blocks.rootBlockOf(projectId)).id,
           title: 'deferred views',
           fields: {
             ops: [

@@ -46,7 +46,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('core names', (it) => {
         const proposal = yield* graph.blocks.create({
           projectId,
           contract: 'core/amendment',
-          amendsId: reflection.id,
+          amendsId: (yield* graph.blocks.rootBlockOf(projectId)).id,
           title: 'deferred creation',
           fields: {
             ops: [

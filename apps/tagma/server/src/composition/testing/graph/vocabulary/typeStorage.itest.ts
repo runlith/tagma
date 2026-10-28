@@ -15,6 +15,9 @@ import { Tags } from '../../../../graph/contract/service/vocabulary.js';
 import { Behaviours } from '../../../../graph/contract/service/behaviours.js';
 import { blockProjection } from '../../../../graph/acts/derived.js';
 import { actUnit } from '../../../../graph/acts/unit.js';
+import { blockNames } from '../../../../graph/acts/names.js';
+import { GraphUnits } from '../../../../platform/contract/service/units.js';
+import { unitsLayer } from '../../../../platform/store/units.js';
 import { CORE_LIBRARY, localTypeId } from '../../../../graph/contract/wire/tags/identity.js';
 import { fixtureGraphMigrations } from '../../migrations.js';
 import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
@@ -72,7 +75,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('type storage', (it) =
         return { blocks: yield* db.select().from(block), history: yield* db.select().from(event) };
       }).pipe(Effect.provide(storeLayer(GraphStore, path, fixtureGraphMigrations, { readers: 1 })));
       const context = yield* Layer.build(
-        tagsLayer.pipe(
+        Layer.mergeAll(tagsLayer, unitsLayer(GraphUnits, GraphStore)).pipe(
           Layer.provideMerge(storeLayer(GraphStore, path, fixtureGraphMigrations, { readers: 1 })),
           Layer.provide(Layer.succeed(Behaviours, BEHAVIOUR_REGISTRY)),
           Layer.provide(Layer.succeed(Catalogs, NO_CATALOGS)),
@@ -80,7 +83,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('type storage', (it) =
       );
       const store = Context.get(context, GraphStore);
       const tags = Context.get(context, Tags);
-      const unit = actUnit(store, tags);
+      const unit = actUnit(store, tags, blockNames(store.db, Context.get(context, GraphUnits)));
       const projection = blockProjection(store.db, tags, unit);
       const marker = () => store.db.select().from(meta).where(eq(meta.key, 'type-index-pending')).get();
       expect(yield* marker()).toEqual({ key: 'type-index-pending', value: '1' });

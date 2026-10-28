@@ -21,6 +21,7 @@ import {
   TreeGuard,
 } from '../contract/service/acts.js';
 import { blockNames } from './names.js';
+import { judgeLayers } from '../blocks/layerLaw.js';
 import { actMarks, blockAnswers } from './measurement.js';
 import { actRecords } from './records.js';
 import { blockProjection, blockReferences } from './derived.js';
@@ -29,7 +30,7 @@ import { BlockRows, blockRows } from './rows.js';
 import { GraphUnits } from '../../platform/contract/service/units.js';
 import { unitsLayer } from '../../platform/store/units.js';
 
-export function actUnit(store: GraphStore['Service'], tags: Tags['Service']) {
+export function actUnit(store: GraphStore['Service'], tags: Tags['Service'], names: BlockNames['Service']) {
   const sets = new WeakMap<WriteSet, WeakMap<WriteSet, WriteSet>>();
   const joinedOnce = (declared: WriteSet, machinery: WriteSet): WriteSet => {
     const byMachinery = sets.get(declared) ?? new WeakMap<WriteSet, WriteSet>();
@@ -79,18 +80,18 @@ export function actUnit(store: GraphStore['Service'], tags: Tags['Service']) {
     const floor = yield* TreeGuard;
     const set = joinedOnce(declared, floor === undefined ? acting : joinedOnce(floor.writes, acting));
     let landing: TreeLanding = Effect.void;
+    const closed = body.pipe(
+      Effect.tap(() => projectTypeIds(store.db, tags)),
+      Effect.tap(() => judgeLayers(store.db, tags, names, held.recorded)),
+    );
     const transaction = (write: TreeWrite | undefined) =>
       store.transaction(
         set,
         (unit) =>
           write === undefined
-            ? Effect.provideService(body.pipe(Effect.tap(() => projectTypeIds(store.db, tags))), ActState, withUnit(held, unit))
+            ? Effect.provideService(closed, ActState, withUnit(held, unit))
             : Effect.gen(function* () {
-                const value = yield* Effect.provideService(
-                  body.pipe(Effect.tap(() => projectTypeIds(store.db, tags))),
-                  ActState,
-                  withUnit(held, unit),
-                );
+                const value = yield* Effect.provideService(closed, ActState, withUnit(held, unit));
                 if (held.recorded.length > 0) landing = yield* write([...held.recorded]);
                 return value;
               }),
@@ -122,13 +123,14 @@ export const actLayer: Layer.Layer<ActServices, never, GraphStore | WriterRegist
     const sessions = yield* WriterRegister;
     const tags = yield* Tags;
 
-    const unit = actUnit(store, tags);
+    const names = blockNames(db, units);
+    const unit = actUnit(store, tags, names);
     const marks = actMarks(db, tags);
     const recorded = actRecords(db, sessions, tags);
     const references = blockReferences(db);
 
     return Context.make(Act, Act.of({ unit, record: recorded.record })).pipe(
-      Context.add(BlockNames, blockNames(db, units)),
+      Context.add(BlockNames, names),
       Context.add(BlockAnswers, blockAnswers(db, tags)),
       Context.add(BlockProjection, blockProjection(db, tags, unit)),
       Context.add(BlockReferences, references),
