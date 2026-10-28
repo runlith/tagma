@@ -21,6 +21,7 @@ export const REFUSAL_WORDS = {
   'batch-ref': 'Unknown handle in batch',
   'batch-shape': 'Batch is malformed',
   'batch-source': 'Batch needs exactly one source',
+  'body-address': 'Reference needs the bare name',
   'body-capped': 'Body too long',
   'body-source': 'Body needs exactly one source',
   'catalog-incomplete': 'Catalog is incomplete',

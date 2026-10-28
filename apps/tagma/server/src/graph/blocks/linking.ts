@@ -3,7 +3,7 @@ import { type FloorRefusal, GateRefusal } from '../../platform/contract/wire/ref
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { block, edge, farEdge } from '../store/tables.js';
-import { CORE_EDGES, type EdgeKind } from '../contract/wire/edges.js';
+import { CORE_EDGES, DISCOVERED_FROM, type EdgeKind, RELATES } from '../contract/wire/edges.js';
 import { BlockRows } from '../acts/rows.js';
 import { Act, BlockNames, type BlockRow } from '../contract/service/acts.js';
 import { Edges, type EdgeNode, type EdgeRefusal, type FarBlock } from '../contract/service/blocks.js';
@@ -69,23 +69,13 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
       if (declared.includes(kind) || CORE_EDGES.includes(kind)) return Effect.void;
       const label = tags.length === 0 ? tagLabel(null) : tags.map(tagLabel).join(' ');
       const many = tags.length > 1;
-      return new GateRefusal(
-        'edge-undeclared',
-        `${label} ${many ? 'declare' : 'declares'} no "${kind}" edge`,
-        declared.length === 0
-          ? tags.length === 0
-            ? [
-                from.id === undefined
-                  ? 'create_block with discovered-from in edges, pointing at the new node’s origin'
-                  : `link_blocks with discovered-from, from ${blockName(from.uuid)} to its origin`,
-                'a reference in its body ([[name]]) connects it to another subject',
-              ]
-            : [
-                `update_block the #tag node declaring one of ${label}, adding "${kind}" to its edges`,
-                `or link_blocks with an edge one of them already declares`,
-              ]
-          : [`the edges ${label} ${many ? 'point' : 'points'} along: ${declared.join(', ')}`],
-      );
+      const carried = [...new Set([RELATES, DISCOVERED_FROM, ...declared])].join(', ');
+      return new GateRefusal('edge-undeclared', `${label} ${many ? 'declare' : 'declares'} no "${kind}" edge`, [
+        `${from.id === undefined ? 'create_block with' : `link_blocks from ${blockName(from.uuid)} along`} an edge it carries: ${carried}`,
+        tags.length === 0
+          ? `tags whose declaration carries "${kind}" make a node that points along it`
+          : `update_block the #tag node declaring one of ${label}, adding "${kind}" to its edges`,
+      ]);
     };
 
     const admittedTargets = (table: TagTable, from: EdgeNode, kind: string): readonly string[] | null => {
@@ -102,7 +92,9 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
         `"${kind}" from ${tagLabel(table.tagOf(from))} points only at ${named.map((target) => `#${table.nameOf(target)}`).join(' or ')}`,
         [
           `${carried}: link a node carrying ${named.map((target) => `#${table.nameOf(target)}`).join(' or ')}`,
-          'link_blocks with relates — a connection of another shape',
+          kind === RELATES
+            ? 'a reference in its body ([[name]]) names any other block'
+            : 'link_blocks with relates — a connection of another shape',
         ],
       );
 
@@ -240,7 +232,7 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
         if (!table.supports(from, rule.from) || !table.supports(to, rule.to)) {
           return yield* new GateRefusal('edge-shape', `"${kind}" connects ${rule.from} → ${rule.to}`, [
             `${blockName(from.uuid)} is ${tagLabel(table.tagOf(from))} and ${blockName(to.uuid)} is ${tagLabel(table.tagOf(to))}: link FROM a node supporting ${rule.from} TO a node supporting ${rule.to}`,
-            'link_blocks with discovered-from, from a block to its origin',
+            'link_blocks with relates, which connects any two blocks, or with discovered-from, to its origin',
           ]);
         }
         if (rule.acyclic === true && from.id !== undefined) yield* assertNoWaitCycle({ ...from, id: from.id }, { id: to.id }, kind);
@@ -264,7 +256,7 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
       if (!table.supports(from, rule.from) || !end.contracts.includes(rule.to)) {
         return yield* new GateRefusal('edge-shape', `"${kind}" connects ${rule.from} → ${rule.to}`, [
           `${blockName(from.uuid)} is ${tagLabel(table.tagOf(from))} and ${blockName(end.target.uuid)} in ${end.target.label} supports ${end.contracts.join(', ') || 'no contract'}: link FROM a node supporting ${rule.from} TO a node supporting ${rule.to}`,
-          'link_blocks with discovered-from, from a block to its origin',
+          'link_blocks with relates, which connects any two blocks, or with discovered-from, to its origin',
         ]);
       }
       if (rule.acyclic === true && from.id !== undefined) yield* assertNoWaitCycle({ ...from, id: from.id }, { far: end.target }, kind);
@@ -383,10 +375,9 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
         ...far.map((row) => ({ kind: row.kind, uuid: row.uuid, to: null })),
       ];
       for (const link of outgoing) {
-        if (CORE_EDGES.includes(link.kind)) continue;
         const toName = blockName(link.uuid);
         const unlink = `${name} ${link.kind} ${toName}`;
-        if (!declared.has(link.kind)) {
+        if (!declared.has(link.kind) && !CORE_EDGES.includes(link.kind)) {
           return yield* retagRefusal(
             'edge-undeclared',
             `${label} declares no "${link.kind}" edge, and ${name} points along one to ${toName}`,
@@ -430,7 +421,7 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
         .innerJoin(block, eq(block.id, edge.fromId))
         .where(eq(edge.toId, node.id));
       for (const link of incoming) {
-        if (CORE_EDGES.includes(link.kind) || link.deletedAt !== null) continue;
+        if (link.deletedAt !== null) continue;
         const from: EdgeNode = link.fromId === node.id ? future : link;
         const unlink = `${blockName(from.uuid)} ${link.kind} ${name}`;
         if (!admits(from, link.kind, future)) {

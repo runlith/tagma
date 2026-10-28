@@ -62,6 +62,7 @@ export type BlockCreateRefusal =
   | 'amends-missing'
   | 'amends-shape'
   | 'body-capped'
+  | 'body-address'
   | 'source-required'
   | 'source-outside'
   | 'carriers-invalid';
@@ -79,6 +80,7 @@ export type BlockUpdateRefusal =
   | 'leaf'
   | 'tree-cycle'
   | 'body-capped'
+  | 'body-address'
   | 'superseded'
   | 'carriers-invalid'
   | 'operation-only';

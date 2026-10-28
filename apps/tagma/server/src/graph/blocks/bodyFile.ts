@@ -3,7 +3,7 @@ import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { BatchSourceUnreadable, BatchFiles } from '../work/batchFiles.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 
-const BODY_CODES = new Set(['body-capped']);
+const BODY_CODES = new Set(['body-capped', 'body-address']);
 
 export function aboutBody(code: string): boolean {
   return BODY_CODES.has(code);

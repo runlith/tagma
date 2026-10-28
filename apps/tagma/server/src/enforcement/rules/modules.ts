@@ -15,7 +15,7 @@ import {
   type ModuleWrite,
   ROOT_FLOOR,
 } from '../../graph/contract/wire/modules.js';
-import { blockName } from '../../graph/contract/wire/references.js';
+import { addressedRefsRefusal, blockName } from '../../graph/contract/wire/references.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import type { TerminalActor } from '../../executions/contract/wire/terminals.js';
@@ -228,6 +228,8 @@ export const planModules = Effect.fn('enforcement.planModules')(function* (input
         'is no standing module, and a new module is born with its title and its root',
         'send `title` and `root`, or the id of a standing module',
       );
+    const addressedBody = known === undefined ? addressedRefsRefusal(ask.body ?? '') : null;
+    if (addressedBody !== null) fail('body', undefined, addressedBody.reason, addressedBody.unblock[0]);
     const under =
       ask.under instanceof GateRefusal || sideFault !== undefined
         ? undefined

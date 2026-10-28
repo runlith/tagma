@@ -71,7 +71,7 @@ export const coreProfile: CatalogProfile = {
 export const coreLibrary: Catalog = {
   id: CORE_LIBRARY,
   guidance:
-    'The core library ships the system types every Tagma graph may carry and names no domain workflow: a project is software, a notebook or anything else by the catalogs installed beside it. In every project, an untagged note may carry file, directory or symbol sources for ownership, navigation and search; sources move and transfer with the same operations as other blocks. To deliver a note to file readers and writers, use a type supporting core/explanation. Tagged nodes keep their declared source kinds.',
+    'The core library ships the system types every Tagma graph may carry and names no domain workflow: a project is software, a notebook or anything else by the catalogs installed beside it. Every block, an untagged note included, connects to any block of its project or another with relates, and to its origin with discovered-from. In every project, an untagged note may carry file, directory or symbol sources for ownership, navigation and search; sources move and transfer with the same operations as other blocks. To deliver a note to file readers and writers, use a type supporting core/explanation. Tagged nodes keep their declared source kinds.',
   tags: [proposal, reflection, view].map(sectioned),
   profile: coreProfile,
 };

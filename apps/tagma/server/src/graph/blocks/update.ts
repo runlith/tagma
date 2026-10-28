@@ -29,7 +29,7 @@ import { assertStanding } from '../work/retirement.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { BlockNames, BlockProjection, BlockReferences } from '../contract/service/acts.js';
 import { BlockRows } from '../acts/rows.js';
-import { assertBodyCap, assertNoBoundary, assertNotOperated, assertTagNode, leafRefusal } from './guards.js';
+import { assertBareRefs, assertBodyCap, assertNoBoundary, assertNotOperated, assertTagNode, leafRefusal } from './guards.js';
 import { checkedText } from '../vocabulary/layerWrite.js';
 import { fieldTargetGuard, vocabularyCloser } from '../vocabulary/carriers.js';
 import { blockBirth } from './birth.js';
@@ -182,6 +182,7 @@ export const blockUpdate = Effect.gen(function* () {
         ? named
         : texted.fields;
     if (texted !== null && texted.body !== null) input = { ...input, body: texted.body };
+    if (input.body !== undefined && input.body !== current.body) yield* assertBareRefs(input.body);
     if (moved !== undefined) {
       yield* validateFields(tags, moved);
       yield* assertFieldTargets(table, current.projectId, tags, moved);

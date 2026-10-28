@@ -5,6 +5,7 @@ import { GateRefusal, type Unblock } from '../../platform/contract/wire/refusal.
 import type { FieldType, Gate, TagFields, TagRoles } from '../contract/wire/tags/declaration.js';
 import type { BehaviourEdge, Bound, ContractBinding, ContractBindings, ContractId, SlotKind } from '../contract/wire/tags/behaviour.js';
 import type { Behaviour, BehaviourRegistry, Registered } from '../contract/service/behaviours.js';
+import { CORE_EDGES } from '../contract/wire/edges.js';
 
 const own = <V>(record: Readonly<Record<string, V>>, key: string): V | undefined => (Object.hasOwn(record, key) ? record[key] : undefined);
 
@@ -82,6 +83,12 @@ export function registerBehaviours(contributed: readonly Contributed<Behaviour>[
           contract: behaviour.id,
           owners: [owner],
           reason: `edge "${edge.kind}" must start at its declaring contract and target a registered contract`,
+        });
+      if (CORE_EDGES.includes(edge.kind))
+        throw new BehaviourInvalid({
+          contract: behaviour.id,
+          owners: [owner],
+          reason: `edge "${edge.kind}" belongs to the core: every node carries it, so no contract narrows its ends`,
         });
       byEdge.set(edge.kind, edge);
     }

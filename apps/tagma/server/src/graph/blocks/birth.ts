@@ -30,7 +30,7 @@ import { Catalogs } from '../contract/wire/catalogs.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { BlockProjection, BlockReferences } from '../contract/service/acts.js';
 import { BlockRows } from '../acts/rows.js';
-import { assertBodyCap, assertNotOperated, assertTagNode, boundaryRefusal, leafRefusal } from './guards.js';
+import { assertBareRefs, assertBodyCap, assertNotOperated, assertTagNode, boundaryRefusal, leafRefusal } from './guards.js';
 import { MODULE } from '../contract/wire/tags/moduleContract.js';
 import { fieldTargetGuard, vocabularyCloser } from '../vocabulary/carriers.js';
 import { checkedLayer } from '../vocabulary/layerWrite.js';
@@ -146,6 +146,7 @@ export const blockBirth = Effect.gen(function* () {
       }
     }
     yield* assertBodyCap(tags, input.body ?? '');
+    yield* assertBareRefs(layered.prompt ?? input.body ?? '');
     if (input.parentId !== undefined) {
       const parent = yield* blockRows.blockById(input.parentId);
       if (parent.projectId !== input.projectId) {

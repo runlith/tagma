@@ -8,7 +8,7 @@ import { BODY_FILE_FIELD, GRAPH_ACT, GRAPH_DIRECT_ACT, noSubjects, graphInput } 
 import { creationFields } from '../creation.js';
 import { placeRole } from '../../../../platform/contract/wire/place.js';
 
-const CREATE_GRAMMAR = `An untagged note may carry file, directory or symbol sources; sources support ownership and navigation. To deliver a note to file readers and writers, use a type supporting \`core/explanation\`. What a tagged node carries — its fields, edges, sources and the word it is born at — is its tags' declaration in your instructions; a proposal is born under \`amendsId\` with deferred \`ops\` (create/edit/update/delete/link/unlink) restricted to that subtree, and a move amends the moving block.`;
+const CREATE_GRAMMAR = `An untagged note may carry file, directory or symbol sources, which support ownership and navigation, and the edges every block carries: \`relates\` and \`discovered-from\`. To deliver a note to file readers and writers, use a type supporting \`core/explanation\`. What a tagged node carries — its fields, edges, sources and the word it is born at — is its tags' declaration in your instructions; a proposal is born under \`amendsId\` with deferred \`ops\` (create/edit/update/delete/link/unlink) restricted to that subtree, and a move amends the moving block.`;
 
 const deleteBlockConsequence = (): string => 'The subtree disappears from every live read until it is restored.';
 
@@ -70,6 +70,7 @@ export const WRITE_OPERATIONS = {
       'symbol-shape',
       'symbol-missing',
       'body-capped',
+      'body-address',
       'body-source',
       'place-mismatch',
       'unknown-project',
@@ -110,7 +111,7 @@ export const WRITE_OPERATIONS = {
     grammar: `\`body\` replaces all text; use edit_block for partial edits safe against concurrent changes.
 Statuses are the words the node’s own tag declares. Other tags have no status.
 \`fields\` writes over the named values and leaves the rest; \`null\` drops a value. The status and each field the tag’s declaration names with an operation are that operation’s.
-\`tags\` replaces what the node is and keeps its name, place, edges, sources and references: the node starts at the new tags’ initial status, as if born, so only a node at its initial status with no holder changes tags. Every value, source and edge it carries must hold under the new tags, and the call names as null each value they do not declare. With \`tags: []\`, file, directory and symbol sources remain valid.
+\`tags\` replaces what the node is and keeps its name, place, edges, sources and references: the node starts at the new tags’ initial status, as if born, so only a node at its initial status with no holder changes tags. Every value, source and edge it carries must hold under the new tags, and the call names as null each value they do not declare. With \`tags: []\`, file, directory and symbol sources and \`relates\` and \`discovered-from\` edges remain valid.
 Title/body changes return referencing blocks; re-read and correct them.
 A \`parentId\` in another project’s graph moves the block with its subtree and carries no other change: names, statuses, holders, every field — operation-owned ones included — and sources stay; the new graph judges each block by its own tags. Edges inside the subtree stay, edges across its edge become cross-project edges, and edges of other projects into it follow it. A rule and the task or spec owning its debt move together; a running rule's inspection must be declared in the new project; module relations across the edge are dropped, and both module maps must still hold.`,
     input: graphInput({
@@ -186,6 +187,7 @@ A \`parentId\` in another project’s graph moves the block with its subtree and
       'leaf',
       'tree-cycle',
       'body-capped',
+      'body-address',
       'body-source',
       'superseded',
       'deleted',
@@ -242,6 +244,7 @@ A \`parentId\` in another project’s graph moves the block with its subtree and
       'anchor-ambiguous',
       'anchor-noop',
       'body-capped',
+      'body-address',
       'superseded',
       'deleted',
       'tag-declared',
@@ -280,7 +283,7 @@ A \`parentId\` in another project’s graph moves the block with its subtree and
     ...GRAPH_ACT,
     meaning: 'Add a typed edge between blocks.',
     grammar:
-      '`kind` is an edge any tag of the FROM node declares, or `discovered-from`, which connects any node — an untagged note included — to its origin. `waits-on` points from waiting work to its blocker and affects readiness. `supersedes` and `amends` belong to their lifecycle operations. A TO block in another project is linked into its graph: the edge lives in the FROM graph and names that graph by its root, so a colleague’s clone resolves it too.',
+      '`kind` is `relates` or `discovered-from`, which every block carries — an untagged note included — or an edge a tag of the FROM block declares; a tag declaring targets for an edge narrows where its blocks point along it. `discovered-from` points at a block’s origin. `waits-on` points from waiting work to its blocker and affects readiness. `supersedes` and `amends` belong to their lifecycle operations. A TO block in another project is linked into its graph: the edge lives in the FROM graph and names that graph by its root, so a colleague’s clone resolves it too.',
     input: graphInput({
       fromId: blockRef.annotate({ description: 'For "waits-on": the work that waits.' }),
       kind: edgeNameSchema,

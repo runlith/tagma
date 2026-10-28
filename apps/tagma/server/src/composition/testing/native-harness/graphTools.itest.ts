@@ -1,7 +1,7 @@
 import { unthreadedCaller } from '../callers';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { agentRuntimeGuidanceMessage } from '@runlith/agent/AgentSignal';
 import { ToolAnswer, toolExecute, toolPrepare } from '@runlith/agent/tool';
 import { toolDecode } from '@runlith/agent/tool/arguments';
@@ -20,7 +20,9 @@ import { checkoutMode, ZONE_PAGE_BUDGET, instructionText } from '../../../graph/
 import { instructionsTold } from '../../../native-harness/testing/doubles.js';
 import { RECORDED_PRODUCT } from '@runlith/llm/profiles/recordedProduct';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
-import { GraphTools, graphToolsFixture } from './graphTools.fixture.js';
+import { type GraphToolContext, GraphTools, graphToolsFixture } from './graphTools.fixture.js';
+import { tempRootEffect } from '../graphFixture.js';
+import { Tags } from '../../../graph/contract/service/vocabulary.js';
 import type { JournalPageBody } from '../../../graph/contract/wire/journal.js';
 
 layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (it) => {
@@ -157,6 +159,78 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       const refused = yield* nativeCall('link_blocks', { fromId: yield* demo.nameOf(task.id), kind: 'reviews', toId });
       expect(refused).toMatchObject({ status: 'refused', code: 'edge-undeclared' });
       expect(refused.reason as string).toContain('reviews');
+    }),
+  );
+
+  it.effect('untagged notes relate in their own project and across projects, from a project with the system library alone', () =>
+    Effect.gen(function* () {
+      const { demo, graph, ctx, nativeCall } = yield* GraphTools;
+      const root = yield* tempRootEffect(demo.fixture, 'notes-');
+      const notes = yield* graph.projectLifecycle.create({ name: basename(root), rootPath: root, catalogs: [] });
+      const inNotes: GraphToolContext = {
+        ...ctx,
+        projectId: notes.id,
+        projectName: notes.name,
+        graphRoot: yield* (yield* FileSystem.FileSystem).realPath(root),
+        vocabulary: yield* (yield* Tags).reader(notes.id),
+      };
+      const elsewhere = yield* graph.blocks.create({ projectId: ctx.projectId, title: 'a note elsewhere' });
+      const elsewhereName = yield* demo.nameOf(elsewhere.id);
+      const born = (yield* nativeCall('create_block', { title: 'a note', edges: [{ kind: 'relates', to: elsewhereName }] }, inNotes)) as {
+        status: string;
+        block: { name: string };
+      };
+      expect(born.status).toBe('ok');
+      const beside = (yield* nativeCall('create_block', { title: 'a note beside it' }, inNotes)) as { block: { name: string } };
+      expect(
+        yield* nativeCall('link_blocks', { fromId: beside.block.name, kind: 'relates', toId: born.block.name }, inNotes),
+      ).toMatchObject({ status: 'ok' });
+      expect(yield* nativeCall('link_blocks', { fromId: elsewhereName, kind: 'relates', toId: born.block.name })).toMatchObject({
+        status: 'ok',
+      });
+      expect(yield* nativeCall('read_block', { blockIds: [beside.block.name] }, inNotes)).toMatchObject({
+        reads: [{ edgesOut: [{ kind: 'relates', toName: born.block.name }] }],
+      });
+      for (const [id, edges] of [
+        ['person', []],
+        ['contact', [{ kind: 'relates', to: ['person'] }]],
+      ] as const) {
+        yield* graph.blocks.create({ projectId: notes.id, tags: ['tag'], title: `#${id}`, body: id, fields: { id, edges } });
+      }
+      const retag = (tags: readonly string[]) => nativeCall('update_block', { blockId: beside.block.name, tags }, inNotes);
+      expect(yield* retag(['contact'])).toMatchObject({ status: 'refused', code: 'edge-shape' });
+      expect(yield* retag(['person'])).toMatchObject({ status: 'ok' });
+      const bornRow = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(born.block.name));
+      const farFrom = (projectId: number) =>
+        Effect.map(graph.edges.farOf(projectId), (rows) => rows.map((row) => [row.fromId, row.kind, row.uuid]));
+      expect(yield* farFrom(notes.id)).toEqual([[bornRow.id, 'relates', elsewhere.uuid]]);
+      expect(yield* farFrom(ctx.projectId)).toContainEqual([elsewhere.id, 'relates', bornRow.uuid]);
+    }),
+  );
+
+  it.effect('a body naming a block by its project address is refused at each write door, which names the bare name instead', () =>
+    Effect.gen(function* () {
+      const { demo, graph, ctx, nativeCall } = yield* GraphTools;
+      const target = yield* demo.nameOf((yield* graph.blocks.create({ projectId: ctx.projectId, title: 'cited' })).id);
+      const addressed = `See [[${ctx.projectId}/${target}|the citation]].`;
+      const bare = `See [[${target}|the citation]].`;
+      const refused = {
+        status: 'refused',
+        code: 'body-address',
+        unblock: expect.arrayContaining([expect.stringContaining(`[[${target}|the citation]]`)]),
+      };
+      expect(yield* nativeCall('create_block', { title: 'cites by address', body: addressed })).toMatchObject(refused);
+      const citing = (yield* nativeCall('create_block', { title: 'cites', body: 'See below.' })) as { block: { name: string } };
+      const edit = { blockId: citing.block.name, oldString: 'See below.' };
+      expect(yield* nativeCall('edit_block', { ...edit, newString: addressed })).toMatchObject(refused);
+      expect(yield* nativeCall('apply_batch', { ops: [{ op: 'update', id: citing.block.name, body: addressed }] })).toMatchObject({
+        status: 'refused',
+        code: 'body-address',
+      });
+      expect(yield* nativeCall('edit_block', { ...edit, newString: bare })).toMatchObject({ status: 'ok' });
+      expect(yield* nativeCall('read_block', { blockIds: [citing.block.name, target] })).toMatchObject({
+        reads: [{ refsOut: [target] }, { refsIn: [citing.block.name] }],
+      });
     }),
   );
 

@@ -97,6 +97,7 @@ export const REFLECTION_FILING_OPERATIONS = {
       'symbol-shape',
       'symbol-missing',
       'body-capped',
+      'body-address',
     ],
     answer: arms({ ok: reflectionFiledFields }),
   }),

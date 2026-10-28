@@ -1,6 +1,7 @@
 import { handle } from '@runlith/utils/printed';
 import { Schema } from 'effect';
 import { SPOKEN_LENGTH, spokenId } from '../../../platform/contract/wire/ids.js';
+import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 
 export const BlockName = Schema.String.annotate(handle());
 
@@ -99,4 +100,18 @@ export function blockRefTargets(text: string): string[] {
   const names = new Set<string>();
   for (const match of text.matchAll(BLOCK_REF)) if (!match[1]!.includes('/')) names.add(match[1]!.toLowerCase());
   return [...names];
+}
+
+export function addressedRefsRefusal(body: string): GateRefusal<'body-address'> | null {
+  const found = new Map<string, string>();
+  for (const [written, target, label] of body.matchAll(BLOCK_REF)) {
+    if (!target!.includes('/')) continue;
+    found.set(written, `[[${blockAddress(target!).name}${label === undefined ? '' : `|${label}`}]]`);
+  }
+  if (found.size === 0) return null;
+  return new GateRefusal(
+    'body-address',
+    `${[...found.keys()].join(', ')} ${found.size === 1 ? 'names its project' : 'name their projects'} by this machine's id, and a stored body keeps the bare name every machine resolves`,
+    [`write ${[...found.values()].join(', ')} instead: a bare name in a body reaches the block in any project`],
+  );
 }

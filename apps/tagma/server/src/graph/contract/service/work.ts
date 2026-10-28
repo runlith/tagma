@@ -208,6 +208,7 @@ export class Review extends Context.Service<
           | 'bad-name'
           | 'ambiguous-name'
           | 'body-capped'
+          | 'body-address'
         >
     >;
     revise(input: {
@@ -232,6 +233,7 @@ export class Review extends Context.Service<
           | 'bad-name'
           | 'ambiguous-name'
           | 'body-capped'
+          | 'body-address'
         >
     >;
     accept(input: {
@@ -460,6 +462,7 @@ export type AcceptedOpRefusal =
   | 'leaf'
   | 'amends-shape'
   | 'body-capped'
+  | 'body-address'
   | 'source-required'
   | 'source-outside'
   | 'no-edge'

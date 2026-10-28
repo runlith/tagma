@@ -6,7 +6,7 @@ import { CATALOG_DECLARATION, type Tag, TAG_DECLARATION } from '../contract/wire
 import { lifecycleOf } from '../contract/wire/tags/lifecycle.js';
 import { MODULE } from '../contract/wire/tags/moduleContract.js';
 import type { Tagged } from '../contract/wire/tags/roles.js';
-import { blockName } from '../contract/wire/references.js';
+import { addressedRefsRefusal, blockName } from '../contract/wire/references.js';
 import { bodyCap, declarationOf, type DeclarationNode } from '../vocabulary/declarationRules.js';
 
 export function leafRefusal(where: string): GateRefusal<'leaf'> {
@@ -102,6 +102,10 @@ export function assertNotOperated(
     }
   }
   return Effect.void;
+}
+
+export function assertBareRefs(body: string): Effect.Effect<void, GateRefusal<'body-address'>> {
+  return addressedRefsRefusal(body) ?? Effect.void;
 }
 
 export function assertBodyCap(
