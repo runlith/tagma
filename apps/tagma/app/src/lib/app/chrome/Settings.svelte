@@ -9,6 +9,7 @@
   import PageHeader from '$lib/shared/PageHeader.svelte';
   import { SettingsCatalog } from '$lib/features/settings/SettingsCatalog.svelte.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+  import ProjectHold from '$lib/features/workspace/ProjectHold.svelte';
   import { SettingsColumn } from '$lib/features/settings/SettingsColumn.svelte.js';
 
   setContext(MODEL_FIELD, ModelField);
@@ -60,16 +61,20 @@
 <svelte:head><title>Settings</title></svelte:head>
 
 {#if catalog !== null}
-  <div class="h-full min-h-0" bind:clientWidth={width}>
-    <SettingsPage
-      {catalog}
-      {active}
-      {scope}
-      column={column.shown}
-      oncollapse={() => column.toggle()}
-      onvisit={(id, at) => column.visit(id, at)}
-    />
-  </div>
+  {#key catalog.projectId}
+    <ProjectHold projectId={catalog.projectId}>
+      <div class="h-full min-h-0" bind:clientWidth={width}>
+        <SettingsPage
+          {catalog}
+          {active}
+          {scope}
+          column={column.shown}
+          oncollapse={() => column.toggle()}
+          onvisit={(id, at) => column.visit(id, at)}
+        />
+      </div>
+    </ProjectHold>
+  {/key}
 {:else}
   <div class="page-wide pt-8 pb-16">
     <PageHeader
