@@ -45,7 +45,7 @@ Read `Statement.SpanPropagationEnabled` and `Statement.withConnectionSpan` in th
 
 `File.write` and `File.writeAll` pass undefined offset and length to `fs.write`. Bun 1.4.2 ignores the explicit file position in that call: writing `XY` at byte 8 of `abcdefgh` overwrites the first two bytes. The patch supplies offset 0 and the buffer's byte length in both calls, so seek governs writes as well as reads. `BunFileSystem.layer` uses this same implementation.
 
-Regenerate with `bun patches/platform-positional-write.mjs <pristine-package> patches/@effect%2Fplatform-node-shared@4.0.1.patch`, then `bun install`. The `file-positional-write` hunk's trap is `packages/executions/src/FilePosition.itest.ts`, proving both public write operations on a real r+ file. Run `bun run patches:prove file-positional-write`.
+Regenerate with `bun patches/platform-positional-write.mjs <pristine-package> patches/@effect%2Fplatform-node-shared@4.0.1.patch`, then `bun install`. The `file-positional-write` hunk's trap is `packages/files/src/position.itest.ts`, proving both public write operations through `BunFileSystem.layer` on a real r+ file. Run `bun run patches:prove file-positional-write`.
 
 When upgrading the platform package or Bun, run the trap without the hunk; remove it only when both sought writes land at the declared byte offset.
 
@@ -55,7 +55,7 @@ When upgrading the platform package or Bun, run the trap without the hunk; remov
 
 `BunWorker.layerPlatform` closes a worker by posting the close message and waiting up to five seconds for its `close` event; finalizers run uninterruptibly, so nothing cuts that wait short. Bun drops a message a worker receives before it attaches a listener, and `BunWorkerRunner` attaches its listener only when the worker's runner starts, so a scope that closes while the worker is still booting loses the close message and holds the parent for the whole five seconds. The patch terminates a worker that has not yet said anything — its first message is the runner's readiness signal — and asks only a listening worker to close.
 
-The `worker-close-before-ready` hunk is generated from Bun's pristine 4.0.1 package. Its trap is `packages/execution-host/src/hostExit.itest.ts`: a host that refuses its own boot must leave within the test's deadline while its performance worker is still starting. Run `bun run patches:prove worker-close-before-ready`.
+The `worker-close-before-ready` hunk is generated from Bun's pristine 4.0.1 package. Its trap is `packages/execution-host/src/workerLifecycle.itest.ts`: closing a real worker before readiness must release its runner without advancing the shutdown grace period on `TestClock`. Run `bun run patches:prove worker-close-before-ready`.
 
 ### When upgrading @effect/platform-bun
 

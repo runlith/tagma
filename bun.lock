@@ -854,6 +854,7 @@
       },
       "devDependencies": {
         "@effect/platform-bun": "catalog:",
+        "@effect/platform-node-shared": "catalog:",
         "@runlith/effect-test": "workspace:*",
         "@types/bun": "catalog:",
       },

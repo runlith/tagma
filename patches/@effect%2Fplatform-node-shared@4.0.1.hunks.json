@@ -3,7 +3,7 @@
   "hunks": {
     "file-positional-write": {
       "markers": ["buffer, 0, buffer.byteLength, nodePosition"],
-      "tests": [{ "package": "packages/executions", "file": "./src/FilePosition.itest.ts" }]
+      "tests": [{ "package": "packages/files", "file": "./src/position.itest.ts" }]
     }
   }
 }
