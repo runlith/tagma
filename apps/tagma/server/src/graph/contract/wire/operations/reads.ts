@@ -5,7 +5,7 @@ import { graphArms as arms } from '../answers.js';
 import { ceilingOf, limitOf } from '../../../../platform/contract/wire/pageFamily.js';
 import { blockAnswerSchema, eventRowSchema, listingFacts, overviewFields } from '../answers.js';
 import { holderStandingSchema } from '../holders.js';
-import { blockMention, blockRef, codePlace } from '../fields.js';
+import { blockMention, blockRef, codePlace, tagWord } from '../fields.js';
 import { placedCursor, placeRole } from '../../../../platform/contract/wire/place.js';
 import { BLOCK_SORT_KEYS, blockQuerySchema } from '../query.js';
 import { typeSelectorSchema } from '../tags/selector.js';
@@ -71,7 +71,7 @@ export const READ_OPERATIONS = {
       query: Schema.optional(Schema.String).annotate({
         description: 'Words to find; omit to list the freshest blocks.',
       }),
-      tag: Schema.optional(Schema.String),
+      tag: Schema.optional(tagWord),
       selector: Schema.optional(typeSelectorSchema),
       status: Schema.optional(Schema.String),
       path: Schema.optional(codePlace).annotate({

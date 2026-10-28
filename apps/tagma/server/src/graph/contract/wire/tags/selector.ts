@@ -1,11 +1,12 @@
 import { Result, Schema } from 'effect';
 import { contractIdSchema } from './behaviour.js';
+import { tagsField } from '../fields.js';
 import type { TagTable } from './table.js';
 
 export const typeSelectorSchema = Schema.Union([
   Schema.Struct({
     kind: Schema.Literals(['exact', 'descendants']),
-    types: Schema.Array(Schema.NonEmptyString).check(Schema.isMinLength(1)),
+    types: tagsField.check(Schema.isMinLength(1)),
   }),
   Schema.Struct({ kind: Schema.Literal('supports'), contract: contractIdSchema }),
 ]);

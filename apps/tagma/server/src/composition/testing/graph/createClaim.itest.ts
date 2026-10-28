@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { layer } from '@runlith/effect-test';
 import { Effect, Schema } from 'effect';
 import { ToolAnswer, toolExecute, toolPrepare } from '@runlith/agent/tool';
+import { toolDecode } from '@runlith/agent/tool/arguments';
 import { unthreadedCaller } from '../callers.js';
 import { fixtureNativeCatalog } from '../nativeCatalog.js';
 import { type EffectDemo, demoGraphLayer, withDemo } from '../graphFixture.js';
@@ -45,8 +46,14 @@ const callsFor = Effect.fnUntraced(function* (demo: EffectDemo) {
   const call = Effect.fnUntraced(function* (id: string, input: Record<string, unknown>) {
     const tool = tools[id]!;
     const toolCallId = `create-claim-${++calls}`;
-    const prepared = yield* toolPrepare(tool)!(input, { toolCallId, caller: unthreadedCaller });
-    const answered = yield* toolExecute(tool)!(input, { toolCallId, caller: unthreadedCaller, messages: [], prepared: prepared.prepared });
+    const decoded = yield* toolDecode(tool, input);
+    const prepared = yield* toolPrepare(tool)!(decoded, { toolCallId, caller: unthreadedCaller });
+    const answered = yield* toolExecute(tool)!(decoded, {
+      toolCallId,
+      caller: unthreadedCaller,
+      messages: [],
+      prepared: prepared.prepared,
+    });
     return answered instanceof ToolAnswer ? answered.value : answered;
   });
   const rootName = yield* demo.nameOf(demo.root);
@@ -114,6 +121,27 @@ layer(demoGraphLayer())('a birth names its parent', (it) => {
           expect(retagged.crowded).toEqual({ parent: engineName, title: 'Engine', role: 'knowledge', children: 22 });
         }),
       ),
+  );
+});
+
+layer(demoGraphLayer())('native tag words', (it) => {
+  it.effect('a displayed tag word creates a declared type and an undeclared word refuses', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const { call, rootName } = yield* callsFor(demo);
+        const answer = yield* call('create_block', { parentId: rootName, tags: ['#rule'], title: 'A declared rule' });
+        expect(answer).toMatchObject({ status: 'ok' });
+        const created = yield* born(answer);
+        expect(created.block.tags).toEqual(['rule']);
+        const row = yield* demo.graph.blocks.blockById(yield* demo.graph.blockNames.idOfName(created.block.name));
+        expect(row.tags).toEqual(['rule']);
+        const unknown = yield* Effect.flatMap(
+          call('create_block', { parentId: rootName, tags: ['#undeclared'], title: 'An undeclared type' }),
+          refused,
+        );
+        expect(unknown.code).toBe('tag-undeclared');
+      }),
+    ),
   );
 });
 

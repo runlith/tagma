@@ -4,7 +4,7 @@ import { limitOf } from '../../../../platform/contract/wire/pageFamily.js';
 import { placedCursor, placeRole } from '../../../../platform/contract/wire/place.js';
 import { operation } from '../../../../platform/contract/wire/operation.js';
 import { graphArms as arms } from '../answers.js';
-import { blockRef } from '../fields.js';
+import { blockRef, tagsField } from '../fields.js';
 import { journalPageSchema, journalVocabularySchema } from '../journal.js';
 import { blockDiffSchema, blockMarkSchema } from '../reads.js';
 import { blockSchema } from '../rows.js';
@@ -68,7 +68,7 @@ export const HISTORY_OPERATIONS = {
     ...read('Read the journal?', 'Read the journal'),
     meaning: 'Read the journal of the served project as batches of one writer’s consecutive acts on one block, newest first.',
     input: graphInput({
-      tags: Schema.optional(Schema.Array(Schema.String)),
+      tags: Schema.optional(tagsField),
       sessions: Schema.optional(Schema.Array(Schema.Number)),
       ops: Schema.optional(Schema.Array(Schema.String)),
       before: Schema.optional(Schema.Number),

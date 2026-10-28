@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 import { edgeNameSchema } from './edges.js';
-import { documentRef, nameRef, place } from './fields.js';
+import { documentRef, nameRef, place, tagsField } from './fields.js';
 import { typeSelectorSchema } from './tags/selector.js';
 
 export const BLOCK_SORT_KEYS = ['updated', 'created', 'ended'] as const;
@@ -10,7 +10,7 @@ export type SelectableRole = (typeof SELECTABLE_ROLES)[number];
 
 const queryFields = (ref: Schema.String) => ({
   selector: Schema.optional(typeSelectorSchema),
-  tags: Schema.optional(Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1))),
+  tags: Schema.optional(tagsField.check(Schema.isMinLength(1))),
   fields: Schema.optional(
     Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Array(Schema.String).check(Schema.isMinLength(1))])),
   ),
