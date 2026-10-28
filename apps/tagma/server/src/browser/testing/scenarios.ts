@@ -23,6 +23,22 @@ const PAGES: Readonly<Record<string, string>> = {
   '/covered': `<!doctype html><title>Covered</title>
     <button id="under" style="position:absolute;left:20px;top:20px;width:120px;height:40px">Under</button>
     <div id="cover" style="position:absolute;left:0;top:0;width:400px;height:200px;background:rgba(0,0,0,.5)">Cookie banner</div>`,
+  '/scrolled': `<!doctype html><title>Scrolled</title><body style="margin:0;height:2800px">
+    <div style="height:1400px"></div><button id="flow" onclick="this.dataset.clicked = 'yes'">Below the fold</button>
+    <div style="position:fixed;left:30px;top:17px">
+      <button id="fixed" aria-label="Close banner" onclick="this.dataset.clicked = 'yes'"><svg width="32" height="25"><path d="M0 0H32V25H0Z"/></svg></button>
+      <input id="field" aria-label="Scrolled field" style="display:block;width:120px;height:24px;margin-top:20px">
+    </div>
+    <button id="under" style="position:fixed;left:30px;top:140px;width:120px;height:40px">Scrolled under</button>
+    <div id="scroll-cover" style="position:fixed;left:20px;top:130px;width:160px;height:60px;background:#333;color:#fff">Scroll cover</div>`,
+  '/scrolled-inner': `<!doctype html><title>Scrolled inner</title><body style="margin:0;height:2000px">
+    <div style="position:fixed;inset:0">
+      <button style="position:absolute;left:10px;top:10px;width:120px;height:30px">Frame hidden</button>
+      <button style="position:absolute;left:10px;top:70px;width:120px;height:30px">Child under</button>
+      <div id="child-cover" style="position:absolute;left:0;top:60px;width:140px;height:50px;background:#aaa">Child cover</div>
+      <button id="open" style="position:absolute;left:10px;top:120px;width:120px;height:30px" onclick="this.textContent = 'Frame pressed'">Frame open</button>
+      <input aria-label="Scrolled frame field" style="position:absolute;left:200px;top:110px;width:150px;height:24px">
+    </div><script>addEventListener('load', () => { scrollTo(0, 600); parent.postMessage('Child scroll ' + scrollY, '*'); });</script>`,
   '/console': `<!doctype html><title>Console</title><p id="state">loading</p>
     <script>console.error('boom from the page'); fetch('/data').then((r) => r.text()).then(() => { document.getElementById('state').textContent = 'loaded'; });</script>`,
   '/confirm': `<!doctype html><title>Confirm</title>
@@ -86,6 +102,16 @@ export const engineScenarios = (input: EngineHost): void => {
         });
       if (path === '/favicon.ico') return new Response(null, { status: 204 });
       if (path === '/heavy') return new Response(HEAVY, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+      if (path === '/scrolled-frame') {
+        return new Response(
+          `<!doctype html><title>Scrolled frame</title><body style="margin:0;height:2800px">
+          <iframe src="http://localhost:${server.port}/scrolled-inner" style="position:fixed;left:80px;top:140px;width:400px;height:200px;border:0"></iframe>
+          <div id="frame-banner" style="position:fixed;left:80px;top:140px;width:400px;height:60px;background:#333;color:#fff">Frame banner</div>
+          <p id="frame-state"></p>
+          <script>addEventListener('message', event => { document.getElementById('frame-state').textContent = event.data; });</script>`,
+          { headers: { 'content-type': 'text/html; charset=utf-8' } },
+        );
+      }
       if (path === '/framed') {
         return new Response(
           `<!doctype html><title>Framed</title>
@@ -180,6 +206,54 @@ export const engineScenarios = (input: EngineHost): void => {
         const refused = yield* refusalOf(act(page, { action: 'click', ref: refIn(yield* snapshot(page), /button "Under"/) }));
         expect(refused.code).toBe('element-obscured');
         expect(refused.reason).toContain('#cover');
+      }),
+    );
+
+    it.effect('a scrolled page clicks flow and fixed refs, focuses by viewport point and names a real cover', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/scrolled');
+        const shot = yield* snapshot(page);
+        expect(yield* evaluate(page, 'document.getElementById("flow").getBoundingClientRect().top >= innerHeight')).toBe(true);
+        const flow = yield* Effect.result(act(page, { action: 'click', ref: refIn(shot, /button "Below the fold"/) }));
+        const flowed = yield* evaluate(page, '[document.getElementById("flow").dataset.clicked, scrollY > 0]');
+        expect(yield* evaluate(page, '(scrollTo(0, 851), scrollY)')).toBe(851);
+        const fixed = yield* Effect.result(act(page, { action: 'click', ref: refIn(shot, /button "Close banner"/) }));
+        const focused = yield* Effect.result(act(page, { action: 'focus', x: 90, y: 90 }));
+        const standing = yield* evaluate(page, '[document.getElementById("fixed").dataset.clicked, document.activeElement.id, scrollY]');
+        const refused = yield* refusalOf(act(page, { action: 'click', ref: refIn(shot, /button "Scrolled under"/) }));
+        expect({ flow, fixed, focused }).toMatchObject({
+          flow: { _tag: 'Success' },
+          fixed: { _tag: 'Success' },
+          focused: { _tag: 'Success' },
+        });
+        expect(flowed).toEqual(['yes', true]);
+        expect(standing).toEqual(['yes', 'field', 851]);
+        expect(refused.code).toBe('element-obscured');
+        expect(refused.reason).toContain('#scroll-cover');
+      }),
+    );
+
+    it.effect('independently scrolled out-of-process frames keep viewport input and name covers in both sessions', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/scrolled-frame');
+        yield* calling(
+          PAGE.wait_for_page.body.execute({ page, until: 'text', value: 'Child scroll 600', timeoutMs: 10_000 }, undefined, agent),
+        );
+        expect(yield* evaluate(page, '(scrollTo(0, 851), scrollY)')).toBe(851);
+        const shot = yield* snapshot(page);
+        const outer = yield* refusalOf(act(page, { action: 'click', ref: refIn(shot, /button "Frame hidden"/) }));
+        const inner = yield* refusalOf(act(page, { action: 'click', ref: refIn(shot, /button "Child under"/) }));
+        const clicked = yield* Effect.result(act(page, { action: 'click', ref: refIn(shot, /button "Frame open"/) }));
+        const focused = yield* Effect.result(act(page, { action: 'focus', x: 355, y: 262 }));
+        yield* act(page, { action: 'type', text: 'scrolled frame' });
+        expect({ clicked, focused }).toMatchObject({ clicked: { _tag: 'Success' }, focused: { _tag: 'Success' } });
+        expect(outer.code).toBe('element-obscured');
+        expect(outer.reason).toContain('#frame-banner');
+        expect(inner.code).toBe('element-obscured');
+        expect(inner.reason).toContain('#child-cover');
+        const after = yield* snapshot(page);
+        expect(refIn(after, /button "Frame pressed"/)).toBe(refIn(shot, /button "Frame open"/));
+        expect(after).toMatch(/textbox "Scrolled frame field".* value="scrolled frame"/);
       }),
     );
 

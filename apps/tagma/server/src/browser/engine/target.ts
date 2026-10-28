@@ -146,14 +146,21 @@ export const describe = (attached: Attached, located: Located) => call<string>(a
 
 export type Covered = { readonly ref: string | null; readonly named: string };
 
-const hitAt = (attached: Attached, child: string | undefined, at: Point) =>
-  attached.session
+const hitAt = Effect.fnUntraced(function* (attached: Attached, child: string | undefined, at: Point) {
+  const { cssLayoutViewport } = yield* attached.session.send('Page.getLayoutMetrics', undefined, child);
+  return yield* attached.session
     .send(
       'DOM.getNodeForLocation',
-      { x: Math.round(at.x), y: Math.round(at.y), includeUserAgentShadowDOM: false, ignorePointerEventsNone: true },
+      {
+        x: Math.round(at.x + cssLayoutViewport.pageX),
+        y: Math.round(at.y + cssLayoutViewport.pageY),
+        includeUserAgentShadowDOM: false,
+        ignorePointerEventsNone: true,
+      },
       child,
     )
     .pipe(Effect.catchTag('CommandRefused', () => Effect.succeed(null)));
+});
 
 const nameOf = Effect.fnUntraced(function* (
   state: Paged,
