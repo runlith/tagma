@@ -1,6 +1,5 @@
 import { lstatSync, type Stats } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
 import { Clock, Effect } from 'effect';
 import { and, eq, inArray } from 'drizzle-orm';
 import { GraphStore } from '../../platform/contract/service/store.js';
@@ -8,7 +7,7 @@ import { block } from '../store/tables.js';
 import { connectionsOf } from './connections.js';
 import { rowText } from './export.js';
 import type { TreeChange } from './freshness.js';
-import { BlockTreeUnreadable } from './layout.js';
+import { BlockTreeUnreadable, type TreeRoots, fileIn } from './layout.js';
 
 type Standing = {
   readonly change: TreeChange;
@@ -51,7 +50,8 @@ const sameExpected = (one: Expected, other: Expected): boolean =>
     ? one.size === other.size && one.mtimeMs === other.mtimeMs && one.ctimeMs === other.ctimeMs && one.ino === other.ino
     : one.kind === other.kind;
 
-export const treeLedger = Effect.fnUntraced(function* (treeRoot: string, projectId: number) {
+export const treeLedger = Effect.fnUntraced(function* (roots: TreeRoots, projectId: number) {
+  const fileOf = (path: string): string => fileIn(roots, path);
   const clock = yield* Clock.Clock;
   const own = new Map<string, { readonly expected: Expected; readonly at: number }>();
   const reflected = new Map<string, { size: number; mtimeMs: number; at: number }>();
@@ -61,13 +61,13 @@ export const treeLedger = Effect.fnUntraced(function* (treeRoot: string, project
     wrote: (relative: string) => {
       const now = clock.currentTimeMillisUnsafe();
       for (const [path, held] of own) if (now - held.at > ECHO_KEPT_MS) own.delete(path);
-      own.set(relative, { expected: expectedOf(join(treeRoot, relative)), at: now });
+      own.set(relative, { expected: expectedOf(fileOf(relative)), at: now });
     },
     echoes: (paths: readonly string[]) => {
       if (paths.length === 0) return false;
       return paths.every((path) => {
         const held = own.get(path);
-        return held !== undefined && sameExpected(held.expected, expectedOf(join(treeRoot, path)));
+        return held !== undefined && sameExpected(held.expected, expectedOf(fileOf(path)));
       });
     },
     unreflected: Effect.fn('TreeLedger.unreflected')(function* (changes: readonly TreeChange[]) {
@@ -79,7 +79,7 @@ export const treeLedger = Effect.fnUntraced(function* (treeRoot: string, project
       if (all.length === 0) return news;
       const standing: Standing[] = [];
       for (const change of all) {
-        const abs = join(treeRoot, change.path);
+        const abs = fileOf(change.path);
         const measured = yield* unlessGone(abs, () => stat(abs));
         if (measured === null) {
           reflected.delete(change.path);

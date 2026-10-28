@@ -50,7 +50,7 @@ layer(demoGraphLayer())('graph refresh retry clock', (it) => {
             layout: { mode: 'team', treeRoot: root, mirrorPath: graph.store.path },
             shadow: null,
             poolContext: context,
-            ledger: yield* treeLedger(root, projectId),
+            ledger: yield* treeLedger({ root, stealth: null }, projectId),
             batches: null,
             topology: null,
             scope: yield* Effect.scope,

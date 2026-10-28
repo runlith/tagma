@@ -54,6 +54,7 @@ const TREE_COLUMNS = {
   deletedAt: block.deletedAt,
   createdAt: block.createdAt,
   updatedAt: block.updatedAt,
+  stealth: block.stealth,
 } as const;
 
 export function readyFrontier(table: TagTable): { query: BlockQuery; where: SQL } {

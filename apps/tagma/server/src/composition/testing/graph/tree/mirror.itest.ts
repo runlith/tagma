@@ -150,7 +150,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           const path = 'doctrine/foreign-identity.md';
           const target = `---\nid: ${foreign}\ntags: ["idea"]\ntitle: Foreign Identity\nord: 2\n---\nThe identity arrived.\n`;
           yield* fs.writeFileString(join(treeRoot, path), target);
-          if (absorb === 'repair') yield* repairMirror(treeRoot, [{ status: 'A', path }], demo.projectId);
+          if (absorb === 'repair') yield* repairMirror({ root: treeRoot, stealth: null }, [{ status: 'A', path }], demo.projectId);
           else yield* rebuildMirror(yield* scanTree(treeRoot), demo.projectId);
           const names = yield* demo.graph.blockNames.idsOfNames([spokenId(foreign)]);
           const toId = names.get(spokenId(foreign))!;
@@ -190,7 +190,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           `---\nid: ${D}\ntags: ["idea"]\ntitle: Newcomer\nord: 6\n---\nborn in the delta`,
         );
         const repaired = yield* repairMirror(
-          treeRoot,
+          { root: treeRoot, stealth: null },
           [
             { status: 'M', path: 'doctrine/palladium-charter.md' },
             { status: 'A', path: 'doctrine/newcomer.md' },
@@ -206,7 +206,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         expect((yield* demo.table()).holderOf(yield* demo.graph.blocks.rawBlockById(taskId))).toBe(holder);
         expect(yield* db.select({ fromId: ref.fromId, toId: ref.toId }).from(ref)).toContainEqual({ fromId: b.id, toId: taskId });
         yield* fs.remove(join(treeRoot, 'doctrine/newcomer.md'));
-        expect(yield* repairMirror(treeRoot, [{ status: 'D', path: 'doctrine/newcomer.md' }], demo.projectId)).toMatchObject({
+        expect(
+          yield* repairMirror({ root: treeRoot, stealth: null }, [{ status: 'D', path: 'doctrine/newcomer.md' }], demo.projectId),
+        ).toMatchObject({
           removed: 1,
         });
         expect(yield* demo.graph.blocks.rawBlockById(d.id)).toMatchObject({

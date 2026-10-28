@@ -76,7 +76,7 @@ layer(demoGraphLayer({ repos: ['topology'] }).pipe(Layer.provideMerge(BunFileSys
                 layout: failed,
                 shadow,
                 poolContext: context,
-                ledger: yield* treeLedger(failed.treeRoot, row.id),
+                ledger: yield* treeLedger({ root: failed.treeRoot, stealth: null }, row.id),
                 batches: {
                   land: () => Effect.die('this sibling lands no acts'),
                   carry: () => Effect.void,

@@ -13,7 +13,7 @@ export type TreeScan = {
   readonly refs: readonly TreeRef[];
 };
 
-export type ScanJob = { readonly root: string; readonly whole: boolean };
+export type ScanJob = { readonly root: string; readonly stealth: string | null; readonly whole: boolean };
 
 export type ScanAnswer =
   | { readonly state: 'scanned'; readonly scan: TreeScan }
@@ -44,8 +44,8 @@ export function blockRefsOf(body: string): string[] {
   return out;
 }
 
-export const readTreeScan = Effect.fnUntraced(function* (root: string) {
-  const blocks = yield* readBlockTree(root);
+export const readTreeScan = Effect.fnUntraced(function* (root: string, stealth: string | null) {
+  const blocks = yield* readBlockTree(root, stealth);
   const refs: TreeRef[] = [];
   for (const block of blocks) {
     for (const to of blockRefsOf(block.body)) refs.push({ fromId: block.frontmatter.id, to });
@@ -53,8 +53,8 @@ export const readTreeScan = Effect.fnUntraced(function* (root: string) {
   return { blocks, refs };
 });
 
-export const scanTree = (root: string): Effect.Effect<TreeScan, BlockTreeUnreadable> =>
-  askScan({ root, whole: true }).pipe(
+export const scanTree = (root: string, stealth: string | null = null): Effect.Effect<TreeScan, BlockTreeUnreadable> =>
+  askScan({ root, stealth, whole: true }).pipe(
     Effect.flatMap((answer) =>
       answer.state === 'scanned'
         ? Effect.succeed(answer.scan)
@@ -72,7 +72,9 @@ const showsEntries = (root: string): Effect.Effect<boolean, BlockTreeUnreadable>
 
 export const treeHoldsAny = (root: string): Effect.Effect<boolean, BlockTreeUnreadable> =>
   showsEntries(root).pipe(
-    Effect.flatMap((shown) => (shown ? askScan({ root, whole: false }) : Effect.succeed({ state: 'holds', holds: false } as const))),
+    Effect.flatMap((shown) =>
+      shown ? askScan({ root, stealth: null, whole: false }) : Effect.succeed({ state: 'holds', holds: false } as const),
+    ),
     Effect.flatMap((answer) =>
       answer.state === 'holds'
         ? Effect.succeed(answer.holds)

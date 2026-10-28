@@ -1,4 +1,4 @@
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { Clock, Data, Effect } from 'effect';
 import { and, eq, getTableColumns, inArray, isNull, or, sql } from 'drizzle-orm';
 import { type StoreDb, GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
@@ -21,7 +21,9 @@ import type { TagTable } from '../contract/wire/tags/table.js';
 import type { BlockFile, BlockFrontmatter } from './blockFile.js';
 import type { TreeChange } from './freshness.js';
 import type { TreeScan } from './scan.js';
-import { type BlockTreeUnreadable, unmergedRefusal } from './layout.js';
+import { type BlockTreeUnreadable, type TreeRoots, fileIn, unmergedRefusal } from './layout.js';
+import { inStealth } from '../contract/wire/storage.js';
+import { forestPlace, rehangFallen } from './forest.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { projecting, referencing } from '../store/actWrites.js';
 import { HOLDER, HOLDER_SLOT } from '../contract/wire/tags/holder.js';
@@ -205,12 +207,14 @@ export const absorbMirror = Effect.fn('Mirror.absorb')(function* (scan: TreeScan
       const fallen: Fallen[] = [];
       const blocks: BlockRow[] = ordered.map((row) => {
         const front = row.frontmatter;
+        const stealth = inStealth(row.path);
         return {
           id: ids.get(front.id) as number,
           uuid: front.id,
           path: row.path,
           projectId,
-          parentId: row.parentId === null ? null : (ids.get(row.parentId) ?? null),
+          stealth,
+          parentId: row.parentId === null ? null : scanned.has(row.parentId) ? (ids.get(row.parentId) as number) : stealth ? rootId : null,
           ord: front.ord,
           tags: front.tags ?? [],
           fields: front.fields ?? {},
@@ -388,7 +392,7 @@ export type MirrorRepair = {
 };
 
 export const repairMirror = Effect.fnUntraced(function* (
-  treeRoot: string,
+  roots: TreeRoots,
   changed: readonly TreeChange[],
   projectId: number,
 ): Effect.fn.Return<
@@ -409,7 +413,7 @@ export const repairMirror = Effect.fnUntraced(function* (
   const arrivals: { path: string; file: BlockFile }[] = [];
   const reads = yield* unreadable(
     readBlocks(
-      treeRoot,
+      roots,
       changed.filter((change) => change.status !== 'D').map((change) => change.path),
     ),
   );
@@ -419,7 +423,7 @@ export const repairMirror = Effect.fnUntraced(function* (
       continue;
     }
     if (read.state === 'invalid') {
-      if (read.reason === 'conflict-markers') return yield* unmergedRefusal(join(treeRoot, read.path));
+      if (read.reason === 'conflict-markers') return yield* unmergedRefusal(fileIn(roots, read.path));
       return yield* new MirrorRefused({ reason: 'repair', message: `${read.path}: ${read.message}` });
     }
     arrivals.push({ path: read.path, file: read.file });
@@ -463,7 +467,7 @@ export const repairMirror = Effect.fnUntraced(function* (
       });
       const standing = yield* unreadable(
         readBlocks(
-          treeRoot,
+          roots,
           elsewhere.map((entry) => entry.held),
         ),
       );
@@ -512,13 +516,25 @@ export const repairMirror = Effect.fnUntraced(function* (
       }
       yield* blockProjection.forgetVocabulary(trashed.map((row) => row.id));
       yield* recordTrash(act, trashed, now);
+      yield* rehangFallen(
+        db,
+        projectId,
+        trashed.map((row) => row.id),
+      );
       const landed: { blockId: number; path: string; file: BlockFile; before: Tagged | undefined }[] = [];
       const named: string[] = [];
       for (const { path, file } of arrivals) {
         const front = file.frontmatter;
         const container = path.endsWith('/index.md') ? dirname(dirname(path)) : dirname(path);
-        let parentId: number | null = null;
-        if (container !== '.') {
+        const placed = yield* forestPlace(db, projectId, path, container);
+        if (placed.kind === 'loose') {
+          return yield* new MirrorRefused({
+            reason: 'repair',
+            message: `${path} stands in the stealth tree outside any parent's directory`,
+          });
+        }
+        let parentId: number | null = placed.kind === 'top' ? placed.parentId : null;
+        if (placed.kind === 'nested' && container !== '.') {
           const parentPath = `${container}/index.md`;
           const parent = yield* db
             .select({ id: block.id })
@@ -532,7 +548,7 @@ export const repairMirror = Effect.fnUntraced(function* (
             });
           }
           parentId = parent.id;
-        } else {
+        } else if (placed.kind === 'nested') {
           const stranger = yield* db
             .select({ id: block.id })
             .from(block)
@@ -553,6 +569,7 @@ export const repairMirror = Effect.fnUntraced(function* (
           uuid: front.id,
           path,
           projectId,
+          stealth: inStealth(path),
           parentId,
           ord: front.ord,
           tags: front.tags ?? [],

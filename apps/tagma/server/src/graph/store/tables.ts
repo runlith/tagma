@@ -39,6 +39,7 @@ export const block = sqliteTable(
     deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+    stealth: integer('stealth', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => [
     index('block_parent_idx').on(table.parentId),

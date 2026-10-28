@@ -1,11 +1,20 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Data, Effect } from 'effect';
-import { type BlockFile, decodeBlockFile, encodeBlockFile } from './blockFile.js';
+import { type BlockFile, FILE_IDENTITY, decodeBlockFile, encodeBlockFile } from './blockFile.js';
 import { SPOKEN_LENGTH } from '../../platform/contract/wire/ids.js';
+import { STEALTH_PREFIX, inStealth, stealthRelative } from '../contract/wire/storage.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 
 export type TreeBlock = BlockFile & { readonly parentId: string | null };
+
+export type TreeRoots = { readonly root: string; readonly stealth: string | null };
+
+export const fileIn = (roots: TreeRoots, path: string): string => {
+  if (!inStealth(path)) return join(roots.root, path);
+  if (roots.stealth === null) throw new Error(`${path} belongs to the stealth tree, and this copy serves none`);
+  return join(roots.stealth, stealthRelative(path));
+};
 
 export type ScannedBlock = TreeBlock & { readonly path: string };
 
@@ -83,8 +92,37 @@ export type RenderedTree = {
   readonly paths: Map<string, string>;
 };
 
-export function renderBlockTree(blocks: readonly TreeBlock[]): Effect.Effect<RenderedTree, BlockTreeUnreadable> {
+const shelvesOf = (blocks: readonly TreeBlock[]): Map<string | null, TreeBlock[]> => {
   const byParent = new Map<string | null, TreeBlock[]>();
+  for (const block of blocks) {
+    const siblings = byParent.get(block.parentId) ?? [];
+    siblings.push(block);
+    byParent.set(block.parentId, siblings);
+  }
+  for (const siblings of byParent.values()) {
+    siblings.sort((a, b) => a.frontmatter.ord - b.frontmatter.ord || a.frontmatter.id.localeCompare(b.frontmatter.id));
+  }
+  return byParent;
+};
+
+const emitShelf = (byParent: ReadonlyMap<string | null, readonly TreeBlock[]>, rendered: RenderedTree) => {
+  const emit = (prefix: string, members: readonly TreeBlock[]): void => {
+    const taken = new Set<string>();
+    for (const block of members) {
+      const name = sibling(block.frontmatter.id, block.frontmatter.title, taken);
+      const text = encodeBlockFile(block);
+      const children = byParent.get(block.frontmatter.id);
+      const place = prefix === '' ? name : `${prefix}/${name}`;
+      const rel = children === undefined ? `${place}.md` : `${place}/${INDEX}`;
+      rendered.files.set(rel, text);
+      rendered.paths.set(block.frontmatter.id, rel);
+      if (children !== undefined) emit(place, children);
+    }
+  };
+  return emit;
+};
+
+export function renderBlockTree(blocks: readonly TreeBlock[]): Effect.Effect<RenderedTree, BlockTreeUnreadable> {
   const ids = new Set(blocks.map((block) => block.frontmatter.id));
   for (const block of blocks) {
     if (block.parentId !== null && !ids.has(block.parentId)) {
@@ -96,34 +134,22 @@ export function renderBlockTree(blocks: readonly TreeBlock[]): Effect.Effect<Ren
         }),
       );
     }
-    const siblings = byParent.get(block.parentId) ?? [];
-    siblings.push(block);
-    byParent.set(block.parentId, siblings);
   }
-  for (const siblings of byParent.values()) {
-    siblings.sort((a, b) => a.frontmatter.ord - b.frontmatter.ord || a.frontmatter.id.localeCompare(b.frontmatter.id));
-  }
-  const files = new Map<string, string>();
-  const paths = new Map<string, string>();
-  const emit = (prefix: string, parentId: string | null): void => {
-    const taken = new Set<string>();
-    for (const block of byParent.get(parentId) ?? []) {
-      const name = sibling(block.frontmatter.id, block.frontmatter.title, taken);
-      const text = encodeBlockFile(block);
-      if (byParent.has(block.frontmatter.id)) {
-        const rel = prefix === '' ? `${name}/${INDEX}` : `${prefix}/${name}/${INDEX}`;
-        files.set(rel, text);
-        paths.set(block.frontmatter.id, rel);
-        emit(prefix === '' ? name : `${prefix}/${name}`, block.frontmatter.id);
-      } else {
-        const rel = prefix === '' ? `${name}.md` : `${prefix}/${name}.md`;
-        files.set(rel, text);
-        paths.set(block.frontmatter.id, rel);
-      }
-    }
-  };
-  emit('', null);
-  return Effect.succeed({ files, paths });
+  const byParent = shelvesOf(blocks);
+  const rendered: RenderedTree = { files: new Map(), paths: new Map() };
+  emitShelf(byParent, rendered)('', byParent.get(null) ?? []);
+  return Effect.succeed(rendered);
+}
+
+export function renderForest(blocks: readonly TreeBlock[], anchorOf: (block: TreeBlock) => string): RenderedTree {
+  const ids = new Set(blocks.map((block) => block.frontmatter.id));
+  const nested = (block: TreeBlock): boolean => block.parentId !== null && ids.has(block.parentId);
+  const byParent = shelvesOf(blocks.filter(nested));
+  const tops = shelvesOf(blocks.filter((block) => !nested(block)).map((block) => ({ ...block, parentId: anchorOf(block) })));
+  const rendered: RenderedTree = { files: new Map(), paths: new Map() };
+  const emit = emitShelf(byParent, rendered);
+  for (const [anchor, members] of tops) if (anchor !== null) emit(anchor, members);
+  return rendered;
 }
 
 export function writeBlockTree(root: string, blocks: readonly TreeBlock[]): Effect.Effect<void, BlockTreeUnreadable> {
@@ -162,25 +188,46 @@ const decode = (path: string): Effect.Effect<BlockFile, BlockTreeUnreadable> =>
     ),
   );
 
-export const visitBlockTree = (root: string, visit: (block: ScannedBlock) => void) => {
+const listing = (dir: string) =>
+  Effect.try({
+    try: () => readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)),
+    catch: (error) => new BlockTreeUnreadable({ reason: 'io', path: dir, message: error instanceof Error ? error.message : String(error) }),
+  });
+
+export const visitForest = Effect.fnUntraced(function* (root: string, visit: (block: ScannedBlock) => void) {
+  if (!existsSync(root)) return;
+  for (const entry of yield* listing(root)) {
+    if (entry.name.startsWith('.')) continue;
+    const path = join(root, entry.name);
+    if (entry.isDirectory() && FILE_IDENTITY.test(entry.name)) {
+      yield* walkBlockTree(path, entry.name, entry.name, visit);
+      continue;
+    }
+    if (entry.isFile() ? entry.name.endsWith('.md') : holdsBlockFiles(path)) {
+      return yield* new BlockTreeUnreadable({
+        reason: 'orphan',
+        path,
+        message: 'a stealth tree keeps its blocks in directories named by the uuid of their parent, and this one stands outside them',
+      });
+    }
+  }
+});
+
+export const visitBlockTree = (root: string, visit: (block: ScannedBlock) => void) => walkBlockTree(root, '', null, visit);
+
+const walkBlockTree = (root: string, base: string, top: string | null, visit: (block: ScannedBlock) => void) => {
   const walk = Effect.fnUntraced(function* (
     dir: string,
     prefix: string,
     parentId: string | null,
   ): Effect.fn.Return<void, BlockTreeUnreadable> {
-    const entries = yield* Effect.try({
-      try: () => readdirSync(dir, { withFileTypes: true }),
-      catch: (error) =>
-        new BlockTreeUnreadable({ reason: 'io', path: dir, message: error instanceof Error ? error.message : String(error) }),
-    });
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of yield* listing(dir)) {
       if (entry.name.startsWith('.')) continue;
       const path = join(dir, entry.name);
       const rel = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
       if (entry.isDirectory()) {
         const index = join(path, INDEX);
-        const listing = readdirSync(path);
-        if (!listing.includes(INDEX)) {
+        if (!readdirSync(path).includes(INDEX)) {
           if (holdsBlockFiles(path)) {
             return yield* new BlockTreeUnreadable({
               reason: 'orphan',
@@ -200,11 +247,12 @@ export const visitBlockTree = (root: string, visit: (block: ScannedBlock) => voi
       visit({ ...file, parentId, path: rel });
     }
   });
-  return walk(root, '', null);
+  return walk(root, base, top);
 };
 
-export const readBlockTree = Effect.fnUntraced(function* (root: string) {
+export const readBlockTree = Effect.fnUntraced(function* (root: string, stealth: string | null = null) {
   const rows: ScannedBlock[] = [];
   yield* visitBlockTree(root, (block) => rows.push(block));
+  if (stealth !== null) yield* visitForest(stealth, (block) => rows.push({ ...block, path: `${STEALTH_PREFIX}${block.path}` }));
   return rows;
 });

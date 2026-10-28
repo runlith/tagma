@@ -319,7 +319,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         expect((yield* decodeBlockFile(byAct)).frontmatter.edges).toEqual([{ kind: 'relates', to: gone.uuid }]);
         yield* projectToTree({ projectId, treeRoot });
         expect(yield* fs.readFileString(join(treeRoot, path))).toBe(byAct);
-        const ledger = yield* treeLedger(treeRoot, projectId);
+        const ledger = yield* treeLedger({ root: treeRoot, stealth: null }, projectId);
         expect(yield* ledger.unreflected([{ status: 'M', path }])).toEqual([]);
       }),
     ),

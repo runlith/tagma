@@ -111,7 +111,7 @@ const OPEN_FENCE = /^---\r?\n/;
 
 const decodeFrontmatter = Schema.decodeUnknownResult(writtenFrontmatterSchema, { onExcessProperty: 'error' });
 
-const FILE_IDENTITY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const FILE_IDENTITY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const CONFLICT_MARKER = /^(<+|>+)(?: |\r?$)/gm;
 

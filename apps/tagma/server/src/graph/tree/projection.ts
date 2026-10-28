@@ -1,4 +1,4 @@
-import { type Stats, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, statSync } from 'node:fs';
+import { type Stats, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, statSync } from 'node:fs';
 import { readFile, readdir, rm, rmdir, stat } from 'node:fs/promises';
 import { availableParallelism } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -8,7 +8,9 @@ import { OwnGitFailed } from '../../platform/git/ownGit.js';
 import { block } from '../store/tables.js';
 import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { changedDirectories, flushDirectories, flushDirectoriesSync, stagingOf, writeAtomic, writeAtomicSync } from './atomicFile.js';
-import { BlockTreeUnreadable, shelfNames } from './layout.js';
+import { BlockTreeUnreadable, type TreeRoots, fileIn, shelfNames } from './layout.js';
+import { STEALTH_PREFIX, anchorOf, inStealth } from '../contract/wire/storage.js';
+import { standingAnchor } from './forest.js';
 import { type ConnectionRows, type ExportBlockRow, ExportFailed, rowText } from './export.js';
 import { connectionRows, connectionsOf } from './connections.js';
 import { mintBlockId } from '../contract/wire/identity.js';
@@ -34,6 +36,16 @@ const under = (dir: string) => sql`instr(${block.path}, ${`${dir}/`}) = 1`;
 const dirOf = (path: string): string => (dirname(path) === '.' ? '' : `${dirname(path)}/`);
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const moveAcross = (source: string, target: string): void => {
+  try {
+    renameSync(source, target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+    cpSync(source, target, { recursive: true, force: true });
+    rmSync(source, { recursive: true, force: true });
+  }
+};
 
 const io = <A>(path: string, run: () => Promise<A>): Effect.Effect<A, BlockTreeUnreadable> =>
   Effect.tryPromise({ try: run, catch: (error) => new BlockTreeUnreadable({ reason: 'io', path, message: messageOf(error) }) });
@@ -66,7 +78,8 @@ const readIdentity = (treeRoot: string): Effect.Effect<Map<number, string>, Bloc
 
 export type ProjectionJob = {
   readonly treeRoot: string;
-  readonly blocks: readonly (ExportBlockRow & { readonly path: string | null })[];
+  readonly stealth: string | null;
+  readonly blocks: readonly (ExportBlockRow & { readonly path: string | null; readonly stealth: boolean })[];
   readonly connections: ConnectionRows;
 };
 
@@ -139,6 +152,7 @@ export type GraphProjection = {
 export const projectToTree = Effect.fn('Graph.projectToTree')(function* (input: {
   readonly projectId: number;
   readonly treeRoot: string;
+  readonly stealth?: string | null;
 }): Effect.fn.Return<GraphProjection, StoreFailure | ExportFailed | BlockTreeUnreadable, GraphStore | Tags> {
   const store = yield* GraphStore;
   const { db } = store;
@@ -154,6 +168,7 @@ export const projectToTree = Effect.fn('Graph.projectToTree')(function* (input: 
       body: block.body,
       deletedAt: block.deletedAt,
       path: block.path,
+      stealth: block.stealth,
     })
     .from(block)
     .where(eq(block.projectId, input.projectId));
@@ -182,7 +197,7 @@ export const projectToTree = Effect.fn('Graph.projectToTree')(function* (input: 
   const identity = join(input.treeRoot, IDENTITY_FILE);
   const { projected, moved } = yield* Effect.uninterruptible(
     Effect.gen(function* () {
-      const projected = yield* renderFiles({ treeRoot: input.treeRoot, blocks, connections });
+      const projected = yield* renderFiles({ treeRoot: input.treeRoot, stealth: input.stealth ?? null, blocks, connections });
       yield* io(identity, () => rm(identity, { force: true }));
       const moved = [...projected.moved, ...dropped];
       if (moved.length > 0) {
@@ -241,6 +256,7 @@ export type TouchedPath = (relative: string, staged: boolean, restorable: boolea
 export const projectDelta = Effect.fnUntraced(function* (input: {
   readonly projectId: number;
   readonly treeRoot: string;
+  readonly stealth?: string | null;
   readonly blockIds: readonly number[];
   readonly touched?: TouchedPath;
 }): Effect.fn.Return<DeltaProjection, StoreFailure | ExportFailed | BlockTreeUnreadable, GraphStore | Tags> {
@@ -251,6 +267,11 @@ export const projectDelta = Effect.fnUntraced(function* (input: {
     .from(block)
     .where(and(eq(block.projectId, input.projectId), inArray(block.id, [...new Set(input.blockIds)])));
   if (named.length === 0) return { written: 0, moved: 0, removed: 0 };
+  const roots: TreeRoots = { root: input.treeRoot, stealth: input.stealth ?? null };
+  if (roots.stealth === null && named.some((row) => row.stealth || (row.path !== null && inStealth(row.path)))) {
+    return yield* new ExportFailed({ message: 'a stealth block needs the stealth tree, and this copy serves none' });
+  }
+  const at = (place: string): string => fileIn(roots, place);
   let written = 0;
   let moved = 0;
   let removed = 0;
@@ -290,21 +311,35 @@ export const projectDelta = Effect.fnUntraced(function* (input: {
   }
   const renamed = new Set<string>();
   const makeDir = (place: string): void => {
-    const abs = join(input.treeRoot, place);
+    const abs = at(place);
     for (const directory of changedDirectories(abs, mkdirSync(abs, { recursive: true }))) renamed.add(directory);
   };
   const movePlace = (from: string, to: string): void => {
-    const source = join(input.treeRoot, from);
+    const source = at(from);
     if (!existsSync(source)) return;
-    const created = !existsSync(dirname(join(input.treeRoot, to)));
-    const made = mkdirSync(dirname(join(input.treeRoot, to)), { recursive: true });
-    renameSync(source, join(input.treeRoot, to));
+    const target = at(to);
+    const created = !existsSync(dirname(target));
+    const made = mkdirSync(dirname(target), { recursive: true });
+    moveAcross(source, target);
     renamed.add(dirname(source));
-    for (const directory of changedDirectories(dirname(join(input.treeRoot, to)), made)) renamed.add(directory);
+    for (const directory of changedDirectories(dirname(target), made)) renamed.add(directory);
     touch(from, !parked(from));
     touch(to, !parked(to));
     if (created) touch(dirname(to), false);
   };
+  const shelfParent = { ...parentColumns, uuid: block.uuid, stealth: block.stealth };
+  const placedMembers = Effect.fn(function* <M extends { readonly path: string | null; readonly stealth: boolean }>(
+    members: readonly M[],
+    parent: { readonly uuid: string; readonly parentId: number | null; readonly stealth: boolean } | undefined,
+  ) {
+    if (parent === undefined || parent.parentId !== null || parent.stealth) return members;
+    const placed: M[] = [];
+    for (const member of members) {
+      const anchor = member.stealth && member.path !== null ? anchorOf(member.path) : null;
+      if (anchor === null || anchor === parent.uuid || (yield* standingAnchor(db, input.projectId, anchor)) !== null) placed.push(member);
+    }
+    return placed;
+  });
   const pending = new Set(ordered);
   const requeue = (key: number | null): void => {
     if (pending.has(key)) return;
@@ -342,7 +377,7 @@ export const projectDelta = Effect.fnUntraced(function* (input: {
   });
   const discard = Effect.fn(function* (place: string, dir: boolean) {
     if (dir) yield* evacuate(place);
-    rmSync(join(input.treeRoot, place), { recursive: true, force: true });
+    rmSync(at(place), { recursive: true, force: true });
     touch(place, !parked(place));
     yield* db
       .update(block)
@@ -359,12 +394,12 @@ export const projectDelta = Effect.fnUntraced(function* (input: {
   const refuseStray = (place: string) =>
     Effect.fail(new ExportFailed({ message: `${place} stands in the tree, but no block of the graph holds it` }));
   const admit = Effect.fn(function* (place: string) {
-    const abs = join(input.treeRoot, place);
+    const abs = at(place);
     if (!existsSync(abs) || bareDir(abs) || (yield* holderOf(place)) !== undefined) return;
     return yield* refuseStray(place);
   });
   const vacate = Effect.fn(function* (place: string) {
-    const abs = join(input.treeRoot, place);
+    const abs = at(place);
     if (!existsSync(abs)) return;
     const holder = yield* holderOf(place);
     if (holder === undefined || holder.uuid === null || holder.path === null) {
@@ -385,81 +420,94 @@ export const projectDelta = Effect.fnUntraced(function* (input: {
   for (let at = 0; at < ordered.length; at += 1) {
     const key = ordered[at] as number | null;
     pending.delete(key);
-    const members = yield* db
-      .select({ id: block.id, uuid: block.uuid, title: block.title, ord: block.ord, path: block.path })
+    const shelf = yield* db
+      .select({ id: block.id, uuid: block.uuid, title: block.title, ord: block.ord, path: block.path, stealth: block.stealth })
       .from(block)
       .where(
         and(eq(block.projectId, input.projectId), key === null ? isNull(block.parentId) : eq(block.parentId, key), isNull(block.deletedAt)),
       );
-    if (members.length === 0) continue;
-    let parentDir = '';
-    if (key !== null) {
-      const parent = yield* db.select(parentColumns).from(block).where(eq(block.id, key)).get();
-      if (parent === undefined || parent.path === null) {
+    if (shelf.length === 0) continue;
+    const parent = key === null ? undefined : yield* db.select(shelfParent).from(block).where(eq(block.id, key)).get();
+    for (const stealth of [false, true]) {
+      const members = yield* placedMembers(
+        shelf.filter((member) => member.stealth === stealth),
+        parent,
+      );
+      if (members.length === 0) continue;
+      if (key !== null && (parent === undefined || parent.path === null)) {
         return yield* Effect.fail(new ExportFailed({ message: `shelf parent ${key} has no projected path` }));
       }
-      if (!parent.path.endsWith('/index.md')) {
-        const dir = parent.path.slice(0, -'.md'.length);
-        const indexPath = `${dir}/index.md`;
-        yield* vacate(dir);
-        makeDir(dir);
-        touch(dir, false);
-        yield* relocate(parent.path, indexPath, parent.id);
-        (parent as { path: string | null }).path = indexPath;
+      let parentDir = '';
+      if (parent !== undefined && parent.path !== null && stealth && !parent.stealth) {
+        parentDir = `${STEALTH_PREFIX}${parent.uuid}/`;
+      } else if (parent !== undefined && parent.path !== null) {
+        if (!stealth && parent.stealth) {
+          return yield* new ExportFailed({ message: `team block ${members[0]?.uuid ?? ''} hangs under stealth block ${parent.uuid}` });
+        }
+        if (!parent.path.endsWith('/index.md')) {
+          const dir = parent.path.slice(0, -'.md'.length);
+          const indexPath = `${dir}/index.md`;
+          yield* vacate(dir);
+          makeDir(dir);
+          touch(dir, false);
+          yield* relocate(parent.path, indexPath, parent.id);
+          (parent as { path: string | null }).path = indexPath;
+          moved += 1;
+        }
+        parentDir = `${dirname(parent.path)}/`;
+        if (parentDir === './') parentDir = '';
+      }
+      const childCounts = new Map<number, number>(
+        (yield* db
+          .select({ parentId: block.parentId, count: sql<number>`count(*)` })
+          .from(block)
+          .where(
+            and(
+              inArray(
+                block.parentId,
+                members.map((m) => m.id),
+              ),
+              eq(block.stealth, stealth),
+              isNull(block.deletedAt),
+            ),
+          )
+          .groupBy(block.parentId)).map((row) => [row.parentId as number, row.count]),
+      );
+      const names = shelfNames(members.map((m) => ({ id: m.uuid as string, title: m.title, ord: m.ord })));
+      const moving = members.flatMap((member) => {
+        const name = names.get(member.uuid as string) as string;
+        const isDir = (childCounts.get(member.id) ?? 0) > 0;
+        const desired = isDir ? `${parentDir}${name}/index.md` : `${parentDir}${name}.md`;
+        return member.path === desired ? [] : [{ id: member.id, uuid: member.uuid as string, isDir, desired }];
+      });
+      for (const { desired, isDir } of moving) yield* admit(isDir ? dirname(desired) : desired);
+      for (const { id, uuid } of moving) {
+        const path = yield* pathOf(id);
+        if (path === null) continue;
+        yield* relocate(placeOf(path), parkingOf(parentDir, uuid), path.endsWith('/index.md') ? null : id);
+      }
+      for (const { id, isDir, desired } of moving) {
+        const path = yield* pathOf(id);
+        if (path === desired) continue;
+        yield* vacate(isDir ? dirname(desired) : desired);
+        if (path === null) {
+          yield* db.update(block).set({ path: desired }).where(eq(block.id, id));
+          continue;
+        }
+        const from = placeOf(path);
+        const wasDir = path.endsWith('/index.md');
+        if (wasDir === isDir) {
+          yield* relocate(from, placeOf(desired), isDir ? null : id);
+        } else if (isDir) {
+          makeDir(dirname(desired));
+          touch(dirname(desired), false);
+          yield* relocate(from, desired, id);
+        } else {
+          yield* relocate(path, desired, id);
+          yield* discard(from, true);
+        }
         moved += 1;
       }
-      parentDir = `${dirname(parent.path)}/`;
-      if (parentDir === './') parentDir = '';
-    }
-    const childCounts = new Map<number, number>(
-      (yield* db
-        .select({ parentId: block.parentId, count: sql<number>`count(*)` })
-        .from(block)
-        .where(
-          and(
-            inArray(
-              block.parentId,
-              members.map((m) => m.id),
-            ),
-            isNull(block.deletedAt),
-          ),
-        )
-        .groupBy(block.parentId)).map((row) => [row.parentId as number, row.count]),
-    );
-    const names = shelfNames(members.map((m) => ({ id: m.uuid as string, title: m.title, ord: m.ord })));
-    const moving = members.flatMap((member) => {
-      const name = names.get(member.uuid as string) as string;
-      const isDir = (childCounts.get(member.id) ?? 0) > 0;
-      const desired = isDir ? `${parentDir}${name}/index.md` : `${parentDir}${name}.md`;
-      return member.path === desired ? [] : [{ id: member.id, uuid: member.uuid as string, isDir, desired }];
-    });
-    for (const { desired, isDir } of moving) yield* admit(isDir ? dirname(desired) : desired);
-    for (const { id, uuid } of moving) {
-      const path = yield* pathOf(id);
-      if (path === null) continue;
-      yield* relocate(placeOf(path), parkingOf(parentDir, uuid), path.endsWith('/index.md') ? null : id);
-    }
-    for (const { id, isDir, desired } of moving) {
-      const path = yield* pathOf(id);
-      if (path === desired) continue;
-      yield* vacate(isDir ? dirname(desired) : desired);
-      if (path === null) {
-        yield* db.update(block).set({ path: desired }).where(eq(block.id, id));
-        continue;
-      }
-      const from = placeOf(path);
-      const wasDir = path.endsWith('/index.md');
-      if (wasDir === isDir) {
-        yield* relocate(from, placeOf(desired), isDir ? null : id);
-      } else if (isDir) {
-        makeDir(dirname(desired));
-        touch(dirname(desired), false);
-        yield* relocate(from, desired, id);
-      } else {
-        yield* relocate(path, desired, id);
-        yield* discard(from, true);
-      }
-      moved += 1;
     }
   }
   const alive = named.filter((row) => row.deletedAt === null);
@@ -476,10 +524,10 @@ export const projectDelta = Effect.fnUntraced(function* (input: {
             ),
           );
   for (const [path, text] of yield* encodedFiles(input.projectId, alive, new Map(settled.map((row) => [row.id, row.path])))) {
-    const abs = join(input.treeRoot, path);
+    const abs = at(path);
     if (existsSync(abs) && readFileSync(abs, 'utf8') === text) continue;
     const staging = stagingOf(path);
-    for (const directory of writeAtomicSync(abs, join(input.treeRoot, staging), text)) renamed.add(directory);
+    for (const directory of writeAtomicSync(abs, at(staging), text)) renamed.add(directory);
     input.touched?.(staging, false, false);
     touch(path, true);
     written += 1;
@@ -509,10 +557,13 @@ const encodedFiles = Effect.fnUntraced(function* (
 export const restorePaths = Effect.fnUntraced(function* (input: {
   readonly projectId: number;
   readonly treeRoot: string;
+  readonly stealth?: string | null;
   readonly paths: readonly string[];
 }) {
-  const places = [...new Set(input.paths)].filter((path) => path !== '' && path !== '.');
+  const roots: TreeRoots = { root: input.treeRoot, stealth: input.stealth ?? null };
+  const places = [...new Set(input.paths)].filter((path) => path !== '' && path !== '.' && (roots.stealth !== null || !inStealth(path)));
   if (places.length === 0) return 0;
+  const at = (place: string): string => fileIn(roots, place);
   const { db } = yield* GraphStore;
   const rows = yield* db
     .select()
@@ -528,7 +579,7 @@ export const restorePaths = Effect.fnUntraced(function* (input: {
   let restored = 0;
   const standing: string[] = [];
   const walk = Effect.fnUntraced(function* (relative: string): Effect.fn.Return<void, BlockTreeUnreadable> {
-    const abs = join(input.treeRoot, relative);
+    const abs = at(relative);
     const found = yield* statOf(abs);
     if (found === null) return;
     if (found.isDirectory()) {
@@ -542,27 +593,27 @@ export const restorePaths = Effect.fnUntraced(function* (input: {
       yield* walk(place);
       continue;
     }
-    const abs = join(input.treeRoot, place);
+    const abs = at(place);
     if ((yield* statOf(abs)) === null) continue;
     yield* io(abs, () => rm(abs, { recursive: true, force: true }));
     restored += 1;
   }
   for (const relative of new Set(standing)) {
     if (target.has(relative)) continue;
-    const abs = join(input.treeRoot, relative);
+    const abs = at(relative);
     yield* io(abs, () => rm(abs, { force: true }));
     restored += 1;
   }
   const written = new Set<string>();
   for (const [relative, text] of target) {
-    const abs = join(input.treeRoot, relative);
+    const abs = at(relative);
     if ((yield* textOf(abs)) === text) continue;
     for (const directory of yield* io(abs, () => writeAtomic(abs, stagingOf(abs), text))) written.add(directory);
     restored += 1;
   }
   yield* io(input.treeRoot, () => flushDirectories(written));
   for (const place of [...places].sort((a, b) => b.length - a.length)) {
-    const abs = join(input.treeRoot, place);
+    const abs = at(place);
     const found = yield* statOf(abs);
     if (found !== null && (yield* emptyDir(abs, found))) yield* io(abs, () => rmdir(abs));
   }

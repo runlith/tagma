@@ -11,6 +11,19 @@ export const WORKFLOWS_DIRECTORY = 'workflows';
 export const inGraphTree = (path: string): boolean =>
   path.startsWith(`${CHECKOUT_DIRECTORY}/`) && !path.startsWith(`${CHECKOUT_DIRECTORY}/${WORKFLOWS_DIRECTORY}/`);
 
+export const STEALTH_PREFIX = '.stealth/';
+
+export const inStealth = (path: string): boolean => path.startsWith(STEALTH_PREFIX) || `${path}/` === STEALTH_PREFIX;
+
+export const stealthRelative = (path: string): string => path.slice(STEALTH_PREFIX.length);
+
+export const anchorOf = (path: string): string | null => {
+  if (!inStealth(path)) return null;
+  const rest = stealthRelative(path);
+  const cut = rest.indexOf('/');
+  return cut === -1 ? null : rest.slice(0, cut);
+};
+
 export const FORMAT_FILE = 'format.json';
 export const VOCABULARY_FORMAT_KEY = 'vocabulary-format';
 

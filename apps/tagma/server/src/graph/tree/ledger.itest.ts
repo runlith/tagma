@@ -9,7 +9,7 @@ it.effect('own deletion echoes expire on the graph clock while new echoes remain
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped();
-    const ledger = yield* treeLedger(root, 1);
+    const ledger = yield* treeLedger({ root, stealth: null }, 1);
     ledger.wrote('removed.md');
     expect(ledger.echoes(['removed.md'])).toBe(true);
     yield* TestClock.adjust('30 seconds');

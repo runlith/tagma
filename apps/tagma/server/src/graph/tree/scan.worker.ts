@@ -6,7 +6,7 @@ declare const self: Worker;
 
 const answer = (job: ScanJob): Effect.Effect<ScanAnswer, BlockTreeUnreadable> =>
   job.whole
-    ? Effect.map(readTreeScan(job.root), (scan) => ({ state: 'scanned', scan }))
+    ? Effect.map(readTreeScan(job.root, job.stealth), (scan) => ({ state: 'scanned', scan }))
     : Effect.try({
         try: (): ScanAnswer => ({ state: 'holds', holds: holdsBlocks(job.root) }),
         catch: (error) =>

@@ -277,7 +277,7 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
                   writeStamp: stamp.writeStamp,
                   unreflected: (changed) => ledger.unreflected(changed),
                   rebuild: Effect.flatMap(scanTree(layout.treeRoot), (scan) => rebuildMirror(scan, row.id)),
-                  repair: (changed) => repairMirror(layout.treeRoot, changed, row.id),
+                  repair: (changed) => repairMirror({ root: layout.treeRoot, stealth: null }, changed, row.id),
                 }).pipe(Effect.provide(poolContext)),
               );
               if (format === null) return absorbed;

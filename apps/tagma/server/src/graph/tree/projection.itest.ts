@@ -100,7 +100,7 @@ layer(demoGraphLayer({ repos: ['projection'] }).pipe(Layer.provideMerge(BunFileS
             { status: 'M', path: kept },
             { status: 'M', path: gone },
           ];
-          const ledger = yield* treeLedger(treeRoot, projectId);
+          const ledger = yield* treeLedger({ root: treeRoot, stealth: null }, projectId);
           expect(yield* ledger.unreflected(changes)).toEqual([]);
           yield* fs.writeFileString(join(treeRoot, kept), 'half written');
           yield* fs.remove(join(treeRoot, gone));

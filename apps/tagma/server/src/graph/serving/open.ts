@@ -323,7 +323,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                   yield* advance(true);
                 }
               }
-              const ledger = yield* treeLedger(layout.treeRoot, row.id);
+              const ledger = yield* treeLedger({ root: layout.treeRoot, stealth: null }, row.id);
               const tree = {
                 treeRoot: layout.treeRoot,
                 ownGit: shadow !== null,

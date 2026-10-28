@@ -73,7 +73,7 @@ const mirrorAt = Effect.fn('repairFixture.open')(function* (demo: EffectDemo) {
     file,
     byUuid,
     state,
-    repair: (changes: readonly TreeChange[]) => repairMirror(tree, changes, projectId),
+    repair: (changes: readonly TreeChange[]) => repairMirror({ root: tree, stealth: null }, changes, projectId),
     rebuild: Effect.flatMap(scanTree(tree), (scan) => rebuildMirror(scan, projectId)),
   };
 });

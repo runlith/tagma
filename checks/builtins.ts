@@ -83,6 +83,11 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: the snapshots one engine serves to its base and worktrees — which revision each checkout reads, how a change, a moved HEAD or a rescan renews them once a question asks, and which questions warm the next; every step shares the same trees, revisions and serialized TypeScript session.',
           },
           {
+            lines: 659,
+            path: 'apps/tagma/server/src/graph/tree/mirror.ts',
+            why: "One subject: the mirror read from the graph's block files — the whole rebuild and the repair of changed files absorb files into rows by the same rules of identity, parents, trash, edges, holders and law, over the team tree and its stealth forest alike.",
+          },
+          {
             lines: 651,
             path: 'packages/code-facts/src/languages/js/declarations.ts',
             why: 'One subject: what one parse of a JavaScript or TypeScript module says about its top level — the declarations it exports and keeps, the names it imports, the tag literals and published types its body holds, and the outline digest; every reading walks the same program and script offsets.',

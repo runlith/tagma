@@ -2,13 +2,13 @@ import { Effect, Schema } from 'effect';
 import { eq } from 'drizzle-orm';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { TREE_BASIS as BASIS } from '../contract/wire/storage.js';
+import { TREE_BASIS } from '../contract/wire/storage.js';
 import { meta } from '../store/tables.js';
 import type { StoredBasis } from './freshness.js';
 
 const stamping = writes('Tree.stamp', [meta]);
 
-const HEAD = 'tree-head';
+const TREE_HEAD = 'tree-head';
 
 const storedMark = Schema.NullOr(Schema.Struct({ position: Schema.String, slot: Schema.Literals([0, 1, 2]), filed: Schema.Boolean }));
 
@@ -22,13 +22,15 @@ const storedBasis = Schema.fromJsonString(
   }),
 );
 
-export function treeHeadStamp(): {
+export function treeHeadStamp(stealth = false): {
   readonly readStamp: Effect.Effect<string | null, StoreFailure, GraphStore>;
   readonly writeStamp: (sha: string) => Effect.Effect<void, StoreFailure, GraphStore>;
   readonly clearStamp: Effect.Effect<void, StoreFailure, GraphStore>;
   readonly readBasis: Effect.Effect<StoredBasis | null, StoreFailure, GraphStore>;
   readonly writeBasis: (basis: StoredBasis) => Effect.Effect<void, StoreFailure, GraphStore>;
 } {
+  const HEAD = stealth ? `${TREE_HEAD}:stealth` : TREE_HEAD;
+  const BASIS = stealth ? `${TREE_BASIS}:stealth` : TREE_BASIS;
   return {
     readStamp: Effect.gen(function* () {
       const { db } = yield* GraphStore;

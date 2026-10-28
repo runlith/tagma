@@ -2,8 +2,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync } f
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import { flushDirectoriesSync, isStaging, stagingOf, writeAtomicSync } from './atomicFile.js';
-import { exportGraphRows, groupConnections } from './export.js';
-import { BlockTreeUnreadable, renderBlockTree } from './layout.js';
+import { ExportFailed, exportGraphRows, groupConnections } from './export.js';
+import { BlockTreeUnreadable, renderBlockTree, renderForest } from './layout.js';
+import { STEALTH_PREFIX, anchorOf } from '../contract/wire/storage.js';
 import type { ProjectionAnswer, ProjectionAsk, ProjectionJob, ProjectionReply } from './projection.js';
 
 declare const self: Worker;
@@ -56,19 +57,36 @@ function applyTreeFiles(root: string, target: ReadonlyMap<string, string>): { re
   return { written, removed };
 }
 
+const applied = (root: string, files: ReadonlyMap<string, string>) =>
+  Effect.try({
+    try: () => applyTreeFiles(root, files),
+    catch: (error) =>
+      new BlockTreeUnreadable({ reason: 'io', path: root, message: error instanceof Error ? error.message : String(error) }),
+  });
+
 const project = Effect.fnUntraced(function* (job: ProjectionJob) {
   const tree = yield* exportGraphRows(job.blocks, groupConnections(job.connections));
-  const rendered = yield* renderBlockTree(tree);
-  const applied = yield* Effect.try({
-    try: () => applyTreeFiles(job.treeRoot, rendered.files),
-    catch: (error) =>
-      new BlockTreeUnreadable({ reason: 'io', path: job.treeRoot, message: error instanceof Error ? error.message : String(error) }),
+  const stealthIds = new Set(job.blocks.filter((row) => row.stealth && row.deletedAt === null).map((row) => row.uuid));
+  const paths = new Map(job.blocks.map((row) => [row.uuid, row.path]));
+  const team = yield* renderBlockTree(tree.filter((block) => !stealthIds.has(block.frontmatter.id)));
+  const teamIds = new Set(team.paths.keys());
+  const kept = tree.filter((block) => stealthIds.has(block.frontmatter.id));
+  if (kept.length > 0 && job.stealth === null) {
+    return yield* new ExportFailed({ message: `${kept.length} stealth block(s) need the stealth tree, and this copy serves none` });
+  }
+  const forest = renderForest(kept, (block) => {
+    const standing = anchorOf(paths.get(block.frontmatter.id) ?? '');
+    return standing !== null && standing !== block.parentId && !teamIds.has(standing) ? standing : (block.parentId as string);
   });
+  const written = yield* applied(job.treeRoot, team.files);
+  const forested = job.stealth === null ? { written: 0, removed: 0 } : yield* applied(job.stealth, forest.files);
   const moved = job.blocks.flatMap((row) => {
-    const path = rendered.paths.get(row.uuid) ?? null;
+    const own = team.paths.get(row.uuid);
+    const hidden = forest.paths.get(row.uuid);
+    const path = own ?? (hidden === undefined ? null : `${STEALTH_PREFIX}${hidden}`);
     return path === row.path ? [] : [{ id: row.id, path }];
   });
-  return { ...applied, moved };
+  return { written: written.written + forested.written, removed: written.removed + forested.removed, moved };
 });
 
 const answerOf = (job: ProjectionJob): ProjectionAnswer => {
