@@ -1,12 +1,13 @@
 import { type Domains, shareDomains } from '@runlith/cdp/domains';
 import type { Ring } from '@runlith/cdp/ring';
+import { watchResponsive } from '@runlith/cdp/probe';
 import { type CdpEvent, type CommandFailure, eventParams, isCommandFailure, type Session, SessionEnded } from '@runlith/cdp/session';
 import type { Protocol } from 'devtools-protocol';
 import { Clock, Deferred, Effect, Exit, PubSub, Scope, Semaphore, Stream } from 'effect';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { DriveRefusal } from '../contract/service/automation.js';
-import { hostRefusal, type Pages } from '../contract/service/pages.js';
+import { type FrameTarget, hostRefusal, type Pages } from '../contract/service/pages.js';
 import type { Profiles } from '../contract/service/profiles.js';
 import type { ThreadRuns } from '../contract/service/runs.js';
 import { NO_EMULATION, type Emulation, type Viewport } from '../contract/wire/emulation.js';
@@ -16,7 +17,7 @@ import { capture, consoleRing, networkRing, type Request } from './capture.js';
 import { applyEmulation, effectiveOf } from './emulate.js';
 import { isLocal } from './local.js';
 import { Refs } from './refs.js';
-import { crashed, devtoolsOpen, ended, unknownPage, unresponsive } from './refusal.js';
+import { crashed, devtoolsOpen, ended, frameUnresponsive, unknownPage, unresponsive } from './refusal.js';
 import { drive } from '../../platform/contract/service/drives.js';
 
 const IDLE_MS = 30_000;
@@ -148,9 +149,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
     if (child === undefined) attached.main = frameTree.frame.id;
   });
 
-  const adoptChild = Effect.fnUntraced(function* (attached: Attached, child: string) {
-    const adopted = yield* Scope.fork(attached.scope);
-    attached.adopted.set(child, adopted);
+  const adoptChild = Effect.fnUntraced(function* (attached: Attached, child: string, adopted: Scope.Closeable) {
     for (const domain of ['Page', 'DOM', 'Network', 'Log', 'Accessibility'] as const)
       yield* Scope.provide(attached.domains.enable(domain, child), adopted);
     if (attached.runtime !== null) yield* Scope.provide(attached.domains.enable('Runtime', child), attached.runtime);
@@ -237,7 +236,16 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
           return;
         }
         attached.children.set(joined.sessionId, joined.targetInfo.targetId);
-        yield* adoptChild(attached, joined.sessionId).pipe(
+        const adopted = yield* Scope.fork(attached.scope);
+        attached.adopted.set(joined.sessionId, adopted);
+        const target: FrameTarget = { session: joined.sessionId, frame: joined.targetInfo.targetId, url: joined.targetInfo.url };
+        yield* Scope.addFinalizer(adopted, pages.mark(state.page, { responsive: true }, target));
+        yield* watchResponsive(
+          attached.session,
+          { every: '1 second', threshold: '5 seconds', paused: () => pages.live(state.page)?.dialog !== null, child: joined.sessionId },
+          (responsive) => pages.mark(state.page, { responsive }, { ...target, url: attached.frames.get(target.frame)?.url ?? target.url }),
+        ).pipe(Effect.forkIn(adopted));
+        yield* adoptChild(attached, joined.sessionId, adopted).pipe(
           Effect.catchTags({
             SessionEnded: () => Effect.void,
             CommandRefused: (refused) =>
@@ -249,7 +257,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
               return PubSub.publish(attached.joined, joined.targetInfo.targetId);
             }),
           ),
-          Effect.forkIn(attached.scope),
+          Effect.forkIn(adopted),
         );
         return;
       }
@@ -305,12 +313,12 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
   );
 
   const setup = Effect.fnUntraced(function* (state: Paged, attached: Attached) {
+    yield* attached.session.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
     for (const domain of ['Page', 'Network', 'DOM', 'Accessibility', 'Log'] as const)
       yield* Scope.provide(attached.domains.enable(domain), attached.scope);
     yield* attached.session.send('Emulation.setFocusEmulationEnabled', { enabled: true });
     yield* readTree(attached, undefined);
     state.refs.keep(new Set([...attached.frames.values()].map((frame) => frame.loader)));
-    yield* attached.session.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
     yield* applyEmulation(attached.session, effectiveOf(state.emulation, state.layout));
     yield* syncRuntime(state, attached);
   });
@@ -415,10 +423,21 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       { discard: true },
     );
 
-  const gate = (page: PageId, recovers: boolean): Effect.Effect<void, GateRefusal<DriveRefusal>> => {
+  const frameRefusal = (state: Paged) => {
+    const frame = pages.hungFrame(state.page);
+    const profile = pages.profileOf(state.page);
+    return frame === undefined
+      ? undefined
+      : frameUnresponsive(state.page, `${frame.frame} (${frame.url})`, profile === undefined ? [] : pages.inProfile(profile));
+  };
+
+  const gate = (state: Paged, recovers: boolean): Effect.Effect<void, GateRefusal<DriveRefusal>> => {
+    const page = state.page;
     const live = pages.live(page);
     if (live === undefined) return Effect.fail(unknownPage(page));
     if (live.crashed && !recovers) return Effect.fail(crashed(page));
+    const frame = frameRefusal(state);
+    if (frame !== undefined) return Effect.fail(frame);
     if (!live.responsive && !recovers) return Effect.fail(unresponsive(page));
     if (live.dialog !== null) {
       return Effect.fail(
@@ -439,30 +458,36 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
   ): Effect.fn.Return<A, Exclude<E, CommandFailure> | Refusal, Scope.Scope> {
     const state = yield* paged(page);
     const moves = yield* pages.moves(page);
-    const recovers = options.recovers === true;
+    const initial = pages.live(page);
+    const recovers = options.recovers === true && (initial?.responsive === false || initial?.crashed === true);
     const blocked = Stream.runHead(
-      Stream.filter(
-        moves,
-        (move) =>
-          move.signal === 'closed' ||
-          (!recovers && (!move.live.responsive || move.live.crashed)) ||
-          (options.opened !== undefined && move.live.dialog !== null),
+      moves.pipe(
+        Stream.map((move) => ({ move, frame: frameRefusal(state) })),
+        Stream.filter(
+          ({ move, frame }) =>
+            move.signal === 'closed' ||
+            frame !== undefined ||
+            (!recovers && (!move.live.responsive || move.live.crashed)) ||
+            (options.opened !== undefined && move.live.dialog !== null),
+        ),
       ),
     ).pipe(
-      Effect.flatMap((move): Effect.Effect<A, Refusal> => {
-        if (move._tag === 'None' || move.value.signal === 'closed') return Effect.fail(unknownPage(page));
-        if (!recovers && move.value.live.crashed) return Effect.fail(crashed(page));
-        if (!recovers && !move.value.live.responsive) return Effect.fail(unresponsive(page));
+      Effect.flatMap((result): Effect.Effect<A, Refusal> => {
+        if (result._tag === 'None' || result.value.move.signal === 'closed') return Effect.fail(unknownPage(page));
+        const { move, frame } = result.value;
+        if (!recovers && move.live.crashed) return Effect.fail(crashed(page));
+        if (frame !== undefined) return Effect.fail(frame);
+        if (!recovers && !move.live.responsive) return Effect.fail(unresponsive(page));
         return options.opened === undefined ? Effect.fail(unknownPage(page)) : options.opened(page);
       }),
     );
     const guarded = state.queue.withPermits(1)(
       Effect.gen(function* () {
-        yield* gate(page, recovers);
         const attempt = Effect.gen(function* () {
-          const hung = pages.live(page)?.responsive === false;
-          if (attaching && hung && !recovers) return yield* unresponsive(page);
-          const attached = hung ? null : attaching ? yield* attach(state, thread) : state.attached;
+          yield* gate(state, recovers);
+          const live = pages.live(page);
+          const unavailable = live?.responsive === false || live?.crashed === true;
+          const attached = unavailable ? null : attaching ? yield* attach(state, thread) : state.attached;
           state.used = yield* Clock.currentTimeMillis;
           if (thread !== null) state.driver = thread;
           if (attached === null) return yield* work(state, attached);

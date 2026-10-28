@@ -24,6 +24,8 @@ export type Opener = { readonly projectId: number; readonly thread: string | nul
 
 export type Listing = { readonly pages: readonly Page[]; readonly total: number };
 
+export type FrameTarget = { readonly session: string; readonly frame: string; readonly url: string };
+
 export type Walk = {
   readonly closed: boolean;
   readonly limit: number;
@@ -44,7 +46,9 @@ export class Pages extends Context.Service<
     list(projectId: number, walk: Walk): Effect.Effect<Listing, StoreFailure>;
     hold(page: PageId): Effect.Effect<Host, StoreFailure | GateRefusal<PageRefusal>>;
     live(page: PageId): Live | undefined;
-    mark(page: PageId, change: Partial<Live>): Effect.Effect<void>;
+    mark(page: PageId, change: Partial<Live>, frame?: FrameTarget): Effect.Effect<void>;
+    hungFrame(page: PageId): FrameTarget | undefined;
+    inProfile(profile: ProfileId): readonly Page[];
     commit(page: PageId, change: PageChange): Effect.Effect<void, StoreFailure>;
     glance(page: PageId, navigated: boolean): Glance;
     changes(projectId: number): Effect.Effect<Stream.Stream<PagesEvent>, never, Scope.Scope>;

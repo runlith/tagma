@@ -5,7 +5,7 @@ import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { type Host, HostAdapters, Hosts, type Moved, type ProfileRecord, type Signal } from './contract/service/hosts.js';
 import type { HostEvent, PageChange } from './contract/wire/host.js';
-import { hostRefusal, type Opener, type PageRefusal, Pages } from './contract/service/pages.js';
+import { type FrameTarget, hostRefusal, type Opener, type PageRefusal, Pages } from './contract/service/pages.js';
 import { PageId, type ProfileId } from './contract/wire/ids.js';
 import type { Download, Glance, Live, Page, PagesEvent, PageState } from './contract/wire/page.js';
 import { DOWNLOADS_KEPT } from './contract/wire/rows.js';
@@ -38,6 +38,7 @@ export const makePages = Effect.gen(function* () {
   const scope = yield* Effect.scope;
 
   const held = new Map<PageId, Held>();
+  const unresponsive = new Map<PageId, Map<string, FrameTarget | null>>();
   const byThread = new Map<string, PageId>();
   const profiles = new Map<ProfileId, ProfileRecord>();
   const prepared = new WeakMap<Host, Set<ProfileId>>();
@@ -96,6 +97,7 @@ export const makePages = Effect.gen(function* () {
 
   const forget = Effect.fnUntraced(function* (page: Held) {
     held.delete(page.row.id);
+    unresponsive.delete(page.row.id);
     for (const [thread, id] of byThread) if (id === page.row.id) byThread.delete(thread);
     yield* announce(page, { type: 'gone', id: page.row.id });
     yield* move(page, 'closed');
@@ -240,7 +242,7 @@ export const makePages = Effect.gen(function* () {
     const page = held.get(id);
     if (page === undefined) return yield* unknownPage(id);
     if (page.holder !== null) {
-      yield* page.holder.pages.close(id, true).pipe(
+      yield* page.holder.pages.close(id, page.live.responsive && !page.live.crashed).pipe(
         Effect.catchTags({
           HostLost: (lost) => Effect.fail(hostRefusal(lost)),
           HostRefused: (refused) => Effect.fail(hostRefusal(refused)),
@@ -351,6 +353,16 @@ export const makePages = Effect.gen(function* () {
     return [...downloads, download].sort((one, other) => one.at.localeCompare(other.at)).slice(-DOWNLOADS_KEPT);
   };
 
+  const respond = (page: Held, responsive: boolean, frame?: FrameTarget): void => {
+    const key = frame === undefined ? 'host' : `frame:${frame.session}`;
+    const silent = unresponsive.get(page.row.id) ?? new Map<string, FrameTarget | null>();
+    if (responsive) silent.delete(key);
+    else silent.set(key, frame ?? null);
+    if (silent.size === 0) unresponsive.delete(page.row.id);
+    else unresponsive.set(page.row.id, silent);
+    page.live = { ...page.live, responsive: silent.size === 0 };
+  };
+
   const arrive = Effect.fnUntraced(function* (host: Host, event: HostEvent) {
     if (event.kind === 'opened') return yield* adoptPopup(host, event);
     const page = held.get(event.page);
@@ -365,7 +377,7 @@ export const makePages = Effect.gen(function* () {
         return yield* publish(page, 'released');
       case 'unresponsive':
       case 'responsive':
-        page.live = { ...page.live, responsive: event.kind === 'responsive' };
+        respond(page, event.kind === 'responsive');
         return yield* publish(page);
       case 'crashed':
         page.live = { ...page.live, crashed: true, loading: false };
@@ -380,6 +392,7 @@ export const makePages = Effect.gen(function* () {
         yield* ledger.closePages([page.row.id], new Date(yield* Clock.currentTimeMillis));
         return yield* forget(page);
       case 'dropped':
+        unresponsive.delete(page.row.id);
         page.holder = null;
         page.live = { ...QUIET };
         return yield* publish(page, 'dropped');
@@ -443,6 +456,7 @@ export const makePages = Effect.gen(function* () {
       if (hostScope !== undefined) yield* Scope.close(hostScope, Exit.void);
       for (const page of held.values()) {
         if (page.holder === host) {
+          unresponsive.delete(page.row.id);
           page.holder = null;
           page.live = { ...QUIET };
         }
@@ -465,13 +479,19 @@ export const makePages = Effect.gen(function* () {
     }),
     hold,
     live: (id) => held.get(id)?.live,
-    mark: (id, change) =>
+    mark: (id, change, frame) =>
       Effect.suspend(() => {
         const page = held.get(id);
         if (page === undefined) return Effect.void;
         page.live = { ...page.live, ...change };
+        if (change.responsive !== undefined) respond(page, change.responsive, frame);
         return publish(page);
       }),
+    hungFrame: (id) => {
+      for (const frame of unresponsive.get(id)?.values() ?? []) if (frame !== null) return frame;
+      return undefined;
+    },
+    inProfile: (profile) => [...held.values()].filter((page) => page.row.profile === profile).map(wire),
     commit: (id, change) =>
       Effect.suspend(() => {
         const page = held.get(id);

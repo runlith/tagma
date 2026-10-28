@@ -32,7 +32,8 @@ const PAGES: Readonly<Record<string, string>> = {
     <button id="open" style="position:absolute;left:10px;top:120px;width:120px;height:30px" onclick="this.textContent = 'Pressed'">Open</button>
     <input id="field" aria-label="Field" style="position:absolute;left:200px;top:110px;width:150px;height:24px">
     <input id="agree" type="checkbox" aria-label="Agree" style="position:absolute;left:200px;top:150px;width:20px;height:20px;margin:0">
-    <iframe src="/nested" style="position:absolute;left:180px;top:70px;width:200px;height:30px;border:0"></iframe>`,
+    <iframe src="/nested" style="position:absolute;left:180px;top:70px;width:200px;height:30px;border:0"></iframe>
+    <button style="position:absolute;left:10px;top:165px" onclick="fetch('/frame-data').then(r => r.text()).then(() => parent.postMessage('Frame data loaded', '*'))">Load data</button>`,
   '/nested': `<!doctype html><title>Nested</title><button style="margin:0" onclick="this.textContent = 'Nested pressed'">Nested</button>`,
   '/leave': `<!doctype html><title>Leave</title><input id="draft" aria-label="Draft">
     <script>addEventListener('beforeunload', (event) => { event.preventDefault(); event.returnValue = ''; });</script>`,
@@ -59,23 +60,39 @@ export type EngineHost = {
 
 export const engineScenarios = (input: EngineHost): void => {
   const spinning = Deferred.makeUnsafe<void>();
+  const childSpinning = Deferred.makeUnsafe<void>();
   const server: Bun.Server<undefined> = Bun.serve({
     port: 0,
     hostname: '127.0.0.1',
     fetch: (request): Response => {
       const path = new URL(request.url).pathname;
       if (path === '/data') return Response.json({ ok: true });
+      if (path === '/frame-data') return new Response('response from the other-process frame');
       if (path === '/spinning') {
         Deferred.doneUnsafe(spinning, Exit.void);
         return new Response(null, { status: 204 });
       }
+      if (path === '/child-spinning') {
+        Deferred.doneUnsafe(childSpinning, Exit.void);
+        return new Response(null, { status: 204 });
+      }
+      if (path === '/hung-inner')
+        return new Response('<!doctype html><script>fetch("/child-spinning"); for (;;) {}</script>', {
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
+      if (path === '/hung-frame')
+        return new Response(`<!doctype html><iframe src="http://hung.localhost:${server.port}/hung-inner"></iframe>`, {
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
       if (path === '/favicon.ico') return new Response(null, { status: 204 });
       if (path === '/heavy') return new Response(HEAVY, { headers: { 'content-type': 'text/html; charset=utf-8' } });
       if (path === '/framed') {
         return new Response(
           `<!doctype html><title>Framed</title>
           <iframe src="http://localhost:${server.port}/inner" style="position:absolute;left:0;top:0;width:400px;height:200px;border:0"></iframe>
-          <div id="banner" style="position:absolute;left:0;top:0;width:400px;height:60px;background:#333;color:#fff">Consent banner</div>`,
+          <div id="banner" style="position:absolute;left:0;top:0;width:400px;height:60px;background:#333;color:#fff">Consent banner</div>
+          <p id="frame-state" style="position:absolute;top:220px"></p>
+          <script>addEventListener('message', event => { document.getElementById('frame-state').textContent = event.data; });</script>`,
           { headers: { 'content-type': 'text/html; charset=utf-8' } },
         );
       }
@@ -129,7 +146,7 @@ export const engineScenarios = (input: EngineHost): void => {
       Effect.map((answer) => ('value' in answer ? (JSON.parse(answer.value) as unknown) : answer.exception)),
     );
 
-  layer(world, { excludeTestServices: true, timeout: '60 seconds' })(`the engine on ${input.name}`, (it) => {
+  layer(world, { excludeTestServices: true })(`the engine on ${input.name}`, (it) => {
     it.effect('the host carries stable refs, DOM input, viewport capture and navigation through its CDP session', () =>
       Effect.gen(function* () {
         const page = yield* open('/form');
@@ -184,6 +201,57 @@ export const engineScenarios = (input: EngineHost): void => {
         const filled = yield* snapshot(page);
         expect(filled).toMatch(/textbox "Field".* value="по точке"/);
         expect(filled).toMatch(/checkbox "Agree".*\[checked\]/);
+      }),
+    );
+
+    it.effect('another-process frame response body is read in its session and becomes unavailable after navigation', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/framed');
+        yield* loaded(page);
+        yield* act(page, { action: 'click', ref: refIn(yield* snapshot(page), /button "Load data"/) });
+        yield* calling(
+          PAGE.wait_for_page.body.execute({ page, until: 'text', value: 'Frame data loaded', timeoutMs: 10_000 }, undefined, agent),
+        );
+        const network = yield* calling(PAGE.read_page_network.body.execute({ page, match: '/frame-data' }, undefined, agent));
+        expect(network.status).toBe('read');
+        if (network.status !== 'read') return;
+        expect(network.total).toBe(1);
+        const request = network.requests[0]!.request;
+        const body = yield* calling(PAGE.read_page_network.body.execute({ page, body: request }, undefined, agent));
+        expect(body).toMatchObject({ status: 'body', body: 'response from the other-process frame', base64: false, cut: false });
+        yield* open('/second');
+        yield* loaded(page);
+        expect((yield* refusalOf(calling(PAGE.read_page_network.body.execute({ page, body: request }, undefined, agent)))).code).toBe(
+          'body-unavailable',
+        );
+      }),
+    );
+
+    it.effect('a hung out-of-process frame refuses attachment work and unsafe reload, and closes without holding the queue', () =>
+      Effect.gen(function* () {
+        const own = yield* open('/second');
+        const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/hung-frame'), profile: input.profile }, undefined, OPERATOR));
+        const page = opened.page.id;
+        const pages = yield* Pages;
+        yield* Effect.addFinalizer(() => (pages.live(page) === undefined ? Effect.void : pages.close(page).pipe(Effect.orDie)));
+        yield* Deferred.await(childSpinning);
+        const refused = yield* refusalOf(calling(PAGE.navigate_page.body.execute({ page, go: 'reload' }, undefined, agent)));
+        expect(refused.code).toBe('page-unresponsive');
+        expect(refused.reason).toContain(`http://hung.localhost:${server.port}/hung-inner`);
+        expect(refused.unblock.join(' ')).toContain(page);
+        expect((yield* refusalOf(snapshot(page))).code).toBe('page-unresponsive');
+        expect((yield* refusalOf(act(page, { action: 'click', x: 20, y: 20 }))).code).toBe('page-unresponsive');
+        expect((yield* refusalOf(calling(PAGE.navigate_page.body.execute({ page, go: 'reload' }, undefined, agent)))).code).toBe(
+          'page-unresponsive',
+        );
+        yield* pages.mark(page, { responsive: true });
+        const listed = yield* calling(PAGE.list_pages.body.execute({}, undefined, agent));
+        expect(listed.pages.find((held) => held.id === page)?.live.responsive).toBe(false);
+        expect(refused.unblock.some((line) => line.includes(own) && line.includes('agent'))).toBe(true);
+        yield* calling(PAGE.close_page.body.execute({ page }, undefined, OPERATOR));
+        const remaining = yield* calling(PAGE.list_pages.body.execute({}, undefined, agent));
+        expect(remaining.pages.some((held) => held.id === page)).toBe(false);
+        expect(refIn(yield* snapshot(own), /heading "Second page"/)).toMatch(/^e\d+$/);
       }),
     );
 
@@ -274,29 +342,51 @@ export const engineScenarios = (input: EngineHost): void => {
       }),
     );
 
-    it.effect(
-      'a large snapshot respects its limit, a CPU-hung action and later snapshot refuse, and reload recovers the page',
-      () =>
-        Effect.gen(function* () {
-          const held = yield* EnginePage;
-          if (held.current !== undefined && (yield* Pages).live(held.current) !== undefined)
-            yield* calling(PAGE.close_page.body.execute({ page: held.current }, undefined, agent));
-          const page = yield* open('/heavy');
-          const pages = yield* Pages;
-          yield* Effect.addFinalizer(() => pages.close(page).pipe(Effect.orDie));
-          yield* loaded(page);
-          const shot = yield* calling(PAGE.snapshot_page.body.execute({ page, limit: 300 }, undefined, agent));
-          expect([shot.shown, shot.more]).toEqual([300, true]);
-          const ref = refIn(shot.text, /button "Spin"/);
-          const acting = yield* Effect.forkChild(act(page, { action: 'click', ref }));
-          yield* Deferred.await(spinning);
-          yield* TestClock.adjust('6 seconds');
-          expect((yield* refusalOf(Fiber.join(acting))).code).toBe('page-unresponsive');
-          expect((yield* refusalOf(snapshot(page))).code).toBe('page-unresponsive');
-          yield* calling(PAGE.navigate_page.body.execute({ page, go: 'reload' }, undefined, agent));
-          expect(refIn(yield* snapshot(page), /button "Spin"/)).toMatch(/^e\d+$/);
-        }).pipe(Effect.provide(TestClock.layer())),
-      30_000,
+    it.effect('a large snapshot respects its limit, a CPU-hung action and later snapshot refuse, and reload recovers the page', () =>
+      Effect.gen(function* () {
+        const held = yield* EnginePage;
+        if (held.current !== undefined && (yield* Pages).live(held.current) !== undefined)
+          yield* calling(PAGE.close_page.body.execute({ page: held.current }, undefined, agent));
+        const page = yield* open('/heavy');
+        const pages = yield* Pages;
+        yield* Effect.addFinalizer(() => pages.close(page).pipe(Effect.orDie));
+        yield* loaded(page);
+        const shot = yield* calling(PAGE.snapshot_page.body.execute({ page, limit: 300 }, undefined, agent));
+        expect([shot.shown, shot.more]).toEqual([300, true]);
+        const ref = refIn(shot.text, /button "Spin"/);
+        const acting = yield* Effect.forkChild(act(page, { action: 'click', ref }));
+        yield* Deferred.await(spinning);
+        yield* TestClock.adjust('6 seconds');
+        expect((yield* refusalOf(Fiber.join(acting))).code).toBe('page-unresponsive');
+        expect((yield* refusalOf(snapshot(page))).code).toBe('page-unresponsive');
+        yield* calling(PAGE.navigate_page.body.execute({ page, go: 'reload' }, undefined, agent));
+        expect(refIn(yield* snapshot(page), /button "Spin"/)).toMatch(/^e\d+$/);
+      }).pipe(Effect.provide(TestClock.layer())),
+    );
+
+    it.effect('a crashed renderer is published, refuses actions and recovers after reload', () =>
+      Effect.gen(function* () {
+        const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/second'), profile: input.profile }, undefined, OPERATOR));
+        const page = opened.page.id;
+        const pages = yield* Pages;
+        yield* Effect.addFinalizer(() => pages.close(page).pipe(Effect.orDie));
+        const moves = yield* pages.moves(page);
+        const host = yield* pages.hold(page);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const session = yield* host.pages.session(page);
+            yield* session.post('Page.crash');
+            if (!pages.live(page)?.crashed) yield* Stream.runHead(Stream.filter(moves, (move) => move.live.crashed));
+          }),
+        );
+        const listed = yield* calling(PAGE.list_pages.body.execute({}, undefined, agent));
+        expect(listed.pages.find((held) => held.id === page)?.live.crashed).toBe(true);
+        expect((yield* refusalOf(snapshot(page))).code).toBe('page-crashed');
+        expect((yield* refusalOf(act(page, { action: 'click', x: 20, y: 20 }))).code).toBe('page-crashed');
+        yield* calling(PAGE.navigate_page.body.execute({ page, go: 'reload' }, undefined, agent));
+        yield* loaded(page);
+        expect(refIn(yield* snapshot(page), /heading "Second page"/)).toMatch(/^e\d+$/);
+      }),
     );
 
     it.effect('a picked element is described with a ref that a click goes through', () =>

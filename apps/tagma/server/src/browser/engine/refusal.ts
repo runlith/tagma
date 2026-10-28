@@ -4,6 +4,7 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { DriveRefusal } from '../contract/service/automation.js';
 import { outcomeUnknown } from '../contract/service/pages.js';
 import type { PageId } from '../contract/wire/ids.js';
+import type { Page } from '../contract/wire/page.js';
 
 export const unknownPage = (page: PageId) =>
   new GateRefusal('page-unknown', `page ${page} is no longer open`, ['list_pages — the open pages of this project']);
@@ -13,6 +14,22 @@ export const unresponsive = (page: PageId) =>
     'navigate_page with go: reload',
     'close_page',
   ]);
+
+export const frameUnresponsive = (page: PageId, frame: string, related: readonly Page[]) =>
+  new GateRefusal(
+    'page-unresponsive',
+    `frame ${frame} of page ${page} does not answer; an in-place reload cannot guarantee a fresh renderer without affecting other pages`,
+    [
+      'list_profiles then open_page with another connected profile; reopening in this profile may reuse the hung renderer while its browser process lives',
+      'to reuse this profile, wait for its browser process to end after its pages close; close_page only for pages opened by your thread, and ask the operator about every other page listed below',
+      ...related
+        .filter((held) => held.state === 'live')
+        .map(
+          (held) =>
+            `page ${held.id}, project ${held.projectId}, profile ${held.profile}, ${held.openedBy === null ? 'opened outside a thread (operator or external caller)' : `opened by thread ${held.openedBy}`}: ${held.url}`,
+        ),
+    ],
+  );
 
 export const crashed = (page: PageId) =>
   new GateRefusal('page-crashed', `the renderer of page ${page} crashed`, ['navigate_page with go: reload', 'close_page']);

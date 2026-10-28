@@ -5,6 +5,7 @@ export type ProbeOptions = {
   readonly every: Duration.Input;
   readonly threshold: Duration.Input;
   readonly paused: () => boolean;
+  readonly child?: string;
 };
 
 export const watchResponsive = Effect.fnUntraced(function* (
@@ -17,7 +18,7 @@ export const watchResponsive = Effect.fnUntraced(function* (
     yield* Effect.sleep(options.every);
     if (options.paused()) continue;
     const answered = yield* session
-      .send('Runtime.evaluate', { expression: '0', returnByValue: true })
+      .send('Runtime.evaluate', { expression: '0', returnByValue: true }, options.child)
       .pipe(Effect.result, Effect.timeoutOption(options.threshold));
     if (Option.isSome(answered) && answered.value._tag === 'Failure' && answered.value.failure._tag === 'SessionEnded') return;
     const responsive = Option.isSome(answered) || options.paused();

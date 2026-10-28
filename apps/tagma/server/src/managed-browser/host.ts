@@ -49,6 +49,7 @@ type Tab = {
   scope: Scope.Closeable | null;
   dialog: boolean;
   responsive: boolean;
+  crashed: boolean;
   url: string;
   title: string;
   readonly opener: PageId | null;
@@ -64,6 +65,7 @@ const tabOn = (target: string, opener: PageId | null, url = '', title = ''): Tab
   scope: null,
   dialog: false,
   responsive: true,
+  crashed: false,
   url,
   title,
   opener,
@@ -283,7 +285,9 @@ export const makeManagedHost = Effect.gen(function* () {
       }
       case 'Target.targetCrashed': {
         const { targetId } = yield* eventParams('Target.targetCrashed', event);
-        const page = state.tabs.get(targetId)?.page ?? null;
+        const tab = state.tabs.get(targetId);
+        if (tab !== undefined) tab.crashed = true;
+        const page = tab?.page ?? null;
         if (page !== null) yield* emit({ kind: 'crashed', page });
         return;
       }
@@ -449,8 +453,7 @@ export const makeManagedHost = Effect.gen(function* () {
   yield* Effect.forkScoped(Effect.forever(Effect.andThen(Effect.sleep(SWEEP), sweep())));
 
   const replace = Effect.fnUntraced(function* (state: Running, tab: Tab, page: PageId): Effect.fn.Return<PageChange, CommandFailure> {
-    const standing = tab.service === null ? {} : yield* historyOf(tab.service);
-    const url = standing.url ?? 'about:blank';
+    const url = tab.url || 'about:blank';
     const { targetId } = yield* state.connection.root.send('Target.createTarget', { url: 'about:blank' });
     yield* unbind(state, tab);
     yield* state.connection.root.send('Target.closeTarget', { targetId: tab.target });
@@ -494,7 +497,7 @@ export const makeManagedHost = Effect.gen(function* () {
             break;
           }
           case 'reload':
-            if (!tab.responsive) return yield* replace(state, tab, page);
+            if (!tab.responsive || tab.crashed) return yield* replace(state, tab, page);
             yield* service.send('Page.reload');
             break;
           case 'stop':
