@@ -70,9 +70,15 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
       expect(later.status).toBe(200);
       const laterName = (later.body as { block: { name: string } }).block.name;
       expect((yield* op('read_block', { blockIds: [laterName] }, detached)).status).toBe(200);
-      expect(yield* op('rewrite_graph_files', {}, detached)).toMatchObject({
-        status: 409,
-        body: { code: 'detached-checkout' },
+      for (const [id, input] of [
+        ['update_block', { blockId: name, title: 'Cannot rename from detached HEAD' }],
+        ['create_block', { title: 'Cannot be written here', parentId }],
+      ] as const) {
+        expect(yield* op(id, input, detached)).toMatchObject({ status: 409, body: { code: 'detached-checkout' } });
+      }
+      expect(yield* op('read_block', { blockIds: [name] })).toMatchObject({
+        status: 200,
+        body: { reads: [{ name, title: 'Canonical knowledge' }] },
       });
       expect(world.runtime.pool.held().filter((copy) => copy.projectId === project)).toMatchObject([{ checkout: root }]);
       expect(yield* suiteGit(detached, 'status', '--porcelain')).toBe('');
