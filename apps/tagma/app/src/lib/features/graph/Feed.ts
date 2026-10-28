@@ -68,7 +68,7 @@ export class GraphFeed extends Service<GraphFeed>()('GraphFeed', { tier: 'graph'
 
   private take(frame: GraphFrame): void {
     if (frame.type === 'resync') {
-      this.tags.resync(this.aim.projectId);
+      void this.tags.retry();
       void Cache.invalidate(this.cache, this.scope);
     } else this.apply(frame);
     this.emitter.emit(frame);

@@ -166,7 +166,7 @@ test('the outline and status menu wait for a served vocabulary and remain unavai
   const live = row(['shipment'], { status: 'open' });
   const ended = row(['shipment'], { status: 'shipped' });
   const hidden = new Set<'done'>(['done']);
-  const loading = catalog.read(1);
+  const loading = catalog.read();
   expect(catalog.showsInOutline(live, hidden)).toBe(false);
   expect(catalog.showsInOutline(ended, hidden)).toBe(false);
   expect(catalog.actions(live)).toEqual([]);
@@ -185,11 +185,11 @@ test('the outline and status menu wait for a served vocabulary and remain unavai
 test('resync preserves the outline while loading and admits a menu only from the matching vocabulary revision', async () => {
   let answer = Promise.resolve(vocabulary);
   const catalog = testTagCatalog(1, () => answer);
-  await catalog.read(1);
+  await catalog.read();
   const old = row(['ticket'], { state: 'open' });
   const refreshed = Promise.withResolvers<Vocabulary>();
   answer = refreshed.promise;
-  const loading = catalog.read(1, true);
+  const loading = catalog.read(true);
   expect(catalog.served).toBe(true);
   expect(catalog.standsInOutline(old)).toBe(true);
   expect(catalog.actions(old)).toEqual([]);
@@ -203,26 +203,18 @@ test('resync preserves the outline while loading and admits a menu only from the
   expect(catalog.actions(fresh).map(act)).toEqual(['claim_block', 'close_block']);
 });
 
-test('a previous project failure cannot replace the vocabulary of the latest read', async () => {
+test('an earlier read failing late cannot replace the vocabulary of the latest read', async () => {
   const prior = Promise.withResolvers<Vocabulary>();
   let answer = prior.promise;
   const catalog = testTagCatalog(1, () => answer);
-  const old = catalog.read(1);
+  const old = catalog.read();
   answer = Promise.resolve(vocabulary);
-  await catalog.read(2);
-  prior.reject(new Error('previous project failed'));
+  await catalog.read(true);
+  prior.reject(new Error('earlier read failed'));
   await old;
   expect(catalog.served).toBe(true);
   expect(catalog.error).toBe(null);
   expect(catalog.declared).toEqual(['shipment', 'ticket', 'invoice']);
-  const next = Promise.withResolvers<Vocabulary>();
-  answer = next.promise;
-  const moving = catalog.read(3);
-  expect(catalog.served).toBe(false);
-  expect(catalog.declared).toEqual([]);
-  next.resolve({ ...vocabulary, tags: [invoice] });
-  await moving;
-  expect(catalog.declared).toEqual(['invoice']);
 });
 
 test('a row rests where its own tag ends, and which resting it hides under is the ending its word means', () => {

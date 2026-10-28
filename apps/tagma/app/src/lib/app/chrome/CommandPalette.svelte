@@ -68,7 +68,12 @@
   const opener = FileOpener.use();
   const graphAim = GraphRung.Source.use();
 
-  let reach = $state.raw<{ readonly tabs: Tabs; readonly checkout: Checkout; readonly projectId: number } | null>(null);
+  let reach = $state.raw<{
+    readonly tabs: Tabs;
+    readonly checkout: Checkout;
+    readonly tags: TagCatalog;
+    readonly projectId: number;
+  } | null>(null);
 
   $effect.pre(() => {
     const aim = graphAim();
@@ -77,7 +82,12 @@
       return;
     }
     const held = app.hold(GraphRung, aim);
-    reach = { tabs: app.resolve(Tabs, held.scope), checkout: app.resolve(Checkout, held.scope), projectId: aim.projectId };
+    reach = {
+      tabs: app.resolve(Tabs, held.scope),
+      checkout: app.resolve(Checkout, held.scope),
+      tags: app.resolve(TagCatalog, held.scope),
+      projectId: aim.projectId,
+    };
     return () => held.release();
   });
 
@@ -96,7 +106,7 @@
 
   const model = new PaletteModel(
     workspace,
-    TagCatalog.use(),
+    () => reach?.tags ?? null,
     PaletteRepo.use(),
     SettingsRepo.use(),
     () => [...declared, ...pluginActions.actions],
@@ -294,7 +304,7 @@
       </div>
       <Command.Group class="py-0">
         {#each section.rows as row (row.value)}
-          <Row {row} projectId={model.project?.id ?? null} env={env()} onSelect={() => open(row)} />
+          <Row {row} tags={reach?.tags ?? null} projectId={model.project?.id ?? null} env={env()} onSelect={() => open(row)} />
         {/each}
         {#if section.showAll !== null}
           <Command.Item
@@ -357,7 +367,7 @@
     {#if ask !== null}
       <div class="mx-2 mt-2 border-t pt-1"></div>
       <Command.Group class="py-0">
-        <Row row={ask} projectId={model.project?.id ?? null} env={env()} onSelect={() => open(ask)} />
+        <Row row={ask} tags={reach?.tags ?? null} projectId={model.project?.id ?? null} env={env()} onSelect={() => open(ask)} />
       </Command.Group>
     {/if}
   </Command.List>

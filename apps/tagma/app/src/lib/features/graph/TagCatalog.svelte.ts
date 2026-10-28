@@ -24,7 +24,7 @@ import { Failure } from '@runlith/layer/Failure';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
 import { untrack } from 'svelte';
-import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
 import { TagsRepo } from './TagsRepo.js';
 import { type RestingState, type StateMark, type StatusAction, isStatusOp, statusColor, statusLabel } from './status.js';
 
@@ -64,10 +64,10 @@ const NOTHING_SERVED: Vocabulary = {
   revision: { format: 2, revision: '' },
 };
 
-export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app', eager: true }) {
+export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'project', eager: true }) {
   static *make() {
-    const catalog = new TagCatalog(yield* TagsRepo, yield* Workspace, yield* Scope, yield* Failure);
-    catalog.follow();
+    const catalog = new TagCatalog(yield* TagsRepo, (yield* ProjectRung.Current).projectId, yield* Scope, yield* Failure);
+    catalog.start();
     return catalog;
   }
 
@@ -79,37 +79,26 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app
   error = $state<unknown>(null);
 
   private generation = 0;
-  private projectId: number | null = null;
 
   constructor(
     private readonly repo: ReturnType<typeof TagsRepo.use>,
-    private readonly workspace: Workspace,
+    private readonly projectId: number,
     private readonly scope: Scope,
     private readonly failure: Failure,
   ) {
     super();
   }
 
-  private follow(): void {
-    $effect(() => {
-      const projectId = this.workspace.contextId;
-      untrack(() => void this.read(projectId));
-    });
+  private start(): void {
+    $effect(() => untrack(() => void this.read()));
   }
 
-  async read(projectId: number | null, refresh = false): Promise<void> {
+  async read(refresh = false): Promise<void> {
     const generation = ++this.generation;
-    if (projectId !== this.projectId) {
-      this.table = new ServedTags(NOTHING_SERVED);
-      this.findings = [];
-      this.served = false;
-    }
-    this.projectId = projectId;
-    this.fetching = projectId !== null;
+    this.fetching = true;
     this.error = null;
-    if (projectId === null) return;
     try {
-      const answer = await this.repo.of.key(projectId).loadOrThrow(refresh ? { refresh: true } : undefined);
+      const answer = await this.repo.of.key(this.projectId).loadOrThrow(refresh ? { refresh: true } : undefined);
       if (answer === undefined || this.scope.signal.aborted || generation !== this.generation) return;
       this.table = new ServedTags(answer);
       this.findings = answer.findings;
@@ -125,12 +114,7 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app
   }
 
   retry(): Promise<void> {
-    return this.read(this.workspace.contextProject?.id ?? null, true);
-  }
-
-  resync(projectId: number): void {
-    if (this.workspace.contextProject?.id !== projectId) return;
-    void this.read(projectId, true);
+    return this.read(true);
   }
 
   tagOf(row: Tagged): string | null {

@@ -129,16 +129,8 @@ export function screen(host: ThreadSlot | null = null) {
   return Layer.mergeAll(Layer.of(ThreadOnScreen, shown), Layer.of(CheckoutScreen, shown), testShellOps);
 }
 
-export function testTagCatalog(
-  projectId: number | null = null,
-  read: () => Promise<Vocabulary | undefined> = async () => undefined,
-): TagCatalog {
-  return new TagCatalog(
-    { of: stubFamily({ loadOrThrow: read }) } as never,
-    { contextProject: projectId === null ? null : { id: projectId } } as never,
-    Scope.make(),
-    new Failure(() => undefined),
-  );
+export function testTagCatalog(projectId = 1, read: () => Promise<Vocabulary | undefined> = async () => undefined): TagCatalog {
+  return new TagCatalog({ of: stubFamily({ loadOrThrow: read }) } as never, projectId, Scope.make(), new Failure(() => undefined));
 }
 
 export function testPlaces(): Worktrees {

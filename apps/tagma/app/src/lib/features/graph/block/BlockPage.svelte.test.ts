@@ -26,6 +26,7 @@ import { SelectionRepo } from '$lib/features/graph/SelectionRepo.js';
 import { SessionRegistry } from '$lib/features/graph/SessionRegistry.svelte.js';
 import { SessionsRepo } from '$lib/features/graph/SessionsRepo.js';
 import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
+import { TagsRepo } from '$lib/features/graph/TagsRepo.js';
 import { ThreadWork } from '$lib/features/graph/ThreadWork.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
@@ -242,7 +243,7 @@ test('a part page in the main pane and another block in the right-hand tab both 
       router: makeRouter({ params: { project: 'tagma', id: PART }, url: new URL(`https://tagma.test/tagma/b/${PART}`) }),
     },
   );
-  await tags.read(1);
+  await tags.read();
   const scope = app.app.scopeOf('graph');
   await app.app.resolve(ProjectTree, scope).reload();
   const readState = app.app.resolve(ReadState, scope);
@@ -266,5 +267,115 @@ test('a part page in the main pane and another block in the right-hand tab both 
   expect(readState.trailOf).toEqual([MODULE, PART]);
   expect(readState.isUnread(PART, LATER)).toBe(false);
   expect(titleOf(side)).toBe('Agent threads');
+  expect(failures).toEqual([]);
+});
+
+test('a project root opened in a tab from another project lists its parts beside the window project’s Knowledge page', async () => {
+  const HONO = 2;
+  const HONO_ROOT = 'e0000000';
+  const HONO_PART = 'e0000001';
+  const honoRow = (name: string, parentName: string | null, title: string): TreeBlock => ({
+    ...row(name, parentName, 1, title),
+    projectId: HONO,
+    actions: { moves: [], slots: [], offers: [], revision: 'hono' },
+  });
+  const graphs = new Map([
+    [1, graph()],
+    [
+      HONO,
+      new Map([honoRow(HONO_ROOT, null, 'hono'), honoRow(HONO_PART, HONO_ROOT, 'HTTP framework')].map((block) => [block.name, block])),
+    ],
+  ]);
+  const answer = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const project = Number(url.searchParams.get('project'));
+    const rows = graphs.get(project)!;
+    if (url.pathname === '/api/op/read_vocabulary')
+      return json({ status: 'ok', ...VOCABULARY, revision: { format: 2, revision: project === HONO ? 'hono' : REVISION } });
+    if (url.pathname === '/api/op/read_tree') return json({ status: 'ok', blocks: [...rows.values()] });
+    if (url.pathname === '/api/op/ready_work') return json({ status: 'ok', tasks: [], shown: 0, total: 0, next: null, complete: true });
+    if (url.pathname === '/api/op/list_trash') return json({ status: 'ok', blocks: [] });
+    if (url.pathname === '/api/op/read_block') {
+      const { blockIds } = (await request.json()) as { blockIds: string[] };
+      return json({ status: 'ok', reads: blockIds.map((name) => read(rows.get(name)!)) });
+    }
+    throw new Error(`Unexpected request ${request.url}`);
+  };
+  const frames: ((frame: GraphFrame) => void)[] = [];
+  const failures: unknown[] = [];
+  const project = { id: 1, name: 'tagma' };
+  app = mountShell(
+    Layer.mergeAll(
+      Cache.of({ defaultOptions: { queries: { retry: false } } }),
+      GraphDoor,
+      BlocksRepo,
+      JournalRepo,
+      SessionsRepo,
+      SelectionRepo,
+      TagsRepo,
+      TagCatalog,
+      GraphFeed,
+      ProjectTree,
+      HiddenStates,
+      ReaderMarks,
+      ReadState,
+      JournalLive,
+      Visits,
+      LinksPlacement,
+    ),
+    Layer.mergeAll(
+      Layer.of(Door, testDoor(answer)),
+      Layer.of(Live, {
+        hold: (_open: unknown, frame: (frame: GraphFrame) => void) => {
+          frames.push(frame);
+          return { unsubscribe: () => undefined };
+        },
+      } as never),
+      Layer.of(SessionRegistry, { writerOf: () => null } as never),
+      Layer.of(ThreadWork, {} as never),
+      Layer.of(ThreadNames, new ThreadNames(() => null)),
+      Layer.of(BlockTitles, { answered: 0, peer: () => null } as never),
+      Layer.of(CommitLinks, {} as never),
+      Layer.of(PathRoads, { road: () => async () => null } as never),
+      Layer.of(Checkout, { row: null } as never),
+      Layer.of(Opening, {
+        knows: () => true,
+        modified: () => false,
+        how: () => 'beside',
+        open: async () => undefined,
+        menu: () => undefined,
+        tip: () => ({ text: null }),
+      } as never),
+      Layer.of(Notices, {
+        undoable: () => undefined,
+        background: (error: unknown) => void failures.push(error),
+        refusal: (error: unknown) => void failures.push(error),
+      } as never),
+      Layer.of(Workspace, {
+        active: project,
+        contextProject: project,
+        contextId: project.id,
+        find: () => null,
+        nameOf: async () => 'tagma',
+      } as never),
+      Failure.of((error) => void failures.push(error)),
+    ),
+    {
+      at: { projectId: 1, branch: null },
+      router: makeRouter({ params: { project: 'tagma' }, url: new URL('https://tagma.test/tagma') }),
+    },
+  );
+
+  const knowledge = app.draw(BlockPage as never, {});
+  const foreignRoot = app.draw(BlockSeat as never, { placed: { projectId: HONO, branch: null, name: HONO_ROOT, diff: null } });
+  const ownRoot = app.draw(BlockSeat as never, { placed: { projectId: 1, branch: null, name: ROOT, diff: null } });
+  for (const frame of frames) frame({ type: 'resync' });
+
+  const lists = (target: HTMLElement, name: string): boolean => target.querySelector(`a[data-block="${name}"]`) !== null;
+  await waitUntil(() => lists(knowledge, PART) && lists(ownRoot, PART) && foreignRoot.textContent?.includes('Add block') === true);
+  flushSync();
+
+  expect(lists(foreignRoot, HONO_PART)).toBe(true);
   expect(failures).toEqual([]);
 });

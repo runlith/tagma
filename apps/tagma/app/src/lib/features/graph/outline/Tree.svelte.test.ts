@@ -163,7 +163,7 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
     ),
     { at: { projectId: 1, branch: null } },
   );
-  await tags.read(1);
+  await tags.read();
   const graph = app.app.scopeOf('graph');
   const tree = app.app.resolve(ProjectTree, graph);
   await tree.reload();

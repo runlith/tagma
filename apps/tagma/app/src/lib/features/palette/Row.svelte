@@ -6,7 +6,7 @@
   import Sparkles from '@lucide/svelte/icons/sparkles';
   import MatchText from '$lib/shared/MatchText.svelte';
   import TagIcon from '$lib/features/graph/TagIcon.svelte';
-  import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
+  import type { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
   import type { ActionEnv } from '$lib/features/workspace/action.js';
   import type { Row } from '$lib/features/palette/Palette.svelte.js';
   import FileIcon from '$lib/shared/FileIcon.svelte';
@@ -22,11 +22,16 @@
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
 
-  let { row, projectId, env, onSelect }: { row: Row; projectId: number | null; env: ActionEnv; onSelect: () => void } = $props();
+  let {
+    row,
+    tags,
+    projectId,
+    env,
+    onSelect,
+  }: { row: Row; tags: TagCatalog | null; projectId: number | null; env: ActionEnv; onSelect: () => void } = $props();
 
   const keymap = Keymap.use();
 
-  const tags = TagCatalog.use();
   const disabled = $derived(row.kind === 'action' && (row.action.disabled?.(env) ?? false));
 
   const twoLines = $derived(row.kind === 'thread' || row.kind === 'commit' || (row.kind === 'block' && row.hit.snippet !== ''));
@@ -63,7 +68,7 @@
     <span class="stamp tabular shrink-0 text-muted-foreground">{timeCompact(row.hit.match.occurredAt)}</span>
   {:else if row.kind === 'block'}
     <TagIcon
-      tag={tags.tagOf(row.hit)}
+      tag={tags?.tagOf(row.hit) ?? null}
       class={twoLines ? 'mt-0.5 size-3.5 shrink-0 text-muted-foreground' : 'size-3.5 shrink-0 text-muted-foreground'}
     />
     <div class="min-w-0 flex-1">
@@ -73,7 +78,7 @@
       {/if}
     </div>
     <span class="flex shrink-0 items-center gap-1.5">
-      <span class="size-2 rounded-full" style:background={tags.statusVar(row.hit)}></span>
+      <span class="size-2 rounded-full" style:background={tags?.statusVar(row.hit)}></span>
     </span>
   {:else if row.kind === 'commit'}
     <GitCommitHorizontal class="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
