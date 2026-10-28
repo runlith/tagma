@@ -49,7 +49,7 @@ export const HARNESS_OPERATIONS = {
 The words reach the running CLI the way a person speaking to it would. They are words, not an answer to a standing ask — answering is answer_question.`,
     input: Schema.Struct({
       threadId,
-      text: Schema.String.check(Schema.isBetweenLength(1, 20_000)).annotate({
+      text: Schema.String.check(Schema.isMinLength(1)).annotate({
         description: 'The words to speak to the running CLI.',
       }),
     }),

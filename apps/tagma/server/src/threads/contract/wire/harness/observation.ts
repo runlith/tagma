@@ -1,6 +1,6 @@
 import { Effect, Schema } from 'effect';
 import { harnessNameSchema, harnessTransportSchema } from './names.js';
-import { HARNESS_ANSWER_MAX, harnessCutSchema, harnessSaidSchema } from './said.js';
+import { harnessSaidSchema } from './said.js';
 
 export const harnessExecutionSchema = Schema.Struct({
   execution: Schema.String,
@@ -188,12 +188,11 @@ export const harnessReportSchema = Schema.Struct({
   capturedAt: Schema.optional(reportId),
   inputs: Schema.optional(Schema.Array(Schema.String.check(Schema.isMaxLength(HARNESS_HOOK_BYTES)))),
   event: Schema.optional(harnessHookSchema),
-  prompt: Schema.optional(Schema.String.check(Schema.isMaxLength(HARNESS_ANSWER_MAX))),
+  prompt: Schema.optional(Schema.String),
   call: Schema.optional(harnessCallReportSchema),
   shell: Schema.optional(harnessShellSchema),
   diagnostics: Schema.optional(Schema.Array(harnessCallReportSchema)),
   said: Schema.optional(harnessSaidSchema),
-  cut: Schema.optional(harnessCutSchema),
 });
 export type HarnessReportInput = typeof harnessReportSchema.Type;
 

@@ -142,11 +142,11 @@ export const threadTurnResultSchema = Schema.Union([
 const threadQuestionAnswersSchema = Schema.Array(
   Schema.Struct({
     questionId: Schema.String.check(Schema.isBetweenLength(1, 512)),
-    values: Schema.Array(Schema.String.check(Schema.isMaxLength(8000))).check(Schema.isMaxLength(16)),
+    values: Schema.Array(Schema.String).check(Schema.isMaxLength(16)),
     annotation: Schema.optional(
       Schema.Struct({
-        notes: Schema.optional(Schema.String.check(Schema.isMaxLength(8000))),
-        preview: Schema.optional(Schema.String.check(Schema.isMaxLength(8000))),
+        notes: Schema.optional(Schema.String),
+        preview: Schema.optional(Schema.String),
       }),
     ),
   }),

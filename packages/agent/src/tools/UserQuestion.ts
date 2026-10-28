@@ -9,24 +9,23 @@ import { ASKS_IN_REVIEW, ASKS_NEVER } from '../permissions/vocabulary';
 
 const UNICODE_ESCAPE = /\\u[0-9a-fA-F]{4}/g;
 
-const text = (min: number, max: number) =>
-  Schema.String.pipe(
-    Schema.decodeTo(Schema.String.check(Schema.isBetweenLength(min, max)), {
-      decode: SchemaGetter.transform(unescapeUnicode),
-      encode: SchemaGetter.passthrough(),
-    }),
-  );
+const text = Schema.String.pipe(
+  Schema.decodeTo(Schema.String.check(Schema.isMinLength(1)), {
+    decode: SchemaGetter.transform(unescapeUnicode),
+    encode: SchemaGetter.passthrough(),
+  }),
+);
 
 const QuestionOption = Schema.Struct({
-  value: text(1, 200),
-  label: text(1, 200),
-  description: Schema.optional(text(1, 500)),
-  preview: Schema.optional(text(1, 500)),
+  value: text,
+  label: text,
+  description: Schema.optional(text),
+  preview: Schema.optional(text),
 });
 
 const QuestionPromptInput = Schema.Struct({
-  prompt: text(1, 1000),
-  header: Schema.optional(text(1, 160)),
+  prompt: text,
+  header: Schema.optional(text),
   options: Schema.optional(Schema.Array(QuestionOption).check(Schema.isBetweenLength(1, 12))),
   allowMultiple: Schema.optional(Schema.Boolean),
   allowFreeform: Schema.optional(Schema.Boolean),
@@ -34,7 +33,7 @@ const QuestionPromptInput = Schema.Struct({
 });
 
 const UserQuestionInput = Schema.Struct({
-  title: Schema.optional(text(1, 160)),
+  title: Schema.optional(text),
   questions: Schema.Array(QuestionPromptInput).check(Schema.isBetweenLength(1, 8)),
 });
 

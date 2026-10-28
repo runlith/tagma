@@ -9,8 +9,8 @@ import { ASKS_IN_REVIEW, ASKS_NEVER } from '../permissions/vocabulary';
 export const READY_ANSWERS_TOOL = 'offer_ready_answers';
 
 const ReadyAnswer = Schema.Struct({
-  label: Schema.String.check(Schema.isBetweenLength(1, 80)),
-  send: Schema.String.check(Schema.isBetweenLength(1, 400)),
+  label: Schema.String.check(Schema.isMinLength(1)),
+  send: Schema.String.check(Schema.isMinLength(1)),
 });
 
 const ReadyAnswersInput = Schema.Struct({

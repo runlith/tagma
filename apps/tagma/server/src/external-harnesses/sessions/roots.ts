@@ -165,7 +165,7 @@ export class SessionRoots {
     const released = yield* observations.releaseHeld(threadId, sessionId);
     if (released.session === null) return;
     for (const held of released.publish) {
-      yield* answered(threadId, { turn: held.turn, text: held.text, cut: held.cut });
+      yield* answered(threadId, { turn: held.turn, text: held.text });
     }
   });
 
@@ -182,7 +182,6 @@ export class SessionRoots {
         turn: held.turn,
         text: held.text,
         unproven: held.rootKey === proved ? undefined : true,
-        cut: held.cut,
       });
     }
   });

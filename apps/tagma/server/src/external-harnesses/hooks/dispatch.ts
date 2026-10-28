@@ -17,7 +17,6 @@ import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { PERMISSION_TIMEOUT_SECONDS } from '../contract/wire/call.js';
 import { HOOK_CONTEXT_CHARS, type FileEffect } from '../contract/service/adapter.js';
 import { adoptedHook, forgetAdoption, publishedHarness } from './adoption.js';
-import { HARNESS_ANSWER_MAX } from '../../threads/contract/wire/harness/said.js';
 import { contextAnswer, permissionAnswer, promptAnswer, promptSupported, toolAnswer } from '../adapter/hookFormat.js';
 import { sessionIdOf } from '../adapter/payload.js';
 import {
@@ -155,17 +154,14 @@ const carried = (event: Record<string, unknown>): Record<string, string> => {
   return bounded;
 };
 
-const saying = (event: Record<string, unknown>): { said: Record<string, string>; cut: Record<string, number> } => {
+const saying = (event: Record<string, unknown>): Record<string, string> => {
   const said: Record<string, string> = {};
-  const cut: Record<string, number> = {};
   for (const key of HARNESS_ANSWER_KEYS) {
     const value = event[key];
     if (typeof value !== 'string' || value.trim().length === 0) continue;
-    const words = value.trim();
-    said[key] = words.slice(0, HARNESS_ANSWER_MAX);
-    if (words.length > HARNESS_ANSWER_MAX) cut[key] = words.length - HARNESS_ANSWER_MAX;
+    said[key] = value.trim();
   }
-  return { said, cut };
+  return said;
 };
 
 type Extras = {
@@ -174,7 +170,6 @@ type Extras = {
   readonly call?: HarnessCallReport;
   readonly shell?: HarnessShell;
   readonly said?: Record<string, string>;
-  readonly cut?: Record<string, number>;
 };
 
 const report = Effect.fnUntraced(function* (
@@ -188,7 +183,7 @@ const report = Effect.fnUntraced(function* (
   const forwarded = carried(event);
   if (Object.keys(forwarded).length === 0) return undefined;
   const session = (road.at.env[SESSION_TOKEN_VARIABLE] ?? '').trim();
-  const { inputs = [], prompt, call, shell, said, cut } = extras;
+  const { inputs = [], prompt, call, shell, said } = extras;
   const post = (door: Parameters<Parameters<typeof delivery.answered>[0]>[0]) =>
     door.harness.report({
       payload: {
@@ -202,7 +197,6 @@ const report = Effect.fnUntraced(function* (
         shell,
         diagnostics: road.diagnostics.length === 0 ? undefined : [...road.diagnostics],
         said: said === undefined || Object.keys(said).length === 0 ? undefined : said,
-        cut: cut === undefined || Object.keys(cut).length === 0 ? undefined : cut,
         session: session.length === 0 ? undefined : session,
       },
     });
@@ -225,7 +219,7 @@ const observe = Effect.fnUntraced(function* (road: Road, named: HarnessName | nu
   const inputs = typeof text === 'string' ? inputEnvelopes(text) : [];
   const receipt = yield* report(road, event, 'self-description', {
     inputs,
-    prompt: typeof text === 'string' ? operatorWords(text).slice(0, HARNESS_ANSWER_MAX) : undefined,
+    prompt: typeof text === 'string' ? operatorWords(text) : undefined,
     call: callOf(named, event),
   });
   if (session !== null) yield* flushPending(road, session, cwd, prepared);
@@ -494,8 +488,7 @@ const stop = Effect.fnUntraced(function* (road: Road, named: HarnessName | null)
   if (ungranted(road)) return;
   const pending = sessionKey(event);
   if (pending !== null) yield* flushPending(road, pending, eventCwd(road, event));
-  const { said, cut } = saying(event);
-  yield* report(road, event, 'turn-end', { said, cut });
+  yield* report(road, event, 'turn-end', { said: saying(event) });
 });
 
 const answer = Effect.fnUntraced(function* (road: Road, named: HarnessName | null) {
@@ -503,8 +496,7 @@ const answer = Effect.fnUntraced(function* (road: Road, named: HarnessName | nul
   if (event === undefined) return;
   yield* adoptedHook(road.at, road.delivery, event, named, false);
   if (ungranted(road)) return;
-  const { said, cut } = saying(event);
-  yield* report(road, event, 'activity', { said, cut });
+  yield* report(road, event, 'activity', { said: saying(event) });
 });
 
 export const hookEventOf = Effect.fnUntraced(function* (

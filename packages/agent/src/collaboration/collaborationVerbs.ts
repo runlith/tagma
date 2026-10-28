@@ -34,9 +34,7 @@ import type { ApprovalAnswered, ApprovalChoice } from '../thread/run/ApprovalAns
 import { PLANE_REFUSAL_WORDS, PLANE_REFUSALS, type APPROVAL_REFUSALS } from './refusals';
 import { coldReason } from './wakeCost';
 
-const TEXT_MAX_CHARS = 20_000;
-
-export const CollaborationText = Schema.String.check(Schema.isBetweenLength(1, TEXT_MAX_CHARS));
+export const CollaborationText = Schema.String.check(Schema.isMinLength(1));
 
 export const AgentAddress = Schema.String.check(Schema.isMinLength(1)).annotate({
   description: 'The agent`s name inside this team, or its thread id.',

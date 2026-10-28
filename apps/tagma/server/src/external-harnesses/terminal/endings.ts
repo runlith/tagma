@@ -27,7 +27,6 @@ export type Settled = { readonly facet: ExternalSession; readonly after: Effect.
 export type HeldAnswer = {
   readonly turn: string;
   readonly text: string;
-  readonly cut?: number | undefined;
   readonly unproven?: boolean | undefined;
 };
 

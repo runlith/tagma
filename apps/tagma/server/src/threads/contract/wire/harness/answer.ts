@@ -1,13 +1,11 @@
 import { Schema } from 'effect';
 import { HARNESS_ID_MAX } from './observation.js';
-import { HARNESS_ANSWER_MAX } from './said.js';
 
 const answerId = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(HARNESS_ID_MAX));
 
 export const harnessHeldAnswerSchema = Schema.Struct({
   turn: answerId,
-  text: Schema.String.check(Schema.isMaxLength(HARNESS_ANSWER_MAX)),
-  cut: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+  text: Schema.String,
   rootKey: answerId,
   at: answerId,
 });
