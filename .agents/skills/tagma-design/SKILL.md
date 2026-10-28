@@ -63,7 +63,6 @@ Ask what the thing is, then draw it so:
 3. A change the operator wants to see first is a mockup (rule 95258760): the whole screen in its surroundings, built from Tagma's own tokens, fonts, icons and components, both themes, with its states and edges and one recommendation. Publish it with the artifacts skill.
 4. Build with tokens only; `check_rules` runs the token rule (55b5437b) before the commit gate does. The `·`, fade and hover-action rules have no check: read your diff for them.
 5. Look at the result in a running app only when the operator asked for a live check (rule c6569513); otherwise report that it is unchecked by eye.
-6. A lasting design decision is an `#explanation` sourced to the component that carries it; when the decision changes, edit that explanation in the same change.
 
 ## Where the reasons are
 
