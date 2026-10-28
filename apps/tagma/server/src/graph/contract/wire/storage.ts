@@ -24,6 +24,15 @@ export const anchorOf = (path: string): string | null => {
   return cut === -1 ? null : rest.slice(0, cut);
 };
 
+export const displacedAt = (path: string, parentUuid: string | null): boolean => {
+  const anchor = anchorOf(path);
+  if (anchor === null || anchor === parentUuid) return false;
+  const placed = stealthRelative(path)
+    .slice(anchor.length + 1)
+    .split('/');
+  return placed.length === 1 || (placed.length === 2 && placed[1] === 'index.md');
+};
+
 export const FORMAT_FILE = 'format.json';
 export const VOCABULARY_FORMAT_KEY = 'vocabulary-format';
 

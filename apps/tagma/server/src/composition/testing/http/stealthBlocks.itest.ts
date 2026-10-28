@@ -305,6 +305,9 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       yield* world.runtime.pool.releaseProject(project);
       expect(yield* seen(partner)).toBe(0);
       expect(yield* seen()).toBe(1);
+      expect((yield* world.op('read_block', { project, blockIds: [child] })).body).toMatchObject({
+        reads: [{ stealth: true, displaced: true }],
+      });
       expect(yield* layer()).toEqual(before);
       expect(yield* suiteGit(root, 'status', '--porcelain', '--untracked-files=all')).toBe('');
     }),

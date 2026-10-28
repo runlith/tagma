@@ -5,7 +5,7 @@ import { blockName } from '../contract/wire/references.js';
 import type { ActEntry } from '../contract/service/acts.js';
 import type { JournalEvent } from '../contract/wire/journal.js';
 import type { BlockDetail, DetailEdge } from '../contract/service/reads.js';
-import type { ServesFrom } from '../contract/wire/storage.js';
+import { displacedAt, type ServesFrom } from '../contract/wire/storage.js';
 import type { Source, Block, BlockRead, Edge, Project, TreeBlock, WrittenBlock } from '../contract/wire/rows.js';
 
 const at = (value: Date): string => value.toISOString();
@@ -32,10 +32,11 @@ export function wireBlock(row: BlockRecord): Block {
 }
 
 export function wireTreeBlock(row: Omit<BlockRecord, 'body'>): TreeBlock {
+  const parentUuid = (row as { parentUuid?: string | null }).parentUuid ?? null;
   return {
     name: blockName(row.uuid),
     projectId: row.projectId,
-    parentName: row.parentId === null ? null : blockName((row as { parentUuid?: string | null }).parentUuid ?? ''),
+    parentName: row.parentId === null ? null : blockName(parentUuid ?? ''),
     ord: row.ord,
     tags: row.tags,
     fields: row.fields,
@@ -46,6 +47,7 @@ export function wireTreeBlock(row: Omit<BlockRecord, 'body'>): TreeBlock {
     building: row.building,
     answered: row.answered,
     stealth: row.stealth ? true : undefined,
+    displaced: row.stealth && row.path !== null && displacedAt(row.path, parentUuid) ? true : undefined,
     deletedAt: maybeAt(row.deletedAt),
     createdAt: at(row.createdAt),
     updatedAt: at(row.updatedAt),

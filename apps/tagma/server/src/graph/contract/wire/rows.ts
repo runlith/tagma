@@ -49,6 +49,10 @@ const treeBlockFields = {
   stealth: Schema.optional(Schema.Literal(true)).annotate({
     description: "Kept in stealth storage: Tagma's data directory, never the repository.",
   }),
+  displaced: Schema.optional(Schema.Literal(true)).annotate({
+    description:
+      'A stealth block whose team parent left the team tree: it stands under the root, and returns under that parent when it comes back.',
+  }),
   deletedAt: Schema.NullOr(Schema.String),
   createdAt: Schema.String,
   updatedAt: Schema.String,

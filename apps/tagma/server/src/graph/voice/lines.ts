@@ -12,12 +12,14 @@ export type BlockLine = Tagged & {
   readonly answered?: boolean;
   readonly deletedAt?: unknown;
   readonly stealth?: boolean;
+  readonly displaced?: boolean;
 };
 
 export function blockLine(table: TagReading, row: BlockLine): string {
   const law = table.lawProjection(row);
   const marks = [
     row.stealth === true ? 'stealth' : '',
+    row.displaced === true ? 'displaced: its team parent left the team tree' : '',
     row.superseded === true ? 'superseded' : '',
     row.answered === true ? 'answered' : '',
     row.blocked === true ? 'blocked' : '',
