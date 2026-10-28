@@ -41,7 +41,7 @@ import { answeredOutcome, triggered } from './perform.js';
 import { admitOperation } from './admission/callers.js';
 import { OperationCatalog } from './contract/service/catalog.js';
 import { inputParsing, inputRefusal } from './contract/service/input.js';
-import { presentationOf, refusalText, refusedAnswer, voiced } from './presentation.js';
+import { answerDisplay, presentationOf, refusalText, refusedAnswer, voiced } from './presentation.js';
 import type { WorkingOrigins } from '../workspace/contract/service/places.js';
 
 const unprepared = (gate: GateRefusal): ToolFailed =>
@@ -194,7 +194,7 @@ function nativeSurface<Owners>(ctx: NativeCall<Owners>) {
     const answered = (input: unknown, answer: unknown, text: string | undefined, media: readonly ToolMedia[]) =>
       new ToolKit.ToolAnswer(
         answer,
-        presentation.settled(input, answer) ?? (media.length === 0 ? undefined : { form: 'text', text: JSON.stringify(answer) }),
+        answerDisplay(presentation, input, answer, media),
         refusedAnswer(answer)
           ? { text, media, refusal: { code: answer.code, reason: answer.reason, words: answer.words?.text } }
           : answeredOutcome(entry, answer) === 'negative'

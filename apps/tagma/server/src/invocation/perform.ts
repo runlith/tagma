@@ -1,5 +1,6 @@
 import { Context, Effect, Option, Schema } from 'effect';
 import type { Caller } from '../platform/contract/wire/caller.js';
+import type { ToolDisplay } from '@runlith/agent/tool/display';
 import { knownAnswer, type Operation } from '../platform/contract/wire/operation.js';
 import { toJson } from '@runlith/utils/json';
 import type { OperationId } from '../platform/contract/wire/ids.js';
@@ -39,7 +40,7 @@ import {
   type Performed,
   type Shaped,
 } from './contract/service/performer.js';
-import { presentationOf, voiced } from './presentation.js';
+import { answerDisplay, presentationOf, voiced } from './presentation.js';
 import { journaled } from './journaled.js';
 
 export const prepare = <Input, Prepared, Answer, R, E>(
@@ -307,12 +308,11 @@ export const prepareById = <R>(
 export const answeredOutcome = (entry: Operation, answer: unknown): Shaped['outcome'] =>
   entry.negative?.(toJson(answer)) === true ? 'negative' : 'answer';
 
-const shapedOf = (catalog: OperationCatalog['Service'], id: OperationId, value: unknown, recorded: unknown): Shaped => {
+const shapedOf = (entry: Operation, toolDisplay: ToolDisplay | undefined, recorded: unknown): Shaped => {
   const answer = toJson(recorded);
-  const toolDisplay = catalog.bound(id)?.display?.(value);
   return {
-    answer: toolDisplay === undefined ? answer : { ...(answer as object), _meta: { toolDisplay } },
-    outcome: answeredOutcome(catalog.registry.entry(id), answer),
+    answer: toolDisplay === undefined ? answer : { ...(answer as object), _meta: { toolDisplay: toJson(toolDisplay) } },
+    outcome: answeredOutcome(entry, answer),
   };
 };
 
@@ -378,11 +378,12 @@ const answeredIn = Effect.fnUntraced(function* (
   const answer = yield* Effect.provide(onPlace(journaled(bound.answer === undefined ? value : bound.answer(value, input))), context);
   const media = !needs.media || bound.media === undefined ? [] : yield* Effect.provide(onPlace(bound.media(answer)), context);
   const catalog = Context.get(context, OperationCatalog);
-  const shaped = shapedOf(catalog, id, value, answer);
+  const entry = catalog.registry.entry(id);
+  const presentation = presentationOf(catalog, id);
+  const shaped = shapedOf(entry, answerDisplay(presentation, input, answer, media), answer);
   if (!needs.text) return { value, answer, shaped, media, text: undefined };
-  const declared = catalog.registry.entry(id).answer;
-  const document = declared === undefined ? Schema.Unknown : knownAnswer(declared);
-  const told = voiced(presentationOf(catalog, id), document, id, answer, input, caller);
+  const document = entry.answer === undefined ? Schema.Unknown : knownAnswer(entry.answer);
+  const told = voiced(presentation, document, id, answer, input, caller);
   const text = yield* Effect.provide(onPlace(told), context);
   return { value, answer, shaped, media, text };
 });

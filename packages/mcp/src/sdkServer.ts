@@ -21,6 +21,7 @@ export type McpServedResult = {
   readonly text: string;
   readonly media?: readonly McpServedMedia[];
   readonly structuredContent?: Readonly<Record<string, unknown>>;
+  readonly meta?: Readonly<Record<string, unknown>>;
   readonly isError?: boolean;
 };
 
@@ -51,6 +52,7 @@ const declared = (tool: McpServedTool) => ({
 const answered = (result: McpServedResult) => ({
   content: [{ type: 'text' as const, text: result.text }, ...(result.media ?? []).map((medium) => ({ ...medium }))],
   structuredContent: result.structuredContent === undefined ? undefined : { ...result.structuredContent },
+  _meta: result.meta === undefined ? undefined : { ...result.meta },
   isError: result.isError,
 });
 

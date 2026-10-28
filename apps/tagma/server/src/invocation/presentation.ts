@@ -2,6 +2,7 @@ import { Effect, type Schema } from 'effect';
 import { TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_LINES } from '@runlith/agent/ToolOutputSpool';
 import { documentLines } from '../platform/contract/wire/plainText.js';
 import type { ToolDisplay } from '@runlith/agent/tool/display';
+import type { ToolMedia } from '@runlith/agent/tool';
 import type { OperationId } from '../platform/contract/wire/ids.js';
 import type { Caller } from '../platform/contract/wire/caller.js';
 import type { Operation } from '../platform/contract/wire/operation.js';
@@ -54,6 +55,14 @@ export const voiced = <R>(
     Effect.catchDefect((defect) => unbuilt(defect instanceof Error ? defect.message : String(defect))),
   );
 };
+
+export const answerDisplay = <R>(
+  presentation: Presentation<R>,
+  input: unknown,
+  answer: unknown,
+  media: readonly ToolMedia[],
+): ToolDisplay | undefined =>
+  presentation.settled(input, answer) ?? (media.length === 0 ? undefined : { form: 'text', text: JSON.stringify(answer) });
 
 export const presentationOf = (catalog: OperationCatalog['Service'], id: OperationId): Presentation<VoiceNeeds> => {
   const entry: Operation = catalog.registry.entry(id);

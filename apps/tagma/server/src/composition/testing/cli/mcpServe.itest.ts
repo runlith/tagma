@@ -3,6 +3,7 @@ import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { mcpCallTool, mcpListTools, type McpSdkCallResult, type McpSdkConnection } from '@runlith/mcp/testing/sdk';
+import { ToolDisplayMeta, toolDisplayOpensByDefault } from '@runlith/agent/tool/display';
 import { MCP_KEY_VARIABLE } from '../../../platform/contract/wire/session.js';
 import { SpawnRefused } from '../../../platform/testing/spawn.js';
 import { makeMcpWorld } from './mcpRig.js';
@@ -40,6 +41,7 @@ const documentOf = (result: McpSdkCallResult) =>
   Effect.flatMap(textOf(result), (text) =>
     Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(text),
   );
+const displayOf = Schema.decodeUnknownEffect(Schema.Struct({ _meta: ToolDisplayMeta }));
 const failed = (result: McpSdkCallResult): boolean => 'content' in result && result.isError === true;
 
 layer(Layer.effect(Bridges, setup), { excludeTestServices: true })('MCP CLI', (it) => {
@@ -103,10 +105,14 @@ layer(Layer.effect(Bridges, setup), { excludeTestServices: true })('MCP CLI', (i
       }),
   );
 
-  it.effect('a call through the bridge answers text, and its document when it asks with json', () =>
+  it.effect('a call through the bridge answers text, its document when it asks with json, and the display of its feed row', () =>
     Effect.gen(function* () {
       const { direct } = yield* Bridges;
-      expect(yield* textOf(yield* called(direct, 'create_block', { title: 'Written over MCP' }))).toContain('Written over MCP');
+      const told = yield* called(direct, 'create_block', { title: 'Written over MCP', body: 'Its first body.' });
+      expect(yield* textOf(told)).toContain('Written over MCP');
+      const shown = (yield* displayOf(told))._meta.toolDisplay;
+      expect(shown.title).toEndWith('Written over MCP');
+      expect(toolDisplayOpensByDefault(shown)).toBe(true);
       const answer = yield* documentOf(yield* called(direct, 'create_block', { title: 'Written as a document', json: true }));
       expect(answer.status).toBe('ok');
       expect((answer.block as { title?: string } | undefined)?.title).toBe('Written as a document');

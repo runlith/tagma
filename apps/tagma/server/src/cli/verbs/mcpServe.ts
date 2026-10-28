@@ -30,10 +30,11 @@ const refused = (refusal: RefusalBody, json: boolean): McpServedResult => ({
 });
 
 const answered = (value: unknown, json: boolean, negative: boolean): McpServedResult => {
-  const { document, text, media } = answerParts(value);
+  const { document, text, media, display } = answerParts(value);
   return {
     text: !json && text !== undefined ? text : JSON.stringify(document, null, 2),
     media: media.length === 0 ? undefined : media.map((one) => ({ type: 'image' as const, data: one.data, mimeType: one.mimeType })),
+    meta: display === undefined ? undefined : { toolDisplay: display },
     isError: negative,
   };
 };
