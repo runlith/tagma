@@ -489,7 +489,7 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
           return yield* new GateRefusal('operation-only', `"${input.kind}" is provenance; it is not unlinked`, [
             'what replaced a block and what a review amended are history: they stay readable',
             'wrong successor? supersede the successor in turn — the chain IS the decision record',
-            'unsupersede_block — the replacement itself was taken in error, and the block stands again',
+            'unsupersede_block — the replacement was taken in error, or the replaced record itself must be corrected; the block stands again',
           ]);
         }
         if (RELATION_EDGES.includes(input.kind)) return yield* boundaryRefusal(yield* names.nameOf(input.fromId), 'unlinked');
