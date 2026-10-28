@@ -19,6 +19,7 @@ export class Omnibox {
   private picked = $state.raw<Suggestion | null>(null);
   private readonly listing: Listing;
   private field: HTMLInputElement | null = null;
+  private asked = false;
 
   constructor(
     private readonly sources: () => SuggestionSources,
@@ -40,6 +41,7 @@ export class Omnibox {
       this.field = field;
       this.reset();
       field.value = this.address();
+      if (this.open || this.asked) this.focus();
     });
     return () => {
       if (this.field === field) this.field = null;
@@ -53,8 +55,20 @@ export class Omnibox {
   }
 
   focus(): void {
+    this.asked = this.field === null;
     this.field?.focus({ preventScroll: true });
     this.field?.select();
+  }
+
+  focused(): void {
+    this.open = true;
+  }
+
+  blurred(): void {
+    this.open = false;
+    this.picked = null;
+    this.completed = null;
+    if (this.field !== null) this.field.value = this.typed === '' ? this.address() : this.typed;
   }
 
   close(): void {
@@ -126,7 +140,7 @@ export class Omnibox {
   private step(field: HTMLInputElement, by: 1 | -1): void {
     const count = this.rows.length;
     if (count === 0) return;
-    const at = this.picked === null ? -1 : this.chosen;
+    const at = this.chosen;
     if (by < 0 && at <= 0 && this.picked !== null) return this.restore(field);
     const next = by > 0 ? (at + 1) % count : at <= 0 ? count - 1 : at - 1;
     const row = this.rows[next];

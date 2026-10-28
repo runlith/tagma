@@ -3,7 +3,6 @@
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import FadeText from '$lib/shared/FadeText.svelte';
   import MatchText from '$lib/shared/MatchText.svelte';
-  import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import RowLead from '$lib/shared/ui/dropdown-menu/dropdown-menu-lead.svelte';
   import RowTail from '$lib/shared/ui/dropdown-menu/dropdown-menu-tail.svelte';
   import { ROW } from '$lib/shared/ui/dropdown-menu/row.js';
@@ -11,9 +10,9 @@
   import { shownOf } from './address.js';
   import type { Omnibox } from './Omnibox.svelte.js';
   import PageIcon from './PageIcon.svelte';
-  import { keyOf, SECTIONS, spotted, type Suggestion } from './suggestions.js';
+  import { keyOf, spotted, type Suggestion } from './suggestions.js';
 
-  let { omnibox, id, roomy = false }: { omnibox: Omnibox; id: string; roomy?: boolean } = $props();
+  let { omnibox, id }: { omnibox: Omnibox; id: string } = $props();
 
   const keymap = Keymap.use();
   const enter = keymap.spell(keymap.bare('Enter'));
@@ -21,21 +20,16 @@
 
   const inView = (option: HTMLElement): void => option.scrollIntoView({ block: 'nearest' });
 
-  const sectionOf = (index: number): string | null => {
-    const row = omnibox.rows[index];
-    if (row === undefined || row.kind === 'go' || row.kind === 'search') return null;
-    return omnibox.rows[index - 1]?.kind === row.kind ? null : SECTIONS[row.kind];
-  };
-
   const labelOf = (row: Suggestion): string | undefined =>
     row.kind === 'served' || row.kind === 'go' ? (row.label ?? undefined) : undefined;
 </script>
 
+{#snippet searching()}<span class="text-small text-muted-foreground">Search</span>{/snippet}
+{#snippet switching()}<span class="text-small text-muted-foreground">Switch</span>{/snippet}
+
 {#each omnibox.rows as row, index (keyOf(row))}
-  {@const section = sectionOf(index)}
   {@const chosen = index === omnibox.chosen}
   {@const label = labelOf(row)}
-  {#if section !== null}<DropdownMenu.GroupHeading>{section}</DropdownMenu.GroupHeading>{/if}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     id="{id}-{index}"
@@ -43,7 +37,7 @@
     tabindex="-1"
     aria-selected={chosen}
     data-highlighted={chosen ? '' : undefined}
-    class={cn(ROW, roomy && 'min-h-8', !chosen && 'hover:bg-hover')}
+    class={cn(ROW, !chosen && 'hover:bg-hover')}
     onmousedown={(event) => event.preventDefault()}
     onclick={() => omnibox.choose(row)}
     {@attach chosen ? inView : null}
@@ -55,7 +49,7 @@
     </RowLead>
     <FadeText class="flex-1">
       {#if row.kind === 'search'}
-        <span>{row.query}</span><span class="pl-2 text-muted-foreground">Google Search</span>
+        <span>{row.query}</span>
       {:else if row.kind === 'go' || row.kind === 'served'}
         {@const shown = shownOf(row.url)}
         <span><MatchText text={shown} positions={spotted(shown, query)} /></span>{#if row.kind === 'go' && row.title !== null}<span
@@ -68,7 +62,11 @@
         >
       {/if}
     </FadeText>
-    {#if label !== undefined}
+    {#if row.kind === 'search'}
+      <RowTail tail={searching} />
+    {:else if row.kind === 'open'}
+      <RowTail tail={switching} />
+    {:else if label !== undefined}
       <RowTail hint={label} />
     {:else if chosen}
       <RowTail keys={enter} />

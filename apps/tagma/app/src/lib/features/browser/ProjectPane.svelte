@@ -39,7 +39,6 @@
   import { Picks } from './pick/Picks.js';
   import { browserPane, shownId as paneId, shownOf, showPage } from './panes.js';
   import { ServedAddresses } from './served.js';
-  import Suggestions from './Suggestions.svelte';
   import { adapterOf } from './view/adapter.js';
   import PageView from './view/PageView.svelte';
 
@@ -77,7 +76,6 @@
   let problem = $state<string | null>(null);
   const zooms = new Map<PageId, number>();
   let zoom = $state(1);
-  let toolbar = $state<HTMLDivElement>();
   let find = $state<{ focus(): void }>();
 
   const usual = $derived.by((): ProfileId | null => {
@@ -242,31 +240,29 @@
 </script>
 
 <section class="flex h-full min-h-0 min-w-0 flex-col bg-background" aria-label="Browser" data-browser-pane={pane.key}>
-  <div bind:this={toolbar} class="flex h-10 min-w-0 shrink-0 items-center gap-0.5 border-b px-1">
-    {#if current !== null}
-      <Tooltip text="Back">
-        <button type="button" class="tool" aria-label="Back" disabled={!current.live.back} onclick={() => navigate('back')}>
-          <ArrowLeft class="size-4" />
+  <div class="flex h-10 min-w-0 shrink-0 items-center gap-0.5 border-b px-1">
+    <Tooltip text="Back">
+      <button type="button" class="tool" aria-label="Back" disabled={!current?.live.back} onclick={() => navigate('back')}>
+        <ArrowLeft class="size-4" />
+      </button>
+    </Tooltip>
+    <Tooltip text="Forward">
+      <button type="button" class="tool" aria-label="Forward" disabled={!current?.live.forward} onclick={() => navigate('forward')}>
+        <ArrowRight class="size-4" />
+      </button>
+    </Tooltip>
+    {#if current?.live.loading}
+      <Tooltip text="Stop">
+        <button type="button" class="tool" aria-label="Stop" onclick={() => navigate('stop')}><X class="size-4" /></button>
+      </Tooltip>
+    {:else}
+      <Tooltip text="Reload">
+        <button type="button" class="tool" aria-label="Reload" disabled={current === null} onclick={() => navigate('reload')}>
+          <RotateCw class="size-4" />
         </button>
       </Tooltip>
-      <Tooltip text="Forward">
-        <button type="button" class="tool" aria-label="Forward" disabled={!current.live.forward} onclick={() => navigate('forward')}>
-          <ArrowRight class="size-4" />
-        </button>
-      </Tooltip>
-      {#if current.live.loading}
-        <Tooltip text="Stop">
-          <button type="button" class="tool" aria-label="Stop" onclick={() => navigate('stop')}><X class="size-4" /></button>
-        </Tooltip>
-      {:else}
-        <Tooltip text="Reload">
-          <button type="button" class="tool" aria-label="Reload" onclick={() => navigate('reload')}>
-            <RotateCw class="size-4" />
-          </button>
-        </Tooltip>
-      {/if}
     {/if}
-    <AddressBar {omnibox} page={current} row={toolbar} {list} profile={differing}>
+    <AddressBar {omnibox} page={current} {list} profile={differing}>
       {#snippet end()}
         {#if native}<ZoomLevel {zoom} {zoomTo} />{/if}
         {#if driver !== null}
@@ -288,20 +284,19 @@
         </button>
       </Tooltip>
     {/if}
-    {#if current !== null}
-      <Downloads page={current} />
-      <Tooltip text={picking ? 'Stop picking' : 'Pick elements into the chat'} keys={picking ? keymap.spell(keymap.bare('Escape')) : null}>
-        <button
-          type="button"
-          class="tool"
-          aria-label="Pick elements into the chat"
-          aria-pressed={picking}
-          onclick={() => (picking = !picking)}
-        >
-          <SquareDashedMousePointer class="size-4" />
-        </button>
-      </Tooltip>
-    {/if}
+    {#if current !== null}<Downloads page={current} />{/if}
+    <Tooltip text={picking ? 'Stop picking' : 'Pick elements into the chat'} keys={picking ? keymap.spell(keymap.bare('Escape')) : null}>
+      <button
+        type="button"
+        class="tool"
+        aria-label="Pick elements into the chat"
+        aria-pressed={picking}
+        disabled={current === null}
+        onclick={() => (picking = !picking)}
+      >
+        <SquareDashedMousePointer class="size-4" />
+      </button>
+    </Tooltip>
   </div>
 
   {#if finding && native && current !== null && desktop.bridge !== null}
@@ -328,21 +323,14 @@
       <PageView page={current} panel={pane.key} />
     {:else}
       <div class="size-full overflow-y-auto">
-        <div class="mx-auto flex w-full max-w-112 flex-col gap-2 px-4 py-8">
+        <div class="flex flex-col gap-2 px-4 py-3">
           {#if pane.id !== null && listing.listed}
-            <p class="px-2 text-small text-muted-foreground">This page is closed.</p>
+            <p class="text-small text-muted-foreground">This page is closed.</p>
           {:else if listing.failure !== null}
-            <p class="px-2 text-small text-muted-foreground">{listing.failure}</p>
-          {/if}
-          {#if omnibox.rows.length > 0}
-            <div id={list} role="listbox" aria-label="Suggestions" class="flex flex-col">
-              <Suggestions {omnibox} id={list} roomy />
-            </div>
-          {:else if omnibox.typed === ''}
-            <p class="px-2 text-small text-muted-foreground">Type an address or a search above.</p>
+            <p class="text-small text-muted-foreground">{listing.failure}</p>
           {/if}
           {#if profiles.length > 1}
-            <div class="mt-2 flex items-center gap-1 border-t px-2 pt-3 text-small text-muted-foreground">
+            <div class="flex items-center gap-1 text-small text-muted-foreground">
               Opens in
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger

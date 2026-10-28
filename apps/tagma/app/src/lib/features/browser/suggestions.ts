@@ -1,6 +1,6 @@
 import type { PageId } from '@tagma/server/browser/contract/wire/ids';
 import type { Page } from '@tagma/server/browser/contract/wire/page';
-import { type Completion, hrefOf, originOf, searchOf, shownOf, targetOf } from './address.js';
+import { type Completion, hrefOf, originOf, partsOf, searchOf, shownOf, targetOf } from './address.js';
 import type { ServedAddress } from './served.js';
 
 export type Suggestion =
@@ -30,17 +30,26 @@ export type Listing = {
   readonly icons: ReadonlyMap<string, string>;
 };
 
-export const SECTIONS: Readonly<Record<Listed['kind'], string>> = { served: 'Running here', open: 'Open pages', recent: 'Recent' };
+const LIMIT = 6;
 
-const LIMIT = 8;
-
-const IDLE_RECENT = 4;
+const LETTER = /[\p{L}\p{N}]/u;
 
 const visited = (url: string): boolean => url !== '' && url !== 'about:blank';
 
 const titleOf = (page: Page): string => (page.title.trim() === '' ? shownOf(page.url) : page.title);
 
-const wordsOf = (row: Listed): readonly string[] => (row.kind === 'served' ? [shownOf(row.url), row.label] : [shownOf(row.url), row.title]);
+const startsWord = (text: string, query: string): boolean => {
+  for (let at = text.indexOf(query); at >= 0; at = text.indexOf(query, at + 1))
+    if (at === 0 || !LETTER.test(text[at - 1] ?? '')) return true;
+  return false;
+};
+
+const rankOf = (row: Listed, query: string): number => {
+  if (partsOf(row.url).host.toLowerCase().startsWith(query)) return 0;
+  const words = (row.kind === 'served' ? row.label : row.title).toLowerCase();
+  if (startsWord(words, query)) return 1;
+  return words.includes(query) || shownOf(row.url).toLowerCase().includes(query) ? 2 : -1;
+};
 
 export const keyOf = (row: Suggestion): string => `${row.kind}:${row.kind === 'open' ? row.page : row.url}`;
 
@@ -82,21 +91,24 @@ export function listingOf(from: SuggestionSources): Listing {
 
 export function suggestions(typed: string, completed: Completion | null, listing: Listing): readonly Suggestion[] {
   const text = typed.trim();
-  if (text === '') {
-    const recent = listing.rows.filter((row) => row.kind === 'recent').slice(0, IDLE_RECENT);
-    return [...listing.rows.filter((row) => row.kind !== 'recent'), ...recent];
-  }
+  if (text === '') return [];
+  const query = text.toLowerCase();
   const top = topOf(text, completed, listing);
-  const lower = text.toLowerCase();
+  const room = top.kind === 'search' ? LIMIT - 1 : LIMIT - 2;
+  const ranked = listing.rows
+    .map((row, at) => ({ row, at, rank: rankOf(row, query) }))
+    .filter((one) => one.rank >= 0)
+    .sort((one, other) => one.rank - other.rank || one.at - other.at);
   const seen = new Set([hrefOf(top.url)]);
   const rows: Suggestion[] = [top];
-  for (const row of listing.rows) {
-    if (rows.length >= LIMIT) break;
-    if (row.kind !== 'open' && seen.has(hrefOf(row.url))) continue;
-    if (!wordsOf(row).some((word) => word.toLowerCase().includes(lower))) continue;
-    seen.add(hrefOf(row.url));
+  for (const { row } of ranked) {
+    if (rows.length > room) break;
+    const href = hrefOf(row.url);
+    if (seen.has(href)) continue;
+    seen.add(href);
     rows.push(row);
   }
+  if (top.kind !== 'search') rows.push(searchOf(text));
   return rows;
 }
 
@@ -105,6 +117,7 @@ function topOf(text: string, completed: Completion | null, listing: Listing): Su
   if (target.kind === 'search') return target;
   const href = hrefOf(target.url);
   const known = listing.rows.find((row) => hrefOf(row.url) === href);
+  if (known?.kind === 'open') return known;
   const origin = originOf(target.url);
   return {
     kind: 'go',

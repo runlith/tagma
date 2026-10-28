@@ -42,6 +42,7 @@ test('Enter visits the row the field shows even after live sources reorder the l
   );
   const input = field(omnibox);
 
+  type(input, 'example');
   press(input, 'ArrowDown');
   expect(input.value).toBe(one.url);
   sources = { ...sources, open: [here, two, one] };

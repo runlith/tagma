@@ -22,23 +22,27 @@ test('a typed host prefix completes to a served origin, whose row carries the co
   expect(completion('localhost:5193/', ['http://localhost:5193/'])).toBeNull();
   expect(suggestions('loc', done, listing)).toEqual([
     { kind: 'go', url: 'http://localhost:5193/', title: null, icon: null, label: 'tagma:try' },
+    { kind: 'search', url: 'https://www.google.com/search?q=loc', query: 'loc' },
   ]);
 });
 
-test('an empty field lists running servers, the other open pages and closed pages not open again, in that order', () => {
-  const shown = pageOf('shown');
-  const other = pageOf('other');
+test('nothing is listed before a letter; then host starts rank first and the list holds at most six rows', () => {
+  const guide = pageOf('guide', { url: 'https://docs.example.com/github-guide', title: 'Guide' });
+  const repo = pageOf('repo', { url: 'https://github.com/runlith', title: 'runlith' });
   const sources: SuggestionSources = {
-    served: [{ url: 'http://localhost:5173/', label: 'bun run dev' }],
-    open: [shown, other],
-    closed: [pageOf('gone'), pageOf('again', { url: other.url })],
+    served: [],
+    open: [pageOf('shown'), guide, repo],
+    closed: Array.from({ length: 9 }, (_, at) => pageOf(`gone${at}`, { url: `https://site${at}.example.com/` })),
     current: PageId.make('shown'),
   };
-  expect(suggestions('', null, listingOf(sources)).map((row) => [row.kind, row.url])).toEqual([
-    ['served', 'http://localhost:5173/'],
-    ['open', other.url],
-    ['recent', 'https://example.com/gone'],
+  const listing = listingOf(sources);
+  expect(suggestions('', null, listing)).toEqual([]);
+  expect(suggestions('git', null, listing).map((row) => [row.kind, row.url])).toEqual([
+    ['search', 'https://www.google.com/search?q=git'],
+    ['open', repo.url],
+    ['open', guide.url],
   ]);
+  expect(suggestions('site', null, listing)).toHaveLength(6);
 });
 
 test('an address reads by its host: no https or www, a decoded path, only Google itself read as a search', () => {
