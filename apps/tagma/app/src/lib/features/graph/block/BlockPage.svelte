@@ -58,6 +58,7 @@
   import { GraphRung } from '$lib/features/workspace/GraphRung.js';
   import { cn } from '$lib/shared/utils.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+  import { labelOf } from '$lib/features/workspace/mark.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
   import PathText from '$lib/shared/PathText.svelte';
@@ -100,6 +101,7 @@
   const opening = Opening.use();
   const checkout = Checkout.use();
   const graph = GraphRung.Current.use();
+  const project = $derived(workspace.find(graph.projectId));
   const here = App.current();
   const roads = PathRoads.use();
   let crumbModified = false;
@@ -191,6 +193,7 @@
   }
 
   function crumbTitle(block: TreeBlock): string {
+    if (block.parentName === null && project !== null) return labelOf(project);
     return block.title.trim() || 'Untitled';
   }
 
@@ -412,10 +415,17 @@
       ></div>
 
       <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span class="flex items-center gap-1.5 text-muted-foreground">
-          <TagIcon tag={rootBlock.parentName === null ? 'project' : tags.tagOf(rootBlock)} class="size-3.5" />
-          <span class="eyebrow capitalize">{rootBlock.parentName === null ? 'project' : tags.word(tags.tagOf(rootBlock))}</span>
-        </span>
+        {#if rootBlock.parentName === null}
+          <span class="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+            <TagIcon tag="project" class="size-3.5" />
+            <FadeText class="eyebrow min-w-0" text={project === null ? 'Project' : labelOf(project)} />
+          </span>
+        {:else}
+          <span class="flex items-center gap-1.5 text-muted-foreground">
+            <TagIcon tag={tags.tagOf(rootBlock)} class="size-3.5" />
+            <span class="eyebrow capitalize">{tags.word(tags.tagOf(rootBlock))}</span>
+          </span>
+        {/if}
         <StatusChip block={rootBlock} {store} always />
         {#if tags.supports(rootBlock, WORK) || tags.supports(rootBlock, SPEC)}
           {#if tags.holderOf(rootBlock) !== null}
