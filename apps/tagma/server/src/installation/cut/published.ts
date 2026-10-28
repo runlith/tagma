@@ -129,8 +129,16 @@ export const checkoutTags = Effect.fn('installation.checkoutTags')(function* (
     .filter((release) => release !== null);
 });
 
-export const highestOf = (issued: Issued, tags: readonly string[]): string | null =>
-  [...issued.numbers, ...tags, ...(issued.latest?.releases.map((one) => one.release) ?? [])].reduce<string | null>(
-    (highest, one) => (highest === null || compareReleases(one, highest) > 0 ? one : highest),
-    null,
-  );
+const known = (issued: Issued, tags: readonly string[]): readonly string[] => [
+  ...issued.numbers,
+  ...tags,
+  ...(issued.latest?.releases.map((one) => one.release) ?? []),
+];
+
+const highestAmong = (numbers: readonly string[]): string | null =>
+  numbers.reduce<string | null>((highest, one) => (highest === null || compareReleases(one, highest) > 0 ? one : highest), null);
+
+export const highestOf = (issued: Issued, tags: readonly string[]): string | null => highestAmong(known(issued, tags));
+
+export const precedingOf = (issued: Issued, tags: readonly string[], release: string): string | null =>
+  highestAmong(known(issued, tags).filter((one) => compareReleases(one, release) < 0));

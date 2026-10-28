@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { afterAll, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect, FileSystem, Layer } from 'effect';
@@ -36,6 +36,27 @@ const source = (name: string): string => {
 };
 const committed = (checkout: string): string => {
   expect(git(['-C', checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'cut']).exitCode).toBe(0);
+  return said(['-C', checkout, 'rev-parse', 'HEAD']);
+};
+
+const changed = (checkout: string, files: Record<string, string>, ...message: string[]): string => {
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(checkout, path)), { recursive: true });
+    writeFileSync(join(checkout, path), text);
+  }
+  expect(git(['-C', checkout, 'add', '-A']).exitCode).toBe(0);
+  const args = [
+    '-C',
+    checkout,
+    '-c',
+    'user.name=t',
+    '-c',
+    'user.email=t@t',
+    'commit',
+    '-q',
+    ...message.flatMap((paragraph) => ['-m', paragraph]),
+  ];
+  expect(git(args).exitCode).toBe(0);
   return said(['-C', checkout, 'rev-parse', 'HEAD']);
 };
 
@@ -93,6 +114,7 @@ type Held = {
   draft: boolean;
   prerelease: boolean;
   target: string;
+  notes: string;
   assets: { name: string; size: number; state: string; digest: string; bytes: Uint8Array }[];
 };
 
@@ -144,6 +166,7 @@ const github = () => {
             draft: args.includes('--draft'),
             prerelease: false,
             target: args[args.indexOf('--target') + 1]!,
+            notes: args[args.indexOf('--notes') + 1]!,
             assets: [],
           });
           return answer('');
@@ -162,6 +185,7 @@ const github = () => {
               isPrerelease: held.prerelease,
               url: `https://github.com/${REPO}/releases/tag/${tag}`,
               targetCommitish: held.target,
+              body: held.notes,
               assets,
             }),
           );
@@ -187,6 +211,7 @@ const github = () => {
         }
         if (verb === 'edit') {
           if (args.includes('--target')) held.target = args[args.indexOf('--target') + 1]!;
+          if (args.includes('--notes')) held.notes = args[args.indexOf('--notes') + 1]!;
           if (args.includes('--prerelease=false')) held.prerelease = false;
           if (args.includes('--draft=false')) {
             held.draft = false;
@@ -335,5 +360,91 @@ it.live(
       expect(notarized.sealed).toEqual(['0.2.0', '0.2.0']);
       expect(untouched).toBe(0);
       expect([...gh.releases.keys()]).toEqual(['v0.2.0']);
+    }),
+);
+
+it.live(
+  'a release body lists the feat, fix and perf commits since the release before it by type, breaking changes first, with no graph commit and no other type; a published release keeps its body',
+  () =>
+    Effect.gen(function* () {
+      const gh = github();
+      const notarizing = apple().notary;
+      const place = placeOf('notes');
+      const { checkout } = place;
+      const push = (commit: string) => gh.pushed.add(commit);
+
+      push(changed(checkout, { 'first.txt': 'a' }, 'feat(old): ship the first thing', 'Task: 11aa The first task'));
+      const firstCommit = changed(checkout, { 'second.txt': 'b' }, 'Old phrase without a type (26c5d6b8)');
+      push(firstCommit);
+      cutInto(place.cut, firstCommit, '0.2.0');
+      gh.failing.upload = true;
+      yield* run(publishRelease(gh.cli, notarizing, place));
+      const draftNotes = gh.releases.get('v0.2.0')?.notes;
+      gh.failing.upload = false;
+      yield* run(publishRelease(gh.cli, notarizing, place));
+      const firstNotes = gh.releases.get('v0.2.0')?.notes;
+
+      changed(
+        checkout,
+        { 'threads.txt': 'c' },
+        'feat(threads): move a thread into another project',
+        'Why and what changed.',
+        'Task: 26c5d6b8 Move a thread into another project\nTask: 0aa1 A second task\nCo-authored-by: Tagma <agent@tagma.dev>',
+      );
+      changed(checkout, { 'facts.txt': 'd' }, 'fix(code-facts): keep symbols across renames', 'Task: b3c4 Keep symbols');
+      for (const type of ['refactor(graph)', 'docs', 'test(threads)', 'build', 'ci', 'chore(deps)', 'revert']) {
+        changed(checkout, { [`${type.replace(/\W/gu, '')}.txt`]: type }, `${type}: not a line of the notes`, 'Task: 99ff Not listed');
+      }
+      changed(checkout, { '.tagma/graph.json': '1' }, 'feat(graph): record the acts of a session');
+      changed(checkout, { '.tagma/graph.json': '2', 'mixed.txt': 'e' }, 'fix(tagma): a change in code and in the graph');
+      changed(
+        checkout,
+        { 'cli.txt': 'f' },
+        'feat(cli)!: rename the publish command',
+        'BREAKING CHANGE: publish is now ship\nTask: 77ee Rename the command',
+      );
+      changed(checkout, { 'perf.txt': 'g' }, 'perf(graph): read a block once');
+      changed(checkout, { 'again.txt': 'h' }, 'fix(threads): second fix, newer');
+      const secondCommit = changed(checkout, { 'product.txt': 'i' }, 'feat: a change across the product');
+      push(secondCommit);
+      cutInto(place.cut, secondCommit, '0.2.1');
+      const two = yield* run(publishRelease(gh.cli, notarizing, place));
+      const secondNotes = gh.releases.get('v0.2.1')?.notes;
+
+      gh.releases.get('v0.2.1')!.notes = 'edited by hand';
+      const again = yield* run(publishRelease(gh.cli, notarizing, place));
+
+      expect(draftNotes).toBe(firstNotes);
+      expect(firstNotes).toBe('## Features\n\n- **old:** ship the first thing\n  - Task: 11aa The first task');
+      expect(two._tag).toBe('Success');
+      expect(secondNotes).toBe(
+        [
+          '## BREAKING CHANGES',
+          '',
+          '- **cli:** rename the publish command',
+          '  publish is now ship',
+          '  - Task: 77ee Rename the command',
+          '',
+          '## Features',
+          '',
+          '- a change across the product',
+          '- **threads:** move a thread into another project',
+          '  - Task: 26c5d6b8 Move a thread into another project',
+          '  - Task: 0aa1 A second task',
+          '',
+          '## Fixes',
+          '',
+          '- **threads:** second fix, newer',
+          '- **tagma:** a change in code and in the graph',
+          '- **code-facts:** keep symbols across renames',
+          '  - Task: b3c4 Keep symbols',
+          '',
+          '## Performance',
+          '',
+          '- **graph:** read a block once',
+        ].join('\n'),
+      );
+      expect(again._tag).toBe('Success');
+      expect(gh.releases.get('v0.2.1')?.notes).toBe('edited by hand');
     }),
 );

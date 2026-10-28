@@ -21,7 +21,17 @@ import { dataDirectory } from '../contract/wire/layout.js';
 import { developerTeam, releaseIdentity } from '../setup/signing.js';
 import { appleNotary, type Notary } from './notarize.js';
 import { checkoutOf, desktopAssets, flagsOf, KEPT_MAPS, RELEASE_DIRECTORY } from './pipeline.js';
-import { checkoutTags, ghTrouble, highestOf, issuedReleases, type PublishedTrouble, releaseFeed, remoteTag } from './published.js';
+import { releaseNotes } from './notes.js';
+import {
+  checkoutTags,
+  ghTrouble,
+  highestOf,
+  issuedReleases,
+  precedingOf,
+  type PublishedTrouble,
+  releaseFeed,
+  remoteTag,
+} from './published.js';
 import {
   decodeRecord,
   digestOf,
@@ -69,6 +79,7 @@ const GitHubRelease = Schema.Struct({
   isPrerelease: Schema.Boolean,
   url: Schema.String,
   targetCommitish: Schema.String,
+  body: Schema.String,
   assets: Schema.Array(Asset),
 });
 type GitHubRelease = typeof GitHubRelease.Type;
@@ -133,7 +144,7 @@ const offersAsCut = (offered: PlatformArchives, record: ReleaseRecord, repo: str
   });
 
 const viewed = (gh: GitHubCli, repo: string, tag: string, cwd: string): Effect.Effect<GitHubRelease | null, PublishRefused> =>
-  gh.run(['release', 'view', tag, '--repo', repo, '--json', 'isDraft,isPrerelease,url,targetCommitish,assets'], cwd).pipe(
+  gh.run(['release', 'view', tag, '--repo', repo, '--json', 'isDraft,isPrerelease,url,targetCommitish,body,assets'], cwd).pipe(
     Effect.map((ended): string | null => ended.stdout),
     Effect.catchTag('ProgramFailed', (failure) =>
       failure.phase === 'exit' && NOT_FOUND.test(failure.stderr ?? '') ? Effect.succeed(null) : Effect.fail(failure),
@@ -270,6 +281,7 @@ export const publishRelease = (
       }
       const drafting = found === null || found.isDraft;
       let before: Feed | null = null;
+      let notes = '';
       if (drafting) {
         if (standing !== '') {
           return yield* refused(
@@ -279,7 +291,8 @@ export const publishRelease = (
           );
         }
         const issued = yield* issuedReleases(gh, repo, cut).pipe(Effect.mapError(troubled('release')));
-        const highest = highestOf(issued, yield* checkoutTags(checkout).pipe(Effect.mapError(troubled('tag'))));
+        const tags = yield* checkoutTags(checkout).pipe(Effect.mapError(troubled('tag')));
+        const highest = highestOf(issued, tags);
         if (highest !== null && compareReleases(release, highest) <= 0) {
           return yield* refused('version', `${highest} is published in ${repo}, and a release is published over every one before it`, [
             RECUT,
@@ -287,6 +300,10 @@ export const publishRelease = (
         }
         yield* committed(gh, repo, commit, release, cut);
         before = issued.latest;
+        const previous = precedingOf(issued, tags, release);
+        notes = yield* releaseNotes(checkout, previous !== null && tags.includes(previous) ? tagOf(previous) : null, commit).pipe(
+          Effect.mapError((failure) => refused('notes', failure.detail, [AGAIN])),
+        );
       }
 
       const { record, home } = yield* notarizedCut(notary, cut, cutStood);
@@ -339,12 +356,18 @@ export const publishRelease = (
         if (found === null) {
           yield* gh
             .run(
-              ['release', 'create', tag, '--repo', repo, '--draft', '--target', commit, '--title', `Tagma ${release}`, '--notes', ''],
+              ['release', 'create', tag, '--repo', repo, '--draft', '--target', commit, '--title', `Tagma ${release}`, '--notes', notes],
               cut,
             )
             .pipe(Effect.mapError(ghFailed('release', repo)));
-        } else if (found.targetCommitish !== commit) {
-          yield* gh.run(['release', 'edit', tag, '--repo', repo, '--target', commit], cut).pipe(Effect.mapError(ghFailed('release', repo)));
+        } else {
+          const corrections = [
+            ...(found.targetCommitish === commit ? [] : ['--target', commit]),
+            ...(found.body.trim() === notes ? [] : ['--notes', notes]),
+          ];
+          if (corrections.length > 0) {
+            yield* gh.run(['release', 'edit', tag, '--repo', repo, ...corrections], cut).pipe(Effect.mapError(ghFailed('release', repo)));
+          }
         }
         const draft = found ?? (yield* viewed(gh, repo, tag, cut));
         if (draft === null)
