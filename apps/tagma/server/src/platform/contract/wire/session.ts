@@ -29,19 +29,21 @@ export const sessionIdentitySchema = Schema.Struct({
   extras: Schema.Array(Schema.String),
 });
 
+export const sessionHarness = (harness: string): string => (harness === 'lode' ? NATIVE_HARNESS : harness);
+
 export function sessionToken(ref: SessionRef): string {
-  return `${ref.harness}:${ref.key}`;
+  return `${sessionHarness(ref.harness)}:${ref.key}`;
 }
 
 export function parseSessionToken(value: string): SessionRef | null {
   const parsed = /^([a-z][\w.-]*):(.+)$/.exec(value.trim());
   const harness = parsed?.[1];
   const key = parsed?.[2];
-  return harness === undefined || key === undefined ? null : { harness, key };
+  return harness === undefined || key === undefined ? null : { harness: sessionHarness(harness), key };
 }
 
 export function sessionName(ref: SessionRef, identity: SessionIdentity['Service']): string {
   const spoken = spokenId(ref.key);
-  if (ref.harness === NATIVE_HARNESS) return spoken;
+  if (sessionHarness(ref.harness) === NATIVE_HARNESS) return spoken;
   return `${identity.prefix[ref.harness] ?? ref.harness}:${spoken}`;
 }

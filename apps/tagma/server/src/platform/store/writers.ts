@@ -6,7 +6,7 @@ import { GraphStore, MachineStore, type StoreBrand, type StoreDb } from '../cont
 import { writes } from '../contract/service/writes.js';
 import { MachineWriters, SignedSession, WriterRegister } from '../contract/service/writers.js';
 import type { WriteUnit } from '../contract/service/units.js';
-import type { SessionRef } from '../contract/wire/session.js';
+import { sessionHarness, type SessionRef } from '../contract/wire/session.js';
 
 export const session = sqliteTable(
   'session',
@@ -28,14 +28,14 @@ const resolveWriter = Effect.fn('WriterRegister.resolve')(function* <Brand exten
     db
       .select()
       .from(session)
-      .where(and(eq(session.harness, ref.harness), eq(session.key, ref.key)))
+      .where(and(eq(session.harness, sessionHarness(ref.harness)), eq(session.key, ref.key)))
       .get(),
   );
   if (found) return found;
   const row = yield* unit.run(
     db
       .insert(session)
-      .values({ harness: ref.harness, key: ref.key, createdAt: new Date(yield* Clock.currentTimeMillis) })
+      .values({ harness: sessionHarness(ref.harness), key: ref.key, createdAt: new Date(yield* Clock.currentTimeMillis) })
       .returning()
       .get(),
   );
@@ -77,7 +77,7 @@ export const writerRegisterLayer: Layer.Layer<WriterRegister, never, GraphStore>
             db
               .select({ id: session.id })
               .from(session)
-              .where(and(eq(session.harness, ref.harness), eq(session.key, ref.key)))
+              .where(and(eq(session.harness, sessionHarness(ref.harness)), eq(session.key, ref.key)))
               .get(),
             (row) => row?.id ?? null,
           ),

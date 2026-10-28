@@ -9,6 +9,7 @@ import { Tags } from '../contract/service/vocabulary.js';
 import { HOLDER, HOLDER_SLOT } from '../contract/wire/tags/holder.js';
 import { block, event } from '../store/tables.js';
 import { ELSEWHERE, elsewhere } from '../tree/sessions.js';
+import { sessionToken } from '../../platform/contract/wire/session.js';
 
 const stepping = writes('Tree.step.holdersProven', [block, session]);
 
@@ -45,17 +46,22 @@ export const holdersProven = Effect.fn('GraphStep.holdersProven')(function* (pro
     }
   }
   const foreign = new Set<number>();
-  for (const page of pagesOf([...new Set(held.map((row) => table.holderOf(row)!))], 1)) {
+  const identity = new Map<number, string>();
+  const writers = [...held.map((row) => table.holderOf(row)!), ...[...claimer.values()].filter((id): id is number => id !== null)];
+  for (const page of pagesOf([...new Set(writers)], 1)) {
     for (const row of yield* db
-      .select({ id: session.id })
+      .select({ id: session.id, harness: session.harness, key: session.key })
       .from(session)
-      .where(and(inArray(session.id, page), eq(session.harness, ELSEWHERE)))) {
-      foreign.add(row.id);
+      .where(inArray(session.id, page))) {
+      if (row.harness === ELSEWHERE) foreign.add(row.id);
+      identity.set(row.id, sessionToken(row));
     }
   }
   const unproven = held.filter((row) => {
     const holder = table.holderOf(row)!;
-    return claimer.get(row.id) !== holder && !foreign.has(holder);
+    const claimedBy = claimer.get(row.id);
+    const same = claimedBy != null && identity.has(holder) && identity.get(holder) === identity.get(claimedBy);
+    return claimedBy !== holder && !same && !foreign.has(holder);
   });
   if (unproven.length === 0) return;
   yield* store.transaction(stepping, (unit) =>

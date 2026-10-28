@@ -21,6 +21,7 @@ import { briefsLeave } from './briefsLeave.js';
 import { storageStealth } from './storageStealth.js';
 import { storageById } from './storageById.js';
 import { holdersProven } from './holdersProven.js';
+import { sessionNamespace } from './sessionNamespace.js';
 
 export const GRAPH_STEPS: readonly GraphStep[] = [
   { id: 'decision-becomes-spec', run: decisionBecomesSpec },
@@ -43,6 +44,7 @@ export const GRAPH_STEPS: readonly GraphStep[] = [
   { id: '20261020160000_knowledge_names', run: knowledgeNames },
   { id: '20261020210000_briefs_leave', run: briefsLeave },
   { id: '20261023130000_holders_proven', run: holdersProven },
+  { id: '20261028120000_session_namespace', mirror: true, run: sessionNamespace },
 ];
 
 export const GRAPH_BASE: GraphBase | null = null;
@@ -79,7 +81,14 @@ export const graphSteps = (
     last,
     base,
     standing,
-    after: (reached) => (standing(reached) === 'behind' ? steps.slice(rank(reached) + 1) : []),
+    mirror: steps.filter((step) => step.mirror).map((step) => step.id),
+    after: (reached, mirrored) => {
+      const pending = standing(reached) === 'behind' ? steps.slice(rank(reached) + 1) : [];
+      if (mirrored === undefined) return pending;
+      const passed = new Set(mirrored);
+      const missing = new Set(pending.map((step) => step.id));
+      return steps.filter((step) => missing.has(step.id) || (step.mirror && !passed.has(step.id)));
+    },
     lower: (one, other) => {
       const [first, second] = [standing(one), standing(other)];
       if (first === 'newer' || second === 'newer' || first === 'older' || second === 'older') return undefined;

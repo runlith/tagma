@@ -1,5 +1,9 @@
 import { Effect } from 'effect';
 import { Background } from '../../platform/contract/service/background.js';
+import { GraphStore } from '../../platform/contract/service/store.js';
+import { writes } from '../../platform/contract/service/writes.js';
+import { meta } from '../store/tables.js';
+import { inArray } from 'drizzle-orm';
 import type { Git } from '@runlith/git/Git';
 import { unmergedPaths } from '../../platform/git/unmerged.js';
 import { Tags } from '../contract/service/vocabulary.js';
@@ -14,6 +18,9 @@ import { projectToTree } from '../tree/projection.js';
 import { scanTree, type TreeScan } from '../tree/scan.js';
 import type { ShadowGit } from '../tree/shadow.js';
 import type { GraphSteps } from '../contract/service/steps.js';
+
+const mirrorStep = (id: string): string => `graph-step:${id}`;
+const steppingMirror = writes('Graph.advanceTree.mirrorStep', [meta]);
 
 const midOperation = Effect.fnUntraced(function* (git: Git['Service'], treeRoot: string) {
   const branch = yield* treeBranch(treeRoot);
@@ -33,9 +40,21 @@ export const advanceTree = Effect.fn('Graph.advanceTree')(function* (input: {
   readonly fromTree: boolean;
   readonly scan?: TreeScan;
 }) {
-  const pending = input.steps.after(input.format.reached());
   yield* Effect.annotateCurrentSpan('graph.steps.passed', false);
-  if (pending.length === 0 || input.format.holds()) return false;
+  if (input.format.holds()) return false;
+  const store = yield* GraphStore;
+  const mirrored =
+    input.steps.mirror.length === 0
+      ? []
+      : yield* store.db
+          .select({ id: meta.value })
+          .from(meta)
+          .where(inArray(meta.key, input.steps.mirror.map(mirrorStep)));
+  const pending = input.steps.after(
+    input.format.reached(),
+    mirrored.map((row) => row.id),
+  );
+  if (pending.length === 0) return false;
   const ids = pending.map((step) => step.id).join(' · ');
   if (yield* midOperation(input.git, input.treeRoot)) {
     yield* Effect.logWarning(`${input.treeRoot} stands mid-operation, so its graph steps wait until it concludes: ${ids}`);
@@ -53,6 +72,13 @@ export const advanceTree = Effect.fn('Graph.advanceTree')(function* (input: {
         for (const step of pending) {
           yield* progress.stage(step.id);
           yield* step.run(input.project);
+          if (step.mirror)
+            yield* store.transaction(steppingMirror, () =>
+              store.db
+                .insert(meta)
+                .values({ key: mirrorStep(step.id), value: step.id })
+                .onConflictDoUpdate({ target: meta.key, set: { value: step.id } }),
+            );
           yield* progress.advance();
         }
         yield* progress.stage('Publishing graph format');

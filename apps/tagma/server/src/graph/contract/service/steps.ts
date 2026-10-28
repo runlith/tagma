@@ -13,6 +13,7 @@ export type StepServices = GraphStore | Act | BlockNames | BlockProjection | Blo
 
 export type GraphStep = {
   readonly id: string;
+  readonly mirror?: boolean;
   readonly run: (
     project: ProjectRow,
   ) => Effect.Effect<void, StoreFailure | SearchUncounted | GateRefusal<FloorRefusal | 'no-root' | 'not-found' | 'deleted'>, StepServices>;
@@ -29,7 +30,8 @@ export class GraphSteps extends Context.Service<
     readonly last: string;
     readonly base: GraphBase | null;
     readonly standing: (reached: string | null) => StepStanding;
-    readonly after: (reached: string | null) => readonly GraphStep[];
+    readonly mirror: readonly string[];
+    readonly after: (reached: string | null, mirrored?: readonly string[]) => readonly GraphStep[];
     readonly lower: (one: string | null, other: string | null) => string | null | undefined;
   }
 >()('graph/GraphSteps') {}
