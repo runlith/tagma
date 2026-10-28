@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import type { RailPlace } from './activity';
+  import { markMoves, type RailPlace } from './activity';
   import { inStep } from './inStep';
 
   type Props = {
@@ -23,6 +23,6 @@
   {#if place !== 'only'}
     <span class={['absolute left-[2.5px] w-px bg-border/50', THREAD[place]]}></span>
   {/if}
-  {#key dot}<span class={['absolute top-[8.5px] left-0 size-1.5', dot]} {@attach inStep}></span>{/key}
+  {#key dot}<span class={['absolute top-[8.5px] left-0 size-1.5', dot]} {@attach markMoves(dot) && inStep}></span>{/key}
   {@render children()}
 </div>

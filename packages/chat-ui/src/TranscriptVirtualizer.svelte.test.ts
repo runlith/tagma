@@ -119,6 +119,25 @@ describe('where the mounted window opens', () => {
     head.virtualizer.dispose();
   });
 
+  test('rows below the screen measured shorter extend the window to a screen of content past it', () => {
+    const { virtualizer, root } = opened(rows(numbered(0, 200)), { tail: false });
+    expect(mounted(virtualizer).at(-1)).toBe('row-19');
+
+    for (const key of numbered(10, 20)) virtualizer.measureRow(measured(root, key, 6));
+
+    expect(mounted(virtualizer).at(-1)).toBe('row-28');
+    virtualizer.dispose();
+  });
+
+  test('a far select mounts the rows where it lands before the scroll is read back', () => {
+    const { virtualizer } = opened(rows(numbered(0, 200)), { tail: false });
+
+    virtualizer.scrollToRow('row-150', 'smooth');
+
+    expect(mounted(virtualizer)).toEqual(expect.arrayContaining(['row-130', 'row-140', 'row-150']));
+    virtualizer.dispose();
+  });
+
   test('the space below the last row is part of what the window reserves', () => {
     const items = rows(numbered(0, 10));
     const bare = opened(items);

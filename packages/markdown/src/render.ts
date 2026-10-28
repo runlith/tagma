@@ -8,6 +8,13 @@ import { escapeAttribute, escapeHtml } from '@runlith/utils/text';
 const domPurify = typeof window === 'undefined' ? undefined : createDOMPurify(window);
 
 if (domPurify && createDOMPurify.isSupported) {
+  domPurify.setConfig({
+    ADD_ATTR: ['tabindex', 'target'],
+    FORBID_CONTENTS: ['script', 'style'],
+    FORBID_TAGS: ['style'],
+    SANITIZE_NAMED_PROPS: true,
+    USE_PROFILES: { html: true, mathMl: true },
+  });
   domPurify.addHook('afterSanitizeAttributes', (node: Element) => {
     if (!(node instanceof HTMLAnchorElement) || node.target !== '_blank') return;
 
@@ -26,13 +33,7 @@ export function fallbackMarkdown(value: string): string {
 export function sanitizeHtml(rawHtml: string, markdown: string): string {
   if (!domPurify || !createDOMPurify.isSupported) return fallbackMarkdown(markdown);
 
-  return domPurify.sanitize(rawHtml, {
-    ADD_ATTR: ['tabindex', 'target'],
-    FORBID_CONTENTS: ['script', 'style'],
-    FORBID_TAGS: ['style'],
-    SANITIZE_NAMED_PROPS: true,
-    USE_PROFILES: { html: true, mathMl: true },
-  });
+  return domPurify.sanitize(rawHtml);
 }
 
 export type MarkdownHtml = { key: string; html: string; live: boolean };

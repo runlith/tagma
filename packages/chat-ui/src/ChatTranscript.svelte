@@ -258,10 +258,15 @@
     if (!element || typeof document === 'undefined') return;
 
     let focused: string | undefined;
+    let touched: string | undefined;
     let ends: readonly string[] = [];
     const keyOf = (node: Node | null | undefined): string | undefined =>
       (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>('[data-timeline-key]')?.dataset.timelineKey;
-    const keep = () => virtualizer.keep(focused === undefined ? ends : [focused, ...ends]);
+    const keep = () => virtualizer.keep([focused, touched, ...ends].filter((key): key is string => key !== undefined));
+    const touch = (event: TouchEvent) => {
+      touched = event.touches.length === 0 ? undefined : (touched ?? keyOf(event.target as Node | null));
+      keep();
+    };
     const syncSelection = () => {
       const selection = window.getSelection();
       viewport.syncSelection(selection, element);
@@ -286,16 +291,19 @@
     element.addEventListener('focusin', focusIn);
     element.addEventListener('focusout', focusOut);
     element.addEventListener('click', pressed, true);
+    for (const name of ['touchstart', 'touchend', 'touchcancel'] as const)
+      element.addEventListener(name, touch, { capture: true, passive: true });
     return () => {
       document.removeEventListener('selectionchange', syncSelection);
       element.removeEventListener('focusin', focusIn);
       element.removeEventListener('focusout', focusOut);
       element.removeEventListener('click', pressed, true);
+      for (const name of ['touchstart', 'touchend', 'touchcancel'] as const) element.removeEventListener(name, touch, { capture: true });
     };
   });
 
-  function measureRow(node: HTMLElement): void {
-    virtualizer.measureRow(node);
+  function mountRow(node: HTMLElement): void {
+    virtualizer.mountRow(node);
   }
 
   function navigationTargetEditable(target: EventTarget | null): boolean {
@@ -474,7 +482,7 @@
                 spaced={item.spaced}
                 dim={timelineItemRewound(item)}
                 inert={virtualizer.heldKeys.has(String(row.key))}
-                measure={measureRow}
+                measure={mountRow}
               >
                 {#if item.kind === 'tail'}
                   {@render tailRow(item.slot)}

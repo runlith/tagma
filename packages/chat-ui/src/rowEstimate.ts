@@ -66,6 +66,24 @@ export function sameMetrics(left: FeedMetrics, right: FeedMetrics): boolean {
 
 export const DESKTOP_METRICS: FeedMetrics = feedMetrics(768, { body: 14, ui: 13, small: 12, spacing: 4 });
 
+export function feedType(root: HTMLElement): FeedType {
+  const style = typeof getComputedStyle === 'function' ? getComputedStyle(root) : undefined;
+  const rem =
+    Number.parseFloat(typeof getComputedStyle === 'function' ? getComputedStyle(root.ownerDocument.documentElement).fontSize : '') || 16;
+  const token = (name: string, fallback: number): number => {
+    const value = style?.getPropertyValue(name).trim() ?? '';
+    const number = Number.parseFloat(value);
+    if (!Number.isFinite(number)) return fallback * rem;
+    return value.endsWith('px') ? number : number * rem;
+  };
+  return {
+    body: token('--text-body', 0.875),
+    ui: token('--text-ui', 0.8125),
+    small: token('--text-small', 0.75),
+    spacing: token('--spacing', 0.25),
+  };
+}
+
 export const attachmentsHeight = (count: number, metrics: FeedMetrics): number =>
   count === 0 ? 0 : Math.ceil(count / metrics.thumbs) * ATTACHMENTS_PX;
 

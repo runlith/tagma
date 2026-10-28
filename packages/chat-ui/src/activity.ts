@@ -311,6 +311,8 @@ const MARK_STILL = 'border border-muted-foreground/50 bg-transparent';
 
 export const liveMark = (pulse: boolean): string => (pulse ? MARK_MOVING : MARK_STILL);
 
+export const markMoves = (mark: string): boolean => /\banimate-/.test(mark);
+
 export function chatCompactionMark(entry: CompactionActivityEntry): string {
   if (entry.compactionStatus === 'running') return MARK_MOVING;
   if (entry.compactionStatus === 'completed') return 'bg-chat-mutation';
