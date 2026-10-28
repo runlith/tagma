@@ -192,19 +192,17 @@ export class RecordStream {
   async verify(): Promise<void> {
     const generation = this.generation;
     if ((await this.standing()) !== 'ended' || generation !== this.generation || this.healing === generation) return;
-    this.healing = generation;
+    this.generation += 1;
+    this.healing = this.generation;
     this.release();
-    return this.finish(generation);
+    return this.finish(this.generation);
   }
 
   private async recover(generation: number): Promise<void> {
     if (generation !== this.generation || this.healing === generation) return;
     this.healing = generation;
     this.release();
-    if (!this.stalled) {
-      this.stalled = true;
-      this.listener({ _tag: 'Recovering' });
-    }
+    this.recovering();
     const standing = await this.standing();
     if (generation !== this.generation) return;
     if (standing === 'ended') return this.finish(generation);
@@ -227,12 +225,18 @@ export class RecordStream {
 
   private async finish(generation: number): Promise<void> {
     this.writer.replaying(true);
+    let replayed: Replayed = 'lost';
     try {
-      await this.replay(generation, false, this.aim);
+      replayed = await this.replay(generation, !this.fed, this.aim);
     } finally {
       if (generation === this.generation) this.writer.replaying(false);
     }
-    if (generation === this.generation) return this.ended(generation);
+    if (generation !== this.generation) return;
+    if (replayed !== 'lost') return this.ended(generation);
+    this.recovering();
+    await recoveryPause(this.attempts);
+    this.attempts += 1;
+    if (generation === this.generation) return this.finish(generation);
   }
 
   private async standing(): Promise<Standing> {
@@ -248,6 +252,12 @@ export class RecordStream {
     } catch {
       return 'unknown';
     }
+  }
+
+  private recovering(): void {
+    if (this.stalled) return;
+    this.stalled = true;
+    this.listener({ _tag: 'Recovering' });
   }
 
   private flowing(): void {

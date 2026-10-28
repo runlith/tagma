@@ -34,10 +34,10 @@ const repoOver = (reads: Record<string, unknown>, state?: unknown): Repo & { rea
   return {
     asked,
     bytes: {
-      key: (key: { readonly offset: string }) => ({
+      key: (key: { readonly offset: string; readonly limit?: number }) => ({
         refresh: () => {
           asked.push(key.offset);
-          const answer = reads[key.offset];
+          const answer = (key.limit === 0 ? reads[`${key.offset} positions`] : undefined) ?? reads[key.offset];
           return answer === undefined ? Promise.reject(new Error(`this suite answers no read at ${key.offset}`)) : Promise.resolve(answer);
         },
       }),
@@ -589,6 +589,74 @@ test('a refused feed of an execution that ended reads the rest of its record and
   expect(pane.written).toEqual(['abc', 'de']);
   expect(frames).toEqual([{ _tag: 'Recovering' }, { _tag: 'Ended', ending: { _tag: 'Exit', native: { _tag: 'Code', code: 1 } } }]);
   expect(live.at().opened).toHaveLength(1);
+});
+
+test('an ending verified while the first read of the record is in flight hands every byte to the writer once', async () => {
+  let answer: (value: unknown) => void = () => undefined;
+  const positions = new Promise((resolve) => {
+    answer = resolve;
+  });
+  const live = liveOver();
+  const pane = writerOver();
+  const frames: StreamFrame[] = [];
+  const reads = { '0 positions': positions, '0': chunk(0, 'abc', 5), '3': chunk(3, 'de', 5) };
+  const stream = new RecordStream(
+    repoReads(repoOver(reads, { phase: 'ended', nativeExit: { _tag: 'Code', code: 0 } })),
+    live.live,
+    1,
+    address,
+    { kind: 'terminal', stream: 'pty' },
+    pane.writer,
+    (frame) => frames.push(frame),
+  );
+  void stream.start();
+  await settled();
+  void stream.verify();
+  await settled();
+  answer(chunk(0, '', 5));
+  await settled();
+  while (pane.parse() !== undefined) await settled();
+
+  expect(pane.written).toEqual(['abc', 'de']);
+  expect(pane.offsets).toEqual(['0', '3']);
+  expect(frames).toEqual([{ _tag: 'Ended', ending: { _tag: 'Exit', native: { _tag: 'Code', code: 0 } } }]);
+  expect(live.at().opened).toEqual([]);
+});
+
+test('a lost read of an ending the input verified says it is recovering and reads the rest again before reporting the exit', async () => {
+  vi.useFakeTimers();
+  try {
+    const live = liveOver();
+    const pane = writerOver();
+    const frames: StreamFrame[] = [];
+    const reads: Record<string, unknown> = { '0 positions': chunk(0, '', 3), '0': chunk(0, 'abc', 3) };
+    const stream = new RecordStream(
+      repoReads(repoOver(reads, { phase: 'ended', nativeExit: { _tag: 'Code', code: 0 } })),
+      live.live,
+      1,
+      address,
+      { kind: 'terminal', stream: 'pty' },
+      pane.writer,
+      (frame) => frames.push(frame),
+    );
+    void stream.start();
+    await vi.advanceTimersByTimeAsync(0);
+    pane.parse();
+    await vi.advanceTimersByTimeAsync(0);
+
+    void stream.verify();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(frames).toEqual([{ _tag: 'Recovering' }]);
+
+    reads['3'] = chunk(3, 'de', 5);
+    await vi.advanceTimersByTimeAsync(1_000);
+    pane.parse();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pane.written).toEqual(['abc', 'de']);
+    expect(frames).toEqual([{ _tag: 'Recovering' }, { _tag: 'Ended', ending: { _tag: 'Exit', native: { _tag: 'Code', code: 0 } } }]);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('a gap ending re-reads through the bounded door, so a reader retention outran advances instead of reopening at a dead cursor', async () => {
