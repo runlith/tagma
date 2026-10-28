@@ -87,7 +87,7 @@ let changed =
       : session !== undefined
         ? [...session.paths]
         : [...split(git('diff', '--name-only', '-z', base!)), ...split(git('ls-files', '-z', '--others', '--exclude-standard'))];
-changed = [...new Set(changed)].filter((path) => !path.startsWith('archive/'));
+changed = [...new Set(changed)];
 const named = commit ?? base ?? (session === undefined ? 'named paths' : `lines session ${session.session} holds`);
 const all = args.includes('--full');
 const global = changed.find(

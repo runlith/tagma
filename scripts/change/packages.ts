@@ -8,7 +8,7 @@ export const workspacePaths = (root: string): string[] => {
   });
   if (git.exitCode !== 0) throw new Error(git.stderr.toString());
   return [...new Set(git.stdout.toString().split('\0'))].filter(
-    (path) => path !== '' && !path.startsWith('archive/') && !path.startsWith('.git/') && existsSync(join(root, path)),
+    (path) => path !== '' && !path.startsWith('.git/') && existsSync(join(root, path)),
   );
 };
 
@@ -25,7 +25,7 @@ export const packagesOf = (paths: readonly string[], read: (path: string) => str
   const root = JSON.parse(read('package.json')) as { readonly workspaces?: readonly string[] | { readonly packages: readonly string[] } };
   const patterns = root.workspaces === undefined ? [] : 'packages' in root.workspaces ? root.workspaces.packages : root.workspaces;
   return paths
-    .filter((path) => /(?:^|\/)package.json$/.test(path) && !path.startsWith('.') && !path.startsWith('archive/'))
+    .filter((path) => /(?:^|\/)package.json$/.test(path) && !path.startsWith('.'))
     .filter((path) => path === 'package.json' || patterns.some((pattern) => new Bun.Glob(pattern).match(dirname(path))))
     .map((manifest) => {
       const parsed = JSON.parse(read(manifest)) as {

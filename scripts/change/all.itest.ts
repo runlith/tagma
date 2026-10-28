@@ -116,13 +116,11 @@ test('all suites resume without replay and report an unconfigured workspace fail
   try {
     expect(Bun.spawnSync(['git', 'init', '-q', root]).exitCode).toBe(0);
     mkdirSync(join(root, 'pkg'));
-    mkdirSync(join(root, 'archive'));
-    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['pkg', 'archive'] }));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['pkg'] }));
     writeFileSync(
       join(root, 'pkg/package.json'),
       JSON.stringify({ scripts: { test: 'bun test ./pass.test.ts', 'test:integration': "bun test $(find . -name '*.itest.ts')" } }),
     );
-    writeFileSync(join(root, 'archive/package.json'), JSON.stringify({ scripts: { test: 'exit 42' } }));
     const report = join(root, 'reading.json');
     writeFileSync(join(root, 'pkg/pass.test.ts'), "import { expect, test } from 'bun:test'; test('sum', () => expect(2 + 2).toBe(4));");
     writeFileSync(

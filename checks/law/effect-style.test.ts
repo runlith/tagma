@@ -8,7 +8,7 @@ import { effectStyle } from './effect-style/implementation';
 const styleOf = (params: unknown) => checked(declared.params, effectStyle, params);
 
 const imports = "import { Effect, Schema, Scope, Context, Layer, ManagedRuntime, Data } from 'effect';\n";
-const params = { base: '', region: ['src/'], files: { extensions: ['.ts', '.svelte'], exclude: ['**/archive/**'] }, forms: FORMS };
+const params = { base: '', region: ['src/'], files: { extensions: ['.ts', '.svelte'], exclude: ['**/vendor/**'] }, forms: FORMS };
 const judge = (
   files: Readonly<Record<string, string>>,
   forms: readonly Form[] = FORMS,
@@ -328,7 +328,7 @@ test('selection respects forms, base, region, extensions and excluded paths', ()
   const files = {
     'pkg/src/file.ts': imports + 'const self = this; Effect.gen(function* () { throw failure; });',
     'src/file.ts': 'const self = this;',
-    'pkg/src/archive/file.ts': 'const self = this;',
+    'pkg/src/vendor/file.ts': 'const self = this;',
     'pkg/src/file.txt': 'const self = this;',
     'pkg/other/file.ts': 'const self = this;',
   };

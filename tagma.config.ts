@@ -7,10 +7,10 @@ import type { EffectStyleParams } from './checks/law/effect-style/declaration';
 
 const EFFECT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.svelte'];
 
-const EFFECT_FILES = { exclude: ['**/archive/**', '**/node_modules/**', '**/dist/**'], extensions: EFFECT_EXTENSIONS };
+const EFFECT_FILES = { exclude: ['**/node_modules/**', '**/dist/**'], extensions: EFFECT_EXTENSIONS };
 
 const EFFECT_TEST_FILES = {
-  exclude: ['**/archive/**', '**/node_modules/**', '**/dist/**', 'packages/effect-test/**'],
+  exclude: ['**/node_modules/**', '**/dist/**', 'packages/effect-test/**'],
   extensions: EFFECT_EXTENSIONS,
 };
 
@@ -281,7 +281,7 @@ export default defineConfig({
     reexports: Code.noReexports({
       allows: ['**/ui/*/index.ts', 'packages/primitives/src/dialog/index.ts'],
       files: {
-        exclude: ['archive/**', '**/*.d.ts', '**/*.generated.*'],
+        exclude: ['**/*.d.ts', '**/*.generated.*'],
         extensions: ['.ts', '.mts', '.cts', '.tsx', '.js', '.mjs', '.cjs', '.jsx', '.svelte'],
       },
     }),
