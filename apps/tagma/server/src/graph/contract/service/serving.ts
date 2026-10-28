@@ -201,10 +201,12 @@ export const ServedTree = Context.Reference<{
 
 export type HeldTask = { readonly name: string; readonly title: string };
 
+export type HolderTask = { readonly name: string; readonly title: string; readonly stealth: boolean };
+
 export class TaskHolders extends Context.Service<
   TaskHolders,
   {
-    forHolders(threadIds: readonly string[], writer?: SessionRef): Effect.Effect<ReadonlyMap<string, readonly HeldTask[]>, StoreFailure>;
+    forHolders(threadIds: readonly string[], writer?: SessionRef): Effect.Effect<ReadonlyMap<string, readonly HolderTask[]>, StoreFailure>;
   }
 >()('tagma/graph/TaskHolders') {}
 

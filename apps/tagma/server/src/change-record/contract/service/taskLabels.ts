@@ -6,6 +6,7 @@ import type { SessionRef } from '../../../platform/contract/wire/session.js';
 export type HeldTaskLabel = {
   readonly name: string;
   readonly title: string;
+  readonly stealth: boolean;
 };
 
 export class HeldTaskLabels

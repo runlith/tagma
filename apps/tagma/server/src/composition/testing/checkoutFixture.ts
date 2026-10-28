@@ -263,7 +263,7 @@ export const makeCheckout = Effect.fnUntraced(
               originFor(threadId),
               {
                 projectId,
-                tasks: [{ name: 'ab12cd34', title: 'the work this commit answers' }],
+                tasks: [{ name: 'ab12cd34', title: 'the work this commit answers', stealth: false }],
                 taking: (options.taking ?? []).map((session) => ({
                   projectId: session.threadId === 'operator' ? null : projectId,
                   threadId: session.threadId,

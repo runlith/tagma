@@ -114,7 +114,7 @@ export const writeThrough = (
         const after: Effect.Effect<void>[] = [];
         if (stealth?.batches != null && hidden.length > 0) after.push(yield* landing(stealth.batches, hidden));
         if (batches !== null) after.push(yield* landing(batches, own));
-        else if (commits !== undefined) after.push(commits.mark(entries, own));
+        else if (commits !== undefined && own.length > 0) after.push(commits.mark(entries, own));
         return Effect.all(after, { discard: true });
       });
       const undo = Effect.suspend(() => {

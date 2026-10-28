@@ -1,10 +1,17 @@
 import { expect, test } from 'bun:test';
-import { messageOf } from './message.js';
+import { messageOf, subjectFor } from './message.js';
 
 const tasks = [
-  { name: 'ab12cd34', title: 'first task' },
-  { name: 'cd34ef56', title: 'second task' },
+  { name: 'ab12cd34', title: 'first task', stealth: false },
+  { name: 'cd34ef56', title: 'second task', stealth: false },
 ];
+
+test('a commit message names no stealth task, neither on the subject nor by its title', () => {
+  const kept = { name: 'ef56ab78', title: 'the vendor deal', stealth: true };
+  expect(messageOf('Fix the result', [...tasks, kept])).toBe('Fix the result (ab12cd34, cd34ef56)');
+  expect(messageOf('Fix the result', [kept])).toBe('Fix the result');
+  expect(subjectFor(undefined, [kept])).toBe('the changes of one session');
+});
 
 test('a commit message carries its tasks on the subject and preserves its body', () => {
   for (const newline of ['\n', '\r\n']) {

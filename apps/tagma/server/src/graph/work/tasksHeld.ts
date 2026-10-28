@@ -7,7 +7,7 @@ import { block } from '../store/tables.js';
 import { session } from '../../platform/store/writers.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
 import { blockName } from '../contract/wire/references.js';
-import type { HeldTask } from '../contract/service/serving.js';
+import type { HolderTask } from '../contract/service/serving.js';
 import { WORK } from '../contract/wire/tags/work.js';
 import { HOLDER, HOLDER_SLOT } from '../contract/wire/tags/holder.js';
 import { carriesContract, contractAt, slotValue } from '../vocabulary/projection.js';
@@ -19,7 +19,7 @@ export function heldTasks(
   projectId: number,
   keys: readonly string[],
   harness = NATIVE_HARNESS,
-): Effect.Effect<ReadonlyMap<string, readonly HeldTask[]>, StoreFailure> {
+): Effect.Effect<ReadonlyMap<string, readonly HolderTask[]>, StoreFailure> {
   if (keys.length === 0) return Effect.succeed(new Map());
   const fixed =
     2 +
@@ -28,10 +28,10 @@ export function heldTasks(
     table.wordsAt(WORK, 'active').reduce((count, words) => count + 2 + words.words.length, 0);
   const size = Math.max(1, rowsPerStatement(1) - fixed);
   return Effect.gen(function* () {
-    const held = new Map<string, HeldTask[]>();
+    const held = new Map<string, HolderTask[]>();
     for (const ids of chunk([...new Set(keys)], size)) {
       const rows = yield* graph.db
-        .select({ key: session.key, uuid: block.uuid, title: block.title })
+        .select({ key: session.key, uuid: block.uuid, title: block.title, stealth: block.stealth })
         .from(block)
         .innerJoin(session, eq(sql`cast(${slotValue(table, HOLDER, HOLDER_SLOT, block.id)} as integer)`, session.id))
         .where(
@@ -47,10 +47,10 @@ export function heldTasks(
         .orderBy(block.title, block.uuid);
       for (const row of rows) {
         const current = held.get(row.key) ?? [];
-        current.push({ name: blockName(row.uuid), title: row.title });
+        current.push({ name: blockName(row.uuid), title: row.title, stealth: row.stealth });
         held.set(row.key, current);
       }
     }
-    return held as ReadonlyMap<string, readonly HeldTask[]>;
+    return held as ReadonlyMap<string, readonly HolderTask[]>;
   });
 }
