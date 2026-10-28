@@ -1,4 +1,5 @@
 import { it } from '@runlith/effect-test';
+import { headed, notRun } from '@runlith/testbed/fixture';
 import { Data, Deferred, Effect, Schema, type Scope } from 'effect';
 import type { BrowserContextOptions } from 'playwright-core';
 import { writeFile } from 'node:fs/promises';
@@ -7,7 +8,12 @@ import { onFailure, recorded } from './artifacts.ts';
 import { session, type ElectronLaunch, type Lane, type Session } from './engines.ts';
 
 export type BrowserTest = Session & { readonly artifacts: string };
-export type Options = { readonly lanes?: readonly Lane[]; readonly context?: BrowserContextOptions; readonly electron?: ElectronLaunch };
+export type Options = {
+  readonly lanes?: readonly Lane[];
+  readonly context?: BrowserContextOptions;
+  readonly electron?: ElectronLaunch;
+  readonly headed?: boolean;
+};
 
 const selected = (options: Options): readonly Lane[] => {
   const filter = process.env.E2E_LANES?.split(',');
@@ -72,7 +78,8 @@ const registerEffect = <E>(
 ): void => {
   for (const lane of selected(options)) {
     const title = `${name} [${lane}]`;
-    it.live(title, () => execute(title, lane, options, body));
+    if (options.headed === true && !headed()) notRun(title, 'headed');
+    else it.live(title, () => execute(title, lane, options, body));
   }
 };
 

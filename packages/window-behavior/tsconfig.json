@@ -1,11 +1,12 @@
 {
-  "extends": "@runlith/tsconfig/library.json",
+  "extends": "@runlith/tsconfig/bun.json",
   "compilerOptions": {
     "types": ["bun"],
-    "rootDir": "src",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "rootDir": ".",
     "outDir": "dist",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "e2e/**/*.ts"],
   "exclude": ["src/**/*.test.ts"]
 }

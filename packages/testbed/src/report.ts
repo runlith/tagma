@@ -1,7 +1,7 @@
 import { relative, resolve } from 'node:path';
 import { CHILD_KINDS, type ByKind } from './core/children.ts';
 import { kindOf, SLOW_MS } from './core/files.ts';
-import type { Cost, FileRow, Spawned, TestRow, WorldRow } from './core/ledger.ts';
+import type { Cost, FileRow, NotRunRow, Spawned, TestRow, WorldRow } from './core/ledger.ts';
 
 export const ITEMS = ['load', 'world', 'tenant', 'body', 'guard'] as const;
 export type ItemName = (typeof ITEMS)[number];
@@ -324,7 +324,14 @@ export const runOf = (facts: RunFacts, files: readonly FileRow[], tests: number,
 
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 
-export const summary = (run: RunRow, files: readonly FileRow[], slow: readonly SlowRow[], unmatched: number, report: string): string => {
+export const summary = (
+  run: RunRow,
+  files: readonly FileRow[],
+  slow: readonly SlowRow[],
+  unmatched: number,
+  report: string,
+  notRun: readonly NotRunRow[] = [],
+): string => {
   const { worlds } = run;
   const lines = [
     `testbed: ${run.files} files, ${run.tests} tests, wall ${seconds(run.wall)}, cpu ${seconds(run.cpu)} (${run.cpuPerFile} ms per file; target ${TARGET_CPU_PER_FILE_MS.join('–')} ms)`,
@@ -356,6 +363,7 @@ export const summary = (run: RunRow, files: readonly FileRow[], slow: readonly S
     lines.push(`  slow tests, over ${seconds(SLOW_MS.unit)} unit or ${seconds(SLOW_MS.resource)} integration: ${slow.length}`);
     for (const row of [...slow].sort((left, right) => right.wall - left.wall).slice(0, 10)) lines.push(`    ${slowLine(row)}`);
   }
+  for (const row of notRun) lines.push(`  ${row.reason}, not run: ${row.name} (${row.file})`);
   if (unmatched > 0) lines.push(`  ${unmatched} test rows kept no name: the junit report and the run disagreed on their files`);
   lines.push(`  report: ${report}`);
   return lines.join('\n');

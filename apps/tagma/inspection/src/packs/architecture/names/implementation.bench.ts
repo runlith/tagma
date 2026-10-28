@@ -22,7 +22,18 @@ const MARGIN = 10;
 
 const FILES = {
   extensions: ['.ts', '.tsx', '.svelte'],
-  exclude: ['**/*.test.*', '**/*.itest.*', '**/*.stest.*', '**/*.spec.*', '**/*.bench.*', '**/*.generated.*', '**/*.d.ts', '**/*_pb.ts'],
+  exclude: [
+    '**/*.test.*',
+    '**/*.itest.*',
+    '**/*.e2e.*',
+    '**/*.stest.*',
+    '**/*.spec.*',
+    '**/*.bench.*',
+    '**/*.fixture.*',
+    '**/*.generated.*',
+    '**/*.d.ts',
+    '**/*_pb.ts',
+  ],
 };
 const VERBS = [
   'read',
@@ -168,7 +179,7 @@ const own = (() => {
   const side = commitTree(REPOSITORY, 'HEAD', [gate.base], new Map(), new Map());
   const texts = new Map<string, string>();
   for (const path of side.paths) {
-    if (!/\.(ts|tsx|svelte)$/.test(path) || /\.(test|itest|stest|spec|bench)\./.test(path)) continue;
+    if (!/\.(ts|tsx|svelte)$/.test(path) || /\.(test|itest|e2e|stest|spec|bench|fixture)\./.test(path)) continue;
     texts.set(path, side.tree.read(path));
   }
   return subjectOf(texts);

@@ -3,11 +3,12 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { constants, getPriority, setPriority } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { kindOf } from './core/files.ts';
-import type { FileRow, Row, TestRow, WorldRow } from './core/ledger.ts';
+import type { FileRow, NotRunRow, Row, TestRow, WorldRow } from './core/ledger.ts';
 import { openProcesses } from './core/processes.ts';
 import { openRun, REPORT_ENV, ROOT_ENV, sweepRuns } from './core/run.ts';
 import { acquireUnits, ADMITTED_ENV, budgetOf, budgetRoot, coresOf, memoryOf, NICE, SLOT_ENV } from './slots.ts';
 import { junitOf, outcomesOf, runOf, slowOf, summary, verdictsOf, workersOf, worldsOf } from './report.ts';
+import { HEADED_ENV } from './fixture.ts';
 
 const REPO = resolve(import.meta.dir, '../../..');
 const TIMINGS = '.bun-test-timings.json';
@@ -15,6 +16,7 @@ const TAIL_MS = 250;
 
 const command = process.argv.slice(2);
 const program = command[0] === 'e2e' && command[1] === '--program';
+let headed = false;
 if (program) {
   const file = command[2];
   if (file === undefined) throw new Error('e2e --program needs a program file');
@@ -50,6 +52,10 @@ if (program) {
   let positional = false;
   for (let at = 1; at < command.length; at++) {
     const part = command[at]!;
+    if (!positional && part === '--headed') {
+      headed = true;
+      continue;
+    }
     if (part === '--') {
       positional = true;
       continue;
@@ -215,6 +221,7 @@ const environment: Record<string, string | undefined> = {
   [ROOT_ENV]: run.root,
   [REPORT_ENV]: run.report,
   [SLOT_ENV]: holder,
+  [HEADED_ENV]: headed ? '1' : undefined,
 };
 delete environment[ADMITTED_ENV];
 const child = Bun.spawn(command, {
@@ -253,6 +260,7 @@ const rows: Row[] = existsSync(run.report)
 const mine = (row: Row): boolean => (row as { run?: unknown }).run === run.root;
 const files = rows.filter((row): row is FileRow => row.type === 'file' && mine(row));
 const tests = rows.filter((row): row is TestRow => row.type === 'test' && mine(row));
+const notRun = rows.filter((row): row is NotRunRow => row.type === 'not-run' && mine(row));
 const worlds = worldsOf(rows.filter((row): row is WorldRow => row.type === 'world' && mine(row)));
 const reported = runner === 'bun' && existsSync(junit) ? junitOf(readFileSync(junit, 'utf8'), process.cwd(), REPO) : undefined;
 const outcomes = reported === undefined ? { rows: [], unmatched: 0 } : outcomesOf(tests, reported.cases);
@@ -268,6 +276,6 @@ appendFileSync(
   run.report,
   `${[...outcomes.rows, ...verdicts, ...slow, ...workersOf(files).map((worker) => ({ ...worker, run: run.root })), runRow].map((row) => JSON.stringify(row)).join('\n')}\n`,
 );
-console.error(summary(runRow, files, slow, outcomes.unmatched, run.report));
+console.error(summary(runRow, files, slow, outcomes.unmatched, run.report, notRun));
 if (seed !== undefined) console.error(`  seed: ${seed}`);
 process.exit(code ?? 1);

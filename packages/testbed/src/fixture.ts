@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import type { Bed } from './core/bed.ts';
-import type { Item, Meter, WorldTaken } from './core/ledger.ts';
+import type { Item, Meter, NotRunReason, WorldTaken } from './core/ledger.ts';
 import type { Hold } from './core/watch.ts';
 import { pristine } from './core/pristine.ts';
 import { locate as locationOf, type PathLocation, REPORT_ENV, ROOT_ENV } from './core/run.ts';
@@ -33,6 +33,10 @@ export const release = (pid: number): void => bed()?.release(pid);
 export const meter = (): Meter | undefined => bed()?.ledger.meter();
 
 export const worldTaken = (taken: WorldTaken): void => bed()?.world(taken);
+
+export const HEADED_ENV = 'RUNLITH_TEST_HEADED';
+export const headed = (): boolean => process.env[HEADED_ENV] === '1';
+export const notRun = (name: string, reason: NotRunReason): void => bed()?.notRun(name, reason);
 
 export const runRoot = (): string | undefined => bed()?.run?.root || process.env[ROOT_ENV] || undefined;
 

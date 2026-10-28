@@ -100,6 +100,10 @@ jobs:
           native: 'true'
       - name: hidden Electron fixture
         run: bun run --cwd packages/e2e test:e2e
+      - name: headed window-behavior examples
+        run: |
+          bun run --cwd packages/window-behavior build
+          bun node_modules/.bin/testbed e2e --headed --parallel=1 packages/window-behavior/e2e/window-behavior.e2e.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with:

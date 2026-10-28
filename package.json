@@ -59,7 +59,6 @@
       "drizzle-orm": "1.0.0-rc.5-ab785fc",
       "electron": "44.8.0",
       "esbuild": "^0.25.0",
-      "@playwright/test": "^1.57.0",
       "playwright-core": "^1.60.0",
       "svelte": "5.57.0",
       "svelte-check": "^4.7.7",
