@@ -14,7 +14,8 @@ import { Selection, type BlockPosition, type SelectionRefusal } from '../../cont
 import { blockName } from '../../contract/wire/references.js';
 import { GraphJournal } from '../../contract/service/journal.js';
 import { Sources } from '../../contract/service/sources.js';
-import { type ProposalFiling, deferredOps, proposalFiling } from './filing.js';
+import { type ProposalFiling, proposalFiling } from './filing.js';
+import { deferredOps } from './payload.js';
 import { proposalVerdicts } from './verdicts.js';
 import { AMENDMENT } from '../../contract/wire/tags/amendment.js';
 import { GraphUnits } from '../../../platform/contract/service/units.js';

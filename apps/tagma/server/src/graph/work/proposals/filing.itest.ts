@@ -61,8 +61,6 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
             },
           ]),
         ).toBe('amendment-outside');
-        expect(yield* code([])).toBe('amendment-empty');
-        expect(yield* code([{ op: 'finish', id: target.name } as never])).toBe('amendment-op');
         expect(yield* code([{ op: 'edit', id: '$ghost', old: 'x', new: 'y' } as never])).toBe('amendment-ref');
       }),
     ),

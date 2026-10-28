@@ -30,15 +30,8 @@ import { Catalogs } from '../contract/wire/catalogs.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { BlockProjection, BlockReferences } from '../contract/service/acts.js';
 import { BlockRows } from '../acts/rows.js';
-import {
-  assertBarePayload,
-  assertBareRefs,
-  assertBodyCap,
-  assertNotOperated,
-  assertTagNode,
-  boundaryRefusal,
-  leafRefusal,
-} from './guards.js';
+import { assertBareRefs, assertBodyCap, assertNotOperated, assertTagNode, boundaryRefusal, leafRefusal } from './guards.js';
+import { payloadGate } from '../work/proposals/payload.js';
 import { MODULE } from '../contract/wire/tags/moduleContract.js';
 import { fieldTargetGuard, vocabularyCloser } from '../vocabulary/carriers.js';
 import { checkedLayer } from '../vocabulary/layerWrite.js';
@@ -102,6 +95,7 @@ export const blockBirth = Effect.gen(function* () {
   const tasks = yield* Tasks;
   const assertFieldTargets = yield* fieldTargetGuard;
   const closeVocabulary = yield* vocabularyCloser;
+  const payload = yield* payloadGate;
 
   return Effect.fn('Blocks.create')(function* (
     input: BlockCreate & { readonly farEdges?: readonly FarLink[] },
@@ -141,6 +135,15 @@ export const blockBirth = Effect.gen(function* () {
         'link_blocks with relates or discovered-from — a connection that is not an amendment',
       ]);
     }
+    const uuid = input.uuid ?? mintBlockId();
+    if (amends && input.amendsId !== undefined) {
+      yield* payload.assertFiled(table, {
+        projectId: input.projectId,
+        amendsId: input.amendsId,
+        parentId: input.parentId,
+        node: { uuid, tags: ids, fields },
+      });
+    }
     if (amends && (input.sources?.length ?? 0) > 0) {
       const cwd = (yield* CallerAim)?.cwd;
       if (cwd !== undefined) {
@@ -166,8 +169,6 @@ export const blockBirth = Effect.gen(function* () {
     }
     const named = input.amendsId ?? input.parentId;
     const parentId = named ?? (yield* blockRows.rootBlockOf(input.projectId)).id;
-    const uuid = input.uuid ?? mintBlockId();
-    if (amends) yield* assertBarePayload(table, { uuid, tags: ids, fields });
     const future = { tags: ids, projectId: input.projectId, uuid };
     const near: { readonly kind: string; readonly to: number }[] = [];
     const far: FarLink[] = [...(input.farEdges ?? [])];

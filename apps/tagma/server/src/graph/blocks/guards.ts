@@ -7,9 +7,7 @@ import { lifecycleOf } from '../contract/wire/tags/lifecycle.js';
 import { MODULE } from '../contract/wire/tags/moduleContract.js';
 import type { Tagged } from '../contract/wire/tags/roles.js';
 import { addressedRefsRefusal, blockName } from '../contract/wire/references.js';
-import { bodyCap, declarationOf, type DeclarationNode, type FieldHolder, readFieldOption } from '../vocabulary/declarationRules.js';
-import type { AmendmentOp } from '../contract/wire/batch.js';
-import { AMENDMENT, amendmentOf } from '../contract/wire/tags/amendment.js';
+import { bodyCap, declarationOf, type DeclarationNode } from '../vocabulary/declarationRules.js';
 
 export function leafRefusal(where: string): GateRefusal<'leaf'> {
   return new GateRefusal('leaf', `${where} holds no children`, [
@@ -108,25 +106,6 @@ export function assertNotOperated(
 
 export function assertBareRefs(body: string): Effect.Effect<void, GateRefusal<'body-address'>> {
   return addressedRefsRefusal(body) ?? Effect.void;
-}
-
-export function assertBareOps(ops: readonly AmendmentOp[]): Effect.Effect<void, GateRefusal<'body-address'>> {
-  for (const [index, op] of ops.entries()) {
-    const text = op.op === 'edit' ? op.new : op.op === 'create' || op.op === 'update' ? op.body : undefined;
-    const refused = text === undefined ? null : addressedRefsRefusal(text);
-    if (refused !== null) return new GateRefusal('body-address', `ops[${index}] (${op.op}): ${refused.reason}`, refused.unblock);
-  }
-  return Effect.void;
-}
-
-export function assertBarePayload(
-  table: TagTable,
-  node: FieldHolder & Tagged,
-): Effect.Effect<void, GateRefusal<'body-address' | 'field-invalid'>> {
-  const bound = table.bindingTag(node, AMENDMENT);
-  const field = bound === null ? undefined : amendmentOf(bound)?.ops;
-  if (field === undefined) return Effect.void;
-  return Effect.flatMap(readFieldOption(node, field, 'amendmentOps'), (ops) => (ops === undefined ? Effect.void : assertBareOps(ops)));
 }
 
 export function assertBodyCap(

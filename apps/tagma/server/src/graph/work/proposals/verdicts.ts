@@ -16,7 +16,9 @@ import type { TagTable } from '../../contract/wire/tags/table.js';
 import { Tags } from '../../contract/service/vocabulary.js';
 import { blockName } from '../../contract/wire/references.js';
 import { GraphJournal } from '../../contract/service/journal.js';
-import { type PayloadRefusal, type ProposalFiling, deferredOps } from './filing.js';
+import { type ProposalFiling } from './filing.js';
+import { deferredOps } from './payload.js';
+import type { AmendmentRefusal } from '../../contract/service/blocks.js';
 import { writes } from '../../../platform/contract/service/writes.js';
 import { linking, projecting } from '../../store/actWrites.js';
 import { LIFECYCLE, lifecycleOf } from '../../contract/wire/tags/lifecycle.js';
@@ -45,7 +47,7 @@ function verdictMove(table: TagTable, row: BlockRow, word: string): Partial<Stat
 
 type VerdictRefusal = FloorRefusal | 'not-found' | 'deleted' | 'not-an-amendment' | 'no-status' | 'illegal-status' | 'illegal-transition';
 
-type AcceptRefusal = VerdictRefusal | PayloadRefusal | AcceptedRefusal | 'anchor-not-found' | 'field-invalid';
+type AcceptRefusal = VerdictRefusal | AmendmentRefusal | AcceptedRefusal | 'anchor-not-found' | 'field-invalid';
 
 type RejectRefusal = VerdictRefusal | 'reason-required';
 

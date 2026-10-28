@@ -14,7 +14,7 @@ import { scopeCondition } from '../../search/selection.js';
 import { carriesContract, contractAt } from '../../vocabulary/projection.js';
 import { UnitOpen } from '../../../platform/store/transaction.js';
 import { conflictComputation, type ConflictJob } from './computation.js';
-import { deferredOps } from './filing.js';
+import { deferredOps } from './payload.js';
 import {
   conflictsOf,
   indexConflicts,

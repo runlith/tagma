@@ -6,7 +6,15 @@ import type { SessionRef } from '../../../platform/contract/wire/session.js';
 import type { HeldTask } from './serving.js';
 import type { FloorRefusal, GateRefusal, GitRefusal, OpenRefusal, ReferenceRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { BlockRecord, BlockRow, BlockWrite, SourceRow } from './acts.js';
-import type { BlockCreateRefusal, BlockEditRefusal, EdgeRefusal, FieldWriteRefusal, RetagRefusal, TagWriteRefusal } from './blocks.js';
+import type {
+  AmendmentPayloadRefusal,
+  BlockCreateRefusal,
+  BlockEditRefusal,
+  EdgeRefusal,
+  FieldWriteRefusal,
+  RetagRefusal,
+  TagWriteRefusal,
+} from './blocks.js';
 import type { BlockPosition, SelectionRefusal } from './reads.js';
 import type { PageSlice } from '@runlith/paging';
 import type { PlacementRefusal } from './sources.js';
@@ -440,7 +448,8 @@ export type AmendmentOpRefusal =
   | 'no-edge'
   | 'project-root'
   | 'catalog-member'
-  | 'deleted';
+  | 'deleted'
+  | 'verdict-standing';
 
 export type AcceptedOpRefusal =
   | GitRefusal
@@ -476,6 +485,11 @@ export type AcceptedOpRefusal =
   | 'anchor-noop'
   | 'anchor-not-found'
   | 'anchor-ambiguous'
+  | AmendmentPayloadRefusal
+  | 'cross-project'
+  | 'amends-an-amendment'
+  | 'amendment-shape'
+  | 'verdict-standing'
   | RetagRefusal;
 export type AcceptedDocumentRefusal = FloorRefusal | 'batch-ref' | 'body-capped' | 'field-target' | 'not-found';
 export type AcceptedRefusal = AcceptedOpRefusal | AcceptedDocumentRefusal;
