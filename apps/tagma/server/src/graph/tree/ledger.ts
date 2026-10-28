@@ -1,7 +1,7 @@
 import { lstatSync, type Stats } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { Clock, Effect } from 'effect';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { GraphStore } from '../../platform/contract/service/store.js';
 import { block } from '../store/tables.js';
 import { connectionsOf } from './connections.js';
@@ -78,12 +78,13 @@ export const treeLedger = Effect.fnUntraced(function* (roots: TreeRoots, project
       const news: TreeChange[] = [];
       if (all.length === 0) return news;
       const standing: Standing[] = [];
+      const absent: TreeChange[] = [];
       for (const change of all) {
         const abs = fileOf(change.path);
         const measured = yield* unlessGone(abs, () => stat(abs));
         if (measured === null) {
           reflected.delete(change.path);
-          if (named.has(change.path)) news.push(change);
+          if (named.has(change.path)) absent.push(change);
           continue;
         }
         const { size, mtimeMs } = measured;
@@ -97,8 +98,26 @@ export const treeLedger = Effect.fnUntraced(function* (roots: TreeRoots, project
         }
         standing.push({ change, text, size, mtimeMs, at: yield* clock.currentTimeMillis });
       }
-      if (standing.length === 0) return news;
+      if (standing.length === 0 && absent.length === 0) return news;
       const { db } = yield* GraphStore;
+      if (absent.length > 0) {
+        const held = yield* db
+          .select({ path: block.path })
+          .from(block)
+          .where(
+            and(
+              eq(block.projectId, projectId),
+              isNull(block.deletedAt),
+              inArray(
+                block.path,
+                absent.map((change) => change.path),
+              ),
+            ),
+          );
+        const live = new Set(held.map((row) => row.path));
+        news.push(...absent.filter((change) => live.has(change.path)));
+      }
+      if (standing.length === 0) return news;
       const rows = yield* db
         .select()
         .from(block)

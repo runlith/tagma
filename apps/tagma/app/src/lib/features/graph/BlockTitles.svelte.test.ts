@@ -5,6 +5,7 @@ import { makePlatform, makeRouter, makeRouterWithLog } from '@runlith/layer/test
 import { single } from '@runlith/query/builders/single';
 import { keyed } from '@runlith/query/builders/keyed';
 import { QueryClient } from '@tanstack/query-core';
+import { waitUntil } from '@runlith/testing/flush';
 import { afterEach, expect, test } from 'vitest';
 import { flushSync } from 'svelte';
 import type { OperationAnswer } from '@tagma/server/composition/catalog';
@@ -199,6 +200,41 @@ test('resync abandons the prior generation of title reading before another read 
   await titles.copy(name);
   expect(titles.peer(name)).toEqual({ title: 'Resolved block', project: 'other', branch: 'feature' });
   expect(signal.aborted).toBe(true);
+});
+
+test('a resync keeps a shown title until its fresh reading answers, and its reader and address take the fresh one', async () => {
+  let answer = Promise.resolve(found);
+  const { titles, send } = open(() => answer);
+  await titles.refresh(name);
+  const later = Promise.withResolvers<Titles>();
+  answer = later.promise;
+  const seen: BlockRefPeer[] = [];
+  const dispose = $effect.root(() => {
+    $effect(() => {
+      seen.push(titles.peer(name));
+    });
+  });
+  const titleOf = (peer: BlockRefPeer): string | undefined => (peer != null && !('error' in peer) ? peer.title : undefined);
+  try {
+    flushSync();
+    send({ type: 'resync' });
+    flushSync();
+    later.resolve({ status: 'ok', titles: [{ name, title: 'Retitled block', projectId: 1, branch: null }], unreadable: [] });
+    await waitUntil(() => {
+      flushSync();
+      return titleOf(seen.at(-1)) === 'Retitled block';
+    });
+    expect(seen.map(titleOf)).not.toContain(undefined);
+    const moved = Promise.withResolvers<Titles>();
+    answer = moved.promise;
+    send({ type: 'resync' });
+    flushSync();
+    const copied = titles.copy(name);
+    moved.resolve(found);
+    expect(await copied).toEqual({ projectId: 2, branch: 'feature' });
+  } finally {
+    dispose();
+  }
 });
 
 const row: TreeBlock = {

@@ -324,4 +324,24 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       }),
     ),
   );
+
+  it.effect('a file an act moved away by retitling its block is reflected at both paths', () =>
+    withTree((demo, treeRoot) =>
+      Effect.gen(function* () {
+        const { graph, projectId } = demo;
+        const fs = yield* FileSystem.FileSystem;
+        const moved = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Old Name' });
+        yield* projectDelta({ projectId, treeRoot, blockIds: [moved.id] });
+        yield* graph.blocks.update({ id: moved.id, title: 'New Name' });
+        yield* projectDelta({ projectId, treeRoot, blockIds: [moved.id] });
+        expect(yield* fs.exists(join(treeRoot, 'demo/old-name.md'))).toBe(false);
+        const ledger = yield* treeLedger({ root: treeRoot, stealth: null }, projectId);
+        const changes = [
+          { status: 'D', path: 'demo/old-name.md' },
+          { status: 'A', path: 'demo/new-name.md' },
+        ];
+        expect(yield* ledger.unreflected(changes)).toEqual([]);
+      }),
+    ),
+  );
 });

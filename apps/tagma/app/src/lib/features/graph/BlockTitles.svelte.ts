@@ -1,7 +1,7 @@
 import { Router } from '@runlith/layer/Router';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
-import { SvelteMap } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { type BlockPlace, type BlockRefFailure, type BlockRefPeer, type BlockRefs, blockRefView, placedHref } from './blockRefView.js';
 import { refusalOf } from '$lib/wire/refusal.js';
 import { BlocksRepo } from './BlocksRepo.js';
@@ -28,6 +28,7 @@ export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: '
   }
 
   private readonly titles = new SvelteMap<string, Title>();
+  private readonly stale = new SvelteSet<string>();
   private readonly asking = new Set<string>();
   private readonly pending = new Map<string, symbol>();
   private readonly waiting = new Map<string, (() => void)[]>();
@@ -53,10 +54,11 @@ export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: '
         if (this.scope.closed) return;
         if (frame.type === 'resync') {
           this.repo.titles.all().reset();
-          this.titles.clear();
+          const inflight = [...this.pending.keys()];
           this.pending.clear();
           this.canon += 1;
-          for (const name of this.waiting.keys()) this.ask(name);
+          for (const name of this.titles.keys()) this.stale.add(name);
+          for (const name of [...inflight, ...this.waiting.keys()]) this.ask(name);
           return;
         }
         for (const row of frame.blocks) {
@@ -84,6 +86,7 @@ export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: '
       this.ask(name);
       return undefined;
     }
+    if (this.stale.has(name)) this.ask(name);
     if (known === null || 'error' in known) return known;
     const project = this.workspace.projects.find((row) => row.id === known.projectId);
     const branch = known.branch === undefined ? (known.projectId === this.aim.projectId ? this.aim.branch : null) : known.branch;
@@ -119,7 +122,7 @@ export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: '
   }
 
   private located(name: string): Promise<BlockRefPeer> {
-    if (this.titles.has(name) || this.scope.closed) return Promise.resolve(this.peer(name));
+    if ((this.titles.has(name) && !this.stale.has(name)) || this.scope.closed) return Promise.resolve(this.peer(name));
     const { promise, resolve } = Promise.withResolvers<void>();
     this.waiting.set(name, [...(this.waiting.get(name) ?? []), resolve]);
     this.ask(name);
@@ -127,6 +130,7 @@ export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: '
   }
 
   private settle(name: string, title: Title): void {
+    this.stale.delete(name);
     this.titles.set(name, title);
     const done = this.waiting.get(name);
     if (done === undefined) return;
