@@ -147,14 +147,21 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         );
         yield* wrote(mine.id, 'own.ts', 'export const own = 2;\n', 'export const own = 3;\n');
         const stale = yield* call('submit_work', { paths: ['own.ts'], tasks: [], subject: 'change own value again' });
-        const staleCheck = yield* call('check_rules', { over: 'change', paths: ['own.ts'], limit: 10 });
+        yield* wrote(
+          mine.id,
+          'app/main.ts',
+          "import { shared } from '$lib/shared';\nexport const main = shared;\n",
+          "import { shared } from '$lib/shared';\nexport const main = shared + 1;\n",
+        );
+        const repairPaths = ['own.ts', 'app/main.ts'];
+        const staleCheck = yield* call('check_rules', { over: 'change', paths: repairPaths, limit: 10 });
         yield* files.writeFileString(join(root, 'app/.gen/tsconfig.json'), copy);
-        const regenerated = answered(yield* call('check_rules', { over: 'change', paths: ['own.ts'], limit: 10 }));
+        const regenerated = answered(yield* call('check_rules', { over: 'change', paths: repairPaths, limit: 10 }));
         expect(regenerated).toMatchObject({ refuses: false, violations: [] });
-        const repeated = answered(yield* call('check_rules', { over: 'change', paths: ['own.ts'], limit: 10 }));
-        expect(repeated).toMatchObject({ refuses: false, violations: [], selection: regenerated.selection });
+        const repeated = answered(yield* call('check_rules', { over: 'change', paths: repairPaths, limit: 10 }));
+        expect(repeated).toMatchObject({ refuses: false, violations: [], head: regenerated.head, paths: regenerated.paths });
         expect(stale).toMatchObject({ class: 'refusal', code: 'inspection-failed' });
-        expect(staleCheck).toMatchObject({ class: 'refusal', code: 'inspection-failed' });
+        expect(answered(staleCheck)).toMatchObject({ refuses: true, rules: [{ failed: expect.any(String) }] });
         if (stale.class === 'refusal') {
           expect(stale.reason).toContain('app/kit.json');
           expect(stale.reason).toContain('app/.gen/tsconfig.json');
