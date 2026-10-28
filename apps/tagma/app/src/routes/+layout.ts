@@ -1,4 +1,3 @@
-import '$lib/app/renamedKeys.js';
 import { App } from '@runlith/layer/sveltekit';
 import { admission } from '$lib/app/admission.js';
 import { Door } from '$lib/wire/Door.js';

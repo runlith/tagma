@@ -27,11 +27,6 @@ const HOST = { path: APP_RUNTIME, why: 'The composition fills `Host`.' };
 
 const WORKERS = { path: 'apps/tagma/app/src/lib/shared/workers/BrowserWorkers.ts', why: 'The browser filler of `ServiceWorkers`.' };
 
-const RENAMED_KEYS = {
-  path: 'apps/tagma/app/src/lib/app/renamedKeys.ts',
-  why: 'The one-off `lode.` to `tagma.` key rename walks every key, which `PlatformStorage` does not list; it leaves with the rename.',
-};
-
 const ADMISSION = 'src/invocation/contract/service/admission.ts';
 
 const SERVING = 'src/graph/contract/service/serving.ts';
@@ -115,8 +110,8 @@ export default defineConfig({
         { allow: [WIRE], instead: '`Live` or `SoundChannel` (`Platform.socket` in a filler)', name: 'WebSocket' },
         { allow: [WIRE], instead: '`Live`', name: 'EventSource' },
         { allow: [WIRE], instead: '`Door`', name: 'XMLHttpRequest' },
-        { allow: [RENAMED_KEYS], instead: '`Platform.storage.local`', name: 'localStorage' },
-        { allow: [RENAMED_KEYS], instead: '`Platform.storage.session`', name: 'sessionStorage' },
+        { allow: [], instead: '`Platform.storage.local`', name: 'localStorage' },
+        { allow: [], instead: '`Platform.storage.session`', name: 'sessionStorage' },
         { allow: [], instead: '`Platform.databases`', name: 'indexedDB' },
         { allow: [], instead: '`Platform.locks`', name: 'navigator.locks' },
         { allow: [], instead: '`Platform.cookies`', name: 'document.cookie' },
