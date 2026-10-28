@@ -5,7 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import { GraphStore, type StoreFailure } from '../../../platform/contract/service/store.js';
 import { block, edge } from '../../store/tables.js';
 import { type BlockCreateRefusal, Blocks } from '../../contract/service/blocks.js';
-import { assertBareRefs, assertBodyCap, leafRefusal } from '../../blocks/guards.js';
+import { assertBareOps, assertBodyCap, leafRefusal } from '../../blocks/guards.js';
 import { type FloorRefusal, GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import { Act, BlockNames, BlockProjection } from '../../contract/service/acts.js';
 import { BlockRows } from '../../acts/rows.js';
@@ -58,14 +58,7 @@ export type PayloadRefusal =
   | 'bad-name'
   | 'ambiguous-name';
 
-type PayloadBodyRefusal =
-  | CreationDefaultRefusal
-  | 'creation-contract'
-  | 'body-capped'
-  | 'body-address'
-  | 'not-found'
-  | 'bad-name'
-  | 'ambiguous-name';
+type PayloadCapRefusal = CreationDefaultRefusal | 'creation-contract' | 'body-capped' | 'not-found' | 'bad-name' | 'ambiguous-name';
 
 type ProposeRefusal =
   | BlockCreateRefusal
@@ -74,9 +67,17 @@ type ProposeRefusal =
   | 'amendment-shape'
   | CreationDefaultRefusal
   | PayloadRefusal
-  | PayloadBodyRefusal;
+  | PayloadCapRefusal;
 
-type ReviseRefusal = FloorRefusal | 'not-found' | 'deleted' | 'not-an-amendment' | 'verdict-standing' | PayloadRefusal | PayloadBodyRefusal;
+type ReviseRefusal =
+  | FloorRefusal
+  | 'not-found'
+  | 'deleted'
+  | 'not-an-amendment'
+  | 'verdict-standing'
+  | 'body-address'
+  | PayloadRefusal
+  | PayloadCapRefusal;
 
 const payloadNames = (ops: readonly AmendmentOp[]): string[] => {
   const spelled: (BatchRef | undefined)[] = [];
@@ -128,12 +129,12 @@ export const proposalFiling = Effect.gen(function* () {
     return tags;
   });
 
-  const assertPayloadBodies = Effect.fn('Review.assertPayloadBodies')(function* (
+  const assertPayloadCaps = Effect.fn('Review.assertPayloadCaps')(function* (
     table: TagTable,
     ops: readonly AmendmentOp[],
-  ): Effect.fn.Return<void, StoreFailure | GateRefusal<PayloadBodyRefusal>> {
+  ): Effect.fn.Return<void, StoreFailure | GateRefusal<PayloadCapRefusal>> {
     const bodies = new Map<string, { tags: readonly string[]; body: string }>();
-    const known = Effect.fn('Review.assertPayloadBodies.known')(function* (ref: BatchRef) {
+    const known = Effect.fn('Review.assertPayloadCaps.known')(function* (ref: BatchRef) {
       const held = bodies.get(ref);
       if (held !== undefined) return held;
       if (ref.startsWith('$')) return undefined;
@@ -148,15 +149,11 @@ export const proposalFiling = Effect.gen(function* () {
         case 'create': {
           const tags = yield* creationTags(table, op);
           if (op.$id !== undefined) bodies.set(`$${op.$id}`, { tags, body: op.body ?? '' });
-          if (op.body !== undefined) {
-            yield* assertBodyCap(table.tagsOf({ tags }), op.body);
-            yield* assertBareRefs(op.body);
-          }
+          if (op.body !== undefined) yield* assertBodyCap(table.tagsOf({ tags }), op.body);
           break;
         }
         case 'update': {
           if (op.body === undefined && op.tags === undefined) break;
-          if (op.body !== undefined) yield* assertBareRefs(op.body);
           const state = yield* known(op.id);
           if (state === undefined) break;
           const replaced = state.body;
@@ -171,7 +168,6 @@ export const proposalFiling = Effect.gen(function* () {
           const replaced = state.body;
           state.body = op.all === true ? state.body.replaceAll(op.old, op.new) : state.body.replace(op.old, op.new);
           yield* assertBodyCap(table.tagsOf(state), state.body, replaced);
-          if (state.body !== replaced) yield* assertBareRefs(state.body);
           break;
         }
         default:
@@ -351,7 +347,7 @@ export const proposalFiling = Effect.gen(function* () {
         ]);
       }
       yield* assertAmendment(table, target, input.ops);
-      yield* assertPayloadBodies(table, input.ops);
+      yield* assertPayloadCaps(table, input.ops);
       const filed = yield* table.creationType(AMENDMENT);
       const binding = amendmentOf(filed);
       if (binding === null) return yield* Effect.die(`type ${filed.id} supports ${AMENDMENT} without its binding`);
@@ -389,7 +385,8 @@ export const proposalFiling = Effect.gen(function* () {
       }
       const target = yield* blockRows.blockById(yield* amendsEdgeOf(input.id));
       yield* assertAmendment(table, target, input.ops);
-      yield* assertPayloadBodies(table, input.ops);
+      yield* assertPayloadCaps(table, input.ops);
+      yield* assertBareOps(input.ops);
       return yield* act.unit(
         revising,
         Effect.gen(function* () {

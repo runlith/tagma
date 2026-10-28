@@ -30,7 +30,15 @@ import { Catalogs } from '../contract/wire/catalogs.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { BlockProjection, BlockReferences } from '../contract/service/acts.js';
 import { BlockRows } from '../acts/rows.js';
-import { assertBareRefs, assertBodyCap, assertNotOperated, assertTagNode, boundaryRefusal, leafRefusal } from './guards.js';
+import {
+  assertBarePayload,
+  assertBareRefs,
+  assertBodyCap,
+  assertNotOperated,
+  assertTagNode,
+  boundaryRefusal,
+  leafRefusal,
+} from './guards.js';
 import { MODULE } from '../contract/wire/tags/moduleContract.js';
 import { fieldTargetGuard, vocabularyCloser } from '../vocabulary/carriers.js';
 import { checkedLayer } from '../vocabulary/layerWrite.js';
@@ -159,6 +167,7 @@ export const blockBirth = Effect.gen(function* () {
     const named = input.amendsId ?? input.parentId;
     const parentId = named ?? (yield* blockRows.rootBlockOf(input.projectId)).id;
     const uuid = input.uuid ?? mintBlockId();
+    if (amends) yield* assertBarePayload(table, { uuid, tags: ids, fields });
     const future = { tags: ids, projectId: input.projectId, uuid };
     const near: { readonly kind: string; readonly to: number }[] = [];
     const far: FarLink[] = [...(input.farEdges ?? [])];

@@ -29,7 +29,15 @@ import { assertStanding } from '../work/retirement.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { BlockNames, BlockProjection, BlockReferences } from '../contract/service/acts.js';
 import { BlockRows } from '../acts/rows.js';
-import { assertBareRefs, assertBodyCap, assertNoBoundary, assertNotOperated, assertTagNode, leafRefusal } from './guards.js';
+import {
+  assertBarePayload,
+  assertBareRefs,
+  assertBodyCap,
+  assertNoBoundary,
+  assertNotOperated,
+  assertTagNode,
+  leafRefusal,
+} from './guards.js';
 import { checkedText } from '../vocabulary/layerWrite.js';
 import { fieldTargetGuard, vocabularyCloser } from '../vocabulary/carriers.js';
 import { blockBirth } from './birth.js';
@@ -182,10 +190,11 @@ export const blockUpdate = Effect.gen(function* () {
         ? named
         : texted.fields;
     if (texted !== null && texted.body !== null) input = { ...input, body: texted.body };
-    if (input.body !== undefined && input.body !== current.body) yield* assertBareRefs(input.body);
+    if (input.body !== undefined) yield* assertBareRefs(input.body);
     if (moved !== undefined) {
       yield* validateFields(tags, moved);
       yield* assertFieldTargets(table, current.projectId, tags, moved);
+      yield* assertBarePayload(table, { uuid: current.uuid, tags: node.tags, fields: moved });
     }
     const kept = (fields: Readonly<Record<string, unknown>>): Record<string, unknown> =>
       Object.fromEntries(Object.entries(fields).filter(([name]) => !cleared.includes(name)));

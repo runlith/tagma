@@ -223,10 +223,16 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       const citing = (yield* nativeCall('create_block', { title: 'cites', body: 'See below.' })) as { block: { name: string } };
       const edit = { blockId: citing.block.name, oldString: 'See below.' };
       expect(yield* nativeCall('edit_block', { ...edit, newString: addressed })).toMatchObject(refused);
-      expect(yield* nativeCall('apply_batch', { ops: [{ op: 'update', id: citing.block.name, body: addressed }] })).toMatchObject({
-        status: 'refused',
-        code: 'body-address',
-      });
+      const deferred = [{ op: 'update', id: citing.block.name, body: addressed }];
+      expect(yield* nativeCall('apply_batch', { ops: deferred })).toMatchObject({ status: 'refused', code: 'body-address' });
+      expect(
+        yield* nativeCall('create_block', {
+          tags: ['proposal'],
+          title: 'cite by address',
+          amendsId: citing.block.name,
+          fields: { ops: deferred },
+        }),
+      ).toMatchObject(refused);
       expect(yield* nativeCall('edit_block', { ...edit, newString: bare })).toMatchObject({ status: 'ok' });
       expect(yield* nativeCall('read_block', { blockIds: [citing.block.name, target] })).toMatchObject({
         reads: [{ refsOut: [target] }, { refsIn: [citing.block.name] }],
