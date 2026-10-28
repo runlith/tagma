@@ -9,8 +9,10 @@ import { TRIGGERS } from '../../../../graph/testing/triggers.js';
 import { demoGraphLayer, withDemo } from '../../graphFixture.js';
 
 const declare = (projectId: number, id: string, fields: Record<string, unknown>) =>
-  Effect.flatMap(Blocks, ({ create }) =>
-    create({ projectId, tags: ['tag'], title: `#${id}`, body: `A #${id}.`, fields: { id, ...fields } }),
+  Effect.flatMap(Blocks, ({ create, rootBlockOf }) =>
+    Effect.flatMap(rootBlockOf(projectId), (root) =>
+      create({ projectId, parentId: root.id, tags: ['tag'], title: `#${id}`, body: `A #${id}.`, fields: { id, ...fields } }),
+    ),
   );
 
 const severity = (values: readonly [string, ...string[]]) => ({
@@ -28,7 +30,7 @@ const document: LawEnforcement = {
 
 layer(demoGraphLayer(), { excludeTestServices: true })('vocabulary closure', (it) => {
   it.effect('trashing and restoring a base removes and restores inherited law and fields without changing its carrier', () =>
-    withDemo(({ graph, projectId, table }) =>
+    withDemo(({ graph, projectId, root, table }) =>
       Effect.gen(function* () {
         const required = severity(['low', 'high']);
         const norm = yield* declare(projectId, 'norm', {
@@ -39,6 +41,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('vocabulary closure', (it
         yield* declare(projectId, 'standard', { extends: 'norm', fields: { component: 'string' } });
         const carrier = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['standard'],
           title: 'Import only downward',
           fields: { severity: 'high', component: 'ui' },
@@ -61,7 +64,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('vocabulary closure', (it
   );
 
   it.effect('repairing an unreadable base validates transitive carriers and rolls back a repair they refuse', () =>
-    withDemo(({ graph, projectId, refusal, table, nameOf }) =>
+    withDemo(({ graph, projectId, root, refusal, table, nameOf }) =>
       Effect.gen(function* () {
         const base = yield* declare(projectId, 'finding', severity(['low', 'high']));
         yield* declare(projectId, 'triage', {
@@ -71,7 +74,13 @@ layer(demoGraphLayer(), { excludeTestServices: true })('vocabulary closure', (it
         yield* declare(projectId, 'audit', { fields: { severity: 'string' } });
         const middle = yield* declare(projectId, 'defect', { extends: 'finding' });
         yield* declare(projectId, 'regression', { extends: 'defect' });
-        const relapse = yield* graph.blocks.create({ projectId, tags: ['regression'], title: 'came back', fields: { severity: 'low' } });
+        const relapse = yield* graph.blocks.create({
+          projectId,
+          parentId: root,
+          tags: ['regression'],
+          title: 'came back',
+          fields: { severity: 'low' },
+        });
         yield* graph.trash.delete({ id: base.id });
         expect((yield* table()).tagById('regression')).toBeNull();
         const before = yield* graph.blocks.blockById(middle.id);

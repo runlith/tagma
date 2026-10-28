@@ -345,6 +345,7 @@ const modulesExecuting = Effect.fnUntraced(function* (input: InputOf<typeof ENFO
     modules: applied.modules,
     rules: applied.rules,
     graph: (yield* ServedTree)?.treeRoot ?? null,
+    crowded: applied.crowded.length === 0 ? undefined : applied.crowded,
   } satisfies ModulesSet & { readonly status: 'ok' };
 });
 

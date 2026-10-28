@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { GraphStore, type StoreFailure } from '../../../platform/contract/service/store.js';
 import { type WriterRef, WriterRegister } from '../../../platform/contract/service/writers.js';
 import { block } from '../../store/tables.js';
-import { Amendments, type AcceptedRefusal, type ProposalVerdictRow } from '../../contract/service/work.js';
+import { Amendments, type Accepted, type AcceptedRefusal, type ProposalVerdictRow } from '../../contract/service/work.js';
 import { type FloorRefusal, GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import { verdictReason } from '../../acts/records.js';
 import { Act, BlockNames, BlockProjection } from '../../contract/service/acts.js';
@@ -72,7 +72,7 @@ export const proposalVerdicts = Effect.fnUntraced(function* (filing: ProposalFil
       id: number;
       reason?: string;
       enclosing?: ReadonlyMap<string, number>;
-    }): Effect.fn.Return<BlockRecord, StoreFailure | GateRefusal<AcceptRefusal>> {
+    }): Effect.fn.Return<Accepted, StoreFailure | GateRefusal<AcceptRefusal>> {
       const current = yield* blockRows.blockById(input.id);
       const table = yield* tableOf(current);
       if (!table.supports(current, AMENDMENT)) {
@@ -126,7 +126,7 @@ export const proposalVerdicts = Effect.fnUntraced(function* (filing: ProposalFil
             },
             now,
           );
-          return yield* blockRows.recordOf(row);
+          return { ...(yield* blockRows.recordOf(row)), born };
         }),
       );
     }),

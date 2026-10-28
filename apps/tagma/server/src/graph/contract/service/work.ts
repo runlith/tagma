@@ -30,6 +30,9 @@ import type { HeldWork } from '../wire/operations/shared.js';
 import type { ThreadAct } from '../wire/threadWork.js';
 import type { ProjectRefusal } from '../../../projects/contract/wire/project.js';
 import type { EdgeKind } from '../wire/edges.js';
+import type { Crowded } from '../wire/answers.js';
+
+export type Accepted = BlockRecord & { readonly born: readonly BlockRecord[] };
 
 export type BlockEnding = {
   status: string;
@@ -242,6 +245,7 @@ export class Review extends Context.Service<
           | 'amendment-op'
           | 'amendment-ref'
           | 'amendment-outside'
+          | 'parent-required'
           | 'leaf'
           | 'bad-name'
           | 'ambiguous-name'
@@ -254,7 +258,7 @@ export class Review extends Context.Service<
       reason?: string;
       enclosing?: ReadonlyMap<string, number>;
     }): Effect.Effect<
-      BlockRecord,
+      Accepted,
       | StoreFailure
       | GateRefusal<
           | FloorRefusal
@@ -434,6 +438,7 @@ export type BatchAnswer = {
   ids: Record<string, string>;
   bodyFiles?: Record<number, string>;
   specs?: readonly WorklessSpec[];
+  crowded?: readonly Crowded[];
 };
 
 export type Handles = {

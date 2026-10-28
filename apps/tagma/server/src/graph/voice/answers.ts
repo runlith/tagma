@@ -4,7 +4,7 @@ import type { GraphToolAnswer } from '../contract/wire/toolAnswers.js';
 import type { CallRecorded } from '../contract/wire/callRange.js';
 import type { SessionIdentity } from '../../platform/contract/wire/session.js';
 import { startLines } from '../../platform/contract/wire/start.js';
-import { blockLine, pageFooter, refsInLine, syncLine, underParent } from './lines.js';
+import { blockLine, crowdedLine, pageFooter, refsInLine, syncLine, underParent } from './lines.js';
 import { blockPageText, payloadLines } from './blockPage.js';
 import type { TagReading } from '../contract/wire/tags/reading.js';
 import type { GraphReport, IdleSpecAnswer, Moved } from '../contract/wire/answers.js';
@@ -69,7 +69,8 @@ const movedLines = (moved: Moved): string[] => [
 function graphContent(table: TagReading, result: GraphToolAnswer, identity: SessionIdentity['Service'], operation?: string): string | null {
   if (result.status === 'refused') return refusalLines(result).join('\n');
   if ('sync' in result) return syncLine(result.sync);
-  if ('overview' in result) return [result.overview, ...(result.specs ?? []).map(idleSpecLine)].join('\n');
+  if ('overview' in result)
+    return [result.overview, ...(result.crowded ?? []).map(crowdedLine), ...(result.specs ?? []).map(idleSpecLine)].join('\n');
   if ('reads' in result) {
     return result.reads.map((read) => blockPageText(table, read, identity, { outlineRows: MODEL_OUTLINE_ROWS })).join('\n\n');
   }
@@ -163,6 +164,7 @@ function graphContent(table: TagReading, result: GraphToolAnswer, identity: Sess
       `${blockLine(table, result.block)}${underParent(result.block.parentName)}`,
       ...(refsIn.length === 0 ? [] : [refsInLine(refsIn)]),
       ...('moved' in result && result.moved !== undefined ? movedLines(result.moved) : []),
+      ...('crowded' in result && result.crowded !== undefined ? [crowdedLine(result.crowded)] : []),
       ...(result.debt ?? []).map(
         (debt) =>
           `remaining debt: ${debt.rule} ${debt.title} · ${debt.entries} entries; owner ${result.block.name} ended or was replaced\nreassign: ${debt.reassign}`,

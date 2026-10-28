@@ -11,7 +11,7 @@ type Floor = NonNullable<Context.Service.Shape<typeof TreeGuard>>;
 
 layer(demoGraphLayer(), { excludeTestServices: true })('act landing', (it) => {
   it.effect('the tree write of an act receives the entries it recorded, and none of a nested unit that rolled back', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
         const landed: { readonly op: string; readonly blockId: number | null }[] = [];
         const floor: Floor = {
@@ -29,12 +29,12 @@ layer(demoGraphLayer(), { excludeTestServices: true })('act landing', (it) => {
           .unit(
             testActing,
             Effect.gen(function* () {
-              const first = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'kept', body: 'stays' });
+              const first = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'kept', body: 'stays', parentId: root });
               const nested = yield* Effect.result(
                 graph.act.unit(
                   testActing,
                   Effect.gen(function* () {
-                    yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'rolled back', body: 'goes' });
+                    yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'rolled back', body: 'goes', parentId: root });
                     return yield* Effect.fail('nested unit fails');
                   }),
                 ),

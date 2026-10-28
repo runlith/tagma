@@ -9,7 +9,10 @@ export const creationFields = <Ref extends Schema.Top, Target extends Schema.Top
   title,
   claim: Schema.optional(Schema.Boolean),
   body: Schema.optional(body).annotate({ description: 'Markdown.' }),
-  parentId: Schema.optional(reference),
+  parentId: Schema.optional(reference).annotate({
+    description:
+      'The block it stands under: the owner of what it is about. The root only for a part of the project or what concerns the whole of it.',
+  }),
   contract: Schema.optional(contractIdSchema).annotate({
     description:
       'Required behaviour. Without tags, selects the creation type from installed catalog profiles; explicit tags must support it.',

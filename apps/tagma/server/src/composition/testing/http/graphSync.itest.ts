@@ -30,7 +30,8 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       expect(paths.every((path) => path.startsWith(`${CHECKOUT_DIRECTORY}/`))).toBe(true);
       expect(yield* suiteGit(root, 'status', '--porcelain')).toBe('?? source.ts');
       yield* suiteGit(root, 'add', 'source.ts');
-      expect(yield* world.op('create_block', { project, title: 'Next graph commit' })).toMatchObject({ status: 200 });
+      const parentId = ((yield* world.op('list_root_blocks', { project })).body as { blocks: { name: string }[] }).blocks[0]!.name;
+      expect(yield* world.op('create_block', { project, title: 'Next graph commit', parentId })).toMatchObject({ status: 200 });
       expect((yield* world.op('sync_graph', { project })).status).toBe(200);
       expect(yield* suiteGit(root, 'rev-parse', 'HEAD^')).toBe(commit);
       expect(yield* suiteGit(root, 'status', '--porcelain')).toBe('A  source.ts');

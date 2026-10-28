@@ -28,11 +28,12 @@ layer(demoGraphLayer(), { excludeTestServices: true })('a reflection stops stand
   );
 
   it.effect('a rule filed against the entry answers it by being written; an open task does not', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
         const entry = yield* file;
         const task = (yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['task'],
           title: 'fix the tool',
           edges: [{ kind: 'discovered-from', to: entry }],
@@ -43,6 +44,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('a reflection stops stand
         const second = yield* file;
         yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['rule'],
           title: 'what the tool does now',
           edges: [{ kind: 'discovered-from', to: second }],
@@ -55,9 +57,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('a reflection stops stand
   it.effect('an answer must be finished work, and the measure holds a record to the same rule', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const entry = yield* file;
-        const task = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'fix the tool' })).id;
+        const task = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'fix the tool' })).id;
         const refused = yield* demo.refusal(graph.reflection.answer({ id: entry, byId: task }));
         expect(refused.code).toBe('not-finished');
         expect(refused.reason).toContain('task at open');
@@ -75,10 +77,10 @@ layer(demoGraphLayer(), { excludeTestServices: true })('a reflection stops stand
   it.effect('an answer names a block that was already standing; the same answer again changes nothing, another refuses', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const entry = yield* file;
-        const already = (yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'stood before' })).id;
-        const other = (yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'stood too' })).id;
+        const already = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['rule'], title: 'stood before' })).id;
+        const other = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['rule'], title: 'stood too' })).id;
         yield* graph.reflection.answer({ id: entry, byId: already });
         expect(yield* standing).not.toContain(entry);
         yield* graph.reflection.answer({ id: entry, byId: already });
@@ -93,9 +95,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('a reflection stops stand
   it.effect('a dead reflection is one measured fact every surface reads', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const entry = yield* file;
-        const already = (yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'stood before' })).id;
+        const already = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['rule'], title: 'stood before' })).id;
         yield* graph.reflection.answer({ id: entry, byId: already });
         const record = yield* graph.blocks.recordOf(yield* graph.blocks.blockById(entry));
         expect(record.answered).toBe(true);

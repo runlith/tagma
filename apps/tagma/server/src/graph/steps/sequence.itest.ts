@@ -57,9 +57,15 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, projectId } = demo;
-        const hub = yield* create(demo, { projectId, tags: ['spec'], title: 'the hub' });
+        const hub = yield* create(demo, { projectId, parentId: demo.root, tags: ['spec'], title: 'the hub' });
         const part = yield* create(demo, { projectId, tags: ['spec'], title: 'a part of it', parentId: hub });
-        const builder = yield* create(demo, { projectId, tags: ['task'], title: 'build it', edges: [{ kind: 'implements', to: hub }] });
+        const builder = yield* create(demo, {
+          projectId,
+          parentId: demo.root,
+          tags: ['task'],
+          title: 'build it',
+          edges: [{ kind: 'implements', to: hub }],
+        });
         const delta = yield* create(demo, {
           projectId,
           tags: ['spec'],
@@ -92,7 +98,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, projectId } = demo;
-        const hub = yield* create(demo, { projectId, tags: ['spec'], title: 'the hub' });
+        const hub = yield* create(demo, { projectId, parentId: demo.root, tags: ['spec'], title: 'the hub' });
         const shipped = yield* declarationOf(demo, 'spec');
         if (shipped === undefined) return yield* Effect.die('the fixture installs no spec');
         yield* retire(demo);
@@ -144,7 +150,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, projectId } = demo;
-        const home = yield* create(demo, { projectId, tags: ['idea'], title: 'home' });
+        const home = yield* create(demo, { projectId, parentId: demo.root, tags: ['idea'], title: 'home' });
         const { db } = graph.graphStore;
         const insert = Effect.fnUntraced(function* (values: { parentId: number; tags: string[]; fields: Raw; title: string }) {
           const row = yield* db
@@ -188,13 +194,15 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
         const { graph, projectId } = demo;
         const declaration = yield* graph.blocks.create({
           projectId,
+          parentId: demo.root,
           tags: ['tag'],
           title: '#finding',
           fields: { id: 'finding', edges: ['relates', 'discovered-from', { kind: 'discovered-from', to: ['task'] }] },
         });
-        const origin = yield* create(demo, { projectId, tags: ['task'], title: 'origin' });
+        const origin = yield* create(demo, { projectId, parentId: demo.root, tags: ['task'], title: 'origin' });
         const found = yield* create(demo, {
           projectId,
+          parentId: demo.root,
           tags: ['finding'],
           title: 'found',
           edges: [{ kind: 'discovered-from', to: origin }],
@@ -218,6 +226,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
         const { graph, projectId } = demo;
         yield* graph.blocks.create({
           projectId,
+          parentId: demo.root,
           tags: ['tag'],
           title: '#finding',
           fields: {
@@ -235,7 +244,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
             gates: ['applied', 'rejected', 'upheld'].map((to) => ({ gate: 'transition', field: 'phase', from: 'draft', to })),
           },
         });
-        const target = yield* create(demo, { projectId, tags: ['spec'], title: 'target' });
+        const target = yield* create(demo, { projectId, parentId: demo.root, tags: ['spec'], title: 'target' });
         const name = yield* demo.nameOf(target);
         const core = { op: 'create', $id: 'builder', tags: ['task'], title: 'migrated work', parentId: name, body: 'before' };
         const edit = { op: 'edit', id: '$builder', old: 'before', new: 'after' };
@@ -303,7 +312,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
             thresholds: [{ glob: '**', metric: 'non-import', lines: 650 }],
           },
         };
-        const rule = yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'files stay small' });
+        const rule = yield* graph.blocks.create({ projectId, parentId: demo.root, tags: ['rule'], title: 'files stay small' });
         yield* graph.graphStore.db
           .update(block)
           .set({

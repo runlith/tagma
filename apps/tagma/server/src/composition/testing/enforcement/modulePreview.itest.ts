@@ -80,7 +80,8 @@ layer(enforceFixture(), { excludeTestServices: true })('module map preview', (it
           if (!(answer instanceof ToolAnswer)) return yield* Effect.die('set_module returned no tool answer');
           return answer;
         });
-        const modules = [{ id: 'consumer', title: 'Consumer', root: 'src/app', imports: { put: ['app'] } }];
+        const parent = yield* fx.demo.nameOf(fx.demo.root);
+        const modules = [{ id: 'consumer', title: 'Consumer', parent, root: 'src/app', imports: { put: ['app'] } }];
         const fingerprint = 'consumer -> app private @ app/main.ts';
         const preview = yield* call({ modules, preview: true });
         expect(preview.value).toMatchObject({ status: 'preview', rules: [{ rule, escaped: [fingerprint] }] });

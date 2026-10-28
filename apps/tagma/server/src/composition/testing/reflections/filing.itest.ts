@@ -16,6 +16,8 @@ import {
   zoneDeclared,
 } from '../graphFixture.js';
 import { fileReflection, filedReflections } from '../../../reflections/filing.js';
+import { OperationOwners } from '../../../platform/contract/service/operationOwners.js';
+import { blockName } from '../../../graph/contract/wire/references.js';
 
 const source = demoGraphLayer({
   source: 'tagma-source',
@@ -64,7 +66,12 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('reflection closure pr
         const { graph } = first;
         const tagma = yield* graph.projectLifecycle.create({ name: 'closure-source', rootPath: root });
         yield* zoneDeclared(tagma.id);
-        const area = yield* graph.blocks.create({ projectId: tagma.id, tags: ['zone'], title: 'The Server' });
+        const area = yield* graph.blocks.create({
+          projectId: tagma.id,
+          parentId: (yield* graph.blocks.rootBlockOf(tagma.id)).id,
+          tags: ['zone'],
+          title: 'The Server',
+        });
         yield* graph.sources.attach({ blockId: area.id, kind: 'dir', ref: 'server' });
         const filed = yield* fileReflection(filing);
         expect(filed.entry.projectId).toBe(tagma.id);
@@ -85,6 +92,31 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('reflection closure pr
 });
 
 layer(Layer.merge(source, BunFileSystem.layer), { excludeTestServices: true })('reflection answers by landed work', (it) => {
+  it.effect('an entry stands under the module declaring the operation its command names; one naming none says where it stands', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const tagma = demo.project('tagma-source');
+        const root = yield* demo.graph.blocks.rootBlockOf(tagma.id);
+        const [card] = yield* demo.graph.blocks.writeModules(
+          tagma.id,
+          [{ id: 'reflections', title: 'Reflections', parent: root.id, root: 'apps' }],
+          [],
+        );
+        const owners = OperationOwners.of({ of: (operation) => (operation === 'file_reflection' ? 'reflections' : null) });
+        const declared = yield* fileReflection({ ...filing, command: 'mcp__tagma__file_reflection {"title":"x"}' }).pipe(
+          Effect.provideService(OperationOwners, owners),
+        );
+        expect(declared.entry.parentId).toBe(card ?? null);
+        expect(declared.unplaced).toBeNull();
+        const loose = yield* fileReflection({ ...filing, command: 'a shell call that never returned' }).pipe(
+          Effect.provideService(OperationOwners, owners),
+        );
+        expect(loose.entry.parentId).toBe(root.id);
+        expect(loose.unplaced).toContain(blockName(root.uuid));
+      }),
+    ),
+  );
+
   it.effect(
     'a direct fix answers its entry by the landed commit, recorded whole; the same answer again writes nothing, another refuses',
     () =>
@@ -137,7 +169,8 @@ layer(Layer.merge(source, BunFileSystem.layer), { excludeTestServices: true })('
       Effect.gen(function* () {
         const { source, tagma, entry } = yield* filedAgainstRepo(demo);
         const { graph } = demo;
-        const task = (yield* graph.blocks.create({ projectId: tagma.id, tags: ['task'], title: 'fix the tool' })).id;
+        const top = (yield* graph.blocks.rootBlockOf(tagma.id)).id;
+        const task = (yield* graph.blocks.create({ projectId: tagma.id, parentId: top, tags: ['task'], title: 'fix the tool' })).id;
         yield* graph.tasks.finish({ id: task });
         yield* graph.reflection.answer({ id: entry, byId: task });
         const late = yield* demo.refusal(graph.reflection.answer({ id: entry, commit: yield* landed(source, 'a later fix') }));
@@ -154,17 +187,19 @@ layer(Layer.merge(source, BunFileSystem.layer), { excludeTestServices: true })('
         Effect.gen(function* () {
           const { source, tagma, entry } = yield* filedAgainstRepo(demo);
           const { graph } = demo;
-          const wrong = (yield* graph.blocks.create({ projectId: tagma.id, tags: ['task'], title: 'another fix' })).id;
+          const top = (yield* graph.blocks.rootBlockOf(tagma.id)).id;
+          const wrong = (yield* graph.blocks.create({ projectId: tagma.id, parentId: top, tags: ['task'], title: 'another fix' })).id;
           yield* graph.tasks.finish({ id: wrong });
           yield* graph.reflection.answer({ id: entry, byId: wrong });
           const partial = (yield* graph.blocks.create({
             projectId: tagma.id,
+            parentId: top,
             tags: ['task'],
             title: 'half of it',
             edges: [{ kind: 'discovered-from', to: entry }],
           })).id;
           yield* graph.tasks.finish({ id: partial });
-          const stranger = (yield* graph.blocks.create({ projectId: tagma.id, tags: ['idea'], title: 'unrelated' })).id;
+          const stranger = (yield* graph.blocks.create({ projectId: tagma.id, parentId: top, tags: ['idea'], title: 'unrelated' })).id;
           expect(yield* graph.blockAnswers.answerOf(entry)).toEqual({ kind: 'block', id: partial });
           yield* graph.reflection.unanswer({ id: entry, byId: partial });
           expect(yield* graph.blockAnswers.answerOf(entry)).toEqual({ kind: 'block', id: wrong });

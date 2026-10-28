@@ -9,11 +9,12 @@ import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture
 
 layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('apply batch', (it) => {
   it.effect('finish ends created work in the same atomic document', () =>
-    withDemo(({ graph, projectId, table }) =>
+    withDemo(({ graph, projectId, table, root, nameOf }) =>
       Effect.gen(function* () {
+        const home = yield* nameOf(root);
         const answer = yield* graph.batch.apply(
           batchDocument([
-            { op: 'create', $id: 'job', tags: ['task'], title: 'batch work' },
+            { op: 'create', $id: 'job', tags: ['task'], title: 'batch work', parentId: home },
             { op: 'finish', id: '$job' },
           ]),
           projectId,
@@ -25,14 +26,16 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('handles wire created blocks together', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root, nameOf }) =>
       Effect.gen(function* () {
+        const home = yield* nameOf(root);
         const result = yield* graph.batch.apply(
           batchDocument([
-            { op: 'create', $id: 's', tags: ['spec'], title: 'batch spec' },
+            { op: 'create', $id: 's', tags: ['spec'], title: 'batch spec', parentId: home },
             {
               op: 'create',
               $id: 't',
+              parentId: home,
               tags: ['task'],
               title: 'batch task',
               edges: [
@@ -51,13 +54,13 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a payload accepted in the same document resolves that document’s handles', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
-        const amended = (yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'the amended doc' })).id;
+        const amended = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'the amended doc' })).id;
         const amendedName = yield* nameOf(amended);
         const result = yield* graph.batch.apply(
           batchDocument([
-            { op: 'create', $id: 'target', tags: ['idea'], title: 'the block the payload names' },
+            { op: 'create', $id: 'target', tags: ['idea'], title: 'the block the payload names', parentId: yield* nameOf(root) },
             {
               op: 'propose',
               $id: 'p',
@@ -75,11 +78,11 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a handle declared with its dollar resolves in parentId and in link alike', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
         const result = yield* graph.batch.apply(
           batchDocument([
-            { op: 'create', $id: '$node', tags: ['idea'], title: 'dollar-declared root' },
+            { op: 'create', $id: '$node', tags: ['idea'], title: 'dollar-declared root', parentId: yield* nameOf(root) },
             { op: 'create', $id: 'leaf', tags: ['idea'], title: 'dollar-declared child', parentId: '$node' },
             { op: 'link', fromId: '$leaf', kind: 'relates', toId: '$node' },
           ]),
@@ -95,11 +98,12 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a view saves the subtrees its own document creates', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root, nameOf }) =>
       Effect.gen(function* () {
+        const home = yield* nameOf(root);
         const result = yield* graph.batch.apply(
           batchDocument([
-            { op: 'create', $id: 'w', tags: ['zone'], title: 'watched area' },
+            { op: 'create', $id: 'w', tags: ['zone'], title: 'watched area', parentId: home },
             { op: 'create', $id: 's', tags: ['spec'], title: 'watched spec', parentId: '$w' },
             {
               op: 'create',
@@ -112,6 +116,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             {
               op: 'create',
               $id: 'v',
+              parentId: home,
               tags: ['view'],
               title: 'work on the new spec',
               fields: { query: { scope: ['$w'], edge: { kind: 'implements', to: '$s' }, sort: { by: 'updated', order: 'desc' } } },
@@ -127,13 +132,15 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a view naming a handle no create declared refuses the whole document', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root, nameOf }) =>
       Effect.gen(function* () {
+        const home = yield* nameOf(root);
         const refused = yield* refusal(
           graph.batch.apply(
             batchDocument([
               {
                 op: 'create',
+                parentId: home,
                 tags: ['view'],
                 title: 'marmoset view',
                 fields: { query: { scope: ['$ghost'], sort: { by: 'updated', order: 'desc' } } },
@@ -149,11 +156,18 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a catalog names the tags its own document declares beneath it', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
         const result = yield* graph.batch.apply(
           batchDocument([
-            { op: 'create', $id: 'catalog', tags: ['catalog'], title: 'study', fields: { id: 'study', tags: ['$topic'] } },
+            {
+              op: 'create',
+              $id: 'catalog',
+              tags: ['catalog'],
+              title: 'study',
+              parentId: yield* nameOf(root),
+              fields: { id: 'study', tags: ['$topic'] },
+            },
             { op: 'create', $id: 'topic', tags: ['tag'], title: '#topic', parentId: '$catalog', fields: { id: 'topic' } },
           ]),
           projectId,
@@ -167,13 +181,14 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a name reached ahead of its create is judged against its field once the document has run', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root, nameOf }) =>
       Effect.gen(function* () {
+        const home = yield* nameOf(root);
         const refused = yield* refusal(
           graph.batch.apply(
             batchDocument([
-              { op: 'create', tags: ['catalog'], title: 'misnamed study', fields: { id: 'misnamed', tags: ['$idea'] } },
-              { op: 'create', $id: 'idea', tags: ['idea'], title: 'an idea, not a declaration' },
+              { op: 'create', tags: ['catalog'], title: 'misnamed study', parentId: home, fields: { id: 'misnamed', tags: ['$idea'] } },
+              { op: 'create', $id: 'idea', tags: ['idea'], title: 'an idea, not a declaration', parentId: home },
             ]),
             projectId,
           ),
@@ -186,13 +201,21 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a create refused on its fields reports its own refusal while a catalog awaits it', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root, nameOf }) =>
       Effect.gen(function* () {
+        const home = yield* nameOf(root);
         const refused = yield* refusal(
           graph.batch.apply(
             batchDocument([
-              { op: 'create', tags: ['catalog'], title: 'awaiting study', fields: { id: 'awaiting', tags: ['$broken'] } },
-              { op: 'create', $id: 'broken', tags: ['tag'], title: '#broken', fields: { id: 'broken', gates: 'not gates' } },
+              { op: 'create', tags: ['catalog'], title: 'awaiting study', parentId: home, fields: { id: 'awaiting', tags: ['$broken'] } },
+              {
+                op: 'create',
+                $id: 'broken',
+                tags: ['tag'],
+                title: '#broken',
+                parentId: home,
+                fields: { id: 'broken', gates: 'not gates' },
+              },
             ]),
             projectId,
           ),
@@ -204,9 +227,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a document exposes indexed operations and bounded post-pass spans', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root: top }) =>
       Effect.gen(function* () {
-        const existing = (yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'span destination' })).id;
+        const existing = (yield* graph.blocks.create({ projectId, parentId: top, tags: ['idea'], title: 'span destination' })).id;
         const spans: Tracer.NativeSpan[] = [];
         const tracer = Tracer.make({
           span(options) {
@@ -219,7 +242,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         const result = yield* graph.batch
           .apply(
             batchDocument([
-              { op: 'create', $id: 'target', tags: ['idea'], title: 'span target', body: 'target body' },
+              { op: 'create', $id: 'target', tags: ['idea'], title: 'span target', body: 'target body', parentId: yield* nameOf(top) },
               { op: 'update', id: yield* nameOf(existing), body: privateBody },
             ]),
             projectId,
@@ -269,9 +292,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('unknown creation fields at either document depth refuse instead of dropping relations', () =>
-    withDemo(({ graph, projectId, nameOf, refusal }) =>
+    withDemo(({ graph, projectId, nameOf, refusal, root }) =>
       Effect.gen(function* () {
-        const target = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'target' });
+        const target = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'target' });
         const name = yield* nameOf(target.id);
         const create = {
           op: 'create',
@@ -293,10 +316,10 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a bare operations array refuses and retains its editable source', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root, nameOf }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const source = JSON.stringify([{ op: 'create', tags: ['idea'], title: 'array member' }]);
+        const source = JSON.stringify([{ op: 'create', tags: ['idea'], title: 'array member', parentId: yield* nameOf(root) }]);
         const refused = yield* refusal(graph.batch.apply({ source }, projectId));
         expect(refused.code).toBe('bad-document');
         expect(yield* fs.readFileString(refused.inputFile!)).toBe(source);
@@ -305,12 +328,13 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a refused batch rolls back and returns an editable source that can be applied', () =>
-    withDemo(({ graph, projectId, nameOf, table, refusal }) =>
+    withDemo(({ graph, projectId, nameOf, table, refusal, root }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const container = (yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'protected' })).id;
+        const home = yield* nameOf(root);
+        const container = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'protected' })).id;
         const source = batchSource([
-          { op: 'create', tags: ['task'], title: 'rolled back' },
+          { op: 'create', tags: ['task'], title: 'rolled back', parentId: home },
           { op: 'update', id: yield* nameOf(container), status: 'in_work' },
         ]);
         const refused = yield* refusal(graph.batch.apply({ source }, projectId));
@@ -318,7 +342,10 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         expect(yield* fs.readFileString(refused.inputFile!)).toBe(source);
         expect((yield* graph.ranking.search({ query: 'rolled back', projectId })).items).toHaveLength(0);
         expect((yield* table()).statusOf(yield* graph.blocks.blockById(container))).toBeNull();
-        yield* fs.writeFileString(refused.inputFile!, batchSource([{ op: 'create', tags: ['task'], title: 'corrected quokka from file' }]));
+        yield* fs.writeFileString(
+          refused.inputFile!,
+          batchSource([{ op: 'create', tags: ['task'], title: 'corrected quokka from file', parentId: home }]),
+        );
         yield* graph.batch.apply({ file: refused.inputFile! }, projectId);
         expect((yield* graph.ranking.search({ query: 'corrected quokka', projectId })).items).toHaveLength(1);
       }),
@@ -326,7 +353,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('relative bodies are read at application or filing, and accepted proposals survive their file’s removal', () =>
-    withDemo(({ graph, projectId, fixture }) =>
+    withDemo(({ graph, projectId, fixture, root: top, nameOf }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const root = yield* fixture.directory('caller');
@@ -335,7 +362,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         const file = join(root, 'document.json');
         yield* fs.writeFileString(
           file,
-          batchSource([{ op: 'create', $id: 'd', tags: ['idea'], title: 'body by file', body: { file: 'one.md' } }]),
+          batchSource([
+            { op: 'create', $id: 'd', tags: ['idea'], title: 'body by file', body: { file: 'one.md' }, parentId: yield* nameOf(top) },
+          ]),
         );
         const inline = yield* graph.batch.apply({ file }, projectId);
         const amendedName = inline.ids.d!;
@@ -365,13 +394,15 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a refusal raised after the op loop still names the body file its op read', () =>
-    withDemo(({ graph, projectId, fixture, refusal }) =>
+    withDemo(({ graph, projectId, fixture, refusal, root: top, nameOf }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const root = yield* fixture.directory('caller');
         const body = '[[$h]]';
+        const home = yield* nameOf(top);
         yield* graph.blocks.create({
           projectId,
+          parentId: top,
           tags: ['tag'],
           title: '#bounded',
           fields: { id: 'bounded', body: { shape: 'content', cap: body.length } },
@@ -381,8 +412,8 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         yield* fs.writeFileString(
           file,
           batchSource([
-            { op: 'create', $id: 'h', tags: ['idea'], title: 'the handle the law names' },
-            { op: 'create', tags: ['bounded'], title: 'bounded data', body: { file: 'law.md' } },
+            { op: 'create', $id: 'h', tags: ['idea'], title: 'the handle the law names', parentId: home },
+            { op: 'create', tags: ['bounded'], title: 'bounded data', body: { file: 'law.md' }, parentId: home },
           ]),
         );
         const refused = yield* refusal(graph.batch.apply({ file }, projectId));
@@ -393,7 +424,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a refusal of an op’s fields names the document, not the body file the op read', () =>
-    withDemo(({ graph, projectId, fixture, refusal }) =>
+    withDemo(({ graph, projectId, fixture, refusal, root: top, nameOf }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const root = yield* fixture.directory('caller');
@@ -404,6 +435,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           batchSource([
             {
               op: 'create',
+              parentId: yield* nameOf(top),
               tags: ['catalog'],
               title: 'bad member',
               body: { file: 'guidance.md' },
@@ -419,11 +451,13 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('relative document and body paths refuse without the caller’s base', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root, nameOf }) =>
       Effect.gen(function* () {
         const refused = yield* refusal(
           graph.batch.apply(
-            batchDocument([{ op: 'create', tags: ['idea'], title: 'nowhere to measure from', body: { file: 'one.md' } }]),
+            batchDocument([
+              { op: 'create', tags: ['idea'], title: 'nowhere to measure from', body: { file: 'one.md' }, parentId: yield* nameOf(root) },
+            ]),
             projectId,
           ),
         );
@@ -435,10 +469,16 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a replaced record is corrected in one document and stays replaced, or the whole correction rolls back', () =>
-    withDemo(({ graph, projectId, nameOf, refusal }) =>
+    withDemo(({ graph, projectId, nameOf, refusal, root }) =>
       Effect.gen(function* () {
-        const old = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'draft', body: 'keeps the token s3cret here' });
-        const successor = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'accepted' });
+        const old = yield* graph.blocks.create({
+          projectId,
+          parentId: root,
+          tags: ['spec'],
+          title: 'draft',
+          body: 'keeps the token s3cret here',
+        });
+        const successor = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'accepted' });
         yield* graph.standing.supersede({ oldId: old.id, withId: successor.id });
         const [oldName, successorName] = [yield* nameOf(old.id), yield* nameOf(successor.id)];
         const correction = (text: string) =>

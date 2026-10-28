@@ -22,7 +22,8 @@ const sample = async (name: string, work: () => Promise<unknown>) => {
   console.log(JSON.stringify({ name, samples: elapsed, medianMs: elapsed[2] }));
 };
 try {
-  const root = (await run(graph.blocks.create({ projectId, title: 'Bench' }))).id;
+  const top = (await run(graph.blocks.rootBlockOf(projectId))).id;
+  const root = (await run(graph.blocks.create({ projectId, parentId: top, title: 'Bench' }))).id;
   const body = 'Benchmark payload contains ordinary searchable words. '.repeat(80);
   const now = new Date();
   const branches = await run(

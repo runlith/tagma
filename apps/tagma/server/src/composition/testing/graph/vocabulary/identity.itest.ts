@@ -33,24 +33,30 @@ const declarationOf = Effect.fnUntraced(function* (projectId: number, key: strin
 
 layer(demoGraphLayer(), { excludeTestServices: true })('type identities', (it) => {
   it.effect('a rename preserves permanent keys, carriers and saved references while new writes and filtered queries use the new name', () =>
-    withDemo(({ graph, projectId, table, refusal }) =>
+    withDemo(({ graph, projectId, root, table, refusal }) =>
       Effect.gen(function* () {
         const { catalog, node } = yield* declarationOf(projectId, 'task');
         const id = shippedTypeId(catalog.id, 'task');
         const identity = (yield* table()).identities.typeOf('task');
         expect(identity?.id).toBe(id);
         expect(identity?.shipped).toEqual({ library: catalog.id, export: 'task', version: catalog.release.revision });
-        const carrier = yield* graph.blocks.create({ projectId, tags: [id], title: 'standing' });
+        const carrier = yield* graph.blocks.create({ projectId, parentId: root, tags: [id], title: 'standing' });
         const before = yield* graph.blocks.blockById(carrier.id);
         expect(before.tags).toEqual(['task']);
         const indexed = () =>
           graph.graphStore.db.select({ tag: blockTag.tag, typeId: blockTag.typeId }).from(blockTag).where(eq(blockTag.blockId, carrier.id));
         expect(yield* indexed()).toEqual([{ tag: 'task', typeId: id }]);
         const query = { tags: [id], fields: { status: 'open' }, sort: { by: 'created' as const, order: 'asc' as const } };
-        const view = yield* graph.blocks.create({ projectId, tags: ['view'], title: 'all work', fields: { query } });
+        const view = yield* graph.blocks.create({ projectId, parentId: root, tags: ['view'], title: 'all work', fields: { query } });
         expect((yield* graph.blocks.blockById(view.id)).fields.query).toEqual(query);
         yield* graph.blocks.update({ id: view.id, fields: { query: { ...query, tags: ['task'] } } });
-        const bug = yield* graph.blocks.create({ projectId, tags: ['tag'], title: '#bug', fields: { id: 'bug', extends: 'task' } });
+        const bug = yield* graph.blocks.create({
+          projectId,
+          parentId: root,
+          tags: ['tag'],
+          title: '#bug',
+          fields: { id: 'bug', extends: 'task' },
+        });
         expect((yield* graph.blocks.blockById(view.id)).fields.query).toEqual(query);
         expect((yield* graph.blocks.blockById(bug.id)).fields.extends).toBe(id);
         yield* graph.blocks.update({ id: node.id, fields: { identity: { name: 'chore' } } });
@@ -59,7 +65,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('type identities', (it) =
         expect(renamed.identities.typeOf('chore')?.id).toBe(id);
         expect(yield* indexed()).toEqual([{ tag: 'task', typeId: id }]);
         expect(yield* graph.blocks.blockById(carrier.id)).toEqual(before);
-        const born = yield* graph.blocks.create({ projectId, tags: ['chore'], title: 'named' });
+        const born = yield* graph.blocks.create({ projectId, parentId: root, tags: ['chore'], title: 'named' });
         expect((yield* graph.blocks.blockById(born.id)).tags).toEqual(['task']);
         expect(tagLabel(renamed.tagById('task'))).toBe('#chore');
         expect(renamed.nameOf(id)).toBe('chore');
@@ -92,7 +98,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('type identities', (it) =
   );
 
   it.effect('same-name exports keep distinct keys and carriers, and foreign references bind to their own library', () =>
-    withDemo(({ graph, projectId, table, context }) =>
+    withDemo(({ graph, projectId, root, table, context }) =>
       Effect.gen(function* () {
         const task: Tag = { id: 'task', fields: {}, edges: [], gates: [], roles: {}, body: { shape: 'content' }, prompt: '' };
         const subtask: Tag = { ...task, id: 'subtask', extends: 'task', fields: { parent: { type: 'ref', tag: 'task' } } };
@@ -108,8 +114,8 @@ layer(demoGraphLayer(), { excludeTestServices: true })('type identities', (it) =
         expect(theirs?.id).not.toBe(ours.id);
         expect(installed.tagById('subtask')?.extends).toBe('other.task');
         expect(installed.tagById('subtask')?.fields.parent).toEqual({ type: 'ref', tag: shippedTypeId(other.id, 'task') });
-        const mine = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'mine' });
-        const foreign = yield* graph.blocks.create({ projectId, tags: [shippedTypeId(other.id, 'task')], title: 'theirs' });
+        const mine = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'mine' });
+        const foreign = yield* graph.blocks.create({ projectId, parentId: root, tags: [shippedTypeId(other.id, 'task')], title: 'theirs' });
         expect((yield* graph.blocks.blockById(mine.id)).tags).toEqual(['task']);
         expect((yield* graph.blocks.blockById(foreign.id)).tags).toEqual(['other.task']);
         const selected = yield* graph.selection.rows(
@@ -140,8 +146,19 @@ layer(demoGraphLayer(), { excludeTestServices: true })('type identities', (it) =
         expect(installed.identities.typeOf(shippedTypeId(other.id, 'person'))?.key).toBe('other.person');
         expect(installed.tagById('contact')?.extends).toBe('other.person');
         expect(installed.tagById('contact')?.fields.parent).toEqual({ type: 'ref', tag: shippedTypeId(other.id, 'person') });
-        const mine = yield* graph.blocks.create({ projectId: project.id, tags: [shippedTypeId('knowledge', 'person')], title: 'mine' });
-        const theirs = yield* graph.blocks.create({ projectId: project.id, tags: [shippedTypeId(other.id, 'person')], title: 'theirs' });
+        const projectRoot = yield* graph.blocks.rootBlockOf(project.id);
+        const mine = yield* graph.blocks.create({
+          projectId: project.id,
+          parentId: projectRoot.id,
+          tags: [shippedTypeId('knowledge', 'person')],
+          title: 'mine',
+        });
+        const theirs = yield* graph.blocks.create({
+          projectId: project.id,
+          parentId: projectRoot.id,
+          tags: [shippedTypeId(other.id, 'person')],
+          title: 'theirs',
+        });
         expect(mine.tags).toEqual(['person']);
         expect(theirs.tags).toEqual(['other.person']);
         const updated: Catalog = { ...other, tags: [person, { ...contact, fields: { ...contact.fields, due: 'date' } }] };
@@ -175,11 +192,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('type identities', (it) =
   );
 
   it.effect('field aliases preserve stored keys and identities, name reads and filters, and refuse an ambiguous selection', () =>
-    withDemo(({ graph, projectId, table, refusal }) =>
+    withDemo(({ graph, projectId, root, table, refusal }) =>
       Effect.gen(function* () {
         const { node } = yield* declarationOf(projectId, 'view');
         const query = { sort: { by: 'created' as const, order: 'asc' as const } };
-        const carrier = yield* graph.blocks.create({ projectId, tags: ['view'], title: 'saved before', fields: { query } });
+        const carrier = yield* graph.blocks.create({ projectId, parentId: root, tags: ['view'], title: 'saved before', fields: { query } });
         const before = yield* graph.blocks.blockById(carrier.id);
         const fieldId = (yield* table()).identities.fieldIdOf('view', 'query');
         const identity = yield* Schema.decodeUnknownEffect(tagIdentitySchema)(node.fields.identity);
@@ -188,7 +205,13 @@ layer(demoGraphLayer(), { excludeTestServices: true })('type identities', (it) =
         expect(yield* graph.blocks.blockById(carrier.id)).toEqual(before);
         expect(renamed.identities.fieldIdOf('view', 'query')).toBe(fieldId);
         expect(renamed.fieldNameOf('view', 'query')).toBe('selection');
-        const born = yield* graph.blocks.create({ projectId, tags: ['view'], title: 'saved after', fields: { selection: query } });
+        const born = yield* graph.blocks.create({
+          projectId,
+          parentId: root,
+          tags: ['view'],
+          title: 'saved after',
+          fields: { selection: query },
+        });
         expect((yield* graph.blocks.blockById(born.id)).fields.query).toEqual(query);
         const shown = payloadLines(renamed, wireRead(yield* graph.reading.show(born.id, 0))).join('\n');
         expect(shown).toContain('selection');

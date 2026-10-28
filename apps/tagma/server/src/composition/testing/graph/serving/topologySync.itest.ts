@@ -17,11 +17,16 @@ layer(servingLayer, { excludeTestServices: true })('standing topology', (it) => 
         const git = demo.graph.git;
         yield* runGit(git, 'branch', ['-C', repo, 'worktree', 'add', '-b', 'feature', wt, 'main']);
         const served = yield* pool.resolve({ projectId, cwd: wt });
+        const root = yield* Effect.provide(
+          Effect.flatMap(Blocks, (blocks) => blocks.rootBlockOf(projectId)),
+          served.context,
+        );
         const made = yield* demo
           .as(
             'topology',
             Context.get(served.context, Blocks).create({
               projectId,
+              parentId: root.id,
               tags: ['idea'],
               title: 'Branch Note',
               body: 'written on the branch',

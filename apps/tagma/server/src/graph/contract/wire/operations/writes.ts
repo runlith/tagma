@@ -18,7 +18,7 @@ export const WRITE_OPERATIONS = {
   create_block: operation('create_block', {
     ...GRAPH_DIRECT_ACT,
     meaning:
-      'Create a block with optional sources. Without parentId, uses the selected project root. With claim: true, atomically take the new block for the calling session through its declared holder lifecycle.',
+      'Create a block with optional sources under `parentId`, the block it is about; a proposal is born under `amendsId` instead. With claim: true, atomically take the new block for the calling session through its declared holder lifecycle.',
     grammar: `${CREATE_GRAMMAR} \`checkout\` selects the graph copy where the block is born.`,
     input: graphInput({
       checkout: Schema.optional(Schema.NonEmptyString.annotate(placeRole('checkout'))).annotate({
@@ -49,6 +49,7 @@ export const WRITE_OPERATIONS = {
       'field-target',
       'source-required',
       'operation-only',
+      'parent-required',
       'amends-missing',
       'amends-shape',
       'tree-not-measured',
@@ -161,6 +162,7 @@ A \`parentId\` in another project’s graph moves the block with its subtree and
       'vocabulary-older',
       'project-root',
       'cross-project-parent',
+      'parent-required',
       'relocation-shape',
       'tag-undeclared',
       'creation-default-missing',

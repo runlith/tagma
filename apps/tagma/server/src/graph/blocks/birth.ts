@@ -14,6 +14,7 @@ import { GraphStore, type StoreFailure } from '../../platform/contract/service/s
 import { block } from '../store/tables.js';
 import { assertRequiredSources } from '../sources/readers/place.js';
 import { Sources } from '../contract/service/sources.js';
+import type { SourceInput } from '../contract/wire/sources.js';
 import { Act, type BlockWrite } from '../contract/service/acts.js';
 import { mintBlockId } from '../contract/wire/identity.js';
 import { blockName } from '../contract/wire/references.js';
@@ -126,6 +127,24 @@ export const blockBirth = Effect.gen(function* () {
   const closeVocabulary = yield* vocabularyCloser;
   const payload = yield* payloadGate;
 
+  const parentRequired = Effect.fn('Blocks.parentRequired')(function* (projectId: number, placed: readonly SourceInput[]) {
+    const root = yield* blockRows.rootBlockOf(projectId);
+    const owners: string[] = [];
+    for (const ref of new Set(placed.map((one) => (one.symbol === undefined ? one.ref : `${one.ref}#${one.symbol}`)))) {
+      const found = yield* sources.ownersOf(projectId, ref);
+      if (found.length === 0) owners.push(`nothing owns ${ref}: create its owner first, then name it as parentId`);
+      for (const owner of found) owners.push(`parentId ${blockName(owner.uuid)} ${owner.title} — the owner read_owners answers for ${ref}`);
+    }
+    const topic = 'parentId of the page of its topic — search_blocks finds it by its words';
+    const named = `parentId ${blockName(root.uuid)}, the root named explicitly — only for a part of the project or what concerns the whole of it`;
+    const [first, ...rest] = new Set(owners);
+    return yield* new GateRefusal(
+      'parent-required',
+      'a block is born under what it is about, and this one names no parent',
+      first === undefined ? [topic, named] : [first, ...rest, topic, named],
+    );
+  });
+
   return Effect.fn('Blocks.create')(function* (
     input: BlockCreate & { readonly farEdges?: readonly FarLink[] },
   ): Effect.fn.Return<BlockWrite, StoreFailure | GateRefusal<BlockCreateRefusal>> {
@@ -187,6 +206,8 @@ export const blockBirth = Effect.gen(function* () {
     }
     yield* assertBodyCap(tags, input.body ?? '');
     yield* assertBareRefs(layered.prompt ?? input.body ?? '');
+    const named = input.amendsId ?? input.parentId;
+    if (named === undefined) return yield* parentRequired(input.projectId, input.sources ?? []);
     if (input.parentId !== undefined) {
       const parent = yield* blockRows.blockById(input.parentId);
       if (parent.projectId !== input.projectId) {
@@ -196,8 +217,7 @@ export const blockBirth = Effect.gen(function* () {
       }
       if (!amends && table.supports(parent, LEAF)) return yield* leafRefusal(`${blockName(parent.uuid)}`);
     }
-    const named = input.amendsId ?? input.parentId;
-    const parentRow = named === undefined ? yield* blockRows.rootBlockOf(input.projectId) : yield* blockRows.blockById(named);
+    const parentRow = yield* blockRows.blockById(named);
     const parentId = parentRow.id;
     const stealth = yield* bornStealth(parentRow, input.storage);
     const future = { tags: ids, projectId: input.projectId, uuid };

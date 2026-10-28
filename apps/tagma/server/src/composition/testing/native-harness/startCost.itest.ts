@@ -5,6 +5,8 @@ import { layer } from '@runlith/effect-test';
 import { Usage, type LLMEvent } from '@runlith/llm/schema/events';
 import { Clock, Context, Effect, Layer, Queue, Schema, Stream } from 'effect';
 import { Settings } from '../../../settings/contract/service/values.js';
+import { Blocks } from '../../../graph/contract/service/blocks.js';
+import { blockName } from '../../../graph/contract/wire/references.js';
 import { autoTitle } from '../../../threads/contract/wire/settings.js';
 import { agentPreviewSchema } from '../../../threads/contract/wire/agentLibrary.js';
 import { EvidenceFeed, ThreadEvidence } from '../../../threads/contract/service/evidence.js';
@@ -51,7 +53,8 @@ const setup = Effect.gen(function* () {
   yield* settings.write({ key: autoTitle.id, value: false, scope: 'project', projectId });
   yield* settings.write({ key: startShare.id, value: 0.01, scope: 'project', projectId });
   yield* modelDefaults(world, { provider: 'subscription', model: 'claude-sonnet-5-5', reasoning: 'low', account: null });
-  return { world, projectId };
+  const rootBlock = yield* Context.get(world.runtime.graph, Blocks).rootBlockOf(projectId).pipe(Effect.provide(world.runtime.graph));
+  return { world, projectId, parentId: blockName(rootBlock.uuid) };
 });
 
 class World extends Context.Service<World, Effect.Success<typeof setup>>()('testing/StartCostWorld') {}
@@ -78,16 +81,16 @@ const carded = Effect.fnUntraced(function* (threadId: string, projectId: number)
 layer(Layer.effect(World, setup).pipe(Layer.provide(doorFixture())), { excludeTestServices: true })('start cost', (it) => {
   it.effect('the first real request and agent preview agree on priced prompt parts, and guidance mutations report their cost', () =>
     Effect.gen(function* () {
-      const { world, projectId } = yield* World;
+      const { world, projectId, parentId } = yield* World;
       const at = `project=${projectId}`;
       type Written = { block?: { name: string }; start?: { agent: string; chars: number; delta: number } };
-      const group = (yield* world.op('create_block', { title: 'Fixture guidance' }, at)).body as Written;
+      const group = (yield* world.op('create_block', { parentId, title: 'Fixture guidance' }, at)).body as Written;
       const prompt = (yield* world.op('create_block', { tags: ['rule'], parentId: group.block!.name, title: 'Keep the fixture data' }, at))
         .body as Written;
       expect(prompt.start!.delta).toBeGreaterThan(0);
       const code = (yield* world.op(
         'create_block',
-        { tags: ['rule'], title: 'Name the gate by its role', sources: [{ kind: 'file', ref: 'gate.ts' }] },
+        { parentId, tags: ['rule'], title: 'Name the gate by its role', sources: [{ kind: 'file', ref: 'gate.ts' }] },
         at,
       )).body as Written;
       expect(code.start).toEqual({ agent: prompt.start!.agent, chars: prompt.start!.chars, delta: 0 });

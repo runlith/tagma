@@ -24,7 +24,9 @@ import { pricedBlockResult, pricedResult } from './answers.js';
 import { birthPricing, lawPricing, nodePricing } from './start.js';
 import { priced, type Priced } from '../../platform/contract/service/start.js';
 import type { BlockWrite } from '../contract/service/acts.js';
-import type { Moved } from '../contract/wire/answers.js';
+import type { Crowded, Moved } from '../contract/wire/answers.js';
+import { crowdedPages } from '../blocks/crowding.js';
+import { Tags } from '../contract/service/vocabulary.js';
 import { cross, link, linkTarget, scoped, targeted, unlink } from './crossing.js';
 import { relocate } from './relocation.js';
 import { GraphCall } from '../contract/service/serving.js';
@@ -158,7 +160,9 @@ const BLOCK_WRITE_ROUTED = {
                 projectId: targetProjectId,
                 ...provenance,
               };
-              return yield* priced(pricing, thereBlocks.create(born));
+              const written = yield* priced(pricing, thereBlocks.create(born));
+              const [crowded] = yield* crowdedPages(thereBlocks, yield* (yield* Tags).of(targetProjectId), [written.value]);
+              return { ...written, crowded };
             }),
           );
         });
@@ -166,7 +170,7 @@ const BLOCK_WRITE_ROUTED = {
         return yield* createIn(projectId ?? call.project.id, parentId === undefined ? undefined : (yield* scoped(parentId)).id);
       }),
     ),
-    answer: pricedResult,
+    answer: (raw: Priced<BlockWrite> & { readonly crowded: Crowded | undefined }) => ({ ...pricedResult(raw), crowded: raw.crowded }),
   }),
 
   update_block: routed(W.update_block, {
@@ -189,11 +193,11 @@ const BLOCK_WRITE_ROUTED = {
             );
           }
           const { write, moved } = yield* relocate(input.blockId, across);
-          return { value: { ...write, moved }, start: undefined };
+          return { value: { ...write, moved }, start: undefined, crowded: undefined };
         }
         const parentId = input.parentId === undefined ? undefined : across === null ? null : (yield* scoped(across)).id;
         const pricing = yield* nodePricing(row.projectId, { tags: [...row.tags, ...(input.tags ?? [])] });
-        return yield* withBodyFile({ body: input.body, bodyFile: callerPath(caller, input.bodyFile) }, (body) =>
+        const written = yield* withBodyFile({ body: input.body, bodyFile: callerPath(caller, input.bodyFile) }, (body) =>
           priced(
             pricing,
             there.update({
@@ -208,9 +212,16 @@ const BLOCK_WRITE_ROUTED = {
             }),
           ),
         );
+        if (parentId === undefined && input.tags === undefined) return { ...written, crowded: undefined };
+        const [crowded] = yield* crowdedPages(there, yield* (yield* Tags).of(row.projectId), [written.value]);
+        return { ...written, crowded };
       }),
     ),
-    answer: (raw: Priced<BlockWrite & { readonly moved?: Moved }>) => ({ ...pricedResult(raw), moved: raw.value.moved }),
+    answer: (raw: Priced<BlockWrite & { readonly moved?: Moved }> & { readonly crowded: Crowded | undefined }) => ({
+      ...pricedResult(raw),
+      moved: raw.value.moved,
+      crowded: raw.crowded,
+    }),
   }),
 
   edit_block: routed(W.edit_block, {

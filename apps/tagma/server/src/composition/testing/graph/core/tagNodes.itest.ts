@@ -9,24 +9,32 @@ import { demoGraphLayer, withDemo } from '../../graphFixture.js';
 import { SHIPPED_CATALOGS } from '../../settings.js';
 
 const declare = (projectId: number, id: string, fields: Record<string, unknown>) =>
-  Effect.flatMap(Blocks, ({ create }) => create({ projectId, tags: ['tag'], title: `#${id}`, fields: { id, ...fields } }));
+  Effect.flatMap(Blocks, ({ create, rootBlockOf }) =>
+    Effect.flatMap(rootBlockOf(projectId), (root) =>
+      create({ projectId, parentId: root.id, tags: ['tag'], title: `#${id}`, fields: { id, ...fields } }),
+    ),
+  );
 
 layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('tag nodes', (it) => {
   it.effect('a declaration checks the next write, stops declaring in the trash and declares again after restoration', () =>
-    withDemo(({ graph, projectId, refusal, table }) =>
+    withDemo(({ graph, projectId, root, refusal, table }) =>
       Effect.gen(function* () {
         const declaration = yield* declare(projectId, 'invoice', { fields: { total: 'number' } });
-        const invalid = yield* refusal(graph.blocks.create({ projectId, tags: ['invoice'], title: 'March', fields: { total: 'x' } }));
+        const invalid = yield* refusal(
+          graph.blocks.create({ projectId, parentId: root, tags: ['invoice'], title: 'March', fields: { total: 'x' } }),
+        );
         expect(invalid.code).toBe('field-invalid');
         expect(invalid.reason).toContain('invoice.total');
-        const first = yield* graph.blocks.create({ projectId, tags: ['invoice'], title: 'March', fields: { total: 1200 } });
+        const first = yield* graph.blocks.create({ projectId, parentId: root, tags: ['invoice'], title: 'March', fields: { total: 1200 } });
         expect((yield* graph.blocks.blockById(first.id)).fields.total).toBe(1200);
         const before = yield* graph.blocks.blockById(first.id);
         yield* graph.trash.delete({ id: declaration.id });
-        expect((yield* refusal(graph.blocks.create({ projectId, tags: ['invoice'], title: 'April' }))).code).toBe('tag-undeclared');
+        expect((yield* refusal(graph.blocks.create({ projectId, parentId: root, tags: ['invoice'], title: 'April' }))).code).toBe(
+          'tag-undeclared',
+        );
         expect((yield* table()).tagById('invoice')).toBeNull();
         yield* graph.trash.restore({ id: declaration.id });
-        const second = yield* graph.blocks.create({ projectId, tags: ['invoice'], title: 'April', fields: { total: 2 } });
+        const second = yield* graph.blocks.create({ projectId, parentId: root, tags: ['invoice'], title: 'April', fields: { total: 2 } });
         expect(second.fields.total).toBe(2);
         expect(yield* graph.blocks.blockById(first.id)).toEqual(before);
       }),
@@ -79,36 +87,43 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('catalog settings select a new project vocabulary and install additional types into a standing project', () =>
-    withDemo(({ graph, projectId, fixture, refusal }) =>
+    withDemo(({ graph, projectId, root: demoBlock, fixture, refusal }) =>
       Effect.gen(function* () {
-        expect((yield* refusal(graph.blocks.create({ projectId, tags: ['decision'], title: 'Use sourdough' }))).code).toBe(
-          'tag-undeclared',
-        );
+        expect(
+          (yield* refusal(graph.blocks.create({ projectId, parentId: demoBlock, tags: ['decision'], title: 'Use sourdough' }))).code,
+        ).toBe('tag-undeclared');
         yield* graph.settings.write({ scope: 'user', key: SHIPPED_CATALOGS.key.id, value: ['knowledge'] });
         const root = yield* fixture.directory('notebook');
         const notebook = yield* graph.projectLifecycle.create({ name: 'notebook', rootPath: root });
+        const notebookRoot = (yield* graph.blocks.rootBlockOf(notebook.id)).id;
         expect(yield* graph.settings.value(SHIPPED_CATALOGS.key, notebook.id)).toEqual(['knowledge']);
-        const refused = yield* refusal(graph.blocks.create({ projectId: notebook.id, tags: ['task'], title: 'do it' }));
+        const refused = yield* refusal(
+          graph.blocks.create({ projectId: notebook.id, parentId: notebookRoot, tags: ['task'], title: 'do it' }),
+        );
         expect(refused.code).toBe('tag-undeclared');
         expect(refused.unblock.join(' ')).toContain('software-development');
         expect(refused.unblock.join(' ')).toContain(SHIPPED_CATALOGS.key.id);
-        expect((yield* graph.blocks.create({ projectId: notebook.id, title: 'a thought' })).tags).toEqual([]);
+        expect((yield* graph.blocks.create({ projectId: notebook.id, parentId: notebookRoot, title: 'a thought' })).tags).toEqual([]);
         yield* graph.settings.write({
           scope: 'project',
           projectId,
           key: SHIPPED_CATALOGS.key.id,
           value: ['software-development', 'knowledge'],
         });
-        expect((yield* graph.blocks.create({ projectId, tags: ['decision'], title: 'Use sourdough' })).tags).toEqual(['decision']);
-        expect((yield* graph.blocks.create({ projectId, tags: ['task'], title: 'bake it' })).fields.status).toBe('open');
+        expect((yield* graph.blocks.create({ projectId, parentId: demoBlock, tags: ['decision'], title: 'Use sourdough' })).tags).toEqual([
+          'decision',
+        ]);
+        expect((yield* graph.blocks.create({ projectId, parentId: demoBlock, tags: ['task'], title: 'bake it' })).fields.status).toBe(
+          'open',
+        );
       }),
     ),
   );
 
   it.effect('a spec with open child work refuses to close until the child finishes', () =>
-    withDemo(({ graph, projectId, refusal, table }) =>
+    withDemo(({ graph, projectId, root, refusal, table }) =>
       Effect.gen(function* () {
-        const spec = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'the shape' });
+        const spec = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'the shape' });
         const child = yield* graph.blocks.create({
           projectId,
           tags: ['task'],
@@ -130,16 +145,17 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a leaf refuses children whether its type was shipped or declared locally', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, root, refusal }) =>
       Effect.gen(function* () {
         yield* declare(projectId, 'dashboard', { roles: { leaf: true } });
         const view = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['view'],
           title: 'open work',
           fields: { query: { tags: ['task'], sort: { by: 'updated', order: 'desc' } } },
         });
-        const dashboard = yield* graph.blocks.create({ projectId, tags: ['dashboard'], title: 'this week' });
+        const dashboard = yield* graph.blocks.create({ projectId, parentId: root, tags: ['dashboard'], title: 'this week' });
         for (const parent of [view, dashboard]) {
           expect(
             (yield* refusal(graph.blocks.create({ projectId, tags: ['idea'], title: 'under a leaf', parentId: parent.id }))).code,
@@ -151,7 +167,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('declared status and holder fields drive search, queries and work operations while plain updates preserve the carrier', () =>
-    withDemo(({ graph, projectId, table, refusal, as, nameOf }) =>
+    withDemo(({ graph, projectId, root, table, refusal, as, nameOf }) =>
       Effect.gen(function* () {
         yield* declare(projectId, 'ticket', {
           fields: { state: { type: 'enum', values: ['filed', 'taken', 'shipped', 'dropped'] }, owner: 'session' },
@@ -167,8 +183,8 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             { gate: 'transition', field: 'state', from: 'filed', to: 'dropped' },
           ],
         });
-        const ticket = yield* graph.blocks.create({ projectId, tags: ['ticket'], title: 'the hinge' });
-        const ordinary = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'the hinge again' });
+        const ticket = yield* graph.blocks.create({ projectId, parentId: root, tags: ['ticket'], title: 'the hinge' });
+        const ordinary = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'the hinge again' });
         const tags = yield* table();
         expect(tags.statusOf(ticket)).toBe('filed');
         for (const [status, node] of [
@@ -199,7 +215,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         expect(shipped.fields.state).toBe('shipped');
         expect(tags.isTerminal(shipped)).toBe(true);
         expect(tags.holderOf(shipped)).toBe(tags.holderOf(taken));
-        const other = yield* graph.blocks.create({ projectId, tags: ['ticket'], title: 'the door sticks' });
+        const other = yield* graph.blocks.create({ projectId, parentId: root, tags: ['ticket'], title: 'the door sticks' });
         expect((yield* graph.tasks.close({ id: other.id, reason: 'not ours' })).fields.state).toBe('dropped');
         expect((yield* graph.selection.ready({ projectId })).map((row) => row.uuid)).toEqual([ordinary.uuid]);
       }),
@@ -207,14 +223,15 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a source-required gate refuses birth without the declared kind and records an accepted source', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, root, refusal }) =>
       Effect.gen(function* () {
         yield* declare(projectId, 'territory', { sources: ['dir'], gates: [{ gate: 'source-required', kinds: ['dir'] }] });
-        const refused = yield* refusal(graph.blocks.create({ projectId, tags: ['territory'], title: 'the server' }));
+        const refused = yield* refusal(graph.blocks.create({ projectId, parentId: root, tags: ['territory'], title: 'the server' }));
         expect(refused.code).toBe('source-required');
         expect(refused.reason).toContain('territory.source-required');
         const born = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['territory'],
           title: 'the server',
           sources: [{ kind: 'dir', ref: 'src' }],
@@ -227,7 +244,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('an unreadable stored declaration is named in the vocabulary and in the birth refusal', () =>
-    withDemo(({ graph, projectId, table, refusal, nameOf }) =>
+    withDemo(({ graph, projectId, root, table, refusal, nameOf }) =>
       Effect.gen(function* () {
         const carrier = yield* declare(projectId, 'invoice', { fields: { total: 'number' } });
         yield* graph.graphStore.db
@@ -240,7 +257,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         const named = tags.unreadable.find((entry) => entry.id === 'invoice');
         expect(named?.name).toBe(yield* nameOf(carrier.id));
         expect(named?.reason).toContain('total');
-        const refused = yield* refusal(graph.blocks.create({ projectId, tags: ['invoice'], title: 'March' }));
+        const refused = yield* refusal(graph.blocks.create({ projectId, parentId: root, tags: ['invoice'], title: 'March' }));
         expect(refused.code).toBe('tag-undeclared');
         expect(refused.unblock.join(' ')).toContain(yield* nameOf(carrier.id));
       }),
@@ -248,9 +265,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('a changed type validates standing carriers atomically before allowing new fields', () =>
-    withDemo(({ graph, projectId, table, refusal, nameOf }) =>
+    withDemo(({ graph, projectId, root, table, refusal, nameOf }) =>
       Effect.gen(function* () {
-        const crash = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'the crash' });
+        const crash = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'the crash' });
         const tags = yield* table();
         const declaration = tags.identities.typeOf('task')?.declaration;
         const task = tags.tagById('task');

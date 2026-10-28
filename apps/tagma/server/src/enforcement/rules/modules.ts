@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { takesMap } from '@tagma/inspection/builtins';
 import { Effect } from 'effect';
 import { Blocks } from '../../graph/contract/service/blocks.js';
+import { Tags } from '../../graph/contract/service/vocabulary.js';
+import { crowdedPages } from '../../graph/blocks/crowding.js';
 import { Act, BlockNames, type BlockRow } from '../../graph/contract/service/acts.js';
 import { measuredRoot } from '../../graph/contract/service/serving.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
@@ -153,6 +155,7 @@ export const planModules = Effect.fn('enforcement.planModules')(function* (input
   const removedNames = new Map<string, string>();
   const fates = new Map<string, { readonly said: string; readonly fix: string }>();
   const renamedIds = new Map<string, string>();
+  let rootName: string | undefined;
 
   for (const raw of input.modules) {
     const ask: ModuleAsk = raw.root === undefined ? raw : { ...raw, root: raw.root.replace(/\/+$/, '') };
@@ -230,10 +233,14 @@ export const planModules = Effect.fn('enforcement.planModules')(function* (input
       );
     const addressedBody = known === undefined ? addressedRefsRefusal(ask.body ?? '') : null;
     if (addressedBody !== null) fail('body', undefined, addressedBody.reason, addressedBody.unblock[0]);
-    const under =
-      ask.under instanceof GateRefusal || sideFault !== undefined
-        ? undefined
-        : (ask.under ?? (known === undefined ? yield* blocks.rootBlockOf(input.projectId) : undefined));
+    if (known === undefined && ask.under === undefined) {
+      rootName ??= blockName((yield* blocks.rootBlockOf(input.projectId)).uuid);
+      faults.unplaced(
+        ask.id,
+        `send \`parent\`: the module holding it — its part — or ${rootName}, the root named explicitly while the root's modules fit a screen`,
+      );
+    }
+    const under = ask.under instanceof GateRefusal || sideFault !== undefined ? undefined : ask.under;
     if (known !== undefined && under !== undefined && (yield* ancestry(under)).includes(known))
       fail('parent', ask.parent, `${blockName(under.uuid)} stands under this module`, 'name a parent outside the module');
     const parent = under === undefined ? undefined : yield* moduleAbove(under);
@@ -570,5 +577,10 @@ export const applyModules = Effect.fn('enforcement.applyModules')(function* (pre
       ? Effect.succeed(one)
       : Effect.map(names.nameOf(landed[at]), (card) => ({ ...one, card })),
   );
-  return { ...prepared, modules };
+  const placed = yield* Effect.forEach(
+    prepared.writes.flatMap((write, at) => (write.parent === undefined || landed[at] === undefined ? [] : [landed[at]])),
+    (id) => blocks.blockById(id),
+  );
+  const crowded = yield* crowdedPages(blocks, yield* (yield* Tags).of(prepared.projectId), placed);
+  return { ...prepared, modules, crowded };
 });

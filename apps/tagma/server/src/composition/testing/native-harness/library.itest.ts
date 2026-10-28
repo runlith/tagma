@@ -155,6 +155,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           yield* served.graph.blocks
             .create({
               projectId: served.projectId,
+              parentId: served.root,
               tags: ['rule'],
               title: 'The served graph is where this project’s law stands',
             })

@@ -37,7 +37,12 @@ layer(demoGraphLayer({ repos: ['namespace'] }).pipe(Layer.provideMerge(BunFileSy
           const files = yield* FileSystem.FileSystem;
           const checkout = project('namespace').root;
           const row = yield* graph.projectPolicy.setStorage({ id: project('namespace').id, mode: 'stealth' });
-          const task = yield* graph.blocks.create({ projectId: row.id, tags: ['task'], title: 'Held work' });
+          const task = yield* graph.blocks.create({
+            projectId: row.id,
+            parentId: (yield* graph.blocks.rootBlockOf(row.id)).id,
+            tags: ['task'],
+            title: 'Held work',
+          });
           yield* signedBy({ harness: 'tagma', key: 'thread-holder' })(graph.tasks.claim({ id: task.id }));
           const layout = yield* resolveStorageLayout({
             mode: 'stealth',
@@ -99,26 +104,22 @@ layer(demoGraphLayer({ repos: ['namespace'] }).pipe(Layer.provideMerge(BunFileSy
                   .returning())[0]!;
                 for (const blockId of [id, deleted.id])
                   yield* store.db.insert(event).values({ ts: new Date(0), op: 'claim', projectId: row.id, blockId, sessionId: holder.id });
-                yield* store.db
-                  .insert(event)
-                  .values({
-                    ts: new Date(0),
-                    op: 'delete',
-                    projectId: row.id,
-                    blockId: deleted.id,
-                    sessionId: holder.id,
-                    payload: JSON.stringify({ ids: [deleted.id] }),
-                  });
-                yield* store.db
-                  .insert(event)
-                  .values({
-                    ts: new Date(0),
-                    op: 'update',
-                    projectId: row.id,
-                    blockId: deleted.id,
-                    sessionId: holder.id,
-                    payload: JSON.stringify({ wasFields: { holder: holder.id } }),
-                  });
+                yield* store.db.insert(event).values({
+                  ts: new Date(0),
+                  op: 'delete',
+                  projectId: row.id,
+                  blockId: deleted.id,
+                  sessionId: holder.id,
+                  payload: JSON.stringify({ ids: [deleted.id] }),
+                });
+                yield* store.db.insert(event).values({
+                  ts: new Date(0),
+                  op: 'update',
+                  projectId: row.id,
+                  blockId: deleted.id,
+                  sessionId: holder.id,
+                  payload: JSON.stringify({ wasFields: { holder: holder.id } }),
+                });
                 yield* store.db
                   .insert(touch)
                   .values({ taskId: deleted.id, place: 'src/held.ts', wrote: true, touchedAt: new Date(0), sessionId: holder.id })

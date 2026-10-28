@@ -12,21 +12,21 @@ const B: SessionRef = { harness: 'claude-code', key: 'session-b' };
 
 layer(demoGraphLayer())('journal sessions', (it) => {
   it.effect('first writes register distinct sessions, stamp their events and expose the newest writer first', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
-        const created = yield* signedBy(A)(graph.blocks.create({ projectId, tags: ['idea'], title: 'First' }));
+        const created = yield* signedBy(A)(graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'First' }));
         const [entry] = yield* graph.journal.events({ blockId: created.id, limit: 1 });
         if (entry?.sessionId == null) return yield* Effect.die('the first signed write has no session');
         const row = yield* graph.sessions.byId(entry.sessionId);
         expect(row).toMatchObject(A);
         expect(yield* graph.sessions.idOf(A)).toBe(entry.sessionId);
-        const again = yield* signedBy(A)(graph.blocks.create({ projectId, tags: ['idea'], title: 'Again' }));
+        const again = yield* signedBy(A)(graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'Again' }));
         expect((yield* graph.journal.events({ blockId: again.id, limit: 1 }))[0]?.sessionId).toBe(entry.sessionId);
-        const other = yield* signedBy(B)(graph.blocks.create({ projectId, tags: ['idea'], title: 'Other' }));
+        const other = yield* signedBy(B)(graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'Other' }));
         const [different] = yield* graph.journal.events({ blockId: other.id, limit: 1 });
         if (different?.sessionId == null) return yield* Effect.die('the other signed write has no session');
         expect(different.sessionId).not.toBe(entry.sessionId);
-        const unsigned = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'No session' });
+        const unsigned = yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'No session' });
         expect((yield* graph.journal.events({ blockId: unsigned.id, limit: 1 }))[0]?.sessionId).toBeNull();
         const vocabulary = yield* graph.journal.vocabulary({ projectId });
         expect(vocabulary.sessions.map(({ id, harness, key }) => ({ id, harness, key }))).toEqual([
@@ -50,7 +50,7 @@ layer(demoGraphLayer())('journal sessions', (it) => {
           signedBy(A)(
             graph.batch.apply(
               batchDocument([
-                { op: 'create', $id: 'a', tags: ['idea'], title: 'Lands' },
+                { op: 'create', $id: 'a', parentId: yield* demo.nameOf(demo.root), tags: ['idea'], title: 'Lands' },
                 { op: 'edit', id: '$a', old: 'nothing like this', new: 'x' },
               ]),
               projectId,
@@ -68,7 +68,7 @@ layer(demoGraphLayer())('journal sessions', (it) => {
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, projectId } = demo;
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Work' });
+        const { id } = yield* graph.blocks.create({ projectId, parentId: demo.root, tags: ['task'], title: 'Work' });
         const table = yield* demo.table();
         yield* graph.tasks.claim({ id });
         expect(table.holderOf(yield* graph.tasks.claim({ id }))).toBeNull();

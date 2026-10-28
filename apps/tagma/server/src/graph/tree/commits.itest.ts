@@ -322,14 +322,14 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
       Effect.gen(function* () {
         const w = yield* checkout(demo);
         const body = Effect.map(w.run(['log', '-1', '--format=%B']), (text) => text.trim().split('\n'));
-        const first = yield* demo.graph.blocks.create({ projectId: demo.projectId, title: 'Before the reopening' });
+        const first = yield* demo.graph.blocks.create({ projectId: demo.projectId, title: 'Before the reopening', parentId: demo.root });
         yield* w.wrote('born.md', 'the first act\n');
         yield* w.commits.carry([]);
         const reopened = w.opened();
         const refusal = w.refuse((args) => args.includes('fast-import'));
         expect((yield* Effect.flip(reopened.commit))._tag).toBe('OwnGitFailed');
         yield* refusal;
-        const second = yield* demo.graph.blocks.create({ projectId: demo.projectId, title: 'After the failure' });
+        const second = yield* demo.graph.blocks.create({ projectId: demo.projectId, title: 'After the failure', parentId: demo.root });
         yield* demo.graph.blocks.update({ id: first.id, body: 'edited twice' });
         yield* demo.graph.blocks.update({ id: first.id, body: 'edited three times' });
         expect(yield* reopened.commit).toMatchObject({ kind: 'committed' });
@@ -353,13 +353,13 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
     withDemo((demo) =>
       Effect.gen(function* () {
         const w = yield* checkout(demo);
-        yield* demo.graph.blocks.create({ projectId: demo.projectId, title: 'Landed once' });
+        yield* demo.graph.blocks.create({ projectId: demo.projectId, title: 'Landed once', parentId: demo.root });
         yield* w.wrote('born.md', 'the landed act\n');
         expect(yield* w.commits.commit).toMatchObject({ kind: 'committed' });
         const position = Number(yield* w.run(['log', '-1', '--format=%(trailers:key=Tagma-Graph,valueonly,separator=)']));
         yield* w.journal.committed(0);
         yield* w.journal.landing(position);
-        yield* demo.graph.blocks.create({ projectId: demo.projectId, title: 'After the gap' });
+        yield* demo.graph.blocks.create({ projectId: demo.projectId, title: 'After the gap', parentId: demo.root });
         yield* w.wrote('later.md', 'the next act\n');
         expect(yield* w.opened().commit).toMatchObject({ kind: 'committed' });
         expect(yield* w.run(['log', '-1', '--format=%s'])).toBe('Add note "After the gap"');

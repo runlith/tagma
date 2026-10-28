@@ -26,7 +26,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('rule inspections', (it) 
         Effect.gen(function* () {
           const { graph, projectId } = demo;
           const { db } = graph.graphStore;
-          const rule = (title: string) => graph.blocks.create({ projectId, tags: ['rule'], title });
+          const rule = (title: string) => graph.blocks.create({ projectId, parentId: demo.root, tags: ['rule'], title });
           const [first, second, modules, style, both, trashed] = yield* Effect.forEach(
             ['first loads', 'second loads', 'modules', 'style', 'two checks', 'trashed modules'],
             rule,

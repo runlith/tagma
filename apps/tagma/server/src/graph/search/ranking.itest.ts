@@ -7,7 +7,7 @@ import { demoGraphLayer, type EffectDemo, withDemo } from '../../composition/tes
 const PAGE = 2;
 
 const lens = (demo: EffectDemo) => {
-  const { graph, projectId } = demo;
+  const { graph, projectId, root } = demo;
   const hits = (input: Parameters<EffectDemo['graph']['ranking']['search']>[0]) =>
     Effect.flatMap(graph.ranking.search(input), (page) =>
       Effect.forEach(page.items, (item) => Effect.map(graph.blockNames.idOfName(item.name), (id) => ({ ...item, id }))),
@@ -15,7 +15,7 @@ const lens = (demo: EffectDemo) => {
   const found = (input: Parameters<EffectDemo['graph']['ranking']['search']>[0]) =>
     Effect.map(hits(input), (rows) => rows.map((row) => row.id));
   const make = (tag: string, title: string, body?: string) =>
-    Effect.map(graph.blocks.create({ projectId, tags: [tag], title, body }), (row) => row.id);
+    Effect.map(graph.blocks.create({ projectId, tags: [tag], title, body, parentId: root }), (row) => row.id);
   return { ...demo, hits, found, make };
 };
 
@@ -23,12 +23,13 @@ const withLens = <A, E, R>(body: (given: ReturnType<typeof lens>) => Effect.Effe
 
 layer(demoGraphLayer(), { excludeTestServices: true })('search', (it) => {
   it.effect('a body references a block the same batch creates after it', () =>
-    withLens(({ graph, projectId }) =>
+    withLens(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
+        const rootName = yield* nameOf(root);
         const result = yield* graph.batch.apply(
           batchDocument([
-            { op: 'create', $id: 'first', tags: ['idea'], title: 'first', body: 'смотри [[$second]]' },
-            { op: 'create', $id: 'second', tags: ['idea'], title: 'second' },
+            { op: 'create', $id: 'first', tags: ['idea'], title: 'first', body: 'смотри [[$second]]', parentId: rootName },
+            { op: 'create', $id: 'second', tags: ['idea'], title: 'second', parentId: rootName },
           ]),
           projectId,
         );
@@ -53,17 +54,21 @@ layer(demoGraphLayer(), { excludeTestServices: true })('search', (it) => {
   );
 
   it.effect('a body naming an undeclared handle refuses the whole batch, and a labelled handle is rewritten with its label kept', () =>
-    withLens(({ graph, projectId, hits, refusal }) =>
+    withLens(({ graph, projectId, hits, refusal, nameOf, root }) =>
       Effect.gen(function* () {
+        const rootName = yield* nameOf(root);
         const lone = yield* refusal(
-          graph.batch.apply(batchDocument([{ op: 'create', tags: ['idea'], title: 'lone', body: 'смотри [[$missing]]' }]), projectId),
+          graph.batch.apply(
+            batchDocument([{ op: 'create', tags: ['idea'], title: 'lone', body: 'смотри [[$missing]]', parentId: rootName }]),
+            projectId,
+          ),
         );
         expect(lone.code).toBe('batch-ref');
         expect((yield* hits({ query: 'lone', projectId })).filter((row) => row.title === 'lone')).toEqual([]);
         const result = yield* graph.batch.apply(
           batchDocument([
-            { op: 'create', $id: 'hub', tags: ['idea'], title: 'hub', body: 'read [[$leaf|the leaf]] and [[$leaf]]' },
-            { op: 'create', $id: 'leaf', tags: ['idea'], title: 'leaf' },
+            { op: 'create', $id: 'hub', tags: ['idea'], title: 'hub', body: 'read [[$leaf|the leaf]] and [[$leaf]]', parentId: rootName },
+            { op: 'create', $id: 'leaf', tags: ['idea'], title: 'leaf', parentId: rootName },
           ]),
           projectId,
         );
@@ -71,7 +76,10 @@ layer(demoGraphLayer(), { excludeTestServices: true })('search', (it) => {
         const hub = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(result.ids.hub as string));
         expect(hub.body).toBe(`read [[${leaf}|the leaf]] and [[${leaf}]]`);
         const labelled = yield* refusal(
-          graph.batch.apply(batchDocument([{ op: 'create', tags: ['idea'], title: 'lone', body: 'see [[$missing|a label]]' }]), projectId),
+          graph.batch.apply(
+            batchDocument([{ op: 'create', tags: ['idea'], title: 'lone', body: 'see [[$missing|a label]]', parentId: rootName }]),
+            projectId,
+          ),
         );
         expect(labelled.code).toBe('batch-ref');
       }),

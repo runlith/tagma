@@ -4,6 +4,8 @@ import { Context, Effect, Layer, Stream } from 'effect';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { grantFor } from '../../../platform/testing/grants.js';
 import { APPROVAL_WAIT_HEADER } from '../../../invocation/contract/wire/headers.js';
+import { Blocks } from '../../../graph/contract/service/blocks.js';
+import { blockName } from '../../../graph/contract/wire/references.js';
 import type { ThreadWork } from '../../../graph/contract/wire/threadWork.js';
 import { birthsOf } from '../../../threads/testing/doubles.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
@@ -79,6 +81,12 @@ const workOf = (threadId: string, projectId: number, page: { readonly limit?: nu
 
 const named = (answer: Answer) => answer.block?.name ?? '';
 
+const rootOf = Effect.fnUntraced(function* (projectId: number) {
+  const { world } = yield* Place;
+  const root = yield* Context.get(world.runtime.graph, Blocks).rootBlockOf(projectId).pipe(Effect.provide(world.runtime.graph));
+  return blockName(root.uuid);
+});
+
 const worker = Effect.fnUntraced(function* (title: string) {
   const { world, home } = yield* Place;
   return (yield* birthsOf(world.runtime.owners).create({ projectId: home, createdBySessionId: null, title, approvalMode: 'bypass' })).thread
@@ -90,11 +98,12 @@ layer(Layer.effect(Place, setup).pipe(Layer.provide(fixture)), { excludeTestServ
     Effect.gen(function* () {
       const { home, other } = yield* Place;
       const thread = yield* worker('worker');
-      const spec = named(yield* operator('create_block', { tags: ['spec'], title: 'Walls stand' }, home));
+      const homeRoot = yield* rootOf(home);
+      const spec = named(yield* operator('create_block', { tags: ['spec'], title: 'Walls stand', parentId: homeRoot }, home));
       const task = named(yield* operator('create_block', { tags: ['task'], title: 'Raise the walls', parentId: spec }, home));
-      const elsewhere = named(yield* operator('create_block', { title: 'Mortar notes' }, other));
+      const elsewhere = named(yield* operator('create_block', { title: 'Mortar notes', parentId: yield* rootOf(other) }, other));
       expect(yield* asThread(thread, 'claim_block', { blockId: task }, home)).toMatchObject({ status: 'ok' });
-      const note = named(yield* asThread(thread, 'create_block', { title: 'Brick sizes' }, home));
+      const note = named(yield* asThread(thread, 'create_block', { title: 'Brick sizes', parentId: homeRoot }, home));
       expect(yield* asThread(thread, 'update_block', { blockId: elsewhere, title: 'Mortar mix' }, other)).toMatchObject({ status: 'ok' });
 
       const read = yield* workOf(thread, home, { limit: 1 });
@@ -121,8 +130,9 @@ layer(Layer.effect(Place, setup).pipe(Layer.provide(fixture)), { excludeTestServ
       const { world, home } = yield* Place;
       const { projectId, checkout, destination } = yield* teamTree(world, 'mortar');
       const thread = yield* worker('two copies');
-      const before = named(yield* operator('create_block', { title: 'Lime ratio' }, projectId));
-      const after = named(yield* operator('create_block', { title: 'Sand grade' }, projectId, destination));
+      const mortarRoot = yield* rootOf(projectId);
+      const before = named(yield* operator('create_block', { title: 'Lime ratio', parentId: mortarRoot }, projectId));
+      const after = named(yield* operator('create_block', { title: 'Sand grade', parentId: mortarRoot }, projectId, destination));
       expect(yield* asThread(thread, 'update_block', { blockId: before, title: 'Lime ratio, wet' }, projectId)).toMatchObject({
         status: 'ok',
       });
@@ -162,7 +172,8 @@ layer(Layer.effect(Place, setup).pipe(Layer.provide(fixture)), { excludeTestServ
     Effect.gen(function* () {
       const { home } = yield* Place;
       const first = yield* worker('first hand');
-      const task = named(yield* operator('create_block', { tags: ['task'], title: 'Lay the floor' }, home));
+      const homeRoot = yield* rootOf(home);
+      const task = named(yield* operator('create_block', { tags: ['task'], title: 'Lay the floor', parentId: homeRoot }, home));
       expect(yield* asThread(first, 'claim_block', { blockId: task }, home)).toMatchObject({ status: 'ok' });
 
       const born = yield* operator('create_thread', { title: 'Lay the floor', work: task }, home);
@@ -173,11 +184,15 @@ layer(Layer.effect(Place, setup).pipe(Layer.provide(fixture)), { excludeTestServ
 
       expect(yield* operator('create_thread', { work: task, task: 'Also this' }, home)).toMatchObject({ code: 'work-with-task' });
       expect(
-        yield* operator('create_thread', { work: named(yield* operator('create_block', { title: 'A note' }, home)) }, home),
+        yield* operator(
+          'create_thread',
+          { work: named(yield* operator('create_block', { title: 'A note', parentId: homeRoot }, home)) },
+          home,
+        ),
       ).toMatchObject({
         code: 'no-holder',
       });
-      const spec = named(yield* operator('create_block', { tags: ['spec'], title: 'Floors stand' }, home));
+      const spec = named(yield* operator('create_block', { tags: ['spec'], title: 'Floors stand', parentId: homeRoot }, home));
       expect(yield* operator('create_thread', { work: spec }, home)).toMatchObject({ status: 'loaded' });
     }),
   );

@@ -41,7 +41,9 @@ layer(Layer.effect(SettingsPlace, setup).pipe(Layer.provideMerge(doorFixture()))
     Effect.gen(function* () {
       const { world, home, other } = yield* SettingsPlace;
       const rule = 'Foreign mutations must carry this project-specific law';
-      expect(yield* world.op('create_block', { tags: ['rule'], title: rule }, `project=${other}`)).toMatchObject({ status: 200 });
+      const parentId = ((yield* world.op('list_root_blocks', {}, `project=${other}`)).body as { blocks: { name: string }[] }).blocks[0]!
+        .name;
+      expect(yield* world.op('create_block', { tags: ['rule'], title: rule, parentId }, `project=${other}`)).toMatchObject({ status: 200 });
       const input = { key: KEY, value: 7_000, project: other };
       const first = yield* asThread(input, '');
       expect(first).toMatchObject({

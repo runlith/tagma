@@ -15,27 +15,39 @@ const WORD = 'obsidian';
 const PLANTED = 2;
 const created = { by: 'created', order: 'asc' } as const;
 
-const planting = ({ graph, projectId }: EffectDemo) =>
-  Effect.asVoid(
-    graph.batch.apply(
-      batchDocument([
-        ...Array.from({ length: PLANTED }, (_, index) => ({ op: 'create' as const, tags: ['idea'], title: `${WORD} ${index}` })),
-        ...Array.from({ length: PLANTED }, (_, index) => ({ op: 'create' as const, tags: ['idea'], title: `${WORD}stone ${index}` })),
-        ...Array.from({ length: PLANTED }, (_, index) => ({
-          op: 'create' as const,
-          tags: ['idea'],
-          title: `unrelated ${index}`,
-          body: `holds ${WORD} inside`,
-        })),
-      ]),
-      projectId,
-    ),
+const planting = Effect.fnUntraced(function* ({ graph, projectId, root, nameOf }: EffectDemo) {
+  const parentId = yield* nameOf(root);
+  yield* graph.batch.apply(
+    batchDocument([
+      ...Array.from({ length: PLANTED }, (_, index) => ({ op: 'create' as const, tags: ['idea'], title: `${WORD} ${index}`, parentId })),
+      ...Array.from({ length: PLANTED }, (_, index) => ({
+        op: 'create' as const,
+        tags: ['idea'],
+        title: `${WORD}stone ${index}`,
+        parentId,
+      })),
+      ...Array.from({ length: PLANTED }, (_, index) => ({
+        op: 'create' as const,
+        tags: ['idea'],
+        title: `unrelated ${index}`,
+        body: `holds ${WORD} inside`,
+        parentId,
+      })),
+    ]),
+    projectId,
   );
+});
 
-const lens = ({ graph, projectId }: EffectDemo) => {
+const lens = ({ graph, projectId, root }: EffectDemo) => {
   const make = (input: { title: string; body?: string; tag?: 'spec' | 'task' | 'zone' | 'idea' | 'explanation'; parentId?: number }) =>
     Effect.map(
-      graph.blocks.create({ projectId, tags: [input.tag ?? 'idea'], title: input.title, body: input.body, parentId: input.parentId }),
+      graph.blocks.create({
+        projectId,
+        tags: [input.tag ?? 'idea'],
+        title: input.title,
+        body: input.body,
+        parentId: input.parentId ?? root,
+      }),
       (row) => row.id,
     );
   const found = (input: Parameters<EffectDemo['graph']['ranking']['search']>[0]) =>
@@ -94,7 +106,7 @@ layer(demoGraphLayer({ prepareEffect: planting }), { excludeTestServices: true }
   );
 
   it.effect('the identity that ends in those characters comes before the ones that merely hold them', () =>
-    withLens(({ graph, projectId }) =>
+    withLens(({ graph, projectId, root }) =>
       Effect.gen(function* () {
         const fragment = 'beef';
         const named = 'abcdbeef';
@@ -102,7 +114,7 @@ layer(demoGraphLayer({ prepareEffect: planting }), { excludeTestServices: true }
           ['01a03991-45fa-70d8-ac24-1ab3abcdbeef', 'ends in it'],
           ['01a03991-45fa-70d8-ac24-1ab1beef234a', 'merely holds it'],
         ] as const) {
-          const row = yield* graph.blocks.create({ projectId, tags: ['idea'], title });
+          const row = yield* graph.blocks.create({ projectId, tags: ['idea'], title, parentId: root });
           yield* graph.graphStore.db.update(block).set({ uuid }).where(eq(block.id, row.id));
         }
         const order = (yield* graph.ranking.search({ query: fragment, projectId })).items.map((hit) => hit.name);
@@ -138,12 +150,12 @@ layer(demoGraphLayer({ prepareEffect: planting }), { excludeTestServices: true }
   );
 
   it.effect('a figure past the ceiling is cut at the ceiling the family derives', () =>
-    withLens(({ graph, projectId, found }) =>
+    withLens(({ graph, projectId, found, root }) =>
       Effect.gen(function* () {
         const many = 'rhodonite';
         const token = 'seedparity';
         const past = ceilingOf(BLOCKS) + 1;
-        const seed = yield* graph.blocks.create({ projectId, title: `${many} ${token} original` });
+        const seed = yield* graph.blocks.create({ projectId, title: `${many} ${token} original`, parentId: root });
         const row = yield* graph.blocks.rawBlockById(seed.id);
         const [copy] = yield* graph.graphStore.db
           .insert(block)
@@ -158,7 +170,7 @@ layer(demoGraphLayer({ prepareEffect: planting }), { excludeTestServices: true }
           )
           .returning({ id: block.id });
         yield* graph.blockProjection.completeDerived('types');
-        const body = yield* graph.blocks.create({ projectId, title: 'parity control', body: token });
+        const body = yield* graph.blocks.create({ projectId, title: 'parity control', body: token, parentId: root });
         const before = yield* found({ query: token, projectId });
         yield* Effect.sleep('2 millis');
         yield* graph.blocks.update({ id: seed.id, title: `${many} ${token} refreshed` });
@@ -300,7 +312,13 @@ layer(demoGraphLayer({ prepareEffect: planting }), { excludeTestServices: true }
       Effect.gen(function* () {
         const mine = yield* make({ title: 'ballista doc' });
         const other = yield* graph.projectLifecycle.create({ name: 'ranking-other', rootPath: yield* fixture.directory('ranking-other') });
-        const theirs = yield* graph.blocks.create({ projectId: other.id, tags: ['idea'], title: 'ballista elsewhere' });
+        const otherRoot = yield* graph.blocks.rootBlockOf(other.id);
+        const theirs = yield* graph.blocks.create({
+          projectId: other.id,
+          tags: ['idea'],
+          title: 'ballista elsewhere',
+          parentId: otherRoot.id,
+        });
         expect(yield* found({ query: 'ballista', projectId })).toEqual([mine]);
         expect(yield* found({ query: 'ballista', projectId: other.id })).toEqual([theirs.id]);
       }),

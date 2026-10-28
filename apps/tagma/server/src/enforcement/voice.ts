@@ -17,6 +17,7 @@ import { triggersSaid } from '../graph/contract/wire/enforcement.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import { provenanceLine } from '../platform/contract/wire/provenance.js';
 import type { ModulesSet } from './contract/wire/modules.js';
+import { crowdedLine } from '../graph/voice/lines.js';
 
 type Refused = {
   readonly status: 'refused';
@@ -208,6 +209,7 @@ export const modulesText = (answer: Answered<ModulesSet> | (ModulesSet & { reado
         ]
       : []),
     ...answer.modules.map((one) => `${preview ? 'would ' : ''}${one.act} ${one.id}${one.card === null ? '' : ` (${one.card})`}`),
+    ...(answer.crowded ?? []).map(crowdedLine),
     `graph copy: ${answer.graph ?? 'the machine graph'}`,
     ...(answer.rules.length === 0 ? ['no enforced map rule was re-measured'] : []),
     ...answer.rules.flatMap((one) => [

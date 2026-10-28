@@ -7,9 +7,9 @@ import { demoGraphLayer, type EffectDemo, withDemo } from '../../composition/tes
 
 type Extra = { edges?: readonly { kind: string; to: number }[]; parentId?: number };
 
-const lens = ({ graph, projectId }: EffectDemo) => {
+const lens = ({ graph, projectId, root }: EffectDemo) => {
   const make = (tag: string, title: string, extra: Extra = {}) =>
-    Effect.map(graph.blocks.create({ projectId, tags: [tag], title, ...extra }), (row) => row.id);
+    Effect.map(graph.blocks.create({ projectId, tags: [tag], title, parentId: root, ...extra }), (row) => row.id);
   const refsIn = (id: number) => Effect.map(graph.reading.show(id, 0), (page) => page.refsIn);
   return { make, refsIn };
 };
@@ -74,7 +74,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('body reference index', (
   );
 
   it.effect('a write that moves the claim answers with the blocks that point at it', () =>
-    withLens(({ graph, projectId, make, nameOf }) =>
+    withLens(({ graph, projectId, make, nameOf, root }) =>
       Effect.gen(function* () {
         const target = yield* make('spec', 'the dealt recipes');
         const targetName = yield* nameOf(target);
@@ -82,6 +82,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('body reference index', (
           projectId,
           tags: ['idea'],
           title: 'reader',
+          parentId: root,
           body: `which recipe is not reproducible ([[${targetName}]])`,
         });
         const pointerName = yield* nameOf(pointer.id);

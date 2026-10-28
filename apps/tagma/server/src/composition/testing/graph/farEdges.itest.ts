@@ -105,17 +105,25 @@ layer(
             return join(served.layout.treeRoot, row?.path ?? '');
           });
 
-          const blocker = yield* within(
-            servedBack,
-            Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: back.id, tags: ['task'], title: 'Serve the orders' })),
-          );
-          const waiting = yield* within(
-            servedFront,
-            Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: front.id, tags: ['task'], title: 'Show the orders' })),
-          );
           const backRoot = yield* within(
             servedBack,
             Effect.flatMap(Blocks, (blocks) => blocks.rootBlockOf(back.id)),
+          );
+          const frontRoot = yield* within(
+            servedFront,
+            Effect.flatMap(Blocks, (blocks) => blocks.rootBlockOf(front.id)),
+          );
+          const blocker = yield* within(
+            servedBack,
+            Effect.flatMap(Blocks, (blocks) =>
+              blocks.create({ projectId: back.id, parentId: backRoot.id, tags: ['task'], title: 'Serve the orders' }),
+            ),
+          );
+          const waiting = yield* within(
+            servedFront,
+            Effect.flatMap(Blocks, (blocks) =>
+              blocks.create({ projectId: front.id, parentId: frontRoot.id, tags: ['task'], title: 'Show the orders' }),
+            ),
           );
           const blockerName = blockName(blocker.uuid);
           const waitingName = blockName(waiting.uuid);
@@ -147,7 +155,9 @@ layer(
 
           const loop = yield* within(
             servedBack,
-            Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: back.id, tags: ['task'], title: 'Wait on the front' })),
+            Effect.flatMap(Blocks, (blocks) =>
+              blocks.create({ projectId: back.id, parentId: backRoot.id, tags: ['task'], title: 'Wait on the front' }),
+            ),
           );
           expect(yield* inBack('link_blocks', { fromId: blockerName, kind: 'waits-on', toId: blockName(loop.uuid) })).toMatchObject({
             status: 'ok',
@@ -166,6 +176,7 @@ layer(
           expect((yield* readyNames).tasks).toContain(waitingName);
 
           const born = (yield* inFront('create_block', {
+            parentId: blockName(frontRoot.uuid),
             tags: ['task'],
             title: 'Born beside the back',
             edges: [{ kind: 'relates', to: blockerAddress }],
@@ -180,6 +191,7 @@ layer(
             Effect.flatMap(Blocks, (blocks) =>
               blocks.create({
                 projectId: front.id,
+                parentId: frontRoot.id,
                 tags: ['tag'],
                 title: '#review',
                 body: 'review',
@@ -192,6 +204,7 @@ layer(
             Effect.flatMap(Blocks, (blocks) =>
               blocks.create({
                 projectId: back.id,
+                parentId: backRoot.id,
                 tags: ['tag'],
                 title: '#chore',
                 body: 'chore',
@@ -201,11 +214,15 @@ layer(
           );
           const review = yield* within(
             servedFront,
-            Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: front.id, tags: ['review'], title: 'Review the orders' })),
+            Effect.flatMap(Blocks, (blocks) =>
+              blocks.create({ projectId: front.id, parentId: frontRoot.id, tags: ['review'], title: 'Review the orders' }),
+            ),
           );
           const chore = yield* within(
             servedBack,
-            Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: back.id, tags: ['chore'], title: 'Sweep the orders' })),
+            Effect.flatMap(Blocks, (blocks) =>
+              blocks.create({ projectId: back.id, parentId: backRoot.id, tags: ['chore'], title: 'Sweep the orders' }),
+            ),
           );
           expect(
             yield* inFront('link_blocks', {
@@ -298,17 +315,31 @@ layer(
             const roots = RegisteredRoots.of({ joined: () => Effect.void, left: () => Effect.void });
             const registry = <A, E>(work: Effect.Effect<A, E, unknown>) =>
               Effect.provide(signed(work), Context.add(routed, RegisteredRoots, roots)) as Effect.Effect<A, E>;
+            const backRoot = yield* within(
+              servedBack,
+              Effect.flatMap(Blocks, (blocks) => blocks.rootBlockOf(back.id)),
+            );
+            const frontRoot = yield* within(
+              servedFront,
+              Effect.flatMap(Blocks, (blocks) => blocks.rootBlockOf(front.id)),
+            );
             const blocker = yield* within(
               servedBack,
-              Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: back.id, tags: ['task'], title: 'Serve the orders' })),
+              Effect.flatMap(Blocks, (blocks) =>
+                blocks.create({ projectId: back.id, parentId: backRoot.id, tags: ['task'], title: 'Serve the orders' }),
+              ),
             );
             const near = yield* within(
               servedFront,
-              Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: front.id, tags: ['task'], title: 'Show the orders' })),
+              Effect.flatMap(Blocks, (blocks) =>
+                blocks.create({ projectId: front.id, parentId: frontRoot.id, tags: ['task'], title: 'Show the orders' }),
+              ),
             );
             const beside = yield* within(
               servedFront,
-              Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: front.id, tags: ['task'], title: 'Read the orders' })),
+              Effect.flatMap(Blocks, (blocks) =>
+                blocks.create({ projectId: front.id, parentId: frontRoot.id, tags: ['task'], title: 'Read the orders' }),
+              ),
             );
             const end = yield* Effect.provide(
               Effect.flatMap(Edges, (edges) => edges.farBlockOf(blocker, 'waits-on')),
@@ -330,6 +361,7 @@ layer(
               Effect.flatMap(Blocks, (blocks) =>
                 blocks.create({
                   projectId: front.id,
+                  parentId: frontRoot.id,
                   title: 'Notes',
                   body: `Waits on [[${blockName(blocker.uuid)}]], never on [[0badc0de]].`,
                 }),

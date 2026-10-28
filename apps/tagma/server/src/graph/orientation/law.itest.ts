@@ -23,7 +23,9 @@ const card = Effect.fnUntraced(function* (projectId: number, id: string, root: s
 });
 
 const rule = Effect.fnUntraced(function* (projectId: number, title: string, body: string, parentId?: number) {
-  return (yield* (yield* Blocks).create({ projectId, tags: ['rule'], title, body, parentId })).id;
+  const blocks = yield* Blocks;
+  return (yield* blocks.create({ projectId, tags: ['rule'], title, body, parentId: parentId ?? (yield* blocks.rootBlockOf(projectId)).id }))
+    .id;
 });
 
 const law = Effect.fnUntraced(function* (projectId: number) {
@@ -60,7 +62,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('law', (it) => {
   );
 
   it.effect('a code rule reaches touches under its sources alone, and set to prompt it rides the instruction set instead', () =>
-    withDemo(({ graph, projectId, nameOf, demoRoot }) =>
+    withDemo(({ graph, projectId, nameOf, demoRoot, root }) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
           await mkdir(join(demoRoot, 'kit'), { recursive: true });
@@ -68,6 +70,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('law', (it) => {
         });
         const coded = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['rule'],
           title: 'Placed law',
           body: 'Only these places.',
@@ -122,7 +125,8 @@ layer(demoGraphLayer(), { excludeTestServices: true })('law', (it) => {
     withDemo(({ graph, projectId, nameOf }) =>
       Effect.gen(function* () {
         const globalId = (yield* graph.projects.global())!.id;
-        const shelf = (yield* graph.blocks.create({ projectId: globalId, tags: [], title: 'law' })).id;
+        const globalRoot = yield* graph.blocks.rootBlockOf(globalId);
+        const shelf = (yield* graph.blocks.create({ projectId: globalId, parentId: globalRoot.id, tags: [], title: 'law' })).id;
         const deep = (yield* graph.blocks.create({
           projectId: globalId,
           tags: ['rule'],

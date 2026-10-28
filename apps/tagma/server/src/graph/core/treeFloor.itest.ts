@@ -11,14 +11,16 @@ const testActing = writes('test', []);
 
 type Floor = NonNullable<Context.Service.Shape<typeof TreeGuard>>;
 
-const lens = ({ graph, projectId }: EffectDemo) => {
+const lens = ({ graph, projectId, root }: EffectDemo) => {
   const probeWrite = (table: string) =>
     graph.units
       .write('treeFloor.probeWrite', (unit) => unit.run(graph.graphStore.db.run(sql.raw(`create table ${table} (id integer primary key)`))))
       .pipe(Effect.exit);
   const acting = (floor: Floor, title: string) =>
     Effect.forkChild(
-      graph.act.unit(testActing, graph.blocks.create({ projectId, tags: ['idea'], title })).pipe(Effect.provideService(TreeGuard, floor)),
+      graph.act
+        .unit(testActing, graph.blocks.create({ projectId, tags: ['idea'], title, parentId: root }))
+        .pipe(Effect.provideService(TreeGuard, floor)),
     );
   return { probeWrite, acting };
 };

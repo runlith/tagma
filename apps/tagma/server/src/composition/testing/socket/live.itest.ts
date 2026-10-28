@@ -89,6 +89,12 @@ const addProject = Effect.fnUntraced(function* (name: string) {
   return yield* Context.get(runtime.graph, ProjectLifecycle).create({ name: `${name}-${randomUUID()}`, rootPath });
 });
 
+const rootOf = Effect.fnUntraced(function* (projectId: number) {
+  const { runtime } = yield* World;
+  const served = yield* runtime.pool.resolve({ projectId });
+  return (yield* Effect.provide(Context.get(served.context, Blocks).rootBlockOf(projectId), served.context)).id;
+});
+
 const addBlock = Effect.fnUntraced(function* (input: Parameters<Context.Service.Shape<typeof Blocks>['create']>[0]) {
   const { runtime } = yield* World;
   const served = yield* runtime.pool.resolve({ projectId: input.projectId });
@@ -175,7 +181,13 @@ layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer
       );
       expect(yield* Queue.take(frames)).toEqual({ type: 'resync' });
 
-      const created = yield* addBlock({ projectId: project.id, tags: ['task'], title: 'live', body: 'detail' });
+      const created = yield* addBlock({
+        projectId: project.id,
+        parentId: yield* rootOf(project.id),
+        tags: ['task'],
+        title: 'live',
+        body: 'detail',
+      });
       const change = (yield* Queue.take(frames)) as {
         type: string;
         projectId: number;
@@ -206,7 +218,7 @@ layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer
         Stream.runForEach(client['graph.work']({ projectId: project.id, threadId: born.thread.id }), (frame) => Queue.offer(frames, frame)),
       );
       expect(yield* Queue.take(frames)).toEqual({ type: 'resync' });
-      const created = yield* addBlock({ projectId: project.id, title: 'seen' });
+      const created = yield* addBlock({ projectId: project.id, parentId: yield* rootOf(project.id), title: 'seen' });
       expect(yield* Queue.take(frames)).toEqual({ type: 'change', own: false, names: [created.name] });
       expect(yield* Effect.flip(Stream.runCollect(client['graph.work']({ projectId: project.id, threadId: 'no-thread' })))).toMatchObject({
         code: 'not-found',

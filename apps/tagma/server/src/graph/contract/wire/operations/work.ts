@@ -2,7 +2,7 @@ import { Schema, SchemaAST } from 'effect';
 import { operation } from '../../../../platform/contract/wire/operation.js';
 import { startPriceSchema } from '../../../../platform/contract/wire/start.js';
 import { graphArms as arms } from '../answers.js';
-import { blockResultFields, idleSpecSchema, overviewFields } from '../answers.js';
+import { blockResultFields, crowdedSchema, idleSpecSchema, overviewFields } from '../answers.js';
 import { amendmentOpSchema, batchCreateOpSchema, batchRefSchema, BATCH_OPERATION_ID_HELP } from '../batch.js';
 import { blockRef, body, fieldsField, filePath, line, tagsField } from '../fields.js';
 import { sourceInputSchema } from '../sources.js';
@@ -227,6 +227,7 @@ const WORK_ACTS = {
       'carriers-invalid',
       'cross-project',
       'cross-project-parent',
+      'parent-required',
       'duplicate-source',
       'edge-shape',
       'catalog-member',
@@ -332,6 +333,7 @@ const WORK_ACTS = {
       'amendment-ref',
       'amendment-outside',
       'amendment-empty',
+      'parent-required',
       'leaf',
       'body-capped',
       'body-address',
@@ -476,6 +478,7 @@ export const WORK_OPERATIONS = {
         ...overviewFields,
         ids: Schema.Record(Schema.String, Schema.String),
         specs: Schema.optional(Schema.Array(idleSpecSchema)),
+        crowded: Schema.optional(Schema.Array(crowdedSchema)),
         start: Schema.optional(startPriceSchema),
       },
     }),

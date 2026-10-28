@@ -79,6 +79,7 @@ export const REFUSAL_WORDS = {
   'open-children': 'Has unfinished child work',
   'operation-only': 'Set by its own action',
   'parent-deleted': 'Parent is in the trash',
+  'parent-required': 'Parent not named',
   'path-outside-tree': 'Path not inside the checkout',
   'project-name': 'Invalid project name',
   'project-root': 'Project root cannot be removed',

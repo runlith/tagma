@@ -1,7 +1,7 @@
 import type { CapabilityBehaviour } from './contract.js';
 import { commandRulesSection } from '../turns/commandRules.js';
 
-const SHELL_TOOLS = { bash: 'eager', glob: 'eager', grep: 'eager' } as const;
+import { SHELL_TOOLS } from '../contract/wire/capability.js';
 
 export const shell: CapabilityBehaviour = {
   factSections: (facts) => [

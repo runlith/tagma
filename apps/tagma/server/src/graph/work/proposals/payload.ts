@@ -221,17 +221,12 @@ export const payloadGate = Effect.gen(function* () {
             ]);
           }
           if (op.parentId === undefined) {
-            if (target.parentId !== null) {
-              return yield* new GateRefusal(
-                'amendment-outside',
-                `ops[${index}] (create): no parent lands under the project root, outside the amended subtree`,
-                ['name a parentId inside the subtree'],
-              );
-            }
-          } else {
-            yield* inScope(op.parentId, index, 'create', 'parent');
-            yield* takesChildren(op.parentId, index, 'create');
+            return yield* new GateRefusal('parent-required', `ops[${index}] (create): a deferred create names the block it stands under`, [
+              `parentId ${blockName(target.uuid)}, the amended block, or a block inside its subtree that the new block is about`,
+            ]);
           }
+          yield* inScope(op.parentId, index, 'create', 'parent');
+          yield* takesChildren(op.parentId, index, 'create');
           for (const link of op.edges ?? []) yield* inScope(link.to, index, 'create', `${link.kind} target`);
           if (op.$id !== undefined) {
             if (handles.has(op.$id)) {

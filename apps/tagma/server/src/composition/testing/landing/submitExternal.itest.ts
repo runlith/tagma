@@ -17,7 +17,8 @@ it.live(
       const { world, born, write, read, files, root, projectId } = yield* nativeLanding({ 'notes.txt': notes, 'shown.ts': shown });
       const at = `project=${projectId}`;
       const peer = yield* born();
-      const created = yield* world.op('create_block', { tags: ['task'], title: 'Outside work' }, at, OUTSIDE);
+      const parentId = ((yield* world.op('list_root_blocks', {}, at, OUTSIDE)).body as { blocks: { name: string }[] }).blocks[0]!.name;
+      const created = yield* world.op('create_block', { tags: ['task'], title: 'Outside work', parentId }, at, OUTSIDE);
       const task = (created.body as { block: { name: string } }).block.name;
       const claim = () => world.op('claim_block', { blockId: task }, at, OUTSIDE);
       const claimed = yield* claim();

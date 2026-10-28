@@ -117,7 +117,7 @@ const makeProgram = Effect.fnUntraced(function* (
   const operator: Caller = { actor: { kind: 'operator' }, files: null };
 
   const created = Effect.fnUntraced(function* (tags: string[], title: string) {
-    return yield* demo.nameOf((yield* demo.graph.blocks.create({ projectId: demo.projectId, tags, title })).id);
+    return yield* demo.nameOf((yield* demo.graph.blocks.create({ projectId: demo.projectId, parentId: demo.root, tags, title })).id);
   });
 
   const served = () => withLanes(demo.context, workers).pipe(Context.add(ProgramRoad, road));

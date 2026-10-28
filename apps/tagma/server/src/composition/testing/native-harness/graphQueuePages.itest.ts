@@ -46,7 +46,8 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
     withGraphTools(function* () {
       const { demo, graph, ctx, call } = yield* GraphTools;
       const projectId = ctx.projectId;
-      const area = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'work area' });
+      const root = (yield* graph.blocks.rootBlockOf(projectId)).id;
+      const area = yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'work area' });
       for (let at = 0; at < 5; at += 1) yield* graph.blocks.create({ projectId, parentId: area.id, tags: ['task'], title: `work ${at}` });
       const areaName = yield* demo.nameOf(area.id);
       const whole = yield* call('ready_work', {});
@@ -101,7 +102,9 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
       expect(walked.pages).toBe(3);
       expect(walked.seen).toEqual(keysOf(rowsIn(whole, 'blocks')));
       expect(new Set(walked.seen).size).toBe(5);
-      for (let at = 0; at < 3; at += 1) yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['task'], title: `elsewhere ${at}` });
+      const root = (yield* graph.blocks.rootBlockOf(ctx.projectId)).id;
+      for (let at = 0; at < 3; at += 1)
+        yield* graph.blocks.create({ projectId: ctx.projectId, parentId: root, tags: ['task'], title: `elsewhere ${at}` });
       const other = yield* call('ready_work', { limit: 2 });
       expect(typeof other.next).toBe('string');
       expect((yield* refusalOf('read_reflections', { cursor: other.next as string })).code).toBe('cursor-stale');
@@ -113,7 +116,8 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
     withGraphTools(function* () {
       const { demo, graph, ctx, call } = yield* GraphTools;
       const projectId = ctx.projectId;
-      const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'target', body: 'before' });
+      const root = (yield* graph.blocks.rootBlockOf(projectId)).id;
+      const target = yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'target', body: 'before' });
       const targetName = yield* demo.nameOf(target.id);
       for (let at = 0; at < 5; at += 1)
         yield* graph.review.propose({
@@ -152,7 +156,8 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
     withGraphTools(function* () {
       const { demo, graph, ctx, call } = yield* GraphTools;
       const projectId = ctx.projectId;
-      const area = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'lapis area' });
+      const root = (yield* graph.blocks.rootBlockOf(projectId)).id;
+      const area = yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'lapis area' });
       for (let at = 0; at < 3; at += 1) yield* graph.blocks.create({ projectId, parentId: area.id, tags: ['idea'], title: `lapis ${at}` });
       const search = yield* call('search_blocks', { query: 'lapis', tag: 'idea', limit: 2 });
       const nextSearch = yield* call('search_blocks', { cursor: search.next as string, limit: 2 });
@@ -179,7 +184,8 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
     withGraphTools(function* () {
       const { demo, graph, ctx, call } = yield* GraphTools;
       const projectId = ctx.projectId;
-      const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'target', body: 'before' });
+      const root = (yield* graph.blocks.rootBlockOf(projectId)).id;
+      const target = yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'target', body: 'before' });
       const name = yield* demo.nameOf(target.id);
       for (let at = 0; at < 2; at += 1) {
         yield* graph.review.propose({
@@ -188,7 +194,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
           title: `finding ${at}`,
           ops: [{ op: 'edit', id: name, old: 'before', new: `after ${at}` }],
         });
-        yield* graph.blocks.create({ projectId, tags: ['idea'], title: `claim ${at}` });
+        yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: `claim ${at}` });
       }
       const proposals = yield* call('read_amendments', { limit: 1 });
       const search = yield* call('search_blocks', { query: 'claim', tag: 'idea', limit: 1 });

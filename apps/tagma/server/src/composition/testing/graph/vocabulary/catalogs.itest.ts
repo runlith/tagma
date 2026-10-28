@@ -48,7 +48,7 @@ const reached = (tag: Readonly<Record<string, unknown>>) => ({
 
 layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('catalogs', (it) => {
   it.effect('installation keeps project-authored guidance and both audiences receive the same live law', () =>
-    withDemo(({ graph, projectId, table, nameOf }) =>
+    withDemo(({ graph, projectId, root, table, nameOf }) =>
       Effect.gen(function* () {
         const catalog = yield* softwareDevelopmentIn(projectId);
         const id = yield* graph.blockNames.idOfName(catalog.name);
@@ -59,7 +59,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         expect(reread.name).toBe(catalog.name);
         expect(reread.guidance).toBe(guidance);
         expect(reread.tags).toEqual(catalog.tags);
-        const rule = yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'Preserve authored data' });
+        const rule = yield* graph.blocks.create({ projectId, parentId: root, tags: ['rule'], title: 'Preserve authored data' });
         const graphSet = yield* graph.orientation.instructions({ projectId, audience: 'graph' });
         expect(graphSet.entries.find((entry) => entry.kind === 'catalog' && entry.source === catalog.name)?.text).toContain(guidance);
         const executorSet = yield* graph.orientation.instructions({ projectId, audience: 'executor' });
@@ -116,21 +116,23 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('catalog writes validate identity and membership while reads preserve order and refuse corrupt targets', () =>
-    withDemo(({ graph, projectId, refusal, nameOf }) =>
+    withDemo(({ graph, projectId, root, refusal, nameOf }) =>
       Effect.gen(function* () {
         const catalogs = yield* InstalledCatalogs;
         const before = yield* catalogs.read(projectId);
         const catalog = before.find((entry) => entry.id === softwareDevelopment.id);
         if (catalog === undefined || catalog.tags[0] === undefined) return yield* Effect.die('catalog members are missing');
         expect(
-          (yield* refusal(graph.blocks.create({ projectId, tags: ['catalog'], title: 'duplicate', fields: { id: catalog.id, tags: [] } })))
-            .code,
+          (yield* refusal(
+            graph.blocks.create({ projectId, parentId: root, tags: ['catalog'], title: 'duplicate', fields: { id: catalog.id, tags: [] } }),
+          )).code,
         ).toBe('field-invalid');
-        const ordinary = yield* graph.blocks.create({ projectId, title: 'ordinary catalog target' });
+        const ordinary = yield* graph.blocks.create({ projectId, parentId: root, title: 'ordinary catalog target' });
         expect(
           (yield* refusal(
             graph.blocks.create({
               projectId,
+              parentId: root,
               tags: ['catalog'],
               title: 'invalid membership',
               fields: { id: 'invalid', tags: [yield* nameOf(ordinary.id)] },
@@ -176,10 +178,12 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         );
         const tags = decoded.filter((tag) => (tag.id === 'rule' || tag.id === 'task') && system.tagById(tag.id) === null);
         expect(tags.map((tag) => tag.id).sort()).toEqual(['rule', 'task']);
+        const projectRoot = yield* graph.blocks.rootBlockOf(project.id);
         const copies = [];
         for (const tag of tags) {
           const copy = yield* graph.blocks.create({
             projectId: project.id,
+            parentId: projectRoot.id,
             tags: ['tag'],
             title: `#${tag.id}`,
             body: tag.id === 'task' ? 'Project-authored task guidance.' : tag.prompt,
@@ -222,12 +226,14 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         const installed = yield* table(project.id);
         expect(installed.identities.typeOf('explanation')?.id).toBe(shippedTypeId(softwareDevelopment.id, 'explanation'));
         expect(installed.identities.typeOf('decision')?.id).toBe(shippedTypeId('knowledge', 'decision'));
+        const projectRoot = yield* graph.blocks.rootBlockOf(project.id);
         const explanation = yield* graph.blocks.create({
           projectId: project.id,
+          parentId: projectRoot.id,
           tags: ['explanation'],
           title: 'why the cursor only moves forward',
         });
-        const note = yield* graph.blocks.create({ projectId: project.id, title: 'a thought' });
+        const note = yield* graph.blocks.create({ projectId: project.id, parentId: projectRoot.id, title: 'a thought' });
         expect(installed.supports(explanation, EXPLANATION)).toBe(true);
         expect(installed.supports(note, EXPLANATION)).toBe(false);
         expect(yield* (yield* InstalledCatalogs).findings(project.id)).toEqual([]);
@@ -259,7 +265,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('an installed rule gains enforcement in place while its standing rule keeps its complete stored state', () =>
-    withDemo(({ graph, projectId, table }) =>
+    withDemo(({ graph, projectId, root, table }) =>
       Effect.gen(function* () {
         const catalog = yield* softwareDevelopmentIn(projectId);
         if (catalog.release === undefined) return yield* Effect.die('catalog has no release');
@@ -293,7 +299,12 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           .where(eq(block.id, catalogNode.id));
         yield* graph.tags.forget(projectId);
         expect((yield* table()).lawProjectionOf('rule')?.enforcement).toBeNull();
-        const standing = yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'Written under the previous release' });
+        const standing = yield* graph.blocks.create({
+          projectId,
+          parentId: root,
+          tags: ['rule'],
+          title: 'Written under the previous release',
+        });
         const before = yield* graph.blocks.blockById(standing.id);
         yield* ensureVocabulary('machine');
         const upgraded = yield* table();
@@ -309,10 +320,11 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   );
 
   it.effect('body declaration migration preserves the authored guidance and enforces its explicit cap idempotently', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, root, refusal }) =>
       Effect.gen(function* () {
         const current = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['tag'],
           title: 'Payload',
           body: 'An authored payload contract.',
@@ -327,7 +339,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         expect(migrated.body).toBe(current.body);
         expect(migrated.fields.body).toEqual({ shape: 'content', cap: 8 });
         expect(
-          (yield* refusal(graph.blocks.create({ projectId, tags: ['payload'], title: 'Beyond its contract', body: '123456789' }))).code,
+          (yield* refusal(
+            graph.blocks.create({ projectId, parentId: root, tags: ['payload'], title: 'Beyond its contract', body: '123456789' }),
+          )).code,
         ).toBe('body-capped');
         yield* ensureVocabulary('machine');
         expect(yield* graph.blocks.blockById(current.id)).toEqual(migrated);
@@ -339,13 +353,13 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
     it.effect(
       `a reach declaration and its carrier migrate idempotently${recorded ? ' with its release base' : ' after losing its release base'}`,
       () =>
-        withDemo(({ graph, projectId, table }) =>
+        withDemo(({ graph, projectId, root, table }) =>
           Effect.gen(function* () {
             const catalog = yield* softwareDevelopmentIn(projectId);
             if (catalog.release === undefined) return yield* Effect.die('catalog has no release');
             const ruleNode = yield* declarationOf(projectId, 'rule');
             const listing = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(catalog.name));
-            const written = yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'Written with a reach' });
+            const written = yield* graph.blocks.create({ projectId, parentId: root, tags: ['rule'], title: 'Written with a reach' });
             const release = catalog.release;
             const tags = release.tags.flatMap<Readonly<Record<string, unknown>>>((tag) =>
               tag.id !== 'rule' ? [tag] : recorded ? [reached(tag)] : [],

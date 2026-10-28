@@ -15,13 +15,16 @@ const seen = (projectId: number, path: string, as: 'read' | 'wrote' | 'found') =
   Effect.flatMap(Touches, (touches) => touches.touch({ projectId, shown: [{ path, as }] }));
 
 const held = Effect.fnUntraced(function* (projectId: number, title: string) {
-  const { id } = yield* (yield* Blocks).create({ projectId, tags: ['task'], title });
+  const blocks = yield* Blocks;
+  const { id } = yield* blocks.create({ projectId, parentId: (yield* blocks.rootBlockOf(projectId)).id, tags: ['task'], title });
   yield* (yield* Tasks).claim({ id });
   return id;
 });
 
 const rule = Effect.fnUntraced(function* (projectId: number, title: string, body: string, parentId?: number) {
-  return (yield* (yield* Blocks).create({ projectId, tags: ['rule'], title, body, parentId })).id;
+  const blocks = yield* Blocks;
+  return (yield* blocks.create({ projectId, tags: ['rule'], title, body, parentId: parentId ?? (yield* blocks.rootBlockOf(projectId)).id }))
+    .id;
 });
 
 layer(demoGraphLayer(), { excludeTestServices: true })('touches', (it) => {
@@ -46,7 +49,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('touches', (it) => {
   );
 
   it.effect('the holder on a file is named from the served graph’s machine store', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
         yield* bornThread(
           graph.store.db,
@@ -68,7 +71,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('touches', (it) => {
           { projectId, title: 'B', readerOrderAt: new Date(0) },
         );
         const signed = signedBy({ harness: 'tagma', key: 'thread-builder' });
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Build the change' });
+        const { id } = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'Build the change' });
         yield* signed(graph.tasks.claim({ id }));
         yield* signed(seen(projectId, 'src/x.ts', 'wrote'));
         expect(yield* graph.touches.of({ projectId, place: 'src/x.ts' })).toMatchObject([
@@ -79,9 +82,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('touches', (it) => {
   );
 
   it.effect('a released task keeps no touches, and a later holder starts clean', () =>
-    withDemo(({ graph, projectId, as }) =>
+    withDemo(({ graph, projectId, as, root }) =>
       Effect.gen(function* () {
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'handed over' });
+        const { id } = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'handed over' });
         yield* as('session-a', graph.tasks.claim({ id }));
         yield* as('session-a', seen(projectId, 'src/y.ts', 'wrote'));
         yield* as('session-a', graph.tasks.release({ id }));
@@ -97,10 +100,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('touches', (it) => {
   );
 
   it.effect('touch answers code law and follows its text revision, independently of inspection changes', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
         const zoned = (yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['rule'],
           title: 'Zone law',
           body: 'Binds here.',
@@ -145,11 +149,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('touches', (it) => {
   );
 
   it.effect('touch names who else is on the file until that work ends', () =>
-    withDemo(({ graph, projectId, nameOf, as }) =>
+    withDemo(({ graph, projectId, nameOf, as, root }) =>
       Effect.gen(function* () {
         const task = yield* held(projectId, 'harden');
         expect((yield* seen(projectId, 'src/shared.ts', 'wrote'))[0]!.touches).toEqual([]);
-        const peerTask = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'review' })).id;
+        const peerTask = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'review' })).id;
         yield* as('peer', graph.tasks.claim({ id: peerTask }));
         expect((yield* as('peer', seen(projectId, 'src/shared.ts', 'read')))[0]!.touches).toEqual([
           { writer: null, agentName: null, task: { name: yield* nameOf(task), title: 'harden' }, wrote: true },

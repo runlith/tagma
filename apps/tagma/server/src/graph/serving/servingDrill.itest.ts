@@ -84,10 +84,12 @@ const recoveryHome = kind(RecoveryHome, (_params: null, base) =>
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );
 
-const create = (served: ServedGraph, title: string, body = title) =>
-  Context.get(served.context, Blocks)
-    .create({ projectId: served.projectId, title, body })
-    .pipe(signedBy({ harness: 'test', key: 'drill' }), Effect.provide(served.context));
+const create = (served: ServedGraph, title: string, body = title) => {
+  const blocks = Context.get(served.context, Blocks);
+  return Effect.flatMap(blocks.rootBlockOf(served.projectId), (root) =>
+    blocks.create({ projectId: served.projectId, parentId: root.id, title, body }),
+  ).pipe(signedBy({ harness: 'test', key: 'drill' }), Effect.provide(served.context));
+};
 
 const byUuid = (served: ServedGraph, uuid: string) =>
   Context.get(served.context, GraphStore).db.select().from(block).where(eq(block.uuid, uuid)).get();
@@ -105,9 +107,15 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('machine loss', (it) =
       const project = yield* Context.get(first.context, ProjectLifecycle)
         .create({ name: 'drill', rootPath: repo, strictProvenance: false })
         .pipe(Effect.provide(first.context));
-      const old = yield* Context.get(first.context, Blocks)
-        .create({ projectId: project.id, title: 'Survivor', body: 'outlives every database' })
-        .pipe(signedBy({ harness: 'test', key: 'drill' }), Effect.provide(first.context));
+      const old = yield* Effect.gen(function* () {
+        const blocks = Context.get(first.context, Blocks);
+        return yield* blocks.create({
+          projectId: project.id,
+          parentId: (yield* blocks.rootBlockOf(project.id)).id,
+          title: 'Survivor',
+          body: 'outlives every database',
+        });
+      }).pipe(signedBy({ harness: 'test', key: 'drill' }), Effect.provide(first.context));
       const pool = yield* openingPool.pipe(Effect.provide(first.context));
       const served = yield* pool.resolve({ projectId: project.id });
       expect(served.layout.treeRoot.startsWith(home)).toBe(true);

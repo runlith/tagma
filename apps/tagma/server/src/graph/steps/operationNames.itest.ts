@@ -40,8 +40,13 @@ layer(demoGraphLayer({ projects: ['elsewhere'] }), { excludeTestServices: true }
         Effect.gen(function* () {
           const { graph, projectId } = demo;
           const { db } = graph.graphStore;
-          const target = yield* graph.blocks.create({ projectId, title: 'an enforcement document' });
-          const untouched = yield* graph.blocks.create({ projectId: demo.project('elsewhere').id, title: 'another project' });
+          const target = yield* graph.blocks.create({ projectId, parentId: demo.root, title: 'an enforcement document' });
+          const elsewhere = demo.project('elsewhere').id;
+          const untouched = yield* graph.blocks.create({
+            projectId: elsewhere,
+            parentId: (yield* graph.blocks.rootBlockOf(elsewhere)).id,
+            title: 'another project',
+          });
           const fields = (after: boolean) => ({
             guard: document(after),
             text: 'claim_task and done are words somebody wrote',

@@ -162,7 +162,10 @@ layer(graphs, { excludeTestServices: true })('working places and their law', (it
     withDemo((demo) =>
       Effect.gen(function* () {
         const { alpha, beta, places, context } = yield* setup(demo);
-        const rule = (projectId: number, title: string) => demo.graph.blocks.create({ projectId, tags: ['rule'], title });
+        const rule = Effect.fnUntraced(function* (projectId: number, title: string) {
+          const top = yield* demo.graph.blocks.rootBlockOf(projectId);
+          return yield* demo.graph.blocks.create({ projectId, parentId: top.id, tags: ['rule'], title });
+        });
         const home = yield* rule(alpha.projectId, 'Alpha law');
         const wide = yield* rule(beta.projectId, 'Beta law');
         const region = yield* demo.graph.graphScopes.zoneByPlace(beta.projectId, 'src');
@@ -223,8 +226,19 @@ layer(graphs, { excludeTestServices: true })('working places and their law', (it
         const copy = { projectId: project.id, root: join(yield* files.realPath(project.root), 'worktree') };
         yield* files.makeDirectory(copy.root);
         const { alpha, beta, places, context, store, contexts } = yield* setup(demo, [copy]);
-        const common = yield* demo.graph.blocks.create({ projectId: beta.projectId, tags: ['rule'], title: 'Shared norm' });
-        const changed = yield* demo.graph.blocks.create({ projectId: beta.projectId, tags: ['rule'], title: 'Original norm' });
+        const betaRoot = yield* demo.graph.blocks.rootBlockOf(beta.projectId);
+        const common = yield* demo.graph.blocks.create({
+          projectId: beta.projectId,
+          parentId: betaRoot.id,
+          tags: ['rule'],
+          title: 'Shared norm',
+        });
+        const changed = yield* demo.graph.blocks.create({
+          projectId: beta.projectId,
+          parentId: betaRoot.id,
+          tags: ['rule'],
+          title: 'Original norm',
+        });
         const name = yield* demo.nameOf(changed.id);
         const commonName = yield* demo.nameOf(common.id);
         const instructions = instructionRule(() => 'graph');

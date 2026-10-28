@@ -17,9 +17,10 @@ layer(servingLayer.pipe(Layer.provideMerge(watchProcessLayer)), { excludeTestSer
         let served = initial;
         const git = demo.graph.git;
         const fs = yield* FileSystem.FileSystem;
+        const root = yield* Effect.provide(Context.get(served.context, Blocks).rootBlockOf(projectId), served.context);
         const create = (title: string) =>
           signedBy({ harness: 'claude-code', key: 'ledger' })(
-            Context.get(served.context, Blocks).create({ projectId, tags: ['idea'], title, body: title }),
+            Context.get(served.context, Blocks).create({ projectId, parentId: root.id, tags: ['idea'], title, body: title }),
           ).pipe(Effect.provide(served.context));
         const fileOf = Effect.fnUntraced(function* (id: number) {
           const row = yield* Context.get(served.context, Blocks).rawBlockById(id);
@@ -78,7 +79,8 @@ layer(servingLayer.pipe(Layer.provideMerge(watchProcessLayer)), { excludeTestSer
           Effect.gen(function* () {
             const blocks = yield* Blocks;
             const fs = yield* FileSystem.FileSystem;
-            const note = yield* blocks.create({ projectId, tags: ['idea'], title: 'Mended Note', body: 'Mended Note' });
+            const root = yield* blocks.rootBlockOf(projectId);
+            const note = yield* blocks.create({ projectId, parentId: root.id, tags: ['idea'], title: 'Mended Note', body: 'Mended Note' });
             const row = yield* blocks.rawBlockById(note.id);
             if (row.path === null) return yield* Effect.die('the projected block has no path');
             const path = join(served.layout.treeRoot, row.path);
@@ -88,7 +90,13 @@ layer(servingLayer.pipe(Layer.provideMerge(watchProcessLayer)), { excludeTestSer
             expect(refused._tag).toBe('Failure');
             yield* fs.writeFileString(path, whole);
             yield* (yield* FileWatcher).settle(served.layout.treeRoot, []);
-            const made = yield* blocks.create({ projectId, tags: ['idea'], title: 'After the mend', body: 'After the mend' });
+            const made = yield* blocks.create({
+              projectId,
+              parentId: root.id,
+              tags: ['idea'],
+              title: 'After the mend',
+              body: 'After the mend',
+            });
             expect(yield* blocks.rawBlockById(made.id)).toMatchObject({ uuid: made.uuid, body: 'After the mend' });
           }),
         ),

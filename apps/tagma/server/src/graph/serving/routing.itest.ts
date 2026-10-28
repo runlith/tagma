@@ -69,7 +69,13 @@ layer(demoGraphLayer({ repos: ['served-catalogs'] }).pipe(Layer.provideMerge(Bun
             const served = yield* pool.resolve({ projectId });
             const born = yield* Effect.provide(
               onGraph(served)(
-                signed(Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId, tags: ['idea'], title: 'Routed node' }))),
+                signed(
+                  Effect.flatMap(Blocks, (blocks) =>
+                    Effect.flatMap(blocks.rootBlockOf(projectId), (top) =>
+                      blocks.create({ projectId, parentId: top.id, tags: ['idea'], title: 'Routed node' }),
+                    ),
+                  ),
+                ),
               ),
               routed,
             );
@@ -118,7 +124,13 @@ layer(demoGraphLayer({ repos: ['served-catalogs'] }).pipe(Layer.provideMerge(Bun
             expect(servedSettings.some((row) => row.key === SHIPPED_CATALOGS.key.id)).toBe(false);
             const decision = yield* Effect.provide(
               onGraph(served)(
-                signed(Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId, tags: ['decision'], title: 'Served Choice' }))),
+                signed(
+                  Effect.flatMap(Blocks, (blocks) =>
+                    Effect.flatMap(blocks.rootBlockOf(projectId), (top) =>
+                      blocks.create({ projectId, parentId: top.id, tags: ['decision'], title: 'Served Choice' }),
+                    ),
+                  ),
+                ),
               ),
               routed,
             );
@@ -166,7 +178,13 @@ layer(demoGraphLayer({ repos: ['served-catalogs'] }).pipe(Layer.provideMerge(Bun
               const canonical = yield* pool.resolve({ projectId: global.id });
               yield* canonical.fresh();
               const law = yield* Effect.provide(
-                signed(Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: global.id, tags: ['idea'], title: 'Cross Law' }))),
+                signed(
+                  Effect.flatMap(Blocks, (blocks) =>
+                    Effect.flatMap(blocks.rootBlockOf(global.id), (top) =>
+                      blocks.create({ projectId: global.id, parentId: top.id, tags: ['idea'], title: 'Cross Law' }),
+                    ),
+                  ),
+                ),
                 canonical.context,
               );
               const local = yield* pool.resolve({ projectId });
@@ -174,7 +192,9 @@ layer(demoGraphLayer({ repos: ['served-catalogs'] }).pipe(Layer.provideMerge(Bun
               const note = yield* Effect.provide(
                 signed(
                   Effect.flatMap(Blocks, (blocks) =>
-                    blocks.create({ projectId, tags: ['idea'], title: 'Names The Law', body: `[[${name}]]` }),
+                    Effect.flatMap(blocks.rootBlockOf(projectId), (top) =>
+                      blocks.create({ projectId, parentId: top.id, tags: ['idea'], title: 'Names The Law', body: `[[${name}]]` }),
+                    ),
                   ),
                 ),
                 local.context,

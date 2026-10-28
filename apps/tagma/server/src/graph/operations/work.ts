@@ -36,9 +36,11 @@ import {
 } from '../contract/service/work.js';
 import { batchSource, type BatchInput } from '../contract/wire/batch.js';
 import { blockName } from '../contract/wire/references.js';
-import type { IdleSpecAnswer } from '../contract/wire/answers.js';
+import type { Crowded, IdleSpecAnswer } from '../contract/wire/answers.js';
 import { blockResult, blockSummary, endResult, pricedBlockResult, pricedResult, specAnswers } from './answers.js';
-import { priced } from '../../platform/contract/service/start.js';
+import { priced, type Priced } from '../../platform/contract/service/start.js';
+import { Blocks } from '../contract/service/blocks.js';
+import { crowdedPages } from '../blocks/crowding.js';
 import type { StartPrice } from '../../platform/contract/wire/start.js';
 import { lawPricing, nodePricing } from './start.js';
 import {
@@ -421,6 +423,7 @@ const WORK_ROUTED = {
           ops: result.ops,
           ids: result.ids,
           specs: specAnswers(result.specs ?? []),
+          crowded: result.crowded,
           start,
         };
       });
@@ -432,8 +435,16 @@ const WORK_ROUTED = {
       readonly ops: OpOutcome[];
       readonly ids: Record<string, string>;
       readonly specs: readonly IdleSpecAnswer[] | undefined;
+      readonly crowded: readonly Crowded[] | undefined;
       readonly start: StartPrice | undefined;
-    }) => ({ status: applied.status, overview: applied.overview, ids: applied.ids, specs: applied.specs, start: applied.start }),
+    }) => ({
+      status: applied.status,
+      overview: applied.overview,
+      ids: applied.ids,
+      specs: applied.specs,
+      crowded: applied.crowded,
+      start: applied.start,
+    }),
   }),
 
   accept_amendment: routed(W.accept_amendment, {
@@ -441,10 +452,12 @@ const WORK_ROUTED = {
       (input: (typeof W.accept_amendment)['input']['Type']) => input.blockId,
       Effect.fnUntraced(function* (input: (typeof W.accept_amendment)['input']['Type'], _prepared: number | undefined) {
         const row = yield* scoped(input.blockId);
-        return yield* priced(lawPricing(row.projectId, true), (yield* Review).accept({ id: row.id, reason: input.reason }));
+        const accepted = yield* priced(lawPricing(row.projectId, true), (yield* Review).accept({ id: row.id, reason: input.reason }));
+        const [crowded] = yield* crowdedPages(yield* Blocks, yield* (yield* Tags).of(row.projectId), accepted.value.born);
+        return { ...accepted, crowded };
       }),
     ),
-    answer: pricedBlockResult,
+    answer: (raw: Priced<BlockRecord> & { readonly crowded: Crowded | undefined }) => ({ ...pricedBlockResult(raw), crowded: raw.crowded }),
   }),
 
   revise_amendment: routed(W.revise_amendment, {

@@ -11,10 +11,10 @@ import { MeasuredCheckout } from '../../contract/service/serving.js';
 import { demoGraphLayer, type EffectDemo, withDemo } from '../../../composition/testing/graphFixture.js';
 
 const lens = (demo: EffectDemo) => {
-  const { graph, projectId, nameOf } = demo;
+  const { graph, projectId, root, nameOf } = demo;
   const held = (id: number) => Effect.map(nameOf(id), (name) => ({ id, name }));
   const create = (tag: string, title: string, extra: { body?: string } = {}) =>
-    Effect.flatMap(graph.blocks.create({ projectId, tags: [tag], title, ...extra }), (row) => held(row.id));
+    Effect.flatMap(graph.blocks.create({ projectId, parentId: root, tags: [tag], title, ...extra }), (row) => held(row.id));
   const proposing = (amendsId: number, ops: AmendmentOp[], title = 'amendment') =>
     graph.review.propose({ projectId, title, amendsId, ops });
   const propose = (amendsId: number, ops: AmendmentOp[], title = 'amendment') =>
@@ -49,7 +49,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
         const outside = yield* create('spec', 'elsewhere');
         const code = (ops: AmendmentOp[]) => Effect.map(refusal(proposing(target.id, ops)), (refused) => refused.code);
         expect(yield* code([{ op: 'edit', id: outside.name, old: 'x', new: 'y' }])).toBe('amendment-outside');
-        expect(yield* code([{ op: 'create', tags: ['idea'], title: 'stray' }])).toBe('amendment-outside');
+        expect(yield* code([{ op: 'create', tags: ['idea'], title: 'stray' }])).toBe('parent-required');
         expect(
           yield* code([
             {
@@ -83,11 +83,12 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
   );
 
   it.effect('a view named as a destination refuses when the finding is filed', () =>
-    withLens(({ graph, projectId, create, nameOf, proposing, refusal }) =>
+    withLens(({ graph, projectId, root, create, nameOf, proposing, refusal }) =>
       Effect.gen(function* () {
         const moved = yield* create('idea', 'parked', { body: 'text' });
         const saved = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['view'],
           title: 'a page',
           fields: { query: { tags: ['task'], sort: { by: 'created', order: 'asc' } } },
@@ -100,18 +101,25 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
   );
 
   it.effect("a deferred body past its tag cap refuses at filing with the write gate's own refusal", () =>
-    withLens(({ graph, projectId, create, propose, refusal }) =>
+    withLens(({ graph, projectId, root, create, propose, refusal }) =>
       Effect.gen(function* () {
         const target = yield* create('spec', 'capped');
         const cap = 32;
         yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['tag'],
           title: '#bounded',
           fields: { id: 'bounded', body: { shape: 'content', cap } },
         });
         const past = 'x'.repeat(cap + 1);
-        const standing = yield* graph.blocks.create({ projectId, tags: ['bounded'], title: 'the standing law', body: 'MUST be short.' });
+        const standing = yield* graph.blocks.create({
+          projectId,
+          parentId: root,
+          tags: ['bounded'],
+          title: 'the standing law',
+          body: 'MUST be short.',
+        });
         const direct = yield* refusal(graph.blocks.update({ id: standing.id, body: past }));
         const refused = yield* refusal(
           graph.review.propose({

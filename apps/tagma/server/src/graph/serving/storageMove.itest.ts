@@ -62,11 +62,15 @@ layer(demoGraphLayer({ repos: ['travel'] }).pipe(Layer.provideMerge(BunFileSyste
           const original = initial.layout.treeRoot;
           const doc = yield* as(
             'op',
-            Context.get(initial.context, Blocks).create({
-              projectId,
-              tags: ['idea'],
-              title: 'The Charter',
-              body: 'what the project is',
+            Effect.gen(function* () {
+              const blocks = Context.get(initial.context, Blocks);
+              return yield* blocks.create({
+                projectId,
+                parentId: (yield* blocks.rootBlockOf(projectId)).id,
+                tags: ['idea'],
+                title: 'The Charter',
+                body: 'what the project is',
+              });
             }),
           ).pipe(Effect.provide(initial.context));
           const byUuid = (copy: ServedGraph, uuid: string) =>
@@ -88,7 +92,15 @@ layer(demoGraphLayer({ repos: ['travel'] }).pipe(Layer.provideMerge(BunFileSyste
           expect(yield* git('status', '--porcelain', '--', '.tagma')).not.toBe('');
           const born = yield* as(
             'op',
-            Context.get(team.context, Blocks).create({ projectId, tags: ['task'], title: 'Written in team mode' }),
+            Effect.gen(function* () {
+              const blocks = Context.get(team.context, Blocks);
+              return yield* blocks.create({
+                projectId,
+                parentId: (yield* blocks.rootBlockOf(projectId)).id,
+                tags: ['task'],
+                title: 'Written in team mode',
+              });
+            }),
           ).pipe(Effect.provide(team.context));
           expect((yield* readBlockTree(target)).map((entry) => entry.frontmatter.id)).toContain(born.uuid);
           const returned = yield* pool.moveProjectStorage({ projectId, mode: 'stealth' });

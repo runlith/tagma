@@ -11,9 +11,9 @@ type Sources = Parameters<EffectDemo['graph']['review']['propose']>[0]['sources'
 
 layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices: true })('proposal conflicts', (it) => {
   it.effect('overlapping edit sources of two open proposals read as a conflict', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
-        const born = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 't', body: 'alpha beta gamma' });
+        const born = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 't', body: 'alpha beta gamma' });
         const target = yield* nameOf(born.id);
         const propose = (title: string, old: string, replacement: string) =>
           Effect.flatMap(
@@ -67,12 +67,12 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
   );
 
   it.effect('proposals whose sources name the same place read as a conflict, and containment does not', () =>
-    withDemo(({ graph, projectId, demoRoot, nameOf }) =>
+    withDemo(({ graph, projectId, demoRoot, nameOf, root }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         yield* fs.makeDirectory(join(demoRoot, 'src'), { recursive: true });
         yield* fs.writeFileString(join(demoRoot, 'src', 'owner.ts'), 'export const a = 1;\nexport const b = 2;\n');
-        const target = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'owns src' });
+        const target = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'owns src' });
         const targetName = yield* nameOf(target.id);
         const finding = (title: string, sources: Sources) =>
           Effect.flatMap(
@@ -117,10 +117,11 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
   );
 
   it.effect('repeated and adjacent edit anchors count each pair once and return the same fights from the worker', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
         const target = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['spec'],
           title: 'repeated text',
           body: 'alpha beta gamma '.repeat(2048),
@@ -179,9 +180,9 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
   );
 
   it.effect('a proposal whose operations do not read is named unread with its reason, never as a conflict', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
-        const target = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'spec' });
+        const target = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'spec' });
         const broken = yield* graph.review.propose({
           projectId,
           title: 'amendment',

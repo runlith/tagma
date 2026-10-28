@@ -17,7 +17,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('ending debt ownership', 
   it.effect('ending or replacing a debt owner reports each rule without changing its debt', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const caller: Caller = { actor: { kind: 'operator' }, files: null };
         const here = Effect.succeed({
           project: { id: projectId, name: 'demo' },
@@ -30,16 +30,17 @@ layer(demoGraphLayer(), { excludeTestServices: true })('ending debt ownership', 
             withGraphCall(here),
             forProject(here),
           );
-        const other = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Other debt owner' });
-        const successor = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Successor' });
-        const first = yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'First norm' });
-        const second = yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'Second norm' });
+        const other = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'Other debt owner' });
+        const successor = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'Successor' });
+        const first = yield* graph.blocks.create({ projectId, parentId: root, tags: ['rule'], title: 'First norm' });
+        const second = yield* graph.blocks.create({ projectId, parentId: root, tags: ['rule'], title: 'Second norm' });
         const rules = [first, second];
         const names = yield* Effect.forEach(rules, (rule) => demo.nameOf(rule.id));
         const operations = ['finish_block', 'close_block', 'supersede_block'] as const;
         const owners = yield* Effect.forEach(operations, (operation) =>
           graph.blocks.create({
             projectId,
+            parentId: root,
             tags: [operation === 'close_block' ? 'spec' : 'task'],
             title: operation,
           }),

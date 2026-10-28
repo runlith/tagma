@@ -294,7 +294,8 @@ layer(Layer.effect(Place, setup).pipe(Layer.provide(fixture)), { excludeTestServ
       expect(JSON.parse(values.find((row) => row.id === saved[0]!.id)!.value!)).toEqual(['release_block', 'held-elsewhere', 'check_rules']);
       expect(JSON.parse(values.find((row) => row.id === disabled[0]!.id)!.value!)).toEqual(['format', 'artifacts']);
       expect(values.find((row) => row.id === unrelated[0]!.id)?.value).toBe(unrelated[0]!.value);
-      const born = yield* operator('create_block', { title: 'granted work', tags: ['task'] });
+      const parentId = ((yield* operator('list_root_blocks', {})).body as { blocks: { name: string }[] }).blocks[0]!.name;
+      const born = yield* operator('create_block', { title: 'granted work', tags: ['task'], parentId });
       const name = (born.body as { block: { name: string } }).block.name;
       expect(yield* asThread(child, 'claim_block', { blockId: name })).toMatchObject({ code: 'approval-pending' });
       const question = yield* standing(child);

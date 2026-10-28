@@ -44,11 +44,13 @@ layer(Layer.effect(Place, setup), { excludeTestServices: true })('door parity', 
       });
       expect(decoded.failure.detail).toMatch(/unknown/u);
 
+      const parentId = ((yield* world.op('list_root_blocks', {}, `project=${project}`)).body as { blocks: { name: string }[] }).blocks[0]!
+        .name;
       const written = [
-        yield* answerOf(yield* http('create_block', { title: 'written over http' })),
-        yield* answerOf(yield* native('create_block', { title: 'written natively' })),
+        yield* answerOf(yield* http('create_block', { title: 'written over http', parentId })),
+        yield* answerOf(yield* native('create_block', { title: 'written natively', parentId })),
       ];
-      const byOperator = yield* world.op('create_block', { title: 'written by the operator' }, `project=${project}`);
+      const byOperator = yield* world.op('create_block', { title: 'written by the operator', parentId }, `project=${project}`);
       const names = [...written, byOperator.body].map((answer) => (answer as { block: { name: string } }).block.name);
       const found = yield* answerOf(yield* http('read_block', { blockIds: names }));
       const blocks = (found as { reads: readonly { projectId: number; author: number | null }[] }).reads;

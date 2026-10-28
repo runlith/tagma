@@ -52,6 +52,7 @@ import type { Descriptor } from '../../config/contract/wire/config.js';
 import { describedBy } from '../../enforcement/testing/doubles.js';
 import { LAYERED, LAYERED_KEY } from '../../enforcement/testing/layered.js';
 import { Capacity, serverCapacity, thisMachine } from '../../platform/contract/service/capacity.js';
+import { OperationOwners } from '../../platform/contract/service/operationOwners.js';
 import type { Background } from '../../platform/contract/service/background.js';
 
 export type DemoServices =
@@ -67,6 +68,7 @@ export type DemoServices =
   | WorkDebt
   | ProjectLaw
   | Capacity
+  | OperationOwners
   | HolderStandings;
 
 const fixtureRoot = () => fixtureRootAt('tagma-graph-fixture', randomUUID());
@@ -120,6 +122,7 @@ export type DemoState = {
   described: Map<string, Descriptor>;
   fixture: FixtureScope;
   projectId: number;
+  root: number;
   demoRoot: string;
   project(name: string): FixtureProject;
 };
@@ -357,8 +360,10 @@ const restored = Effect.fn('graphFixture.restore')(function* (template: string, 
 });
 
 export const zoneDeclared = Effect.fnUntraced(function* (projectId: number) {
-  yield* (yield* Blocks).create({
+  const blocks = yield* Blocks;
+  yield* blocks.create({
     projectId,
+    parentId: (yield* blocks.rootBlockOf(projectId)).id,
     tags: ['tag'],
     title: '#zone',
     body: 'A grouping inside a module.',
@@ -407,6 +412,7 @@ export function graphFixture(settings: GraphFixtureOptions = {}) {
         Layer.sync(WorkEnds, workEndsOver),
         Layer.succeed(WorkDebt, WorkDebt.of({ remaining: () => Effect.die('debt inspections require the enforcement fixture') })),
         Layer.succeed(ProjectLaw, ProjectLaw.of({ read: () => Effect.die('reading a project law requires the enforcement fixture') })),
+        Layer.succeed(OperationOwners, OperationOwners.of({ of: () => null })),
         fixtureGraph({
           catalogs: SHIPPED_CATALOGS,
           sourcePath: options.sourcePath ?? sourcePath,
@@ -490,6 +496,7 @@ export function graphFixture(settings: GraphFixtureOptions = {}) {
       nameOf: graph.blockNames.nameOf,
       table: (id) => graph.tags.of(id ?? projectId),
       projectId,
+      root: (yield* Effect.provide(graph.blocks.rootBlockOf(projectId), context)).id,
       demoRoot,
       project,
     };

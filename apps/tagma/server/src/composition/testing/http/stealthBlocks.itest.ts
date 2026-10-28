@@ -11,6 +11,12 @@ import { suiteGit } from '../suiteGit.js';
 
 type Written = { readonly block: { readonly name: string } };
 
+const rootOf = Effect.fnUntraced(function* (project: number) {
+  const world = yield* DoorFixture;
+  const roots = yield* world.op('list_root_blocks', { project });
+  return (roots.body as { blocks: { name: string }[] }).blocks[0]!.name;
+});
+
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
 })('stealth blocks', (it) => {
@@ -26,7 +32,13 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       expect((yield* world.op('sync_graph', { project })).status).toBe(200);
       const head = yield* suiteGit(root, 'rev-parse', 'HEAD');
 
-      const terms = yield* world.op('create_block', { project, title: 'Vendor terms', body: 'kept inside', storage: 'stealth' });
+      const terms = yield* world.op('create_block', {
+        project,
+        title: 'Vendor terms',
+        body: 'kept inside',
+        storage: 'stealth',
+        parentId: yield* rootOf(project),
+      });
       expect(terms.status).toBe(200);
       const parent = (terms.body as Written).block.name;
       expect((yield* world.op('create_block', { project, title: 'Clause', parentId: parent })).status).toBe(200);
@@ -62,7 +74,8 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
       const project = (born.body as { project: { id: number } }).project.id;
       yield* projectLeaving(world, project);
-      const roadmap = ((yield* world.op('create_block', { project, title: 'Roadmap' })).body as Written).block.name;
+      const roadmap = ((yield* world.op('create_block', { project, title: 'Roadmap', parentId: yield* rootOf(project) })).body as Written)
+        .block.name;
       const quarter = ((yield* world.op('create_block', { project, title: 'Quarter plan', parentId: roadmap })).body as Written).block.name;
       expect((yield* world.op('sync_graph', { project })).status).toBe(200);
       const inTeam = () => Effect.map(suiteGit(root, 'ls-files', '--', '.tagma'), (listed) => listed.includes('roadmap'));
@@ -97,12 +110,15 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const project = (born.body as { project: { id: number } }).project.id;
       yield* projectLeaving(world, project);
       const code = (answer: { readonly body: unknown }) => (answer.body as { code?: string }).code;
+      const parentId = yield* rootOf(project);
       const created = (input: Record<string, unknown>) =>
-        Effect.map(world.op('create_block', { project, ...input }), (answer) => (answer.body as Written).block.name);
+        Effect.map(world.op('create_block', { project, parentId, ...input }), (answer) => (answer.body as Written).block.name);
       const secret = yield* created({ title: 'Secret', storage: 'stealth' });
       const plan = yield* created({ title: 'Plan' });
 
-      expect(code(yield* world.op('create_block', { project, title: 'Leak', body: `see [[${secret}]]` }))).toBe('stealth-dependency');
+      expect(code(yield* world.op('create_block', { project, parentId, title: 'Leak', body: `see [[${secret}]]` }))).toBe(
+        'stealth-dependency',
+      );
       expect(code(yield* world.op('link_blocks', { project, fromId: plan, kind: 'relates', toId: secret }))).toBe('stealth-dependency');
       expect((yield* world.op('link_blocks', { project, fromId: secret, kind: 'relates', toId: plan })).status).toBe(200);
       expect(code(yield* world.op('supersede_block', { project, oldId: plan, withId: secret }))).toBe('stealth-supersede');
@@ -134,14 +150,15 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
       const project = (born.body as { project: { id: number } }).project.id;
       yield* projectLeaving(world, project);
-      const pricing = ((yield* world.op('create_block', { project, title: 'Pricing' })).body as Written).block.name;
+      const parentId = yield* rootOf(project);
+      const pricing = ((yield* world.op('create_block', { project, title: 'Pricing', parentId })).body as Written).block.name;
       const batch = yield* world.op('apply_batch', {
         project,
         source: JSON.stringify({
           ops: [
-            { op: 'create', $id: 'deals', title: 'Deals', storage: 'stealth' },
+            { op: 'create', $id: 'deals', title: 'Deals', storage: 'stealth', parentId },
             { op: 'storage', id: pricing, storage: 'stealth' },
-            { op: 'create', title: 'Changelog' },
+            { op: 'create', title: 'Changelog', parentId },
           ],
         }),
       });
@@ -183,7 +200,11 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       expect(created.status).toBe(200);
       const rootId = (created.body as { operation: { rootId: string } }).operation.rootId;
 
-      const plan = yield* world.op('create_block', { title: 'Launch plan', storage: 'stealth' }, at(destination));
+      const plan = yield* world.op(
+        'create_block',
+        { title: 'Launch plan', storage: 'stealth', parentId: yield* rootOf(project) },
+        at(destination),
+      );
       expect(plan.status).toBe(200);
       const name = (plan.body as Written).block.name;
       const seen = (cwd: string) =>
@@ -210,8 +231,10 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       yield* suiteGit(root, 'init', '-q', '-b', 'main');
       const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
       const project = (born.body as { project: { id: number } }).project.id;
-      const plan = ((yield* world.op('create_block', { project, title: 'Public plan' })).body as Written).block.name;
-      const terms = ((yield* world.op('create_block', { project, title: 'Vendor terms', storage: 'stealth' })).body as Written).block.name;
+      const parentId = yield* rootOf(project);
+      const plan = ((yield* world.op('create_block', { project, title: 'Public plan', parentId })).body as Written).block.name;
+      const terms = ((yield* world.op('create_block', { project, title: 'Vendor terms', storage: 'stealth', parentId })).body as Written)
+        .block.name;
       expect((yield* world.op('sync_graph', { project })).status).toBe(200);
       const set = yield* world.op('set_graph_remote', { ref: String(project), remote: bare });
       expect(set.body).toMatchObject({ project: { graphRemote: bare }, remote: { holds: 'this-graph', failure: null } });
@@ -242,8 +265,9 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'stealth' });
       const project = (born.body as { project: { id: number } }).project.id;
       yield* projectLeaving(world, project);
+      const parentId = yield* rootOf(project);
       const created = (input: Record<string, unknown>) =>
-        Effect.map(world.op('create_block', { project, ...input }), (answer) => (answer.body as Written).block.name);
+        Effect.map(world.op('create_block', { project, parentId, ...input }), (answer) => (answer.body as Written).block.name);
       const roadmap = yield* created({ title: 'Roadmap' });
       const deals = yield* created({ title: 'Deals' });
       const terms = yield* created({ title: 'Acme terms', parentId: deals });
@@ -287,7 +311,8 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
       const project = (born.body as { project: { id: number } }).project.id;
       yield* projectLeaving(world, project);
-      const partner = ((yield* world.op('create_block', { project, title: 'Partner' })).body as Written).block.name;
+      const partner = ((yield* world.op('create_block', { project, title: 'Partner', parentId: yield* rootOf(project) })).body as Written)
+        .block.name;
       expect((yield* world.op('sync_graph', { project })).status).toBe(200);
       const terms = yield* world.op('create_block', { project, title: 'Partner terms', parentId: partner, storage: 'stealth' });
       const child = (terms.body as Written).block.name;

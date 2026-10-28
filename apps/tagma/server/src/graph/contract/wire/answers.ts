@@ -6,6 +6,7 @@ import { BlockName } from './references.js';
 import { refusalSchema } from '../../../platform/contract/wire/refusal.js';
 import { startPriceSchema } from '../../../platform/contract/wire/start.js';
 import { nodeActionsSchema } from './tags/actions.js';
+import { PAGE_ROLES, SCREEN_ROWS } from './tags/pageRole.js';
 
 export const graphCopySchema = Schema.Struct({
   projectId: Schema.Int,
@@ -91,10 +92,21 @@ export const movedSchema = Schema.Struct({
 }).annotate({ description: 'What a move into the graph of another project carried with the block.' });
 export type Moved = typeof movedSchema.Type;
 
+export const crowdedSchema = Schema.Struct({
+  parent: BlockName,
+  title: Schema.String,
+  role: Schema.Literals(PAGE_ROLES),
+  children: Schema.Int,
+}).annotate({
+  description: `A page this write left with more than ${SCREEN_ROWS} standing children of one role: group them by subject under it in this same work.`,
+});
+export type Crowded = typeof crowdedSchema.Type;
+
 export const blockResultFields = {
   ...graphReportFields,
   block: blockAnswerSchema,
   moved: Schema.optional(movedSchema),
+  crowded: Schema.optional(crowdedSchema),
   refsIn: Schema.optional(Schema.Array(BlockName)),
   debt: Schema.optional(Schema.Array(remainingDebtSchema)),
   debtUnreadable: Schema.optional(Schema.Array(Schema.String)),

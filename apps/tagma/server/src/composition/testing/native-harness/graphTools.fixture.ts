@@ -235,6 +235,9 @@ const makeGraphTools = Effect.fnUntraced(function* ({
     root,
     scratch,
     ctx,
+    rootName: Effect.fnUntraced(function* (at: number = projectId) {
+      return yield* demo.nameOf((yield* demo.graph.blocks.rootBlockOf(at)).id);
+    }),
     graphCatalog: catalogFor,
     answer,
     call,

@@ -25,7 +25,7 @@ The `#rule` tag prompt governs its form: one norm, the title states the obligati
 - **`delivery`** decides where its text reaches agents. `prompt`: every thread's startup instructions — a norm across the project or wider than the code it was born in. `code`: when an agent reads or writes code its sources name — a norm about that code. Unset, a rule with sources is `code`, one without `prompt`. `set_rule_delivery` switches it and keeps the sources; its answer names how each thread's startup cost moved. Choosing `code` without sources succeeds with a warning: its text reaches no agent, while any check still measures the whole project; add sources with anchor_block or choose `prompt`. Delivery never changes the reach.
 - **`set_rule_enabled`** false: the rule is not delivered, its check judges nothing and a new enforce_rule refuses `rule-disabled`; switch it on with set_rule_enabled `enabled: true` before enforcing it. Its document and debt stay. It is for correct law that should not bind now; a wrong rule is rewritten or replaced.
 - Write the switch and delivery through set_rule_enabled and set_rule_delivery; these fields belong to their operations, so create_block and update_block direct their caller there.
-- Tree position decides nothing: a nested rule overrides no ancestor.
+- A rule stands under what it governs — the module its sources name, or the root for law over the whole project; its place serves the reader, and its delivery and sources decide who receives it. A nested rule overrides no ancestor.
 - A rule in the global graph rides every project as `prompt` text and is never enforced: checks judge only the project's own rules.
 
 ## A measurable norm gets a check offered

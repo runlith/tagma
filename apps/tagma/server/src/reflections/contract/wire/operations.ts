@@ -27,7 +27,7 @@ export const REFLECTION_FILING_OPERATIONS = {
     presentation: { running: 'Filing a reflection', done: 'Filed a reflection' },
     subjects: () => [],
     grammar:
-      'For a Tagma defect your own work ran into that nobody pointed you to. A defect the operator or another agent brought, or one under discussion with the operator, is filed only when asked. Defects or missing documentation in the product being worked on belong under its owner. The result lists similar entries; use `ontoId` for a new occurrence of an existing fault, not for investigating its original report. Filing targets the area covering the running Tagma server’s source.',
+      'For a Tagma defect your own work ran into that nobody pointed you to. A defect the operator or another agent brought, or one under discussion with the operator, is filed only when asked. Defects or missing documentation in the product being worked on belong under its owner. The result lists similar entries; use `ontoId` for a new occurrence of an existing fault, not for investigating its original report. An entry stands under the module declaring the operation or tool `command` names; one naming none stands in the area covering the running Tagma server’s source, and the answer says so.',
     input: Schema.Struct({
       title,
       command: line.annotate({
@@ -85,6 +85,7 @@ export const REFLECTION_FILING_OPERATIONS = {
       'wait-cycle',
       'cross-project',
       'cross-project-parent',
+      'parent-required',
       'superseded',
       'leaf',
       'amends-missing',

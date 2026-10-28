@@ -14,8 +14,10 @@ it.live('submit_work attributes only declared tasks when paths lands one of two 
     });
     const caller = yield* born();
     const tasks: string[] = [];
+    const parentId = ((yield* world.op('list_root_blocks', {}, `project=${projectId}`)).body as { blocks: { name: string }[] }).blocks[0]!
+      .name;
     for (const title of ['First task', 'Second task']) {
-      const created = yield* world.op('create_block', { tags: ['task'], title }, `project=${projectId}`);
+      const created = yield* world.op('create_block', { tags: ['task'], title, parentId }, `project=${projectId}`);
       const name = (created.body as { block: { name: string } }).block.name;
       tasks.push(name);
       const claim = () => world.op('claim_block', { blockId: name }, `project=${projectId}`, { [GRANT_HEADER]: caller.grant });
@@ -64,7 +66,7 @@ it.live('submit_work attributes only declared tasks when paths lands one of two 
     expect(new TextDecoder().decode(trailers.stdout).trim()).toBe(`Task: ${tasks[0]} First task\nCo-authored-by: Tagma <agent@tagma.dev>`);
     expect(yield* read('second.ts')).toBe('export const second = 1;\n');
 
-    const unheld = yield* world.op('create_block', { tags: ['task'], title: 'Unheld task' }, `project=${projectId}`);
+    const unheld = yield* world.op('create_block', { tags: ['task'], title: 'Unheld task', parentId }, `project=${projectId}`);
     const unheldName = (unheld.body as { block: { name: string } }).block.name;
     const refused = yield* doors.atNative('submit_work', { subject: 'Reject an unheld task', tasks: [unheldName] }, caller);
     expect(refused).toMatchObject({ class: 'refusal', code: 'task-not-held' });
@@ -86,7 +88,9 @@ it.live('submit_work names the declared work of a single held task without sourc
     expect(yield* world.op('write_setting', { key: 'commits.coAuthor', value: false }, `project=${projectId}`)).toMatchObject({
       status: 200,
     });
-    const created = yield* world.op('create_block', { tags: ['task'], title: 'Single task' }, `project=${projectId}`);
+    const parentId = ((yield* world.op('list_root_blocks', {}, `project=${projectId}`)).body as { blocks: { name: string }[] }).blocks[0]!
+      .name;
+    const created = yield* world.op('create_block', { tags: ['task'], title: 'Single task', parentId }, `project=${projectId}`);
     const task = (created.body as { block: { name: string } }).block.name;
     const claim = () => world.op('claim_block', { blockId: task }, `project=${projectId}`, { [GRANT_HEADER]: caller.grant });
     const claimed = yield* claim();

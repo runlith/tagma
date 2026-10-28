@@ -16,12 +16,18 @@ layer(demoGraphLayer({ repos: ['projection'] }).pipe(Layer.provideMerge(BunFileS
     it.effect('acts publish stable identities, suffix references and attributed history; a no-op publishes no commit', () =>
       withDemo((demo) =>
         Effect.gen(function* () {
-          const { graph, projectId } = demo;
+          const { graph, projectId, root } = demo;
           const treeRoot = demo.project('projection').root;
           const shadow = yield* ShadowGit.openInPlace(treeRoot, graph.git);
-          const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'The Charter', body: 'the standing law' });
+          const target = yield* graph.blocks.create({
+            projectId,
+            tags: ['idea'],
+            title: 'The Charter',
+            body: 'the standing law',
+            parentId: root,
+          });
           const body = `it points at [[${spokenId(target.uuid)}]]`;
-          const pointer = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'The Pointer', body });
+          const pointer = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'The Pointer', body, parentId: root });
           const sync = (message: string) => syncProject({ projectId, treeRoot, shadow, message });
           const first = yield* sync('create both');
           expect(first.commit).toBeString();
@@ -46,14 +52,15 @@ layer(demoGraphLayer({ repos: ['projection'] }).pipe(Layer.provideMerge(BunFileS
     it.effect('trash and rename leave exactly the surviving block at its new address, whose history follows the move', () =>
       withDemo((demo) =>
         Effect.gen(function* () {
-          const { graph, projectId } = demo;
+          const { graph, projectId, root } = demo;
           const treeRoot = demo.project('projection').root;
           const shadow = yield* ShadowGit.openInPlace(treeRoot, graph.git);
-          const doomed = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Doomed', body: '' });
+          const doomed = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Doomed', body: '', parentId: root });
           const renamed = yield* graph.blocks.create({
             projectId,
             tags: ['idea'],
             title: 'Old Name',
+            parentId: root,
             body: 'A body of real size, because git stores no renames: history follows a moved file only by content similarity, and a near-empty block gives it nothing to match.',
           });
           yield* syncProject({ projectId, treeRoot, shadow, message: 'create both' });
@@ -74,10 +81,10 @@ layer(demoGraphLayer({ repos: ['projection'] }).pipe(Layer.provideMerge(BunFileS
     it.effect('the ledger detects edits and deletions; restoring touched paths recovers exact bytes and removes the stray subtree', () =>
       withDemo((demo) =>
         Effect.gen(function* () {
-          const { graph, projectId } = demo;
+          const { graph, projectId, root } = demo;
           const fs = yield* FileSystem.FileSystem;
           const treeRoot = yield* demo.fixture.directory('projection');
-          const parent = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Shelf', body: 'holds' });
+          const parent = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Shelf', body: 'holds', parentId: root });
           const first = yield* graph.blocks.create({ projectId, parentId: parent.id, tags: ['idea'], title: 'Kept', body: 'kept' });
           const second = yield* graph.blocks.create({ projectId, parentId: parent.id, tags: ['idea'], title: 'Gone', body: 'gone' });
           yield* graph.sources.attach({ blockId: first.id, kind: 'file', ref: 'first.ts' });

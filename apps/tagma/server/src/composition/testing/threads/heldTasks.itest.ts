@@ -73,7 +73,8 @@ const operator = Effect.fnUntraced(function* (id: string, input: unknown, where:
 });
 
 const filed = Effect.fnUntraced(function* (threadId: string, title: string, where: string) {
-  const born = yield* asThread(threadId, 'create_block', { tags: ['task'], title }, where);
+  const roots = (yield* operator('list_root_blocks', {}, where)) as { readonly blocks: readonly { readonly name: string }[] };
+  const born = yield* asThread(threadId, 'create_block', { tags: ['task'], title, parentId: roots.blocks[0]!.name }, where);
   return born as { readonly block: { readonly name: string }; readonly graphCopy?: { readonly branch: string | null } };
 });
 

@@ -97,7 +97,7 @@ const makeLanding = Effect.fnUntraced(function* (demo: EffectDemo, workers: Lane
   });
 
   const created = Effect.fnUntraced(function* (tags: string[], title: string) {
-    return yield* demo.nameOf((yield* demo.graph.blocks.create({ projectId: demo.projectId, tags, title })).id);
+    return yield* demo.nameOf((yield* demo.graph.blocks.create({ projectId: demo.projectId, parentId: demo.root, tags, title })).id);
   });
 
   const enforcedAt = Effect.fnUntraced(function* (

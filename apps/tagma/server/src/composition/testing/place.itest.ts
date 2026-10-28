@@ -29,6 +29,12 @@ const setup = Effect.gen(function* () {
     env: { [GRANT_VARIABLE]: grant },
   });
   expect({ code: entered.code, err: entered.err }).toEqual({ code: 0, err: '' });
+  const topOf = Effect.fnUntraced(function* (project: { name: string }) {
+    const roots = yield* world.tagma(['op', 'list_root_blocks', '--json', '--project', project.name], { cwd: home.root });
+    return (JSON.parse(roots.out) as { blocks: { name: string }[] }).blocks[0]!.name;
+  });
+  const homeTop = yield* topOf(home);
+  const targetTop = yield* topOf(target);
   const native = Effect.gen(function* () {
     const served = yield* world.runtime.pool.resolve({ projectId: home.id });
     const vocabulary = yield* Context.get(served.context, Tags).of(home.id);
@@ -61,7 +67,7 @@ const setup = Effect.gen(function* () {
     );
   });
   const tools = yield* native;
-  return { world, home, target, grant, tools, native };
+  return { world, home, target, grant, tools, native, homeTop, targetTop };
 });
 
 class Placed extends Context.Service<Placed, Effect.Success<typeof setup>>()('testing/PlaceStest') {}
@@ -107,25 +113,28 @@ const valueOf = (value: unknown): unknown =>
 layer(Layer.effect(Placed, setup), { excludeTestServices: true })('place', (it) => {
   it.effect('native, CLI and MCP proxy act in the selected project while the caller keeps its home', () =>
     Effect.gen(function* () {
-      const { world, home, target, grant, tools } = yield* Placed;
-      const input = { title: 'Native target', project: target.name };
+      const { world, home, target, grant, tools, targetTop } = yield* Placed;
+      const input = { title: 'Native target', project: target.name, parentId: targetTop };
       const call = yield* preparedCall('create_block', input, 'native-target');
       const created = valueOf(yield* toolExecute(tools.create_block!)!(input, call)) as {
         block: { name: string; projectId: number };
       };
       yield* inTarget(created.block.name);
 
-      const cli = yield* world.tagma(['op', 'create_block', '--json', '--project', target.name, JSON.stringify({ title: 'CLI target' })], {
-        cwd: home.root,
-        env: { [GRANT_VARIABLE]: grant },
-      });
+      const cli = yield* world.tagma(
+        ['op', 'create_block', '--json', '--project', target.name, JSON.stringify({ title: 'CLI target', parentId: targetTop })],
+        {
+          cwd: home.root,
+          env: { [GRANT_VARIABLE]: grant },
+        },
+      );
       expect({ code: cli.code, err: cli.err }).toEqual({ code: 0, err: '' });
       yield* inTarget((JSON.parse(cli.out) as { block: { name: string } }).block.name);
 
       const proxy = mcpCatalog(operationsCli).route('proxy', 'call_operation', {
         operation: 'create_block',
         project: target.id,
-        input: { title: 'Proxy target' },
+        input: { title: 'Proxy target', parentId: targetTop },
       });
       expect(proxy._tag, JSON.stringify(proxy)).toBe('Operation');
       if (proxy._tag !== 'Operation') return;
@@ -149,8 +158,8 @@ layer(Layer.effect(Placed, setup), { excludeTestServices: true })('place', (it) 
 
   it.effect('a rebuilt native catalog reads the lost answer from the recorded project, even when retry input names the home', () =>
     Effect.gen(function* () {
-      const { home, target, tools, native } = yield* Placed;
-      const input = { title: 'Receipt target', project: target.name };
+      const { home, target, tools, native, targetTop } = yield* Placed;
+      const input = { title: 'Receipt target', project: target.name, parentId: targetTop };
       const key = 'native-receipt';
       const call = yield* preparedCall('create_block', input, key);
       const created = valueOf(yield* toolExecute(tools.create_block!)!(input, call)) as {
@@ -173,8 +182,13 @@ layer(Layer.effect(Placed, setup), { excludeTestServices: true })('place', (it) 
 
   it.effect('project-selected create, batch and paged reads share the isolated target graph', () =>
     Effect.gen(function* () {
-      const { home, target } = yield* Placed;
-      const created = yield* http('create_block', { project: target.name, tags: ['idea'], title: 'Isolated selector first' });
+      const { home, target, targetTop } = yield* Placed;
+      const created = yield* http('create_block', {
+        project: target.name,
+        parentId: targetTop,
+        tags: ['idea'],
+        title: 'Isolated selector first',
+      });
       expect(created.status).toBe(200);
       const first = (created.body as { block: { name: string } }).block.name;
       const applied = yield* http('apply_batch', {
@@ -212,9 +226,9 @@ layer(Layer.effect(Placed, setup), { excludeTestServices: true })('place', (it) 
 
   it.effect('a prepared key refuses a different named subject after its catalog is rebuilt', () =>
     Effect.gen(function* () {
-      const { home, target, native } = yield* Placed;
-      const local = yield* http('create_block', { title: 'Pinned local subject' }, home.id);
-      const foreign = yield* http('create_block', { title: 'Pinned foreign subject' }, target.id);
+      const { home, target, native, homeTop, targetTop } = yield* Placed;
+      const local = yield* http('create_block', { title: 'Pinned local subject', parentId: homeTop }, home.id);
+      const foreign = yield* http('create_block', { title: 'Pinned foreign subject', parentId: targetTop }, target.id);
       expect(local.status).toBe(200);
       expect(foreign.status).toBe(200);
       const localName = (local.body as { block: { name: string } }).block.name;

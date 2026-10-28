@@ -28,6 +28,7 @@ layer(servingLayer, { excludeTestServices: true })('writer sessions through nati
       onGraph(served)(
         Effect.gen(function* () {
           const blocks = yield* Blocks;
+          const root = yield* blocks.rootBlockOf(projectId);
           const tasks = yield* Tasks;
           const tags = yield* Tags;
           const names = yield* BlockNames;
@@ -69,12 +70,12 @@ layer(servingLayer, { excludeTestServices: true })('writer sessions through nati
           const baseline = yield* Effect.flatMap(call('list_sessions', {}), listed);
           const held = yield* signedBy({ harness: 'tagma', key: holderThread })(
             Effect.gen(function* () {
-              const made = yield* blocks.create({ projectId, tags: ['task'], title: 'Held task' });
+              const made = yield* blocks.create({ projectId, parentId: root.id, tags: ['task'], title: 'Held task' });
               return yield* tasks.claim({ id: made.id });
             }),
           );
           yield* signedBy({ harness: 'claude-code', key: 'external-writer' })(
-            blocks.create({ projectId, tags: ['idea'], title: 'External write' }),
+            blocks.create({ projectId, parentId: root.id, tags: ['idea'], title: 'External write' }),
           );
           const first = yield* Effect.flatMap(call('list_sessions', { limit: 1, checkout: repo }), listed);
           expect(first.sessions).toHaveLength(1);

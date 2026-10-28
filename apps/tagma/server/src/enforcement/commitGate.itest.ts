@@ -223,8 +223,10 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
         yield* gate.put('tagma.config.ts', `${config}\n`);
         yield* gate.ran(gate.repo, ['add', '-A']);
         yield* gate.ran(gate.repo, ['commit', '-qm', 'a program that cannot judge a crash', '--no-verify']);
+        const roots = yield* op(gate, gate.repo, 'list_root_blocks', {});
         const made = yield* op(gate, gate.repo, 'create_block', {
           title: 'Nothing crashes the checker',
+          parentId: (JSON.parse(roots.out) as { blocks: { name: string }[] }).blocks[0]!.name,
           tags: ['rule'],
           sources: [{ kind: 'file', ref: 'crashing.ts' }],
         });
@@ -264,7 +266,9 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
         .create({ name: `team-${gate.projectId}`, rootPath: root, storage: 'team' })
         .pipe(Effect.provide(gate.world.runtime.graph));
       const calls = yield* gate.counting(root);
-      expect(yield* op(gate, root, 'create_block', { title: 'A block the graph commits' })).toMatchObject({ code: 0 });
+      const roots = yield* op(gate, root, 'list_root_blocks', {});
+      const parentId = (JSON.parse(roots.out) as { blocks: { name: string }[] }).blocks[0]!.name;
+      expect(yield* op(gate, root, 'create_block', { title: 'A block the graph commits', parentId })).toMatchObject({ code: 0 });
       const served = yield* gate.world.runtime.pool.resolve({ projectId: team.id });
       const commits = Context.get(served.context, TreeCommits);
       if (commits === undefined) return yield* Effect.die('a team tree is served with its committer');

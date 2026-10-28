@@ -50,7 +50,8 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       const { world, project, root } = yield* Place;
       const files = yield* FileSystem.FileSystem;
       yield* Context.get(world.runtime.workspace, Coverage).cover(project);
-      const rule = (yield* op('create_block', { tags: ['rule'], title: 'No re-exports' })).body as { block: { name: string } };
+      const parentId = ((yield* op('list_root_blocks', {})).body as { blocks: { name: string }[] }).blocks[0]!.name;
+      const rule = (yield* op('create_block', { tags: ['rule'], title: 'No re-exports', parentId })).body as { block: { name: string } };
       const gated = yield* op('enforce_rule', {
         blockId: rule.block.name,
         base: null,
@@ -83,7 +84,7 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       yield* files.writeFileString(join(destination, 'server', 'again.ts'), "export * from './value.js';\n");
       yield* committed(destination, 'the branch re-exports under its own watch');
       const tip = yield* suiteGit(destination, 'rev-parse', 'HEAD');
-      const later = (yield* op('create_block', { tags: ['task'], title: 'A task main wrote after the branch parted' })).body as {
+      const later = (yield* op('create_block', { tags: ['task'], title: 'A task main wrote after the branch parted', parentId })).body as {
         block: { name: string };
       };
       expect((yield* op('sync_graph', {})).status).toBe(200);
@@ -98,7 +99,11 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       const beforeTake = (yield* suiteGit(destination, 'diff', '--name-only', tip, refusedTip)).split('\n').filter(Boolean);
       expect(beforeTake.every(inGraphTree)).toBe(true);
       yield* suiteGit(destination, 'checkout', '--', 'server/shared.ts');
-      const pending = yield* op('create_block', { tags: ['task'], title: 'A task the branch has not committed yet' }, destination);
+      const pending = yield* op(
+        'create_block',
+        { tags: ['task'], title: 'A task the branch has not committed yet', parentId },
+        destination,
+      );
       expect(pending.status).toBe(200);
       const pendingTask = yield* Schema.decodeUnknownEffect(Schema.Struct({ block: Schema.Struct({ name: Schema.String }) }))(pending.body);
       const merged = yield* op('merge_worktree', { rootId });

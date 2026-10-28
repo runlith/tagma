@@ -3,7 +3,7 @@ import type { BlockListRow } from './reads.js';
 import type { BlockQuery } from './query.js';
 import type { BlockRead } from './rows.js';
 import type { VoiceAck, VoiceRefused } from '../../../platform/contract/wire/voiceAnswer.js';
-import type { BlockAnswer, BlockResultAnswer, IdleSpecAnswer } from './answers.js';
+import type { BlockAnswer, BlockResultAnswer, Crowded, IdleSpecAnswer } from './answers.js';
 import type { ReadyTaskAnswer } from './operations/reads.js';
 import type { CallRecorded } from './callRange.js';
 import type { JournalPageBody } from './journal.js';
@@ -36,6 +36,7 @@ export type ToolOverview = {
   readonly status: 'ok';
   readonly overview: string;
   readonly specs?: readonly IdleSpecAnswer[];
+  readonly crowded?: readonly Crowded[];
 };
 
 export type ToolBlockList = {

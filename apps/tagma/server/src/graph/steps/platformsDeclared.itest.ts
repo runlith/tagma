@@ -97,7 +97,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('platforms declared', (it
           'apps/desk/src/main.ts': 'export {};\n',
         });
         const project = { ...(yield* graph.projects.byId(projectId)), rootPath: root };
-        const rules = yield* Effect.forEach(['modules', 'loads', 'platforms'], (title) => graph.blocks.create({ projectId, title }));
+        const rules = yield* Effect.forEach(['modules', 'loads', 'platforms'], (title) =>
+          graph.blocks.create({ projectId, parentId: demo.root, title }),
+        );
         const stored = [
           document('modules', modules),
           document('loads', loads),
@@ -212,7 +214,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('platforms declared', (it
         for (const { files, reason } of cases) {
           const root = yield* tracked(files);
           const project = { ...(yield* graph.projects.byId(projectId)), rootPath: root };
-          const rule = yield* graph.blocks.create({ projectId, title: 'platforms' });
+          const rule = yield* graph.blocks.create({ projectId, parentId: demo.root, title: 'platforms' });
           const old = platforms([app('apps/web', ['$lib'], [])]);
           yield* db
             .update(block)

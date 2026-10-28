@@ -1,7 +1,7 @@
 import { dirname, isAbsolute } from 'node:path';
 import { Effect, Layer, Result, Schema, SchemaIssue } from 'effect';
 import { AMENDMENT_OPS, batchSchema, type AmendmentOp, type BatchInput, type BatchOp } from '../contract/wire/batch.js';
-import type { StoreFailure } from '../../platform/contract/service/store.js';
+import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { BatchSourceUnreadable, BatchFiles } from './batchFiles.js';
 import { type Unblock, GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { optionalRef, refOf, register } from './amendmentOps.js';
@@ -11,6 +11,7 @@ import {
   Review,
   Supersession,
   Tasks,
+  type Accepted,
   type BatchAnswer,
   type DocumentScope,
   type BlockEnd,
@@ -27,6 +28,7 @@ import { attachedStealth } from '../blocks/storage.js';
 import { InstalledCatalogs, Tags } from '../contract/service/vocabulary.js';
 import { resolveTypes } from '../contract/wire/tags/profile.js';
 import { aboutBody } from '../blocks/bodyFile.js';
+import { crowdedPages, type Placed } from '../blocks/crowding.js';
 import { closedParsing } from '../contract/wire/fields.js';
 
 const standardSchemaIssue = SchemaIssue.makeFormatterStandardSchemaV1();
@@ -158,7 +160,19 @@ function batchDocumentOps(document: unknown): Effect.Effect<readonly unknown[], 
 export const batchLayer: Layer.Layer<
   Batch,
   never,
-  BlockRows | BlockNames | Amendments | BatchFiles | Sources | Tasks | Supersession | Review | Trash | Tags | InstalledCatalogs | Blocks
+  | BlockRows
+  | BlockNames
+  | Amendments
+  | BatchFiles
+  | Sources
+  | Tasks
+  | Supersession
+  | Review
+  | Trash
+  | Tags
+  | InstalledCatalogs
+  | Blocks
+  | GraphStore
 > = Layer.effect(
   Batch,
   Effect.gen(function* () {
@@ -174,6 +188,7 @@ export const batchLayer: Layer.Layer<
     const trash = yield* Trash;
     const vocabulary = yield* Tags;
     const catalogs = yield* InstalledCatalogs;
+    const graphStore = yield* GraphStore;
 
     const hintsFor = Effect.fn('Batch.hintsFor')(function* (
       projectId: number,
@@ -367,7 +382,17 @@ export const batchLayer: Layer.Layer<
         );
         const named = [...bodyFiles.entries()].filter((entry): entry is [number, string] => entry[1] !== undefined);
         const specs = yield* tasks.specsLeftBy(ended);
-        const counted = specs.length === 0 ? ran : { ...ran, specs };
+        const placed = decoded.ops.flatMap((op, index): readonly Placed[] => {
+          const outcome = ran.ops[index];
+          if (outcome === undefined) return [];
+          if (op.op === 'accept' && 'born' in outcome) return (outcome as Accepted).born;
+          const moved = op.op === 'create' || (op.op === 'update' && (op.parentId != null || op.tags !== undefined));
+          return moved && 'parentId' in outcome && 'tags' in outcome ? [outcome] : [];
+        });
+        const crowded = yield* crowdedPages(blocks, yield* vocabulary.of(projectId), placed).pipe(
+          Effect.provideService(GraphStore, graphStore),
+        );
+        const counted = { ...ran, ...(specs.length === 0 ? {} : { specs }), ...(crowded.length === 0 ? {} : { crowded }) };
         return named.length === 0 ? counted : { ...counted, bodyFiles: Object.fromEntries(named) };
       });
       return yield* work.pipe(

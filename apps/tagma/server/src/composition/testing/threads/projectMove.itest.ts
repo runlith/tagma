@@ -71,7 +71,8 @@ const projects = Effect.gen(function* () {
     yield* suiteGit(root, 'commit', '-q', '--allow-empty', '-m', 'born');
     const id = yield* world.stealthProject(root);
     yield* Context.get(world.runtime.workspace, Coverage).cover(id);
-    const law = yield* world.op('create_block', { tags: ['rule'], title: `Law of ${root}` }, `project=${id}`);
+    const parentId = ((yield* world.op('list_root_blocks', {}, `project=${id}`)).body as { blocks: { name: string }[] }).blocks[0]!.name;
+    const law = yield* world.op('create_block', { tags: ['rule'], title: `Law of ${root}`, parentId }, `project=${id}`);
     if (law.status !== 200) return yield* Effect.die(new Error(`the law was not written: ${JSON.stringify(law.body)}`));
     return { id, root, law: (law.body as { block: { name: string } }).block.name };
   });

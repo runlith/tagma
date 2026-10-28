@@ -50,6 +50,7 @@ export type AmendmentRefusal =
   | 'amendment-op'
   | 'amendment-ref'
   | 'amendment-outside'
+  | 'parent-required'
   | 'leaf'
   | 'not-found'
   | 'bad-name'
@@ -72,6 +73,7 @@ export type BlockCreateRefusal =
   | 'not-found'
   | 'deleted'
   | 'no-root'
+  | 'parent-required'
   | 'cross-project-parent'
   | 'leaf'
   | 'amends-missing'
@@ -159,7 +161,15 @@ export type RestoreRefusal =
   | 'carriers-invalid'
   | 'field-invalid';
 
-export type ModuleRefusal = FloorRefusal | 'not-found' | 'deleted' | 'field-invalid' | 'field-required' | 'tag-undeclared' | 'module-shape';
+export type ModuleRefusal =
+  | FloorRefusal
+  | 'not-found'
+  | 'deleted'
+  | 'field-invalid'
+  | 'field-required'
+  | 'tag-undeclared'
+  | 'module-shape'
+  | 'parent-required';
 
 export type ArrivalRefusal = BlockCreateRefusal | 'relocation-shape';
 

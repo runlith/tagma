@@ -22,7 +22,14 @@ layer(servingLayer, { excludeTestServices: true })('tree ledger', (it) => {
           const blocks = yield* Blocks;
           const db = (yield* GraphStore).db;
           const fs = yield* FileSystem.FileSystem;
-          const note = yield* blocks.create({ projectId, tags: ['idea'], title: 'Ledger Note', body: 'as the act wrote it' });
+          const root = yield* blocks.rootBlockOf(projectId);
+          const note = yield* blocks.create({
+            projectId,
+            parentId: root.id,
+            tags: ['idea'],
+            title: 'Ledger Note',
+            body: 'as the act wrote it',
+          });
           const held = yield* blocks.rawBlockById(note.id);
           if (held.path === null) return yield* Effect.die('the projected note has no path');
           const path = join(served.layout.treeRoot, held.path);
@@ -35,8 +42,8 @@ layer(servingLayer, { excludeTestServices: true })('tree ledger', (it) => {
           yield* fs.writeFileString(path, written);
           yield* served.settled(true);
           expect((yield* blocks.rawBlockById(note.id)).body).toBe('as the act wrote it');
-          const a = yield* blocks.create({ projectId, tags: ['idea'], title: 'Linked Owner', body: 'owner' });
-          const shelf = yield* blocks.create({ projectId, tags: ['idea'], title: 'Linked Shelf', body: 'shelf' });
+          const a = yield* blocks.create({ projectId, parentId: root.id, tags: ['idea'], title: 'Linked Owner', body: 'owner' });
+          const shelf = yield* blocks.create({ projectId, parentId: root.id, tags: ['idea'], title: 'Linked Shelf', body: 'shelf' });
           const b = yield* blocks.create({ projectId, tags: ['idea'], title: 'Linked Peer', body: 'peer', parentId: shelf.id });
           const peer = yield* blocks.rawBlockById(b.id);
           if (peer.path === null) return yield* Effect.die('the projected peer has no path');

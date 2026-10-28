@@ -7,39 +7,62 @@ import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture
 
 layer(demoGraphLayer(), { excludeTestServices: true })('block pages', (it) => {
   it.effect('a block page names what its body points at in GLOBAL', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root: home }) =>
       Effect.gen(function* () {
         const global = yield* graph.projects.global();
-        const law = yield* graph.blocks.create({ projectId: (global as { id: number }).id, tags: ['rule'], title: 'the law' });
+        const globalRoot = yield* graph.blocks.rootBlockOf((global as { id: number }).id);
+        const law = yield* graph.blocks.create({
+          projectId: (global as { id: number }).id,
+          parentId: globalRoot.id,
+          tags: ['rule'],
+          title: 'the law',
+        });
         const name = yield* nameOf(law.id);
-        const doc = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'what we stand on', body: `We stand on [[${name}]].` });
+        const doc = yield* graph.blocks.create({
+          projectId,
+          parentId: home,
+          tags: ['idea'],
+          title: 'what we stand on',
+          body: `We stand on [[${name}]].`,
+        });
         expect((yield* graph.reading.show(doc.id, 0)).refsOut).toEqual([name]);
       }),
     ),
   );
 
   it.effect('a page never crosses a name two of its own blocks answer', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root: home }) =>
       Effect.gen(function* () {
         const global = yield* graph.projects.global();
         const named = Effect.fnUntraced(function* (uuid: string, owner: number, title: string) {
-          const { id } = yield* graph.blocks.create({ projectId: owner, tags: ['idea'], title });
+          const { id } = yield* graph.blocks.create({
+            projectId: owner,
+            parentId: (yield* graph.blocks.rootBlockOf(owner)).id,
+            tags: ['idea'],
+            title,
+          });
           yield* graph.graphStore.db.update(block).set({ uuid }).where(eq(block.id, id));
         });
         yield* named('00000000-0000-4000-8000-0001beeff00d', projectId, 'one of two');
         yield* named('00000000-0000-4000-8000-0002beeff00d', projectId, 'two of two');
         yield* named('00000000-0000-4000-8000-0003beeff00d', (global as { id: number }).id, 'the law');
-        const doc = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'points at a collision', body: 'see [[beeff00d]]' });
+        const doc = yield* graph.blocks.create({
+          projectId,
+          parentId: home,
+          tags: ['idea'],
+          title: 'points at a collision',
+          body: 'see [[beeff00d]]',
+        });
         expect((yield* graph.reading.show(doc.id, 0)).refsOut).toEqual([]);
       }),
     ),
   );
 
   it.effect('outline depth counts standing ancestors and keeps promoted siblings in outline order', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root: home }) =>
       Effect.gen(function* () {
         const create = (title: string, parentId?: number, tags?: string[]) =>
-          Effect.map(graph.blocks.create({ projectId, title, parentId, tags }), (row) => row.id);
+          Effect.map(graph.blocks.create({ projectId, title, parentId: parentId ?? home, tags }), (row) => row.id);
         const root = yield* create('root');
         const closed = yield* create('closed', root, ['idea']);
         const promoted = yield* create('promoted', closed);
@@ -67,9 +90,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('block pages', (it) => {
   );
 
   it.effect('block detail SQL count is independent of visible child count', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
-        const area = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'area' });
+        const area = yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'area' });
         const child = (title: string) => graph.blocks.create({ projectId, parentId: area.id, tags: ['idea'], title });
         yield* child('first');
         const sqlCount = Effect.fnUntraced(function* () {

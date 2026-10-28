@@ -72,7 +72,7 @@ const rigOf = Effect.fnUntraced(function* (demo: EffectDemo) {
     yield* gitEffect(demo.demoRoot, ['config', 'user.name', 'tagma']);
   });
   const enforced = Effect.fnUntraced(function* (title: string) {
-    const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title });
+    const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, parentId: demo.root, tags: ['rule'], title });
     return { rule, name: yield* demo.nameOf(rule.id) };
   });
   const enforce = Effect.fnUntraced(

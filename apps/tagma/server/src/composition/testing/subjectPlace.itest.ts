@@ -21,8 +21,9 @@ layer(doorFixture(), { excludeTestServices: true })('subject placement through t
       const caller = (created.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
       const grant = grantEnvironment(caller, testSessionIdentity)[GRANT_VARIABLE] as string;
       const raw = (id: string, input: unknown, query = '') => world.op(id, input, query, { [GRANT_HEADER]: grant });
-      const first = nameOf(yield* operator('create_block', { tags: ['idea'], title: 'First subject' }, target));
-      const second = nameOf(yield* operator('create_block', { tags: ['idea'], title: 'Second subject' }, target));
+      const parentId = ((yield* operator('list_root_blocks', {}, target)).body as { blocks: { name: string }[] }).blocks[0]!.name;
+      const first = nameOf(yield* operator('create_block', { tags: ['idea'], title: 'First subject', parentId }, target));
+      const second = nameOf(yield* operator('create_block', { tags: ['idea'], title: 'Second subject', parentId }, target));
 
       expect(yield* raw('update_block', { blockId: first, title: 'Changed in target' })).toMatchObject({
         status: 409,

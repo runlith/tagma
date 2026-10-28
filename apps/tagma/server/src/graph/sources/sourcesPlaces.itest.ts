@@ -7,12 +7,12 @@ import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture
 
 layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices: true })('source places', (it) => {
   it.effect('the sources at a place answer with each one’s block and area, and the standing owners of the file', () =>
-    withDemo(({ graph, projectId, demoRoot }) =>
+    withDemo(({ graph, projectId, demoRoot, root }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         yield* fs.makeDirectory(join(demoRoot, 'src'), { recursive: true });
         yield* fs.writeFileString(join(demoRoot, 'src', 'reader.ts'), 'export function read() {}\n');
-        const area = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'engine' });
+        const area = yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'engine' });
         const doc = yield* graph.blocks.create({
           projectId,
           tags: ['idea'],
@@ -22,6 +22,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
         });
         const rootDoc = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['idea'],
           title: 'the file',
           sources: [{ kind: 'file', ref: 'src/reader.ts' }],
@@ -32,6 +33,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
         yield* graph.tasks.finish({ id: done.id });
         const trashed = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['idea'],
           title: 'gone',
           sources: [{ kind: 'file', ref: 'src/reader.ts' }],
@@ -57,13 +59,13 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
   );
 
   it.effect('a directory move re-points every source under it', () =>
-    withDemo(({ graph, projectId, demoRoot }) =>
+    withDemo(({ graph, projectId, demoRoot, root }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         yield* fs.makeDirectory(join(demoRoot, 'old', 'src'), { recursive: true });
         yield* fs.writeFileString(join(demoRoot, 'old', 'src', 'core.ts'), 'export const core = 1;\n');
-        const doc = yield* graph.blocks.create({ projectId, title: 'the core' });
-        const area = yield* graph.blocks.create({ projectId, title: 'the zone' });
+        const doc = yield* graph.blocks.create({ projectId, parentId: root, title: 'the core' });
+        const area = yield* graph.blocks.create({ projectId, parentId: root, title: 'the zone' });
         yield* graph.sources.attach({ blockId: doc.id, kind: 'symbol', ref: 'old/src/core.ts', symbol: 'core' });
         yield* graph.sources.attach({ blockId: area.id, kind: 'dir', ref: 'old' });
         yield* fs.rename(join(demoRoot, 'old'), join(demoRoot, 'new'));
@@ -75,11 +77,11 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
   );
 
   it.effect('a symbol is renamed where it stands, and a place nothing watches refuses', () =>
-    withDemo(({ graph, projectId, demoRoot, refusal }) =>
+    withDemo(({ graph, projectId, demoRoot, refusal, root }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         yield* fs.writeFileString(join(demoRoot, 'events.ts'), 'export type Old = { readonly a: 1 };\n');
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'the event' });
+        const { id } = yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'the event' });
         yield* graph.sources.attach({ blockId: id, kind: 'symbol', ref: 'events.ts', symbol: 'Old' });
         yield* fs.writeFileString(join(demoRoot, 'events.ts'), 'export type New = { readonly a: 1 };\n');
         yield* graph.sources.relocate({ projectId, from: 'events.ts#Old', to: 'events.ts#New' });

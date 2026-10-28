@@ -5,8 +5,8 @@ import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { demoGraphLayer, type EffectDemo, withDemo } from '../../composition/testing/graphFixture.js';
 
-const lens = ({ graph, projectId }: EffectDemo) => {
-  const spec = (title: string) => Effect.map(graph.blocks.create({ projectId, tags: ['spec'], title }), (row) => row.id);
+const lens = ({ graph, projectId, root }: EffectDemo) => {
+  const spec = (title: string) => Effect.map(graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title }), (row) => row.id);
   const chain = Effect.gen(function* () {
     const first = yield* spec('v1');
     const second = yield* spec('v2');
@@ -39,18 +39,25 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
   );
 
   it.effect('supersede answers with the sentences written against the retired block', () =>
-    withLens(({ graph, projectId, spec, nameOf }) =>
+    withLens(({ graph, projectId, spec, nameOf, root }) =>
       Effect.gen(function* () {
         const oldSpec = yield* spec('v1');
         const newSpec = yield* spec('v2');
         const oldName = yield* nameOf(oldSpec);
         const pointer = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['idea'],
           title: 'built on the decision',
           body: `as decided in [[${oldName}]]`,
         });
-        const trashed = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'also pointed', body: `and [[${oldName}]]` });
+        const trashed = yield* graph.blocks.create({
+          projectId,
+          parentId: root,
+          tags: ['idea'],
+          title: 'also pointed',
+          body: `and [[${oldName}]]`,
+        });
         yield* graph.trash.delete({ id: trashed.id });
         const answer = yield* graph.standing.supersede({ oldId: oldSpec, withId: newSpec });
         expect(answer.refsIn).toEqual([yield* nameOf(pointer.id)]);

@@ -7,8 +7,10 @@ import { GraphTools, graphToolsFixture } from './graphTools.fixture.js';
 layer(graphToolsFixture, { excludeTestServices: true })('native rule operations', (it) => {
   it.effect('code delivery without sources warns its caller while keeping the whole-project gate', () =>
     Effect.gen(function* () {
-      const { graph, call, answer } = yield* GraphTools;
-      const created = (yield* call('create_block', { tags: ['rule'], title: 'Preserve project data' })) as { block: { name: string } };
+      const { graph, call, answer, rootName } = yield* GraphTools;
+      const created = (yield* call('create_block', { parentId: yield* rootName(), tags: ['rule'], title: 'Preserve project data' })) as {
+        block: { name: string };
+      };
       const name = created.block.name;
       const id = yield* graph.blockNames.idOfName(name);
       const document = {
@@ -39,8 +41,10 @@ layer(graphToolsFixture, { excludeTestServices: true })('native rule operations'
 
   it.effect('law fields follow their declared operations, including fields with project-defined names', () =>
     Effect.gen(function* () {
-      const { call, nativeCall } = yield* GraphTools;
+      const { call, nativeCall, rootName } = yield* GraphTools;
+      const parentId = yield* rootName();
       yield* call('create_block', {
+        parentId,
         tags: ['tag'],
         title: 'Project norm',
         fields: {
@@ -49,7 +53,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native rule operations'
           contracts: { 'core/law': { slots: { enabled: 'live', delivery: 'route' }, words: {} } },
         },
       });
-      const created = (yield* call('create_block', { tags: ['norm'], title: 'Keep records' })) as { block: { name: string } };
+      const created = (yield* call('create_block', { parentId, tags: ['norm'], title: 'Keep records' })) as { block: { name: string } };
       const blockId = created.block.name;
       expect(yield* call('set_rule_enabled', { blockId, enabled: false })).toMatchObject({
         status: 'ok',

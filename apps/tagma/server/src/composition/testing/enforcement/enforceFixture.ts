@@ -67,7 +67,9 @@ const makeFixture = Effect.fnUntraced(function* (demo: EffectDemo, workers: Retu
     planned: (input: Unbased) => working(Effect.flatMap(based(input), (full) => prepare(bodies.enforce_rule, full, operator))),
     written: (input: Unbased): InputOf<typeof ENFORCEMENT_OPERATIONS.enforce_rule> => ({ ...input, base: null }),
     created: Effect.fnUntraced(function* (tags: string[], title: string, extra: object = {}) {
-      return yield* demo.nameOf((yield* demo.graph.blocks.create({ projectId: demo.projectId, tags, title, ...extra })).id);
+      return yield* demo.nameOf(
+        (yield* demo.graph.blocks.create({ projectId: demo.projectId, parentId: demo.root, tags, title, ...extra })).id,
+      );
     }),
     documentOf: Effect.fnUntraced(function* (name: string) {
       const id = yield* demo.graph.blockNames.idOfName(name);

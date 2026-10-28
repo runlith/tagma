@@ -127,7 +127,12 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
     Effect.gen(function* () {
       const { demo, graph, call } = yield* CrossingFixture;
       const other = yield* graph.projectLifecycle.create({ name: 'сосед', rootPath: yield* tempRootEffect(demo.fixture, 'tagma-other-') });
-      const block = yield* graph.blocks.create({ projectId: other.id, tags: ['task'], title: 'чужая' });
+      const block = yield* graph.blocks.create({
+        projectId: other.id,
+        parentId: (yield* graph.blocks.rootBlockOf(other.id)).id,
+        tags: ['task'],
+        title: 'чужая',
+      });
       const read = yield* call('read_block', { blockIds: [yield* demo.nameOf(block.id)] });
       expect(read.status).toBe('ok');
       expect(yield* call('delete_block', { blockId: yield* demo.nameOf(block.id) })).toMatchObject({ status: 'ok' });
@@ -139,13 +144,16 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
     Effect.gen(function* () {
       const { foreign, graph, ctx, across, answerWith, refusedWith } = yield* CrossingFixture;
       const other = (yield* foreign.graph.projects.global())!;
-      const source = yield* graph.blocks.create({ projectId: ctx.projectId, title: 'Local batch note' });
+      const localRoot = yield* graph.blocks.rootBlockOf(ctx.projectId);
+      const root = yield* foreign.graph.blocks.rootBlockOf(other.id);
+      const source = yield* graph.blocks.create({ projectId: ctx.projectId, parentId: localRoot.id, title: 'Local batch note' });
       yield* graph.blocks.create({
         projectId: ctx.projectId,
+        parentId: localRoot.id,
         title: 'Same short name',
         uuid: (source.uuid[0] === '0' ? '1' : '0') + source.uuid.slice(1),
       });
-      const target = yield* foreign.graph.blocks.create({ projectId: other.id, title: 'Foreign batch note' });
+      const target = yield* foreign.graph.blocks.create({ projectId: other.id, parentId: root.id, title: 'Foreign batch note' });
       const fromId = source.uuid.replaceAll('-', '');
       const toId = `${other.id}/${yield* foreign.nameOf(target.id)}`;
       const seamed = across(ctx, other.id);
@@ -155,7 +163,6 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
           ops: [{ op: 'link', fromId, kind: 'relates', toId }],
         }),
       ).toMatchObject({ status: 'ok' });
-      const root = yield* foreign.graph.blocks.rootBlockOf(other.id);
       expect((yield* graph.edges.farOf(ctx.projectId)).filter((row) => row.fromId === source.id)).toMatchObject([
         { kind: 'relates', graph: root.uuid, uuid: target.uuid },
       ]);
@@ -257,12 +264,24 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
     Effect.gen(function* () {
       const { demo, graph, call } = yield* CrossingFixture;
       const globalId = (yield* graph.projects.global())?.id ?? 0;
-      const law = yield* graph.blocks.create({ projectId: globalId, tags: ['rule'], title: 'Cross law', body: 'It binds everywhere.' });
+      const law = yield* graph.blocks.create({
+        projectId: globalId,
+        parentId: (yield* graph.blocks.rootBlockOf(globalId)).id,
+        tags: ['rule'],
+        title: 'Cross law',
+        body: 'It binds everywhere.',
+      });
       const name = yield* demo.nameOf(law.id);
       expect((yield* call('read_block', { blockIds: [name] })).status).toBe('ok');
       expect((yield* call('edit_block', { blockId: name, oldString: 'everywhere', newString: 'in every project' })).status).toBe('ok');
       const other = yield* graph.projectLifecycle.create({ name: 'other', rootPath: yield* tempRootEffect(demo.fixture, 'tagma-other-') });
-      const theirs = yield* graph.blocks.create({ projectId: other.id, tags: ['idea'], title: 'theirs', body: 'x' });
+      const theirs = yield* graph.blocks.create({
+        projectId: other.id,
+        parentId: (yield* graph.blocks.rootBlockOf(other.id)).id,
+        tags: ['idea'],
+        title: 'theirs',
+        body: 'x',
+      });
       expect((yield* call('read_block', { blockIds: [yield* demo.nameOf(theirs.id)] })).status).toBe('ok');
     }),
   );
@@ -274,6 +293,7 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
       const globalRoot = yield* foreign.graph.blocks.rootBlockOf(globalId);
       const law = yield* foreign.graph.blocks.create({
         projectId: globalId,
+        parentId: globalRoot.id,
         tags: ['rule'],
         title: 'Far law',
         body: 'It binds from another store.',
@@ -296,7 +316,7 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
       expect((yield* Effect.result(graph.blockNames.idOfName(born.block.name)))._tag).toBe('Failure');
       const applied = yield* answerWith(seamed, 'apply_batch', {
         project: 'global',
-        ops: [{ op: 'create', $id: 'far-doc', tags: ['idea'], title: 'Far document' }],
+        ops: [{ op: 'create', $id: 'far-doc', parentId: yield* foreign.nameOf(globalRoot.id), tags: ['idea'], title: 'Far document' }],
       });
       expect(applied).toMatchObject({ status: 'ok' });
       const batchName = (applied.overview as string).match(/\$far-doc → ([0-9a-f]+)/)?.[1];
@@ -322,7 +342,12 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
         const { demo, foreign, graph, ctx, across, answerWith, refusedWith } = yield* CrossingFixture;
         const global = yield* foreign.graph.projects.global();
         if (global === undefined) return yield* Effect.die('The fixture has no global graph.');
-        const born = yield* foreign.graph.blocks.create({ projectId: global.id, tags: ['idea'], title: 'Reachable foreign block' });
+        const born = yield* foreign.graph.blocks.create({
+          projectId: global.id,
+          parentId: (yield* foreign.graph.blocks.rootBlockOf(global.id)).id,
+          tags: ['idea'],
+          title: 'Reachable foreign block',
+        });
         const name = yield* foreign.nameOf(born.id);
         const broken = yield* graph.projectLifecycle.create({
           name: `unreachable-${code}`,
@@ -381,7 +406,13 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
       expect(zone.status).toBe('ok');
       expect(zone.page).toContain('It was written from another project.');
       expect(yield* refusedWith(seamed, 'claim_block', { blockId: 'ffffffff' })).toMatchObject({ code: 'not-found' });
-      const mine = yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['idea'], title: 'mine', body: 'Here.' });
+      const mine = yield* graph.blocks.create({
+        projectId: ctx.projectId,
+        parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
+        tags: ['idea'],
+        title: 'mine',
+        body: 'Here.',
+      });
       const trap: GraphToolContext = {
         ...ctx,
         graph: Context.add(ctx.graph, OtherGraphs(), () => Effect.die('the ladder was walked on a local hit')),
@@ -399,11 +430,22 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
       const { demo, foreign, graph, ctx, graphCatalog, across, answerWith, refusedWith } = yield* CrossingFixture;
       const global = yield* foreign.graph.projects.global();
       if (global === undefined) return yield* Effect.die('the fixture has no GLOBAL project');
-      const replacement = yield* foreign.graph.blocks.create({ projectId: global.id, tags: ['rule'], title: 'Standing law' });
+      const globalRoot = yield* foreign.graph.blocks.rootBlockOf(global.id);
+      const replacement = yield* foreign.graph.blocks.create({
+        projectId: global.id,
+        parentId: globalRoot.id,
+        tags: ['rule'],
+        title: 'Standing law',
+      });
       const context = across(ctx, global.id);
       const tool = (yield* graphCatalog(context)).supersede_block!;
       for (const mode of ['bypass', 'trust', 'review'] as const) {
-        const old = yield* foreign.graph.blocks.create({ projectId: global.id, tags: ['rule'], title: `Retiring law ${mode}` });
+        const old = yield* foreign.graph.blocks.create({
+          projectId: global.id,
+          parentId: globalRoot.id,
+          tags: ['rule'],
+          title: `Retiring law ${mode}`,
+        });
         const input = { oldId: yield* foreign.nameOf(old.id), withId: yield* foreign.nameOf(replacement.id) };
         yield* Effect.acquireUseRelease(
           Effect.sync(() => openToolDoor(mode, unthreadedCaller, {}, new ToolJudge(builtinMode(mode)))),
@@ -426,7 +468,8 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
           (door) => door.close(),
         );
       }
-      const local = yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['rule'], title: 'Local law' });
+      const localRoot = yield* graph.blocks.rootBlockOf(ctx.projectId);
+      const local = yield* graph.blocks.create({ projectId: ctx.projectId, parentId: localRoot.id, tags: ['rule'], title: 'Local law' });
       expect(
         yield* refusedWith(context, 'supersede_block', {
           oldId: yield* demo.nameOf(local.id),
@@ -459,8 +502,10 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
       const globalId = (yield* foreign.graph.projects.global())?.id ?? 0;
       const seamed = across(ctx, globalId);
       const home = yield* demo.nameOf((yield* graph.blocks.rootBlockOf(ctx.projectId)).id);
+      const globalRoot = yield* foreign.graph.blocks.rootBlockOf(globalId);
       const law = yield* foreign.graph.blocks.create({
         projectId: globalId,
+        parentId: globalRoot.id,
         tags: ['rule'],
         title: 'Misplaced law',
         body: 'It binds one project.',
@@ -489,7 +534,12 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
       expect((yield* Effect.result(foreign.graph.blockNames.idOfName(name)))._tag).toBe('Failure');
       expect((yield* Effect.result(foreign.graph.blockNames.idOfName(child)))._tag).toBe('Failure');
 
-      const patched = yield* foreign.graph.blocks.create({ projectId: globalId, tags: ['idea'], title: 'Patched' });
+      const patched = yield* foreign.graph.blocks.create({
+        projectId: globalId,
+        parentId: globalRoot.id,
+        tags: ['idea'],
+        title: 'Patched',
+      });
       const patchedName = yield* foreign.nameOf(patched.id);
       expect(yield* answerWith(seamed, 'update_block', { blockId: patchedName, parentId: home, fields: { unknown: 1 } })).toMatchObject({
         status: 'refused',
@@ -508,7 +558,7 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
       const target = yield* graph.blocks.rootBlockOf(ctx.projectId);
       const home = yield* demo.nameOf(target.id);
       const stopped = Effect.fnUntraced(function* (title: string) {
-        const row = yield* foreign.graph.blocks.create({ projectId: globalId, tags: ['idea'], title });
+        const row = yield* foreign.graph.blocks.create({ projectId: globalId, parentId: globalRoot.id, tags: ['idea'], title });
         yield* graph.blocks.arrive({
           projectId: ctx.projectId,
           parentId: target.id,
@@ -566,7 +616,8 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
         name: 'move-source',
         rootPath: yield* tempRootEffect(demo.fixture, 'tagma-source-'),
       });
-      const spec = yield* graph.blocks.create({ projectId: source.id, tags: ['spec'], title: 'Moving spec' });
+      const left = yield* graph.blocks.rootBlockOf(source.id);
+      const spec = yield* graph.blocks.create({ projectId: source.id, parentId: left.id, tags: ['spec'], title: 'Moving spec' });
       const working = yield* graph.blocks.create({
         projectId: source.id,
         tags: ['task'],
@@ -584,6 +635,7 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
       });
       const staying = yield* graph.blocks.create({
         projectId: source.id,
+        parentId: left.id,
         tags: ['task'],
         title: 'Staying task',
         edges: [{ kind: 'waits-on', to: working.id }],
@@ -599,7 +651,6 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
         law: yield* demo.nameOf(law.id),
       };
       const target = yield* graph.blocks.rootBlockOf(ctx.projectId);
-      const left = yield* graph.blocks.rootBlockOf(source.id);
       expect(yield* call('update_block', { blockId: names.spec, parentId: yield* demo.nameOf(target.id) })).toMatchObject({
         status: 'ok',
         block: { name: names.spec },
@@ -641,15 +692,22 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
           name: 'move-refused',
           rootPath: yield* tempRootEffect(demo.fixture, 'tagma-refused-'),
         });
+        const sourceRoot = yield* graph.blocks.rootBlockOf(source.id);
         yield* graph.blocks.create({
           projectId: source.id,
+          parentId: sourceRoot.id,
           tags: ['tag'],
           title: '#errand',
           body: 'A small piece of work.',
           fields: { id: 'errand' },
         });
         yield* graph.tags.forget(source.id);
-        const parent = yield* graph.blocks.create({ projectId: source.id, tags: ['idea'], title: 'Holds an errand' });
+        const parent = yield* graph.blocks.create({
+          projectId: source.id,
+          parentId: sourceRoot.id,
+          tags: ['idea'],
+          title: 'Holds an errand',
+        });
         yield* graph.blocks.create({ projectId: source.id, tags: ['errand'], title: 'The errand', parentId: parent.id });
         const home = yield* demo.nameOf((yield* graph.blocks.rootBlockOf(ctx.projectId)).id);
         const parentName = yield* demo.nameOf(parent.id);
@@ -659,8 +717,8 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
         });
         expect(yield* graph.blocks.blockById(parent.id)).toMatchObject({ projectId: source.id, deletedAt: null });
 
-        const owner = yield* graph.blocks.create({ projectId: source.id, tags: ['task'], title: 'Owns the debt' });
-        const rule = yield* graph.blocks.create({ projectId: source.id, tags: ['rule'], title: 'Owes debt' });
+        const owner = yield* graph.blocks.create({ projectId: source.id, parentId: sourceRoot.id, tags: ['task'], title: 'Owns the debt' });
+        const rule = yield* graph.blocks.create({ projectId: source.id, parentId: sourceRoot.id, tags: ['rule'], title: 'Owes debt' });
         yield* graph.blocks.setEnforcement({
           id: rule.id,
           anchors: [],
@@ -692,20 +750,26 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
         body: 'A reviewed ticket.',
         fields: { id: 'ticket', fields: { reviewer: 'session' } },
       };
-      yield* foreign.graph.blocks.create({ projectId: globalId, ...ticket });
+      const globalRoot = yield* foreign.graph.blocks.rootBlockOf(globalId);
+      const localRoot = yield* graph.blocks.rootBlockOf(ctx.projectId);
+      yield* foreign.graph.blocks.create({ projectId: globalId, parentId: globalRoot.id, ...ticket });
       yield* foreign.graph.tags.forget(globalId);
-      yield* graph.blocks.create({ projectId: ctx.projectId, ...ticket });
+      yield* graph.blocks.create({ projectId: ctx.projectId, parentId: localRoot.id, ...ticket });
       yield* graph.tags.forget(ctx.projectId);
-      yield* foreign.as('reviewer', foreign.graph.blocks.create({ projectId: globalId, title: 'Signed by the reviewer' }));
+      yield* foreign.as(
+        'reviewer',
+        foreign.graph.blocks.create({ projectId: globalId, parentId: globalRoot.id, title: 'Signed by the reviewer' }),
+      );
       const reviewer = yield* foreign.graph.sessions.idOf({ harness: 'test', key: 'reviewer' });
       const reviewed = yield* foreign.graph.blocks.create({
         projectId: globalId,
+        parentId: globalRoot.id,
         tags: ['ticket'],
         title: 'Reviewed',
         fields: { reviewer },
       });
       const name = yield* foreign.nameOf(reviewed.id);
-      const home = yield* demo.nameOf((yield* graph.blocks.rootBlockOf(ctx.projectId)).id);
+      const home = yield* demo.nameOf(localRoot.id);
       expect(yield* answerWith(across(ctx, globalId), 'update_block', { blockId: name, parentId: home })).toMatchObject({ status: 'ok' });
       const moved = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(name));
       expect(yield* graph.sessions.writerOf(moved.fields['reviewer'] as number)).toMatchObject({ harness: 'test', key: 'reviewer' });
@@ -720,7 +784,8 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
         rootPath: yield* tempRootEffect(demo.fixture, 'tagma-beta-'),
       });
       const title = 'Selector destination';
-      const created = yield* call('create_block', { project: beta.name, tags: ['idea'], title });
+      const betaRoot = yield* demo.nameOf((yield* graph.blocks.rootBlockOf(beta.id)).id);
+      const created = yield* call('create_block', { project: beta.name, parentId: betaRoot, tags: ['idea'], title });
       expect(created.status).toBe('ok');
       const name = (created.block as { name: string }).name;
       const row = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(name));
@@ -749,7 +814,8 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
       const { demo, graph, ctx, call, refusedWith } = yield* CrossingFixture;
       const home = yield* graph.sourceProject.project();
       if (home === undefined) return yield* Effect.die('the fixture source has no project');
-      const created = yield* call('create_block', { project: 'tagma', tags: ['idea'], title: 'Source graph' });
+      const homeRoot = yield* demo.nameOf((yield* graph.blocks.rootBlockOf(home.id)).id);
+      const created = yield* call('create_block', { project: 'tagma', parentId: homeRoot, tags: ['idea'], title: 'Source graph' });
       expect(created.status).toBe('ok');
       const name = (created.block as { name: string }).name;
       expect(yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(name))).toMatchObject({ projectId: home.id });
@@ -757,10 +823,18 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
         name: 'tagma',
         rootPath: yield* tempRootEffect(demo.fixture, 'tagma-alias-'),
       });
-      expect(yield* refusedWith(ctx, 'create_block', { project: 'tagma', tags: ['idea'], title: 'Ambiguous source' })).toMatchObject({
+      expect(
+        yield* refusedWith(ctx, 'create_block', { project: 'tagma', parentId: homeRoot, tags: ['idea'], title: 'Ambiguous source' }),
+      ).toMatchObject({
         code: 'ambiguous-project',
       });
-      const explicit = yield* call('create_block', { project: collision.id, tags: ['idea'], title: 'Chosen by id' });
+      const collisionRoot = yield* demo.nameOf((yield* graph.blocks.rootBlockOf(collision.id)).id);
+      const explicit = yield* call('create_block', {
+        project: collision.id,
+        parentId: collisionRoot,
+        tags: ['idea'],
+        title: 'Chosen by id',
+      });
       expect(explicit.status).toBe('ok');
       expect(yield* graph.blocks.blockById(yield* graph.blockNames.idOfName((explicit.block as { name: string }).name))).toMatchObject({
         projectId: collision.id,

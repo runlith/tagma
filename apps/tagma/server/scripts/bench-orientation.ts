@@ -57,7 +57,7 @@ try {
   console.log(JSON.stringify({ rules: 156, samples: 15, workers: 1, fixture: 'isolated SQLite reader pool; no running server' }));
   await sample('instructions', () => graph.orientation.instructions({ projectId, audience: 'graph' }));
   await sample('touch', () => graph.touches.touch({ projectId, shown: [{ path: 'src/sample.ts', as: 'read' }] }));
-  const note = await run(graph.blocks.create({ projectId, title: 'Unrelated note' }));
+  const note = await run(graph.blocks.create({ projectId, parentId: parent, title: 'Unrelated note' }));
   await run(graph.blocks.update({ id: note.id, body: 'Ordinary graph write.' }));
   await sample('instructions after unrelated write', () => graph.orientation.instructions({ projectId, audience: 'graph' }));
   await run(graph.projectPolicy.set({ ref: String(projectId), settings: { strictProvenance: true } }));

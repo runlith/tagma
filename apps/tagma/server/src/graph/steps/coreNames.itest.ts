@@ -10,9 +10,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('core names', (it) => {
   it.effect('installed types, custom inheritance, saved selections and creation defaults survive the namespace move once', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
+        const rootName = yield* demo.nameOf(root);
         const reflection = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           contract: 'core/reflection',
           title: 'Lode lode/law',
           body: 'Lode lode/law is user prose.',
@@ -20,18 +22,21 @@ layer(demoGraphLayer(), { excludeTestServices: true })('core names', (it) => {
         });
         const custom = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['tag'],
           title: 'custom observation',
           fields: { id: 'sighting', extends: 'shipped:core/reflection', fields: { contract: 'string' } },
         });
         const sighting = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['sighting'],
           title: 'custom observation',
           fields: { contract: 'lode/example', command: 'read', expected: 'an answer', actual: 'a refusal' },
         });
         const saved = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           contract: 'core/selection',
           title: 'saved observations',
           fields: {
@@ -46,12 +51,13 @@ layer(demoGraphLayer(), { excludeTestServices: true })('core names', (it) => {
         const proposal = yield* graph.blocks.create({
           projectId,
           contract: 'core/amendment',
-          amendsId: (yield* graph.blocks.rootBlockOf(projectId)).id,
+          amendsId: root,
           title: 'deferred creation',
           fields: {
             ops: [
               {
                 op: 'create',
+                parentId: rootName,
                 contract: 'core/selection',
                 title: 'shipped:lode/view',
                 body: 'lode/law',
@@ -102,6 +108,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('core names', (it) => {
         expect((yield* graph.blocks.blockById(proposal.id)).fields.ops).toEqual([
           {
             op: 'create',
+            parentId: rootName,
             contract: 'core/selection',
             title: 'shipped:lode/view',
             body: 'lode/law',
@@ -128,6 +135,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('core names', (it) => {
         expect(
           (yield* graph.blocks.create({
             projectId,
+            parentId: root,
             contract: 'core/selection',
             title: 'another saved selection',
             fields: { query: { tags: ['shipped:core/reflection'], sort: { by: 'created', order: 'asc' } } },

@@ -90,9 +90,12 @@ const setup = Effect.gen(function* () {
 });
 class Place extends Context.Service<Place, Effect.Success<typeof setup>>()('testing/WorktreeGraph') {}
 
-const named = Effect.fnUntraced(function* (input: unknown, cwd?: string) {
+const named = Effect.fnUntraced(function* (input: Record<string, unknown>, cwd?: string) {
   const { world, project } = yield* Place;
-  const written = yield* world.op('create_block', input, `project=${project}${cwd === undefined ? '' : `&cwd=${encodeURIComponent(cwd)}`}`);
+  const query = `project=${project}${cwd === undefined ? '' : `&cwd=${encodeURIComponent(cwd)}`}`;
+  const roots = yield* world.op('list_root_blocks', {}, query);
+  const parentId = (roots.body as { blocks: { name: string }[] }).blocks[0]!.name;
+  const written = yield* world.op('create_block', { parentId, ...input }, query);
   if (written.status !== 200) return yield* Effect.die(new Error(`the block was not written: ${JSON.stringify(written.body)}`));
   expect(written.body).toMatchObject({ graphCopy: { projectId: project, branch: cwd === undefined ? null : 'placed' } });
   return (written.body as { block: { name: string } }).block.name;

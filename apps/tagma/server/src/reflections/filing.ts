@@ -10,6 +10,7 @@ import { GraphSource, SourceProject, type SourceRefusal } from '../graph/contrac
 import { Projects } from '../projects/contract/service/registry.js';
 import { GraphScopes } from '../graph/contract/service/serving.js';
 import { type BlockCreateRefusal, Blocks } from '../graph/contract/service/blocks.js';
+import { OperationOwners } from '../platform/contract/service/operationOwners.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { REFLECTION, reflectionOf } from '../graph/contract/wire/tags/reflection.js';
 import { Tags } from '../graph/contract/service/vocabulary.js';
@@ -29,6 +30,7 @@ export type FiledReflection = {
   readonly written: BlockWrite;
   readonly already: readonly ReflectionEcho[];
   readonly receivedBy: ProcessProvenance | null;
+  readonly unplaced: string | null;
 };
 
 const receivedBy = Effect.fn('Reflection.receivedBy')(function* () {
@@ -183,6 +185,19 @@ const where = Effect.fn('Reflection.where')(function* (projectRef: string | unde
   return scope === undefined ? `project \`${project.name}\`` : `project \`${project.name}\`, scope ${blockName(scope.uuid)} ${scope.title}`;
 });
 
+const declaring = Effect.fn('Reflection.declaring')(function* (at: BlockRow, command: string) {
+  const owners = yield* OperationOwners;
+  for (const word of command.match(/[a-z][a-z0-9_-]*/g) ?? []) {
+    const operation = word.replace(/^mcp__[a-z0-9-]+__/, '');
+    const module = owners.of(operation);
+    if (module === null) continue;
+    const card = (yield* (yield* Blocks).moduleCards(at.projectId)).find((one) => one.id === module);
+    if (card === undefined) return { at, unplaced: `${operation} is declared by module \`${module}\`, which has no #module card here` };
+    return { at: yield* (yield* BlockRows).blockById(card.block), unplaced: null };
+  }
+  return { at, unplaced: 'the command names no operation or tool of Tagma' };
+});
+
 export const fileReflection = Effect.fn('Reflection.file')(function* (input: Filing) {
   const at = yield* home();
   const received = yield* receivedBy();
@@ -193,15 +208,21 @@ export const fileReflection = Effect.fn('Reflection.file')(function* (input: Fil
       ...(yield* onto(at, input.ontoId, input.title, place, facts, input.body)),
       already: [],
       receivedBy: received,
+      unplaced: null,
     } satisfies FiledReflection;
   }
   const standing = yield* already(at, `${input.title} ${input.command}`);
-  const entry = yield* fileAt(at, input.title, place, facts, input.body);
+  const placed = yield* declaring(at, input.command);
+  const entry = yield* fileAt(placed.at, input.title, place, facts, input.body);
   return {
     entry: { ...entry, sightings: 1 },
     written: entry,
     already: standing,
     receivedBy: received,
+    unplaced:
+      placed.unplaced === null
+        ? null
+        : `${placed.unplaced}, so it stands under ${blockName(at.uuid)} ${at.title}: move it under the owner of the code it is about`,
   } satisfies FiledReflection;
 });
 

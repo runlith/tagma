@@ -39,7 +39,9 @@ layer(terminalFixture, { excludeTestServices: true })('project selection', (it) 
       const projectId = (JSON.parse(registered.out) as { project: { id: number } }).project.id;
       const names: string[] = [];
       for (const project of ['branching', String(projectId)]) {
-        const born = yield* op(branch, 'create_block', { title: 'branch-local', tags: ['idea'] }, project);
+        const roots = yield* op(branch, 'list_root_blocks', {}, project);
+        const parentId = (JSON.parse(roots.out) as { blocks: { name: string }[] }).blocks[0]!.name;
+        const born = yield* op(branch, 'create_block', { title: 'branch-local', tags: ['idea'], parentId }, project);
         expect(born.code, born.out).toBe(0);
         names.push((JSON.parse(born.out) as { block: { name: string } }).block.name);
       }
@@ -50,7 +52,9 @@ layer(terminalFixture, { excludeTestServices: true })('project selection', (it) 
       expect(main.code, main.out).toBe(0);
       expect(JSON.parse(main.out)).toMatchObject({ blocks: [] });
       const other = yield* world.checkout();
-      const foreign = yield* op(branch, 'create_block', { title: 'explicit-destination', tags: ['idea'] }, other.name);
+      const otherRoots = yield* op(branch, 'list_root_blocks', {}, other.name);
+      const otherRoot = (JSON.parse(otherRoots.out) as { blocks: { name: string }[] }).blocks[0]!.name;
+      const foreign = yield* op(branch, 'create_block', { title: 'explicit-destination', tags: ['idea'], parentId: otherRoot }, other.name);
       expect(foreign.code, foreign.out).toBe(0);
       const named = yield* op(other.root, 'search_blocks', { query: 'explicit-destination' });
       expect(named.code, named.out).toBe(0);

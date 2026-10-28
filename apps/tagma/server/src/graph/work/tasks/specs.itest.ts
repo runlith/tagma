@@ -5,11 +5,12 @@ import { demoGraphLayer, withDemo } from '../../../composition/testing/graphFixt
 
 layer(demoGraphLayer(), { excludeTestServices: true })('a spec is edited in place', (it) => {
   it.effect('a body rewritten while its work is in flight stays the same open spec', () =>
-    withDemo(({ graph, projectId, table }) =>
+    withDemo(({ graph, projectId, table, root }) =>
       Effect.gen(function* () {
-        const spec = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'spec' });
+        const spec = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'spec' });
         const work = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['task'],
           title: 'build',
           edges: [{ kind: 'implements', to: spec.id }],
@@ -24,9 +25,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('a spec is edited in plac
   );
 
   it.effect('close_block closes a spec whose child specs nobody checked', () =>
-    withDemo(({ graph, projectId, table }) =>
+    withDemo(({ graph, projectId, table, root }) =>
       Effect.gen(function* () {
-        const spec = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'spec' });
+        const spec = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'spec' });
         yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'unchecked part', parentId: spec.id });
         yield* graph.tasks.close({ id: spec.id, reason: 'done elsewhere' });
         expect((yield* table()).statusOf(yield* graph.reading.show(spec.id, 0))).toBe('closed');

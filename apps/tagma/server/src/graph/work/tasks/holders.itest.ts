@@ -18,7 +18,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('task holders', (it) => {
   it.effect(
     'work of a child that stopped or a thread that is gone is held by nobody, stands idle, and leaves the orientation; a working child and a rested root keep theirs',
     () =>
-      withDemo(({ graph, context, projectId, as, nameOf }) =>
+      withDemo(({ graph, context, projectId, as, nameOf, root }) =>
         Effect.gen(function* () {
           yield* Effect.acquireRelease(
             Effect.sync(() =>
@@ -30,7 +30,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('task holders', (it) => {
           );
           const names = new Map<string, string>();
           for (const key of STATES.keys()) {
-            const { id } = yield* graph.blocks.create({ projectId, tags: ['task'], title: `held by ${key}` });
+            const { id } = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: `held by ${key}` });
             yield* signedBy({ harness: NATIVE_HARNESS, key })(graph.tasks.claim({ id }));
             names.set(key, yield* nameOf(id));
           }
@@ -66,14 +66,16 @@ layer(demoGraphLayer(), { excludeTestServices: true })('task holders', (it) => {
   );
 
   it.effect('a holder that stopped hands what it holds to the session named, or back to open, and names the open work it filed', () =>
-    withDemo(({ graph, projectId, nameOf, table }) =>
+    withDemo(({ graph, projectId, nameOf, table, root: home }) =>
       Effect.gen(function* () {
         const tags = yield* table();
         const child = { harness: NATIVE_HARNESS, key: 'stopped-child' };
         const parent = { harness: NATIVE_HARNESS, key: 'its-parent' };
-        const held = yield* signedBy(child)(graph.blocks.create({ projectId, tags: ['task'], title: 'held by the child' }));
+        const held = yield* signedBy(child)(graph.blocks.create({ projectId, parentId: home, tags: ['task'], title: 'held by the child' }));
         yield* signedBy(child)(graph.tasks.claim({ id: held.id }));
-        const filed = yield* signedBy(child)(graph.blocks.create({ projectId, tags: ['task'], title: 'filed by the child' }));
+        const filed = yield* signedBy(child)(
+          graph.blocks.create({ projectId, parentId: home, tags: ['task'], title: 'filed by the child' }),
+        );
 
         const named = { name: yield* nameOf(held.id), title: 'held by the child' };
         expect(yield* graph.tasks.holdings({ projectId, from: child })).toEqual({
@@ -88,14 +90,18 @@ layer(demoGraphLayer(), { excludeTestServices: true })('task holders', (it) => {
         expect(yield* signedBy(child)(graph.tasks.heldElsewhere(taken))).toMatchObject({ name: yield* nameOf(held.id) });
 
         const other = { harness: NATIVE_HARNESS, key: 'another-taker' };
-        const moved = yield* signedBy(child)(graph.blocks.create({ projectId, tags: ['task'], title: 'taken on by another' }));
+        const moved = yield* signedBy(child)(
+          graph.blocks.create({ projectId, parentId: home, tags: ['task'], title: 'taken on by another' }),
+        );
         yield* signedBy(child)(graph.tasks.claim({ id: moved.id }));
         yield* signedBy(other)(graph.tasks.claim({ id: moved.id }));
         expect(yield* graph.tasks.handOver({ projectId, from: child, to: parent })).toEqual([]);
         expect(yield* signedBy(other)(graph.tasks.heldElsewhere(yield* graph.blocks.blockById(moved.id)))).toBeNull();
 
         const root = { harness: NATIVE_HARNESS, key: 'root-put-away' };
-        const left = yield* signedBy(root)(graph.blocks.create({ projectId, tags: ['task'], title: 'held by a root put away' }));
+        const left = yield* signedBy(root)(
+          graph.blocks.create({ projectId, parentId: home, tags: ['task'], title: 'held by a root put away' }),
+        );
         yield* signedBy(root)(graph.tasks.claim({ id: left.id }));
         expect(yield* graph.tasks.handOver({ projectId, from: root, to: null })).toEqual([
           { name: yield* nameOf(left.id), title: 'held by a root put away' },

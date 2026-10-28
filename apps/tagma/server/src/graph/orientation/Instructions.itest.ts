@@ -12,7 +12,9 @@ import { instructionChanges } from './Instructions.js';
 import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture.js';
 
 const rule = Effect.fnUntraced(function* (projectId: number, title: string, body: string, parentId?: number) {
-  return (yield* (yield* Blocks).create({ projectId, tags: ['rule'], title, body, parentId })).id;
+  const blocks = yield* Blocks;
+  return (yield* blocks.create({ projectId, tags: ['rule'], title, body, parentId: parentId ?? (yield* blocks.rootBlockOf(projectId)).id }))
+    .id;
 });
 
 const lawOf = (set: InstructionSet) => set.entries.filter((entry) => entry.kind === 'law');
@@ -73,10 +75,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('instructions', (it) => {
   );
 
   it.effect('committed declaration changes are delivered before the writer finishes its publication hooks', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
         const declared = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['tag'],
           title: '#memo',
           body: 'Initial guidance.',
@@ -148,10 +151,17 @@ layer(demoGraphLayer(), { excludeTestServices: true })('instructions', (it) => {
   );
 
   it.effect('an unreadable declaration is named while readable types and law remain delivered', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
         const everywhere = yield* rule(projectId, 'Bun only', 'No node.');
-        const memo = yield* graph.blocks.create({ projectId, tags: ['tag'], title: '#memo', body: 'A memo.', fields: { id: 'memo' } });
+        const memo = yield* graph.blocks.create({
+          projectId,
+          parentId: root,
+          tags: ['tag'],
+          title: '#memo',
+          body: 'A memo.',
+          fields: { id: 'memo' },
+        });
         yield* graph.graphStore.db
           .update(block)
           .set({ fields: { id: 'memo', roles: { retired: true } } })
@@ -167,12 +177,13 @@ layer(demoGraphLayer(), { excludeTestServices: true })('instructions', (it) => {
   );
 
   it.effect('the instruction set holds every prompt rule wherever it stands, and delivery moves a sourced rule in and out', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
-        const area = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'product' });
+        const area = yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'product' });
         const deep = yield* rule(projectId, 'Zone law', 'This zone speaks one way.', area.id);
         const coded = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['rule'],
           title: 'Source law',
           body: 'Only under src.',

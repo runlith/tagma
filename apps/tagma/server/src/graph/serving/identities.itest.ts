@@ -11,13 +11,19 @@ import { adoptIdentities } from './identities.js';
 
 layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('identity adoption', (it) => {
   it.effect('adopts the target identity across files, edges, body references and the mirror', () =>
-    withDemo(({ graph, projectId, demoRoot, nameOf }) =>
+    withDemo(({ graph, projectId, demoRoot, nameOf, root }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const shelf = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Shelf' });
+        const shelf = yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'Shelf' });
         const born = yield* graph.blocks.create({ projectId, parentId: shelf.id, tags: ['idea'], title: 'Born card' });
         const spoken = yield* nameOf(born.id);
-        const pointer = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Pointer', body: `see [[${spoken}]]` });
+        const pointer = yield* graph.blocks.create({
+          projectId,
+          parentId: root,
+          tags: ['idea'],
+          title: 'Pointer',
+          body: `see [[${spoken}]]`,
+        });
         yield* graph.edges.link({ fromId: pointer.id, kind: 'relates', toId: born.id });
         yield* graph.edges.link({ fromId: shelf.id, kind: 'relates', toId: born.id });
         const treeRoot = join(demoRoot, 'adopt-levelled');

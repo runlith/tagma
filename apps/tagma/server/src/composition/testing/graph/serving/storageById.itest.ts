@@ -46,10 +46,20 @@ layer(servingLayer, { excludeTestServices: true })('graph storage keyed by proje
           const { appHome } = storageHomes(demo.graph.store.path);
           const featureCheckout = join(dirname(repo), 'storage-feature');
           yield* runGit(git, 'feature', ['-C', repo, 'worktree', 'add', '-b', 'storage-feature', featureCheckout, 'main']);
+          const root = yield* Effect.provide(
+            Effect.flatMap(Blocks, (blocks) => blocks.rootBlockOf(projectId)),
+            served.context,
+          );
           const kept = yield* demo
             .as(
               'op',
-              Context.get(served.context, Blocks).create({ projectId, tags: ['idea'], title: 'Kept across the move', body: 'kept' }),
+              Context.get(served.context, Blocks).create({
+                projectId,
+                parentId: root.id,
+                tags: ['idea'],
+                title: 'Kept across the move',
+                body: 'kept',
+              }),
             )
             .pipe(Effect.provide(served.context));
           const feature = yield* pool.resolve({ projectId, cwd: featureCheckout });
@@ -129,7 +139,10 @@ layer(servingLayer, { excludeTestServices: true })('graph storage keyed by proje
           expect(yield* store.db.select().from(event).where(eq(event.projectId, projectId))).toEqual(journal);
           expect((yield* runGit(git, 'moved-log', ['-C', main.layout.treeRoot, 'log', '--format=%H'])).split('\n')).toContain(head);
           const added = yield* demo
-            .as('op', Context.get(main.context, Blocks).create({ projectId, tags: ['idea'], title: 'Written after the move' }))
+            .as(
+              'op',
+              Context.get(main.context, Blocks).create({ projectId, parentId: root.id, tags: ['idea'], title: 'Written after the move' }),
+            )
             .pipe(Effect.provide(main.context));
           expect(yield* store.db.select().from(block).where(eq(block.uuid, added.uuid)).get()).toMatchObject({
             title: 'Written after the move',

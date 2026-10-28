@@ -8,10 +8,10 @@ import { blockName } from '../../contract/wire/references.js';
 import { demoGraphLayer, type EffectDemo, withDemo } from '../../../composition/testing/graphFixture.js';
 
 const lens = (demo: EffectDemo) => {
-  const { graph, projectId, nameOf } = demo;
+  const { graph, projectId, nameOf, root } = demo;
   const held = (id: number) => Effect.map(nameOf(id), (name) => ({ id, name }));
   const create = (tag: string, title: string, body?: string) =>
-    Effect.flatMap(graph.blocks.create({ projectId, tags: [tag], title, body }), (row) => held(row.id));
+    Effect.flatMap(graph.blocks.create({ projectId, parentId: root, tags: [tag], title, body }), (row) => held(row.id));
   const propose = (amendsId: number, ops: AmendmentOp[], title = 'amendment') =>
     Effect.flatMap(graph.review.propose({ projectId, title, amendsId, ops }), (row) => held(row.id));
   const entryOf = (blockId: number, op: string) =>

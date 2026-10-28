@@ -8,14 +8,14 @@ const testActing = writes('test', []);
 
 layer(demoGraphLayer(), { excludeTestServices: true })('declared reads', (it) => {
   it.effect('a declared read inside an act unit sees what that unit has not committed', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
         const inside: { titles: readonly string[]; id: number } = { titles: [], id: 0 };
         const rolled = yield* graph.act
           .unit(
             testActing,
             Effect.gen(function* () {
-              const made = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'held' });
+              const made = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'held', parentId: root });
               inside.id = made.id;
               inside.titles = (yield* graph.selection.records([made.id])).map((row) => row.title);
               return yield* Effect.fail('roll back' as const);
@@ -31,16 +31,16 @@ layer(demoGraphLayer(), { excludeTestServices: true })('declared reads', (it) =>
   );
 
   it.effect('a declared read outside a unit answers while one is open, with the last committed state', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
-        const standing = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'standing' });
+        const standing = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'standing', parentId: root });
         const opened = yield* Deferred.make<number>();
         const letGo = yield* Deferred.make<void>();
         const writing = yield* Effect.forkChild(
           graph.act.unit(
             testActing,
             Effect.gen(function* () {
-              const made = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'uncommitted' });
+              const made = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'uncommitted', parentId: root });
               yield* Deferred.succeed(opened, made.id);
               yield* Deferred.await(letGo);
             }),

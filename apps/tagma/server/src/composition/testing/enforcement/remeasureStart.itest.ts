@@ -144,7 +144,8 @@ const worldLayer = Layer.effect(
 const withCase = Effect.fnUntraced(function* <A, E, R>(body: (scene: StartupCase) => Effect.Effect<A, E, R>, project?: string) {
   const world = yield* World;
   const at = project === undefined ? { id: world.projectId, root: world.demoRoot } : world.project(project);
-  const demo = { ...world, projectId: at.id, demoRoot: at.root };
+  const root = (yield* world.graph.blocks.rootBlockOf(at.id).pipe(Effect.provide(world.context))).id;
+  const demo = { ...world, projectId: at.id, demoRoot: at.root, root };
   const workers = yield* Workers;
   const files = yield* FileSystem.FileSystem;
   return yield* body({ demo, workers, files }).pipe(Effect.provide(demo.context));
@@ -158,7 +159,12 @@ layer(Layer.mergeAll(worldLayer, BunFileSystem.layer, workersLayer), { excludeTe
         Effect.gen(function* () {
           const { demo, workers, files } = scene;
           yield* seed(scene);
-          const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Files stay small' });
+          const rule = yield* demo.graph.blocks.create({
+            projectId: demo.projectId,
+            parentId: demo.root,
+            tags: ['rule'],
+            title: 'Files stay small',
+          });
           yield* applied(scene, rule.id);
           const other = yield* demo.fixture.directory('other-checkout');
           yield* files.copy(demo.demoRoot, other, { overwrite: true });
@@ -227,7 +233,12 @@ layer(Layer.mergeAll(worldLayer, BunFileSystem.layer, workersLayer), { excludeTe
           const gate = yield* Deferred.make<void>();
           const entered = yield* Deferred.make<void>();
           yield* seed(scene);
-          const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Files stay small' });
+          const rule = yield* demo.graph.blocks.create({
+            projectId: demo.projectId,
+            parentId: demo.root,
+            tags: ['rule'],
+            title: 'Files stay small',
+          });
           yield* applied(scene, rule.id);
           const memory = join(demo.fixture.root, 'enforcing.json');
           yield* files.writeFileString(memory, JSON.stringify([{ projectId: demo.projectId, root: demo.demoRoot }]));
@@ -259,7 +270,12 @@ layer(Layer.mergeAll(worldLayer, BunFileSystem.layer, workersLayer), { excludeTe
         Effect.gen(function* () {
           const { demo, workers, files } = scene;
           yield* seed(scene);
-          const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Files stay small' });
+          const rule = yield* demo.graph.blocks.create({
+            projectId: demo.projectId,
+            parentId: demo.root,
+            tags: ['rule'],
+            title: 'Files stay small',
+          });
           const measured = yield* applied(scene, rule.id, 10, 'merge_worktree');
           const journal = journalOver(demo.graph.store.db, demo.graph.units);
           const memory = join(demo.fixture.root, 'enforcing.json');
@@ -310,7 +326,12 @@ layer(Layer.mergeAll(worldLayer, BunFileSystem.layer, workersLayer), { excludeTe
         Effect.gen(function* () {
           const { demo, workers, files } = scene;
           yield* seed(scene);
-          const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Files stay small' });
+          const rule = yield* demo.graph.blocks.create({
+            projectId: demo.projectId,
+            parentId: demo.root,
+            tags: ['rule'],
+            title: 'Files stay small',
+          });
           const planned = yield* applied(scene, rule.id);
           const measured = join(demo.demoRoot, '.git/tagma/measured', `${rule.uuid}.json`);
           const prior = yield* files.readFileString(measured);

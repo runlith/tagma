@@ -9,7 +9,7 @@ type Extra = { parentId?: number; edges?: readonly { kind: string; to: number }[
 
 const lens = (demo: EffectDemo) => {
   const make = (tag: string, title: string, extra: Extra = {}) =>
-    Effect.map(demo.graph.blocks.create({ projectId: demo.projectId, tags: [tag], title, ...extra }), (row) => row.id);
+    Effect.map(demo.graph.blocks.create({ projectId: demo.projectId, parentId: demo.root, tags: [tag], title, ...extra }), (row) => row.id);
   return { ...demo, make };
 };
 
