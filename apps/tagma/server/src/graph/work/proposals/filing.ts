@@ -31,6 +31,41 @@ export const proposalFiling = Effect.gen(function* () {
   const vocabulary = yield* Tags;
   const payload = yield* payloadGate;
 
+  const revise = Effect.fn('Review.revise')(function* (input: {
+    id: number;
+    ops: readonly AmendmentOp[];
+  }): Effect.fn.Return<BlockRecord, StoreFailure | GateRefusal<ReviseRefusal>> {
+    const current = yield* blockRows.blockById(input.id);
+    const table = yield* vocabulary.of(current.projectId);
+    if (!table.supports(current, AMENDMENT)) {
+      return yield* new GateRefusal(
+        'not-an-amendment',
+        `${blockName(current.uuid)} is ${tagLabel(table.tagOf(current))}, which does not support the amendment contract; deferred ops belong to an amendment`,
+        [`update_block on ${yield* blockNames.nameOf(input.id)} — the block's own text`],
+      );
+    }
+    const target = yield* payload.assertRevised(table, current, input.ops);
+    return yield* act.unit(
+      revising,
+      Effect.gen(function* () {
+        const fresh = yield* blockRows.blockById(input.id);
+        if (JSON.stringify(fresh.tags) !== JSON.stringify(current.tags) || JSON.stringify(fresh.fields) !== JSON.stringify(current.fields))
+          return yield* revise(input);
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const row = yield* db
+          .update(block)
+          .set({ fields: { ...fresh.fields, [amendmentField(table, fresh) ?? 'ops']: input.ops }, updatedAt: now })
+          .where(eq(block.id, input.id))
+          .returning()
+          .get();
+        if (!row) return yield* Effect.die('proposal revise returned no row');
+        yield* blockProjection.syncTags(row.id);
+        yield* act.record('revise', row.id, { amends: target.id, ops: input.ops.length }, now);
+        return yield* blockRows.recordOf(row);
+      }),
+    );
+  });
+
   return {
     assertAmendment: payload.assertAmendment,
     amendsEdgeOf: payload.amendsEdgeOf,
@@ -59,37 +94,7 @@ export const proposalFiling = Effect.gen(function* () {
       });
     }),
 
-    revise: Effect.fn('Review.revise')(function* (input: {
-      id: number;
-      ops: readonly AmendmentOp[];
-    }): Effect.fn.Return<BlockRecord, StoreFailure | GateRefusal<ReviseRefusal>> {
-      const current = yield* blockRows.blockById(input.id);
-      const table = yield* vocabulary.of(current.projectId);
-      if (!table.supports(current, AMENDMENT)) {
-        return yield* new GateRefusal(
-          'not-an-amendment',
-          `${blockName(current.uuid)} is ${tagLabel(table.tagOf(current))}, which does not support the amendment contract; deferred ops belong to an amendment`,
-          [`update_block on ${yield* blockNames.nameOf(input.id)} — the block's own text`],
-        );
-      }
-      const target = yield* payload.assertRevised(table, current, input.ops);
-      return yield* act.unit(
-        revising,
-        Effect.gen(function* () {
-          const now = new Date(yield* Clock.currentTimeMillis);
-          const row = yield* db
-            .update(block)
-            .set({ fields: { ...current.fields, [amendmentField(table, current) ?? 'ops']: input.ops }, updatedAt: now })
-            .where(eq(block.id, input.id))
-            .returning()
-            .get();
-          if (!row) return yield* Effect.die('proposal revise returned no row');
-          yield* blockProjection.syncTags(row.id);
-          yield* act.record('revise', row.id, { amends: target.id, ops: input.ops.length }, now);
-          return yield* blockRows.recordOf(row);
-        }),
-      );
-    }),
+    revise,
   };
 });
 

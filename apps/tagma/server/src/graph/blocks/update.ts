@@ -196,10 +196,11 @@ export const blockUpdate = Effect.gen(function* () {
     if (moved !== undefined) {
       yield* validateFields(tags, moved);
       yield* assertFieldTargets(table, current.projectId, tags, moved);
-      const deferred = amendmentField(table, node);
-      if (deferred !== null && moved[deferred] !== undefined) {
-        yield* payload.assertRevised(table, current, yield* readField({ uuid: current.uuid, fields: moved }, deferred, 'amendmentOps'));
-      }
+    }
+    const deferred = amendmentField(table, node);
+    const revising = deferred !== null && moved?.[deferred] !== undefined;
+    if (deferred !== null && revising) {
+      yield* payload.assertRevised(table, current, yield* readField({ uuid: current.uuid, fields: moved ?? {} }, deferred, 'amendmentOps'));
     }
     const kept = (fields: Readonly<Record<string, unknown>>): Record<string, unknown> =>
       Object.fromEntries(Object.entries(fields).filter(([name]) => !cleared.includes(name)));
@@ -248,7 +249,8 @@ export const blockUpdate = Effect.gen(function* () {
         const fresh = writesFields ? yield* blockRows.blockById(input.id) : current;
         const stale =
           JSON.stringify(fresh.tags) !== JSON.stringify(current.tags) ||
-          (retag !== null && (JSON.stringify(fresh.fields) !== JSON.stringify(current.fields) || fresh.body !== current.body));
+          (retag !== null && (JSON.stringify(fresh.fields) !== JSON.stringify(current.fields) || fresh.body !== current.body)) ||
+          (revising && JSON.stringify(fresh.fields) !== JSON.stringify(current.fields));
         if (stale) return yield* write(asked);
         if (retag !== null) yield* settleRetag(table, fresh, retag);
         const standing = kept({ ...(retag === null ? fresh.fields : retagBase(table, fresh, retag)), ...moved });
