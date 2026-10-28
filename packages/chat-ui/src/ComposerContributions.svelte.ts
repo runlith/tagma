@@ -1,5 +1,4 @@
 import { Effect } from 'effect';
-import { untrack } from 'svelte';
 import {
   type ComposerAttachmentKind,
   type ComposerChip,
@@ -14,49 +13,22 @@ import {
 } from './composer';
 import type { ChatNotice } from './notice';
 import { clashOf } from './RegistryClash';
+import { Roster } from './Roster.svelte';
 
 const LAST = Number.MAX_SAFE_INTEGER;
 
-type Held<T> = { readonly contributor: string; readonly item: T };
-
-class Roster<T> {
-  held = $state.raw<readonly Held<T>[]>([]);
-
-  constructor(
-    private readonly kind: string,
-    private readonly keyOf: (item: T) => string,
-  ) {}
-
-  add(contributor: string, item: T): () => void {
-    const key = this.keyOf(item);
-    const held = untrack(() => this.held);
-    const clash = held.find((one) => this.keyOf(one.item) === key);
-    if (clash) {
-      throw clashOf(`Composer ${this.kind} "${key}"`, clash.contributor, contributor);
-    }
-    const entry: Held<T> = { contributor, item };
-    this.held = [...held, entry];
-    return () => {
-      this.held = untrack(() => this.held).filter((one) => one !== entry);
-    };
-  }
-
-  contributorOf(match: (item: T) => boolean): string | undefined {
-    return untrack(() => this.held).find((one) => match(one.item))?.contributor;
-  }
-
-  get items(): readonly T[] {
-    return this.held.map((one) => one.item);
-  }
-}
+const subject =
+  (kind: string) =>
+  (key: string): string =>
+    `Composer ${kind} "${key}"`;
 
 export class ComposerContributions {
-  private readonly commandRoster = new Roster<ComposerSlashCommand>('command', (command) => command.name);
-  private readonly chipRoster = new Roster<ComposerChip>('chip', (chip) => chip.id);
-  private readonly panelRoster = new Roster<ComposerPanelContribution>('panel', (panel) => panel.id);
-  private readonly mentionRoster = new Roster<ComposerMentionProvider>('mention provider', (provider) => provider.id);
-  private readonly attachmentRoster = new Roster<ComposerAttachmentKind>('attachment kind', (kind) => kind.id);
-  private readonly dropRoster = new Roster<ComposerDrop>('drop', (drop) => drop.id);
+  private readonly commandRoster = new Roster<ComposerSlashCommand>(subject('command'), (command) => command.name);
+  private readonly chipRoster = new Roster<ComposerChip>(subject('chip'), (chip) => chip.id);
+  private readonly panelRoster = new Roster<ComposerPanelContribution>(subject('panel'), (panel) => panel.id);
+  private readonly mentionRoster = new Roster<ComposerMentionProvider>(subject('mention provider'), (provider) => provider.id);
+  private readonly attachmentRoster = new Roster<ComposerAttachmentKind>(subject('attachment kind'), (kind) => kind.id);
+  private readonly dropRoster = new Roster<ComposerDrop>(subject('drop'), (drop) => drop.id);
 
   commands = $derived([...this.commandRoster.items].sort((a, b) => (a.order ?? LAST) - (b.order ?? LAST)));
   mentions = $derived(this.mentionRoster.items);

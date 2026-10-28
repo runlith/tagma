@@ -53,6 +53,12 @@
       "svelte": "./src/RegistryClash.ts",
       "default": "./src/RegistryClash.ts"
     },
+    "./Roster.svelte": {
+      "types": "./src/Roster.svelte.ts",
+      "browser": "./src/Roster.svelte.ts",
+      "svelte": "./src/Roster.svelte.ts",
+      "default": "./src/Roster.svelte.ts"
+    },
     "./FeedMemory": {
       "types": "./src/FeedMemory.ts",
       "browser": "./src/FeedMemory.ts",

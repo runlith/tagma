@@ -1,4 +1,4 @@
-import { type Snippet, untrack } from 'svelte';
+import type { Snippet } from 'svelte';
 import { coreKind, makeThreadEntryReader, type ThreadEntryKind, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import type { ActivityEntry, ChatStepFact } from './activity';
 import type { ChatEntry, ChatEntryKind, ProductEntry, ProductId } from './entries';
@@ -105,6 +105,7 @@ export type EntryKinds = {
 
 export function createEntryKinds(): EntryKinds {
   let revision = $state(0);
+  let bumps = 0;
   const wireKinds = new Map<string, { readonly contributor: string; readonly kind: ThreadEntryKind }>();
   let wire: ThreadEntryReader | null = null;
   const held = new Map<string, Map<string, Facet>>();
@@ -112,7 +113,7 @@ export function createEntryKinds(): EntryKinds {
   const tools = new Map<string, { readonly contributor: string; readonly tool: ToolKind }>();
 
   const bump = (): void => {
-    revision = untrack(() => revision) + 1;
+    revision = ++bumps;
   };
 
   const add = (into: Map<string, Map<string, Facet>>, contributor: string, key: string, kind: object): (() => void) => {
