@@ -6,7 +6,7 @@
   import { Ledger, Machine, Player, Teaser } from './handoff-fixtures.svelte.js';
   import HandoffFrame from './HandoffFrame.svelte';
 
-  type Props = { authed: boolean; search?: Layer<never, never>; awaits?: boolean };
+  type Props = { authed: boolean };
 
   const props: Props = $props();
 
@@ -19,7 +19,6 @@
         Player,
         Ledger,
         Teaser,
-        props.search ?? Layer.mergeAll(),
         Visitor.of(() => session),
       ),
       {
@@ -32,6 +31,6 @@
 {#key Visitor.keyOf(session)}
   <svelte:boundary>
     {#snippet failed(error)}<div data-testid="failed">{String(error)}</div>{/snippet}
-    <HandoffFrame awaits={props.awaits === true && props.authed} />
+    <HandoffFrame />
   </svelte:boundary>
 {/key}

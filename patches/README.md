@@ -17,6 +17,11 @@ built beforehand is the caller's to build. A diff block with no owner or two own
 tests, a green without the hunk — each refuses. `bun run patches:prove <hunk>` proves one hunk inside the thirty-second gate; a hunk whose only
 proof is an e2e elsewhere is printed, not run.
 
+A hunk switched off without being lost carries `off` in the manifest — the reason, in one line — and its
+blocks stand in `<pkg>@<version>.off.patch`, a diff on top of the applied patch, which bun never reads.
+`patches:prove` names an off hunk and proves nothing for it; an off hunk still in the applied patch, or
+an off patch missing or holding a block no off hunk owns, refuses.
+
 Regenerating a patch: the pristine package from bun's cache (`$(bun pm cache)/<pkg>@<version>@@@1`), a
 git repository outside the checkout, `git apply` of the previous patch, and `git diff` is the new one;
 `bun install` then re-links the patched copy. bun applies a patch by line, so a hunk header cut for
@@ -226,7 +231,8 @@ build is what would fail. Both are named here rather than given a trap that cann
 
 ## `svelte@5.57.0.patch`
 
-Eight hunks. 1, 2, 5 and 6 are carried from shop `core-refactor` at `8c71394ba0`, 7 and 8 from shop
+Eight hunks: 1, 2, 7 and 10 stand in the applied patch; 5, 6, 8 and 9 are off while Tagma compiles
+without `experimental.async` (below), kept in `svelte@5.57.0.off.patch`. 1, 2, 5 and 6 are carried from shop `core-refactor` at `8c71394ba0`, 7 and 8 from shop
 `release` at `9de9eb1deb`, 9 and 10 are runlith's own. Three of the first four are about one thing: the
 graph's services live in detached roots (`detachedRoot` in `packages/layer/src/svelte/App.svelte.ts`),
 their effects stand outside the component tree, and Svelte's batch scheduler in async mode does not
@@ -384,9 +390,43 @@ the stack ends in a row's template effect run by `flush`; the batch that removed
 reached the column's rows, and the page's teardown released the main seat (`ThreadSeats.page`) the
 column is guarded on.
 
-Traps: `packages/layer/src/svelte/seat-release.svelte.test.ts`, the shape alone and with a `flushSync`
+Traps: `packages/layer/src/svelte/nested-eager-flush.svelte.test.ts`, the nested flush in sync mode;
+`packages/layer/src/svelte/seat-release.svelte.test.ts`, the shape alone and with a `flushSync`
 in the guarded branch's teardown; the column itself in
 `apps/tagma/app/src/lib/features/threads/Column.svelte.test.ts -t "leaves when the page"`.
+
+### Async mode is off
+
+The app and every package config compile with `experimental: { async: false }`. Hunks 5, 6, 8 and 9
+fix batches held by an `await`, which exist only in async mode; their traps use `await` in markup and
+do not compile without it. Hunk 10 stays: its commit-callback case is async-only — without the flag a
+branch switch commits at once (`should_defer_append` answers false) — but its nested-flush half holds
+in sync mode as well. A queued effect that closes a branch puts the block in the eager set, the
+branch's teardown flushes, the nested flush ends by clearing the shared collector, and the outer flush
+then reads `null`; `nested-eager-flush.svelte.test.ts` is that trap, red without the hunk. Hunks 1 and
+7 stay red without themselves in sync mode, and 2 is not tied to the mode.
+
+Tests that need async mode are parked, not deleted, in `svelte@5.57.0.off/` at their repository paths:
+neither Vitest nor svelte-check reads that directory, and svelte-check compiles every `.svelte` file of
+a package whatever its tsconfig excludes, so a fixture with `await` cannot stay in place. Parked:
+
+- `packages/layer`: the traps of 8 and 9 (`rebase`, `branch-removal`) with their fixtures; the
+  originals of `time-travel.svelte.test.ts` and its `Host.svelte` with `Page.svelte` — the traps of 5
+  and 6 are its `pending` and `blocking` doors, and the copies in place keep the `handle` door, which
+  reads a deferred key's `.current` in any mode; `deferred-tree.svelte.test.ts` with `DeferredApp` and
+  `DeferredConsumer`, a deferred key awaited in a component under a `pending` boundary; and the
+  originals of `session-handoff.svelte.test.ts`, `HandoffFrame.svelte` and `HandoffProbe.svelte`, whose
+  second case lets the incoming frame await its chunk — the copies in place keep the first case alone;
+- `packages/query`: `single.fork.test.ts` with `ForkRouteProbe`, since `fork` throws without the flag;
+- `apps/tagma/app`: `RenderingPorts.svelte.test.ts` with `RewindClaim.fixture.svelte`, a rewind claim
+  taken while its release's batch awaits.
+
+Turning async mode back on: `async: true` in `apps/tagma/app/svelte.config.js`, every package Vite
+config and `packages/layer/svelte.config.js`; copy `svelte@5.57.0.off/` over the repository root, the
+parked originals replacing the reduced time-travel and session-handoff files in place; apply `svelte@5.57.0.off.patch` on top
+of the applied patch and `git diff` the result against the pristine package as the new
+`svelte@5.57.0.patch`; remove the off patch, the parked directory and the `off` fields; `bun install`;
+`bun run patches:prove`.
 
 ### Tried and rejected
 

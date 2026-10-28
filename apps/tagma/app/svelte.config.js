@@ -5,7 +5,7 @@ import { surfaceOut } from './surfaceOut.js';
 const config = {
   compilerOptions: {
     runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true),
-    experimental: { async: true },
+    experimental: { async: false },
   },
   kit: {
     outDir: process.env.TAGMA_SURFACE_WORK?.trim() || '.svelte-kit',

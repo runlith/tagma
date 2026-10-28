@@ -69,12 +69,14 @@
     enforcement,
     aside = false,
     diff = null,
+    ready = true,
     read: shown = $bindable(null),
   }: {
     blockName?: string;
     enforcement?: Snippet<[BlockRead]>;
     aside?: boolean;
     diff?: string | null;
+    ready?: boolean;
     read?: BlockRead | null;
   } = $props();
 
@@ -211,7 +213,7 @@
   let appeared = $state(false);
 
   $effect.pre(() => {
-    if (rootBlock !== undefined && read !== null && lensSettled) appeared = true;
+    if (rootBlock !== undefined && read !== null && lensSettled && ready) appeared = true;
   });
 
   const lensAvailable = $derived(
@@ -341,7 +343,7 @@
   <TrashedBlock name={unavailable.name} {store} restored={() => subject.retry()} />
 {:else if unavailable?.kind === 'failed'}
   <UnreadableBlock error={unavailable.error} retry={() => subject.retry()} />
-{:else if rootBlock && read && (appeared || lensSettled)}
+{:else if rootBlock && read && (appeared || (lensSettled && ready))}
   <div
     class={cn(
       'page-reading grid grid-cols-1 gap-x-8 pt-8 pb-16',

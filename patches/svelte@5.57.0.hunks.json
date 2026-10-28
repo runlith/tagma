@@ -12,11 +12,13 @@
     },
     "05-flushed": {
       "markers": ["#flushed"],
-      "tests": [{ "package": "packages/layer", "file": "src/svelte/time-travel.svelte.test.ts", "names": "pending" }]
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/time-travel.svelte.test.ts", "names": "pending" }],
+      "off": "experimental.async is off: a batch held by an await exists only in async mode, and the trap's await does not compile without it"
     },
     "06-stale": {
       "markers": ["note_stale", "#stale", "reverted_by"],
-      "tests": [{ "package": "packages/layer", "file": "src/svelte/time-travel.svelte.test.ts", "names": "blocking" }]
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/time-travel.svelte.test.ts", "names": "blocking" }],
+      "off": "experimental.async is off: a reverted read exists only around a batch held by an await, and the trap's await does not compile without it"
     },
     "07-null-batch": {
       "markers": ["Batch.ensure().schedule(effect)"],
@@ -24,15 +26,21 @@
     },
     "08-rebase-defers": {
       "markers": ["issues/18895", "#scheduled"],
-      "tests": [{ "package": "packages/layer", "file": "src/svelte/rebase.svelte.test.ts" }]
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/rebase.svelte.test.ts" }],
+      "off": "experimental.async is off: a rebase runs only in async mode, and the trap's await does not compile without it"
     },
     "09-carried-removal": {
       "markers": ["#carried()", "#removed_by("],
-      "tests": [{ "package": "packages/layer", "file": "src/svelte/branch-removal.svelte.test.ts" }]
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/branch-removal.svelte.test.ts" }],
+      "off": "experimental.async is off: a branch held by an earlier batch exists only in async mode, and the trap's await does not compile without it"
     },
     "10-commit-teardown": {
       "markers": ["teardown at commit", "flush_eager_block_effects", "outer_block_effects"],
-      "tests": [{ "package": "packages/layer", "file": "src/svelte/seat-release.svelte.test.ts" }, { "package": "apps/tagma/app", "file": "src/lib/features/threads/Column.svelte.test.ts", "names": "leaves when the page" }]
+      "tests": [
+        { "package": "packages/layer", "file": "src/svelte/nested-eager-flush.svelte.test.ts" },
+        { "package": "packages/layer", "file": "src/svelte/seat-release.svelte.test.ts" },
+        { "package": "apps/tagma/app", "file": "src/lib/features/threads/Column.svelte.test.ts", "names": "leaves when the page" }
+      ]
     }
   }
 }

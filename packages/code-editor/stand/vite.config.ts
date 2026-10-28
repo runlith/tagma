@@ -4,7 +4,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
-  plugins: [svelte({ compilerOptions: { experimental: { async: true } } })],
+  plugins: [svelte({ compilerOptions: { experimental: { async: false } } })],
   server: { port: 5181, strictPort: false },
   worker: { format: 'es' },
   build: {

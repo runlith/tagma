@@ -65,15 +65,6 @@
   const reading = $derived(entry.data ?? kept);
   const failed = $derived(entry.error);
 
-  const first = repo.engine.key({ rule: untrack(() => name), focus: null });
-  const cold = untrack(() => first.watch()) === undefined;
-  let answer: Promise<boolean> | null = null;
-  const settled = (): Promise<boolean> =>
-    (answer ??= first.promise.then(
-      () => true,
-      () => true,
-    ));
-
   $effect(() => {
     const data = entry.data;
     if (data !== undefined) kept = data;
@@ -271,145 +262,143 @@
   <span class="text-small text-muted-foreground">landed while the rule did not block; each stays until it is removed</span>
 {/snippet}
 
-{#if !cold || (await settled())}
-  {#if failed && !reading}
-    {@const unread = unreadOf("rule's engine", failed)}
-    <StateLine title={unread.title} class="mt-6">{unread.detail}</StateLine>
-  {:else if reading?.engine}
-    {@const engine = reading.engine}
-    {@const row = engine.row}
-    {@const slipped = reading.escaped?.total ?? row.escaped}
-    {@const known = reading.debt?.total ?? row.debt.count}
-    {@const blocked = reading.refusals?.total ?? 0}
-    <section class="mt-8 border-t border-vein pt-5">
-      <StrictnessSwitch current={row.strictness} {busy} onpick={pick} />
+{#if failed && !reading}
+  {@const unread = unreadOf("rule's engine", failed)}
+  <StateLine title={unread.title} class="mt-6">{unread.detail}</StateLine>
+{:else if reading?.engine}
+  {@const engine = reading.engine}
+  {@const row = engine.row}
+  {@const slipped = reading.escaped?.total ?? row.escaped}
+  {@const known = reading.debt?.total ?? row.debt.count}
+  {@const blocked = reading.refusals?.total ?? 0}
+  <section class="mt-8 border-t border-vein pt-5">
+    <StrictnessSwitch current={row.strictness} {busy} onpick={pick} />
 
-      {#if row.unreadable}
-        <StateLine title="This server cannot read the rule's enforcement." class="mt-6" />
-      {:else if row.checker?.kind === 'unread'}
-        <StateLine title="The check cannot run." class="mt-6">{` ${row.checker.reason}`}</StateLine>
-      {:else if slipped === 0 && known === 0}
-        <p class="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui text-muted-foreground">
-          {#if row.measured}
-            <span class="size-1.5 rounded-full bg-status-verified"></span>No violations in the code
-            <Trend history={engine.history} was={row.debt.was} total={known} />
-          {:else}
-            Not measured in this checkout yet
-          {/if}
-        </p>
-      {/if}
+    {#if row.unreadable}
+      <StateLine title="This server cannot read the rule's enforcement." class="mt-6" />
+    {:else if row.checker?.kind === 'unread'}
+      <StateLine title="The check cannot run." class="mt-6">{` ${row.checker.reason}`}</StateLine>
+    {:else if slipped === 0 && known === 0}
+      <p class="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui text-muted-foreground">
+        {#if row.measured}
+          <span class="size-1.5 rounded-full bg-status-verified"></span>No violations in the code
+          <Trend history={engine.history} was={row.debt.was} total={known} />
+        {:else}
+          Not measured in this checkout yet
+        {/if}
+      </p>
+    {/if}
 
-      {#if slipped > 0}
-        {@render part('Slipped through', slipped, stays, 'text-severity-gap')}
-        <Findings rows={escaped} total={slipped} more={moreOf('escaped')} {now} {general} link={fileAt}>
-          {#snippet detail({ escape })}
-            <p>
-              {escape.changed === 'check' ? 'Stood at' : 'Landed in'}
-              <a
-                class="font-mono text-foreground/80 hover:text-foreground"
-                href={addresses.commit(escape.commit)}
-                {@attach shaLink(escape.commit)}>{escape.commit.slice(0, 8)}</a
-              >{#if escape.changed === 'check'}{' when the check changed'}{/if}{#if escape.holder !== undefined}, held by {escape.holder}{/if}.
-            </p>
-          {/snippet}
-        </Findings>
-        <div class="mt-2 flex flex-wrap gap-1">
-          <Button size="sm" variant="outline" onclick={() => askToFix(slipped)}>Ask an agent to fix</Button>
-          {#if tags.workTag !== null}<Button size="sm" variant="ghost" disabled={busy} onclick={keepKnown}>Keep as known…</Button>{/if}
-        </div>
-      {/if}
-
-      {#if known > 0}
-        {#snippet trend()}<Trend history={engine.history} was={row.debt.was} total={known} />{/snippet}
-        {@render part('Known violations', known, trend)}
-        <Debt
-          rows={[...(reading.debt?.rows ?? []), ...moreDebt]}
-          total={known}
-          {owners}
-          {ceiling}
-          {general}
-          more={moreOf('debt')}
-          {now}
-          link={fileAt}
-        />
-      {/if}
-
-      {#if blocked > 0}
-        {@render part(
-          'Commits blocked',
-          reading.refusals === undefined || reading.refusals.times === blocked
-            ? blocked
-            : `${reading.refusals.times} times at ${plural(blocked, 'place')}`,
-        )}
-        <Refusals rows={refusals} total={blocked} more={moreOf('refusals')} {now} {general} link={fileAt} />
-      {/if}
-
-      <Disclosure class="mt-8 border-t border-vein pt-3" summaryClass="w-full min-w-0 gap-2 text-ui">
-        {#snippet summary()}
-          <span class="shrink-0 text-foreground/90">What it checks</span>
-          <FadeText class="min-w-0 text-muted-foreground" title={placesSaid(row.places)} text={placesSaid(row.places)} />
+    {#if slipped > 0}
+      {@render part('Slipped through', slipped, stays, 'text-severity-gap')}
+      <Findings rows={escaped} total={slipped} more={moreOf('escaped')} {now} {general} link={fileAt}>
+        {#snippet detail({ escape })}
+          <p>
+            {escape.changed === 'check' ? 'Stood at' : 'Landed in'}
+            <a
+              class="font-mono text-foreground/80 hover:text-foreground"
+              href={addresses.commit(escape.commit)}
+              {@attach shaLink(escape.commit)}>{escape.commit.slice(0, 8)}</a
+            >{#if escape.changed === 'check'}{' when the check changed'}{/if}{#if escape.holder !== undefined}, held by {escape.holder}{/if}.
+          </p>
         {/snippet}
-        <div class="mt-4 grid gap-5 pl-5">
-          {#if engine.figures.length > 0}
-            <Figures
-              figures={engine.figures}
-              units={[...(reading.units?.rows ?? []), ...moreUnits]}
-              unitsTotal={reading.units?.total ?? 0}
-              more={moreOf('units')}
-              onfocus={(module) => (focus = module)}
-            />
-          {/if}
-          <dl class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-ui">
-            <dt class="text-muted-foreground">Checked by</dt>
-            <dd class="text-foreground/85">
-              {#if row.checker === null}text{:else if row.checker.kind === 'builtin'}Tagma's {checkerName(row.checker)} check{:else}{checkerKind(
-                  row.checker,
-                )}
-                {checkerName(row.checker)}{/if}
+      </Findings>
+      <div class="mt-2 flex flex-wrap gap-1">
+        <Button size="sm" variant="outline" onclick={() => askToFix(slipped)}>Ask an agent to fix</Button>
+        {#if tags.workTag !== null}<Button size="sm" variant="ghost" disabled={busy} onclick={keepKnown}>Keep as known…</Button>{/if}
+      </div>
+    {/if}
+
+    {#if known > 0}
+      {#snippet trend()}<Trend history={engine.history} was={row.debt.was} total={known} />{/snippet}
+      {@render part('Known violations', known, trend)}
+      <Debt
+        rows={[...(reading.debt?.rows ?? []), ...moreDebt]}
+        total={known}
+        {owners}
+        {ceiling}
+        {general}
+        more={moreOf('debt')}
+        {now}
+        link={fileAt}
+      />
+    {/if}
+
+    {#if blocked > 0}
+      {@render part(
+        'Commits blocked',
+        reading.refusals === undefined || reading.refusals.times === blocked
+          ? blocked
+          : `${reading.refusals.times} times at ${plural(blocked, 'place')}`,
+      )}
+      <Refusals rows={refusals} total={blocked} more={moreOf('refusals')} {now} {general} link={fileAt} />
+    {/if}
+
+    <Disclosure class="mt-8 border-t border-vein pt-3" summaryClass="w-full min-w-0 gap-2 text-ui">
+      {#snippet summary()}
+        <span class="shrink-0 text-foreground/90">What it checks</span>
+        <FadeText class="min-w-0 text-muted-foreground" title={placesSaid(row.places)} text={placesSaid(row.places)} />
+      {/snippet}
+      <div class="mt-4 grid gap-5 pl-5">
+        {#if engine.figures.length > 0}
+          <Figures
+            figures={engine.figures}
+            units={[...(reading.units?.rows ?? []), ...moreUnits]}
+            unitsTotal={reading.units?.total ?? 0}
+            more={moreOf('units')}
+            onfocus={(module) => (focus = module)}
+          />
+        {/if}
+        <dl class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-ui">
+          <dt class="text-muted-foreground">Checked by</dt>
+          <dd class="text-foreground/85">
+            {#if row.checker === null}text{:else if row.checker.kind === 'builtin'}Tagma's {checkerName(row.checker)} check{:else}{checkerKind(
+                row.checker,
+              )}
+              {checkerName(row.checker)}{/if}
+          </dd>
+          {#if row.inspection !== null}
+            <dt class="text-muted-foreground">Key</dt>
+            <dd class="font-mono text-small break-all text-foreground/85">
+              {`${row.inspection}${row.function === null ? '' : ` · ${row.function}`} · tagma.config.ts`}
             </dd>
-            {#if row.inspection !== null}
-              <dt class="text-muted-foreground">Key</dt>
-              <dd class="font-mono text-small break-all text-foreground/85">
-                {`${row.inspection}${row.function === null ? '' : ` · ${row.function}`} · tagma.config.ts`}
-              </dd>
-            {/if}
-            <dt class="text-muted-foreground">Runs</dt>
-            <dd class="text-foreground/85">{triggersSaid(row.on)}</dd>
-            <dt class="text-muted-foreground">Measured</dt>
-            <dd class="text-foreground/85">
-              {#if row.measured}
-                {duration(row.measured.ms)} for a full reading, at
-                <a
-                  class="font-mono text-small hover:text-foreground"
-                  href={addresses.commit(row.measured.commit)}
-                  {@attach shaLink(row.measured.commit)}>{row.measured.commit.slice(0, 8)}</a
-                >
-                {agoSaid(row.measured.at)}
-              {:else}
-                not in this checkout yet
-              {/if}
-            </dd>
-            {#if engine.changed}
-              <dt class="text-muted-foreground">{engine.changed.act === 'remeasure' ? 'Re-measured' : 'Changed'}</dt>
-              <dd class="flex flex-wrap items-center gap-1.5 text-foreground/85">
-                {agoSaid(engine.changed.at)}
-                {#if engine.changed.session !== null}<WriterBadge writer={sessions.writerOf(engine.changed.session)} />{/if}
-              </dd>
-            {/if}
-          </dl>
-          {#if engine.historyEnds}
-            <p class="text-small text-severity-gap">History stops early: {engine.historyEnds}.</p>
           {/if}
-        </div>
-      </Disclosure>
-    </section>
-    <Tighten
-      bind:open={deciding}
-      count={slipped}
-      blocking={target === 'gate' && row.strictness !== 'gate'}
-      canKeep={tags.workTag !== null}
-      {busy}
-      ondecide={(choice) => void decide(choice)}
-    />
-  {/if}
+          <dt class="text-muted-foreground">Runs</dt>
+          <dd class="text-foreground/85">{triggersSaid(row.on)}</dd>
+          <dt class="text-muted-foreground">Measured</dt>
+          <dd class="text-foreground/85">
+            {#if row.measured}
+              {duration(row.measured.ms)} for a full reading, at
+              <a
+                class="font-mono text-small hover:text-foreground"
+                href={addresses.commit(row.measured.commit)}
+                {@attach shaLink(row.measured.commit)}>{row.measured.commit.slice(0, 8)}</a
+              >
+              {agoSaid(row.measured.at)}
+            {:else}
+              not in this checkout yet
+            {/if}
+          </dd>
+          {#if engine.changed}
+            <dt class="text-muted-foreground">{engine.changed.act === 'remeasure' ? 'Re-measured' : 'Changed'}</dt>
+            <dd class="flex flex-wrap items-center gap-1.5 text-foreground/85">
+              {agoSaid(engine.changed.at)}
+              {#if engine.changed.session !== null}<WriterBadge writer={sessions.writerOf(engine.changed.session)} />{/if}
+            </dd>
+          {/if}
+        </dl>
+        {#if engine.historyEnds}
+          <p class="text-small text-severity-gap">History stops early: {engine.historyEnds}.</p>
+        {/if}
+      </div>
+    </Disclosure>
+  </section>
+  <Tighten
+    bind:open={deciding}
+    count={slipped}
+    blocking={target === 'gate' && row.strictness !== 'gate'}
+    canKeep={tags.workTag !== null}
+    {busy}
+    ondecide={(choice) => void decide(choice)}
+  />
 {/if}
