@@ -198,7 +198,7 @@
       awaitingConfirmation,
     }),
   );
-  const currentMessageId = $derived(viewport.currentMessageId(activeMessageId()));
+  const currentMessageId = $derived(viewport.currentMessageId(activeMessage));
   const bodiesRendered = new WeakSet<ChatTimelineItem>();
   let bodiesVersion = $state(0);
 
@@ -281,10 +281,7 @@
   });
 
   $effect(() => {
-    viewport.useReveal((id) => {
-      const index = rows.indexOf(id);
-      virtualizer.scrollToRow(rows.itemAt(index)?.kind === 'entry' ? index : -1);
-    });
+    viewport.useMessages(() => users);
   });
 
   $effect(() => {
@@ -334,10 +331,6 @@
     virtualizer.measureRow(node);
   }
 
-  function activeMessageId(): string | undefined {
-    return working ? activeMessage : undefined;
-  }
-
   function navigationTargetEditable(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
     return target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName);
@@ -354,7 +347,7 @@
     viewport.navigate(
       event.key === '[' ? -1 : 1,
       users.map((entry) => entry.id),
-      activeMessageId(),
+      activeMessage,
     );
   }
 
@@ -583,7 +576,7 @@
     </div>
   </div>
   <div
-    class="pointer-events-none absolute top-0 left-4 z-20 hidden flex-col justify-center @min-[56rem]/feed:flex"
+    class="pointer-events-none absolute top-0 left-3 z-20 hidden flex-col justify-center @min-[56rem]/feed:flex"
     style:bottom="var(--chat-composer-clearance)"
   >
     <MessageNav {users} currentId={currentMessageId} onSelect={(id) => viewport.select(id)} />

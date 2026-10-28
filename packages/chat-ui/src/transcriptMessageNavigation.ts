@@ -1,16 +1,12 @@
-export function resolvePinnedMessageId(input: { pinnedId?: string; pinnedMark: number; scrollMark: number }): string | undefined {
-  if (!input.pinnedId) return undefined;
-  return input.pinnedMark === input.scrollMark ? input.pinnedId : undefined;
-}
-
 export function resolveCurrentMessageId(input: {
   activeId?: string;
   cursorId?: string;
   following: boolean;
   pinnedId?: string;
 }): string | undefined {
-  if (input.following) return input.cursorId ?? input.activeId;
-  return input.pinnedId ?? input.cursorId ?? input.activeId;
+  if (input.pinnedId) return input.pinnedId;
+  if (input.following) return input.activeId ?? input.cursorId;
+  return input.cursorId;
 }
 
 export type MessageOffsetTarget = { kind: 'message'; id: string } | { kind: 'latest' } | { kind: 'none' };

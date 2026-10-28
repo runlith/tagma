@@ -16,6 +16,7 @@ const ESTIMATED_ROW_PX = 60;
 const OVERSCAN_ROWS = 20;
 const OPENING_OVERSCAN_ROWS = 6;
 export const TRANSCRIPT_END_THRESHOLD_PX = 80;
+const ROW_LANDING_GAP_PX = 12;
 const PREPEND_SETTLE_PX = 0.5;
 const PREPEND_STABLE_FRAMES = 30;
 const PREPEND_MAX_FRAMES = 180;
@@ -64,6 +65,7 @@ export class TranscriptVirtualizer {
   private stampedDisclosure = -1;
   private itemKey = (index: number): string | number => this.rows_.keyAt(index) ?? index;
 
+  private aim: { key: string; index: number; behavior: ScrollBehavior } | undefined;
   private prependAnchor: { key: string; offset: number } | undefined;
   private prependFrame: number | undefined;
   private prependLoading = false;
@@ -127,6 +129,7 @@ export class TranscriptVirtualizer {
     virtualizer._willUpdate();
     this.publish();
     if (remeasure) this.measureMounted();
+    if (reshaped) this.reaim(virtualizer);
     if (reshaped && this.chasing && this.anchoredBottom() && !this.gesturing()) this.anchorEnd();
   }
 
@@ -181,11 +184,42 @@ export class TranscriptVirtualizer {
     );
   }
 
-  scrollToRow(index: number): void {
+  holds(key: string): boolean {
+    return this.virtualizer !== undefined && this.rows_.indexOf(key) >= 0;
+  }
+
+  scrollToRow(key: string, behavior: ScrollBehavior): void {
+    const index = this.rows_.indexOf(key);
     if (index < 0) return;
-    if (this.rows.some((row) => row.index === index)) return;
+    this.dropPrepend();
     this.chasing = false;
-    this.virtualizer?.scrollToIndex(index, { align: 'start' });
+    this.aim = { key, index, behavior };
+    this.virtualizer?.scrollToIndex(index, { align: 'start', behavior });
+  }
+
+  letGo(): void {
+    this.aim = undefined;
+  }
+
+  private reaim(virtualizer: Virtualizer<HTMLElement, HTMLElement>): void {
+    const aim = this.aim;
+    if (aim === undefined) return;
+    const index = this.rows_.indexOf(aim.key);
+    if (index < 0) {
+      this.aim = undefined;
+      return;
+    }
+    if (index === aim.index) return;
+    aim.index = index;
+    virtualizer.scrollToIndex(index, { align: 'start', behavior: aim.behavior });
+  }
+
+  rowAt(offset: number): number | undefined {
+    return this.virtualizer?.getVirtualItemForOffset(offset)?.index;
+  }
+
+  rowOf(key: string): number {
+    return this.rows_.indexOf(key);
   }
 
   holdPrepend(): void {
@@ -214,6 +248,7 @@ export class TranscriptVirtualizer {
     if (this.pinning !== undefined) cancelAnimationFrame(this.pinning);
     this.pinning = undefined;
     this.pinned = [];
+    this.aim = undefined;
     this.dropPrepend();
     if (this.list) this.list.style.height = `${virtualizer.getTotalSize()}px`;
     virtualizer.scrollToEnd();
@@ -235,7 +270,7 @@ export class TranscriptVirtualizer {
 
   private capturePrepend(): void {
     const root = this.root;
-    if (!root) return;
+    if (!root || this.aim !== undefined) return;
     const view = root.getBoundingClientRect();
     const rows = this.rowNodes()
       .map((element) => ({ key: element.dataset.timelineKey, rect: element.getBoundingClientRect() }))
@@ -346,6 +381,7 @@ export class TranscriptVirtualizer {
         return this.withLiveRows(mounted);
       },
       scrollMargin: this.margin,
+      scrollPaddingStart: ROW_LANDING_GAP_PX,
       paddingEnd: this.clearance,
       anchorTo: 'end' as const,
       followOnAppend: this.anchoredBottom(),
@@ -537,6 +573,7 @@ export class TranscriptVirtualizer {
     this.pinning = undefined;
     this.pinned = [];
     this.chasing = false;
+    this.aim = undefined;
     this.alive.clear();
     this.stamps.clear();
     this.stampedWidth = 0;

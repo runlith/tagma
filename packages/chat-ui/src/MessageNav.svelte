@@ -70,13 +70,23 @@
   }
 
   const tip = $derived(hovered === null ? null : { message: messages[hovered], top: centers[hovered] ?? 0 });
+
+  $effect(() => {
+    const index = messages.findIndex((message) => message.id === currentId);
+    const tile = list?.children[index];
+    if (list === null || !(tile instanceof HTMLElement)) return;
+    const frame = list.getBoundingClientRect();
+    const box = tile.getBoundingClientRect();
+    if (box.top < frame.top) list.scrollTop -= frame.top - box.top;
+    else if (box.bottom > frame.bottom) list.scrollTop += box.bottom - frame.bottom;
+  });
 </script>
 
 {#if messages.length >= SHOWN_FROM}
   <div aria-label={strings.messageNavigation()} class="pointer-events-auto relative" role="navigation">
     <ul
       bind:this={list}
-      class="m-0 grid max-h-[min(60vh,520px)] w-2.5 list-none gap-1 overflow-y-auto p-0 no-scrollbar"
+      class="m-0 grid max-h-[min(60vh,520px)] w-4 list-none overflow-y-auto p-0 no-scrollbar"
       onpointermove={track}
       onpointerleave={leave}
       onscroll={measure}
@@ -84,11 +94,11 @@
       {#each messages as message, index (message.id)}
         {@const lift = grow(index)}
         {@const current = message.id === currentId}
-        <li class="grid h-3">
+        <li class="grid h-4">
           <button
             aria-label={message.label}
             aria-current={current ? 'location' : undefined}
-            class="grid h-3 w-2.5 cursor-pointer place-items-center bg-transparent p-0"
+            class="grid h-4 w-4 cursor-pointer place-items-center bg-transparent p-0"
             type="button"
             onclick={() => onSelect(message.id)}
           >

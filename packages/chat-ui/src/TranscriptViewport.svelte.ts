@@ -4,8 +4,7 @@ import { tick } from 'svelte';
 import type { FeedMemory } from './FeedMemory';
 import { transcriptCursorMessageId } from './transcriptCursor';
 import { TRANSCRIPT_END_THRESHOLD_PX, TranscriptVirtualizer } from './TranscriptVirtualizer.svelte';
-import { messageOffsetTarget, resolveCurrentMessageId, resolvePinnedMessageId } from './transcriptMessageNavigation';
-import { scrollMessageIntoView } from './transcriptNavigation';
+import { messageOffsetTarget, resolveCurrentMessageId } from './transcriptMessageNavigation';
 
 const CURSOR_LINE_OFFSET_PX = 100;
 const HEAD_REACH_PX = 200;
@@ -15,9 +14,7 @@ const SCROLL_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'PageU
 export class TranscriptViewport {
   private cursorId = $state<string | undefined>();
   private pinnedId = $state<string | undefined>();
-  private pinnedMark = $state(0);
-  private scrollMark = $state(0);
-  private reveal: ((id: string) => void) | undefined;
+  private messages: () => readonly { readonly id: string }[] = () => [];
   private head: (() => boolean) | undefined;
   private fill: (() => boolean) | undefined;
   private scrolled: (() => void) | undefined;
@@ -57,8 +54,6 @@ export class TranscriptViewport {
     this.window.openThread(key);
     this.cursorId = undefined;
     this.pinnedId = undefined;
-    this.pinnedMark = 0;
-    this.scrollMark = 0;
     this.gestureAt = Number.NEGATIVE_INFINITY;
     this.inputAt = Number.NEGATIVE_INFINITY;
     this.historyRequested = false;
@@ -149,8 +144,8 @@ export class TranscriptViewport {
     if (held && !this.followingViewport.held) this.scrollToBottom(false);
   }
 
-  useReveal(reveal: (id: string) => void): void {
-    this.reveal = reveal;
+  useMessages(read: () => readonly { readonly id: string }[]): void {
+    this.messages = read;
   }
 
   useHead(reach: () => boolean): void {
@@ -187,32 +182,24 @@ export class TranscriptViewport {
     this.landed?.(entryId);
   }
 
-  async select(id: string, behavior: ScrollBehavior = 'smooth'): Promise<void> {
+  select(id: string, behavior: ScrollBehavior = 'smooth'): void {
     const root = this.followingViewport.viewport;
-    if (!root) return;
-    this.reveal?.(id);
-    await tick();
-    const target = root.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(id)}"]`);
-    if (target === null) return;
+    if (!root || !this.window.holds(id)) return;
+    this.gestureAt = Number.NEGATIVE_INFINITY;
     this.pin(id);
     this.followingViewport.pause();
-    scrollMessageIntoView({ behavior, root, target });
+    this.window.scrollToRow(id, behavior);
     this.followingViewport.scheduleState(root);
   }
 
   navigate(offset: number, ids: readonly string[], activeId: string | undefined): void {
-    const target = messageOffsetTarget({
-      currentId: this.pinnedId ?? this.cursorId ?? activeId,
-      ids,
-      offset,
-    });
+    const target = messageOffsetTarget({ currentId: this.currentMessageId(activeId), ids, offset });
     if (target.kind === 'none') return;
     if (target.kind === 'latest') {
       this.resume();
       return;
     }
-    this.pause();
-    void this.select(target.id, 'auto');
+    this.select(target.id, 'auto');
   }
 
   currentMessageId(activeId: string | undefined): string | undefined {
@@ -220,11 +207,7 @@ export class TranscriptViewport {
       activeId,
       cursorId: this.cursorId,
       following: this.following,
-      pinnedId: resolvePinnedMessageId({
-        pinnedId: this.pinnedId,
-        pinnedMark: this.pinnedMark,
-        scrollMark: this.scrollMark,
-      }),
+      pinnedId: this.pinnedId,
     });
   }
 
@@ -236,6 +219,7 @@ export class TranscriptViewport {
     this.previousEntryCount = entryCount;
     this.previousActiveRunId = activeRunId;
     if ((runChanged || entriesChanged) && this.following) {
+      this.clearPinned();
       this.scrollToBottom(true);
       return;
     }
@@ -324,13 +308,7 @@ export class TranscriptViewport {
 
   private readScroll(outcome: ScrollOutcome): void {
     if (outcome === 'reader-moved' && this.gesturing) this.gestureAt = Date.now();
-    if (outcome === 'at-bottom') {
-      if (this.pinnedId) this.clearPinned();
-      return;
-    }
-    if (outcome !== 'reader-moved') return;
-    this.scrollMark += 1;
-    if (this.pinnedId) this.clearPinned();
+    if (outcome === 'reader-moved' || (outcome === 'at-bottom' && this.gesturing)) this.clearPinned();
   }
 
   private markGesture(target: EventTarget | null, delta: number, starts?: boolean): void {
@@ -351,7 +329,9 @@ export class TranscriptViewport {
     this.inputAt = now;
     this.gestureAt = now;
     this.historyDirection = Math.sign(delta);
+    this.window.letGo();
     this.followingViewport.gesture(delta);
+    if (delta > 0 && this.following) this.clearPinned();
     this.gestured?.();
     this.followingViewport.scheduleState(root);
   }
@@ -371,35 +351,16 @@ export class TranscriptViewport {
 
   private pin(id: string): void {
     this.pinnedId = id;
-    this.pinnedMark = this.scrollMark;
     this.cursorId = id;
   }
 
   private clearPinned(): void {
     this.pinnedId = undefined;
-    this.pinnedMark = this.scrollMark;
   }
 
   private readCursor(root: HTMLElement): string | undefined {
-    const rect = root.getBoundingClientRect();
-    const line = rect.top + CURSOR_LINE_OFFSET_PX;
-    const items = Array.from(root.querySelectorAll('[data-message-id]'))
-      .filter((item): item is HTMLElement => item instanceof HTMLElement)
-      .map((item) => {
-        const bounds = item.getBoundingClientRect();
-        return {
-          bottom: bounds.bottom,
-          id: item.dataset.messageId ?? '',
-          top: bounds.top,
-        };
-      })
-      .filter((item) => item.id);
-    return transcriptCursorMessageId({
-      fallback: this.cursorId,
-      items,
-      line,
-      viewportBottom: rect.bottom,
-      viewportTop: rect.top,
-    });
+    const row = this.window.rowAt(root.scrollTop + CURSOR_LINE_OFFSET_PX);
+    if (row === undefined) return undefined;
+    return transcriptCursorMessageId({ messages: this.messages(), rowOf: (id) => this.window.rowOf(id), row });
   }
 }

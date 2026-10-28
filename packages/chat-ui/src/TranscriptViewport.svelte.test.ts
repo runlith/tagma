@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { FeedMemory } from './FeedMemory';
+import type { ChatTimelineItem, RowModel } from './timeline';
 import { TranscriptViewport } from './TranscriptViewport.svelte';
 
 function container(input: { scrollHeight: number; clientHeight: number; scrollTop?: number }): HTMLElement {
@@ -469,42 +470,137 @@ describe('a reader who sees the bottom rides the tail', () => {
   });
 });
 
-describe('where a message is looked for', () => {
-  if (typeof CSS === 'undefined') Object.assign(globalThis, { CSS: { escape: (value: string) => value.replace(/["\\]/g, '\\$&') } });
+describe('which message of the operator the feed is on', () => {
+  const ROW_PX = 60;
+  const ROWS = 200;
 
-  test('selecting a message scrolls the feed that holds it, not another feed showing the same thread', async () => {
-    const other = container({ scrollHeight: 4000, clientHeight: 600 });
-    const holding = opened({ scrollHeight: 4000, clientHeight: 600 });
-    const targetAt = (root: HTMLElement) => {
-      const node = document.createElement('article');
-      node.dataset.messageId = 'm1';
-      node.getBoundingClientRect = () => ({
-        top: 1500,
-        bottom: 1560,
-        left: 0,
-        right: 0,
-        width: 0,
-        height: 60,
-        x: 0,
-        y: 1500,
-        toJSON: () => ({}),
-      });
-      root.append(node);
+  function rowModel(keys: readonly string[]): RowModel {
+    const items = keys.map((key) => ({ kind: 'entry', key, entry: { kind: 'user', id: key } }) as unknown as ChatTimelineItem);
+    return {
+      revision: 0,
+      shape: keys.length,
+      count: items.length,
+      keyAt: (index) => items[index]?.key,
+      itemAt: (index) => items[index],
+      item: (key) => items.find((item) => item.key === key),
+      indexOf: (key) => items.findIndex((item) => item.key === key),
     };
-    targetAt(other);
-    targetAt(holding.root);
-    other.scrollTo = (() => {
-      throw new Error('scrolled the wrong feed');
-    }) as HTMLElement['scrollTo'];
-    const scrolled: number[] = [];
-    holding.root.scrollTo = ((options: ScrollToOptions) => {
-      scrolled.push(options.top ?? -1);
-    }) as HTMLElement['scrollTo'];
+  }
 
-    const selected = holding.viewport.select('m1', 'auto');
-    await vi.advanceTimersByTimeAsync(0);
-    await selected;
+  function rect(top: number, height: number): DOMRect {
+    return { width: 800, height, top, bottom: top + height, left: 0, right: 800, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+  }
 
-    expect(scrolled).toHaveLength(1);
+  function feed(messages: readonly string[]) {
+    const viewport = new TranscriptViewport(new FeedMemory());
+    const root = document.createElement('div');
+    const held = document.createElement('div');
+    held.getBoundingClientRect = () => rect(-root.scrollTop, 0);
+    root.append(held);
+    document.body.append(root);
+    Object.defineProperty(root, 'clientHeight', { value: 600, configurable: true });
+    Object.defineProperty(root, 'offsetHeight', { value: 600, configurable: true });
+    Object.defineProperty(root, 'offsetWidth', { value: 800, configurable: true });
+    Object.defineProperty(root, 'scrollHeight', { get: () => Number.parseFloat(held.style.height) || 0, configurable: true });
+    root.getBoundingClientRect = () => rect(0, 600);
+    root.scrollTo = ((options: ScrollToOptions) => {
+      const top = options?.top;
+      if (typeof top !== 'number') return;
+      if (options.behavior === 'smooth') setTimeout(() => drift(root, top), 20);
+      else drift(root, top);
+    }) as HTMLElement['scrollTo'];
+    const keys = Array.from({ length: ROWS }, (_unused, index) => `row-${index}`);
+    viewport.attach(root);
+    viewport.useMessages(() => messages.map((id) => ({ id })));
+    const sync = (older: readonly string[] = []) =>
+      viewport.window.sync({
+        root,
+        list: held,
+        model: rowModel([...older, ...keys]),
+        shape: older.length + keys.length,
+        atBottom: () => viewport.anchored,
+        clearance: 0,
+        disclosure: 0,
+      });
+    sync();
+    held.style.height = `${viewport.window.totalSize}px`;
+    viewport.scrollToBottom(true);
+    return { held, root, sync, viewport };
+  }
+
+  function grown(host: HTMLElement, key: string, height: number): HTMLElement {
+    const node = document.createElement('div');
+    node.dataset.timelineKey = key;
+    Object.defineProperty(node, 'offsetHeight', { value: height, configurable: true });
+    node.getBoundingClientRect = () => rect(0, height);
+    host.append(node);
+    return node;
+  }
+
+  test('a message far above the mounted rows is reached and stays where the reader asked, while the tail keeps growing', async () => {
+    const { held, root, viewport } = feed(['row-10', 'row-120', 'row-190']);
+    await frames();
+    expect(viewport.window.rows.some((row) => row.key === 'row-10')).toBe(false);
+
+    viewport.select('row-10', 'auto');
+    await frames();
+    viewport.window.measureRow(grown(held, 'row-199', ROW_PX + 400));
+    await frames();
+    await frames();
+
+    expect(root.scrollTop).toBe(10 * ROW_PX - 12);
+    expect(viewport.following).toBe(false);
+    expect(viewport.currentMessageId('row-190')).toBe('row-10');
+    viewport.dispose();
+  });
+
+  test('a message clicked right after the wheel stays the current one while the feed travels to it', async () => {
+    const { root, viewport } = feed(['row-10', 'row-11', 'row-190']);
+    await frames();
+    scroll(root, 100 * ROW_PX);
+
+    viewport.select('row-10', 'smooth');
+    await frames();
+
+    expect(root.scrollTop).toBe(10 * ROW_PX - 12);
+    expect(viewport.currentMessageId('row-190')).toBe('row-10');
+    viewport.dispose();
+  });
+
+  test('older rows landing above a message on its way keep the feed going to that message', async () => {
+    const { root, sync, viewport } = feed(['row-10', 'row-190']);
+    await frames();
+    viewport.select('row-10', 'smooth');
+
+    sync(['older-0', 'older-1', 'older-2']);
+    await frames();
+    await frames();
+
+    expect(root.scrollTop).toBe(13 * ROW_PX - 12);
+    expect(viewport.currentMessageId('row-190')).toBe('row-10');
+    viewport.dispose();
+  });
+
+  test('the current message is the one whose turn is under the reading line, not the nearest one on screen', async () => {
+    const { root, viewport } = feed(['row-10', 'row-120', 'row-190']);
+    await frames();
+
+    scroll(root, 117 * ROW_PX);
+    await frames();
+    expect(viewport.currentMessageId('row-190')).toBe('row-10');
+
+    scroll(root, 125 * ROW_PX);
+    await frames();
+    expect(viewport.currentMessageId('row-190')).toBe('row-120');
+    viewport.dispose();
+  });
+
+  test('a feed riding its tail is on the latest message', async () => {
+    const { viewport } = feed(['row-10', 'row-120', 'row-190']);
+    await frames();
+
+    expect(viewport.following).toBe(true);
+    expect(viewport.currentMessageId('row-190')).toBe('row-190');
+    viewport.dispose();
   });
 });
