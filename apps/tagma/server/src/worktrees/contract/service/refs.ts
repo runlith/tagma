@@ -2,7 +2,7 @@ import { Context, Data, type Effect } from 'effect';
 import type { BranchCommit } from '../wire/retirement.js';
 
 export type BranchHead = { readonly ref: string | null; readonly commit: string | null };
-export type BranchHistory = { readonly base: string; readonly tip: string; readonly limit: number; readonly excludeSubject?: string };
+export type BranchHistory = { readonly base: string; readonly tip: string; readonly limit: number };
 
 export class BranchRefRefused extends Data.TaggedError('BranchRefRefused')<{
   readonly message: string;

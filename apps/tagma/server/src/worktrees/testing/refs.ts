@@ -1,11 +1,12 @@
 import { Effect } from 'effect';
 import { BranchRefRefused, BranchRefs, BranchRefsUnavailable, type BranchHead } from '../contract/service/refs.js';
 import type { BranchCommit } from '../contract/wire/retirement.js';
+import { inGraphTree } from '../../graph/contract/wire/storage.js';
 
 export type MemoryBranchFacts = {
   readonly objects: ReadonlySet<string>;
   readonly changes: ReadonlyMap<string, readonly string[]>;
-  readonly history: ReadonlyMap<string, readonly BranchCommit[]>;
+  readonly history: ReadonlyMap<string, readonly (BranchCommit & { readonly paths: readonly string[] })[]>;
 };
 
 export type MemoryBranchCheckout = {
@@ -65,8 +66,10 @@ export const memoryBranchRefs = (checkouts: ReadonlyMap<string, MemoryBranchChec
       const commits = one.facts?.history.get(`${history.base}|${history.tip}`);
       if (commits === undefined)
         return yield* new BranchRefsUnavailable({ message: `no branch history from ${history.base} to ${history.tip}` });
-      const excluded = history.excludeSubject === undefined ? null : new RegExp(history.excludeSubject);
-      return commits.filter((commit) => excluded === null || !excluded.test(commit.subject)).slice(0, history.limit);
+      return commits
+        .filter((commit) => commit.paths.some((path) => !inGraphTree(path)))
+        .map(({ sha, subject }) => ({ sha, subject }))
+        .slice(0, history.limit);
     }),
     remove: Effect.fnUntraced(function* (path, branch) {
       const one = yield* checkout(path);

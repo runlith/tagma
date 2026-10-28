@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { statSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import type { Git } from './Git.js';
@@ -129,21 +129,35 @@ test('the log answers no more than the max it was given, and every field of a re
   expect(whole[2]?.parents).toEqual([]);
 });
 
-test('a subject exclusion judges the subject alone: a body line matching it keeps the commit, in the log and in the unpushed count', async () => {
-  const root = await tempRepo('git-log-subject-');
+test('a confined exclusion judges the paths a commit changed: confined commits leave, a mixed or foreign one stays, in the log and in the unpushed count', async () => {
+  const root = await tempRepo('git-log-confined-');
+  const confined = (path: string) => path.startsWith('graph/');
   writeFileSync(join(root, 'f.txt'), 'base\n');
   await git(root, ['add', '-A']);
   await git(root, ['commit', '-qm', 'base']);
   const base = await git(root, ['rev-parse', 'HEAD']);
+  mkdirSync(join(root, 'graph'));
+  const odd = 'graph/we\nird.md';
+  writeFileSync(join(root, 'graph', 'a.md'), 'one\n');
+  writeFileSync(join(root, odd), 'one\n');
+  await git(root, ['add', '-A']);
+  await git(root, ['commit', '-qm', 'docs: whatever the subject says']);
   writeFileSync(join(root, 'f.txt'), 'work\n');
-  await git(root, ['commit', '-qam', 'user work', '-m', 'graph: 7 (amber-fox)']);
-  writeFileSync(join(root, 'f.txt'), 'graph\n');
-  await git(root, ['commit', '-qam', 'graph: 8']);
-  const pattern = '^graph: [0-9]+( \\(.*\\))?$';
+  writeFileSync(join(root, 'graph', 'a.md'), 'two\n');
+  await git(root, ['commit', '-qam', 'mixed']);
+  await git(root, ['commit', '-q', '--allow-empty', '-m', 'empty']);
+  await git(root, ['mv', '--', 'graph/a.md', 'f2.txt']);
+  await git(root, ['commit', '-qm', 'moved out']);
+  writeFileSync(join(root, odd), 'two\n');
+  await git(root, ['commit', '-qam', 'tagma: graph @ 9']);
 
-  const log = await onGit((service) => logAt(service, root, { range: `${base}..HEAD`, max: 1, excludeSubject: pattern }));
-  expect(log.map((commit) => commit.subject)).toEqual(['user work']);
-  expect(await onGit((service) => unpushedAt(service, root, 'HEAD', [base], { excludeSubject: pattern }))).toBe(1);
+  const range = `${base}..HEAD`;
+  const log = await onGit((service) => logAt(service, root, { range, max: 10, excludeConfined: confined }));
+  expect(log.map((commit) => commit.subject)).toEqual(['moved out', 'mixed']);
+  const first = await onGit((service) => logAt(service, root, { range, max: 1, skip: 1, excludeConfined: confined }));
+  expect(first.map((commit) => commit.subject)).toEqual(['mixed']);
+  expect(await onGit((service) => unpushedAt(service, root, 'HEAD', [base], { excludeConfined: confined }))).toBe(2);
+  expect(await onGit((service) => unpushedAt(service, root, 'HEAD', [base]))).toBe(5);
 });
 
 test('a path narrows the log to the commits that touched it, and a name git would quote survives', async () => {

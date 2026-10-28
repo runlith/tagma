@@ -1,7 +1,6 @@
 import { expect } from 'bun:test';
 import { Effect } from 'effect';
 import type { BranchRefs } from '../contract/service/refs.js';
-import { GRAPH_COMMIT_PATTERN } from '../../graph/contract/wire/storage.js';
 
 export type BranchRefFixture = {
   readonly refs: BranchRefs['Service'];
@@ -26,10 +25,7 @@ export const branchRefContract = Effect.fnUntraced(function* ({ refs, path, comm
   expect(yield* refs.changes(path, commit, tree)).toEqual([]);
   expect(yield* refs.changes(path, commit, squash)).toEqual([]);
   expect(yield* refs.changes(path, squash, merged)).toEqual([]);
-  expect(yield* refs.commits(path, { base, tip: commit, limit: 1 })).toEqual([{ sha: commit, subject: 'tagma: graph @ 7 (amber-fox)' }]);
-  expect(yield* refs.commits(path, { base, tip: commit, limit: 1, excludeSubject: GRAPH_COMMIT_PATTERN })).toEqual([
-    { sha: work, subject: 'user work' },
-  ]);
+  expect(yield* refs.commits(path, { base, tip: commit, limit: 10 })).toEqual([{ sha: work, subject: 'user work' }]);
 
   yield* refs.rename(path, 'topic', 'renamed');
   expect(yield* refs.head(path)).toEqual({ ref: 'refs/heads/renamed', commit });

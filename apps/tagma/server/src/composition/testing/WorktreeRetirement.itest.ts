@@ -55,11 +55,20 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
 
           const worked = yield* make('unmerged');
           yield* commitEffect(worked.path, 'u.txt', 'unmerged\n', 'work nobody merged');
+          const unmerged = yield* shEffect(worked.path, ['rev-parse', 'HEAD']);
+          yield* files.makeDirectory(join(worked.path, '.tagma'), { recursive: true });
+          yield* commitEffect(worked.path, '.tagma/old.md', 'a block\n', 'tagma: graph @ 4 (amber-fox)');
+          yield* commitEffect(worked.path, '.tagma/new.md', 'a block\n', 'docs(graph): finish 2 tasks');
+          yield* files.writeFileString(join(worked.path, 'mixed.txt'), 'code\n');
+          yield* files.writeFileString(join(worked.path, '.tagma', 'mixed.md'), 'a block\n');
+          yield* shEffect(worked.path, ['add', '--', 'mixed.txt', '.tagma/mixed.md']);
+          yield* shEffect(worked.path, ['commit', '-q', '-m', 'tagma: graph @ 5 (amber-fox)']);
+          const mixed = yield* shEffect(worked.path, ['rev-parse', 'HEAD']);
           yield* files.writeFileString(join(worked.path, 'draft.txt'), 'half done\n');
           const kept = yield* retirement.delete(projectId, worked.rootId);
           expect(kept.committed?.paths).toEqual(['draft.txt']);
           const named = kept.branch.status === 'kept' ? kept.branch.commits.map((one) => one.sha) : [];
-          expect(named).toEqual([kept.committed?.commit ?? '', yield* shEffect(project, ['rev-parse', `${worked.branch}~1`])]);
+          expect(named).toEqual([kept.committed?.commit ?? '', mixed, unmerged]);
           expect(yield* shEffect(project, ['show', `${worked.branch}:draft.txt`])).toBe('half done');
           expect(yield* files.exists(worked.path)).toBe(false);
 

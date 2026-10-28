@@ -22,12 +22,7 @@ it.live('the real branch refs preserve names, publication and rename failures', 
     const base = (yield* run(git, path, ['rev-parse', 'HEAD'], undefined)).trim();
     yield* files.writeFileString(`${path}/work.txt`, 'user work\n');
     yield* run(git, path, ['add', 'work.txt'], undefined);
-    yield* run(
-      git,
-      path,
-      ['-c', 'user.email=git@test', '-c', 'user.name=git', 'commit', '-q', '-m', 'user work', '-m', 'tagma: graph @ 7 (amber-fox)'],
-      undefined,
-    );
+    yield* run(git, path, ['-c', 'user.email=git@test', '-c', 'user.name=git', 'commit', '-q', '-m', 'user work'], undefined);
     const work = (yield* run(git, path, ['rev-parse', 'HEAD'], undefined)).trim();
     yield* files.makeDirectory(`${path}/.tagma`);
     yield* files.writeFileString(`${path}/.tagma/note.md`, 'graph\n');
@@ -35,7 +30,7 @@ it.live('the real branch refs preserve names, publication and rename failures', 
     yield* run(
       git,
       path,
-      ['-c', 'user.email=git@test', '-c', 'user.name=git', 'commit', '-q', '-m', 'tagma: graph @ 7 (amber-fox)'],
+      ['-c', 'user.email=git@test', '-c', 'user.name=git', 'commit', '-q', '-m', 'docs(graph): add a block'],
       undefined,
     );
     const commit = (yield* run(git, path, ['rev-parse', 'HEAD'], undefined)).trim();

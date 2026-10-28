@@ -66,8 +66,8 @@ const fixture = Effect.fnUntraced(function* (input: BranchCase = {}) {
               [
                 `${BASE}|${TIP}`,
                 [
-                  { sha: TIP, subject: 'tagma: graph @ 7 (amber-fox)' },
-                  { sha: WORK, subject: 'user work' },
+                  { sha: TIP, subject: 'docs(graph): add a block', paths: ['.tagma/note.md'] },
+                  { sha: WORK, subject: 'user work', paths: ['work.txt'] },
                 ],
               ],
             ]),

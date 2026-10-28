@@ -6,7 +6,7 @@ import { Git } from '@runlith/git/Git';
 import { actingGit } from '../../platform/git/ownGit.js';
 import type { FinishingPlace } from '../contract/wire/mergeTypes.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { GRAPH_COMMIT_PATTERN } from '../../graph/contract/wire/storage.js';
+import { inGraphTree } from '../../graph/contract/wire/storage.js';
 import type { RootId } from '../../workspace/contract/wire/ids.js';
 import type { CleanedWorktree, CleanupBlocker, CleanupCandidate, CleanupReason } from '../contract/wire/cleanup.js';
 import type { FinishRefusalRow } from '../contract/wire/failures.js';
@@ -22,7 +22,7 @@ const DAY_MS = 86_400_000;
 
 const HEADS = 'refs/heads/';
 
-const OWN_WORK = { excludeSubject: GRAPH_COMMIT_PATTERN };
+const OWN_WORK = { excludeConfined: inGraphTree };
 
 const NOT_A_CANDIDATE: FinishRefusalRow = {
   code: 'not-a-candidate',

@@ -5,6 +5,7 @@ import { deleteBranchAt, renameBranchAt } from '@runlith/git/worktree';
 import { changedBetween } from '@runlith/git/entries';
 import { logAt } from '@runlith/git/history';
 import { actingGit } from '../../platform/git/ownGit.js';
+import { inGraphTree } from '../../graph/contract/wire/storage.js';
 import { BranchRefRefused, BranchRefs, BranchRefsUnavailable } from '../contract/service/refs.js';
 
 const failed = (failure: Parameters<typeof troubleOf>[0]) =>
@@ -28,7 +29,7 @@ export const makeGitBranchRefs = Effect.fnUntraced(function* (input: BranchRefOp
           logAt(git, path, {
             range: `${history.base}..${history.tip}`,
             max: history.limit,
-            excludeSubject: history.excludeSubject,
+            excludeConfined: inGraphTree,
           }),
           failed,
         ),

@@ -80,7 +80,10 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
         yield* files.writeFileString(join(root, 'stale'), 'only here\n');
         yield* sh(root, ['add', '-A']);
         yield* sh(root, ['commit', '-qm', 'work nobody pushed', `--date=${daysAgo(now, 20)}`]);
-        yield* sh(root, ['commit', '-q', '--allow-empty', '-m', 'tagma: graph @ 7', `--date=${daysAgo(now, 0)}`]);
+        yield* files.makeDirectory(join(root, '.tagma'), { recursive: true });
+        yield* files.writeFileString(join(root, '.tagma', 'note.md'), 'a block\n');
+        yield* sh(root, ['add', '-A']);
+        yield* sh(root, ['commit', '-qm', 'docs(graph): finish a task', `--date=${daysAgo(now, 0)}`]);
         yield* sh(root, ['switch', '-q', 'main']);
         yield* sh(root, ['branch', 'tagma/unreadable', 'tagma/stale']);
         const rows: WorktreeRow[] = [

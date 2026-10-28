@@ -67,7 +67,7 @@ export type LogOptions = {
   readonly skip?: number;
   readonly paths?: readonly string[];
   readonly grep?: string;
-  readonly excludeSubject?: string;
+  readonly excludeConfined?: (path: string) => boolean;
   readonly capture?: number;
 };
 
@@ -76,35 +76,65 @@ const COUNT = /^\d+$/;
 
 const FIELD = String.fromCharCode(0x1f);
 const FORMAT = '--format=%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%s';
+const TOUCHING = ['--name-only', '--no-renames', `--format=%x00${FORMAT.slice('--format='.length)}`];
 const HEADS = 5;
-const SUBJECT_WINDOW = 64;
+const OWN_WINDOW = 64;
 const OBJECT_ID = /^[0-9a-f]{7,64}$/;
+
+function commitIn(record: string): Commit | null {
+  const fields: string[] = [];
+  let at = 0;
+  while (fields.length < HEADS) {
+    const mark = record.indexOf(FIELD, at);
+    if (mark === -1) break;
+    fields.push(record.slice(at, mark));
+    at = mark + 1;
+  }
+  const [sha = '', parents = '', author = '', email = '', date = ''] = fields;
+  if (fields.length < HEADS || sha === '') return null;
+  return { sha, parents: parents === '' ? [] : parents.split(' '), author, email, date, subject: record.slice(at) };
+}
 
 function commitsIn(listing: string): Commit[] | null {
   const commits: Commit[] = [];
   for (const record of listing.split('\0')) {
     if (record === '') continue;
-    const fields: string[] = [];
-    let at = 0;
-    while (fields.length < HEADS) {
-      const mark = record.indexOf(FIELD, at);
-      if (mark === -1) break;
-      fields.push(record.slice(at, mark));
-      at = mark + 1;
-    }
-    const [sha = '', parents = '', author = '', email = '', date = ''] = fields;
-    if (fields.length < HEADS || sha === '') return null;
-    commits.push({
-      sha,
-      parents: parents === '' ? [] : parents.split(' '),
-      author,
-      email,
-      date,
-      subject: record.slice(at),
-    });
+    const commit = commitIn(record);
+    if (commit === null) return null;
+    commits.push(commit);
   }
   return commits;
 }
+
+type Touching = { readonly commit: Commit; readonly paths: string[] };
+
+function touchingIn(listing: string): Touching[] | null {
+  const touching: Touching[] = [];
+  let current: Touching | null = null;
+  let header = false;
+  let separator = false;
+  for (const field of listing.split('\0')) {
+    if (field === '') {
+      header = true;
+      continue;
+    }
+    if (header) {
+      const commit = commitIn(field);
+      if (commit === null) return null;
+      current = { commit, paths: [] };
+      touching.push(current);
+      header = false;
+      separator = true;
+      continue;
+    }
+    if (current === null) return null;
+    current.paths.push(separator && field.startsWith('\n') ? field.slice(1) : field);
+    separator = false;
+  }
+  return touching;
+}
+
+const holdsWork = (touching: Touching, confined: (path: string) => boolean): boolean => touching.paths.some((path) => !confined(path));
 
 type Weighing = { readonly named: readonly NamedChange[]; readonly stats: readonly PathStat[]; readonly numbersArgs: readonly string[] };
 
@@ -502,23 +532,17 @@ export const unpushedAt = Effect.fn('Git.unpushed')(function* (
   dir: string,
   tip: string,
   besides: readonly string[],
-  options: { readonly capture?: number; readonly excludeSubject?: string } = {},
+  options: { readonly capture?: number; readonly excludeConfined?: (path: string) => boolean } = {},
 ): Effect.fn.Return<number, GitUnreadable | GitRefused | GitAnswerInvalid> {
   const range = ['--not', '--remotes', '--not', '--end-of-options', tip, ...besides.map((one) => `^${one}`)];
-  if (options.excludeSubject !== undefined) {
-    const excluded = new RegExp(options.excludeSubject);
-    const args = ['rev-list', '--format=%s', ...range];
-    const lines = (yield* run(git, dir, args, options.capture)).split('\n');
-    let counted = 0;
-    for (let at = 0; at < lines.length; at += 1) {
-      if (!lines[at]!.startsWith('commit ')) continue;
-      const subject = lines[at + 1];
-      if (subject === undefined)
-        return yield* new GitUnreadable({ command: commandFor(dir, args), reason: 'rev-list printed a commit without its subject' });
-      if (!excluded.test(subject)) counted += 1;
-      at += 1;
+  const confined = options.excludeConfined;
+  if (confined !== undefined) {
+    const args = ['log', '-z', ...TOUCHING, ...range];
+    const touching = touchingIn(yield* run(git, dir, args, options.capture));
+    if (touching === null) {
+      return yield* new GitUnreadable({ command: commandFor(dir, args), reason: 'log printed a record this reader cannot frame' });
     }
-    return counted;
+    return touching.filter((one) => holdsWork(one, confined)).length;
   }
   const args = ['rev-list', '--count', ...range];
   const counted = Number((yield* run(git, dir, args, options.capture)).trim());
@@ -533,30 +557,31 @@ export const logAt = Effect.fn('Git.log')(function* (
   dir: string,
   options: LogOptions,
 ): Effect.fn.Return<readonly Commit[], GitUnreadable | GitRefused | GitAnswerInvalid> {
-  const read = Effect.fnUntraced(function* (max: number, skip: number | undefined) {
-    const args = [
-      'log',
-      '-z',
-      `--max-count=${max}`,
-      ...(skip === undefined ? [] : [`--skip=${skip}`]),
-      ...(options.grep === undefined ? [] : [`--grep=${options.grep}`, '--regexp-ignore-case', '--fixed-strings']),
-      FORMAT,
-      '--end-of-options',
-      options.range,
-      ...(options.paths === undefined ? [] : ['--', ...options.paths]),
-    ];
+  const argsOf = (max: number, skip: number | undefined, touching: boolean) => [
+    'log',
+    '-z',
+    `--max-count=${max}`,
+    ...(skip === undefined ? [] : [`--skip=${skip}`]),
+    ...(options.grep === undefined ? [] : [`--grep=${options.grep}`, '--regexp-ignore-case', '--fixed-strings']),
+    ...(touching ? TOUCHING : [FORMAT]),
+    '--end-of-options',
+    options.range,
+    ...(options.paths === undefined ? [] : ['--', ...options.paths]),
+  ];
+  const unframed = (args: readonly string[]) =>
+    new GitUnreadable({ command: commandFor(dir, args), reason: 'log printed a record this reader cannot frame' });
+  const confined = options.excludeConfined;
+  if (confined === undefined) {
+    const args = argsOf(options.max, options.skip, false);
     const commits = commitsIn(yield* run(git, dir, args, options.capture));
-    if (commits === null) {
-      return yield* new GitUnreadable({ command: commandFor(dir, args), reason: 'log printed a record this reader cannot frame' });
-    }
-    return commits;
-  });
-  if (options.excludeSubject === undefined) return yield* read(options.max, options.skip);
-  const excluded = new RegExp(options.excludeSubject);
+    return commits === null ? yield* unframed(args) : commits;
+  }
   const wanted = (options.skip ?? 0) + options.max;
-  for (let window = Math.max(SUBJECT_WINDOW, wanted * 4); ; window *= 4) {
-    const commits = yield* read(window, undefined);
-    const kept = commits.filter((commit) => !excluded.test(commit.subject));
-    if (kept.length >= wanted || commits.length < window) return kept.slice(options.skip ?? 0, wanted);
+  for (let window = Math.max(OWN_WINDOW, wanted * 4); ; window *= 4) {
+    const args = argsOf(window, undefined, true);
+    const touching = touchingIn(yield* run(git, dir, args, options.capture));
+    if (touching === null) return yield* unframed(args);
+    const own = touching.filter((one) => holdsWork(one, confined)).map((one) => one.commit);
+    if (own.length >= wanted || touching.length < window) return own.slice(options.skip ?? 0, wanted);
   }
 });

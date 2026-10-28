@@ -5,7 +5,6 @@ export type ServesFrom = (typeof SERVES_FROM)[number];
 
 export const CHECKOUT_DIRECTORY = '.tagma';
 export const GRAPH_COMMIT_PREFIX = 'tagma: graph @ ';
-export const GRAPH_COMMIT_PATTERN = `^${GRAPH_COMMIT_PREFIX}[0-9]+( \\(.*\\))?$`;
 export const WORKFLOWS_DIRECTORY = 'workflows';
 
 export const inGraphTree = (path: string): boolean =>

@@ -35,8 +35,8 @@ it.effect('the in-memory branch refs preserve names, publication and rename fail
               [
                 `${base}|${commit}`,
                 [
-                  { sha: commit, subject: 'tagma: graph @ 7 (amber-fox)' },
-                  { sha: work, subject: 'user work' },
+                  { sha: commit, subject: 'docs(graph): add a block', paths: ['.tagma/note.md'] },
+                  { sha: work, subject: 'user work', paths: ['work.txt'] },
                 ],
               ],
             ]),

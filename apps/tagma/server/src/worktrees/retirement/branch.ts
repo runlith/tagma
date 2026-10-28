@@ -1,7 +1,6 @@
 import { Effect } from 'effect';
 import { troubleOf } from '@runlith/git/repository';
 import { BranchRefs, BranchRefsUnavailable } from '../contract/service/refs.js';
-import { GRAPH_COMMIT_PATTERN } from '../../graph/contract/wire/storage.js';
 import type { WorktreeDeleted } from '../contract/wire/retirement.js';
 import type { ActProgress } from '../contract/service/progress.js';
 import type { MergeChecks } from '../contract/service/mergeChecks.js';
@@ -38,12 +37,7 @@ export const makeBranchDeletion = Effect.fnUntraced(function* (input: {
       yield* refs.remove(common, name);
       return { status: 'deleted', name } satisfies Branch;
     }
-    const commits = yield* refs.commits(common, {
-      base,
-      tip,
-      limit: COMMITS_SHOWN,
-      excludeSubject: GRAPH_COMMIT_PATTERN,
-    });
+    const commits = yield* refs.commits(common, { base, tip, limit: COMMITS_SHOWN });
     const paths = `${work.length} ${work.length === 1 ? 'path' : 'paths'}`;
     return {
       status: 'kept',
