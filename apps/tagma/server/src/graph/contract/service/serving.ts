@@ -29,6 +29,7 @@ import type { STEALTH_PREFIX } from '../wire/storage.js';
 import type { ShadowGit } from '../../tree/shadow.js';
 import type { TreeLedger } from '../../tree/ledger.js';
 import type { TreeCommits } from '../../tree/commits.js';
+import type { CommitAct } from '../../tree/message.js';
 import type { UnmergedTracker } from '../../../platform/git/unmerged.js';
 import type { BlockTitle } from './reads.js';
 import type { TreeScan } from '../../tree/scan.js';
@@ -59,7 +60,7 @@ export type IndexedTitles = {
 };
 
 export type TreeBatches = {
-  readonly land: (landed: { readonly paths: readonly string[]; readonly message: string; readonly author: string }) => Effect.Effect<void>;
+  readonly land: (landed: { readonly paths: readonly string[]; readonly act: CommitAct }) => Effect.Effect<void>;
   readonly carry: (paths: readonly string[]) => Effect.Effect<void>;
   readonly flush: Effect.Effect<void, GateRefusal<'graph-pool'>>;
 };

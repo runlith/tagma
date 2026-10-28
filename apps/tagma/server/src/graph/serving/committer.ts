@@ -4,37 +4,25 @@ import { gitAnswer } from '../../platform/git/ownGit.js';
 import type { UnmergedTracker } from '../../platform/git/unmerged.js';
 import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { captureTree, commitCapture, treeBranch } from '../tree/batch.js';
+import { GraphBatch, shapeOf } from '../tree/message.js';
 import type { TreeBatches } from '../contract/service/serving.js';
 import { refused } from './refusal.js';
 import type { PermitHold } from './permits.js';
 
-const NAMED_ACTS = 6;
 const RETRY_FIRST_MS = 1_000;
 const RETRY_CAP_MS = 300_000;
 const MAINTENANCE_EVERY = 100;
 
 type Pending = {
   readonly paths: Set<string>;
-  readonly messages: string[];
-  readonly authors: Set<string>;
-  acts: number;
+  readonly batch: GraphBatch;
 };
 
-const nothing = (): Pending => ({ paths: new Set(), messages: [], authors: new Set(), acts: 0 });
-
-const messageOf = (batch: Pending): string => {
-  const { acts } = batch;
-  const subject =
-    acts === 0
-      ? 'the tree as the graph read it'
-      : acts === 1
-        ? (batch.messages[0] as string)
-        : `${acts} acts: ${batch.messages.join(' · ')}${acts > NAMED_ACTS ? ` +${acts - NAMED_ACTS}` : ''}`;
-  return batch.authors.size > 1 ? `${subject}\n\nby ${[...batch.authors].sort().join(', ')}\n` : `${subject}\n`;
-};
+const nothing = (): Pending => ({ paths: new Set(), batch: new GraphBatch() });
 
 export const treeCommitter = ({
   git,
+  checkout,
   treeRoot,
   unmerged,
   overTree,
@@ -43,6 +31,7 @@ export const treeCommitter = ({
   committed,
 }: {
   readonly git: Git['Service'];
+  readonly checkout: string;
   readonly treeRoot: string;
   readonly unmerged: UnmergedTracker;
   readonly overTree: PermitHold;
@@ -65,9 +54,7 @@ export const treeCommitter = ({
     const later = pending;
     pending = batch;
     for (const path of later.paths) batch.paths.add(path);
-    batch.acts += later.acts;
-    for (const message of later.messages) if (batch.messages.length < NAMED_ACTS) batch.messages.push(message);
-    for (const author of later.authors) if (batch.authors.size <= NAMED_ACTS) batch.authors.add(author);
+    batch.batch.absorb(later.batch);
   };
 
   const publish = Effect.fn('TreeCommitter.publish', { root: true })(function* (capturing: PermitHold) {
@@ -82,19 +69,19 @@ export const treeCommitter = ({
         }),
       );
       if (capture.files.size === 0 && capture.gone.size === 0) return 'published' as const;
+      const shape = yield* refused(shapeOf(git, checkout));
       const made = yield* Effect.uninterruptible(
         refused(
           commitCapture(git, treeRoot, capture, {
             ref: branch.ref,
             from: `${branch.ref}^0`,
-            message: messageOf(batch),
-            author: batch.authors.size === 1 ? ([...batch.authors][0] as string) : 'tagma',
+            message: batch.batch.message(shape, batch.batch.position),
             at: new Date(yield* Clock.currentTimeMillis),
           }),
         ),
       );
       yield* Effect.annotateCurrentSpan({
-        acts: batch.messages.length,
+        acts: batch.batch.acts,
         paths: batch.paths.size,
         files: capture.files.size,
         gone: capture.gone.size,
@@ -163,9 +150,7 @@ export const treeCommitter = ({
       Effect.sync(() => {
         if (landed.paths.length === 0) return;
         for (const path of landed.paths) pending.paths.add(path);
-        pending.acts += 1;
-        if (pending.messages.length < NAMED_ACTS) pending.messages.push(landed.message);
-        if (pending.authors.size <= NAMED_ACTS) pending.authors.add(landed.author);
+        pending.batch.add(landed.act);
         drive();
       }),
     carry: (paths) =>

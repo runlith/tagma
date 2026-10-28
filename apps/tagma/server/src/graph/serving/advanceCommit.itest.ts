@@ -5,7 +5,6 @@ import { Effect, FiberSet, Queue } from 'effect';
 import { TestClock } from 'effect/testing';
 import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture.js';
 import { runGit } from '../../platform/git/ownGit.js';
-import { testSessionIdentity } from '../../platform/testing/identity.js';
 import { CHECKOUT_DIRECTORY } from '../contract/wire/storage.js';
 import { shippedSteps } from '../steps/sequence.js';
 import { TreeCommits, treeCommits } from '../tree/commits.js';
@@ -42,7 +41,6 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph format delivery', 
               permit: (effect) => effect,
               policy: Effect.succeed('auto'),
               fork: (work) => fork(Effect.andThen(work, Queue.offer(landed, undefined))),
-              identity: testSessionIdentity,
             });
             expect(
               yield* advanceTree({ project, treeRoot, shadow: null, git: graph.git, format, steps: shippedSteps, fromTree: false }).pipe(

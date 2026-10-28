@@ -10,24 +10,14 @@ import type { ActEntry, TreeGuard, TreeProjection } from '../contract/service/ac
 import { CurrentGraph, type TreeBatches, type WriteBindings } from '../contract/service/serving.js';
 import { inStealth, stealthRelative } from '../contract/wire/storage.js';
 import { writableAt } from './writing.js';
-import { blockName } from '../contract/wire/references.js';
 import { FORMAT_FILE } from '../contract/wire/storage.js';
 import { blocksOf } from '../journal/eventLog.js';
 import { projectDelta, restorePaths } from '../tree/projection.js';
+import { actLines, type CommitAct } from '../tree/message.js';
 import { refusal, refused } from './refusal.js';
 import { writes } from '../../platform/contract/service/writes.js';
 
 export const throughWrites = writes('TreeGuard.writeThrough', [block]);
-
-const MESSAGE_OPS = 6;
-
-function actMessage(entries: readonly ActEntry[], names: ReadonlyMap<number, string>): string {
-  const parts = entries
-    .slice(0, MESSAGE_OPS)
-    .map((entry) => (entry.blockId === null ? entry.op : `${entry.op} ${names.get(entry.blockId) ?? ''}`));
-  const rest = entries.length > MESSAGE_OPS ? ` +${entries.length - MESSAGE_OPS}` : '';
-  return parts.join(' · ') + rest;
-}
 
 export const writeThrough = (
   deps: { readonly identity: SessionIdentity['Service'] },
@@ -93,28 +83,38 @@ export const writeThrough = (
         if (projected._tag !== 'Success') return yield* Effect.fail(refusal(projected.failure));
         const own = [...staged].filter((path) => !inStealth(path));
         const hidden = [...staged].filter(inStealth).map(stealthRelative);
-        const landing = Effect.fnUntraced(function* (into: TreeBatches, paths: readonly string[]) {
+        const actOf = Effect.fnUntraced(function* () {
           const sessionId = entries.find((entry) => entry.sessionId !== null)?.sessionId ?? null;
           const signer =
             sessionId === null
               ? undefined
               : yield* store.db.select({ harness: session.harness, key: session.key }).from(session).where(eq(session.id, sessionId)).get();
-          const named = new Map(
-            (ids.length === 0
+          const rows =
+            ids.length === 0
               ? []
-              : yield* store.db.select({ id: block.id, uuid: block.uuid }).from(block).where(inArray(block.id, ids))
-            ).map((row) => [row.id, blockName(row.uuid)] as const),
-          );
-          return into.land({
-            paths,
-            message: actMessage(entries, named),
-            author: signer === undefined ? 'tagma' : sessionName(signer, deps.identity),
+              : yield* store.db
+                  .select({ id: block.id, uuid: block.uuid, title: block.title, tags: block.tags, stealth: block.stealth })
+                  .from(block)
+                  .where(inArray(block.id, ids));
+          const table = yield* tags.of(projectId);
+          const agent = signer === undefined ? null : sessionName(signer, deps.identity);
+          const position = entries.length === 0 ? null : Math.max(...entries.map((entry) => entry.id));
+          return (team: boolean): CommitAct => ({
+            lines: actLines(entries, new Map(rows.filter((row) => !team || !row.stealth).map((row) => [row.id, row])), table),
+            agent,
+            position,
           });
         });
+        const hiddenInto: TreeBatches | null = hidden.length > 0 ? (stealth?.batches ?? null) : null;
+        const ownLands = own.length > 0 && (batches !== null || commits !== undefined);
+        if (hiddenInto === null && !ownLands) return Effect.void;
+        const acts = yield* actOf();
         const after: Effect.Effect<void>[] = [];
-        if (stealth?.batches != null && hidden.length > 0) after.push(yield* landing(stealth.batches, hidden));
-        if (batches !== null) after.push(yield* landing(batches, own));
-        else if (commits !== undefined && own.length > 0) after.push(commits.mark(entries, own));
+        if (hiddenInto !== null) after.push(hiddenInto.land({ paths: hidden, act: acts(false) }));
+        if (ownLands) {
+          if (batches !== null) after.push(batches.land({ paths: own, act: acts(false) }));
+          else if (commits !== undefined) after.push(commits.mark(acts(true), own));
+        }
         return Effect.all(after, { discard: true });
       });
       const undo = Effect.suspend(() => {

@@ -10,7 +10,7 @@ import {
   CheckoutWrites,
   CommitOverlay,
 } from '../contract/service/checkouts.js';
-import { gitIdentity } from '../../platform/git/ownGit.js';
+import { AGENT_PERSON } from '../../platform/contract/wire/commits.js';
 import { readCheckout, readCheckoutHistory, readCommit } from './reads.js';
 import { HolderLabels } from '../contract/service/checkouts.js';
 import { CallerWorkspace } from '../contract/service/places.js';
@@ -19,7 +19,7 @@ import { CHECKOUT_OPERATIONS as READS } from '../contract/wire/checkoutReads.js'
 import { CHECKOUT_ACT_OPERATIONS as ACTS } from '../contract/wire/checkoutActs.js';
 import { type CheckoutPlace, checkoutRefusal, placeOf, standing } from './place.js';
 
-const GRAPH_AUTHOR = gitIdentity('tagma').GIT_AUTHOR_EMAIL;
+const GRAPH_AUTHORS: ReadonlySet<string> = new Set([AGENT_PERSON.email, 'tagma@tagma']);
 
 const checkoutCaller = Effect.fn('checkout.caller')(function* (call: ProjectCaller) {
   const place = yield* CallerWorkspace;
@@ -76,7 +76,7 @@ export const CHECKOUT_PAIRS = {
         const history = yield* readCheckoutHistory(
           yield* checkoutCaller(call),
           { root: input.root, path: input.path, grep: input.grep, limit: input.limit, cursor: input.cursor },
-          GRAPH_AUTHOR,
+          GRAPH_AUTHORS,
         );
         return { status: 'ok' as const, history };
       }),

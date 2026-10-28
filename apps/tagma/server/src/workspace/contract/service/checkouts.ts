@@ -185,7 +185,7 @@ export class CheckoutHistory extends Context.Service<
         readonly limit?: number;
         readonly cursor?: string;
       },
-      graphAuthor: string,
+      graphAuthors: ReadonlySet<string>,
     ): Effect.Effect<PathHistory, GateRefusal<PlaceRefusal | GitRefusal | 'bad-cursor' | 'cursor-stale'>>;
     commit(
       caller: CheckoutCaller,

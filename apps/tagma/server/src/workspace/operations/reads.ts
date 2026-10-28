@@ -66,13 +66,13 @@ export const readCheckoutHistory = Effect.fn('reads.history')(function* (
     readonly limit?: number;
     readonly cursor?: string;
   },
-  graphAuthor: string,
+  graphAuthors: ReadonlySet<string>,
 ) {
   const checkouts = yield* CheckoutHistory;
   return yield* checkouts.history(
     caller,
     { root: input.root, path: input.path, grep: input.grep, limit: input.limit, cursor: input.cursor },
-    graphAuthor,
+    graphAuthors,
   );
 });
 

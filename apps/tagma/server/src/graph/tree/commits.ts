@@ -1,25 +1,21 @@
 import { existsSync } from 'node:fs';
 import { Cause, Clock, Context, Effect, Semaphore } from 'effect';
-import { inArray, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
-import { type SessionIdentity, sessionName } from '../../platform/contract/wire/session.js';
 import { OwnGitFailed, runGitBytes } from '../../platform/git/ownGit.js';
 import { event } from '../store/tables.js';
-import { session } from '../../platform/store/writers.js';
-import type { ActEntry } from '../contract/service/acts.js';
 import type { Git } from '@runlith/git/Git';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { type GraphCommitPolicy, graphCommit } from '../settings.js';
-import { CHECKOUT_DIRECTORY, GRAPH_COMMIT_PREFIX, inGraphTree, WORKFLOWS_DIRECTORY } from '../contract/wire/storage.js';
+import { CHECKOUT_DIRECTORY, inGraphTree, WORKFLOWS_DIRECTORY } from '../contract/wire/storage.js';
 import { settleIndex } from '../../platform/git/settle.js';
 import { placesOf } from '../../platform/git/places.js';
 import { captureTree, type OwedSettlement, owedOf, publishToCheckout } from './batch.js';
+import { type CommitAct, GraphBatch, shapeOf } from './message.js';
 
 const PATHSPEC = [CHECKOUT_DIRECTORY, `:(exclude)${CHECKOUT_DIRECTORY}/${WORKFLOWS_DIRECTORY}`] as const;
 
 const PUBLISH_ATTEMPTS = 3;
-
-const NAMED_SESSIONS = 6;
 
 const QUIET_MS = 10_000;
 
@@ -49,7 +45,7 @@ export type TreeCommitReport = {
 
 export const TreeCommits = Context.Reference<
   | {
-      readonly mark: (entries: readonly ActEntry[], paths: readonly string[]) => Effect.Effect<void>;
+      readonly mark: (act: CommitAct, paths: readonly string[]) => Effect.Effect<void>;
       readonly carry: (paths: readonly string[]) => Effect.Effect<void>;
       readonly commit: Effect.Effect<SyncAnswer, OwnGitFailed | StoreFailure>;
       readonly uncommitted: Effect.Effect<number, OwnGitFailed>;
@@ -114,30 +110,17 @@ export type TreeCommitsOptions = {
   readonly permit: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   readonly policy: Effect.Effect<GraphCommitPolicy, StoreFailure>;
   readonly fork: (effect: Effect.Effect<void>) => unknown;
-  readonly identity: SessionIdentity['Service'];
 };
 
 export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Service.Shape<typeof TreeCommits>> {
-  const { git, checkout, treeRoot, db, permit, policy, fork, identity } = options;
-  let pending: { position: number | null; sessions: Set<number>; since: number; last: number } | null = null;
+  const { git, checkout, treeRoot, db, permit, policy, fork } = options;
+  let pending: { since: number; last: number } | null = null;
+  let batch = new GraphBatch();
   let settling = false;
   let written = new Set<string>();
   let failures = 0;
   let owed: OwedSettlement | null = null;
   const serial = Semaphore.makeUnsafe(1);
-
-  const spokenFor = Effect.fnUntraced(function* (ids: readonly number[]) {
-    if (ids.length === 0) return [];
-    const rows = yield* db.select({ harness: session.harness, key: session.key }).from(session).where(inArray(session.id, ids));
-    return [...new Set(rows.map((row) => sessionName(row, identity)))];
-  });
-
-  const subject = (position: number, names: readonly string[]): string => {
-    const shown = names.slice(0, NAMED_SESSIONS);
-    const more = names.length - shown.length;
-    const who = shown.length === 0 ? '' : ` (${shown.join(', ')}${more > 0 ? `, +${more}` : ''})`;
-    return `${GRAPH_COMMIT_PREFIX}${position}${who}`;
-  };
 
   const dirt = Effect.map(
     runGitBytes(git, 'graph-dirty', [
@@ -184,10 +167,20 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
           return { kind: 'clean' } as const;
         }
         let acted = new Set<string>();
+        let carried = new GraphBatch();
+        const restore = Effect.sync(() => {
+          acted.forEach((path) => written.add(path));
+          acted = new Set();
+          carried.absorb(batch);
+          batch = carried;
+          carried = new GraphBatch();
+        });
         const capture = yield* permit(
           Effect.suspend(() => {
             acted = written;
             written = new Set();
+            carried = batch;
+            batch = new GraphBatch();
             return captureTree(
               checkout,
               [...paths, ...[...acted].map((path) => `${CHECKOUT_DIRECTORY}/${path}`)],
@@ -195,21 +188,22 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
             );
           }),
         ).pipe(
-          Effect.tapError(() => Effect.sync(() => acted.forEach((path) => written.add(path)))),
+          Effect.onError(() => restore),
           Effect.mapError((failure) => new OwnGitFailed({ op: 'graph-capture', message: failure.message, ran: false })),
         );
-        const restore = Effect.sync(() => acted.forEach((path) => written.add(path)));
         const position =
-          taken?.position ??
+          carried.position ??
           (yield* db
             .select({ id: sql<number>`coalesce(max(id), 0)` })
             .from(event)
-            .get())?.id ??
+            .get()
+            .pipe(Effect.onError(() => restore)))?.id ??
           0;
-        const names = yield* spokenFor(taken === null ? [] : [...taken.sessions]).pipe(Effect.tapError(() => restore));
-        const published = yield* Effect.uninterruptible(
-          publishToCheckout(git, checkout, capture, { message: `${subject(position, names)}\n`, author: 'tagma' }),
-        ).pipe(Effect.tapError(() => restore));
+        const shape = yield* shapeOf(git, checkout).pipe(Effect.onError(() => restore));
+        const names = carried.named;
+        const published = yield* Effect.uninterruptible(publishToCheckout(git, checkout, capture, carried.message(shape, position))).pipe(
+          Effect.onError(() => restore),
+        );
         if (published.kind === 'moved' || published.kind === 'held') yield* restore;
         if (published.kind === 'moved' && attempt < PUBLISH_ATTEMPTS) continue;
         if (published.kind === 'moved') {
@@ -233,7 +227,7 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
           const landed = new Set(published.owed.entries.map((entry) => entry.path));
           owed = { ref: published.owed.ref, entries: [...kept.filter((entry) => !landed.has(entry.path)), ...published.owed.entries] };
         }
-        if (owed !== null) yield* due([], []);
+        if (owed !== null) yield* due(null, []);
         return { kind: 'committed', commit: published.commit, sessions: names, files: published.files } as const;
       }
     }),
@@ -268,16 +262,11 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
     }
   }).pipe(Effect.ensuring(Effect.sync(() => (settling = false))), Effect.withSpan('TreeCommits.settle', { root: true }));
 
-  const due = Effect.fnUntraced(function* (entries: readonly ActEntry[], paths: readonly string[]) {
+  const due = Effect.fnUntraced(function* (act: CommitAct | null, paths: readonly string[]) {
     const now = yield* Clock.currentTimeMillis;
     for (const path of paths) written.add(path);
-    const sessions = pending?.sessions ?? new Set<number>();
-    let position = pending?.position ?? null;
-    for (const entry of entries) {
-      if (entry.sessionId !== null) sessions.add(entry.sessionId);
-      position = Math.max(position ?? 0, entry.id);
-    }
-    pending = { position, sessions, since: pending?.since ?? now, last: now };
+    if (act !== null) batch.add(act);
+    pending = { since: pending?.since ?? now, last: now };
     if (settling) return;
     settling = true;
     fork(settle);
@@ -285,7 +274,7 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
 
   return {
     mark: due,
-    carry: (paths) => due([], paths),
+    carry: (paths) => due(null, paths),
     commit,
     uncommitted: Effect.map(dirt, (paths) => new Set(paths).size),
   };

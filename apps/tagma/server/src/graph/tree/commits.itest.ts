@@ -6,14 +6,14 @@ import { Effect, Exit, FiberSet, FileSystem, Layer, Queue, Scope } from 'effect'
 import { TestClock } from 'effect/testing';
 import { join } from 'node:path';
 import { demoGraphLayer, type EffectDemo, withDemo } from '../../composition/testing/graphFixture.js';
-import { testSessionIdentity } from '../../platform/testing/identity.js';
 import { runGit } from '../../platform/git/ownGit.js';
-import type { ActEntry } from '../contract/service/acts.js';
 import type { GraphCommitPolicy } from '../settings.js';
-import { CHECKOUT_DIRECTORY, GRAPH_COMMIT_PREFIX, WORKFLOWS_DIRECTORY } from '../contract/wire/storage.js';
+import { CHECKOUT_DIRECTORY, WORKFLOWS_DIRECTORY } from '../contract/wire/storage.js';
 import { syncGraph, treeCommits } from './commits.js';
+import type { CommitAct } from './message.js';
 
-const BASE = 'the code and its graph';
+const BASE = 'the code and its graph|';
+const synced = (position: number) => `Sync graph files|${position}`;
 const fixtures = demoGraphLayer({
   projects: ['code'],
   prepareEffect: Effect.fnUntraced(function* (demo: EffectDemo) {
@@ -29,7 +29,7 @@ const fixtures = demoGraphLayer({
     const run = (args: readonly string[]) => runGit(demo.graph.git, 'test', ['-C', base, ...args]);
     yield* run(['init', '-q', '-b', 'main', '.']);
     yield* run(['add', '--', 'src', CHECKOUT_DIRECTORY]);
-    yield* run(['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', BASE]);
+    yield* run(['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'the code and its graph']);
   }),
 }).pipe(Layer.provideMerge(BunFileSystem.layer));
 
@@ -80,9 +80,8 @@ const checkout = Effect.fnUntraced(function* (demo: EffectDemo) {
     permit: (effect) => effect,
     policy: chosen,
     fork,
-    identity: testSessionIdentity,
   });
-  const subjects = Effect.map(run(['log', '--format=%s']), (text) => text.split('\n'));
+  const subjects = Effect.map(run(['log', '--format=%s|%(trailers:key=Tagma-Graph,valueonly,separator=)']), (text) => text.split('\n'));
   return {
     base,
     treeRoot,
@@ -111,9 +110,7 @@ const withCheckout = <A, E, R>(body: (world: Effect.Success<ReturnType<typeof ch
 const withClock = <A, E, R>(body: (world: Effect.Success<ReturnType<typeof checkout>>) => Effect.Effect<A, E, R>) =>
   withDemo((demo) => Effect.provide(Effect.flatMap(checkout(demo), body), TestClock.layer()));
 
-const acted = (id: number): ActEntry[] => [
-  { id, ts: new Date(0), projectId: 1, sessionId: null, callId: null, op: 'update', blockId: 1, payload: '{}' },
-];
+const acted = (position: number, agent: string | null = null): CommitAct => ({ lines: [], agent, position });
 
 layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
   it.effect('commits only block files, preserves staged and unstaged code, and bypasses checkout hooks', () =>
@@ -135,8 +132,9 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
         yield* w.wrote('standing.md', 'the block, rewritten\n');
         yield* w.wrote('born.md', 'a block that did not exist\n');
         expect(yield* w.commits.commit).toMatchObject({ kind: 'committed', files: 2 });
-        expect(yield* w.run(['log', '-1', '--format=%an'])).toBe('tagma');
-        expect((yield* w.run(['log', '-1', '--format=%s'])).startsWith(GRAPH_COMMIT_PREFIX)).toBe(true);
+        expect(yield* w.run(['log', '-1', '--format=%an <%ae>|%cn <%ce>|%s'])).toBe(
+          'Tagma <agent@tagma.dev>|Tagma <agent@tagma.dev>|Sync graph files',
+        );
         expect((yield* w.run(['show', '--name-only', '--format=', 'HEAD'])).split('\n').sort()).toEqual([
           `${CHECKOUT_DIRECTORY}/demo/born.md`,
           `${CHECKOUT_DIRECTORY}/demo/standing.md`,
@@ -266,7 +264,7 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
         yield* TestClock.adjust(9_999);
         expect(yield* w.subjects).toEqual([BASE]);
         yield* TestClock.adjust(1);
-        expect(yield* w.landed).toEqual([`${GRAPH_COMMIT_PREFIX}2`, BASE]);
+        expect(yield* w.landed).toEqual([synced(2), BASE]);
         yield* w.wrote('later.md', 'an act inside a burst that never pauses\n');
         for (let age = 0; age < 117_000; age += 9_000) {
           yield* w.commits.mark(acted(3), []);
@@ -275,7 +273,7 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
         expect(yield* w.subjects).toHaveLength(2);
         yield* w.commits.mark(acted(4), []);
         yield* TestClock.adjust(3_000);
-        expect(yield* w.landed).toEqual([`${GRAPH_COMMIT_PREFIX}4`, `${GRAPH_COMMIT_PREFIX}2`, BASE]);
+        expect(yield* w.landed).toEqual([synced(4), synced(2), BASE]);
       }),
     ),
   );
@@ -293,7 +291,7 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
         w.answers('auto');
         yield* w.commits.mark(acted(2), []);
         yield* TestClock.adjust(10_000);
-        expect(yield* w.landed).toEqual([`${GRAPH_COMMIT_PREFIX}2`, BASE]);
+        expect(yield* w.landed).toEqual([synced(2), BASE]);
         expect((yield* w.run(['show', '--name-only', '--format=', 'HEAD'])).split('\n').sort()).toEqual([
           `${CHECKOUT_DIRECTORY}/demo/manual.md`,
           `${CHECKOUT_DIRECTORY}/demo/off.md`,
@@ -302,8 +300,32 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
         yield* w.commits.mark(acted(3), []);
         yield* Scope.close(w.scope, Exit.void);
         yield* TestClock.adjust(130_000);
-        expect(yield* w.subjects).toEqual([`${GRAPH_COMMIT_PREFIX}2`, BASE]);
+        expect(yield* w.subjects).toEqual([synced(2), BASE]);
         expect(yield* w.graphStatus()).toEqual(['?? .tagma/demo/born.md']);
+      }),
+    ),
+  );
+
+  it.effect('a failed publication keeps its acts for the next commit, ahead of later acts and never twice', () =>
+    withCheckout((w) =>
+      Effect.gen(function* () {
+        const line = (name: string) => ({ verb: 'edit', name, title: `block ${name}`, kind: 'note', weight: 3 });
+        yield* w.wrote('born.md', 'the first act\n');
+        yield* w.commits.mark({ lines: [line('aaaaaaaa')], agent: 'jade-ibis', position: 1 }, []);
+        const refusal = w.refuse((args) => args.includes('fast-import'));
+        expect((yield* Effect.flip(w.commits.commit))._tag).toBe('OwnGitFailed');
+        yield* refusal;
+        yield* w.commits.mark({ lines: [line('bbbbbbbb'), line('aaaaaaaa')], agent: 'amber-fox', position: 2 }, []);
+        expect(yield* w.commits.commit).toMatchObject({ kind: 'committed', sessions: ['jade-ibis', 'amber-fox'] });
+        expect((yield* w.run(['log', '-1', '--format=%B'])).trim().split('\n')).toEqual([
+          'Edit 2 notes',
+          '',
+          'edit aaaaaaaa block aaaaaaaa',
+          'edit bbbbbbbb block bbbbbbbb',
+          'by jade-ibis, amber-fox',
+          '',
+          'Tagma-Graph: 2',
+        ]);
       }),
     ),
   );
@@ -313,10 +335,9 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
       Effect.gen(function* () {
         const w = yield* checkout(demo);
         yield* w.wrote('born.md', 'an act whose unit closed before its batch settled\n');
-        const signed: ActEntry[] = [{ ...acted(1)[0]!, sessionId: 1 }];
-        yield* demo.graph.graphStore.transaction('commits.itest.act', () => w.commits.mark(signed, []));
+        yield* demo.graph.graphStore.transaction('commits.itest.act', () => w.commits.mark(acted(1, 'jade-ibis'), []));
         yield* TestClock.adjust(10_000);
-        expect(yield* w.landed).toEqual([`${GRAPH_COMMIT_PREFIX}1`, BASE]);
+        expect(yield* w.landed).toEqual([synced(1), BASE]);
       }).pipe(Effect.provide(TestClock.layer())),
     ),
   );

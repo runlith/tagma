@@ -3,6 +3,7 @@ import { Git, GitNotAdmitted, gitVerb, type GitOptions, type GitAnswer } from '@
 import { type GitAnswerInvalid, type GitRefused, type GitUnreadable, troubleOf } from '@runlith/git/repository';
 import { OWN_GIT_VARIABLE } from '../contract/service/credentials.js';
 import { GateRefusal } from '../contract/wire/refusal.js';
+import type { Person } from '../contract/wire/commits.js';
 
 export type OwnGitReason = 'unstarted' | 'not-admitted' | 'refused' | 'locked' | 'not-a-repository' | 'hook-unsupported';
 
@@ -41,12 +42,14 @@ type Unstarted = Effect.Error<ReturnType<Git['Service']['run']>>;
 const unstarted = (op: string, failure: Unstarted): OwnGitFailed =>
   new OwnGitFailed({ op, message: failure.message, ran: false, admission: failure instanceof GitNotAdmitted ? failure : undefined });
 
-export const gitIdentity = (author: string) => ({
-  GIT_AUTHOR_NAME: author,
-  GIT_AUTHOR_EMAIL: `${author}@tagma`,
-  GIT_COMMITTER_NAME: author,
-  GIT_COMMITTER_EMAIL: `${author}@tagma`,
+export const identityOf = (person: Person) => ({
+  GIT_AUTHOR_NAME: person.name,
+  GIT_AUTHOR_EMAIL: person.email,
+  GIT_COMMITTER_NAME: person.name,
+  GIT_COMMITTER_EMAIL: person.email,
 });
+
+export const gitIdentity = (author: string) => identityOf({ name: author, email: `${author}@tagma` });
 
 export const ownGitOptions = (options: GitOptions | undefined): GitOptions => {
   const env = { ...options?.env, [OWN_GIT_VARIABLE]: '1', GIT_OPTIONAL_LOCKS: '0' };

@@ -2,7 +2,8 @@ import { readFile, rm } from 'node:fs/promises';
 import { Data, Effect } from 'effect';
 import type { Git } from '@runlith/git/Git';
 import type { HoldCut, HoldStalled } from '@runlith/held/failures';
-import { gitIdentity, OwnGitFailed, quietGit, runGit } from './ownGit.js';
+import type { Person } from '../contract/wire/commits.js';
+import { identityOf, OwnGitFailed, quietGit, runGit } from './ownGit.js';
 import { type GitPlaces, type OpenOperation, operationIn, pointedAt } from './places.js';
 import { type IndexBusy, type IndexWriteFailed, type SettleEntry, type Settlement, settleIndex } from './settle.js';
 
@@ -15,7 +16,7 @@ export type Publication = {
   readonly message: string;
   readonly job: string;
   readonly entries: readonly SettleEntry[];
-  readonly author?: string;
+  readonly author?: Person;
 };
 
 type Unsettled = IndexBusy | IndexWriteFailed | OwnGitFailed | HoldStalled | HoldCut;
@@ -138,7 +139,7 @@ export const publish = Effect.fn('platform.git.publish')(function* <E>(
     ['-C', checkout, 'commit-tree', tree, ...(base === null ? [] : ['-p', base]), '-F', '-'],
     {
       stdin: message,
-      env: author === undefined ? undefined : gitIdentity(author),
+      env: author === undefined ? undefined : identityOf(author),
     },
   );
   yield* witness(commit, ref);

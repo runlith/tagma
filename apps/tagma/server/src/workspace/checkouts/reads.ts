@@ -92,7 +92,7 @@ export const makeGitCheckoutReads = Effect.gen(function* () {
   const git = actingGit(yield* Git, 'checkout-history');
 
   const reader = CheckoutHistory.of({
-    history: Effect.fn('CheckoutHistory.history')(function* (caller, asked, graphAuthor) {
+    history: Effect.fn('CheckoutHistory.history')(function* (caller, asked, graphAuthors) {
       const continuing = asked.cursor === undefined ? undefined : yield* walks.recall(HISTORY_WALK, asked.cursor);
       if (continuing !== undefined && continuing.projectId !== caller.projectId) return yield* cursorRefusal('cursor-stale');
       const path = asked.path ?? continuing?.path ?? null;
@@ -138,7 +138,7 @@ export const makeGitCheckoutReads = Effect.gen(function* () {
           author: commit.author,
           date: commit.date,
           subject: commit.subject,
-          graph: commit.email === graphAuthor,
+          graph: graphAuthors.has(commit.email),
         })),
         shown: cut.shown,
         total: cut.total,

@@ -77,19 +77,23 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
       expect(elsewhere.status).toBe(409);
       expect((elsewhere.body as RefusalBody).code).toBe('not-found');
       yield* Effect.gen(function* () {
-        yield* files.writeFileString(join(root, 'graph.md'), 'synced\n');
-        yield* suiteGit(root, 'add', 'graph.md');
-        const synced = yield* spawnedEffect(
-          ['git', '-c', 'user.name=tagma', '-c', 'user.email=tagma@tagma', 'commit', '-qm', 'tagma: graph @ 1'],
-          { cwd: root },
-        );
-        expect(synced.success).toBe(true);
+        for (const [name, email, subject] of [
+          ['tagma', 'tagma@tagma', 'tagma: graph @ 1'],
+          ['Tagma', 'agent@tagma.dev', 'Sync graph files'],
+        ] as const) {
+          yield* files.writeFileString(join(root, 'graph.md'), `${subject}\n`);
+          yield* suiteGit(root, 'add', 'graph.md');
+          const synced = yield* spawnedEffect(['git', '-c', `user.name=${name}`, '-c', `user.email=${email}`, 'commit', '-qm', subject], {
+            cwd: root,
+          });
+          expect(synced.success).toBe(true);
+        }
         const branch = (limit: number, cursor?: string) => history(projectId, { root: rootId, limit, cursor });
         const first = (yield* branch(2)).body as PathHistory;
         expect(first.path).toBeNull();
         expect(first.commits.map((commit) => [commit.subject, commit.graph])).toEqual([
+          ['Sync graph files', true],
           ['tagma: graph @ 1', true],
-          ['later kept edit', false],
         ]);
         expect(first.total).toBeNull();
         expect(first.next).not.toBeNull();
@@ -97,7 +101,7 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
         yield* suiteGit(root, 'commit', '-qam', 'landed mid-walk');
         const rest = (yield* branch(5, first.next ?? '')).body as PathHistory;
         expect(rest.path).toBeNull();
-        expect(rest.commits.map((commit) => commit.subject)).toEqual(['only the other one', 'kept again', 'born']);
+        expect(rest.commits.map((commit) => commit.subject)).toEqual(['later kept edit', 'only the other one', 'kept again', 'born']);
         expect(rest.next).toBeNull();
         const narrowed = yield* history(projectId, { root: rootId, path: 'kept.txt', limit: 2, cursor: first.next ?? '' });
         expect(narrowed.status).toBe(409);

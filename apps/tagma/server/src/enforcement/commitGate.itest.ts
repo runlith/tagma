@@ -270,7 +270,7 @@ layer(commitFixture, { excludeTestServices: true })('commit gate', (it) => {
       if (commits === undefined) return yield* Effect.die('a team tree is served with its committer');
       const answered = yield* Effect.all([commits.commit, op(gate, root, 'search_blocks', { query: 'graph commits' })], { concurrency: 2 });
       expect(answered).toMatchObject([{ kind: 'committed' }, { code: 0 }]);
-      expect((yield* gate.ran(root, ['log', '-1', '--format=%an'])).out).toBe('tagma');
+      expect((yield* gate.ran(root, ['log', '-1', '--format=%an'])).out).toBe('Tagma');
       expect(yield* calls()).toEqual([]);
     }),
   );

@@ -4,7 +4,6 @@ export const SERVES_FROM = ['files', 'rows'] as const;
 export type ServesFrom = (typeof SERVES_FROM)[number];
 
 export const CHECKOUT_DIRECTORY = '.tagma';
-export const GRAPH_COMMIT_PREFIX = 'tagma: graph @ ';
 export const WORKFLOWS_DIRECTORY = 'workflows';
 
 export const inGraphTree = (path: string): boolean =>

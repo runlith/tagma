@@ -5,6 +5,7 @@ import { isStaging } from './atomicFile.js';
 import type { Git } from '@runlith/git/Git';
 import { OwnGitFailed, gitAnswer, runGit, runGitBytes } from '../../platform/git/ownGit.js';
 import { publish } from '../../platform/git/publish.js';
+import { AGENT_PERSON, personOf } from '../../platform/contract/wire/commits.js';
 import { operationIn, placesOf, pointedAt } from '../../platform/git/places.js';
 import type { SettleEntry, Settlement } from '../../platform/git/settle.js';
 
@@ -22,7 +23,6 @@ export type BatchCommit = {
   readonly ref: string;
   readonly from: string | null;
   readonly message: string;
-  readonly author: string;
   readonly at: Date;
 };
 
@@ -127,7 +127,7 @@ const importStream = (capture: TreeCapture, commit: BatchCommit): Uint8Array => 
     text('\n');
   };
   const seconds = Math.floor(commit.at.getTime() / 1000);
-  const person = `${commit.author} <${commit.author}@tagma> ${seconds} +0000`;
+  const person = `${personOf(AGENT_PERSON)} ${seconds} +0000`;
   if (commit.from === null) text(`reset ${commit.ref}\n\n`);
   text(`commit ${commit.ref}\nmark :1\nauthor ${person}\ncommitter ${person}\n`);
   data(Buffer.from(commit.message, 'utf8'));
@@ -165,7 +165,7 @@ export const publishToCheckout = Effect.fnUntraced(function* (
   git: Git['Service'],
   checkout: string,
   capture: TreeCapture,
-  commit: Omit<BatchCommit, 'ref' | 'from' | 'at'>,
+  message: string,
 ): Effect.fn.Return<CheckoutPublished, OwnGitFailed> {
   const places = yield* placesOf(git, checkout);
   if ((yield* operationIn(places)) !== null) return { kind: 'held', reason: 'merge' } as const;
@@ -174,7 +174,7 @@ export const publishToCheckout = Effect.fnUntraced(function* (
   if (ref === null) return { kind: 'held', reason: 'detached' } as const;
   const base = head.commit;
   const imported = yield* gitAnswer(git, 'graph-batch', ['-C', checkout, ...NO_HOOKS, 'fast-import', '--quiet', '--done', '--force'], {
-    stdin: importStream(capture, { ...commit, ref: STAGING_REF, from: base, at: new Date(yield* Clock.currentTimeMillis) }),
+    stdin: importStream(capture, { message, ref: STAGING_REF, from: base, at: new Date(yield* Clock.currentTimeMillis) }),
   });
   if (imported.status !== 0) {
     return yield* new OwnGitFailed({ op: 'graph-batch', message: imported.stderr.trim() || imported.stdout.trim(), ran: true });
@@ -210,7 +210,7 @@ export const publishToCheckout = Effect.fnUntraced(function* (
   const answer = yield* Effect.result(
     publish(
       git,
-      { checkout, places, ref, base, tree: `${built}^{tree}`, message: commit.message, job: 'graph batch', entries, author: commit.author },
+      { checkout, places, ref, base, tree: `${built}^{tree}`, message, job: 'graph batch', entries, author: AGENT_PERSON },
       () => Effect.void,
     ),
   );

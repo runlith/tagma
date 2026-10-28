@@ -9,7 +9,8 @@ import { STAGING_PATHSPEC } from '../tree/atomicFile.js';
 import { eq } from 'drizzle-orm';
 import { GraphStore, MachineStore } from '../../platform/contract/service/store.js';
 import { unitsLayer } from '../../platform/store/units.js';
-import { gitIdentity, runGit, runGitBytes } from '../../platform/git/ownGit.js';
+import { identityOf, runGit, runGitBytes } from '../../platform/git/ownGit.js';
+import { AGENT_PERSON } from '../../platform/contract/wire/commits.js';
 import { SessionIdentity } from '../../platform/contract/wire/session.js';
 import { mirrorStoreLayer } from '../storage/baseline.js';
 import { identifyMirror } from '../storage/identity.js';
@@ -295,7 +296,6 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                       permit: overTree(gates, layout.treeRoot),
                       policy: Effect.map(Context.get(machine, Settings).read(graphCommit, row.id), (resolved) => resolved.value),
                       fork,
-                      identity,
                     })
                   : undefined;
               const poolContext = Context.add(Context.add(opening, VocabularyFormat, format), TreeCommits, commits);
@@ -390,6 +390,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                   ? null
                   : treeCommitter({
                       git,
+                      checkout,
                       treeRoot: layout.treeRoot,
                       unmerged,
                       overTree: overTree(gates, layout.treeRoot),
@@ -406,6 +407,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                   topology: synced,
                   batches: treeCommitter({
                     git,
+                    checkout,
                     treeRoot: place.treeRoot,
                     unmerged: tracked,
                     overTree: overTree(gates, place.treeRoot),
@@ -614,7 +616,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                     git,
                     'level-commit',
                     ['-C', checkout, 'commit-tree', tree, '-p', input.commit, '-m', `graph brought to the format of ${input.checkout}`],
-                    { env: gitIdentity('tagma') },
+                    { env: identityOf(AGENT_PERSON) },
                   ),
                 );
           return { built, layout, checkout, head, release };
