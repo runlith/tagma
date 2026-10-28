@@ -32,7 +32,22 @@ const linker = 'import type { Routed } from "./routed.js";\n\nexport const marke
 const ownRoot =
   'const held = { root: "graph" };\nexport const label = (routed: Routed) => {\n  const root = held.root;\n  return `${root}:${routed.graphs}`;\n};\nexport const named = () => {\n  const { root } = held;\n  return root;\n};\nenum Kind { root }\nexport type Chosen = Kind.root;\n';
 
+const checkoutPaths = 'export interface CheckoutPaths {\n  readonly home: string;\n}\n';
+const explainer =
+  'import type { CheckoutPaths } from "./paths.js";\nimport type { Failure } from "./failure.js";\n\nexport const marker = 0;\n';
+
+const api =
+  'export interface Other {\n  readonly message: string;\n}\nexport interface Picked {\n  readonly home: string;\n}\nexport declare function pick(mode: "other"): Other;\nexport declare function pick(mode: "picked"): Picked;\n';
+const picker = 'import { pick } from "./api.js";\nimport { mode } from "./selector.js";\n\nexport const marker = 0;\n';
+
 const BASE = {
+  'api.ts': api,
+  'tag.ts': 'export type Mode = "picked";\n',
+  'selector.ts': 'import type { Mode } from "./tag.js";\nexport const mode = "picked" as Mode;\n',
+  'picker.ts': picker,
+  'failure.ts': 'export interface Failure {\n  readonly message: string;\n}\n',
+  'paths.ts': checkoutPaths,
+  'explain.ts': explainer,
   'routed.ts': routed,
   'linker.ts': linker,
   'reader.ts': linker,
@@ -104,6 +119,8 @@ layer(checkoutFixture, { excludeTestServices: true })('submit_work bindings', (i
             ),
           );
           yield* write(PEER, 'routed.ts', routed.replace('  readonly graphs', '  readonly root: string;\n  readonly graphs'));
+          yield* write(PEER, 'paths.ts', checkoutPaths.replace('  readonly home', '  readonly message: string;\n  readonly home'));
+          yield* write(PEER, 'api.ts', api.replace('  readonly home', '  readonly message: string;\n  readonly home'));
 
           const shadow = `${scope}export const identity = (Peer: number) => Peer;\n`;
           yield* write(CALLER, 'scope.ts', shadow);
@@ -114,14 +131,17 @@ layer(checkoutFixture, { excludeTestServices: true })('submit_work bindings', (i
           const explorerImport = explorer.replace('Existing as Shape } from "./peer.js"', 'Foreign as Shape } from "./leaf.js"');
           yield* write(CALLER, 'ExplorerView.svelte', explorerImport);
           yield* write(CALLER, 'linker.ts', `${linker}${ownRoot}`);
+          const explained = `${explainer}export const explain = (failure: Failure, paths: CheckoutPaths) => \`\${paths.home}: \${failure.message}\`;\n`;
+          yield* write(CALLER, 'explain.ts', explained);
           expect(
             yield* world.submit(CALLER, { subject: 'use local names beside peer declarations and component internals' }),
           ).toMatchObject({
             status: 'landed',
             carried: [],
-            committed: ['ExplorerView.svelte', 'independent.ts', 'linker.ts', 'scope.ts', 'serving.ts'],
+            committed: ['ExplorerView.svelte', 'explain.ts', 'independent.ts', 'linker.ts', 'scope.ts', 'serving.ts'],
           });
           expect(yield* read('routed.ts')).toBe(routed);
+          expect(yield* read('paths.ts')).toBe(checkoutPaths);
           expect(yield* read('ExplorerView.svelte')).toBe(explorerImport);
           expect(yield* read('TreeMenu.svelte')).toBe(treeMenu);
           expect(yield* read('scope.ts')).toBe(`${scopeBase}export const identity = (Peer: number) => Peer;\n`);
@@ -164,6 +184,10 @@ layer(checkoutFixture, { excludeTestServices: true })('submit_work bindings', (i
           yield* write(CALLER, 'ExplorerView.svelte', explorerUse);
           const member = `${linker}let root = "";\nexport const take = (routed: Routed) => {\n  ({ root } = routed);\n  return root;\n};\n`;
           yield* write(CALLER, 'reader.ts', member);
+          const said = `${explained}export const said = (paths: CheckoutPaths) => paths.message;\n`;
+          yield* write(CALLER, 'explain.ts', said);
+          const picked = `${picker}export const picked = pick(mode).message;\n`;
+          yield* write(CALLER, 'picker.ts', picked);
           const refused = yield* Effect.flip(world.submit(CALLER, { subject: 'use uncommitted peer declarations' }));
           expect(refused).toBeInstanceOf(GateRefusal);
           if (!(refused instanceof GateRefusal)) return;
@@ -183,6 +207,8 @@ layer(checkoutFixture, { excludeTestServices: true })('submit_work bindings', (i
             ['Peer', 'moved.ts'],
             ['fresh', 'TreeMenu.svelte'],
             ['root', 'routed.ts'],
+            ['message', 'paths.ts'],
+            ['message', 'api.ts'],
           ] as const)
             expect(refused.reason).toMatch(
               new RegExp(`${RegExp.escape(name)} in ${RegExp.escape(path)}:\\d+, held by ${RegExp.escape(PEER)}`),
@@ -202,6 +228,8 @@ layer(checkoutFixture, { excludeTestServices: true })('submit_work bindings', (i
           expect(yield* read('moved.ts')).toBe(relocated);
           expect(yield* read('ExplorerView.svelte')).toBe(explorerUse);
           expect(yield* read('reader.ts')).toBe(member);
+          expect(yield* read('explain.ts')).toBe(said);
+          expect(yield* read('picker.ts')).toBe(picked);
         }),
       ),
   );

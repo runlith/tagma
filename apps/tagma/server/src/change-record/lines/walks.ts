@@ -16,7 +16,7 @@ import type { BaseAlignment } from './projection.js';
 import type { FoldJob, FoldResponse } from './jobs.js';
 import type { ReleasedSpan } from './released.js';
 import type { DebtWindow } from './owed.js';
-import type { DependencyAnswer, DependencyInput, DependencyProbe, ImportProbe } from '../prepared/dependencyWalk.js';
+import type { DependencyAnswer, DependencyInput, DependencyProbe, ImportProbe, PlacementInput } from '../prepared/dependencyWalk.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Authoring, Placed } from '../threadFiles/authored.js';
 import type { LineTally, Tallied } from './tally.js';
@@ -45,7 +45,8 @@ export type WalkQuestion =
   | { readonly kind: 'spans'; readonly hunks: readonly LineHunk[] }
   | { readonly kind: 'windows'; readonly before: string; readonly after: string }
   | { readonly kind: 'dependencies'; readonly input: DependencyInput }
-  | { readonly kind: 'dependencyImports'; readonly input: DependencyProbe };
+  | { readonly kind: 'dependencyImports'; readonly input: DependencyProbe }
+  | { readonly kind: 'placements'; readonly input: PlacementInput };
 
 export type WalkAsk = { readonly id: number } & WalkQuestion;
 
@@ -61,6 +62,7 @@ export type WalkAnswer = { readonly id: number } & (
   | { readonly kind: 'windows'; readonly answer: readonly DebtWindow[] | null }
   | { readonly kind: 'dependencies'; readonly answer: DependencyAnswer }
   | { readonly kind: 'dependencyImports'; readonly answer: ImportProbe }
+  | { readonly kind: 'placements'; readonly answer: readonly string[] }
   | { readonly kind: 'failed'; readonly reason: string }
 );
 
@@ -250,6 +252,7 @@ export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size
     windows: (before: string, after: string) => ask({ kind: 'windows', before, after }, 'later'),
     dependencies: (input: DependencyInput) => ask({ kind: 'dependencies', input }, 'now'),
     dependencyImports: (input: DependencyProbe) => ask({ kind: 'dependencyImports', input }, 'now'),
+    placements: (input: PlacementInput) => ask({ kind: 'placements', input }, 'now'),
     fold: Effect.fnUntraced(function* (
       input: FoldInput,
       cached?: CachedFold,

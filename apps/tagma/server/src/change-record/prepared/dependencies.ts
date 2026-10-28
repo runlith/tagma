@@ -197,9 +197,45 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
     reaches.set(root, paths);
     return paths;
   };
+  const matched: { readonly candidate: Dependency; readonly users: readonly string[] }[] = [];
+  const asked = new Map<string, Set<string>>();
   for (const [path, one] of facts)
-    for (const candidate of one.candidates)
-      if ([...(users.get(candidate.name) ?? [])].some((root) => reached(root).has(path))) dependencies.push(candidate);
+    for (const candidate of one.candidates) {
+      const using = [...(users.get(candidate.name) ?? [])].filter((user) => reached(user).has(path));
+      if (using.length === 0) continue;
+      matched.push({ candidate, users: using });
+      for (const user of using) asked.set(user, (asked.get(user) ?? new Set()).add(candidate.name));
+    }
+  const landed = (path: string): string | null | undefined => {
+    const snapshot = snapshots.get(path);
+    if (snapshot !== undefined) return snapshot.selected;
+    const carried = planned.get(path);
+    return carried?.land === 'own' ? carried.text : undefined;
+  };
+  const placed = new Map<string, ReadonlySet<string>>();
+  for (const [path, names] of asked) {
+    const input = snapshots.get(path);
+    if (input === undefined || input.selected === null) continue;
+    const files = [...new Set([...(edges.get(path) ?? []), ...reached(path)])];
+    const answer = yield* fns.walks
+      .placements({
+        root,
+        path,
+        text: input.selected,
+        lines: input.lines,
+        names: [...names],
+        files,
+        texts: files.flatMap((file) => {
+          const text = landed(file);
+          return text === undefined ? [] : [[file, text] as const];
+        }),
+        capture,
+      })
+      .pipe(Effect.mapError((failure) => walkCut(path, failure, `include ${path} in paths and whole to carry its complete text`)));
+    placed.set(path, new Set(answer));
+  }
+  for (const { candidate, users: using } of matched)
+    if (using.some((user) => placed.get(user)?.has(candidate.name) !== true)) dependencies.push(candidate);
   if (dependencies.length === 0) return;
   const unique = [...new Map(dependencies.map((one) => [`${one.path}:${one.line}:${one.name}:${one.holder}`, one])).values()];
   const paths = [...new Set(unique.map((one) => one.path))];

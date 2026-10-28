@@ -30,6 +30,16 @@ export type ImportProbe = {
   readonly reads: number;
   readonly importMs: number;
 };
+export type PlacementInput = {
+  readonly root: string;
+  readonly path: string;
+  readonly text: string;
+  readonly lines?: readonly number[];
+  readonly names: readonly string[];
+  readonly files: readonly string[];
+  readonly texts: readonly (readonly [string, string | null])[];
+  readonly capture: number;
+};
 export type DependencyAnswer = {
   readonly dependencies: readonly Dependency[];
   readonly imports: readonly ImportedUse[];
@@ -112,6 +122,29 @@ export const dependencyImportsOf = async (input: DependencyProbe): Promise<Impor
     if (target !== '..' && !target.startsWith('../')) paths.add(target);
   }
   return { text, paths: [...paths], reads: hit ? 0 : 1, importMs };
+};
+
+export const placementsOf = async (input: PlacementInput): Promise<readonly string[]> => {
+  const adapter = ADAPTERS.find((one) => one.parses(input.path));
+  if (adapter?.symbols === undefined) return [];
+  const reader = await adapter.symbols();
+  const disk = treeAt(input.root);
+  const texts = new Map(input.texts);
+  const tree: Tree = {
+    has: (path) => (texts.has(path) ? texts.get(path) !== null : disk.has(path)),
+    read: (path) => texts.get(path) ?? disk.read(path),
+    realpath: disk.realpath,
+  };
+  let left = input.capture - input.text.length;
+  const files: string[] = [];
+  for (const path of input.files) {
+    if (!adapter.parses(path) || !tree.has(path)) continue;
+    const size = texts.get(path)?.length ?? statSync(join(input.root, path)).size;
+    if (size > left) continue;
+    left -= size;
+    files.push(path);
+  }
+  return reader.place({ text: input.text, path: input.path, lines: input.lines, names: input.names, files, tree });
 };
 
 export const dependenciesOf = async (input: DependencyInput): Promise<DependencyAnswer> => {

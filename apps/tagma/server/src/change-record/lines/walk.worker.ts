@@ -44,6 +44,12 @@ const answered = (ask: WalkAsk): WalkAnswer | Promise<WalkAnswer> => {
         kind: 'dependencyImports',
         answer: await dependencyImportsOf(ask.input),
       }));
+    case 'placements':
+      return import('../prepared/dependencyWalk.js').then(async ({ placementsOf }) => ({
+        id: ask.id,
+        kind: 'placements',
+        answer: await placementsOf(ask.input),
+      }));
     case 'dependencies':
       return import('../prepared/dependencyWalk.js').then(async ({ dependenciesOf }) => ({
         id: ask.id,

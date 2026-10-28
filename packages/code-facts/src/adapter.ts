@@ -76,8 +76,17 @@ export type Symbols = {
   readonly uses: readonly string[];
   readonly imports: readonly string[];
 };
+export type SymbolPlacing = {
+  readonly text: string;
+  readonly path: string;
+  readonly lines?: readonly number[];
+  readonly names: readonly string[];
+  readonly files: readonly string[];
+  readonly tree: Tree;
+};
 export type SymbolReader = {
   readonly read: (text: string, path: string, lines?: readonly number[]) => Symbols;
+  readonly place: (input: SymbolPlacing) => readonly string[];
   readonly resolve: (specifier: string, from: string, tree: Tree) => Resolution | null;
 };
 

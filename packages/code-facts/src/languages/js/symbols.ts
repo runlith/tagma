@@ -6,6 +6,7 @@ import type {
   SymbolForward,
   SymbolImport,
   SymbolMeaning,
+  SymbolPlacing,
   SymbolReader,
   SymbolReference,
   Symbols,
@@ -117,42 +118,72 @@ const assigned = (node: ts.Node): boolean => {
   return (ts.isArrayLiteralExpression(parent) || ts.isSpreadElement(parent)) && assigned(parent);
 };
 
+type Spelled = { readonly name: ts.Identifier; readonly symbol: ts.Symbol | undefined };
+
+const identifierSymbol = (node: ts.Identifier, checker: ts.TypeChecker): ts.Symbol | undefined =>
+  ts.isShorthandPropertyAssignment(node.parent)
+    ? checker.getShorthandAssignmentValueSymbol(node.parent)
+    : ts.isExportSpecifier(node.parent)
+      ? checker.getExportSpecifierLocalTargetSymbol(node.parent)
+      : checker.getSymbolAtLocation(node);
+
+const memberSpellings = (node: ts.Node, checker: ts.TypeChecker): readonly Spelled[] => {
+  if (ts.isBindingElement(node) && node.propertyName === undefined && ts.isObjectBindingPattern(node.parent) && ts.isIdentifier(node.name))
+    return [{ name: node.name, symbol: checker.getPropertyOfType(checker.getTypeAtLocation(node.parent), node.name.text) }];
+  if (!ts.isObjectLiteralExpression(node) || !assigned(node)) return [];
+  return node.properties.flatMap((property) =>
+    (ts.isShorthandPropertyAssignment(property) || ts.isPropertyAssignment(property)) && ts.isIdentifier(property.name)
+      ? [{ name: property.name, symbol: checker.getPropertySymbolOfDestructuringAssignment(property.name) }]
+      : [],
+  );
+};
+
+const kindOf = (path: string): ts.ScriptKind => (/(?:\.[jt]sx|\.[cm]?js)$/.test(path) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+
+const startsOf = (source: string): readonly number[] => {
+  const starts = [0];
+  for (let at = source.indexOf('\n'); at !== -1; at = source.indexOf('\n', at + 1)) starts.push(at + 1);
+  return starts;
+};
+
+const located = (starts: readonly number[], at: number) => {
+  let low = 0;
+  let high = starts.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >>> 1;
+    if (starts[middle]! <= at) low = middle;
+    else high = middle - 1;
+  }
+  return { line: low + 1, column: at - starts[low]! + 1 };
+};
+
+const hostOver = (files: ReadonlyMap<string, ts.SourceFile>): ts.CompilerHost => ({
+  getSourceFile: (wanted) => files.get(wanted),
+  getDefaultLibFileName: () => '',
+  getCurrentDirectory: () => '/',
+  getCanonicalFileName: (name) => name,
+  useCaseSensitiveFileNames: () => true,
+  readFile: () => undefined,
+  fileExists: (wanted) => files.has(wanted),
+  writeFile: () => undefined,
+  getNewLine: () => '\n',
+});
+
 const readScript = (script: Script, path: string, source: string, lines?: ReadonlySet<number>): Symbols => {
   const { text, at: offset } = script;
-  const kind = /(?:\.[jt]sx|\.[cm]?js)$/.test(path) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const kind = kindOf(path);
   const rootName = `${path}.binding.${kind === ts.ScriptKind.TSX ? 'tsx' : 'ts'}`;
   const file = ts.createSourceFile(rootName, text, ts.ScriptTarget.Latest, true, kind);
   const program = ts.createProgram(
     [rootName],
     { noLib: true, noResolve: true, types: [], noEmit: true, allowJs: true },
-    {
-      getSourceFile: (wanted) => (wanted === rootName ? file : undefined),
-      getDefaultLibFileName: () => '',
-      getCurrentDirectory: () => '/',
-      getCanonicalFileName: (name) => name,
-      useCaseSensitiveFileNames: () => true,
-      readFile: () => undefined,
-      fileExists: (wanted) => wanted === rootName,
-      writeFile: () => undefined,
-      getNewLine: () => '\n',
-    },
+    hostOver(new Map([[rootName, file]])),
   );
   const errors = program.getSyntacticDiagnostics(file);
   if (errors.length > 0) throw new UnsupportedSource(path, ts.flattenDiagnosticMessageText(errors[0]!.messageText, '\n'));
   const checker = program.getTypeChecker();
-  const starts = [0];
-  for (let at = source.indexOf('\n'); at !== -1; at = source.indexOf('\n', at + 1)) starts.push(at + 1);
-  const position = (node: ts.Node) => {
-    const at = offset + node.getStart(file);
-    let low = 0;
-    let high = starts.length - 1;
-    while (low < high) {
-      const middle = (low + high + 1) >>> 1;
-      if (starts[middle]! <= at) low = middle;
-      else high = middle - 1;
-    }
-    return { line: low + 1, column: at - starts[low]! + 1 };
-  };
+  const starts = startsOf(source);
+  const position = (node: ts.Node) => located(starts, offset + node.getStart(file));
   const targets = new Map<ts.Symbol, Map<SymbolMeaning, SymbolTarget>>();
   const target = (symbol: ts.Symbol, meaning: SymbolMeaning): SymbolTarget => {
     const cached = targets.get(symbol)?.get(meaning);
@@ -275,28 +306,11 @@ const readScript = (script: Script, path: string, source: string, lines?: Readon
       if (name !== undefined && (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)))
         names.push({ name: name.text, owner: ownerOf(node), line: position(name).line });
     }
-    if (
-      ts.isBindingElement(node) &&
-      node.propertyName === undefined &&
-      ts.isObjectBindingPattern(node.parent) &&
-      ts.isIdentifier(node.name)
-    ) {
-      const property = checker.getPropertyOfType(checker.getTypeAtLocation(node.parent), node.name.text);
-      use(node.name, property === undefined ? undefined : target(property, 'all'));
-    }
-    if (ts.isObjectLiteralExpression(node) && assigned(node))
-      for (const property of node.properties)
-        if ((ts.isShorthandPropertyAssignment(property) || ts.isPropertyAssignment(property)) && ts.isIdentifier(property.name)) {
-          const read = checker.getPropertySymbolOfDestructuringAssignment(property.name);
-          use(property.name, read === undefined ? undefined : target(read, 'all'));
-        }
+    for (const member of memberSpellings(node, checker))
+      use(member.name, member.symbol === undefined ? undefined : target(member.symbol, 'all'));
     if (ts.isIdentifier(node) && !isName(node)) {
       const meaning = meaningOf(node);
-      const symbol = ts.isShorthandPropertyAssignment(node.parent)
-        ? checker.getShorthandAssignmentValueSymbol(node.parent)
-        : ts.isExportSpecifier(node.parent)
-          ? checker.getExportSpecifierLocalTargetSymbol(node.parent)
-          : checker.getSymbolAtLocation(node);
+      const symbol = identifierSymbol(node, checker);
       const found = symbol === undefined ? { definitions: [], imported: undefined } : target(symbol, meaning);
       let imported = found.imported;
       if (imported?.name === '*') {
@@ -402,7 +416,180 @@ const resolution = (specifier: string, from: string, tree: Tree) => {
   return found === undefined ? (relative ?? configured) : { to: local(found.resolvedFileName) };
 };
 
+const derivations = (node: ts.Node): readonly ts.Node[] => {
+  if (ts.isBindingElement(node)) return node.initializer === undefined ? [node.parent.parent] : [node.parent.parent, node.initializer];
+  if (ts.isFunctionLike(node)) return node.type !== undefined || !('body' in node) || node.body === undefined ? [] : [node.body];
+  if (ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isPropertyDeclaration(node)) {
+    if (node.type !== undefined) return [];
+    if (node.initializer !== undefined) return [node.initializer];
+    return ts.isParameter(node) ? [node.parent.parent] : [];
+  }
+  if (ts.isPropertyAssignment(node)) return [node.initializer];
+  if (ts.isShorthandPropertyAssignment(node)) return [node.name];
+  if (ts.isExportAssignment(node)) return [node.expression];
+  return [];
+};
+
+const declared = (node: ts.Node): boolean =>
+  ts.isBindingElement(node) ||
+  ts.isFunctionLike(node) ||
+  ts.isVariableDeclaration(node) ||
+  ts.isParameter(node) ||
+  ts.isPropertyDeclaration(node) ||
+  ts.isPropertySignature(node) ||
+  ts.isPropertyAssignment(node) ||
+  ts.isShorthandPropertyAssignment(node) ||
+  ts.isExportAssignment(node) ||
+  ts.isClassLike(node) ||
+  ts.isInterfaceDeclaration(node) ||
+  ts.isTypeAliasDeclaration(node) ||
+  ts.isEnumDeclaration(node) ||
+  ts.isEnumMember(node) ||
+  ts.isModuleDeclaration(node) ||
+  ts.isTypeParameterDeclaration(node) ||
+  ts.isSourceFile(node);
+
+const receiversOf = (name: ts.Identifier): readonly ts.Node[] => {
+  const parent = name.parent;
+  if (ts.isPropertyAccessExpression(parent) && parent.name === name) return [parent.expression];
+  if (ts.isBindingElement(parent)) return [parent.parent.parent];
+  if (!ts.isShorthandPropertyAssignment(parent) && !ts.isPropertyAssignment(parent)) return [];
+  const sources: ts.Node[] = [];
+  let held: ts.Node = parent.parent;
+  while (assigned(held)) {
+    const above = held.parent;
+    if (ts.isForOfStatement(above) || ts.isForInStatement(above)) return [...sources, above.expression];
+    if (ts.isBinaryExpression(above)) sources.push(above.right);
+    held = ts.isPropertyAssignment(above) ? above.parent : above;
+  }
+  return sources;
+};
+
+type Unit = { readonly path: string; readonly file: ts.SourceFile };
+
+const placing =
+  (scripts: Scripts) =>
+  (input: SymbolPlacing): readonly string[] => {
+    const { path, tree } = input;
+    const files = new Map<string, ts.SourceFile>();
+    const units = new Map<string, Unit>();
+    const add = (name: string, owner: string, text: string): Unit => {
+      const kind = kindOf(owner);
+      const fileName = `/${name}.${kind === ts.ScriptKind.TSX ? 'tsx' : 'ts'}`;
+      const unit = { path: owner, file: ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, kind) };
+      files.set(fileName, unit.file);
+      units.set(fileName, unit);
+      return unit;
+    };
+    const starts = startsOf(input.text);
+    const roots = scripts(input.text, path).map((script, index) => ({
+      ...add(`${path}.place.${index}`, path, script.text),
+      offset: script.at,
+    }));
+    const byPath = new Map<string, string>();
+    for (const other of input.files) {
+      if (other === path || byPath.has(other)) continue;
+      const fragments = scripts(tree.read(other), other);
+      const only = fragments[0];
+      if (fragments.length !== 1 || only === undefined || only.at !== 0 || !only.module) continue;
+      byPath.set(other, add(other, other, only.text).file.fileName);
+    }
+    const resolved = new Map<string, string | undefined>();
+    const targetOf = (specifier: string, from: string): string | undefined => {
+      const key = `${from}\0${specifier}`;
+      if (resolved.has(key)) return resolved.get(key);
+      const found = resolution(specifier, from, tree);
+      const name = found !== null && 'to' in found ? byPath.get(tree.realpath?.(found.to) ?? found.to) : undefined;
+      resolved.set(key, name);
+      return name;
+    };
+    const program = ts.createProgram(
+      [...files.keys()],
+      { noLib: true, types: [], noEmit: true, allowJs: true },
+      {
+        ...hostOver(files),
+        resolveModuleNameLiterals: (literals, containing) =>
+          literals.map((literal) => {
+            const from = units.get(containing)?.path;
+            const name = from === undefined ? undefined : targetOf(literal.text, from);
+            return {
+              resolvedModule:
+                name === undefined
+                  ? undefined
+                  : {
+                      resolvedFileName: name,
+                      extension: name.endsWith('.tsx') ? ts.Extension.Tsx : ts.Extension.Ts,
+                      isExternalLibraryImport: false,
+                    },
+            };
+          }),
+      },
+    );
+    const checker = program.getTypeChecker();
+    const aliased = (symbol: ts.Symbol | undefined): ts.Symbol | undefined =>
+      symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(symbol) : symbol;
+    const guessed = (node: ts.CallLikeExpression): boolean => {
+      if (ts.isTaggedTemplateExpression(node)) return checker.getTypeAtLocation(node.tag).getCallSignatures().length > 1;
+      if (!ts.isCallExpression(node) && !ts.isNewExpression(node)) return false;
+      const callee = checker.getTypeAtLocation(node.expression);
+      const signatures = ts.isNewExpression(node) ? callee.getConstructSignatures() : callee.getCallSignatures();
+      return (
+        signatures.length > 1 &&
+        (node.arguments ?? []).some((argument) => (checker.getTypeAtLocation(argument).flags & ts.TypeFlags.Any) !== 0)
+      );
+    };
+    const clean = new Set<ts.Node>();
+    const settled = (receivers: readonly ts.Node[]): boolean => {
+      const seen = new Set<ts.Node>();
+      const pending = [...receivers];
+      while (pending.length > 0) {
+        const node = pending.pop()!;
+        if (clean.has(node) || seen.has(node)) continue;
+        seen.add(node);
+        if (declared(node)) {
+          pending.push(...derivations(node));
+          continue;
+        }
+        if (ts.isIdentifier(node)) {
+          pending.push(...(aliased(identifierSymbol(node, checker))?.declarations ?? []));
+          continue;
+        }
+        if (ts.isCallLikeExpression(node)) {
+          if (guessed(node)) return false;
+          const declaration = checker.getResolvedSignature(node)?.declaration;
+          if (declaration !== undefined && !ts.isJSDocSignature(declaration)) pending.push(declaration);
+        }
+        ts.forEachChild(node, (child) => {
+          pending.push(child);
+        });
+      }
+      for (const node of seen) clean.add(node);
+      return true;
+    };
+    const wanted = new Set(input.names);
+    const lines = input.lines === undefined ? undefined : new Set(input.lines);
+    const placed = new Map<string, boolean>();
+    for (const unit of roots) {
+      const visit = (node: ts.Node): void => {
+        const spelled =
+          ts.isIdentifier(node) && !isName(node)
+            ? [{ name: node, symbol: identifierSymbol(node, checker) }]
+            : memberSpellings(node, checker);
+        for (const one of spelled) {
+          const name = one.name.text;
+          if (!wanted.has(name) || placed.get(name) === false) continue;
+          if (lines !== undefined && !lines.has(located(starts, unit.offset + one.name.getStart(unit.file)).line)) continue;
+          placed.set(name, (aliased(one.symbol)?.declarations ?? []).length > 0 && settled(receiversOf(one.name)));
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(unit.file);
+    }
+    return [...placed].flatMap(([name, all]) => (all ? [name] : []));
+  };
+
 export const symbolReader = (scripts: Scripts): SymbolReader => ({
+  place: placing(scripts),
   read: (source, path, lines) => {
     const selected = lines === undefined ? undefined : new Set(lines);
     const fragments = scripts(source, path).map((script) => readScript(script, path, source, selected));
