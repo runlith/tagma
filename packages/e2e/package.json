@@ -19,6 +19,10 @@
     "./stand": {
       "types": "./src/stand.ts",
       "bun": "./src/stand.ts"
+    },
+    "./ios": {
+      "types": "./src/lanes/ios.ts",
+      "bun": "./src/lanes/ios.ts"
     }
   },
   "scripts": {
@@ -29,6 +33,7 @@
     "@effect/platform-bun": "catalog:",
     "@runlith/chrome-for-testing": "workspace:*",
     "@runlith/effect-test": "workspace:*",
+    "@runlith/file-lock": "workspace:*",
     "@runlith/testbed": "workspace:*",
     "appium-remote-debugger": "18.0.3",
     "effect": "catalog:",

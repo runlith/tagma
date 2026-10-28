@@ -1,10 +1,11 @@
 import { it } from '@runlith/effect-test';
 import { headed, notRun } from '@runlith/testbed/fixture';
-import { Data, Deferred, Effect, Schema, type Scope } from 'effect';
+import { Deferred, Effect, Schema, type Scope } from 'effect';
 import type { BrowserContextOptions } from 'playwright-core';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { onFailure, recorded } from './artifacts.ts';
+import { errorScript, pageFailure, PageException, PageFailed } from './pageErrors.ts';
 import { session, type ElectronLaunch, type Lane, type Session } from './engines.ts';
 
 export type BrowserTest = Session & { readonly artifacts: string };
@@ -20,28 +21,17 @@ const selected = (options: Options): readonly Lane[] => {
   return (options.lanes ?? ['chromium']).filter((lane) => filter === undefined || filter.includes(lane));
 };
 
-const PageException = Schema.Struct({ name: Schema.String, message: Schema.String, stack: Schema.String });
-class PageFailed extends Data.TaggedError('PageFailed')<{ readonly message: string }> {}
-const errorScript = `(() => {
-  const report = (error) => {
-    if (!(error instanceof Error)) return;
-    void globalThis.__runlithE2eError({ name: error.name, message: error.message, stack: error.stack ?? '' });
-  };
-  addEventListener('error', (event) => report(event.error));
-  addEventListener('unhandledrejection', (event) => report(event.reason));
-})()`;
-
 const prepared = Effect.fn('e2e.recording')(function* (lane: Lane, options: Options, artifacts: string) {
   const fixture = yield* session(lane, options.context, {}, options.electron);
   const failed = yield* Deferred.make<never, PageFailed>();
   yield* Effect.promise(() =>
     fixture.context.exposeBinding('__runlithE2eError', (_source, value: unknown) => {
       const error = Schema.decodeUnknownSync(PageException)(value);
-      Deferred.doneUnsafe(failed, Effect.fail(new PageFailed({ message: error.stack || `${error.name}: ${error.message}` })));
+      Deferred.doneUnsafe(failed, Effect.fail(pageFailure(error)));
     }),
   );
-  yield* Effect.promise(() => fixture.context.addInitScript(errorScript));
-  yield* Effect.promise(() => fixture.page.evaluate(errorScript));
+  yield* Effect.promise(() => fixture.context.addInitScript(errorScript('globalThis.__runlithE2eError')));
+  yield* Effect.promise(() => fixture.page.evaluate(errorScript('globalThis.__runlithE2eError')));
   const console: string[] = [];
   fixture.page.on('console', (message) => console.push(`[${message.type()}] ${message.text()}`));
   fixture.page.on('pageerror', (error) => console.push(`[pageerror] ${error.stack || `${error.name}: ${error.message}`}`));

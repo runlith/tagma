@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, parse, sep } from 'node:path';
 import { pristine } from './pristine.ts';
 import { MARK, type Processes } from './processes.ts';
-import { sweep } from './watch.ts';
+import { runLiveness as ownerLiveness, sweep, type RunLiveness } from './watch.ts';
 
 export const BASE = join(process.platform === 'darwin' ? '/tmp' : tmpdir(), 'runlith-test');
 export const REPORTS = join(BASE, 'reports');
@@ -108,6 +108,8 @@ export const openRun = (owner: { readonly pid: number; readonly start: number } 
 };
 
 const modified = (files: Fs, path: string): number | undefined => files.statSync(path, { throwIfNoEntry: false })?.mtimeMs;
+
+export const runLiveness = (processes: Processes, root: string): RunLiveness => ownerLiveness(processes, basename(root));
 
 export const sweepRuns = (processes: Processes): { readonly stranded: number; readonly roots: number } => {
   const files = fs();
