@@ -43,8 +43,8 @@
 </script>
 
 {#if live}
-  <div class={['flex min-w-0 flex-col py-1', className]} data-no-output>
-    <div class="flex h-6 items-center justify-between gap-3 px-3 text-small text-muted-foreground">
+  <div class={['grid min-w-0 gap-x-3 py-1', className]} style:grid-template-columns="minmax(0, 1fr) auto auto" data-no-output>
+    <div class="col-span-full flex h-6 items-center justify-between gap-3 px-3 text-small text-muted-foreground">
       <FadeText text={heading} />
       {#if read}
         <span class="shrink-0 text-meta tabular text-muted-foreground/70">{rows.length} {rows.length === 1 ? 'process' : 'processes'}</span>
@@ -53,23 +53,23 @@
     {#each rows.slice(0, SHOWN) as row, at (row.pid ?? at)}
       <div
         class={[
-          'flex h-6 min-w-0 items-center gap-3 px-3 font-mono text-small',
+          'col-span-full grid h-6 grid-cols-subgrid items-center px-3 font-mono text-small',
           row.pid !== null && row.pid === line.currentPid ? 'text-foreground' : 'text-muted-foreground',
         ]}
       >
-        <span class="flex min-w-0 flex-1 items-center">
+        <span class="flex min-w-0 items-center">
           {#if row.depth > 0}
             <span class="shrink-0" style:width={`calc(var(--spacing) * ${(row.depth - 1) * 3.5})`}></span>
             <span class="mr-1.5 mb-1.5 size-2 shrink-0 border-b border-l border-vein-strong"></span>
           {/if}
           <FadeText class="flex-1" text={row.command} />
         </span>
-        <span class="w-12 shrink-0 text-right text-meta tabular">{percent(row.share)}</span>
-        <span class="w-14 shrink-0 text-right text-meta tabular">{formatBytes(row.memoryBytes)}</span>
+        <span class="text-right text-meta tabular">{percent(row.share)}</span>
+        <span class="text-right text-meta tabular">{formatBytes(row.memoryBytes)}</span>
       </div>
     {/each}
     {#if rows.length > SHOWN}
-      <span class="h-6 px-3 text-small leading-6 text-muted-foreground/60">+{rows.length - SHOWN} more</span>
+      <span class="col-span-full h-6 px-3 text-small leading-6 text-muted-foreground/60">+{rows.length - SHOWN} more</span>
     {/if}
   </div>
 {:else}
