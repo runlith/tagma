@@ -109,6 +109,14 @@ const isName = (node: ts.Identifier): boolean => {
   return (ts.isLabeledStatement(parent) || ts.isBreakStatement(parent) || ts.isContinueStatement(parent)) && parent.label === node;
 };
 
+const assigned = (node: ts.Node): boolean => {
+  const parent = node.parent;
+  if (ts.isBinaryExpression(parent)) return parent.left === node && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+  if (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) return parent.initializer === node;
+  if (ts.isPropertyAssignment(parent)) return parent.initializer === node && assigned(parent.parent);
+  return (ts.isArrayLiteralExpression(parent) || ts.isSpreadElement(parent)) && assigned(parent);
+};
+
 const readScript = (script: Script, path: string, source: string, lines?: ReadonlySet<number>): Symbols => {
   const { text, at: offset } = script;
   const kind = /(?:\.[jt]sx|\.[cm]?js)$/.test(path) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
@@ -180,8 +188,8 @@ const readScript = (script: Script, path: string, source: string, lines?: Readon
   const note = (reference: SymbolReference, included = false): void => {
     if (included || lines === undefined || lines.has(reference.line)) references.push(reference);
   };
-  const use = (node: ts.Identifier): void => {
-    if (chosen(node)) uses.add(node.text);
+  const use = (node: ts.Identifier, found: SymbolTarget | undefined): void => {
+    if (chosen(node) && (found === undefined || found.imported !== undefined || found.definitions.length === 0)) uses.add(node.text);
   };
   const imports = new Set<string>();
   const changedImports = new Map<ts.Symbol, boolean>();
@@ -272,8 +280,16 @@ const readScript = (script: Script, path: string, source: string, lines?: Readon
       node.propertyName === undefined &&
       ts.isObjectBindingPattern(node.parent) &&
       ts.isIdentifier(node.name)
-    )
-      use(node.name);
+    ) {
+      const property = checker.getPropertyOfType(checker.getTypeAtLocation(node.parent), node.name.text);
+      use(node.name, property === undefined ? undefined : target(property, 'all'));
+    }
+    if (ts.isObjectLiteralExpression(node) && assigned(node))
+      for (const property of node.properties)
+        if ((ts.isShorthandPropertyAssignment(property) || ts.isPropertyAssignment(property)) && ts.isIdentifier(property.name)) {
+          const read = checker.getPropertySymbolOfDestructuringAssignment(property.name);
+          use(property.name, read === undefined ? undefined : target(read, 'all'));
+        }
     if (ts.isIdentifier(node) && !isName(node)) {
       const meaning = meaningOf(node);
       const symbol = ts.isShorthandPropertyAssignment(node.parent)
@@ -304,7 +320,7 @@ const readScript = (script: Script, path: string, source: string, lines?: Readon
         { name: node.text, ...position(node), meaning, definitions: found.definitions, imported },
         imported !== undefined && symbol !== undefined && changedImport(symbol),
       );
-      use(node);
+      use(node, symbol === undefined ? undefined : target(symbol, 'all'));
     }
     ts.forEachChild(node, visit);
   };

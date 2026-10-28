@@ -27,7 +27,15 @@ const treeMenu = '<script lang="ts">\nconst aim = { paths: [] };\n</script>\n';
 const explorer =
   '<script lang="ts">\nimport TreeMenu from "./TreeMenu.svelte";\nimport type { Existing as Shape } from "./peer.js";\nconst identity = (one: number): Shape | number => one;\n</script>\n<TreeMenu />\n';
 
+const routed = 'export type Routed = {\n  readonly graphs: number;\n};\n';
+const linker = 'import type { Routed } from "./routed.js";\n\nexport const marker = 0;\n';
+const ownRoot =
+  'const held = { root: "graph" };\nexport const label = (routed: Routed) => {\n  const root = held.root;\n  return `${root}:${routed.graphs}`;\n};\nexport const named = () => {\n  const { root } = held;\n  return root;\n};\nenum Kind { root }\nexport type Chosen = Kind.root;\n';
+
 const BASE = {
+  'routed.ts': routed,
+  'linker.ts': linker,
+  'reader.ts': linker,
   'consumer.ts': consumer,
   'peer.ts': peerBase,
   'scope.ts': scopeBase,
@@ -95,6 +103,7 @@ layer(checkoutFixture, { excludeTestServices: true })('submit_work bindings', (i
               'const one = $derived(aim.paths.length === 1);\nexport function fresh() { return one; }\n</script>',
             ),
           );
+          yield* write(PEER, 'routed.ts', routed.replace('  readonly graphs', '  readonly root: string;\n  readonly graphs'));
 
           const shadow = `${scope}export const identity = (Peer: number) => Peer;\n`;
           yield* write(CALLER, 'scope.ts', shadow);
@@ -104,13 +113,15 @@ layer(checkoutFixture, { excludeTestServices: true })('submit_work bindings', (i
           yield* write(CALLER, 'serving.ts', mentioned);
           const explorerImport = explorer.replace('Existing as Shape } from "./peer.js"', 'Foreign as Shape } from "./leaf.js"');
           yield* write(CALLER, 'ExplorerView.svelte', explorerImport);
+          yield* write(CALLER, 'linker.ts', `${linker}${ownRoot}`);
           expect(
             yield* world.submit(CALLER, { subject: 'use local names beside peer declarations and component internals' }),
           ).toMatchObject({
             status: 'landed',
             carried: [],
-            committed: ['ExplorerView.svelte', 'independent.ts', 'scope.ts', 'serving.ts'],
+            committed: ['ExplorerView.svelte', 'independent.ts', 'linker.ts', 'scope.ts', 'serving.ts'],
           });
+          expect(yield* read('routed.ts')).toBe(routed);
           expect(yield* read('ExplorerView.svelte')).toBe(explorerImport);
           expect(yield* read('TreeMenu.svelte')).toBe(treeMenu);
           expect(yield* read('scope.ts')).toBe(`${scopeBase}export const identity = (Peer: number) => Peer;\n`);
@@ -151,6 +162,8 @@ layer(checkoutFixture, { excludeTestServices: true })('submit_work bindings', (i
             .replace('</script>', 'let menu = $state<{ fresh(): boolean }>();\nconst call = () => menu?.fresh();\n</script>')
             .replace('<TreeMenu />', '<TreeMenu bind:this={menu} />');
           yield* write(CALLER, 'ExplorerView.svelte', explorerUse);
+          const member = `${linker}let root = "";\nexport const take = (routed: Routed) => {\n  ({ root } = routed);\n  return root;\n};\n`;
+          yield* write(CALLER, 'reader.ts', member);
           const refused = yield* Effect.flip(world.submit(CALLER, { subject: 'use uncommitted peer declarations' }));
           expect(refused).toBeInstanceOf(GateRefusal);
           if (!(refused instanceof GateRefusal)) return;
@@ -169,6 +182,7 @@ layer(checkoutFixture, { excludeTestServices: true })('submit_work bindings', (i
             ['CopyWriting', 'serving.ts'],
             ['Peer', 'moved.ts'],
             ['fresh', 'TreeMenu.svelte'],
+            ['root', 'routed.ts'],
           ] as const)
             expect(refused.reason).toMatch(
               new RegExp(`${RegExp.escape(name)} in ${RegExp.escape(path)}:\\d+, held by ${RegExp.escape(PEER)}`),
@@ -187,6 +201,7 @@ layer(checkoutFixture, { excludeTestServices: true })('submit_work bindings', (i
           expect(yield* read('serving.ts')).toBe(used);
           expect(yield* read('moved.ts')).toBe(relocated);
           expect(yield* read('ExplorerView.svelte')).toBe(explorerUse);
+          expect(yield* read('reader.ts')).toBe(member);
         }),
       ),
   );
