@@ -69,7 +69,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           demo.graph.store,
           demo.graph.units,
           origin,
-          { projectId, subject: 'the writer lands mine', tasks: [], taking: [] },
+          { projectId, subject: 'the writer lands mine', tasks: [], taking: [], coAuthored: true },
           { before: () => Effect.succeed(UNCHECKED), after: () => Effect.void },
           producer,
         ).pipe(Effect.provide(services));

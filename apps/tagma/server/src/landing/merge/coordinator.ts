@@ -19,7 +19,7 @@ import type { TreeReady, TreeSync } from '../../graph/contract/service/delivery.
 import { inGraphTree } from '../../graph/contract/wire/storage.js';
 import { checkMerge } from './check.js';
 import { integrate } from './integrate.js';
-import { makeMergeCommits } from './modes.js';
+import { type CoAuthored, makeMergeCommits } from './modes.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { MergeReceipts } from '../contract/service/receipts.js';
 import { MergeNotice, type NoticeWrite } from '../contract/service/mergeNotice.js';
@@ -55,6 +55,7 @@ export const makeMergeCoordinator = Effect.fnUntraced(function* (options: {
   readonly rules?: ActChecks;
   readonly carried?: GraphCarried;
   readonly settled?: GraphSettled;
+  readonly coAuthored: CoAuthored;
 }) {
   const git = yield* MergeGit;
   const units = yield* MachineUnits;
@@ -144,6 +145,7 @@ export const makeMergeCoordinator = Effect.fnUntraced(function* (options: {
       rules: options.rules,
       carried: options.carried,
       settled: options.settled,
+      coAuthored: options.coAuthored,
     }),
     openPullRequest: openPullRequest(git, guards, gate, checkouts, gh, progress),
     recover: Effect.fnUntraced(function* () {

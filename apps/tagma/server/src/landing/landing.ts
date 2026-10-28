@@ -4,6 +4,7 @@ import { RELOCATIONS } from '../platform/contract/service/relocation.js';
 import { lazyLayer, manifest } from '../platform/contract/service/manifest.js';
 import { LandingGit } from './contract/service/servedGit.js';
 import { commits } from './doctrine/commits.js';
+import { LANDING_SETTING_KEYS, LANDING_SETTING_SECTIONS } from './contract/wire/settings.js';
 
 export const landing = manifest({
   ...declaration,
@@ -32,6 +33,8 @@ export const landing = manifest({
       path: 'src/landing/doctrine/commits.ts',
     },
   ],
+  settings: [...LANDING_SETTING_KEYS],
+  settingSections: [...LANDING_SETTING_SECTIONS],
   lifetimes: {
     installation: lazyLayer(
       () => import('./lifetime.js'),

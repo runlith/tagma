@@ -270,6 +270,7 @@ export const makeCheckout = Effect.fnUntraced(
                   tasks: [],
                 })),
                 subject: options.subject,
+                coAuthored: true,
                 paths: options.paths,
                 whole: options.whole,
                 withoutFormat: options.withoutFormat,

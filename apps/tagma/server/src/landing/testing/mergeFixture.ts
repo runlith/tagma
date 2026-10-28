@@ -189,6 +189,7 @@ export const mergeFixture = Effect.fnUntraced(function* (options: { readonly rul
     sync: () => Effect.succeed('ordinary'),
     rules: options.rules,
     carried: () => Effect.succeed(options.carried ?? false),
+    coAuthored: () => Effect.succeed(true),
   });
   const merges = Merges.of({
     merge,

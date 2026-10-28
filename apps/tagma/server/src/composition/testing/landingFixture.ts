@@ -161,6 +161,7 @@ const makeLanding = Effect.fnUntraced(function* (demo: EffectDemo, workers: Lane
             projectId: demo.projectId,
             tasks: [],
             taking: [],
+            coAuthored: true,
             whole: asked.whole,
             paths: asked.paths,
           },

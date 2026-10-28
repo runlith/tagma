@@ -98,7 +98,7 @@ export const makeMergeGit = Effect.gen(function* () {
     const commit = yield* create(checkout, {
       tree: at.tree,
       parents: [tip, at.baseTip],
-      message: `Merge ${baseBranch} into ${branch}\n`,
+      message: at.message,
       sign: config.sign,
     });
     const ref = `refs/heads/${branch}`;

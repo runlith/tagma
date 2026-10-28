@@ -118,7 +118,7 @@ export const SubmitReceipt: Schema.Codec<SubmitReceipt> = Schema.Union([
     status: Schema.Literal('landed'),
     checkout: Schema.NonEmptyString.annotate({ description: 'The registered id of the checkout this commit landed in.' }),
     commit: Schema.NonEmptyString,
-    subject: Schema.optional(Schema.String.annotate({ description: 'The subject line of the commit, task names included.' })),
+    subject: Schema.optional(Schema.String.annotate({ description: 'The subject line of the commit.' })),
     committed: Schema.Array(Schema.String).annotate({ description: 'Paths whose lines this commit carried.' }),
     carried: Schema.Array(Schema.Struct({ path: Schema.String, holders: Schema.Array(Schema.NonEmptyString) })),
     tasks: Schema.optional(
@@ -132,7 +132,7 @@ export const SubmitReceipt: Schema.Codec<SubmitReceipt> = Schema.Union([
         }),
       ).annotate({
         description:
-          'The tasks the caller declared this commit carries, held by this session or holders in taking. Each names its holder, how that holder’s lines came in and, where known, its standing. These tasks ride in the subject; the landing ends none: finish_block names this commit for each one it completes.',
+          'The tasks the caller declared this commit carries, held by this session or holders in taking. Each names its holder, how that holder’s lines came in and, where known, its standing. These tasks ride in its Task trailers; the landing ends none: finish_block names this commit for each one it completes.',
       }),
     ),
     unnamedTasks: Schema.optional(Schema.Array(Schema.String)).annotate({

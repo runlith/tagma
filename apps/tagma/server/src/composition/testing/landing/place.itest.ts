@@ -295,7 +295,7 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
       expect(landed).toMatchObject({ submitted: { status: 'landed', committed: ['shared.ts'], carried: [] } });
       expect(yield* out(target.root, ['show', 'HEAD:shared.ts'])).toBe(mine.trimEnd().replace('100;   ', '100;'));
       expect(yield* files.readFileString(join(target.root, 'shared.ts'))).toBe(both.replace('100;   ', '100;'));
-      expect(yield* out(target.root, ['log', '-1', '--format=%s'])).toBe(`foreign work (${task})`);
+      expect(yield* out(target.root, ['log', '-1', '--format=%s'])).toBe('foreign work');
       expect(yield* out(home.root, ['rev-parse', 'HEAD'])).toBe(homeHead);
       const view = yield* held(target.root);
       const hands = view.paths.find((one) => one.path === 'shared.ts')?.verdict;

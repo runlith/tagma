@@ -378,6 +378,7 @@ export const composed = Effect.fnUntraced(
                 : Effect.succeed({ delivered: false, reason: lookup.undelivered } as const),
           },
           carried: () => Effect.succeed(options.carried === true),
+          coAuthored: () => Effect.succeed(true),
         },
       ),
       services,

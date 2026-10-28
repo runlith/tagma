@@ -1,24 +1,20 @@
 import type { HeldTaskLabel } from '../../change-record/contract/service/taskLabels.js';
-import { spokenId } from '../../platform/contract/wire/ids.js';
+import { AGENT_PERSON, personOf, type Trailer, trailed } from '../../platform/contract/wire/commits.js';
+
+export const CO_AUTHOR: Trailer = ['Co-authored-by', personOf(AGENT_PERSON)];
 
 const team = (tasks: readonly HeldTaskLabel[]): readonly HeldTaskLabel[] => tasks.filter((task) => !task.stealth);
 
 export const subjectFor = (subject: string | undefined, tasks: readonly HeldTaskLabel[]): string => {
-  if (subject !== undefined && subject !== '') return subject;
+  if (subject !== undefined && subject.trim() !== '') return subject;
   const named = team(tasks);
   const only = named[0];
   return named.length === 1 && tasks.length === 1 && only !== undefined ? only.title : 'the changes of one session';
 };
 
-export const messageOf = (subject: string, tasks: readonly HeldTaskLabel[]): string => {
-  const named = team(tasks);
-  if (named.length === 0) return subject;
-  const newline = subject.search(/\r?\n/);
-  const end = newline === -1 ? subject.length : newline;
-  const headline = subject.slice(0, end);
-  const suffix = headline.match(/(?:[ \t]+\([0-9a-f]{8,32}(?:,[ \t]*[0-9a-f]{8,32})*\))+[ \t]*$/iu);
-  const names = new Map<string, string>();
-  for (const name of suffix?.[0].match(/[0-9a-f]{8,32}/giu) ?? []) names.set(spokenId(name.toLowerCase()), name);
-  for (const task of named) names.set(spokenId(task.name.toLowerCase()), task.name);
-  return `${headline.slice(0, suffix?.index ?? headline.length)} (${[...names.values()].join(', ')})${subject.slice(end)}`;
+export const messageOf = (subject: string, body: string | undefined, tasks: readonly HeldTaskLabel[], coAuthored: boolean): string => {
+  const said = body === undefined || body.trim() === '' ? subject : `${subject.trimEnd()}\n\n${body.trim()}`;
+  const named = new Map(team(tasks).map((task) => [task.name, task]));
+  const carried = [...named.values()].map((task): Trailer => ['Task', `${task.name} ${task.title}`]);
+  return trailed(said, coAuthored ? [...carried, CO_AUTHOR] : carried);
 };

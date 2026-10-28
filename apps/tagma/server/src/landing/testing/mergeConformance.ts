@@ -56,7 +56,15 @@ export const verifyMergeGit = Effect.fnUntraced(function* (fixture: MergeGitFixt
   const replayed = yield* git.replay(side, base, tip, false);
   expect(replayed.tree).toBe(tree);
   expect(replayed.conflicts).toEqual([]);
-  const taken = yield* git.take({ checkout: side, branch: 'side', baseBranch: 'main', tip, baseTip: merged, tree });
+  const taken = yield* git.take({
+    checkout: side,
+    branch: 'side',
+    baseBranch: 'main',
+    tip,
+    baseTip: merged,
+    tree,
+    message: 'Merge main into side\n',
+  });
   expect((yield* git.head(side)).commit).toBe(taken);
   expect(yield* git.ancestor(side, merged, taken)).toBe(true);
   expect(yield* git.interrupted(main)).toBeNull();

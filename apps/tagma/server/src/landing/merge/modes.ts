@@ -1,12 +1,15 @@
 import { Effect } from 'effect';
 import type { HoldCut, HoldStalled } from '@runlith/held/failures';
 import { CEILINGS } from '../../platform/contract/service/deadlines.js';
+import type { StoreFailure } from '../../platform/contract/service/store.js';
 import type { MergeMode } from '../../worktrees/contract/wire/mergeTypes.js';
 import { type FinishFailure, WorktreeFinishRefused } from '../../worktrees/contract/wire/failures.js';
 import type { WorktreeRecord } from '../../worktrees/contract/service/worktrees.js';
 import { refused } from '../../worktrees/retirement/finishing.js';
 import { MergeGit, type MergeHookRefused, type MergePrepared } from '../contract/service/mergeGit.js';
 import { MERGE_TRAILER } from '../contract/wire/merge.js';
+import { trailed } from '../../platform/contract/wire/commits.js';
+import { CO_AUTHOR } from '../land/message.js';
 import { conflicting } from './failures.js';
 import type { Sent, Settled } from './publication.js';
 
@@ -19,7 +22,10 @@ export type MergeCut = {
   readonly tree: string;
   readonly dir: string;
   readonly message: string | undefined;
+  readonly coAuthored: boolean;
 };
+
+export type CoAuthored = (projectId: number) => Effect.Effect<boolean, StoreFailure>;
 
 export type Publishing = (commit: string) => Effect.Effect<Sent, FinishFailure | HoldStalled | HoldCut>;
 
@@ -36,8 +42,8 @@ export type Landed =
 
 const MOVED: Landed = { _tag: 'moved' };
 
-const trailed = (record: WorktreeRecord, at: MergeCut, said: string): string =>
-  `${at.message ?? said}\n\n${MERGE_TRAILER}: ${record.rootId}`;
+const messageOf = (record: WorktreeRecord, at: MergeCut, said: string): string =>
+  trailed(at.message ?? said, at.coAuthored ? [[MERGE_TRAILER, record.rootId], CO_AUTHOR] : [[MERGE_TRAILER, record.rootId]]);
 
 export const makeMergeCommits = Effect.fnUntraced(function* () {
   const git = yield* MergeGit;
@@ -48,7 +54,7 @@ export const makeMergeCommits = Effect.fnUntraced(function* () {
     if (at.mode !== 'merge') {
       return { tree: at.tree, left: at.tree, message: '', sign: yield* git.signing(at.dir) };
     }
-    const message = trailed(record, at, `Merge worktree ${record.name} (${at.branch}) into ${at.baseBranch}`);
+    const message = messageOf(record, at, `Merge worktree ${record.name} (${at.branch}) into ${at.baseBranch}`);
     return yield* git.hooks(at.dir, at.baseTip, at.tree, message);
   });
   const land = Effect.fnUntraced(function* (
@@ -71,7 +77,7 @@ export const makeMergeCommits = Effect.fnUntraced(function* () {
       return yield* landed(merged, at.tip);
     }
     if (at.mode === 'squash') {
-      const message = `${trailed(record, at, `${record.name}: ${at.branch} squashed into ${at.baseBranch}`)}\n`;
+      const message = `${messageOf(record, at, `${record.name}: ${at.branch} squashed into ${at.baseBranch}`)}\n`;
       const squashed = yield* git.create(at.dir, { tree: at.tree, parents: [at.baseTip], message, sign: made.sign });
       return yield* landed(squashed, at.tip);
     }

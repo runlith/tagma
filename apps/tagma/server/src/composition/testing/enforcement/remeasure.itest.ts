@@ -104,7 +104,7 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
             demo.graph.store,
             demo.graph.units,
             originFor(threadId),
-            { projectId: demo.projectId, tasks: [], taking: [], whole: whole ? ['.'] : undefined },
+            { projectId: demo.projectId, tasks: [], taking: [], coAuthored: true, whole: whole ? ['.'] : undefined },
             actChecks(checksOver({ graphOf: () => Effect.succeed(context) }), 'submit_work'),
             producer,
           ).pipe(Effect.provide(services));

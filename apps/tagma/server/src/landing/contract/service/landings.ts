@@ -10,6 +10,8 @@ export type SubmitTaking = ChangeTaking & { readonly tasks: readonly HeldTaskLab
 export type SubmitRequest = {
   readonly projectId: number;
   readonly subject?: string;
+  readonly body?: string;
+  readonly coAuthored: boolean;
   readonly tasks: readonly HeldTaskLabel[];
   readonly paths?: readonly string[];
   readonly whole?: readonly string[];

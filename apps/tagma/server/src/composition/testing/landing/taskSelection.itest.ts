@@ -38,7 +38,7 @@ it.live('submit_work attributes only declared tasks when paths lands one of two 
     yield* write(caller.threadId, 'first.ts', 'export const first = 3;\n');
     const selected = yield* doors.atNative(
       'submit_work',
-      { subject: 'Complete the first task', paths: ['first.ts'], tasks: [tasks[0]] },
+      { subject: 'Complete the first task', body: 'Attribute only the declared task.', paths: ['first.ts'], tasks: [tasks[0]] },
       caller,
     );
     expect(selected).toMatchObject({
@@ -46,7 +46,7 @@ it.live('submit_work attributes only declared tasks when paths lands one of two 
       value: {
         submitted: {
           status: 'landed',
-          subject: `Complete the first task (${tasks[0]})`,
+          subject: 'Complete the first task',
           committed: ['first.ts'],
           left: ['second.ts'],
           tasks: [{ name: tasks[0], holder: caller.threadId, by: 'session' }],
@@ -55,9 +55,13 @@ it.live('submit_work attributes only declared tasks when paths lands one of two 
     });
     if (selected.class !== 'answer') return;
     expect((selected.value as { submitted: { tasks: readonly unknown[] } }).submitted.tasks).toHaveLength(1);
-    const selectedHead = yield* spawnedEffect(['git', 'log', '-1', '--format=%s'], { cwd: root });
+    const selectedHead = yield* spawnedEffect(['git', 'log', '-1', '--format=%B'], { cwd: root });
     expect(selectedHead.exitCode).toBe(0);
-    expect(new TextDecoder().decode(selectedHead.stdout).trim()).toBe(`Complete the first task (${tasks[0]})`);
+    expect(new TextDecoder().decode(selectedHead.stdout).trim()).toBe(
+      `Complete the first task\n\nAttribute only the declared task.\n\nTask: ${tasks[0]} First task\nCo-authored-by: Tagma <agent@tagma.dev>`,
+    );
+    const trailers = yield* spawnedEffect(['git', 'log', '-1', '--format=%(trailers:only,unfold)'], { cwd: root });
+    expect(new TextDecoder().decode(trailers.stdout).trim()).toBe(`Task: ${tasks[0]} First task\nCo-authored-by: Tagma <agent@tagma.dev>`);
     expect(yield* read('second.ts')).toBe('export const second = 1;\n');
 
     const unheld = yield* world.op('create_block', { tags: ['task'], title: 'Unheld task' }, `project=${projectId}`);
@@ -75,10 +79,13 @@ it.live('submit_work attributes only declared tasks when paths lands one of two 
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );
 
-it.live('submit_work names the declared work of a single held task without sources', () =>
+it.live('submit_work names the declared work of a single held task without sources, and commits.coAuthor off drops Tagma', () =>
   Effect.gen(function* () {
     const { world, projectId, root, born, doors, write } = yield* nativeLanding({ 'value.ts': 'export const value = 1;\n' });
     const caller = yield* born();
+    expect(yield* world.op('write_setting', { key: 'commits.coAuthor', value: false }, `project=${projectId}`)).toMatchObject({
+      status: 200,
+    });
     const created = yield* world.op('create_block', { tags: ['task'], title: 'Single task' }, `project=${projectId}`);
     const task = (created.body as { block: { name: string } }).block.name;
     const claim = () => world.op('claim_block', { blockId: task }, `project=${projectId}`, { [GRANT_HEADER]: caller.grant });
@@ -88,11 +95,11 @@ it.live('submit_work names the declared work of a single held task without sourc
     expect(yield* doors.atNative('submit_work', { tasks: [task] }, caller)).toMatchObject({
       class: 'answer',
       value: {
-        submitted: { status: 'landed', subject: `Single task (${task})`, tasks: [{ name: task, holder: caller.threadId, by: 'session' }] },
+        submitted: { status: 'landed', subject: 'Single task', tasks: [{ name: task, holder: caller.threadId, by: 'session' }] },
       },
     });
-    const head = yield* spawnedEffect(['git', 'log', '-1', '--format=%s'], { cwd: root });
+    const head = yield* spawnedEffect(['git', 'log', '-1', '--format=%B'], { cwd: root });
     expect(head.exitCode).toBe(0);
-    expect(new TextDecoder().decode(head.stdout).trim()).toBe(`Single task (${task})`);
+    expect(new TextDecoder().decode(head.stdout).trim()).toBe(`Single task\n\nTask: ${task} Single task`);
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );

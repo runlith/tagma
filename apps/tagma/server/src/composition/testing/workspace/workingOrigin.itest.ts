@@ -110,7 +110,7 @@ const makeWorld = Effect.gen(function* () {
         store,
         units,
         origin,
-        { projectId: origin.work.projectId, tasks: [], taking: [] },
+        { projectId: origin.work.projectId, tasks: [], taking: [], coAuthored: true },
         noRuleInPlay,
         producer,
       ).pipe(Effect.provideContext(services)),

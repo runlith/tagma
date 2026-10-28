@@ -4,7 +4,7 @@ const when = (ctx: SectionContext) => {
   if (!ctx.autoCommit) return 'Commit only when the one who gave you the work asks; until then your report names the files you changed.';
   const landing = `Commit your ready work before your run ends, one ${ctx.op('submit_work')} per checkout holding your lines (\`multiple-checkouts\` names them; \`left\` names what remains). Follow a refusal's available exit; report the refusal and held paths only when no exit is available.`;
   return ctx.sharedCheckout
-    ? `${landing} A parent commits what a stopped child of its own left uncommitted, with \`taking\`, under the child's authorship. Pass \`tasks\` naming only the held tasks whose work this commit carries, including tasks of holders in \`taking\`; pass \`[]\` for unrelated work. The subject and answer attribute only those tasks. Omitting \`tasks\` leaves them unattributed and names this session’s held tasks separately in the answer. Whoever lands a child's lines decides that child's tasks too, finishing each this commit completes.`
+    ? `${landing} A parent commits what a stopped child of its own left uncommitted, with \`taking\`, under the child's authorship. Pass \`tasks\` naming only the held tasks whose work this commit carries, including tasks of holders in \`taking\`; pass \`[]\` for unrelated work. The commit's Task trailers and the answer attribute only those tasks. Omitting \`tasks\` leaves them unattributed and names this session’s held tasks separately in the answer. Whoever lands a child's lines decides that child's tasks too, finishing each this commit completes.`
     : landing;
 };
 
@@ -20,5 +20,5 @@ ${when(ctx)}
 Land the lines you wrote with ${ctx.op('submit_work')}, which runs the project's commit steps a bare \`git commit\` skips. An act on existing commits — undo, pick, merge, restore a version — uses git under the authority rule. ${what(ctx)}
 
 - Before delivery, read the diff for correctness, unintended changes and secrets, and run the checks the project requires. Reuse applicable evidence; a broader or repeated check, build, e2e or independent review needs a new change, a failure or a concrete unresolved risk. Fix failures your change caused, report unrelated ones without expanding the task, and report a necessary check that cannot run within the limits as the unproved part.
-- A subject is concise, in the repository's style. Rewriting another's commits, push, force-push, Git configuration and skipped hooks need the operator's word.
+- A subject is concise, in the repository's style; \`body\` says in one to three sentences what changed in behaviour and why, and a micro-edit may omit it. Rewriting another's commits, push, force-push, Git configuration and skipped hooks need the operator's word.
 `;

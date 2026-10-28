@@ -24,7 +24,7 @@ import type { MergeOptions } from '../contract/service/merges.js';
 import type { GraphCarried, GraphHeld, GraphSettled } from '../contract/service/graphSyncing.js';
 import type { MergeRequestRow } from '../store/mergeRequests.js';
 import { conflicting } from './failures.js';
-import type { MergeCommits, MergeCut, Publishing } from './modes.js';
+import type { CoAuthored, MergeCommits, MergeCut, Publishing } from './modes.js';
 import type { MergeHookRefused } from '../contract/service/mergeGit.js';
 import { both, NO_EDITS, NOTHING_CARRIED, type RefusedEdits, unreadSaid } from '../land/reshaping.js';
 import { hookFields } from '../contract/wire/receipt.js';
@@ -126,6 +126,7 @@ export const integrate = (
     readonly rules?: ActChecks;
     readonly carried?: GraphCarried;
     readonly settled?: GraphSettled;
+    readonly coAuthored: CoAuthored;
   },
 ) =>
   Effect.fnUntraced(function* (projectId: number, rootId: RootId, request: MergeOptions): Effect.fn.Return<WorktreeMerged, FinishFailure> {
@@ -157,6 +158,14 @@ export const integrate = (
                       message: `whether this project carries its graph in the tree could not be read: ${failure.message}`,
                     }),
                 );
+          const coAuthored = yield* Effect.mapError(
+            options.coAuthored(projectId),
+            (failure) =>
+              new WorktreeUnavailable({
+                reason: 'storage',
+                message: `whether this project's commits name Tagma as co-author could not be read: ${failure.message}`,
+              }),
+          );
           const attempt = Effect.fnUntraced(function* (left: number): Effect.fn.Return<Merged, FinishFailure> {
             const open = yield* Effect.mapError(publications.holding(rootId), (failure) =>
               failure._tag === 'WorktreeFinishRefused'
@@ -259,7 +268,7 @@ export const integrate = (
                   git,
                   checkouts,
                   holdings,
-                )({ record, branch, baseBranch, tip, baseTip, tree: checked.tree, paths: behind }).pipe(
+                )({ record, branch, baseBranch, tip, baseTip, tree: checked.tree, paths: behind, coAuthored }).pipe(
                   Effect.catchTags(laneRefusals(branch)),
                 )
               : tip;
@@ -287,6 +296,7 @@ export const integrate = (
               tree: checked.tree,
               dir: base.root.path,
               message: request.message,
+              coAuthored,
             };
             const judging = (built: string, paths: readonly string[]): Effect.Effect<Checked | null, FinishFailure> => {
               const rules = options.rules;

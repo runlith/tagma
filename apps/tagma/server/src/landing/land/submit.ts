@@ -134,7 +134,12 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
   landed: (commit: string, subject: string) => void,
 ): Effect.fn.Return<SubmitReceipt, SubmitFailure, Landing> {
   const { projectId } = input;
-  const message = messageOf(subjectFor(input.subject, input.tasks), [...input.tasks, ...input.taking.flatMap((session) => session.tasks)]);
+  const message = messageOf(
+    subjectFor(input.subject, input.tasks),
+    input.body,
+    [...input.tasks, ...input.taking.flatMap((session) => session.tasks)],
+    input.coAuthored,
+  );
   const changes = yield* ChangeRecord;
   const holdings = yield* Holdings;
   const retirement = yield* Retirement;

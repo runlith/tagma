@@ -27,6 +27,8 @@ import { completeSubmission, settleSubmission } from '../store/submissions.js';
 import { Git } from '@runlith/git/Git';
 import { custodianOf } from '../../executions/terminals/principals.js';
 import { TerminalRefused } from '../../executions/contract/wire/refusals.js';
+import { Settings } from '../../settings/contract/service/values.js';
+import { coAuthor } from '../contract/wire/settings.js';
 
 type SubmitOwners =
   | Effect.Services<ReturnType<typeof handoverOf>>
@@ -42,6 +44,7 @@ type SubmitOwners =
   | MachineStore
   | MachineUnits
   | RuleChecks
+  | Settings
   | Git;
 
 const NO_STATES: ReadonlyMap<string, HolderState> = new Map();
@@ -153,6 +156,8 @@ export const SUBMIT_PAIRS = {
             tasks: own === null ? [] : (held.get(own) ?? []),
             taking: carried,
             subject: input.subject,
+            body: input.body,
+            coAuthored: yield* (yield* Settings).value(coAuthor, call.project.id),
             paths: input.paths,
             whole: input.whole,
             withoutFormat: input.withoutFormat,

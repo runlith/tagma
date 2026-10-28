@@ -37,7 +37,7 @@ it.live(
       ).toMatchObject({
         submitted: {
           status: 'landed',
-          subject: `land the outside edit (${task})`,
+          subject: 'land the outside edit',
           committed: ['added.txt', 'notes.txt'],
           carried: [],
           tasks: [{ name: task, holder: 'claude-code:outside', by: 'session' }],

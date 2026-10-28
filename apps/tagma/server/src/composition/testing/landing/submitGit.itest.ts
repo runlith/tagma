@@ -110,10 +110,7 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
             if (answer.status !== 'landed') return;
             if (!lockLost) expect(answer.edited).toEqual(['src/a.ts']);
             expect(answer.commit).toBe(yield* world.run(['rev-parse', 'HEAD']));
-            expect((yield* world.run(['log', '-2', '--format=%s'])).split('\n')).toEqual([
-              'the work this commit answers (ab12cd34)',
-              'foreign',
-            ]);
+            expect((yield* world.run(['log', '-2', '--format=%s'])).split('\n')).toEqual(['the work this commit answers', 'foreign']);
             expect(yield* world.run(['show', 'HEAD:src/other.ts'])).toBe('const other = 1;');
             const committed = lockLost ? mine : [...FILE.slice(0, 4), 'const five = 5; // MINE'];
             expect(yield* world.committed()).toEqual(committed);

@@ -226,7 +226,7 @@ dockerSuite('imported output', () => {
               world.store,
               world.units,
               world.origin,
-              { projectId: world.projectId, tasks: [], taking: [], subject: 'the produced files' },
+              { projectId: world.projectId, tasks: [], taking: [], coAuthored: true, subject: 'the produced files' },
               noRuleInPlay,
               world.producer,
             );

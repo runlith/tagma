@@ -6,27 +6,29 @@ const tasks = [
   { name: 'cd34ef56', title: 'second task', stealth: false },
 ];
 
-test('a commit message names no stealth task, neither on the subject nor by its title', () => {
-  const kept = { name: 'ef56ab78', title: 'the vendor deal', stealth: true };
-  expect(messageOf('Fix the result', [...tasks, kept])).toBe('Fix the result (ab12cd34, cd34ef56)');
-  expect(messageOf('Fix the result', [kept])).toBe('Fix the result');
-  expect(subjectFor(undefined, [kept])).toBe('the changes of one session');
-});
+const CO = 'Co-authored-by: Tagma <agent@tagma.dev>';
 
-test('a commit message carries its tasks on the subject and preserves its body', () => {
-  for (const newline of ['\n', '\r\n']) {
-    const body = `${newline}${newline}Preserve the detail.${newline}${newline}And the final paragraph.`;
-    expect(messageOf(`Fix the result${body}`, tasks)).toBe(`Fix the result (ab12cd34, cd34ef56)${body}`);
-  }
-  expect(messageOf('Fix the result', tasks)).toBe('Fix the result (ab12cd34, cd34ef56)');
-  expect(messageOf('Fix the result\n\nPreserve the detail.', [])).toBe('Fix the result\n\nPreserve the detail.');
-});
-
-test('task names already on the subject merge with the held ones once, in any case and id length', () => {
-  const held = tasks.slice(0, 1);
-  expect(messageOf('the work (AB12CD34)', held)).toBe('the work (ab12cd34)');
-  expect(messageOf('the work (cd34ef56, 000000000000000000000000ab12cd34) (ab12cd34)\n\nbody', held)).toBe(
-    'the work (cd34ef56, ab12cd34)\n\nbody',
+test('a commit keeps the subject and body as written and closes on one trailer block of its tasks and Tagma', () => {
+  expect(messageOf('fix(landing): keep the result', 'Keep the detail.', tasks, true)).toBe(
+    `fix(landing): keep the result\n\nKeep the detail.\n\nTask: ab12cd34 first task\nTask: cd34ef56 second task\n${CO}`,
   );
-  expect(messageOf('the work (reviewed)', held)).toBe('the work (reviewed) (ab12cd34)');
+  expect(messageOf('fix the result (ab12cd34)', undefined, [], false)).toBe('fix the result (ab12cd34)');
+  expect(messageOf('fix the result', '  ', tasks.slice(0, 1), false)).toBe('fix the result\n\nTask: ab12cd34 first task');
+});
+
+test('a body ending in trailers takes the added ones into the same block, once each', () => {
+  expect(messageOf('fix the result', `Keep the detail.\n\nSigned-off-by: A <a@a>\n${CO}\n`, tasks.slice(0, 1), true)).toBe(
+    `fix the result\n\nKeep the detail.\n\nSigned-off-by: A <a@a>\n${CO}\nTask: ab12cd34 first task`,
+  );
+  expect(messageOf('fix the result', 'Keep it.\n\nSigned-off-by :A <a@a>\n# kept by cleanup', [], true)).toBe(
+    `fix the result\n\nKeep it.\n\nSigned-off-by :A <a@a>\n# kept by cleanup\n${CO}`,
+  );
+  expect(messageOf('fix: one line: with a colon', undefined, [], true)).toBe(`fix: one line: with a colon\n\n${CO}`);
+});
+
+test('a commit message names no stealth task, neither in a trailer nor by its title', () => {
+  const kept = { name: 'ef56ab78', title: 'the vendor deal', stealth: true };
+  expect(messageOf('fix the result', undefined, [kept], false)).toBe('fix the result');
+  expect(subjectFor(undefined, [kept])).toBe('the changes of one session');
+  expect(subjectFor(' \t', [])).toBe('the changes of one session');
 });

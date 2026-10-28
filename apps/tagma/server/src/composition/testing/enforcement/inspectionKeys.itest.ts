@@ -107,7 +107,7 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
           demo.graph.store,
           demo.graph.units,
           origin,
-          { projectId: demo.projectId, tasks: [], taking: [] },
+          { projectId: demo.projectId, tasks: [], taking: [], coAuthored: true },
           actChecks(checksOver({ graphOf: () => Effect.succeed(context) }), 'submit_work'),
           makePreparedChanges(
             { commands: quietCommands, pathsOfThread, evidenceInGroups },

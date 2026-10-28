@@ -7,6 +7,8 @@ import type { WorktreeRecord } from '../../worktrees/contract/service/worktrees.
 import type { FinishFailure } from '../../worktrees/contract/wire/failures.js';
 import { holderName, pathsOf, refused, stored, underGraph } from '../../worktrees/retirement/finishing.js';
 import type { MergeGit } from '../contract/service/mergeGit.js';
+import { trailed } from '../../platform/contract/wire/commits.js';
+import { CO_AUTHOR } from '../land/message.js';
 
 export type Uncommitted = {
   readonly dirty: readonly CheckoutEntry[];
@@ -34,6 +36,7 @@ export type Taking = {
   readonly baseTip: string;
   readonly tree: string;
   readonly paths: readonly string[];
+  readonly coAuthored: boolean;
 };
 
 export const takeBase = (git: MergeGit['Service'], checkouts: CheckoutRows['Service'], holdings: CheckoutHoldings['Service']) =>
@@ -62,5 +65,6 @@ export const takeBase = (git: MergeGit['Service'], checkouts: CheckoutRows['Serv
         ],
       );
     }
-    return yield* git.take({ checkout: record.path, branch, baseBranch, tip, baseTip: at.baseTip, tree: at.tree });
+    const message = `${trailed(`Merge ${baseBranch} into ${branch}`, at.coAuthored ? [CO_AUTHOR] : [])}\n`;
+    return yield* git.take({ checkout: record.path, branch, baseBranch, tip, baseTip: at.baseTip, tree: at.tree, message });
   });

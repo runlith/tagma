@@ -105,7 +105,7 @@ const makeCase = Effect.fnUntraced(function* (fixture: EnforcementFixture) {
             demo.graph.store,
             demo.graph.units,
             originFor(MINE),
-            { projectId: demo.projectId, tasks: [], taking: [] },
+            { projectId: demo.projectId, tasks: [], taking: [], coAuthored: true },
             checks,
             producer,
           ).pipe(Effect.provide(services));

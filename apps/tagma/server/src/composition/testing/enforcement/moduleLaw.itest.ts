@@ -53,7 +53,7 @@ const submitted = Effect.fnUntraced(function* (fx: EnforcementFixture) {
       fx.demo.graph.store,
       fx.demo.graph.units,
       origin,
-      { projectId: fx.demo.projectId, tasks: [], taking: [] },
+      { projectId: fx.demo.projectId, tasks: [], taking: [], coAuthored: true },
       checks,
       producer,
     ).pipe(Effect.provideContext(services)),

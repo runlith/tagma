@@ -17,6 +17,8 @@ import { MergeGit } from './contract/service/mergeGit.js';
 import { makeMergeGit } from './merge/git.js';
 import { makeMergeQueue } from './queue/pendingMerges.js';
 import { mergeReceipts } from './store/receipts.js';
+import { Settings } from '../settings/contract/service/values.js';
+import { coAuthor } from './contract/wire/settings.js';
 
 export const assembleLanding = Effect.gen(function* () {
   const worktrees = yield* WorktreeOwners;
@@ -26,6 +28,7 @@ export const assembleLanding = Effect.gen(function* () {
   const served = yield* ServedGraphs;
   const git = yield* Git;
   const delivery = yield* GraphDelivering;
+  const settings = yield* Settings;
   const mergeGit = yield* makeMergeGit.pipe(Effect.provideService(Git, git));
   const merges = yield* makeMergeCoordinator({
     covered: worktrees.covered,
@@ -42,6 +45,7 @@ export const assembleLanding = Effect.gen(function* () {
     carried: (projectId) => Effect.map(policy.read([projectId]), (rows) => rows.get(projectId)?.storage === 'team'),
     settled: (projectId, checkout) => Effect.flatMap(served.resolve({ projectId, cwd: checkout }), (graph) => graph.settled(true)),
     rules: actChecks(yield* RuleChecks, 'merge_worktree'),
+    coAuthored: (projectId) => settings.value(coAuthor, projectId),
   }).pipe(Effect.provideService(MergeGit, mergeGit), Effect.provideService(MergeReceipts, mergeReceipts(db, units)));
   const pending = yield* makeMergeQueue().pipe(Effect.provideService(Merges, merges));
   yield* Effect.forkScoped(

@@ -32,6 +32,7 @@ export type MergeTaking = {
   readonly tip: string;
   readonly baseTip: string;
   readonly tree: string;
+  readonly message: string;
 };
 
 type Failed = FinishFailure;

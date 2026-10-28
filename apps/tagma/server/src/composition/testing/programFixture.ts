@@ -187,6 +187,7 @@ const makeProgram = Effect.fnUntraced(function* (
           projectId: demo.projectId,
           tasks: [],
           taking: [],
+          coAuthored: true,
           paths,
           whole: whole ? ['.'] : undefined,
         },
