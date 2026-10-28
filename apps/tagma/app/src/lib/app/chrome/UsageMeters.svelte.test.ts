@@ -115,12 +115,12 @@ test('each provider holding an account stands as a segment, its gauge filled to 
 test('a provider with nothing to measure takes no room, while one whose credential died stands and asks', () => {
   drawSegments([
     account('subscription', 'a1', 40, 2),
-    unread('kimi-oauth', { _tag: 'unsupported' } as AccountQuotaRow['failure']),
-    unread('xai-oauth', { _tag: 'stale-token' } as AccountQuotaRow['failure']),
+    unread('example-oauth', { _tag: 'unsupported' } as AccountQuotaRow['failure']),
+    unread('acme-oauth', { _tag: 'stale-token' } as AccountQuotaRow['failure']),
   ]);
 
-  expect(segments()).toEqual(['subscription', 'xai-oauth']);
-  expect(gauge('xai-oauth').dataset.fill).toBe('0');
+  expect(segments()).toEqual(['subscription', 'acme-oauth']);
+  expect(gauge('acme-oauth').dataset.fill).toBe('0');
 });
 
 test('the tenant draws nothing until the table names a provider', () => {

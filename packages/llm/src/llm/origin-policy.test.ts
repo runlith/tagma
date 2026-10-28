@@ -102,16 +102,16 @@ describe('history produced by another model', () => {
 });
 
 describe('provider-owned tool history', () => {
-  const devin = new ModelIdentity({ provider: ProviderID.make('devin-oauth'), model: ModelID.make('swe-2') });
+  const foreign = new ModelIdentity({ provider: ProviderID.make('acme-oauth'), model: ModelID.make('model-a') });
   const input = { server_name: 'lode', tool_name: 'file_reflection', arguments: { actual: 'export refused' } };
   const failure = "Failed to connect to MCP server 'lode'. Please try again.";
-  const metadata = { devin: { mcpGateway: { name: 'mcp_call_tool', input } } };
+  const metadata = { acme: { mcpGateway: { name: 'mcp_call_tool', input } } };
   const history = () => [
     Message.user('Record the failed export.'),
     Message.make({
       role: 'assistant',
-      origin: devin,
-      native: { devinClient: { trajectoryId: 'old-trajectory' } },
+      origin: foreign,
+      native: { acmeClient: { trajectoryId: 'old-trajectory' } },
       content: [
         Message.text('Before the attempt.'),
         { type: 'tool-call', id: 'gateway-1', name: 'mcp_call_tool', input, providerExecuted: true, providerMetadata: metadata },
@@ -129,7 +129,7 @@ describe('provider-owned tool history', () => {
     }),
     Message.make({
       role: 'tool',
-      origin: devin,
+      origin: foreign,
       content: [
         {
           type: 'tool-result',
@@ -222,7 +222,7 @@ describe('provider-owned tool history', () => {
         0,
         Message.make({
           role: 'tool',
-          origin: devin,
+          origin: foreign,
           content: [{ type: 'tool-result', id: 'real-2', name: 'read', result: { type: 'text', value: 'Second result.' } }],
         }),
       );
@@ -257,7 +257,7 @@ describe('provider-owned tool history', () => {
           Message.user('Read the previous results.'),
           Message.make({
             role: 'tool',
-            origin: devin,
+            origin: foreign,
             content: [
               {
                 type: 'tool-result',

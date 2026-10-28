@@ -141,12 +141,12 @@ test('the roster lists one row per provider, the fullest allowance first', async
   table.rows = [
     account('k1', 'first@runlith.dev', { default: true }),
     account('o1', 'codex@runlith.dev', { provider: 'openai-oauth', default: true, quota: weekly(85) }),
-    account('x1', 'grok@runlith.dev', { provider: 'xai-oauth', default: true, quota: weekly(50) }),
+    account('x1', 'acme@runlith.dev', { provider: 'acme-oauth', default: true, quota: weekly(50) }),
   ];
 
   const target = await open();
 
-  expect(rows(target)).toEqual(['openai-oauth', 'xai-oauth', 'subscription']);
+  expect(rows(target)).toEqual(['openai-oauth', 'acme-oauth', 'subscription']);
 });
 
 test('the default moves through the door, not the thread’s pin', async () => {

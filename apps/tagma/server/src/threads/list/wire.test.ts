@@ -252,11 +252,11 @@ test('a harness row names the CLI it was born to run and the model it reported, 
     execution: null,
     observation: unmeasuredObservation(),
   } as const;
-  expect(wire(row({ harness: unnamed, provider: 'devin-oauth', model: null, reasoning: null, ...TERMINAL_ROAD })).harness).toEqual({
+  expect(wire(row({ harness: unnamed, provider: 'acme-oauth', model: null, reasoning: null, ...TERMINAL_ROAD })).harness).toEqual({
     name: 'devin',
     transport: 'terminal',
     agent: null,
-    provider: 'devin-oauth',
+    provider: 'acme-oauth',
     capabilities: HARNESS_OFFER,
     model: null,
     effort: null,

@@ -244,10 +244,10 @@ test('the bar stands without a table and its tenant says nothing until one arriv
   const bar = draw();
   expect(bar.querySelector('[data-usage-meters]')).toBeNull();
 
-  table.rows = [account('xai-oauth', 'x1', [new QuotaWindow({ kind: 'weekly', usedPercent: 12 })])];
+  table.rows = [account('acme-oauth', 'x1', [new QuotaWindow({ kind: 'weekly', usedPercent: 12 })])];
   table.known = true;
   flushSync();
-  expect(bar.querySelector('[data-usage-segment="xai-oauth"] [data-gauge]')?.getAttribute('data-fill')).toBe('12');
+  expect(bar.querySelector('[data-usage-segment="acme-oauth"] [data-gauge]')?.getAttribute('data-fill')).toBe('12');
 });
 
 test('the standing chip says a dropped connection before the server, and stops saying it once the connection is open', () => {

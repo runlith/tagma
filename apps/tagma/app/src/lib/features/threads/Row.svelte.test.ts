@@ -132,7 +132,7 @@ const asked = (ask: ThreadListRow['ask']): ThreadListRow =>
     ask,
     harness: {
       name: 'devin',
-      provider: 'devin-oauth',
+      provider: 'acme-oauth',
       transport: 'terminal',
       agent: null,
       capabilities: {

@@ -369,26 +369,26 @@ describe('ThreadCompaction policy', () => {
     expect(threadUsableTokens({ context: 200_000, output: 8_192 }, 8_192, policy, percent(1))).toBe(200_000);
   });
   test('resolves the pair first, then the row, then the standing value', () => {
-    const overrides = [{ provider: 'devin-oauth', model: 'swe-2', strategy: 'percent' as const, trigger: 0.4 }];
+    const overrides = [{ provider: 'acme-oauth', model: 'model-a', strategy: 'percent' as const, trigger: 0.4 }];
     const withOverride = { ...policy, compactionTrigger: { strategy: 'percent' as const, trigger: 0.9 }, compactionOverrides: overrides };
-    expect(resolveCompactionTrigger({ provider: 'devin-oauth', model: 'swe-2', policy: withOverride })).toEqual({
+    expect(resolveCompactionTrigger({ provider: 'acme-oauth', model: 'model-a', policy: withOverride })).toEqual({
       strategy: 'percent',
       trigger: 0.4,
       source: 'override',
     });
-    expect(resolveCompactionTrigger({ provider: 'openai-oauth', model: 'swe-2', policy: withOverride }).source).toBe('global');
+    expect(resolveCompactionTrigger({ provider: 'openai-oauth', model: 'model-a', policy: withOverride }).source).toBe('global');
     const row = { strategy: 'percent' as const, trigger: 0.7 };
-    expect(resolveCompactionTrigger({ provider: 'devin-oauth', model: 'swe-2', policy: policy, row }).source).toBe('row');
-    expect(resolveCompactionTrigger({ provider: 'devin-oauth', model: 'swe-2', policy: withOverride, row })).toEqual({
+    expect(resolveCompactionTrigger({ provider: 'acme-oauth', model: 'model-a', policy: policy, row }).source).toBe('row');
+    expect(resolveCompactionTrigger({ provider: 'acme-oauth', model: 'model-a', policy: withOverride, row })).toEqual({
       strategy: 'percent',
       trigger: 0.4,
       source: 'override',
     });
     const twice = {
       ...withOverride,
-      compactionOverrides: [...overrides, { provider: 'devin-oauth', model: 'swe-2', strategy: 'reserve-output' as const }],
+      compactionOverrides: [...overrides, { provider: 'acme-oauth', model: 'model-a', strategy: 'reserve-output' as const }],
     };
-    expect(resolveCompactionTrigger({ provider: 'devin-oauth', model: 'swe-2', policy: twice }).strategy).toBe('reserve-output');
+    expect(resolveCompactionTrigger({ provider: 'acme-oauth', model: 'model-a', policy: twice }).strategy).toBe('reserve-output');
   });
   test('keeps provider input ceilings separate from total context and output capacity', () => {
     expect(threadUsableTokens({ context: 400_000, input: 272_000, output: 128_000 }, 32_000, policy, policy.compactionTrigger)).toBe(

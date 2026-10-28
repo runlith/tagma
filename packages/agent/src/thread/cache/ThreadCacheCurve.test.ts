@@ -34,7 +34,7 @@ layer(threadCacheCurveLayer.pipe(Layer.provide(storage)))('ThreadCacheCurve', (i
     'each provider and gap has its bounded sample; partial reads do not change the share',
     Effect.fnUntraced(function* () {
       const curve = yield* ThreadCacheCurve;
-      const [reading, empty] = yield* curve.of(['openai-oauth', 'xai-oauth']);
+      const [reading, empty] = yield* curve.of(['openai-oauth', 'acme-oauth']);
       const bucket = reading!.buckets.find((entry) => entry.gap === '30–60m')!;
       expect(bucket.sample).toBe(CACHE_CURVE_SAMPLE);
       expect(bucket.oldestAt).toBe(rows[1]!.sentAt);

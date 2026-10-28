@@ -40,7 +40,7 @@ test('a StepFun row stands as its mark alone, and a provider that really reports
   expect(alone.note).toBeNull();
   expect(alone.tone).toBe('plain');
 
-  expect(usageStatus(row({ provider: 'kimi-oauth', failure: unsupported, failedAt: NOW }), SUBSCRIPTION, NOW).word).toBe(
+  expect(usageStatus(row({ provider: 'acme-oauth', failure: unsupported, failedAt: NOW }), SUBSCRIPTION, NOW).word).toBe(
     'No usage reported',
   );
 
@@ -79,14 +79,14 @@ test('a refusal carries how long it stands, measured from when it was recorded',
 });
 
 test('a provider that reports no usage is not a fault of the account', () => {
-  const kimi = usageStatus(
-    row({ provider: 'kimi-oauth', failure: { _tag: 'unsupported' } as AccountQuotaRow['failure'], failedAt: NOW }),
+  const silent = usageStatus(
+    row({ provider: 'acme-oauth', failure: { _tag: 'unsupported' } as AccountQuotaRow['failure'], failedAt: NOW }),
     SUBSCRIPTION,
     NOW,
   );
-  expect(kimi.word).toBe('No usage reported');
-  expect(kimi.tone).toBe('plain');
-  expect(kimi.note).toContain('reports no usage');
+  expect(silent.word).toBe('No usage reported');
+  expect(silent.tone).toBe('plain');
+  expect(silent.note).toContain('reports no usage');
 });
 
 test('a failed read keeps the windows it had, marked and dated', () => {

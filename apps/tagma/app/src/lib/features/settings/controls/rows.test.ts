@@ -9,29 +9,29 @@ const decode = Schema.decodeUnknownSync(CompactionOverride);
 
 describe('a list of records', () => {
   test('writes the fields that apply and drops the ones whose condition stopped holding', () => {
-    const percent = settleRow(fields, { provider: 'devin-oauth', model: 'swe-2', strategy: 'percent', trigger: 0.4 });
+    const percent = settleRow(fields, { provider: 'acme-oauth', model: 'model-a', strategy: 'percent', trigger: 0.4 });
     const reserved = settleRow(fields, {
-      provider: 'devin-oauth',
-      model: 'swe-2',
+      provider: 'acme-oauth',
+      model: 'model-a',
       strategy: 'reserve-output',
       trigger: 0.4,
     });
-    expect(percent).toEqual({ provider: 'devin-oauth', model: 'swe-2', strategy: 'percent', trigger: 0.4 });
-    expect(reserved).toEqual({ provider: 'devin-oauth', model: 'swe-2', strategy: 'reserve-output' });
+    expect(percent).toEqual({ provider: 'acme-oauth', model: 'model-a', strategy: 'percent', trigger: 0.4 });
+    expect(reserved).toEqual({ provider: 'acme-oauth', model: 'model-a', strategy: 'reserve-output' });
   });
 
   test('what it settles is what the key decodes', () => {
     const rows = [
       { provider: 'openai-oauth', model: 'gpt-5.6-sol', strategy: 'percent', trigger: 0.7 },
-      { provider: 'devin-oauth', model: 'gpt-5.6-sol', strategy: 'reserve-output' },
+      { provider: 'acme-oauth', model: 'gpt-5.6-sol', strategy: 'reserve-output' },
     ];
     for (const row of rows) {
       expect(() => decode(settleRow(fields, row))).not.toThrow();
     }
-    expect(() => decode('{"provider":"devin-oauth","model":"swe-2"}')).toThrow();
-    expect(decode({ provider: 'devin-oauth', model: 'swe-2', strategy: 'reserve-output', trigger: 0.4 })).toEqual({
-      provider: 'devin-oauth',
-      model: 'swe-2',
+    expect(() => decode('{"provider":"acme-oauth","model":"model-a"}')).toThrow();
+    expect(decode({ provider: 'acme-oauth', model: 'model-a', strategy: 'reserve-output', trigger: 0.4 })).toEqual({
+      provider: 'acme-oauth',
+      model: 'model-a',
       strategy: 'reserve-output',
     });
   });
@@ -47,14 +47,14 @@ describe('a list of records', () => {
   });
 
   test('editing opens on this layer’s rows, or on the ones it would replace', () => {
-    const inherited = [{ provider: 'devin-oauth', model: 'swe-2', strategy: 'percent', trigger: 0.4 }];
+    const inherited = [{ provider: 'acme-oauth', model: 'model-a', strategy: 'percent', trigger: 0.4 }];
     expect(rowsToEdit({ own: undefined, inherited, merging: true })).toEqual([]);
     expect(rowsToEdit({ own: undefined, inherited, merging: false })).toEqual(inherited);
     expect(rowsToEdit({ own: [], inherited, merging: true })).toEqual([]);
   });
 
   test('a write removes a property rather than storing an empty one', () => {
-    const row = writePath({ provider: 'devin-oauth', trigger: 0.4 }, ['trigger'], undefined);
-    expect(row).toEqual({ provider: 'devin-oauth' });
+    const row = writePath({ provider: 'acme-oauth', trigger: 0.4 }, ['trigger'], undefined);
+    expect(row).toEqual({ provider: 'acme-oauth' });
   });
 });

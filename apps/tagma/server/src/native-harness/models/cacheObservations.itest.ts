@@ -43,7 +43,7 @@ layer(machine)('cache observations', (it) => {
         Effect.succeed({ cacheObservations: [observed(1, 420_000), observed(2, 30_000), observed(3, 500_000, 'openai-oauth')] }),
       );
 
-      const read = yield* observations.latest(['subscription', 'openai-oauth', 'muse-oauth'], 10);
+      const read = yield* observations.latest(['subscription', 'openai-oauth', 'acme-oauth'], 10);
       expect(read.filter((observation) => observation.provider === 'subscription')).toEqual([
         expect.objectContaining({ threadId: row.id, stepNumber: 2, gapMs: 30_000 }),
         expect.objectContaining({ threadId: row.id, stepNumber: 1, gapMs: 420_000 }),
@@ -51,7 +51,7 @@ layer(machine)('cache observations', (it) => {
       expect(read.filter((observation) => observation.provider === 'openai-oauth')).toEqual([
         expect.objectContaining({ threadId: row.id, stepNumber: 3, gapMs: 500_000 }),
       ]);
-      expect(read.some((observation) => observation.provider === 'muse-oauth')).toBe(false);
+      expect(read.some((observation) => observation.provider === 'acme-oauth')).toBe(false);
       expect(yield* observations.latest([], 10)).toEqual([]);
     }),
   );
@@ -62,11 +62,11 @@ layer(machine)('cache observations', (it) => {
       const extra = 5;
       yield* fold(row.id, () =>
         Effect.succeed({
-          cacheObservations: Array.from({ length: CACHE_CURVE_SAMPLE + extra }, (_, index) => observed(index, 3_700_000, 'muse-oauth')),
+          cacheObservations: Array.from({ length: CACHE_CURVE_SAMPLE + extra }, (_, index) => observed(index, 3_700_000, 'acme-oauth')),
         }),
       );
 
-      const kept = yield* observations.latest(['muse-oauth'], CACHE_CURVE_SAMPLE * 2);
+      const kept = yield* observations.latest(['acme-oauth'], CACHE_CURVE_SAMPLE * 2);
       expect(kept).toHaveLength(CACHE_CURVE_SAMPLE);
       expect(kept[0]?.stepNumber).toBe(CACHE_CURVE_SAMPLE + extra - 1);
       expect(kept.at(-1)?.stepNumber).toBe(extra);
@@ -79,13 +79,13 @@ layer(machine)('cache observations', (it) => {
       yield* fold(row.id, () =>
         Effect.succeed({
           cacheObservations: [
-            ...Array.from({ length: 6 }, (_, index) => observed(index, 2_000, 'xai-oauth')),
-            ...Array.from({ length: 6 }, (_, index) => observed(100 + index, 5_000_000, 'xai-oauth')),
+            ...Array.from({ length: 6 }, (_, index) => observed(index, 2_000, 'example-oauth')),
+            ...Array.from({ length: 6 }, (_, index) => observed(100 + index, 5_000_000, 'example-oauth')),
           ],
         }),
       );
 
-      const capped = yield* observations.latest(['xai-oauth'], 2);
+      const capped = yield* observations.latest(['example-oauth'], 2);
       expect(capped.filter((observation) => observation.gapMs === 2_000).map((observation) => observation.stepNumber)).toEqual([5, 4]);
       expect(capped.filter((observation) => observation.gapMs === 5_000_000).map((observation) => observation.stepNumber)).toEqual([
         105, 104,
@@ -99,13 +99,13 @@ layer(machine)('cache observations', (it) => {
       yield* fold(row.id, () =>
         Effect.succeed({
           cacheObservations: [
-            ...Array.from({ length: 3 }, (_, index) => observed(200 + index, 5_000_000, 'kimi-oauth')),
-            ...Array.from({ length: 20 }, (_, index) => observed(index, 2_000, 'kimi-oauth')),
+            ...Array.from({ length: 3 }, (_, index) => observed(200 + index, 5_000_000, 'sample-oauth')),
+            ...Array.from({ length: 20 }, (_, index) => observed(index, 2_000, 'sample-oauth')),
           ],
         }),
       );
 
-      const read = yield* observations.latest(['kimi-oauth'], 2);
+      const read = yield* observations.latest(['sample-oauth'], 2);
       expect(read.filter((observation) => observation.gapMs === 2_000).map((observation) => observation.stepNumber)).toEqual([19, 18]);
       expect(read.filter((observation) => observation.gapMs === 5_000_000).map((observation) => observation.stepNumber)).toEqual([
         202, 201,

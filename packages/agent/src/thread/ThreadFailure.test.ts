@@ -56,7 +56,7 @@ describe('ThreadFailure', () => {
 
   test('keeps a retryable pre-execution provider capacity failure through durable diagnostics', () => {
     const entry = threadFailureEntry(
-      { id: 'run-capacity', threadId: 'thread-1', provider: 'xai-oauth' },
+      { id: 'run-capacity', threadId: 'thread-1', provider: 'acme-oauth' },
       new LLMError({
         module: 'OpenAIResponses',
         method: 'stream',
@@ -70,7 +70,7 @@ describe('ThreadFailure', () => {
     expect(entry).toMatchObject({
       message: 'OpenAIResponses.stream: The model is currently at capacity due to high demand.',
       diagnostics: {
-        provider: 'xai-oauth',
+        provider: 'acme-oauth',
         stage: 'OpenAIResponses.stream',
         type: 'ProviderInternal',
         retryable: true,
