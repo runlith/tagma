@@ -66,12 +66,15 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('reflection closure pr
         const { graph } = first;
         const tagma = yield* graph.projectLifecycle.create({ name: 'closure-source', rootPath: root });
         yield* zoneDeclared(tagma.id);
-        const area = yield* graph.blocks.create({
+        const top = (yield* graph.blocks.rootBlockOf(tagma.id)).id;
+        const leaf = yield* graph.blocks.create({
           projectId: tagma.id,
-          parentId: (yield* graph.blocks.rootBlockOf(tagma.id)).id,
-          tags: ['zone'],
-          title: 'The Server',
+          parentId: top,
+          tags: ['explanation'],
+          title: 'The server keeps one law',
         });
+        yield* graph.sources.attach({ blockId: leaf.id, kind: 'dir', ref: 'server' });
+        const area = yield* graph.blocks.create({ projectId: tagma.id, parentId: top, tags: ['zone'], title: 'The Server' });
         yield* graph.sources.attach({ blockId: area.id, kind: 'dir', ref: 'server' });
         const filed = yield* fileReflection(filing);
         expect(filed.entry.projectId).toBe(tagma.id);

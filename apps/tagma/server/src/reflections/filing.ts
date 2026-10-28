@@ -13,6 +13,8 @@ import { type BlockCreateRefusal, Blocks } from '../graph/contract/service/block
 import { OperationOwners } from '../platform/contract/service/operationOwners.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { REFLECTION, reflectionOf } from '../graph/contract/wire/tags/reflection.js';
+import { CONTAINER } from '../graph/contract/wire/tags/container.js';
+import { Sources } from '../graph/contract/service/sources.js';
 import { Tags } from '../graph/contract/service/vocabulary.js';
 import { Ranking } from '../graph/contract/service/reads.js';
 import { blockName } from '../graph/contract/wire/references.js';
@@ -37,16 +39,19 @@ const receivedBy = Effect.fn('Reflection.receivedBy')(function* () {
   return (yield* GraphSource).source ?? null;
 });
 
+type Home = { readonly root: BlockRow; readonly source: BlockRow };
+
 const home = Effect.fn('Reflection.home')(function* (): Effect.fn.Return<
-  BlockRow,
-  StoreFailure | GateRefusal<'no-home' | 'no-root' | SourceRefusal>,
-  SourceProject | GraphSource | GraphScopes | BlockRows
+  Home,
+  StoreFailure | GateRefusal<'no-home' | 'no-root' | 'source-outside' | SourceRefusal>,
+  SourceProject | GraphSource | Sources | BlockRows
 > {
   const found = yield* (yield* SourceProject).place();
-  if (found !== undefined)
-    return (
-      (yield* (yield* GraphScopes).scopeByPlace(found.project.id, found.place)) ?? (yield* (yield* BlockRows).rootBlockOf(found.project.id))
-    );
+  if (found !== undefined) {
+    const root = yield* (yield* BlockRows).rootBlockOf(found.project.id);
+    const [container] = yield* (yield* Sources).containersOf(found.project.id, found.place);
+    return { root, source: container ?? root };
+  }
   const { sourcePath, originPath } = yield* GraphSource;
   return yield* new GateRefusal(
     'no-home',
@@ -185,17 +190,20 @@ const where = Effect.fn('Reflection.where')(function* (projectRef: string | unde
   return scope === undefined ? `project \`${project.name}\`` : `project \`${project.name}\`, scope ${blockName(scope.uuid)} ${scope.title}`;
 });
 
-const declaring = Effect.fn('Reflection.declaring')(function* (at: BlockRow, command: string) {
+const declaring = Effect.fn('Reflection.declaring')(function* (at: Home, command: string) {
   const owners = yield* OperationOwners;
+  const table = yield* (yield* Tags).of(at.root.projectId);
   for (const word of command.match(/[a-z][a-z0-9_-]*/g) ?? []) {
     const operation = word.replace(/^mcp__[a-z0-9-]+__/, '');
     const module = owners.of(operation);
     if (module === null) continue;
-    const card = (yield* (yield* Blocks).moduleCards(at.projectId)).find((one) => one.id === module);
-    if (card === undefined) return { at, unplaced: `${operation} is declared by module \`${module}\`, which has no #module card here` };
-    return { at: yield* (yield* BlockRows).blockById(card.block), unplaced: null };
+    const card = (yield* (yield* Blocks).moduleCards(at.root.projectId)).find((one) => one.id === module);
+    const row = card === undefined ? undefined : yield* (yield* BlockRows).blockById(card.block);
+    if (row === undefined || !table.supports(row, CONTAINER))
+      return { at: at.source, unplaced: `${operation} is declared by module \`${module}\`, which has no module card here` };
+    return { at: row, unplaced: null };
   }
-  return { at, unplaced: 'the command names no operation or tool of Tagma' };
+  return { at: at.source, unplaced: 'the command names no operation or tool of Tagma' };
 });
 
 export const fileReflection = Effect.fn('Reflection.file')(function* (input: Filing) {
@@ -205,13 +213,13 @@ export const fileReflection = Effect.fn('Reflection.file')(function* (input: Fil
   const place = yield* where(input.project, input.cwd);
   if (input.ontoId !== undefined) {
     return {
-      ...(yield* onto(at, input.ontoId, input.title, place, facts, input.body)),
+      ...(yield* onto(at.root, input.ontoId, input.title, place, facts, input.body)),
       already: [],
       receivedBy: received,
       unplaced: null,
     } satisfies FiledReflection;
   }
-  const standing = yield* already(at, `${input.title} ${input.command}`);
+  const standing = yield* already(at.root, `${input.title} ${input.command}`);
   const placed = yield* declaring(at, input.command);
   const entry = yield* fileAt(placed.at, input.title, place, facts, input.body);
   return {
@@ -222,10 +230,10 @@ export const fileReflection = Effect.fn('Reflection.file')(function* (input: Fil
     unplaced:
       placed.unplaced === null
         ? null
-        : `${placed.unplaced}, so it stands under ${blockName(at.uuid)} ${at.title}: move it under the owner of the code it is about`,
+        : `${placed.unplaced}, so it stands under ${blockName(placed.at.uuid)} ${placed.at.title}: move it under the module owning the code it is about`,
   } satisfies FiledReflection;
 });
 
 export const filedReflections = Effect.fn('Reflection.filed')(function* (after: BlockPosition | undefined, rows: number) {
-  return yield* (yield* Reflections).standing(yield* home(), after, rows);
+  return yield* (yield* Reflections).standing((yield* home()).root, after, rows);
 });

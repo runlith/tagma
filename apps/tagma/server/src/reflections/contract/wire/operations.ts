@@ -118,7 +118,7 @@ export const REFLECTION_FILING_OPERATIONS = {
       'Entries leave this list when their answering task ends, an answering doc/rule is written, answer_reflection names finished work, the landed commit of a direct fix or a check that found nothing to fix, or a keeper supersedes them. Search the reflection kind to include answered entries. The answer carries the standing total beside the page.',
     input: graphInput({ limit: limitOf(REFLECTIONS), cursor: placedCursor }),
     answer: arms({ ok: reflectionListFields }),
-    refusals: ['no-home', 'not-found', 'no-root', 'bad-cursor', 'cursor-stale'],
+    refusals: ['no-home', 'not-found', 'no-root', 'source-outside', 'bad-cursor', 'cursor-stale'],
     confirmation: () => ({ summary: 'Read standing Tagma reflections?' }),
     confirmLabel: 'Read',
     presentation: { running: 'Reading the standing friction', done: 'Read the standing friction' },

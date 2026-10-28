@@ -1,5 +1,5 @@
 import { expect } from 'bun:test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { layer } from '@runlith/effect-test';
 import { Effect, Schema } from 'effect';
@@ -79,29 +79,30 @@ const callsFor = Effect.fnUntraced(function* (demo: EffectDemo) {
 
 layer(demoGraphLayer())('a birth names its parent', (it) => {
   it.effect(
-    'a create naming no parent refuses with its sources’ owner and the root as ways out; a page past a screen of one role is named',
+    'a create naming no parent refuses, naming the root among its ways out and writing nothing; a page past a screen of one role is named',
     () =>
       withDemo((demo) =>
         Effect.gen(function* () {
           const { graph, projectId } = demo;
           const { call, create, children, rootName } = yield* callsFor(demo);
-          yield* Effect.sync(() => mkdirSync(join(demo.demoRoot, 'engine'), { recursive: true }));
-          const engine = yield* graph.blocks.create({
-            projectId,
-            parentId: demo.root,
-            tags: ['zone'],
-            title: 'Engine',
-            sources: [{ kind: 'dir', ref: 'engine' }],
+          yield* Effect.sync(() => {
+            mkdirSync(join(demo.demoRoot, 'engine'), { recursive: true });
+            writeFileSync(join(demo.demoRoot, 'engine', 'core.ts'), 'export const core = 1;\n');
           });
+          const [engineId] = yield* graph.blocks.writeModules(
+            projectId,
+            [{ id: 'engine', title: 'Engine', parent: demo.root, root: 'engine' }],
+            [],
+          );
+          const engine = { id: engineId! };
           const engineName = yield* demo.nameOf(engine.id);
           const before = yield* children();
           const stray = yield* Effect.flatMap(
-            call('create_block', { tags: ['idea'], title: 'Stray', sources: [{ kind: 'dir', ref: 'engine' }] }),
+            call('create_block', { tags: ['idea'], title: 'Stray', sources: [{ kind: 'file', ref: 'engine/core.ts' }] }),
             refused,
           );
           expect(stray.code).toBe('parent-required');
-          expect(stray.unblock[0]).toContain(engineName);
-          expect(stray.unblock.at(-1)).toContain(rootName);
+          expect(stray.unblock.some((way) => way.includes(rootName))).toBe(true);
           expect(yield* children()).toEqual(before);
           for (let at = 0; at < 20; at += 1)
             yield* graph.blocks.create({ projectId, parentId: engine.id, tags: ['idea'], title: `idea ${at}` });

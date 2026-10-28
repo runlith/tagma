@@ -89,5 +89,9 @@ export class Sources extends Context.Service<
       spelling: string,
       excluding?: number,
     ): Effect.Effect<BlockRecord[], StoreFailure | GateRefusal<'not-found' | 'source-outside' | GitRefusal>>;
+    containersOf(
+      projectId: number,
+      spelling: string,
+    ): Effect.Effect<BlockRecord[], StoreFailure | GateRefusal<'not-found' | 'source-outside' | GitRefusal>>;
   }
 >()('tagma/graph/Sources') {}

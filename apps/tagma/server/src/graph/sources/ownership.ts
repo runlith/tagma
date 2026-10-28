@@ -91,7 +91,7 @@ export const sourceOwnership = (parts: SourceParts) => {
     return { rows: page, total: counted.total };
   });
 
-  const ownersOf = Effect.fn('Sources.ownersOf')(function* (projectId: number, spelling: string, excluding?: number) {
+  const covering = Effect.fnUntraced(function* (projectId: number, spelling: string, containers: boolean, excluding?: number) {
     const { place, symbol } = yield* scopes.placeOf(projectId, spelling);
     const ancestors = new Set(['.', place]);
     for (let at = place.lastIndexOf('/'); at > 0; at = place.lastIndexOf('/', at - 1)) ancestors.add(place.slice(0, at));
@@ -121,7 +121,9 @@ export const sourceOwnership = (parts: SourceParts) => {
           and(inArray(block.id, [...new Set(rows.map((row) => row.blockId))]), eq(block.projectId, projectId), isNull(block.deletedAt)),
         ),
     );
-    const standing = new Set(candidates.flatMap((row) => (rests(table, row) ? [] : [row.id])));
+    const standing = new Set(
+      candidates.flatMap((row) => (rests(table, row) || (containers && !table.supports(row, CONTAINER)) ? [] : [row.id])),
+    );
     let best = 0;
     let depth = -1;
     const owners = new Set<number>();
@@ -139,5 +141,13 @@ export const sourceOwnership = (parts: SourceParts) => {
     return candidates.filter((row) => owners.has(row.id));
   });
 
-  return { atPlacePage, ownersOf };
+  const ownersOf = Effect.fn('Sources.ownersOf')(function* (projectId: number, spelling: string, excluding?: number) {
+    return yield* covering(projectId, spelling, false, excluding);
+  });
+
+  const containersOf = Effect.fn('Sources.containersOf')(function* (projectId: number, spelling: string) {
+    return yield* covering(projectId, spelling, true);
+  });
+
+  return { atPlacePage, ownersOf, containersOf };
 };
