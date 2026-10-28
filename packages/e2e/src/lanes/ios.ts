@@ -15,6 +15,7 @@ export type SimulatorOptions = { readonly runtime: string; readonly deviceType?:
 export type SimulatorTiming = { readonly clone: number; readonly boot: number };
 
 export class IOSUnavailable extends Data.TaggedError('IOSUnavailable')<{ readonly message: string; readonly cause?: unknown }> {}
+export class UntransferableValue extends Data.TaggedError('UntransferableValue')<{ readonly message: string }> {}
 export type IOSRun = { readonly runtimes?: readonly string[]; readonly deviceType?: string };
 
 export const ScrollFrame = Schema.Struct({ t: Schema.Number, offset: Schema.Number });
@@ -108,16 +109,74 @@ const startRecording = String.raw`function(input) {
   requestAnimationFrame(frame);
   return true;
 }`;
-const Evaluation = Schema.Struct({ result: Schema.optional(Schema.Unknown) });
+const transfer = String.raw`(value) => {
+  class Refused { constructor(reason) { this.reason = reason; } }
+  const refuse = (path, what) => { throw new Refused(what + ' at ' + path); };
+  const field = (holder, key, path) => {
+    const descriptor = Object.getOwnPropertyDescriptor(holder, key);
+    if (descriptor === undefined) refuse(path, 'an array hole');
+    if (!('value' in descriptor)) refuse(path, 'an accessor property');
+    if (!descriptor.enumerable) refuse(path, 'a non-enumerable property');
+    return descriptor.value;
+  };
+  const copy = (raw, path, open) => {
+    switch (typeof raw) {
+      case 'number':
+        if (!Number.isFinite(raw) || Object.is(raw, -0)) refuse(path, Object.is(raw, -0) ? '-0' : String(raw));
+        return raw;
+      case 'string':
+      case 'boolean':
+        return raw;
+      case 'object': {
+        if (raw === null) return raw;
+        if (open.includes(raw)) refuse(path, 'a cycle');
+        const prototype = Object.getPrototypeOf(raw);
+        const keys = Reflect.ownKeys(raw);
+        const inner = [...open, raw];
+        if (Array.isArray(raw)) {
+          if (prototype !== Array.prototype) refuse(path, 'an array subclass');
+          const extra = keys.find((key) => key !== 'length' && !(typeof key === 'string' && String(Number(key) >>> 0) === key && Number(key) < raw.length));
+          if (extra !== undefined) refuse(path, 'an array with property ' + String(extra));
+          const out = [];
+          for (let index = 0; index < raw.length; index++) {
+            const item = field(raw, String(index), path + '[' + index + ']');
+            if (item === undefined) refuse(path + '[' + index + ']', 'an undefined array element');
+            out.push(copy(item, path + '[' + index + ']', inner));
+          }
+          return out;
+        }
+        if (prototype !== Object.prototype && prototype !== null) refuse(path, 'a ' + (prototype?.constructor?.name ?? 'non-plain object'));
+        const out = Object.create(null);
+        for (const key of keys) {
+          if (typeof key === 'symbol') refuse(path, 'a symbol-keyed property');
+          const item = field(raw, key, path + '[' + JSON.stringify(key) + ']');
+          if (item !== undefined) out[key] = copy(item, path + '[' + JSON.stringify(key) + ']', inner);
+        }
+        return out;
+      }
+      default:
+        return refuse(path, 'a ' + typeof raw);
+    }
+  };
+  try {
+    return JSON.stringify(value === undefined ? {} : { result: copy(value, 'value', []) });
+  } catch (error) {
+    return JSON.stringify({ refused: error instanceof Refused ? error.reason : String(error) });
+  }
+}`;
+const Evaluation = Schema.fromJsonString(
+  Schema.Struct({ result: Schema.optional(Schema.Unknown), refused: Schema.optional(Schema.String) }),
+);
 const Viewport = Schema.Struct({ title: Schema.String, x: Schema.Number, y: Schema.Number, width: Schema.Number });
-const evaluatePage = async (debugger_: RemoteDebugger, expression: string): Promise<unknown> =>
-  decode(
+const evaluatePage = async (debugger_: RemoteDebugger, expression: string): Promise<unknown> => {
+  const evaluation = decode(
     Evaluation,
-    await debugger_.executeAtom('execute_script', [
-      `return (async () => { const result = await (${expression}); return result === undefined ? {} : {result}; })()`,
-      [],
-    ]),
-  ).result;
+    await debugger_.executeAtom('execute_script', [`return (async () => (${transfer})(await (${expression})))()`, []]),
+  );
+  if (evaluation.refused !== undefined)
+    throw new UntransferableValue({ message: `the page value is not JSON-representable: ${evaluation.refused}` });
+  return evaluation.result;
+};
 const connectInspector = async (debugger_: RemoteDebugger, pid: number): Promise<void> => {
   await debugger_.connect();
   await new Promise<void>((resolve, reject) => {

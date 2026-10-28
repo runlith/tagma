@@ -2,7 +2,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { withFileLock } from '@runlith/file-lock/FileLock';
 import { holding, runLiveness, runRoot } from '@runlith/testbed/fixture';
 import { once, runKind } from '@runlith/testbed/worlds';
-import { Clock, Data, Effect, Exit, Fiber, FileSystem, Schedule, Schema, type Scope } from 'effect';
+import { Clock, Data, Effect, Exit, Fiber, FileSystem, Option, Schedule, Schema, type Scope } from 'effect';
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -40,7 +40,12 @@ type TemplateParams = {
   readonly python: string;
 };
 type Template = { readonly udid: string; readonly runtime: string; readonly set: string };
-type Input = { readonly run: (...args: string[]) => Promise<string>; readonly diagnostics: () => string; readonly touch: NativeTouch };
+type Input = {
+  readonly run: (...args: string[]) => Promise<string>;
+  readonly quiet: (pid: number) => Promise<void>;
+  readonly diagnostics: () => string;
+  readonly touch: NativeTouch;
+};
 
 const command = (file: string, args: readonly string[], signal?: AbortSignal, progress?: (text: string) => void): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -55,21 +60,30 @@ const attempted = <A>(message: string, work: () => Promise<A>) =>
   Effect.tryPromise({ try: work, catch: (cause) => new SimulatorUnavailable({ message, cause }) });
 const decode = <A>(schema: Schema.Decoder<A>, value: unknown): A => Schema.decodeUnknownSync(schema)(value);
 const SafariLaunch = Schema.String.check(Schema.isPattern(/^com\.apple\.mobilesafari:\s*\d+$/u));
+const ServicePID = /"PID"\s*=\s*(\d+);/u;
+const ServiceIdentity = Schema.String.check(Schema.isPattern(ServicePID));
+const Verdict = Schema.fromJsonString(
+  Schema.Struct({ retry: Schema.Literals(['safe', 'safe_after_reread', 'unsafe']), retry_reason: Schema.String }),
+);
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false;
+    throw error;
+  }
+};
 const Runtimes = Schema.Struct({
   runtimes: Schema.Array(Schema.Struct({ identifier: Schema.String, version: Schema.String, isAvailable: Schema.Boolean })),
 });
 const Devices = Schema.Struct({
   devices: Schema.Record(Schema.String, Schema.Array(Schema.Struct({ udid: Schema.String, name: Schema.String, state: Schema.String }))),
 });
-const AXElement = Schema.Struct({
-  type: Schema.String,
-  AXLabel: Schema.NullOr(Schema.String),
-  AXUniqueId: Schema.NullOr(Schema.String),
-  enabled: Schema.NullOr(Schema.Boolean),
-  traits: Schema.Array(Schema.String),
-  frame: Schema.Struct({ x: Schema.Number, y: Schema.Number, width: Schema.Number, height: Schema.Number }),
-});
-const Accessibility = Schema.Array(AXElement);
+const ButtonType = 9;
+const DisabledTrait = 0x100;
+const BridgeScalar = Schema.Union([Schema.String, Schema.Number, Schema.Boolean]);
+type BridgeScalar = typeof BridgeScalar.Type;
 const BridgeFrame = Schema.Struct({
   X: Schema.optional(Schema.Number),
   Y: Schema.optional(Schema.Number),
@@ -83,17 +97,21 @@ const PositionedFrame = Schema.Struct({
   Height: Schema.Finite.check(Schema.isGreaterThan(0)),
 });
 type BridgeNode = {
-  readonly XC_kAXXCAttributeElementType?: string | null;
-  readonly XC_kAXXCAttributeIdentifier?: string | null;
-  readonly XC_kAXXCAttributeLabel?: string | null;
+  readonly XC_kAXXCAttributeElementType?: BridgeScalar | null;
+  readonly XC_kAXXCAttributeAutomationType?: BridgeScalar | null;
+  readonly XC_kAXXCAttributeTraits?: number | null;
+  readonly XC_kAXXCAttributeIdentifier?: BridgeScalar | null;
+  readonly XC_kAXXCAttributeLabel?: BridgeScalar | null;
   readonly XC_kAXXCAttributeFrame?: typeof BridgeFrame.Type | null;
   readonly XC_kAXXCAttributeChildren?: readonly BridgeNode[] | null;
 };
 const BridgeNode: Schema.Codec<BridgeNode> = Schema.suspend(() =>
   Schema.Struct({
-    XC_kAXXCAttributeElementType: Schema.optional(Schema.NullOr(Schema.String)),
-    XC_kAXXCAttributeIdentifier: Schema.optional(Schema.NullOr(Schema.String)),
-    XC_kAXXCAttributeLabel: Schema.optional(Schema.NullOr(Schema.String)),
+    XC_kAXXCAttributeElementType: Schema.optional(Schema.NullOr(BridgeScalar)),
+    XC_kAXXCAttributeAutomationType: Schema.optional(Schema.NullOr(BridgeScalar)),
+    XC_kAXXCAttributeTraits: Schema.optional(Schema.NullOr(Schema.Number)),
+    XC_kAXXCAttributeIdentifier: Schema.optional(Schema.NullOr(BridgeScalar)),
+    XC_kAXXCAttributeLabel: Schema.optional(Schema.NullOr(BridgeScalar)),
     XC_kAXXCAttributeFrame: Schema.optional(Schema.NullOr(BridgeFrame)),
     XC_kAXXCAttributeChildren: Schema.optional(Schema.NullOr(Schema.Array(BridgeNode))),
   }),
@@ -102,7 +120,13 @@ const BridgeReply = Schema.Union([
   Schema.Struct({ tree: Schema.Struct({ response: Schema.Struct({ tree: BridgeNode }) }) }),
   Schema.Struct({ failure: Schema.Struct({ reason: Schema.Struct({ error: Schema.String }) }) }),
 ]);
-type AXRead = { readonly pid: number; readonly automation: boolean; readonly depth: number; readonly nodes: number };
+type AXRead = {
+  readonly pid: number;
+  readonly automation: boolean;
+  readonly depth: number;
+  readonly nodes: number;
+  readonly traversal: 'view-hierarchy' | 'single-fetch';
+};
 const readAX = async (device: Device, tools: Tools, input: AXRead): Promise<BridgeNode> => {
   const raw = await simctl(
     device.set,
@@ -118,7 +142,7 @@ const readAX = async (device: Device, tools: Tools, input: AXRead): Promise<Brid
     '--max-nodes',
     String(input.nodes),
     '--traversal',
-    'view-hierarchy',
+    input.traversal,
     '--client-type',
     '0',
     '--automation-mode',
@@ -127,6 +151,20 @@ const readAX = async (device: Device, tools: Tools, input: AXRead): Promise<Brid
   const reply = decode(BridgeReply, JSON.parse(raw));
   if ('failure' in reply) throw new SimulatorUnavailable({ message: reply.failure.reason.error });
   return reply.tree.response.tree;
+};
+
+const elementsOf = (root: BridgeNode): BridgeNode[] => {
+  const elements = [root];
+  for (let index = 0; index < elements.length; index++) elements.push(...(elements[index]!.XC_kAXXCAttributeChildren ?? []));
+  return elements;
+};
+const launchSafari = async (device: Device): Promise<number> => {
+  const launched = decode(SafariLaunch, await simctl(device.set, 'launch', device.udid, 'com.apple.mobilesafari'));
+  return Number(launched.slice(launched.indexOf(':') + 1));
+};
+const readSystemPID = async (device: Device): Promise<number> => {
+  const identity = decode(ServiceIdentity, await simctl(device.set, 'spawn', device.udid, 'launchctl', 'list', 'com.apple.SpringBoard'));
+  return Number(ServicePID.exec(identity)![1]);
 };
 
 const remove = async (device: Device): Promise<void> => {
@@ -243,8 +281,43 @@ const input = Effect.fn('e2e.iosInput')(function* (device: Device, tools: Tools)
         lines.once('close', () => reject(new Error(stderr)));
       }),
   );
+  const answered = (pid: number) =>
+    new Promise<boolean>((resolve, reject) => {
+      const args = [
+        '--companion',
+        `localhost:${port}`,
+        '--retry-verdict',
+        'ui',
+        'quiet',
+        '0',
+        '--pid',
+        String(pid),
+        '--json',
+        '--udid',
+        device.udid,
+      ];
+      execFile(tools.client, args, { encoding: 'utf8' }, (cause, out, err) => {
+        try {
+          const verdict = cause === null ? undefined : Schema.decodeUnknownOption(Verdict)(err.trim().split('\n').at(-1));
+          if (verdict === undefined) resolve(true);
+          else if (Option.isSome(verdict) && verdict.value.retry === 'safe' && alive(pid)) resolve(false);
+          else
+            reject(
+              new SimulatorUnavailable({
+                message: `the native interface of pid ${pid} did not go quiet\n${err.trim()}\n${out.trim()}`,
+                cause,
+              }),
+            );
+        } catch (failure) {
+          reject(failure);
+        }
+      });
+    });
   const control: Input = {
     run: (...args) => command(tools.client, ['--companion', `localhost:${port}`, ...args, '--udid', device.udid]),
+    quiet: async (pid) => {
+      while (!(await answered(pid))) console.info(`iOS: pid ${pid} has not answered accessibility yet`);
+    },
     diagnostics: () => stderr,
     touch: yield* nativeTouch({ tools, port }),
   };
@@ -253,7 +326,7 @@ const input = Effect.fn('e2e.iosInput')(function* (device: Device, tools: Tools)
 const tap = async (control: Input, point: Point): Promise<void> => {
   await control.run('ui', 'tap', String(Math.round(point.x)), String(Math.round(point.y)));
 };
-const onboarding = Effect.fn('e2e.iosOnboarding')(function* (device: Device, control: Input) {
+const onboarding = Effect.fn('e2e.iosOnboarding')(function* (device: Device, control: Input, tools: Tools) {
   let ready = false;
   const html =
     '<!doctype html><title>Safari template</title><p>Ready</p><script>requestAnimationFrame(()=>requestAnimationFrame(()=>fetch("/ready",{method:"POST"})))</script>';
@@ -276,7 +349,8 @@ const onboarding = Effect.fn('e2e.iosOnboarding')(function* (device: Device, con
         await server.stop(true);
       }),
   );
-  yield* attempted('MobileSafari did not launch', () => simctl(device.set, 'launch', device.udid, 'com.apple.mobilesafari'));
+  const pid = yield* attempted('MobileSafari did not launch', () => launchSafari(device));
+  const systemPID = yield* attempted('the native system UI process is unavailable', () => readSystemPID(device));
   const navigation = yield* Effect.forkScoped(
     Effect.tryPromise({
       try: (signal) => command('xcrun', ['simctl', '--set', device.set, 'openurl', device.udid, server.url.href], signal),
@@ -286,30 +360,38 @@ const onboarding = Effect.fn('e2e.iosOnboarding')(function* (device: Device, con
   const interaction = Effect.gen(function* () {
     for (;;) {
       console.info('iOS onboarding: waiting for the native interface');
-      yield* attempted('the native interface did not become quiet', () =>
-        control.run('ui', 'quiet', '0', '--bundle-id', 'com.apple.mobilesafari'),
-      );
-      console.info('iOS onboarding: reading native accessibility');
-      const elements = yield* attempted('the native accessibility tree is unavailable', async () => {
-        const tree: unknown = JSON.parse(await control.run('ui', 'describe-all', '--api', 'axbridge', '--format', 'default', '--json'));
-        return decode(Accessibility, tree);
+      yield* attempted('the native interface did not become quiet', async () => {
+        await control.quiet(pid);
+        await control.quiet(systemPID);
       });
-      const popover = elements.some((one) => one.AXUniqueId === 'PopoverDismissRegion');
-      const buttons = elements.filter(
-        (one) => one.traits.includes('Button') && !one.traits.includes('NotEnabled') && one.enabled !== false,
+      console.info('iOS onboarding: reading native accessibility');
+      const snapshot = async (target: number) =>
+        elementsOf(await readAX(device, tools, { pid: target, automation: true, depth: 64, nodes: 4096, traversal: 'single-fetch' }));
+      const [elements, systemElements] = yield* attempted('the native accessibility tree is unavailable', () =>
+        Promise.all([snapshot(pid), snapshot(systemPID)]),
+      );
+      const hasSystemAlert = systemElements.some((one) => one.XC_kAXXCAttributeLabel === 'Search Engine Preference');
+      const popover = elements.some((one) => one.XC_kAXXCAttributeIdentifier === 'PopoverDismissRegion');
+      const buttons = (hasSystemAlert ? systemElements : elements).filter(
+        (one) => one.XC_kAXXCAttributeAutomationType === ButtonType && ((one.XC_kAXXCAttributeTraits ?? 0) & DisabledTrait) === 0,
       );
       const button =
-        buttons.find((one) => one.AXLabel === 'Continue') ?? (popover ? buttons.find((one) => one.AXLabel === 'Close') : undefined);
+        buttons.find((one) => one.XC_kAXXCAttributeLabel === 'Continue') ??
+        (!hasSystemAlert && popover ? buttons.find((one) => one.XC_kAXXCAttributeLabel === 'Close') : undefined);
       if (button !== undefined) {
-        yield* attempted('the native onboarding button did not accept a tap', () =>
-          tap(control, { x: button.frame.x + button.frame.width / 2, y: button.frame.y + button.frame.height / 2 }),
+        const frame = yield* Schema.decodeUnknownEffect(PositionedFrame)(button.XC_kAXXCAttributeFrame).pipe(
+          Effect.mapError((cause) => new SimulatorUnavailable({ message: 'the native onboarding button has no usable frame', cause })),
         );
-      } else if (ready && !popover && elements.some((one) => one.AXUniqueId === 'ReloadButton')) return;
+        yield* attempted('the native onboarding button did not accept a tap', () =>
+          tap(control, { x: frame.X + frame.Width / 2, y: frame.Y + frame.Height / 2 }),
+        );
+      } else if (ready && !hasSystemAlert && !popover && elements.some((one) => one.XC_kAXXCAttributeIdentifier === 'ReloadButton')) return;
       else yield* Effect.sleep(100);
     }
   });
   yield* Effect.raceFirst(interaction, Fiber.join(navigation).pipe(Effect.andThen(Effect.never)));
   yield* Fiber.join(navigation);
+  return pid;
 });
 const templates = runKind(
   'e2e/IOSTemplate',
@@ -366,16 +448,9 @@ const templates = runKind(
     const device = { set, udid };
     yield* boot(device);
     const control = yield* input(device, tools);
-    yield* onboarding(device, control);
-    const launched = yield* attempted('the template Safari process is unavailable', () =>
-      simctl(set, 'launch', udid, 'com.apple.mobilesafari'),
-    );
-    const identity = yield* Schema.decodeUnknownEffect(SafariLaunch)(launched).pipe(
-      Effect.mapError((cause) => new SimulatorUnavailable({ message: 'the template returned no Safari process identity', cause })),
-    );
-    const pid = Number(identity.slice(identity.indexOf(':') + 1));
+    const pid = yield* onboarding(device, control, tools);
     yield* attempted('the template could not leave accessibility automation mode', () =>
-      readAX(device, tools, { pid, automation: false, depth: 1, nodes: 8 }),
+      readAX(device, tools, { pid, automation: false, depth: 1, nodes: 8, traversal: 'view-hierarchy' }),
     );
     yield* attempted('the template Safari process did not terminate', () => simctl(set, 'terminate', udid, 'com.apple.mobilesafari'));
     return { udid, runtime: runtime.version, set };
@@ -417,10 +492,9 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
     timing,
     socket: () => simctl(set, 'getenv', udid, 'RWI_LISTEN_SOCKET'),
     launchSafari: async () => {
-      const launched = decode(SafariLaunch, await simctl(set, 'launch', udid, 'com.apple.mobilesafari'));
-      const pid = Number(launched.slice(launched.indexOf(':') + 1));
-      await control.run('ui', 'quiet', '0', '--bundle-id', 'com.apple.mobilesafari');
-      await readAX(device, tools, { pid, automation: true, depth: 1, nodes: 8 });
+      const pid = await launchSafari(device);
+      await control.quiet(pid);
+      await readAX(device, tools, { pid, automation: true, depth: 1, nodes: 8, traversal: 'view-hierarchy' });
       console.info(`iOS native accessibility ready for Safari ${pid}`);
       return pid;
     },
@@ -444,9 +518,8 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
       );
     },
     webFrame: async (title, pid) => {
-      const root = await readAX(device, tools, { pid, automation: true, depth: 64, nodes: 4096 });
-      const elements: BridgeNode[] = [root];
-      for (let index = 0; index < elements.length; index++) elements.push(...(elements[index]!.XC_kAXXCAttributeChildren ?? []));
+      const root = await readAX(device, tools, { pid, automation: true, depth: 64, nodes: 4096, traversal: 'view-hierarchy' });
+      const elements = elementsOf(root);
       const view = elements.find((one) => one.XC_kAXXCAttributeIdentifier === 'WebView');
       if (view === undefined) throw new SimulatorUnavailable({ message: 'native accessibility exposed no Safari WebView' });
       const viewport = decode(PositionedFrame, view.XC_kAXXCAttributeFrame);

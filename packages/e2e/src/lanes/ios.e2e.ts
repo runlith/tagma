@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { Effect, Schema } from 'effect';
 import { join } from 'node:path';
-import { ios } from './ios.ts';
+import { ios, UntransferableValue } from './ios.ts';
 import { proveTouch } from '../testing/touch.ts';
 
 const page = `<!doctype html><title>Native fling proof</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;overflow:hidden}#list{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain}.row{height:80px;border-bottom:1px solid;box-sizing:border-box}#probe{position:fixed;left:20px;top:100px;width:120px;height:40px;z-index:1}</style><div id="list"></div><button id="probe">Tap target</button><textarea id="keyboard" style="position:fixed;left:20px;top:160px;width:120px;height:30px;z-index:1"></textarea><script>window.clicked=new Promise(resolve=>document.querySelector('#probe').addEventListener('click',event=>resolve(event.isTrusted),{once:true}));const list=document.querySelector('#list');for(let i=0;i<100;i++){const row=document.createElement('div');row.className='row';row.textContent='row '+i;list.append(row)}list.scrollTop=1000;</script>`;
@@ -36,6 +36,24 @@ ios.effect('MobileSafari preserves native momentum until a page write stops it',
     expect(yield* Effect.promise(() => phone.evaluate('Promise.resolve(document.querySelector("#list").scrollTop)', Schema.Number))).toBe(
       1000,
     );
+    const optional = yield* Effect.promise(() =>
+      phone.evaluate('({ kept: 1, absent: undefined })', Schema.Struct({ kept: Schema.Number, absent: Schema.optional(Schema.Number) })),
+    );
+    expect(Object.keys(optional)).toEqual(['kept']);
+    for (const value of [
+      'document.body',
+      '({ nested: [1, NaN] })',
+      '({ "": NaN })',
+      '-0',
+      'Object.assign([1], { extra: 2 })',
+      '({ get x() { return 1; } })',
+      '(() => { const self = {}; self.self = self; return self; })()',
+    ]) {
+      const refused = yield* Effect.tryPromise({ try: () => phone.evaluate(value, Schema.Unknown), catch: (cause) => cause }).pipe(
+        Effect.flip,
+      );
+      expect(refused).toBeInstanceOf(UntransferableValue);
+    }
     const css = yield* Effect.promise(() =>
       phone.evaluate(
         '(() => { const r = document.querySelector("#probe").getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; })()',
