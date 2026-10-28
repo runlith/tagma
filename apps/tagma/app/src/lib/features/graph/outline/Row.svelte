@@ -10,6 +10,7 @@
   import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
   import type { TitleEdit, TreeScreen } from '$lib/features/graph/TreeScreen.svelte.js';
   import { cn } from '$lib/shared/utils.js';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
 
   const tags = TagCatalog.use();
@@ -19,7 +20,8 @@
   let { store, name }: { store: TreeScreen; name: string } = $props();
 
   const block = $derived(store.block(name));
-  const hasChildren = $derived(store.hasChildren(name));
+  const childCount = $derived(store.visibleChildren(name).length);
+  const hasChildren = $derived(childCount > 0);
   const expanded = $derived(store.expanded.has(name));
   const resting = $derived(block !== undefined && tags.isResting(block));
   const off = $derived(block !== undefined && tags.switchedOff(block));
@@ -151,7 +153,7 @@
       {block}
       {store}
       href={addresses.block(name)}
-      subtree={!hasChildren ? 'none' : expanded || store.readingLens.active ? 'open' : 'collapsed'}
+      {childCount}
       bind:link
       attributes={{ onkeydown: onRowKeydown }}
       class={cn(passthrough && 'opacity-45', mark && `border-l-2 ${MARK_EDGE[mark]} pl-1.5`)}
@@ -184,25 +186,27 @@
       {/snippet}
 
       {#snippet title()}
-        <div
-          bind:this={titleEl}
-          class={cn(
-            'title min-w-0 flex-1 py-px text-body leading-6 font-normal break-words whitespace-pre-wrap outline-none',
-            edit !== null ? 'relative cursor-text' : 'select-none',
-            (resting || off) && 'text-muted-foreground',
-            tags.restingState(block) === 'closed' && 'line-through decoration-muted-foreground/40',
-            ghost && 'text-severity-lie line-through decoration-severity-lie/40',
-          )}
-          contenteditable={edit !== null ? 'true' : undefined}
-          spellcheck="false"
-          role={edit !== null ? 'textbox' : undefined}
-          aria-label={edit !== null ? 'Title' : undefined}
-          data-placeholder="Untitled"
-          onfocus={() => (focused = true)}
-          onblur={leave}
-          onkeydown={onKeydown}
-          onpaste={onPaste}
-        ></div>
+        <FadeText class={cn('flex-1', edit === null && 'pointer-events-none')}>
+          <div
+            bind:this={titleEl}
+            class={cn(
+              'title py-px text-body leading-6 outline-none',
+              edit !== null ? 'relative cursor-text break-words whitespace-pre-wrap' : 'select-none',
+              (resting || off) && 'text-muted-foreground',
+              tags.restingState(block) === 'closed' && 'line-through decoration-muted-foreground/40',
+              ghost && 'text-severity-lie line-through decoration-severity-lie/40',
+            )}
+            contenteditable={edit !== null ? 'true' : undefined}
+            spellcheck="false"
+            role={edit !== null ? 'textbox' : undefined}
+            aria-label={edit !== null ? 'Title' : undefined}
+            data-placeholder="Untitled"
+            onfocus={() => (focused = true)}
+            onblur={leave}
+            onkeydown={onKeydown}
+            onpaste={onPaste}
+          ></div>
+        </FadeText>
       {/snippet}
 
       {#snippet trailing()}

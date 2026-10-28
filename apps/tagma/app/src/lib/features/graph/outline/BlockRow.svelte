@@ -5,6 +5,8 @@
   import type { Snippet } from 'svelte';
   import type { HTMLAnchorAttributes } from 'svelte/elements';
   import type { ListedBlock } from '@tagma/server/graph/contract/wire/rows';
+  import { CONTAINER } from '@tagma/server/graph/contract/wire/tags/container';
+  import { LIFECYCLE } from '@tagma/server/graph/contract/wire/tags/lifecycle';
   import TagIcon from '$lib/features/graph/TagIcon.svelte';
   import StatusChip from '$lib/features/graph/StatusChip.svelte';
   import WriterBadge from '$lib/features/graph/WriterBadge.svelte';
@@ -25,7 +27,7 @@
     block,
     href,
     store,
-    subtree = 'none',
+    childCount = 0,
     layout = 'line',
     link = $bindable(null),
     attributes,
@@ -37,7 +39,7 @@
     block: ListedBlock;
     href: string;
     store?: TreeScreen;
-    subtree?: 'none' | 'collapsed' | 'open';
+    childCount?: number;
     layout?: 'line' | 'stacked' | 'compact';
     link?: HTMLAnchorElement | null;
     attributes?: HTMLAnchorAttributes;
@@ -50,6 +52,9 @@
   const off = $derived(tags.switchedOff(block));
   const unread = $derived(readState.isUnread(block.name, block.updatedAt));
   const holder = $derived(tags.holderOf(block));
+  const lives = $derived(tags.supports(block, LIFECYCLE));
+  const work = $derived(lives && !tags.isResting(block));
+  const container = $derived(childCount > 0 || tags.supports(block, CONTAINER));
 </script>
 
 <div
@@ -68,19 +73,23 @@
     data-block={block.name}
   ></a>
 
-  <div class={cn('flex min-w-0', layout === 'compact' ? 'items-center' : 'items-start', layout === 'stacked' ? 'w-full' : 'flex-1')}>
+  <div
+    class={cn(
+      'flex min-w-0',
+      layout === 'compact' ? 'items-center' : 'items-start',
+      layout === 'stacked' ? 'w-full' : 'flex-1',
+      container && 'font-medium',
+    )}
+  >
     {@render leading?.()}
 
-    <span
-      class={cn('pointer-events-none relative mr-1.5 grid size-4 shrink-0 place-items-center rounded-full', layout !== 'compact' && 'mt-1')}
-    >
-      {#if subtree === 'collapsed'}
-        <span class="absolute size-4 rounded-full bg-vein transition-colors group-hover/row:bg-vein-strong"></span>
+    <span class={cn('pointer-events-none mr-1.5 grid h-4 w-2 shrink-0 place-items-center', layout !== 'compact' && 'mt-1')}>
+      {#if lives}
+        <span
+          class="size-2 rounded-none transition-transform duration-150 ease-instrument group-hover/row:scale-125"
+          style:background={tags.statusVar(block)}
+        ></span>
       {/if}
-      <span
-        class="relative size-2 rounded-full transition-transform duration-150 ease-instrument group-hover/row:scale-125"
-        style:background={tags.statusVar(block)}
-      ></span>
     </span>
 
     <TagIcon tag={tags.tagOf(block)} class={cn('mr-1.5 size-3.5 shrink-0 text-muted-foreground/70', layout !== 'compact' && 'mt-1')} />
@@ -89,6 +98,9 @@
   </div>
 
   {#if layout === 'compact'}
+    {#if childCount > 0}
+      <span class="stamp tabular ml-2 shrink-0 self-center text-muted-foreground/60">{childCount}</span>
+    {/if}
     {#if trailing}
       <div class="relative ml-2 flex shrink-0 items-center gap-1.5 self-center">
         {@render trailing()}
@@ -127,15 +139,19 @@
       {#if tags.underway(block) && holder !== null}
         <WriterBadge writer={sessions.writerOf(holder)} class="pointer-events-auto relative" />
       {/if}
-
-      <span
-        class={cn(
-          'stamp tabular whitespace-nowrap transition-colors',
-          unread ? 'font-medium text-foreground/90' : 'text-muted-foreground/45',
-        )}
-      >
-        {timeAgo(block.updatedAt)}
-      </span>
+      {#if childCount > 0}
+        <span class="stamp tabular whitespace-nowrap text-muted-foreground/60">{childCount}</span>
+      {/if}
+      {#if work}
+        <span
+          class={cn(
+            'stamp tabular whitespace-nowrap transition-colors',
+            unread ? 'font-medium text-foreground/90' : 'text-muted-foreground/45',
+          )}
+        >
+          {timeAgo(block.updatedAt)}
+        </span>
+      {/if}
     </div>
     {#if trailing}
       <div class="absolute top-px right-1 flex items-center">

@@ -2,7 +2,7 @@ export type TreeLine = {
   readonly name: string;
   readonly depth: number;
   readonly parent: string;
-  readonly branch: boolean;
+  readonly count: number;
 };
 
 export type TreeStep =
@@ -14,9 +14,9 @@ export function treeLines(root: string, children: (name: string) => readonly str
   const lines: TreeLine[] = [];
   const walk = (parent: string, depth: number): void => {
     for (const name of children(parent)) {
-      const branch = children(name).length > 0;
-      lines.push({ name, depth, parent, branch });
-      if (branch && expanded.has(name)) walk(name, depth + 1);
+      const count = children(name).length;
+      lines.push({ name, depth, parent, count });
+      if (count > 0 && expanded.has(name)) walk(name, depth + 1);
     }
   };
   walk(root, 1);
@@ -37,10 +37,10 @@ export function treeStep(lines: readonly TreeLine[], at: string | null, key: str
     case 'End':
       return focusAt(lines, lines.length - 1);
     case 'ArrowRight':
-      if (!line.branch) return null;
+      if (line.count === 0) return null;
       return expanded.has(line.name) ? focusAt(lines, index + 1) : { kind: 'expand', name: line.name };
     case 'ArrowLeft':
-      if (line.branch && expanded.has(line.name)) return { kind: 'collapse', name: line.name };
+      if (line.count > 0 && expanded.has(line.name)) return { kind: 'collapse', name: line.name };
       return lines.some((other) => other.name === line.parent) ? { kind: 'focus', name: line.parent } : null;
     default:
       return null;

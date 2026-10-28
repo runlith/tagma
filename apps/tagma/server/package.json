@@ -534,6 +534,11 @@
       "browser": "./src/graph/contract/wire/tags/behaviour.ts",
       "default": "./src/graph/contract/wire/tags/behaviour.ts"
     },
+    "./graph/contract/wire/tags/container": {
+      "types": "./src/graph/contract/wire/tags/container.ts",
+      "browser": "./src/graph/contract/wire/tags/container.ts",
+      "default": "./src/graph/contract/wire/tags/container.ts"
+    },
     "./graph/contract/wire/tags/lifecycle": {
       "types": "./src/graph/contract/wire/tags/lifecycle.ts",
       "browser": "./src/graph/contract/wire/tags/lifecycle.ts",

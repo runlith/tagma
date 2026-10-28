@@ -14,6 +14,7 @@
   let {
     block,
     project,
+    childCount,
     attributes,
     class: className,
     leading,
@@ -21,6 +22,7 @@
   }: {
     block: ListedBlock;
     project: string;
+    childCount?: number;
     attributes?: HTMLAnchorAttributes;
     class?: string;
     leading?: Snippet;
@@ -31,7 +33,7 @@
   const label = $derived(block.title.trim() || 'Untitled');
 </script>
 
-<BlockRow {block} {href} layout="compact" {attributes} class={className} {leading} {trailing}>
+<BlockRow {block} {href} {childCount} layout="compact" {attributes} class={className} {leading} {trailing}>
   {#snippet title()}
     <FadeText
       class={cn(

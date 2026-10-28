@@ -6,11 +6,11 @@ const children = (name: string): readonly string[] => shape[name] ?? [];
 
 test('only expanded branches show their children', () => {
   expect(treeLines('root', children, new Set()).map((line) => line.name)).toEqual(['a', 'b']);
-  expect(treeLines('root', children, new Set(['a'])).map((line) => [line.name, line.depth, line.branch])).toEqual([
-    ['a', 1, true],
-    ['a1', 2, true],
-    ['a2', 2, false],
-    ['b', 1, false],
+  expect(treeLines('root', children, new Set(['a'])).map((line) => [line.name, line.depth, line.count])).toEqual([
+    ['a', 1, 2],
+    ['a1', 2, 1],
+    ['a2', 2, 0],
+    ['b', 1, 0],
   ]);
 });
 

@@ -59,10 +59,11 @@
               <SidebarRow
                 {block}
                 {project}
+                childCount={line.count}
                 attributes={{
                   role: 'treeitem',
                   'aria-level': line.depth,
-                  'aria-expanded': line.branch ? open : undefined,
+                  'aria-expanded': line.count > 0 ? open : undefined,
                   'aria-selected': line.name === current,
                   tabindex: line.name === tabStop ? 0 : -1,
                   'data-tree-name': line.name,
@@ -70,7 +71,7 @@
                 class={cn(line.name === current && 'bg-selected')}
               >
                 {#snippet leading()}
-                  {#if line.branch}
+                  {#if line.count > 0}
                     <button
                       type="button"
                       tabindex="-1"
