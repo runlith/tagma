@@ -13,7 +13,21 @@ Follow [Run from source](README.md#run-from-source) up to `bun install`. Rust is
 - A `*.test.ts` file touches no process, database, socket or disk; a test that needs one is an `*.itest.ts`. Test the public contract of the code you change, with the fewest cases that prove it; a fixed bug gets a test that fails before the fix.
 - Formatting is `oxfmt` with the repository's `.oxfmtrc.json`.
 - `bun.lock` is written only by `bun install`.
-- Commit messages are in English: a short subject saying what the change does.
+- Commits follow [Conventional Commits](#commits), and the pull request title takes the same shape: a pull request is squash-merged under its title.
+
+## Commits
+
+```
+feat(threads): move a thread into another project
+
+What changed in behaviour and why, in one to three sentences.
+```
+
+- Type: `feat`, `fix`, `perf`, `refactor`, `test`, `docs`, `build`, `ci`, `chore` or `revert`, chosen honestly — a mechanical edit is not a `feat`.
+- Scope: the id of the module the change was made for, without `@runlith/` (`graph`, `threads`, `code-facts`); none for a change across the product. A module's id stands on its card in the project graph under `.tagma`.
+- Subject: English, imperative, lowercase, no trailing period, at most 72 characters.
+- `!` after the scope and a `BREAKING CHANGE:` trailer only when something users or adapter authors rely on breaks: the `@runlith/tagma` package, CLI commands, operation inputs.
+- Release notes are assembled from `feat`, `fix` and `perf` commits, so their subjects are written for the person reading the release.
 
 ## Code
 
