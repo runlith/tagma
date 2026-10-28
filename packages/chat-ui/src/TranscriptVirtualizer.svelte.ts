@@ -222,6 +222,12 @@ export class TranscriptVirtualizer {
     return this.rows_.indexOf(key);
   }
 
+  rowSpan(key: string): { readonly start: number; readonly end: number; readonly landing: number } | undefined {
+    const index = this.rows_.indexOf(key);
+    const item = index < 0 ? undefined : this.virtualizer?.measurementsCache[index];
+    return item === undefined ? undefined : { start: item.start, end: item.end, landing: item.start - ROW_LANDING_GAP_PX };
+  }
+
   holdPrepend(): void {
     this.prependLoading = true;
     this.capturePrepend();

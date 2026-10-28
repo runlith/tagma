@@ -2,16 +2,24 @@ export const READING_LINE_PX = 100;
 
 export type ReadingView = {
   readonly scrollTop: number;
-  readonly scrollHeight: number;
   readonly clientHeight: number;
   readonly clearance: number;
+  readonly endGap: number;
 };
 
+export function visibleHeight(view: ReadingView): number {
+  return Math.max(1, view.clientHeight - view.clearance);
+}
+
 export function readingLine(view: ReadingView): number {
-  const visible = Math.max(1, view.clientHeight - view.clearance);
-  const remaining = Math.max(0, view.scrollHeight - view.clientHeight - view.scrollTop);
+  const visible = visibleHeight(view);
   const end = visible - 1;
-  return view.scrollTop + end + (READING_LINE_PX - end) * Math.min(1, remaining / visible);
+  const fixed = Math.min(READING_LINE_PX, visible / 2);
+  return view.scrollTop + end + (fixed - end) * Math.min(1, Math.max(0, view.endGap) / visible);
+}
+
+export function inView(view: ReadingView, span: { readonly start: number; readonly end: number }): boolean {
+  return span.end > view.scrollTop && span.start < view.scrollTop + visibleHeight(view);
 }
 
 export function transcriptCursorMessageId(input: {

@@ -2,7 +2,7 @@ import { canScroll, type ScrollState, wheelCrossesOut, wheelDistance } from '@ru
 import { FollowingViewport, type Hold, type ScrollOutcome } from '@runlith/scroll-follow/FollowingViewport.svelte';
 import { tick } from 'svelte';
 import type { FeedMemory } from './FeedMemory';
-import { readingLine, transcriptCursorMessageId } from './transcriptCursor';
+import { inView, type ReadingView, readingLine, transcriptCursorMessageId } from './transcriptCursor';
 import { TRANSCRIPT_END_THRESHOLD_PX, TranscriptVirtualizer } from './TranscriptVirtualizer.svelte';
 import { messageOffsetTarget } from './transcriptMessageNavigation';
 
@@ -13,6 +13,8 @@ const SCROLL_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'PageU
 export class TranscriptViewport {
   private cursorId = $state<string | undefined>();
   private pinnedId = $state<string | undefined>();
+  private shortId = $state<string | undefined>();
+  private endGap = 0;
   private messages: () => readonly { readonly id: string }[] = () => [];
   private head: (() => boolean) | undefined;
   private fill: (() => boolean) | undefined;
@@ -38,7 +40,7 @@ export class TranscriptViewport {
     movedByReader: () => this.gesturing,
     onScroll: (outcome) => this.readScroll(outcome),
     onMeasure: (root) => {
-      this.cursorId = this.readCursor(root);
+      this.readPosition(root);
       this.scrolled?.();
       this.askForOlder(root);
     },
@@ -54,6 +56,8 @@ export class TranscriptViewport {
     this.window.openThread(key);
     this.cursorId = undefined;
     this.pinnedId = undefined;
+    this.shortId = undefined;
+    this.endGap = 0;
     this.gestureAt = Number.NEGATIVE_INFINITY;
     this.inputAt = Number.NEGATIVE_INFINITY;
     this.historyRequested = false;
@@ -118,6 +122,8 @@ export class TranscriptViewport {
 
   resume(): void {
     this.clearPinned();
+    this.shortId = undefined;
+    this.endGap = 0;
     this.cursorId = undefined;
     this.followingViewport.resume();
     this.window.anchorEnd();
@@ -186,6 +192,7 @@ export class TranscriptViewport {
     const root = this.followingViewport.viewport;
     if (!root || !this.window.holds(id)) return;
     this.gestureAt = Number.NEGATIVE_INFINITY;
+    this.shortId = undefined;
     this.pin(id);
     this.followingViewport.pause();
     this.window.scrollToRow(id, behavior);
@@ -203,7 +210,7 @@ export class TranscriptViewport {
   }
 
   get currentMessageId(): string | undefined {
-    return this.pinnedId ?? this.cursorId;
+    return this.pinnedId ?? this.shortId ?? this.cursorId;
   }
 
   syncClearance(clearance: number): void {
@@ -309,6 +316,10 @@ export class TranscriptViewport {
   };
 
   private readScroll(outcome: ScrollOutcome): void {
+    const root = this.viewport;
+    if (root && (outcome === 'reader-moved' || outcome === 'at-bottom')) {
+      this.endGap = Math.max(0, root.scrollHeight - root.clientHeight - root.scrollTop);
+    }
     if (outcome === 'reader-moved' && this.gesturing) this.gestureAt = Date.now();
     if (outcome === 'reader-moved' || (outcome === 'at-bottom' && this.gesturing)) this.clearPinned();
   }
@@ -360,15 +371,30 @@ export class TranscriptViewport {
     this.pinnedId = undefined;
   }
 
-  private readCursor(root: HTMLElement): string | undefined {
-    const line = readingLine({
+  private readPosition(root: HTMLElement): void {
+    if (this.following) this.endGap = 0;
+    const view: ReadingView = {
       scrollTop: root.scrollTop,
-      scrollHeight: root.scrollHeight,
       clientHeight: root.clientHeight,
       clearance: this.clearance,
-    });
-    const row = this.window.rowAt(line);
-    if (row === undefined) return undefined;
-    return transcriptCursorMessageId({ messages: this.messages(), rowOf: (id) => this.window.rowOf(id), row });
+      endGap: this.endGap,
+    };
+    this.readShort(root, view);
+    const row = this.window.rowAt(readingLine(view));
+    this.cursorId =
+      row === undefined ? undefined : transcriptCursorMessageId({ messages: this.messages(), rowOf: (id) => this.window.rowOf(id), row });
+  }
+
+  private readShort(root: HTMLElement, view: ReadingView): void {
+    const pinned = this.pinnedId;
+    if (pinned !== undefined) {
+      const span = this.window.rowSpan(pinned);
+      this.shortId = span !== undefined && span.landing > root.scrollHeight - root.clientHeight + 1 ? pinned : undefined;
+      return;
+    }
+    const short = this.shortId;
+    if (short === undefined) return;
+    const span = this.window.rowSpan(short);
+    if (span === undefined || !inView(view, span)) this.shortId = undefined;
   }
 }

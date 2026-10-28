@@ -509,15 +509,15 @@ describe('which message of the operator the feed is on', () => {
       if (options.behavior === 'smooth') setTimeout(() => drift(root, top), 20);
       else drift(root, top);
     }) as HTMLElement['scrollTo'];
-    const keys = Array.from({ length: ROWS }, (_unused, index) => `row-${index}`);
+    const keys = (count: number) => Array.from({ length: count }, (_unused, index) => `row-${index}`);
     viewport.attach(root);
     viewport.useMessages(() => messages.map((id) => ({ id })));
-    const sync = (older: readonly string[] = []) =>
+    const sync = (older: readonly string[] = [], newer = 0) =>
       viewport.window.sync({
         root,
         list: held,
-        model: rowModel([...older, ...keys]),
-        shape: older.length + keys.length,
+        model: rowModel([...older, ...keys(ROWS + newer)]),
+        shape: older.length + ROWS + newer,
         atBottom: () => viewport.anchored,
         clearance: 0,
         disclosure: 0,
@@ -592,6 +592,41 @@ describe('which message of the operator the feed is on', () => {
     scroll(root, 125 * ROW_PX);
     await frames();
     expect(viewport.currentMessageId).toBe('row-120');
+    viewport.dispose();
+  });
+
+  test('a paused reader on the last message stays on it while the tail grows below', async () => {
+    const { held, root, sync, viewport } = feed(['row-10', 'row-120', 'row-190']);
+    await frames();
+    scroll(root, 11_200);
+    await frames();
+    expect(viewport.currentMessageId).toBe('row-190');
+
+    sync([], 30);
+    held.style.height = `${viewport.window.totalSize}px`;
+    viewport.resized();
+    await frames();
+
+    expect(root.scrollTop).toBe(11_200);
+    expect(viewport.currentMessageId).toBe('row-190');
+    viewport.dispose();
+  });
+
+  test('a message that cannot land at the top stays current while it is in view', async () => {
+    const { root, viewport } = feed(['row-10', 'row-194', 'row-197']);
+    await frames();
+
+    viewport.select('row-194', 'auto');
+    await frames();
+    expect(viewport.currentMessageId).toBe('row-194');
+
+    scroll(root, root.scrollTop - 20);
+    await frames();
+    expect(viewport.currentMessageId).toBe('row-194');
+
+    scroll(root, 11_000);
+    await frames();
+    expect(viewport.currentMessageId).toBe('row-10');
     viewport.dispose();
   });
 
