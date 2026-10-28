@@ -112,7 +112,6 @@ export const REFUSAL_WORDS = {
   'tag-incoherent': 'Type declaration is inconsistent',
   'tag-undeclared': 'Type not declared',
   'target-holds-tree': 'Target already holds a graph',
-  'team-storage': 'Graph travels with the repository',
   'team-tree': 'Graph has no merge of its own',
   'tree-cycle': 'Would move a block under itself',
   'tree-not-measured': 'Sources measured in another checkout',

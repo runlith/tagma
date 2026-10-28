@@ -198,6 +198,39 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
     }),
   );
 
+  it.effect('a clone registered with the graph remote reads the stealth blocks, and a clone without it reads only the team tree', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const bare = yield* world.directory('layer-remote');
+      yield* suiteGit(bare, 'init', '-q', '--bare');
+      const root = yield* files.realPath(yield* world.directory('origin'));
+      yield* suiteGit(root, 'init', '-q', '-b', 'main');
+      const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
+      const project = (born.body as { project: { id: number } }).project.id;
+      const plan = ((yield* world.op('create_block', { project, title: 'Public plan' })).body as Written).block.name;
+      const terms = ((yield* world.op('create_block', { project, title: 'Vendor terms', storage: 'stealth' })).body as Written).block.name;
+      expect((yield* world.op('sync_graph', { project })).status).toBe(200);
+      const set = yield* world.op('set_graph_remote', { ref: String(project), remote: bare });
+      expect(set.body).toMatchObject({ project: { graphRemote: bare }, remote: { holds: 'this-graph', failure: null } });
+
+      const cloned = Effect.fnUntraced(function* (label: string, graphRemote?: string) {
+        const clone = join(yield* files.realPath(yield* world.directory(label)), 'checkout');
+        yield* suiteGit(root, 'clone', '-q', root, clone);
+        const added = yield* world.op('add_project', { name: world.uniqueName(), rootPath: clone, storage: 'team', graphRemote });
+        expect(added.status).toBe(200);
+        return (added.body as { project: { id: number } }).project.id;
+      });
+      const shared = yield* cloned('shared', bare);
+      const alone = yield* cloned('alone');
+      yield* projectLeaving(world, project, shared, alone);
+      const seen = (at: number, name: string) =>
+        Effect.map(world.op('search_blocks', { project: at, query: name }), (answer) => (answer.body as { total: number }).total);
+      expect([yield* seen(shared, plan), yield* seen(shared, terms)]).toEqual([1, 1]);
+      expect([yield* seen(alone, plan), yield* seen(alone, terms)]).toEqual([1, 0]);
+    }),
+  );
+
   it.effect('a team parent removed by a commit made elsewhere leaves its stealth child standing, and Tagma writes no file for it', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;

@@ -98,7 +98,7 @@ export const policy = ({ perform, here, render }: PolicyCli) => {
       }),
   ).pipe(
     Command.withDescription(
-      'the private git remote of a stealth project’s graph: show it, set it and exchange now, take it away with --off, or take the graph it holds with --restore',
+      'the private git remote of a project’s stealth graph — a stealth project’s whole graph, a team project’s stealth blocks: show it, set it and exchange now, take it away with --off, or take the graph it holds with --restore',
     ),
   );
 

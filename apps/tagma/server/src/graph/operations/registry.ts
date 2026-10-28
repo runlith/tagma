@@ -88,11 +88,6 @@ export const REGISTRY_PAIRS = {
     OPS.add_project,
     body(OPS.add_project, {
       execute: Effect.fnUntraced(function* (input: In<'add_project'>) {
-        if (input.graphRemote !== undefined && input.storage === 'team') {
-          return yield* new GateRefusal('team-storage', 'a team graph travels with the repository’s own remote and takes no graph remote', [
-            'register it with stealth storage to give its graph a remote of its own',
-          ]);
-        }
         const refusal = input.graphRemote === undefined ? null : remoteRefusal(input.graphRemote);
         if (refusal !== null) return yield* refusal;
         const pool = yield* RoutedGraphs;

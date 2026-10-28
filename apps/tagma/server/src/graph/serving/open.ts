@@ -242,7 +242,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                   })
                 : null;
             const stealthShadow =
-              stealthLayout !== null && existsSync(stealthLayout.gitDir)
+              stealthLayout !== null && (existsSync(stealthLayout.gitDir) || row.graphRemote !== null)
                 ? yield* overRepository(gates, stealthLayout)(refused(attachShadowTree(git, row, checkout, stealthLayout, steps)))
                 : null;
             const stealthRoot = stealthLayout?.treeRoot ?? null;

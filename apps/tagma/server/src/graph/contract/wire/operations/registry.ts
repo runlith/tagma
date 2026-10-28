@@ -78,11 +78,11 @@ export const REGISTRY_OPERATIONS = {
       }),
       graphRemote: Schema.optional(remoteField).annotate({
         description:
-          'The private git remote of a stealth graph: a graph it holds is restored here, an empty one receives this graph. A remote git cannot read refuses the registration.',
+          'The private git remote of the stealth graph — a stealth project’s whole graph, a team project’s stealth blocks: a graph it holds is restored here, an empty one receives this graph. A remote git cannot read refuses the registration.',
       }),
     }),
     answer: arms({ ok: { project: projectSchema, returned: Schema.Boolean } }),
-    refusals: [...ROOT_REFUSALS, 'reserved-project', 'project-name', 'duplicate-name', 'unknown-catalog', 'team-storage', 'remote-invalid'],
+    refusals: [...ROOT_REFUSALS, 'reserved-project', 'project-name', 'duplicate-name', 'unknown-catalog', 'remote-invalid'],
   }),
 
   set_project_root: operation('set_project_root', {
@@ -166,9 +166,10 @@ export const REGISTRY_OPERATIONS = {
     ...SURFACE_ACT,
     place: 'machine',
     ...act('Change this project’s graph remote?', 'Set', 'Set a graph remote'),
-    meaning: 'Give a stealth project’s graph a private git remote, change it or take it away, and exchange the graph with it now.',
+    meaning:
+      'Give a project’s stealth graph — a stealth project’s whole graph, a team project’s stealth blocks — a private git remote, change it or take it away, and exchange the graph with it now.',
     grammar:
-      'Tagma then pushes every graph branch there after its commits and takes in what another machine pushed. `remote: null` takes the remote away; naming the standing remote exchanges now. An empty remote receives this graph; a remote holding another graph refuses `remote-unrelated` and the project keeps its remote. `restore: true` sets this machine’s graph aside under `setAside` and serves the graph the remote holds instead. A failed exchange keeps the remote, answers git’s words in `remote.failure` and repeats on its own. A team project takes no remote: its graph travels with the repository.',
+      'Tagma then pushes every graph branch there after its commits and takes in what another machine pushed. `remote: null` takes the remote away; naming the standing remote exchanges now. An empty remote receives this graph; a remote holding another graph refuses `remote-unrelated` and the project keeps its remote. `restore: true` sets this machine’s graph aside under `setAside` and serves the graph the remote holds instead. A failed exchange keeps the remote, answers git’s words in `remote.failure` and repeats on its own. A team project’s `.tagma` travels with the repository, never with this remote.',
     input: Schema.Struct({
       ref,
       remote: Schema.NullOr(remoteField),
@@ -180,7 +181,7 @@ export const REGISTRY_OPERATIONS = {
     subjects: noSubjects,
     raises: (_input: unknown, raised?: readonly Raised[]) => raised ?? [],
     approval: { ...ASKS_IN_REVIEW, when: [GRAPH_SET_ASIDE] },
-    refusals: ['not-found', 'no-pool', 'team-storage', 'remote-invalid', 'remote-unrelated', 'remote-unreachable', 'remote-empty'],
+    refusals: ['not-found', 'no-pool', 'remote-invalid', 'remote-unrelated', 'remote-unreachable', 'remote-empty'],
   }),
 
   read_graph_remote: operation('read_graph_remote', {
@@ -188,7 +189,7 @@ export const REGISTRY_OPERATIONS = {
     place: 'project',
     ...read('Read this project’s graph remote?', 'Read the graph remote'),
     meaning:
-      'Read the private git remote of a project’s stealth graph: whether each graph branch stands there as it stands here, and how the last exchange went.',
+      'Read the private git remote of a project’s stealth graph — a stealth project’s whole graph, a team project’s stealth blocks: whether each graph branch stands there as it stands here, and how the last exchange went.',
     grammar: 'Without `ref` it reads the project the call stands in.',
     input: graphInput({ ref: Schema.optional(ref) }),
     answer: arms({ ok: { project: projectSchema, remote: graphRemoteSchema } }),
