@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import ts from 'typescript';
 import type { Resolution } from '../../adapter';
 import { CopyStale, InputAbsent, UnsupportedSource } from '../../imports';
@@ -60,7 +61,9 @@ const staleOf = (tree: Tree, output: string, source: string, copy: string): Unsu
       `the config this checkout's build generated does not parse, so \`${source}\`, which stands for it, cannot be checked against it: generate it again`,
     );
   const held = ts.parseConfigFileTextToJson(source, copy);
-  return held.error === undefined && JSON.stringify(held.config) === JSON.stringify(made.config)
+  return held.error === undefined &&
+    isDeepStrictEqual(held.config, made.config) &&
+    isDeepStrictEqual(Object.keys(held.config?.compilerOptions?.paths ?? {}), Object.keys(made.config?.compilerOptions?.paths ?? {}))
     ? undefined
     : new CopyStale(
         source,
@@ -70,13 +73,14 @@ const staleOf = (tree: Tree, output: string, source: string, copy: string): Unsu
 };
 
 export const staleAmong = (tree: Tree, built: Built, outputs: Iterable<string>): UnsupportedSource | undefined => {
+  let first: UnsupportedSource | undefined;
   for (const output of outputs) {
     const source = built.get(output);
     if (source === undefined || tree.has(output) || !tree.has(source)) continue;
     const stale = staleOf(tree, output, source, tree.read(source));
-    if (stale !== undefined) return stale;
+    first ??= stale;
   }
-  return undefined;
+  return first;
 };
 
 export function configResolver(

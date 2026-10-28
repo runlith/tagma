@@ -1,5 +1,5 @@
 import { js } from '@runlith/code-facts/adapters';
-import { configResolver, environmental, installedOf } from '@runlith/code-facts/js/config';
+import { configResolver, environmental, installedOf, staleAmong } from '@runlith/code-facts/js/config';
 import { resolveUnique } from '@runlith/code-facts/js/resolve';
 import { queryOf, sitesOf, type Tree } from '@runlith/code-facts/tree';
 import { matchesGlob, posix } from 'node:path';
@@ -77,6 +77,9 @@ export function readSlice(
   prepared?: Snapshot,
   places: readonly string[] = [''],
 ): Sliced {
+  const built = new Map((params.built ?? []).map(({ output, source }) => [pathOf(params.base, output), pathOf(params.base, source)]));
+  const stale = staleAmong(source, built, built.keys());
+  if (stale !== undefined) throw stale;
   const held: InspectionMemo = supplied ?? new Map();
   const stats = supplied?.stats;
   const memo: InspectionMemo = {
@@ -140,11 +143,7 @@ export function readSlice(
   const loader = (file: string): boolean => (params.loaders ?? []).some(({ at }) => file === pathOf(params.base, at));
   const running = runningOf(params);
   const named = Object.keys(params.platforms);
-  const configured = configResolver(
-    tree,
-    (name) => packages.get(name)?.dir,
-    new Map((params.built ?? []).map(({ output, source }) => [pathOf(params.base, output), pathOf(params.base, source)])),
-  );
+  const configured = configResolver(tree, (name) => packages.get(name)?.dir, built);
   const listingStamps = new Map<string, string>();
   const listing = (query: string): string => {
     const held = listingStamps.get(query);

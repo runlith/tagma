@@ -48,6 +48,11 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: the remeasurement lifecycle of an open checkout — Start waiters, rule-slot scheduling with its per-request answers, pauses, debt and origin-tracing lanes, HEAD observation and cancellation share the same copy and confirmed measurement boundary.',
           },
           {
+            lines: 653,
+            path: 'apps/tagma/server/src/enforcement/workers/inspecting.ts',
+            why: 'One subject: execution of an inspection worker ask over its git trees, including materialization, checkout inputs, cached readings, slices and the answer returned to the caller.',
+          },
+          {
             lines: 698,
             path: 'apps/tagma/server/src/enforcement/judging/judge.ts',
             why: 'One subject: enforcement judgement of a tree or HEAD, including selection, inspection outcomes, gate decisions and their recovery contract in the graph context that owns the law.',

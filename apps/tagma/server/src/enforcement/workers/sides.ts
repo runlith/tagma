@@ -157,6 +157,7 @@ export type Working = {
   readonly files: ReadonlyMap<string, Installed | null>;
   readonly asked: Set<string>;
   readonly installed: Set<string>;
+  readonly compared?: ReadonlySet<string>;
   readonly depth: number;
 };
 
@@ -240,7 +241,10 @@ export const sideTree = (
       if (known === undefined) wanted.set(key, terms);
       return known;
     },
-    working: checkout?.judged === true && outside !== undefined ? (path) => outside(path)?.text : undefined,
+    working:
+      checkout?.judged === true && outside !== undefined
+        ? (path) => (checkout.working.compared === undefined || checkout.working.compared.has(path) ? outside(path)?.text : undefined)
+        : undefined,
     environment:
       checkout === undefined || outside === undefined
         ? undefined
