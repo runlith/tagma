@@ -17,6 +17,7 @@ export type RecordAim =
 
 export type StreamWriter = {
   write(bytes: Uint8Array, parsed: () => void, at?: ByteOffset): void;
+  begin(): void;
   grid?(grid: TerminalGeometry): void;
   screen?(bytes: Uint8Array, at: ByteOffset, parsed: () => void): void;
   replaying(on: boolean): void;
@@ -133,6 +134,7 @@ export class RecordStream {
   ) {}
 
   start(): Promise<void> {
+    this.writer.begin();
     return this.follow(START, true);
   }
 
@@ -211,7 +213,9 @@ export class RecordStream {
     if (generation !== this.generation) return;
     const ahead = await this.ahead();
     if (generation !== this.generation) return;
-    return ahead ? this.follow(START, true) : this.follow(this.cursor, !this.fed);
+    if (!ahead) return this.follow(this.cursor, !this.fed);
+    this.writer.begin();
+    return this.follow(START, true);
   }
 
   private async ahead(): Promise<boolean> {
@@ -271,6 +275,7 @@ export class RecordStream {
     if (!this.apartShown) {
       this.cursor = START;
       this.laid = undefined;
+      this.writer.begin();
       const stdout = await this.replay(generation, true, apartAim(this.aim, 'stdout'));
       if (stdout !== 'read' || generation !== this.generation) return 'lost';
       this.apartShown = true;
@@ -288,6 +293,7 @@ export class RecordStream {
     this.note(STDERR_APART_LINE);
     this.cursor = START;
     this.laid = undefined;
+    this.writer.begin();
     const read = await this.replay(generation, true, stderr);
     return read === 'read' ? 'read' : 'lost';
   }
@@ -346,7 +352,7 @@ export class RecordStream {
       const bytes = decode(answer.bytes);
       const reached = offsetValue(answer.range.next) >= offsetValue(answer.range.durableThrough);
       if (bytes.length > 0) {
-        const parsed = new Promise<void>((resolve) => this.feed(bytes, resolve, from));
+        const parsed = new Promise<void>((resolve) => this.feed(bytes, resolve, startOf(answer.range, bytes)));
         this.cursor = answer.range.next;
         if (!reached) ahead = this.window(this.cursor, false, aim);
         await parsed;
@@ -524,7 +530,7 @@ export class RecordStream {
           void this.acknowledge(viewer, offset, generation);
           resolve();
         },
-        chunk.range.cursor.offset,
+        startOf(chunk.range, bytes),
       );
     });
   }
@@ -625,6 +631,8 @@ export class RecordStream {
 }
 
 const noCredit = (): void => undefined;
+
+const startOf = (range: RecordRange, bytes: Uint8Array): ByteOffset => byteOffset(offsetValue(range.next) - BigInt(bytes.length));
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 

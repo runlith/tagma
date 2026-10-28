@@ -844,6 +844,7 @@ export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPa
         this.noteDelivered(bytes, at);
         writer.write(bytes, parsed, at);
       },
+      begin: () => writer.begin(),
       grid: (grid) => this.laidOut({ cols: grid.columns, rows: grid.rows }),
       screen: (bytes, at, parsed) => {
         this.paintedAt ??= performance.now();

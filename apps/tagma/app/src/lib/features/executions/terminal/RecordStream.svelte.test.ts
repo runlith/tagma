@@ -3,10 +3,18 @@ import type { RecordDelivery } from '@tagma/server/executions/contract/wire/view
 import { expect, test, vi } from 'vitest';
 import type { LiveConnection, LiveFailure } from '$lib/wire/Live.js';
 import { LaneConnection } from './LaneConnection.js';
-import { BYTE_GAP_RESET, RETAINED_GAP_LINE, RecordStream, notShownLine, type StreamFrame } from './RecordStream.svelte.js';
+import {
+  BYTE_GAP_RESET,
+  RETAINED_GAP_LINE,
+  RecordStream,
+  STDERR_APART_LINE,
+  STREAM_MISSING,
+  notShownLine,
+  type StreamFrame,
+} from './RecordStream.svelte.js';
 import { DROP, LaneEndpoint } from './testing/endpoint.js';
 import { repoReads } from '../Repo.js';
-import type { ExecutionsRepo } from '../Repo.js';
+import type { ExecutionsRepo, RecordReads } from '../Repo.js';
 
 type Repo = ReturnType<typeof ExecutionsRepo.use>;
 
@@ -132,11 +140,13 @@ const writerOver = () => {
   const written: string[] = [];
   const offsets: (string | undefined)[] = [];
   const modes: boolean[] = [];
+  const begun: number[] = [];
   const pending: (() => void)[] = [];
   return {
     written,
     offsets,
     modes,
+    begun,
     parse: () => {
       const parsed = pending.shift();
       parsed?.();
@@ -147,6 +157,9 @@ const writerOver = () => {
         written.push(text(bytes));
         offsets.push(at);
         pending.push(parsed);
+      },
+      begin: () => {
+        begun.push(written.length);
       },
       grid: (grid: Grid) => {
         written.push(`grid ${grid.columns}x${grid.rows}`);
@@ -659,6 +672,52 @@ test('a lost read of an ending the input verified says it is recovering and read
   }
 });
 
+test('a record without its output stream begins stderr as a new stream for the writer, even where its tail starts at the offset stdout ended', async () => {
+  const recorded: Record<string, string> = { stdout: '\u001b[', stderr: `aa2J${'x'.repeat(118)}` };
+  const reads: RecordReads = {
+    terminalBytes: () => Promise.reject(new Error('this suite reads no terminal')),
+    terminal: () => Promise.reject(new Error('this suite reads no terminal')),
+    commandBytes: (window) => {
+      const text = recorded[window.stream];
+      if (text === undefined) return Promise.reject({ code: STREAM_MISSING, reason: 'StreamMissing' });
+      const from = Number(window.offset);
+      const value = window.limit === 0 ? '' : text.slice(from);
+      return Promise.resolve({
+        range: {
+          cursor: { offset: window.offset },
+          next: String(from + value.length),
+          retainedFrom: '0',
+          durableThrough: String(text.length),
+          gap: false,
+        },
+        bytes: base64(value),
+      } as never);
+    },
+    command: () =>
+      Promise.resolve({
+        command: {},
+        live: { _tag: 'Held', entry: { state: { phase: 'ended' }, ending: { nativeExit: { _tag: 'Code', code: 0 } } } },
+      } as never),
+  };
+  const pane = writerOver();
+  const stream = new RecordStream(reads, liveOver().live, 1, address, { kind: 'command', stream: 'output' }, pane.writer, () => undefined, {
+    scrollbackRows: 1,
+  });
+  void stream.start();
+  await settled();
+  while (pane.parse() !== undefined) await settled();
+
+  const tail = ByteOffset.make('2');
+  expect(pane.written).toEqual([
+    '\u001b[',
+    STDERR_APART_LINE,
+    notShownLine(ByteOffset.make('0'), ByteOffset.make('0'), tail),
+    `2J${'x'.repeat(118)}`,
+  ]);
+  expect(pane.offsets).toEqual(['0', undefined, undefined, '2']);
+  expect(pane.begun.at(-1)).toBe(2);
+});
+
 test('a gap ending re-reads through the bounded door, so a reader retention outran advances instead of reopening at a dead cursor', async () => {
   const live = liveOver();
   const pane = writerOver();
@@ -751,11 +810,12 @@ test('start answers when the replay has been written and parsed, before the live
 test('a fresh replay starts at the tail the engine can hold, saying where the skipped head was', async () => {
   const live = liveOver();
   const pane = writerOver();
-  const window = (next: string, value: string) => ({
-    range: { cursor: { offset: '0' }, next, retainedFrom: '0', durableThrough: '2097152', gap: false },
+  const window = (offset: string, next: string, value: string) => ({
+    range: { cursor: { offset }, next, retainedFrom: '0', durableThrough: '2097152', gap: false },
     bytes: base64(value),
   });
-  const repo = repoOver({ '0': window('4', 'head'), '1497152': window('2097152', 'tail') });
+  const tail = 'x'.repeat(120);
+  const repo = repoOver({ '0 positions': window('0', '0', ''), '2097032': window('2097032', '2097152', tail) });
   const stream = new RecordStream(
     repoReads(repo),
     live.live,
@@ -765,7 +825,7 @@ test('a fresh replay starts at the tail the engine can hold, saying where the sk
     pane.writer,
     () => undefined,
     {
-      scrollbackRows: 5000,
+      scrollbackRows: 1,
     },
   );
   let replayed = false;
@@ -774,9 +834,9 @@ test('a fresh replay starts at the tail the engine can hold, saying where the sk
   });
   await settled();
 
-  expect(repo.asked).toEqual(['0', '1497152']);
-  expect(pane.written).toEqual([notShownLine(ByteOffset.make('0'), ByteOffset.make('0'), ByteOffset.make('1497152')), 'tail']);
-  expect(pane.offsets).toEqual([undefined, '1497152']);
+  expect(repo.asked).toEqual(['0', '2097032']);
+  expect(pane.written).toEqual([notShownLine(ByteOffset.make('0'), ByteOffset.make('0'), ByteOffset.make('2097032')), tail]);
+  expect(pane.offsets).toEqual([undefined, '2097032']);
   expect(replayed).toBe(false);
 
   pane.parse();

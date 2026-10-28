@@ -490,20 +490,49 @@ test('an incomplete control sequence at the end of a chunk is held and written w
   const writer = scheduler.register(engine.target, paneOver().facts);
   const credits = creditsOver();
 
-  writer.write(encode('abc\u001b['), credits.for(1));
+  writer.write(encode('abc\u001b['), credits.for(1), at(0));
   expect(engine.writes).toEqual(['abc']);
-  writer.write(encode('2Jdef'), credits.for(2));
+  writer.write(encode('2Jdef'), credits.for(2), at(5));
   expect(engine.writes).toEqual(['abc', '\u001b[2Jdef']);
 
-  writer.write(new Uint8Array([0xc3]), credits.for(3));
+  writer.write(new Uint8Array([0xc3]), credits.for(3), at(10));
   expect(credits.fired.get(3)).toBe(1);
   expect(engine.writes).toHaveLength(2);
-  writer.write(new Uint8Array([0xa9]), credits.for(4));
+  writer.write(new Uint8Array([0xa9]), credits.for(4), at(11));
   expect(engine.writes.at(-1)).toBe('é');
 
-  writer.write(encode(`\u001b]52;c;${'A'.repeat(5000)}`), credits.for(5));
+  writer.write(encode(`\u001b]52;c;${'A'.repeat(5000)}`), credits.for(5), at(12));
   tick();
   expect(engine.writes.at(-1)?.startsWith('\u001b]52;c;')).toBe(true);
+});
+
+test('a held prefix completes across a replay start and a note when the next bytes continue its offset, and is dropped when they jump or a new stream begins', () => {
+  const { scheduler, tick } = schedulerOver();
+  const engine = targetOver({ eager: true });
+  const writer = scheduler.register(engine.target, paneOver().facts);
+  const flushed = () => {
+    while (tick() > 0);
+    return engine.writes.join('');
+  };
+
+  writer.write(new Uint8Array([0xc3]), () => undefined, at(0));
+  writer.replaying(true);
+  writer.write(new Uint8Array([0xa9]), () => undefined, at(1));
+  expect(flushed()).toBe('é');
+
+  writer.write(encode('\u001b['), () => undefined, at(2));
+  writer.write(encode('note'), () => undefined);
+  writer.write(encode('2J'), () => undefined, at(4));
+  expect(flushed()).toBe('énote\u001b[2J');
+
+  writer.write(new Uint8Array([0xc3]), () => undefined, at(6));
+  writer.write(encode('x'), () => undefined, at(9));
+  expect(flushed()).toBe('énote\u001b[2Jx');
+
+  writer.write(encode('\u001b['), () => undefined, at(10));
+  writer.begin();
+  writer.write(encode('2J'), () => undefined, at(12));
+  expect(flushed()).toBe('énote\u001b[2Jx2J');
 });
 
 test('the tail scan is fold-safe across chunk boundaries and closes on every terminator', () => {

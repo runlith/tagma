@@ -60,6 +60,7 @@ export interface PaneOutput {
 
 export interface Writer {
   write(bytes: Uint8Array, parsed: () => void, at?: ByteOffset): void;
+  begin(): void;
   screen(bytes: Uint8Array, parsed: () => void): void;
   focus(visible: boolean): void;
   typed(): void;
@@ -438,6 +439,7 @@ class Entry implements Writer {
   private readonly decoder = new TextDecoder();
   private undecoded: Uint8Array = new Uint8Array(0);
   private heldTail = '';
+  private streamEnd: bigint | null = null;
   private endsWithCarriageReturn = false;
 
   private readonly budget: Budget = { chars: 0, windowStart: 0 };
@@ -464,7 +466,7 @@ class Entry implements Writer {
       credit();
       return;
     }
-    const text = this.decode(bytes);
+    const text = at === undefined ? this.decoder.decode(bytes) : this.decode(bytes, at);
     const foreground = this.pane.visible();
     if (foreground && this.restore()) {
       credit();
@@ -486,6 +488,10 @@ class Entry implements Writer {
     }
     if (foreground) this.writeForeground(text, bytes.length, done, at ?? null);
     else this.writeBackground(text, bytes.length, done, at ?? null);
+  }
+
+  begin(): void {
+    this.resetDecoder();
   }
 
   screen(bytes: Uint8Array, parsed: () => void): void {
@@ -523,7 +529,6 @@ class Entry implements Writer {
 
   replaying(on: boolean): void {
     this.replayMode = on;
-    if (on) this.resetDecoder();
   }
 
   replayInFlight(): boolean {
@@ -599,7 +604,10 @@ class Entry implements Writer {
     return (text.includes(CSI) || containsNonAscii(text)) && outputPrefersRefresh(text);
   }
 
-  private decode(bytes: Uint8Array): string {
+  private decode(bytes: Uint8Array, at: ByteOffset): string {
+    const from = offsetValue(at);
+    if (this.streamEnd !== from) this.resetDecoder();
+    this.streamEnd = from + BigInt(bytes.length);
     const joined = this.undecoded.length === 0 ? bytes : joinBytes(this.undecoded, bytes);
     const whole = wholeUtf8(joined);
     this.undecoded = joined.slice(whole);
@@ -612,6 +620,7 @@ class Entry implements Writer {
   private resetDecoder(): void {
     this.undecoded = new Uint8Array(0);
     this.heldTail = '';
+    this.streamEnd = null;
     this.endsWithCarriageReturn = false;
   }
 
