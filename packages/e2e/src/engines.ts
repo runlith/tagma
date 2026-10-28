@@ -14,6 +14,7 @@ import { kind, own, shared, type Taking } from '@runlith/testbed/worlds';
 import { Context, Data, Effect, FileSystem, type Scope } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join } from 'node:path';
+import { makeTouch, type PagePoint, type Touch } from './touch.ts';
 
 export type Lane = 'chromium' | 'webkit' | 'electron';
 
@@ -24,6 +25,7 @@ type PageSession = {
   readonly context: BrowserContext;
   readonly page: Page;
   readonly cdp: CDPSession | undefined;
+  readonly touch: Touch | undefined;
 };
 
 export type BrowserSession = PageSession & {
@@ -91,6 +93,17 @@ const makeEngines = Effect.fn('e2e.engines')(function* (home: string) {
 class Engines extends Context.Service<Engines, Effect.Success<ReturnType<typeof makeEngines>>>()('e2e/Engines') {}
 const engines = kind(Engines, (_params: null, home: string) => makeEngines(home).pipe(Effect.provide(BunFileSystem.layer)));
 
+const chromiumTouch = (cdp: CDPSession) =>
+  makeTouch<PagePoint>({
+    locate: async (point) => point,
+    send: async (phase, point) => {
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: phase === 'press' ? 'touchStart' : phase === 'move' ? 'touchMove' : 'touchEnd',
+        touchPoints: phase === 'release' ? [] : [{ x: point.x, y: point.y, id: 1 }],
+      });
+    },
+  });
+
 const electronSession = Effect.fn('e2e.electron')(function* (options: BrowserContextOptions, target: ElectronTarget = {}) {
   const files = yield* FileSystem.FileSystem;
   const executablePath = target.executablePath ?? process.env.E2E_ELECTRON_EXECUTABLE;
@@ -114,7 +127,7 @@ const electronSession = Effect.fn('e2e.electron')(function* (options: BrowserCon
   const page = yield* attempted('the desktop app opened no window', () => app.firstWindow({ timeout: 0 }));
   if (options.viewport != null) yield* attempted('the desktop viewport could not change', () => page.setViewportSize(options.viewport!));
   const cdp = yield* attempted('the desktop CDP session did not open', () => context.newCDPSession(page));
-  return { lane: 'electron' as const, browser: null, context, page, cdp, electron: app };
+  return { lane: 'electron' as const, browser: null, context, page, cdp, touch: undefined, electron: app };
 });
 
 const makeSession = Effect.fn('e2e.session')(function* (
@@ -138,7 +151,8 @@ const makeSession = Effect.fn('e2e.session')(function* (
   context.setDefaultNavigationTimeout(0);
   const page = yield* attempted('a page did not open', () => context.newPage());
   const cdp = lane === 'chromium' ? yield* attempted('a CDP session did not open', () => context.newCDPSession(page)) : undefined;
-  return { lane, browser, context, page, cdp, electron: undefined };
+  const touch = cdp !== undefined && options.hasTouch === true ? yield* chromiumTouch(cdp) : undefined;
+  return { lane, browser, context, page, cdp, touch, electron: undefined };
 });
 
 export function session(

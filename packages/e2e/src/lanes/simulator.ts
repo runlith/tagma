@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { cacheDirectory, cachedTools, COMPANION_VERSION, CLIENT_VERSION, PYTHON_VERSION, type Tools } from './iosTools.ts';
+import { nativeTouch, type NativeTouch } from './hid.ts';
 
 export class SimulatorUnavailable extends Data.TaggedError('SimulatorUnavailable')<{
   readonly message: string;
@@ -26,6 +27,7 @@ export type Simulator = {
   readonly screenshot: (path: string) => Promise<void>;
   readonly swipe: (gesture: Swipe) => Promise<void>;
   readonly tap: (point: Point) => Promise<void>;
+  readonly touch: NativeTouch;
   readonly webFrame: (title: string, pid: number) => Promise<Rect>;
   readonly diagnostics: () => string;
 };
@@ -38,7 +40,7 @@ type TemplateParams = {
   readonly python: string;
 };
 type Template = { readonly udid: string; readonly runtime: string; readonly set: string };
-type Input = { readonly run: (...args: string[]) => Promise<string>; readonly diagnostics: () => string };
+type Input = { readonly run: (...args: string[]) => Promise<string>; readonly diagnostics: () => string; readonly touch: NativeTouch };
 
 const command = (file: string, args: readonly string[], signal?: AbortSignal, progress?: (text: string) => void): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -244,6 +246,7 @@ const input = Effect.fn('e2e.iosInput')(function* (device: Device, tools: Tools)
   const control: Input = {
     run: (...args) => command(tools.client, ['--companion', `localhost:${port}`, ...args, '--udid', device.udid]),
     diagnostics: () => stderr,
+    touch: yield* nativeTouch({ tools, port }),
   };
   return control;
 });
@@ -425,6 +428,7 @@ export const simulator = Effect.fn('e2e.iosSimulator')(function* (
       await simctl(set, 'io', udid, 'screenshot', path);
     },
     tap: (point) => tap(control, point),
+    touch: control.touch,
     swipe: async ({ from, to, duration = 0.15, delta = 5 }) => {
       await control.run(
         'ui',

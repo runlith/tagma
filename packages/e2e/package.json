@@ -23,6 +23,10 @@
     "./ios": {
       "types": "./src/lanes/ios.ts",
       "bun": "./src/lanes/ios.ts"
+    },
+    "./touch": {
+      "types": "./src/touch.ts",
+      "bun": "./src/touch.ts"
     }
   },
   "scripts": {

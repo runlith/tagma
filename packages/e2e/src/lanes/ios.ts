@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { onFailure, recorded } from '../artifacts.ts';
 import { errorScript, flushErrors, pageFailure, PageException, PageFailed } from '../pageErrors.ts';
 import { bootstrap } from './inspector.ts';
+import { makeTouch, type Touch } from '../touch.ts';
 import { prepareSimulator, simulator } from './simulator.ts';
 
 export type Point = { readonly x: number; readonly y: number };
@@ -54,6 +55,7 @@ export type IOSSession = {
   readonly evaluate: <A>(expression: string, schema: Schema.Decoder<A>) => Promise<A>;
   readonly swipe: (gesture: Swipe) => Promise<void>;
   readonly tap: (point: Point) => Promise<void>;
+  readonly touch: Touch;
   readonly pagePoint: (point: Point) => Promise<Point>;
   readonly screenshot: (path: string) => Promise<void>;
   readonly recording: (selector: string) => Promise<ScrollCapture>;
@@ -213,7 +215,9 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
   const script = errorScript(
     `value => fetch(${JSON.stringify(errors.url.href)}, {method:'POST',body:JSON.stringify(value),keepalive:true})`,
   );
+  const touch = yield* makeTouch<Point>({ locate: (point) => fixture.pagePoint(point), send: held.touch });
   const fixture: IOSSession = {
+    touch,
     udid,
     deviceSet: held.deviceSet,
     runtime,

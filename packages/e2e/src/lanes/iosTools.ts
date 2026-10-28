@@ -13,7 +13,7 @@ export const COMPANION_VERSION = '1.7.7';
 export const CLIENT_VERSION = '1.7.7';
 export const PYTHON_VERSION = '3.11';
 
-export type Tools = { readonly companion: string; readonly client: string; readonly bridge: string };
+export type Tools = { readonly companion: string; readonly client: string; readonly bridge: string; readonly python: string };
 export class ToolsUnavailable extends Data.TaggedError('ToolsUnavailable')<{
   readonly message: string;
   readonly cause?: unknown;
@@ -44,6 +44,7 @@ const pathsIn = (directory: string): Tools => ({
   companion: join(directory, 'companion', 'idb_companion'),
   client: join(directory, 'client', 'bin', 'idb'),
   bridge: join(directory, 'companion', 'Resources', 'SimulatorFrameworkBridge-iOS'),
+  python: join(directory, 'client', 'bin', 'python'),
 });
 export const cacheDirectory = () =>
   Effect.try({
@@ -68,7 +69,7 @@ const inspect = Effect.fn('e2e.inspectIosTools')(function* (directory: string) {
   yield* executable(tools.companion);
   yield* executable(tools.client);
   yield* executable(tools.bridge);
-  yield* executable(join(directory, 'client', 'bin', 'python'));
+  yield* executable(tools.python);
   return tools;
 });
 const command = Effect.fn('e2e.iosToolCommand')(function* (file: string, args: readonly string[]) {

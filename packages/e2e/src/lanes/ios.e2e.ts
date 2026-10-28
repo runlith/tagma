@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { Effect, Schema } from 'effect';
 import { join } from 'node:path';
 import { ios } from './ios.ts';
+import { proveTouch } from '../testing/touch.ts';
 
 const page = `<!doctype html><title>Native fling proof</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;overflow:hidden}#list{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain}.row{height:80px;border-bottom:1px solid;box-sizing:border-box}#probe{position:fixed;left:20px;top:100px;width:120px;height:40px;z-index:1}</style><div id="list"></div><button id="probe">Tap target</button><textarea id="keyboard" style="position:fixed;left:20px;top:160px;width:120px;height:30px;z-index:1"></textarea><script>window.clicked=new Promise(resolve=>document.querySelector('#probe').addEventListener('click',event=>resolve(event.isTrusted),{once:true}));const list=document.querySelector('#list');for(let i=0;i<100;i++){const row=document.createElement('div');row.className='row';row.textContent='row '+i;list.append(row)}list.scrollTop=1000;</script>`;
 
@@ -45,6 +46,7 @@ ios.effect('MobileSafari preserves native momentum until a page write stops it',
     yield* Effect.promise(() => Bun.write(join(phone.artifacts, 'mapped-tap.json'), JSON.stringify({ css, screen })));
     yield* Effect.promise(() => phone.tap(screen));
     expect(yield* Effect.promise(() => phone.evaluate('window.clicked', Schema.Boolean))).toBe(true);
+    yield* proveTouch(phone);
     const baseline = yield* Effect.promise(() => phone.recording('#list'));
     yield* Effect.promise(() => phone.swipe({ from: { x: 200, y: 650 }, to: { x: 200, y: 200 } }));
     const native = yield* Effect.promise(() => baseline.result);
