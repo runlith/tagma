@@ -9,10 +9,11 @@
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import { timeAgo } from '$lib/shared/time.js';
   import type { TreeScreen } from '$lib/features/graph/TreeScreen.svelte.js';
+  import type { LinkHow } from '$lib/features/opening/Link.js';
 
   const tags = TagCatalog.use();
 
-  let { store }: { store: TreeScreen } = $props();
+  let { store, click }: { store: TreeScreen; click?: LinkHow | undefined } = $props();
 
   const rootChildren = $derived(store.rootName === null ? [] : store.visibleChildren(store.rootName));
 
@@ -41,7 +42,7 @@
 {:else}
   <div class="-ml-2">
     {#each rootChildren as name (name)}
-      <OutlineRow {store} {name} />
+      <OutlineRow {store} {name} {click} />
     {/each}
 
     <DropdownMenu.Root>

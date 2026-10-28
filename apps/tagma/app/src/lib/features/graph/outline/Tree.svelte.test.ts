@@ -25,7 +25,8 @@ import { TreeScreen } from '$lib/features/graph/TreeScreen.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import type { Link } from '$lib/features/opening/Link.js';
 import { linkWithin } from '$lib/features/opening/linkTarget.js';
-import type { Opening } from '$lib/features/opening/Opening.svelte.js';
+import { Opening } from '$lib/features/opening/Opening.svelte.js';
+import Copy from '@lucide/svelte/icons/copy';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Door } from '$lib/wire/Door.js';
@@ -87,7 +88,7 @@ afterEach(async () => {
   app = undefined;
 });
 
-test('a row opens its block instead of editing; F2 starts the edit, Enter starts the next row in edit, and Tab keeps its typed title', async () => {
+test('a row opens its block instead of editing; F2 starts the edit, Enter starts the next row in edit, Tab keeps its typed title, and a right click opens the row actions menu', async () => {
   const rows = new Map<string, WrittenBlock>([
     ['root', row('root', null, 0, 'Project')],
     ['a1b2c3d4', row('a1b2c3d4', 'root', 1, 'Plan')],
@@ -119,6 +120,21 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
     throw new Error(`Unexpected request ${request.url}`);
   };
 
+  const opened: Link[] = [];
+  const menus: Link[] = [];
+  const opening = {
+    knows: () => true,
+    modified: () => false,
+    how: () => 'beside',
+    open: async (link: Link) => void opened.push(link),
+    menu: (link: Link) => void menus.push(link),
+    shape: () => ({
+      steps: [{ how: 'full', words: 'Open in Knowledge', icon: Copy, keys: 'click', run: async () => undefined }],
+      places: [],
+      copies: [{ id: 'copy-name', words: 'Copy name', icon: Copy, run: () => undefined }],
+    }),
+  } as unknown as Opening;
+
   const tags = testTagCatalog(1, async () => VOCABULARY);
   const failures: unknown[] = [];
   app = mountShell(
@@ -142,6 +158,7 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
       Layer.of(ThreadWork, {} as never),
       Layer.of(Notices, { undoable: () => undefined } as never),
       Layer.of(Workspace, { find: () => null } as never),
+      Layer.of(Opening, opening),
       Failure.of((error) => void failures.push(error)),
     ),
     { at: { projectId: 1, branch: null } },
@@ -163,14 +180,6 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
   );
   screen.load();
 
-  const opened: Link[] = [];
-  const opening = {
-    knows: () => true,
-    modified: () => false,
-    how: () => 'beside',
-    open: async (link: Link) => void opened.push(link),
-    menu: () => undefined,
-  } as unknown as Opening;
   const target = app.draw(Tree as never, { store: screen });
   const release = linkWithin(opening, 'a[data-block]', (element) => blockLink({ name: element.dataset['block'] ?? '' }))(target);
   flushSync();
@@ -215,6 +224,12 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
     expect(editing()).toBeNull();
     expect(titled.filter((entry) => entry.blockId === 'e5f6a7b8').map((entry) => entry.title)).toEqual(['Draft']);
     expect(opened).toHaveLength(1);
+
+    link('a1b2c3d4').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 40, clientY: 20 }));
+    flushSync();
+    const menu = document.querySelector('[role="menu"]')?.textContent ?? '';
+    for (const words of ['Rename', 'Open in Knowledge', 'Copy name', 'Delete']) expect(menu).toContain(words);
+    expect(menus).toEqual([]);
     expect(failures).toEqual([]);
   } finally {
     if (typeof release === 'function') release();

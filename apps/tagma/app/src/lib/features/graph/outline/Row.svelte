@@ -1,6 +1,7 @@
 <script lang="ts">
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import { Host } from '@runlith/layer/Host';
+  import { type Attachment, createAttachmentKey } from 'svelte/attachments';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import { spellModifier } from '$lib/shared/chordSpelling.js';
   import BlockActionsMenu from '$lib/features/graph/outline/BlockActionsMenu.svelte';
@@ -9,6 +10,7 @@
   import { MARK_EDGE, MARK_LABEL, MARK_SIGN, MARK_TEXT } from '$lib/features/graph/diff.js';
   import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
   import type { TitleEdit, TreeScreen } from '$lib/features/graph/TreeScreen.svelte.js';
+  import type { LinkHow } from '$lib/features/opening/Link.js';
   import { cn } from '$lib/shared/utils.js';
   import FadeText from '$lib/shared/FadeText.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
@@ -17,7 +19,7 @@
   const addresses = Addresses.use();
   const apple = Host.use().apple;
 
-  let { store, name }: { store: TreeScreen; name: string } = $props();
+  let { store, name, click }: { store: TreeScreen; name: string; click?: LinkHow | undefined } = $props();
 
   const block = $derived(store.block(name));
   const childCount = $derived(store.visibleChildren(name).length);
@@ -34,6 +36,7 @@
 
   let titleEl = $state<HTMLDivElement | null>(null);
   let link = $state<HTMLAnchorElement | null>(null);
+  let actions = $state<ReturnType<typeof BlockActionsMenu> | null>(null);
   let held: TitleEdit | null = null;
   let focused = $state(false);
 
@@ -64,6 +67,19 @@
     event.preventDefault();
     store.edit(name);
   }
+
+  function onRowMenu(event: MouseEvent): void {
+    if (actions === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    actions.show(event.button === 2 || event.ctrlKey ? { x: event.clientX, y: event.clientY } : undefined);
+  }
+
+  const rowMenu: Attachment<HTMLElement> = (anchor) => {
+    anchor.addEventListener('contextmenu', onRowMenu);
+    return () => anchor.removeEventListener('contextmenu', onRowMenu);
+  };
+  const rowAttributes = { onkeydown: onRowKeydown, [createAttachmentKey()]: rowMenu };
 
   function focusAt(el: HTMLElement, at: 'start' | 'end'): void {
     el.focus();
@@ -156,7 +172,7 @@
       href={addresses.block(name)}
       {childCount}
       bind:link
-      attributes={{ onkeydown: onRowKeydown }}
+      attributes={rowAttributes}
       class={cn(passthrough && 'opacity-45', mark && `border-l-2 ${MARK_EDGE[mark]} pl-1.5`)}
     >
       {#snippet leading()}
@@ -217,8 +233,10 @@
 
       {#snippet trailing()}
         <BlockActionsMenu
+          bind:this={actions}
           {block}
           {store}
+          steps={{ click }}
           rename={ghost ? undefined : () => store.edit(name)}
           triggerClass="opacity-0 transition-opacity focus-visible:opacity-100 group-hover/row:opacity-100 data-[state=open]:opacity-100"
         />
@@ -228,7 +246,7 @@
     {#if (expanded || store.readingLens.active) && hasChildren}
       <div class="branch ml-4 border-l border-vein pl-2 transition-colors duration-150 ease-instrument">
         {#each store.visibleChildren(name) as childName (childName)}
-          <OutlineRow {store} name={childName} />
+          <OutlineRow {store} name={childName} {click} />
         {/each}
       </div>
     {/if}

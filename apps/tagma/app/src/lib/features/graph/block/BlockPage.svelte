@@ -530,7 +530,7 @@
             {#if filterable}<FilterBar lens={store.readingLens} {store} diff={lensAvailable && !aside} />{/if}
           </div>
           <div class="mt-1">
-            <Outline {store} />
+            <Outline {store} click={aside ? undefined : 'full'} />
           </div>
         {/if}
       {/if}
