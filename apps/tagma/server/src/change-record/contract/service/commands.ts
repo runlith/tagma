@@ -7,6 +7,7 @@ export type CommandSelection = ({ readonly projectId: number } | { readonly chec
 };
 
 export const TEAM_REASON = 'team';
+export const ABSENT_DIGEST = 'absent';
 
 export type CommandSession = { readonly projectId: number; readonly threadId: string };
 
@@ -17,6 +18,7 @@ export type CommandUnattributed = {
   readonly path: string;
   readonly reason: string;
   readonly team: string | null;
+  readonly digest: string | null;
   readonly at: number;
 };
 

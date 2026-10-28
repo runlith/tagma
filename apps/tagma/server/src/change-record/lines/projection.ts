@@ -3,7 +3,7 @@ import { alignWindow, matchedRuns, type Aligned, type Match } from './alignment.
 import { completeFold, askFold, type FoldWork } from './jobs.js';
 import { sliceLines, shareText, type TextSlice } from './text.js';
 import type { NetWindow } from './net.js';
-import { contentLines, digestKey, type Content, type FoldState, type TextContent, type Unknown } from './folding.js';
+import { contentLines, digestKey, type Content, type FoldState, type Snapshot, type TextContent, type Unknown } from './folding.js';
 import { anchorsOf, frameOf, gapsOf, indexOf, pointIn, walkFrame, type Frame, type RemovalIndex } from './intervals.js';
 import { landedRoot, removalAt, rowRemovals, type Landed, type Removal, type Removals } from './landed.js';
 import {
@@ -101,8 +101,18 @@ const headSource = (head: TextContent): Source => ({
   right: null,
 });
 
+const snapshotOf = (state: FoldState, digest: string | null): Snapshot | undefined => {
+  const snapshot = lookup(state.snapshots, digestKey(digest));
+  return digest === state.base.digest &&
+    snapshot !== undefined &&
+    typeof snapshot.transition !== 'string' &&
+    lookup(state.snapshot.byRow, snapshot.transition.row) === undefined
+    ? state.initial
+    : snapshot;
+};
+
 function headRoot(state: FoldState, head: TextContent, alignment: BaseAlignment): Rope {
-  const base = lookup(state.snapshots, digestKey(state.base.digest))?.root ?? null;
+  const base = snapshotOf(state, state.base.digest)?.root ?? null;
   const source = headSource(head);
   if ('reason' in alignment.aligned) return null;
   let root: Rope = null;
@@ -466,7 +476,7 @@ export function* projectWork(
   const before = contentLines(head);
   const after = contentLines(working);
   const newer = frameOf(state.snapshot.root);
-  const recalled = lookup(state.snapshots, digestKey(head.digest));
+  const recalled = snapshotOf(state, head.digest);
   const removedOf = rowRemovals(state);
   const composed = recalled === undefined ? landedRoot(state, head, landed, removedOf) : undefined;
   let root: Rope;

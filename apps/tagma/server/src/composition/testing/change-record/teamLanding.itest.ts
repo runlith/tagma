@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { writeFileSync } from 'node:fs';
+import { unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Clock, Effect } from 'effect';
 import { contentDigest } from '@runlith/files/content';
@@ -76,12 +76,75 @@ layer(commandLayer, { excludeTestServices: true })('team command landing', (it) 
         expect(yield* s.w.run(['show', 'HEAD:src/a.ts'])).toBe(text.trimEnd());
       }),
   );
+  it.effect('a named birth never adopts an off-path team-observed deletion as a move', () =>
+    Effect.gen(function* () {
+      const s = yield* commandWorld({ teams: true });
+      yield* s.w.namedAgent(ROOT, { name: ROOT, task: 'leads the team' });
+      yield* s.w.namedAgent(LEFT, { name: LEFT, task: 'copies a file', parent: ROOT });
+      const text = `export const source = "${'shared bytes '.repeat(8)}";\n`;
+      yield* s.w.based({ 'source.ts': text, 'outside.ts': text });
+      const head = yield* s.w.run(['rev-parse', 'HEAD']);
+      const from = yield* Clock.currentTimeMillis;
+      const life = yield* s.record.changes({ work: { projectId: s.w.projectId, threadId: LEFT } }).command!(
+        s.w.root,
+        naming(join(s.w.root, 'new.ts')),
+      );
+      if (life === null) return yield* Effect.die('the checkout opened no command window');
+      life.opened();
+      writeFileSync(join(s.w.root, 'new.ts'), text);
+      unlinkSync(join(s.w.root, 'outside.ts'));
+      const to = yield* Clock.currentTimeMillis;
+      life.ended();
+      yield* life.settle({
+        base: head,
+        window: { from, to },
+        moves: [
+          {
+            name: 'new.ts',
+            before: null,
+            after: contentDigest(text),
+            present: true,
+            existed: false,
+            written: { from: to, to },
+            bytes: null,
+            link: false,
+            mode: null,
+          },
+          {
+            name: 'outside.ts',
+            before: null,
+            after: contentDigest(''),
+            present: false,
+            existed: true,
+            written: { from, to },
+            bytes: null,
+            link: false,
+            mode: null,
+          },
+        ],
+      });
+      life.close();
+      yield* s.decided(LEFT);
+      expect(yield* s.held('outside.ts')).toEqual([]);
+      expect(yield* s.w.submit(LEFT, { commands: s.commands })).toMatchObject({ status: 'landed', committed: ['new.ts'] });
+      expect(yield* s.w.head('outside.ts')).toBe(text);
+    }),
+  );
   it.effect('a team path another session’s command also met stays out of the root’s landing without paths', () =>
     Effect.gen(function* () {
       const { s } = yield* teamWrite();
       const at = yield* Clock.currentTimeMillis;
       s.commands.remembered([
-        { projectId: s.w.projectId, threadId: THEIRS, checkout: 'repo-root', path: 'src/a.ts', reason: OVERLAP_REASON, team: null, at },
+        {
+          projectId: s.w.projectId,
+          threadId: THEIRS,
+          checkout: 'repo-root',
+          path: 'src/a.ts',
+          reason: OVERLAP_REASON,
+          team: null,
+          digest: null,
+          at,
+        },
       ]);
       expect(yield* s.w.submit(ROOT, { commands: s.commands, taking: takingLeft })).toMatchObject({ status: 'nothing' });
     }),

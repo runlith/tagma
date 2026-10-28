@@ -52,7 +52,11 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
 ) {
   const { root, carriers, fns } = landing;
   const planned = new Map(plan.map((one) => [one.path, one]));
-  const borne = (path: string): boolean => bearsNobody(landing.origin, landing.explicit, path);
+  const borne = (path: string, digest?: string | null): boolean => {
+    const one = planned.get(path);
+    const current = digest === undefined ? (one?.land === 'own' ? one.landed?.working : undefined) : digest;
+    return bearsNobody(landing.origin, landing.explicit, landing.team, path, current);
+  };
   const foreign = yield* fns.foreignPaths(landing, carriers, (path) => planned.get(path)?.land !== 'whole' && !borne(path));
   if (foreign.size === 0) return;
   const files = yield* FileSystem.FileSystem;
@@ -89,7 +93,7 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
     enqueue(answer.imports);
   });
   for (const one of roots) {
-    const peers = peersOf(one.judged, carriers, borne(one.path));
+    const peers = peersOf(one.judged, carriers, borne(one.path, one.judged.digests?.working));
     if (peers.length === 0) continue;
     const input = { root, path: one.path, working: one.working, selected: one.selected, peers, positions: one.positions, lines: one.lines };
     snapshots.set(one.path, input);
@@ -124,7 +128,7 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
     const judged = unseen.length === 0 ? new Map<string, Judged>() : yield* fns.judged(landing, unseen);
     const dirty = unseen.filter((path) => {
       const one = judged.get(path);
-      return one !== undefined && peersOf(one, carriers, borne(path)).length > 0;
+      return one !== undefined && peersOf(one, carriers, borne(path, one.digests?.working)).length > 0;
     });
     const basePaths = dirty.filter((path) => !planned.has(path));
     const older =
@@ -148,7 +152,7 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
         }
         if (one.verdict.lines === 'unweighed' && one.verdict.hands.some((hand) => !carriers.has(hand.holder)))
           return yield* unproven(path, 'its peer changes are not weighed by lines');
-        const peers = peersOf(one, carriers, borne(path));
+        const peers = peersOf(one, carriers, borne(path, one.digests?.working));
         if (peers.length === 0) {
           ignored.add(path);
           continue;

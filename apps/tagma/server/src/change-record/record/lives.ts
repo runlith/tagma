@@ -77,8 +77,10 @@ const verdict = (
   }
   if (proof === null)
     return ours
-      ? { kind: 'overlap', basis: 'unproven', counted, sole }
-      : { kind: 'unclaimed', basis: 'unproven', counted: false, sole: false };
+      ? team === null
+        ? { kind: 'overlap', basis: 'unproven', counted, sole }
+        : { kind: 'team', root: team, basis: 'team', counted, sole }
+      : { kind: 'unclaimed', basis: team === null ? 'unproven' : 'team', counted: false, sole: false };
   if (ours) return { kind: 'mine', basis: proof, counted, sole };
   const [only] = threads as Set<string>;
   return { kind: 'taken', by: only as string, basis: proof, counted: false, sole: false };

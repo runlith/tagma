@@ -73,7 +73,7 @@ export type Step = {
 export type Consumer = { readonly serial: number; readonly mark: Mark; readonly previous: Consumer | null };
 export type Snapshot = {
   readonly digest: string | null;
-  readonly recorded: boolean;
+  readonly transition: Mark | 'base';
   readonly root: Rope;
   readonly edits: KeyTree<Source>;
   readonly live: KeyTree<Source>;
@@ -87,6 +87,7 @@ export type RowLink = { readonly row: FoldRow; readonly previous: RowLink | null
 export type FoldState = {
   readonly base: TextContent;
   readonly normalized: boolean;
+  readonly initial: Snapshot;
   readonly snapshot: Snapshot;
   readonly snapshots: KeyTree<Snapshot>;
   readonly rows: RowLink | null;
@@ -153,7 +154,7 @@ export function startFold(base: Content, normalized: boolean): FoldState | Unkno
   };
   const snapshot: Snapshot = {
     digest: base.digest,
-    recorded: false,
+    transition: 'base',
     root: leaf({ source, offset: 0, count: source.lines.length }),
     edits: null,
     live: null,
@@ -166,6 +167,7 @@ export function startFold(base: Content, normalized: boolean): FoldState | Unkno
   return {
     base,
     normalized,
+    initial: snapshot,
     snapshot,
     snapshots: put(null, digestKey(base.digest), snapshot),
     rows: null,
@@ -200,7 +202,7 @@ function references(snapshot: Snapshot, removed: Rope, added: Rope): Snapshot {
 
 const recallOf = (state: FoldState, digest: string | null, mark: Mark): Snapshot | undefined => {
   const snapshot = lookup(state.snapshots, digestKey(digest));
-  return snapshot !== undefined && (typeof mark === 'string' || snapshot.recorded) ? snapshot : undefined;
+  return snapshot !== undefined && (typeof mark === 'string' || typeof snapshot.transition !== 'string') ? snapshot : undefined;
 };
 
 export function applyStep(state: FoldState, step: Step): FoldState | Unknown {
@@ -277,7 +279,7 @@ export function applyStep(state: FoldState, step: Step): FoldState | Unknown {
   snapshot = {
     ...snapshot,
     digest: step.after,
-    recorded: step.before === step.after ? snapshot.recorded : typeof step.mark !== 'string',
+    transition: step.before === step.after ? snapshot.transition : step.mark,
     live,
     byRow: typeof step.mark === 'string' ? snapshot.byRow : put(snapshot.byRow, step.mark.row, written),
     existence: changingExistence ? step.mark : snapshot.existence,

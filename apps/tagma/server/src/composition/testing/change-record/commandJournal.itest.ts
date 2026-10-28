@@ -360,7 +360,10 @@ layer(Layer.mergeAll(commandWalksLayer, BunFileSystem.layer, checkoutFixture), {
           yield* restarted.restart();
           yield* restarted.commands.decided({ projectId: w.projectId, threadId: THEIRS });
           expect(restarted.record.unattributed({ projectId: w.projectId, threadId: THEIRS })).toMatchObject([
-            { path: 'src/a.ts', reason: 'team', team: 'tree' },
+            { path: 'src/a.ts', reason: 'team', team: 'tree', digest: contentDigest(after) },
+          ]);
+          expect((yield* journal.unattributed()).filter((row) => row.threadId === THEIRS)).toMatchObject([
+            { path: 'src/a.ts', reason: 'team', team: 'tree', digest: contentDigest(after) },
           ]);
         }),
       ),
@@ -381,6 +384,7 @@ layer(Layer.mergeAll(commandWalksLayer, BunFileSystem.layer, checkoutFixture), {
               path,
               reason: OVERLAP_REASON,
               team: null,
+              digest: null,
               at,
             });
             const names = Array.from({ length: 5000 }, (_, at) => `gen/${at}.ts`);

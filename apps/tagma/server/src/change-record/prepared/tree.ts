@@ -119,6 +119,7 @@ export type Landing<Row extends PreparedRow> = {
   readonly carriers: ReadonlySet<string>;
   readonly paths: readonly string[];
   readonly explicit: ReadonlySet<string>;
+  readonly team: ReadonlyMap<string, string>;
   readonly pairs: ReadonlyMap<string, ReadonlySet<string>>;
   readonly message: string;
   readonly index: string;
@@ -472,7 +473,7 @@ const heldOf = Effect.fnUntraced(function* <Row extends PreparedRow>(
     const holders = peersOf(one, landing.carriers);
     const verdict = one?.verdict;
     const external = verdict?.verdict === 'proven' && verdict.hands.some((hand) => landing.carriers.has(hand.holder)) && verdict.unheld;
-    return { path, rows: byPath.get(path) ?? [], holders, judged: one, shared: holders.length > 0 || external };
+    return { path, rows: byPath.get(path) ?? [], holders, judged: one, shared: holders.length > 0 || external || landing.team.has(path) };
   });
 });
 
@@ -589,10 +590,17 @@ const cutOf = <Row extends PreparedRow>(
   const { carriers } = landing;
   if (judged.digests === null || judged.digests.head !== head.digest || judged.digests.working !== now.digest)
     return Effect.fail(moved(path, partners));
-  const nobody = bearsNobody(landing.origin, landing.explicit, path);
+  const nobody = bearsNobody(landing.origin, landing.explicit, landing.team, path, now.digest);
   const chosen = selectFold(judged.verdict, head, now, { holders: carriers, nobody }, retiredOf(judged));
   if ('refuse' in chosen) {
     if (chosen.refuse === 'walk-cut') return Effect.fail(unproven(path, partners));
+    if (chosen.nobody)
+      return Effect.fail(
+        new GateRefusal('lines-held', `${path} depends on uncommitted lines held by nobody`, [
+          `carry ${path} as it stands (whole: ${JSON.stringify([path])})`,
+          omitted(path, partners),
+        ]),
+      );
     return Effect.fail(
       heldBy(
         path,

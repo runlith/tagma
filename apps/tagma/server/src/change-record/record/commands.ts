@@ -2,7 +2,7 @@ import { Clock, Effect } from 'effect';
 import { uuidv7 } from 'uuidv7';
 import type { CommandFacts, CommandLife, CommandMoves, CommandVerdict } from '@runlith/agent-tools/WorkspaceChanges';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
-import { CommandChanges, type CommandSession, type CommandUnattributed, TEAM_REASON } from '../contract/service/commands.js';
+import { ABSENT_DIGEST, CommandChanges, type CommandSession, type CommandUnattributed, TEAM_REASON } from '../contract/service/commands.js';
 import type { CommandEntry, Commanding, CommandOpening, QueuedMove } from './commandRows.js';
 import type { Basis, Claim, Command, Life, Lives } from './lives.js';
 import { explains, type Learned, learns, roleOf, signatureIn } from './roles.js';
@@ -124,8 +124,24 @@ export const makeCommandWrites = Effect.fnUntraced(function* ({
     if (sessions.size === 0) retainedAt.delete(checkout);
   };
 
-  const unattribute = (at: Commanding, names: readonly string[], reason: string, now: number, team: string | null = null): void => {
-    const rows = names.map((path) => ({ projectId: at.projectId, threadId: at.threadId, checkout: at.key, path, reason, team, at: now }));
+  const unattribute = (
+    at: Commanding,
+    names: readonly string[],
+    reason: string,
+    now: number,
+    team: string | null = null,
+    digests?: ReadonlyMap<string, string>,
+  ): void => {
+    const rows = names.map((path) => ({
+      projectId: at.projectId,
+      threadId: at.threadId,
+      checkout: at.key,
+      path,
+      reason,
+      team,
+      digest: digests?.get(path) ?? null,
+      at: now,
+    }));
     for (const row of rows) remember(row);
     if (journal !== null) background(journal.unattribute(rows), 'unattributed command paths were not journaled; a restart forgets them');
   };
@@ -227,9 +243,9 @@ export const makeCommandWrites = Effect.fnUntraced(function* ({
         claim:
           claim.kind === 'mine'
             ? 'mine'
-            : claim.basis === 'unproven'
+            : claim.basis === 'unproven' || claim.kind === 'team'
               ? 'unproven'
-              : claim.kind === 'overlap' || claim.kind === 'team'
+              : claim.kind === 'overlap'
                 ? 'overlap'
                 : 'other',
       });
@@ -251,7 +267,9 @@ export const makeCommandWrites = Effect.fnUntraced(function* ({
       const { verdicts, decided, overlapped, unproven, teamed, bases, lesson } = judged(at, life, moved);
       if (overlapped.length > 0) unattribute(at, overlapped, OVERLAP_REASON, now);
       if (unproven.length > 0) unattribute(at, unproven, UNPROVEN_REASON, now);
-      for (const [root, names] of teamed) unattribute(at, names, TEAM_REASON, now, root);
+      const digests =
+        teamed.size === 0 ? undefined : new Map(moved.moves.map((move) => [move.name, move.present ? move.after : ABSENT_DIGEST]));
+      for (const [root, names] of teamed) unattribute(at, names, TEAM_REASON, now, root, digests);
       return recorded(bases).pipe(
         Effect.andThen(!teaching || lesson === null || lessons === null ? Effect.void : lessons.taught(at.key, lesson)),
         Effect.andThen(enqueue(at, life, moved, decided, now)),

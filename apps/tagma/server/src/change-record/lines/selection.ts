@@ -10,7 +10,7 @@ export type Carried = { readonly holders: readonly string[]; readonly external: 
 export type SelectedSpan = { readonly selected: number; readonly working: number; readonly count: number };
 export type Selection =
   | { readonly kind: 'none' }
-  | { readonly refuse: 'lines-held'; readonly holders: readonly string[] }
+  | { readonly refuse: 'lines-held'; readonly holders: readonly string[]; readonly nobody?: true }
   | { readonly refuse: 'walk-cut' }
   | { readonly kind: 'whole'; readonly rows: readonly string[]; readonly carried: Carried }
   | {
@@ -95,7 +95,8 @@ export function selectFold(
   for (let grown = true; grown;) {
     while (pending.length > 0) {
       for (const unit of neighbours.get(pending.pop()!) ?? []) {
-        if (selected.has(unit) || unborne.has(unit)) continue;
+        if (selected.has(unit)) continue;
+        if (unborne.has(unit)) return { refuse: 'lines-held', holders: [], nobody: true };
         selected.add(unit);
         pending.push(unit);
       }

@@ -385,20 +385,18 @@ layer(Layer.effectDiscard(seeded).pipe(Layer.provideMerge(machineLayers), Layer.
         const paths = yield* PATHS;
         const id = 'pending-in-stale-root';
         const checkout = RootId.make('stale-root');
-        yield* store.db
-          .insert(workspaceChange())
-          .values({
-            id,
-            projectId: 1,
-            holderProjectId: 1,
-            holder: 'thread-one',
-            checkout,
-            path: 'pending.ts',
-            state: 'held',
-            origin: 'write',
-            afterHash: 'pending-after',
-            at: new Date(4_000),
-          });
+        yield* store.db.insert(workspaceChange()).values({
+          id,
+          projectId: 1,
+          holderProjectId: 1,
+          holder: 'thread-one',
+          checkout,
+          path: 'pending.ts',
+          state: 'held',
+          origin: 'write',
+          afterHash: 'pending-after',
+          at: new Date(4_000),
+        });
         yield* Effect.addFinalizer(() => Effect.orDie(store.db.delete(workspaceChange()).where(eq(workspaceChange().id, id))));
         yield* store.db
           .insert(retirementProof)
@@ -543,6 +541,7 @@ layer(Layer.effectDiscard(seeded).pipe(Layer.provideMerge(machineLayers), Layer.
           path: 'src/b.ts',
           reason: 'overlap',
           team: null,
+          digest: null,
           at: 4_000,
         };
         const sessionRows = [observation, { ...observation, checkout: 'other' }];
