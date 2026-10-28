@@ -100,12 +100,14 @@ export type Scrollbar = { track: Rect; x: number; gutter: number; viewport: numb
 export type ThumbSample = { y: number; time: number; top: number };
 export type ThumbControl = { scrollbar: Scrollbar; samples: ThumbSample[]; recording: Recording };
 export type ThumbReference = { scale: number; interval: number; trial: Scrollbar; control: ThumbControl[] };
+export type ScrollWrite = { time: number; frame: number; method: 'scrollTop' | 'scrollTo' | 'scrollBy' };
 export type Recording = {
   name: string;
   frames: Frame[];
   touches: TrustedTouch[];
   drags: Drag[];
   wheels: WheelRun[];
+  writes?: ScrollWrite[];
   timings?: number[];
   ticks?: number[];
   commands?: Navigation[];

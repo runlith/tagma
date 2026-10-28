@@ -172,6 +172,11 @@ const ThumbReference = Schema.Struct({
   trial: Scrollbar,
   control: Schema.mutable(Schema.Array(ThumbControl)),
 } satisfies Record<keyof DOM.ThumbReference, Schema.Constraint>) satisfies Schema.Codec<DOM.ThumbReference>;
+const ScrollWrite = Schema.Struct({
+  time: Schema.Number,
+  frame: Schema.Number,
+  method: Schema.Literals(['scrollTop', 'scrollTo', 'scrollBy']),
+} satisfies Record<keyof DOM.ScrollWrite, Schema.Constraint>) satisfies Schema.Codec<DOM.ScrollWrite>;
 
 export const Recording: Schema.Codec<DOM.Recording> = Schema.suspend(() =>
   Schema.Struct({
@@ -180,6 +185,7 @@ export const Recording: Schema.Codec<DOM.Recording> = Schema.suspend(() =>
     touches: Schema.mutable(Schema.Array(TrustedTouch)),
     drags: Schema.mutable(Schema.Array(Drag)),
     wheels: Schema.mutable(Schema.Array(WheelRun)),
+    writes: Schema.optional(Schema.mutable(Schema.Array(ScrollWrite))),
     timings: Schema.optional(numbers),
     ticks: Schema.optional(numbers),
     commands: Schema.optional(Schema.mutable(Schema.Array(Navigation))),

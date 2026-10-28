@@ -10,6 +10,7 @@ import type {
   Rect,
   RowChange,
   RowRect,
+  ScrollWrite,
   Sentinel,
   Targets,
   WheelRun,
@@ -62,6 +63,11 @@ export class Recorder {
   private identity = 0;
   private endGap = 0;
   private ownMovement = false;
+  private tick = 0;
+  private wroteAt: number | null = null;
+  private absorbed = false;
+  private readonly writeFrames = new Set<number>();
+  private unhookWrites = () => {};
   private touching = false;
   private finger: number | null = null;
   private lastSample: Frame | null = null;
@@ -99,6 +105,7 @@ export class Recorder {
     };
     const reader = () => {
       if (this.clockOnly) return;
+      this.settle();
       this.ownMovement = true;
       this.selected = null;
       this.controlRow = null;
@@ -120,6 +127,9 @@ export class Recorder {
       },
       true,
     );
+    let releaseContact = () => {};
+    this.cleanups.push(() => releaseContact());
+    const contactEvents = ['touchmove', 'touchend', 'touchcancel'] as const;
     const touch = (event: Event) => {
       if (!event.isTrusted) return;
       const sample = event as TouchEvent;
@@ -146,14 +156,39 @@ export class Recorder {
       this.finger = point?.clientY ?? this.finger;
       this.touching = event.type === 'touchstart' || event.type === 'touchmove';
       if (event.type === 'touchmove') reader();
+      if (event.type === 'touchend' || event.type === 'touchcancel') releaseContact();
     };
-    for (const name of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) listen(root, name, touch, true);
+    listen(
+      root,
+      'touchstart',
+      (event) => {
+        if (!event.isTrusted) return;
+        releaseContact();
+        const target = event.target;
+        if (target !== null) {
+          for (const type of contactEvents) target.addEventListener(type, touch, { capture: true, passive: true });
+          releaseContact = () => {
+            for (const type of contactEvents) target.removeEventListener(type, touch, true);
+            releaseContact = () => {};
+          };
+        }
+        touch(event);
+      },
+      true,
+    );
     listen(root, 'scroll', () => {
       if (!this.clockOnly && this.ownMovement) this.endGap = Math.max(0, root.scrollHeight - root.clientHeight - root.scrollTop);
     });
     listen(root, 'scrollend', () => {
+      if (this.wroteAt !== null && this.tick - this.wroteAt <= 1) {
+        this.wroteAt = null;
+        if (this.ownMovement) this.absorbed = true;
+        return;
+      }
       this.ownMovement = false;
+      this.absorbed = false;
     });
+    if (!this.clockOnly) this.unhookWrites = this.hookWrites(root);
     listen(
       document,
       'click',
@@ -205,6 +240,7 @@ export class Recorder {
     );
     let pulse = false;
     const sample = (time: number) => {
+      this.tick += 1;
       if (this.finishFrame()) this.advance();
       if (this.clockOnly) {
         this.lastTime = time;
@@ -252,12 +288,15 @@ export class Recorder {
     this.activeDrag = null;
     this.activeWheel = null;
     this.activeEnded = true;
+    if (this.recording === null) this.settle();
+    this.writeFrames.clear();
     this.recording = {
       name,
       frames: [],
       touches: [],
       drags: [],
       wheels: [],
+      writes: this.clockOnly ? undefined : [],
       commands: [],
       timings: this.clockOnly ? [] : undefined,
       ticks: this.clockOnly ? undefined : [],
@@ -266,6 +305,7 @@ export class Recorder {
   stop(): Recording {
     if (this.recording === null) throw new Error('No recording was started');
     this.finishFrame(true);
+    this.settle();
     const result = this.recording;
     this.recording = null;
     this.activeDrag = null;
@@ -342,12 +382,14 @@ export class Recorder {
     cancelAnimationFrame(this.frame);
     this.clearLayout();
     this.signatures?.dispose();
+    this.unhookWrites();
     for (const cleanup of this.cleanups) cleanup();
   }
 
   timing(): void {
     if (this.recording !== null) throw new Error('Choose timing mode before starting a recording');
     this.clockOnly = true;
+    this.unhookWrites();
     this.clearLayout();
     this.signatures?.dispose();
     this.signatures = null;
@@ -438,12 +480,59 @@ export class Recorder {
     }
   }
 
+  private settle(): void {
+    if (!this.absorbed) return;
+    this.absorbed = false;
+    if (!this.ownMovement) return;
+    this.ownMovement = false;
+    if (this.recording === null) return;
+    const frames = this.recording.frames;
+    let last = 0;
+    for (let index = 1; index < frames.length; index += 1)
+      if (frames[index]!.scrollTop !== frames[index - 1]!.scrollTop && !this.writeFrames.has(index)) last = index;
+    for (let index = last + 1; index < frames.length; index += 1) if (!frames[index]!.touching) frames[index]!.moving = false;
+  }
+
+  private hookWrites(root: HTMLElement): () => void {
+    const top = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop')!;
+    const wrote = (method: ScrollWrite['method']) => {
+      this.wroteAt = this.tick;
+      if (this.recording === null) return;
+      this.writeFrames.add(this.count());
+      this.recording.writes?.push({ time: performance.now(), frame: this.count(), method });
+    };
+    Object.defineProperty(root, 'scrollTop', {
+      configurable: true,
+      get: () => top.get!.call(root),
+      set: (value: number) => {
+        wrote('scrollTop');
+        top.set!.call(root, value);
+      },
+    });
+    for (const name of ['scrollTo', 'scrollBy'] as const) {
+      const write = root[name];
+      Object.defineProperty(root, name, {
+        configurable: true,
+        writable: true,
+        value: (...args: unknown[]) => {
+          wrote(name);
+          return Reflect.apply(write, root, args);
+        },
+      });
+    }
+    return () => {
+      for (const name of ['scrollTop', 'scrollTo', 'scrollBy']) Reflect.deleteProperty(root, name);
+      this.unhookWrites = () => {};
+    };
+  }
+
   private count(): number {
     return this.recording?.timings?.length ?? this.recording?.frames.length ?? 0;
   }
 
   private navigate(event: Event, kind: Navigation['kind'], target: string): void {
     if (this.recording === null) return;
+    this.settle();
     this.controlRow = null;
     this.controlNode = null;
     const command: Navigation = {

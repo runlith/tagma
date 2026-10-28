@@ -114,9 +114,9 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: the DOM displacement proof oracle — shared frame-pair witnesses establish quiet anchor flow, conserved gesture paths and calibrated momentum limits against the same independent recordings.',
           },
           {
-            lines: 747,
+            lines: 833,
             path: 'packages/chat-ui/stand/recorder.ts',
-            why: 'One subject: a DOM recording lifecycle — trusted input and command evidence, row measurements, anchor history and final ResizeObserver samples share the same pending capture and frame boundary.',
+            why: 'One subject: a DOM recording lifecycle — trusted input and command evidence, own scroller writes and the movement they leave running, row measurements, anchor history and final ResizeObserver samples share the same pending capture and frame boundary.',
           },
         ],
         lines: 650,
