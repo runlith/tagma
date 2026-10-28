@@ -5,7 +5,7 @@ description: Use before writing, changing, reviewing or testing code in apps/tag
 
 # Frontend on Layer and Query
 
-A client app is one graph of services: a feature declares what it needs, the composition names who provides it, and the graph gives each instance a lifetime by its tier. Sources: `packages/layer/src` (graph, bindings), `packages/query/src` (repos, queries), `apps/tagma/app/src/lib/wire` (server doors), `apps/tagma/app/src/lib/app/runtime.ts` (composition). When this file and the source disagree, the source wins. Runes: load `svelte5`. What a person sees — marks, color, tokens, words, mockups: `tagma-design`. Code that imports `effect` (Door and Live internals): load `effect4`; its "service is closures" form is for Effect `Context.Service`, not for Layer keys below.
+A client app is one graph of services: a feature declares what it needs, the composition names who provides it, and the graph gives each instance a lifetime by its tier. Sources: `packages/layer/src` (graph, bindings), `packages/query/src` (repos, queries), `apps/tagma/app/src/lib/wire` (server doors), `apps/tagma/app/src/lib/app/runtime.ts` (composition). When this file and the source disagree, the source wins. What a person sees — marks, color, tokens, words, mockups: `tagma-design`. Code that imports `effect` (Door and Live internals): load `effect4`; its "service is closures" form is for Effect `Context.Service`, not for Layer keys below.
 
 ## Assembling the app
 
