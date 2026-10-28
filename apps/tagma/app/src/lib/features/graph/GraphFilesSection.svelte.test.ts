@@ -6,7 +6,10 @@ import { afterEach, expect, test } from 'vitest';
 
 import { mountShell, type TestApp, testTagCatalog } from '$lib/app/testing.js';
 import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
+import { Notices } from '$lib/features/notices/Service.svelte.js';
+import { Live } from '$lib/wire/Live.js';
 import GraphFilesSection from './GraphFilesSection.svelte';
+import { RemoteRepo } from './RemoteRepo.js';
 
 let app: TestApp | undefined;
 
@@ -17,12 +20,19 @@ afterEach(async () => {
 
 test('an unreadable tag declaration is named with its reason and opens its node', async () => {
   const tags = testTagCatalog();
-  app = mountShell(Layer.mergeAll(Layer.of(TagCatalog, tags)));
+  app = mountShell(
+    Layer.mergeAll(
+      Layer.of(TagCatalog, tags),
+      Layer.of(RemoteRepo, {} as never),
+      Layer.of(Live, { hold: () => ({ unsubscribe: () => undefined }) } as never),
+      Layer.of(Notices, {} as never),
+    ),
+  );
 
   const host = app.draw(GraphFilesSection as never, {
     catalog: { entriesOf: () => [] },
     scope: 'project',
-    project: { name: 'runlith', storage: 'team' } as never,
+    project: { id: 1, name: 'runlith', storage: 'team' } as never,
   });
   tags.table = new ServedTags({
     catalogs: [],

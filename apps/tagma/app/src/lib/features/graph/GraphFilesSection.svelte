@@ -19,7 +19,7 @@
   const unreadable = $derived(tags.table.unreadable);
 
   const STORAGE_FACT: Record<StorageMode, string> = {
-    team: 'Team — the tree lives in the repository, on the branch it stands on.',
+    team: "Team — the tree lives in the repository, on the branch it stands on. Stealth blocks live beside it in a tree versioned by Tagma's own git, which the repository never carries; its remote below keeps a copy off this machine.",
     stealth: "Stealth — the tree is versioned by Tagma's own git, outside the repository; its remote below keeps a copy off this machine.",
   };
 
@@ -67,7 +67,7 @@
   {/snippet}
 </KeyCard>
 
-{#if project !== null && storage === 'stealth'}
+{#if project !== null}
   <RemoteCard {project} />
 {/if}
 

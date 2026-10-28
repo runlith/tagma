@@ -1,5 +1,6 @@
 <script lang="ts">
   import Ban from '@lucide/svelte/icons/ban';
+  import EyeOff from '@lucide/svelte/icons/eye-off';
   import Power from '@lucide/svelte/icons/power';
   import type { Snippet } from 'svelte';
   import type { HTMLAnchorAttributes } from 'svelte/elements';
@@ -105,6 +106,13 @@
         <Tooltip text="Blocked by another open task">
           <span class="pointer-events-auto relative grid place-items-center">
             <Ban class="size-3 text-severity-lie/80" />
+          </span>
+        </Tooltip>
+      {/if}
+      {#if block.stealth === true}
+        <Tooltip text="Stealth: kept in Tagma's data directory, the repository never carries it">
+          <span class="pointer-events-auto relative grid place-items-center">
+            <EyeOff class="size-3 text-muted-foreground/70" />
           </span>
         </Tooltip>
       {/if}

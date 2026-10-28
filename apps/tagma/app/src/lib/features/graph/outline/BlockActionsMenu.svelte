@@ -1,6 +1,8 @@
 <script lang="ts">
   import Copy from '@lucide/svelte/icons/copy';
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
+  import EyeOff from '@lucide/svelte/icons/eye-off';
+  import FolderGit2 from '@lucide/svelte/icons/folder-git-2';
   import History from '@lucide/svelte/icons/history';
   import PanelBottom from '@lucide/svelte/icons/panel-bottom';
   import PanelRight from '@lucide/svelte/icons/panel-right';
@@ -27,6 +29,7 @@
   import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
   import type { TreeScreen } from '$lib/features/graph/TreeScreen.svelte.js';
   import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
+  import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { START_WORDS, startable, ThreadWork } from '$lib/features/graph/ThreadWork.svelte.js';
   import { cn } from '$lib/shared/utils.js';
 
@@ -35,6 +38,7 @@
   const addresses = Addresses.use();
   const work = ThreadWork.use();
   const door = GraphDoor.use();
+  const workspace = Workspace.use();
 
   let {
     block,
@@ -64,7 +68,10 @@
   const moves = $derived(tags.actions(block).length > 0);
   const status = $derived(tags.statusOf(block));
   const law = $derived(tags.supports(block, LAW));
-  const acting = $derived(rename !== undefined || starts || !leaf || moves || law);
+  const team = $derived(workspace.find(block.projectId)?.storage === 'team');
+  const stealth = $derived(block.stealth === true);
+  const storable = $derived(team && block.parentName !== null && (stealth ? store.block(block.parentName)?.stealth !== true : true));
+  const acting = $derived(rename !== undefined || starts || !leaf || moves || law || storable);
   const opening = $derived(!leaf || linksPlacement !== undefined);
 
   const BY_SOURCES = 'sources';
@@ -107,6 +114,27 @@
             {/each}
           </DropdownMenu.SubContent>
         </DropdownMenu.Sub>
+        {#if team && !stealth}
+          <DropdownMenu.Sub>
+            <DropdownMenu.SubTrigger icon={EyeOff}>Add stealth child</DropdownMenu.SubTrigger>
+            <DropdownMenu.SubContent class="min-w-40">
+              {#each tags.titleOnly as tag (tag)}
+                <DropdownMenu.Item onSelect={() => store.createChild(block.name, tag, 'stealth')}>
+                  {#snippet lead()}<TagIcon {tag} class="size-3.5" />{/snippet}
+                  <span class="capitalize">{tag}</span>
+                </DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.SubContent>
+          </DropdownMenu.Sub>
+        {/if}
+      {/if}
+      {#if storable}
+        <DropdownMenu.Item
+          icon={stealth ? FolderGit2 : EyeOff}
+          onSelect={() => void store.setStorage(block.name, stealth ? 'team' : 'stealth')}
+        >
+          {stealth ? 'Move to team' : 'Move to stealth'}
+        </DropdownMenu.Item>
       {/if}
       {#if moves}
         <DropdownMenu.Sub>

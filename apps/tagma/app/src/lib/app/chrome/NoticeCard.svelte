@@ -9,10 +9,12 @@
   import { actOf, SystemSettings } from '$lib/shared/SystemSettings.js';
   import { hasDetails } from '$lib/wire/told.js';
   import ToldDetails from '$lib/shared/ToldDetails.svelte';
+  import { Addresses } from '$lib/features/workspace/Addresses.js';
 
   let { notice, thumb, enter }: { notice: Notice; thumb: boolean; enter: FlyParams } = $props();
 
   const notices = Notices.use();
+  const addresses = Addresses.use();
   const systemSettings = SystemSettings.find();
 
   let open = $state(false);
@@ -91,7 +93,7 @@
       actions={act !== undefined || detailed ? actions : undefined}
     >
       {#if open && told !== undefined}
-        <ToldDetails {told} />
+        <ToldDetails {told} linked={told.code?.startsWith('stealth-') === true ? (name) => addresses.block(name) : undefined} />
       {/if}
     </Callout>
   {/if}

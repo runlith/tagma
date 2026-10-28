@@ -2,6 +2,7 @@ import type { BatchOp } from '@tagma/server/graph/contract/wire/batch';
 import { type BlockMark, type MarkKind } from '@tagma/server/graph/contract/wire/reads';
 import type { Block, TreeBlock } from '@tagma/server/graph/contract/wire/rows';
 import type { Delivery } from '@tagma/server/graph/contract/wire/tags/law';
+import type { StorageMode } from '@tagma/server/projects/contract/wire/project';
 import { Failure } from '@runlith/layer/Failure';
 import { Platform, type PlatformStorage } from '@runlith/layer/Platform';
 import { Scope } from '@runlith/layer/Scope';
@@ -314,6 +315,10 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
     await this.mutate(() => this.repo.setLawEnabled.run({ name, enabled }, { throwOnError: true }));
   }
 
+  async setStorage(name: string, storage: StorageMode): Promise<void> {
+    await this.mutate(() => this.repo.setStorage.run({ name, storage }, { throwOnError: true }));
+  }
+
   async setLawDelivery(name: string, delivery: Delivery | null): Promise<void> {
     await this.mutate(() => this.repo.setLawDelivery.run({ name, delivery }, { throwOnError: true }));
   }
@@ -387,10 +392,10 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
     });
   }
 
-  async createChild(parentName: string, tag: string): Promise<void> {
+  async createChild(parentName: string, tag: string, storage?: StorageMode): Promise<void> {
     await this.structural(async () => {
       try {
-        const created = await this.repo.create.run({ parentId: parentName, tags: [tag], title: '' }, { throwOnError: true });
+        const created = await this.repo.create.run({ parentId: parentName, tags: [tag], title: '', storage }, { throwOnError: true });
         this.expand(parentName);
         await this.tree.reload();
         if (created) {

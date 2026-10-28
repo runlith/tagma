@@ -27,6 +27,7 @@ import type { Link } from '$lib/features/opening/Link.js';
 import { linkWithin } from '$lib/features/opening/linkTarget.js';
 import type { Opening } from '$lib/features/opening/Opening.svelte.js';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
+import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
 import { loadOperations } from '$lib/wire/operation.js';
@@ -140,6 +141,7 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
       Layer.of(SessionRegistry, { writerOf: () => null } as never),
       Layer.of(ThreadWork, {} as never),
       Layer.of(Notices, { undoable: () => undefined } as never),
+      Layer.of(Workspace, { find: () => null } as never),
       Failure.of((error) => void failures.push(error)),
     ),
     { at: { projectId: 1, branch: null } },

@@ -1,5 +1,6 @@
 import { type BatchOp, batchDocument } from '@tagma/server/graph/contract/wire/batch';
 import type { Delivery } from '@tagma/server/graph/contract/wire/tags/law';
+import type { StorageMode } from '@tagma/server/projects/contract/wire/project';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import type { OperationInput } from '@tagma/server/composition/catalog';
@@ -116,6 +117,11 @@ export const BlocksRepo = Repo.define(
     setLawEnabled: mutation({
       mutator: (input: { name: string; enabled: boolean }, { signal }, door) =>
         door.perform('set_rule_enabled', { blockId: input.name, enabled: input.enabled }, { signal }),
+    }),
+
+    setStorage: mutation({
+      mutator: (input: { name: string; storage: StorageMode }, { signal }, door) =>
+        door.perform('set_block_storage', { blockId: input.name, storage: input.storage }, { signal }),
     }),
 
     setLawDelivery: mutation({
