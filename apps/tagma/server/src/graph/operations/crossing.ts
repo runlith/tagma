@@ -2,7 +2,7 @@ import { Context, Effect, Result } from 'effect';
 import { carriedSelection, type PageKey, type PageSelection, type PageWalk } from '@runlith/paging';
 import type { Caller } from '../../platform/contract/wire/caller.js';
 import type { GraphStore, StoreFailure } from '../../platform/contract/service/store.js';
-import { Blocks, Edges, type FarBlock } from '../contract/service/blocks.js';
+import { Blocks, Edges, type BlockLink, type LinkTarget } from '../contract/service/blocks.js';
 import type { EdgeKind } from '../contract/wire/edges.js';
 import type { FarAddress } from '../contract/wire/far.js';
 import { blockAddress, distinctTails } from '../contract/wire/references.js';
@@ -23,6 +23,7 @@ import { projectOrNone } from '../serving/current.js';
 import type { CopyFailure, UnreachableProject } from '../contract/wire/answers.js';
 import { refusal } from '../serving/refusal.js';
 import { ambiguousAcross } from '../serving/ambiguity.js';
+import type { DocumentScope } from '../contract/service/work.js';
 
 export type CrossingRefusal = ReferenceRefusal | OpenRefusal | SelectorRefusal | 'place-mismatch' | 'not-found';
 
@@ -427,8 +428,6 @@ export const targeted = <Input, A, E, R, F = null, EF = never, RF = never>(
 
 export const scoped = (name: string) => cross(name, (id) => Effect.flatMap(Blocks, (blocks) => blocks.blockById(id)));
 
-export type LinkTarget = { readonly near: number } | { readonly far: FarBlock };
-
 export const linkTarget = Effect.fn('crossing.linkTarget')(function* (name: string, owner: { readonly projectId: number }, kind: EdgeKind) {
   const target = yield* locate(name);
   if (target.projectId === owner.projectId) {
@@ -454,6 +453,70 @@ export const farAddressOf = Effect.fn('crossing.farAddressOf')(function* (target
   );
   const address: FarAddress = { graph: root.uuid, uuid: target.row.uuid };
   return address;
+});
+
+const linkSource = (from: string | number) =>
+  typeof from === 'string' ? scoped(from) : Effect.flatMap(Blocks, (blocks) => blocks.blockById(from));
+
+export const link = Effect.fnUntraced(function* (input: BlockLink) {
+  const edges = yield* Edges;
+  const from = yield* linkSource(input.fromId);
+  if (typeof input.toId === 'number') return yield* edges.link({ fromId: from.id, kind: input.kind, toId: input.toId });
+  const target = yield* linkTarget(input.toId, from, input.kind);
+  if ('far' in target) return yield* edges.linkFar({ fromId: from.id, kind: input.kind, end: target.far });
+  yield* edges.link({ fromId: from.id, kind: input.kind, toId: target.near });
+});
+
+export const unlink = Effect.fnUntraced(function* (input: BlockLink) {
+  const edges = yield* Edges;
+  const from = yield* linkSource(input.fromId);
+  if (typeof input.toId === 'number') return yield* edges.unlink({ fromId: from.id, kind: input.kind, toId: input.toId });
+  const ends = yield* edges.farFrom(from.id, input.kind);
+  if (blockAddress(input.toId).projectId === null) {
+    const named = input.toId.toLowerCase();
+    const held = ends.filter((row) => row.uuid.replaceAll('-', '').endsWith(named));
+    const blocks = new Set(held.map((row) => row.uuid));
+    if (blocks.size > 1) {
+      return yield* new GateRefusal('ambiguous-name', `${input.toId} names ${blocks.size} far ends of ${input.kind} edges`, [
+        'write more of the name — the tail is what tells them apart',
+        ...held.map((row) => `${row.uuid.replaceAll('-', '')} in ${row.label}`),
+      ]);
+    }
+    if (held.length > 0) return yield* edges.unlinkFar({ fromId: from.id, kind: input.kind, to: held });
+  }
+  const target = yield* locate(input.toId);
+  if (target.projectId === from.projectId)
+    return yield* edges.unlink({ fromId: from.id, kind: input.kind, toId: (yield* scoped(input.toId)).id });
+  const exact = ends.filter((row) => row.uuid === target.row.uuid);
+  if (exact.length > 0) return yield* edges.unlinkFar({ fromId: from.id, kind: input.kind, to: exact });
+  yield* edges.unlinkFar({ fromId: from.id, kind: input.kind, to: [yield* farAddressOf(target)] });
+});
+
+export const documentScope = Effect.fnUntraced(function* (projectId: number) {
+  const context = yield* Effect.context<GraphServices | GraphCall>();
+  const names = yield* BlockNames;
+  const resolve = Effect.fnUntraced(function* (name: string) {
+    const target = yield* locate(name);
+    if (target.projectId !== projectId) {
+      return yield* new GateRefusal(
+        'place-mismatch',
+        `The document writes project ${projectId}, but ${name} belongs to project ${target.projectId}.`,
+        [
+          `name a block in project ${projectId}, or submit a document in project ${target.projectId}`,
+          'to move a block into another project, call update_block with parentId alone outside apply_batch',
+        ],
+      );
+    }
+    return yield* names.idOfName(name);
+  });
+  return {
+    references: {
+      resolve: (name) => Effect.provide(resolve(name), context),
+      target: (name, owner, kind) => Effect.provide(linkTarget(name, { projectId: owner }, kind), context),
+    },
+    link: (input) => Effect.provide(link(input), context),
+    unlink: (input) => Effect.provide(unlink(input), context),
+  } satisfies DocumentScope;
 });
 
 export const peer = <const Code extends string>(name: string, owner: BlockRow, code: Code) =>

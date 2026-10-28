@@ -4,7 +4,7 @@ import { QUERY_WALK, SEARCH_WALK } from '../contract/wire/walks.js';
 import { BLOCKS } from '../contract/wire/operations/shared.js';
 import { ceilingOf } from '../../platform/contract/wire/pageFamily.js';
 import { BlockNames } from '../contract/service/acts.js';
-import { Blocks, Edges, type FarLink, Trash } from '../contract/service/blocks.js';
+import { Blocks, type FarLink, Trash } from '../contract/service/blocks.js';
 import { Ranking, Selection } from '../contract/service/reads.js';
 import { withBodyFile } from '../blocks/bodyFile.js';
 import { GateRefusal, cursorRefusal, walks } from '../../platform/contract/wire/refusal.js';
@@ -17,7 +17,7 @@ import type { QueryPage } from '../contract/service/reads.js';
 import type { SearchPage } from '../contract/wire/reads.js';
 
 import { type BlockCreate } from '../contract/wire/creation.js';
-import { blockAddress, blockName } from '../contract/wire/references.js';
+import { blockName } from '../contract/wire/references.js';
 import { WRITE_OPERATIONS } from '../contract/wire/operations/writes.js';
 import { READ_OPERATIONS } from '../contract/wire/operations/reads.js';
 import { pricedBlockResult, pricedResult } from './answers.js';
@@ -25,7 +25,7 @@ import { birthPricing, lawPricing, nodePricing } from './start.js';
 import { priced, type Priced } from '../../platform/contract/service/start.js';
 import type { BlockWrite } from '../contract/service/acts.js';
 import type { Moved } from '../contract/wire/answers.js';
-import { cross, farAddressOf, linkTarget, locate, scoped, targeted } from './crossing.js';
+import { cross, link, linkTarget, scoped, targeted, unlink } from './crossing.js';
 import { relocate } from './relocation.js';
 import { GraphCall } from '../contract/service/serving.js';
 
@@ -237,46 +237,12 @@ const BLOCK_WRITE_ROUTED = {
   }),
 
   link_blocks: routed(W.link_blocks, {
-    ...targeted(
-      (input: (typeof W.link_blocks)['input']['Type']) => [input.fromId, input.toId],
-      Effect.fnUntraced(function* (input: (typeof W.link_blocks)['input']['Type']) {
-        const edges = yield* Edges;
-        const from = yield* scoped(input.fromId);
-        const target = yield* linkTarget(input.toId, from, input.kind);
-        if ('far' in target) return yield* edges.linkFar({ fromId: from.id, kind: input.kind, end: target.far });
-        yield* edges.link({ fromId: from.id, kind: input.kind, toId: target.near });
-      }),
-    ),
+    ...targeted((input: (typeof W.link_blocks)['input']['Type']) => [input.fromId, input.toId], link),
     answer: () => ({ status: 'ok' as const }),
   }),
 
   unlink_blocks: routed(W.unlink_blocks, {
-    ...targeted(
-      (input: (typeof W.unlink_blocks)['input']['Type']) => input.fromId,
-      Effect.fnUntraced(function* (input: (typeof W.unlink_blocks)['input']['Type']) {
-        const edges = yield* Edges;
-        const from = yield* scoped(input.fromId);
-        const ends = yield* edges.farFrom(from.id, input.kind);
-        if (blockAddress(input.toId).projectId === null) {
-          const named = input.toId.toLowerCase();
-          const held = ends.filter((row) => row.uuid.replaceAll('-', '').endsWith(named));
-          const blocks = new Set(held.map((row) => row.uuid));
-          if (blocks.size > 1) {
-            return yield* new GateRefusal('ambiguous-name', `${input.toId} names ${blocks.size} far ends of ${input.kind} edges`, [
-              'write more of the name — the tail is what tells them apart',
-              ...held.map((row) => `${row.uuid.replaceAll('-', '')} in ${row.label}`),
-            ]);
-          }
-          if (held.length > 0) return yield* edges.unlinkFar({ fromId: from.id, kind: input.kind, to: held });
-        }
-        const target = yield* locate(input.toId);
-        if (target.projectId === from.projectId)
-          return yield* edges.unlink({ fromId: from.id, kind: input.kind, toId: (yield* scoped(input.toId)).id });
-        const exact = ends.filter((row) => row.uuid === target.row.uuid);
-        if (exact.length > 0) return yield* edges.unlinkFar({ fromId: from.id, kind: input.kind, to: exact });
-        yield* edges.unlinkFar({ fromId: from.id, kind: input.kind, to: [yield* farAddressOf(target)] });
-      }),
-    ),
+    ...targeted((input: (typeof W.unlink_blocks)['input']['Type']) => input.fromId, unlink),
     answer: () => ({ status: 'ok' as const }),
   }),
 

@@ -252,6 +252,10 @@ export type Arrival = {
 
 export type GraphAddress = { readonly graph: string; readonly label: string };
 
+export type LinkTarget = { readonly near: number } | { readonly far: FarBlock };
+
+export type BlockLink = { readonly fromId: string | number; readonly kind: EdgeKind; readonly toId: string | number };
+
 export type FarEdgeRow = typeof farEdge.$inferSelect;
 
 export class Edges extends Context.Service<

@@ -58,6 +58,8 @@ const makeCrossing = Effect.gen(function* () {
         'edit_block',
         'create_block',
         'apply_batch',
+        'link_blocks',
+        'unlink_blocks',
         'supersede_block',
         'update_block',
       ],
@@ -130,6 +132,124 @@ layer(crossingFixture, { excludeTestServices: true })('cross-project native tool
       expect(read.status).toBe('ok');
       expect(yield* call('delete_block', { blockId: yield* demo.nameOf(block.id) })).toMatchObject({ status: 'ok' });
       expect((yield* graph.blocks.rawBlockById(block.id)).deletedAt).toBeInstanceOf(Date);
+    }),
+  );
+
+  it.effect('a batch links a note to an addressed note in another graph from a project thread', () =>
+    Effect.gen(function* () {
+      const { foreign, graph, ctx, across, answerWith, refusedWith } = yield* CrossingFixture;
+      const other = (yield* foreign.graph.projects.global())!;
+      const source = yield* graph.blocks.create({ projectId: ctx.projectId, title: 'Local batch note' });
+      yield* graph.blocks.create({
+        projectId: ctx.projectId,
+        title: 'Same short name',
+        uuid: (source.uuid[0] === '0' ? '1' : '0') + source.uuid.slice(1),
+      });
+      const target = yield* foreign.graph.blocks.create({ projectId: other.id, title: 'Foreign batch note' });
+      const fromId = source.uuid.replaceAll('-', '');
+      const toId = `${other.id}/${yield* foreign.nameOf(target.id)}`;
+      const seamed = across(ctx, other.id);
+      expect(
+        yield* answerWith(seamed, 'apply_batch', {
+          project: ctx.projectId,
+          ops: [{ op: 'link', fromId, kind: 'relates', toId }],
+        }),
+      ).toMatchObject({ status: 'ok' });
+      const root = yield* foreign.graph.blocks.rootBlockOf(other.id);
+      expect((yield* graph.edges.farOf(ctx.projectId)).filter((row) => row.fromId === source.id)).toMatchObject([
+        { kind: 'relates', graph: root.uuid, uuid: target.uuid },
+      ]);
+      const changed = yield* answerWith(seamed, 'apply_batch', {
+        project: ctx.projectId,
+        ops: [
+          { op: 'unlink', fromId: `${ctx.projectId}/${fromId}`, kind: 'relates', toId },
+          { op: 'create', $id: 'child', parentId: fromId, title: 'Linked batch child', edges: [{ kind: 'relates', to: toId }] },
+          { op: 'link', fromId: '$child', kind: 'discovered-from', toId: `${ctx.projectId}/${fromId}` },
+          { op: 'link', fromId, kind: 'relates', toId: '$child' },
+          { op: 'unlink', fromId, kind: 'relates', toId: '$child' },
+        ],
+      });
+      expect(changed).toMatchObject({ status: 'ok' });
+      expect((yield* graph.edges.farOf(ctx.projectId)).filter((row) => row.fromId === source.id)).toEqual([]);
+      expect((yield* graph.edges.of(ctx.projectId, new Set([source.id]))).filter((row) => row.fromId === source.id)).toEqual([]);
+      const child = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName((changed.ids as Record<string, string>).child!));
+      expect(child.parentId).toBe(source.id);
+      expect((yield* graph.edges.farOf(ctx.projectId)).filter((row) => row.fromId === child.id)).toMatchObject([
+        { kind: 'relates', graph: root.uuid, uuid: target.uuid },
+      ]);
+      expect(yield* graph.edges.of(ctx.projectId, new Set([child.id]))).toMatchObject([
+        { fromId: child.id, kind: 'discovered-from', toId: source.id },
+      ]);
+      const standalone = yield* refusedWith(seamed, 'edit_block', {
+        project: ctx.projectId,
+        blockId: toId,
+        oldString: 'x',
+        newString: 'y',
+      });
+      expect(standalone).toMatchObject({ code: 'place-mismatch' });
+      for (const op of [
+        { op: 'edit', id: toId, old: 'x', new: 'y' },
+        { op: 'link', fromId: toId, kind: 'relates', toId: fromId },
+        { op: 'create', parentId: toId, title: 'Wrong project' },
+        { op: 'update', id: fromId, parentId: toId },
+      ]) {
+        expect(yield* answerWith(seamed, 'apply_batch', { project: ctx.projectId, ops: [op] })).toMatchObject({
+          status: 'refused',
+          code: standalone.code,
+        });
+      }
+      expect(
+        yield* answerWith(seamed, 'apply_batch', {
+          project: ctx.projectId,
+          ops: [
+            { op: 'link', fromId, kind: 'relates', toId },
+            { op: 'link', fromId, kind: 'relates', toId: `${other.id}/ffffffff` },
+          ],
+        }),
+      ).toMatchObject({ status: 'refused', code: 'not-found' });
+      expect((yield* graph.edges.farOf(ctx.projectId)).filter((row) => row.fromId === source.id)).toEqual([]);
+      const found = yield* answerWith(seamed, 'search_blocks', { project: other.id, query: 'Foreign batch note' });
+      const foundName = (found.blocks as { name: string }[])[0]!.name;
+      expect(
+        yield* answerWith(seamed, 'apply_batch', {
+          project: ctx.projectId,
+          ops: [{ op: 'link', fromId, kind: 'relates', toId: `${other.id}/${foundName}` }],
+        }),
+      ).toMatchObject({ status: 'ok' });
+      expect(yield* answerWith(seamed, 'unlink_blocks', { project: ctx.projectId, fromId, kind: 'relates', toId })).toMatchObject({
+        status: 'ok',
+      });
+      expect((yield* graph.edges.farOf(ctx.projectId)).filter((row) => row.fromId === source.id)).toEqual([]);
+      expect(yield* answerWith(seamed, 'link_blocks', { project: ctx.projectId, fromId, kind: 'relates', toId })).toMatchObject({
+        status: 'ok',
+      });
+      expect((yield* graph.edges.farOf(ctx.projectId)).filter((row) => row.fromId === source.id)).toMatchObject([
+        { kind: 'relates', graph: root.uuid, uuid: target.uuid },
+      ]);
+      expect(
+        yield* answerWith(seamed, 'apply_batch', {
+          project: ctx.projectId,
+          ops: [
+            {
+              op: 'propose',
+              amendsId: fromId,
+              title: 'Stored address',
+              ops: [{ op: 'update', id: `${ctx.projectId}/${fromId}`, body: 'x' }],
+            },
+          ],
+        }),
+      ).toMatchObject({ status: 'refused', code: 'bad-document' });
+      expect(
+        yield* refusedWith(seamed, 'create_block', { project: ctx.projectId, title: 'Wrong amended project', amendsId: toId }),
+      ).toMatchObject({
+        code: 'place-mismatch',
+      });
+      expect(
+        yield* answerWith(seamed, 'apply_batch', {
+          project: ctx.projectId,
+          ops: [{ op: 'create', title: 'Wrong amended project', amendsId: toId }],
+        }),
+      ).toMatchObject({ status: 'refused', code: 'place-mismatch' });
     }),
   );
 

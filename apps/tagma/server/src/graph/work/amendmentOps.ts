@@ -28,6 +28,7 @@ import {
   type AmendmentOpRefusal,
   type BatchAnswer,
   type DocumentRefRefusal,
+  type DocumentReferences,
   type DocumentRefusal,
   type Handles,
   type OpOutcome,
@@ -51,7 +52,7 @@ export function refOf(handles: Handles, value: BatchRef): Effect.Effect<number, 
     }
     return Effect.succeed(id);
   }
-  return handles.resolve(value);
+  return handles.references.resolve(value);
 }
 
 export function optionalRef(
@@ -219,6 +220,7 @@ export const amendmentsLayer: Layer.Layer<
       dispatch: (op: Op, handles: Handles, index: number) => Effect.Effect<OpOutcome, StoreFailure | GateRefusal<Code>, ActState>,
       enclosing?: ReadonlyMap<string, number>,
       bodyFiles?: ReadonlyMap<number, string | undefined>,
+      references?: DocumentReferences,
     ): Effect.fn.Return<BatchAnswer, StoreFailure | GateRefusal<Code | DocumentRefusal>> {
       const actId = Hex.random(16);
       yield* Effect.annotateCurrentSpan({ actId });
@@ -232,7 +234,10 @@ export const amendmentsLayer: Layer.Layer<
         outer: enclosing?.size === 0 ? undefined : enclosing,
         minted: mintedHandles(ops),
         awaiting: new Set(),
-        resolve: (name) => blockNames.idOfName(name),
+        references: references ?? {
+          resolve: blockNames.idOfName,
+          target: (name) => Effect.map(blockNames.idOfName(name), (near) => ({ near })),
+        },
       };
       const mintedNames = new Map([...handles.minted].map(([handle, uuid]) => [blockName(uuid), handle] as const));
       const enclosingUnborn = yield* Unborn;
@@ -406,6 +411,14 @@ export const amendmentsLayer: Layer.Layer<
           const written = yield* resolveFieldRefs(handles, table, table.tagsOf({ tags }), op.fields);
           const handle = op.$id === undefined ? undefined : handleOf(op.$id);
           const uuid = handle === undefined || handles.declared.has(handle) ? undefined : handles.minted.get(handle);
+          const linked = yield* Effect.forEach(op.edges ?? [], (link) =>
+            Effect.map(
+              link.to.startsWith('$')
+                ? Effect.map(refOf(handles, link.to), (near) => ({ near }))
+                : handles.references.target(link.to, projectId, link.kind),
+              (target) => ({ kind: link.kind, target }),
+            ),
+          );
           const row = yield* blocks.create({
             ...op,
             tags,
@@ -416,7 +429,8 @@ export const amendmentsLayer: Layer.Layer<
             edges:
               op.edges === undefined
                 ? undefined
-                : yield* Effect.forEach(op.edges, (link) => Effect.map(refOf(handles, link.to), (to) => ({ kind: link.kind, to }))),
+                : linked.flatMap((link) => ('near' in link.target ? [{ kind: link.kind, to: link.target.near }] : [])),
+            farEdges: linked.flatMap((link) => ('far' in link.target ? [{ kind: link.kind, end: link.target.far }] : [])),
             amendsId: yield* optionalRef(handles, op.amendsId),
           });
           if (written.unborn) handles.awaiting.add(row.id);

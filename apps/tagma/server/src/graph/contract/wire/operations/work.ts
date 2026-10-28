@@ -3,8 +3,8 @@ import { operation } from '../../../../platform/contract/wire/operation.js';
 import { startPriceSchema } from '../../../../platform/contract/wire/start.js';
 import { graphArms as arms } from '../answers.js';
 import { blockResultFields, idleSpecSchema, overviewFields } from '../answers.js';
-import { amendmentOpSchema, batchCreateOpSchema, BATCH_OPERATION_ID_HELP } from '../batch.js';
-import { blockRef, body, documentRef, fieldsField, filePath, line, tagsField } from '../fields.js';
+import { amendmentOpSchema, batchCreateOpSchema, batchRefSchema, BATCH_OPERATION_ID_HELP } from '../batch.js';
+import { blockRef, body, fieldsField, filePath, line, tagsField } from '../fields.js';
 import { sourceInputSchema } from '../sources.js';
 import { SOURCE_OPERATIONS } from './sources.js';
 import type { Raised } from '@runlith/agent/permissions';
@@ -36,7 +36,7 @@ Exact fields per op (?, optional):
   reject    {op, id, reason}
   uphold    {op, id, reason, by}
 A create inside propose.ops leaves work unheld; claim it after accept.
-One project per document; individual ops cannot set project.
+One writing project per document; individual ops cannot set project. References to blocks being changed, parents, source donors and replacements must stay there; another project refuses place-mismatch. To move a block to a foreign parent, use update_block with parentId alone outside the document. Edge targets may be in any registered project, as in link_blocks/unlink_blocks.
 \`$id\` on create/propose declares a handle. Every reference accepts \`$handle\`; bodies use \`[[$handle]]\`. A body and a field naming blocks (a ref field such as a catalog's tags, a view query's scope and edge) reach a create's handle anywhere in the document; an op's own reference (id, parentId, fromId, …) names a handle declared above it. An undeclared handle refuses. Any failed gate rolls back all ops and names the failing op.
 Submit a document file, read at call time. An op’s \`body\` may be \`{"file":"name.md"}\`, relative to the document; edit old/new stay inline. On refusal, edit the returned \`inputFile\` and resubmit its path: it names the body file when the body itself was refused, otherwise the document (or a saved copy of inline input).`;
 
@@ -57,7 +57,7 @@ const batchOpSchema = Schema.StructWithRest(
     body: Schema.optional(Schema.Union([body, Schema.Struct({ file: filePath })])).annotate({
       description: 'create, update, propose: the markdown itself, or `{"file": "name.md"}` relative to the document.',
     }),
-    by: Schema.optional(Schema.Array(documentRef).check(Schema.isMinLength(1))).annotate({
+    by: Schema.optional(Schema.Array(batchRefSchema).check(Schema.isMinLength(1))).annotate({
       description: 'uphold: every answering block, always a list — `["$handle"]` for one.',
     }),
     sources: Schema.optional(Schema.Array(sourceInputSchema)).annotate({ description: 'create, propose: anchors.' }),

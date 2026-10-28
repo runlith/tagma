@@ -4,13 +4,14 @@ import { edgeNameSchema } from './edges.js';
 import { creationFields } from './creation.js';
 
 import { body, documentRef, fieldsField, line, oldText, place, tagsField, title } from './fields.js';
+import { BLOCK_ADDRESS } from './references.js';
 
-export const batchRefSchema = documentRef;
+export const batchRefSchema = Schema.String.check(Schema.isPattern(new RegExp(`^(?:\\$\\S+|${BLOCK_ADDRESS.source.slice(1, -1)})$`, 'u')));
 
 export type BatchRef = typeof batchRefSchema.Type;
 
 export const BATCH_OPERATION_ID_HELP =
-  'Batch operations use their own reference fields: update/edit/claim/release/finish/close/delete/restore/accept/reject/uphold use `id` (not a standalone tool’s `blockId`); anchor/unanchor use `blockId`; link/unlink use `fromId` and `toId`; supersede uses `oldId` and `withId`. Every reference accepts a block name or `$handle`.';
+  'Batch operations use their own reference fields: update/edit/claim/release/finish/close/delete/restore/accept/reject/uphold use `id` (not a standalone tool’s `blockId`); anchor/unanchor use `blockId`; link/unlink use `fromId` and `toId`; supersede uses `oldId` and `withId`. Operation references accept a block name, `<project id>/<name>` or `$handle`. Subjects stay in the document project; link/unlink `toId` and create `edges[].to` may name another project. Stored fields and deferred proposal ops use bare names or handles.';
 
 export const batchCreateOpSchema = Schema.Struct({
   op: Schema.Literal('create'),
@@ -18,45 +19,36 @@ export const batchCreateOpSchema = Schema.Struct({
   ...creationFields(batchRefSchema, batchRefSchema),
 });
 type BatchCreateOp = typeof batchCreateOpSchema.Type;
-const { claim: _claim, ...deferredFields } = batchCreateOpSchema.fields;
-const amendmentCreateOpSchema = Schema.Struct(deferredFields);
+const { claim: _claim, ...deferredFields } = creationFields(documentRef, documentRef);
+const amendmentCreateOpSchema = Schema.Struct({ op: Schema.Literal('create'), $id: Schema.optional(Schema.String), ...deferredFields });
 
-export const updateOpSchema = Schema.Struct({
-  op: Schema.Literal('update'),
-  id: batchRefSchema,
-  title: Schema.optional(title),
-  body: Schema.optional(body),
-  status: Schema.optional(Schema.String),
-  tags: Schema.optional(tagsField),
-  parentId: Schema.optional(batchRefSchema),
-  ord: Schema.optional(Schema.Number),
-  fields: Schema.optional(fieldsField),
+const mutationSchemas = (reference: Schema.String) => ({
+  update: Schema.Struct({
+    op: Schema.Literal('update'),
+    id: reference,
+    title: Schema.optional(title),
+    body: Schema.optional(body),
+    status: Schema.optional(Schema.String),
+    tags: Schema.optional(tagsField),
+    parentId: Schema.optional(reference),
+    ord: Schema.optional(Schema.Number),
+    fields: Schema.optional(fieldsField),
+  }),
+  edit: Schema.Struct({ op: Schema.Literal('edit'), id: reference, old: oldText, new: body, all: Schema.optional(Schema.Boolean) }),
+  delete: Schema.Struct({ op: Schema.Literal('delete'), id: reference }),
+  link: Schema.Struct({ op: Schema.Literal('link'), fromId: reference, kind: edgeNameSchema, toId: reference }),
+  unlink: Schema.Struct({ op: Schema.Literal('unlink'), fromId: reference, kind: edgeNameSchema, toId: reference }),
 });
-export const editOpSchema = Schema.Struct({
-  op: Schema.Literal('edit'),
-  id: batchRefSchema,
-  old: oldText,
-  new: body,
-  all: Schema.optional(Schema.Boolean),
-});
-export const deleteOpSchema = Schema.Struct({ op: Schema.Literal('delete'), id: batchRefSchema });
-export const linkOpSchema = Schema.Struct({
-  op: Schema.Literal('link'),
-  fromId: batchRefSchema,
-  kind: edgeNameSchema,
-  toId: batchRefSchema,
-});
-export const unlinkOpSchema = Schema.Struct({
-  op: Schema.Literal('unlink'),
-  fromId: batchRefSchema,
-  kind: edgeNameSchema,
-  toId: batchRefSchema,
-});
+
+const mutations = mutationSchemas(batchRefSchema);
+export const updateOpSchema = mutations.update;
+export const editOpSchema = mutations.edit;
+export const deleteOpSchema = mutations.delete;
+export const linkOpSchema = mutations.link;
+export const unlinkOpSchema = mutations.unlink;
 
 export const AMENDMENT_OPS = ['create', 'edit', 'update', 'delete', 'link', 'unlink'] as const;
-const AMENDMENT_VERBS = Schema.Union([editOpSchema, updateOpSchema, deleteOpSchema, linkOpSchema, unlinkOpSchema]).pipe(
-  Schema.toTaggedUnion('op'),
-);
+const AMENDMENT_VERBS = Schema.Union(Object.values(mutationSchemas(documentRef))).pipe(Schema.toTaggedUnion('op'));
 export const amendmentOpSchema = Schema.Union([amendmentCreateOpSchema, AMENDMENT_VERBS]);
 export type AmendmentOp = typeof amendmentOpSchema.Type;
 

@@ -14,6 +14,8 @@ import type {
   FieldWriteRefusal,
   RetagRefusal,
   TagWriteRefusal,
+  LinkTarget,
+  BlockLink,
 } from './blocks.js';
 import type { BlockPosition, SelectionRefusal } from './reads.js';
 import type { PageSlice } from '@runlith/paging';
@@ -25,6 +27,8 @@ import type { ActState } from './transaction.js';
 import type { CreationDefaultRefusal } from '../wire/tags/profile.js';
 import type { HeldWork } from '../wire/operations/shared.js';
 import type { ThreadAct } from '../wire/threadWork.js';
+import type { ProjectRefusal } from '../../../projects/contract/wire/project.js';
+import type { EdgeKind } from '../wire/edges.js';
 
 export type BlockEnding = {
   status: string;
@@ -412,7 +416,12 @@ export class Supersession extends Context.Service<
 export class Batch extends Context.Service<
   Batch,
   {
-    apply(input: BatchInput, projectId: number, operator?: boolean): Effect.Effect<BatchAnswer, StoreFailure | GateRefusal>;
+    apply(
+      input: BatchInput,
+      projectId: number,
+      operator?: boolean,
+      scope?: DocumentScope,
+    ): Effect.Effect<BatchAnswer, StoreFailure | GateRefusal>;
     held(input: BatchInput): Effect.Effect<readonly HeldWork[], StoreFailure | GateRefusal<'batch-source'>>;
   }
 >()('tagma/graph/Batch') {}
@@ -431,10 +440,35 @@ export type Handles = {
   readonly outer?: ReadonlyMap<string, number>;
   readonly minted: ReadonlyMap<string, string>;
   readonly awaiting: Set<number>;
-  readonly resolve: (name: string) => Effect.Effect<number, GateRefusal<ReferenceRefusal | 'not-found'> | StoreFailure>;
+  readonly references: DocumentReferences;
 };
 
-export type DocumentRefRefusal = ReferenceRefusal | 'not-found' | 'batch-ref';
+export type DocumentRefRefusal =
+  | ReferenceRefusal
+  | OpenRefusal
+  | ProjectRefusal
+  | GitRefusal
+  | 'global-missing'
+  | 'no-home'
+  | 'place-mismatch'
+  | 'cross-project'
+  | 'not-found'
+  | 'batch-ref';
+
+export type DocumentScope = {
+  readonly references: DocumentReferences;
+  readonly link: (input: BlockLink) => Effect.Effect<void, GateRefusal | StoreFailure>;
+  readonly unlink: (input: BlockLink) => Effect.Effect<void, GateRefusal | StoreFailure>;
+};
+
+export type DocumentReferences = {
+  readonly resolve: (name: string) => Effect.Effect<number, GateRefusal<DocumentRefRefusal> | StoreFailure>;
+  readonly target: (
+    name: string,
+    projectId: number,
+    kind: EdgeKind,
+  ) => Effect.Effect<LinkTarget, GateRefusal<DocumentRefRefusal | 'superseded' | 'deleted'> | StoreFailure>;
+};
 
 export type DocumentRefusal = FloorRefusal | 'batch-shape' | 'batch-ref' | 'body-capped' | 'field-target' | 'not-found';
 
@@ -507,6 +541,7 @@ export class Amendments extends Context.Service<
       dispatch: (op: Op, handles: Handles, index: number) => Effect.Effect<OpOutcome, StoreFailure | GateRefusal<Code>, ActState>,
       enclosing?: ReadonlyMap<string, number>,
       bodyFiles?: ReadonlyMap<number, string | undefined>,
+      references?: DocumentReferences,
     ): Effect.Effect<BatchAnswer, StoreFailure | GateRefusal<Code | DocumentRefusal>>;
     applyOp(
       op: AmendmentOp,

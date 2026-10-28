@@ -12,6 +12,7 @@ import {
   Supersession,
   Tasks,
   type BatchAnswer,
+  type DocumentScope,
   type BlockEnd,
   type Handles,
   type OpOutcome,
@@ -91,7 +92,9 @@ function batchDocumentUnblock(op: string | undefined, field: string | undefined,
     return [`in operation ${position}, remove \`${field}\`; batch \`${op}\` has no such field`];
   }
   if (field === 'id' && op !== undefined) {
-    return [`in operation ${position}, set \`id\` to a block name or \`$handle\`; batch \`${op}\` does not use \`blockId\``];
+    return [
+      `in operation ${position}, set \`id\` to a block name, \`<project id>/<name>\` or \`$handle\`; batch \`${op}\` does not use \`blockId\``,
+    ];
   }
   if (op === 'edit' && field === 'old') return [`in operation ${position}, set \`old\` to the exact text to replace`];
   if (op === 'edit' && field === 'new') return [`in operation ${position}, set \`new\` to what replaces it`];
@@ -189,7 +192,18 @@ export const batchLayer: Layer.Layer<
       handles: Handles,
       projectId: number,
       operator: boolean,
+      scope: DocumentScope | undefined,
     ): Effect.fn.Return<OpOutcome, StoreFailure | GateRefusal, ActState> {
+      if (scope !== undefined && (op.op === 'link' || op.op === 'unlink')) {
+        const from = yield* refOf(handles, op.fromId);
+        const input = {
+          fromId: from,
+          kind: op.kind,
+          toId: op.toId.startsWith('$') ? yield* refOf(handles, op.toId) : op.toId,
+        };
+        yield* op.op === 'link' ? scope.link(input) : scope.unlink(input);
+        return { ok: true };
+      }
       if ((AMENDMENT_OPS as readonly string[]).includes(op.op)) {
         return yield* amendments.applyOp(op as AmendmentOp, handles, projectId);
       }
@@ -293,6 +307,7 @@ export const batchLayer: Layer.Layer<
       input: BatchInput,
       projectId: number,
       operator = false,
+      scope?: DocumentScope,
     ): Effect.fn.Return<BatchAnswer, StoreFailure | GateRefusal> {
       if (input.file === undefined && input.source === undefined) {
         return yield* new GateRefusal('batch-source', 'a batch needs one source: file or source', [
@@ -323,7 +338,7 @@ export const batchLayer: Layer.Layer<
         const ran = yield* amendments.runDocument(
           decoded.ops,
           (op, handles, index) =>
-            applyOp(op, handles, projectId, operator).pipe(
+            applyOp(op, handles, projectId, operator, scope).pipe(
               Effect.tap((outcome) =>
                 op.op === 'finish' || op.op === 'close' || op.op === 'supersede'
                   ? Effect.sync(() => ended.push(outcome as BlockEnd))
@@ -341,6 +356,7 @@ export const batchLayer: Layer.Layer<
             ),
           undefined,
           bodyFiles,
+          scope?.references,
         );
         const named = [...bodyFiles.entries()].filter((entry): entry is [number, string] => entry[1] !== undefined);
         const specs = yield* tasks.specsLeftBy(ended);

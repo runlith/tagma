@@ -41,9 +41,20 @@ import { blockResult, blockSummary, endResult, pricedBlockResult, pricedResult, 
 import { priced } from '../../platform/contract/service/start.js';
 import type { StartPrice } from '../../platform/contract/wire/start.js';
 import { lawPricing, nodePricing } from './start.js';
-import { atTarget, currentTarget, reflectionPlace, scoped, targeted, peer, type CrossingRefusal, type GraphTarget } from './crossing.js';
+import {
+  atTarget,
+  currentTarget,
+  documentScope,
+  reflectionPlace,
+  scoped,
+  targeted,
+  peer,
+  type CrossingRefusal,
+  type GraphTarget,
+} from './crossing.js';
 import { projectOrNone } from '../serving/current.js';
 import { CurrentGraph, GraphCall } from '../contract/service/serving.js';
+import type { GraphServices } from '../contract/service/services.js';
 
 const READS = READ_OPERATIONS;
 
@@ -351,7 +362,14 @@ const WORK_ROUTED = {
       ...documentReads(caller, input.file),
       ...inlineBodyFiles(input.ops ?? input.source).map((path) => readSubject(path)),
     ],
-    prepare: Effect.fn('apply_batch.prepare')(function* (input: (typeof W.apply_batch)['input']['Type'], caller: Caller) {
+    prepare: Effect.fn('apply_batch.prepare')(function* (
+      input: (typeof W.apply_batch)['input']['Type'],
+      caller: Caller,
+    ): Effect.fn.Return<
+      { readonly target: Result.Result<GraphTarget, GateRefusal<CrossingRefusal> | StoreFailure>; readonly facts: readonly Raised[] },
+      StoreFailure | GateRefusal<'batch-source'>,
+      GraphServices | GraphCall
+    > {
       const target = yield* Effect.result(currentTarget);
       const found = Result.isFailure(target)
         ? []
@@ -382,7 +400,7 @@ const WORK_ROUTED = {
         }
         const { value: result, start } = yield* priced(
           lawPricing(projectId, true),
-          batch.apply(batchInput(input, caller), projectId, caller.actor.kind === 'operator'),
+          batch.apply(batchInput(input, caller), projectId, caller.actor.kind === 'operator', yield* documentScope(projectId)),
         );
         const lines: string[] = [];
         for (const [index, outcome] of result.ops.entries()) {
