@@ -366,7 +366,7 @@ Trap: `packages/layer/src/svelte/branch-removal.svelte.test.ts`, the column's sh
 nearest-decision rule has no trap: a third batch intersecting a removal and a nearer return merges into
 the return once its own `await` ends, so a wrong skip only delays it; a scheduler trace shows the skip.
 
-### 10 · `batch.js`, `#process`: a teardown at commit updates the blocks it marks first
+### 10 · `batch.js`, `#process`: a teardown while a batch processes updates the blocks it marks first
 
 In async mode a branch an `{#if}`, `{#each}` or `{#key}` leaves is destroyed by the batch's commit
 callbacks, after `current_batch` was cleared and before the render and user effects the traversal
@@ -380,28 +380,46 @@ before the next effect. The hunk opens that collection for the commit callbacks 
 the start of the queue flush; the loop moved into `flush_eager_block_effects`, shared by both. A
 `flushSync` inside such a teardown or inside an eager update processes another batch with its own
 collection: `#process` restores the collector it replaced once it ends, and the flush walks the set it
-started with, so the nested flush neither drops the outer collection nor clears it under the walk. A
-write during the traversal itself stays as upstream has it. Pristine 5.57.0 and upstream `main` run the commit
-callbacks the same way; no upstream issue reports it.
+started with, so the nested flush neither drops the outer collection nor clears it under the walk. Pristine 5.57.0
+and upstream `main` run the commit callbacks the same way; no upstream issue reports it.
+
+Without async mode the same write happens earlier: a branch the traversal leaves is destroyed inside
+`#traverse`, and its teardown's write goes through `legacy_updates` into the next batch. A block earlier
+in the tree, which the traversal has already passed, is marked there; this batch then runs the effects
+it collected under that block before the next batch updates it. So in sync mode the collection opens
+before the traversal. In async mode it still opens only at the commit callbacks: `should_defer_append`
+answers false while a collector stands, and a collector open during the traversal would stop every
+branch switch from waiting for the commit. The flush skips a collected block that is no longer dirty,
+since a block later in the tree is updated by the traversal itself after the write marked it, and it
+takes each block out of the set as it reaches it: a block whose teardown clears a guard the walk has
+already updated marks that guard again, and the walk reaches it once more instead of leaving it marked
+under the batch's effects.
 
 Symptom: the agents column of the Tagma window fell into its error boundary with
 `Cannot read properties of null (reading 'activeId')` when a project the window stood on was renamed:
 the stack ends in a row's template effect run by `flush`; the batch that removed the thread page had
 reached the column's rows, and the page's teardown released the main seat (`ThreadSeats.page`) the
-column is guarded on.
+column is guarded on. In sync mode the whole window fell into its `window` boundary with
+`Cannot read properties of null (reading 'measure')`: the top row's seam handles stand under
+`{#if columnSeam !== null}` and `{#if areaSeam !== null}` in `TopBar`, earlier in the tree than the
+section column and the right area, whose teardowns clear those seams in `AreaFrame`.
 
 Traps: `packages/layer/src/svelte/nested-eager-flush.svelte.test.ts`, the nested flush in sync mode;
-`packages/layer/src/svelte/seat-release.svelte.test.ts`, the shape alone and with a `flushSync`
-in the guarded branch's teardown; the column itself in
-`apps/tagma/app/src/lib/features/threads/Column.svelte.test.ts -t "leaves when the page"`.
+`packages/layer/src/svelte/passed-guard.svelte.test.ts`, a guard the sync traversal passed, cleared by
+the teardown of a later branch, and cleared once more by a block the walk runs after it;
+`packages/layer/src/svelte/seat-release.svelte.test.ts`, the shape alone and with a `flushSync` in the
+guarded branch's teardown; the column itself in
+`apps/tagma/app/src/lib/features/threads/Column.svelte.test.ts -t "leaves when the page"`. The last two
+are async-mode traps and stay green without the hunk in sync mode.
 
 ### Async mode is off
 
 The app and every package config compile with `experimental: { async: false }`. Hunks 5, 6, 8 and 9
 fix batches held by an `await`, which exist only in async mode; their traps use `await` in markup and
 do not compile without it. Hunk 10 stays: its commit-callback case is async-only — without the flag a
-branch switch commits at once (`should_defer_append` answers false) — but its nested-flush half holds
-in sync mode as well. A queued effect that closes a branch puts the block in the eager set, the
+branch switch commits at once (`should_defer_append` answers false) — but in sync mode the same teardown
+runs during the traversal, which the hunk collects from (`passed-guard.svelte.test.ts`), and its
+nested-flush half holds as well. A queued effect that closes a branch puts the block in the eager set, the
 branch's teardown flushes, the nested flush ends by clearing the shared collector, and the outer flush
 then reads `null`; `nested-eager-flush.svelte.test.ts` is that trap, red without the hunk. Hunks 1 and
 7 stay red without themselves in sync mode, and 2 is not tied to the mode.
@@ -462,7 +480,7 @@ bun run --cwd packages/primitives test
 6. PR #18896 landed, or #18895 is closed otherwise — hunk 8 goes, its trap stays.
 7. A batch's traversal no longer enters a branch an intersecting earlier batch removes — hunk 9 goes, its
    trap stays.
-8. A write by a teardown at commit no longer lets the committing batch run effects under a block it
-   marked — hunk 10 goes, its traps stay.
+8. A write by a teardown at commit, or during a sync-mode traversal, no longer lets the batch run
+   effects under a block it marked — hunk 10 goes, its traps stay.
 9. While none of this is done, the patch is regenerated for the new version by the method above,
    `patches:prove` is green whole, and the e2e trap of hunk 2 is green in shop.

@@ -39,6 +39,7 @@
       "tests": [
         { "package": "packages/layer", "file": "src/svelte/nested-eager-flush.svelte.test.ts" },
         { "package": "packages/layer", "file": "src/svelte/seat-release.svelte.test.ts" },
+        { "package": "packages/layer", "file": "src/svelte/passed-guard.svelte.test.ts" },
         { "package": "apps/tagma/app", "file": "src/lib/features/threads/Column.svelte.test.ts", "names": "leaves when the page" }
       ]
     }
