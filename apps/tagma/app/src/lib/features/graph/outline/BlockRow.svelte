@@ -102,8 +102,8 @@
   {:else}
     <div
       class={cn(
-        'pointer-events-none flex h-6 shrink-0 items-center gap-1.5',
-        layout === 'stacked' ? 'pl-6' : 'ml-3',
+        'pointer-events-none flex shrink-0 items-center gap-1.5',
+        layout === 'stacked' ? 'pl-6' : 'ml-3 h-6',
         trailing && 'group-hover/row:fade-under group-has-[[data-state=open]]/row:fade-under',
       )}
     >

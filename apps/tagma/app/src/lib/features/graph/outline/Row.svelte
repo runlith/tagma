@@ -22,6 +22,7 @@
   const block = $derived(store.block(name));
   const childCount = $derived(store.visibleChildren(name).length);
   const hasChildren = $derived(childCount > 0);
+  const branchable = $derived(hasChildren && !store.readingLens.active);
   const expanded = $derived(store.expanded.has(name));
   const resting = $derived(block !== undefined && tags.isResting(block));
   const off = $derived(block !== undefined && tags.switchedOff(block));
@@ -162,16 +163,23 @@
         <span class="pointer-events-none relative -ml-2 grid h-6 w-4 shrink-0 place-items-center">
           {#if mark && MARK_SIGN[mark]}
             <Tooltip text={MARK_LABEL[mark]}>
-              <span class={cn('stamp pointer-events-auto', MARK_TEXT[mark])}>{MARK_SIGN[mark]}</span>
+              <span
+                class={cn(
+                  'stamp pointer-events-auto col-start-1 row-start-1 transition-opacity',
+                  MARK_TEXT[mark],
+                  branchable && 'group-hover/row:opacity-0',
+                )}>{MARK_SIGN[mark]}</span
+              >
             </Tooltip>
-          {:else if hasChildren && !store.readingLens.active}
+          {/if}
+          {#if branchable}
             <Tooltip
               text={expanded ? 'Collapse' : 'Expand'}
               hints={[{ keys: spellModifier('alt', apple), words: 'click for the whole branch' }]}
             >
               <button
                 type="button"
-                class="pointer-events-auto grid size-4 place-items-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
+                class="pointer-events-auto col-start-1 row-start-1 grid size-4 place-items-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
                 onclick={(event) => (event.altKey ? store.setBranch(name, !expanded) : store.toggle(name))}
                 aria-label={expanded ? 'Collapse' : 'Expand'}
                 aria-expanded={expanded}
