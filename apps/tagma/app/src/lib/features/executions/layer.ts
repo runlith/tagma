@@ -1,4 +1,5 @@
 import { Layer } from '@runlith/layer/Layer';
+import { ServedAddresses } from '$lib/features/browser/served.js';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 import { PlaceStanding } from '$lib/features/worktrees/PlaceStanding.js';
 import { placeStanding } from './worktrees/standing.js';
@@ -12,6 +13,7 @@ import { Terminals } from './worktrees/Terminals.svelte.js';
 import { TerminalRenderPolicy } from './terminal/RenderPolicy.js';
 import { TerminalViews } from './terminal/Views.svelte.js';
 import { ExecutionsRepo } from './Repo.js';
+import { isLive } from './processes/lines.js';
 
 export const TerminalsLayer = Layer.mergeAll(
   ExecutionsRepo,
@@ -42,5 +44,17 @@ export const TerminalsLayer = Layer.mergeAll(
         thread: (threadId) => names.of(threadId)?.label ?? threadId.slice(0, 8),
       }),
     );
+  }),
+  Layer.provide(ServedAddresses, function* () {
+    const commands = yield* CommandActivity;
+    return {
+      get addresses() {
+        return commands.lines
+          .filter(isLive)
+          .flatMap((line) =>
+            line.ports.flatMap((port) => (port.url === null ? [] : [{ url: port.url, label: line.label ?? line.command ?? port.url }])),
+          );
+      },
+    };
   }),
 );

@@ -41,8 +41,12 @@ export class ClosedPages extends Service<ClosedPages>()('ClosedPages', { tier: '
     this.armed = true;
   }
 
-  async reopen(): Promise<void> {
+  async read(): Promise<void> {
     this.listed = (await this.door.perform('list_pages', { closed: true, limit: 20 }, this.lens)).pages;
+  }
+
+  async reopen(): Promise<void> {
+    await this.read();
     const last = this.listed.find((page) => !this.reopened.has(page.id) && page.url !== '' && page.url !== 'about:blank');
     if (last === undefined) {
       this.armed = false;

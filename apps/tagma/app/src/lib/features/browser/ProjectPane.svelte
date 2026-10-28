@@ -3,6 +3,7 @@
   import { untrack } from 'svelte';
   import ArrowLeft from '@lucide/svelte/icons/arrow-left';
   import ArrowRight from '@lucide/svelte/icons/arrow-right';
+  import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import CodeXml from '@lucide/svelte/icons/code-xml';
   import RotateCw from '@lucide/svelte/icons/rotate-cw';
   import SquareDashedMousePointer from '@lucide/svelte/icons/square-dashed-mouse-pointer';
@@ -10,25 +11,35 @@
   import type { PageId, ProfileId } from '@tagma/server/browser/contract/wire/ids';
   import type { Page } from '@tagma/server/browser/contract/wire/page';
   import type { Profile } from '@tagma/server/browser/contract/wire/profile';
+  import { userProfile } from '@tagma/server/browser/contract/wire/settings';
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
+  import { SettingsRepo, writtenCatalog } from '$lib/features/settings/SettingsRepo.js';
   import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import type { SidePane } from '$lib/shared/panes/pane.js';
+  import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
+  import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
+  import Working from '$lib/shared/ui/Working.svelte';
   import { ZOOM_KEYS, zoomStep } from './zoom.js';
   import ZoomLevel from './ZoomLevel.svelte';
   import { Door } from '$lib/wire/Door.js';
   import { Live } from '$lib/wire/Live.js';
-  import { addressOf } from './address.js';
+  import { editable } from './address.js';
+  import AddressBar from './AddressBar.svelte';
   import { ClosedPages } from './ClosedPages.svelte.js';
   import { DesktopPages } from './DesktopPages.svelte.js';
   import Downloads from './Downloads.svelte';
+  import { Omnibox } from './Omnibox.svelte.js';
   import PageFind from './PageFind.svelte';
   import { OpenPages } from './OpenPages.svelte.js';
   import PageNotices from './PageNotices.svelte';
   import { Picks } from './pick/Picks.js';
-  import { browserPane, shownId as paneId, shownOf } from './panes.js';
+  import { browserPane, shownId as paneId, shownOf, showPage } from './panes.js';
+  import { ServedAddresses } from './served.js';
+  import Suggestions from './Suggestions.svelte';
   import { adapterOf } from './view/adapter.js';
   import PageView from './view/PageView.svelte';
 
@@ -44,10 +55,15 @@
   const desktop = DesktopPages.use();
   const picks = Picks.use();
   const closedPages = ClosedPages.use();
+  const served = ServedAddresses.use();
+  const settings = SettingsRepo.use();
+  const names = ThreadNames.use();
 
   const listing = open.listing;
   const projectId = open.aim.projectId;
   const lens = { project: String(projectId) };
+  const uid = $props.id();
+  const list = `${uid}-suggestions`;
 
   const paneShows = $derived(shownOf(pane.id)?.page ?? null);
   const current = $derived<Page | null>(paneShows === null ? null : (listing.byId.get(paneShows) ?? null));
@@ -56,15 +72,33 @@
 
   let profiles = $state.raw<readonly Profile[]>([]);
   let profile = $state<ProfileId | null>(null);
-  let typed = $state('');
-  let editing = $state(false);
   let finding = $state(false);
   let picking = $state(false);
   let problem = $state<string | null>(null);
   const zooms = new Map<PageId, number>();
   let zoom = $state(1);
-  let address = $state<HTMLInputElement>();
+  let toolbar = $state<HTMLDivElement>();
   let find = $state<{ focus(): void }>();
+
+  const usual = $derived.by((): ProfileId | null => {
+    const catalog = writtenCatalog(settings, projectId) ?? settings.catalog.key(projectId).data;
+    if (catalog === undefined) return null;
+    const value = catalog.entries.find((entry) => entry.id === userProfile.id)?.value;
+    return typeof value === 'string' ? (value as ProfileId) : userProfile.fallback;
+  });
+  const nameOf = (id: ProfileId | null): string | null => (id === null ? null : (profiles.find((one) => one.id === id)?.name ?? null));
+  const differing = $derived(current === null || usual === null || current.profile === usual ? null : nameOf(current.profile));
+  const opening = $derived(profile ?? usual);
+  const driver = $derived.by((): string | null => {
+    const thread = current?.live.driven ?? null;
+    return thread === null ? null : (names.of(thread)?.label ?? 'An agent');
+  });
+
+  const omnibox = new Omnibox(
+    () => ({ served: served.addresses, open: listing.pages, closed: closedPages.listed, current: current?.id ?? null }),
+    () => (current === null ? '' : editable(current.url)),
+    { go: (url) => go(url), visit: (page) => showPage(panes, { project: projectId, page }) },
+  );
 
   const point = (page: PageId | null) => panes.point(pane.key, page === null ? null : paneId({ project: projectId, page }));
 
@@ -85,12 +119,18 @@
   });
 
   $effect(() => {
-    if (!editing) typed = current?.url === 'about:blank' ? '' : (current?.url ?? '');
+    if (current !== null && !omnibox.open) return;
+    untrack(() => {
+      closedPages.read().catch((error: unknown) => {
+        problem = error instanceof Error ? error.message : String(error);
+      });
+    });
   });
 
   $effect(() => {
     zoom = shownId === null ? 1 : (zooms.get(shownId) ?? 1);
     finding = false;
+    untrack(() => omnibox.close());
   });
 
   $effect(() => {
@@ -112,7 +152,7 @@
 
   $effect(() => {
     untrack(() => {
-      if (pane.id === null && panes.focus === pane.key) address?.focus();
+      if (pane.id === null && panes.focus === pane.key) omnibox.focus();
     });
   });
 
@@ -125,19 +165,20 @@
     if ((await act(() => closedPages.close(page))) !== null) close();
   }
 
-  function go(to: 'back' | 'forward' | 'reload' | 'stop'): void {
+  function navigate(to: 'back' | 'forward' | 'reload' | 'stop'): void {
     const page = current?.id;
     if (page !== undefined) void act(() => door.perform('navigate_page', { page, go: to }, lens));
   }
 
-  function submit(): void {
-    const url = addressOf(typed);
-    editing = false;
-    address?.blur();
-    if (url === null) return;
+  function go(url: string): void {
     const page = current?.id;
     if (page === undefined) void openPage(url);
     else void act(() => door.perform('navigate_page', { page, url }, lens));
+  }
+
+  function edit(): void {
+    if (current === null) omnibox.focus();
+    else omnibox.edit();
   }
 
   function zoomTo(factor: number): void {
@@ -169,13 +210,10 @@
       bound('KeyT', () => panes.open(browserPane(null))),
       bound('KeyW', () => (current === null || pane.agent === true ? close() : void closePage(current.id))),
       bound('KeyT', () => void act(() => closedPages.reopen()), true),
-      bound('KeyL', () => {
-        address?.focus();
-        address?.select();
-      }),
-      bound('BracketLeft', () => go('back')),
-      bound('BracketRight', () => go('forward')),
-      bound('KeyR', () => go('reload')),
+      bound('KeyL', edit),
+      bound('BracketLeft', () => navigate('back')),
+      bound('BracketRight', () => navigate('forward')),
+      bound('KeyR', () => navigate('reload')),
       bound('KeyF', seek),
       ...(native
         ? [
@@ -201,87 +239,44 @@
       },
     ]);
   });
-
-  const suggestions = $derived(
-    [
-      ...new Set(
-        [...listing.byId.values(), ...closedPages.listed].map((page) => page.url).filter((url) => url !== '' && url !== 'about:blank'),
-      ),
-    ].slice(0, 50),
-  );
 </script>
 
 <section class="flex h-full min-h-0 min-w-0 flex-col bg-background" aria-label="Browser" data-browser-pane={pane.key}>
-  <div class="flex h-10 min-w-0 shrink-0 items-center gap-0.5 border-b px-1">
-    <Tooltip text="Back">
-      <button type="button" class="tool" aria-label="Back" disabled={!current?.live.back} onclick={() => go('back')}>
-        <ArrowLeft class="size-4" />
-      </button>
-    </Tooltip>
-    <Tooltip text="Forward">
-      <button type="button" class="tool" aria-label="Forward" disabled={!current?.live.forward} onclick={() => go('forward')}>
-        <ArrowRight class="size-4" />
-      </button>
-    </Tooltip>
-    {#if current?.live.loading}
-      <Tooltip text="Stop">
-        <button type="button" class="tool" aria-label="Stop" onclick={() => go('stop')}><X class="size-4" /></button>
-      </Tooltip>
-    {:else}
-      <Tooltip text="Reload">
-        <button type="button" class="tool" aria-label="Reload" disabled={current === null} onclick={() => go('reload')}>
-          <RotateCw class="size-4" />
+  <div bind:this={toolbar} class="flex h-10 min-w-0 shrink-0 items-center gap-0.5 border-b px-1">
+    {#if current !== null}
+      <Tooltip text="Back">
+        <button type="button" class="tool" aria-label="Back" disabled={!current.live.back} onclick={() => navigate('back')}>
+          <ArrowLeft class="size-4" />
         </button>
       </Tooltip>
+      <Tooltip text="Forward">
+        <button type="button" class="tool" aria-label="Forward" disabled={!current.live.forward} onclick={() => navigate('forward')}>
+          <ArrowRight class="size-4" />
+        </button>
+      </Tooltip>
+      {#if current.live.loading}
+        <Tooltip text="Stop">
+          <button type="button" class="tool" aria-label="Stop" onclick={() => navigate('stop')}><X class="size-4" /></button>
+        </Tooltip>
+      {:else}
+        <Tooltip text="Reload">
+          <button type="button" class="tool" aria-label="Reload" onclick={() => navigate('reload')}>
+            <RotateCw class="size-4" />
+          </button>
+        </Tooltip>
+      {/if}
     {/if}
-    {#if current === null && profiles.length > 1}
-      <select
-        class="h-7 max-w-28 shrink-0 rounded-md bg-background px-1 text-small text-muted-foreground hover:bg-hover"
-        aria-label="Profile of the page"
-        value={profile ?? ''}
-        onchange={(event) => (profile = event.currentTarget.value === '' ? null : (event.currentTarget.value as ProfileId))}
-      >
-        <option value="">Default profile</option>
-        {#each profiles as one (one.id)}
-          <option value={one.id} disabled={!one.connected}>{one.name}</option>
-        {/each}
-      </select>
-    {/if}
-    <form
-      class="min-w-0 flex-1"
-      onsubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-    >
-      <input
-        bind:this={address}
-        bind:value={typed}
-        class="h-7 w-full min-w-0 rounded-md bg-field px-2 text-ui"
-        list="browser-history-{pane.key}"
-        placeholder="Search or type an address"
-        aria-label="Address"
-        autocapitalize="off"
-        autocomplete="off"
-        spellcheck="false"
-        onfocus={(event) => {
-          editing = true;
-          event.currentTarget.select();
-        }}
-        onblur={() => (editing = false)}
-        onkeydown={(event) => {
-          if (event.key !== 'Escape') return;
-          editing = false;
-          typed = current?.url ?? '';
-          address?.blur();
-        }}
-      />
-      <datalist id="browser-history-{pane.key}">
-        {#each suggestions as url (url)}<option value={url}></option>{/each}
-      </datalist>
-    </form>
+    <AddressBar {omnibox} page={current} row={toolbar} {list} profile={differing}>
+      {#snippet end()}
+        {#if native}<ZoomLevel {zoom} {zoomTo} />{/if}
+        {#if driver !== null}
+          <span class="flex max-w-32 shrink-0 items-center gap-1.5 pl-1 text-small text-muted-foreground">
+            <Working /><FadeText text={driver} />
+          </span>
+        {/if}
+      {/snippet}
+    </AddressBar>
     {#if native}
-      <ZoomLevel {zoom} {zoomTo} />
       <Tooltip text="Developer tools">
         <button
           type="button"
@@ -293,19 +288,20 @@
         </button>
       </Tooltip>
     {/if}
-    {#if current !== null}<Downloads page={current} />{/if}
-    <Tooltip text={picking ? 'Stop picking' : 'Pick elements into the chat'} keys={picking ? keymap.spell(keymap.bare('Escape')) : null}>
-      <button
-        type="button"
-        class="tool"
-        aria-label="Pick elements into the chat"
-        aria-pressed={picking}
-        disabled={current === null}
-        onclick={() => (picking = !picking)}
-      >
-        <SquareDashedMousePointer class="size-4" />
-      </button>
-    </Tooltip>
+    {#if current !== null}
+      <Downloads page={current} />
+      <Tooltip text={picking ? 'Stop picking' : 'Pick elements into the chat'} keys={picking ? keymap.spell(keymap.bare('Escape')) : null}>
+        <button
+          type="button"
+          class="tool"
+          aria-label="Pick elements into the chat"
+          aria-pressed={picking}
+          onclick={() => (picking = !picking)}
+        >
+          <SquareDashedMousePointer class="size-4" />
+        </button>
+      </Tooltip>
+    {/if}
   </div>
 
   {#if finding && native && current !== null && desktop.bridge !== null}
@@ -331,10 +327,45 @@
     {#if current !== null}
       <PageView page={current} panel={pane.key} />
     {:else}
-      <div class="grid size-full place-items-center px-8 text-center text-small text-muted-foreground">
-        {pane.id !== null && listing.listed
-          ? 'This page is closed. Type an address to open another.'
-          : (listing.failure ?? 'Type an address or a search above.')}
+      <div class="size-full overflow-y-auto">
+        <div class="mx-auto flex w-full max-w-112 flex-col gap-2 px-4 py-8">
+          {#if pane.id !== null && listing.listed}
+            <p class="px-2 text-small text-muted-foreground">This page is closed.</p>
+          {:else if listing.failure !== null}
+            <p class="px-2 text-small text-muted-foreground">{listing.failure}</p>
+          {/if}
+          {#if omnibox.rows.length > 0}
+            <div id={list} role="listbox" aria-label="Suggestions" class="flex flex-col">
+              <Suggestions {omnibox} id={list} roomy />
+            </div>
+          {:else if omnibox.typed === ''}
+            <p class="px-2 text-small text-muted-foreground">Type an address or a search above.</p>
+          {/if}
+          {#if profiles.length > 1}
+            <div class="mt-2 flex items-center gap-1 border-t px-2 pt-3 text-small text-muted-foreground">
+              Opens in
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger
+                  class="flex h-6 items-center gap-1 rounded-md px-1.5 text-small text-foreground hover:bg-hover data-[state=open]:bg-selected"
+                >
+                  <FadeText class="max-w-48" text={nameOf(opening) ?? 'Default'} /><ChevronDown
+                    class="size-3 shrink-0 text-muted-foreground"
+                  />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="start" class="min-w-44">
+                  <DropdownMenu.RadioGroup
+                    value={opening ?? undefined}
+                    onValueChange={(chosen) => (profile = chosen === usual ? null : (chosen as ProfileId))}
+                  >
+                    {#each profiles as one (one.id)}
+                      <DropdownMenu.RadioItem value={one.id} disabled={!one.connected}>{one.name}</DropdownMenu.RadioItem>
+                    {/each}
+                  </DropdownMenu.RadioGroup>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            </div>
+          {/if}
+        </div>
       </div>
     {/if}
   </div>
