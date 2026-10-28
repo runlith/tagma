@@ -118,12 +118,11 @@ export const resolveConflict = Effect.fnUntraced(function* (
   treeRoot: string,
   path: string,
   text: string,
-  author = 'tagma',
 ): Effect.fn.Return<ConflictResolution, OwnGitFailed | BlockFileInvalid> {
   const standing = yield* shadow.unmergedPaths(treeRoot);
   if (!standing.includes(path)) {
     if (standing.length === 0 && (yield* shadow.mergeInProgress(treeRoot))) {
-      const merged = yield* shadow.concludeMerge(treeRoot, author);
+      const merged = yield* shadow.concludeMerge(treeRoot);
       return { merged, remaining: [] };
     }
     return yield* new OwnGitFailed({ op: 'resolve', message: `${path} is not in conflict`, ran: true });
@@ -141,6 +140,6 @@ export const resolveConflict = Effect.fnUntraced(function* (
   yield* shadow.stagePath(treeRoot, path);
   const remaining = yield* shadow.unmergedPaths(treeRoot);
   if (remaining.length > 0) return { merged: null, remaining };
-  const merged = yield* shadow.concludeMerge(treeRoot, author);
+  const merged = yield* shadow.concludeMerge(treeRoot);
   return { merged, remaining: [] };
 });

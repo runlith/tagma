@@ -65,7 +65,7 @@ layer(template, { excludeTestServices: true })('graph conflicts', (it) => {
       expect(yield* fs.readFileString(join(tree, 'law.md'))).toBe(before);
       expect(yield* shadow.unmergedPaths(tree)).toEqual(['law.md']);
       const text = block('the merged truth');
-      expect(yield* resolveConflict(shadow, tree, 'law.md', text, 'jade-ibis')).toEqual({ remaining: [], merged: expect.any(String) });
+      expect(yield* resolveConflict(shadow, tree, 'law.md', text)).toEqual({ remaining: [], merged: expect.any(String) });
       expect(yield* fs.readFileString(join(tree, 'law.md'))).toBe(text);
       expect(yield* conflicts).toEqual([]);
       expect(yield* Effect.flip(resolveConflict(shadow, tree, 'law.md', 'anything'))).toMatchObject(resolveRefusal);

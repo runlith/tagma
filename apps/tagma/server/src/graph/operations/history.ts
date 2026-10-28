@@ -208,10 +208,8 @@ export const HISTORY_PAIRS = {
         yield* writableAt(current);
         const recoveries = yield* GraphRecoveries;
         const recovery = yield* recoveries.read(aim);
-        const signed = yield* SignedSession;
-        const author = signed === null ? 'tagma' : sessionName(signed, yield* SessionIdentity);
         if (recovery !== null || current === null || current.layout.mode === 'team') {
-          const result = yield* recoveries.finish(aim, author);
+          const result = yield* recoveries.finish(aim);
           const target = yield* (yield* ServedGraphs).resolve(aim);
           yield* admitted(OPS.resolve_graph_conflict)(target.settled(true));
           return {
@@ -234,7 +232,7 @@ export const HISTORY_PAIRS = {
         yield* validateMerge(graph.git, graph.layout.treeRoot, graph.layout.treeRoot, open, capture).pipe(
           Effect.mapError((failure) => (failure instanceof GateRefusal ? failure : gitRefusal(failure))),
         );
-        const commit = yield* Effect.mapError(graph.shadow.concludeMerge(graph.layout.treeRoot, author), gitRefusal);
+        const commit = yield* Effect.mapError(graph.shadow.concludeMerge(graph.layout.treeRoot), gitRefusal);
         yield* admitted(OPS.resolve_graph_conflict)(graph.settled(true));
         return { status: 'ok' as const, commit, resolved: open };
       }),

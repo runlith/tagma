@@ -22,7 +22,7 @@ layer(demoGraphLayer({ repos: ['projection'] }).pipe(Layer.provideMerge(BunFileS
           const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'The Charter', body: 'the standing law' });
           const body = `it points at [[${spokenId(target.uuid)}]]`;
           const pointer = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'The Pointer', body });
-          const sync = (message: string) => syncProject({ projectId, treeRoot, shadow, message, author: 'jade-ibis' });
+          const sync = (message: string) => syncProject({ projectId, treeRoot, shadow, message });
           const first = yield* sync('create both');
           expect(first.commit).toBeString();
           const scanned = new Map((yield* scanTree(treeRoot)).blocks.map((row) => [row.frontmatter.id, row]));
@@ -36,8 +36,8 @@ layer(demoGraphLayer({ repos: ['projection'] }).pipe(Layer.provideMerge(BunFileS
           const acts = (yield* shadow.log(treeRoot)).slice(0, 2);
           expect([third.commit, first.commit]).toEqual(acts.map((act) => act.commit));
           expect(acts.map((act) => [act.author, act.message])).toEqual([
-            ['jade-ibis', 'amend the charter'],
-            ['jade-ibis', 'create both'],
+            ['Tagma', 'amend the charter'],
+            ['Tagma', 'create both'],
           ]);
         }),
       ),

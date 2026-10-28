@@ -7,7 +7,8 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import type { Git } from '@runlith/git/Git';
 import { dataPathOf, type MachineStore } from '../../platform/contract/service/store.js';
 import { mergeTreeAt } from '@runlith/git/merge';
-import { actingGit, gitIdentity, notAdmitted, quietGit, readingFailed, runGit, OwnGitFailed } from '../../platform/git/ownGit.js';
+import { actingGit, identityOf, notAdmitted, quietGit, readingFailed, runGit, OwnGitFailed } from '../../platform/git/ownGit.js';
+import { AGENT_PERSON } from '../../platform/contract/wire/commits.js';
 import { mergeParents } from '../../platform/git/publish.js';
 import { type GitPlaces, type OpenOperation, operationIn, standingOf } from '../../platform/git/places.js';
 import { indexWrites } from '../../platform/git/index.js';
@@ -328,7 +329,7 @@ export const readMerge = Effect.fn('prepared.merge')(function* (
   const start = yield* mergeStart(git, root, head);
   if (start === head) return { parents, tree: staged };
   const own = yield* runGit(git, 'submit-merge-own', ['-C', root, 'commit-tree', staged, '-p', start, '-m', 'merge index'], {
-    env: gitIdentity('tagma'),
+    env: identityOf(AGENT_PERSON),
   });
   const laid = yield* Effect.mapError(mergeTreeAt(actingGit(git, 'submit-merge-over'), root, head, own, { mergeBase: start }), (failure) =>
     readingFailed('submit-merge-over', failure),

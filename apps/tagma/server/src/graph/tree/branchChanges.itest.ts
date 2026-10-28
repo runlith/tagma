@@ -6,7 +6,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { Effect, FileSystem, Layer } from 'effect';
-import { gitIdentity, ownGitLayer, runGit } from '../../platform/git/ownGit.js';
+import { identityOf, ownGitLayer, runGit } from '../../platform/git/ownGit.js';
 import type { Tag } from '../contract/wire/tags/declaration.js';
 import { TagIndex } from '../vocabulary/tagIndex.js';
 import { graphChangesAt } from './branchChanges.js';
@@ -56,7 +56,8 @@ layer(Layer.merge(platform, git), { excludeTestServices: true })('branch graph c
       const dir = join(root, '.tagma', 'p');
       yield* fs.makeDirectory(dir, { recursive: true });
       const git = yield* Git;
-      const run = (...args: string[]) => runGit(git, 'branch-changes-setup', ['-C', root, ...args], { env: gitIdentity('test') });
+      const run = (...args: string[]) =>
+        runGit(git, 'branch-changes-setup', ['-C', root, ...args], { env: identityOf({ name: 'test', email: 'test@tagma' }) });
       const put = (name: string, text: string) => fs.writeFileString(join(dir, `${name}.md`), text);
       yield* run('init', '-q', '-b', 'main');
       const kept = block(1, ['memo']);

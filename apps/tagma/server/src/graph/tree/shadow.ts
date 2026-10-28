@@ -2,7 +2,8 @@ import { access, mkdir, readFile, realpath, rename, rm, stat, writeFile } from '
 import { dirname, join, resolve } from 'node:path';
 import { Effect } from 'effect';
 import type { Git } from '@runlith/git/Git';
-import { gitAnswer, gitIdentity, OwnGitFailed, quietGit, type RunGitOptions, runGit, runGitBytes } from '../../platform/git/ownGit.js';
+import { gitAnswer, identityOf, OwnGitFailed, quietGit, type RunGitOptions, runGit, runGitBytes } from '../../platform/git/ownGit.js';
+import { AGENT_PERSON } from '../../platform/contract/wire/commits.js';
 import { unmergedPaths } from '../../platform/git/unmerged.js';
 import { TREE_ORIGINS, TREE_SERVED, TREE_RETIRED } from '../contract/wire/storage.js';
 import { STAGING_PATHSPEC } from './atomicFile.js';
@@ -230,11 +231,11 @@ const shadowAt = (gitDir: string, git: Git['Service']) => {
       yield* run('worktree-prune', ['--git-dir', gitDir, 'worktree', 'prune']);
       yield* attach(treeRoot, branch);
     }),
-    commitAct: Effect.fnUntraced(function* (treeRoot: string, message: string, author = 'tagma') {
+    commitAct: Effect.fnUntraced(function* (treeRoot: string, message: string) {
       yield* run('add', ['-C', treeRoot, 'add', '-A', '--', '.', STAGING_PATHSPEC]);
       const staged = yield* run('staged', ['-C', treeRoot, 'diff', '--cached', '--name-only']);
       if (staged === '') return null;
-      yield* run('commit', ['-C', treeRoot, 'commit', '-m', message], { env: gitIdentity(author) });
+      yield* run('commit', ['-C', treeRoot, 'commit', '-m', message], { env: identityOf(AGENT_PERSON) });
       return yield* run('rev-parse', ['-C', treeRoot, 'rev-parse', 'HEAD']);
     }),
     branch: (name: string, from: string) => Effect.asVoid(run('branch', ['--git-dir', gitDir, 'branch', name, from])),
@@ -252,9 +253,9 @@ const shadowAt = (gitDir: string, git: Git['Service']) => {
     forkPoints,
     recordFork,
     dropFork,
-    merge: Effect.fnUntraced(function* (treeRoot: string, branch: string, message: string, author = 'tagma') {
+    merge: Effect.fnUntraced(function* (treeRoot: string, branch: string, message: string) {
       const attempt = yield* gitAnswer(git, 'merge', ['-C', treeRoot, 'merge', '--no-ff', '-m', message, branch], {
-        env: gitIdentity(author),
+        env: identityOf(AGENT_PERSON),
       });
       if (attempt.status === 0) {
         const merged = yield* run('rev-parse', ['-C', treeRoot, 'rev-parse', 'HEAD']);
@@ -278,9 +279,9 @@ const shadowAt = (gitDir: string, git: Git['Service']) => {
       ),
     stagedSides: (treeRoot: string, path: string) => stagedSides(git, treeRoot, path),
     stagePath: (treeRoot: string, path: string) => Effect.asVoid(run('add-path', ['-C', treeRoot, 'add', '--', path])),
-    concludeMerge: Effect.fnUntraced(function* (treeRoot: string, author = 'tagma') {
+    concludeMerge: Effect.fnUntraced(function* (treeRoot: string) {
       yield* run('add', ['-C', treeRoot, 'add', '-A', '--', '.', STAGING_PATHSPEC]);
-      yield* run('commit', ['-C', treeRoot, 'commit', '--no-edit'], { env: gitIdentity(author) });
+      yield* run('commit', ['-C', treeRoot, 'commit', '--no-edit'], { env: identityOf(AGENT_PERSON) });
       return yield* run('rev-parse', ['-C', treeRoot, 'rev-parse', 'HEAD']);
     }),
     log: (treeRoot: string, path?: string) =>
@@ -306,7 +307,7 @@ const bornEmpty = Effect.fnUntraced(function* (gitDir: string, git: Git['Service
     'commit-tree',
     ['--git-dir', gitDir, 'commit-tree', tree, '-m', 'graph born', '-m', `graph ${crypto.randomUUID()}`],
     {
-      env: gitIdentity('tagma'),
+      env: identityOf(AGENT_PERSON),
     },
   );
   yield* runGit(git, 'update-ref', ['--git-dir', gitDir, 'update-ref', 'refs/heads/main', commit]);

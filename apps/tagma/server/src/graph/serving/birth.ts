@@ -1,7 +1,8 @@
 import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath } from 'node:path';
-import { gitIdentity, runGit } from '../../platform/git/ownGit.js';
+import { identityOf, runGit } from '../../platform/git/ownGit.js';
+import { AGENT_PERSON } from '../../platform/contract/wire/commits.js';
 import { blocksRetiredKey, rowsStepKey, type ServesFrom } from '../contract/wire/storage.js';
 import { GraphSteps } from '../contract/service/steps.js';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
@@ -172,7 +173,7 @@ export const projectsLayer = (
           if (!(yield* Effect.sync(() => existsSync(join(globalRoot, '.git'))))) {
             yield* runGit(git, 'global-init', ['init', '-q', '-b', 'main', globalRoot]);
             yield* runGit(git, 'global-init', ['-C', globalRoot, 'commit', '-q', '--allow-empty', '-m', 'Shared project born'], {
-              env: gitIdentity('tagma'),
+              env: identityOf(AGENT_PERSON),
             });
           }
         }

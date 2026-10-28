@@ -49,8 +49,6 @@ export const identityOf = (person: Person) => ({
   GIT_COMMITTER_EMAIL: person.email,
 });
 
-export const gitIdentity = (author: string) => identityOf({ name: author, email: `${author}@tagma` });
-
 export const ownGitOptions = (options: GitOptions | undefined): GitOptions => {
   const env = { ...options?.env, [OWN_GIT_VARIABLE]: '1', GIT_OPTIONAL_LOCKS: '0' };
   if (options?.env === undefined) return { ...options, env, extendEnv: true };

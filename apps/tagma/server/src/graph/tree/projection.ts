@@ -228,7 +228,6 @@ export const syncProject = Effect.fnUntraced(function* (input: {
   readonly treeRoot: string;
   readonly shadow: ShadowGit;
   readonly message: string;
-  readonly author?: string;
 }): Effect.fn.Return<GraphFileSyncAnswer, StoreFailure | ExportFailed | BlockTreeUnreadable | OwnGitFailed, GraphStore | Tags> {
   if ((yield* statOf(join(input.treeRoot, '.git'))) !== null) {
     const unmerged = yield* input.shadow.unmergedPaths(input.treeRoot);
@@ -241,7 +240,7 @@ export const syncProject = Effect.fnUntraced(function* (input: {
     }
   }
   const projection = yield* projectToTree(input);
-  const commit = yield* input.shadow.commitAct(input.treeRoot, input.message, input.author);
+  const commit = yield* input.shadow.commitAct(input.treeRoot, input.message);
   return { blocks: projection.blocks, commit };
 });
 

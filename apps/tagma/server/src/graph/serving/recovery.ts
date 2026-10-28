@@ -155,7 +155,7 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
         }),
       );
     }),
-    finish: Effect.fnUntraced(function* (aim, author) {
+    finish: Effect.fnUntraced(function* (aim) {
       const here = yield* at(aim);
       if (here === null)
         return yield* new GateRefusal('team-tree', 'this project has no isolated graph merge', ['resolve the merge in its own repository']);
@@ -170,7 +170,7 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
                 : new GateRefusal('graph-pool', failure.message, ['read the graph merge files and resolve again']),
             ),
           );
-      return yield* here.assignment.withPermit(here.permit(refused(Effect.andThen(here.merges.restore(), here.merges.finish(author)))));
+      return yield* here.assignment.withPermit(here.permit(refused(Effect.andThen(here.merges.restore(), here.merges.finish()))));
     }),
   });
 });

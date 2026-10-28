@@ -124,7 +124,7 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
       });
       const gate = Semaphore.makeUnsafe(1);
       const serving = yield* recoveries(switching, policyFor(row).service, () => gate, join(root, 'home', 'machine.sqlite'));
-      const finish = () => serving.finish({ projectId: row.id }, 'operator');
+      const finish = () => serving.finish({ projectId: row.id });
       const initial = yield* git('ls-files', '--stage', '--', path);
       expect(yield* Effect.result(finish())).toMatchObject({ _tag: 'Failure', failure: { code: 'files' } });
       expect(yield* git('ls-files', '--stage', '--', path)).toBe(initial);
@@ -220,7 +220,7 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
       const reopened = yield* recoveries(switching, policy.service, gate, storePath);
       expect(yield* reopened.assign(aim, pending.id, () => Effect.succeed(crypto.randomUUID()))).toBe(threadId);
       yield* fs.writeFileString(join(pending.path, 'rule.md'), block('current and incoming'));
-      yield* reopened.finish(aim, 'operator');
+      yield* reopened.finish(aim);
       expect(yield* next((notice) => notice.total === 0)).toMatchObject({ recovery: null, total: 0 });
       yield* fs.remove(broken);
       expect(yield* next((notice) => notice.unreadable.length === 0)).toEqual({ recovery: null, total: 0, unreadable: [] });

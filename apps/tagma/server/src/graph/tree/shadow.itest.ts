@@ -79,21 +79,24 @@ layer(template, { excludeTestServices: true })('shadow git', (it) => {
     );
   }
 
-  it.effect('history records authors and acts newest first, while an unchanged act leaves no commit', () =>
+  it.effect('history records Tagma-signed acts newest first, while an unchanged act leaves no commit', () =>
     Effect.gen(function* () {
       const { tree, shadow } = yield* world();
       yield* block(tree, 'doctrine', 'the original');
-      const born = yield* shadow.commitAct(tree, 'create doctrine', 'jade-ibis');
+      const born = yield* shadow.commitAct(tree, 'create doctrine');
       expect(born).toBeString();
       expect(yield* shadow.commitAct(tree, 'nothing happened')).toBeNull();
       yield* block(tree, 'doctrine', 'the amended');
-      const amended = yield* shadow.commitAct(tree, 'edit doctrine', 'amber-fox');
+      const amended = yield* shadow.commitAct(tree, 'edit doctrine');
       const acts = yield* shadow.log(tree, 'doctrine.md');
       expect([amended, born]).toEqual(acts.map((act) => act.commit));
       expect(acts.map((act) => [act.author, act.message])).toEqual([
-        ['amber-fox', 'edit doctrine'],
-        ['jade-ibis', 'create doctrine'],
+        ['Tagma', 'edit doctrine'],
+        ['Tagma', 'create doctrine'],
       ]);
+      expect(yield* shadow.run('identity', ['-C', tree, 'log', '-1', '--format=%an <%ae>|%cn <%ce>'])).toBe(
+        'Tagma <agent@tagma.dev>|Tagma <agent@tagma.dev>',
+      );
     }),
   );
 
@@ -141,7 +144,8 @@ layer(template, { excludeTestServices: true })('shadow git', (it) => {
         expect(yield* shadow.mergeInProgress(tree)).toBe(true);
         expect((yield* shadow.stagedSides(tree, `${name}.md`)).get(3)).toBe('the rival truth');
         yield* block(tree, name, 'the merged truth');
-        expect(yield* shadow.concludeMerge(tree, 'jade-ibis')).toBeString();
+        expect(yield* shadow.concludeMerge(tree)).toBeString();
+        expect(yield* shadow.run('identity', ['-C', tree, 'log', '-1', '--format=%ae|%ce'])).toBe('agent@tagma.dev|agent@tagma.dev');
         expect(yield* fs.readFileString(join(tree, `${name}.md`))).toBe('the merged truth');
         expect(yield* shadow.mergeInProgress(tree)).toBe(false);
       }),
@@ -165,7 +169,7 @@ layer(template, { excludeTestServices: true })('shadow git', (it) => {
     }),
   );
 
-  it.effect('an ancestor branch still produces an attributed merge commit with both parents', () =>
+  it.effect('an ancestor branch still produces a Tagma-signed merge commit with both parents', () =>
     Effect.gen(function* () {
       const { base, tree, shadow } = yield* world();
       const head = yield* shadow.run('head', ['-C', tree, 'rev-parse', 'HEAD']);
@@ -174,11 +178,11 @@ layer(template, { excludeTestServices: true })('shadow git', (it) => {
       yield* shadow.attach(other, 'feature');
       yield* block(other, 'beta', 'feature work');
       const feature = yield* shadow.commitAct(other, 'create beta');
-      const merged = yield* shadow.merge(tree, 'feature', 'merge feature', 'jade-ibis');
+      const merged = yield* shadow.merge(tree, 'feature', 'merge feature');
       expect(merged.merged).toBeString();
       const parents = yield* shadow.run('parents', ['-C', tree, 'rev-list', '--parents', '-n', '1', 'HEAD']);
       expect([merged.merged, head, feature]).toEqual(parents.split(' '));
-      expect((yield* shadow.log(tree)).slice(0, 1).map((act) => [act.author, act.message])).toEqual([['jade-ibis', 'merge feature']]);
+      expect((yield* shadow.log(tree)).slice(0, 1).map((act) => [act.author, act.message])).toEqual([['Tagma', 'merge feature']]);
     }),
   );
 

@@ -221,7 +221,7 @@ const mergesAt = (shadow: ShadowGit, treeRoot: string) => {
       if (outcome.merged === null) yield* save({ ...record, conflicts: outcome.conflicts });
       return outcome;
     }),
-    finish: Effect.fnUntraced(function* (author: string) {
+    finish: Effect.fnUntraced(function* () {
       const record = yield* recordAt(file);
       if (record === null || record.conflicts === null) return yield* failed('no graph merge awaits recovery');
       const resolved = record.conflicts;
@@ -238,7 +238,7 @@ const mergesAt = (shadow: ShadowGit, treeRoot: string) => {
         ),
       );
       const commit = (yield* shadow.mergeInProgress(record.path))
-        ? yield* shadow.concludeMerge(record.path, author)
+        ? yield* shadow.concludeMerge(record.path)
         : yield* shadow.run('recovery-head', ['-C', record.path, 'rev-parse', 'HEAD']);
       yield* publish(record, commit);
       return { commit, resolved };

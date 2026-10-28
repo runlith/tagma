@@ -16,7 +16,6 @@ export class GraphRecoveries extends Context.Service<
     ): Effect.Effect<string, E | GateRefusal<RecoveryRefusal>, R>;
     finish(
       aim: RecoveryAim,
-      author: string,
     ): Effect.Effect<
       { readonly commit: string | null; readonly resolved: readonly string[]; readonly remaining?: readonly string[] },
       GateRefusal<RecoveryRefusal | 'no-merge' | 'files'>

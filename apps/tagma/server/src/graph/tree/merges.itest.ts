@@ -75,20 +75,20 @@ layer(template, { excludeTestServices: true })('graph merge recovery', (it) => {
           [3, block('incoming knowledge')],
         ]),
       );
-      expect(yield* Effect.flip(reopened.finish('operator'))).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
+      expect(yield* Effect.flip(reopened.finish())).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
       expect(yield* reopened.read()).toEqual(pending);
       yield* fs.writeFileString(join(pending.path, 'rule.md'), block('current and incoming knowledge'));
       yield* fs.writeFileString(join(pending.path, 'format.json'), '<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> incoming\n');
-      expect(yield* Effect.flip(reopened.finish('operator'))).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
+      expect(yield* Effect.flip(reopened.finish())).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
       yield* fs.writeFileString(join(pending.path, 'format.json'), '{}\n');
       const added = block('new target knowledge', '0198c3d4-7b2a-7f00-8000-3f9ac2b41e7b');
       yield* fs.writeFileString(join(tree, 'new.md'), added);
       const advanced = yield* shadow.commitAct(tree, 'target advanced');
       if (advanced === null) return yield* Effect.fail('target commit missing');
-      expect(yield* Effect.flip(reopened.finish('operator'))).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
+      expect(yield* Effect.flip(reopened.finish())).toMatchObject({ _tag: 'OwnGitFailed', op: 'graph-recovery' });
       expect(yield* shadow.run('head', ['-C', tree, 'rev-parse', 'HEAD'])).toBe(advanced);
       yield* shadow.merge(pending.path, advanced, 'include the new target');
-      const finished = yield* reopened.finish('operator');
+      const finished = yield* reopened.finish();
       expect(yield* shadow.run('head', ['-C', tree, 'rev-parse', 'HEAD'])).toBe(finished.commit);
       expect(yield* shadow.run('ancestry', ['--git-dir', shadow.gitDir, 'merge-base', theirs, finished.commit])).toBe(theirs);
       expect(yield* shadow.run('ancestry', ['--git-dir', shadow.gitDir, 'merge-base', advanced, finished.commit])).toBe(advanced);
