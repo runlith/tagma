@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit } from 'effect';
+import { Cause, Deferred, Effect, Exit } from 'effect';
 import type { HarnessFailure } from '../contract/service/failure.js';
 import type { ThreadEvictionVerdict } from '../contract/wire/eviction.js';
 import type { RolloutContext } from './rolloutContext.js';
@@ -26,6 +26,7 @@ export const rolloutWhole = (
   const going = new Set<string>();
   const deferred = new Set<string>();
   const recalled = new Set<string>();
+  const passes = new Map<string, Deferred.Deferred<void>>();
 
   const placed = Effect.fnUntraced(function* (threadId: string) {
     if (ctx.home === undefined || !(yield* forms.lags(threadId))) return null;
@@ -58,9 +59,21 @@ export const rolloutWhole = (
           }).pipe(Effect.withSpan('ThreadRollout.formWhole', { attributes: { threadId } })),
         );
 
+  const settled = (threadId: string): void => {
+    const pass = passes.get(threadId);
+    passes.delete(threadId);
+    if (pass !== undefined) Deferred.doneUnsafe(pass, Exit.void);
+  };
+
+  const requested = (threadId: string): void => {
+    if (!passes.has(threadId)) passes.set(threadId, Deferred.makeUnsafe<void>());
+    runAppend(restedNow(threadId));
+  };
+
   const restedNow = (threadId: string): Effect.Effect<void> =>
     Effect.suspend(() => {
-      if (ctx.kinds.last === null || going.has(threadId)) return Effect.void;
+      if (going.has(threadId)) return Effect.void;
+      if (ctx.kinds.last === null) return Effect.sync(() => settled(threadId));
       going.add(threadId);
       deferred.delete(threadId);
       return later(
@@ -90,6 +103,7 @@ export const rolloutWhole = (
           Effect.sync(() => {
             going.delete(threadId);
             if (recalled.delete(threadId) && deferred.has(threadId)) runAppend(restedNow(threadId));
+            else settled(threadId);
           }),
         ),
       );
@@ -97,10 +111,15 @@ export const rolloutWhole = (
 
   return {
     resident,
-    rested: (threadId: string): void => runAppend(restedNow(threadId)),
+    rested: requested,
+    restedFormed: (threadId: string): Effect.Effect<void> =>
+      Effect.suspend(() => {
+        const pass = passes.get(threadId);
+        return pass === undefined ? Effect.void : Deferred.await(pass);
+      }),
     released: (threadId: string): void => {
       if (going.has(threadId)) recalled.add(threadId);
-      else if (deferred.has(threadId)) runAppend(restedNow(threadId));
+      else if (deferred.has(threadId)) requested(threadId);
     },
   };
 };

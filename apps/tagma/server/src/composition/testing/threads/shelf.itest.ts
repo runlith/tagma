@@ -6,9 +6,19 @@ import { Clock, Context, Deferred, Effect, Fiber, FileSystem, Layer, Schedule } 
 import { eq } from 'drizzle-orm';
 import type { ThreadMessageEntry } from '@runlith/agent/transcript/entries';
 import { MachineStore } from '../../../platform/contract/service/store.js';
-import { threadEntry, threadEvent, threadRun, birthsOf, evidenceOf, listOf, rolloutsOf } from '../../../threads/testing/doubles.js';
+import {
+  threadEntry,
+  threadEvent,
+  threadRolloutForm,
+  threadRun,
+  birthsOf,
+  evidenceOf,
+  listOf,
+  rolloutsOf,
+} from '../../../threads/testing/doubles.js';
 import { restOf } from '../../../threads/testing/rest.js';
 import { makeDoorWorld } from '../doorFixture.js';
+import { ENTRY_KINDS } from '../../manifest.js';
 
 const setup = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
@@ -98,6 +108,31 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(reading);
         yield* shelved(busy);
+      }),
+    );
+
+    it.effect('a cast of a rested thread requested while it is in use stays owed and lands when its last use ends', () =>
+      Effect.gen(function* () {
+        const { runtime, projectId, db } = yield* World;
+        const rollouts = rolloutsOf(runtime.owners);
+        const threadId = yield* resident('the visited thread');
+        expect(yield* rollouts.evict(projectId, threadId)).toMatchObject({ outcome: 'evicted' });
+        const form = threadRolloutForm();
+        yield* db.update(form).set({ step: null }).where(eq(form.threadId, threadId));
+        const mark = Effect.map(
+          db.select({ step: form.step }).from(form).where(eq(form.threadId, threadId)).get(),
+          (row) => row?.step ?? null,
+        );
+        yield* rollouts.using(
+          threadId,
+          Effect.gen(function* () {
+            rollouts.formRested(threadId);
+            yield* rollouts.restedFormed(threadId);
+            expect(yield* mark).toBeNull();
+          }),
+        );
+        yield* rollouts.restedFormed(threadId);
+        expect(yield* mark).toBe(ENTRY_KINDS.last);
       }),
     );
   },

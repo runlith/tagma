@@ -20,6 +20,7 @@ export class ThreadRollouts extends Context.Service<
     freeing(threadIds: readonly string[]): Effect.Effect<Effect.Effect<void, HarnessFailure>, HarnessFailure>;
     rehydrate(threadId: string, read?: ThreadGate): Effect.Effect<void, HarnessFailure>;
     formRested(threadId: string): void;
+    restedFormed(threadId: string): Effect.Effect<void>;
     evict(projectId: number, threadId: string): Effect.Effect<ThreadEvictionVerdict, HarnessFailure>;
     sweep(): Effect.Effect<ThreadSweep, HarnessFailure>;
     shelve(threadIds: readonly string[]): void;

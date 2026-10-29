@@ -100,6 +100,7 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
     locate: ctx.locate,
     rehydrate: (threadId, read) => Effect.tap(rehydrate(threadId, read), () => whole.resident(threadId)),
     formRested: whole.rested,
+    restedFormed: whole.restedFormed,
     evict,
     sweep,
     shelve,
