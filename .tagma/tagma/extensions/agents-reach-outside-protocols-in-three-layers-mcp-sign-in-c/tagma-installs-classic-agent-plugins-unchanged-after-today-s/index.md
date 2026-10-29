@@ -25,6 +25,10 @@ The rename is task [[05a933b6]]. It renames:
 - the data directory;
 - the modules, the skill and the graph.
 
+**Names.** Code says `TagmaApp` (`tagma-app`, `tagmaApp`): the server module `tagma-apps`, the client module `app-tagma-apps`, the project directory `.tagma-apps/`, the manifest `tagma-app.json`. What an agent or the operator reads follows the interface word "Apps": the operations `read_apps`, `read_app_schema`, `install_app`, `uninstall_app`, `enable_app`, the view operations `call_app_tool` and `read_app_resource`, refusal codes `app-*`, the tool prefix `app__<id>__<tool>`, the capabilities `apps` and `app:<id>` (also the caller of an app's own calls), the setting keys `apps.installed` and `apps.enabled`, the thread binding `app`, the skill `apps`, and inside Tagma's data directory `apps/<id>/` and `app-data/<id>/`. The process environment is `TAGMA_APP_DATA` and `TAGMA_APP_REVISION`.
+
+**A source with the old manifest name.** An installed source whose manifest is still `plugin.json` (a project's `.tagma-apps/<id>/`, or a source left under `.plugins/`) is read like any directory without `tagma-app.json`: its row is refused, naming the missing file, and its process does not start. Nothing reads `plugin.json` as an app, because from step 2 that path is a classic plugin's manifest. Tagma renames only what lies in its own data directory; a project's apps belong to its repository and are renamed there.
+
 **What carries over.**
 - Stored installs, enablings, data and secrets move to the new names on the first start of the build that carries it, so nobody reinstalls.
 - Recorded tool calls of apps keep rendering as their app's view: a journal-shape step in the apps module (rule a4d62ee7) renames recorded `plugin__<id>__<tool>` names to the new prefix when a thread is opened.
