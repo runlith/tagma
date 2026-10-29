@@ -39,6 +39,6 @@ sources:
 - A section does not follow the operator to another project and is not remembered as the last place: the app may be disabled there.
 - A side panel closes when the app is disabled or stops contributing it; a transient crash or restart does not wipe the saved layout.
 - A view may open its own section or panel itself — only on a click inside the view and only what the app contributes.
-- From the phone, views open through the app's own HTTPS port on the Tailscale node.
+- Through the remote door, views open through the app's own HTTPS port on the Tailscale node: a phone reaches them in the desktop layout, while the phone shell offers no app views.
 
 **Limits.** Views appear in a project where the app is enabled and running. Until the app has a ready origin on the remote door, its views do not open there and state the reason.
