@@ -177,7 +177,7 @@ export const threads = manifest({
       ],
     };
   },
-  drivers: [{ id: 'thread-sweeps' }, { id: 'rollout-shelving' }, { id: 'said-backfill' }],
+  drivers: [{ id: 'thread-sweeps' }, { id: 'rollout-shelving' }, { id: 'rollout-reconciling' }, { id: 'said-backfill' }],
   lifetimes: {
     installation: lazyLayer(
       () => Promise.all([import('./assembly.js'), import('./worlds.js'), import('./lifetime.js')]),

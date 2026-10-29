@@ -32,10 +32,22 @@ export const rolloutReconciling = (
 
   return Effect.fnUntraced(function* (): Effect.fn.Return<number, HarnessFailure> {
     const home = ctx.home;
-    if (home === undefined || !(yield* Effect.promise(() => exists(home)))) return 0;
+    if (home === undefined) return 0;
     const store = Context.get(graph, MachineStore);
+    const imported = yield* stored('rollout-replay')(
+      store.db.select({ path: threadRolloutHome.path }).from(threadRolloutHome).where(eq(threadRolloutHome.path, home)).get(),
+    );
+    const recorded = stored('rollout-replay')(
+      store.db
+        .insert(threadRolloutHome)
+        .values({ path: home, importedAt: new Date(yield* Clock.currentTimeMillis) })
+        .onConflictDoNothing(),
+    );
+    if (!(yield* Effect.promise(() => exists(home)))) {
+      if (imported === undefined) yield* recorded;
+      return 0;
+    }
     const pending = yield* floor.pendingRollouts();
-    for (const marked of pending) yield* floor.unmark(marked.threadId);
     const settle = (threadId: string, path: string, cursor?: typeof threadRolloutCursor.$inferSelect): Effect.Effect<number> =>
       inJournal(
         threadId,
@@ -43,6 +55,7 @@ export const rolloutReconciling = (
           forms.formedHere(threadId, path),
           projection.run({ threadId, path }, cursor).pipe(
             Effect.map(({ projected }) => projected),
+            Effect.tap(() => floor.unmark(threadId)),
             Effect.catchTag('ThreadProjectionRefused', (failure) =>
               Effect.gen(function* () {
                 yield* floor.remark({ threadId, path });
@@ -96,6 +109,7 @@ export const rolloutReconciling = (
                 Effect.provideService(MachineStore, store),
                 Effect.provideService(ThreadEntryKinds, ctx.kinds),
                 Effect.tap(({ inherited }) => (inherited === 0 ? Effect.void : written(threadId, path))),
+                Effect.tap(() => floor.unmark(threadId)),
               ),
             ),
           ),
@@ -111,13 +125,13 @@ export const rolloutReconciling = (
             ),
           ),
         );
-    const imported = yield* stored('rollout-replay')(
-      store.db.select({ path: threadRolloutHome.path }).from(threadRolloutHome).where(eq(threadRolloutHome.path, home)).get(),
-    );
     let moved = 0;
     if (imported !== undefined) {
       for (const { threadId, path } of pending) {
-        if ((yield* rolloutStateOf(path)) === null) continue;
+        if ((yield* rolloutStateOf(path)) === null) {
+          yield* floor.unmark(threadId);
+          continue;
+        }
         const row = yield* stored('rollout-replay')(
           store.db
             .select({ evictedAt: restStamps.restedAt })
@@ -130,7 +144,10 @@ export const rolloutReconciling = (
           moved += yield* bring(threadId, path);
           continue;
         }
-        if (row.evictedAt !== null) continue;
+        if (row.evictedAt !== null) {
+          yield* floor.unmark(threadId);
+          continue;
+        }
         const cursor = yield* stored('rollout-replay')(
           store.db.select().from(threadRolloutCursor).where(eq(threadRolloutCursor.threadId, threadId)).get(),
         );
@@ -162,12 +179,7 @@ export const rolloutReconciling = (
         else if (!rested.has(threadId)) moved += yield* settle(threadId, path, cursors.get(threadId));
       }
     }
-    yield* stored('rollout-replay')(
-      store.db
-        .insert(threadRolloutHome)
-        .values({ path: home, importedAt: new Date(yield* Clock.currentTimeMillis) })
-        .onConflictDoNothing(),
-    );
+    yield* recorded;
     return moved;
   });
 };

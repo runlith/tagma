@@ -429,6 +429,17 @@ export const threadEngineLayer = Layer.effectContext(
     yield* scheduleSweeps('thread-sweeps', [projectionSweep(rollouts), historySweep(yield* ExecutionHistory)]);
     const opened = (yield* Maintenance).opened;
     yield* drive('rollout-shelving', Effect.asVoid(Effect.andThen(opened, rollouts.shelving)));
+    yield* drive(
+      'rollout-reconciling',
+      Effect.andThen(opened, rollouts.replay()).pipe(
+        Effect.asVoid,
+        Effect.tapCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.logError('the rollouts marked with an unfinished write stay marked until the next start', cause),
+        ),
+      ),
+    );
     yield* Effect.forkScoped(
       Effect.andThen(opened, events.start()).pipe(
         Effect.tapCause((cause) => Effect.logError('the cooling of resting threads goes unwatched until the next start', cause)),

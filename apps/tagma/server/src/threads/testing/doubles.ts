@@ -43,6 +43,7 @@ import {
   threadEvent as threadEventTable,
   threadRolloutCursor as threadRolloutCursorTable,
   threadRolloutForm as threadRolloutFormTable,
+  threadRolloutHome as threadRolloutHomeTable,
   threadRolloutRefusal as threadRolloutRefusalTable,
 } from '../store/journal.js';
 import {
@@ -230,6 +231,8 @@ export const threadRolloutCursor = () => threadRolloutCursorTable;
 export const threadRolloutRefusal = () => threadRolloutRefusalTable;
 
 export const threadRolloutForm = () => threadRolloutFormTable;
+
+export const threadRolloutHome = () => threadRolloutHomeTable;
 
 export const threadInbox = () => threadInboxTable;
 
