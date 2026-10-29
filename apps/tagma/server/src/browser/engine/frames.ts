@@ -69,18 +69,34 @@ export const detachFrame = (
   return true;
 };
 
-export const joinChild = (state: Paged, attached: Attached, child: string, frame: string): void => {
+export const joinChild = (state: Paged, attached: Attached, child: string, frame: string, through: string | undefined): void => {
   const outgoing = attached.sessions.get(frame);
   attached.children.set(child, frame);
   attached.sessions.set(frame, child);
+  if (through !== undefined) attached.through.set(child, through);
   if (outgoing !== undefined && outgoing !== child) retireChild(state, attached, outgoing);
 };
 
-export const leaveChild = (attached: Attached, child: string): string | undefined => {
-  const gone = attached.children.get(child);
-  if (gone === undefined) return undefined;
-  attached.settled.delete(child);
-  attached.children.delete(child);
-  if (attached.sessions.get(gone) === child) attached.sessions.delete(gone);
-  return gone;
+type ChildSession = { readonly child: string; readonly frame: string };
+
+export const leaveChild = (attached: Attached, child: string): readonly ChildSession[] => {
+  const nested = new Map<string, string[]>();
+  for (const [session, parent] of attached.through) {
+    const siblings = nested.get(parent) ?? [];
+    siblings.push(session);
+    nested.set(parent, siblings);
+  }
+  const left: ChildSession[] = [];
+  for (const pending = [child]; pending.length > 0;) {
+    const session = pending.pop()!;
+    const gone = attached.children.get(session);
+    if (gone === undefined) continue;
+    attached.settled.delete(session);
+    attached.children.delete(session);
+    attached.through.delete(session);
+    if (attached.sessions.get(gone) === session) attached.sessions.delete(gone);
+    left.push({ child: session, frame: gone });
+    pending.push(...(nested.get(session) ?? []));
+  }
+  return left;
 };

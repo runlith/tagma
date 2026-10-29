@@ -605,12 +605,24 @@ export const engineScenarios = (input: EngineHost): void => {
       }),
     );
 
-    it.effect('cross-site frame picks survive captures, include frames attached later and end with their feed', () =>
-      Effect.gen(function* () {
-        const page = yield* open('/pick-frames');
-        yield* loaded(page);
-        yield* framePickScenario({ page, caller: agent, frameUrl: crossSite('/pick-frame?name=Later%20frame'), through: pickThrough });
-      }),
+    it.effect(
+      'cross-site frame picks survive captures, include frames attached later and end with their feed, and the page picks again after leaving them',
+      () =>
+        Effect.gen(function* () {
+          const page = yield* open('/pick-frames');
+          yield* loaded(page);
+          yield* framePickScenario({ page, caller: agent, frameUrl: crossSite('/pick-frame?name=Later%20frame'), through: pickThrough });
+          yield* open('/pick');
+          const automation = yield* Automation;
+          const described = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const picked = yield* Effect.forkChild(Stream.runHead(yield* automation.pick(page, (yield* Seeded).id)));
+              yield* act(page, { action: 'click', ref: refIn(yield* snapshot(page), /button "Pick me"/) });
+              return yield* Fiber.join(picked);
+            }),
+          );
+          expect(described._tag === 'Some' ? described.value.selector : null).toBe('#target');
+        }),
     );
 
     it.effect('a dev pick reads main-world component locations and resolves only existing checkout files', () =>

@@ -50,6 +50,7 @@ export type Attached = {
   readonly frames: Map<string, Frame>;
   readonly children: Map<string, string>;
   readonly sessions: Map<string, string>;
+  readonly through: Map<string, string>;
   readonly adopted: Map<string, Scope.Closeable>;
   readonly worlds: Map<string, number>;
   readonly picks: PubSub.PubSub<Picking>;
@@ -242,7 +243,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
           yield* Effect.exit(attached.session.send('Target.detachFromTarget', { sessionId: joined.sessionId }));
           return;
         }
-        joinChild(state, attached, joined.sessionId, joined.targetInfo.targetId);
+        joinChild(state, attached, joined.sessionId, joined.targetInfo.targetId, event.child);
         const adopted = yield* Scope.fork(attached.scope);
         attached.adopted.set(joined.sessionId, adopted);
         const target: FrameTarget = { session: joined.sessionId, frame: joined.targetInfo.targetId, url: joined.targetInfo.url };
@@ -276,13 +277,14 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       }
       case 'Target.detachedFromTarget': {
         const { sessionId } = yield* eventParams('Target.detachedFromTarget', event);
-        const gone = sessionId === undefined ? undefined : leaveChild(attached, sessionId);
-        if (sessionId === undefined || gone === undefined) return;
-        yield* PubSub.publish(attached.joined, gone);
-        retireChild(state, attached, sessionId);
-        const adopted = attached.adopted.get(sessionId);
-        attached.adopted.delete(sessionId);
-        if (adopted !== undefined) yield* Scope.close(adopted, Exit.void);
+        if (sessionId === undefined) return;
+        for (const { child, frame } of leaveChild(attached, sessionId)) {
+          yield* PubSub.publish(attached.joined, frame);
+          retireChild(state, attached, child);
+          const adopted = attached.adopted.get(child);
+          attached.adopted.delete(child);
+          if (adopted !== undefined) yield* Scope.close(adopted, Exit.void);
+        }
         return;
       }
       default:
@@ -394,6 +396,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         frames: new Map(),
         children: new Map(),
         sessions: new Map(),
+        through: new Map(),
         adopted: new Map(),
         worlds: new Map(),
         picks: yield* PubSub.unbounded<Picking>(),
