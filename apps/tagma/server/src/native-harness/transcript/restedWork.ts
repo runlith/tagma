@@ -10,7 +10,7 @@ import { RolloutReads, type RolloutRead, type ReadRollout } from '../../threads/
 export const TRANSCRIPT_FOOTER_BYTES = 48;
 export const TRANSCRIPT_SLOT_BYTES = 16;
 export const TRANSCRIPT_OPEN_BYTES = 24;
-export const TRANSCRIPT_FORM = 3;
+export const TRANSCRIPT_FORM = 2;
 
 export type RestedCompaction = {
   readonly bytes: number;

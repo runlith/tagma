@@ -17,7 +17,8 @@ import { thread, threadRun } from '../store/kernel.js';
 import { RolloutUnreadable, rolloutStream } from './rolloutFile.js';
 import { isMetaRecord } from './rolloutMeta.js';
 import { RolloutReads, type ReadRollout } from '../contract/service/rolloutReads.js';
-import { compressedRollout, rolloutStateOf } from './rolloutForms.js';
+import { compressedRollout, rolloutStateOf, transcriptOf } from './rolloutForms.js';
+import type { RolloutFiles, TranscriptKey } from '../contract/service/rested.js';
 
 type Formed = {
   readonly changed: boolean;
@@ -192,11 +193,13 @@ async function staged(
 async function cleared(path: string, suffix: string): Promise<void> {
   await rm(`${path}${suffix}`, { force: true });
   await rm(`${compressedRollout(path)}${suffix}`, { force: true });
+  await rm(`${transcriptOf(path)}${suffix}`, { force: true });
 }
 
 type Basis = {
   readonly form: string | null;
   readonly cursor: number | undefined;
+  readonly position: number | undefined;
   readonly refused: number | undefined;
   readonly restedAt: number | null;
   readonly file: string | null;
@@ -205,7 +208,11 @@ type Basis = {
 const basisOf = Effect.fnUntraced(function* (db: StoreDb<'machine'>, threadId: string, path: string) {
   const done = yield* rolloutFormOf(db, threadId);
   const cursor = yield* db
-    .select({ bytes: threadRolloutCursor.nextByteOffset, restedAt: threadRolloutCursor.restedAt })
+    .select({
+      bytes: threadRolloutCursor.nextByteOffset,
+      position: threadRolloutCursor.nextPosition,
+      restedAt: threadRolloutCursor.restedAt,
+    })
     .from(threadRolloutCursor)
     .where(eq(threadRolloutCursor.threadId, threadId))
     .get();
@@ -227,6 +234,7 @@ const basisOf = Effect.fnUntraced(function* (db: StoreDb<'machine'>, threadId: s
   return {
     form: done === undefined ? null : JSON.stringify([done.step, done.refusal, done.publishing?.sha256 ?? null]),
     cursor: cursor?.bytes,
+    position: cursor?.position,
     refused: refused?.bytes,
     restedAt: cursor?.restedAt == null ? null : cursor.restedAt.getTime(),
     file,
@@ -236,6 +244,7 @@ const basisOf = Effect.fnUntraced(function* (db: StoreDb<'machine'>, threadId: s
 const sameBasis = (one: Basis, other: Basis): boolean =>
   one.form === other.form &&
   one.cursor === other.cursor &&
+  one.position === other.position &&
   one.refused === other.refused &&
   one.restedAt === other.restedAt &&
   one.file === other.file;
@@ -389,8 +398,9 @@ export const settledRollout = Effect.fnUntraced(function* (
 
 export type RolloutStaged = {
   readonly kind: 'staged';
-  readonly commit: Effect.Effect<RolloutForm | { readonly kind: 'moved' }, RolloutUnreadable | StoreFailure>;
+  readonly commit: (transcribed: boolean) => Effect.Effect<RolloutForm | { readonly kind: 'moved' }, RolloutUnreadable | StoreFailure>;
   readonly discard: Effect.Effect<void, RolloutUnreadable>;
+  readonly transcript: { readonly files: RolloutFiles; readonly key: TranscriptKey } | null;
 };
 
 const MOVED = { kind: 'moved' } as const;
@@ -475,14 +485,21 @@ export const stagedRollout = Effect.fnUntraced(function* (
     yield* clear;
     const failure = attempt.failure;
     if (failure._tag === 'RolloutUnreadable') return yield* failure;
-    return { kind: 'staged', commit: unmoved(refuse(failure)), discard: Effect.void } satisfies RolloutStaged;
+    return { kind: 'staged', commit: () => unmoved(refuse(failure)), discard: Effect.void, transcript: null } satisfies RolloutStaged;
   }
   const { formed, staged: from, published } = attempt.success;
   const moved = (bytes: number | undefined) => (bytes === undefined ? null : (formed.moved.get(bytes) ?? bytes));
   const publishing: RolloutPublishing | null = formed.changed
     ? { sha256: formed.sha256, cursorBytes: moved(basis.cursor), refusalBytes: moved(basis.refused) }
     : null;
-  const commit = Effect.gen(function* () {
+  const transcript =
+    aside && publishing !== null
+      ? {
+          files: { path: `${path}${suffix}`, packed: `${compressedRollout(path)}${suffix}`, transcript: `${transcriptOf(path)}${suffix}` },
+          key: { bytes: publishing.cursorBytes ?? 0, position: basis.position ?? 0 },
+        }
+      : null;
+  const commit = Effect.fnUntraced(function* (transcribed: boolean) {
     const recording = yield* Effect.result(
       write(
         FORMING,
@@ -508,13 +525,21 @@ export const stagedRollout = Effect.fnUntraced(function* (
       yield* clear;
       return FORMED;
     }
-    const renamed = yield* Effect.result(Effect.tryPromise({ try: () => rename(from, published), catch: io(path) }));
+    const renamed = yield* Effect.result(
+      Effect.tryPromise({
+        try: async () => {
+          await rename(from, published);
+          if (transcribed && transcript !== null) await rename(transcript.files.transcript, transcriptOf(path));
+        },
+        catch: io(path),
+      }),
+    );
     yield* clear;
     if (Result.isFailure(renamed)) return yield* renamed.failure;
     if (recorded) yield* settledWith(db, write, threadId, publishing);
     return FORMED;
   });
-  return { kind: 'staged', commit: unmoved(commit), discard: clear } satisfies RolloutStaged;
+  return { kind: 'staged', commit: (transcribed) => unmoved(commit(transcribed)), discard: clear, transcript } satisfies RolloutStaged;
 });
 
 //! Runs inside the thread's journal lane: nothing else moves the file, its cursor or its refusal while it works.
@@ -528,7 +553,7 @@ export const formRollout = Effect.fnUntraced(function* (
   for (;;) {
     const staging = yield* stagedRollout(db, write, threadId, path, kinds, false);
     if (staging.kind !== 'staged') return staging;
-    const outcome = yield* staging.commit;
+    const outcome = yield* staging.commit(false);
     if (outcome.kind !== 'moved') return outcome;
   }
 });

@@ -238,11 +238,11 @@ it.live(
     const first = yield* Effect.provide(forms.staged('t-written', path), runtime);
     yield* files.writeFileString(path, written, { flag: 'a' });
     const standing = yield* files.readFileString(path);
-    expect((yield* Effect.provide(first!.commit, runtime)).kind).toBe('moved');
+    expect((yield* Effect.provide(first!.commit(false), runtime)).kind).toBe('moved');
     expect(yield* files.readFileString(path)).toBe(standing);
     expect((yield* stored('t-written')).step).toBeNull();
     const second = yield* Effect.provide(forms.staged('t-written', path), runtime);
-    expect((yield* Effect.provide(second!.commit, runtime)).kind).toBe('formed');
+    expect((yield* Effect.provide(second!.commit(false), runtime)).kind).toBe('formed');
     expect((yield* stored('t-written')).step).toBe(dated.name);
     expect((yield* files.readFileString(path)).endsWith(written)).toBe(true);
     expect(yield* Effect.provide(fileEntries(path), runtime)).toEqual([

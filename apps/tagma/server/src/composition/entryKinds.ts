@@ -10,5 +10,5 @@ export const entryKinds: ThreadReaderModule['entryKinds'] = () =>
     products: modules.flatMap((module) => module.entryKinds ?? []),
     steps: journalSteps(modules.map((module) => module.formSteps ?? [])),
     base: JOURNAL_BASE,
-    source: import.meta.url,
+    source: new URL('./entryKinds.ts', import.meta.url).href,
   });

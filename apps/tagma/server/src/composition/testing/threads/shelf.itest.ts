@@ -3,7 +3,7 @@ import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join } from 'node:path';
 import { Clock, Context, Deferred, Effect, Fiber, FileSystem, Layer, Schedule } from 'effect';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { ThreadMessageEntry } from '@runlith/agent/transcript/entries';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import {
@@ -133,6 +133,54 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
         );
         yield* rollouts.restedFormed(threadId);
         expect(yield* mark).toBe(ENTRY_KINDS.last);
+      }),
+    );
+
+    it.effect('a cast that rewrites a rested file leaves a transcript the next window reads without touching the file', () =>
+      Effect.gen(function* () {
+        const { files, runtime, projectId, db } = yield* World;
+        const rollouts = rolloutsOf(runtime.owners);
+        const threadId = (yield* birthsOf(runtime.owners).create({ projectId, createdBySessionId: null, title: 'the old law' })).thread.id;
+        yield* rollouts.ensure(threadId);
+        const path = (yield* rollouts.locate(threadId))!;
+        const law = { projectId: 1, root: '/project', complete: true, audience: 'graph', entries: [] };
+        const entry = {
+          type: 'runtime-guidance' as const,
+          id: `guidance-${threadId}`,
+          runId: `run-${threadId}`,
+          hook: 'beforeStep' as const,
+          sequence: 1,
+          texts: ['law'],
+          sources: [{ hook: 'beforeStep' as const, ruleId: 'prompt', state: { law } }],
+        };
+        const id = `event-${threadId}`;
+        yield* files.writeFileString(
+          path,
+          `${JSON.stringify({ kind: 'event', row: { threadId, position: 1, id, kind: 'runtime-guidance', payload: { entry } } })}\n`,
+          { flag: 'a' },
+        );
+        yield* db.insert(threadEvent()).values({ threadId, position: 1, id, kind: 'runtime-guidance', payload: { entry } });
+        yield* db
+          .insert(threadEntry())
+          .values({ threadId, ord: 0, entryId: entry.id, runId: entry.runId, type: 'runtime-guidance', entry });
+        yield* db.run(sql`insert into thread_log (thread_id, history_through, entries_through) values (${threadId}, 1, 1)
+          on conflict (thread_id) do update set history_through = 1, entries_through = 1`);
+        yield* db.run(
+          sql`update thread_rollout_cursor set next_byte_offset = ${Number((yield* files.stat(path)).size)}, next_position = 2 where thread_id = ${threadId}`,
+        );
+        expect(yield* rollouts.evict(projectId, threadId)).toMatchObject({ outcome: 'evicted' });
+        const form = threadRolloutForm();
+        yield* db.update(form).set({ step: null }).where(eq(form.threadId, threadId));
+        const transcript = `${path}.entries`;
+        const offloaded = (yield* files.stat(transcript)).ino;
+        rollouts.formRested(threadId);
+        yield* rollouts.restedFormed(threadId);
+        expect((yield* db.select({ step: form.step }).from(form).where(eq(form.threadId, threadId)).get())?.step).toBe(ENTRY_KINDS.last);
+        const cast = (yield* files.stat(transcript)).ino;
+        expect(cast).not.toEqual(offloaded);
+        const window = yield* evidenceOf(runtime.owners).entries(threadId, projectId, 10);
+        expect(window.entries.map((one) => one.id)).toContain(entry.id);
+        expect((yield* files.stat(transcript)).ino).toEqual(cast);
       }),
     );
   },

@@ -1,4 +1,5 @@
 import { Cause, Deferred, Effect, Exit } from 'effect';
+import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { HarnessFailure } from '../contract/service/failure.js';
 import type { ThreadEvictionVerdict } from '../contract/wire/eviction.js';
 import type { RolloutContext } from './rolloutContext.js';
@@ -7,6 +8,8 @@ import type { RolloutStaged } from './rolloutEntryForms.js';
 import type { ThreadUses } from './uses.js';
 
 const BUSY = { kind: 'busy' } as const;
+
+type Committed = ReturnType<RolloutStaged['commit']>;
 
 const later = (threadId: string, work: Effect.Effect<void, unknown>): Effect.Effect<void> =>
   Effect.flatMap(Effect.exit(work), (exit) =>
@@ -83,12 +86,17 @@ export const rolloutWhole = (
           if (place === null) return;
           const staging = yield* forms.staged(threadId, place.path);
           if (staging === null) return;
+          if (staging.transcript !== null)
+            yield* ctx.parts.native.folds.transcribe(staging.transcript.files, staging.transcript.key).pipe(
+              Effect.provideService(ThreadEntryKinds, ctx.kinds),
+              Effect.tapError(() => staging.discard),
+            );
           const outcome = yield* ctx
             .inJournal(
               threadId,
-              uses.rest<Effect.Success<RolloutStaged['commit']> | typeof BUSY, Effect.Error<RolloutStaged['commit']>, never>(
+              uses.rest<Effect.Success<Committed> | typeof BUSY, Effect.Error<Committed>, never>(
                 threadId,
-                staging.commit,
+                staging.commit(staging.transcript !== null),
                 BUSY,
               ),
             )
