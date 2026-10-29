@@ -43,7 +43,9 @@ export const settingsLayer: Layer.Layer<
     );
 
     return Context.make(Settings, {
-      read: reads(<A>(key: SettingKey<A>, projectId?: number) => Effect.map(chainOf(projectId), (chain) => resolveSetting(key, chain))),
+      read: reads(<A>(key: SettingKey<A>, projectId?: number) =>
+        Effect.map(layers(db, sessions, projectId, key.id), (chain) => resolveSetting(key, chain)),
+      ),
       value: reads(<A>(key: SettingKey<A>, projectId?: number) =>
         Effect.map(valueRows(db, projectId, key.id), (chain) => resolveSetting(key, chain).value),
       ),

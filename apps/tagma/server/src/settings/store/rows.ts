@@ -17,18 +17,20 @@ export const layers = Effect.fn('Settings.layers')(function* (
   db: StoreDb<'graph'>,
   sessions: WriterRegister['Service'],
   projectId?: number,
+  keyId?: string,
 ): Effect.fn.Return<SettingLayer[], StoreFailure> {
+  const keyed = (scoped: ReturnType<typeof and>) => (keyId === undefined ? scoped : and(eq(setting.key, keyId), scoped));
   const user = yield* db
     .select()
     .from(setting)
-    .where(and(eq(setting.scope, 'user'), isNull(setting.projectId)));
+    .where(keyed(and(eq(setting.scope, 'user'), isNull(setting.projectId))));
   const project =
     projectId === undefined
       ? []
       : yield* db
           .select()
           .from(setting)
-          .where(and(eq(setting.scope, 'project'), eq(setting.projectId, projectId)));
+          .where(keyed(and(eq(setting.scope, 'project'), eq(setting.projectId, projectId))));
   const wrote = new Map<number, SessionRef>();
   const signed = [...user, ...project].map((row) => row.sessionId).filter((id): id is number => id !== null);
   for (const row of signed.length === 0 ? [] : yield* sessions.named(signed)) {
@@ -61,7 +63,10 @@ export const standingRow = (db: StoreDb<'graph'>, keyId: string, scope: Settable
 
 export const storedValue = (key: SettingKey<unknown>, offered: unknown, declined: boolean, beneath: Resolved<unknown>): string | null => {
   const echoesBeneath =
-    offered !== undefined && !declined && JSON.stringify(offered) === JSON.stringify(Schema.encodeSync(key.schema)(beneath.value as never));
+    key.merge === 'replace' &&
+    offered !== undefined &&
+    !declined &&
+    JSON.stringify(offered) === JSON.stringify(Schema.encodeSync(key.schema)(beneath.value as never));
   return offered === undefined || echoesBeneath ? null : JSON.stringify(offered);
 };
 
