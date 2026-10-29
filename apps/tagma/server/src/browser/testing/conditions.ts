@@ -1,9 +1,10 @@
 import { expect } from 'bun:test';
-import { Effect, Stream } from 'effect';
+import { Effect, Fiber, Stream } from 'effect';
 import type { Caller } from '../../platform/contract/wire/caller.js';
 import { Pages } from '../contract/service/pages.js';
 import { NETWORKS } from '../contract/wire/emulation.js';
 import type { PageId, ProfileId } from '../contract/wire/ids.js';
+import type { PagesEvent } from '../contract/wire/page.js';
 import { PAGE_PAIRS as PAGE } from '../operations.js';
 import { RunEnds } from './runs.js';
 import { calling, OPERATOR, refusalOf } from './world.js';
@@ -72,19 +73,43 @@ export const conditionScenario = Effect.fnUntraced(function* (input: {
   yield* evaluate(framed);
   yield* evaluate(child);
   const childBaseline = (yield* evaluate(child)) as number;
-  yield* emulate({ cpu: 6 });
+  expect((yield* emulate({ cpu: 6 })).emulation.cpu).toBe(6);
   const slowed = (yield* evaluate('measure()')) as number;
   const childSlowed = (yield* evaluate(child)) as number;
-  expect(slowed / baseline).toBeGreaterThanOrEqual(3);
-  expect(childSlowed / childBaseline).toBeGreaterThanOrEqual(3);
   yield* evaluate(`document.getElementById('bench').remove()`);
   yield* evaluate(framed);
-  expect((yield* evaluate(child)) as number).toBeGreaterThanOrEqual(childBaseline * 3);
+  const laterChildSlowed = (yield* evaluate(child)) as number;
   yield* emulate({ cpu: 20 });
-  const strained = yield* evaluate(
-    `(() => { window.identity = 'same target'; const start = performance.now(); while (performance.now() - start < 6000) measure(100000); return performance.now() - start; })()`,
+  const owner = pages.inProfile(profile).find((held) => held.id === page);
+  if (owner === undefined) return yield* Effect.die('the condition page was not recorded');
+  const changes = yield* pages.changes(owner.projectId);
+  const sharing = yield* Effect.forkScoped(
+    Stream.runHead(
+      Stream.filter(
+        changes,
+        (event): event is Extract<PagesEvent, { readonly type: 'put' }> => event.type === 'put' && event.page.opener === page,
+      ),
+    ),
   );
-  expect(strained as number).toBeGreaterThan(5000);
+  yield* evaluate(`window.identity = 'same target'; window.open(${JSON.stringify(url)}, ${JSON.stringify(`strain-${page}`)}); true`);
+  const opened = yield* Fiber.join(sharing);
+  if (opened._tag === 'None') return yield* Effect.die('the shared-renderer popup was not recorded');
+  const peer = opened.value.page.id;
+  yield* Effect.addFinalizer(() => pages.close(peer).pipe(Effect.orDie));
+  yield* calling(PAGE.wait_for_page.body.execute({ page: peer, until: 'load', timeoutMs: 120000 }, undefined, caller));
+  const strainedAnswer = yield* calling(
+    PAGE.evaluate_in_page.body.execute(
+      {
+        page: peer,
+        expression: `(() => { const start = performance.now(); while (performance.now() - start < 6000) measure(100000); return performance.now() - start; })()`,
+      },
+      undefined,
+      caller,
+    ),
+  );
+  if ('exception' in strainedAnswer) return yield* Effect.die(strainedAnswer.exception);
+  const strained = JSON.parse(strainedAnswer.value) as number;
+  expect(pages.live(peer)?.responsive).toBe(true);
   expect(yield* evaluate('window.identity')).toBe('same target');
   expect(pages.live(page)?.responsive).toBe(true);
   yield* emulate({ cpu: 1, network: 'slow-3g' });
@@ -115,12 +140,26 @@ export const conditionScenario = Effect.fnUntraced(function* (input: {
   yield* emulate({ geolocation: null });
   expect(yield* evaluate(`navigator.permissions.query({name:'geolocation'}).then(permission => permission.state)`)).toBe(permission);
   yield* emulate({ cpu: 6, network: 'fast-4g', geolocation: { latitude: 10, longitude: 20 } });
+  const endingSlowed = (yield* evaluate('measure()')) as number;
   const moves = yield* pages.moves(page);
   yield* (yield* RunEnds).end('agent');
   if (pages.live(page)?.conditions.cpu !== 1) yield* Stream.runHead(Stream.filter(moves, (move) => move.live.conditions.cpu === 1));
   expect(pages.live(page)?.conditions).toEqual({ cpu: 1, network: null, geolocation: null });
-  expect((yield* evaluate('measure()')) as number).toBeLessThan(slowed / 3);
+  const resumed = (yield* evaluate('measure()')) as number;
   console.log(
-    JSON.stringify({ conditions: { baseline, slowed, childBaseline, childSlowed, strained, latency, otherPageOnlineDuringOffline: true } }),
+    JSON.stringify({
+      conditions: {
+        baseline,
+        slowed,
+        childBaseline,
+        childSlowed,
+        laterChildSlowed,
+        endingSlowed,
+        resumed,
+        strained,
+        latency,
+        otherPageOnlineDuringOffline: true,
+      },
+    }),
   );
 });

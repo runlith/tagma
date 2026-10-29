@@ -22,6 +22,8 @@ import { ended, navigationBlocked, unknownPage } from './refusal.js';
 import { applyEmulation, changeConditions, effectiveOf, nextEmulation } from './emulate.js';
 import { describePick, screenshot, snapshot } from './read.js';
 import { world } from './target.js';
+import { makeHeap } from './heap.js';
+import type { Analysis } from './analysis.js';
 
 const PROBE_MS = 100;
 const CAPTURES_KEPT = 20;
@@ -52,7 +54,7 @@ type Probe = {
   readonly invalid?: string;
 };
 
-export const makeAutomation = Effect.fnUntraced(function* (input: { readonly drive: Drive }) {
+export const makeAutomation = Effect.fnUntraced(function* (input: { readonly drive: Drive; readonly analysis: Analysis }) {
   const { drive } = input;
   const pages = yield* Pages;
   const profiles = yield* Profiles;
@@ -62,6 +64,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
   const checkoutPaths = yield* CheckoutPaths;
   const servedRoots = yield* ServedRoots;
   const path = yield* Path.Path;
+  const heap = yield* makeHeap(input);
 
   const navigatedSince = (attached: Attached, before: number): boolean => attached.navigations > before;
 
@@ -70,7 +73,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
     yield* files.makeDirectory(dir, { recursive: true });
     const file = path.join(dir, `${yield* Clock.currentTimeMillis}.${extension}`);
     yield* files.writeFile(file, bytes);
-    const kept = (yield* files.readDirectory(dir)).sort();
+    const kept = (yield* files.readDirectory(dir)).filter((name) => /\.(png|pdf)$/u.test(name)).sort();
     for (const old of kept.slice(0, Math.max(0, kept.length - CAPTURES_KEPT))) yield* files.remove(path.join(dir, old), { force: true });
     return file;
   });
@@ -108,6 +111,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
     );
 
   return Automation.of({
+    heap,
     navigate: Effect.fn('Automation.navigate')(function* (page, to, thread, agent = thread !== null) {
       return yield* drive.run(
         page,

@@ -4,6 +4,7 @@ import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { ceilingOf, limitOf } from '../../../platform/contract/wire/pageFamily.js';
 import { Cpu, DEVICE_NAMES, Emulation, Geolocation, NetworkCondition, SCHEMES, Viewport } from './emulation.js';
 import { PageId, ProfileId, Ref } from './ids.js';
+import { HEAP_CLASSES, HeapCaptured } from './heap.js';
 import { Download, Glance, Page } from './page.js';
 import {
   CONSOLE_LEVELS,
@@ -35,7 +36,7 @@ export const ACTIONS = [
 ] as const;
 export type ActionName = (typeof ACTIONS)[number];
 
-export const CAPTURES = ['viewport', 'full', 'element', 'pdf'] as const;
+export const CAPTURES = ['viewport', 'full', 'element', 'pdf', 'heap'] as const;
 
 export const WAITS = ['load', 'text', 'url', 'element'] as const;
 
@@ -158,7 +159,7 @@ export const PAGE_OPERATIONS = {
     ...ACTING,
     meaning: 'Set or clear a page’s viewport, device, color scheme, CPU slowdown, network conditions and geolocation.',
     grammar:
-      '`device` sets size, pixel ratio, mobile mode and user agent; `viewport` sets size alone; `scheme` sets `prefers-color-scheme`. Those overrides survive reconnection. `cpu` is a factor from 1 to 20 (1 removes slowdown), including other-process frames; pages sharing its renderer slow too. `network` takes offline, slow-3g, fast-3g, slow-4g or fast-4g, or latency in ms and download/upload in bytes per second; null removes it. Throttling leaves navigator.connection unchanged; offline also changes navigator.onLine. `geolocation` takes latitude, longitude and optional accuracy in metres; null removes it. On the managed host its permission grant reaches same-origin pages of the profile. Conditions end with the setting thread’s run or the engine session. `conditions: false` removes only these conditions; `clear` removes all overrides.',
+      '`device` sets size, pixel ratio, mobile mode and user agent; `viewport` sets size alone; `scheme` sets `prefers-color-scheme`. Those overrides survive reconnection. `cpu` is a factor from 1 to 20 (1 removes slowdown), including other-process frames; pages sharing its renderer slow too. Desktop CPU watchdog strain follows exact renderer processes, widening to the profile only during pending navigation toward an unknown speculative renderer and returning on commit or failure. Managed watchdogs and engine frame probes without renderer identity use profile scope, delaying detection of a genuinely hung sibling until strain ends. `network` takes offline, slow-3g, fast-3g, slow-4g or fast-4g, or latency in ms and download/upload in bytes per second; null removes it. Throttling leaves navigator.connection unchanged; offline also changes navigator.onLine. `geolocation` takes latitude, longitude and optional accuracy in metres; null removes it. On the managed host its permission grant reaches same-origin pages of the profile. Conditions end with the setting thread’s run or the engine session. `conditions: false` removes only these conditions; `clear` removes all overrides.',
     input: Schema.Struct({
       project,
       page,
@@ -179,11 +180,16 @@ export const PAGE_OPERATIONS = {
   }),
   capture_page: operation('capture_page', {
     ...ACTING,
-    meaning:
-      'Capture a page as a picture — the visible part, the whole page or one element — or print it to PDF; the file is kept and named in the answer.',
+    meaning: 'Capture a page as a picture, PDF or heap snapshot; the local file is kept and named in the answer.',
     grammar:
-      'A picture up to 5 MiB reaches the agent as an image; a larger one, as a whole tall page can be, is only the file. `element` takes `ref`. A PDF is a file to read.',
-    input: Schema.Struct({ project, page, what: Schema.optional(Schema.Literals(CAPTURES)), ref: Schema.optional(Ref) }),
+      'A picture up to 5 MiB reaches the agent as an image; a larger one stays file-only. `element` takes `ref`. `heap` pauses the main frame’s V8 isolate and writes a .heapsnapshot that Chrome DevTools opens; other-process frames are outside it and same-isolate pages can appear. It summarizes self size, object count, detached native nodes, the largest classes and growth against this page’s previous capture, each list bounded by `limit`. `pausedMs` measures the capture’s pause hold, an upper bound on the renderer pause. An admitted capture waits for its producer even after caller cancellation or a chunk-write failure. Managed watchdogs and unknown-identity engine frame probes pause for the profile, so a genuinely hung sibling is detected only after capture ends. Desktop heap pause stays on the captured PID; concurrent CPU strain widens to the profile only during navigation toward an unknown speculative renderer and returns to exact membership on commit or failure. Heap files contain all heap strings, including sign-in tokens; only class names enter the answer. The newest four heap files stay per page; `removed` names any pruned files.',
+    input: Schema.Struct({
+      project,
+      page,
+      what: Schema.optional(Schema.Literals(CAPTURES)),
+      ref: Schema.optional(Ref),
+      limit: limitOf(HEAP_CLASSES),
+    }),
     answer: arms({
       captured: {
         page: Glance,
@@ -193,8 +199,9 @@ export const PAGE_OPERATIONS = {
         width: Schema.NullOr(Schema.Int),
         height: Schema.NullOr(Schema.Int),
       },
+      heap: HeapCaptured.fields,
     }),
-    refusals: [...DRIVE_REFUSALS, 'stale-ref', 'action-shape'],
+    refusals: [...DRIVE_REFUSALS, 'stale-ref', 'action-shape', 'heap-failed'],
     confirmation: () => ({ summary: 'Capture the page?' }),
     confirmLabel: 'Capture page',
     presentation: { running: 'Capturing the page', done: 'Captured the page' },

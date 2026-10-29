@@ -19,9 +19,10 @@ const engineLayer = Layer.effectContext(
   Effect.gen(function* () {
     const pages = yield* Pages;
     const drive = yield* makeDrive({ pages, profiles: yield* Profiles, runs: yield* ThreadRuns });
-    const automation = yield* makeAutomation({ drive });
+    const analysis = yield* makeAnalysis();
+    const automation = yield* makeAutomation({ drive, analysis });
     const screencast = yield* makeScreencast({ pages, drive });
-    const traces = yield* makeTraces({ drive, analysis: yield* makeAnalysis() });
+    const traces = yield* makeTraces({ drive, analysis });
     return Context.make(Automation, automation).pipe(Context.add(Screencast, screencast), Context.add(Traces, traces));
   }),
 );

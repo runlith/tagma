@@ -8,6 +8,7 @@ import { cursorRefusal, GateRefusal } from '../platform/contract/wire/refusal.js
 import { CurrentProject } from '../projects/contract/service/caller.js';
 import { type Aim, Automation, type PlannedAction } from './contract/service/automation.js';
 import type { Navigation } from './contract/wire/host.js';
+import { HEAP_CLASSES } from './contract/wire/heap.js';
 import { conditionsOf } from './contract/wire/emulation.js';
 import { type Opener, Pages } from './contract/service/pages.js';
 import { Profiles } from './contract/service/profiles.js';
@@ -251,6 +252,10 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
     body(PAGE.capture_page, {
       execute: Effect.fnUntraced(function* (input, _prepared, caller) {
         const { page, thread } = yield* pageOf(caller, input.page);
+        if (input.what === 'heap') {
+          const captured = yield* (yield* Automation).heap(page, pageRows(input.limit, HEAP_CLASSES, ceilingOf(HEAP_CLASSES)), thread);
+          return { status: 'heap' as const, ...captured };
+        }
         const captured = yield* (yield* Automation).capture(page, input.what ?? 'viewport', input.ref, thread);
         return {
           status: 'captured' as const,
@@ -263,7 +268,7 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         };
       }),
       media: (answer) =>
-        answer.mediaType !== 'image/png' || answer.bytes > PICTURE_BYTES
+        answer.status === 'heap' || answer.mediaType !== 'image/png' || answer.bytes > PICTURE_BYTES
           ? Effect.succeed([])
           : Effect.flatMap(Automation, (automation) =>
               Effect.map(automation.picture(answer.path), (bytes) => [{ bytes, mediaType: answer.mediaType, label: answer.path }]),

@@ -12,7 +12,7 @@ import {
   networkOf,
   type Viewport,
 } from '../contract/wire/emulation.js';
-import type { Strain } from '../contract/wire/host.js';
+import { type Strain, strainOf } from '../contract/wire/host.js';
 import type { Attached, Paged } from './drive.js';
 import { unknownPage } from './refusal.js';
 import { endsWithRun } from './lifetime.js';
@@ -108,19 +108,16 @@ export const holdStrain = Effect.fnUntraced(function* (attached: Attached, strai
   const host = yield* pages.hold(attached.page);
   const token = {};
   const update = () => {
-    attached.strain = {
-      factor: Math.max(1, ...[...attached.strains.values()].map((held) => held.factor)),
-      paused: [...attached.strains.values()].some((held) => held.paused),
-    };
+    attached.strain.value = strainOf(attached.strain.holds.values());
   };
   yield* Effect.acquireRelease(
     Effect.sync(() => {
-      attached.strains.set(token, strain);
+      attached.strain.holds.set(token, strain);
       update();
     }),
     () =>
       Effect.sync(() => {
-        attached.strains.delete(token);
+        attached.strain.holds.delete(token);
         update();
       }),
   );

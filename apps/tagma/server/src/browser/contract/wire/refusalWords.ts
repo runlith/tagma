@@ -10,6 +10,7 @@ export const REFUSAL_WORDS = {
   'dialog-open': 'Dialog is open on the page',
   'document-invalid': 'Profile settings not accepted',
   'element-obscured': 'Element is covered',
+  'heap-failed': 'Page heap not captured',
   'host-away': 'Browser host not connected',
   'host-refused': 'Browser host declined',
   'import-broken': 'Cookie import failed',

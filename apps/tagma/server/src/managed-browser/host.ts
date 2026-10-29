@@ -1,5 +1,6 @@
 import { bytesOf } from '@runlith/cdp/payload';
 import { pipeTransport } from '@runlith/cdp/pipe';
+import { heapToFile } from '@runlith/cdp/stream';
 import { watchResponsive } from '@runlith/cdp/probe';
 import {
   type CdpEvent,
@@ -22,9 +23,9 @@ import {
   PageStayed,
   type ProfileRecord,
 } from '../browser/contract/service/hosts.js';
-import type { HostEvent, LivePage, Navigation, PageChange, Strain } from '../browser/contract/wire/host.js';
+import { type HostEvent, type LivePage, type Navigation, type PageChange, type Strain, strainOf } from '../browser/contract/wire/host.js';
 import type { PageId, ProfileId } from '../browser/contract/wire/ids.js';
-import type { Download } from '../browser/contract/wire/page.js';
+import { type Downloads, makeDownloads } from './downloads.js';
 import { ManagedPlace } from './contract/service/place.js';
 import { type BuildId, MANAGED, ManagedDocument } from './contract/wire/document.js';
 import type { Build } from './builds/build.js';
@@ -57,7 +58,6 @@ type Tab = {
   readonly opener: PageId | null;
   sessions: number;
   quietSince: number | null;
-  readonly strains: Set<Strain>;
 };
 
 const tabOn = (target: string, opener: PageId | null, url = '', title = ''): Tab => ({
@@ -73,7 +73,6 @@ const tabOn = (target: string, opener: PageId | null, url = '', title = ''): Tab
   opener,
   sessions: 0,
   quietSince: null,
-  strains: new Set(),
 });
 
 type Running = {
@@ -81,9 +80,11 @@ type Running = {
   readonly connection: Connection;
   readonly scope: Scope.Closeable;
   readonly tabs: Map<string, Tab>;
-  readonly downloads: Map<string, { readonly page: PageId; download: Download }>;
+  readonly downloads: Downloads;
   readonly permissions: Permissions;
   readonly navigation: NavigationGate;
+  readonly strains: Set<Strain>;
+  strain: Strain;
   readonly dir: string;
   users: number;
   idleSince: number | null;
@@ -108,6 +109,22 @@ export const makeManagedHost = Effect.gen(function* () {
   const nextRevision = () => ++revision;
 
   const emit = (event: HostEvent) => Effect.asVoid(PubSub.publish(events, event));
+
+  const holdStrain = Effect.fnUntraced(function* (state: Running, strain: Strain) {
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const held = { ...strain };
+        state.strains.add(held);
+        state.strain = strainOf(state.strains);
+        return held;
+      }),
+      (held) =>
+        Effect.sync(() => {
+          state.strains.delete(held);
+          state.strain = strainOf(state.strains);
+        }),
+    );
+  });
 
   const refused = (message: string) => new HostRefused({ message, unblock: ['open the page again'] });
 
@@ -233,8 +250,8 @@ export const makeManagedHost = Effect.gen(function* () {
       {
         every: PROBE_EVERY,
         threshold: UNRESPONSIVE_AFTER,
-        paused: () => tab.dialog || [...tab.strains].some((strain) => strain.paused),
-        factor: () => Math.max(1, ...[...tab.strains].map((strain) => strain.factor)),
+        paused: () => tab.dialog || state.strain.paused,
+        factor: () => state.strain.factor,
       },
       (responsive) => {
         tab.responsive = responsive;
@@ -308,35 +325,9 @@ export const makeManagedHost = Effect.gen(function* () {
       case 'Fetch.requestPaused':
         yield* state.navigation.request(yield* eventParams('Fetch.requestPaused', event));
         return;
-      case 'Browser.downloadWillBegin': {
-        const begun = yield* eventParams('Browser.downloadWillBegin', event);
-        const page = state.navigation.page(begun.frameId);
-        if (page === null) return;
-        const download: Download = {
-          id: begun.guid,
-          name: begun.suggestedFilename,
-          path: path.join(place.downloads, state.profile, begun.guid),
-          bytes: null,
-          state: 'running',
-          at: new Date(yield* Clock.currentTimeMillis).toISOString(),
-        };
-        state.downloads.set(begun.guid, { page, download });
-        yield* emit({ kind: 'download', page, download });
-        return;
-      }
-      case 'Browser.downloadProgress': {
-        const progress = yield* eventParams('Browser.downloadProgress', event);
-        const held = state.downloads.get(progress.guid);
-        if (held === undefined || progress.state === 'inProgress') return;
-        held.download = {
-          ...held.download,
-          bytes: progress.receivedBytes,
-          state: progress.state === 'completed' ? 'done' : 'cancelled',
-        };
-        state.downloads.delete(progress.guid);
-        yield* emit({ kind: 'download', page: held.page, download: held.download });
-        return;
-      }
+      case 'Browser.downloadWillBegin':
+      case 'Browser.downloadProgress':
+        return yield* state.downloads.take(event);
     }
   });
 
@@ -385,14 +376,18 @@ export const makeManagedHost = Effect.gen(function* () {
       );
       const transport = yield* Scope.provide(pipeTransport({ writer: handle.getInputFd(3), reader: handle.getOutputFd(4) }), held);
       const connection = yield* Scope.provide(connect(transport), held);
+      const permissions = yield* makePermissions({ browser: connection.root });
+      const navigation = yield* Scope.provide(makeNavigation({ connection, events, nextRevision }), held);
       const state: Running = {
         profile: profile.id,
         connection,
         scope: held,
         tabs: new Map(),
-        downloads: new Map(),
-        permissions: yield* makePermissions({ browser: connection.root }),
-        navigation: yield* Scope.provide(makeNavigation({ connection, events, nextRevision }), held),
+        downloads: makeDownloads({ directory: downloads, navigation, events }),
+        permissions,
+        navigation,
+        strains: new Set(),
+        strain: { factor: 1, paused: false },
         dir,
         users: 0,
         idleSince: null,
@@ -400,9 +395,7 @@ export const makeManagedHost = Effect.gen(function* () {
       const stream = yield* Scope.provide(connection.root.events(), held);
       yield* Stream.runForEach(stream, (event) => onBrowser(state, event).pipe(quiet('a browser event'))).pipe(Effect.forkIn(held));
       yield* connection.root.send('Target.setDiscoverTargets', { discover: true }).pipe(Effect.mapError(lost));
-      yield* connection.root
-        .send('Browser.setDownloadBehavior', { behavior: 'allowAndName', downloadPath: downloads, eventsEnabled: true })
-        .pipe(Effect.mapError(lost));
+      yield* state.downloads.start(connection.root).pipe(Effect.mapError(lost));
       const { targetInfos } = yield* connection.root.send('Target.getTargets').pipe(Effect.mapError(lost));
       yield* connection.root.send('Target.createTarget', { url: 'about:blank', background: true }).pipe(Effect.mapError(lost));
       for (const info of targetInfos) {
@@ -644,6 +637,24 @@ export const makeManagedHost = Effect.gen(function* () {
         const text = yield* service.reply('Page.printToPDF', { printBackground: true }).pipe(Effect.mapError(lost));
         return yield* bytesOf(text).pipe(Effect.mapError((failure) => new HostLost({ message: failure.message, pending: false })));
       }),
+      heap: Effect.fn('ManagedHost.heap')(
+        function* (page, path) {
+          const { state, service } = yield* serviceOf(page);
+          yield* holdStrain(state, { factor: 1, paused: true });
+          yield* heapToFile(service, path).pipe(
+            Effect.provideService(FileSystem.FileSystem, files),
+            Effect.mapError(
+              (failure) =>
+                new HostRefused({
+                  message: `the page heap was not captured: ${failure.message}`,
+                  unblock: ['capture_page with what: heap again'],
+                }),
+            ),
+          );
+        },
+        Effect.uninterruptible,
+        Effect.scoped,
+      ),
       answer: Effect.fn('ManagedHost.answer')(function* (page, accept, text) {
         const { service } = yield* serviceOf(page);
         yield* service.send('Page.handleJavaScriptDialog', { accept, promptText: text }).pipe(Effect.mapError(lost));
@@ -651,15 +662,8 @@ export const makeManagedHost = Effect.gen(function* () {
       events: Effect.map(PubSub.subscribe(events), (subscription) => Stream.fromSubscription(subscription)),
       paint: (page) => Effect.asVoid(tabOf(page)),
       strain: Effect.fn('ManagedHost.strain')(function* (page, strain) {
-        const { tab } = yield* tabOf(page);
-        yield* Effect.acquireRelease(
-          Effect.sync(() => {
-            const held = { ...strain };
-            tab.strains.add(held);
-            return held;
-          }),
-          (held) => Effect.sync(() => tab.strains.delete(held)),
-        );
+        const { state } = yield* tabOf(page);
+        yield* holdStrain(state, strain);
       }),
       geolocation: Effect.fn('ManagedHost.geolocation')(function* (page) {
         const { state, service } = yield* serviceOf(page);

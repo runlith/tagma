@@ -9,6 +9,16 @@ export const Strain = Schema.Struct({
 });
 export type Strain = typeof Strain.Type;
 
+export const strainOf = (holds: Iterable<Strain>): Strain => {
+  let factor = 1;
+  let paused = false;
+  for (const hold of holds) {
+    factor = Math.max(factor, hold.factor);
+    paused ||= hold.paused;
+  }
+  return { factor, paused };
+};
+
 export const Navigation = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('url'), url: Schema.String }),
   Schema.Struct({ kind: Schema.Literal('back') }),

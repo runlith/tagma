@@ -1,8 +1,19 @@
 import { totalmem } from 'node:os';
-import type { HostEvent } from '@tagma/server/browser/contract/wire/host';
+import type { HostEvent, Strain } from '@tagma/server/browser/contract/wire/host';
 import type { PageId } from '@tagma/server/browser/contract/wire/ids';
 import type { Call, Failure } from '@tagma/server/desktop-browser/contract/wire/channel';
-import { BaseWindow, type BrowserWindow, type Event, type Input, type InputEvent, type WebContents, WebContentsView } from 'electron';
+import {
+  app,
+  BaseWindow,
+  type BrowserWindow,
+  type Event,
+  type FrameCreatedDetails,
+  type Input,
+  type InputEvent,
+  type WebContents,
+  WebContentsView,
+  type WebFrameMain,
+} from 'electron';
 import type { Chord, FramedChord, PageKey } from '../bridge.js';
 import { BROWSER } from '../channels.js';
 import { devToolsChord, newWindowChord, toggleDevTools } from '../projectWindows.js';
@@ -17,12 +28,14 @@ import { allowedUrl, type GateFailure, HeldPage, type NavigationGate, type PageE
 import { Placement } from './placement.js';
 import { showPopup } from './popups.js';
 import type { Profiles } from './profiles.js';
+import { RendererStrain } from './strain.js';
 
 const GESTURE_MS = 1_000;
 const TAB_BUDGET = 4;
 const TAB_WINDOW_MS = 2_000;
 const ACTIVATING = new Set(['mouseDown', 'mouseUp', 'keyDown', 'rawKeyDown', 'char', 'touchStart', 'touchEnd', 'gestureTap']);
 const OPERATED_EVERY_MS = 1_000;
+const HEAP_SWEEP_MS = 1_000;
 const OPERATING = new Set([
   'mouseDown',
   'mouseUp',
@@ -52,6 +65,8 @@ type GateWatch = { readonly gate: NavigationGate; failure: GateFailure | null };
 
 type Lease = { readonly page: HeldPage; readonly release: () => void };
 
+type HeapCapture = { readonly renderer: number; readonly created: number; readonly gone: () => void };
+
 export class BrowserHost implements Executor {
   readonly placement: Placement;
   private reporter: Reporter | null = null;
@@ -63,6 +78,9 @@ export class BrowserHost implements Executor {
   private readonly holds = new Map<number, HeldPage>();
   private readonly watches = new Map<number, GateWatch>();
   private readonly leases = new Map<number, Lease>();
+  private readonly strains = new RendererStrain();
+  private readonly heaps = new Map<symbol, HeapCapture>();
+  private heapSweep: ReturnType<typeof setInterval> | null = null;
   private readonly services = new Map<string, Service>();
   private readonly chords = new Map<WebContents, readonly Chord[]>();
   private readonly framed = new Map<WebContents, readonly FramedChord[]>();
@@ -182,7 +200,7 @@ export class BrowserHost implements Executor {
         const standing = this.byId.get(call.page);
         if (standing !== undefined) return answer(standing.restriction);
         this.profiles.session(call.profile);
-        const page = this.track(HeldPage.create(this.local(), call.page, call.profile, null, this.identity, this.events));
+        const page = this.track(HeldPage.create(this.local(), call.page, call.profile, null, this.identity, this.strains, this.events));
         page.navigation(call.policy, null);
         const block = page.load(call.url, call.history);
         if (block === null) return answer(page.restriction);
@@ -268,6 +286,11 @@ export class BrowserHost implements Executor {
         );
         return;
       }
+      case 'heap': {
+        const page = this.byId.get(call.page);
+        if (page === undefined) return missing(call.page);
+        return this.heap(page, call.path, reporter, id);
+      }
       case 'answer': {
         const page = this.byId.get(call.page);
         if (page === undefined) return missing(call.page);
@@ -299,8 +322,7 @@ export class BrowserHost implements Executor {
       case 'strain': {
         const page = this.byId.get(call.page);
         if (page === undefined) return missing(call.page);
-        page.strain(call.hold, call.strain);
-        this.leases.set(call.hold, { page, release: () => page.strain(call.hold, null) });
+        this.leases.set(call.hold, { page, release: this.strain(page, call.strain) });
         return answer();
       }
       case 'geolocation': {
@@ -382,6 +404,98 @@ export class BrowserHost implements Executor {
     }
   }
 
+  private strain(page: HeldPage, strain: Strain): () => void {
+    const frame = page.contents.mainFrame;
+    const releases: (() => void)[] = [];
+    if (strain.factor > 1) {
+      const contents = page.contents;
+      const cpu = this.strains.cpu(page.profile, strain.factor);
+      const refresh = (extra: WebFrameMain | null = null) => {
+        if (contents.isDestroyed()) return;
+        const root = contents.mainFrame;
+        const frames = root.isDestroyed() ? [] : root.framesInSubtree;
+        const renderers = frames
+          .filter((child) => !child.isDestroyed())
+          .map((child) => child.osProcessId)
+          .filter((pid) => pid > 0);
+        if (extra !== null && !extra.isDestroyed() && extra.osProcessId > 0) renderers.push(extra.osProcessId);
+        cpu.update(renderers, page.navigationPending);
+      };
+      const changed = () => refresh();
+      const created = (_event: Event, details: FrameCreatedDetails) => refresh(details.frame);
+      contents.on('did-start-navigation', changed);
+      contents.on('did-redirect-navigation', changed);
+      contents.on('did-frame-navigate', changed);
+      contents.on('did-fail-provisional-load', changed);
+      contents.on('did-fail-load', changed);
+      contents.on('did-stop-loading', changed);
+      contents.on('render-process-gone', changed);
+      contents.on('frame-created', created);
+      changed();
+      releases.push(() => {
+        contents.off('did-start-navigation', changed);
+        contents.off('did-redirect-navigation', changed);
+        contents.off('did-frame-navigate', changed);
+        contents.off('did-fail-provisional-load', changed);
+        contents.off('did-fail-load', changed);
+        contents.off('did-stop-loading', changed);
+        contents.off('render-process-gone', changed);
+        contents.off('frame-created', created);
+        cpu.release();
+      });
+    }
+    const renderer = frame.osProcessId;
+    if (strain.paused && renderer > 0) releases.push(this.strains.hold([renderer], { factor: 1, paused: true }));
+    return () => {
+      for (const release of releases) release();
+    };
+  }
+
+  private heap(page: HeldPage, path: string, reporter: Reporter, id: number): void {
+    const renderer = page.contents.getOSProcessId();
+    const metric = app.getAppMetrics().find((process) => process.pid === renderer);
+    if (metric === undefined) {
+      reporter.fail(id, {
+        kind: 'refused',
+        message: 'the page heap was not captured because its renderer is not running',
+        unblock: ['capture_page with what: heap again'],
+      });
+      return;
+    }
+    const capture = Symbol();
+    const release = this.strains.hold([renderer], { factor: 1, paused: true });
+    const finish = (failure: Failure | null) => {
+      if (!this.heaps.delete(capture)) return;
+      release();
+      if (this.heaps.size === 0 && this.heapSweep !== null) {
+        clearInterval(this.heapSweep);
+        this.heapSweep = null;
+      }
+      if (failure === null) reporter.answer(id, null);
+      else reporter.fail(id, failure);
+    };
+    const failed = (error: unknown) =>
+      finish({
+        kind: 'refused',
+        message: `the page heap was not captured: ${String(error)}`,
+        unblock: ['capture_page with what: heap again'],
+      });
+    this.heaps.set(capture, { renderer, created: metric.creationTime, gone: () => failed('the captured renderer exited') });
+    this.heapSweep ??= setInterval(() => this.sweepHeaps(), HEAP_SWEEP_MS);
+    try {
+      void page.contents.takeHeapSnapshot(path).then(() => finish(null), failed);
+    } catch (error) {
+      failed(error);
+    }
+  }
+
+  private sweepHeaps(): void {
+    const live = new Map(app.getAppMetrics().map((process) => [process.pid, process.creationTime]));
+    for (const capture of this.heaps.values()) {
+      if (live.get(capture.renderer) !== capture.created) capture.gone();
+    }
+  }
+
   private local(): string {
     this.locals += 1;
     return `page-${this.locals}`;
@@ -441,7 +555,7 @@ export class BrowserHost implements Executor {
 
   private openTab(opener: HeldPage, url: string, human = false): void {
     if (!human && opener.block(url) !== null) return;
-    const page = HeldPage.create(this.local(), null, opener.profile, opener.id, this.identity, this.events);
+    const page = HeldPage.create(this.local(), null, opener.profile, opener.id, this.identity, this.strains, this.events);
     page.inherit(opener);
     if (human) this.operated(page);
     this.track(page);
@@ -481,7 +595,7 @@ export class BrowserHost implements Executor {
         outlivesOpener: true,
         createWindow: (options) => {
           const adopted = (options as { readonly webContents?: WebContents }).webContents;
-          const popup = HeldPage.create(this.local(), null, page.profile, page.id, this.identity, this.events, adopted);
+          const popup = HeldPage.create(this.local(), null, page.profile, page.id, this.identity, this.strains, this.events, adopted);
           popup.inherit(page);
           this.popups.set(
             popup,

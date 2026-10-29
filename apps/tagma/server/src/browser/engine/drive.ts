@@ -30,6 +30,8 @@ export type Frame = { readonly loader: string; readonly child: string | undefine
 
 export type Picking = { readonly node: number; readonly child: string | undefined };
 
+export type StrainState = { readonly holds: Map<object, Strain>; value: Strain };
+
 export type Attached = {
   readonly page: PageId;
   readonly session: Session;
@@ -49,8 +51,7 @@ export type Attached = {
   group: string;
   conditions: Scope.Closeable | null;
   readonly emulating: Semaphore.Semaphore;
-  readonly strains: Map<object, Strain>;
-  strain: Strain;
+  readonly strain: StrainState;
   overlaid: boolean;
   cursor: Mark | null;
 };
@@ -92,6 +93,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
   const { pages, profiles, runs } = input;
   const scope = yield* Effect.scope;
   const held = new Map<PageId, Paged>();
+  const strains = new Map<ProfileId, StrainState>();
 
   const paged = (page: PageId): Effect.Effect<Paged> =>
     Effect.suspend(() => {
@@ -270,8 +272,8 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
           {
             every: '1 second',
             threshold: '5 seconds',
-            paused: () => attached.strain.paused || pages.live(state.page)?.dialog !== null,
-            factor: () => attached.strain.factor,
+            paused: () => attached.strain.value.paused || pages.live(state.page)?.dialog !== null,
+            factor: () => attached.strain.value.factor,
             child: joined.sessionId,
           },
           (responsive) => pages.mark(state.page, { responsive }, { ...target, url: attached.frames.get(target.frame)?.url ?? target.url }),
@@ -371,6 +373,10 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         session.events((method) => method !== 'Page.screencastFrame'),
         attachment,
       );
+      const profile = pages.profileOf(state.page);
+      if (profile === undefined) return yield* unknownPage(state.page);
+      const strain = strains.get(profile) ?? { holds: new Map<object, Strain>(), value: { factor: 1, paused: false } };
+      strains.set(profile, strain);
       const attached: Attached = {
         page: state.page,
         session,
@@ -390,8 +396,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         group: 'engine',
         conditions: null,
         emulating: yield* Semaphore.make(1),
-        strains: new Map(),
-        strain: { factor: 1, paused: false },
+        strain,
         overlaid: false,
         cursor: null,
       };

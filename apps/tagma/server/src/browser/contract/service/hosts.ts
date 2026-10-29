@@ -60,6 +60,7 @@ export type PageHost = {
   navigate(page: PageId, to: Navigation): Effect.Effect<PageChange, HostFailure | PageMissing | NavigationFailed | NavigationBlocked>;
   navigation(page: PageId, policy: DomainPolicy | null): Effect.Effect<NavigationWatch, HostFailure | PageMissing, Scope.Scope>;
   pdf(page: PageId): Effect.Effect<Uint8Array, HostFailure | PageMissing>;
+  heap(page: PageId, path: string): Effect.Effect<void, HostFailure | PageMissing>;
   strain(page: PageId, strain: Strain): Effect.Effect<void, HostFailure | PageMissing, Scope.Scope>;
   geolocation(page: PageId): Effect.Effect<void, HostFailure | PageMissing, Scope.Scope>;
   answer(page: PageId, accept: boolean, text: string | undefined): Effect.Effect<void, HostFailure | PageMissing>;

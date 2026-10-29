@@ -29,6 +29,9 @@ export const parsed = (text: string, trim: number | null = null): Effect.Effect<
 export const chunkOf = (text: string): Effect.Effect<Chunk, WorkerUnavailable | PayloadUnreadable> =>
   Effect.map(offLoop({ kind: 'chunk', text }), (value) => value as Chunk);
 
+export const appendHeapChunk = (text: string, file: string): Effect.Effect<void, WorkerUnavailable | PayloadUnreadable> =>
+  Effect.asVoid(offLoop({ kind: 'heap', text, file }));
+
 export const bytesOf = (text: string): Effect.Effect<Uint8Array, WorkerUnavailable | PayloadUnreadable> =>
   text.length <= INLINE_CHARS
     ? inline(() => bytesText(text))

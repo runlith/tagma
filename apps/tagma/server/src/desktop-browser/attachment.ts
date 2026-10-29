@@ -363,6 +363,15 @@ export const makeAttachment = Effect.fnUntraced(function* (input: {
         if (tail === undefined) return yield* new HostLost({ message: 'the desktop host answered a PDF without its bytes', pending: true });
         return yield* bytesOf(tail).pipe(Effect.mapError(unread('a PDF')));
       }),
+      heap: Effect.fn('DesktopHost.heap')(function* (page, path) {
+        yield* onPage(page, { kind: 'heap', page, path }).pipe(
+          Effect.asVoid,
+          Effect.catchTags({
+            DebuggerTaken: (taken) => Effect.fail(new HostLost({ message: taken.message, pending: true })),
+            NavigationFailed: (failed) => Effect.fail(new HostLost({ message: failed.message, pending: true })),
+          }),
+        );
+      }),
       answer: Effect.fn('DesktopHost.answer')(function* (page, accept, text) {
         yield* onPage(page, { kind: 'answer', page, accept, text: text ?? null }).pipe(
           Effect.asVoid,

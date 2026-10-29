@@ -35,6 +35,7 @@ export const Call = Schema.Union([
   at('unnavigation', { watch: Schema.Int }),
   at('navigationSeen', { watch: Schema.Int }),
   at('pdf', { page: PageId }),
+  at('heap', { page: PageId, path: Schema.String }),
   at('answer', { page: PageId, accept: Schema.Boolean, text: Schema.NullOr(Schema.String) }),
   at('paint', { page: PageId, hold: Schema.Int }),
   at('unpaint', { hold: Schema.Int }),

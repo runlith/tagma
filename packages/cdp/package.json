@@ -71,6 +71,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-bun": "catalog:",
     "@runlith/effect-test": "workspace:*",
     "@types/bun": "catalog:"
   }

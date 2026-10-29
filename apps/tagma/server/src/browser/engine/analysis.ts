@@ -1,10 +1,15 @@
 import { Cause, Data, Effect, Queue, Schema, Semaphore } from 'effect';
+import { reportHeap, type HeapReadOptions, type HeapUnreadable } from '@runlith/performance/HeapReader';
+import type { HeapReport } from '@runlith/performance/HeapSummary';
 import type { TraceSummary } from '../contract/wire/trace.js';
 import { AnalysisAnswer, type AnalysisAsk } from './sidecar.js';
 
 export class AnalysisFailed extends Data.TaggedError('AnalysisFailed')<{ readonly message: string }> {}
 
-export type Analysis = { readonly analyze: (ask: Omit<AnalysisAsk, 'id'>) => Effect.Effect<TraceSummary, AnalysisFailed> };
+export type Analysis = {
+  readonly analyze: (ask: Omit<AnalysisAsk, 'id'>) => Effect.Effect<TraceSummary, AnalysisFailed>;
+  readonly heap: (file: string, options: HeapReadOptions) => Effect.Effect<HeapReport, HeapUnreadable>;
+};
 
 const failed = (message: string) => new AnalysisFailed({ message: `the trace was not analyzed: ${message}` });
 
@@ -43,6 +48,7 @@ export const makeAnalysis = Effect.fnUntraced(function* () {
   }, Effect.scoped);
 
   return {
+    heap: (file, options) => turn.withPermits(1)(reportHeap(file, options)),
     analyze: Effect.fn('Traces.analyze')(function* (ask) {
       asked += 1;
       return yield* turn.withPermits(1)(analyzed({ ...ask, id: asked }));

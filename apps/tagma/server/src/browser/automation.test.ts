@@ -14,6 +14,8 @@ import type { CurrentProject } from '../projects/contract/service/caller.js';
 import { Automation } from './contract/service/automation.js';
 import type { Host, Moved } from './contract/service/hosts.js';
 import { Pages } from './contract/service/pages.js';
+import { Screencast } from './contract/service/screencast.js';
+import { browserChannels } from './feeds.js';
 import { BrowserPlace } from './contract/service/place.js';
 import { Profiles } from './contract/service/profiles.js';
 import { ThreadRuns } from './contract/service/runs.js';
@@ -21,10 +23,12 @@ import { PageId, ProfileId } from './contract/wire/ids.js';
 import type { Live, Page } from './contract/wire/page.js';
 import type { PAGE_OPERATIONS } from './contract/wire/pageOperations.js';
 import { conditionsOf, NETWORKS, NO_CONDITIONS } from './contract/wire/emulation.js';
+import { type Strain, strainOf } from './contract/wire/host.js';
 import { CheckoutPaths } from '../workspace/contract/service/checkoutPaths.js';
 import { ServedRoots } from './contract/service/sources.js';
 import { fixedCheckoutPaths } from '../workspace/testing/doubles.js';
 import { makeAutomation } from './engine/automation.js';
+import { makeAnalysis } from './engine/analysis.js';
 import { makeDrive } from './engine/drive.js';
 import { PAGE_PAIRS } from './operations.js';
 
@@ -32,6 +36,12 @@ type Act = typeof PAGE_OPERATIONS.act_on_page;
 type Call = Effect.Effect<DeclaredAnswer<Act['answer']>, Refused<Act>, Automation | Pages | CurrentProject>;
 type Emulate = typeof PAGE_OPERATIONS.emulate_page;
 type EmulateCall = Effect.Effect<DeclaredAnswer<Emulate['answer']>, Refused<Emulate>, Automation | Pages | CurrentProject>;
+type Snapshot = typeof PAGE_OPERATIONS.snapshot_page;
+type SnapshotCall = Effect.Effect<DeclaredAnswer<Snapshot['answer']>, Refused<Snapshot>, Automation | Pages | CurrentProject>;
+type Evaluate = typeof PAGE_OPERATIONS.evaluate_in_page;
+type EvaluateCall = Effect.Effect<DeclaredAnswer<Evaluate['answer']>, Refused<Evaluate>, Automation | Pages | CurrentProject>;
+type Capture = typeof PAGE_OPERATIONS.capture_page;
+type CaptureCall = Effect.Effect<DeclaredAnswer<Capture['answer']>, Refused<Capture>, Automation | Pages | CurrentProject>;
 const unused = () => Effect.die('this scenario does not use this port');
 const PAGE = PageId.make('01a184cf-76ca-7d83-87c6-2f78805e2612');
 const caller: Caller = {
@@ -39,13 +49,21 @@ const caller: Caller = {
   files: null,
 };
 
-const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach' | 'conditions') {
+const engine = Effect.fnUntraced(function* (
+  mode: 'dialog' | 'detach' | 'conditions' | 'replacement' | 'late-adoption' | 'pick-detach' | 'heap',
+) {
   const incoming = yield* Queue.unbounded<string>();
+  const frameTrees = yield* Queue.unbounded<string>();
+  const answeredTrees = yield* Queue.unbounded<string>();
   const started = yield* Deferred.make<void>();
   const release = yield* Deferred.make<void>();
   const adopting = yield* Deferred.make<void>();
   const adopted = yield* Deferred.make<void>();
   let latency = 0;
+  let clicks = 0;
+  const inspecting = new Set<string>();
+  const rates = new Map<string, number>();
+  const strains = new Set<Strain>();
   const connection = yield* connect({
     incoming: Stream.fromQueue(incoming),
     send: Effect.fnUntraced(function* (text) {
@@ -56,6 +74,8 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach' | 'conditi
         readonly params?: {
           readonly type?: string;
           readonly key?: string;
+          readonly mode?: string;
+          readonly rate?: number;
           readonly matchedNetworkConditions?: readonly { readonly latency: number }[];
         };
       };
@@ -69,6 +89,25 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach' | 'conditi
           return;
         }
       }
+      if (mode === 'pick-detach' && command.method === 'Overlay.setInspectMode') {
+        if (command.params?.mode === 'none' && command.sessionId === 'child-old') {
+          yield* Queue.offer(
+            incoming,
+            JSON.stringify({ method: 'Target.detachedFromTarget', params: { sessionId: 'child-old' }, sessionId: 'engine' }),
+          );
+          return;
+        }
+        if (command.params?.mode === 'searchForNode') inspecting.add(command.sessionId ?? 'engine');
+        else inspecting.delete(command.sessionId ?? 'engine');
+      }
+      if (
+        mode === 'pick-detach' &&
+        command.method === 'Input.dispatchMouseEvent' &&
+        command.params?.type === 'mouseReleased' &&
+        !inspecting.has('child-new')
+      )
+        clicks += 1;
+      if (command.method === 'Emulation.setCPUThrottlingRate') rates.set(command.sessionId ?? '', command.params?.rate ?? 1);
       if (mode === 'conditions' && command.sessionId === 'child') {
         if (command.method === 'Emulation.setCPUThrottlingRate' && !Deferred.isDoneUnsafe(adopting)) {
           yield* Deferred.succeed(adopting, undefined);
@@ -78,22 +117,36 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach' | 'conditi
           latency = command.params?.matchedNetworkConditions?.[0]?.latency ?? 0;
         if (command.method === 'Page.getFrameTree') yield* Deferred.succeed(adopted, undefined);
       }
+      if (command.method === 'Page.getFrameTree' && command.sessionId?.startsWith('child')) {
+        yield* Queue.offer(frameTrees, command.sessionId);
+        if (mode === 'late-adoption' && command.sessionId === 'child-old') yield* Deferred.await(release);
+      }
       const result =
-        command.method === 'Runtime.evaluate'
-          ? { result: { type: 'object', subtype: 'null', value: null } }
-          : command.method === 'Page.createIsolatedWorld'
-            ? { executionContextId: 1 }
-            : command.method === 'Page.getFrameTree'
-              ? {
-                  frameTree: {
-                    frame:
-                      command.sessionId === 'child'
-                        ? { id: 'child-frame', parentId: 'frame', loaderId: 'child-document', url: 'https://frame.example/' }
-                        : { id: 'frame', loaderId: 'document', url: 'https://example.test/' },
-                  },
-                }
-              : {};
+        command.method === 'Accessibility.getRootAXNode'
+          ? { node: { nodeId: 'root', role: { value: 'RootWebArea' }, childIds: ['button'] } }
+          : command.method === 'Accessibility.getChildAXNodes'
+            ? { nodes: [{ nodeId: 'button', role: { value: 'button' }, name: { value: command.sessionId }, backendDOMNodeId: 2 }] }
+            : command.method === 'Runtime.evaluate'
+              ? { result: mode === 'pick-detach' ? { type: 'number', value: clicks } : { type: 'object', subtype: 'null', value: null } }
+              : command.method === 'Page.createIsolatedWorld'
+                ? { executionContextId: 1 }
+                : command.method === 'Page.getFrameTree'
+                  ? {
+                      frameTree: {
+                        frame: command.sessionId?.startsWith('child')
+                          ? {
+                              id: 'child-frame',
+                              parentId: 'frame',
+                              loaderId: `${command.sessionId}-document`,
+                              url: 'https://frame.example/',
+                            }
+                          : { id: 'frame', loaderId: 'document', url: 'https://example.test/' },
+                      },
+                    }
+                  : {};
       yield* Queue.offer(incoming, JSON.stringify({ id: command.id, result }));
+      if (command.method === 'Page.getFrameTree' && command.sessionId?.startsWith('child'))
+        yield* Queue.offer(answeredTrees, command.sessionId);
     }),
   });
   const session = yield* connection.attach('engine');
@@ -139,11 +192,24 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach' | 'conditi
       navigate: unused,
       navigation: () => Effect.succeed({ changes: [], blocked: Effect.never, check: Effect.void }),
       pdf: unused,
-      strain: () => (mode === 'conditions' ? Effect.void : unused()),
+      heap: () => (mode === 'heap' ? Effect.andThen(Deferred.succeed(started, undefined), Deferred.await(release)) : unused()),
+      strain: (_page, strain) =>
+        mode === 'conditions' || mode === 'heap'
+          ? Effect.asVoid(
+              Effect.acquireRelease(
+                Effect.sync(() => {
+                  const held = { ...strain };
+                  strains.add(held);
+                  return held;
+                }),
+                (held) => Effect.sync(() => strains.delete(held)),
+              ),
+            )
+          : unused(),
       geolocation: unused,
       answer: unused,
       events: unused(),
-      paint: unused,
+      paint: () => (mode === 'pick-detach' ? Effect.void : unused()),
       session: () => Effect.succeed(session),
     },
     profiles: { prepare: unused, session: unused, remove: unused },
@@ -178,12 +244,21 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach' | 'conditi
       conditions: conditionsOf(live.conditions),
     }),
     moves: () => Effect.map(PubSub.subscribe(moves), Stream.fromSubscription),
-    profileOf: () => undefined,
+    profileOf: () => record.profile,
     urlOf: () => record.url,
   });
   const profiles = Profiles.of({
     list: unused(),
-    record: unused,
+    record: () =>
+      Effect.succeed({
+        id: record.profile,
+        name: 'Test',
+        adapter: 'test',
+        document: {},
+        console: 'never' as const,
+        removal: null,
+        createdAt: new Date(0),
+      }),
     chosen: unused,
     create: unused,
     update: unused,
@@ -198,7 +273,17 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach' | 'conditi
     profiles,
     runs: ThreadRuns.of({ running: () => Effect.succeed(true), ending: () => Effect.succeed(Effect.never) }),
   });
-  const automation = yield* makeAutomation({ drive }).pipe(
+  const analysis = yield* makeAnalysis();
+  const automation = yield* makeAutomation({
+    drive,
+    analysis:
+      mode === 'heap'
+        ? {
+            ...analysis,
+            heap: () => Effect.succeed({ sizeBytes: 0, objectCount: 0, detachedNodes: 0, classCount: 0, classes: [], growth: [] }),
+          }
+        : analysis,
+  }).pipe(
     Effect.provideService(Pages, pages),
     Effect.provideService(Profiles, profiles),
     Effect.provideService(ThreadRuns, ThreadRuns.of({ running: () => Effect.succeed(true), ending: () => Effect.succeed(Effect.never) })),
@@ -220,29 +305,167 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach' | 'conditi
       Effect.provideService(Pages, pages),
       Effect.provideService(Automation, automation),
     );
+  const join = (child: string) =>
+    Queue.offer(
+      incoming,
+      JSON.stringify({
+        method: 'Target.attachedToTarget',
+        params: {
+          sessionId: child,
+          targetInfo: { targetId: 'child-frame', type: 'iframe', url: 'https://frame.example/' },
+          waitingForDebugger: false,
+        },
+        sessionId: 'engine',
+      }),
+    );
+  const channels = browserChannels(
+    pages,
+    Automation.of({
+      ...automation,
+      pick: (...args) => automation.pick(...args).pipe(Effect.tap(() => Deferred.succeed(started, undefined))),
+    }),
+    Screencast.of({ watch: () => Stream.die('this scenario does not watch a screencast'), input: unused, choose: unused }),
+  );
   return {
     act,
+    pick: channels['browser.pick']({ projectId: 1, page: PAGE }),
+    evaluate: () =>
+      (PAGE_PAIRS.evaluate_in_page.body.execute({ page: PAGE, expression: 'globalThis.clicks' }, undefined, caller) as EvaluateCall).pipe(
+        forProject(Effect.succeed({ project: { id: 1, name: 'browser' } })),
+        Effect.provideService(Pages, pages),
+        Effect.provideService(Automation, automation),
+      ),
+    heap: () =>
+      (PAGE_PAIRS.capture_page.body.execute({ page: PAGE, what: 'heap' }, undefined, caller) as CaptureCall).pipe(
+        forProject(Effect.succeed({ project: { id: 1, name: 'browser' } })),
+        Effect.provideService(Pages, pages),
+        Effect.provideService(Automation, automation),
+      ),
+    snapshot: () =>
+      (PAGE_PAIRS.snapshot_page.body.execute({ page: PAGE }, undefined, caller) as SnapshotCall).pipe(
+        forProject(Effect.succeed({ project: { id: 1, name: 'browser' } })),
+        Effect.provideService(Pages, pages),
+        Effect.provideService(Automation, automation),
+      ),
+    frame: (child: string) => Effect.andThen(join(child), Queue.take(frameTrees)),
+    answeredTree: Queue.take(answeredTrees),
+    barrier: Effect.gen(function* () {
+      const changes = yield* pages.moves(PAGE);
+      yield* Queue.offer(
+        incoming,
+        JSON.stringify({
+          method: 'Page.javascriptDialogOpening',
+          params: { type: 'alert', message: 'barrier', url: 'https://example.test/' },
+          sessionId: 'engine',
+        }),
+      );
+      yield* Stream.runHead(Stream.filter(changes, (change) => change.live.dialog?.message === 'barrier'));
+      yield* pages.mark(PAGE, { dialog: null });
+    }),
+    retire: Effect.fnUntraced(function* (child: string) {
+      const changes = yield* pages.moves(PAGE);
+      yield* Queue.offer(
+        incoming,
+        JSON.stringify({ method: 'Target.detachedFromTarget', params: { sessionId: child }, sessionId: 'engine' }),
+      );
+      yield* Queue.offer(
+        incoming,
+        JSON.stringify({
+          method: 'Page.javascriptDialogOpening',
+          params: { type: 'alert', message: 'retired', url: 'https://example.test/' },
+          sessionId: 'engine',
+        }),
+      );
+      yield* Stream.runHead(Stream.filter(changes, (change) => change.live.dialog?.message === 'retired'));
+      yield* pages.mark(PAGE, { dialog: null });
+    }),
     started,
     pages,
     emulate,
     adopting,
     adopted,
     latency: () => latency,
+    rate: (session = 'engine') => rates.get(session) ?? 1,
+    strain: () => strainOf(strains),
     release: Deferred.succeed(release, undefined),
-    join: Queue.offer(
-      incoming,
-      JSON.stringify({
-        method: 'Target.attachedToTarget',
-        params: {
-          sessionId: 'child',
-          targetInfo: { targetId: 'child-frame', type: 'iframe', url: 'https://frame.example/' },
-          waitingForDebugger: false,
-        },
-        sessionId: 'engine',
-      }),
-    ),
+    join: join('child'),
   };
 });
+
+it.effect('CPU emulation sends the renderer rate and scopes the matching strain until it is cleared', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('conditions');
+    yield* browser.emulate({ cpu: 6 });
+    expect(browser.rate()).toBe(6);
+    expect(browser.strain()).toEqual({ factor: 6, paused: false });
+    yield* browser.emulate({ conditions: false });
+    expect(browser.rate()).toBe(1);
+    expect(browser.strain()).toEqual({ factor: 1, paused: false });
+  }),
+);
+
+it.effect('canceling a heap capture waits for its admitted renderer producer to settle', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('heap');
+    const capturing = yield* Effect.forkChild(browser.heap());
+    yield* Deferred.await(browser.started);
+    const ended = yield* Deferred.make<void>();
+    const interrupted = yield* Effect.forkChild(Effect.andThen(Fiber.interrupt(capturing), Deferred.succeed(ended, undefined)));
+    yield* TestClock.adjust('6 seconds');
+    expect(Deferred.isDoneUnsafe(ended)).toBe(false);
+    expect(browser.strain()).toEqual({ factor: 1, paused: true });
+    yield* browser.release;
+    yield* Fiber.join(interrupted);
+    expect(Deferred.isDoneUnsafe(ended)).toBe(true);
+    expect(browser.strain()).toEqual({ factor: 1, paused: false });
+    expect(browser.pages.live(PAGE)?.responsive).toBe(true);
+  }),
+);
+
+it.effect('ending a pick releases surviving frames when another frame detaches during cleanup', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('pick-detach');
+    yield* browser.snapshot();
+    yield* browser.frame('child-old');
+    yield* browser.frame('child-new');
+    const picking = yield* Effect.forkChild(Stream.runDrain(browser.pick));
+    yield* Deferred.await(browser.started);
+    yield* Fiber.interrupt(picking);
+    yield* browser.act([{ action: 'click', x: 200, y: 100 }]);
+    expect(yield* browser.evaluate()).toMatchObject({ value: '1' });
+  }),
+);
+
+it.effect('a late outgoing frame tree cannot overwrite its ready replacement', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('late-adoption');
+    yield* browser.snapshot();
+    yield* browser.frame('child-old');
+    yield* browser.frame('child-new');
+    yield* browser.answeredTree;
+    const before = (yield* browser.snapshot()).text.split('\n').find((line) => line.includes('button "child-new"'));
+    expect(before).toMatch(/\[ref=e\d+\]/);
+    yield* browser.release;
+    yield* browser.answeredTree;
+    yield* browser.barrier;
+    expect((yield* browser.snapshot()).text).toContain(before!);
+    yield* browser.retire('child-old');
+    expect((yield* browser.snapshot()).text).toContain(before!);
+  }),
+);
+
+it.effect('retiring an old frame session leaves its replacement readable', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('replacement');
+    yield* browser.snapshot();
+    yield* browser.frame('child-old');
+    expect((yield* browser.snapshot()).text).toContain('button "child-old"');
+    yield* browser.frame('child-new');
+    expect((yield* browser.snapshot()).text).toContain('button "child-new"');
+    yield* browser.retire('child-old');
+    expect((yield* browser.snapshot()).text).toContain('button "child-new"');
+  }),
+);
 
 it.effect('a late frame keeps the newest network conditions when its initial CPU command overlaps an update', () =>
   Effect.gen(function* () {
@@ -257,6 +480,7 @@ it.effect('a late frame keeps the newest network conditions when its initial CPU
     yield* Deferred.await(browser.adopted);
     expect(changed.emulation.network).toBe('fast-4g');
     expect(browser.latency()).toBe(NETWORKS['fast-4g'].latency);
+    expect(browser.rate('child')).toBe(6);
   }),
 );
 

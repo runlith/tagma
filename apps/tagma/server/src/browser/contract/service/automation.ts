@@ -9,6 +9,7 @@ import type { Picked } from '../wire/pick.js';
 import type { ConsoleEntry, ConsoleLevel, NetworkEntry } from '../wire/rows.js';
 import type { Navigation } from '../wire/host.js';
 import type { PageRefusal } from './pages.js';
+import type { HeapCaptured } from '../wire/heap.js';
 
 export type Aim = { readonly ref: string } | { readonly x: number; readonly y: number };
 
@@ -116,6 +117,7 @@ export class Automation extends Context.Service<
       ref: string | undefined,
       thread: string | null,
     ): Effect.Effect<Captured, Drive<'stale-ref' | 'action-shape'>>;
+    heap(page: PageId, limit: number, thread: string | null): Effect.Effect<HeapCaptured, Drive<'heap-failed'>>;
     picture(path: string): Effect.Effect<Uint8Array>;
     evaluate(page: PageId, expression: string, thread: string | null, agent?: boolean): Effect.Effect<Evaluated, Drive<'operator-input'>>;
     wait(

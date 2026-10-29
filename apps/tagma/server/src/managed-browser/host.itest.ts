@@ -2,12 +2,10 @@ import { afterAll, expect } from 'bun:test';
 import { it, layer } from '@runlith/effect-test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { kind, own } from '@runlith/testbed/worlds';
 import { Context, Effect, Exit, Layer, Scope, Stream } from 'effect';
 import { Pages } from '../browser/contract/service/pages.js';
-import { Hosts } from '../browser/contract/service/hosts.js';
-import { Profiles } from '../browser/contract/service/profiles.js';
 import { type PageId } from '../browser/contract/wire/ids.js';
 import { agentIn, browserWorld, calling, OPERATOR, PAGE, refIn, refusalOf, Seeded, type Served } from '../browser/testing/world.js';
 import { MANAGED_AGENT } from './adapter.js';
@@ -61,8 +59,7 @@ const server: Bun.Server<undefined> = Bun.serve({
 afterAll(() => server.stop(true));
 const at = (path: string) => `http://127.0.0.1:${server.port}${path}`;
 
-const home = mkdtempSync(join(tmpdir(), 'managed-host-'));
-const agent = agentIn(home);
+const agent = agentIn(dirname(import.meta.path));
 
 const settled = Effect.fnUntraced(function* <A, E>(page: PageId, probe: Effect.Effect<A | undefined, E, Served>) {
   const changes = yield* (yield* Pages).changes((yield* Seeded).id);
@@ -82,17 +79,7 @@ const evaluate = (page: PageId, expression: string) =>
   );
 
 const PROFILES = chromeInstalled ? [MANAGED_AGENT, INSTALLED] : [MANAGED_AGENT];
-const fixture = Layer.effectDiscard(
-  Effect.gen(function* () {
-    const profiles = yield* Profiles;
-    const hosts = yield* Hosts;
-    for (const profile of PROFILES) {
-      const record = yield* profiles.record(profile);
-      const host = yield* hosts.reach(record.adapter);
-      yield* host.profiles.prepare(record);
-    }
-  }),
-).pipe(Layer.provideMerge(managedFixture()));
+const fixture = managedFixture();
 
 layer(fixture, { excludeTestServices: true })('the managed host', (it) => {
   it.effect.each(PROFILES)(

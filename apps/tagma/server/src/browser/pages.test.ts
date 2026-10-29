@@ -20,6 +20,7 @@ import { ServedRoots } from './contract/service/sources.js';
 import { PageId, ProfileId } from './contract/wire/ids.js';
 import type { HostEvent } from './contract/wire/host.js';
 import { makeAutomation } from './engine/automation.js';
+import { makeAnalysis } from './engine/analysis.js';
 import { makeDrive } from './engine/drive.js';
 import { makeHosts } from './hosts.js';
 import { PAGE_PAIRS } from './operations.js';
@@ -74,6 +75,7 @@ it.effect('operator navigation releases reconciled host policies and ignores an 
         adopt: unused,
         close: unused,
         pdf: unused,
+        heap: unused,
         answer: unused,
         paint: unused,
         session: unused,
@@ -166,7 +168,10 @@ it.effect('operator navigation releases reconciled host policies and ignores an 
     );
     const pages = yield* Effect.provide(makePages, context);
     const drive = yield* makeDrive({ pages, profiles, runs });
-    const automation = yield* Effect.provide(makeAutomation({ drive }), Context.add(context, Pages, pages));
+    const automation = yield* Effect.provide(
+      makeAutomation({ drive, analysis: yield* makeAnalysis() }),
+      Context.add(context, Pages, pages),
+    );
     const navigating = PAGE_PAIRS.navigate_page.body.execute({ page, url: 'https://blocked.example/next' }, undefined, {
       actor: { kind: 'operator' },
       files: null,

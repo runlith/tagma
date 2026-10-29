@@ -1,7 +1,8 @@
 export type Job =
   | { readonly kind: 'json'; readonly text: string; readonly trim: number | null }
   | { readonly kind: 'bytes'; readonly text: string }
-  | { readonly kind: 'chunk'; readonly text: string };
+  | { readonly kind: 'chunk'; readonly text: string }
+  | { readonly kind: 'heap'; readonly text: string; readonly file: string };
 
 export type Chunk = { readonly bytes: Uint8Array; readonly eof: boolean };
 

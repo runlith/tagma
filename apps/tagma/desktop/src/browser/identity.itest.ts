@@ -11,6 +11,7 @@ const fixture = `
 import { once } from 'node:events';
 import { app, BaseWindow } from 'electron';
 import { HeldPage } from ${source('./page.ts')};
+import { RendererStrain } from ${source('./strain.ts')};
 import { cleanedAgent, firefoxAgent } from ${source('./identity.ts')};
 import { Profiles } from ${source('./profiles.ts')};
 
@@ -31,7 +32,7 @@ void app.whenReady().then(async () => {
     if (url.pathname === '/leave') return new Response(null, { status: 302, headers: { location: 'https://fixture.invalid/complete' } });
     return new Response('<!doctype html><p>complete</p>', { headers: { 'content-type': 'text/html' } });
   });
-  const page = HeldPage.create('redirect', null, 'redirect', null, 'cleaned', { event: () => undefined, closed: () => undefined, window: () => window, navigation: () => undefined, blocked: () => undefined, revision: () => 0 });
+  const page = HeldPage.create('redirect', null, 'redirect', null, 'cleaned', new RendererStrain(), { event: () => undefined, closed: () => undefined, window: () => window, navigation: () => undefined, blocked: () => undefined, revision: () => 0 });
   window.contentView.addChildView(page.view);
   const visit = async (url) => {
     const stopped = once(page.contents, 'did-stop-loading');

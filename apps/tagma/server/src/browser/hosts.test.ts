@@ -18,6 +18,7 @@ const host: Host = {
     navigate: unused,
     navigation: unused,
     pdf: unused,
+    heap: unused,
     strain: unused,
     geolocation: unused,
     answer: unused,

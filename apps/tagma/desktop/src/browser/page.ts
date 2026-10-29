@@ -9,11 +9,21 @@ import {
 import type { PageId, ProfileId } from '@tagma/server/browser/contract/wire/ids';
 import type { Dialog, History } from '@tagma/server/browser/contract/wire/page';
 import type { Failure } from '@tagma/server/desktop-browser/contract/wire/channel';
-import { type BaseWindow, dialog, type WebContents, WebContentsView, type WebFrameMain } from 'electron';
+import {
+  type BaseWindow,
+  dialog,
+  type Event,
+  type WebContents,
+  type WebContentsDidStartNavigationEventParams,
+  WebContentsView,
+  type WebFrameMain,
+  webFrameMain,
+} from 'electron';
 import type { Driven } from './driven.js';
 import { firefoxAgent, isGoogleSignIn } from './identity.js';
 import { type Placed, VIEWPORT } from './placement.js';
 import { partitionOf } from './profiles.js';
+import type { RendererStrain } from './strain.js';
 
 const ABORTED = -3;
 
@@ -84,12 +94,12 @@ export class HeldPage {
   private readonly children = new Set<HeldPage>();
   private held: Held | null = null;
   private going: Going | null = null;
+  private readonly pending = new Map<number | symbol, string>();
   private leaving: Leaving | null = null;
   private closing: Closing | null = null;
   private allowLeave = false;
   private responsive = true;
   private restarting = false;
-  private readonly strains = new Map<number, Strain>();
   private unresponsive: ReturnType<typeof setInterval> | null = null;
   private readonly firefox: string | null;
 
@@ -100,6 +110,7 @@ export class HeldPage {
     readonly opener: PageId | null,
     readonly view: WebContentsView,
     identity: 'cleaned' | 'native',
+    private readonly strains: RendererStrain,
     private readonly events: PageEvents,
   ) {
     this.id = id;
@@ -115,6 +126,7 @@ export class HeldPage {
     profile: ProfileId,
     opener: PageId | null,
     identity: 'cleaned' | 'native',
+    strains: RendererStrain,
     events: PageEvents,
     contents?: WebContents,
   ): HeldPage {
@@ -123,7 +135,7 @@ export class HeldPage {
         ? { webPreferences: viewPreferences(profile) }
         : { webPreferences: viewPreferences(profile), webContents: contents },
     );
-    return new HeldPage(local, id, profile, opener, view, identity, events);
+    return new HeldPage(local, id, profile, opener, view, identity, strains, events);
   }
 
   get contents(): WebContents {
@@ -136,6 +148,10 @@ export class HeldPage {
 
   get dialogOpen(): boolean {
     return this.held !== null || this.leaving !== null;
+  }
+
+  get navigationPending(): boolean {
+    return this.pending.size > 0;
   }
 
   get restricted(): boolean {
@@ -342,25 +358,16 @@ export class HeldPage {
     return done;
   }
 
-  strain(hold: number, strain: Strain | null): void {
-    if (strain === null) this.strains.delete(hold);
-    else this.strains.set(hold, strain);
-  }
-
-  private get strainFactor(): number {
-    return Math.max(1, ...[...this.strains.values()].map((strain) => strain.factor));
-  }
-
-  private get strainPaused(): boolean {
-    return [...this.strains.values()].some((strain) => strain.paused);
+  private get strain(): Strain {
+    return this.strains.current(this.contents.getOSProcessId(), this.profile);
   }
 
   driving(driven: Driven | null): void {
     this.driven = driven;
     if (driven !== null) this.clearUnresponsive();
     driven?.probe({
-      paused: () => this.dialogOpen || this.strainPaused,
-      factor: () => this.strainFactor,
+      paused: () => this.dialogOpen || this.strain.paused,
+      factor: () => this.strain.factor,
       report: (responsive) => this.respond(responsive),
     });
     if (driven === null && this.held !== null && !this.held.told) this.surface(this.held);
@@ -461,7 +468,8 @@ export class HeldPage {
 
   private nativeUnresponsive(): void {
     if (this.driven !== null || this.unresponsive !== null) return;
-    if (!this.strainPaused && !this.dialogOpen && this.strainFactor === 1) {
+    const strain = this.strain;
+    if (!strain.paused && !this.dialogOpen && strain.factor === 1) {
       this.respond(false);
       return;
     }
@@ -469,7 +477,8 @@ export class HeldPage {
     let waited = 0;
     this.unresponsive = setInterval(() => {
       const now = performance.now();
-      if (!this.strainPaused && !this.dialogOpen) waited += (now - previous) / this.strainFactor;
+      const strain = this.strain;
+      if (!strain.paused && !this.dialogOpen) waited += (now - previous) / strain.factor;
       previous = now;
       if (waited < 5_000) return;
       this.clearUnresponsive();
@@ -574,6 +583,20 @@ export class HeldPage {
     this.children.clear();
   }
 
+  private finishNavigation(url: string, main: boolean, process: number, routing: number): void {
+    const frame = webFrameMain.fromId(process, routing);
+    const key = main ? this.contents.mainFrame.frameTreeNodeId : frame?.frameTreeNodeId;
+    if (key !== undefined && this.pending.has(key)) {
+      if (this.pending.get(key) === url) this.pending.delete(key);
+      return;
+    }
+    for (const [key, address] of this.pending) {
+      if (typeof key !== 'symbol' || address !== url) continue;
+      this.pending.delete(key);
+      return;
+    }
+  }
+
   private follow(): void {
     const contents = this.contents;
     const emitter = contents as unknown as NodeJS.EventEmitter;
@@ -603,12 +626,27 @@ export class HeldPage {
     contents.on('will-redirect', (event, url) => {
       if (!allowedUrl(url) || this.block(url) !== null) event.preventDefault();
     });
-    const identified = (details: { readonly url: string; readonly isMainFrame: boolean; readonly isSameDocument: boolean }) => {
-      if (details.isMainFrame && !details.isSameDocument) this.agentFor(details.url);
+    const identified = (details: Event<WebContentsDidStartNavigationEventParams>) => {
+      if (details.isSameDocument) return;
+      const key = details.isMainFrame ? contents.mainFrame.frameTreeNodeId : details.frame?.frameTreeNodeId;
+      this.pending.set(key ?? Symbol(), details.url);
+      if (details.isMainFrame) this.agentFor(details.url);
     };
     contents.on('did-start-navigation', identified);
+    contents.on('did-redirect-navigation', (details) => {
+      const key = details.isMainFrame ? contents.mainFrame.frameTreeNodeId : details.frame?.frameTreeNodeId;
+      if (key !== undefined && this.pending.has(key)) this.pending.set(key, details.url);
+    });
+    contents.on('did-frame-navigate', (_event, url, _code, _status, main, process, routing) =>
+      this.finishNavigation(url, main, process, routing),
+    );
+    const failed = (_event: Event, _code: number, _description: string, url: string, main: boolean, process: number, routing: number) =>
+      this.finishNavigation(url, main, process, routing);
+    contents.on('did-fail-provisional-load', failed);
+    contents.on('did-fail-load', failed);
     contents.on('did-start-loading', () => this.changed({ loading: true }));
     contents.on('did-stop-loading', () => {
+      this.pending.clear();
       this.agentFor(contents.getURL());
       this.changed({ ...this.state(), loading: false });
     });
@@ -624,6 +662,7 @@ export class HeldPage {
       this.respond(true);
     });
     contents.on('render-process-gone', () => {
+      this.pending.clear();
       this.clearUnresponsive();
       this.held = null;
       this.leaving = null;
@@ -633,9 +672,9 @@ export class HeldPage {
     });
     contents.on('devtools-closed', () => this.emit((page) => ({ kind: 'released', page })));
     contents.once('destroyed', () => {
+      this.pending.clear();
       this.disconnect();
       this.clearUnresponsive();
-      this.strains.clear();
       this.events.closed(this);
     });
   }
