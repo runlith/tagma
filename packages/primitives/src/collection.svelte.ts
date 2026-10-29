@@ -97,6 +97,20 @@ export class Collection {
     this.current?.scrollIntoView({ block: 'nearest' });
   }
 
+  at(target: EventTarget | null): HTMLElement | undefined {
+    for (let node = target instanceof Element ? target : null; node !== null && node !== this.fieldElement; node = node.parentElement) {
+      if (!(node instanceof HTMLElement)) continue;
+      const options = this.entries.get(node);
+      if (options !== undefined) return untrack(options).disabled === true ? undefined : node;
+    }
+    return undefined;
+  }
+
+  point(element: HTMLElement): void {
+    const options = this.entries.get(element);
+    if (options !== undefined && untrack(options).disabled !== true && this.tracks()) this.mark(element);
+  }
+
   select(element: HTMLElement, event: Event): void {
     const options = this.entries.get(element)?.();
     if (options !== undefined && options.disabled !== true) options.onSelect?.(event);
@@ -125,7 +139,7 @@ export class Collection {
         else $effect(() => element.setAttribute('aria-selected', String(options().value === selected())));
       }
       const hover = (event: PointerEvent): void => {
-        if (event.pointerType !== 'touch' && untrack(options).disabled !== true && this.tracks()) this.mark(element);
+        if (event.pointerType !== 'touch') this.point(element);
       };
       const leave = (): void => {
         if (focusing && this.current === element && this.tracks()) this.mark(null);

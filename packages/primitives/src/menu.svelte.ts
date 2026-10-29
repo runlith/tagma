@@ -28,13 +28,11 @@ type Entry = 'first' | 'content' | 'none';
 interface Aim {
   readonly sub: Menu;
   readonly apex: Point;
-  readonly near: readonly [Point, Point];
-  readonly box: DOMRect;
-  point: Point;
+  over: EventTarget | null;
 }
 
 const CONTEXT = Symbol.for('@runlith/primitives/menu');
-const AIM_MS = 300;
+const REST_MS = 150;
 const APEX_PX = 5;
 const OPENING_KEYS = new Set(['Enter', ' ', 'ArrowDown']);
 
@@ -50,6 +48,11 @@ function inTriangle(p: Point, a: Point, b: Point, c: Point): boolean {
   return (ab >= 0 && bc >= 0 && ca >= 0) || (ab <= 0 && bc <= 0 && ca <= 0);
 }
 
+function onPath(point: Point, apex: Point, box: DOMRect): boolean {
+  const edge = box.left >= apex.x ? box.left : box.right;
+  return inTriangle(point, apex, { x: edge, y: box.top }, { x: edge, y: box.bottom });
+}
+
 export class Menu {
   conduct: () => MenuConduct = () => ({});
   readonly collection: Collection;
@@ -58,7 +61,7 @@ export class Menu {
   private entry: Entry = 'content';
   private dragging = false;
   private aim: Aim | null = null;
-  private aimTimer: ReturnType<typeof setTimeout> | undefined;
+  private restTimer: ReturnType<typeof setTimeout> | undefined;
   private contentElement = $state.raw<HTMLElement | null>(null);
   private openings = $state(0);
   private subTriggerElement: HTMLElement | null = null;
@@ -121,7 +124,7 @@ export class Menu {
     );
     const menu = new Menu(id, parent, layer, float, open, change);
     setContext(CONTEXT, menu);
-    onDestroy(() => menu.endAim(false));
+    onDestroy(() => menu.endAim());
     return menu;
   }
 
@@ -198,10 +201,7 @@ export class Menu {
       this.subTriggerElement = element;
       this.layer.triggerElement = element;
       const hover = (event: PointerEvent): void => {
-        if (event.pointerType === 'touch' || untrack(options).disabled === true || parent.aim !== null) return;
-        if (this.opened()) return;
-        this.layer.prime('pointer');
-        this.show('none');
+        if (event.pointerType !== 'touch' && untrack(options).disabled !== true) this.reach();
       };
       const leave = (event: PointerEvent): void => {
         if (this.opened() && event.pointerType !== 'touch') parent.aimAt(this, event);
@@ -297,6 +297,12 @@ export class Menu {
     this.change(true);
   }
 
+  private reach(): void {
+    if (this.opened() || this.parent?.aim !== null) return;
+    this.layer.prime('pointer');
+    this.show('none');
+  }
+
   private filterField(): HTMLInputElement | null {
     const named = this.contentElement === null ? null : namedFocusIn(this.contentElement);
     return named instanceof HTMLInputElement ? named : null;
@@ -347,49 +353,39 @@ export class Menu {
   private aimAt(sub: Menu, event: PointerEvent): void {
     const content = sub.contentElement;
     if (content === null) return;
-    this.endAim(false);
-    const box = content.getBoundingClientRect();
-    const toRight = box.left >= event.clientX;
-    const edge = toRight ? box.left : box.right;
-    const point = { x: event.clientX, y: event.clientY };
-    this.aim = {
-      sub,
-      box,
-      point,
-      apex: { x: point.x + (toRight ? -APEX_PX : APEX_PX), y: point.y },
-      near: [
-        { x: edge, y: box.top },
-        { x: edge, y: box.bottom },
-      ],
-    };
-    this.hold();
+    this.endAim();
+    const toRight = content.getBoundingClientRect().left >= event.clientX;
+    this.aim = { sub, over: event.relatedTarget, apex: { x: event.clientX + (toRight ? -APEX_PX : APEX_PX), y: event.clientY } };
+    this.rest();
     document.addEventListener('pointermove', this.follow, true);
   }
 
   private readonly follow = (event: PointerEvent): void => {
     const aim = this.aim;
     if (aim === null) return;
-    aim.point = { x: event.clientX, y: event.clientY };
-    if (within(aim.box, aim.point)) this.endAim(false);
-    else if (!inTriangle(aim.point, aim.apex, aim.near[0], aim.near[1])) this.endAim(true);
-    else this.hold();
+    const point = { x: event.clientX, y: event.clientY };
+    const box = aim.sub.contentElement?.getBoundingClientRect();
+    if (box === undefined || within(box, point) || !onPath(point, aim.apex, box)) return this.endAim();
+    aim.over = event.target;
+    this.rest();
   };
 
-  private hold(): void {
-    clearTimeout(this.aimTimer);
-    this.aimTimer = setTimeout(() => this.endAim(true), AIM_MS);
+  private rest(): void {
+    clearTimeout(this.restTimer);
+    this.restTimer = setTimeout(() => this.handOver(), REST_MS);
   }
 
-  private endAim(release: boolean): void {
-    clearTimeout(this.aimTimer);
+  private handOver(): void {
+    const row = this.collection.at(this.aim?.over ?? null);
+    this.endAim();
+    if (row === undefined) return;
+    this.collection.point(row);
+    for (const sub of this.subs) if (sub.subTriggerElement === row) sub.reach();
+  }
+
+  private endAim(): void {
+    clearTimeout(this.restTimer);
     document.removeEventListener('pointermove', this.follow, true);
-    const aim = this.aim;
     this.aim = null;
-    if (!release || aim === null || !aim.sub.opened()) return;
-    const trigger = aim.sub.subTriggerElement;
-    const content = aim.sub.contentElement;
-    if (content !== null && within(content.getBoundingClientRect(), aim.point)) return;
-    if (trigger !== null && within(trigger.getBoundingClientRect(), aim.point)) return;
-    this.collection.highlight(null);
   }
 }

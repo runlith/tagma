@@ -27,6 +27,12 @@
       <DropdownMenu.RadioItem value="bold">Bold</DropdownMenu.RadioItem>
     </DropdownMenu.RadioGroup>
     <DropdownMenu.Sub>
+      <DropdownMenu.SubTrigger icon={Circle}>Spacing</DropdownMenu.SubTrigger>
+      <DropdownMenu.SubContent data-spacing>
+        <DropdownMenu.Item icon={Circle} onSelect={() => picked('tight')}>Tight</DropdownMenu.Item>
+      </DropdownMenu.SubContent>
+    </DropdownMenu.Sub>
+    <DropdownMenu.Sub>
       <DropdownMenu.SubTrigger icon={Circle}>More</DropdownMenu.SubTrigger>
       <DropdownMenu.SubContent data-sub>
         <DropdownMenu.Item icon={Circle} onSelect={() => picked('deep')}>Deep</DropdownMenu.Item>
