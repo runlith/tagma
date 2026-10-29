@@ -10,11 +10,13 @@ import { MachineStore } from '../../../platform/contract/service/store.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
 import {
+  compressRollout,
   evictThreadProjection,
   exportThreadRollout,
   formedThread,
   journalSteps,
   rehydrateThreadRecords,
+  restedReads,
   rolloutForms,
   threadProjection,
 } from '../../../threads/testing/doubles.js';
@@ -37,7 +39,7 @@ const setup = Effect.fnUntraced(function* () {
   const runtime = Context.add(Context.merge(fixture.context, yield* Layer.build(BunFileSystem.layer)), ThreadEntryKinds, kinds);
   const home = yield* Context.get(runtime, FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'form-steps-' });
 
-  const raise = Effect.fnUntraced(function* (threadId: string, form: 'old' | 'current') {
+  const raise = Effect.fnUntraced(function* (threadId: string, form: 'old' | 'current', dir = home) {
     const { db } = yield* Effect.provide(MachineStore, runtime);
     yield* Effect.provide(
       bornThread(
@@ -83,7 +85,7 @@ const setup = Effect.fnUntraced(function* () {
       ),
       runtime,
     );
-    const path = join(home, `${threadId}.jsonl`);
+    const path = join(dir, `${threadId}.jsonl`);
     yield* Effect.provide(exportThreadRollout({ threadId, path, parts: nativeOnlyParts }), runtime);
     yield* Effect.provide(db.run(sql`update thread_rollout_form set step = null where thread_id = ${threadId}`), runtime);
     yield* Effect.provide(
@@ -137,7 +139,7 @@ const setup = Effect.fnUntraced(function* () {
       tails: yield* Effect.forEach(tails, (row) => Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(row.tail)),
     };
   });
-  return { runtime, raise, owner, returned, stored };
+  return { runtime, raise, owner, returned, stored, home, projectId: fixture.projectId };
 });
 
 const message = (id: string, form: 'old' | 'current') =>
@@ -186,6 +188,30 @@ it.live(
     const old = message('t-neighbour:m', 'old');
     expect(yield* stored('t-neighbour')).toEqual({ step: null, events: [old], entries: [old], tails: [[old]] });
     expect(yield* Context.get(runtime, FileSystem.FileSystem).readFileString(neighbour)).toBe(untouched);
+  }),
+);
+
+it.live(
+  'a read of an offloaded thread whose mark lags answers in the current form, opens its compressed file unshaped and only queues the shaping',
+  Effect.fnUntraced(function* () {
+    const { runtime, raise, stored, home, projectId } = yield* setup();
+    const files = Context.get(runtime, FileSystem.FileSystem);
+    const path = yield* raise('t-read', 'old', join(home, String(projectId)));
+    expect(
+      yield* Effect.provide(evictThreadProjection({ threadId: 't-read', path, parts: nativeOnlyParts, returning: true }), runtime),
+    ).toMatchObject({ outcome: 'evicted' });
+    const bytes = yield* files.readFileString(path);
+    yield* Effect.provide(compressRollout(path), runtime);
+    const queued: string[] = [];
+    const reads = yield* Effect.provide(
+      restedReads(kinds, home, (threadId) => queued.push(threadId)),
+      runtime,
+    );
+    const events = yield* Effect.provide(reads.events('t-read', { afterPosition: 0, head: 1, limit: 10 }), runtime);
+    expect(events?.map((row) => row.payload.entry)).toEqual([message('t-read:m', 'current')]);
+    expect(yield* files.readFileString(path)).toBe(bytes);
+    expect((yield* stored('t-read')).step).toBeNull();
+    expect(queued).toEqual(['t-read']);
   }),
 );
 
@@ -242,7 +268,7 @@ it.live(
     const folded = makeThreadEntryReader({ products: [], base: { step: dated.name, release: '0.2.0' } });
     const forms = yield* owner(folded);
     const formed = yield* returned(forms, 't-older', path);
-    const read = yield* Effect.provide(Effect.result(forms.formed('t-older', path)), runtime);
+    const read = yield* Effect.provide(Effect.result(forms.readable('t-older', path)), runtime);
     for (const refused of [formed, read])
       expect(Result.isFailure(refused) && refused.failure._tag === 'RolloutUnformable' && refused.failure.older).toEqual({
         step: dated.name,

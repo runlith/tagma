@@ -213,7 +213,7 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
       if (standing === null || home === undefined) return null;
       const path = `${home}/${standing.journal}/${threadId}${ROLLOUT_SUFFIX}`;
       if ((yield* rolloutStateOf(path)) !== null) {
-        yield* forms.formed(threadId, path).pipe(Effect.mapError(formFailed));
+        yield* forms.checked(threadId, path).pipe(Effect.mapError(formFailed));
         if (standing.evicted) lagging(threadId);
       }
       return yield* lineRead('rolloutReads.range', async (read) => {

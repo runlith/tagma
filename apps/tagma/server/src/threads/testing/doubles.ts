@@ -384,10 +384,10 @@ export const rolloutWriter = (
 export const rolloutBirth = (...input: Parameters<typeof rolloutBirthOver>): ReturnType<typeof rolloutBirthOver> =>
   rolloutBirthOver(...input);
 
-export const restedReads = (kinds: ThreadEntryReader, home: string | undefined) =>
-  Effect.flatMap(makeRolloutForms({ journal: (_threadId, work) => work }), (forms) =>
-    makeRestedReads({ forms, home, lagging: () => {} }),
-  ).pipe(Effect.provideService(ThreadEntryKinds, kinds));
+export const restedReads = (kinds: ThreadEntryReader, home: string | undefined, lagging: (threadId: string) => void = () => {}) =>
+  Effect.flatMap(makeRolloutForms({ journal: (_threadId, work) => work }), (forms) => makeRestedReads({ forms, home, lagging })).pipe(
+    Effect.provideService(ThreadEntryKinds, kinds),
+  );
 
 export const rolloutForms = (journal: JournalEntry, kinds: ThreadEntryReader) =>
   Effect.provideService(makeRolloutForms({ journal }), ThreadEntryKinds, kinds);

@@ -8,7 +8,15 @@ import { ReentrantCall } from '@runlith/held/failures';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { threadRolloutForm } from '../store/journal.js';
-import { eventless, formRollout, olderRollout, rolloutFormOf, RolloutUnformable } from './rolloutEntryForms.js';
+import {
+  eventless,
+  formRollout,
+  olderRollout,
+  rolloutFormOf,
+  RolloutUnformable,
+  settledRollout,
+  type RolloutFormWrite,
+} from './rolloutEntryForms.js';
 import type { RolloutUnreadable } from './rolloutFile.js';
 import { openRollout, rolloutStateOf } from './rolloutForms.js';
 import type { JournalEntry } from './rolloutContext.js';
@@ -35,21 +43,20 @@ export const makeRolloutForms = Effect.fnUntraced(function* ({ journal }: { read
   const units = yield* MachineUnits;
   const kinds = yield* ThreadEntryKinds;
 
+  const write: RolloutFormWrite = (operation, body) => units.write(operation, body);
+
   const formedHere = (threadId: string, path: string): Effect.Effect<void, RolloutFormFailure> =>
-    Effect.flatMap(
-      formRollout(db, (operation, body) => units.write(operation, body), threadId, path, kinds),
-      (outcome) => (outcome.kind === 'refused' ? Effect.fail(outcome.refusal) : Effect.void),
+    Effect.flatMap(formRollout(db, write, threadId, path, kinds), (outcome) =>
+      outcome.kind === 'refused' ? Effect.fail(outcome.refusal) : Effect.void,
     );
 
-  const standingRead = (
-    threadId: string,
-    path: string,
-    standing: { readonly refusal: string | null; readonly step: string | null },
-  ): Effect.Effect<void, RolloutUnformable> => {
-    if (standing.refusal !== null) return Effect.fail(new RolloutUnformable({ threadId, path, reason: standing.refusal }));
-    if (kinds.base !== null && kinds.below(standing.step)) return Effect.fail(olderRollout(threadId, path, standing.step, kinds.base));
-    return Effect.void;
-  };
+  const checked = Effect.fnUntraced(function* (threadId: string, path: string) {
+    const standing = yield* rolloutFormOf(db, threadId);
+    if (standing?.refusal != null) return yield* new RolloutUnformable({ threadId, path, reason: standing.refusal });
+    const step = standing?.step ?? null;
+    if (kinds.base !== null && kinds.below(step)) return yield* olderRollout(threadId, path, step, kinds.base);
+    return standing;
+  });
 
   const within = <A, E>(threadId: string, work: Effect.Effect<A, E>) =>
     Effect.flatMap(Effect.result(journal(threadId, work)), (entered) => {
@@ -85,17 +92,21 @@ export const makeRolloutForms = Effect.fnUntraced(function* ({ journal }: { read
           kinds.lags(standing.step) &&
           eventless(kinds.after(standing.step)),
       ),
-    formed: Effect.fnUntraced(function* (threadId: string, path: string) {
-      const standing = yield* rolloutFormOf(db, threadId);
-      if (standing === undefined && kinds.last === null) return;
-      if (standing !== undefined && standing.publishing === null) return yield* standingRead(threadId, path, standing);
-      yield* within(threadId, formedHere(threadId, path));
-    }),
+    checked: (threadId: string, path: string): Effect.Effect<void, RolloutUnformable | StoreFailure> =>
+      Effect.asVoid(checked(threadId, path)),
     readable: Effect.fnUntraced(function* (threadId: string, path: string) {
+      const standing = yield* checked(threadId, path);
+      const state = yield* rolloutStateOf(path);
+      if (standing?.publishing == null && state?.form !== 'compressed') return;
+      yield* within(threadId, settledRollout(db, write, threadId, path).pipe(Effect.andThen(openRollout(path))));
+    }),
+    formedOpen: Effect.fnUntraced(function* (threadId: string, path: string) {
       const standing = yield* rolloutFormOf(db, threadId);
       const state = yield* rolloutStateOf(path);
-      if (standing !== undefined && standing.publishing === null && state?.form !== 'compressed')
-        return yield* standingRead(threadId, path, standing);
+      if (standing !== undefined && standing.publishing === null && state?.form !== 'compressed') {
+        yield* checked(threadId, path);
+        return;
+      }
       yield* within(threadId, formedHere(threadId, path).pipe(Effect.andThen(openRollout(path))));
     }),
   };

@@ -6,19 +6,9 @@ import { Clock, Context, Deferred, Effect, Fiber, FileSystem, Layer, Schedule } 
 import { eq } from 'drizzle-orm';
 import type { ThreadMessageEntry } from '@runlith/agent/transcript/entries';
 import { MachineStore } from '../../../platform/contract/service/store.js';
-import {
-  threadEntry,
-  threadEvent,
-  threadRolloutForm,
-  threadRun,
-  birthsOf,
-  evidenceOf,
-  listOf,
-  rolloutsOf,
-} from '../../../threads/testing/doubles.js';
+import { threadEntry, threadEvent, threadRun, birthsOf, evidenceOf, listOf, rolloutsOf } from '../../../threads/testing/doubles.js';
 import { restOf } from '../../../threads/testing/rest.js';
 import { makeDoorWorld } from '../doorFixture.js';
-import { ENTRY_KINDS } from '../../manifest.js';
 
 const setup = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
@@ -74,47 +64,41 @@ const resident = Effect.fn('testing.residentRollout')(function* (title: string) 
 layer(Layer.effect(World, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
   'rested rollout maintenance',
   (it) => {
-    it.effect(
-      'forms lagging journals, shelves archived payloads only after maintenance starts, preserves reads and said, and waits for the last user',
-      () =>
-        Effect.gen(function* () {
-          const { runtime, projectId, db } = yield* World;
-          const rollouts = rolloutsOf(runtime.owners);
-          const list = listOf(runtime.owners);
-          const threadId = yield* resident('the archived thread');
-          const form = threadRolloutForm();
-          yield* db.update(form).set({ step: null }).where(eq(form.threadId, threadId));
-          expect(yield* rollouts.formLagging()).toBeGreaterThan(0);
-          expect((yield* db.select({ step: form.step }).from(form).where(eq(form.threadId, threadId)).get())?.step).toBe(ENTRY_KINDS.last);
-          const said = (yield* list.row(threadId))?.saidLine;
-          expect(said).toBe('the archived thread\nmore');
-          const evidence = evidenceOf(runtime.owners);
-          const feed = (yield* evidence.entries(threadId, projectId, Number.MAX_SAFE_INTEGER)).entries.map((entry) => entry.id);
-          yield* list.setArchived(threadId, projectId, true);
-          expect((yield* events(threadId)).map((row) => row.id)).toEqual([`ev-${threadId}`]);
-          expect(yield* restOf(db, threadId)).toBeNull();
-          yield* runtime.openMaintenance;
-          yield* shelved(threadId);
-          expect((yield* evidence.entries(threadId, projectId, Number.MAX_SAFE_INTEGER)).entries.map((entry) => entry.id)).toEqual(feed);
-          expect((yield* list.row(threadId))?.saidLine).toBe(said);
-          yield* rollouts.rehydrate(threadId);
-          expect((yield* events(threadId)).map((row) => row.id)).toEqual([`ev-${threadId}`]);
-          yield* evidence.shape(threadId, projectId);
-          yield* shelved(threadId);
-          const busy = yield* resident('the busy archived thread');
-          const entered = yield* Deferred.make<void>();
-          const release = yield* Deferred.make<void>();
-          const reading = yield* Effect.forkScoped(
-            rollouts.using(busy, Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))),
-          );
-          yield* Deferred.await(entered);
-          yield* list.setArchived(busy, projectId, true);
-          expect(yield* rollouts.evict(projectId, busy)).toEqual({ outcome: 'kept', reason: 'in-use' });
-          expect((yield* events(busy)).map((row) => row.id)).toEqual([`ev-${busy}`]);
-          yield* Deferred.succeed(release, undefined);
-          yield* Fiber.join(reading);
-          yield* shelved(busy);
-        }),
+    it.effect('shelves archived payloads only after maintenance starts, preserves reads and said, and waits for the last user', () =>
+      Effect.gen(function* () {
+        const { runtime, projectId, db } = yield* World;
+        const rollouts = rolloutsOf(runtime.owners);
+        const list = listOf(runtime.owners);
+        const threadId = yield* resident('the archived thread');
+        const said = (yield* list.row(threadId))?.saidLine;
+        expect(said).toBe('the archived thread\nmore');
+        const evidence = evidenceOf(runtime.owners);
+        const feed = (yield* evidence.entries(threadId, projectId, Number.MAX_SAFE_INTEGER)).entries.map((entry) => entry.id);
+        yield* list.setArchived(threadId, projectId, true);
+        expect((yield* events(threadId)).map((row) => row.id)).toEqual([`ev-${threadId}`]);
+        expect(yield* restOf(db, threadId)).toBeNull();
+        yield* runtime.openMaintenance;
+        yield* shelved(threadId);
+        expect((yield* evidence.entries(threadId, projectId, Number.MAX_SAFE_INTEGER)).entries.map((entry) => entry.id)).toEqual(feed);
+        expect((yield* list.row(threadId))?.saidLine).toBe(said);
+        yield* rollouts.rehydrate(threadId);
+        expect((yield* events(threadId)).map((row) => row.id)).toEqual([`ev-${threadId}`]);
+        yield* evidence.shape(threadId, projectId);
+        yield* shelved(threadId);
+        const busy = yield* resident('the busy archived thread');
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const reading = yield* Effect.forkScoped(
+          rollouts.using(busy, Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))),
+        );
+        yield* Deferred.await(entered);
+        yield* list.setArchived(busy, projectId, true);
+        expect(yield* rollouts.evict(projectId, busy)).toEqual({ outcome: 'kept', reason: 'in-use' });
+        expect((yield* events(busy)).map((row) => row.id)).toEqual([`ev-${busy}`]);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(reading);
+        yield* shelved(busy);
+      }),
     );
   },
 );

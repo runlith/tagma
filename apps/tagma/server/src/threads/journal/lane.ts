@@ -6,7 +6,6 @@ import { Settings } from '../../settings/contract/service/values.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { sourcesOutside, unfiledHeirs } from './base.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
-import type { Background } from '../../platform/contract/service/background.js';
 import type { GraphServices } from '../../graph/contract/service/services.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import type { HarnessFailure } from '../contract/service/failure.js';
@@ -44,7 +43,6 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
   repair,
   runAppend,
   forms,
-  background,
   home: rolloutHome,
 }: {
   readonly projection: ThreadProjection;
@@ -52,7 +50,6 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
   readonly repair: ThreadRolloutRepair;
   readonly runAppend: (effect: Effect.Effect<void>) => void;
   readonly forms: RolloutForms;
-  readonly background: Background['Service'];
   readonly home?: string;
 }) {
   const threads = { ...(yield* ThreadRunning), ...(yield* ThreadShelving) };
@@ -75,7 +72,7 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
   const { ensure, behind, owed, exportStanding, written, rewrite } = exporting;
   const { evict, rest, sweep } = rolloutEvicting(ctx, threads, ledger, resourceKinds, settings, uses, rewrite, exporting.whole);
   const { repair: repaired, report } = rolloutRepairing(ctx, forms, repair, rollout, rehydrate);
-  const whole = rolloutWhole(ctx, forms, rest, wake, runAppend, uses, background);
+  const whole = rolloutWhole(ctx, forms, rest, wake, runAppend, uses);
   const { shelve, shelving } = rolloutShelf(ctx, evict);
   const appendMeta = (threadId: string): Effect.Effect<void> => {
     if (rolloutHome === undefined) return Effect.void;
@@ -100,7 +97,6 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
     locate: ctx.locate,
     rehydrate: (threadId, read) => Effect.tap(rehydrate(threadId, read), () => whole.resident(threadId)),
     formRested: whole.rested,
-    formLagging: whole.lagging,
     evict,
     sweep,
     shelve,

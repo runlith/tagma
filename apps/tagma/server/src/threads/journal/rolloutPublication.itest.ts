@@ -53,7 +53,7 @@ const plant = Effect.fnUntraced(function* (id: string, bytes: number, publishing
 const formed = (kinds: ThreadEntryReader, id: string, path: string) =>
   makeRolloutForms({ journal: (_id, work) => work }).pipe(
     Effect.provideService(ThreadEntryKinds, kinds),
-    Effect.flatMap((forms) => forms.formed(id, path)),
+    Effect.flatMap((forms) => forms.formedHere(id, path)),
   );
 
 layer(machine)('rollout publication', (it) => {

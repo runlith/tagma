@@ -78,7 +78,7 @@ export const rolloutReconciling = (
         if (!projectDir.isDirectory()) continue;
         const path = join(home, projectDir.name, `${sourceId}${ROLLOUT_SUFFIX}`);
         if ((yield* rolloutStateOf(path)) === null) continue;
-        yield* forms.readable(sourceId, path);
+        yield* forms.formedOpen(sourceId, path);
         found = yield* replayRollout(path);
         break;
       }

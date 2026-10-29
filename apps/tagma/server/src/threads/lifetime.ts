@@ -7,7 +7,6 @@ import { Custody } from '../executions/contract/service/custody.js';
 import { Sandboxes } from '../sandbox/contract/service/sandboxes.js';
 import { dataPathOf, MachineStore } from '../platform/contract/service/store.js';
 import type { Unit } from '../platform/contract/service/units.js';
-import { Background } from '../platform/contract/service/background.js';
 import { ExternalRolloutPart, NativeResourceKinds, NativeRolloutPart, ThreadFilesPlace } from './contract/service/parts.js';
 import { ScratchAreas } from './contract/service/scratch.js';
 import { JournalOrder, makeThreadRollouts } from './journal/lane.js';
@@ -108,7 +107,6 @@ export const makeThreadsLifetime = Effect.fnUntraced(function* ({ rolloutHome }:
     repair: yield* makeThreadRolloutRepair,
     runAppend: append,
     forms,
-    background: yield* Background,
     home: rolloutHome,
   }).pipe(
     Effect.provideService(ThreadRunning, reads),

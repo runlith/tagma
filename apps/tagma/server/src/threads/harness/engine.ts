@@ -67,7 +67,7 @@ import { MadeBirths, PlacementRefused, Placing, type PlacementCoordinator } from
 import { JournalOrder } from '../journal/lane.js';
 import { ThreadRollouts } from '../contract/service/rollouts.js';
 import { RestedRollouts } from '../contract/service/rested.js';
-import { formingSweep, projectionSweep } from '../journal/projectionSweep.js';
+import { projectionSweep } from '../journal/projectionSweep.js';
 import { Maintenance, scheduleSweeps } from '../../platform/contract/service/maintenance.js';
 import { drive } from '../../platform/contract/service/drives.js';
 import { ExecutionHistory } from '../../executions/contract/service/history.js';
@@ -426,7 +426,7 @@ export const threadEngineLayer = Layer.effectContext(
       (release) => Effect.sync(release),
     );
     yield* Effect.addFinalizer(() => harness.dispose());
-    yield* scheduleSweeps('thread-sweeps', [projectionSweep(rollouts), formingSweep(rollouts), historySweep(yield* ExecutionHistory)]);
+    yield* scheduleSweeps('thread-sweeps', [projectionSweep(rollouts), historySweep(yield* ExecutionHistory)]);
     const opened = (yield* Maintenance).opened;
     yield* drive('rollout-shelving', Effect.asVoid(Effect.andThen(opened, rollouts.shelving)));
     yield* Effect.forkScoped(

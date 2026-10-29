@@ -287,6 +287,48 @@ export const rolloutFormOf = (db: StoreDb<'machine'>, threadId: string) =>
 const io = (path: string) => (error: unknown) =>
   new RolloutUnreadable({ reason: 'io', path, message: error instanceof Error ? error.message : String(error) });
 
+const settledWith = (db: StoreDb<'machine'>, write: RolloutFormWrite, threadId: string, publishing: RolloutPublishing) =>
+  write(
+    FORMING,
+    Effect.fnUntraced(function* (unit) {
+      if (publishing.cursorBytes !== null) {
+        yield* unit.run(
+          db
+            .update(threadRolloutCursor)
+            .set({ nextByteOffset: publishing.cursorBytes, generation: sql`${threadRolloutCursor.generation} + 1` })
+            .where(eq(threadRolloutCursor.threadId, threadId)),
+        );
+      }
+      if (publishing.refusalBytes !== null) {
+        yield* unit.run(
+          db
+            .update(threadRolloutRefusal)
+            .set({ nextByteOffset: publishing.refusalBytes })
+            .where(eq(threadRolloutRefusal.threadId, threadId)),
+        );
+      }
+      yield* unit.run(db.update(threadRolloutForm).set({ publishing: null }).where(eq(threadRolloutForm.threadId, threadId)));
+    }),
+  );
+
+const publishedHere = Effect.fnUntraced(function* (path: string, publishing: RolloutPublishing) {
+  const state = yield* rolloutStateOf(path);
+  if (state === null) return false;
+  const read = yield* RolloutReads;
+  return (yield* Effect.tryPromise({ try: () => sha256Of(state.path, read), catch: io(path) })) === publishing.sha256;
+});
+
+export const settledRollout = Effect.fnUntraced(function* (
+  db: StoreDb<'machine'>,
+  write: RolloutFormWrite,
+  threadId: string,
+  path: string,
+): Effect.fn.Return<void, RolloutUnreadable | StoreFailure> {
+  const publishing = (yield* rolloutFormOf(db, threadId))?.publishing;
+  if (publishing == null || !(yield* publishedHere(path, publishing))) return;
+  yield* settledWith(db, write, threadId, publishing);
+});
+
 //! Runs inside the thread's journal lane: nothing else moves the file, its cursor or its refusal while it works.
 export const formRollout = Effect.fnUntraced(function* (
   db: StoreDb<'machine'>,
@@ -295,29 +337,7 @@ export const formRollout = Effect.fnUntraced(function* (
   path: string,
   kinds: ThreadEntryReader,
 ): Effect.fn.Return<RolloutForm, RolloutUnreadable | StoreFailure> {
-  const settled = (publishing: RolloutPublishing) =>
-    write(
-      FORMING,
-      Effect.fnUntraced(function* (unit) {
-        if (publishing.cursorBytes !== null) {
-          yield* unit.run(
-            db
-              .update(threadRolloutCursor)
-              .set({ nextByteOffset: publishing.cursorBytes, generation: sql`${threadRolloutCursor.generation} + 1` })
-              .where(eq(threadRolloutCursor.threadId, threadId)),
-          );
-        }
-        if (publishing.refusalBytes !== null) {
-          yield* unit.run(
-            db
-              .update(threadRolloutRefusal)
-              .set({ nextByteOffset: publishing.refusalBytes })
-              .where(eq(threadRolloutRefusal.threadId, threadId)),
-          );
-        }
-        yield* unit.run(db.update(threadRolloutForm).set({ publishing: null }).where(eq(threadRolloutForm.threadId, threadId)));
-      }),
-    );
+  const settled = (publishing: RolloutPublishing) => settledWith(db, write, threadId, publishing);
 
   const unmark = write(FORMING, (unit) => unit.run(db.delete(threadRolloutForm).where(eq(threadRolloutForm.threadId, threadId))));
 
@@ -337,8 +357,7 @@ export const formRollout = Effect.fnUntraced(function* (
   }
   let mark: string | null = null;
   if (done?.publishing != null) {
-    const published = state === null ? null : yield* Effect.tryPromise({ try: () => sha256Of(state.path, read), catch: io(path) });
-    if (published === done.publishing.sha256) {
+    if (yield* publishedHere(path, done.publishing)) {
       yield* settled(done.publishing);
       if (!kinds.lags(done.step)) return FORMED;
     } else if (kinds.base !== null && done.step === kinds.base.step) {
