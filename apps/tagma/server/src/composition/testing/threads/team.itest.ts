@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { agentRuntimeGuidanceMessage } from '@runlith/agent/AgentSignal';
-import type { AgentDirective } from '@runlith/agent/AgentRuntimePolicy';
+import type { AgentRuleAnswer } from '@runlith/agent/AgentRuntimePolicy';
 import { enabledModels, reviewers, type TeamEdit } from '@runlith/agent/collaboration/team';
 import { AccountKey } from '@runlith/llm/models/authStatus';
 import { Message } from '@runlith/llm/schema/messages';
@@ -174,8 +174,8 @@ it.live(
         projectId: demo.projectId,
         thread: { id: root },
       } as unknown as Parameters<typeof rule>[0]);
-    const told = (directive: AgentDirective | null): void => {
-      if (directive?.type !== 'guide') throw new Error('expected a line');
+    const told = (directive: AgentRuleAnswer): void => {
+      if (directive === null || !('type' in directive) || directive.type !== 'guide') throw new Error('expected a line');
       history.push(agentRuntimeGuidanceMessage(directive.text, directive.state));
     };
     expect(yield* step()).toBeNull();

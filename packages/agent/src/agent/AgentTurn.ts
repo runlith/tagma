@@ -477,7 +477,7 @@ export function agentTurn(deps: AgentTurnDeps): AgentTurn {
         });
         return followUp;
       }
-      if (closing) {
+      if (closing && !(yield* stopConditionMet())) {
         const directives = yield* deps.stop.cut(
           deps.door.evaluate({
             hook: 'beforeClose',

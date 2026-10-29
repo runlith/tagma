@@ -6,6 +6,7 @@ import { ActivityLog } from '@runlith/activity/log';
 import { activityRecording } from '@runlith/activity/testing';
 import {
   AgentRuntimePolicy,
+  agentCallDirective,
   agentGuides,
   agentRule,
   agentStepToolPolicy,
@@ -342,5 +343,13 @@ describe('directives resolve by the published precedence exclude > require > req
   test.each(pairs)('%s', (_name, stronger, weaker, resolved) => {
     expect(agentStepToolPolicy([stronger, weaker], catalog)).toEqual(resolved);
     expect(agentStepToolPolicy([weaker, stronger], catalog)).toEqual(resolved);
+  });
+  test('deny over rewrite, and the first rewrite over a later one', () => {
+    const deny: AgentDirective = { type: 'deny', reason: 'blocked' };
+    const first: AgentDirective = { type: 'rewrite', input: { a: 1 } };
+    const second: AgentDirective = { type: 'rewrite', input: { a: 2 } };
+    expect(agentCallDirective([first, deny])).toBe(deny);
+    expect(agentCallDirective([deny, first])).toBe(deny);
+    expect(agentCallDirective([first, second])).toBe(first);
   });
 });

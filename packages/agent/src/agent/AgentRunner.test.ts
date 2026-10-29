@@ -3250,6 +3250,54 @@ describe('the turn loop owns its iteration', () => {
     }),
   );
   it.live(
+    'a beforeTool rule refuses one call with its reason and runs another on the input it rewrote',
+    Effect.fnUntraced(function* () {
+      const ran: string[] = [];
+      const model = fakeModel((callNumber) =>
+        callNumber === 1
+          ? toolCallTurn('echo', 'call-denied', { text: 'rm -rf /' })
+          : callNumber === 2
+            ? toolCallTurn('echo', 'call-rewritten', { text: 'draft' })
+            : textTurn('Done.'),
+      );
+      const guarded = new Agent<Record<string, never>>({
+        id: 'guarded-agent',
+        name: 'Guarded agent',
+        description: 'Exercises a rule that judges each call.',
+        stopWhen: [stepLimit(TEST_MAX_STEPS)],
+        instructions: () => 'Echo twice.',
+        tools: () => ({
+          echo: Tool.make({
+            display: () => ({ form: 'none' }),
+            approval: ASKS_NEVER,
+            description: 'Echo the text.',
+            parameters: Schema.Struct({ text: Schema.String }),
+            execute: ({ text }) =>
+              Effect.sync(() => {
+                ran.push(text);
+                return text;
+              }),
+          }),
+        }),
+        rules: [
+          agentRule<Record<string, never>>(
+            'call-guard',
+            (ctx) => {
+              if (ctx.hook !== 'beforeTool' || ctx.tool === undefined) return null;
+              if (ctx.tool.toolCallId === 'call-denied') return { type: 'deny', reason: 'destructive commands are blocked' };
+              return { type: 'rewrite', input: { text: 'final' } };
+            },
+            { owner: 'test' },
+          ),
+        ],
+      });
+      const handle = yield* runner(model).run(guarded, input('run-guarded'));
+      expect(yield* handle.output.text).toBe('Done.');
+      expect(ran).toEqual(['final']);
+      expect(JSON.stringify(model.calls[1]?.messages)).toContain('destructive commands are blocked');
+    }),
+  );
+  it.live(
     'a stopped run ends with the reason given and stops the tool it was waiting on',
     Effect.fnUntraced(function* () {
       const running = createDeferred<void>();
@@ -4245,6 +4293,11 @@ describe('AgentRunner closing rules', () => {
         rules: [closing('run-stopped')],
       });
       yield* stopped.output.steps;
+      const spent = yield* runner(fakeModel(() => textTurn('Last word.'))).run(limited, {
+        ...closingInput('run-spent'),
+        rules: [closing('run-spent')],
+      });
+      expect(yield* spent.output.text).toBe('Last word.');
       const cut = yield* runner(fakeModel(() => unfinishedTextTurn('Half an answer'))).run(agent(), {
         ...closingInput('run-cut'),
         rules: [closing('run-cut')],

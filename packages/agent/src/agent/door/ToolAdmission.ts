@@ -13,12 +13,15 @@ import {
 } from '../tool';
 import { toolArguments } from '../ToolArguments';
 import { previewed } from '../ToolOutput';
+import { agentCallDirective } from '../policy/AgentRuntimePolicy';
 import { DoorMisuse, projected } from './failures';
 import type { CallLedger } from './CallLedger';
 import type { ToolConfirmations, ToolVerdicts } from './ports';
 import type { ToolRules } from './ToolRules';
 import type { ToolRun } from './ToolRun';
 import type { AgentPermissionQuestion, AgentToolInvocation, AgentToolPreflight } from './types';
+
+const RULE_DENIED = 'permission-denied';
 
 export type ToolAdmission<TCtx> = ReturnType<typeof makeToolAdmission<TCtx>>;
 
@@ -40,6 +43,20 @@ export const makeToolAdmission = <TCtx>({
   const decode = (call: AgentPermissionQuestion): Effect.Effect<unknown, AgentToolFailed> =>
     toolArguments(call.tool, call.name, call.input, catalog?.()).pipe(
       Effect.mapError((cause) => new AgentToolFailed({ toolName: call.name, toolCallId: call.toolCallId, cause })),
+    );
+
+  const rewritten = (call: AgentPermissionQuestion, given: unknown, ruleId: string | undefined): Effect.Effect<unknown, AgentToolFailed> =>
+    toolArguments(call.tool, call.name, given, catalog?.()).pipe(
+      Effect.mapError(
+        (invalid) =>
+          new AgentToolFailed({
+            toolName: call.name,
+            toolCallId: call.toolCallId,
+            cause: new ToolFailed({
+              reason: `Rule ${ruleId ?? 'unnamed'} replaced the input of this call with one ${call.name} does not take: ${invalid.message}`,
+            }),
+          }),
+      ),
     );
 
   return {
@@ -67,15 +84,35 @@ export const makeToolAdmission = <TCtx>({
       const openedAt = yield* Clock.currentTimeMillis;
       const runState = run.runState;
       runState.noteToolInput(call.name, call.input, call.toolCallId, runState.stepNumber);
-      const input = yield* decode(call);
-      const display = yield* previewed(() => toolDisplay(call.tool, input));
+      const decoded = yield* decode(call);
       const before = yield* rules.evaluate({
         hook: 'beforeTool',
-        tool: { name: call.name, input, toolCallId: call.toolCallId },
+        tool: { name: call.name, input: decoded, toolCallId: call.toolCallId },
         invocationKey: call.toolCallId,
         ordinal: runState.count(call.name),
       });
       rules.guide(before, { hook: 'beforeTool', toolName: call.name, toolCallId: call.toolCallId });
+      const directed = agentCallDirective(before);
+      const input = directed?.type === 'rewrite' ? yield* rewritten(call, directed.input, directed.ruleId) : decoded;
+      const display = yield* previewed(() => toolDisplay(call.tool, input));
+      if (directed?.type === 'deny') {
+        return {
+          name: call.name,
+          tool: call.tool,
+          toolCallId: call.toolCallId,
+          rawInput: call.input,
+          input,
+          display,
+          subjects: [],
+          prepared: undefined,
+          permission: { verdict: 'deny', code: RULE_DENIED, reason: directed.reason },
+          confirmation: undefined,
+          reader: undefined,
+          openedAt,
+          resultRetention: call.resultRetention,
+          contributor: call.tool.contributor,
+        };
+      }
       const handed = ledger.resolutionFor(call.toolCallId, call.name, call.input);
       const contributor = handed?.contributor ?? call.tool.contributor;
       const prepare = toolPrepare(call.tool);

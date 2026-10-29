@@ -33,8 +33,12 @@ export type AgentDirective =
   | { readonly type: 'restrict'; readonly tools: readonly string[]; readonly ruleId?: string }
   | { readonly type: 'exclude'; readonly tools: readonly string[]; readonly ruleId?: string }
   | { readonly type: 'require'; readonly tool?: string; readonly text?: string; readonly ruleId?: string }
-  | { readonly type: 'request'; readonly tool: string; readonly text: string; readonly ruleId?: string };
+  | { readonly type: 'request'; readonly tool: string; readonly text: string; readonly ruleId?: string }
+  | { readonly type: 'deny'; readonly reason: string; readonly ruleId?: string }
+  | { readonly type: 'rewrite'; readonly input: unknown; readonly ruleId?: string };
 export type AgentGuideDirective = AgentDirective & { readonly type: 'guide' };
+export type AgentCallDirective = AgentDirective & { readonly type: 'deny' | 'rewrite' };
+export type AgentRuleAnswer = AgentDirective | readonly AgentDirective[] | null;
 
 type AgentInvocationFacts = {
   readonly tool?: AgentToolCall;
@@ -78,8 +82,7 @@ export type AgentRuleDescriptor = {
   readonly critical?: boolean;
 };
 
-export type AgentRule<TCtx = unknown> = ((ctx: AgentRuleContext<TCtx>) => Effect.Effect<AgentDirective | null, unknown>) &
-  AgentRuleDescriptor;
+export type AgentRule<TCtx = unknown> = ((ctx: AgentRuleContext<TCtx>) => Effect.Effect<AgentRuleAnswer, unknown>) & AgentRuleDescriptor;
 
 export type AgentRuleOptions = {
   readonly owner: string;
@@ -92,10 +95,10 @@ export type AgentEvaluationInput<TCtx = unknown> = TCtx & AgentRunFacts & AgentE
 
 export function agentRule<TCtx = unknown>(
   id: string,
-  rule: (ctx: AgentRuleContext<TCtx>) => Effect.Effect<AgentDirective | null, unknown> | AgentDirective | null,
+  rule: (ctx: AgentRuleContext<TCtx>) => Effect.Effect<AgentRuleAnswer, unknown> | AgentRuleAnswer,
   options: AgentRuleOptions,
 ): AgentRule<TCtx> {
-  const evaluate = (ctx: AgentRuleContext<TCtx>): Effect.Effect<AgentDirective | null, unknown> => {
+  const evaluate = (ctx: AgentRuleContext<TCtx>): Effect.Effect<AgentRuleAnswer, unknown> => {
     const value = rule(ctx);
     return Effect.isEffect(value) ? value : Effect.succeed(value);
   };
@@ -211,7 +214,9 @@ export class AgentRuntimePolicy<TCtx = unknown> {
           );
           continue;
         }
-        if (answered.directive) directives.push({ ...answered.directive, ruleId: rule.id } satisfies AgentDirective);
+        for (const directive of answerDirectives(answered.directive)) {
+          directives.push({ ...directive, ruleId: rule.id } satisfies AgentDirective);
+        }
         if (invokeMs >= SLOW_RULE_MS || settleMs >= SLOW_RULE_MS) {
           yield* note<AgentNote>({ type: 'rule-slow', ruleId: rule.id, owner: rule.owner, hook: input.hook, invokeMs, settleMs }, run);
         }
@@ -219,6 +224,16 @@ export class AgentRuntimePolicy<TCtx = unknown> {
       return directives as readonly AgentDirective[];
     });
   }
+}
+
+function answerDirectives(answer: AgentRuleAnswer): readonly AgentDirective[] {
+  if (answer === null) return [];
+  return 'type' in answer ? [answer] : answer;
+}
+
+export function agentCallDirective(directives: readonly AgentDirective[]): AgentCallDirective | null {
+  const deny = directives.find((directive): directive is AgentCallDirective => directive.type === 'deny');
+  return deny ?? directives.find((directive): directive is AgentCallDirective => directive.type === 'rewrite') ?? null;
 }
 
 export function agentGuidance(directives: readonly AgentDirective[]): string[] {

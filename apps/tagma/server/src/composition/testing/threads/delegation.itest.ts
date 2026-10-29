@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { agentRuntimeGuidanceMessage } from '@runlith/agent/AgentSignal';
-import type { AgentDirective } from '@runlith/agent/AgentRuntimePolicy';
+import type { AgentRuleAnswer } from '@runlith/agent/AgentRuntimePolicy';
 import { Message } from '@runlith/llm/schema/messages';
 import { delegationRule } from '../../../native-harness/testing/doubles.js';
 import { Settings } from '../../../settings/contract/service/values.js';
@@ -68,8 +68,8 @@ it.live('a working agent hears a changed delegation once, and after compaction o
     const history: Message[] = [Message.user('Build it.')];
     const step = () =>
       rule({ hook: 'beforeStep', modelMessages: history, settings, thread: { id: child } } as unknown as Parameters<typeof rule>[0]);
-    const told = (directive: AgentDirective | null): void => {
-      if (directive?.type !== 'guide') throw new Error('Expected delegation guidance');
+    const told = (directive: AgentRuleAnswer): void => {
+      if (directive === null || !('type' in directive) || directive.type !== 'guide') throw new Error('Expected delegation guidance');
       history.push(agentRuntimeGuidanceMessage(directive.text, directive.state));
     };
     const compacted = () =>

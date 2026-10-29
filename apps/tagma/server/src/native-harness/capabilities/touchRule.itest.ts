@@ -4,7 +4,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join, relative } from 'node:path';
 import { Deferred, Effect, Fiber, FileSystem, Layer } from 'effect';
 import { agentRuntimeGuidanceMessage } from '@runlith/agent/AgentSignal';
-import type { AgentDirective, AgentRuleContext } from '@runlith/agent/AgentRuntimePolicy';
+import type { AgentRuleAnswer, AgentRuleContext } from '@runlith/agent/AgentRuntimePolicy';
 import { demoGraphLayer, withDemo, type EffectDemo } from '../../composition/testing/graphFixture.js';
 import { Act } from '../../graph/contract/service/acts.js';
 import { Touches } from '../../graph/contract/service/orientation.js';
@@ -28,10 +28,10 @@ const execution = {
     ),
 } as ThreadExecution['Service'];
 const shown = (path: string, as: ToolShown['as'] = 'read'): ToolShown[] => [{ path, as }];
-const guideText = Effect.fnUntraced(function* <E, R>(directive: Effect.Effect<AgentDirective | null, E, R>) {
+const guideText = Effect.fnUntraced(function* <E, R>(directive: Effect.Effect<AgentRuleAnswer, E, R>) {
   const answered = yield* directive;
   if (answered === null) return null;
-  if (answered.type !== 'guide') return yield* Effect.die(`the rule answered ${answered.type}`);
+  if (!('type' in answered) || answered.type !== 'guide') return yield* Effect.die('the rule answered no single guide');
   return answered.text;
 });
 

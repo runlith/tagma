@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { type Message as ModelMessage, Message } from '@runlith/llm/schema/messages';
 import { agentRuntimeGuidanceMessage } from '@runlith/agent/AgentSignal';
-import type { AgentDirective, AgentRuleContext } from '@runlith/agent/AgentRuntimePolicy';
+import type { AgentRuleAnswer, AgentRuleContext } from '@runlith/agent/AgentRuntimePolicy';
 import { demoGraphLayer, withDemo, type DemoServices, type EffectDemo } from '../composition/testing/graphFixture.js';
 import { Orientation, Touches } from '../graph/contract/service/orientation.js';
 import type { InstructionSet } from '../graph/contract/wire/instructions.js';
@@ -41,10 +41,10 @@ const execution = {
 } as ThreadExecution['Service'];
 const lawOf = (set: unknown): string[] =>
   (set as InstructionSet).entries.flatMap((entry) => (entry.kind === 'law' ? [entry.source] : [])).sort();
-const told = Effect.fnUntraced(function* (directive: Effect.Effect<AgentDirective | null, unknown>) {
+const told = Effect.fnUntraced(function* (directive: Effect.Effect<AgentRuleAnswer, unknown>) {
   const answered = yield* directive;
   if (answered === null) return null;
-  if (answered.type !== 'guide') return yield* Effect.die(`the rule answered ${answered.type}`);
+  if (!('type' in answered) || answered.type !== 'guide') return yield* Effect.die('the rule answered no single guide');
   return answered;
 });
 
