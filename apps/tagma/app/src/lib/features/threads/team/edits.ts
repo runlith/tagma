@@ -42,8 +42,13 @@ export const poolRows = <Row extends TeamModelKey>(policy: ReviewPolicy, rows: r
   policy.pool.flatMap((key) => rows.filter((row) => sameRow(row, key)));
 
 export function withPooled(policy: ReviewPolicy, row: TeamModelKey): ReviewPolicy {
-  const key = { provider: row.provider, model: row.model, reasoning: row.reasoning };
-  return { ...policy, pool: pooled(policy, row) ? policy.pool.filter((one) => !sameRow(one, row)) : [...policy.pool, key] };
+  return withPool(policy, [row], !pooled(policy, row));
+}
+
+export function withPool(policy: ReviewPolicy, rows: readonly TeamModelKey[], on: boolean): ReviewPolicy {
+  const keys = rows.map(({ provider, model, reasoning }) => ({ provider, model, reasoning }));
+  if (on) return { ...policy, pool: [...policy.pool, ...keys.filter((key) => !pooled(policy, key))] };
+  return { ...policy, pool: policy.pool.filter((one) => !keys.some((key) => sameRow(key, one))) };
 }
 
 export function withLens(policy: ReviewPolicy, lens: ReviewLens): ReviewPolicy {

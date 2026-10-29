@@ -15,6 +15,7 @@
   import InlineSvg from '$lib/shared/ui/InlineSvg.svelte';
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
+  import Rungs from '../../../shared/models/Rungs.svelte';
   import {
     choiceKey,
     type ModelChoice,
@@ -380,27 +381,14 @@
       {/each}
     </span>
     {#if on && ladder.length > 0}
-      <span class="flex shrink-0 gap-px rounded-md bg-hover p-0.5" role="group" aria-label="Reasoning" data-model-rung={rung ?? ''}>
-        {#each ladder as one (one.id)}
-          <button
-            type="button"
-            tabindex="-1"
-            class={[
-              'h-5 rounded-sm px-1.5 text-small font-medium transition-colors pointer-coarse:h-9 pointer-coarse:px-3',
-              one.id === rung ? 'bg-selected text-foreground' : 'text-muted-foreground hover:bg-hover hover:text-foreground',
-            ]}
-            aria-label={`${line.choice.label} at ${one.label}`}
-            aria-pressed={one.id === rung}
-            disabled={busy}
-            onclick={(event) => {
-              event.stopPropagation();
-              pick(line, 'send', one.id);
-            }}
-          >
-            {one.short}
-          </button>
-        {/each}
-      </span>
+      <Rungs
+        steps={ladder}
+        model={line.choice.label}
+        pressed={(step) => step === rung}
+        disabled={busy}
+        onpress={(step) => pick(line, 'send', step)}
+        data-model-rung={rung ?? ''}
+      />
     {:else if (here || rungs[line.key] !== undefined) && reached >= 0}
       <span class="shrink-0 px-1 text-small text-muted-foreground">{ladder[reached]!.label}</span>
     {/if}

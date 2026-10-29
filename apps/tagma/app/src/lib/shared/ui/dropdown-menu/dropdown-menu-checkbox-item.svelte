@@ -18,6 +18,7 @@
     textValue,
     icon,
     lead,
+    tail,
     class: className,
     children,
     ...rest
@@ -28,6 +29,7 @@
     disabled?: boolean;
     closeOnSelect?: boolean;
     textValue?: string;
+    tail?: Snippet;
     children?: Snippet;
   } & BareLead = $props();
 
@@ -52,11 +54,15 @@
 >
   <RowLead {icon} {lead} />
   <FadeText class="flex-1">{@render children?.()}</FadeText>
-  <span class="grid size-3.5 shrink-0 place-items-center" data-slot="dropdown-menu-checkbox-item-indicator">
-    {#if indeterminate}
-      <MinusIcon class="size-3.5" />
-    {:else if checked}
-      <CheckIcon class="size-3.5" />
-    {/if}
-  </span>
+  {#if tail}
+    <span data-slot="dropdown-menu-tail" class="flex shrink-0 items-center">{@render tail()}</span>
+  {:else}
+    <span class="grid size-3.5 shrink-0 place-items-center" data-slot="dropdown-menu-checkbox-item-indicator">
+      {#if indeterminate}
+        <MinusIcon class="size-3.5" />
+      {:else if checked}
+        <CheckIcon class="size-3.5" />
+      {/if}
+    </span>
+  {/if}
 </div>

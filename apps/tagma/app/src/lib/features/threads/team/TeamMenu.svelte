@@ -60,23 +60,12 @@
 
 {#if delegation.allowed}
   <DropdownMenu.Separator />
-  {#if depth !== null}
-    <DropdownMenu.Item
-      icon={ListTree}
-      current={String(depth)}
-      title="Floors of delegation below the root agent, set for the whole project in Settings"
-      onSelect={() => open('agent.subAgentDepth')}
-      data-team-go="depth"
-    >
-      Depth
-    </DropdownMenu.Item>
-  {/if}
   {#if team !== null && read !== undefined}
     <DropdownMenu.Sub>
       <DropdownMenu.SubTrigger icon={Bot} current={agentsWords(catalog.models, read.team)} data-team-go="models">
         Agents run on
       </DropdownMenu.SubTrigger>
-      <DropdownMenu.SubContent class="w-80">
+      <DropdownMenu.SubContent class="w-72">
         <ModelsMenu {team} {writes} onedit={() => open('agent.models')} />
       </DropdownMenu.SubContent>
     </DropdownMenu.Sub>
@@ -88,6 +77,17 @@
         <ReviewMenu {team} {writes} />
       </DropdownMenu.SubContent>
     </DropdownMenu.Sub>
+  {/if}
+  {#if depth !== null}
+    <DropdownMenu.Item
+      icon={ListTree}
+      current={String(depth)}
+      title="Floors of delegation below the root agent, set for the whole project in Settings"
+      onSelect={() => open('agent.subAgentDepth')}
+      data-team-go="depth"
+    >
+      Depth
+    </DropdownMenu.Item>
   {/if}
 {/if}
 
