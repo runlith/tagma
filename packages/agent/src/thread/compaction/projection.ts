@@ -51,8 +51,9 @@ function carriedArguments(messages: readonly Message[]): Record<string, string> 
   const carried: Record<string, string> = {};
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]!;
-    const text = agentInputText(message);
-    if (text !== null) for (const id of agentInputSkills(message) ?? []) carried[id] ??= skillArguments(text, id);
+    const skills = agentInputSkills(message) ?? new Set<string>();
+    const text = skills.size > 0 ? agentInputText(message) : null;
+    if (text !== null) for (const id of skills) carried[id] ??= skillArguments(text, id);
     for (const [id, value] of Object.entries(agentCarriedArguments(message) ?? {})) carried[id] ??= value;
   }
   return carried;
