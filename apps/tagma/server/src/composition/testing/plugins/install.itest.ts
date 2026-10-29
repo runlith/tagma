@@ -3,7 +3,9 @@ import { join, resolve } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { Context, Effect, FileSystem, Layer } from 'effect';
+import { mcpToolCatalog } from '@runlith/mcp/mcpToolCatalog';
 import { McpServers } from '../../../mcp/contract/service/servers.js';
+import { ASKS_IN_REVIEW } from '../../../platform/contract/wire/conditions.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { makeDoorWorld } from '../doorFixture.js';
 
@@ -172,7 +174,17 @@ layer(Layer.effect(Plugins, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
         const started = yield* world.op('create_thread', { type: 'cc-demo-helper' }, scope);
         expect(started.status).toBe(200);
 
-        yield* Context.get(world.runtime.owners, McpServers).reconcile(projectId);
+        const mcp = Context.get(world.runtime.owners, McpServers);
+        yield* mcp.reconcile(projectId);
+        const offered = mcp.palette(projectId).find((entry) => entry.declaration.name === 'cc-demo-echo');
+        expect(offered).toBeDefined();
+        const tools = mcpToolCatalog({
+          projectId,
+          declaration: offered!.declaration,
+          descriptors: offered!.descriptors,
+          pool: mcp.caller(projectId),
+        }).tools;
+        expect(tools['echo']).toMatchObject({ approval: ASKS_IN_REVIEW, mutates: true });
         const connected = new Map((yield* servers).map((row) => [row.name, row]));
         for (const name of ['cc-demo-echo', 'ap-demo-echo', 'both-demo-echo']) {
           expect(connected.get(name)).toMatchObject({
@@ -186,7 +198,7 @@ layer(Layer.effect(Plugins, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
         for (const id of ['cc-demo', 'ap-demo', 'both-demo']) yield* world.op('enable_plugin', { id, enabled: false }, scope);
         expect((yield* skills).filter((id) => id.includes('-demo-'))).toEqual([]);
         expect((yield* agents).filter((id) => id.includes('-demo-'))).toEqual([]);
-        expect(yield* servers).toEqual([]);
+        expect((yield* servers).filter((row) => row.name.includes('-demo-'))).toEqual([]);
       }),
   );
 
