@@ -11,6 +11,9 @@ fields:
       },
       {
         "at": "src/failure.ts"
+      },
+      {
+        "at": "src/RefreshFlight.ts"
       }
     ],
     "id": "@runlith/credential-file"
