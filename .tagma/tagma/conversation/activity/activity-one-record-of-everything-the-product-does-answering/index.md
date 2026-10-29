@@ -5,7 +5,7 @@ ord: 16
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 sources:
   - kind: dir
