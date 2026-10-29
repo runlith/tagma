@@ -5,7 +5,7 @@ ord: 3
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 edges:
   - kind: implements
