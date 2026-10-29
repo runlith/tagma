@@ -1,6 +1,8 @@
 <script lang="ts">
   import AlertTriangle from '@lucide/svelte/icons/triangle-alert';
+  import X from '@lucide/svelte/icons/x';
   import { Router } from '@runlith/layer/Router';
+  import { Button } from '$lib/shared/ui/button/index.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { currentBranch, currentProject } from '$lib/features/workspace/address.js';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
@@ -25,7 +27,7 @@
   }
 </script>
 
-{#if pending !== null || recovery.failure !== null || recovery.unreadable.length > 0}
+{#if recovery.shown}
   <section class="flex shrink-0 items-center gap-3 border-b border-border bg-raised px-4 py-2 text-ui" aria-label="Graph recovery">
     <AlertTriangle class="size-4 shrink-0 text-destructive" />
     <div class="min-w-0 flex-1">
@@ -52,5 +54,8 @@
         {recovery.busy ? 'Opening recovery…' : pending.threadId === null ? 'Assign to agent' : 'Open recovery'}
       </button>
     {/if}
+    <Button type="button" variant="ghost" size="icon-sm" class="shrink-0" aria-label="Dismiss" onclick={() => recovery.dismiss()}>
+      <X class="size-3.5" />
+    </Button>
   </section>
 {/if}
