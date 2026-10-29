@@ -20,9 +20,9 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/lib/features/tagma-apps/SectionPage.svelte
   - kind: file
-    ref: apps/tagma/app/src/routes/_desktop/view/[project]/[plugin]/[view]/+page.svelte
+    ref: apps/tagma/app/src/routes/_desktop/view/[project]/[app]/[view]/+page.svelte
   - kind: file
-    ref: apps/tagma/app/src/routes/[project]/p/[plugin]/[view]/+page.svelte
+    ref: apps/tagma/app/src/routes/[project]/p/[app]/[view]/+page.svelte
   - kind: file
     ref: apps/tagma/desktop/src/viewWindows.ts
   - kind: file
