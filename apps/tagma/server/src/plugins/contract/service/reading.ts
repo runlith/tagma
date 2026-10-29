@@ -6,6 +6,9 @@ export type PluginEntry = { readonly kind: 'absent' | 'outside' | 'file' | 'dire
 
 export type Frontmatter = { readonly fields: Readonly<Record<string, unknown>>; readonly body: string };
 
+export const isObject = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
 export const within = (root: string, path: string): boolean => {
   const step = relative(root, path);
   return step === '' || (!step.startsWith('..') && !isAbsolute(step));
@@ -28,6 +31,24 @@ export const entryOf = Effect.fnUntraced(function* (root: string, path: string) 
     return { kind: 'outside', path: asked } as PluginEntry;
   const info = yield* files.stat(real).pipe(Effect.mapError(unreadable(asked)));
   return { kind: info.type === 'File' ? 'file' : info.type === 'Directory' ? 'directory' : 'other', path: asked } as PluginEntry;
+});
+
+export const declaredPath = Effect.fnUntraced(function* (
+  root: string,
+  component: string,
+  path: string,
+  ignored: PluginIgnored[],
+  allowRoot = false,
+) {
+  if (!path.startsWith('./') && !(allowRoot && path === '.')) {
+    ignored.push({ component, name: path, reason: 'a manifest path starts with ./' });
+    return null;
+  }
+  const entry: PluginEntry = yield* entryOf(root, path);
+  if (entry.kind === 'outside') ignored.push({ component, name: path, reason: 'the path escapes the plugin directory' });
+  else if (entry.kind === 'absent') ignored.push({ component, name: path, reason: 'the path does not exist' });
+  else return entry;
+  return null;
 });
 
 export const namesIn = Effect.fnUntraced(function* (path: string) {

@@ -41,6 +41,28 @@ const PLUGIN: Readonly<Record<string, string>> = {
   }),
 };
 
+const CODEX_GUARD = `
+const event = JSON.parse(await Bun.stdin.text());
+if (event.hook_event_name === 'PreToolUse' && String(event.tool_input?.command ?? '').includes('codex-deny')) {
+  const data = process.env.PLUGIN_DATA ? 'set' : 'unset';
+  const root = process.env.CLAUDE_PLUGIN_ROOT === process.env.PLUGIN_ROOT ? 'agreeing' : 'differing';
+  console.error('codex hook saw ' + event.tool_name + ' with data ' + data + ' and root ' + root);
+  process.exit(2);
+}
+`;
+
+const CODEX_PLUGIN: Readonly<Record<string, string>> = {
+  '.codex-plugin/plugin.json': JSON.stringify({ name: 'codex-guard' }),
+  'hooks/codex-guard.ts': CODEX_GUARD,
+  'hooks/hooks.json': JSON.stringify({
+    hooks: {
+      PreToolUse: [
+        { matcher: 'Bash', hooks: [{ type: 'command', command: `"${process.execPath}" "\${PLUGIN_ROOT}/hooks/codex-guard.ts"` }] },
+      ],
+    },
+  }),
+};
+
 const calls = (...made: readonly (readonly [id: string, name: string, input: unknown])[]): readonly LLMEvent[] => [
   { type: 'step-start', index: 0 },
   ...made.flatMap(([id, name, input]): LLMEvent[] => [
@@ -100,15 +122,20 @@ const setup = Effect.gen(function* () {
   yield* files.writeFileString(join(checkout, 'secret.txt'), 'secret words\n');
   yield* files.writeFileString(join(checkout, 'draft.txt'), 'draft words\n');
   yield* files.writeFileString(join(checkout, 'final.txt'), 'final words\n');
-  const plugin = yield* world.directory('guard-plugin');
-  for (const [path, text] of Object.entries(PLUGIN)) {
-    yield* files.makeDirectory(join(plugin, path, '..'), { recursive: true });
-    yield* files.writeFileString(join(plugin, path), text);
-  }
   const scope = `project=${projectId}`;
-  const installed = yield* world.op('install_plugin', { source: plugin }, scope);
-  expect(installed.body).toMatchObject({ plugin: { id: 'guard', enabled: true } });
-  yield* Effect.addFinalizer(() => world.op('uninstall_plugin', { id: 'guard' }, scope).pipe(Effect.orDie));
+  for (const [name, id, plugin] of [
+    ['guard-plugin', 'guard', PLUGIN],
+    ['codex-guard-plugin', 'codex-guard', CODEX_PLUGIN],
+  ] as const) {
+    const directory = yield* world.directory(name);
+    for (const [path, text] of Object.entries(plugin)) {
+      yield* files.makeDirectory(join(directory, path, '..'), { recursive: true });
+      yield* files.writeFileString(join(directory, path), text);
+    }
+    const installed = yield* world.op('install_plugin', { source: directory }, scope);
+    expect(installed.body).toMatchObject({ plugin: { id, enabled: true } });
+    yield* Effect.addFinalizer(() => world.op('uninstall_plugin', { id }, scope).pipe(Effect.orDie));
+  }
   return { world, account, projectId, scope };
 });
 
@@ -175,6 +202,18 @@ layer(Layer.effect(Guarded, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
         expect(last).not.toContain('draft words');
         expect(last).toContain('Read of final.txt noted');
       }),
+  );
+
+  it.effect('a Codex PreToolUse hook sees Codex tool names and environment and blocks a shell call through the shared runner', () =>
+    Effect.gen(function* () {
+      const script = scripted('Run the denied shell.', (answered) =>
+        answered === 0 ? call('call-codex', 'bash', { command: 'echo codex-deny' }) : DONE,
+      );
+      const { threadId, ended } = yield* born('bypass');
+      yield* ended(yield* turn(threadId, 'Run the denied shell.'));
+
+      expect(script.asked.at(-1)).toContain('bash is refused: codex hook saw Bash with data set and root agreeing');
+    }),
   );
 
   it.effect('a PostToolUse context reaches the run resumed after the call it follows was approved', () =>

@@ -1,8 +1,8 @@
 import { resolve } from 'node:path';
 import { Effect, Schema } from 'effect';
 import type { PluginIgnored, PluginPlace, PluginServer, PluginServerReach } from '../../plugins/contract/service/format.js';
-import { entryOf, jsonOf, textOf } from '../../plugins/contract/service/reading.js';
-import { declaredPath, type Manifest } from './manifest.js';
+import { declaredPath, entryOf, jsonOf, textOf } from '../../plugins/contract/service/reading.js';
+import type { Manifest } from './manifest.js';
 import { pluginEnvironment, substituted } from './variables.js';
 
 const Strings = Schema.Record(Schema.String, Schema.String);

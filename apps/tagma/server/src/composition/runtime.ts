@@ -89,6 +89,7 @@ import { PluginPlaces } from '../plugins/contract/service/plugins.js';
 import { PluginFormats } from '../plugins/contract/service/format.js';
 import { claudeCodeFormat } from '../plugin-formats/claude-code/format.js';
 import { agentPluginsFormat } from '../plugin-formats/agent-plugins/format.js';
+import { codexFormat } from '../plugin-formats/codex/format.js';
 import { Coverage } from '../workspace/contract/service/roots.js';
 import { mcpPlaces } from './mcpPlaces.js';
 import { MachineWorld } from '../executions/contract/service/worlds.js';
@@ -523,7 +524,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   });
   const pluginsInstallation = plugins.lifetimes.installation.pipe(
     Layer.provide(Layer.succeed(PluginPlaces, { home: dataPath ?? join(tmpdir(), `tagma-plugins-${instanceId.slice(0, 8)}`) })),
-    Layer.provide(Layer.succeed(PluginFormats, [claudeCodeFormat, agentPluginsFormat])),
+    Layer.provide(Layer.succeed(PluginFormats, [claudeCodeFormat, codexFormat, agentPluginsFormat])),
     Layer.provide(BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)))),
     Layer.provide(BunFileSystem.layer),
   );
