@@ -1,4 +1,5 @@
 import { agentToolOutputText } from '@runlith/agent/ToolOutput';
+import { AGENT_RUNTIME_GUIDANCE_SIGNAL_TYPE, agentSignalMarkup } from '@runlith/agent/AgentSignal';
 import { AgentHostFailed, type AgentToolFailure } from '@runlith/agent/AgentFailure';
 import type { AgentToolOutcome } from '@runlith/agent/door/types';
 import { toolOutcomeFailed } from '@runlith/agent/tool';
@@ -13,7 +14,8 @@ const endingOf = (call: CallRecord, exit: Exit.Exit<AgentToolOutcome, AgentToolF
     return Cause.hasInterruptsOnly(exit.cause) ? { outcome: 'interrupted' } : { outcome: 'failed', result: Cause.pretty(exit.cause) };
   }
   if (exit.value.completion === 'command') return { outcome: 'elsewhere' };
-  const result = agentToolOutputText(exit.value.modelOutput);
+  const told = (exit.value.guidance ?? []).map((text) => agentSignalMarkup({ type: AGENT_RUNTIME_GUIDANCE_SIGNAL_TYPE, text }));
+  const result = [agentToolOutputText(exit.value.modelOutput), ...told].join('\n\n');
   const kind = exit.value.verdict.kind;
   return {
     outcome: call.phase === 'stopping' || kind === 'denied' ? 'stopped' : toolOutcomeFailed(kind) ? 'failed' : 'completed',

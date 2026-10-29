@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import type { LLMEvent } from '@runlith/llm/schema/events';
-import { Context, Effect, FileSystem, Layer, Queue, Stream } from 'effect';
+import { THREAD_TOOL_CONFIRM_VALUE } from '@runlith/agent/transcript/parts';
+import { Context, Data, Effect, FileSystem, Layer, Queue, Schedule, Stream } from 'effect';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { birthsOf } from '../../../threads/testing/doubles.js';
 import { makeDoorWorld, projectLeaving } from '../doorFixture.js';
@@ -21,7 +22,8 @@ if (event.hook_event_name === 'PreToolUse' && path.endsWith('draft.txt')) {
   console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput } }));
 }
 if (event.hook_event_name === 'PostToolUse') {
-  console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: 'read noted' } }));
+  const additionalContext = event.tool_name + ' of ' + path.split('/').pop() + ' noted';
+  console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext } }));
 }
 `;
 
@@ -33,15 +35,15 @@ const PLUGIN: Readonly<Record<string, string>> = {
   'hooks/hooks.json': JSON.stringify({
     hooks: {
       PreToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: guarded }] }],
-      PostToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: guarded }] }],
+      PostToolUse: [{ matcher: 'Read|Write', hooks: [{ type: 'command', command: guarded }] }],
     },
   }),
 };
 
-const call = (id: string, path: string): readonly LLMEvent[] => [
+const call = (id: string, name: string, input: unknown): readonly LLMEvent[] => [
   { type: 'step-start', index: 0 },
-  { type: 'tool-input-start', id, name: 'read' },
-  { type: 'tool-call', id, name: 'read', input: { path } },
+  { type: 'tool-input-start', id, name },
+  { type: 'tool-call', id, name, input },
   { type: 'step-finish', index: 0, reason: 'tool-calls' },
   { type: 'finish', reason: 'tool-calls' },
 ];
@@ -55,9 +57,14 @@ const DONE: readonly LLMEvent[] = [
   { type: 'finish', reason: 'stop' },
 ];
 
+class AwaitedStateNever extends Data.TaggedError('AwaitedStateNever')<{}> {}
+
 const TITLE = 'name the subject the user is working on';
-const asked: string[] = [];
+type Script = { readonly asked: string[]; readonly answer: (answered: number) => readonly LLMEvent[] };
+const scripts = new Map<string, Script>();
 let checkout = '';
+
+const answeredIn = (said: string): number => said.split('"role":"tool"').length - 1;
 
 const setup = Effect.gen(function* () {
   const world = yield* makeDoorWorld({
@@ -70,16 +77,10 @@ const setup = Effect.gen(function* () {
           stream: (streamed) =>
             Stream.suspend(() => {
               const said = JSON.stringify(streamed.messages);
-              if (!said.includes('Read the files.') || said.includes(TITLE)) return request.stream(streamed);
-              asked.push(said);
-              const answered = said.split('"role":"tool"').length - 1;
-              return Stream.fromIterable(
-                answered === 0
-                  ? call('call-secret', join(checkout, 'secret.txt'))
-                  : answered === 1
-                    ? call('call-draft', join(checkout, 'draft.txt'))
-                    : DONE,
-              );
+              const script = said.includes(TITLE) ? undefined : [...scripts].find(([words]) => said.includes(words))?.[1];
+              if (script === undefined) return request.stream(streamed);
+              script.asked.push(said);
+              return Stream.fromIterable(script.answer(answeredIn(said)));
             }),
         };
       },
@@ -108,40 +109,101 @@ const setup = Effect.gen(function* () {
 
 class Guarded extends Context.Service<Guarded, Effect.Success<typeof setup>>()('testing/GuardedPlugin') {}
 
+const scripted = (words: string, answer: Script['answer']): Script => {
+  const script = { asked: [], answer };
+  scripts.set(words, script);
+  return script;
+};
+
+const born = Effect.fnUntraced(function* (approvalMode: 'bypass' | 'review') {
+  const { world, account, projectId } = yield* Guarded;
+  const { thread } = yield* birthsOf(world.runtime.owners).create({ projectId, createdBySessionId: null, account, approvalMode });
+  const settled = yield* Queue.unbounded<string>();
+  yield* Context.get(world.runtime.owners, ThreadHarness)
+    .runs.settlements()
+    .subscribe({
+      name: `plugin hooks ${thread.id}`,
+      at: 'after-stages',
+      handle: (event) => (event.threadId === thread.id ? Queue.offer(settled, event.runId).pipe(Effect.asVoid) : Effect.void),
+    });
+  const ended = (runId: string) =>
+    Stream.runDrain(
+      Stream.take(
+        Stream.filter(Stream.fromQueue(settled), (id) => id === runId),
+        1,
+      ),
+    );
+  return { threadId: thread.id, ended };
+});
+
+const turn = Effect.fnUntraced(function* (threadId: string, text: string) {
+  const { world, scope } = yield* Guarded;
+  const started = yield* world.op('start_turn', { threadId, text, key: crypto.randomUUID() }, scope);
+  return (started.body as { runId: string }).runId;
+});
+
+const until = <A, E, R>(found: Effect.Effect<A | undefined, E, R>) =>
+  Effect.retry(
+    Effect.flatMap(found, (value) => (value === undefined ? Effect.fail(new AwaitedStateNever()) : Effect.succeed(value))),
+    { schedule: Schedule.spaced('20 millis'), while: (failure) => failure instanceof AwaitedStateNever },
+  );
+
 layer(Layer.effect(Guarded, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('plugin hooks', (it) => {
   it.effect(
     'a PreToolUse hook blocks one read with the reason the model reads, rewrites another, and a PostToolUse hook adds context',
     () =>
       Effect.gen(function* () {
-        const { world, account, projectId, scope } = yield* Guarded;
-        const harness = Context.get(world.runtime.owners, ThreadHarness);
-        const { thread } = yield* birthsOf(world.runtime.owners).create({
-          projectId,
-          createdBySessionId: null,
-          account,
-          approvalMode: 'bypass',
-        });
-        const ended = yield* Queue.unbounded<string>();
-        yield* harness.runs.settlements().subscribe({
-          name: 'plugin hooks turn',
-          at: 'after-stages',
-          handle: (event) => (event.threadId === thread.id ? Queue.offer(ended, event.runId).pipe(Effect.asVoid) : Effect.void),
-        });
-        const started = yield* world.op('start_turn', { threadId: thread.id, text: 'Read the files.', key: crypto.randomUUID() }, scope);
-        const runId = (started.body as { runId: string }).runId;
-        yield* Stream.runDrain(
-          Stream.take(
-            Stream.filter(Stream.fromQueue(ended), (id) => id === runId),
-            1,
-          ),
+        const script = scripted('Read the files.', (answered) =>
+          answered === 0
+            ? call('call-secret', 'read', { path: join(checkout, 'secret.txt') })
+            : answered === 1
+              ? call('call-draft', 'read', { path: join(checkout, 'draft.txt') })
+              : DONE,
         );
+        const { threadId, ended } = yield* born('bypass');
+        yield* ended(yield* turn(threadId, 'Read the files.'));
 
-        const last = asked.at(-1) ?? '';
+        const last = script.asked.at(-1) ?? '';
         expect(last).toContain('read is refused: secrets stay closed');
         expect(last).not.toContain('secret words');
         expect(last).toContain('final words');
         expect(last).not.toContain('draft words');
-        expect(last).toContain('read noted');
+        expect(last).toContain('Read of final.txt noted');
       }),
+  );
+
+  it.effect('a PostToolUse context reaches the run resumed after the call it follows was approved', () =>
+    Effect.gen(function* () {
+      const { world } = yield* Guarded;
+      const script = scripted('Write the note.', (answered) =>
+        answered === 0 ? call('call-note', 'write', { path: join(checkout, 'note.txt'), content: 'noted\n' }) : DONE,
+      );
+      const { threadId, ended } = yield* born('review');
+      yield* turn(threadId, 'Write the note.');
+      const questions = Context.get(world.runtime.owners, ThreadHarness).runs.questions();
+      const question = yield* until(Effect.map(questions.open(threadId), (open) => open[0]));
+      const answered = yield* questions.answer(
+        threadId,
+        question.questionId,
+        question.questions.map((asked) => ({ questionId: asked.id, values: [THREAD_TOOL_CONFIRM_VALUE] })),
+      );
+      if (answered === null) return yield* Effect.die(new Error('the answer opened no run'));
+      yield* ended(answered.runId);
+
+      expect(script.asked.at(-1)).toContain('Write of note.txt noted');
+    }),
+  );
+
+  it.effect('a PostToolUse context reaches the run that reads the ending of a call that ran in the background', () =>
+    Effect.gen(function* () {
+      const script = scripted('Read in the background.', (answered) =>
+        answered === 0 ? call('call-behind', 'read', { path: join(checkout, 'final.txt'), background: true }) : DONE,
+      );
+      const { threadId, ended } = yield* born('bypass');
+      yield* ended(yield* turn(threadId, 'Read in the background.'));
+      const told = yield* until(Effect.sync(() => script.asked.find((said) => said.includes('read finished in the background'))));
+
+      expect(told).toContain('Read of final.txt noted');
+    }),
   );
 });

@@ -26,6 +26,7 @@ import {
   toolSettleEffect,
 } from '../tool';
 import { type AgentToolModelOutput, initialToolDisplay } from '../ToolOutput';
+import { agentGuidance } from '../policy/AgentRuntimePolicy';
 import { DoorMisuse } from './failures';
 import { outcomeOutput } from './outcomeText';
 import { ToolSettlements, type ToolSettlement } from '../ToolSettlements';
@@ -346,12 +347,12 @@ export const makeToolExecution = <TCtx>({
       },
       tracked?.ctx,
     );
-    if (tracked === undefined || tracked.call.record.mode === 'foreground') {
-      rules.guide(after, { hook: 'afterTool', toolName: name, toolCallId: options.toolCallId });
-    }
+    const live = tracked === undefined || tracked.call.record.mode === 'foreground';
+    if (live) rules.guide(after, { hook: 'afterTool', toolName: name, toolCallId: options.toolCallId });
     const durationMs = yield* took;
     return {
       ...projection,
+      guidance: live ? undefined : agentGuidance(after),
       executed: true,
       verdict: answered instanceof ToolAnswer ? answered.verdict : { kind: 'answered' },
       durationMs,

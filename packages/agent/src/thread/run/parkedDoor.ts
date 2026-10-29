@@ -1,6 +1,7 @@
 import { Cause, Effect, Exit } from 'effect';
 import type { CallHooks } from '../../agent/AgentCalls';
 import type { AgentToolDoor } from '../../agent/door/AgentToolDoor';
+import type { ToolGuides } from '../../agent/door/ToolRules';
 import { ToolSettlements } from '../../agent/ToolSettlements';
 import type { AgentToolResolution } from '../../agent/door/types';
 import type { ThreadTranscriptEntry } from '../../transcript/rows';
@@ -44,6 +45,7 @@ export const makeParkedDoors = Effect.gen(function* () {
     resolutions: readonly AgentToolResolution[],
     interruptible: RunResumption['interruptible'],
     callHooks?: (toolContext: ThreadToolExecutionContext) => CallHooks,
+    onGuides?: ToolGuides,
   ) {
     const admitted = (yield* interruptible(contexts.read({ id: run.id, threadId: thread.id }))).admitted?.record ?? null;
     const transcript = yield* interruptible(store.entriesOfRun(thread.id, run.id));
@@ -62,6 +64,7 @@ export const makeParkedDoors = Effect.gen(function* () {
           toolOutputs: toolContext.toolOutputs,
           resolutions,
           callHooks: callHooks?.(toolContext),
+          onGuides,
         });
       }).pipe(Effect.provideService(ToolSettlements, settlements)),
     ).pipe(Effect.onError(() => disposed(toolContext)));

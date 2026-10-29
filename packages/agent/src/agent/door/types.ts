@@ -28,6 +28,7 @@ export type AgentToolOutcome = AgentToolOutputProjection & {
   readonly durationMs?: number;
   readonly display: ToolDisplay;
   readonly completion?: 'command';
+  readonly guidance?: readonly string[];
 };
 
 export function doorToolOutcome(settled: AgentToolOutcome): ToolOutcome {

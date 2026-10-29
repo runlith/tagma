@@ -9,7 +9,8 @@ import { actDigest, callKey, type CallerKey, type Keyed } from '../keyed';
 import { answerOf, transitionDeps, transitionNow } from '../transition/kernel';
 import { ThreadActReusedError, ThreadActSpentError, type Decision } from '../transition/port';
 import { runTransition, ThreadRunSequences } from '../transition/sequence';
-import { threadQuestionEvent } from '../events';
+import { threadGuidanceEvent, threadQuestionEvent } from '../events';
+import { AgentGuidanceJournal, type PendingRuntimeGuide, pendingRuntimeGuides } from '../../agent/AgentGuidanceJournal';
 import { sealThreadEvents } from '../ThreadEventDoor';
 import type { ThreadWriteTx } from '../ThreadPorts';
 import { disposed, makeParkedDoors } from './parkedDoor';
@@ -384,8 +385,20 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
     const resolutions = parking.take(run.id, questionId);
     retract(run.id);
     let executing = false;
+    const guides: PendingRuntimeGuide[] = [];
     return yield* Effect.gen(function* () {
-      const { transcript: ofRun, toolContext, door } = yield* parkedDoor(claimed, run, resolutions, interruptible);
+      const {
+        transcript: ofRun,
+        toolContext,
+        door,
+      } = yield* parkedDoor(
+        claimed,
+        run,
+        resolutions,
+        interruptible,
+        undefined,
+        (directives, at) => void guides.push(...pendingRuntimeGuides(at.hook, directives, at)),
+      );
       return yield* Effect.gen(function* () {
         const { results } = yield* questionToolResults({
           executing: () => {
@@ -407,6 +420,7 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
           updatedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         };
         const toolMessage = toolMessageFromResults(results);
+        const told = new AgentGuidanceJournal(run.id).emit(door.runState.stepNumber, guides);
         yield* Effect.flatMap(
           transitionNow<string, ThreadWriteTx>(
             kernel,
@@ -421,6 +435,7 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
                   events: [
                     ...questionToolResultEvents(yield* store.entriesOfRun(threadId, answeredQuestion.runId, tx), answeredQuestion, results),
                     threadQuestionEvent(answeredQuestion, [toolMessage]),
+                    ...(told === null ? [] : [threadGuidanceEvent(told)]),
                   ],
                   patch: { pendingInteraction: yield* slotAfter(store, threadId, row.pendingInteraction, answeredQuestion, 'parked', tx) },
                   participants: (unit) => toolContext.toolOutputs.commitReferenced([toolMessage], [], unit),
