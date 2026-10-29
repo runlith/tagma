@@ -19,10 +19,10 @@ The Plugins section opens on a catalog of every added marketplace, with search a
 **Opening a card** runs the preview of [[38643816]]. It shows the author, repository, version, the components Tagma takes and ignores with their reasons, and the consent install will ask.
 
 **Installing.**
-- Install asks, as for MCP servers and skills, whether the plugin runs in all the person's projects or in this one. For the all-projects choice, `plugins.enabled` gains the person's own layer, and a project can turn an all-projects plugin off.
+- Install asks, as for MCP servers and skills, whether the plugin runs in all the person's projects or in this one: it lands on the layer the page's "Set for" switch stands on, and so do the switches of installed plugins. For the all-projects choice, `plugins.enabled` gains the person's own layer, and a project turns an all-projects plugin off with `plugins.disabled`.
 - When a plugin's remote servers need sign-in, the card then offers the sign-in of each, which the person starts. An agent's install never signs in.
 
-**The rest of the section.** Installed plugins stay in their own list with their state. A part of the section manages the marketplaces: add by URL, refresh, remove. Each shows its label, the time of its stored revision and a failed refresh's error.
+**The rest of the section.** Installed plugins stay in their own list with their state. A part of the section manages the marketplaces: add by URL, refresh, remove; their settings live in the Plugins section (`plugins.marketplaces`, `plugins.marketplacePresets`), so no separate Marketplaces section stands beside it. Each shows its label, the time of its stored revision and a failed refresh's error.
 
 ## Design
 

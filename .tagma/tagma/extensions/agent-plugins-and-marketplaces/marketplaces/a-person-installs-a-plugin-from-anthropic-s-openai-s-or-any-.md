@@ -5,7 +5,7 @@ ord: 3
 tags: ["feature"]
 fields:
   {
-    "state": "partial"
+    "state": "live"
   }
 edges:
   - kind: relates
@@ -18,7 +18,7 @@ sources:
 ---
 **Value.** A person finds a plugin in the marketplaces of the ecosystem — Anthropic's, OpenAI's or any other git repository or folder carrying a Claude Code or Codex list — instead of having to know its folder or git URL, and installs it with the consent installing already asks.
 
-**How.** `read_marketplaces` lists each marketplace with its trust label and stored list, and its entries with their install state; `preview_plugin` prepares an entry and answers what Tagma takes and ignores, the consent it will ask and who made it; `install_plugin` with the prepared revision installs it. `add_marketplace`, `remove_marketplace` and `update_plugin` are the operator's; `refresh_marketplace` and the reads are open to agents. The `marketplaces.subscribe` feed carries the lists and install states live.
+**How.** `read_marketplaces` lists each marketplace with its trust label and stored list, and its entries with their install state; `preview_plugin` prepares an entry and answers what Tagma takes and ignores, the consent it will ask and who made it; `install_plugin` with the prepared revision installs it. `add_marketplace`, `remove_marketplace` and `update_plugin` are the operator's; `refresh_marketplace` and the reads are open to agents. The `marketplaces.subscribe` feed carries the lists and install states live. In the app the Plugins settings section opens on the catalog of every added marketplace, searched and filtered by marketplace; opening an entry previews it, and Install puts it in this project or in every project, as the page's "Set for" switch stands. The same section adds, refreshes and removes marketplaces.
 
 **Behaviour.**
 - Anthropic's and OpenAI's marketplaces stand in the list from the first start, labelled `vendor`; one the person removes stays removed.
@@ -27,5 +27,6 @@ sources:
 - A Claude Code entry combines with the plugin's own `plugin.json` as Claude Code combines them.
 - An installed plugin is a copy: refreshing or removing its marketplace never changes it, and `update_plugin` moves it to what the stored list says.
 - A plugin's id is global: an entry whose plugin is installed from elsewhere reads `taken` and refuses to install.
+- After an install, the plugin's card offers the sign-in each of its remote servers asks for; the person starts it, an agent's install never signs in.
 
-**Limits.** The Plugins section of the app does not show the catalog yet. Marketplaces served as a single `marketplace.json` URL, npm packages, zip archives and command sources are not installed.
+**Limits.** Marketplaces served as a single `marketplace.json` URL, npm packages, zip archives and command sources are not installed. Tagma's own marketplace is not shipped yet.
