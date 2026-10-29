@@ -5,7 +5,7 @@ ord: 3
 tags: ["idea"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 sources:
   - kind: file
