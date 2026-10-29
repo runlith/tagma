@@ -134,6 +134,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         sensitive: option.sensitive,
         required: option.required,
         set: options[option.key] !== undefined,
+        fallback: option.sensitive ? null : option.fallback,
       })),
     } satisfies PluginRow;
   });

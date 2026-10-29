@@ -38,7 +38,11 @@ export const pluginOptionSchema = Schema.Struct({
   sensitive: Schema.Boolean.annotate({ description: 'Kept in the key store under the plugin, never in a setting.' }),
   required: Schema.Boolean,
   set: Schema.Boolean.annotate({ description: 'Whether a value or the declared default stands for it.' }),
+  fallback: Schema.NullOr(Schema.String).annotate({
+    description: 'The default the plugin declares, used while no value is given; null for none and for a secret option.',
+  }),
 });
+export type PluginOptionRow = typeof pluginOptionSchema.Type;
 
 export const pluginRowSchema = Schema.Struct({
   id: Schema.String,

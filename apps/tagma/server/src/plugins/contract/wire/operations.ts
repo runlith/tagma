@@ -38,6 +38,7 @@ export const PLUGIN_ROWS = {
       sensitive: true,
       required: false,
       set: false,
+      fallback: 'x'.repeat(40),
     })),
     refused: 'x'.repeat(300),
   })),

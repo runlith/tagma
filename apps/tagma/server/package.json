@@ -654,6 +654,16 @@
       "browser": "./src/secrets/contract/wire/rows.ts",
       "default": "./src/secrets/contract/wire/rows.ts"
     },
+    "./plugins/contract/wire/rows": {
+      "types": "./src/plugins/contract/wire/rows.ts",
+      "browser": "./src/plugins/contract/wire/rows.ts",
+      "default": "./src/plugins/contract/wire/rows.ts"
+    },
+    "./plugins/contract/wire/settings": {
+      "types": "./src/plugins/contract/wire/settings.ts",
+      "browser": "./src/plugins/contract/wire/settings.ts",
+      "default": "./src/plugins/contract/wire/settings.ts"
+    },
     "./graph/contract/wire/law": {
       "types": "./src/graph/contract/wire/law.ts",
       "browser": "./src/graph/contract/wire/law.ts",
