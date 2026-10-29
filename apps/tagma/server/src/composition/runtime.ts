@@ -83,6 +83,11 @@ import { HarnessOwner } from '../threads/contract/service/engine.js';
 import { ThreadFilesPlace } from '../threads/contract/service/parts.js';
 import { ScratchAreas } from '../threads/contract/service/scratch.js';
 import { McpPlaces } from '../mcp/contract/service/places.js';
+import { plugins } from '../plugins/plugins.js';
+import { PluginPlaces } from '../plugins/contract/service/plugins.js';
+import { PluginFormats } from '../plugins/contract/service/format.js';
+import { claudeCodeFormat } from '../plugin-formats/claude-code/format.js';
+import { agentPluginsFormat } from '../plugin-formats/agent-plugins/format.js';
 import { Coverage } from '../workspace/contract/service/roots.js';
 import { mcpPlaces } from './mcpPlaces.js';
 import { MachineWorld } from '../executions/contract/service/worlds.js';
@@ -515,6 +520,12 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     home: dataPath,
     server: options.tagmaAppServer ?? null,
   });
+  const pluginsInstallation = plugins.lifetimes.installation.pipe(
+    Layer.provide(Layer.succeed(PluginPlaces, { home: dataPath ?? join(tmpdir(), `tagma-plugins-${instanceId.slice(0, 8)}`) })),
+    Layer.provide(Layer.succeed(PluginFormats, [claudeCodeFormat, agentPluginsFormat])),
+    Layer.provide(BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)))),
+    Layer.provide(BunFileSystem.layer),
+  );
   const browsers = closing(
     'browser',
     Layer.merge(cookieSourcesLayer, pageRender.lifetimes.installation).pipe(
@@ -636,7 +647,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                 ),
               ),
             ),
-            Layer.provideMerge(closing('app views', views.lifetimes.installation)),
+            Layer.provideMerge(Layer.merge(closing('app views', views.lifetimes.installation), closing('plugins', pluginsInstallation))),
             Layer.provideMerge(
               closing(
                 'apps',

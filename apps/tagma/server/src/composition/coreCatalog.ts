@@ -10,6 +10,7 @@ import { config } from '../config/contract/wire/module.js';
 import { mcp } from '../mcp/contract/wire/module.js';
 import { connectors } from '../connectors/contract/wire/module.js';
 import { tagmaApps } from '../tagma-apps/contract/wire/module.js';
+import { plugins } from '../plugins/contract/wire/module.js';
 import { views } from '../views/contract/wire/module.js';
 import { secrets } from '../secrets/contract/wire/module.js';
 import { artifacts } from '../artifacts/contract/wire/module.js';
@@ -47,6 +48,7 @@ export const CORE_CATALOG: readonly [
   typeof mcp,
   typeof connectors,
   typeof tagmaApps,
+  typeof plugins,
   typeof views,
   typeof secrets,
   typeof artifacts,
@@ -83,6 +85,7 @@ export const CORE_CATALOG: readonly [
   mcp,
   connectors,
   tagmaApps,
+  plugins,
   views,
   secrets,
   artifacts,

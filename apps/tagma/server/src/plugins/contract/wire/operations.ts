@@ -1,0 +1,162 @@
+import { family } from '@runlith/paging';
+import { Schema } from 'effect';
+import { ASKS_IN_REVIEW, ASKS_NEVER, MCP_ENV_RESOLVING } from '../../../platform/contract/wire/conditions.js';
+import { arms, operation } from '../../../platform/contract/wire/operation.js';
+import { limitOf } from '../../../platform/contract/wire/pageFamily.js';
+import { placedCursor, projectField } from '../../../platform/contract/wire/place.js';
+import type { PluginConsented } from './consent.js';
+import { PluginId } from './names.js';
+import { pluginRowSchema } from './rows.js';
+
+const declared = {
+  doors: { http: true },
+  tool: { capability: 'plugins' },
+  callers: 'any',
+  subject: 'none',
+  place: 'project',
+  waits: [],
+  lifetimes: [],
+} as const;
+
+export const PLUGIN_ROWS = {
+  ...family('plugins', 1, 'json', { text: 6_000, json: 6_000 }, 10, () => ({
+    id: 'x'.repeat(40),
+    title: 'x'.repeat(60),
+    version: 'x'.repeat(12),
+    description: 'x'.repeat(200),
+    format: 'claude-code',
+    source: { kind: 'git', url: 'x'.repeat(120) },
+    root: 'x'.repeat(160),
+    enabled: true,
+    components: Array.from({ length: 16 }, () => ({ kind: 'mcp-server', name: 'x'.repeat(40), detail: 'x'.repeat(80) })),
+    ignored: Array.from({ length: 6 }, () => ({ component: 'x'.repeat(20), name: 'x'.repeat(30), reason: 'x'.repeat(80) })),
+    options: Array.from({ length: 3 }, () => ({
+      key: 'x'.repeat(20),
+      type: 'string',
+      title: 'x'.repeat(30),
+      description: 'x'.repeat(80),
+      sensitive: true,
+      required: false,
+      set: false,
+    })),
+    refused: 'x'.repeat(300),
+  })),
+};
+
+const answer = arms({ ok: { plugin: pluginRowSchema } });
+
+const acted = { ...declared, effect: 'write', identity: { key: 'call' } } as const;
+
+const LIST_REFUSALS = ['unknown-project', 'secret-store-failed'] as const;
+const CHANGE_REFUSALS = [
+  ...LIST_REFUSALS,
+  'plugin-not-installed',
+  'plugin-refused',
+  'plugin-names-collide',
+  'plugin-source-unreadable',
+  'plugin-clone-failed',
+  'setting-scope',
+  'setting-value',
+] as const;
+
+const consentFacts = (prepared: PluginConsented) => {
+  const runs = prepared.consent.subjects.filter((subject) => subject.kind === 'execute').map((subject) => subject.value);
+  const reaches = prepared.consent.subjects.filter((subject) => subject.kind === 'network').map((subject) => subject.value);
+  return [
+    ...(runs.length === 0 ? [] : [{ label: 'runs', value: runs.join('\n') }]),
+    ...(reaches.length === 0 ? [] : [{ label: 'reaches', value: reaches.join('\n') }]),
+  ];
+};
+
+export const PLUGIN_OPERATIONS = {
+  read_plugins: operation('read_plugins', {
+    approval: ASKS_NEVER,
+    ...declared,
+    answer: arms({
+      ok: { plugins: Schema.Array(pluginRowSchema), shown: Schema.Int, total: Schema.Int, next: Schema.NullOr(Schema.String) },
+    }),
+    effect: 'read',
+    identity: 'none',
+    meaning:
+      'Read the agent plugins installed on this machine: what each one gives the agent here, what Tagma ignores in it and why, the options it asks for, and whether this project runs it.',
+    grammar:
+      'A page of rows by id with the total; `next` continues the walk, null on the last page. A component is offered as `<plugin>-<name>`. A refused row says why its directory as it stands now cannot be read.',
+    input: Schema.Struct({ project: projectField, limit: limitOf(PLUGIN_ROWS), cursor: placedCursor }),
+    refusals: [...LIST_REFUSALS, 'bad-cursor', 'cursor-stale'],
+    page: PLUGIN_ROWS,
+    confirmation: () => ({ summary: 'Read the plugins?' }),
+    confirmLabel: 'Read',
+    presentation: { running: 'Reading the plugins', done: 'Read the plugins', many: (count) => `Read the plugins ${count} times` },
+    subjects: () => [],
+  }),
+  install_plugin: operation('install_plugin', {
+    approval: { ...ASKS_IN_REVIEW, when: [MCP_ENV_RESOLVING] },
+    ...acted,
+    answer,
+    meaning:
+      'Install an agent plugin — Agent Plugins 1.0 or Claude Code — from a folder, read in place, or a git URL, cloned onto this machine; installing the same URL again updates it. `enabled: false` installs it without running it in this project.',
+    grammar:
+      'Its skills and commands join the `$` catalog, its MCP servers this project’s pool and its agents the agent library, each named `<plugin>-<name>`; its command hooks run as the operator. A relative folder is read from the project root.',
+    input: Schema.Struct({
+      project: projectField,
+      source: Schema.String.check(Schema.isMinLength(1)).annotate({ description: 'The plugin folder, or the git URL it is cloned from.' }),
+      enabled: Schema.optional(Schema.Boolean).annotate({ description: 'true (the default): this project runs it at once.' }),
+    }),
+    refusals: [...CHANGE_REFUSALS, 'plugin-id-taken'],
+    confirmation: (input, prepared?: PluginConsented) => ({
+      summary:
+        prepared === undefined
+          ? `Install the plugin from ${input.source}?`
+          : input.enabled === false
+            ? `Install the plugin ${prepared.id} on this machine without running it?`
+            : `Install the plugin ${prepared.id} and run it in this project?`,
+      facts: prepared === undefined ? [] : consentFacts(prepared),
+      consequence: 'Its MCP servers and hooks run as the operator on this machine wherever it is enabled.',
+    }),
+    confirmLabel: 'Install',
+    presentation: { running: 'Installing a plugin', done: 'Installed a plugin' },
+    subjects: (input, prepared?: PluginConsented) => (input.enabled === false || prepared === undefined ? [] : prepared.consent.subjects),
+    raises: (input, prepared?: PluginConsented) => (input.enabled === false || prepared === undefined ? [] : prepared.consent.raised),
+  }),
+  enable_plugin: operation('enable_plugin', {
+    approval: { ...ASKS_IN_REVIEW, when: [MCP_ENV_RESOLVING] },
+    ...acted,
+    answer,
+    meaning:
+      'Run an installed plugin in this project or stop running it here: its skills, commands, MCP servers, agents and hooks reach this project only while it is enabled.',
+    input: Schema.Struct({
+      project: projectField,
+      id: PluginId,
+      enabled: Schema.optional(Schema.Boolean).annotate({ description: 'true (the default): this project runs it. false: it stops here.' }),
+    }),
+    refusals: CHANGE_REFUSALS,
+    confirmation: (input, prepared?: PluginConsented | null) => ({
+      summary:
+        input.enabled === false ? `Stop running the plugin ${input.id} in this project?` : `Run the plugin ${input.id} in this project?`,
+      facts: prepared ? consentFacts(prepared) : [],
+    }),
+    confirmLabel: 'Switch',
+    presentation: { running: 'Switching a plugin', done: 'Switched a plugin' },
+    subjects: (_input, prepared?: PluginConsented | null) => (prepared ? prepared.consent.subjects : []),
+    raises: (_input, prepared?: PluginConsented | null) => (prepared ? prepared.consent.raised : []),
+  }),
+  uninstall_plugin: operation('uninstall_plugin', {
+    approval: ASKS_IN_REVIEW,
+    ...acted,
+    answer,
+    meaning:
+      'Uninstall an agent plugin from this machine: every project stops running it and its secret options are dropped. Its data stays.',
+    input: Schema.Struct({ project: projectField, id: PluginId }),
+    refusals: CHANGE_REFUSALS,
+    confirmation: (input) => ({
+      summary: `Uninstall the plugin ${input.id}?`,
+      consequence:
+        'Every project stops running it and its secret options are dropped; its data stays, and a clone of its git URL is removed.',
+    }),
+    confirmLabel: 'Uninstall',
+    presentation: { running: 'Uninstalling a plugin', done: 'Uninstalled a plugin' },
+    subjects: () => [],
+  }),
+};
+
+export type PluginOperationId = keyof typeof PLUGIN_OPERATIONS;

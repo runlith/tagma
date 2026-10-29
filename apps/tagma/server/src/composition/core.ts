@@ -15,6 +15,7 @@ import { config } from '../config/config.js';
 import { mcp } from '../mcp/mcp.js';
 import { connectors } from '../connectors/connectors.js';
 import { tagmaApps } from '../tagma-apps/tagma-apps.js';
+import { plugins } from '../plugins/plugins.js';
 import { views } from '../views/views.js';
 import { secrets } from '../secrets/secrets.js';
 import { artifacts } from '../artifacts/artifacts.js';
@@ -62,6 +63,7 @@ export const CORE_MODULES = [
   mcp,
   connectors,
   tagmaApps,
+  plugins,
   views,
   secrets,
   artifacts,
