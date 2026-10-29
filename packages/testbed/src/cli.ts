@@ -196,8 +196,11 @@ const option = (prefix: string): string | undefined => command.find((part) => pa
 const randomize = command.indexOf('--randomize');
 let seed: number | undefined;
 if (runner === 'bun') {
-  const given = option('--seed=');
-  seed = given === undefined ? undefined : Number(given);
+  for (let at = 0; at < options(); at++) {
+    const part = command[at]!;
+    if (part === '--seed') seed = Number(command[++at]);
+    else if (part.startsWith('--seed=')) seed = Number(part.slice('--seed='.length));
+  }
   if (seed === undefined && randomize !== -1) {
     seed = Math.floor(Math.random() * 2 ** 31);
     command.push(`--seed=${seed}`);
