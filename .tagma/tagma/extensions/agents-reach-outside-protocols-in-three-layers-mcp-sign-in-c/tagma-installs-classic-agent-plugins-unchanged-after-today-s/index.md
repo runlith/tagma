@@ -55,7 +55,7 @@ Each format is an adapter that turns a directory into one plugin description: na
 - **MCP servers.**
   - **Port.** `mcp` gains a port for contributed declarations, and the plugins module fills it. `mcp` knows no plugin, and plugin declarations are not a settings layer.
   - **Shadowing.** A user or project declaration of the same name shadows a contributed one.
-  - **Disabling.** A contributed server is not editable. Disabling one is a project setting keyed by its name.
+  - **Disabling.** A contributed server is not editable: `remove_mcp_server` refuses it. Disabling one is a project setting keyed by its name (`mcp.contributionsOff`), which `enable_mcp_server` with scope `contributed` writes.
   - **Expansion.** A contributed declaration expands only its own format's variables, and never from the server environment:
     - Agent Plugins: `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` in args, env and cwd, never in the URL or headers;
     - Claude Code: `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}` and `${user_config.KEY}`.
