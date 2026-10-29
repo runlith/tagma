@@ -160,6 +160,204 @@ fields:
           "line": 26,
           "path": "packages/execution-host/src/terminalRelease.itest.ts",
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/app/src/lib/features/plugin-secrets/PluginSecrets.svelte",
+          "fix": "Give it an owner: add `apps/tagma/app/src/lib/features/plugin-secrets/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/app/src/lib/features/plugin-secrets/PluginSecrets.svelte",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/app/src/lib/features/plugin-secrets/Repo.ts",
+          "fix": "Give it an owner: add `apps/tagma/app/src/lib/features/plugin-secrets/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/app/src/lib/features/plugin-secrets/Repo.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/app/src/lib/features/plugin-secrets/Section.svelte",
+          "fix": "Give it an owner: add `apps/tagma/app/src/lib/features/plugin-secrets/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/app/src/lib/features/plugin-secrets/Section.svelte",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/app/src/lib/features/plugin-secrets/settings.ts",
+          "fix": "Give it an owner: add `apps/tagma/app/src/lib/features/plugin-secrets/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/app/src/lib/features/plugin-secrets/settings.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/contract/service/secrets.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/contract/service/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/contract/service/secrets.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/contract/wire/entries.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/contract/wire/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/contract/wire/entries.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/contract/wire/module.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/contract/wire/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/contract/wire/module.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/contract/wire/operations.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/contract/wire/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/contract/wire/operations.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/contract/wire/refusalWords.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/contract/wire/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/contract/wire/refusalWords.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/contract/wire/rows.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/contract/wire/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/contract/wire/rows.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/layer.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/layer.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/operations.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/operations.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/plugin-secrets.itest.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/plugin-secrets.itest.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/plugin-secrets.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/plugin-secrets.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/shelf.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/shelf.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/store.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/store.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "uncovered @ apps/tagma/server/src/plugin-secrets/testing/fixture.ts",
+          "fix": "Give it an owner: add `apps/tagma/server/src/plugin-secrets/testing/` or the file to the territory of the module that owns its meaning with `set_module`, or draw a module card for it.",
+          "line": 1,
+          "path": "apps/tagma/server/src/plugin-secrets/testing/fixture.ts",
+          "said": "lies in no module's territory"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "app-composition -> apps/tagma/app/src/lib/features/plugin-secrets/Repo.ts unowned @ apps/tagma/app/src/lib/app/composition.ts",
+          "fix": "Give `apps/tagma/app/src/lib/features/plugin-secrets/Repo.ts` an owner: add it or its directory to the territory of the module that owns it with `set_module`.",
+          "line": 41,
+          "path": "apps/tagma/app/src/lib/app/composition.ts",
+          "said": "imports `$lib/features/plugin-secrets/Repo.js`, landing on `apps/tagma/app/src/lib/features/plugin-secrets/Repo.ts`, which no module's territory covers"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "app-composition -> apps/tagma/app/src/lib/features/plugin-secrets/settings.ts unowned @ apps/tagma/app/src/lib/app/declaredSections.ts",
+          "fix": "Give `apps/tagma/app/src/lib/features/plugin-secrets/settings.ts` an owner: add it or its directory to the territory of the module that owns it with `set_module`.",
+          "line": 4,
+          "path": "apps/tagma/app/src/lib/app/declaredSections.ts",
+          "said": "imports `../features/*/settings.ts`, landing on `apps/tagma/app/src/lib/features/plugin-secrets/settings.ts`, which no module's territory covers"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "composition -> apps/tagma/server/src/plugin-secrets/plugin-secrets.ts unowned @ apps/tagma/server/src/composition/core.ts",
+          "fix": "Give `apps/tagma/server/src/plugin-secrets/plugin-secrets.ts` an owner: add it or its directory to the territory of the module that owns it with `set_module`.",
+          "line": 18,
+          "path": "apps/tagma/server/src/composition/core.ts",
+          "said": "imports `../plugin-secrets/plugin-secrets.js`, landing on `apps/tagma/server/src/plugin-secrets/plugin-secrets.ts`, which no module's territory covers"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "composition -> apps/tagma/server/src/plugin-secrets/contract/wire/module.ts unowned @ apps/tagma/server/src/composition/coreCatalog.ts",
+          "fix": "Give `apps/tagma/server/src/plugin-secrets/contract/wire/module.ts` an owner: add it or its directory to the territory of the module that owns it with `set_module`.",
+          "line": 13,
+          "path": "apps/tagma/server/src/composition/coreCatalog.ts",
+          "said": "imports `../plugin-secrets/contract/wire/module.js`, landing on `apps/tagma/server/src/plugin-secrets/contract/wire/module.ts`, which no module's territory covers"
+        },
+        {
+          "changed": "check",
+          "commit": "82bb38dc7dcaf422958d1678a299adfd7ac301e0",
+          "fingerprint": "composition -> apps/tagma/server/src/plugin-secrets/plugin-secrets.ts unowned @ apps/tagma/server/src/composition/runtime.ts",
+          "fix": "Give `apps/tagma/server/src/plugin-secrets/plugin-secrets.ts` an owner: add it or its directory to the territory of the module that owns it with `set_module`.",
+          "line": 177,
+          "path": "apps/tagma/server/src/composition/runtime.ts",
+          "said": "imports `../plugin-secrets/plugin-secrets.js`, landing on `apps/tagma/server/src/plugin-secrets/plugin-secrets.ts`, which no module's territory covers"
         }
       ],
       "inspection": "modules",
