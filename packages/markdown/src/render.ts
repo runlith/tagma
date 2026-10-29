@@ -125,16 +125,15 @@ export function codeColours(block: MarkdownHtml): (root: HTMLElement) => (() => 
     const code = codeOf.get(block);
     if (code === undefined) return undefined;
     const colouring = colourings.get(code) ?? coloured(code);
-    if (colouring.lines !== null) {
-      paintCode(root, code, colouring.lines);
-      return undefined;
-    }
+    if (colouring.lines !== null) return paintCode(root, code, colouring.lines);
     let active = true;
+    let erase: (() => void) | undefined;
     void colouring.ready.then((lines) => {
-      if (active) paintCode(root, code, lines);
+      if (active) erase = paintCode(root, code, lines);
     });
     return () => {
       active = false;
+      erase?.();
     };
   };
 }
@@ -154,17 +153,111 @@ function coloured(code: readonly Code[]): Colouring {
   return colouring;
 }
 
-function paintCode(root: HTMLElement, code: readonly Code[], lines: Lines): void {
+function paintCode(root: HTMLElement, code: readonly Code[], lines: Lines): (() => void) | undefined {
+  const ink = inkOf(root.ownerDocument);
+  const painted: [Inked, StaticRange][] = [];
   let at = 0;
   for (const element of root.querySelectorAll('pre > code')) {
     const one = code[at];
-    if (one === undefined) return;
+    if (one === undefined) break;
     const shown = visibleCode(one.text, one.language);
     if (element.textContent !== shown) continue;
     const colours = lines[at];
     at += 1;
-    if (colours !== undefined && colours.size > 0) element.replaceChildren(...colouredLines(element.ownerDocument, shown, colours));
+    if (colours === undefined || colours.size === 0) continue;
+    if (ink === null) element.replaceChildren(...colouredLines(element.ownerDocument, shown, colours));
+    else highlightLines(ink, element, shown, colours, painted);
   }
+  if (painted.length === 0 || ink === null) return undefined;
+  return () => {
+    for (const [inked, range] of painted) {
+      inked.highlight.delete(range);
+      if (inked.highlight.size === 0 && !inked.colour.startsWith('var(')) release(ink, inked);
+    }
+  };
+}
+
+type Inked = { colour: string; name: string; highlight: Highlight };
+
+type Ink = {
+  view: Window & typeof globalThis;
+  sheet: CSSStyleSheet;
+  registry: HighlightRegistry;
+  colours: Map<string, Inked | null>;
+  named: number;
+};
+
+const inks = new WeakMap<Document, Ink | null>();
+
+function inkOf(page: Document): Ink | null {
+  const held = inks.get(page);
+  if (held !== undefined) return held;
+  const view = page.defaultView;
+  const ink =
+    view === null || view.CSS?.highlights === undefined || typeof view.Highlight !== 'function' || typeof view.StaticRange !== 'function'
+      ? null
+      : { view, sheet: new view.CSSStyleSheet(), registry: view.CSS.highlights, colours: new Map<string, Inked | null>(), named: 0 };
+  if (ink !== null) page.adoptedStyleSheets = [...page.adoptedStyleSheets, ink.sheet];
+  inks.set(page, ink);
+  return ink;
+}
+
+function inked(ink: Ink, colour: string): Inked | null {
+  const held = ink.colours.get(colour);
+  if (held !== undefined) return held;
+  let inked: Inked | null = null;
+  if (ink.view.CSS.supports('color', colour)) {
+    inked = { colour, name: `code-ink-${(ink.named += 1)}`, highlight: new ink.view.Highlight() };
+    ink.sheet.insertRule(`::highlight(${inked.name}) { color: ${colour}; }`, ink.sheet.cssRules.length);
+    ink.registry.set(inked.name, inked.highlight);
+  }
+  ink.colours.set(colour, inked);
+  return inked;
+}
+
+function release(ink: Ink, inked: Inked): void {
+  ink.colours.delete(inked.colour);
+  ink.registry.delete(inked.name);
+  const rules = ink.sheet.cssRules;
+  for (let index = rules.length - 1; index >= 0; index -= 1) {
+    if ((rules[index] as CSSStyleRule).selectorText === `::highlight(${inked.name})`) ink.sheet.deleteRule(index);
+  }
+}
+
+function highlightLines(ink: Ink, element: Element, shown: string, colours: CodeColours, painted: [Inked, StaticRange][]): void {
+  const texts: Text[] = [];
+  const starts: number[] = [];
+  const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let length = 0;
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    texts.push(node as Text);
+    starts.push(length);
+    length += (node as Text).length;
+  }
+  let text = 0;
+  const point = (offset: number): [Text, number] => {
+    while (text < texts.length - 1 && starts[text + 1]! <= offset) text += 1;
+    return [texts[text]!, offset - starts[text]!];
+  };
+  let lineStart = 0;
+  shown.split('\n').forEach((line, index) => {
+    const tokens = colours.get(index);
+    if (tokens !== undefined && tokens.map((token) => token.text).join('') === line) {
+      let offset = lineStart;
+      for (const token of tokens) {
+        const held = token.color === undefined || token.text === '' ? null : inked(ink, token.color);
+        if (held !== null) {
+          const [startContainer, startOffset] = point(offset);
+          const [endContainer, endOffset] = point(offset + token.text.length);
+          const range = new ink.view.StaticRange({ startContainer, startOffset, endContainer, endOffset });
+          held.highlight.add(range);
+          painted.push([held, range]);
+        }
+        offset += token.text.length;
+      }
+    }
+    lineStart += line.length + 1;
+  });
 }
 
 function colouredLines(page: Document, shown: string, colours: CodeColours): Node[] {

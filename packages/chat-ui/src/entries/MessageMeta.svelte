@@ -1,6 +1,4 @@
 <script lang="ts">
-  import Check from '@lucide/svelte/icons/check';
-  import Copy from '@lucide/svelte/icons/copy';
   import type { Snippet } from 'svelte';
   import { messageTime } from '../chatTime';
   import type { ChatMessageMetaExtra } from '../renderers';
@@ -38,9 +36,36 @@
       onclick={onCopy}
     >
       {#if copied}
-        <Check class="size-3.5 text-chat-success-mark" />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          class="lucide-icon lucide lucide-check size-3.5 text-chat-success-mark"><path d="M20 6 9 17l-5-5" /></svg
+        >
       {:else}
-        <Copy class="size-3.5" />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          class="lucide-icon lucide lucide-copy size-3.5"
+          ><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path
+            d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+          /></svg
+        >
       {/if}
     </button>
   {/if}
