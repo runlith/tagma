@@ -84,9 +84,10 @@ export type Frame = {
   changes: RowChange[];
   mounts: Mount[];
 };
-export type Drag = { distance: number; speed: number; fromFrame: number; toFrame: number; preventFling: boolean };
-export type WheelStep = { frame: number; deltaY: number; deltaMode: number };
+export type Drag = { distance: number; speed: number; fromFrame: number; toFrame: number; preventFling: boolean; quantum?: number };
+export type WheelStep = { frame: number; deltaY: number; deltaMode: number; stamp: number; received: number };
 export type WheelRun = { fromFrame: number; toFrame: number; steps: WheelStep[] };
+export type ScrollStep = { stamp: number; received: number; top: number };
 export type TrustedTouch = { type: string; timeStamp: number; received: number; x: number | null; y: number | null };
 export type Navigation = {
   kind: 'rail' | 'latest' | 'keyboard';
@@ -100,7 +101,7 @@ export type Scrollbar = { track: Rect; x: number; gutter: number; viewport: numb
 export type ThumbSample = { y: number; time: number; top: number };
 export type ThumbControl = { scrollbar: Scrollbar; samples: ThumbSample[]; recording: Recording };
 export type ThumbReference = { scale: number; interval: number; trial: Scrollbar; control: ThumbControl[] };
-export type ScrollWrite = { time: number; frame: number; method: 'scrollTop' | 'scrollTo' | 'scrollBy' };
+export type ScrollWrite = { time: number; frame: number; method: 'scrollTop' | 'scrollTo' | 'scrollBy'; from: number; to: number };
 export type Recording = {
   name: string;
   frames: Frame[];
@@ -108,6 +109,7 @@ export type Recording = {
   drags: Drag[];
   wheels: WheelRun[];
   writes?: ScrollWrite[];
+  scrolls?: ScrollStep[];
   timings?: number[];
   ticks?: number[];
   commands?: Navigation[];

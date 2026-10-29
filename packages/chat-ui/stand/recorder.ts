@@ -65,7 +65,7 @@ export class Recorder {
   private ownMovement = false;
   private tick = 0;
   private wroteAt: number | null = null;
-  private absorbed = false;
+  private unended = false;
   private readonly writeFrames = new Set<number>();
   private unhookWrites = () => {};
   private touching = false;
@@ -107,6 +107,7 @@ export class Recorder {
       if (this.clockOnly) return;
       this.settle();
       this.ownMovement = true;
+      this.unended = !('onscrollend' in root);
       this.selected = null;
       this.controlRow = null;
       this.controlNode = null;
@@ -123,7 +124,18 @@ export class Recorder {
           frame: this.count() + Number(this.candidate !== null),
           deltaY: wheel.deltaY,
           deltaMode: wheel.deltaMode,
+          stamp: wheel.timeStamp,
+          received: performance.now(),
         });
+      },
+      true,
+    );
+    listen(
+      root,
+      'scroll',
+      (event) => {
+        if (!event.isTrusted) return;
+        this.recording?.scrolls?.push({ stamp: event.timeStamp, received: performance.now(), top: root.scrollTop });
       },
       true,
     );
@@ -182,11 +194,11 @@ export class Recorder {
     listen(root, 'scrollend', () => {
       if (this.wroteAt !== null && this.tick - this.wroteAt <= 1) {
         this.wroteAt = null;
-        if (this.ownMovement) this.absorbed = true;
+        if (this.ownMovement) this.unended = true;
         return;
       }
       this.ownMovement = false;
-      this.absorbed = false;
+      this.unended = false;
     });
     if (!this.clockOnly) this.unhookWrites = this.hookWrites(root);
     listen(
@@ -297,6 +309,7 @@ export class Recorder {
       drags: [],
       wheels: [],
       writes: this.clockOnly ? undefined : [],
+      scrolls: this.clockOnly ? undefined : [],
       commands: [],
       timings: this.clockOnly ? [] : undefined,
       ticks: this.clockOnly ? undefined : [],
@@ -322,11 +335,11 @@ export class Recorder {
   stable(): boolean {
     return this.previousKeys.size > 0 && [...this.previousKeys].every((key) => (this.measured.get(key)?.stable ?? 0) >= 2);
   }
-  beginDrag(distance: number, speed: number, preventFling: boolean): void {
+  beginDrag(distance: number, speed: number, preventFling: boolean, quantum?: number): void {
     if (this.recording === null) throw new Error('Start a recording before its gesture');
     if (!this.activeEnded) throw new Error('End the previous gesture portion first');
     this.declaredTouchEnd = false;
-    this.activeDrag = { distance, speed, preventFling, fromFrame: Math.max(0, this.count() - 1), toFrame: this.count() };
+    this.activeDrag = { distance, speed, preventFling, fromFrame: Math.max(0, this.count() - 1), toFrame: this.count(), quantum };
     this.recording.drags.push(this.activeDrag);
     this.activeEnded = false;
   }
@@ -481,8 +494,8 @@ export class Recorder {
   }
 
   private settle(): void {
-    if (!this.absorbed) return;
-    this.absorbed = false;
+    if (!this.unended) return;
+    this.unended = false;
     if (!this.ownMovement) return;
     this.ownMovement = false;
     if (this.recording === null) return;
@@ -495,29 +508,30 @@ export class Recorder {
 
   private hookWrites(root: HTMLElement): () => void {
     const top = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop')!;
-    const wrote = (method: ScrollWrite['method']) => {
+    const read = (): number => top.get!.call(root);
+    const wrote = <T>(method: ScrollWrite['method'], write: () => T): T => {
       this.wroteAt = this.tick;
-      if (this.recording === null) return;
-      this.writeFrames.add(this.count());
-      this.recording.writes?.push({ time: performance.now(), frame: this.count(), method });
+      const from = read();
+      const time = performance.now();
+      const frame = this.count();
+      const result = write();
+      if (this.recording !== null) {
+        this.writeFrames.add(frame);
+        this.recording.writes?.push({ time, frame, method, from, to: read() });
+      }
+      return result;
     };
     Object.defineProperty(root, 'scrollTop', {
       configurable: true,
-      get: () => top.get!.call(root),
-      set: (value: number) => {
-        wrote('scrollTop');
-        top.set!.call(root, value);
-      },
+      get: read,
+      set: (value: number) => wrote('scrollTop', () => top.set!.call(root, value)),
     });
     for (const name of ['scrollTo', 'scrollBy'] as const) {
       const write = root[name];
       Object.defineProperty(root, name, {
         configurable: true,
         writable: true,
-        value: (...args: unknown[]) => {
-          wrote(name);
-          return Reflect.apply(write, root, args);
-        },
+        value: (...args: unknown[]) => wrote(name, () => Reflect.apply(write, root, args)),
       });
     }
     return () => {

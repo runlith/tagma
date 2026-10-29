@@ -70,7 +70,11 @@ for (const lane of ['chromium', 'webkit'] as const)
             failure = error.message;
           }
           const result = evidence(recording);
-          const movement = displacement(recording, controlKey === undefined ? undefined : envelopes.get(controlKey));
+          const movement = displacement(
+            recording,
+            controlKey === undefined ? undefined : envelopes.get(controlKey),
+            lane === 'webkit' ? 'causal-late' : 'full',
+          );
           await writeFile(join(artifacts, framesFile), JSON.stringify({ lane, branch, recording, result, movement }));
           console.log(
             JSON.stringify({
@@ -80,6 +84,7 @@ for (const lane of ['chromium', 'webkit'] as const)
               ...result,
               displacement: {
                 maxError: movement.maxError,
+                lateWheels: movement.lateWheels.length,
                 cumulativeDrift: movement.cumulativeDrift,
                 failures: movement.failures.length,
                 unchecked: movement.unchecked.length,

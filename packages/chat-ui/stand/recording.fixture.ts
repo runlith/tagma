@@ -122,17 +122,25 @@ const Drag = Schema.Struct({
   fromFrame: Schema.Number,
   toFrame: Schema.Number,
   preventFling: Schema.Boolean,
+  quantum: Schema.optional(Schema.Number),
 } satisfies Record<keyof DOM.Drag, Schema.Constraint>) satisfies Schema.Codec<DOM.Drag>;
 const WheelStep = Schema.Struct({
   frame: Schema.Number,
   deltaY: Schema.Number,
   deltaMode: Schema.Number,
+  stamp: Schema.Number,
+  received: Schema.Number,
 } satisfies Record<keyof DOM.WheelStep, Schema.Constraint>) satisfies Schema.Codec<DOM.WheelStep>;
 const WheelRun = Schema.Struct({
   fromFrame: Schema.Number,
   toFrame: Schema.Number,
   steps: Schema.mutable(Schema.Array(WheelStep)),
 } satisfies Record<keyof DOM.WheelRun, Schema.Constraint>) satisfies Schema.Codec<DOM.WheelRun>;
+const ScrollStep = Schema.Struct({
+  stamp: Schema.Number,
+  received: Schema.Number,
+  top: Schema.Number,
+} satisfies Record<keyof DOM.ScrollStep, Schema.Constraint>) satisfies Schema.Codec<DOM.ScrollStep>;
 const TrustedTouch = Schema.Struct({
   type: Schema.String,
   timeStamp: Schema.Number,
@@ -176,6 +184,8 @@ const ScrollWrite = Schema.Struct({
   time: Schema.Number,
   frame: Schema.Number,
   method: Schema.Literals(['scrollTop', 'scrollTo', 'scrollBy']),
+  from: Schema.Number,
+  to: Schema.Number,
 } satisfies Record<keyof DOM.ScrollWrite, Schema.Constraint>) satisfies Schema.Codec<DOM.ScrollWrite>;
 
 export const Recording: Schema.Codec<DOM.Recording> = Schema.suspend(() =>
@@ -186,6 +196,7 @@ export const Recording: Schema.Codec<DOM.Recording> = Schema.suspend(() =>
     drags: Schema.mutable(Schema.Array(Drag)),
     wheels: Schema.mutable(Schema.Array(WheelRun)),
     writes: Schema.optional(Schema.mutable(Schema.Array(ScrollWrite))),
+    scrolls: Schema.optional(Schema.mutable(Schema.Array(ScrollStep))),
     timings: Schema.optional(numbers),
     ticks: Schema.optional(numbers),
     commands: Schema.optional(Schema.mutable(Schema.Array(Navigation))),

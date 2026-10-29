@@ -1,6 +1,7 @@
 import { anchorFlow, type AnchorFlow, type AnchorIssue } from './anchor';
 import { causes, type CauseEvidence } from './causes';
 import type { Drag, Frame, Navigation, Recording, Rect, Sentinel, WheelRun } from './recording';
+import { wheelReader, wheelsOf, type LateWheel, type WheelIssue, type WheelJudgement } from './wheel';
 
 const TOLERANCE = 0.5;
 const REQUIRED_CONTROLS = 5;
@@ -13,9 +14,6 @@ type SegmentPosition = { active: Segment | undefined; reference: Drag | undefine
 type Segments = { ordered: Segment[]; problems: UncheckedPair[] };
 type DragStep = { pair: PairEvidence; pixel: number };
 type SegmentTracks = { evidence: DragEvidence; tracks: Map<number, number>; structural: DragStep[] };
-type WheelReference = { run: WheelRun; deltas: Map<number, number> };
-type Wheels = { ordered: WheelReference[]; problems: UncheckedPair[] };
-type WheelPosition = { active: WheelReference | undefined; reference: WheelRun | undefined };
 
 export type PairEvidence = {
   frame: number;
@@ -44,10 +42,12 @@ export type DisplacementFailure = {
     | 'scroll'
     | 'common'
     | 'drag-step'
+    | 'drag-reversal'
     | 'drag-distance'
     | 'drag-chain'
     | 'momentum'
-    | 'wheel';
+    | 'wheel'
+    | 'wheel-write';
   frame: number;
   sentinel: number | null;
   pixels: number;
@@ -65,9 +65,6 @@ export type UncheckedPair =
         | 'no-common-sentinel'
         | 'invalid-drag'
         | 'overlapping-drags'
-        | 'invalid-wheel'
-        | 'wheel-unit'
-        | 'overlapping-wheels'
         | 'overlapping-inputs'
         | 'invalid-command'
         | 'command-not-landed'
@@ -77,7 +74,8 @@ export type UncheckedPair =
         | 'no-previous-momentum'
         | 'insufficient-controls';
     }
-  | AnchorIssue;
+  | AnchorIssue
+  | WheelIssue;
 
 export type DragAnchor = { sentinel: number; distance: number; error: number };
 export type DragEvidence = {
@@ -108,6 +106,7 @@ export type DisplacementEvidence = {
   comparisons: number;
   anchorComparisons: number;
   causes: CauseEvidence;
+  lateWheels: LateWheel[];
   maxError: number;
   cumulativeDrift: number;
   failures: DisplacementFailure[];
@@ -199,58 +198,6 @@ function validNavigation(command: Navigation, frames: number): boolean {
     Number.isFinite(command.received) &&
     (command.toFrame === null || (Number.isInteger(command.toFrame) && command.toFrame >= command.fromFrame && command.toFrame < frames))
   );
-}
-
-function wheelsOf(recording: Recording): Wheels {
-  const ordered: WheelReference[] = [];
-  const problems: UncheckedPair[] = [];
-  for (const run of recording.wheels) {
-    const range =
-      Number.isInteger(run.fromFrame) &&
-      Number.isInteger(run.toFrame) &&
-      run.fromFrame >= 0 &&
-      run.toFrame > run.fromFrame &&
-      run.toFrame < recording.frames.length;
-    if (
-      !range ||
-      run.steps.length === 0 ||
-      run.steps.some(
-        (step) => !Number.isInteger(step.frame) || step.frame <= run.fromFrame || step.frame > run.toFrame || !Number.isFinite(step.deltaY),
-      )
-    ) {
-      problems.push({ frame: 0, reason: 'invalid-wheel' });
-      continue;
-    }
-    if (run.steps.some((step) => step.deltaMode !== 0)) {
-      problems.push({ frame: run.fromFrame + 1, reason: 'wheel-unit' });
-      continue;
-    }
-    const deltas = new Map<number, number>();
-    for (const step of run.steps) deltas.set(step.frame, (deltas.get(step.frame) ?? 0) - step.deltaY);
-    ordered.push({ run, deltas });
-  }
-  ordered.sort((a, b) => a.run.fromFrame - b.run.fromFrame);
-  let end = -1;
-  let overlap = false;
-  for (const wheel of ordered) {
-    if (wheel.run.fromFrame < end) {
-      problems.push({ frame: wheel.run.fromFrame + 1, reason: 'overlapping-wheels' });
-      overlap = true;
-    }
-    end = Math.max(end, wheel.run.toFrame);
-  }
-  return { ordered: overlap ? [] : ordered, problems };
-}
-
-function wheelReader(ordered: readonly WheelReference[]): (frame: number) => WheelPosition {
-  let cursor = 0;
-  let previous: WheelReference | undefined;
-  return (frame) => {
-    while (cursor < ordered.length && frame > ordered[cursor]!.run.toFrame) previous = ordered[cursor++];
-    const next = ordered[cursor];
-    const active = next !== undefined && frame > next.run.fromFrame ? next : undefined;
-    return { active, reference: active?.run ?? previous?.run };
-  };
 }
 
 function pairOf(previous: Frame, current: Frame, index: number, drag?: Drag, wheel?: WheelRun): Pair | PairProblem {
@@ -433,10 +380,14 @@ export function controlEnvelope(recordings: readonly Recording[]): ControlEnvelo
   };
 }
 
-export function displacement(recording: Recording, control?: ControlEnvelope): DisplacementEvidence {
+export function displacement(
+  recording: Recording,
+  control?: ControlEnvelope,
+  wheelJudgement: WheelJudgement = 'full',
+): DisplacementEvidence {
   const segments = segmentsOf(recording);
   const segmentAt = segmentReader(segments.ordered);
-  const wheels = wheelsOf(recording);
+  const wheels = wheelsOf(recording, wheelJudgement);
   const wheelAt = wheelReader(wheels.ordered);
   const tracked: SegmentTracks[] = recording.drags.map((command) => ({
     evidence: { command, comparedPairs: 0, commonDistance: 0, observedRate: null, ratePairs: 0, anchors: [], complete: false },
@@ -449,6 +400,7 @@ export function displacement(recording: Recording, control?: ControlEnvelope): D
     comparisons: 0,
     anchorComparisons: 0,
     causes: causes(recording),
+    lateWheels: wheels.late,
     maxError: 0,
     cumulativeDrift: 0,
     failures: [],
@@ -474,6 +426,7 @@ export function displacement(recording: Recording, control?: ControlEnvelope): D
     if (exceeds(pixels, limit)) result.failures.push({ kind, frame, sentinel, pixels, limit });
   };
   if (recording.frames.length < 2) result.unchecked.push({ frame: 0, reason: 'no-common-sentinel' });
+  for (const late of wheels.late) fail(late.frame, 'wheel-write', late.writes, 0);
   for (let index = 1; index < recording.frames.length; index += 1) {
     const before = recording.frames[index - 1]!;
     const after = recording.frames[index]!;
@@ -552,11 +505,14 @@ export function displacement(recording: Recording, control?: ControlEnvelope): D
       const distance = quiet ? flow?.shift : measured.commonDelta;
       if (distance !== undefined && distance !== null) active!.evidence.commonDistance += distance;
     }
-    if (wheel !== undefined) {
+    const uncertainWheel = wheel?.late.get(index);
+    if (wheel !== undefined && (uncertainWheel === undefined || wheel.deltas.has(index))) {
       measured.wheelDelta = wheel.deltas.get(index) ?? 0;
       measured.change = measured.commonDelta!;
       measured.limit = measured.pixel;
-      fail(index, 'wheel', Math.abs(measured.commonDelta! - measured.wheelDelta), measured.pixel);
+      const minimum = measured.wheelDelta + (uncertainWheel?.min ?? 0);
+      const maximum = measured.wheelDelta + (uncertainWheel?.max ?? 0);
+      fail(index, 'wheel', Math.max(0, minimum - measured.change, measured.change - maximum), measured.pixel);
     }
     if (dragging && !quiet) measured.change = Math.abs(measured.commonDelta!);
     let validRate = true;
@@ -599,6 +555,7 @@ export function displacement(recording: Recording, control?: ControlEnvelope): D
       }
     }
     if (dragging && active !== undefined && !quiet) {
+      if (drag!.distance > 0) fail(index, 'drag-reversal', Math.max(0, -measured.commonDelta!), measured.pixel);
       if (after.structure) active.structural.push({ pair: measured, pixel: measured.pixel });
       else if (validRate) {
         const rate = Math.abs(measured.commonDelta!) / measured.dt;
@@ -623,6 +580,7 @@ export function displacement(recording: Recording, control?: ControlEnvelope): D
   }
   let previousSegment: Segment | undefined;
   let chain: DragChain | undefined;
+  let chainQuantum = 0;
   for (const segment of segments.ordered) {
     const drag = segment.command;
     const held = tracked[segment.index]!;
@@ -640,8 +598,9 @@ export function displacement(recording: Recording, control?: ControlEnvelope): D
       const rate = evidence.observedRate;
       if (rate === null) result.unchecked.push({ frame: step.pair.frame, reason: 'no-drag-rate' });
       else {
-        step.pair.limit = rate * step.pair.dt + step.pixel;
-        fail(step.pair.frame, 'drag-step', Math.max(0, Math.abs(step.pair.commonDelta!) - rate * step.pair.dt), step.pixel);
+        const quantum = drag.quantum ?? 0;
+        step.pair.limit = rate * step.pair.dt + step.pixel + quantum;
+        fail(step.pair.frame, 'drag-step', Math.max(0, Math.abs(step.pair.commonDelta!) - rate * step.pair.dt), step.pixel + quantum);
       }
     }
     let minimum = Infinity;
@@ -651,7 +610,7 @@ export function displacement(recording: Recording, control?: ControlEnvelope): D
       evidence.anchors.push({ sentinel, distance, error });
       minimum = Math.min(minimum, distance);
       maximum = Math.max(maximum, distance);
-      if (covered) fail(drag.toFrame, 'drag-distance', error, pixel, sentinel);
+      if (covered) fail(drag.toFrame, 'drag-distance', error, pixel + (drag.quantum ?? 0), sentinel);
     }
     evidence.complete = covered && held.tracks.size > 0;
     if (covered && held.tracks.size === 0) result.unchecked.push({ frame: drag.toFrame, reason: 'no-full-drag-anchor' });
@@ -666,7 +625,9 @@ export function displacement(recording: Recording, control?: ControlEnvelope): D
         complete: true,
       };
       result.chains.push(chain);
+      chainQuantum = 0;
     }
+    chainQuantum = Math.max(chainQuantum, drag.quantum ?? 0);
     chain.toSegment = segment.index;
     chain.commandedDistance += drag.distance;
     chain.complete = chain.complete && evidence.complete;
@@ -675,7 +636,7 @@ export function displacement(recording: Recording, control?: ControlEnvelope): D
       chain.maximum = chain.maximum! + maximum;
       const error = Math.max(Math.abs(chain.minimum - chain.commandedDistance), Math.abs(chain.maximum - chain.commandedDistance));
       chain.error = Math.max(chain.error!, error);
-      fail(drag.toFrame, 'drag-chain', error, pixel);
+      fail(drag.toFrame, 'drag-chain', error, pixel + chainQuantum);
     } else {
       chain.minimum = null;
       chain.maximum = null;

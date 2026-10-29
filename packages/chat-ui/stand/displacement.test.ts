@@ -438,6 +438,94 @@ test('discrete wheel steps sum trusted frame deltas through structural changes w
   });
 });
 
+test('only causal late-wheel judgement exempts ambiguous input and ends write attribution at the actual scroll', () => {
+  const frames = [frame(0, 100), frame(10, 100), frame(20, 100), frame(30, 100)];
+  const step = { frame: 2, deltaY: -10, deltaMode: 0, stamp: 0, received: 19 };
+  const sample: Recording = {
+    ...recording('late-wheel', frames),
+    wheels: [{ fromFrame: 0, toFrame: 2, steps: [step] }],
+    scrolls: [],
+    writes: [],
+  };
+  const full = displacement(sample);
+  expect(full.lateWheels).toEqual([]);
+  expect(full.failures).toContainEqual({ kind: 'wheel', frame: 2, sentinel: null, pixels: 10, limit: 1 });
+
+  const late = displacement(sample, undefined, 'causal-late');
+  expect(late.lateWheels).toEqual([
+    {
+      kind: 'wheel-late',
+      frame: 2,
+      stamp: 0,
+      received: 19,
+      lag: 19,
+      refresh: 10,
+      task: { kind: 'frame-interval', from: 10, to: 20 },
+      scroll: null,
+      writes: 0,
+    },
+  ]);
+  expect(late.failures).toEqual([]);
+  expect(late.unchecked).toEqual([]);
+
+  const forced: Recording = {
+    ...sample,
+    scrolls: [{ stamp: 21, received: 25, top: 1000 }],
+    writes: [{ time: 20.5, frame: 3, method: 'scrollTop', from: 1000, to: 1010 }],
+  };
+  expect(displacement(forced, undefined, 'causal-late').failures).toContainEqual({
+    kind: 'wheel-write',
+    frame: 2,
+    sentinel: null,
+    pixels: 1,
+    limit: 0,
+  });
+  const alreadyScrolled = displacement(
+    {
+      ...forced,
+      scrolls: [{ stamp: 18, received: 20, top: 990 }],
+      writes: [{ time: 19.5, frame: 2, method: 'scrollTop', from: 990, to: 1000 }],
+    },
+    undefined,
+    'causal-late',
+  );
+  expect(alreadyScrolled.lateWheels[0]!.writes).toBe(0);
+  expect(alreadyScrolled.failures).toEqual([]);
+
+  const promptlyDelivered = displacement(
+    {
+      ...sample,
+      wheels: [{ ...sample.wheels[0]!, steps: [{ ...step, stamp: 9 }] }],
+    },
+    undefined,
+    'causal-late',
+  );
+  expect(promptlyDelivered.lateWheels).toEqual([]);
+  expect(promptlyDelivered.failures).toContainEqual({ kind: 'wheel', frame: 2, sentinel: null, pixels: 10, limit: 1 });
+
+  const mixed = displacement(
+    {
+      ...sample,
+      wheels: [
+        {
+          ...sample.wheels[0]!,
+          steps: [
+            { ...step, deltaY: -20 },
+            { ...step, stamp: 18 },
+          ],
+        },
+      ],
+    },
+    undefined,
+    'causal-late',
+  );
+  expect(mixed.failures).toContainEqual({ kind: 'wheel', frame: 2, sentinel: null, pixels: 10, limit: 1 });
+  expect(displacement({ ...sample, scrolls: undefined }, undefined, 'causal-late').unchecked).toContainEqual({
+    frame: 2,
+    reason: 'wheel-scrolls-missing',
+  });
+});
+
 test('control calibration discards dirty recordings and requires five clean, observed flings', () => {
   const measured = controls();
   const resized = recording(
