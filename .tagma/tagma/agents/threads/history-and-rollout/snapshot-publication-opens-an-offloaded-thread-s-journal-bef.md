@@ -14,7 +14,7 @@ sources:
   - kind: file
     ref: packages/agent/src/thread/run/ThreadSnapshots.ts
 ---
-`ThreadSnapshots.publish` reads the journal while holding `agent-snapshot-lane`. Under a held `Lane.enter` into `thread-journal`, `WaitUnderHold` dies, and reading a compressed or unfinished rollout of an offloaded thread (`forms.readable`/`formed`) enters that lane. So publication runs inside `ThreadResidence.reading`: the server opens the rollout (`RestedRollouts.readable`) before the snapshot lock and holds `rollouts.using` until publication ends. Offload (compresses the file) and forming (drops the form mark and rewrites the file) answer `in-use` and wait for the next access.
+`ThreadSnapshots.publish` reads the journal while holding `agent-snapshot-lane`. Under a held `Lane.enter` into `thread-journal`, `WaitUnderHold` dies, and reading a compressed rollout of an offloaded thread, or one whose publication a crash left unsettled (`RolloutForms.readable`), enters that lane to open or settle it. So publication runs inside `ThreadResidence.reading`: the server opens the rollout (`RestedRollouts.readable`) before the snapshot lock and holds `rollouts.using` until publication ends. Offload (compresses the file) and forming (drops the form mark and rewrites the file) answer `in-use` and wait for the next access.
 
 Order is fixed: first the thread journal lock, then `uses.rest` (`evict`, `rolloutWhole`). Publication is also called from inside the same thread's journal steps (`afterCommit`, `ensuring`), and its `using` awaits the running `rest`. When `rest` is taken outside the journal lock, `rest` awaits the lane held by the publishing step, and the step awaits `rest`. Only the lane's minute ceiling lifts this mutual wait.
 
