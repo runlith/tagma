@@ -21,14 +21,16 @@ const held: ClaimHolding = { _tag: 'Holders', pids: [4242] };
 it.live('a live host claim keeps the wait pending until its holder lets go', () =>
   Effect.gen(function* () {
     const holding = yield* Ref.make<ClaimHolding>(held);
+    const read = yield* Deferred.make<void>();
     const settled = yield* Deferred.make<void>();
+    const reading = { of: () => Effect.andThen(Deferred.succeed(read, undefined), Ref.get(holding)) };
     const waiting = yield* Effect.forkChild(
-      Effect.flatMap(FileSystem.FileSystem, (files) => hostsStaying({ of: () => Ref.get(holding) }, files, store)).pipe(
+      Effect.flatMap(FileSystem.FileSystem, (files) => hostsStaying(reading, files, store)).pipe(
         Effect.provide(BunFileSystem.layer),
         Effect.tap(() => Deferred.succeed(settled, undefined)),
       ),
     );
-    yield* Effect.sleep('300 millis');
+    yield* Deferred.await(read);
     expect(yield* Deferred.isDone(settled)).toBe(false);
     yield* Ref.set(holding, { _tag: 'Holders', pids: [] });
     expect(yield* Fiber.join(waiting)).toEqual([]);
