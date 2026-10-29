@@ -265,8 +265,7 @@ const performed = Effect.fnUntraced(function* (
     case 'scroll': {
       if (action.aim !== null && 'ref' in action.aim && action.dx === 0 && action.dy === 0) {
         const located = yield* locate(state, attached, action.aim.ref);
-        yield* session.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: located.anchor.node }, located.child);
-        return yield* markElement(state, attached, located);
+        return yield* mark(state, attached, { kind: 'box', box: yield* boxOf(attached, located) });
       }
       const at = action.aim === null ? yield* viewportCenter(attached) : (yield* aimAt(state, attached, action.aim, false)).point;
       if (action.aim === null) yield* pointAt(state, attached, at);

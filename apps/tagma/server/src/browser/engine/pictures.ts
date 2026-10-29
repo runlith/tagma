@@ -12,6 +12,7 @@ export const pngSize = (bytes: Uint8Array): { readonly width: number | null; rea
 
 export type Pictures = {
   capture(params: Protocol.Page.CaptureScreenshotRequest): Effect.Effect<string, CommandFailure>;
+  readonly paint: Effect.Effect<void, CommandFailure>;
   accepts(target: Protocol.Target.TargetInfo): boolean;
 };
 
@@ -35,21 +36,23 @@ export const makePictures = Effect.fnUntraced(function* (session: Session) {
       scope,
     ),
   );
-  const paint = Effect.fn('browser.paint')(function* (child: string) {
+  const paint = Effect.gen(function* () {
+    const child = yield* channel;
     yield* session.reply(
       'Page.captureScreenshot',
       { format: 'jpeg', quality: 0, optimizeForSpeed: true, captureBeyondViewport: false },
       child,
     );
-  });
+  }).pipe(Effect.withSpan('browser.paint'));
   return {
+    paint,
     accepts: (info) => info.type === 'page' && info.targetId === target,
     capture: Effect.fn('browser.capture')(function* (params) {
-      const child = yield* channel;
+      yield* channel;
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
           const result = yield* Effect.result(session.reply('Page.captureScreenshot', params));
-          yield* paint(child);
+          yield* paint;
           return yield* Effect.fromResult(result);
         }),
       );

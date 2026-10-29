@@ -13,7 +13,8 @@ import { calling, OPERATOR, refIn, Seeded } from './world.js';
 
 export const PICK_FRAME = `<!doctype html><body style="margin:0;background:white">
   <button id="frame-pick" style="position:absolute;left:20px;top:20px;width:160px;height:60px;background:#ddd;border:0"
-    onclick="this.dataset.clicks = String(Number(this.dataset.clicks || 0) + 1); this.textContent = 'Clicked ' + this.dataset.clicks; fetch('/pick-through')">FRAME_NAME</button>`;
+    onclick="this.dataset.clicks = String(Number(this.dataset.clicks || 0) + 1); this.textContent = 'Clicked ' + this.dataset.clicks; fetch('/pick-through')">FRAME_NAME</button>
+  <script>if (new URL(location.href).searchParams.has('nested')) { document.documentElement.style.overflow = 'hidden'; document.body.style.height = '1600px'; const url = new URL('/pick-frame?name=Deep%20frame', location.href); url.hostname = '127.0.0.1'; const frame = document.createElement('iframe'); frame.src = url; frame.style = 'position:absolute;left:0;top:1000px;width:300px;height:100px;border:0'; document.body.append(frame); }</script>`;
 
 export const framePickScenario = Effect.fnUntraced(function* (input: {
   readonly page: PageId;
@@ -124,4 +125,63 @@ export const framePickScenario = Effect.fnUntraced(function* (input: {
   yield* calling(PAGE.capture_page.body.execute({ page, what: 'full' }, undefined, caller));
   yield* rootClick();
   expect(refIn((yield* snapshot()).text, /button "Clicked 6"/)).toBe(later);
+  yield* calling(PAGE.emulate_page.body.execute({ page, clear: true }, undefined, caller));
+  yield* calling(
+    PAGE.evaluate_in_page.body.execute(
+      {
+        page,
+        expression: `document.body.insertAdjacentHTML('beforeend', '<div role="button" aria-label="Document region" style="position:absolute;left:0;top:1000px;width:1200px;height:900px;background:white"></div>'); true`,
+      },
+      undefined,
+      caller,
+    ),
+  );
+  const documentRegion = refIn((yield* snapshot()).text, /button "Document region"/);
+  for (const captureFirst of [false, true]) {
+    yield* calling(
+      PAGE.act_on_page.body.execute({ page, steps: [{ action: 'scroll', ref: documentRegion, dx: 0, dy: 0 }] }, undefined, caller),
+    );
+    if (captureFirst) yield* calling(PAGE.capture_page.body.execute({ page, what: 'element', ref: documentRegion }, undefined, caller));
+    yield* act('click', later);
+    yield* rootClick();
+    const after = yield* snapshot();
+    expect(refIn(after.text, new RegExp(`button "Clicked ${captureFirst ? 10 : 8}"`))).toBe(later);
+  }
+  yield* calling(
+    PAGE.evaluate_in_page.body.execute(
+      {
+        page,
+        expression: `(() => { document.body.insertAdjacentHTML('beforeend', '<div id="nested-scroll" style="position:absolute;left:80px;top:1000px;width:300px;height:200px;overflow:auto;background:white"><button id="nested-target" style="display:block;position:relative;margin:0;width:160px;height:40px" onclick="this.dataset.clicks = String(Number(this.dataset.clicks || 0) + 1)">Nested root target</button><div style="height:1600px"></div></div>'); const box = document.querySelector('#nested-scroll'); const target = document.querySelector('#nested-target'); target.scrollIntoViewIfNeeded(); const offset = scrollY; scrollTo(0,0); box.scrollTop = offset; return { offset, y: target.getBoundingClientRect().y }; })()`,
+      },
+      undefined,
+      caller,
+    ),
+  );
+  const nested = refIn((yield* snapshot()).text, /button "Nested root target"/);
+  yield* calling(PAGE.capture_page.body.execute({ page }, undefined, caller));
+  yield* act('click', nested);
+  const nestedClicks = yield* calling(
+    PAGE.evaluate_in_page.body.execute(
+      { page, expression: `Number(document.querySelector('#nested-target').dataset.clicks || 0)` },
+      undefined,
+      caller,
+    ),
+  );
+  if (!('value' in nestedClicks)) return yield* Effect.die('the nested click count was not evaluated');
+  expect(nestedClicks.value).toBe('1');
+  yield* calling(
+    PAGE.evaluate_in_page.body.execute(
+      {
+        page,
+        expression: `(() => { scrollTo(0,0); const frame = document.querySelectorAll('iframe')[1]; frame.src = ${JSON.stringify(`${input.frameUrl}&nested=1`)}; return new Promise(resolve => frame.onload = resolve); })()`,
+      },
+      undefined,
+      caller,
+    ),
+  );
+  const deep = refIn((yield* snapshot()).text, /button "Deep frame"/);
+  yield* calling(PAGE.capture_page.body.execute({ page }, undefined, caller));
+  yield* act('click', deep);
+  yield* rootClick();
+  expect(refIn((yield* snapshot()).text, /button "Clicked 2"/)).toBe(deep);
 });

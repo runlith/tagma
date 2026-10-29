@@ -83,54 +83,92 @@ const center = (quad: readonly number[]): Point => ({
   y: (quad[1]! + quad[3]! + quad[5]! + quad[7]!) / 4,
 });
 
-const offsetOf = Effect.fnUntraced(function* (attached: Attached, child: string | undefined): Effect.fn.Return<Point, CommandFailure> {
-  let x = 0;
-  let y = 0;
-  let at = child;
-  while (at !== undefined) {
-    const root = attached.children.get(at);
-    const parent = root === undefined ? undefined : attached.frames.get(root)?.parent;
-    if (root === undefined || parent === null || parent === undefined) break;
-    const parentChild = attached.frames.get(parent)?.child;
-    const owner = yield* attached.session.send('DOM.getFrameOwner', { frameId: root }, parentChild);
-    const box = yield* attached.session.send('DOM.getBoxModel', { backendNodeId: owner.backendNodeId }, parentChild);
-    x += box.model.content[0]!;
-    y += box.model.content[1]!;
-    at = parentChild;
+type FrameOwner = { readonly node: number; readonly child: string | undefined };
+type Offset = Point & { readonly owners: readonly FrameOwner[]; readonly points: readonly Point[] };
+
+const offsetOf = Effect.fnUntraced(function* (
+  attached: Attached,
+  child: string | undefined,
+  known?: readonly FrameOwner[],
+): Effect.fn.Return<Offset, CommandFailure> {
+  const owners = known === undefined ? [] : [...known];
+  if (known === undefined) {
+    let at = child;
+    while (at !== undefined) {
+      const root = attached.children.get(at);
+      const parent = root === undefined ? undefined : attached.frames.get(root)?.parent;
+      if (root === undefined || parent === null || parent === undefined) break;
+      const parentChild = attached.frames.get(parent)?.child;
+      const owner = yield* attached.session.send('DOM.getFrameOwner', { frameId: root }, parentChild);
+      owners.push({ node: owner.backendNodeId, child: parentChild });
+      at = parentChild;
+    }
   }
-  return { x, y };
+  const points = yield* Effect.forEach(
+    owners,
+    Effect.fnUntraced(function* (owner) {
+      const box = yield* attached.session.send('DOM.getBoxModel', { backendNodeId: owner.node }, owner.child);
+      return { x: box.model.content[0]!, y: box.model.content[1]! };
+    }),
+  );
+  return { x: points.reduce((sum, point) => sum + point.x, 0), y: points.reduce((sum, point) => sum + point.y, 0), owners, points };
 });
 
 export type Box = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
 
 type PlacedBox = Box & { readonly center: Point; readonly localCenter: Point };
+type Measured = { readonly box: PlacedBox | null; readonly offset: Offset };
 
-export const boxOf = Effect.fnUntraced(function* (
+const measureBox = Effect.fnUntraced(function* (
   attached: Attached,
   located: Located,
-  reveal = true,
-): Effect.fn.Return<PlacedBox, CommandFailure | GateRefusal<'action-failed'>> {
-  if (reveal)
-    yield* attached.session
-      .send('DOM.scrollIntoViewIfNeeded', { backendNodeId: located.anchor.node }, located.child)
-      .pipe(Effect.catchTag('CommandRefused', () => Effect.void));
+  owners?: readonly FrameOwner[],
+): Effect.fn.Return<Measured, CommandFailure> {
   const { quads } = yield* attached.session
     .send('DOM.getContentQuads', { backendNodeId: located.anchor.node }, located.child)
     .pipe(Effect.catchTag('CommandRefused', () => Effect.succeed({ quads: [] as number[][] })));
   const quad = quads.find((held) => Math.abs((held[4]! - held[0]!) * (held[5]! - held[1]!)) > 1);
-  if (quad === undefined) return yield* actionFailed(`${located.ref} has no visible box to aim at`);
-  const offset = yield* offsetOf(attached, located.child);
+  const offset = yield* offsetOf(attached, located.child, owners);
+  if (quad === undefined) return { box: null, offset };
   const xs = [quad[0]!, quad[2]!, quad[4]!, quad[6]!];
   const ys = [quad[1]!, quad[3]!, quad[5]!, quad[7]!];
   const middle = center(quad);
   return {
-    x: Math.min(...xs) + offset.x,
-    y: Math.min(...ys) + offset.y,
-    width: Math.max(...xs) - Math.min(...xs),
-    height: Math.max(...ys) - Math.min(...ys),
-    center: { x: middle.x + offset.x, y: middle.y + offset.y },
-    localCenter: middle,
+    box: {
+      x: Math.min(...xs) + offset.x,
+      y: Math.min(...ys) + offset.y,
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+      center: { x: middle.x + offset.x, y: middle.y + offset.y },
+      localCenter: middle,
+    },
+    offset,
   };
+});
+
+export const boxOf = Effect.fn('browser.box')(function* (
+  attached: Attached,
+  located: Located,
+  shouldReveal = true,
+): Effect.fn.Return<PlacedBox, CommandFailure | GateRefusal<'action-failed'>> {
+  const before = shouldReveal ? yield* measureBox(attached, located) : null;
+  if (shouldReveal)
+    yield* attached.session
+      .send('DOM.scrollIntoViewIfNeeded', { backendNodeId: located.anchor.node }, located.child)
+      .pipe(Effect.catchTag('CommandRefused', () => Effect.void));
+  const after = yield* measureBox(attached, located, before?.offset.owners);
+  const box = after.box;
+  if (box === null) return yield* actionFailed(`${located.ref} has no visible box to aim at`);
+  if (
+    before !== null &&
+    (before.box === null ||
+      before.box.localCenter.x !== box.localCenter.x ||
+      before.box.localCenter.y !== box.localCenter.y ||
+      before.offset.points.some((point, index) => point.x !== after.offset.points[index]!.x || point.y !== after.offset.points[index]!.y))
+  ) {
+    yield* attached.pictures.paint;
+  }
+  return box;
 });
 
 export const pointOf = (attached: Attached, located: Located): Effect.Effect<Point, CommandFailure | GateRefusal<'action-failed'>> =>
