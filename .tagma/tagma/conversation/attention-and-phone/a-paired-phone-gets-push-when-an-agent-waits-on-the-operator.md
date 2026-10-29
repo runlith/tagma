@@ -29,7 +29,7 @@ sources:
 **How.** On a paired phone Inbox offers to enable notifications; the `read_push_status`, `subscribe_push`, and `unsubscribe_push` operations are available only to a paired device.
 
 **Behaviour.**
-- Every Attention event and every plugin notice leaves by Web Push with project, thread, and essence; questions go as urgent. A tap opens the thread or Inbox.
+- Every Attention event and every app notice leaves by Web Push with project, thread, and essence; questions go as urgent. A tap opens the thread or Inbox.
 - An open thread closes its own notices; the app badge shows the waiting count.
 - An event arrives once; temporary push-service failures repeat, a gone subscription is removed.
 

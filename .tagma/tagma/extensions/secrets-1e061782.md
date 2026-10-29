@@ -28,4 +28,4 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/secrets
 ---
-The operator enters the keys and tokens an owner declares where that owner is shown — an app's in the Plugins settings, an MCP server's on its card; the module reads an owner kind's secret sets, draws their fields and writes the values to the server.
+The operator enters the keys and tokens an owner declares where that owner is shown — an app's in the Apps settings, an MCP server's on its card; the module reads an owner kind's secret sets, draws their fields and writes the values to the server.

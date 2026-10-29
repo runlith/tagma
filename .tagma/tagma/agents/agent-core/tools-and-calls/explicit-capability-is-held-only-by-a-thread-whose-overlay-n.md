@@ -11,6 +11,6 @@ sources:
 ---
 An `explicit: true` capability is held only by a thread whose overlay names it; its source is always in grant, and the offer check hands its tools out.
 
-`explicit: true` fits a capability owned by a narrow circle of agents, e.g. a plugin's `plugin:<id>`. An agent with `capabilities: 'every'` and an agent without an overlay do not hold it, even when the base declaration lists it; an agent whose overlay names it holds it, even when the base declaration does not.
+`explicit: true` fits a capability owned by a narrow circle of agents, e.g. an app's `app:<id>`. An agent with `capabilities: 'every'` and an agent without an overlay do not hold it, even when the base declaration lists it; an agent whose overlay names it holds it, even when the base declaration does not.
 
-The agent's grant assembles without a thread (`Agent.standing`), while the overlay arrives with the thread. So the explicit capability's source always enters the grant, and `capabilityHolds` decides at the source's offer. Removing the source from the grant would deny a plugin's agent its tools; checking only `overlayHolds` at offer would hand others' tools to an agent without an overlay.
+The agent's grant assembles without a thread (`Agent.standing`), while the overlay arrives with the thread. So the explicit capability's source always enters the grant, and `capabilityHolds` decides at the source's offer. Removing the source from the grant would deny an app's agent its tools; checking only `overlayHolds` at offer would hand others' tools to an agent without an overlay.

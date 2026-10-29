@@ -30,4 +30,4 @@ sources:
 
 **Behaviour.** The shell assembles sections and columns from owner declarations, highlights the current section and can hide its column. For a project the last portable place and branch are remembered, by project id; entering the project restores them. A window at a renamed project's address moves to the new name as soon as it learns it from the registry, and the whole move stays on the same project: the open page and columns do not rebuild. The app root opens the remembered project, otherwise an available plain project; an empty installation shows the start screen.
 
-**Limits.** History uses the window history, not a separate Tagma-action journal. Plugin sections do not carry over when restoring another project's place. Project registration, section contents and worktree choice belong to their areas.
+**Limits.** History uses the window history, not a separate Tagma-action journal. App sections do not carry over when restoring another project's place. Project registration, section contents and worktree choice belong to their areas.

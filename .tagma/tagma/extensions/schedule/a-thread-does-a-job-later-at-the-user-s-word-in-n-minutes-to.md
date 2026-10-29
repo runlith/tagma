@@ -22,7 +22,7 @@ edges:
 - "In N minutes do X" — a one-time timed assignment.
 - "Every day", "tomorrow", a chain by time — a repeating assignment.
 
-**The shape, if built.** At the user's direct request the agent sets the thread an assignment: a time or a grid and what to do — and ends the turn; nothing holds the machine. In time the server opens the thread's turn with that assignment. The assignment is visible in the thread, can be cancelled, survives machine sleep and server restart. The foundation is the "Schedule" module ([[d50acfdc]]): it already wakes by time and does not accumulate missed ticks, but currently only owners — modules and plugins — declare schedules, not the user through conversation.
+**The shape, if built.** At the user's direct request the agent sets the thread an assignment: a time or a grid and what to do — and ends the turn; nothing holds the machine. In time the server opens the thread's turn with that assignment. The assignment is visible in the thread, can be cancelled, survives machine sleep and server restart. The foundation is the "Schedule" module ([[d50acfdc]]): it already wakes by time and does not accumulate missed ticks, but currently only owners — modules and apps — declare schedules, not the user through conversation.
 
 **Boundary.** The guard against useless sleep stands: the agent resolves its own waits by fact — an answer, a process exit, an event — and by time only at the user's request.
 

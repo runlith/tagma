@@ -28,6 +28,6 @@ sources:
 
 **How.** The `agent.offered` setting; written by the operator only.
 
-**Behaviour.** Origin decides by default: a built-in agent, a CLI type, and a personal file are offered to agents; a project file and a plugin agent — to the operator only. The setting overrides it both ways, project over machine. An agent sees the types offered to it in the `spawn_agent` description.
+**Behaviour.** Origin decides by default: a built-in agent, a CLI type, and a personal file are offered to agents; a project file and an app agent — to the operator only. The setting overrides it both ways, project over machine. An agent sees the types offered to it in the `spawn_agent` description.
 
 **Limits.** A withheld type refuses an agent separately from a nonexistent one and names the way out: the operator offers it to agents.

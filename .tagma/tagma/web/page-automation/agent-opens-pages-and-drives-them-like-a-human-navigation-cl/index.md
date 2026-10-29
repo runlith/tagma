@@ -52,7 +52,7 @@ sources:
 ---
 **Value.** The agent walks a scenario in a real browser — sign-in, form, SPA, file upload — on the same pages a human sees, with no separate Playwright or Chrome DevTools MCP.
 
-**How.** The `open_page`, `navigate_page`, `act_on_page`, `wait_for_page`, `answer_page_dialog`, `close_page`, `list_pages`, and `read_page_downloads` operations; agent tools in the `browser` capability, the HTTP, MCP, and `tagma op` doors, admitting an external caller — plugin processes.
+**How.** The `open_page`, `navigate_page`, `act_on_page`, `wait_for_page`, `answer_page_dialog`, `close_page`, `list_pages`, and `read_page_downloads` operations; agent tools in the `browser` capability, the HTTP, MCP, and `tagma op` doors, admitting an external caller — app processes.
 
 **Behaviour.**
 - Searching for `open_page` reveals `snapshot_page` and `capture_page` with it; the opening answer prints ready calls for the page it opened. Action tools are revealed separately.
@@ -63,4 +63,4 @@ sources:
 - Agent navigation respects the operator's domain lists, including redirects, frames and popups, without limiting the operator's own navigation.
 - Browser operations never ask for approval, in any thread mode.
 
-**Limits.** The tools reach the built-in `tagma` agent (the capability joins it, deferred, with a prompt line on when to take the browser), agents extending it unless they narrow their capabilities, agents declared by file with `browser` in `capabilities`, foreign CLIs through `tagma mcp-serve`, and plugins. A thread whose overlay narrows its capabilities without `browser`, or whose `tools` list leaves the browser tools out, does not get them.
+**Limits.** The tools reach the built-in `tagma` agent (the capability joins it, deferred, with a prompt line on when to take the browser), agents extending it unless they narrow their capabilities, agents declared by file with `browser` in `capabilities`, foreign CLIs through `tagma mcp-serve`, and apps. A thread whose overlay narrows its capabilities without `browser`, or whose `tools` list leaves the browser tools out, does not get them.

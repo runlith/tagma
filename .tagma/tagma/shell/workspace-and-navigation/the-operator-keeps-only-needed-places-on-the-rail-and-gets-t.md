@@ -26,7 +26,7 @@ sources:
 
 **Behaviour.**
 - Right after installation, Agents, Checkout and Knowledge are pinned.
-- "…" enumerates all rail places in a stable order: Rules, Journal, Calls, Agent library, plugin sections and windows. Pinned ones are there too, their pin always visible.
+- "…" enumerates all rail places in a stable order: Rules, Journal, Calls, Agent library, app sections and windows. Pinned ones are there too, their pin always visible.
 - A newly pinned place stands at the rail's end. A place dropped on the rail stands where it was released.
 - When an open place is not on the rail, "…" is highlighted.
 - Hover, pin and drag in "…" do not steal focus. If the operator was typing in an input, they keep typing there.
@@ -35,6 +35,6 @@ sources:
 
 **Limits.**
 - The setting lives in the window's store. It does not move to another machine or browser.
-- A plugin's place is only visible in a project where the plugin is enabled. In other projects it leaves no empty cell.
+- An app's place is only visible in a project where the app is enabled. In other projects it leaves no empty cell.
 - From the keyboard a place can be pinned and unpinned, but only the mouse reorders.
 - The mobile shell has no rail.

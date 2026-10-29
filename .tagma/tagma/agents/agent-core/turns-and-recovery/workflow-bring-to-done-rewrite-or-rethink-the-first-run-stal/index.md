@@ -29,7 +29,7 @@ sources:
 
 **What a static workflow gives over an agent coordinator:**
 - order and completeness held by code, not prompt: the next step only after all reports;
-- launch with no leading model — from schedule, webhook, plugin, or CLI;
+- launch with no leading model — from schedule, webhook, app, or CLI;
 - the same process by name.
 
 **Against:**

@@ -29,9 +29,9 @@ sources:
 **How.** Turns on itself on a touch screen or by layout choice in Settings → Layout; tabs below: Inbox, Threads, Pages, and Settings.
 
 **Behaviour.**
-- Inbox: agent questions with option buttons right in the card, plugin questions, crashed and finished runs.
+- Inbox: agent questions with option buttons right in the card, app questions, crashed and finished runs.
 - Threads: projects, search, filters, folders, and pinned; swipes and long-press to pin, archive, rename.
 - Thread full-screen with composer, camera attachments, model and mode choice.
 - Offline the shell shows the last loaded and the cause, and on a cold start opens from cache.
 
-**Limits.** Graph, checkout, rules, calls, and plugin views do not open on the phone — the shell refers to the machine. A terminal-CLI thread is not run on the phone. The Mac app always stays in desktop layout.
+**Limits.** Graph, checkout, rules, calls, and app views do not open on the phone — the shell refers to the machine. A terminal-CLI thread is not run on the phone. The Mac app always stays in desktop layout.

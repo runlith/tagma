@@ -9,4 +9,4 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/notify/inbox.ts
 ---
-The `notifications.subscribe` feed and the `all` event for push carry every open record at once, with no window or pages, and a record weighs up to ~1.2 KB (title, body, a question with four options). With no limit a plugin with a looping bug would bloat that frame and the operator's "Attention" list, and someone else's notification stream would push out the rest. Twenty is room for a bridge or a table where single records await answers at once. If more is ever needed, the limit turns into a window in the feed, not a raise.
+The `notifications.subscribe` feed and the `all` event for push carry every open record at once, with no window or pages, and a record weighs up to ~1.2 KB (title, body, a question with four options). With no limit an app with a looping bug would bloat that frame and the operator's "Attention" list, and someone else's notification stream would push out the rest. Twenty is room for a bridge or a table where single records await answers at once. If more is ever needed, the limit turns into a window in the feed, not a raise.

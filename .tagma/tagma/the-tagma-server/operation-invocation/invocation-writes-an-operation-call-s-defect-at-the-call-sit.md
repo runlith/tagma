@@ -14,7 +14,7 @@ sources:
     ref: apps/tagma/server/src/invocation/perform.ts
     symbol: performByIdIn
 ---
-A call arriving over HTTP (the app, MCP, `tagma op`, plugins) or over the socket runs through `performByIdIn`, and invocation itself writes the defect ending it at any step — place and admission, `prepare`, approval, `execute`, response projection (`display`, outcome), media, and voice — with the context only it knows. A store failure (`StoreFailure`) ending the call becomes a defect inside the call, not at the door (`refusing`): otherwise it would become a defect outside the context. Before, the door wrote the defect — a `server call` with no thread, run, or project — and the guilty thread was searched by enumeration.
+A call arriving over HTTP (the client, MCP, `tagma op`, apps) or over the socket runs through `performByIdIn`, and invocation itself writes the defect ending it at any step — place and admission, `prepare`, approval, `execute`, response projection (`display`, outcome), media, and voice — with the context only it knows. A store failure (`StoreFailure`) ending the call becomes a defect inside the call, not at the door (`refusing`): otherwise it would become a defect outside the context. Before, the door wrote the defect — a `server call` with no thread, run, or project — and the guilty thread was searched by enumeration.
 
 A fault opens with a place — the operation id, the actor and trigger of the call — and this record entry:
 - a calling thread — its thread, under its current run (`CallStanding.runId`), if a run is in flight;

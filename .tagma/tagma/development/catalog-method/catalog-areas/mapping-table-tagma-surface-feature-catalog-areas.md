@@ -56,10 +56,10 @@ Every Tagma surface unit stands in exactly one catalog area; the areas and their
 - mcp (7): add_mcp_server, call_mcp_app_tool, enable_mcp_server, open_mcp_app, read_mcp_resource, read_mcp_servers, remove_mcp_server
 - native-harness (3): read_agent_skills, read_workspace_sources, reload_workspace_sources
 - secrets (3): read_secrets, remove_secret, set_secret
-- plugins (5): enable_plugin, install_plugin, read_plugin_schema, read_plugins, uninstall_plugin
+- tagma-apps (5): enable_app, install_app, read_app_schema, read_apps, uninstall_app
 - schedule (1): read_schedules
 - threads (2): pin_view, unpin_view
-- views (4): call_plugin_tool, read_plugin_resource, read_view_storage, write_view_storage
+- views (4): call_app_tool, read_app_resource, read_view_storage, write_view_storage
 
 **A11 (12)**
 - access (4): read_access, refresh_access, sign_in, sign_out
@@ -81,7 +81,7 @@ Every Tagma surface unit stands in exactly one catalog area; the areas and their
 - **A7 (0)**
 - **A8 (17):** speech.calls.again, speech.calls.audio, speech.calls.echo, speech.calls.followEvery, speech.calls.keys, speech.calls.speakers, speech.calls.tracks, speech.dictation.global, speech.dictation.globalKey, speech.dictation.key, speech.dictation.recognizer, speech.languages, speech.microphone, speech.recognizer, speech.segmenter, speech.tuning, speech.voice
 - **A9 (4):** agent.web, browser.agentProfile, browser.openLinks, browser.userProfile
-- **A10 (12):** agent.contextFiles.enabled, agent.contextFiles.names, mcp.servers, plugins.enabled, plugins.installed, skills.directories.global, skills.directories.project, skills.disabled, skills.global.enabled, skills.own.enabled, skills.project.enabled, skills.rescan
+- **A10 (12):** agent.contextFiles.enabled, agent.contextFiles.names, apps.enabled, apps.installed, mcp.servers, skills.directories.global, skills.directories.project, skills.disabled, skills.global.enabled, skills.own.enabled, skills.project.enabled, skills.rescan
 - **A11 (2):** access.cloud, release.feed (release build only)
 - **A12 (7):** appearance.loadInStatusBar, telemetry.keepOneTraceIn, telemetry.maxPendingBytes, telemetry.maxStoredBytes, telemetry.metricsIntervalMs, telemetry.spanFloorMicros, telemetry.vitalsIntervalMs
 
@@ -118,8 +118,8 @@ The agent's remaining tools are operations and stand above in their areas.
 - A6: executions, power; from threads — quota.feed
 - A7: providers; from threads — dictation.composer
 - A8: speech; from threads — browserTools.feed
-- A9: browser; from threads — mcpApps.feed, pluginViews.feed, pins.feed, skills.composer, SkillCatalog, SkillsSection
-- A10: mcp, plugins, views, secrets, pages; from threads — pins.feed
+- A9: browser; from threads — mcpApps.feed, tagmaAppViews.feed, pins.feed, skills.composer, SkillCatalog, SkillsSection
+- A10: mcp, tagma-apps, views, secrets, pages; from threads — pins.feed
 - A11: access
 - A12: settings, projects, workspace, palette, notices, telemetry
 
@@ -139,7 +139,7 @@ The agent's remaining tools are operations and stand above in their areas.
 - A5: `[project]/checkout`
 - A8: `[project]/calls/[[id]]`, `_desktop/dictation`
 - A9: `[project]/w/[[page]]`
-- A10: `[project]/p/[plugin]/[view]`, `_desktop/view/[project]/[plugin]/[view]`
+- A10: `[project]/p/[app]/[view]`, `_desktop/view/[project]/[app]/[view]`
 - A12: `/`, `[project]`, `settings`
 
 ## Server modules `apps/tagma/server/src` (47)
@@ -153,7 +153,7 @@ The agent's remaining tools are operations and stand above in their areas.
 - A7: providers
 - A8: speech
 - A9: browser, managed-browser, desktop-browser
-- A10: mcp, plugins, views, secrets, artifacts, schedule; native-harness skills and inputs
+- A10: mcp, tagma-apps, views, secrets, artifacts, schedule; native-harness skills and inputs
 - A11: installation, access, release-channel, checkout-builds, mac-applications; composition/cli (serve, db) and composition/cut (release, developer only)
 - A12: settings, performance, invocation, http, socket, cli
 - substrate with no surface of its own: platform, composition (server assembly)
@@ -177,7 +177,7 @@ The agent's remaining tools are operations and stand above in their areas.
 
 ## Other `apps/tagma` applications
 
-- desktop: A11 — windows, release, exit and stop, wait page, bridge; A8 — Dictation.ts (pill and global key); A9 — src/browser (built-in browser host); A10 — viewWindows.ts, viewWindowUrl.ts (plugin-view windows)
+- desktop: A11 — windows, release, exit and stop, wait page, bridge; A8 — Dictation.ts (pill and global key); A9 — src/browser (built-in browser host); A10 — viewWindows.ts, viewWindowUrl.ts (app-view windows)
 - inspection: A4 — 8 builtin inspections (call-services, loads, modules, names, platforms, reexports, size, swallowed-failures) in the js, effect, and architecture packs and runners of external programs (ast-grep, eslint, files, oxlint, ruff, sarif, semgrep)
 
 ## Outside the catalog

@@ -11,6 +11,6 @@ One pinned list is not enough. Had only it been stored, a place the next version
 
 So two lists are stored: pinned places in order, and daily places the operator removed. The rail is the pinned ones, then daily ones in neither list. The first reorder, pin or unpin writes the default explicitly into the pinned list.
 
-The list also keeps places missing from the current project (a disabled plugin's section). A move inserts the place before the visible neighbour, so such places keep position and stand on it when the plugin returns to the set.
+The list also keeps places missing from the current project (a disabled app's section). A move inserts the place before the visible neighbour, so such places keep position and stand on it when the app returns to the set.
 
 Every record first re-reads the store, and a `storage` event updates the other windows. So two windows do not overwrite each other's set.

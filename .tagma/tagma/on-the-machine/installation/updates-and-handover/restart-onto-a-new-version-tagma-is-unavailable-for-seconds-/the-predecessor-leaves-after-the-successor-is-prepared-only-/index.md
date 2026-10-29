@@ -22,7 +22,7 @@ The predecessor stops answering only once the successor has done everything that
 - **The handshake promises nothing.** The successor reports `STANDING_BY` after seeing the predecessor's lock — before reading the installation and opening the store (`installation/process/succession.ts:220-231`). The predecessor leaves after that (`succession.ts:68-89`). A migration, runtime assembly, or bind failure leaves the machine with no server; `SuccessorFailed` covers only refusal before that message.
 - **Only program loading runs in parallel**, about 1.9 s. After that the successor waits for the data catalog, polling the lock (`succession.ts:188-206`).
 - **`createRuntime` sits entirely inside the window**: 5.4–7.1 s across four samples. It includes copying and verifying the execution host bundle with the host replaced afterwards, even an idle one: the digest is compared after copying (`executions/host/offer.ts:59-107`).
-- **Plugin closing is 2.0 s of a 3.7 s exit**: the stdio transport waits up to 2000 ms after EOF, then SIGTERM (`packages/mcp/src/sdk.ts:190-202,262-275`).
+- **App closing is 2.0 s of a 3.7 s exit**: the stdio transport waits up to 2000 ms after EOF, then SIGTERM (`packages/mcp/src/sdk.ts:190-202,262-275`).
 - **After the door opens**, run recovery waits for reconciliation and export of thread rollouts (`composition/boot.ts:26-34`), and then `formStanding` walks project rollout files (`threads/journal/rolloutForming.ts:93-122`).
 - **The remote door** opens asynchronously: its listener waits for Tailscale setup and origin sandbox checks (`remote/reach.ts:111-127`, `remote/tailscale/serve.ts:68-132`; order explained in [[7747ed00]]). In one sample it lagged the local door by 18.5 s.
 
@@ -36,12 +36,12 @@ The predecessor stops answering only once the successor has done everything that
 ## What leaves the gap between doors
 
 - **Execution host bundle.** The digest is compared before copying; a matching bundle is neither copied nor verified again. A changed one is prepared at stage 1. A host with a different digest changes between doors without finishing executions: preparation at stage 1, handover as the predecessor's last act at stage 2, takeover at stage 3 ([[d86d6647]]).
-- **Plugin closing.** The plugin process learns about closing from the transport owner and exits without a grace wait; the wait stays as insurance for one that did not exit.
+- **App closing.** The app process learns about closing from the transport owner and exits without a grace wait; the wait stays as insurance for one that did not exit.
 - **Lock polling** — replaced by the handover message.
 - **Post-door work that grows with history.** Recovery of running runs starts first and reads only what those runs need. Rollout reconciliation goes per thread: right after start — only threads marked with an unfinished write, the rest — when they are opened, as journal lane opening already does ([[df760b9f]]). No walk over all threads and all rollout files after start.
 - **The remote door** waits for neither run recovery nor rollout reconciliation. Its own external steps — Tailscale setup, origin and sandbox checks — keep their order and count separately in the restart record; its refusal or delay does not hold the local door.
 
-What cannot start before the handover stays in the gap: the database writer, journal writers, the second plugin process over the same plugin data, execution host custody, the port.
+What cannot start before the handover stays in the gap: the database writer, journal writers, the second app process over the same app data, execution host custody, the port.
 
 ## Predecessor and successor are different builds
 

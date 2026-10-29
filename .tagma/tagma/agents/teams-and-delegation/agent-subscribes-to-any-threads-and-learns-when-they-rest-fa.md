@@ -31,4 +31,4 @@ sources:
 
 **Limits.**
 - Subscribing is to threads, not to trees and projects.
-- Plugins and the interface do not subscribe to events.
+- Apps and the interface do not subscribe to events.
