@@ -27,8 +27,6 @@ Two independent ratings of 2026-10-06 — our own ~5/10 and the obs-architect ag
 - **Reading.** No entry by time window; `select:'trace'` folds every run twice on the main flow with no read ceiling.
 - **Layers and names.** The lower kit holds a closed union of domain facts; the store decides the meaning of run completion; the server duplicates the `RunTrace` schema; the store mounts the `performance` module; there is a `schemaVersion` and an old-shape reader; "trace" names two systems.
 
-The goal is at least 9/10 on the rating axes: ownership, layers, one mechanism, completeness, identity, lifecycle, storage, performance, reading.
-
 ## 1. Model
 
 - The **`@runlith/activity`** package replaces `@runlith/trace` and `@runlith/trace-bundle`. Neutral entries (envelope, port, combinator, the `model-call` kind) load only `effect` — `llm` and `agent` take them; node entries (store, body writing, reading) — only the server. Module cards merge through `set_module`; rules aee8c068 (the drain does not throw into the observed work) and ebb5b50e (a page is read by replaying the observed prefix) move to the new module.
@@ -106,4 +104,3 @@ Task bd12712a closes as absorbed by this work, 0fcb2de4 as fixed by the identity
 - **system:** one ACP turn yields one activity `run` (`protocolRuns.stest.ts`).
 - **measurement:** a day-window project read holds the main flow no longer than 50 ms; fact recording on the main flow is O(1) with no file operations.
 - **live check:** after a restart the agent itself triggers title generation and answers from `read_thread` who, when, by which trigger, with which model and why, on which input, with which output and effect — for a native, ACP, and terminal thread, for recap, and for an interrupted attempt. Still unproved: no such post-update live check was established by the completed tasks; this is an agent verification, not an operator-glance condition.
-- **repeat independent rating** on the nine axes — at least 9 on each. Still unproved: the historical third-round fixes were not re-reviewed as recorded in [[3d2a8b42]], and the focused delivery review for [[e4024638]] does not rate the whole activity system.
