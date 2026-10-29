@@ -258,6 +258,12 @@
   .prompt {
     position: relative;
   }
+  @media (pointer: coarse) {
+    .prompt,
+    .mirror {
+      font-size: var(--text-page);
+    }
+  }
   .prompt::placeholder {
     font-size: var(--text-ui);
     color: color-mix(in oklch, var(--muted-foreground), transparent 50%);
