@@ -154,8 +154,8 @@ it.live(
     expect((yield* team(root)).models.some((row) => row.provider === 'openai')).toBe(false);
     yield* signIn('openai');
     const told = yield* step();
-    expect(told?.type).toBe('guide');
-    if (told?.type === 'guide') history.push(agentRuntimeGuidanceMessage(told.text, told.state));
+    if (told === null || !('type' in told) || told.type !== 'guide') return yield* Effect.die('no single guide');
+    history.push(agentRuntimeGuidanceMessage(told.text, told.state));
     expect((yield* team(root)).models.some((row) => row.provider === 'openai')).toBe(true);
     expect(yield* step()).toBeNull();
   }),

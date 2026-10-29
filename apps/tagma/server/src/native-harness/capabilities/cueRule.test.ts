@@ -35,9 +35,9 @@ it.effect('a cue the agent never received, as after a call that went to the back
       }) as unknown as AgentRuleContext<ThreadContext>;
 
     const evaluated = yield* rule(after([]));
-    expect(evaluated?.type).toBe('guide');
-    expect((yield* rule(after([])))?.type).toBe('guide');
-    if (evaluated?.type !== 'guide') return;
+    const again = yield* rule(after([]));
+    if (evaluated === null || !('type' in evaluated) || evaluated.type !== 'guide') return yield* Effect.die('no single guide');
+    expect(again !== null && 'type' in again ? again.type : null).toBe('guide');
     expect(yield* rule(after([agentRuntimeGuidanceMessage(evaluated.text, evaluated.state)]))).toBeNull();
   }),
 );
