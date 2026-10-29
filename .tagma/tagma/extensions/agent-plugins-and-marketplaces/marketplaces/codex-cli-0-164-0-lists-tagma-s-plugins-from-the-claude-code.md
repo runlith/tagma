@@ -22,4 +22,6 @@ Run 2026-10-30 on macOS against `runlith/tagma-plugins` at `ed6fee3ab70b7e826731
 
 **Codex CLI 0.164.0.** With an empty `CODEX_HOME`, `codex plugin marketplace add <clone>` registered marketplace `tagma` from `.claude-plugin/marketplace.json` alone. `codex plugin list --available --json` listed `linear@tagma`, `notion@tagma` and `sentry@tagma`, each with source `local`, version `1.0.0` from its `.codex-plugin/plugin.json`, `installPolicy` `AVAILABLE` and `authPolicy` `ON_INSTALL`, which are the defaults: the Claude list names no policy. Without `--available` the command lists installed plugins only and answered empty.
 
+`claude plugin validate --strict` passed again at `54ad879a4a3c4104b59bd9df62f770ca87c37335`, which changes only the text of the three skills.
+
 **Not established.** No plugin was installed in either client. `codex plugin add` was not run, because `ON_INSTALL` may start the service's real sign-in, so Codex's reading of the manifest's `skills` and `mcpServers` was not observed. No session of either client ran.
