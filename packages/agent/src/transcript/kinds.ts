@@ -151,11 +151,17 @@ export type ThreadReaderInput = {
   readonly products: readonly ThreadEntryKind[];
   readonly steps?: readonly ThreadFormStep[];
   readonly base?: ThreadFormBase | null;
+  readonly source?: string;
 };
 
 export type ThreadEntryReader = ReturnType<typeof makeThreadEntryReader>;
 
-export const makeThreadEntryReader = ({ products, steps = [], base = null }: ThreadReaderInput) => {
+export type ThreadReaderModule = { readonly entryKinds: () => ThreadEntryReader };
+
+export const entryKinds: ThreadReaderModule['entryKinds'] = () => makeThreadEntryReader({ products: [] });
+
+export const makeThreadEntryReader = ({ products, steps = [], base = null, source }: ThreadReaderInput) => {
+  const loadable = source ?? (products.length === 0 && steps.length === 0 && base === null ? import.meta.url : null);
   const readers = new Map<string, Reader>();
   const schemas = new Map<string, ThreadEntryKind['schema']>();
   for (const kind of [...CORE_KINDS, ...products]) {
@@ -231,7 +237,23 @@ export const makeThreadEntryReader = ({ products, steps = [], base = null }: Thr
       ? Result.succeed(result.success)
       : Result.fail(new ThreadEntryUndecodable({ type: entry.type, id: entry.id, issue: result.failure.message }));
   };
-  return { steps, base, last, after, lags, below, formed, formedEvent, form, formEvent, decode, read, readWire, writeWire } as const;
+  return {
+    steps,
+    base,
+    source: loadable,
+    last,
+    after,
+    lags,
+    below,
+    formed,
+    formedEvent,
+    form,
+    formEvent,
+    decode,
+    read,
+    readWire,
+    writeWire,
+  } as const;
 };
 
 export class ThreadEntryKinds extends Context.Service<ThreadEntryKinds, ThreadEntryReader>()('@runlith/agent/ThreadEntryKinds') {

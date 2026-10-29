@@ -4,12 +4,12 @@ import { open, rename, rm, type FileHandle } from 'node:fs/promises';
 import { Schema } from 'effect';
 import type { Readable } from 'node:stream';
 import { createZstdDecompress } from 'node:zlib';
-import { decodeThreadEventFacetsResult, parseThreadRunUsage } from '@runlith/agent/thread/persisted';
+import { decodeThreadEventPayloadResult, parseThreadRunUsage } from '@runlith/agent/thread/persisted';
 import type { ThreadCompactionCheckpointRow } from '@runlith/agent/thread/rows';
 import { revived } from '../../threads/journal/rolloutMeta.js';
 import { HistoryFold } from '@runlith/agent/thread/HistoryFold';
 import { TranscriptFold } from '@runlith/agent/transcript/TranscriptFold';
-import { entryOf } from '@runlith/agent/transcript/kinds';
+import { entryOf, type ThreadEntryReader, type ThreadReaderModule } from '@runlith/agent/transcript/kinds';
 import { RolloutLineUnreadable, factOf } from '../../threads/journal/restedReads.js';
 import type { RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
 import { wireWeight } from './rows.js';
@@ -48,32 +48,50 @@ async function source(rollout: RolloutFiles, read: ReadRollout, retried = false)
   return source(rollout, read, true);
 }
 
-async function* facts(rollout: RolloutFiles, read: ReadRollout): AsyncGenerator<NonNullable<ReturnType<typeof factOf>>> {
+const readers = new Map<string, Promise<ThreadEntryReader>>();
+
+function readerOf(source: string): Promise<ThreadEntryReader> {
+  const held = readers.get(source);
+  if (held !== undefined) return held;
+  const loading = import(source).then((loaded: ThreadReaderModule) => loaded.entryKinds());
+  readers.set(source, loading);
+  loading.catch(() => readers.delete(source));
+  return loading;
+}
+
+async function* facts(
+  rollout: RolloutFiles,
+  kinds: ThreadEntryReader,
+  read: ReadRollout,
+): AsyncGenerator<NonNullable<ReturnType<typeof factOf>>> {
+  const decode = (value: unknown) => decodeThreadEventPayloadResult(kinds, value);
   const decoder = new TextDecoder();
   let rest = '';
   let corrupt = 0;
+  let first = '';
   for await (const chunk of await source(rollout, read)) {
     const lines = (rest + decoder.decode(chunk as Uint8Array, { stream: true })).split('\n');
     rest = lines.pop() ?? '';
     for (const line of lines) {
       let fact: ReturnType<typeof factOf>;
       try {
-        fact = factOf(line, decodeThreadEventFacetsResult);
+        fact = factOf(line, decode);
       } catch (failure) {
         if (!(failure instanceof RolloutLineUnreadable)) throw failure;
+        if (corrupt === 0) first = failure.message;
         corrupt += 1;
         continue;
       }
       if (fact !== null) yield fact;
     }
   }
-  if (corrupt > 0) throw new RolloutLineUnreadable(`${rollout.path}: ${corrupt} rollout line(s) cannot be read`);
+  if (corrupt > 0) throw new RolloutLineUnreadable(`${rollout.path}: ${corrupt} rollout line(s) cannot be read; ${first}`);
   if (rest + decoder.decode() !== '') throw new RolloutLineUnreadable(`${rollout.path}: the rollout ends inside a line`);
 }
 
-async function transcribe(rollout: RolloutFiles, key: TranscriptKey, read: ReadRollout): Promise<number> {
+async function transcribe(rollout: RolloutFiles, key: TranscriptKey, kinds: ThreadEntryReader, read: ReadRollout): Promise<number> {
   const fold = new TranscriptFold([]);
-  for await (const fact of facts(rollout, read)) fold.place(fact.fact);
+  for await (const fact of facts(rollout, kinds, read)) fold.place(fact.fact);
   const entries = fold.take();
   const target = rollout.transcript;
   const partial = `${target}.partial`;
@@ -127,10 +145,11 @@ async function transcribe(rollout: RolloutFiles, key: TranscriptKey, read: ReadR
 
 async function history(
   rollout: RolloutFiles,
+  kinds: ThreadEntryReader,
   read: ReadRollout,
 ): Promise<{ readonly history: ReturnType<HistoryFold['take']>; readonly bytes: number }> {
   const fold = new HistoryFold();
-  for await (const fact of facts(rollout, read)) fold.fold({ kind: fact.kind, payload: fact.payload }, fact.position);
+  for await (const fact of facts(rollout, kinds, read)) fold.fold({ kind: fact.kind, payload: fact.payload }, fact.position);
   const folded = fold.take();
   return { history: folded, bytes: Buffer.byteLength(JSON.stringify(folded), 'utf8') };
 }
@@ -190,11 +209,11 @@ async function compaction(rollout: RolloutFiles, read: ReadRollout): Promise<Res
 
 const writing = new Map<string, Promise<number>>();
 
-function transcribed(rollout: RolloutFiles, key: TranscriptKey, read: ReadRollout): Promise<number> {
+function transcribed(rollout: RolloutFiles, key: TranscriptKey, kinds: ThreadEntryReader, read: ReadRollout): Promise<number> {
   const before = writing.get(rollout.transcript) ?? Promise.resolve(0);
   const turn = before.then(
-    () => transcribe(rollout, key, read),
-    () => transcribe(rollout, key, read),
+    () => transcribe(rollout, key, kinds, read),
+    () => transcribe(rollout, key, kinds, read),
   );
   writing.set(rollout.transcript, turn);
   const settled = (): void => {
@@ -208,9 +227,11 @@ async function answered(ask: RestedAsk): Promise<RestedAnswer> {
   const totals = totalledReads();
   const read = totals.observe;
   try {
-    if (ask.kind === 'transcribe') return { id: ask.id, kind: 'transcribed', entries: await transcribed(ask.rollout, ask.key, read) };
     if (ask.kind === 'compaction') return { id: ask.id, kind: 'compaction', summary: await compaction(ask.rollout, read) };
-    return { id: ask.id, kind: 'history', ...(await history(ask.rollout, read)) };
+    const kinds = await readerOf(ask.reader);
+    if (ask.kind === 'transcribe')
+      return { id: ask.id, kind: 'transcribed', entries: await transcribed(ask.rollout, ask.key, kinds, read) };
+    return { id: ask.id, kind: 'history', ...(await history(ask.rollout, kinds, read)) };
   } finally {
     const reads = totals.drain();
     if (reads.length > 0) self.postMessage({ id: ask.id, kind: 'read', reads } satisfies RestedRead);

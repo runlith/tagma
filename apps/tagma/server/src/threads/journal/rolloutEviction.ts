@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { restStamps } from '../rest.js';
 import type { ThreadUses } from './uses.js';
 import type { ThreadResourceKind } from '@runlith/agent/resources/ResourcesConfig';
+import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ThreadResourceStorage } from '@runlith/agent/thread/storage/resources';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import type { Unit } from '../../platform/contract/service/units.js';
@@ -37,13 +38,15 @@ export const rolloutEvicting = (
   rewrite: (threadId: string) => Effect.Effect<void, HarnessFailure>,
   whole: (threadId: string, path: string) => Effect.Effect<void, RolloutSyncRefused | RolloutUnreadable | StoreFailure>,
 ) => {
-  const { graph, parts, machineStore, inJournal, locate, records, floor } = ctx;
+  const { graph, parts, kinds, machineStore, inJournal, locate, records, floor } = ctx;
 
   const projected = Effect.fnUntraced(function* (threadId: string, returning: boolean, whole = false) {
     const running = yield* threads.activeRunInSubtree(threadId);
     if (running !== null) return { outcome: 'kept', reason: 'running' } as const;
     const path = yield* locate(threadId);
-    const verdict = yield* machineStore(evictThreadProjection({ threadId, path, parts, returning, whole }));
+    const verdict = yield* machineStore(evictThreadProjection({ threadId, path, parts, returning, whole })).pipe(
+      Effect.provideService(ThreadEntryKinds, kinds),
+    );
     if (verdict.outcome === 'evicted') floor.forget(threadId);
     return verdict;
   });

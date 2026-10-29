@@ -1,6 +1,7 @@
 import { Effect } from 'effect';
 import type { WorkerUnavailable } from '@runlith/utils/worker';
 import type { ThreadEventPayload } from '@runlith/agent/thread/events';
+import type { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { and, asc, eq, lt, sql } from 'drizzle-orm';
 import { threadResource } from '../store/tables.js';
 import { threadBase, threadEvent, threadRolloutCursor, threadRolloutRefusal } from '../store/journal.js';
@@ -81,7 +82,10 @@ export type NativeFolds = {
   readonly drop: (threadId: string, rows: number, retained: boolean) => Effect.Effect<number, StoreFailure, MachineStore>;
   readonly projected: (threadId: string) => Effect.Effect<boolean, StoreFailure, MachineStore>;
   readonly settle: (threadId: string, through: number) => Effect.Effect<void, StoreFailure, MachineStore>;
-  readonly transcribe: (files: RolloutFiles, key: TranscriptKey) => Effect.Effect<void, RolloutUnreadable | WorkerUnavailable>;
+  readonly transcribe: (
+    files: RolloutFiles,
+    key: TranscriptKey,
+  ) => Effect.Effect<void, RolloutUnreadable | WorkerUnavailable, ThreadEntryKinds>;
   readonly writes: WriteSet;
 };
 

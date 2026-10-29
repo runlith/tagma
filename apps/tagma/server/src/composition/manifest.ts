@@ -13,8 +13,8 @@ import { MODULES } from '@tagma/server/composition/modules';
 import type { DeclaredCapability } from '../native-harness/contract/service/capabilities.js';
 import { BEHAVIOURS, type BehaviourRegistry } from '../graph/contract/service/behaviours.js';
 import { registerBehaviours } from '../graph/vocabulary/behaviours.js';
-import { makeThreadEntryReader, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
-import { JOURNAL_BASE, journalSteps } from '../threads/journal/formSteps.js';
+import type { ThreadEntryReader } from '@runlith/agent/transcript/kinds';
+import { entryKinds } from './entryKinds.js';
 import { BUILTIN_NOTES, type BuiltinNote } from '../threads/contract/service/notes.js';
 import { NATIVE_RULES } from '../native-harness/contract/service/rules.js';
 import { HOME_FOLLOWERS, type HomeFollower } from '../thread-record/contract/service/homes.js';
@@ -54,11 +54,7 @@ export const NATIVE_AGENT_RULES = NATIVE_RULES.collect(modules);
 
 export const HOME_FOLLOWER_ENTRIES: readonly HomeFollower[] = HOME_FOLLOWERS.collect(modules).map(({ entry }) => entry);
 
-export const ENTRY_KINDS: ThreadEntryReader = makeThreadEntryReader({
-  products: modules.flatMap((module) => module.entryKinds ?? []),
-  steps: journalSteps(modules.map((module) => module.formSteps ?? [])),
-  base: JOURNAL_BASE,
-});
+export const ENTRY_KINDS: ThreadEntryReader = entryKinds();
 
 export const COLLECTED_SETTINGS: {
   readonly sections: readonly SettingSectionDeclaration[];

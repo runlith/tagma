@@ -54,7 +54,7 @@ export const makeRestedFolds = Effect.gen(function* () {
         const done = yield* Deferred.make<void, StoredFailure>();
         building.set(key, done);
         const exit = yield* Effect.exit(
-          transcribeRollout(rollout, rollout.key).pipe(
+          transcribeRollout(kinds, rollout, rollout.key).pipe(
             Effect.asVoid,
             Effect.mapError((cause) => new ThreadStorageFailed({ call: 'restedTranscript.build', cause })),
           ),
@@ -194,7 +194,7 @@ export const makeRestedFolds = Effect.gen(function* () {
         cached.touched = clock += 1;
         return cached.history;
       }
-      const folded = yield* foldRolloutHistory(rollout).pipe(
+      const folded = yield* foldRolloutHistory(kinds, rollout).pipe(
         Effect.mapError((cause) => new ThreadStorageFailed({ call: 'rolloutReads.history', cause })),
       );
       keep(slot, { kind: 'history', history: folded.history, bytes: folded.bytes, key: rollout.key, touched: (clock += 1) });

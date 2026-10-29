@@ -2,6 +2,7 @@ import { Effect } from 'effect';
 import { WorkerUnavailable, eventReason, workerGone } from '@runlith/utils/worker';
 import type { ThreadCompactionCheckpointRow, ThreadHistory } from '@runlith/agent/thread/rows';
 import type { ThreadPrunedVolume } from '@runlith/agent/thread/storage/compaction';
+import type { ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { RolloutUnreadable } from '../../threads/journal/rolloutFile.js';
 import type { RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
 import { RolloutReads, type RolloutRead, type ReadRollout } from '../../threads/contract/service/rolloutReads.js';
@@ -9,7 +10,7 @@ import { RolloutReads, type RolloutRead, type ReadRollout } from '../../threads/
 export const TRANSCRIPT_FOOTER_BYTES = 48;
 export const TRANSCRIPT_SLOT_BYTES = 16;
 export const TRANSCRIPT_OPEN_BYTES = 24;
-export const TRANSCRIPT_FORM = 2;
+export const TRANSCRIPT_FORM = 3;
 
 export type RestedCompaction = {
   readonly bytes: number;
@@ -20,8 +21,8 @@ export type RestedCompaction = {
 };
 
 export type RestedAsk = { readonly id: number; readonly rollout: RolloutFiles } & (
-  | { readonly kind: 'transcribe'; readonly key: TranscriptKey }
-  | { readonly kind: 'history' }
+  | { readonly kind: 'transcribe'; readonly key: TranscriptKey; readonly reader: string }
+  | { readonly kind: 'history'; readonly reader: string }
   | { readonly kind: 'compaction' }
 );
 
@@ -72,6 +73,11 @@ const started = (): Worker => {
   return thread;
 };
 
+const loadable = (kinds: ThreadEntryReader): Effect.Effect<string, WorkerUnavailable> =>
+  kinds.source === null
+    ? Effect.fail(workerGone(WORKER, 'its entry reader names no module the worker can load it from'))
+    : Effect.succeed(kinds.source);
+
 const ask = (rollout: RolloutFiles, asking: (id: number) => RestedAsk): Effect.Effect<RestedAnswer, WorkerUnavailable> =>
   Effect.flatMap(RolloutReads, (read) =>
     Effect.callback<RestedAnswer, WorkerUnavailable>((resume) => {
@@ -108,11 +114,12 @@ const unreadable = (rollout: RolloutFiles, answer: RestedAnswer): RolloutUnreada
   });
 
 export const transcribeRollout = (
+  kinds: ThreadEntryReader,
   rollout: RolloutFiles,
   key: TranscriptKey,
 ): Effect.Effect<number, RolloutUnreadable | WorkerUnavailable> =>
   Effect.flatMap(
-    ask(rollout, (id) => ({ id, rollout, kind: 'transcribe', key })),
+    Effect.flatMap(loadable(kinds), (reader) => ask(rollout, (id) => ({ id, rollout, reader, kind: 'transcribe', key }))),
     (answer) => (answer.kind === 'transcribed' ? Effect.succeed(answer.entries) : Effect.fail(unreadable(rollout, answer))),
   );
 
@@ -123,10 +130,11 @@ export const readRolloutCompaction = (rollout: RolloutFiles): Effect.Effect<Rest
   );
 
 export const foldRolloutHistory = (
+  kinds: ThreadEntryReader,
   rollout: RolloutFiles,
 ): Effect.Effect<{ readonly history: ThreadHistory; readonly bytes: number }, RolloutUnreadable | WorkerUnavailable> =>
   Effect.flatMap(
-    ask(rollout, (id) => ({ id, rollout, kind: 'history' })),
+    Effect.flatMap(loadable(kinds), (reader) => ask(rollout, (id) => ({ id, rollout, reader, kind: 'history' }))),
     (answer) =>
       answer.kind === 'history'
         ? Effect.succeed({ history: answer.history, bytes: answer.bytes })

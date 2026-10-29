@@ -21,6 +21,7 @@ import {
   threadProjection,
 } from '../../../threads/testing/doubles.js';
 import { ENTRY_KINDS } from '../../manifest.js';
+import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 
 const fact = (threadId: string, id: string) => ({
   threadId,
@@ -144,6 +145,7 @@ it.live(
       Effect.provide(
         evictThreadProjection({ threadId: id, path: pathOf(projectId, id), parts: nativeOnlyParts }).pipe(
           Effect.provideService(MachineStore, store),
+          Effect.provideService(ThreadEntryKinds, ENTRY_KINDS),
         ),
         runtime,
       );

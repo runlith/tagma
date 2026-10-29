@@ -1,6 +1,7 @@
 import { HistoryFold } from '@runlith/agent/thread/HistoryFold';
 import { threadEventFact } from '@runlith/agent/thread/ThreadEventDoor';
 import { TranscriptFold } from '@runlith/agent/transcript/TranscriptFold';
+import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { Effect } from 'effect';
 import { MachineStore, type StoreFailure } from '../platform/contract/service/store.js';
@@ -161,6 +162,6 @@ export const nativeFolds: NativeFolds = {
     const { db } = yield* MachineStore;
     yield* db.insert(threadLog).values({ threadId, historyThrough: through, entriesThrough: through });
   }),
-  transcribe: (files, key) => Effect.asVoid(transcribeRollout(files, key)),
+  transcribe: (files, key) => Effect.flatMap(ThreadEntryKinds, (kinds) => Effect.asVoid(transcribeRollout(kinds, files, key))),
   writes: writes('rollout.native.folds', [threadEntry, threadHistoryItem, threadLog, threadPrunedToolCall, threadCompactionCheckpoint]),
 };
