@@ -95,7 +95,7 @@ const engines = kind(Engines, (_params: null, home: string) => makeEngines(home)
 
 const chromiumTouch = (cdp: CDPSession) =>
   makeTouch<PagePoint>({
-    locate: async (point) => point,
+    frame: async () => (point) => point,
     send: async (phase, point) => {
       await cdp.send('Input.dispatchTouchEvent', {
         type: phase === 'press' ? 'touchStart' : phase === 'move' ? 'touchMove' : 'touchEnd',

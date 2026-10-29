@@ -46,6 +46,7 @@ export const proveTouch = Effect.fn('e2e.proveTouch')(function* (fixture: Fixtur
   })()`,
       Schema.Void,
     );
+    const before = await evaluate('document.querySelector("#list").scrollTop', Schema.Number);
     await touch.press({ x: 200, y: 500 });
     await evaluate('heldTouch.wait("touchstart", 1)', Schema.Void);
     await touch.move({ x: 200, y: 420 });
@@ -55,6 +56,12 @@ export const proveTouch = Effect.fn('e2e.proveTouch')(function* (fixture: Fixtur
     expect(held.mounted).toBe(true);
     await touch.move({ x: 200, y: 340 });
     await evaluate('heldTouch.wait("touchmove", 2)', Schema.Void);
+    const panned = await evaluate(
+      'new Promise(resolve => requestAnimationFrame(() => resolve({active: heldTouch.active, top: document.querySelector("#list").scrollTop})))',
+      Schema.Struct({ active: Schema.Number, top: Schema.Number }),
+    );
+    expect(panned.active).toBe(1);
+    expect(panned.top).toBeGreaterThan(before);
     await touch.release();
     await evaluate('heldTouch.wait("touchend", 1)', Schema.Void);
     const events = await evaluate('heldTouch.events', Events);
@@ -69,7 +76,7 @@ export const proveTouch = Effect.fn('e2e.proveTouch')(function* (fixture: Fixtur
   yield* Effect.scoped(
     Effect.gen(function* () {
       const scoped = yield* makeTouch<PagePoint>({
-        locate: async (point) => point,
+        frame: async () => (point) => point,
         send: async (phase, point) => {
           if (phase === 'release') await touch.release();
           else await touch[phase](point);

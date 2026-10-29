@@ -165,8 +165,29 @@ const transfer = String.raw`(value) => {
   }
 }`;
 const Evaluation = Schema.fromJsonString(
-  Schema.Struct({ result: Schema.optional(Schema.Unknown), refused: Schema.optional(Schema.String) }),
+  Schema.Struct({
+    result: Schema.optional(Schema.Unknown),
+    refused: Schema.optional(Schema.String),
+    thrown: Schema.optional(Schema.String),
+  }),
 );
+const ChannelMessage = Schema.fromJsonString(
+  Schema.Union([Schema.Struct({ hello: Schema.String }), Schema.Struct({ call: Schema.Number, text: Schema.String })]),
+);
+const channelScript = (url: string) => `(() => {
+  if (globalThis.__runlithChannel) return;
+  const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  globalThis.__runlithChannel = id;
+  const socket = new WebSocket(${JSON.stringify(url)});
+  socket.onopen = () => socket.send(JSON.stringify({ hello: id }));
+  socket.onmessage = async (event) => {
+    const { call, expression } = JSON.parse(event.data);
+    let text;
+    try { text = (${transfer})(await (0, eval)('(' + expression + ')')); }
+    catch (error) { text = JSON.stringify({ thrown: String((error && error.stack) || error) }); }
+    socket.send(JSON.stringify({ call, text }));
+  };
+})()`;
 const Viewport = Schema.Struct({ title: Schema.String, x: Schema.Number, y: Schema.Number, width: Schema.Number });
 const evaluatePage = async (debugger_: RemoteDebugger, expression: string): Promise<unknown> => {
   const evaluation = decode(
@@ -272,10 +293,80 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
     }),
   );
   servers.add(errors);
-  const script = errorScript(
-    `value => fetch(${JSON.stringify(errors.url.href)}, {method:'POST',body:JSON.stringify(value),keepalive:true})`,
+  type Socket = Bun.ServerWebSocket<unknown>;
+  const sockets = new Map<string, Socket>();
+  const arrivals = new Map<string, (socket: Socket) => void>();
+  const calls = new Map<
+    number,
+    { readonly socket: Socket; readonly resolve: (text: string) => void; readonly reject: (cause: unknown) => void }
+  >();
+  let sequence = 0;
+  let current: string | undefined;
+  const channel = yield* Effect.sync(() =>
+    Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch(request, server) {
+        if (server.upgrade(request)) return undefined;
+        return new Response('the page channel accepts WebSocket upgrades only', { status: 400 });
+      },
+      websocket: {
+        message(socket, message) {
+          const decoded = decode(ChannelMessage, String(message));
+          if ('hello' in decoded) {
+            sockets.set(decoded.hello, socket);
+            arrivals.get(decoded.hello)?.(socket);
+            arrivals.delete(decoded.hello);
+            return;
+          }
+          const call = calls.get(decoded.call);
+          calls.delete(decoded.call);
+          call?.resolve(decoded.text);
+        },
+        close(socket) {
+          for (const [id, held] of sockets) if (held === socket) sockets.delete(id);
+          for (const [id, call] of calls)
+            if (call.socket === socket) {
+              calls.delete(id);
+              call.reject(new IOSUnavailable({ message: 'the page left before answering an evaluation' }));
+            }
+        },
+      },
+    }),
   );
-  const touch = yield* makeTouch<Point>({ locate: (point) => fixture.pagePoint(point), send: held.touch });
+  servers.add(channel);
+  const script = `void (${errorScript(
+    `value => fetch(${JSON.stringify(errors.url.href)}, {method:'POST',body:JSON.stringify(value),keepalive:true})`,
+  )}, ${channelScript(`ws://127.0.0.1:${channel.port}/`)})`;
+  const evaluateChannel = async (expression: string): Promise<unknown> => {
+    const id = current;
+    if (id === undefined) throw new IOSUnavailable({ message: 'open a page before evaluating it' });
+    const socket = sockets.get(id) ?? (await new Promise<Socket>((resolve) => arrivals.set(id, resolve)));
+    const call = ++sequence;
+    const text = await new Promise<string>((resolve, reject) => {
+      calls.set(call, { socket, resolve, reject });
+      socket.send(JSON.stringify({ call, expression }));
+    });
+    const evaluation = decode(Evaluation, text);
+    if (evaluation.refused !== undefined)
+      throw new UntransferableValue({ message: `the page value is not JSON-representable: ${evaluation.refused}` });
+    if (evaluation.thrown !== undefined) throw new IOSUnavailable({ message: `the page expression threw: ${evaluation.thrown}` });
+    return evaluation.result;
+  };
+  const mapping = async (): Promise<(point: Point) => Point> => {
+    const viewport = decode(
+      Viewport,
+      await evaluatePage(
+        inspect(),
+        '({title:document.title,x:visualViewport.offsetLeft,y:visualViewport.offsetTop,width:visualViewport.width})',
+      ),
+    );
+    if (application === undefined) throw new IOSUnavailable({ message: 'open a page before mapping its coordinates' });
+    const frame = await held.webFrame(viewport.title, application);
+    const scale = frame.width / viewport.width;
+    return (point) => ({ x: frame.x + (point.x - viewport.x) * scale, y: frame.y + (point.y - viewport.y) * scale });
+  };
+  const touch = yield* makeTouch<Point>({ frame: mapping, send: held.touch });
   const fixture: IOSSession = {
     touch,
     udid,
@@ -324,6 +415,7 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
           addEventListener('hashchange', changed); location.href = target;
         })`,
         );
+        current = decode(Schema.String, await evaluatePage(debugger_, 'globalThis.__runlithChannel'));
         return;
       }
       const loaded = new Promise<void>((resolve, reject) => {
@@ -345,25 +437,17 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
         pageIdKey: page,
       });
       await loaded;
-      const landed = decode(Schema.String, await evaluatePage(debugger_, 'location.href'));
-      if (landed !== to.href) throw new IOSUnavailable({ message: `MobileSafari loaded ${landed} while opening ${to.href}` });
+      const landed = decode(
+        Schema.Struct({ href: Schema.String, channel: Schema.String }),
+        await evaluatePage(debugger_, '({href: location.href, channel: globalThis.__runlithChannel})'),
+      );
+      if (landed.href !== to.href) throw new IOSUnavailable({ message: `MobileSafari loaded ${landed.href} while opening ${to.href}` });
+      current = landed.channel;
     },
-    evaluate: async (expression, schema) => decode(schema, await evaluatePage(inspect(), expression)),
+    evaluate: async (expression, schema) => decode(schema, await evaluateChannel(expression)),
     swipe: held.swipe,
     tap: held.tap,
-    pagePoint: async (point) => {
-      const viewport = decode(
-        Viewport,
-        await evaluatePage(
-          inspect(),
-          '({title:document.title,x:visualViewport.offsetLeft,y:visualViewport.offsetTop,width:visualViewport.width})',
-        ),
-      );
-      if (application === undefined) throw new IOSUnavailable({ message: 'open a page before mapping its coordinates' });
-      const frame = await held.webFrame(viewport.title, application);
-      const scale = frame.width / viewport.width;
-      return { x: frame.x + (point.x - viewport.x) * scale, y: frame.y + (point.y - viewport.y) * scale };
-    },
+    pagePoint: async (point) => (await mapping())(point),
     screenshot: held.screenshot,
     recording: (selector) => pageRecording(inspect(), selector, servers),
   };

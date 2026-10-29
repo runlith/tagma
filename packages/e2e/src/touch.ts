@@ -8,13 +8,14 @@ export type Touch = {
 };
 export type TouchPhase = 'press' | 'move' | 'release';
 export type TouchInput<A extends object> = {
-  readonly locate: (point: PagePoint) => Promise<A>;
+  readonly frame: () => Promise<(point: PagePoint) => A>;
   readonly send: (phase: TouchPhase, point: A) => Promise<void>;
 };
 export class TouchFailed extends Data.TaggedError('TouchFailed')<{ readonly message: string; readonly cause?: unknown }> {}
 
 class Contact<A extends object> implements Touch {
   private point: A | undefined;
+  private map: ((point: PagePoint) => A) | undefined;
   private pending = Promise.resolve();
   constructor(private readonly input: TouchInput<A>) {}
 
@@ -37,14 +38,16 @@ class Contact<A extends object> implements Touch {
   press = (point: PagePoint): Promise<void> =>
     this.ordered(async () => {
       if (this.point !== undefined) throw new TouchFailed({ message: 'the finger is already pressed' });
-      this.point = await this.input.locate(point);
+      const map = await this.input.frame();
+      this.point = map(point);
+      this.map = map;
       await this.input.send('press', this.point);
     });
 
   move = (point: PagePoint): Promise<void> =>
     this.ordered(async () => {
-      if (this.point === undefined) throw new TouchFailed({ message: 'press the finger before moving it' });
-      this.point = await this.input.locate(point);
+      if (this.point === undefined || this.map === undefined) throw new TouchFailed({ message: 'press the finger before moving it' });
+      this.point = this.map(point);
       await this.input.send('move', this.point);
     });
 
@@ -53,6 +56,7 @@ class Contact<A extends object> implements Touch {
       if (this.point === undefined) return;
       await this.input.send('release', this.point);
       this.point = undefined;
+      this.map = undefined;
     });
 }
 
