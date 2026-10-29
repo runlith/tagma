@@ -32,6 +32,7 @@ import { retiredRoutes } from '../../http/retired.js';
 import { Devices } from '../../remote/contract/service/devices.js';
 import { ConnectionHeaders } from '../../invocation/contract/service/admission.js';
 import { OperationCatalog } from '../../invocation/contract/service/catalog.js';
+import { mcpCallbackRoute } from '../../mcp/callback.js';
 
 const callerCheckout = HttpMiddleware.make((app) =>
   Effect.gen(function* () {
@@ -79,7 +80,7 @@ export const doorLayer = (options: DoorOptions) => {
     Layer.provide(callLogLayer),
   );
   const app = options.appDist === undefined ? Layer.empty : HttpStaticServer.layer({ root: options.appDist, spa: true });
-  return Layer.mergeAll(api, retiredRoutes, unknownApiPath, app, doorMiddleware);
+  return Layer.mergeAll(api, retiredRoutes, unknownApiPath, mcpCallbackRoute, app, doorMiddleware);
 };
 
 export const doorMiddleware = HttpRouter.middleware<{ provides: never; handles: never }>()(

@@ -69,6 +69,10 @@
       "types": "./src/sdk.ts",
       "default": "./src/sdk.ts"
     },
+    "./testing/oauth": {
+      "types": "./src/testing/oauthServer.ts",
+      "default": "./src/testing/oauthServer.ts"
+    },
     "./server": {
       "types": "./src/sdkServer.ts",
       "default": "./src/sdkServer.ts"

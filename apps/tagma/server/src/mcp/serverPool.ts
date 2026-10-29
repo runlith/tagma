@@ -269,6 +269,10 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       );
     });
     yield* reconciling;
+    yield* Effect.forEach(readers(keyOf(input.scope, input.projectId, declaration.name)), ([pool, name]) => pool.awaitHandshake(name), {
+      concurrency: 'unbounded',
+      discard: true,
+    });
     return yield* listing;
   });
 

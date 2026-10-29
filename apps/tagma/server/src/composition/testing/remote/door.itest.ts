@@ -29,6 +29,7 @@ import { sandboxRoutes } from '../../http/sites.js';
 import { doorServicesOf } from '../doorServices.js';
 import { makeDoorWorld } from '../doorFixture.js';
 import { REPORT_PATH } from '../../../desktop-browser/contract/wire/channel.js';
+import { oauthServer } from '@runlith/mcp/testing/oauth';
 
 const ORIGIN = 'https://tagma-test.tail0000.ts.net';
 const SITE = `${ORIGIN}:11001`;
@@ -589,6 +590,32 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
       expect((yield* settles('blocked'))._tag).toBe('blocked');
       siteRefused = false;
       expect(yield* settles('ready')).toEqual({ _tag: 'ready', origin: SITE });
+    }),
+  );
+
+  it.effect('an MCP sign-in begun on a paired device returns to this door, admitted by its state alone with no device cookie', () =>
+    Effect.gen(function* () {
+      const { world, project } = yield* Remote;
+      const oauth = yield* oauthServer;
+      const { credential } = yield* paired();
+      const declaration = { name: 'guarded', transport: 'http', url: oauth.url, capabilities: { kinds: ['network'], mutates: false } };
+      expect(yield* world.op('add_mcp_server', declaration, `project=${project}`)).toMatchObject({ status: 200 });
+      yield* Effect.addFinalizer(() =>
+        Effect.asVoid(Effect.orDie(world.op('remove_mcp_server', { name: 'guarded' }, `project=${project}`))),
+      );
+      const begun = yield* remote(`/api/op/sign_in_mcp_server?project=${project}`, {
+        method: 'POST',
+        body: { name: 'guarded' },
+        credential,
+      });
+      expect(begun.status).toBe(200);
+      const { url } = (yield* Effect.promise(() => begun.json())) as { url: string };
+      expect(new URL(url).searchParams.get('redirect_uri')).toBe(`${ORIGIN}/mcp/oauth/callback`);
+      const returned = yield* oauth.follow(url);
+      const back = yield* remote(`${returned.pathname}${returned.search}`, { origin: null, headers: { 'sec-fetch-site': 'cross-site' } });
+      expect([back.status, ...framing(back)]).toEqual([200, 'DENY', ["frame-ancestors 'none'"]]);
+      const read = (yield* world.op('read_mcp_servers', {}, `project=${project}`)).body as { mcp: { name: string; status: string }[] };
+      expect(read.mcp.find((row) => row.name === 'guarded')).toMatchObject({ status: 'connected' });
     }),
   );
 

@@ -95,7 +95,7 @@ export const MCP_OPERATIONS = {
     answer,
     meaning: 'Declare a project or user MCP server. Its tools become available at the next run.',
     grammar: `Requires the connection details and capability classification. \`\${NAME}\` anywhere in the declaration is stored literally and resolved on connection: first from the value the operator set for this server with set_secret, then from Tagma’s environment. A server whose names resolve from neither is declared and shows needs-value naming them.
-Returns declarations without connecting. Use read_mcp_servers for connection state.`,
+Answers once the new server's first handshake ends in every open pool that runs it, so its row reads connected, needs-sign-in or failed there; a project whose pool is not open yet reads pending.`,
     input: mcpAddParams,
     refusals: ['mcp-server-exists', 'mcp-reconcile-stalled', 'secret-store-failed', 'setting-scope', 'setting-value', 'unknown-project'],
     confirmation: (input, project: ProjectRef) => ({

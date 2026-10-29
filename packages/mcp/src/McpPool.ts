@@ -174,6 +174,11 @@ const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) 
     yield* Fiber.awaitAll(attempts);
   });
 
+  const awaitHandshake = Effect.fn('McpPool.awaitHandshake')(function* (name: string) {
+    const attempt = yield* FiberMap.get(connects, name);
+    if (attempt._tag === 'Some') yield* Fiber.await(attempt.value);
+  });
+
   const paletteUnsafe = (): McpPalette => {
     const palette: McpPaletteEntry[] = [];
     for (const [, entry] of entries) {
@@ -594,6 +599,7 @@ const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) 
     reconcile,
     reconnect,
     awaitHandshakes,
+    awaitHandshake,
     paletteUnsafe,
     states,
     changes: Stream.fromPubSub(pulses),

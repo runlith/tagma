@@ -24,6 +24,7 @@ import { LaneEndpoint, type ViewLanes } from '../../executions/contract/service/
 import { remoteEndpoint } from './endpoint.js';
 import { remoteSignInDoor } from './signInDoor.js';
 import { McpSignInDoor } from '../../mcp/contract/service/door.js';
+import { MCP_CALLBACK_PATH } from '../../mcp/contract/wire/callback.js';
 import type { Devices } from '../../remote/contract/service/devices.js';
 import {
   DEVICE_COOKIE,
@@ -156,6 +157,7 @@ export const remoteGate = (admission: Admission['Service'], shell: Shell | null)
       yield* HttpEffect.appendPreResponseHandler((_request, response) => Effect.succeed(frame(response)));
       return yield* Effect.gen(function* () {
         if (request.method === PAIRING_ENDPOINT.method && path === PAIRING_ENDPOINT.path) return yield* pairing(admission);
+        if (request.method === 'GET' && !upgrade && path === MCP_CALLBACK_PATH) return yield* app;
         if (reading(request.method) && !upgrade && !gated(path)) return yield* shellOf(shell);
         const credential = request.cookies[DEVICE_COOKIE];
         return yield* admission.remote(

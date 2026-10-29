@@ -49,6 +49,8 @@ type CallOptions = {
   readonly headers?: Readonly<Record<string, string>>;
 };
 
+export const DOOR_ORIGIN = 'http://tagma';
+
 export const WORLD_SOURCE = {
   startedAt: '2026-01-01T00:00:00.000Z',
   revision: { head: 'wor1dcut', dirty: false },
@@ -201,6 +203,7 @@ const built = Effect.fnUntraced(
         attachmentsPath: join(data, 'attachments'),
         artifactOrigin: options.artifactOrigin,
         sandboxPort: options.sandboxPort,
+        localOrigin: DOOR_ORIGIN,
         sourcePath: serverPath,
         hostSourcePath: options.hostSourcePath,
         hostBundlePath,
@@ -261,7 +264,7 @@ const built = Effect.fnUntraced(
       Effect.provide(
         requestEffect(
           handler,
-          new Request(`http://tagma${path}`, {
+          new Request(`${DOOR_ORIGIN}${path}`, {
             method: init.method ?? 'GET',
             headers: { 'content-type': 'application/json', ...init.headers },
             body: init.body === undefined ? undefined : JSON.stringify(init.body),
