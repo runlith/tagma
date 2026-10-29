@@ -6,7 +6,7 @@ import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } fr
 import { existsSync, mkdtempSync, readFileSync, watch } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Cause, Clock, Deferred, Effect, Exit, Fiber, Scope } from 'effect';
+import { Cause, Deferred, Effect, Exit, Fiber, Scope } from 'effect';
 import { type McpPalette, McpPool } from './McpPool';
 import type { McpHttpServerDeclaration, McpStdioServerDeclaration } from './McpServerDeclaration';
 import type { McpSdkCallResult } from './sdk';
@@ -172,16 +172,19 @@ describe('McpPool', () => {
   it.live(
     'closing the pool waits out servers that ignore the end of stdin together, not one after another',
     Effect.fnUntraced(function* () {
+      const journal = join(mkdtempSync(join(tmpdir(), 'mcp-linger-')), 'journal');
       const scope = yield* Scope.fork(yield* Effect.scope);
       const pool = yield* McpPool.make().pipe(Scope.provide(scope));
-      yield* pool.reconcile([declare('first', ['--linger']), declare('second', ['--linger'])]);
+      const lingering = (name: string) => declare(name, [], { env: { MCP_TEST_LINGER: journal } });
+      yield* pool.reconcile([lingering('first'), lingering('second')]);
       yield* pool.awaitHandshakes();
       const pids = yield* Effect.forEach(['first', 'second'], (name) =>
         Effect.map(pool.call(name, 'pid', {}), (result) => Number(text(result))),
       );
-      const began = yield* Clock.currentTimeMillis;
       yield* Scope.close(scope, Exit.void);
-      expect((yield* Clock.currentTimeMillis) - began).toBeLessThan(4_000);
+      const heard = readFileSync(journal, 'utf8').trim().split('\n');
+      expect(heard.slice(0, 2).sort()).toEqual(pids.map((pid) => `eof ${pid}`).sort());
+      expect(heard.slice(2).sort()).toEqual(pids.map((pid) => `term ${pid}`).sort());
       expect(pids.filter(alive)).toEqual([]);
     }),
   );

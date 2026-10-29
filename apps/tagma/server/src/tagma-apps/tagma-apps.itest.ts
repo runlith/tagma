@@ -1,7 +1,8 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { Clock, Context, Effect, Exit, Fiber, Layer, Scope } from 'effect';
 import { TestClock } from 'effect/testing';
@@ -133,17 +134,19 @@ it.live('closing the apps waits out processes that ignore the end of stdin toget
     const owned = yield* Scope.fork(yield* Effect.scope);
     const { apps, projectId, root, said } = yield* setup.pipe(Scope.provide(owned));
     const second = join(dirname(root), 'second');
+    const journal = join(yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'apps-linger-'))), 'journal');
     yield* Effect.promise(async () => {
-      await writeFile(join(root, 'tagma-app.json'), manifest(TOOLS, 'fixture', ['--linger']));
+      await writeFile(join(root, 'tagma-app.json'), manifest(TOOLS, 'fixture', ['--linger', journal]));
       await mkdir(second, { recursive: true });
-      await writeFile(join(second, 'tagma-app.json'), manifest(TOOLS, 'second', ['--linger']));
+      await writeFile(join(second, 'tagma-app.json'), manifest(TOOLS, 'second', ['--linger', journal]));
     });
     yield* apps.install({ projectId, id: 'fixture', enabled: true });
     yield* apps.install({ projectId, id: 'second', enabled: true });
     const pids = [Number(yield* said('pid')), Number(yield* said('pid', 'second'))];
-    const began = yield* Clock.currentTimeMillis;
     yield* Scope.close(owned, Exit.void);
-    expect((yield* Clock.currentTimeMillis) - began).toBeLessThan(3_500);
+    const heard = (yield* Effect.promise(() => readFile(journal, 'utf8'))).trim().split('\n');
+    expect(heard.slice(0, 2).sort()).toEqual(pids.map((pid) => `eof ${pid}`).sort());
+    expect(heard.slice(2).sort()).toEqual(pids.map((pid) => `term ${pid}`).sort());
     expect(pids.filter(alive)).toEqual([]);
   }),
 );
