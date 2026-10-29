@@ -124,6 +124,10 @@ fields:
       {
         "at": "src/testing/oauthServer.ts",
         "role": "testing"
+      },
+      {
+        "at": "src/testing/keyedServer.ts",
+        "role": "testing"
       }
     ],
     "id": "@runlith/mcp",
