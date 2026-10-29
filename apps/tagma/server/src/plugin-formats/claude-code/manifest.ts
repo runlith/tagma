@@ -1,5 +1,5 @@
 import { Effect, Schema } from 'effect';
-import { type PluginIgnored, type PluginOption, PluginRefused } from '../../plugins/contract/service/format.js';
+import { type PluginAbout, type PluginIgnored, type PluginOption, PluginRefused } from '../../plugins/contract/service/format.js';
 import { entryOf, jsonOf, type PluginEntry, textOf } from '../../plugins/contract/service/reading.js';
 
 export const MANIFEST = '.claude-plugin/plugin.json';
@@ -29,21 +29,30 @@ const Option = Schema.Struct({
   max: Schema.optional(Schema.Finite),
 });
 
-const Manifest = Schema.Struct({
-  name: Schema.String.check(Schema.isMinLength(1)),
+const FIELDS = {
   displayName: Schema.optional(Schema.String),
   version: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
+  author: Schema.optional(Schema.Unknown),
+  homepage: Schema.optional(Schema.Unknown),
+  repository: Schema.optional(Schema.Unknown),
+  license: Schema.optional(Schema.Unknown),
   skills: Schema.optional(Paths),
   commands: Schema.optional(Schema.Union([Paths, Schema.Record(Schema.String, Schema.Unknown)])),
   agents: Schema.optional(Paths),
   hooks: Schema.optional(Schema.Unknown),
   mcpServers: Schema.optional(Schema.Unknown),
   userConfig: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-});
+};
+
+const Manifest = Schema.Struct({ name: Schema.String.check(Schema.isMinLength(1)), ...FIELDS });
 export type Manifest = typeof Manifest.Type;
 
+const Declared = Schema.Struct(FIELDS);
+export type Declared = typeof Declared.Type;
+
 const decodeManifest = Schema.decodeUnknownEffect(Manifest);
+const decodeDeclared = Schema.decodeUnknownEffect(Declared);
 const decodeOption = Schema.decodeUnknownEffect(Option);
 const decodeCommand = Schema.decodeUnknownEffect(CommandEntry);
 
@@ -81,6 +90,28 @@ export const manifestOf = Effect.fnUntraced(function* (root: string) {
   );
   const fields = raw.value !== null && typeof raw.value === 'object' ? Object.keys(raw.value) : [];
   return { manifest, fields };
+});
+
+export const ENTRY = 'its marketplace entry';
+
+export const entryManifest = (entry: Readonly<Record<string, unknown>>) =>
+  decodeManifest(entry).pipe(Effect.mapError((failure) => new PluginRefused({ reason: `${ENTRY}: ${failure.message}` })));
+
+export const entryFields = (entry: Readonly<Record<string, unknown>>) =>
+  decodeDeclared(entry).pipe(Effect.mapError((failure) => new PluginRefused({ reason: `${ENTRY}: ${failure.message}` })));
+
+const named = (value: unknown, key: 'name' | 'url'): string | null => {
+  if (typeof value === 'string') return value.length > 0 ? value : null;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const inner = (value as Readonly<Record<string, unknown>>)[key];
+  return typeof inner === 'string' && inner.length > 0 ? inner : null;
+};
+
+export const aboutOf = (manifest: Manifest | null): PluginAbout => ({
+  author: named(manifest?.author, 'name'),
+  homepage: named(manifest?.homepage, 'url'),
+  repository: named(manifest?.repository, 'url'),
+  license: named(manifest?.license, 'name'),
 });
 
 export const optionsOf = Effect.fnUntraced(function* (manifest: Manifest) {

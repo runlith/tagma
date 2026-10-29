@@ -25,10 +25,9 @@ export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf:
     for (const id of enabled) {
       const install = installs.find((entry) => entry.id === id);
       if (install === undefined) continue;
-      const bound = yield* Effect.flatMap(shelf.read(install.root), (read) => shelf.bind(read, install.root, project)).pipe(
-        Effect.catchTags({ PluginRefused: refusedHere(id), NamesCollide: refusedHere(id) }),
-        Effect.mapError(unreadable),
-      );
+      const bound = yield* Effect.flatMap(shelf.read(install.root, install.declared ?? null), (read) =>
+        shelf.bind(read, install.root, project),
+      ).pipe(Effect.catchTags({ PluginRefused: refusedHere(id), NamesCollide: refusedHere(id) }), Effect.mapError(unreadable));
       if (bound !== null) loaded.push(bound.loaded);
     }
     return loaded;
@@ -45,7 +44,7 @@ export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf:
           const install = installs.find((entry) => entry.id === id);
           if (install === undefined) continue;
           const read = yield* shelf
-            .read(install.root)
+            .read(install.root, install.declared ?? null)
             .pipe(Effect.catchTags({ PluginRefused: refusedHere(id), NamesCollide: refusedHere(id) }));
           if (read === null) continue;
           const entries = read.package.options

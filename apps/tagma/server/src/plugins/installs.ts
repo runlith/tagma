@@ -68,8 +68,8 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       (project) => project.rootPath,
     );
 
-  const readOf = (root: string) =>
-    shelf.read(root).pipe(
+  const readOf = (root: string, declared: PluginInstall['declared']) =>
+    shelf.read(root, declared ?? null).pipe(
       Effect.catchTags({
         PluginRefused: (failure) => Effect.fail(refusedOf(failure)),
         PluginUnreadable: (failure) => Effect.fail(refusedOf(failure)),
@@ -98,7 +98,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     const project = yield* projectRoot(projectId);
     const base = { id: install.id, source: install.source, root: install.root, enabled: enabled.has(install.id) };
     const reading = yield* Effect.result(
-      Effect.flatMap(shelf.read(install.root), (read) =>
+      Effect.flatMap(shelf.read(install.root, install.declared ?? null), (read) =>
         Effect.map(shelf.bind(read, install.root, project), (bound) => ({ read, ...bound })),
       ),
     );
@@ -166,7 +166,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     for (const id of enabled) {
       const install = installs.find((entry) => entry.id === id);
       if (install === undefined) continue;
-      const standing = yield* shelf.read(install.root).pipe(
+      const standing = yield* shelf.read(install.root, install.declared ?? null).pipe(
         Effect.catchTags({
           PluginRefused: () => Effect.succeed(null),
           PluginUnreadable: () => Effect.succeed(null),
@@ -216,7 +216,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         Effect.mapError(refusedOf),
       );
       shelf.forget(fetched.root);
-      const read = yield* readOf(fetched.root);
+      const read = yield* readOf(fetched.root, undefined);
       const standing = (yield* installedList).find((entry) => entry.id === read.id);
       if (standing !== undefined && !sameSource(standing.source, source)) {
         const from = standing.source.kind === 'git' ? standing.source.url : standing.source.path;
@@ -231,7 +231,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       return yield* locked(
         Effect.gen(function* () {
           shelf.forget(prepared.root);
-          const read = yield* readOf(prepared.root);
+          const read = yield* readOf(prepared.root, undefined);
           if (read.id !== id) {
             return yield* new GateRefusal(
               'plugin-refused',
@@ -271,13 +271,13 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     }),
     installed: Effect.fn('Plugins.installed')(function* ({ projectId, id }) {
       const install = yield* installedOf(id);
-      return yield* preparedOf(yield* readOf(install.root), install.root, install.source, projectId);
+      return yield* preparedOf(yield* readOf(install.root, install.declared), install.root, install.source, projectId);
     }),
     enable: Effect.fn('Plugins.enable')(function* ({ projectId, id, enabled }) {
       return yield* locked(
         Effect.gen(function* () {
           const install = yield* installedOf(id);
-          if (enabled) yield* clashes(projectId, yield* readOf(install.root));
+          if (enabled) yield* clashes(projectId, yield* readOf(install.root, install.declared));
           yield* shown(projectId, id, enabled);
           yield* changed(projectId);
           return yield* row(projectId, id);

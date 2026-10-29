@@ -356,7 +356,13 @@ const hooksFile = Effect.fnUntraced(function* (
   yield* eventMap(plugin, label, raw.value['hooks'], hooks, ignored);
 });
 
-export const hooksOf = Effect.fnUntraced(function* (root: string, plugin: ToolNaming, manifest: Manifest | null, ignored: PluginIgnored[]) {
+export const hooksOf = Effect.fnUntraced(function* (
+  root: string,
+  plugin: ToolNaming,
+  manifest: Manifest | null,
+  ignored: PluginIgnored[],
+  replacing: Readonly<Record<string, unknown>> | null,
+) {
   const hooks: PluginHook[] = [];
   const standard = yield* entryOf(root, 'hooks/hooks.json');
   if (standard.kind === 'file') yield* hooksFile(plugin, standard.path, 'hooks/hooks.json', hooks, ignored);
@@ -369,5 +375,9 @@ export const hooksOf = Effect.fnUntraced(function* (root: string, plugin: ToolNa
     } else if (isObject(shape)) yield* eventMap(plugin, 'plugin.json', shape, hooks, ignored);
     else ignored.push({ component: 'hooks', name: null, reason: 'a hooks entry is neither a path nor an event map' });
   }
-  return hooks;
+  if (replacing === null) return hooks;
+  const replaced = new Set(Object.keys(replacing).flatMap((event) => EVENTS[event] ?? []));
+  const kept = hooks.filter((hook) => !replaced.has(hook.point));
+  yield* eventMap(plugin, 'its marketplace entry', replacing, kept, ignored);
+  return kept;
 });

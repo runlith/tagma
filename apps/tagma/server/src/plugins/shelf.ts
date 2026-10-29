@@ -16,6 +16,7 @@ import {
 import type { PluginLoaded } from './contract/service/plugins.js';
 import { PluginReads } from './contract/service/reading.js';
 import { componentName } from './contract/wire/names.js';
+import type { PluginDeclared } from './contract/wire/rows.js';
 import { pluginsOptions } from './contract/wire/settings.js';
 import { type NamesCollide, type Read, readPlugin } from './reader.js';
 import { dataRoot } from './sources.js';
@@ -53,11 +54,11 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
       (parts) => parts.join('|'),
     );
 
-  const read = Effect.fn('PluginShelf.read')(function* (root: string) {
+  const read = Effect.fn('PluginShelf.read')(function* (root: string, declared: PluginDeclared | null) {
     const standing = cache.get(root);
     if (standing !== undefined && standing.stamp === (yield* stampOf(standing.paths))) return standing.read;
     const reads = new Set<string>([root]);
-    const fresh = yield* readPlugin(formats, root).pipe(
+    const fresh = yield* readPlugin(formats, root, declared).pipe(
       Effect.provideService(FileSystem.FileSystem, files),
       Effect.provideService(PluginReads, reads),
       Effect.tapError(() => Effect.sync(() => cache.delete(root))),

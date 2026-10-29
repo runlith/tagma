@@ -5,8 +5,9 @@ import { contentSubstitution, substituted } from './variables.js';
 import { pluginIdOf } from '../../plugins/contract/wire/names.js';
 import { entryOf } from '../../plugins/contract/service/reading.js';
 import { agentsOf, commandsOf, skillsOf } from './components.js';
+import { type Combined, combined } from './entry.js';
 import { hooksOf } from './hooks.js';
-import { IGNORED_FIELDS, IGNORED_FILES, MANIFEST, type Manifest, manifestOf, optionsOf } from './manifest.js';
+import { aboutOf, IGNORED_FIELDS, IGNORED_FILES, MANIFEST, type Manifest, manifestOf, optionsOf } from './manifest.js';
 import { serversOf } from './servers.js';
 
 const LAYOUT = ['skills', 'agents', 'commands', 'hooks/hooks.json', '.mcp.json', 'SKILL.md'];
@@ -17,12 +18,14 @@ const claim: PluginFormat['claim'] = Effect.fnUntraced(function* (root) {
   return null;
 });
 
-const read: PluginFormat['read'] = Effect.fn('claudeCode.read')(function* (root, claimed) {
-  const declared = claimed === 'manifest' ? yield* manifestOf(root) : null;
+const read: PluginFormat['read'] = Effect.fn('claudeCode.read')(function* (root, claimed, entry) {
+  const own = claimed === 'manifest' ? yield* manifestOf(root) : null;
+  const declared: Combined | null =
+    entry === null ? (own === null ? null : { ...own, hooks: null, ignored: [] }) : yield* combined(root, own, entry);
   const manifest: Manifest | null = declared?.manifest ?? null;
   const name = manifest?.name ?? basename(root);
   const plugin = { name, id: pluginIdOf(name) };
-  const ignored: PluginIgnored[] = [];
+  const ignored: PluginIgnored[] = [...(declared?.ignored ?? [])];
   for (const field of declared?.fields ?? []) {
     const what = IGNORED_FIELDS[field];
     if (what !== undefined) ignored.push({ component: field, name: null, reason: `Tagma does not read ${what}` });
@@ -37,6 +40,7 @@ const read: PluginFormat['read'] = Effect.fn('claudeCode.read')(function* (root,
     title: manifest?.displayName ?? null,
     version: manifest?.version ?? null,
     description: manifest?.description ?? null,
+    about: aboutOf(manifest),
     skills: (yield* skillsOf(root, name, manifest, ignored)).map((skill) => ({
       ...skill,
       render: (text: string, place: PluginPlace) => substituted(text, place, contentSubstitution(options)),
@@ -44,7 +48,7 @@ const read: PluginFormat['read'] = Effect.fn('claudeCode.read')(function* (root,
     commands: yield* commandsOf(root, manifest, options, ignored),
     agents: yield* agentsOf(root, plugin, manifest, options, ignored),
     servers: yield* serversOf(root, manifest, ignored),
-    hooks: yield* hooksOf(root, plugin, manifest, ignored),
+    hooks: yield* hooksOf(root, plugin, manifest, ignored, declared?.hooks ?? null),
     options,
     ignored,
   } satisfies PluginPackage;

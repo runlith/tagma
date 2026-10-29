@@ -47,7 +47,10 @@ const claim: PluginFormat['claim'] = Effect.fnUntraced(function* (root) {
   return typeof schema === 'string' && SCHEMA_FAMILY.test(schema) ? 'manifest' : null;
 });
 
-const read: PluginFormat['read'] = Effect.fn('agentPlugins.read')(function* (root) {
+const read: PluginFormat['read'] = Effect.fn('agentPlugins.read')(function* (root, _claim, declared) {
+  if (declared !== null) {
+    return yield* new PluginRefused({ reason: 'an Agent Plugins package is its own manifest: a marketplace entry declares none for it' });
+  }
   const text = yield* manifestText(root);
   if (text === null) return yield* new PluginRefused({ reason: 'plugin.json is not a file inside the plugin' });
   if ('failure' in text) return yield* new PluginRefused({ reason: `plugin.json is not JSON: ${text.failure}` });
@@ -97,6 +100,12 @@ const read: PluginFormat['read'] = Effect.fn('agentPlugins.read')(function* (roo
     title: null,
     version: manifest.version ?? null,
     description: manifest.description ?? null,
+    about: {
+      author: manifest.author?.name ?? null,
+      homepage: manifest.homepage ?? null,
+      repository: manifest.repository ?? null,
+      license: manifest.license ?? null,
+    },
     skills,
     commands: [],
     agents: [],

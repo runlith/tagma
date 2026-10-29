@@ -1,12 +1,14 @@
 import { Schema } from 'effect';
 import { settingKey, settingListKey } from '../../../platform/contract/wire/setting.js';
 import { PluginId } from './names.js';
-import { PluginSource } from './rows.js';
+import { PluginDeclared, PluginOrigin, PluginSource } from './rows.js';
 
 export const PluginInstall = Schema.Struct({
   id: PluginId,
   source: PluginSource,
   root: Schema.String.check(Schema.isMinLength(1)),
+  origin: Schema.optional(PluginOrigin),
+  declared: Schema.optional(PluginDeclared),
 });
 export type PluginInstall = typeof PluginInstall.Type;
 
