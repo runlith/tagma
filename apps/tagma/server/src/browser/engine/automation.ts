@@ -16,9 +16,9 @@ import type { Picked } from '../contract/wire/pick.js';
 import { BODY_CHARS, CONSOLE_LEVELS, type ConsoleEntry, EVALUATED_CHARS } from '../contract/wire/rows.js';
 import { perform } from './act.js';
 import type { Attached, Drive, Paged } from './drive.js';
-import { PICKING } from './cursor.js';
+import { picking } from './cursor.js';
 import { operatorQuiet } from './operator.js';
-import { ended, navigationBlocked, unknownPage } from './refusal.js';
+import { navigationBlocked, unknownPage } from './refusal.js';
 import { applyEmulation, changeConditions, effectiveOf, nextEmulation } from './emulate.js';
 import { describePick, screenshot, snapshot } from './read.js';
 import { world } from './target.js';
@@ -339,6 +339,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
         Effect.gen(function* () {
           state.asked = true;
           yield* drive.syncRuntime(state, attached);
+          yield* attached.syncEvents();
           const floor = query.level === undefined ? CONSOLE_LEVELS.length - 1 : severity(query.level);
           const match = query.match;
           const named = query.seq === undefined ? undefined : state.console.at(query.seq);
@@ -419,32 +420,14 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
       return pages.glance(page, false);
     }),
     pick: Effect.fn('Automation.pick')(function* (page, projectId) {
-      const state = yield* drive.paged(page);
       const attached = yield* drive.drive(page, null, (_state, held) => Effect.succeed(held));
       const subscription = yield* PubSub.subscribe(attached.picks);
       const scope = yield* Effect.scope;
-      yield* attached.domains.enable('Overlay').pipe(
-        Effect.catchTags({
-          CommandRefused: (failure) => ended(page, failure),
-          SessionEnded: (failure) => ended(page, failure),
-          PayloadUnreadable: (failure) => ended(page, failure),
-          WorkerUnavailable: (failure) => ended(page, failure),
+      yield* drive.drive(page, null, (state, now) =>
+        Effect.gen(function* () {
+          yield* Scope.provide(painted(page), scope);
+          yield* Scope.provide(picking(state, now), scope);
         }),
-      );
-      yield* Effect.acquireRelease(
-        drive.drive(page, null, (_state, now) =>
-          Effect.gen(function* () {
-            yield* Scope.provide(painted(page), scope);
-            yield* now.session.send('Overlay.setInspectMode', { mode: 'searchForNode', highlightConfig: PICKING });
-            state.picking += 1;
-          }),
-        ),
-        () =>
-          Effect.gen(function* () {
-            state.picking -= 1;
-            if (state.picking > 0 || state.attached !== attached) return;
-            yield* Effect.exit(attached.session.send('Overlay.setInspectMode', { mode: 'none', highlightConfig: {} }));
-          }),
       );
       return Stream.fromSubscription(subscription).pipe(
         Stream.interruptWhen(attached.session.ended),

@@ -14,8 +14,9 @@ import { NO_EMULATION, type Emulation, type Viewport } from '../contract/wire/em
 import type { PageId, ProfileId } from '../contract/wire/ids.js';
 import type { ConsoleEntry, NetworkEntry } from '../contract/wire/rows.js';
 import { capture, consoleRing, networkRing, type Request } from './capture.js';
-import type { Mark } from './cursor.js';
+import { adoptPicking, type Mark } from './cursor.js';
 import { applyConditions, applyEmulation, effectiveOf } from './emulate.js';
+import { commitFrame, detachFrame, type Frame, joinChild, leaveChild, readTree, retireChild } from './frames.js';
 import type { Strain } from '../contract/wire/host.js';
 import { isLocal } from './local.js';
 import { Refs } from './refs.js';
@@ -25,8 +26,6 @@ import { drive } from '../../platform/contract/service/drives.js';
 
 const IDLE_MS = 30_000;
 const SWEEP = '10 seconds';
-
-export type Frame = { readonly loader: string; readonly child: string | undefined; readonly url: string; readonly parent: string | null };
 
 export type Picking = { readonly node: number; readonly child: string | undefined };
 
@@ -39,11 +38,13 @@ export type Attached = {
   readonly scope: Scope.Closeable;
   readonly frames: Map<string, Frame>;
   readonly children: Map<string, string>;
+  readonly sessions: Map<string, string>;
   readonly adopted: Map<string, Scope.Closeable>;
   readonly worlds: Map<string, number>;
   readonly picks: PubSub.PubSub<Picking>;
   readonly joined: PubSub.PubSub<string>;
   readonly settled: Set<string>;
+  readonly syncEvents: () => Effect.Effect<void, SessionEnded>;
   main: string;
   navigations: number;
   runtime: Scope.Closeable | null;
@@ -53,6 +54,7 @@ export type Attached = {
   readonly emulating: Semaphore.Semaphore;
   readonly strain: StrainState;
   overlaid: boolean;
+  readonly overlaying: Semaphore.Semaphore;
   cursor: Mark | null;
 };
 
@@ -151,17 +153,6 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       }),
     );
 
-  const readTree = Effect.fnUntraced(function* (attached: Attached, child: string | undefined) {
-    const { frameTree } = yield* attached.session.send('Page.getFrameTree', undefined, child);
-    const walk = (tree: Protocol.Page.FrameTree): void => {
-      const parent = tree.frame.parentId ?? attached.frames.get(tree.frame.id)?.parent ?? null;
-      attached.frames.set(tree.frame.id, { loader: tree.frame.loaderId, child, url: tree.frame.url, parent });
-      for (const nested of tree.childFrames ?? []) walk(nested);
-    };
-    walk(frameTree);
-    if (child === undefined) attached.main = frameTree.frame.id;
-  });
-
   const adoptChild = Effect.fnUntraced(function* (state: Paged, attached: Attached, child: string, adopted: Scope.Closeable) {
     yield* attached.emulating.withPermits(1)(Effect.suspend(() => applyConditions(attached.session, state.emulation, undefined, child)));
     for (const domain of ['Page', 'DOM', 'Network', 'Log', 'Accessibility'] as const)
@@ -169,33 +160,13 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
     if (attached.runtime !== null) yield* Scope.provide(attached.domains.enable('Runtime', child), attached.runtime);
     yield* attached.session.send('Emulation.setFocusEmulationEnabled', { enabled: true }, child);
     yield* attached.session.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, child);
-    yield* readTree(attached, child);
+    if (!(yield* readTree(attached, child))) return;
+    yield* adoptPicking(state, attached, child);
   });
 
   const navigated = Effect.fnUntraced(function* (state: Paged, attached: Attached, frame: Protocol.Page.Frame, child: string | undefined) {
-    const before = attached.frames.get(frame.id);
-    if (before !== undefined && before.loader !== frame.loaderId) {
-      const children = new Map<string, string[]>();
-      for (const [id, held] of attached.frames) {
-        if (held.parent === null) continue;
-        const siblings = children.get(held.parent) ?? [];
-        siblings.push(id);
-        children.set(held.parent, siblings);
-      }
-      for (const pending = [frame.id]; pending.length > 0;) {
-        const id = pending.pop()!;
-        const gone = attached.frames.get(id)!;
-        state.refs.retire(gone.loader);
-        attached.worlds.delete(`${id}|${gone.loader}`);
-        attached.frames.delete(id);
-        pending.push(...(children.get(id) ?? []));
-      }
-    }
-    attached.frames.set(frame.id, { loader: frame.loaderId, child, url: frame.url, parent: frame.parentId ?? before?.parent ?? null });
-    if (frame.parentId === undefined && child === undefined) {
-      attached.main = frame.id;
-      yield* syncRuntime(state, attached);
-    }
+    if (!commitFrame(state, attached, frame, child)) return;
+    if (frame.parentId === undefined && child === undefined) yield* syncRuntime(state, attached);
     yield* PubSub.publish(attached.joined, frame.id);
   });
 
@@ -229,15 +200,9 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         return yield* PubSub.publish(attached.joined, frameId);
       }
       case 'Page.frameDetached': {
-        const { frameId, reason } = yield* eventParams('Page.frameDetached', event);
-        const gone = attached.frames.get(frameId);
-        if (reason === 'swap' || gone?.child !== event.child) return;
-        attached.frames.delete(frameId);
-        if (gone !== undefined) {
-          state.refs.retire(gone.loader);
-          attached.worlds.delete(`${frameId}|${gone.loader}`);
-        }
-        return yield* PubSub.publish(attached.joined, frameId);
+        const detached = yield* eventParams('Page.frameDetached', event);
+        if (!detachFrame(state, attached, detached, event.child)) return;
+        return yield* PubSub.publish(attached.joined, detached.frameId);
       }
       case 'Page.javascriptDialogOpening': {
         const opened = yield* eventParams('Page.javascriptDialogOpening', event);
@@ -262,7 +227,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
           yield* Effect.exit(attached.session.send('Target.detachFromTarget', { sessionId: joined.sessionId }));
           return;
         }
-        attached.children.set(joined.sessionId, joined.targetInfo.targetId);
+        joinChild(state, attached, joined.sessionId, joined.targetInfo.targetId);
         const adopted = yield* Scope.fork(attached.scope);
         attached.adopted.set(joined.sessionId, adopted);
         const target: FrameTarget = { session: joined.sessionId, frame: joined.targetInfo.targetId, url: joined.targetInfo.url };
@@ -286,7 +251,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
           }),
           Effect.ensuring(
             Effect.suspend(() => {
-              attached.settled.add(joined.targetInfo.targetId);
+              attached.settled.add(joined.sessionId);
               return PubSub.publish(attached.joined, joined.targetInfo.targetId);
             }),
           ),
@@ -296,12 +261,10 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       }
       case 'Target.detachedFromTarget': {
         const { sessionId } = yield* eventParams('Target.detachedFromTarget', event);
-        if (sessionId === undefined || !attached.children.has(sessionId)) return;
-        const gone = attached.children.get(sessionId)!;
-        attached.settled.delete(gone);
-        attached.children.delete(sessionId);
+        const gone = sessionId === undefined ? undefined : leaveChild(attached, sessionId);
+        if (sessionId === undefined || gone === undefined) return;
         yield* PubSub.publish(attached.joined, gone);
-        for (const [frame, held] of attached.frames) if (held.child === sessionId) attached.frames.delete(frame);
+        retireChild(state, attached, sessionId);
         const adopted = attached.adopted.get(sessionId);
         attached.adopted.delete(sessionId);
         if (adopted !== undefined) yield* Scope.close(adopted, Exit.void);
@@ -369,10 +332,38 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         }),
       );
       const domains = yield* Scope.provide(shareDomains(session), attachment);
+      let admitted = 0;
+      let applied = 0;
+      let waiting: Deferred.Deferred<void> | null = null;
+      let waitingThrough = 0;
       const events = yield* Scope.provide(
-        session.events((method) => method !== 'Page.screencastFrame'),
+        session.events((method) => {
+          if (method === 'Page.screencastFrame') return false;
+          admitted += 1;
+          return true;
+        }),
         attachment,
       );
+      const syncEvents = Effect.fn('browser.syncEvents')(function* () {
+        const through = admitted;
+        if (applied >= through) return;
+        const ready = yield* Deferred.make<void>();
+        if (applied >= through) return;
+        waiting = ready;
+        waitingThrough = through;
+        yield* Effect.raceFirst(
+          Deferred.await(ready),
+          Effect.flatMap(session.ended, (end) =>
+            Effect.fail(new SessionEnded({ message: 'the session ended before queued page events were applied', end, pending: false })),
+          ),
+        ).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (waiting === ready) waiting = null;
+            }),
+          ),
+        );
+      });
       const profile = pages.profileOf(state.page);
       if (profile === undefined) return yield* unknownPage(state.page);
       const strain = strains.get(profile) ?? { holds: new Map<object, Strain>(), value: { factor: 1, paused: false } };
@@ -384,11 +375,13 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         scope: attachment,
         frames: new Map(),
         children: new Map(),
+        sessions: new Map(),
         adopted: new Map(),
         worlds: new Map(),
         picks: yield* PubSub.unbounded<Picking>(),
         joined: yield* PubSub.unbounded<string>(),
         settled: new Set(),
+        syncEvents,
         main: '',
         navigations: 0,
         runtime: null,
@@ -398,6 +391,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         emulating: yield* Semaphore.make(1),
         strain,
         overlaid: false,
+        overlaying: yield* Semaphore.make(1),
         cursor: null,
       };
       yield* Stream.runForEach(events, (event) =>
@@ -409,6 +403,15 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
             SessionEnded: () => Effect.void,
             CommandRefused: (refused) => Effect.logDebug(`browser: page ${state.page} refused ${refused.method}: ${refused.message}`),
           }),
+          Effect.tap(() =>
+            Effect.suspend(() => {
+              applied += 1;
+              if (waiting === null || applied < waitingThrough) return Effect.void;
+              const ready = waiting;
+              waiting = null;
+              return Deferred.succeed(ready, undefined);
+            }),
+          ),
         ),
       ).pipe(Effect.forkIn(attachment));
       yield* Effect.flatMap(session.ended, (end) =>

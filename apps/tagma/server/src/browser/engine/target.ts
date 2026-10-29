@@ -265,24 +265,25 @@ const joining = Effect.fnUntraced(function* (
   const { node: described } = yield* attached.session.send('DOM.describeNode', { backendNodeId: node }, child);
   const remote = described.frameId;
   if (remote === undefined || described.contentDocument !== undefined) return false;
-  if (attached.settled.has(remote)) return false;
-  yield* joined(attached, remote);
+  const childSession = attached.sessions.get(remote);
+  if (childSession !== undefined && attached.settled.has(childSession)) return false;
+  yield* joined(attached, remote, childSession);
   return true;
 });
 
-export const joined = (attached: Attached, remote: string): Effect.Effect<void> => {
-  if (attached.settled.has(remote)) return Effect.void;
-  const child = [...attached.children].find(([, target]) => target === remote)?.[0];
+export const joined = (attached: Attached, remote: string, child = attached.sessions.get(remote)): Effect.Effect<void> => {
+  if (child !== undefined && attached.settled.has(child)) return Effect.void;
   const navigations = attached.navigations;
   const known = attached.frames.has(remote);
-  return until(
-    attached,
-    () =>
-      attached.settled.has(remote) ||
+  return until(attached, () => {
+    const current = child ?? attached.sessions.get(remote);
+    return (
+      (current !== undefined && attached.settled.has(current)) ||
       (child !== undefined
         ? attached.children.get(child) !== remote
-        : attached.navigations !== navigations || (known && !attached.frames.has(remote))),
-  );
+        : attached.navigations !== navigations || (known && !attached.frames.has(remote)))
+    );
+  });
 };
 
 const until = (attached: Attached, done: () => boolean): Effect.Effect<void> =>

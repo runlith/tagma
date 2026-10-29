@@ -1,6 +1,6 @@
-import type { CommandFailure } from '@runlith/cdp/session';
+import { type CommandFailure, isCommandFailure } from '@runlith/cdp/session';
 import type { Protocol } from 'devtools-protocol';
-import { Effect, Scope } from 'effect';
+import { Effect, Exit, Result, Scope } from 'effect';
 import type { Attached, Paged } from './drive.js';
 import type { Box } from './target.js';
 
@@ -62,18 +62,91 @@ export const fade = (attached: Attached): Effect.Effect<void> =>
     );
   });
 
+const inspectMode = Effect.fnUntraced(function* (
+  attached: Attached,
+  enabled: boolean,
+  targets: readonly (string | undefined)[] = [undefined, ...attached.children.keys()],
+) {
+  const results = yield* Effect.forEach(
+    targets.filter((child) => attached.domains.held('Overlay', child)),
+    (child) =>
+      attached.session
+        .send('Overlay.setInspectMode', { mode: enabled ? 'searchForNode' : 'none', highlightConfig: enabled ? PICKING : {} }, child)
+        .pipe(Effect.result),
+  );
+  for (const result of results) if (Result.isFailure(result)) return yield* Effect.fail(result.failure);
+});
+
+const holdOverlay = Effect.fnUntraced(function* (attached: Attached, child: string | undefined) {
+  if (attached.domains.held('Overlay', child)) return;
+  const scope = child === undefined ? attached.scope : attached.adopted.get(child);
+  if (scope !== undefined) yield* Scope.provide(attached.domains.enable('Overlay', child), scope);
+});
+
+export const adoptPicking = (state: Paged, attached: Attached, child: string) =>
+  attached.overlaying.withPermits(1)(
+    Effect.gen(function* () {
+      if (state.picking === 0) return;
+      yield* holdOverlay(attached, child);
+      yield* inspectMode(attached, true, [child]);
+    }),
+  );
+
+export const picking = (state: Paged, attached: Attached) =>
+  Effect.acquireRelease(
+    attached.overlaying.withPermits(1)(
+      Effect.gen(function* () {
+        yield* holdOverlay(attached, undefined);
+        for (const child of attached.children.keys()) {
+          if (attached.domains.held('DOM', child)) yield* holdOverlay(attached, child);
+        }
+        yield* inspectMode(attached, true);
+        state.picking += 1;
+      }).pipe(
+        Effect.onExit((exit) =>
+          Exit.isFailure(exit) && state.picking === 0
+            ? inspectMode(attached, false).pipe(
+                Effect.catchIf(isCommandFailure, (failure) =>
+                  Effect.logDebug(`browser: a partial pick on ${attached.page} could not be cleared: ${failure.message}`),
+                ),
+              )
+            : Effect.void,
+        ),
+      ),
+    ),
+    () =>
+      attached.overlaying.withPermits(1)(
+        Effect.gen(function* () {
+          state.picking -= 1;
+          if (state.picking > 0 || state.attached !== attached) return;
+          yield* inspectMode(attached, false).pipe(
+            Effect.catchIf(isCommandFailure, (failure) =>
+              Effect.logDebug(`browser: inspect mode on ${attached.page} could not be ended: ${failure.message}`),
+            ),
+          );
+        }),
+      ),
+  );
+
 export const unmarked = <A, E>(state: Paged, attached: Attached, capture: Effect.Effect<A, E>): Effect.Effect<A, E | CommandFailure> =>
-  Effect.suspend(() => {
-    const shown = attached.cursor;
-    const picking = state.picking > 0;
-    if (shown === null && !picking) return capture;
-    const restore = Effect.suspend(() => {
-      if (state.picking > 0) return attached.session.post('Overlay.setInspectMode', { mode: 'searchForNode', highlightConfig: PICKING });
-      return shown !== null && attached.cursor === shown ? draw(attached, shown) : Effect.void;
-    });
-    return Effect.gen(function* () {
-      if (picking) yield* attached.session.send('Overlay.setInspectMode', { mode: 'none', highlightConfig: {} });
-      else yield* attached.session.send('Overlay.hideHighlight');
-      return yield* capture;
-    }).pipe(Effect.ensuring(restore));
-  });
+  attached.overlaying.withPermits(1)(
+    Effect.suspend(() => {
+      const shown = attached.cursor;
+      const picking = state.picking > 0;
+      if (shown === null && !picking) return capture;
+      const restore = Effect.suspend(() => {
+        if (state.picking > 0)
+          return inspectMode(attached, true).pipe(
+            Effect.catchIf(isCommandFailure, (failure) =>
+              Effect.logWarning(`browser: inspect mode on ${attached.page} could not be restored after capture: ${failure.message}`),
+            ),
+          );
+        return shown !== null && attached.cursor === shown ? draw(attached, shown) : Effect.void;
+      });
+      return Effect.gen(function* () {
+        if (picking) yield* inspectMode(attached, false);
+        else yield* attached.session.send('Overlay.hideHighlight');
+        return yield* capture;
+      }).pipe(Effect.ensuring(restore));
+    }),
+  );

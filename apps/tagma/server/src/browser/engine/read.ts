@@ -9,7 +9,7 @@ import type { CheckoutPaths } from '../../workspace/contract/service/checkoutPat
 import type { PageId } from '../contract/wire/ids.js';
 import type { Picked } from '../contract/wire/pick.js';
 import { unmarked } from './cursor.js';
-import type { Attached, Frame, Paged, Picking } from './drive.js';
+import type { Attached, Paged, Picking } from './drive.js';
 import { componentOf } from './source.js';
 import { actionFailed, anchorOf, boxOf, joined, call, frameOfNode, locate, staleRef } from './target.js';
 
@@ -18,17 +18,6 @@ const PICTURE_PX = 1_600;
 
 export const snapshot = Effect.fnUntraced(function* (state: Paged, attached: Attached, within: string | undefined, limit: number) {
   const loaders = new Map<string, string>();
-  const frames = new Map<string, Frame | undefined>(attached.frames);
-  const children = new Map<string, string>();
-  for (const [child, frame] of attached.children) {
-    children.set(frame, child);
-    if (!frames.has(frame)) frames.set(frame, undefined);
-  }
-  const ordered = [...frames]
-    .filter(
-      ([id, frame]) => id === attached.main || children.has(id) || (frame !== undefined && frame.url !== '' && frame.url !== 'about:blank'),
-    )
-    .sort(([left], [right]) => (left === attached.main ? -1 : right === attached.main ? 1 : 0));
   const target = within === undefined ? null : yield* locate(state, attached, within);
   const gone = <A>(effect: Effect.Effect<A, CommandFailure>, empty: A): Effect.Effect<A, CommandFailure> =>
     effect.pipe(
@@ -87,7 +76,7 @@ export const snapshot = Effect.fnUntraced(function* (state: Paged, attached: Att
   if (target !== null && start === null) return yield* staleRef(within ?? '');
   const rootOf = Effect.fnUntraced(function* (frameId: string, child: string | undefined) {
     const target = child === undefined ? undefined : attached.children.get(child);
-    if (target !== undefined) yield* joined(attached, target);
+    if (target !== undefined) yield* joined(attached, target, child);
     const { node } = yield* attached.session.send('Accessibility.getRootAXNode', { frameId }, child);
     return node;
   });
@@ -98,27 +87,42 @@ export const snapshot = Effect.fnUntraced(function* (state: Paged, attached: Att
     );
     if (!remote) return null;
     yield* joined(attached, frameId);
-    const adopted = [...attached.children].find(([, root]) => root === frameId)?.[0];
+    const adopted = attached.sessions.get(frameId);
     return adopted === undefined ? null : yield* gone(rootOf(frameId, adopted), null);
   });
-  const parts =
-    target === null
-      ? ordered.map(([frameId, frame], at) => {
-          const child = children.get(frameId) ?? frame?.child;
-          return partOf(
-            frameId,
-            child,
-            child === undefined && at > 0
-              ? rootOf(frameId, undefined).pipe(Effect.catchTag('CommandRefused', () => remoteRoot(frameId)))
-              : gone(rootOf(frameId, child), null),
-            at === 0 ? null : (frame?.url ?? ''),
-          );
-        })
-      : [partOf(target.anchor.frame, target.child, Effect.succeed(start), null)];
-  const shot = yield* snapshotWalk(
-    parts.map((held) => held.part),
-    limit,
-  );
+  const parts: ReturnType<typeof partOf>[] = [];
+  function* candidates(): Generator<readonly [string, string | undefined]> {
+    yield [attached.main, undefined];
+    yield* attached.sessions;
+    for (const [id, frame] of attached.frames) {
+      if (frame.url !== '' && frame.url !== 'about:blank') yield [id, frame.child];
+    }
+  }
+  function* walking(): Generator<SnapshotPart<CommandFailure>> {
+    if (target !== null) {
+      const held = partOf(target.anchor.frame, target.child, Effect.succeed(start), null);
+      parts.push(held);
+      yield held.part;
+      return;
+    }
+    const seen = new Set<string>();
+    for (const [frameId, child] of candidates()) {
+      if (seen.has(frameId)) continue;
+      seen.add(frameId);
+      const main = frameId === attached.main;
+      const held = partOf(
+        frameId,
+        child,
+        child === undefined && !main
+          ? rootOf(frameId, undefined).pipe(Effect.catchTag('CommandRefused', () => remoteRoot(frameId)))
+          : gone(rootOf(frameId, child), null),
+        main ? null : (attached.frames.get(frameId)?.url ?? ''),
+      );
+      parts.push(held);
+      yield held.part;
+    }
+  }
+  const shot = yield* snapshotWalk(walking(), limit);
   const lines = shot.lines.map((line, at) => {
     const node = shot.nodes[at]!;
     if (node < 0) return line;
