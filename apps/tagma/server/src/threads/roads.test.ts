@@ -8,7 +8,7 @@ import { AccountCredentials } from '../providers/contract/service/access.js';
 import { ProviderRegistry } from '../providers/contract/service/registry.js';
 import { providerCatalogOf, staticRegistry, testRegistry } from '../providers/testing/registry.js';
 import { Settings } from '../settings/contract/service/values.js';
-import { HarnessRegistry } from './contract/service/harness.js';
+import { type Harness, HarnessRegistry } from './contract/service/harness.js';
 import type { ThreadMetadata } from './list/store.js';
 import { askerOf, makeRoads, TITLE_ROLE, type RejectedRoad, type RoadAsker } from './roads.js';
 
@@ -150,6 +150,49 @@ it.effect('with no thread, a named model wins, then the light model of the first
     expect(yield* roads.choose(TITLE_ROLE, { ...asked(null), named: { model: 'second:missing', reasoning: null } })).toMatchObject({
       name: 'named',
       road: { _tag: 'Invalid' },
+    });
+  }),
+);
+
+it.effect('a CLI thread whose provider has no wire is asked through its CLI, not through a light model nobody can call', () =>
+  Effect.gen(function* () {
+    const oneShot: NonNullable<Harness['Service']['oneShot']> = {
+      capacity: { context: 16_000 },
+      ask: () => Effect.succeed(null),
+    };
+    const cliProvider: Parameters<typeof providerCatalogOf>[0][number] = {
+      id: 'cli-agent',
+      label: 'CLI agent',
+      kind: 'harness',
+      auth: 'cli',
+      environment: () => [],
+      models,
+      defaultTextModel: 'large',
+      lightTextModel: { model: 'light', rung: 'low' },
+      cacheLifetime: { promisedSeconds: null, prior: null },
+    };
+    const roads = yield* makeRoads.pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.mock(HarnessRegistry, {
+            resolve: () => Effect.succeed({ provider: 'cli-agent', oneShot } as Harness['Service']),
+            list: () => [],
+            writes: (base) => base,
+          }),
+          Layer.mock(Settings, { value: (key) => Schema.decodeUnknownEffect(key.schema)(key.fallback).pipe(Effect.orDie) }),
+          Layer.succeed(ProviderRegistry, staticRegistry(providerCatalogOf([cliProvider]))),
+          Layer.succeed(AccountCredentials, { account: (provider) => Effect.succeed(AccountKey.make(`account-${provider}`)) }),
+        ),
+      ),
+    );
+    const asker: RoadAsker = { provider: 'cli-agent', model: null, account: null, harness: 'claude-code' };
+    expect(yield* roads.choose(TITLE_ROLE, asked(asker))).toMatchObject({
+      name: 'cli',
+      road: { _tag: 'Cli', cli: oneShot },
+      rejected: [
+        { road: 'title-model', reason: 'not-configured' },
+        { road: 'provider-light', reason: 'not-declared' },
+      ],
     });
   }),
 );

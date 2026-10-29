@@ -85,7 +85,7 @@ export const makeRoads = Effect.gen(function* () {
     const chosen = (name: string, road: Road): RoadChoice => ({ name, road, rejected });
     const configured = yield* settings.value(role.model, projectId);
     const effort = yield* settings.value(role.reasoning, projectId);
-    const { models: catalog } = yield* providers.catalog;
+    const { models: catalog, wires } = yield* providers.catalog;
     const decides = role.answers === 'schema';
     const selection =
       ask.named !== undefined
@@ -122,7 +122,7 @@ export const makeRoads = Effect.gen(function* () {
       rejected.push({ road: 'decision-capable', reason: built.length === 0 ? 'not-declared' : 'account-unavailable' });
     }
     const lightOf = Effect.fnUntraced(function* (provider: string, account: string | null) {
-      const light = catalog.registered(provider) ? catalog.named(provider).lightTextModel : undefined;
+      const light = wires.registered(provider) ? catalog.named(provider).lightTextModel : undefined;
       if (light === undefined) return 'not-declared' as const;
       const connected = yield* Effect.exit(credentials.account(provider, account ?? undefined));
       const option = catalog.modelsFor(provider, 'text').find((row) => row.id === light.model);
