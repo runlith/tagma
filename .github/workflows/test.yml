@@ -124,7 +124,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11.12'
-      - name: pinned native Simulator tools
+      - name: pinned native Simulator tools and Safari template
         run: bun packages/e2e/scripts/fetch-ios.ts
       - run: xcrun simctl list runtimes
       - run: bun run test:e2e --parallel=1
