@@ -11,13 +11,15 @@ import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { Automation } from '../contract/service/automation.js';
 import type { Clips } from '../contract/service/clips.js';
 import { Pages } from '../contract/service/pages.js';
-import type { HostAdapter, Hosts } from '../contract/service/hosts.js';
+import { type HostAdapter, Hosts } from '../contract/service/hosts.js';
+import { Profiles } from '../contract/service/profiles.js';
 import { Screencast } from '../contract/service/screencast.js';
 import type { PageId, ProfileId } from '../contract/wire/ids.js';
 import { RECORDING_FPS } from '../contract/wire/recording.js';
 import type { Budget, Frame, InputEvent, ScreencastEvent } from '../contract/wire/screencast.js';
 import { PAGE_PAIRS as PAGE } from '../operations.js';
 import { RECORD_PAIRS as RECORD } from '../recordings.js';
+import { TRACE_PAIRS as TRACE } from '../traces.js';
 import { amber, neutral, pixelOf } from './pixels.js';
 import { RunEnds } from './runs.js';
 import { agentIn, calling, OPERATOR, refusalOf, type Served } from './world.js';
@@ -305,6 +307,65 @@ export const screencastScenarios = (input: CastHost): void => {
         const clip = yield* clipOf(begun.path);
         expect(clip.codec).toBe('avc');
         expect(clip.packets).toBeGreaterThan(0);
+      }),
+    );
+
+    it.effect('a running trace and recording stand in the page’s live state with who started them, and the operator stops each', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/still');
+        const pages = yield* Pages;
+        const before = yield* Clock.currentTimeMillis;
+        yield* calling(TRACE.trace_page.body.execute({ page, action: 'start' }, undefined, agent));
+        yield* record(page, 'start');
+        const after = yield* Clock.currentTimeMillis;
+        const live = pages.live(page);
+        expect({ trace: live?.trace?.by, recording: live?.recording?.by }).toEqual({ trace: 'agent', recording: 'agent' });
+        for (const started of [live?.trace?.at, live?.recording?.at]) {
+          expect(Date.parse(started ?? '')).toBeGreaterThanOrEqual(before);
+          expect(Date.parse(started ?? '')).toBeLessThanOrEqual(after);
+        }
+        const traced = yield* calling(TRACE.trace_page.body.execute({ page, action: 'stop' }, undefined, OPERATOR));
+        expect(traced.status).toBe('traced');
+        expect(pages.live(page)?.trace).toBeNull();
+        expect(pages.live(page)?.recording?.by).toBe('agent');
+        const stopped = yield* calling(
+          RECORD.record_page.body.execute({ page, action: 'stop' }, undefined, OPERATOR).pipe(Effect.provide(input.clips)),
+        );
+        expect(stopped.status).toBe('recorded');
+        expect(pages.live(page)?.recording).toBeNull();
+      }),
+    );
+
+    it.effect('a recording ends with the engine session its page lost, and the restored page records anew', () =>
+      Effect.gen(function* () {
+        const profiles = yield* Profiles;
+        const source = yield* profiles.record(input.profile);
+        const profile = yield* profiles.create({
+          name: 'Dropped recording',
+          adapter: source.adapter,
+          document: source.document,
+          console: source.console,
+        });
+        yield* Effect.addFinalizer(() => profiles.remove(profile.id).pipe(Effect.orDie));
+        const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/still'), profile: profile.id }, undefined, agent));
+        const page = opened.page.id;
+        const pages = yield* Pages;
+        yield* Effect.addFinalizer(() => (pages.live(page) === undefined ? Effect.void : pages.close(page).pipe(Effect.orDie)));
+        const begun = yield* record(page, 'start');
+        if (begun.status !== 'recording') return yield* Effect.die('the recording did not start');
+        const changes = yield* Queue.unbounded<void>();
+        yield* Effect.acquireRelease(
+          Effect.sync(() => watch(dirname(begun.path), () => Queue.offerUnsafe(changes, undefined))),
+          (watcher) => Effect.sync(() => watcher.close()),
+        );
+        yield* (yield* (yield* Hosts).reach(source.adapter)).profiles.remove(profile.id);
+        while (!existsSync(begun.path)) yield* Queue.take(changes);
+        expect((yield* clipOf(begun.path)).packets).toBeGreaterThan(0);
+        expect((yield* refusalOf(record(page, 'stop'))).reason).toContain(begun.path);
+        const again = yield* record(page, 'start');
+        expect(again.status).toBe('recording');
+        expect(pages.live(page)?.recording?.by).toBe('agent');
+        expect((yield* record(page, 'stop')).status).toBe('recorded');
       }),
     );
   });

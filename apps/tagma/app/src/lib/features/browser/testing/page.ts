@@ -23,6 +23,8 @@ export const pageOf = (id: string, over: Partial<Page> = {}): Page => ({
     driven: null,
     shown: false,
     conditions: NO_CONDITIONS,
+    trace: null,
+    recording: null,
   },
   downloads: 0,
   activeAt: '2026-10-17T12:00:00.000Z',

@@ -8,7 +8,7 @@ export const RECORD_OPERATIONS = {
   record_page: operation('record_page', {
     ...ACTING,
     meaning: 'Record what a page shows into an MP4 video, from `start` to `stop`, to prove a flow or show it to the operator.',
-    grammar: `\`start\` begins recording; act on the page with the usual tools, then \`stop\` answers the file, its duration and frame size, and the video plays in the thread. Frames are placed on an \`fps\` grid (${RECORDING_FPS} by default) and the last picture holds while the page does not change, so the clip lasts as long as the recording ran. A page holds one recording at a time: a second start refuses \`recording-running\`. A recording started by a thread stops when its run ends, and one ends when its page closes; each ending writes a complete file.`,
+    grammar: `\`start\` begins recording; act on the page with the usual tools, then \`stop\` answers the file, its duration and frame size, and the video plays in the thread. Frames are placed on an \`fps\` grid (${RECORDING_FPS} by default) and the last picture holds while the page does not change, so the clip lasts as long as the recording ran. A page holds one recording at a time: a second start refuses \`recording-running\`. A recording started by a thread stops when its run ends, and one ends when its page closes or its browser session is lost; each ending writes a complete file.`,
     input: Schema.Struct({
       project,
       page,

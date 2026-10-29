@@ -161,6 +161,8 @@ const engine = Effect.fnUntraced(function* (
     driven: null,
     shown: false,
     conditions: NO_CONDITIONS,
+    trace: null,
+    recording: null,
   };
   const record: Page = {
     id: PAGE,

@@ -163,7 +163,10 @@ export const makeTraces = Effect.fnUntraced(function* (input: { readonly drive: 
         finishing(held).pipe(
           Effect.onExit((exit) =>
             Effect.gen(function* () {
-              if (running.get(held.page) === held) running.delete(held.page);
+              if (running.get(held.page) === held) {
+                running.delete(held.page);
+                yield* pages.mark(held.page, { trace: null });
+              }
               held.state.watching -= 1;
               yield* Scope.close(held.scope, Exit.void);
               yield* Scope.close(held.listening, Exit.void);
@@ -249,6 +252,7 @@ export const makeTraces = Effect.fnUntraced(function* (input: { readonly drive: 
         };
         running.set(page, held);
         state.watching += 1;
+        yield* pages.mark(page, { trace: { by: thread, at: new Date(stamp).toISOString() } });
         yield* Scope.addFinalizer(
           traceScope,
           Effect.suspend(() => (held.finished === null ? Effect.asVoid(Effect.forkIn(ending(held), scope)) : Effect.void)),

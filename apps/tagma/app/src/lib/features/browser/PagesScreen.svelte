@@ -12,6 +12,7 @@
   import { ProjectPages } from './ProjectPages.svelte.js';
   import CastView from './screencast/CastView.svelte';
   import Downloads from './Downloads.svelte';
+  import Measuring from './Measuring.svelte';
 
   let { project, pageId }: { project: string; pageId: PageId | null } = $props();
 
@@ -159,6 +160,7 @@
         </div>
       </div>
     {/if}
+    {#if current !== undefined}<Measuring page={current} touch />{/if}
     <div class="relative min-h-0 flex-1">
       {#key pageId}
         <CastView bind:this={view} {projectId} page={pageId} />

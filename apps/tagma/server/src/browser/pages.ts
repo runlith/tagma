@@ -27,6 +27,8 @@ const QUIET: Live = {
   driven: null,
   shown: false,
   conditions: NO_CONDITIONS,
+  trace: null,
+  recording: null,
 };
 
 const ACTIVE_WRITE_MS = 10_000;

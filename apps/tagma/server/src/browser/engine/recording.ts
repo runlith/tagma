@@ -9,7 +9,7 @@ import { ThreadRuns } from '../contract/service/runs.js';
 import type { PageId } from '../contract/wire/ids.js';
 import type { Recorded } from '../contract/wire/recording.js';
 import type { Budget } from '../contract/wire/screencast.js';
-import type { Drive } from './drive.js';
+import type { Attached, Drive } from './drive.js';
 import { endsWithRun } from './lifetime.js';
 import type { Shot, Shots } from './screencast.js';
 
@@ -59,7 +59,11 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
     for (const name of names) if (old.has(name) || name.endsWith('.part')) yield* files.remove(path.join(dir, name), { force: true });
   });
 
-  const record = Effect.fnUntraced(function* (held: Running, clips: Clips['Service']): Effect.fn.Return<Recorded, Failed> {
+  const record = Effect.fnUntraced(function* (
+    held: Running,
+    attached: Attached,
+    clips: Clips['Service'],
+  ): Effect.fn.Return<Recorded, Failed> {
     const failed = (reason: string) => recordingFailed(held.page, reason);
     const slotOf = (at: number) => Math.max(0, Math.round(((at - held.started) * held.fps) / 1000));
     const state: { clip: Clip | null; pending: Placed | null } = { clip: null, pending: null };
@@ -72,6 +76,7 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
       Effect.andThen(stopping(held)),
       Effect.forkIn(held.life),
     );
+    yield* Effect.andThen(attached.session.ended, stopping(held)).pipe(Effect.forkIn(held.life));
 
     const open = Effect.fnUntraced(function* (shot: Shot) {
       const size = pictureSize(shot.data);
@@ -128,7 +133,10 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
         Effect.logWarning(`browser: old recordings of page ${held.page} were not pruned: ${failure.message}`),
       ),
     );
-    if (running.get(held.page) === held) running.delete(held.page);
+    if (running.get(held.page) === held) {
+      running.delete(held.page);
+      yield* pages.mark(held.page, { recording: null });
+    }
     const outcome: Ended | undefined = Exit.isSuccess(exit)
       ? { path: exit.value.path }
       : Option.match(Cause.findErrorOption(exit.cause), { onNone: () => undefined, onSome: (failure) => ({ failure }) });
@@ -143,7 +151,13 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
       return Deferred.succeed(held.stopped, undefined);
     });
 
-  const begin = Effect.fn('Recordings.begin')(function* (page: PageId, fps: number, thread: string | null, clips: Clips['Service']) {
+  const begin = Effect.fn('Recordings.begin')(function* (
+    page: PageId,
+    attached: Attached,
+    fps: number,
+    thread: string | null,
+    clips: Clips['Service'],
+  ) {
     const started = yield* Clock.currentTimeMillis;
     const dir = recordingsOf(path, place, page);
     const life = yield* Scope.fork(scope);
@@ -171,9 +185,12 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
       Effect.suspend(() => {
         running.set(page, held);
         ended.delete(page);
-        return record(held, clips).pipe(
-          Effect.onExit((exit) => settle(held, exit)),
-          Effect.forkIn(scope),
+        return Effect.andThen(
+          pages.mark(page, { recording: { by: thread, at: new Date(started).toISOString() } }),
+          record(held, attached, clips).pipe(
+            Effect.onExit((exit) => settle(held, exit)),
+            Effect.forkIn(scope),
+          ),
         );
       }),
     );
@@ -183,7 +200,7 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
   return Recordings.of({
     start: Effect.fn('Recordings.start')(function* (page, fps, thread) {
       const clips = yield* Clips;
-      const held = yield* drive.drive(page, thread, () => begin(page, fps, thread, clips));
+      const held = yield* drive.drive(page, thread, (_state, attached) => begin(page, attached, fps, thread, clips));
       yield* Deferred.await(held.ready);
       return { page: pages.glance(page, false), path: held.file, fps };
     }),
