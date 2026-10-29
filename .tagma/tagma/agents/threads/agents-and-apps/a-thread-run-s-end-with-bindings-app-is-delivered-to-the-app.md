@@ -5,7 +5,7 @@ ord: 1
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/threads/harness/pluginEndings.ts
+    ref: apps/tagma/server/src/threads/harness/tagmaAppEndings.ts
 ---
 Threads declares the `on` point because run ends belong to it. Delivery is a recipient `plugin endings` of the thread-events owner, not a separate queue: the owner subscribes it to the run-end notification obligation under that name, so claim, retry and `notification-exhausted` with `redeliver_ending` already exist, and already-delivered subscribers are not called on retry. It stands after the ending stages.
 

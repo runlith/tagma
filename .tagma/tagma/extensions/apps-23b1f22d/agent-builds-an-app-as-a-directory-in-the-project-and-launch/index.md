@@ -20,7 +20,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/tagma-apps/discovery.ts
   - kind: file
-    ref: apps/tagma/server/src/tagma-apps/doctrine/plugins.ts
+    ref: apps/tagma/server/src/tagma-apps/doctrine/apps.ts
   - kind: file
     ref: apps/tagma/server/src/tagma-apps/generation.ts
   - kind: file

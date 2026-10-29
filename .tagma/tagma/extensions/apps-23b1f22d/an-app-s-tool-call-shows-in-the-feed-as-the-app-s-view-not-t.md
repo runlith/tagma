@@ -14,7 +14,7 @@ edges:
     to: 01a14c08-8336-7b3c-965a-b095d946528f
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/native/pluginViews.feed.svelte
+    ref: apps/tagma/app/src/lib/features/threads/native/tagmaAppViews.feed.svelte
   - kind: file
     ref: apps/tagma/server/src/views/contract/wire/points.ts
   - kind: file

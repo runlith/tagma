@@ -31,7 +31,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/invocation/admission/callers.ts
   - kind: file
-    ref: apps/tagma/server/src/native-harness/agents/declared/plugins.ts
+    ref: apps/tagma/server/src/native-harness/agents/declared/tagmaApps.ts
   - kind: file
     ref: apps/tagma/server/src/notify/contract/wire/notification.ts
   - kind: file
@@ -49,7 +49,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/threads/contract/wire/operations/turns.ts
   - kind: file
-    ref: apps/tagma/server/src/threads/harness/pluginEndings.ts
+    ref: apps/tagma/server/src/threads/harness/tagmaAppEndings.ts
   - kind: file
     ref: apps/tagma/server/src/threads/operations/acts.ts
   - kind: file

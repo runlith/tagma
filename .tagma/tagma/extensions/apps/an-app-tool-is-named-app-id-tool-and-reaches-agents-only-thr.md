@@ -8,7 +8,7 @@ edges:
     to: 01a12306-efba-7a0e-94d7-05ecc0602266
 sources:
   - kind: file
-    ref: apps/tagma/server/src/native-harness/capabilities/plugins.ts
+    ref: apps/tagma/server/src/native-harness/capabilities/tagmaApps.ts
   - kind: file
     ref: apps/tagma/server/src/tagma-apps/toolPoint.ts
 ---

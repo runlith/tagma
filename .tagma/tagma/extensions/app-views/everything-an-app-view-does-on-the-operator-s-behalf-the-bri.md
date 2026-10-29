@@ -5,7 +5,7 @@ ord: 1
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/tagma-apps/pluginHost.svelte.ts
+    ref: apps/tagma/app/src/lib/features/tagma-apps/tagmaAppHost.svelte.ts
   - kind: file
     ref: apps/tagma/server/src/views/shelf.ts
 ---

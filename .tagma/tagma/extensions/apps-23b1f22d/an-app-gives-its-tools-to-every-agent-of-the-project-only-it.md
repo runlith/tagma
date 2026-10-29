@@ -18,7 +18,7 @@ edges:
     to: 01a14c08-8336-7b3c-965a-b09415a61526
 sources:
   - kind: file
-    ref: apps/tagma/server/src/native-harness/capabilities/plugins.ts
+    ref: apps/tagma/server/src/native-harness/capabilities/tagmaApps.ts
   - kind: file
     ref: apps/tagma/server/src/tagma-apps/contract/wire/audience.ts
   - kind: file

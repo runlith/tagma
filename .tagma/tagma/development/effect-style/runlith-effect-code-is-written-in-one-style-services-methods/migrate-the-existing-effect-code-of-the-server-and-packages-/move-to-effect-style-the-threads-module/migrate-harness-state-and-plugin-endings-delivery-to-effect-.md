@@ -10,7 +10,7 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/threads/harness/pluginEndings.ts
+    ref: apps/tagma/server/src/threads/harness/tagmaAppEndings.ts
   - kind: file
     ref: apps/tagma/server/src/threads/harness/state.ts
   - kind: symbol

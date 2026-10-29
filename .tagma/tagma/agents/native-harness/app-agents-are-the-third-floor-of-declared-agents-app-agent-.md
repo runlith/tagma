@@ -5,7 +5,7 @@ ord: 6
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/native-harness/agents/declared/plugins.ts
+    ref: apps/tagma/server/src/native-harness/agents/declared/tagmaApps.ts
   - kind: file
     ref: apps/tagma/server/src/threads/library/declared.ts
 ---
