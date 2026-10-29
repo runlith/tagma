@@ -91,7 +91,9 @@ Each format is an adapter module (`claude-code-format`, `agent-plugins-format`) 
 - **Step 1:** `plugins`, `views`, the apps owner kind of `secrets`, `app-plugins`, `native-harness` app agents, the settings keys, the skill, the graph.
 - **Step 2:**
   - a new `plugins` (server) and `app-plugins` (client), freed by step 1;
-  - `native-harness`: skill sources and declared agents;
+  - the format adapters `claude-code-format` and `agent-plugins-format`, filled into `plugins` by composition;
+  - `native-harness`: skill sources, declared agents and the hook rule;
+  - `agent`: `beforeTool` deny and input rewrite;
   - `mcp`: the contributed-declarations port;
   - `secrets`: the plugin owner kind.
 
