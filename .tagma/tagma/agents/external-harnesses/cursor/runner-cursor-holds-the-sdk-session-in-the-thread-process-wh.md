@@ -1,0 +1,17 @@
+---
+id: 01a1646a-30fe-70a6-aa96-25c09d6cee47
+title: Runner Cursor holds the SDK session in the thread process, while Tagma's native door executes its tools
+ord: 16
+tags: ["explanation"]
+edges:
+  - kind: relates
+    to: 01a16458-c462-7849-98a0-7c6114227879
+sources:
+  - kind: dir
+    ref: apps/tagma/server/src/external-harnesses/runner/cursor
+---
+Runner holds a local session of the official SDK separately from the server: the execution host survives Tagma restarts, and the SDK never enters the process serving the other threads. Built-in tools are off; a callback executes each tool through the shared relay with Cursor's original id. A message is sealed after all of its calls are announced, before hosting hands any of their results over: otherwise the history and order of the native door would diverge from the foreign loop. The adapter expects this order from the SDK; synthetic tests cover Tagma's side, while the live SDK order without a working key is unconfirmed.
+
+A new session gets the journal with pictures; a continuation gets the thread store. The instruction hash is stored separately per session after the turn's confirmed end: after a crash the instructions repeat, but no delivery is invented. The SDK takes no external systemPrompt, so instructions travel as a message. The catalog is pinned per turn, yet every call is still judged by the native door; ambiguous steer is unused, so one word is never delivered twice. Cursor's own compression is only recorded as a boundary; compression by Tagma is done by a foreign model with the SDK session reset to the journal fold.
+
+Store, homedir records, and SDK temp files point inside the thread scratch: one CURSOR_DATA_DIR is not enough for SDK paths built from HOME and the system tmp. This resource is already freed by the thread lifecycle; same-named user Cursor directories never become Tagma storage.

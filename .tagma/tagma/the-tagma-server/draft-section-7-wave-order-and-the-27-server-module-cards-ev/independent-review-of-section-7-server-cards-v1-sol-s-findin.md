@@ -1,0 +1,31 @@
+---
+id: 01a0e43d-372e-7181-a7b5-7f9f686aa3cb
+title: "Independent review of section 7 server cards v1: Sol's findings (8)"
+ord: 1
+---
+# Section 7 server cards — Sol review, first pass
+
+Reviewer: cards-review (GPT-6 Sol xhigh). Verdict: REVISE; the 27 server cards are written, but wave execution and whole-section acceptance are not ready. This file retains the returned findings, condensed by the launcher; it is not an approval or an instruction to edit the draft while Astra reads it.
+
+## Findings
+
+1. **Blocker — circular preparation (§7.2.1 P1/P2/P5, §7.10; section 8 §8.9).** P1/P2 need a task owning each debt entry, but P5 creates those tasks only after their debt exists. P2 also waits for the unwritten package/app cards. Section 8 puts vocabulary and zone-agent work before modules enforcement, whereas section 7 declares P1–P4 independent. Create sufficiently specified task shells before measuring their debt and reconcile the real dependencies. W0 cannot open on the current preconditions.
+2. **Blocker — M1 is not compile/runtime readiness (§7.2.2; thread-record, threads and native-harness cards).** M1 removes old paths and rewrites consumers while implementations wait for M2. Threads M1 removes the kernel's native default and introduces Harness, but the implementations cannot start until after that M1. The accepted two-phase-start contract refuses unbound thread work. Specify a runnable transition or one coordinated merge for inseparable declarations/implementations/consumers. Narrowing a module's entries depends on migration of its incoming consumers, not just completion of its lower dependencies; the local thread-record card and global M3 rule currently disagree.
+3. **High — one path move cannot reanchor a split file (§7.4.6; graph and native-harness cards).** Sources.relocate (`graph/measure/Sources.ts:997–1107`) rewrites all selected sources to one target, or one exact named symbol. Mixed Act.ts/Sources.ts/ThreadStore.ts splits need per-symbol/per-file source plans; whole-file claims may themselves need to be re-expressed. Reanchoring changes addresses, not block ownership. Use real graph operations to transfer the right evidence and separately move the claim into its owner, checking every affected claim.
+4. **High — registry restore incorrectly includes secret rollback (installation card).** MachineRegistry.registryFileSchema/seedRows carries projects/settings. Accepted data §2.4.3 restores through projects/settings/graph in the machine unit. Providers writes credential keys into a COPY of a snapshot only for downgrade rollback (§2.10), a different protocol. Remove providers as a fourth participant of empty-store registry restoration; do not imply atomic file+SQLite writes.
+5. **High — existing thread routes have no target owners/contracts (threads and HTTP cards).** `api/threads.ts#ThreadsGroup` has concrete upload/attachment binary routes (:380–396), roots, locate, seen, sweep, query, expand, etc. 'Builder lists the rest before the wave opens' contradicts the promised complete map and route retirement. Decide each route's owner and operation/feed/retained HTTP-resource shape now, including binary payloads and compatibility.
+6. **High in the review — unsafe conflict and concurrency protocol (§7.2.5, §7.8).** 'Receiver wins its lines' cannot authorize overwriting a peer's changes. Preserve independently owned edits, coordinate genuinely overlapping lines with the writer, and keep indivisible changes together. Reviewer also cited [[8925d705]] against 10–20 builders and up to 27 worktrees; see the launcher's qualification below.
+7. **Medium — debt keys/territory control lag accepted decisions (§7.5 debt rows, §7.6).** Formal consumer/target names still contain delivery instead of landing. Correct the registry, send/receive maps, primary file coverage and actual cut sites after the ~30 territory corrections and three pattern changes. Counts alone do not prove this. Native capabilities map says 16 files plus 'rest by name', but the directory has 18 non-test TS files, as section 1 appendix A does. Produce an exact updated mapping on the frozen tree, including explicit coverage limits.
+8. **Medium — CLI entry ownership contradicts itself (§7.5.26–27; section 1 §1.3/§1.6.3).** One accepted passage gives process entry points to composition, another says the CLI door owns its process; the card leaves cli/main.ts in cli. Its code binds process.argv/process.exit; claim [[7750f179]] documents that. Resolve the semantic owner and make the contract and cards consistent, rather than relying on contradictory passages.
+
+## Coverage reported by the reviewer
+
+The full 2,274-line draft and the full module decision zone were read, relevant sections of decisions 2–6/8/9 were read, and the specific source files establishing findings were read whole. The reviewer did not reread all ~891 files or independently verify every one of the 30+ corrections and every line-range handoff. Package/app/desktop maps remain unwritten; §3.13 performance is unapproved. No tests, typechecks, DB reads, graph/file writes or new agents.
+
+## Launcher's qualification of finding 6
+
+I reread [[8925d705]] and [[3d635aff]]. The six-worker rule limits concurrent execution fan-out (parallel commands, job pools, containers, worker spawns) and says concurrent readers inside one process are not that fan-out. It is not evidence that the PRODUCT may serve only six agent sessions, or that six idle worktrees exhaust a CPU pool. Keep the operator's 10–20-agent product workload target separate from this project's actual worker/admission budgets and from checkout storage. Do not replace the product target with six agents merely to satisfy the review. Enforce the six-worker bound where it actually applies, declare the implementation task's own allowed parallelism and obtain worktrees through their authorized operations. The prohibition on 'receiver wins' is accepted without qualification.
+
+## Next revision
+
+Wait for Astra's independent reading before editing spec-07-cards.md. Package/app work may continue separately. Reconcile both reviews once; keep signed findings intact and state any disagreement with evidence. No extra authors are needed.

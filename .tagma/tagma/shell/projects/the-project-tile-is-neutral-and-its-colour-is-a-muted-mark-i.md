@@ -1,0 +1,19 @@
+---
+id: 01a165d5-d5a5-785f-bfe2-a3acf0e82349
+title: "The project tile is neutral, and its colour is a muted mark in the corner: colour in the dock means state, not project"
+ord: 4
+tags: ["explanation"]
+edges:
+  - kind: relates
+    to: 01a165b3-4050-7292-999c-e1cf18dd9e6b
+sources:
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/projects/Tile.svelte
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/workspace/mark.ts
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/workspace/Swatch.svelte
+---
+The previous eight project colours were a rainbow of the same lightness and saturation as the state colours, and on nearly the same tones: a red project read as a failure, a blue one as "waits for you", a green one as "done", orange and olive argued with the amber of work and the gold of "you are here". So the project tile is neutral — letters on backing, the current tile flooded with `--primary` like a light helm on a dark icon — and the project colour stands as a small tile in the corner (`Tile`) or in a frame (`Swatch`). The tile with letters stands only in the dock, where there is no name beside it; in lists next to a name — `Swatch`: letters there repeat the name, and a mark in the corner of a 20 px tile overlapped them.
+
+`--project-1…8` are muted (saturation 0.06 against 0.14–0.19 for states) and stand at least 21° from state tones. A new project colour holds both conditions, otherwise the colour in the dock starts meaning state again.

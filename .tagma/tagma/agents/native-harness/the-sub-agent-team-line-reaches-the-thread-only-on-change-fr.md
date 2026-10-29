@@ -1,0 +1,19 @@
+---
+id: 01a15101-ab43-7efc-a255-40e446e7ebcd
+title: The sub-agent team line reaches the thread only on change from the last told; with nothing told the baseline is the list from the spawn_agent description
+ord: 23
+tags: ["explanation"]
+edges:
+  - kind: relates
+    to: 01a150e5-fbff-700e-98b9-7039ac67b9de
+sources:
+  - kind: file
+    ref: apps/tagma/server/src/native-harness/turns/teamRule.ts
+  - kind: file
+    ref: apps/tagma/server/src/providers/accounts/connected.ts
+---
+Before every step the rule compares fingerprints of what the thread allows — a copy of the team from its birth line, otherwise the machine and project `agent.models` and `agent.review` — against the state recorded in the last delivered row. The enabled-review fingerprint includes the list fingerprint: a list edit can remove a reviewer from the pool or return one, and then the row repeats the review policy. With no recorded state — a new thread or a post-compaction history — models count as already shown: the `spawn_agent.model` description is assembled from the same list when the run catalog assembles. Review with no record counts as off, so the opening row reaches only a thread whose review policy is on.
+
+The list fingerprint includes the connected-provider-set revision from `ProviderAccounts.connected`: an account connecting or disconnecting mid-run reaches the thread in the same row on the next step. The revision is a hash of the set itself, so after a server restart it repeats until the set changes. The account owner makes it cheap: every credential file lives in one directory and is written by atomic replacement, so any write, including from another process, moves the directory mtime. While it stands, the owner answers the previous set without reading accounts; when it moved, it rereads every provider's accounts and changes the revision only if the set differs (a token refresh does not touch it). A directory changed less than two seconds before its time was read counts as unsettled and is reread on every access: mtime can be coarse, and a second write into the same stamp would otherwise pass unseen. Signing in or out in someone else's CLI (Claude Code, Codex) does not touch the directory, so the previous set lives no longer than the CLI login-list freshness (`LISTED_MS`, half a minute): the next access rereads the accounts, and the reread asks only the previously chosen CLI; an installed binary and an old auto-found default record do not connect a provider. One owner rereads for all threads, and only while someone asks: resting threads do not wake CLIs.
+
+The last seen rule is also kept in memory by thread id: with no history record, a change arriving after the first step would have nothing to compare against. After a server restart the new run's description serves as the baseline again.

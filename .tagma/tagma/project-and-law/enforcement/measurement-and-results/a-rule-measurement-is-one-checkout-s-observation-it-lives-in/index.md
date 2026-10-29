@@ -1,0 +1,20 @@
+---
+id: 01a10c48-d981-7087-bcb6-a8341793ab98
+title: "A rule measurement is one checkout's observation: it lives in its git directory, not in the rule document"
+ord: 1
+tags: ["explanation"]
+sources:
+  - kind: file
+    ref: apps/tagma/server/src/enforcement/contract/service/inspectionCode.ts
+  - kind: file
+    ref: apps/tagma/server/src/enforcement/rules/measurements.ts
+---
+The commit, time, moment and identity of a rule's confirmed state (`Measurement`) are written by `enforce_rule`, `set_module` and remeasure into `<git-dir>/tagma/measured/<rule uuid>.json` of the checkout where it was measured. For a file-local inspection the full measurement is replaced by a delta from the confirmed tree only when the declaration and execution match and the checkpoint knows the exact source of every debt fingerprint. Sources come from the verdict: fingerprint parsing is ambiguous for paths with spaces. The delta replaces the ledger only on those source paths and keeps the rest; without full identity and sources a full measurement runs. The time belongs to the last executed pass; remeasuring a program or linter with no changed, carried or held paths keeps the whole previous observation, including time and moment. The rule document in `.tagma` carries only law and debt. Parallel publications of one rule's observations use independent temp files: a time collision doesn't let one pass take another's record, and a reader sees a whole observation of one finished pass.
+
+Why: the document travels with the branch, while each copy has its own observation. While it lived in the document, each branch wrote its own SHA and time into it, and any merge of two measuring branches conflicted with no meaning difference. A linked worktree's git directory is its own (`--git-path`), so the observation is bound to the checkout by construction: a fresh worktree or clone starts without it and leaves with it, leaving no rows in the base.
+
+Identity binds the Git tree, the full acting declaration, the ledger, the computed reach and the inspection execution. The ledger is part of it because a debt or escaped change changes the result even over the same tree. At start a match replaces a full walk after confirming that debt held for uncommitted files still awaits landing; the tree and previous measurements are read once per checkout. An unfinished journaled landing demands measurement regardless of match: it still carries attribution and holder messages. Identity is confirmed after a successful inspection and an accepted ledger; a refusal, interruption, changed HEAD or stale declaration confirms no new tree.
+
+The execution identity of builtin inspections arrives from composition as an already computed installation-closure digest: it includes bundled inspections, analyzers and runtime. This is a conservative bound — any install-part change starts a new remeasure, but start doesn't re-read or re-hash its code. Without a confirmed digest, including source mode, a builtin-inspection walk isn't skipped. For a program and a linter the install digest doesn't certify their implementation: remeasure keeps the changed-path bound at the same declaration and known debt sources, including source mode; a run over the same tree with no carried or held paths doesn't require the program. The declaration includes the canonical view of the key description from the HEAD `tagma.config.ts`, so a landing changing the description leads to a full measurement. An observation with incomplete identity stays a lineage point.
+
+An observation is no law: its absence forbids nothing. `read_inspections`, `read_enforcement` and the Engine screen show it as "measured here" or "not measured here"; lineage without it takes its point from the rule file's history.

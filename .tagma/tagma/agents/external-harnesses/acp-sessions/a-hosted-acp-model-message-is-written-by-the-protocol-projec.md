@@ -1,0 +1,21 @@
+---
+id: 01a10bef-a7f7-7381-b714-ae96ae10d61d
+title: A hosted ACP model message is written by the protocol projection; the tool result waits for its write
+ord: 5
+tags: ["explanation"]
+sources:
+  - kind: file
+    ref: apps/tagma/server/src/external-harnesses/protocol/introductions.ts
+  - kind: file
+    ref: apps/tagma/server/src/external-harnesses/protocol/projection.ts
+  - kind: file
+    ref: apps/tagma/server/src/external-harnesses/protocol/runs.ts
+  - kind: file
+    ref: apps/tagma/server/src/external-harnesses/protocol/steps.ts
+  - kind: symbol
+    ref: packages/agent/src/transcript/entries.ts
+    symbol: toolStanding
+---
+The protocol projection writes a hosted ACP model message; the tool result waits for its write.
+
+Text, reasoning, and all tool-call parts of one Claude message accumulate in the open turn's line and become one assistant message on the `_tagma/said` boundary; the turn end seals the remainder. The boundary arrives after the matching chunks and tool calls, but the tool may already be running. So `ThreadHosting` writes a tool result only after `TransportRuns.reached(run, { callId })`: the driver answers after durably writing the assistant message with the same toolCallId, and the final flush releases the remaining waiters. The wait holds no driver-transition lock. A turn with no hosted projection never waits for its signal. The driver remembers recorded calls in memory, but a turn taken over after a restart from the server's past life has no such memory. So for a call it does not hold, such a turn asks the journal: the call record exists, but its tool-call part in the printed turn line no longer waits — the past server wrote the message, and `reached` answers at once instead of at the turn end. A call that Tagma itself runs (the runner marks its start `_meta['tagma/executes']`) enters the feed only as the initial `ToolCallStarted` record: `execution: queued` with `gated: true` on any frame status — Tagma runs such a call, not the vendor, and it never started before `reached` and hosting admission (hosting writes `started` before the call's work, so `queued` left at the run end proves the call never ran) — plus the display its tool declares for input. Feed and turn line show such a record like a native call not yet admitted by the door (`toolStanding`), not with the word "queued": "queued" means a wait that names its cause (`after …` of call order), or vendor-declared `pending`. Display comes from the driver `HostedDisplay` port — `ThreadHosting.display`, a synchronous read of the run's already built assembly with no hosting semaphore, so the driver step under its own hosting lock never waits for it; with no assembly (after a restart `adopt` reads stdout before `open_hosted_turn`) — a record with no display. The hosting writes the final native record with the same id together with the result, and later `ToolCallChanged`, `ToolCallEnded`, and `ToolCallAmended` never touch it. The end mark is a fact, not a name: the runner sets `tagma/executes: true` only when Claude Code handed the call to the MCP handler, else false: the ACP machine replaces the whole `_meta` of a call only with the frame that carries it, and an end without `_meta` would leave the start's mark. A Tagma call that Claude Code itself declined (deferred past `tool_search`, off-schema input, withdrawn before send) is closed by the projection as a vendor call, in Claude Code's words; otherwise nobody would have closed it before the run end. The projection carries every other call into the same typed record as native, translated via [[c5cc143d|the call-translation note]]. The projection writes a tool result that the vendor ended into history as a tool-result with its words after the assistant message holding that call: Claude Code runs the call while the message is still being written, so a result arriving before the `_tagma/said` boundary waits in the turn line (`answered`) and leaves right after the message when it is written. Without that, history would carry "did not finish" in place of the result for a new Claude session and for a move to native. Transcript boundaries are published independently of model history: a separate feed text part never creates a second assistant message.

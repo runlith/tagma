@@ -1,0 +1,16 @@
+---
+id: 01a14b6d-b24b-77f7-a09d-54ddb2ce2570
+title: Claude Code, Codex, Grok Build, Devin, Cursor, and Gemini run as Tagma threads in their own terminal
+ord: 24
+---
+The operator or agent launches someone else's agent CLI — Claude Code, Codex, Grok Build, Devin, Cursor, or Gemini — as a Tagma thread: it stands in the list, is visible and can be stopped, obeys the approval mode and the project law, can be a native agent's child, and reports to it.
+
+**How.** The `harness:<cli>` type in `/agent`, `create_thread` (a CLI root can be given an initial task) or `spawn_agent`; a type is offered when the CLI is found (`list_thread_types` with `refresh` searches again). By default a CLI goes over the `terminal` transport: Tagma launches it in a PTY in the thread's world, in its own bypass mode, and sees it through hooks and the screen. Tagma installs its hooks (`tagma hook …`, `tagma prime`), a skill, and a `tagma` MCP server (`tagma mcp-serve`) with the thread's grant into the CLI — through it the CLI calls Tagma operations, including collaboration (`spawn_agent`, `send_message`, `send_task`, and others), on behalf of its thread. Install state — `read_installation_status`.
+
+**What Tagma does with a running CLI.** A hook reports the turn's start, tool calls, and the words the turn ended with (`report_harness_event`); before a tool call the hook asks the thread mode's verdict (`judge_harness_call`) and waits for the operator's answer to a question (`record_harness_outcome`); at the first prompt and when touching files the CLI gets orientation and the law of the touched places (`guide_harness`), once per thread. File writes enter row-authorship accounting. The CLI's own question is read from the screen and answered with keys. The operator's words arrive as keyboard input (`speak_harness`); `read_harness_screen` returns the screen's visible rows. The thread opens with its terminal; `threads.terminalChat` opens a chat over the journal instead (words, hook calls, the turn's result). The thread title is taken from the CLI while `threads.harnessTitle` is on.
+
+**Limits.** A CLI is busy only while the thread has a running run; a live CLI without a run idles. The terminal transport does not read words mid-turn (they wait for the turn's end), takes no rollback, branching, or history compaction (`transport-cannot` / `harness-contract`), no images and no web; the model is set at birth (`model-pinned`, and another provider row's model — `model-provider`). Without the CLI installed — `harness-missing`. A thread on a host does not launch a CLI (`harness-host`). A CLI thread whose session runs does not move to another worktree (`harness-pinned`).
+
+**Links.** The ACP transport; the CLI profile; adopting a CLI from the terminal; approval by the parent.
+
+Code: apps/tagma/server/src/external-harnesses/contract/service/table.ts#HARNESSES, apps/tagma/server/src/external-harnesses/birth/seat.ts#terminalCapabilities, apps/tagma/server/src/external-harnesses/contract/wire/hooks.ts, apps/tagma/server/src/external-harnesses/contract/wire/operations.ts#HARNESS_OPERATIONS, apps/tagma/server/src/external-harnesses/installs/mcpDeclaration.ts, apps/tagma/server/src/external-harnesses/installs/targets.ts, apps/tagma/server/src/external-harnesses/settings.ts, apps/tagma/server/src/external-harnesses/birth/installed.ts

@@ -1,0 +1,24 @@
+---
+id: 01a1410d-c9d2-795d-a7f8-9eabc82c927b
+title: "A subtree moves into another graph under its former uuids: with two stores the target births it before the source departs it, with one store in a single transaction"
+ord: 8
+tags: ["explanation"]
+sources:
+  - kind: file
+    ref: apps/tagma/server/src/graph/operations/carrying.ts
+  - kind: file
+    ref: apps/tagma/server/src/graph/operations/relocation.ts
+---
+A block name resolves across every graph on the machine, so a move keeps each subtree block's uuid: `[[name]]` references from other blocks' bodies and from history keep leading to the block, now in its new graph.
+
+**Order with two stores.** Two graph copies share no transaction, so the target first births the subtree in one act (`Blocks.arrive`), and only then does the source graph depart it in one act (`Trash.depart`). A process crash between the acts leaves the subtree in both graphs. From a third project the name then gives `ambiguous-name` with both addresses. From the target project it finds its copy, so the move is finished by a call from the source project or by a call addressed `<project>/<name>`. A target whose copy coincides with the moved subtree does not birth it twice, and the source only departs. Copies that diverged after stopping are not reconciled by the move: the `relocation-stale` refusal offers to delete the copy that is not kept. After deletion a bare name from any project leads to the remaining copy, so a repeated move needs no address. Comparison goes by content, not by uuid presence — otherwise an edit made in the source after stopping would leave for its trash. Arrival renames trashed rows with the same uuids, so a repeat after deleting the target copy does not hit the unique index. The reverse act order was rejected: a crash after departing would leave names only in the source trash, under fresh uuids — in no graph at all.
+
+**One store for several projects.** The target cannot insert the former uuids while the source rows hold them: the uuid index is unique across the whole store. So departure and birth go in one transaction, departure first — it is atomic.
+
+**Departure renames rows.** The source graph departs the subtree into the trash under fresh uuids: in a shared store the target needs those uuids, and the uuid index is unique across the whole store. `restore_block` raises such a copy as a separate block under new names. Trash interception of a name closes name resolution ([[a4b76617]]): a trash row yields to a live block of another project.
+
+**Snapshot.** Preparation takes the subtree snapshot (`carriedOf`), and the target births exactly it. Departure inside its own act takes the snapshot anew and refuses `relocation-stale` if it changed: otherwise a block added or changed after arrival would leave for the source trash without arriving. In the same act it rechecks that a rule and its debt owner do not diverge across graphs: `enforce_rule` could have assigned a departing task as owner after preparation. After a refused departure the target departs the arrived copy with the same `Trash.depart` with the source address. If that fails too — `relocation-unfinished` with exits. The whole sequence is uninterrupted.
+
+**Edges.** Edges between subtree blocks are born anew. The snapshot carries the subtree's edges to the source's remaining blocks as address edges. Ordinary edges of remaining blocks into the subtree are turned into address edges into the target graph by departure. The arrival turns the target's address edges into the subtree into ordinary ones. Every edge whose end changes kind is judged anew: shape and contract by the dictionary of the graph where it lies, and the end's types in the target dictionary. An address edge's end into a third graph resolves across the machine; an end that is not here is judged only by the edge kind and the start's contract. Other projects' address edges are readdressed after the move, by an act in each project's graph (`Edges.readdress`). Projects whose index does not read or whose graph did not open are named by the answer: Tagma deletes no edge itself, and their edges read "not on this machine". `supersedes` across the subtree boundary refuses: its own operation writes it inside one graph.
+
+The act journal and the files' git log stay in the source graph.

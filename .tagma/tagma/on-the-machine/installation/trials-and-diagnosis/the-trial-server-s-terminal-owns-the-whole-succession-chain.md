@@ -1,0 +1,18 @@
+---
+id: 01a123b2-171e-70e1-bb12-ce0d2e4c21a3
+title: The trial server's terminal owns the whole Succession chain
+ord: 1
+tags: ["explanation"]
+sources:
+  - kind: file
+    ref: apps/tagma/server/src/installation/contract/wire/launch.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/cut/try.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/process/launch.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/process/succession.ts
+---
+`tagma:try` keeps a single launch owner: it spawns the original server and every successor through IPC, holds them until completion, and passes the stop to all unfinished generations. `Succession` picks the command and leaves only after the successor's `standing-by` and preparing its execution host for its bundle (`SuccessionSteps.prepare`). The successor sends only `standing-by`, `Taken` and `Serving` over IPC: the launcher and another build's predecessor never read any other frame, and the launcher crashes with the server on it. That the candidate was laid by this attempt, preparation learns from the `bundle.next.restart` file next to it — it holds the restart id (`TAGMA_RESTART_ID`). A candidate with someone else's id is removed, and the restart proceeds with no yielding. With `standing-by` the candidate belongs to the predecessor: on attempt failure or cancellation it removes it itself (`SuccessionSteps.withdraw`), not through the killed successor's exit hook; store closing and the data directory handover stay with the server. A cancelled attempt and a preparation refusal close the candidate (at `tagma:try` — with a `Cancel` frame to the launch owner after `Started` already), losing the IPC owner finishes the subordinate server. The subordinate-launch mark is consumed at startup, so no other server commands inherit it. A standalone launch keeps the detached handover to the successor.
+
+An owner-closing failure at the leaving predecessor never holds the data directory: the predecessor releases it anyway (`ReleaseFailed` with a reason), and the successor serves, writing the reason into the restart record's `unreleased`. Losing touch with the predecessor or its death after `standing-by` lead to the same: the successor takes the directory as soon as it is gone. Without that, a race between disconnect and pid observation would decide the outcome. The predecessor never vanishes until the successor answers. After `Released` the successor answers `Taken` (the directory is its) and `Serving` (the local door is open); only whoever was asked to await release (`HANDOFF`) sends them, they are never sent to the old side. When the successor ended after `standing-by` but before `Serving`, the server rises anew: at `tagma:try` the launch owner does that from the saved spawn command, standalone — the predecessor itself. It raises the `current` release when the attempt record is open and the successor already entered it (`starts > 0`): its own release drives the interrupted attempt through or rolls it back. Otherwise — its own build from its process's command, captured before the `current` switch. Its own build never opens the database after the successor's applied migration, so the successor itself rolls back before exiting. No handover wait judges by time: while the other side lives, it is awaited — the predecessor's departure and its release, the successor's `Taken` and `Serving`; only its exit, IPC loss, or a recorded refusal pass verdict, because on a slow machine owner closing and migration take minutes.

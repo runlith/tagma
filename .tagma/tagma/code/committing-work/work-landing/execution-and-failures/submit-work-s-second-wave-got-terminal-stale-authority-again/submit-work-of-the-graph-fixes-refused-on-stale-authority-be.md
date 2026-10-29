@@ -1,0 +1,13 @@
+---
+id: 01a12cc1-4800-716c-bc02-6b275770ca29
+title: submit_work of the graph fixes refused on stale authority before reading the branch
+ord: 1
+tags: ["reflection"]
+fields:
+  {
+    "actual": "refused[git-unavailable]: git symbolic-ref ended and its console could not be read: terminal-stale-authority. read_commands showed the finished git symbolic-ref, a fresh bash with git symbolic-ref --short HEAD answered main. The commit had not run yet.",
+    "command": "submit_work(checkout=\"/opt/workspaces/runlith\", subject=\"Route graph acts to checkout copies and resolve graph conflicts\", whole=true, paths=[apps/tagma/server/src/invocation/admission/project.ts, apps/tagma/server/src/invocation/admission/actor.ts, apps/tagma/server/src/invocation/admission/admit.ts, apps/tagma/server/src/invocation/admission/project.test.ts, apps/tagma/server/src/graph/contract/wire/answers.ts, apps/tagma/server/src/graph/operations/answers.ts, apps/tagma/server/src/graph/operations/pairs.ts, apps/tagma/server/src/graph/contract/wire/operations/outline.ts, apps/tagma/server/src/graph/contract/wire/operations/history.ts, apps/tagma/server/src/graph/contract/wire/operations/reflections.ts, apps/tagma/server/src/graph/contract/wire/operations/tree.ts, apps/tagma/server/src/graph/contract/wire/operations/writes.ts, apps/tagma/server/src/graph/contract/wire/operations/work.ts, apps/tagma/server/src/graph/contract/wire/operations/orientation.ts, apps/tagma/server/src/graph/contract/wire/operations/registry.ts, apps/tagma/server/src/graph/contract/wire/operations/sources.ts, apps/tagma/server/src/native-harness/voice/graphTools.ts, apps/tagma/server/src/graph/operations/crossing.ts, apps/tagma/server/src/graph/tree/conflicts.ts, apps/tagma/server/src/graph/serving/recovery.ts, apps/tagma/server/src/graph/contract/service/recovery.ts, apps/tagma/server/src/graph/operations/history.ts, apps/tagma/server/src/graph/tree/batch.ts, apps/tagma/server/src/graph/tree/commits.itest.ts, apps/tagma/server/src/composition/testing/http/graphRecovery.stest.ts, apps/tagma/server/src/composition/testing/http/reflectWorktree.stest.ts, apps/tagma/server/src/graph/work/filedReflections.ts, apps/tagma/server/src/graph/tree/blockFile.ts, apps/tagma/server/src/graph/tree/blockFile.test.ts, apps/tagma/server/src/graph/operations/work.ts, apps/tagma/server/src/graph/tree/validation.ts, apps/tagma/server/src/graph/tree/validation.worker.ts, apps/tagma/server/src/graph/serving/recovery.itest.ts])",
+    "expected": "Read the branch and land the reviewed graph changes after three independent reviews."
+  }
+---
+Filed from project `runlith`.

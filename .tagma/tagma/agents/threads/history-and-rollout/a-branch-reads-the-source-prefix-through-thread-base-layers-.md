@@ -1,0 +1,27 @@
+---
+id: 01a15240-8f7a-74d6-8068-23c7ba634604
+title: "A branch reads the source prefix through `thread_base` layers: a row visible to it does not change in place while the layer lives"
+ord: 11
+tags: ["explanation"]
+edges:
+  - kind: relates
+    to: 01a151df-e920-73d7-9b09-09e4d7c40fd9
+sources:
+  - kind: file
+    ref: apps/tagma/server/src/native-harness/rows/branch.ts
+  - kind: file
+    ref: apps/tagma/server/src/native-harness/transcript/layers.ts
+  - kind: file
+    ref: apps/tagma/server/src/threads/journal/base.ts
+---
+A branch (`branch_thread`, spawn with `fork`) does not copy the source journal: `thread_base` holds its layers — the thread whose *own* rows it reads, event positions `(after, through]`, the transcript `ord` range, and cut filters. A layer addresses rows by `ord`, so everything below holds one invariant: **a row visible to a branch through a layer neither changes in place nor disappears while the layer lives**.
+
+- **Copy-on-write.** A thread changing a transcript row (`replace`, `mark`, `withdraw`) first puts to each child with a layer on that `ord` what that child saw (`layers.ts#preserve`). The branch writes its own edit of an inherited row as a copy into its own table on the same `ord`; its own row closes layers, and the upper layer closes the lower one.
+- **New rows outside layers.** `edge` takes the outer `ord` over its own rows, its own layers, and children's layers on that thread, so append and prepend never land in another layer's range, even after `withdraw` of upper rows.
+- **Filters only over immutable properties.** The cut is set by run, type, and `ord`; the `rewound` mark changes, so runs hidden by rollback become a run list at birth — otherwise a source restore would show the branch what was hidden.
+- **Live layer only while both sides are in SQL.** Return builds the transcript with new `ord`, and an evicted thread's projection reflects its final state, so a layer cannot read an evicted side. The eviction pass materializes the prefix before evicting either side: to the branch — whole into its rollout (`exportThreadRollout` with `prefix`) plus a copy of the visible index replicas, with the layer emptied in the same transaction that sets the eviction mark; to a source with live children — in chunks into each live child's rows (`inheritance.ts`), moving the layer bounds in each chunk. Reads from several requests see no single snapshot, so read order keeps completeness: transcript rows are read first from layers, then its own, and the same `ord` collapses into its own row; a layer event is closed by its own event and by the upper layer's event at the same position. A grandchild's layer of the parent's own rows covers positions from zero: after materialization the parent has its own rows plus prefix rows, and what the upper layer covers overlaps the lower. An empty layer holds neither the eviction nor the source rows; it exists only as a path to the attachment and output folders and goes away with the branch.
+- **Source removal** materializes each branch's visible part into its tables; the layer stays empty of rows so that file reads reach the source folders, which are not freed while a layer refers to them. The source file goes away, so such a branch's rollout must be rewritten whole from its rows; the debt stands in SQL in the same transaction (`thread_base.unfiled`), the rewrite after the removal commit pays it off, and a broken rewrite is finished by the first entry into the branch journal after start (`ThreadRollouts.owed`).
+- **Restore from rollouts.** The branch meta carries its live layers (`base`: source and positions). Import into an empty base takes events `(after, through]` from each source file, folds them with the tail using the canonical fold, sets empty layers with the same rewrite debt, and rewrites the branch rollout whole. A source file whose positions fall short of what the layer promises refuses the branch import instead of giving it a cut prefix. The conversation index drops hidden runs and replicas before `from` on the `branched` fact, otherwise a restored branch search would find the cut-out.
+- **File with holes.** A branch rollout does not hold live-layer positions: a born branch starts at `through + 1`, and a grandchild after the grandfather's removal starts with the materialized prefix, then a hole onto the parent layer. The file projection into SQL steps over positions covered by live layers, otherwise reconciliation would refuse such a file as out-of-order, and it does not insert into its own rows events at such positions when the file already carries the prefix (a branch before eviction) — otherwise one position would read twice. Projection proceeds in ~25 ms chunks per transaction, each advancing the cursor by at least one row.
+- **Conversation index** holds the same invariant: before a source `thread_message` row is dropped or edited, a child with a layer on its position gets a copy (`conversationIndex.ts#keepForBranches`).
+- **Cut events.** What sets a branch apart from the prefix is its `branch` event: the `branched` fact with cut model-history segments (a cut, not a replacement — otherwise attribution would count the remaining turns as folded and forbid their rewind). The canonical fold drops records on it; the SQL projection skips it because the same cut stands in the layer filters — two implementations of one fact must agree, held by the `storagePort/transcript.ts` conformance.

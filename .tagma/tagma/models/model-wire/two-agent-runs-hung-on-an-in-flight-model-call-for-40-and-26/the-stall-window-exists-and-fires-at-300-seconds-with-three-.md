@@ -1,0 +1,13 @@
+---
+id: 01a0c9b5-7053-7b7c-8ff8-c6eb7b3ada53
+title: The stall window exists and fires at 300 seconds with three attempts, so the silent runs that never failed were calls carrying no window at all
+ord: 1
+tags: ["reflection"]
+fields:
+  {
+    "actual": "Both happened in the same wave on the same provider and model. Thread 01a0c9a3-34d6-7573-86ad-0f96c32cf0c2 failed cleanly with StreamStalled: \"nothing arrived for 300 seconds\", after \"Automatic retries exhausted (2/1; 3 model attempts)\" — about fifteen minutes end to end, reported to the parent as a failure. Threads 01a0c957-cae2 and 01a0c964-6c84 went silent for 40 and 26 minutes with no stall failure at all and had to be stopped by hand; 01a0c98a-c160 the same at 21 minutes.</actual>\n<parameter name=\"body\">This sharpens the first sighting rather than repeating it. I reported those silences as runs that nothing abandoned, and left open whether the host stated no window or the wire ignored one. The clean StreamStalled failure here settles half of it: the mechanism works, the figure is 300 seconds, and three attempts are made before the run fails and the parent is told. So the silent runs were not a broken stall window — they were calls that carried no window to compare against.\n\nThat is consistent with what the kernel declares about itself and makes the inconsistency sharper, not softer. A run may carry its own stall window and otherwise takes the runner's, and each call carries the host's figure to the wire; so a call reaching the wire with none is a composition where neither was stated. Four runs of one wave, all spawned the same way on the same provider and model, split between the two behaviours — which means the figure is not reaching every call the same way, and the difference is invisible from outside: both look like \"working, running\" until one reports a failure fifteen minutes later and the other never does.\n\nThe practical cost is unchanged and now attributable. A parent watching a pool cannot tell the two apart while they are happening, because the only reading that distinguishes them is the last measured step time, and nothing surfaces it. Where the window is in force the instrument handles the silence correctly and says so; where it is absent the run is lost until somebody notices and stops it by hand.\n\nMeasured across one wave over packages/agent. The four thread ids above carry the evidence on both sides.",
+    "command": "spawn_agent (zone-reviewer on muse-spark-1.3-contributor at max), left to run",
+    "expected": "Either every model call carries a stall window and a silent one is abandoned, or none does and every silence hangs — one behaviour across the runs of one wave"
+  }
+---
+Filed from project `runlith`.

@@ -1,0 +1,14 @@
+---
+id: 01a14b6d-b229-7a67-9d74-9d0364c274e9
+title: Agents and the operator read agent composition, states, run endings, and thread contents via operations
+ord: 18
+---
+An agent or the operator learns the agent composition and what each does, how their runs ended, and what was said in them — with one operation, without opening feeds.
+
+**For the agent: `list_agents`.** All of the owner's agents on this server, working first, then waiting, then idle, freshest movement first. A row: name or id, type, project (if another), model and rung, state, `stalled since` (how many minutes with no durable movement — a heartbeat is no proof of progress), the question the agent asked, the last run's outcome and, for a fallen one, failure type, stage, provider, HTTP, repeatability, whether model execution started and the record address, context fill against the auto-compaction point and window, prompt-cache warmth (warm/cold, how many minutes remain or the warm share after such a pause), the team root, the parent, the thread id. A page is 20 rows by default; a name addresses only inside its own team, others by id. A CLI thread calls `list_agents` over MCP.
+
+**Thread operations.** `list_threads` — a selection by id, title, birth line, clocks, and what the runs did; a row names both the thread's model and the last run's model. `read_thread` — what the thread is (row, frozen prompt, journal size, runs with model, spend, and time, the session's graph acts) or a query over facts: runs, steps, measurements, entries, records, activity, with where/group/sum/order. `read_thread_record` opens an addressed record whole. `read_statuses` — what the named threads do now: a run going, standing on an answer, stuck or idle, who holds it, which questions, pending-word receipts. `read_endings` — the last run endings: status, who stopped it, failure, notification state; `redeliver_ending` repeats a notification that gave up. `search_threads` — what was said in native threads of any project (the operator's words, including steer, and agents' answers; child reports are found in the child's thread). Terminal: `tagma thread <id> --follow`, `tagma activity <id> [--run]`.
+
+**Limits.** An agent reads another's thread under the thread-read right. Rows that do not exist or live in another project answer `not-found` / `foreign-project` in their own row; the page does not refuse. A cursor from another question — `cursor-stale`.
+
+Code: packages/agent/src/collaboration/agentRoster.ts#readRoster, packages/agent/src/collaboration/collaborationVerbs.ts#LIST_AGENTS, apps/tagma/server/src/threads/contract/wire/operations/catalog.ts#THREAD_OPERATIONS, apps/tagma/server/src/threads/contract/wire/operations/turns.ts#TURN_OPERATIONS, apps/tagma/server/src/threads/contract/wire/operations/search.ts#SEARCH_OPERATIONS, apps/tagma/server/src/threads/cli/threadVerbs.ts

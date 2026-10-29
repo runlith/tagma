@@ -1,0 +1,21 @@
+---
+id: 01a16b85-12cc-77ab-9527-4d7d0a2d7254
+title: "Restarting the agent goes on its own fiber under a turn-admission hold: stop, transport release even when stop fails, record, then continue"
+ord: 17
+tags: ["explanation"]
+edges:
+  - kind: discovered-from
+    to: 01a16b62-7941-74ad-a1ce-96febd4e3665
+  - kind: relates
+    to: 01a16b62-65bd-7e64-b65a-b72f418bc57e
+sources:
+  - kind: file
+    ref: packages/agent/src/thread/run/ThreadAggregate.ts
+---
+`ThreadAggregate.restart` (the `restart_thread` operation, the thread menu's "Restart agent") is one act for any agent breakage, including one not yet known: stopping the turn, replacing the process, continuing. The core does not branch by vendor (rule [[6f758080]]): the process replaces the transport through its own `TransportResource.release`, and for a transport without a resource (a native thread) that step is empty.
+
+- **Its own lifetime.** The act goes on its own fiber (`forkDetach`), and the caller waits for its end. A native agent restarting itself calls the operation from its own turn: stopping that turn interrupts the tool call, and without a separate fiber the act would end in a plain stop, with no replacement, record, or continuation.
+- **Holding admission.** Turn selection, stop, `release`, and the write go under the thread's `RunAdmission.hold`, and the turn is selected already under the hold. Otherwise words from the queue would open a follow-up turn between selection and stop, or right after the stop — on the old process still — and `release` would cut that one down. The hold always lifts with a wake: waiting words open a turn on the new process, and `continue`, losing them the race (the turn is already running or already over), answers with the turn that took them.
+- **A failed stop does not stop the replacement.** The stop waits for the turn's end no longer than the history-rebuild limit (the same as rewind's). A refusal, `still-settling`, or a silent transport is written as a warning, and the act still calls `release`: restart is needed exactly when an ordinary stop does not reach the agent. For ACP `release` is `attendance.stop`. It removes the process via `ProtocolProcess.ending` ([[8711a398]]) even when the agent did not answer the cancellation.
+- **Continuation.** What continues is the stopped turn (not a compaction), and when there is no turn — the last turn that fell on a limit (`threadRunLimited`: the `rate-limit` family), and only at a transport declaring `continue`: the process is replaced precisely when the old one ran into an exhausted subscription. The terminal CLI continues with a continuation instruction printed into the new CLI; the turn the CLI starts with it takes the continued run instead of opening its own, and it is not written into the journal as words. Devin does not declare `continue` — the turn stands stopped there, the process is replaced, and the next word continues the work on the new process. The act writes no words on the operator's behalf. Without continuation, including on a thread with no turn, the act after the write, still under the hold, calls `TransportResource.seated`: the terminal CLI stands up a new process at once, with no words and no turn, as at the thread's birth — otherwise after restart the thread would stand with no CLI until the first word, showing chat instead of the TUI. A failed stand-up fails the restart; the feed entry stands by then.
+- **Feed entry.** The `restart` view stands between turns (it has no `runId`). It stores who restarted (`byThreadId`; absent — the operator), which turn was stopped (`stoppedRunId`), whether it continues (`continued`), and the calls the stop closed (`calls`). Calls are a projection of the settle owner (`unsettledEffects`): the turn's open calls from its records and stream tail, read under the hold before the stop. Those that finished on their own are removed from them. The entry is written on every restart, including on a thread with no turn: otherwise the press would leave no trace.

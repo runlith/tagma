@@ -1,0 +1,19 @@
+---
+id: 01a14e15-fd11-7fd9-af78-f829eb39973e
+title: A turn owned by a terminal CLI closes its run only through TerminalClosing, and the turn's spend is reported by main-agent requests plus the subagent remainder
+ord: 2
+tags: ["explanation"]
+edges:
+  - kind: relates
+    to: 01a14cba-e095-7bcb-bb6f-6087f822dd50
+sources:
+  - kind: file
+    ref: apps/tagma/server/src/external-harnesses/terminal/closing.ts
+---
+A terminal CLI turn ends on the Stop hook, on the next turn's start without Stop, on a watch readout over the transcript, on an admitted held answer, or on the process end. Only a run stopped before the CLI received its words (`halt`) ends without it: such a turn has no spend. If every path wrote `ended` itself, only the transcript reader would know the spend, and the path that closed the turn first would drop `turn`, losing the spend. So all paths hand the end to `TerminalClosing.close`: over the transcript tail from the turn's start it writes `measured` for every main-agent request — a repeat with the same id writes nothing, so a late watch does not double — and `ended` with the subagent line remainder.
+
+Context reading carries only the main agent's last request, with no cache expiry: the transcript proves neither the send moment nor the promised TTL, so such a thread's warmth never rests on a promise: with no provider-local curve or catalog estimate it is `unknown`, with them it is that curve's estimate. Keep-warm and automatic recap need a promise, so the terminal is not pinged and there is no automatic recap. The reading model is the catalog id: the vendor writes the id with a date, and without reconciliation the reading would not match the thread's model and would read `cold`. `<synthetic>` lines, which Claude Code writes itself with no model request, do not count as requests.
+
+Compaction and context clearing in the run TUI open no run, so the reading changes outside the run (`RunReports.outside` with the reading). `SessionStart` with `source: compact` or `clear` marks the reading stale in the same record that resets guidance: the old fill is no longer truth. No hook carries the number after compaction: in Claude Code 2.1.310 `SessionStart` and `PostCompact` run inside the compaction, before it counts the remainder and writes `compact_boundary` with `compactMetadata.postTokens` into the transcript. So after `compact` the watch takes the transcript size at the hook moment and every `COMPACTION_BEAT_MS` re-reads what was appended past it until it finds the boundary, but no longer than `QUIET_WINDOW_MS` and while the same session and turn stand. The boundary's `postTokens` becomes the `compacted` reading: the old reading's context (model, window, run) with the new token count — the number Claude Code itself shows until the next answer. A boundary with no `postTokens`, one not found within the window, or one lost to a server restart inside the window leaves the reading stale until the next turn's end.
+
+A partial transcript read does not hold the end: the turn ends with no requests, with a warning. A read that skipped a record past the transcript record limit also counts as partial: otherwise a lost request would silently undercount the spend, and the previous one would become the context reading. This limit (`TRANSCRIPT_LIMITS`) is 8 MB, as the document's, not the 128 KB of the metadata index: Claude Code writes an image prompt as one record together with its base64 (a screenshot is 0.4–0.6 MB, and again in `api-request-blob`), and a `Write` of a large file as one answer record. At the index limit every turn started with a screenshot lost both spend and context reading. A turn's requests are selected by the turn start's byte offset; the vendor record time is compared with the turn opening only where there is no offset, because vendor clocks in a guest environment may diverge from the server's.

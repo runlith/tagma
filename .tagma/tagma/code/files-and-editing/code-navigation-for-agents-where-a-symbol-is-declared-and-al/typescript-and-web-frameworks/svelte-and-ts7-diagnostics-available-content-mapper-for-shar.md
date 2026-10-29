@@ -1,0 +1,40 @@
+---
+id: 01a16133-998e-7e8d-9757-a042d97c8d39
+title: "Svelte and TS7: diagnostics available, content mapper for shared navigation still in an open PR"
+ord: 6
+tags: ["research"]
+fields:
+  {
+    "source": {
+      "name": "Svelte TS7 diagnostics and prototype content mapper",
+      "ref": "https://github.com/sveltejs/language-tools/tree/c2a9be791be9229401b3f488058f1d12e930f6f7; https://github.com/jasonlyu123/language-tools/tree/d3766bcb2f85e10d68b398233fcbf133f8bbb010; upstream PR #3111; TS7.1.0-beta 2026-10-20"
+    }
+  }
+---
+## Observation — three different TypeScript 7 paths
+
+Reference clones fetched via `ag-external-refs/scripts/fetch.py` were read: `sveltejs/language-tools` master `c2a9be791be9229401b3f488058f1d12e930f6f7` and `jasonlyu123/language-tools` branch `ts7-content-mapper`, commit `d3766bcb2f85e10d68b398233fcbf133f8bbb010` (2026-10-18). The second is the code of open upstream [PR #3111](https://github.com/sveltejs/language-tools/pull/3111), not a released master capability.
+
+1. **`svelte-check --tsgo`: diagnostics via CLI.** Master `packages/svelte-check/src/options.ts` states that transpiled Svelte is written to `.svelte-kit` or `.svelte-check`. `incremental.ts` creates a virtual project and runs the native compiler; `getTsGoBinPath`, lines 564–573, picks `tsgo` for `@typescript/native-preview` or `tsc` for the TS7 package alias. This is not a navigation server. Fast diagnostics do not add definition/references/call-hierarchy/implementation.
+2. **`svelte-check --tsgo-experimental-api`: diagnostics via the old experimental sync API.** Master `src/tsgo.ts` tries `unstable/sync`, then `sync`, same for AST modules. `language-server/src/plugins/typescript-go/features/DiagnosticsProvider.ts`, lines 115–163, creates `new apiModule.API({ fs: createFsProxy() })`, a virtual tsconfig, and takes syntactic/suggestion/semantic diagnostics. `getProject`, lines 175–192, passes `api.updateSnapshot({ openProject, fileChanges: { created, changed, deleted } })`. The FS proxy (`createFsProxy`, line 337 on: `readFile`, `fileExists`, `getAccessibleEntries`) serves virtual paths and transformed text from `virtualFiles`; `.svelte` is converted through `SvelteDocumentSnapshot`. This is FS virtualization, not a content-mapper protocol. `mapAndFilterDiagnostics`, lines 199–266, groups diagnostics by real path and returns Svelte ranges through source maps; it provides no ready references/call-hierarchy/implementation operations and no universal reverse mapping of navigation results. The TS6 dependency of such a frontend for parser/codegen does not equal a semantic JS LanguageService and alone does not contradict the operator's decision to exclude the JS LS. This provider is wired from `svelte-check.ts`, lines 148–190; the regular LSP still wires the JS TypeScriptPlugin. In the TS7.1 API the snapshot lifecycle uses `createSnapshot`/`snapshot.update` instead of the old public `api.updateSnapshot({ openProject, fileChanges })`; the public facade is still called `API`, and `Client` is its transport. That is a contract difference by code, not a runtime compatibility check. `options.ts` directly declares an experimental feature that may break without warning.
+3. **TS7.1 content mapper: shared TypeScript navigation over TS and Svelte.** The PR #3111 branch adds `@sveltejs/ts-content-mapper` 0.1.0: the package manifest declares a `node dist/server.js` executable, a `typescript: ~6.0.2` dependency, and a workspace `svelte2tsx`. The [mapper server](https://github.com/jasonlyu123/language-tools/blob/d3766bcb2f85e10d68b398233fcbf133f8bbb010/packages/typescript-content-mapper/src/server.ts#L13-L148) serves stdio JSON-RPC `initialize/openProject/closeProject/transform`; calls `svelte2tsx` with `generateSpanMapping: true` and returns virtual text, extension, mappings, and parser diagnostics. This is a JS mapper process next to TS7, not a native rewrite of Svelte.
+
+[Span mapping](https://github.com/jasonlyu123/language-tools/blob/d3766bcb2f85e10d68b398233fcbf133f8bbb010/packages/svelte2tsx/src/utils/spanMap.ts#L197-L224) gives a synthetic default export a separate zero-length anchor only with `Definition`; the enum holds `Definition`, `Implementation`, `References`, `CallHierarchy`. `htmlxtojsx_v2/nodes/InlineComponent.ts`, lines 13–24, enables these navigation flags for component spans. Flag presence does not prove full equivalence with the previous bespoke component-call complementing algorithms.
+
+In mapper mode the Svelte LS **hands** TS features to the native server: branch `language-server/src/server.ts`, lines 203–244, does not register the TypeScriptPlugin; the `implementationProvider` and `callHierarchyProvider` capabilities equal `enableTs6Features`. So the same Svelte LSP cannot simply be launched in mapper mode and expected to keep answering all semantic requests. Headless semantic requests must go to the TS7 LSP/API that knows the content mapper; the Svelte LS stays for Svelte/HTML/CSS.
+
+## Observation — maintainer words and present context
+
+In [issue #3063](https://github.com/sveltejs/language-tools/issues/3063), jasonlyu123 confirmed on 2026-08-31 both diagnostics flags, the need for TypeScript 6 alongside 7 via npm alias, and the near content mapper. That is more precise than the earlier June note about direct replacement of the `typescript` package with 7 being incompatible. Master README now documents the `typescript@~6 @typescript/native@npm:typescript@7` alias.
+
+In [PR #3111](https://github.com/sveltejs/language-tools/pull/3111) the author limits the PR to editor support, leaving svelte-check as separate work. The known-issues list includes inlay hints, document highlights, SvelteKit auto-typing, and unmappable Svelte 4 legacy features; the instructions still require a local TS extension build. That is the PR's state description, not a check of the currently published extension.
+
+The [official TS7.1 Beta announcement of 2026-10-20](https://devblogs.microsoft.com/typescript/announcing-typescript-7-1-beta/#content-mappers) already describes content mappers as an extension point for virtual text and source spans, wired via `contentMappers` in tsconfig, the `tsc --runExternalCode` CLI, and editor support; it directly references Svelte PR #3111. Hence the claim "TS7 fundamentally cannot do Svelte/plugins" is outdated. `tsgo` is the former native-preview CLI name; `tsc --api` and `tsc --lsp` are different transports to a native host, and a content mapper is a separate extension point, not a svelte-check command.
+
+## Inference
+
+For a future Svelte extension, the studied boundary is one native TS7 host with a content mapper: TS files and virtual components land in one type graph. The JS TS5/6 LanguageService, including tsserver with the Svelte plugin, stays excluded from Tagma's options by the operator; it remains only a parity reference. The operator's later decision is a first version with no Svelte, with `.svelte` explicitly out of scope. `svelte-check --tsgo` speed proves nothing about navigation speed: it is a different mode with a different capability set; textual Svelte candidates, when shown separately, stay unresolved.
+
+## Unknown
+
+The mapper branch was not built or launched; further runtime probes stopped on the operator's decision for a first version with no Svelte. Not independently proven: compatibility of the PR with the TS7.1.0-beta API/LSP; real `.ts`→`.svelte` references and source-span accuracy; component incoming/outgoing semantics; runes/snippets/SvelteKit; invalidation of mappings on file/config changes; multi-project/worktree sharing; cold/warm latency, RSS, and virtual text/mapping size. The native host has generic mapper fixtures, but that is no Svelte-specific runtime evidence. The old sync diagnostics provider uses `new API`/`api.updateSnapshot({ openProject, fileChanges })`; the TS7.1 API uses `createSnapshot`/`snapshot.update`. The TS7.1 public facade is still `API`, `Client` its transport. Compatibility of the installed svelte-check 4.7.6 dist was not runtime-verified here.

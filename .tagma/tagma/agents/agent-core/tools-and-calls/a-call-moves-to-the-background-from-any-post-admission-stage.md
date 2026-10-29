@@ -1,0 +1,32 @@
+---
+id: 01a17899-5e80-7d19-8161-2d220cf14ca8
+title: "A call moves to the background from any post-admission stage: the thread finishes preparation, permission, queue, and execution, and the outcome arrives as a notification"
+ord: 13
+tags: ["explanation"]
+sources:
+  - kind: file
+    ref: apps/tagma/server/src/threads/collaboration/callEndings.ts
+  - kind: file
+    ref: packages/agent/src/agent/AgentCall.ts
+  - kind: file
+    ref: packages/agent/src/agent/AgentCalls.ts
+  - kind: file
+    ref: packages/agent/src/agent/door/CallOrder.ts
+  - kind: file
+    ref: packages/agent/src/agent/door/ToolExecution.ts
+  - kind: file
+    ref: packages/agent/src/thread/run/callConfirmation.ts
+  - kind: file
+    ref: packages/agent/src/thread/run/ParkedMoves.ts
+---
+A call goes to the background from any stage after admission: the preparing, resolving, queueing, and executing is finished by the thread, and the outcome arrives as a notification. A call that asked for `background` is taken by the door right after admission — before preparation — and the model gets a receipt naming only what is known at that point: the call has not executed yet. The operator moves a running call to the background at any stage: preparation, queueing for claims, waiting for permission, execution. After that the call's life belongs to the thread, and the outcome arrives as a notification the same way as for a call moved during execution.
+
+- **First the debt, then the receipt.** Before answering the model, the thread's debt is written (`CallHooks.detaching`) and the call's holdings taken: the run's output scope, the world lease, the door ledger. Otherwise the run end would close the output under a call that never started, and a restart would lose its outcome.
+- **One life instead of stages at the caller.** Preparation, permission, and execution run as one call fiber in the `AgentCalls` scope (`AgentCall.run` with pre-admission stages); a foreground call's preparation also runs under the call owner (`AgentCall.attend`), so moving to background mid-preparation starts nothing over.
+- **Permission is never skipped.** An `ask` verdict for a background call is asked through the `CallHooks.asking` port (`callConfirmation` over `Questions`) — the same `thread.tool.confirm` record to the same addressee. A background call's question stands in the thread area (`approvals:<thread>`), not the run's: the run ends before the answer. A call moved to background while its question stands takes the run's question down and asks the same question to the thread. With no reader (`unattended`) and on `deny` — the same refusal as in foreground; refusal and rejection arrive as notifications, and nothing executes.
+- **Order as before — across the thread.** The receipt never answers the call in `CallOrder`: reads and the barrier release when the call starts executing, and `write` claims on a file or key hold to its end. A background call, not yet started, places its claims in the thread too (`ThreadClaims` in `AgentCalls`), and every door of the thread — the next execution of the same run, the next run, the answer door — places its own earlier by the shared sequence number. So a later call touching the same thing waits its turn instead of overtaking it; once the call body starts (not its admission, after which the start debt mark is still written), only `write` claims on a file or key to the call end stay in the thread — the same rule as inside one door. Only the door that placed it removes each standing record: closing the run's old door never removes claims the new door placed for the same call. A background call waiting for a reader is not marked asking: a later call waits instead of getting a same-batch refusal. A restart does not restore these claims: an unstarted call from the past life ends at load as never executed and does nothing more.
+- **A prepared call can still be moved.** After preparation a call stays with the operator until the run takes it: for execution (`AgentCall.keep` in `perform`) or, when the call waits for a reader, at the step end (`door.keep`), after the step's other calls. Moved in that gap, it answers the run with a receipt instead of executing or asking.
+- **A call on parking.** A native call around whose question the run is parked gets `ParkedQuestions.offer` (`AgentCall.offer`) while the question is open. Moving to background is one fact: one transaction narrows the question, writes the receipt as the call result, and writes a debt line (`ThreadOwedCalls.owe` in the same write unit); if any part fails the call stays on parking, releases the holdings it took, and the button answers `unavailable` with a reason. Moving and answering the same question exclude each other: moving refuses while an answer runs, and an answer waits for a running move and re-reads the question — otherwise the call would execute both as answer and in background. After the commit the call's life runs in the new door (`door.adopt`) with its thread claims, the question is asked to the thread, and the run continues with the receipt once no calls hang on the question. A late outcome rewrites the original tool record with the same `settledLate` as a live-run background call.
+- **Stop.** Pre-admission stages answer stop on their own (preparation races with stop, the question is withdrawn), so stop never cuts their fiber: otherwise an open question would hang. Stop and run end leave a background call alone; its own stop, and thread archive and delete, end it as `cancelled` with an unstarted mark, and the outcome is delivered once.
+- **Restart.** A debt line carries `unstarted` until the call starts executing (`CallHooks.began` clears the mark before the work). Load first withdraws such a call's question to the thread (`Questions.withdraw`), then closes its line with "never executed"; when withdrawing the question fails the line stays a debt until the next load, so the notification never speaks of a withdrawn question while the question stands. A started call stays "outcome unknown".
+- **Hosted.** No `started` record is written for a call taken to background before execution: its record already closed with the receipt. The sealed-message watcher rejects as "answered outside Tagma" only a call that never reached hosting.

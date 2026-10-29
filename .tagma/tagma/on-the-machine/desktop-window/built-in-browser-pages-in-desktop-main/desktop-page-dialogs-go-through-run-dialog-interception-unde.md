@@ -1,0 +1,16 @@
+---
+id: 01a1489c-3f9d-7f13-a10f-f4578f915a5b
+title: "Desktop page dialogs go through `-run-dialog` interception: under an agent the dialog waits for the engine's answer, without an agent it shows natively"
+ord: 1
+tags: ["explanation"]
+sources:
+  - kind: file
+    ref: apps/tagma/desktop/src/browser/page.ts
+---
+Electron's default dialog handler shows a modal window itself, and a managed page would get stuck in it with no engine answer. `-run-dialog` is a private webContents event; the page removes its previous listeners and installs its own. This relies on an Electron internal: Electron upgrades are checked by dialog system tests.
+
+While an agent drives the page (debugger attached), `alert`/`confirm` are held until `PageHost.answer` — so the engine sees the open dialog and refuses other actions until it is answered. Without an agent the same dialog shows natively and is dismissed if the answer arrived another way. If the agent session ended with a dialog open (channel break, server restart), the dialog is shown to the person at that moment: otherwise the renderer would hang on it invisibly. Electron does not support `prompt`: it is refused at once, the page sees `null`.
+
+`beforeunload` goes through `will-prevent-unload`, and it is synchronous: Electron gives no way to defer the answer, so leaving is cancelled and reported with a dialog. On consent, engine-initiated leaving is repeated. Page-initiated leaving (a link, `location`) cannot be repeated: main does not know its address, `will-navigate` arrives after `beforeunload`. Consent then lets the page's next attempt through without asking. Page closing goes through `close({ waitForBeforeUnload })` with the same dialog: consent repeats the close, refusal keeps the page and answers the server `stayed`. The exception is a hung page: it closes without asking, it cannot answer. The core also closes without asking where there is nobody to answer (`PageHost.close` with `ask: false`): pages with no record at reconciliation and pages of a profile being deleted. Otherwise one such page would hold reconciliation, and with it the registration of the whole host. A second close of the same page while the first waits for an answer waits for the same answer. Closing with a dialog already open (alert, confirm, navigation beforeunload) is refused: the dialog first. The managed host behaves the same.
+
+The host reports its own `beforeunload` with a `dialog` event. Chromium then sends `Page.javascriptDialogOpening` of type `beforeunload` over CDP and immediately `javascriptDialogClosed`, because Electron cancelled the leaving synchronously. The engine session never receives those two events: CDP events and host events are applied at the core by different threads, and a late `Closed` erased the open dialog — the agent never saw it, and the close hung.
