@@ -144,7 +144,7 @@ test('a block anchor of Knowledge keeps the copy its address names: the modified
     anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true }));
     await waitUntil(() => at.tabs().length > 0);
     expect(at.tabs()).toHaveLength(1);
-    expect(placedBlockOf(at.tabs()[0]!.id)).toEqual({ projectId: 1, branch: 'feature/one', name: '5940aab8', diff: null });
+    expect(placedBlockOf(at.tabs()[0]!.id)).toEqual({ projectId: 1, branch: 'feature/one', name: '5940aab8', diff: null, lang: null });
 
     anchor.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
     const aim = at.opening.aim;
@@ -196,7 +196,7 @@ test('a click opens each kind of link beside in the holder on screen, once howev
   ]);
   const [file, block, commit, page] = at.tabs();
   expect(fileTargetOf(file!.id)).toEqual({ projectId: 1, rootId: ROOT, path: 'src/a.ts', at: { line: 9, column: null } });
-  expect(placedBlockOf(block!.id)).toEqual({ projectId: 1, branch: null, name: '5940aab8', diff: null });
+  expect(placedBlockOf(block!.id)).toEqual({ projectId: 1, branch: null, name: '5940aab8', diff: null, lang: null });
   expect(commitOf(commit!.id)).toEqual({ projectId: 1, sha: 'b4dc210b5e11' });
   expect(shownOf(page!.id)).toEqual({ project: 1, page: 'page-1' });
   expect([...at.pages.keys()]).toEqual(['page-1']);

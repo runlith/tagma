@@ -23,7 +23,7 @@ test('a block tab of another project keeps that copy open while another tab is s
   const block = graphPanes.find((kind) => kind.kind === BLOCK_PANE) as PaneKind;
   const note: PaneKind = { ...testKind('note'), view: () => Promise.resolve({ default: (() => undefined) as never }) };
   const area = testArea([block, note]);
-  area.panes.open(blockPane({ projectId: 2, branch: null, name: '5940aab8', diff: null }), { activate: false });
+  area.panes.open(blockPane({ projectId: 2, branch: null, name: '5940aab8', diff: null, lang: null }), { activate: false });
   area.panes.open({ kind: 'note', id: 'n-1' });
   app = mountShell(Layer.of(SidePanes, area.panes), Layer.mergeAll(), { at: { projectId: 1, branch: null } });
   app.draw(PaneStack);

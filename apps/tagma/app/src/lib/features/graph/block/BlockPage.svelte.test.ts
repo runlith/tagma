@@ -39,6 +39,7 @@ import { Door } from '$lib/wire/Door.js';
 import { Live, type GraphFrame } from '$lib/wire/Live.js';
 import { loadOperations } from '$lib/wire/operation.js';
 import { testDoor } from '$lib/wire/testing.js';
+import { TranslationLayer } from '$lib/features/graph/translation/layer.js';
 import { LinksPlacement } from './LinksPlacement.svelte.js';
 import BlockPage from './BlockPage.svelte';
 
@@ -204,6 +205,7 @@ test('a part page in the main pane and another block in the right-hand tab both 
       JournalLive,
       Visits,
       LinksPlacement,
+      TranslationLayer,
     ),
     Layer.mergeAll(
       Layer.of(Door, testDoor(answer)),
@@ -323,6 +325,7 @@ test('a project root opened in a tab from another project lists its parts beside
       JournalLive,
       Visits,
       LinksPlacement,
+      TranslationLayer,
     ),
     Layer.mergeAll(
       Layer.of(Door, testDoor(answer)),

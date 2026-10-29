@@ -14,5 +14,5 @@
 </script>
 
 <div class="@container/page h-full min-h-0 overflow-y-auto">
-  <BlockPage blockName={held.name} diff={held.diff} aside />
+  <BlockPage blockName={held.name} diff={held.diff} lang={held.lang} aside />
 </div>

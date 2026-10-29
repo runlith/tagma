@@ -30,7 +30,7 @@
   const placed = $derived(place === undefined ? null : titles.placed(block.name, place, diff));
   const view = $derived<BlockRefView>(
     placed === null
-      ? blockRefView(addresses, block.name, null, titles.peer(block.name), diff)
+      ? blockRefView(addresses, block.name, null, titles.peer(block.name), { diff })
       : { text: block.title, title: null, dead: false, href: placed ?? null },
   );
   const copy = $derived<GraphAim | undefined>(

@@ -16,6 +16,8 @@
     value,
     fallback,
     disabled = false,
+    chip = false,
+    blank,
     onwrite,
   }: {
     label: string;
@@ -23,6 +25,8 @@
     value: unknown;
     fallback?: unknown;
     disabled?: boolean;
+    chip?: boolean;
+    blank?: string;
     onwrite: (value: string) => void;
   } = $props();
 
@@ -30,7 +34,7 @@
   let query = $state('');
 
   const choices = ModelChoices.use();
-  const entries = $derived(catalogEntries(of, choices));
+  const entries = $derived(catalogEntries(of, choices).filter((entry) => !chip || entry.value !== ''));
   const ranked = $derived(rank(entries, query, (entry) => ({ name: entry.label, names: [entry.value] })));
   const groups = $derived(catalogGroups(ranked.map(({ item }) => item)));
   const marked = $derived(new Map(ranked.map(({ item, hit }) => [item.value, hit.positions])));
@@ -52,7 +56,7 @@
   </span>
 {/snippet}
 
-<div class="grid w-full min-w-0 gap-1.5 @xl/settings:w-72">
+<div class={chip ? 'flex min-w-0' : 'grid w-full min-w-0 gap-1.5 @xl/settings:w-72'}>
   <Popover.Root
     bind:open
     onOpenChange={(next) => {
@@ -60,17 +64,22 @@
     }}
   >
     <Popover.Trigger
-      class="flex min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-small transition-colors hover:bg-hover disabled:opacity-50"
+      class={chip
+        ? 'flex h-6 min-w-0 items-center gap-1.5 rounded-md px-1.5 text-small font-medium transition-colors hover:bg-hover disabled:opacity-50 data-[state=open]:bg-selected'
+        : 'flex min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-small transition-colors hover:bg-hover disabled:opacity-50'}
       aria-label={label}
       {disabled}
     >
       {#if chosen}
         {@render swatches(chosen.swatches)}
       {/if}
-      <span class="min-w-0 flex-1 truncate text-left">{chosen?.label ?? current}</span>
+      <FadeText
+        class={['min-w-0 flex-1 text-left', chosen === undefined && blank !== undefined && 'text-muted-foreground']}
+        text={chosen?.label ?? (current === '' && blank !== undefined ? blank : current)}
+      />
       <ChevronDown class="size-3 shrink-0 text-muted-foreground" />
     </Popover.Trigger>
-    <Popover.Content align="end" class="w-72 p-0">
+    <Popover.Content align={chip ? 'start' : 'end'} class="w-72 p-0">
       <Command.Root>
         {#if entries.length > FILTER_FROM}
           <Command.Input bind:value={query} placeholder="Search {label.toLowerCase()}…" />

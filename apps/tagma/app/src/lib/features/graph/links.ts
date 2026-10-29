@@ -6,6 +6,7 @@ import type { Resolver } from '@runlith/layer/key';
 import { Router } from '@runlith/layer/Router';
 import { Beside } from '$lib/features/opening/Beside.js';
 import type { Link, LinkItems, LinkKind, LinkFrom } from '$lib/features/opening/Link.js';
+import type { BlockLens } from '$lib/features/workspace/address.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import type { GraphAim } from '$lib/features/workspace/GraphRung.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
@@ -19,7 +20,7 @@ import { START_WORDS, startable, ThreadWork } from './ThreadWork.svelte.js';
 
 export const BLOCK_LINK = 'block';
 
-export type BlockTarget = { readonly name: string; readonly copy?: GraphAim | undefined; readonly diff?: string | undefined };
+export type BlockTarget = BlockLens & { readonly name: string; readonly copy?: GraphAim | undefined };
 
 export const blockLink = (target: BlockTarget, from?: LinkFrom): Link<BlockTarget> => ({ kind: BLOCK_LINK, target, from });
 
@@ -27,17 +28,17 @@ export async function blockPlace(app: Resolver, target: BlockTarget): Promise<Gr
   return target.copy ?? (await app.resolve(BlockTitles).copy(target.name));
 }
 
-export function knowledgeHref(app: Resolver, name: string, copy: GraphAim, diff?: string): string | null {
+export function knowledgeHref(app: Resolver, name: string, copy: GraphAim, lens: BlockLens = {}): string | null {
   const project = app.resolve(Workspace).find(copy.projectId);
   return project === null
     ? null
-    : app.resolve(Addresses).block(blockAddress(name).name, { project: project.name, branch: copy.branch, diff });
+    : app.resolve(Addresses).block(blockAddress(name).name, { ...lens, project: project.name, branch: copy.branch });
 }
 
 async function openFull(app: Resolver, link: Link<BlockTarget>): Promise<void> {
-  const { name, diff } = link.target;
-  if (link.target.copy === undefined) return app.resolve(BlockTitles).open(name, diff);
-  const href = knowledgeHref(app, name, link.target.copy, diff);
+  const { name, diff, lang } = link.target;
+  if (link.target.copy === undefined) return app.resolve(BlockTitles).open(name, { diff, lang });
+  const href = knowledgeHref(app, name, link.target.copy, { diff, lang });
   if (href !== null) await app.resolve(Router).goto(href);
 }
 
@@ -53,7 +54,12 @@ const blocks: LinkKind<BlockTarget> = {
     open: async (app, link) => {
       const copy = await blockPlace(app, link.target);
       if (copy === null) return openFull(app, link);
-      const content = blockPane({ ...copy, name: blockAddress(link.target.name).name, diff: link.target.diff ?? null });
+      const content = blockPane({
+        ...copy,
+        name: blockAddress(link.target.name).name,
+        diff: link.target.diff ?? null,
+        lang: link.target.lang ?? null,
+      });
       if (!app.resolve(Beside).show({ content, from: link.from })) await openFull(app, link);
     },
   },
@@ -65,7 +71,7 @@ const blocks: LinkKind<BlockTarget> = {
     const project = decodeURIComponent(url.pathname.split('/')[1] ?? '');
     const owner = app.resolve(Workspace).projects.find((one) => one.name === project);
     const copy = owner === undefined ? undefined : { projectId: owner.id, branch: url.searchParams.get('branch') };
-    return blockLink({ name, copy, diff: url.searchParams.get('diff') ?? undefined });
+    return blockLink({ name, copy, diff: url.searchParams.get('diff') ?? undefined, lang: url.searchParams.get('lang') ?? undefined });
   },
   tab: {
     kind: BLOCK_PANE,
@@ -73,7 +79,12 @@ const blocks: LinkKind<BlockTarget> = {
       const placed = placedBlockOf(id);
       return placed === null
         ? null
-        : blockLink({ name: placed.name, copy: { projectId: placed.projectId, branch: placed.branch }, diff: placed.diff ?? undefined });
+        : blockLink({
+            name: placed.name,
+            copy: { projectId: placed.projectId, branch: placed.branch },
+            diff: placed.diff ?? undefined,
+            lang: placed.lang ?? undefined,
+          });
     },
   },
 };

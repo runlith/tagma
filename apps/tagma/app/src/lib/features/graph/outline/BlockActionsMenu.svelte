@@ -26,6 +26,7 @@
   import TagIcon from '$lib/features/graph/TagIcon.svelte';
   import WriterBadge from '$lib/features/graph/WriterBadge.svelte';
   import StatusMenuItems from '$lib/features/graph/StatusMenuItems.svelte';
+  import TranslateItem from '$lib/features/graph/translation/MenuItem.svelte';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import type { SessionHandle } from '$lib/features/graph/SessionRegistry.svelte.js';
   import { statusLabel } from '$lib/features/graph/status.js';
@@ -53,6 +54,7 @@
     steps,
     triggerClass,
     onDeleted,
+    translated,
   }: {
     block: TreeBlock;
     store: TreeScreen;
@@ -62,7 +64,13 @@
     steps?: { readonly click: LinkHow | undefined } | undefined;
     triggerClass?: string;
     onDeleted?: (parentName: string | null) => void;
+    translated?: (language: string) => void;
   } = $props();
+
+  function showTranslation(language: string): void {
+    if (translated !== undefined) translated(language);
+    else void opening.open(blockLink({ name: block.name, copy: door.aim, lang: language }), 'full', here);
+  }
 
   let open = $state(false);
   let at = $state<{ readonly x: number; readonly y: number } | undefined>(undefined);
@@ -97,7 +105,6 @@
   const stealth = $derived(block.stealth === true);
   const storable = $derived(team && block.parentName !== null && (stealth ? store.block(block.parentName)?.stealth !== true : true));
   const acting = $derived(rename !== undefined || places.length > 0 || !leaf || moves || law || storable);
-  const going = $derived(ways.length > 0 || !leaf || linksPlacement !== undefined);
 
   const BY_SOURCES = 'sources';
   const DELIVERY_CHOICES = [
@@ -204,26 +211,25 @@
       {/if}
       <DropdownMenu.Separator />
     {/if}
-    {#if going}
-      {#each ways as way (way.how)}
-        <DropdownMenu.Item icon={way.icon} keys={way.keys} onSelect={() => run(way.run)}>{way.words}</DropdownMenu.Item>
-      {/each}
-      {#if !leaf}
-        <DropdownMenu.Item icon={Share2} onSelect={() => void router.goto(addresses.scoped('graph', block.name))}>
-          Open in graph
-        </DropdownMenu.Item>
-        <DropdownMenu.Item icon={History} onSelect={() => void router.goto(addresses.scoped('journal', block.name))}>
-          Open in journal
-        </DropdownMenu.Item>
-      {/if}
-      {#if linksPlacement !== undefined}
-        {@const placement = linksPlacement}
-        <DropdownMenu.Item icon={placement.beside ? PanelBottom : PanelRight} onSelect={() => placement.toggle()}>
-          {placement.beside ? 'Show links below' : 'Show links beside'}
-        </DropdownMenu.Item>
-      {/if}
-      <DropdownMenu.Separator />
+    {#each ways as way (way.how)}
+      <DropdownMenu.Item icon={way.icon} keys={way.keys} onSelect={() => run(way.run)}>{way.words}</DropdownMenu.Item>
+    {/each}
+    {#if !leaf}
+      <DropdownMenu.Item icon={Share2} onSelect={() => void router.goto(addresses.scoped('graph', block.name))}>
+        Open in graph
+      </DropdownMenu.Item>
+      <DropdownMenu.Item icon={History} onSelect={() => void router.goto(addresses.scoped('journal', block.name))}>
+        Open in journal
+      </DropdownMenu.Item>
     {/if}
+    <TranslateItem block={block.name} shown={showTranslation} />
+    {#if linksPlacement !== undefined}
+      {@const placement = linksPlacement}
+      <DropdownMenu.Item icon={placement.beside ? PanelBottom : PanelRight} onSelect={() => placement.toggle()}>
+        {placement.beside ? 'Show links below' : 'Show links beside'}
+      </DropdownMenu.Item>
+    {/if}
+    <DropdownMenu.Separator />
     {#if copies.length > 0}
       {@render acts(copies)}
       <DropdownMenu.Separator />

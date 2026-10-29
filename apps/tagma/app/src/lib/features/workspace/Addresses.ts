@@ -2,11 +2,11 @@ import { isBlockName } from '@tagma/server/graph/contract/wire/references';
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { Service } from '@runlith/layer/key';
 import { Router } from '@runlith/layer/Router';
-import { carriedQuery, currentProject, type GitView } from './address.js';
+import { type BlockLens, carriedQuery, currentProject, type GitView } from './address.js';
 import { labelOf } from './mark.js';
 import { CHAT, CHECKOUT, type Surface, SurfaceRegistry, withBranch } from './surface.js';
 
-export type BlockAim = { readonly project?: string; readonly diff?: string; readonly branch?: string | null };
+export type BlockAim = BlockLens & { readonly project?: string; readonly branch?: string | null };
 
 export class Addresses extends Service<Addresses>()('Addresses', { tier: 'app' }) {
   static *make() {
@@ -38,7 +38,7 @@ export class Addresses extends Service<Addresses>()('Addresses', { tier: 'app' }
 
   block(name: string, options: BlockAim = {}): string {
     const project = options.project ?? currentProject(this.router);
-    return `${this.surfaces.pathOf(project, this.surfaces.root, name)}${carriedQuery(this.router, project, options.diff, options.branch)}`;
+    return `${this.surfaces.pathOf(project, this.surfaces.root, name)}${carriedQuery(this.router, project, options, options.branch)}`;
   }
 
   thread(sessionId: string | null, project: string = currentProject(this.router)): string {

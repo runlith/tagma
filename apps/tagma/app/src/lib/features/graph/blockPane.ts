@@ -7,13 +7,20 @@ export type PlacedBlock = {
   readonly branch: string | null;
   readonly name: string;
   readonly diff: string | null;
+  readonly lang: string | null;
 };
 
-type Stored = readonly [projectId: number, branch: string | null, name: string, diff: string | null];
+type Stored =
+  | readonly [projectId: number, branch: string | null, name: string, diff: string | null]
+  | readonly [projectId: number, branch: string | null, name: string, diff: null, lang: string];
 
 export const blockPane = (placed: PlacedBlock): PaneContent => ({
   kind: BLOCK_PANE,
-  id: JSON.stringify([placed.projectId, placed.branch, placed.name, placed.diff] satisfies Stored),
+  id: JSON.stringify(
+    (placed.lang === null || placed.diff !== null
+      ? [placed.projectId, placed.branch, placed.name, placed.diff]
+      : [placed.projectId, placed.branch, placed.name, null, placed.lang]) satisfies Stored,
+  ),
 });
 
 const named = (value: unknown): value is string | null => value === null || (typeof value === 'string' && value !== '');
@@ -25,9 +32,9 @@ export function placedBlockOf(id: string | null): PlacedBlock | null {
   } catch {
     return null;
   }
-  if (!Array.isArray(stored) || stored.length !== 4) return null;
-  const [projectId, branch, name, diff] = stored as unknown[];
+  if (!Array.isArray(stored) || (stored.length !== 4 && stored.length !== 5)) return null;
+  const [projectId, branch, name, diff, lang = null] = stored as unknown[];
   if (typeof projectId !== 'number' || !Number.isInteger(projectId) || projectId <= 0) return null;
-  if (!named(branch) || !named(diff) || typeof name !== 'string' || name === '') return null;
-  return { projectId, branch, name, diff };
+  if (!named(branch) || !named(diff) || !named(lang) || typeof name !== 'string' || name === '') return null;
+  return { projectId, branch, name, diff, lang };
 }

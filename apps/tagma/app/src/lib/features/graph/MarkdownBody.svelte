@@ -37,6 +37,7 @@
     threadOf,
     paths,
     from,
+    lang,
   }: {
     text: string;
     size?: MarkdownSize;
@@ -49,6 +50,7 @@
     threadOf?: (id: string) => OwnerWords | null | undefined;
     paths?: PathRoad | undefined;
     from?: LinkFrom | undefined;
+    lang?: string | undefined;
   } = $props();
 
   const SIZES: Record<MarkdownSize, string> = {
@@ -93,7 +95,7 @@
         const name = anchor.getAttribute('data-block-ref') ?? '';
         const labelled = anchor.hasAttribute('data-block-label');
         const peer = resolver.peer(name);
-        const view = blockRefView(addresses, name, labelled ? (anchor.textContent ?? '') : null, peer);
+        const view = blockRefView(addresses, name, labelled ? (anchor.textContent ?? '') : null, peer, { lang });
         anchor.toggleAttribute('data-dead', view.dead);
         if (view.href === null) {
           anchor.removeAttribute('href');
@@ -108,7 +110,7 @@
         const told = view.dead || (peer != null && 'error' in peer) ? view.title : null;
         if (told === null) anchor.removeAttribute('title');
         else anchor.setAttribute('title', told);
-        if (!view.dead) releases.push(linked(anchor, blockLink({ name }, from)));
+        if (!view.dead) releases.push(linked(anchor, blockLink({ name, lang }, from)));
       }
       return () => {
         for (const release of releases) release();

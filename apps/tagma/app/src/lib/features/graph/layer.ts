@@ -19,6 +19,7 @@ import { Recovery } from './Recovery.svelte.js';
 import { RemoteRepo } from './RemoteRepo.js';
 import { ThreadWork } from './ThreadWork.svelte.js';
 import { ThreadWorkRepo } from './ThreadWorkRepo.js';
+import { TranslationLayer } from './translation/layer.js';
 
 export const GraphLayer = Layer.mergeAll(
   ThreadWorkRepo,
@@ -41,4 +42,5 @@ export const GraphLayer = Layer.mergeAll(
   GraphSelection,
   BlockLayer,
   JournalLayer,
+  TranslationLayer,
 );

@@ -3,10 +3,16 @@
   import Check from '@lucide/svelte/icons/check';
   import Copy from '@lucide/svelte/icons/copy';
   import Folder from '@lucide/svelte/icons/folder';
-  import X from '@lucide/svelte/icons/x';
   import { untrack, type Snippet } from 'svelte';
   import { Router } from '@runlith/layer/Router';
-  import { currentBranch, diffLensHref, diffRangeOf } from '$lib/features/workspace/address.js';
+  import { currentBranch, currentLanguage, diffLensHref, diffRangeOf, languageLensHref } from '$lib/features/workspace/address.js';
+  import LensStrip from './LensStrip.svelte';
+  import TranslationBody from '$lib/features/graph/translation/Body.svelte';
+  import { TranslationLens } from '$lib/features/graph/translation/Lens.svelte.js';
+  import { TranslationsRepo } from '$lib/features/graph/translation/Repo.js';
+  import TranslationStrip from '$lib/features/graph/translation/Strip.svelte';
+  import TranslationTitle from '$lib/features/graph/translation/Title.svelte';
+  import { Translations } from '$lib/features/graph/translation/Translations.svelte.js';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import type { BlockDiff, BlockMark } from '@tagma/server/graph/contract/wire/reads';
   import type { Block, BlockRead, TreeBlock } from '@tagma/server/graph/contract/wire/rows';
@@ -71,6 +77,7 @@
     enforcement,
     aside = false,
     diff = null,
+    lang = null,
     ready = true,
     read: shown = $bindable(null),
   }: {
@@ -78,12 +85,29 @@
     enforcement?: Snippet<[BlockRead]>;
     aside?: boolean;
     diff?: string | null;
+    lang?: string | null;
     ready?: boolean;
     read?: BlockRead | null;
   } = $props();
 
   let lensAt = $state(untrack(() => diff));
+  let langAt = $state(untrack(() => (diff === null ? lang : null)));
   const lensParam = (): string | null => (aside ? lensAt : router.url.searchParams.get('diff'));
+  const langParam = (): string | null => (aside ? langAt : currentLanguage(router));
+
+  function showLanguage(next: string | null, replaceState = false): void {
+    if (aside) {
+      langAt = next;
+      if (next !== null) lensAt = null;
+    } else void router.goto(languageLensHref(router, next), { replaceState, noScroll: true, keepFocus: true });
+  }
+
+  function showChanges(since: string): void {
+    if (aside) {
+      langAt = null;
+      lensAt = since;
+    } else void router.goto(diffLensHref(router, since), { noScroll: true, keepFocus: true });
+  }
 
   const blockTitles = BlockTitles.use();
   const commitLinks = CommitLinks.use();
@@ -119,6 +143,13 @@
   const store = TreeScreen.mount(blockName === undefined ? { reading: 'outline' } : { reading: 'block', root: blockName });
 
   const subject = new Subject(store, blocks, feed, tags, notices);
+  const translation = new TranslationLens(
+    Translations.use(),
+    TranslationsRepo.use(),
+    () => store.rootName ?? null,
+    () => (lensParam() === null ? langParam() : null),
+    (next) => showLanguage(next),
+  );
   const read = $derived(subject.read);
   const rootBlock = $derived<TreeBlock | undefined>(subject.root ?? (read !== null && read.name === store.rootName ? read : undefined));
   const unavailable = $derived(subject.unavailable);
@@ -213,7 +244,13 @@
   let lens = $state<{ diff: BlockDiff; marks: readonly BlockMark[]; blocks: readonly Block[] } | null>(null);
   let lensFailure = $state<unknown>(null);
   let lensQuestion: string | null = null;
-  const lensSettled = $derived(diffRange === null || lens !== null || lensFailure !== null);
+  const lensSettled = $derived(
+    (diffRange === null || lens !== null || lensFailure !== null) && (!translation.active || translation.settled),
+  );
+
+  $effect(() => {
+    if (translation.absent) showLanguage(null, true);
+  });
   let appeared = $state(false);
 
   $effect.pre(() => {
@@ -245,7 +282,7 @@
     current.lensReturn = lensParam();
     lensFailure = null;
     let cancelled = false;
-    const seen = range.kind === 'read' ? baseline : undefined;
+    const seen = range.kind === 'read' ? baseline : range.kind === 'since' ? range.at : undefined;
     const asked =
       range.kind === 'range'
         ? { from: range.from, to: range.to ?? undefined }
@@ -280,7 +317,7 @@
     const currentId = store.rootName;
     if (currentId == null) return;
     return feed.frames((event) => {
-      if (event.type !== 'change' || diffRangeOf(lensParam()) !== null) return;
+      if (event.type !== 'change' || diffRangeOf(lensParam()) !== null || translation.active) return;
       if (event.blocks.some((row) => row.name === currentId && row.deletedAt !== null)) return;
       const foreign = event.events.find((entry) => entry.blockName === currentId && entry.sessionId !== null);
       if (foreign === undefined) return;
@@ -393,27 +430,31 @@
         <div class="mb-3 text-small" aria-hidden="true">&nbsp;</div>
       {/if}
 
-      <div
-        bind:this={titleEl}
-        class="title text-title outline-none"
-        contenteditable="true"
-        spellcheck="false"
-        role="textbox"
-        aria-label="Title"
-        tabindex="0"
-        data-placeholder="Untitled"
-        onfocus={editTitle}
-        onblur={() => {
-          commitTitle();
-          editingTitle = false;
-        }}
-        onkeydown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            titleEl?.blur();
-          }
-        }}
-      ></div>
+      {#if translation.active}
+        <TranslationTitle lens={translation} original={rootBlock.title} />
+      {:else}
+        <div
+          bind:this={titleEl}
+          class="title text-title outline-none"
+          contenteditable="true"
+          spellcheck="false"
+          role="textbox"
+          aria-label="Title"
+          tabindex="0"
+          data-placeholder="Untitled"
+          onfocus={editTitle}
+          onblur={() => {
+            commitTitle();
+            editingTitle = false;
+          }}
+          onkeydown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              titleEl?.blur();
+            }
+          }}
+        ></div>
+      {/if}
 
       <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         {#if rootBlock.parentName === null}
@@ -470,6 +511,7 @@
           {store}
           author={sessions.writerOf(read.author)}
           linksPlacement={hasConnectivity ? { beside: linksBeside, toggle: () => links.toggle() } : undefined}
+          translated={(language) => showLanguage(language)}
           triggerClass="ml-auto"
           onDeleted={aside
             ? undefined
@@ -480,8 +522,7 @@
       <div class="mt-4 border-t border-vein pt-1"></div>
 
       {#if diffRange}
-        <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-brand/35 bg-brand/5 px-3 py-2">
-          <span class="eyebrow shrink-0 text-brand">Diff</span>
+        <LensStrip word="Diff" leave="Show the current version" href={aside ? null : router.pathname} onleave={() => (lensAt = null)}>
           {#if lens}
             {#each lens.diff.sessions as sessionId (sessionId)}
               <WriterBadge writer={sessions.writerOf(sessionId)} />
@@ -502,21 +543,9 @@
           {:else}
             <span class="text-small text-muted-foreground">Reading the journal back…</span>
           {/if}
-          {#snippet current()}<X class="size-3" />Show the current version{/snippet}
-          {#if aside}
-            <button
-              type="button"
-              class="ml-auto flex items-center gap-1 text-small text-muted-foreground transition-colors hover:text-foreground"
-              onclick={() => (lensAt = null)}>{@render current()}</button
-            >
-          {:else}
-            <a
-              href={router.pathname}
-              class="ml-auto flex items-center gap-1 text-small text-muted-foreground transition-colors hover:text-foreground"
-              >{@render current()}</a
-            >
-          {/if}
-        </div>
+        </LensStrip>
+      {:else if translation.active}
+        <TranslationStrip lens={translation} href={aside ? null : languageLensHref(router, null)} changes={showChanges} />
       {/if}
 
       {#if diffRange}
@@ -527,6 +556,8 @@
             <MarkdownBody text={read.body} refs={blockTitles} commits={commitLinks} {paths} />
           {/if}
         </div>
+      {:else if translation.active}
+        <TranslationBody lens={translation} original={read.body} {paths} />
       {:else}
         <BlockBody {store} body={read.body} {paths} />
       {/if}

@@ -7,6 +7,7 @@ import { refusalOf } from '$lib/wire/refusal.js';
 import { BlocksRepo } from './BlocksRepo.js';
 import { GraphFeed } from './Feed.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import type { BlockLens } from '$lib/features/workspace/address.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { GraphRung, type GraphAim } from '$lib/features/workspace/GraphRung.js';
 
@@ -96,9 +97,9 @@ export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: '
   readonly placed = (name: string, place: BlockPlace, diff?: string): string | null | undefined =>
     placedHref(this.addresses, name, place, this.workspace.find(place.projectId), diff);
 
-  readonly open = async (name: string, diff?: string): Promise<void> => {
+  readonly open = async (name: string, lens: BlockLens = {}): Promise<void> => {
     const from = this.router.url.href;
-    const { href } = blockRefView(this.addresses, name, null, await this.located(name), diff);
+    const { href } = blockRefView(this.addresses, name, null, await this.located(name), lens);
     if (href !== null && this.router.url.href === from) await this.router.goto(href);
   };
 

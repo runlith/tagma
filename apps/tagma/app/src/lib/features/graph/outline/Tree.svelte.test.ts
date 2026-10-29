@@ -12,6 +12,7 @@ import { mountShell, type TestApp, testTagCatalog } from '$lib/app/testing.js';
 import { BlocksRepo } from '$lib/features/graph/BlocksRepo.js';
 import { GraphFeed } from '$lib/features/graph/Feed.js';
 import { HiddenStates } from '$lib/features/graph/HiddenStates.svelte.js';
+import { TranslationLayer } from '$lib/features/graph/translation/layer.js';
 import { JournalRepo } from '$lib/features/graph/JournalRepo.js';
 import { SessionsRepo } from '$lib/features/graph/SessionsRepo.js';
 import { blockLink } from '$lib/features/graph/links.js';
@@ -148,6 +149,7 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
       GraphFeed,
       ProjectTree,
       HiddenStates,
+      TranslationLayer,
     ),
     Layer.mergeAll(
       Layer.of(Door, testDoor(answer)),

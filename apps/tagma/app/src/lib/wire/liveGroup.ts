@@ -28,6 +28,7 @@ import { NOTIFY_FEEDS } from '@tagma/server/notify/contract/wire/notification';
 import { ACTIVITY_FEEDS } from '@tagma/server/activity/contract/wire/faults';
 import { BROWSER_FEEDS } from '@tagma/server/browser/contract/wire/feeds';
 import { ATTACH_FEED } from '@tagma/server/desktop-browser/contract/wire/channel';
+import { TRANSLATION_FEED } from '@tagma/server/translations/contract/wire/feed';
 
 const USED = [
   NEXT_FEED,
@@ -64,6 +65,7 @@ const USED = [
   ...ACTIVITY_FEEDS,
   ...BROWSER_FEEDS,
   ATTACH_FEED,
+  TRANSLATION_FEED,
 ] as const;
 
 export type UsedRpcs = RpcOfFeed<(typeof USED)[number]>;

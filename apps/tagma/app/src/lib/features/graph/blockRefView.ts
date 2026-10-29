@@ -1,5 +1,6 @@
 import { blockAddress } from '@tagma/server/graph/contract/wire/references';
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
+import type { BlockLens } from '$lib/features/workspace/address.js';
 import type { Addresses } from '$lib/features/workspace/Addresses.js';
 import type { Refusal } from '$lib/wire/refusal.js';
 import type { GraphLens } from '$lib/features/workspace/GraphDoor.js';
@@ -28,7 +29,7 @@ export type BlockRefPeer =
 
 export type BlockRefs = {
   readonly peer: (name: string) => BlockRefPeer;
-  readonly open: (name: string, diff?: string) => Promise<void>;
+  readonly open: (name: string, lens?: BlockLens) => Promise<void>;
 };
 
 export function lensOf(peer: BlockRefPeer): GraphLens | null {
@@ -44,7 +45,13 @@ export type BlockRefView = {
 
 const DEAD_TITLE = 'Not on this machine';
 
-export function blockRefView(addresses: Addresses, name: string, label: string | null, peer: BlockRefPeer, diff?: string): BlockRefView {
+export function blockRefView(
+  addresses: Addresses,
+  name: string,
+  label: string | null,
+  peer: BlockRefPeer,
+  lens: BlockLens = {},
+): BlockRefView {
   const fallback = name;
   if (peer != null && 'error' in peer) {
     return { text: label ?? fallback, title: peer.error.message, dead: false, href: null };
@@ -52,7 +59,7 @@ export function blockRefView(addresses: Addresses, name: string, label: string |
   const liveTitle = peer == null ? fallback : peer.title.trim() || fallback;
   const bare = blockAddress(name).name;
   const href =
-    peer === undefined ? null : addresses.block(bare, peer === null ? { diff } : { project: peer.project, branch: peer.branch, diff });
+    peer === undefined ? null : addresses.block(bare, peer === null ? lens : { ...lens, project: peer.project, branch: peer.branch });
   if (label !== null) {
     return {
       text: label,

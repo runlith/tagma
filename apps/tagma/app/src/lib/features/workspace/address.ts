@@ -21,11 +21,14 @@ export function currentBranch(router: Router): string | null {
   return router.url.searchParams.get('branch');
 }
 
-export const carriedQuery = (router: Router, project: string, diff?: string, aimed?: string | null): string => {
+export type BlockLens = { readonly diff?: string | undefined; readonly lang?: string | undefined };
+
+export const carriedQuery = (router: Router, project: string, lens: BlockLens = {}, aimed?: string | null): string => {
   const parts: string[] = [];
   const branch = aimed === undefined ? (project === currentProject(router) ? currentBranch(router) : null) : aimed;
   if (branch !== null) parts.push(`branch=${encodeURIComponent(branch)}`);
-  if (diff !== undefined) parts.push(`diff=${diff}`);
+  if (lens.diff !== undefined) parts.push(`diff=${encodeURIComponent(lens.diff)}`);
+  else if (lens.lang !== undefined) parts.push(`lang=${encodeURIComponent(lens.lang)}`);
   return parts.length === 0 ? '' : `?${parts.join('&')}`;
 };
 
@@ -44,9 +47,23 @@ export function currentPlace(router: Router): string | null {
 
 export function diffLensHref(router: Router, diff: string | null): string {
   const url = new URL(router.url);
+  url.searchParams.delete('lang');
   if (diff === null) url.searchParams.delete('diff');
   else url.searchParams.set('diff', diff);
   return `${url.pathname}${url.search}`;
+}
+
+export function languageLensHref(router: Router, lang: string | null): string {
+  const url = new URL(router.url);
+  url.searchParams.delete('diff');
+  if (lang === null) url.searchParams.delete('lang');
+  else url.searchParams.set('lang', lang);
+  return `${url.pathname}${url.search}`;
+}
+
+export function currentLanguage(router: Router): string | null {
+  const raw = router.url.searchParams.get('lang');
+  return raw === null || raw === '' || router.url.searchParams.has('diff') ? null : raw;
 }
 
 export function settingsHref(router: Router, section?: string, scope?: SettableScope, key?: string, project?: string): string {
@@ -75,9 +92,13 @@ export function currentCommit(router: Router): string | null {
   return raw === null || raw === '' ? null : raw;
 }
 
-export type DiffRange = { readonly kind: 'read' } | { readonly kind: 'range'; from: number; to: number | null };
+export type DiffRange =
+  | { readonly kind: 'read' }
+  | { readonly kind: 'since'; readonly at: string }
+  | { readonly kind: 'range'; from: number; to: number | null };
 
 const DIFF_RANGE = /^(\d+)\.\.(\d*)$/;
+const DIFF_SINCE = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/;
 
 export function currentDiffRange(router: Router): DiffRange | null {
   return diffRangeOf(router.url.searchParams.get('diff'));
@@ -85,6 +106,7 @@ export function currentDiffRange(router: Router): DiffRange | null {
 
 export function diffRangeOf(raw: string | null): DiffRange | null {
   if (raw === 'read') return { kind: 'read' };
+  if (raw !== null && DIFF_SINCE.test(raw)) return { kind: 'since', at: raw };
   const match = raw === null ? null : DIFF_RANGE.exec(raw);
   if (!match) return null;
   return { kind: 'range', from: Number(match[1]), to: match[2] ? Number(match[2]) : null };
