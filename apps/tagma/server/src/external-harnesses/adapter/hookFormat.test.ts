@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { harnessAdapter } from '../contract/service/table.js';
 import type { HarnessAnswer } from '../contract/wire/call.js';
 import { contextAnswer, hookTrust, permissionAnswer, promptAnswer, promptSupported, toolAnswer } from './hookFormat.js';
 
@@ -58,23 +59,24 @@ test('a session-start context rides top-level additional_context to Cursor', () 
   expect(Object.keys(answer)).toEqual(['additional_context']);
 });
 
-test('a prompt answer rides top-level additional_context to Cursor, the nested envelope to Codex and silence elsewhere', () => {
+test('a prompt answer rides top-level additional_context to Cursor, the nested envelope to Codex and Claude Code and silence elsewhere', () => {
   const answer = JSON.parse(promptAnswer('cursor', 'the law')!);
   expect(answer).toEqual({ additional_context: 'the law' });
   expect(Object.keys(answer)).toEqual(['additional_context']);
-  expect(JSON.parse(promptAnswer('codex', 'the law')!)).toEqual({
-    hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: 'the law' },
-  });
-  expect(promptAnswer('claude-code', 'the law')).toBeNull();
-  expect(promptAnswer('gemini', 'the law')).toBeNull();
-  for (const format of ['claude-code', 'cursor', 'codex', 'gemini', 'devin'] as const) {
-    expect(promptSupported(format)).toBe(promptAnswer(format, 'the law') !== null);
+  for (const format of ['codex', 'claude-code'] as const) {
+    expect(JSON.parse(promptAnswer(format, 'the law')!)).toEqual({
+      hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: 'the law' },
+    });
   }
+  expect(promptAnswer('gemini', 'the law')).toBeNull();
 });
 
-test('a prompt answer stays silent for Devin: measured, and closed by decision', () => {
+test('a prompt answer is taken only from CLIs whose own row declares it measured: Claude Code, Codex and Cursor, not Grok, OpenCode or Devin', () => {
+  const taken = (['claude-code', 'codex', 'cursor', 'grok', 'opencode', 'devin', 'gemini'] as const).filter((name) =>
+    promptSupported(harnessAdapter(name).hooks),
+  );
+  expect(taken).toEqual(['claude-code', 'codex', 'cursor']);
   expect(promptAnswer('devin', 'the law')).toBeNull();
-  expect(promptSupported('devin')).toBe(false);
 });
 
 test('post-tool words ride top-level additional_context to Cursor and the nested envelope elsewhere', () => {

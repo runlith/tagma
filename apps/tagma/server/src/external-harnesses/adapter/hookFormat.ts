@@ -1,4 +1,4 @@
-import type { HookFormat } from '../contract/service/adapter.js';
+import type { HookFormat, HookSurface } from '../contract/service/adapter.js';
 import type { HarnessAnswer } from '../contract/wire/call.js';
 
 export const hookFileKeys = (format: HookFormat): Record<string, unknown> => (format === 'cursor' ? { version: 1 } : {});
@@ -59,9 +59,11 @@ export const toolAnswer = (format: HookFormat, text: string, event: 'PreToolUse'
   return JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext: text } });
 };
 
-export const promptSupported = (format: HookFormat): boolean => format === 'cursor' || format === 'codex';
+export const promptSupported = (hooks: HookSurface | null): boolean => hooks !== null && hooks.promptContext === true;
 
 export const promptAnswer = (format: HookFormat, text: string): string | null => {
   if (format === 'cursor') return JSON.stringify({ additional_context: text });
-  return format === 'codex' ? JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: text } }) : null;
+  return format === 'codex' || format === 'claude-code'
+    ? JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: text } })
+    : null;
 };

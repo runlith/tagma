@@ -45,6 +45,7 @@ export type HookSurface = {
   readonly events: HookEvents;
   readonly user: HookUserFile | null;
   readonly context: HookContextLimit;
+  readonly promptContext?: boolean;
 };
 
 export type McpConfigFile =

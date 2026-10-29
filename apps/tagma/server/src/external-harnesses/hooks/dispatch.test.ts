@@ -248,7 +248,7 @@ it.effect('the five hook vocabularies open and finish real core runs without end
 );
 
 it.effect(
-  'Codex prompt notes replay to the same prompt and are recorded afresh for the next prompt, while unmeasured prompts stay silent',
+  'Codex and Claude Code prompt notes replay to the same prompt and are recorded afresh for the next prompt, while unmeasured prompts stay silent',
   () =>
     Effect.gen(function* () {
       const note = 'operator data 7f3a';
@@ -278,8 +278,24 @@ it.effect(
       expect(yield* invoke(devin, 'observe', { hook_event_name: 'UserPromptSubmit', session_id: 'quiet', prompt_id: 'one' })).toBe('');
       expect(yield* invoke(world, 'observe', prompt('ungranted'), false)).toBe('');
       expect(yield* world.notes.withheld(world.id)).toBeNull();
-      const claude = yield* world.create('claude-code', 'claude');
-      expect(yield* world.notes.withheld(claude.id)).toEqual(expect.any(String));
+      const claude = { ...world, ...(yield* world.create('claude-code', 'claude')) };
+      const claudePrompt = (turn: string) => ({
+        hook_event_name: 'UserPromptSubmit',
+        session_id: 'claude',
+        prompt_id: turn,
+        prompt: 'hello',
+      });
+      const said = JSON.parse(yield* invoke(claude, 'observe', claudePrompt('one'), true, 'claude-code'));
+      expect(said).toEqual({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: note } });
+      expect(JSON.parse(yield* invoke(claude, 'observe', claudePrompt('one'), true, 'claude-code'))).toEqual(said);
+      expect(JSON.parse(yield* invoke(claude, 'observe', claudePrompt('two'), true, 'claude-code'))).toEqual(said);
+      expect(yield* world.notes.withheld(claude.id)).toBeNull();
+      for (const name of ['grok', 'opencode'] as const) {
+        const silent = { ...world, ...(yield* world.create(name, name)) };
+        const event = { hook_event_name: 'UserPromptSubmit', session_id: name, prompt_id: 'one', prompt: 'hello' };
+        expect(yield* invoke(silent, 'observe', event, true, name)).toBe('');
+        expect(yield* world.notes.withheld(silent.id)).toEqual(expect.any(String));
+      }
     }),
 );
 

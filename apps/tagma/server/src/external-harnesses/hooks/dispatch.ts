@@ -237,7 +237,7 @@ const guidePrompt = Effect.fnUntraced(function* (
   if (receipt === undefined || receipt.transport === 'acp') return;
   const adapter = harnessAdapter(receipt.harness);
   const format = adapter.hooks?.format ?? null;
-  if (format === null || !promptSupported(format)) return;
+  if (format === null || !promptSupported(adapter.hooks)) return;
   const name = event.hook_event_name ?? event.hookEventName;
   const occasion = adapter.occasionOf({
     name: typeof name === 'string' ? name : '',

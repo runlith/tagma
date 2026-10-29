@@ -207,6 +207,7 @@ export const claudeCode: TerminalHarnessAdapter = {
     events: CLAUDE_EVENTS,
     user: { folder: ['.claude'], file: 'settings.json', homeEnv: 'CLAUDE_CONFIG_DIR' },
     context: { chars: HOOK_CONTEXT_CHARS, basis: 'reported' },
+    promptContext: true,
   },
   setup: { file: '.claude.json', done: 'hasCompletedOnboarding' },
   mcpTools: 'catalog',

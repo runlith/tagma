@@ -198,6 +198,7 @@ export const cursor: TerminalHarnessAdapter = {
     },
     user: { folder: ['.cursor'], file: 'hooks.json' },
     context: UNMEASURED_HOOK_CONTEXT,
+    promptContext: true,
   },
   mcpTools: 'proxy',
   mcp: {

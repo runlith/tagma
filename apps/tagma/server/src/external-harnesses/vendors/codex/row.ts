@@ -267,6 +267,7 @@ export const codex: TerminalHarnessAdapter = {
     events: { ...CLAUDE_EVENTS, toolFailure: undefined, stopFailure: undefined, notification: undefined },
     user: { folder: ['.codex'], file: 'hooks.json', homeEnv: 'CODEX_HOME' },
     context: UNMEASURED_HOOK_CONTEXT,
+    promptContext: true,
   },
   mcpTools: 'catalog',
   mcp: {
