@@ -157,6 +157,11 @@ export const engineSite = () => {
             },
           },
         );
+      if (path === '/leave-framed')
+        return new Response(
+          `<!doctype html><title>Leave framed</title><iframe src="http://localhost:${server.port}/leave" style="width:300px;height:80px;border:0"></iframe>`,
+          { headers: { 'content-type': 'text/html; charset=utf-8' } },
+        );
       if (path === '/favicon.ico') return new Response(null, { status: 204 });
       if (path === '/heavy') return new Response(HEAVY, { headers: { 'content-type': 'text/html; charset=utf-8' } });
       if (path === '/scrolled-frame') {

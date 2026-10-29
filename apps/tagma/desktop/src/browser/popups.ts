@@ -16,7 +16,7 @@ const barPage = (url: string): string => {
 
 export type PopupSize = { readonly width?: number; readonly height?: number; readonly x?: number; readonly y?: number };
 
-export const showPopup = (page: HeldPage, size: PopupSize, settle: () => void): BaseWindow => {
+export const showPopup = (page: HeldPage, size: PopupSize, settle: () => void, reveal: (window: BaseWindow) => void): BaseWindow => {
   const width = Math.max(MINIMUM.width, size.width ?? SIZE.width);
   const height = Math.max(MINIMUM.height, size.height ?? SIZE.height);
   const window = new BaseWindow({ width, height: height + BAR, minWidth: MINIMUM.width, minHeight: MINIMUM.height + BAR, show: false });
@@ -47,6 +47,6 @@ export const showPopup = (page: HeldPage, size: PopupSize, settle: () => void): 
     bar.webContents.close();
     if (!page.contents.isDestroyed()) page.contents.close();
   });
-  window.show();
+  reveal(window);
   return window;
 };

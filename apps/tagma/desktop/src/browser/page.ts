@@ -251,8 +251,16 @@ export class HeldPage {
       leaving.stay?.();
       return;
     }
-    this.allowLeave = true;
-    leaving.retry?.();
+    const retry = leaving.retry;
+    if (retry === null) {
+      this.allowLeave = true;
+      return;
+    }
+    const leave = () => {
+      this.allowLeave = true;
+      retry();
+    };
+    this.contents.mainFrame.executeJavaScript('0').then(leave, leave);
   }
 
   close(ask: boolean): Promise<boolean> {
@@ -326,6 +334,10 @@ export class HeldPage {
 
   private go(to: Navigation, settle: (settled: Settled) => void): void {
     const contents = this.contents;
+    if (contents.isDestroyed()) {
+      settle({ failure: { kind: 'missing', message: 'the page closed during the navigation' } });
+      return;
+    }
     const finish = (settled: Settled) => {
       if (this.going !== going) return;
       this.going = null;
@@ -491,7 +503,12 @@ export class HeldPage {
     const closing = this.closing;
     if (closing !== null) {
       abandoned();
-      this.leaving = { retry: () => this.contents.close({ waitForBeforeUnload: true }), stay: closing.stay };
+      this.leaving = {
+        retry: () => {
+          if (!this.contents.isDestroyed()) this.contents.close({ waitForBeforeUnload: true });
+        },
+        stay: closing.stay,
+      };
     } else {
       this.leaving = going === null ? { retry: null, stay: null } : { retry: () => this.go(going.to, going.settle), stay: abandoned };
     }

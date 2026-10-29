@@ -348,6 +348,7 @@ function serveBrowser(fronts: Fronts, data: string, projects: ProjectWindows): v
   });
   host = new BrowserHost(profiles, identity, {
     newWindow: (from) => projects.create(fronts.placed(from.webContents.getURL()) ?? surfaceUrl),
+    reveal: (popup) => popup.show(),
   });
   new Panels(fronts, host, hostId, userData, identity).install();
   const ours = async () => (await reach(surfaceUrl, data)).at === 'ours';

@@ -73,6 +73,16 @@ export const engineScenarios = (input: EngineHost): void => {
   const act = (page: PageId, action: Parameters<typeof PAGE.act_on_page.body.execute>[0]['steps'][number]) =>
     calling(PAGE.act_on_page.body.execute({ steps: [action], page }, undefined, agent));
 
+  const slowed = Effect.fnUntraced(function* (page: PageId) {
+    const pages = yield* Pages;
+    yield* calling(PAGE.emulate_page.body.execute({ page, cpu: 20 }, undefined, agent));
+    yield* Effect.addFinalizer(() =>
+      pages.live(page) === undefined
+        ? Effect.void
+        : calling(PAGE.emulate_page.body.execute({ page, cpu: 1 }, undefined, agent)).pipe(Effect.asVoid, Effect.orDie),
+    );
+  });
+
   const evaluate = (page: PageId, expression: string) =>
     calling(PAGE.evaluate_in_page.body.execute({ page, expression }, undefined, agent)).pipe(
       Effect.map((answer) => ('value' in answer ? (JSON.parse(answer.value) as unknown) : answer.exception)),
@@ -394,54 +404,63 @@ export const engineScenarios = (input: EngineHost): void => {
       }),
     );
 
-    it.effect('a navigation held by beforeunload waits for the answer: dismissed it fails and the page stays, accepted it leaves', () =>
-      Effect.gen(function* () {
-        const page = yield* open('/leave');
-        yield* act(page, { action: 'type', ref: refIn(yield* snapshot(page), /textbox "Draft"/), text: 'unsaved' });
-        const leave = () => Effect.forkChild(calling(PAGE.navigate_page.body.execute({ page, url: at('/second') }, undefined, agent)));
-        const asked = Effect.gen(function* () {
-          const pages = yield* Pages;
-          const moves = yield* pages.moves(page);
-          if (pages.live(page)?.dialog?.kind === 'beforeunload') return;
-          yield* Stream.runHead(Stream.filter(moves, (move) => move.live.dialog?.kind === 'beforeunload'));
-        });
-        const stayed = yield* leave();
-        yield* asked;
-        yield* calling(PAGE.answer_page_dialog.body.execute({ page, accept: false }, undefined, agent));
-        expect((yield* refusalOf(Fiber.join(stayed))).code).toBe('navigation-failed');
-        expect(yield* evaluate(page, 'location.pathname')).toBe('/leave');
-        const left = yield* leave();
-        yield* asked;
-        yield* calling(PAGE.answer_page_dialog.body.execute({ page, accept: true }, undefined, agent));
-        expect((yield* Fiber.join(left)).page.url).toBe(at('/second'));
-      }),
+    it.effect(
+      'a navigation held by beforeunload of the page or its cross-site frame on a slowed renderer waits for the answer: dismissed it fails and the page stays, accepted it leaves',
+      () =>
+        Effect.gen(function* () {
+          for (const path of ['/leave', '/leave-framed']) {
+            const page = yield* open(path);
+            if (path === '/leave-framed') yield* loaded(page);
+            yield* act(page, { action: 'type', ref: refIn(yield* snapshot(page), /textbox "Draft"/), text: 'unsaved' });
+            if (path === '/leave') yield* slowed(page);
+            const leave = () => Effect.forkChild(calling(PAGE.navigate_page.body.execute({ page, url: at('/second') }, undefined, agent)));
+            const asked = Effect.gen(function* () {
+              const pages = yield* Pages;
+              const moves = yield* pages.moves(page);
+              if (pages.live(page)?.dialog?.kind === 'beforeunload') return;
+              yield* Stream.runHead(Stream.filter(moves, (move) => move.live.dialog?.kind === 'beforeunload'));
+            });
+            const stayed = yield* leave();
+            yield* asked;
+            yield* calling(PAGE.answer_page_dialog.body.execute({ page, accept: false }, undefined, agent));
+            expect((yield* refusalOf(Fiber.join(stayed))).code).toBe('navigation-failed');
+            expect(yield* evaluate(page, 'location.pathname')).toBe(path);
+            const left = yield* leave();
+            yield* asked;
+            yield* calling(PAGE.answer_page_dialog.body.execute({ page, accept: true }, undefined, agent));
+            expect((yield* Fiber.join(left)).page.url).toBe(at('/second'));
+          }
+        }),
     );
 
-    it.effect('a close held by beforeunload waits for the answer: dismissed the page stays open, accepted it closes', () =>
-      Effect.gen(function* () {
-        const page = yield* open('/leave');
-        yield* act(page, { action: 'type', ref: refIn(yield* snapshot(page), /textbox "Draft"/), text: 'unsaved' });
-        const closing = () => Effect.forkChild(calling(PAGE.close_page.body.execute({ page }, undefined, agent)));
-        const standing = Effect.map(calling(PAGE.list_pages.body.execute({}, undefined, agent)), (listed) =>
-          listed.pages.find((held) => held.id === page),
-        );
-        const asked = Effect.gen(function* () {
-          const pages = yield* Pages;
-          const moves = yield* pages.moves(page);
-          if (pages.live(page)?.dialog?.kind === 'beforeunload') return;
-          yield* Stream.runHead(Stream.filter(moves, (move) => move.live.dialog?.kind === 'beforeunload'));
-        });
-        const stayed = yield* closing();
-        yield* asked;
-        yield* calling(PAGE.answer_page_dialog.body.execute({ page, accept: false }, undefined, agent));
-        expect((yield* refusalOf(Fiber.join(stayed))).code).toBe('page-stayed');
-        expect(yield* evaluate(page, 'document.getElementById("draft").value')).toBe('unsaved');
-        const closed = yield* closing();
-        yield* asked;
-        yield* calling(PAGE.answer_page_dialog.body.execute({ page, accept: true }, undefined, agent));
-        expect((yield* Fiber.join(closed)).page).toBe(page);
-        expect(yield* standing).toBeUndefined();
-      }),
+    it.effect(
+      'a close held by beforeunload on a slowed renderer waits for the answer: dismissed the page stays open, accepted it closes',
+      () =>
+        Effect.gen(function* () {
+          const page = yield* open('/leave');
+          yield* act(page, { action: 'type', ref: refIn(yield* snapshot(page), /textbox "Draft"/), text: 'unsaved' });
+          yield* slowed(page);
+          const closing = () => Effect.forkChild(calling(PAGE.close_page.body.execute({ page }, undefined, agent)));
+          const standing = Effect.map(calling(PAGE.list_pages.body.execute({}, undefined, agent)), (listed) =>
+            listed.pages.find((held) => held.id === page),
+          );
+          const asked = Effect.gen(function* () {
+            const pages = yield* Pages;
+            const moves = yield* pages.moves(page);
+            if (pages.live(page)?.dialog?.kind === 'beforeunload') return;
+            yield* Stream.runHead(Stream.filter(moves, (move) => move.live.dialog?.kind === 'beforeunload'));
+          });
+          const stayed = yield* closing();
+          yield* asked;
+          yield* calling(PAGE.answer_page_dialog.body.execute({ page, accept: false }, undefined, agent));
+          expect((yield* refusalOf(Fiber.join(stayed))).code).toBe('page-stayed');
+          expect(yield* evaluate(page, 'document.getElementById("draft").value')).toBe('unsaved');
+          const closed = yield* closing();
+          yield* asked;
+          yield* calling(PAGE.answer_page_dialog.body.execute({ page, accept: true }, undefined, agent));
+          expect((yield* Fiber.join(closed)).page).toBe(page);
+          expect(yield* standing).toBeUndefined();
+        }),
     );
 
     it.effect('a limited snapshot and a CPU-hung action refuse, closing ends its renderer, and a fresh same-site page works', () =>
@@ -511,6 +530,7 @@ export const engineScenarios = (input: EngineHost): void => {
         if (opened._tag === 'None' || opened.value.type !== 'put') return yield* Effect.die('the recovery popup never opened');
         const peer = opened.value.page.id;
         yield* Effect.addFinalizer(() => (pages.live(peer) === undefined ? Effect.void : pages.close(peer).pipe(Effect.orDie)));
+        yield* loaded(peer);
         expect(refIn(yield* snapshot(peer), /heading "Recovery peer"/)).toMatch(/^e\d+$/);
         const acting = yield* Effect.forkChild(act(page, { action: 'click', ref: refIn(yield* snapshot(page), /button "Spin"/) }));
         expect((yield* refusalOf(Fiber.join(acting))).code).toBe('page-unresponsive');

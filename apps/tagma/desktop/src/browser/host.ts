@@ -58,6 +58,7 @@ export const liveLimit = (): number => Math.max(4, Math.floor(totalmem() / 2 ** 
 
 export type HostActs = {
   readonly newWindow: (from: BrowserWindow) => void;
+  readonly reveal: (popup: BaseWindow) => void;
 };
 
 type Service = { readonly view: WebContentsView; readonly window: BaseWindow };
@@ -604,7 +605,7 @@ export class BrowserHost implements Executor {
           popup.restrictions.inherit(page.restrictions);
           this.popups.set(
             popup,
-            showPopup(popup, { width: options.width, height: options.height }, () => this.placement.settle(popup.placed)),
+            showPopup(popup, { width: options.width, height: options.height }, () => this.placement.settle(popup.placed), this.acts.reveal),
           );
           this.track(popup);
           if (adopted === undefined) {
