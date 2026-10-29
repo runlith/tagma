@@ -20,6 +20,7 @@ import { LAW } from '../contract/wire/tags/lawContracts.js';
 import { block, event, meta } from '../store/tables.js';
 
 const SUBJECT_LIMIT = 72;
+const MIN_BATCH_TITLE = 20;
 const CONVENTION_SAMPLE = 10;
 const NO_HISTORY = /does not have any commits yet|not a git repository/u;
 const CONVENTIONAL = /^[a-z]+(\([^()]+\))?!?: \S/u;
@@ -146,6 +147,13 @@ const counted = (lines: readonly ActLine[], room: number): string => {
   return best;
 };
 
+const titleWithin = (title: string, room: number): string | null => {
+  if (room < 1) return null;
+  if (title.length <= room) return title;
+  const end = title.lastIndexOf(' ', room - 1);
+  return end > 0 ? `${title.slice(0, end)}…` : null;
+};
+
 const phraseOf = (lines: readonly ActLine[], room: number): string => {
   if (lines.length === 0) return 'sync graph files';
   const top = Math.min(...lines.map((line) => line.weight));
@@ -153,19 +161,22 @@ const phraseOf = (lines: readonly ActLine[], room: number): string => {
   const act = leading[0] as ActLine;
   if (leading.length === 1 && act.title !== '') {
     const rest = lines.length - 1;
-    const titled = `${act.verb} ${act.kind} "${act.title}"${rest > 0 ? ` and ${rest} more` : ''}`;
-    if (titled.length <= room) return titled;
+    const start = `${act.verb} ${act.kind} "`;
+    const end = `"${rest > 0 ? ` and ${rest} more` : ''}`;
+    const title = titleWithin(act.title, room - start.length - end.length);
+    if (title !== null && (rest === 0 || title === act.title || title.length >= MIN_BATCH_TITLE)) return `${start}${title}${end}`;
+    if (rest === 0 && act.name !== null) return `${act.verb} ${act.name}`;
   }
   return counted(lines, room);
 };
 
 const bodyLine = (line: ActLine): string => [line.verb, line.name ?? line.kind, line.title].filter((part) => part !== '').join(' ');
 
-const worded = (lines: readonly ActLine[], agents: readonly string[], shape: CommitShape, position: number): string => {
+const worded = (lines: readonly ActLine[], shape: CommitShape, position: number): string => {
   const prefix = shape === 'conventional' ? PREFIX : '';
   const phrase = phraseOf(lines, SUBJECT_LIMIT - prefix.length);
   const subject = `${prefix}${shape === 'conventional' ? phrase : `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`}`;
-  const body = [...lines.map(bodyLine), ...(agents.length === 0 ? [] : [`by ${agents.join(', ')}`])];
+  const body = lines.map(bodyLine);
   const text = body.length === 0 ? subject : `${subject}\n\n${body.join('\n')}`;
   return `${trailed(text, [[POSITION_TRAILER, String(position)]])}\n`;
 };
@@ -185,7 +196,7 @@ export type CommitWords = {
   readonly agents: readonly string[];
 };
 
-export const messageOf = (words: CommitWords, shape: CommitShape): string => worded(words.lines, words.agents, shape, words.reach);
+export const messageOf = (words: CommitWords, shape: CommitShape): string => worded(words.lines, shape, words.reach);
 
 export type CommitJournal = {
   readonly words: Effect.Effect<CommitWords, StoreFailure>;

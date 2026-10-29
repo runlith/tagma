@@ -10,6 +10,7 @@ import { suiteGit } from '../suiteGit.js';
 type Written = { readonly block: { readonly name: string } };
 
 const TAGMA = 'Tagma <agent@tagma.dev>';
+const LONG_TITLE = "The team tree's commit stream belongs to the tree and survives every reopening without another graph write";
 
 const lastCommit = (root: string) =>
   Effect.map(suiteGit(root, 'log', '-1', '--format=%an <%ae>%x00%cn <%ce>%x00%B'), (text) => {
@@ -50,7 +51,13 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
           'fix(core): mend the seed',
           'Merge the seed',
         ]);
-        const spec = yield* created({ tags: ['spec'], title: 'Graph commits read without Tagma' });
+        const explanation = yield* created({ tags: ['explanation'], title: LONG_TITLE });
+        expect((yield* world.op('sync_graph', { project })).status).toBe(200);
+        const single = yield* lastCommit(root);
+        expect(single.subject).toBe(`docs(graph): add explanation "The team tree's commit stream belongs to…"`);
+        expect(single.lines.slice(0, -1)).toEqual([`add ${explanation} ${LONG_TITLE}`]);
+        expect(single.lines.at(-1)).toMatch(/^Tagma-Graph: [0-9]+$/);
+        const spec = yield* created({ tags: ['spec'], title: LONG_TITLE });
         const task = yield* created({ tags: ['task'], title: 'Build the assembler', parentId: spec });
         for (const body of ['first draft', 'second draft']) {
           expect((yield* world.op('update_block', { project, blockId: task, body })).status).toBe(200);
@@ -60,9 +67,9 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
 
         const commit = yield* lastCommit(root);
         expect([commit.author, commit.committer]).toEqual([TAGMA, TAGMA]);
-        expect(commit.subject).toBe('docs(graph): open spec "Graph commits read without Tagma" and 3 more');
+        expect(commit.subject).toBe(`docs(graph): open spec "The team tree's commit stream…" and 3 more`);
         expect(commit.lines.slice(0, -1)).toEqual([
-          `open ${spec} Graph commits read without Tagma`,
+          `open ${spec} ${LONG_TITLE}`,
           `open ${task} Build the assembler`,
           `edit ${task} Build the assembler`,
           `finish ${task} Build the assembler`,
@@ -74,12 +81,12 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   it.effect('a team graph commit in a history without Conventional Commits is a plain capitalized phrase', () =>
     Effect.gen(function* () {
       const { world, root, project, created } = yield* teamProject('plain', ['Seed the code', 'feat: one conventional', 'Mend the seed']);
-      const note = yield* created({ title: 'Pricing page' });
+      const note = yield* created({ tags: ['explanation'], title: LONG_TITLE });
       expect((yield* world.op('sync_graph', { project })).status).toBe(200);
       const commit = yield* lastCommit(root);
       expect(commit.author).toBe(TAGMA);
-      expect(commit.subject).toBe('Add note "Pricing page"');
-      expect(commit.lines[0]).toBe(`add ${note} Pricing page`);
+      expect(commit.subject).toBe(`Add explanation "The team tree's commit stream belongs to the tree and…"`);
+      expect(commit.lines.slice(0, -1)).toEqual([`add ${note} ${LONG_TITLE}`]);
 
       const split = yield* created({ title: 'Billing\n\nquestions' });
       const faq = yield* created({ title: 'Refund FAQ' });
@@ -118,15 +125,17 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
         source: JSON.stringify({
           ops: [
             { op: 'create', title: 'Deals', storage: 'stealth', parentId },
-            { op: 'create', title: 'Changelog', parentId },
+            { op: 'create', $id: 'visible', tags: ['explanation'], title: LONG_TITLE, parentId },
           ],
         }),
       });
       expect(batch.status).toBe(200);
       expect((yield* world.op('sync_graph', { project })).status).toBe(200);
       const team = yield* lastCommit(root);
-      expect(team.subject).toBe('docs(graph): add note "Changelog"');
-      expect(team.lines.some((line) => line.endsWith(' Deals'))).toBe(false);
+      expect(team.subject).toBe(`docs(graph): add explanation "The team tree's commit stream belongs to…"`);
+      const visible = (batch.body as { ids: { visible: string } }).ids.visible;
+      expect(team.lines.slice(0, -1)).toEqual([`add ${visible} ${LONG_TITLE}`]);
+      expect(team.lines.at(-1)).toMatch(/^Tagma-Graph: [0-9]+$/);
     }),
   );
 });
