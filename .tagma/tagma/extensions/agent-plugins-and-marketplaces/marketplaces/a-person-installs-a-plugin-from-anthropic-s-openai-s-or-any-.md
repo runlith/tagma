@@ -27,6 +27,6 @@ sources:
 - A Claude Code entry combines with the plugin's own `plugin.json` as Claude Code combines them.
 - An installed plugin is a copy: refreshing or removing its marketplace never changes it, and `update_plugin` moves it to what the stored list says.
 - A plugin's id is global: an entry whose plugin is installed from elsewhere reads `taken` and refuses to install.
-- After an install, the plugin's card offers the sign-in each of its remote servers asks for; the person starts it, an agent's install never signs in.
+- Installing or enabling a plugin connects its remote servers in that project at once, and its card then offers the sign-in each of them asks for; the person starts it, an agent's install never signs in.
 
 **Limits.** Marketplaces served as a single `marketplace.json` URL, npm packages, zip archives and command sources are not installed. Tagma's own marketplace is not shipped yet.
