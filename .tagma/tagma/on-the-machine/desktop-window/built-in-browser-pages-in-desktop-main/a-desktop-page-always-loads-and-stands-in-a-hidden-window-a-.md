@@ -10,7 +10,9 @@ sources:
     ref: apps/tagma/desktop/src/browser/page.ts
     symbol: HeldPage
 ---
-A webContents into which no document was ever loaded does not answer `Page.enable`, and the core would wait for it forever. So a new page always goes through `loadURL`, including `about:blank`, or through history restoration.
+A webContents into which no document was ever loaded does not answer `Page.enable`, and the core would wait for it forever. So a new page always goes through `loadURL`, including `about:blank`, or through history restoration. `open` answers once that main-frame document commits or fails: until then the navigation is pending, and Chromium refuses debugger commands such as `Page.crash` against a pending navigation.
+
+A page keeps its webContents from creation: a destroyed `WebContentsView`, which closing a popup's window makes, hands out no webContents, and placement still settles the page after that.
 
 A page shown in no panel stands in a hidden `BrowserWindow` rather than hanging without a window: a `WebContentsView` without a window does not paint, and an agent's screenshot or stream would get an empty frame. While someone holds `paint`, the page's background throttling is lifted, and a hold counts as ready only after a non-empty `capturePage`: the first screenshot after showing may outrun the surface.
 

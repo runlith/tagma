@@ -14,6 +14,6 @@ sources:
 ---
 Desktop main reports the operator's input on a page from Electron's `input-event`, which observes the page's widget host. Input the engine dispatches through the debugger reaches the renderer through that same widget host between the `Input.*` command and its answer, so main does not count an event whose type a pending `Input.*` debugger command of the page dispatches (`Driven.injects`: a pending press hides presses, a pending key hides keys). The window lasts until the renderer acknowledges the command, so only the operator's events of that same type inside it are missed; his other input is counted. Scroll and pinch gestures are not counted at all: Chromium derives them from wheel events after the wheel's answer, including the engine's own, and a native scroll reaches main as a wheel event first.
 
-This reading of Chromium's routing is not verified by a run under Electron: if the event arrived after the command's answer, every agent action would hold the agent itself, and the shared scenarios under Electron (task 6febfab1) are where that shows first.
+The shared engine scenarios on the desktop host confirm this routing under Electron 44.8: an agent's consecutive actions on a page are never held for operator quiet, which they would be if the event arrived after the command's answer.
 
 Reports are throttled to one a second per page, which the engine's quiet bound must outlast.

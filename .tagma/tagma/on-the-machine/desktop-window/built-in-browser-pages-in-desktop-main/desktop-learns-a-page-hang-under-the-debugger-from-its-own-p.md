@@ -20,3 +20,5 @@ A scoped strain hold excludes an engine-owned pause from an in-flight probe's el
 The probe stands in the renderer's queue behind the agent's own commands, so a long command without a strain hold (an accessibility-tree snapshot of a very large page) is indistinguishable from outside from a hang; the decision is the core's — task [[475a615c]].
 
 Reloading a hung page drops the renderer: the previous CDP session on it is dead, so the host closes it (`swap`) and reports `swapped`, and the core connects anew. This deliberate renderer failure is not reported as `crashed`.
+
+Closing a page the host holds hung ends its renderer first, then closes on the process's end, which is reported as `crashed`. Closing alone leaves Chromium to retire the process at its own pace, and a fresh same-site page can land in it. Main sees every webContents and frame of the app, so it proves a renderer unshared exactly. A renderer any other page or frame uses is only closed: ending it would end those pages too.
