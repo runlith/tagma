@@ -42,9 +42,6 @@ it.live('a view starts only its scoped server, carries its caller and loses its 
     expect(yield* Effect.flip(servers.remove({ projectId, scope: 'project', name: 'app' }))).toMatchObject({
       code: 'mcp-server-unknown',
     });
-    expect(
-      yield* Effect.flip(servers.add({ projectId, scope: 'project', declaration: { ...app, env: { TOKEN: '${NOPE}' } } })),
-    ).toMatchObject({ code: 'mcp-secret-missing' });
     const mount = { projectId, server: 'app', identity: listed[0]!.identity };
     const viewer = { kind: 'operator' as const, projectId, view: 'ui://app/dashboard' };
     const read = servers.appRead(mount, 'app://state', viewer);

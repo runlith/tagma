@@ -10,6 +10,7 @@ import { McpPlaces } from '../../../mcp/contract/service/places.js';
 import { McpServers } from '../../../mcp/contract/service/servers.js';
 import { mcpServers as mcpServersKey } from '../../../mcp/contract/wire/settings.js';
 import { mcpServersLayer } from '../../../mcp/serverPool.js';
+import { memorySecretsLayer } from '../../../secrets/testing/doubles.js';
 import { asMcpToolsContext, mcpBoundTools, mcpServerTools } from '../../../native-harness/testing/doubles.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { threadScratch } from '../../../threads/testing/doubles.js';
@@ -32,7 +33,9 @@ it.live('a thread’s MCP tool that caches its roots writes into the thread’s 
       bases: [scratch.root, attachments],
     });
     const servers = Context.get(
-      yield* Layer.build(mcpServersLayer({}).pipe(Layer.provide(Layer.succeed(McpPlaces, places.port)))).pipe(Effect.provide(demo.context)),
+      yield* Layer.build(
+        mcpServersLayer({}).pipe(Layer.provide(Layer.succeed(McpPlaces, places.port)), Layer.provide(memorySecretsLayer())),
+      ).pipe(Effect.provide(demo.context)),
       McpServers,
     );
     yield* Context.get(demo.context, Settings).amend(mcpServersKey, 'project', demo.projectId, () =>

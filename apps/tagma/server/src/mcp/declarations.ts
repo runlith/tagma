@@ -33,12 +33,9 @@ export function mcpReachOf(declaration: McpServerDeclaration): McpServerReach {
     : { transport: 'http', url: declaration.url, headers: Object.keys(declaration.headers ?? {}).sort() };
 }
 
-export const rowOf = (
-  resolved: McpServerResolution,
-  state: McpServerState | undefined,
-  at: number,
-  environment: Readonly<Record<string, string | undefined>>,
-): McpServerRow => {
+export type Resolve = (name: string) => string | undefined;
+
+export const rowOf = (resolved: McpServerResolution, state: McpServerState | undefined, at: number, resolve: Resolve): McpServerRow => {
   const { declaration } = resolved;
   const declared = {
     name: declaration.name,
@@ -46,22 +43,17 @@ export const rowOf = (
     reach: mcpReachOf(declaration),
     capabilities: declaration.capabilities,
     enabled: declaration.enabled,
+    shadows: resolved.shadows,
   };
-  const identity = mcpDeclarationFingerprint(expandEnvReferences(declaration, environment));
+  const identity = mcpDeclarationFingerprint(expandEnvReferences(declaration, resolve));
+  const needs = declaration.enabled ? mcpMissingReferences(declaration, resolve) : [];
+  if (needs.length > 0) return { ...declared, identity, status: 'needs-value', needs, tools: 0, measuredAt: at };
   const own = state !== undefined && state.identity === identity ? state : undefined;
   return own === undefined
-    ? {
-        ...declared,
-        identity,
-        shadows: resolved.shadows,
-        status: declaration.enabled ? 'pending' : 'disabled',
-        tools: 0,
-        measuredAt: at,
-      }
+    ? { ...declared, identity, status: declaration.enabled ? 'pending' : 'disabled', tools: 0, measuredAt: at }
     : {
         ...declared,
         identity,
-        shadows: resolved.shadows,
         status: own.status,
         tools: own.tools,
         failure: own.failure === undefined ? undefined : own.failure.message,
@@ -70,6 +62,32 @@ export const rowOf = (
 };
 
 const REFERENCE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+
+const placesOf = (declaration: McpServerDeclaration): ReadonlyArray<readonly [string, string]> =>
+  declaration.transport === 'stdio'
+    ? [
+        [declaration.command, 'the command'],
+        ...(declaration.args ?? []).map((arg) => [arg, 'an argument'] as const),
+        ...(declaration.cwd === undefined ? [] : [[declaration.cwd, 'the working directory'] as const]),
+        ...Object.entries(declaration.env ?? {}).map(([key, value]) => [value, `the variable ${key}`] as const),
+      ]
+    : [
+        [declaration.url, 'the URL'],
+        ...Object.entries(declaration.headers ?? {}).map(([key, value]) => [value, `the header ${key}`] as const),
+      ];
+
+export function mcpReferences(declaration: McpServerDeclaration): ReadonlyMap<string, readonly string[]> {
+  const named = new Map<string, string[]>();
+  for (const [text, place] of placesOf(declaration)) {
+    for (const match of text.matchAll(REFERENCE)) {
+      const name = match[1] as string;
+      const places = named.get(name) ?? [];
+      if (!places.includes(place)) places.push(place);
+      named.set(name, places);
+    }
+  }
+  return named;
+}
 
 function walkStrings<T>(value: T, visit: (text: string) => string): T {
   if (typeof value === 'string') return visit(value) as T;
@@ -82,26 +100,20 @@ function walkStrings<T>(value: T, visit: (text: string) => string): T {
   return value;
 }
 
-export function mcpMissingReferences(
-  declaration: McpServerDeclaration,
-  environment: Readonly<Record<string, string | undefined>>,
-): readonly string[] {
+export function mcpMissingReferences(declaration: McpServerDeclaration, resolve: Resolve): readonly string[] {
   const named: string[] = [];
   walkStrings(declaration, (text) => {
     for (const match of text.matchAll(REFERENCE)) named.push(match[1] as string);
     return text;
   });
-  return [...new Set(named.filter((name) => environment[name] === undefined))];
+  return [...new Set(named.filter((name) => resolve(name) === undefined))];
 }
 
-export function mcpResolvedValues(
-  declaration: McpServerDeclaration,
-  environment: Readonly<Record<string, string | undefined>>,
-): readonly string[] {
+export function mcpResolvedValues(declaration: McpServerDeclaration, resolve: Resolve): readonly string[] {
   const values = new Set<string>();
   walkStrings(declaration, (text) => {
     for (const match of text.matchAll(REFERENCE)) {
-      const held = environment[match[1] as string];
+      const held = resolve(match[1] as string);
       if (held !== undefined && held.length > 0) values.add(held);
     }
     return text;
@@ -109,9 +121,6 @@ export function mcpResolvedValues(
   return [...values];
 }
 
-export function expandEnvReferences(
-  declaration: McpServerDeclaration,
-  environment: Readonly<Record<string, string | undefined>>,
-): McpServerDeclaration {
-  return walkStrings(declaration, (text) => text.replaceAll(REFERENCE, (whole, name: string) => environment[name] ?? whole));
+export function expandEnvReferences(declaration: McpServerDeclaration, resolve: Resolve): McpServerDeclaration {
+  return walkStrings(declaration, (text) => text.replaceAll(REFERENCE, (whole, name: string) => resolve(name) ?? whole));
 }

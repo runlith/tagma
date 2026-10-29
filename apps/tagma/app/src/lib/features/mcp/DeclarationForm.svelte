@@ -133,7 +133,7 @@
 
   <label class="grid gap-1 text-small text-muted-foreground">
     {transport === 'stdio' ? 'Environment' : 'Headers'} — one <span class="font-mono">KEY=value</span> per line; a
-    <span class="font-mono">{'${NAME}'}</span> is read from this server's own environment when it connects
+    <span class="font-mono">{'${NAME}'}</span> asks for a value on the server's card, or is read from Tagma's environment
     <textarea
       class="min-h-16 w-full resize-y rounded-lg border bg-background px-3 py-1.5 font-mono text-small outline-none transition-colors focus-visible:border-ring"
       spellcheck="false"

@@ -60,6 +60,8 @@ $RECYCLE.BIN/
 *.jks
 *.keystore
 secrets/
+!apps/tagma/server/src/secrets/
+!apps/tagma/app/src/lib/features/secrets/
 .secrets/
 credentials.json
 service-account*.json

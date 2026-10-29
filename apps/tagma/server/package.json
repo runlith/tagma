@@ -644,10 +644,10 @@
       "browser": "./src/views/contract/wire/points.ts",
       "default": "./src/views/contract/wire/points.ts"
     },
-    "./plugin-secrets/contract/wire/rows": {
-      "types": "./src/plugin-secrets/contract/wire/rows.ts",
-      "browser": "./src/plugin-secrets/contract/wire/rows.ts",
-      "default": "./src/plugin-secrets/contract/wire/rows.ts"
+    "./secrets/contract/wire/rows": {
+      "types": "./src/secrets/contract/wire/rows.ts",
+      "browser": "./src/secrets/contract/wire/rows.ts",
+      "default": "./src/secrets/contract/wire/rows.ts"
     },
     "./graph/contract/wire/law": {
       "types": "./src/graph/contract/wire/law.ts",

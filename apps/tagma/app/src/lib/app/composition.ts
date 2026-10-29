@@ -38,7 +38,7 @@ import { PaletteRepo } from '$lib/features/palette/Repo.js';
 import { ProjectPrefetch } from '$lib/features/projects/Prefetch.js';
 import { ProjectsLayer } from '$lib/features/projects/layer.js';
 import { RulesRepo } from '$lib/features/rules/Repo.js';
-import { SecretsRepo } from '$lib/features/plugin-secrets/Repo.js';
+import { SecretsRepo } from '$lib/features/secrets/Repo.js';
 import { SettingsColumn } from '$lib/features/settings/SettingsColumn.svelte.js';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 import { SectionRegistry } from '$lib/features/settings/SectionRegistry.js';

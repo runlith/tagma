@@ -4,11 +4,9 @@ export const SECRETS_POINT = 'secrets';
 
 export const SECRET_NAME_PATTERN = /^(?!TAGMA_)[A-Z][A-Z0-9_]*$/u;
 
-export const SECRET_VALUE_MAX = 16_384;
-
 const BASE_ENVIRONMENT = ['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TERM', 'TMPDIR'] as const;
 
-export const SECRET_MAX_PER_PLUGIN = 8;
+export const SECRETS_MAX = 8;
 
 export const SecretName = Schema.String.check(
   Schema.isPattern(SECRET_NAME_PATTERN),
@@ -31,7 +29,7 @@ export type SecretEntry = typeof SecretEntry.Type;
 
 export const SecretEntries = Schema.Array(SecretEntry)
   .check(
-    Schema.isMaxLength(SECRET_MAX_PER_PLUGIN),
+    Schema.isMaxLength(SECRETS_MAX),
     Schema.makeFilter((entries: readonly SecretEntry[]) => {
       const seen = new Set<string>();
       for (const { name } of entries) {

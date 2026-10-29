@@ -1,5 +1,6 @@
 <script lang="ts">
   import KeyCard from '$lib/features/settings/KeyCard.svelte';
+  import Secrets from '$lib/features/plugins/Secrets.svelte';
   import type { SectionProps } from '$lib/features/settings/section.js';
   import { SectionRegistry } from '$lib/features/settings/SectionRegistry.js';
 
@@ -10,6 +11,10 @@
 </script>
 
 <div class="grid">
+  {#if project}
+    <Secrets projectId={project.id} />
+  {/if}
+
   {#each contributions as contribution, index (index)}
     {@const View = contribution.view}
     <View {catalog} {scope} {project} />

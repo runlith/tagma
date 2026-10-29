@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { McpServerRow } from '@tagma/server/mcp/contract/wire/servers';
   import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
+  import type { SecretSet } from '@tagma/server/secrets/contract/wire/rows';
+  import SecretFields from '$lib/features/secrets/SecretFields.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
   import SwitchControl from '$lib/features/settings/controls/SwitchControl.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
@@ -12,21 +14,26 @@
     scope,
     project,
     busy = false,
+    secrets,
     onenabled,
     onremove,
+    onsecret,
   }: {
     row: McpServerRow;
     scope: SettableScope;
     project: Project | null;
     busy?: boolean;
+    secrets?: SecretSet;
     onenabled: (enabled: boolean) => void;
     onremove: () => void;
+    onsecret: () => Promise<unknown>;
   } = $props();
 
   const TONE: Record<McpServerRow['status'], string> = {
     connected: 'bg-status-done',
     connecting: 'bg-status-in-work',
     pending: 'bg-vein-strong',
+    'needs-value': 'bg-status-open',
     failed: 'bg-severity-lie',
     disabled: 'bg-status-closed',
   };
@@ -36,7 +43,9 @@
       ? `connected · ${row.tools} tool${row.tools === 1 ? '' : 's'}`
       : row.status === 'pending'
         ? 'declared; nothing running'
-        : row.status,
+        : row.status === 'needs-value'
+          ? `needs ${(row.needs ?? []).join(', ')}`
+          : row.status,
   );
 
   const reach = $derived(
@@ -91,4 +100,8 @@
       <p class="text-small text-destructive">{row.failure}</p>
     {/if}
   </div>
+
+  {#if secrets && project}
+    <SecretFields set={secrets} projectId={project.id} onchanged={onsecret} />
+  {/if}
 </section>

@@ -11,6 +11,7 @@ import { Senders } from '../../../notify/contract/service/senders.js';
 import { notify } from '../../../notify/notify.js';
 import { Schedules } from '../../../schedule/contract/service/schedules.js';
 import { schedule } from '../../../schedule/schedule.js';
+import { memorySecretsLayer } from '../../../secrets/testing/doubles.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { Projects } from '../../../projects/contract/service/registry.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
@@ -22,7 +23,7 @@ import { outcomes } from '../../outcomes.js';
 const assembled = Layer.mergeAll(
   schedule.lifetimes.serving.pipe(Layer.provideMerge(ticks)),
   notify.lifetimes.serving.pipe(Layer.provideMerge(outcomes)),
-).pipe(Layer.provideMerge(pluginModule.lifetimes.installation));
+).pipe(Layer.provideMerge(pluginModule.lifetimes.installation), Layer.provide(memorySecretsLayer()));
 
 type Call = { readonly tool: string; readonly args: Record<string, unknown>; readonly meta: Readonly<Record<string, unknown>> };
 

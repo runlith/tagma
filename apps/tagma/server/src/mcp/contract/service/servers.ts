@@ -16,20 +16,15 @@ export type McpServerScopeInput = {
   readonly scope: SettableScope;
 };
 
-export type McpReconcileRefusal = 'mcp-reconcile-stalled';
-export type McpServerAddRefusal =
-  | 'mcp-server-exists'
-  | 'mcp-secret-missing'
-  | McpReconcileRefusal
-  | 'setting-scope'
-  | 'setting-value'
-  | 'unknown-project';
+export type McpListRefusal = 'secret-store-failed';
+export type McpReconcileRefusal = 'mcp-reconcile-stalled' | McpListRefusal;
+export type McpServerAddRefusal = 'mcp-server-exists' | McpReconcileRefusal | 'setting-scope' | 'setting-value' | 'unknown-project';
 export type McpServerChangeRefusal = 'mcp-server-unknown' | McpReconcileRefusal | 'setting-scope' | 'setting-value' | 'unknown-project';
 
 export class McpServers extends Context.Service<
   McpServers,
   {
-    list(projectId: number): Effect.Effect<readonly McpServerRow[], StoreFailure>;
+    list(projectId: number): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpListRefusal>>;
     add(
       input: McpServerScopeInput & { readonly declaration: McpServerDeclaration },
     ): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpServerAddRefusal | OpenRefusal>>;

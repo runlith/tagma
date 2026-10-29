@@ -174,7 +174,8 @@ import { McpServers } from '../mcp/contract/service/servers.js';
 import { mcp } from '../mcp/mcp.js';
 import { plugins } from '../plugins/plugins.js';
 import { views } from '../views/views.js';
-import { pluginSecrets } from '../plugin-secrets/plugin-secrets.js';
+import { secrets } from '../secrets/secrets.js';
+import { SecretsPlace } from '../secrets/contract/service/secrets.js';
 import { PluginViews, ViewSites } from '../views/contract/service/views.js';
 import { WantedSites } from '../remote/contract/service/sites.js';
 import { PluginPlace, Plugins } from '../plugins/contract/service/supervision.js';
@@ -527,7 +528,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             closing('working owners', workingLayerWithUnits),
             closing('terminals floor', agentPaceLayer.pipe(Layer.provideMerge(executionsLayerWithDeps))),
             closing('mcp servers', mcp.lifetimes.installation.pipe(Layer.provide(Layer.succeed(McpPlaces, mcpPlacesPort.port)))),
-            closing('plugin secrets', pluginSecrets.lifetimes.installation.pipe(Layer.provide(pluginPlace))),
             closing(
               'artifacts',
               artifacts.lifetimes.installation.pipe(
@@ -629,7 +629,18 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
               ),
             ),
             Layer.provideMerge(closing('plugin views', views.lifetimes.installation)),
-            Layer.provideMerge(closing('plugins', plugins.lifetimes.installation.pipe(Layer.provide(pluginPlace)))),
+            Layer.provideMerge(
+              closing(
+                'plugins',
+                plugins.lifetimes.installation.pipe(
+                  Layer.provide(pluginPlace),
+                  Layer.provide(BunFileSystem.layer),
+                  Layer.provideMerge(
+                    closing('secrets', secrets.lifetimes.installation.pipe(Layer.provide(Layer.succeed(SecretsPlace, { home: dataPath })))),
+                  ),
+                ),
+              ),
+            ),
             Layer.provideMerge(closing('graph', graphLayerForRuntime)),
             Layer.provideMerge(
               closing('projects', projects.lifetimes.installation.pipe(Layer.provide(Layer.succeed(ReservedNames, reservedNames)))),

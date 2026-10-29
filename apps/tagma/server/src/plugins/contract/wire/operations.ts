@@ -122,12 +122,13 @@ An id standing in both floors, or installed from another directory, refuses with
     ...acted,
     place: 'home',
     answer,
-    meaning: 'Uninstall a plugin from this machine: its process ends and its contributions are withdrawn everywhere. Its data stays.',
+    meaning:
+      'Uninstall a plugin from this machine: its process ends, its contributions are withdrawn everywhere and its secret values are dropped. Its data stays.',
     input: named,
-    refusals: CHANGE_REFUSALS,
+    refusals: [...CHANGE_REFUSALS, 'secret-store-failed'],
     confirmation: (input) => ({
       summary: `Uninstall the plugin ${input.id}?`,
-      consequence: 'Its process ends and every project stops seeing it; its data and its directory stay.',
+      consequence: 'Its process ends, every project stops seeing it and its secret values are dropped; its data and its directory stay.',
     }),
     confirmLabel: 'Uninstall',
     presentation: { running: 'Uninstalling a plugin', done: 'Uninstalled a plugin' },

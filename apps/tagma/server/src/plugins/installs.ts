@@ -2,12 +2,14 @@ import { join } from 'node:path';
 import { Effect, Result, Semaphore } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { Projects } from '../projects/contract/service/registry.js';
+import { SecretOwners } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { PluginPlace, Plugins, type PluginSwitch } from './contract/service/supervision.js';
 import { MANIFEST_FILE } from './contract/wire/manifest.js';
 import { type PluginInstall, pluginsEnabled, pluginsInstalled } from './contract/wire/settings.js';
 import { discover, type Found, manifestOf, PERSONAL_PLUGINS, PROJECT_PLUGINS } from './discovery.js';
 import type { PointRegistry } from './registry.js';
+import { type Former, SECRET_KIND } from './secrets.js';
 import { clipped, type Supervisor } from './supervisor.js';
 
 type Standing = { readonly title: string | null; readonly refused: string | null };
@@ -26,10 +28,15 @@ const collision = (id: string, found: readonly Found[]) =>
     'remove or rename one of them, then install again',
   ]);
 
-export const makeInstalls = Effect.fnUntraced(function* (input: { readonly registry: PointRegistry; readonly supervisor: Supervisor }) {
-  const { registry, supervisor } = input;
+export const makeInstalls = Effect.fnUntraced(function* (input: {
+  readonly registry: PointRegistry;
+  readonly supervisor: Supervisor;
+  readonly former: Former;
+}) {
+  const { registry, supervisor, former } = input;
   const settings = yield* Settings;
   const projects = yield* Projects;
+  const secrets = yield* SecretOwners;
   const { home } = yield* PluginPlace;
   const locks = new Map<string, Semaphore.Semaphore>();
 
@@ -170,6 +177,14 @@ export const makeInstalls = Effect.fnUntraced(function* (input: { readonly regis
         id,
         Effect.gen(function* () {
           yield* installed(id);
+          yield* Effect.andThen(former.move(), secrets.drop(SECRET_KIND, id)).pipe(
+            Effect.mapError(
+              () =>
+                new GateRefusal('secret-store-failed', `${id} stays installed: its secret values could not be dropped.`, [
+                  'make secrets.json and plugin-secrets.json in the server’s data directory readable and writable to the server, then uninstall again',
+                ]),
+            ),
+          );
           yield* installs((current) => current.filter((entry) => entry.id !== id));
           for (const project of yield* projects.list()) {
             if ((yield* settings.value(pluginsEnabled, project.id)).includes(id)) yield* shown(project.id, id, false);

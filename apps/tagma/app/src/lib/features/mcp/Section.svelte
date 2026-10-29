@@ -9,13 +9,25 @@
   import KeyCard from '$lib/features/settings/KeyCard.svelte';
   import McpDeclarationForm from '$lib/features/mcp/DeclarationForm.svelte';
   import McpServerCard from '$lib/features/mcp/ServerCard.svelte';
+  import { SecretsRepo } from '$lib/features/secrets/Repo.js';
   import { rest, type SectionProps } from '$lib/features/settings/section.js';
 
   let { catalog, scope, project }: SectionProps = $props();
 
   const MANAGED = ['mcp.servers'];
   const mcp = McpRepo.use();
+  const secrets = SecretsRepo.use();
   const rows = $derived(mcp.servers.key(project?.id).data ?? []);
+  const projectId = $derived(project?.id);
+  const sets = $derived(projectId === undefined ? [] : (secrets.sets.key({ projectId, owner: 'mcp' }).data ?? []));
+
+  async function refreshed(): Promise<void> {
+    await Promise.all([
+      mcp.servers.key(projectId).refresh(),
+      projectId === undefined ? undefined : secrets.sets.key({ projectId, owner: 'mcp' }).refresh(),
+    ]);
+  }
+  const setOf = (row: McpServerRow) => sets.find((set) => set.id === `${row.scope}/${row.name}`);
   const reading = $derived(mcp.servers.key(project?.id).isPending);
   const failed = $derived(mcp.servers.key(project?.id).error);
 
@@ -34,7 +46,7 @@
     refusal = undefined;
     try {
       await mcp.add.run({ projectId: project?.id, scope, declaration }, { throwOnError: true });
-      await mcp.servers.key(project?.id).refresh();
+      await refreshed();
       adding = false;
     } catch (caught) {
       refusal = said(caught);
@@ -48,7 +60,7 @@
     refusal = undefined;
     try {
       await mcp.remove.run({ projectId: project?.id, scope, name: row.name }, { throwOnError: true });
-      await mcp.servers.key(project?.id).refresh();
+      await refreshed();
     } catch (caught) {
       refusal = said(caught);
     } finally {
@@ -133,8 +145,10 @@
           {scope}
           {project}
           busy={busy === row.name}
+          secrets={setOf(row)}
           onenabled={(enabled) => void setEnabled(row, enabled)}
           onremove={() => void remove(row)}
+          onsecret={() => mcp.servers.key(project?.id).refresh()}
         />
       {/each}
 

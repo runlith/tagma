@@ -12,9 +12,10 @@ function mcpServersText(servers: readonly McpServerRow[]): string {
       const configured = carried.length === 0 ? '' : ` +${carried.join(',')}`;
       const tools = row.status === 'connected' ? `, ${row.tools} tools` : '';
       const failure = row.failure === undefined ? '' : ` — ${row.failure}`;
+      const needs = row.needs === undefined ? '' : ` — needs ${row.needs.join(', ')}`;
       const shadows = row.shadows === undefined ? '' : ` (shadows the ${row.shadows} entry)`;
       const scope = row.scope === 'user' ? ' [user]' : '';
-      return `${row.name}${scope} [${row.status}${tools}] ${reached}${configured}${shadows}${failure}`;
+      return `${row.name}${scope} [${row.status}${tools}] ${reached}${configured}${shadows}${needs}${failure}`;
     })
     .join('\n');
 }

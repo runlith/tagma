@@ -10,7 +10,7 @@ import { config } from '../config/contract/wire/module.js';
 import { mcp } from '../mcp/contract/wire/module.js';
 import { plugins } from '../plugins/contract/wire/module.js';
 import { views } from '../views/contract/wire/module.js';
-import { pluginSecrets } from '../plugin-secrets/contract/wire/module.js';
+import { secrets } from '../secrets/contract/wire/module.js';
 import { artifacts } from '../artifacts/contract/wire/module.js';
 import { executions } from '../executions/contract/wire/module.js';
 import { worktrees } from '../worktrees/contract/wire/module.js';
@@ -45,7 +45,7 @@ export const CORE_CATALOG: readonly [
   typeof mcp,
   typeof plugins,
   typeof views,
-  typeof pluginSecrets,
+  typeof secrets,
   typeof artifacts,
   typeof executions,
   typeof worktrees,
@@ -79,7 +79,7 @@ export const CORE_CATALOG: readonly [
   mcp,
   plugins,
   views,
-  pluginSecrets,
+  secrets,
   artifacts,
   executions,
   worktrees,

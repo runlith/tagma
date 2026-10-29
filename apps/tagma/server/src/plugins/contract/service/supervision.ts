@@ -30,6 +30,8 @@ export type PluginInstallRefusal =
 
 export type PluginChangeRefusal = PluginListRefusal | 'plugin-not-installed' | SettingLandRefusal | 'setting-scope' | 'setting-value';
 
+export type UninstallRefusal = PluginChangeRefusal | 'secret-store-failed';
+
 export type PluginTarget = { readonly projectId: number; readonly id: string };
 
 export type PluginSwitch = PluginTarget & { readonly enabled: boolean };
@@ -40,7 +42,7 @@ export class Plugins extends Context.Service<
     start(): Effect.Effect<void, StoreFailure>;
     list(projectId: number): Effect.Effect<readonly PluginRow[], StoreFailure | GateRefusal<PluginListRefusal>>;
     install(input: PluginSwitch): Effect.Effect<PluginRow, StoreFailure | GateRefusal<PluginInstallRefusal>>;
-    uninstall(input: PluginTarget): Effect.Effect<PluginRow, StoreFailure | GateRefusal<PluginChangeRefusal>>;
+    uninstall(input: PluginTarget): Effect.Effect<PluginRow, StoreFailure | GateRefusal<UninstallRefusal>>;
     enable(input: PluginSwitch): Effect.Effect<PluginRow, StoreFailure | GateRefusal<PluginChangeRefusal>>;
     pending(id: string): Effect.Effect<boolean, StoreFailure>;
     call: McpToolCaller['call'];

@@ -9,6 +9,8 @@ import { graphFixture, tempRootEffect } from '../composition/testing/graphFixtur
 import { watchProcessLayer } from '../composition/testing/fileWatcher.js';
 import { FileWatcher } from '../platform/contract/service/watch.js';
 import { Projects } from '../projects/contract/service/registry.js';
+import { SecretsPlace } from '../secrets/contract/service/secrets.js';
+import { secrets } from '../secrets/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { PluginPlace, Plugins } from './contract/service/supervision.js';
 import { PluginTools } from './contract/service/tools.js';
@@ -38,7 +40,8 @@ const setup = Effect.gen(function* () {
     await writeFile(join(root, 'plugin.json'), manifest(TOOLS));
   });
   const watching = yield* Layer.build(watchProcessLayer);
-  const built = yield* Layer.build(pluginsLayer).pipe(
+  const secretsAt = secrets.lifetimes.installation.pipe(Layer.provide(Layer.succeed(SecretsPlace, { home })));
+  const built = yield* Layer.build(pluginsLayer.pipe(Layer.provide(Layer.merge(secretsAt, BunFileSystem.layer)))).pipe(
     Effect.provideService(Settings, Context.get(demo.context, Settings)),
     Effect.provideService(Projects, Context.get(demo.context, Projects)),
     Effect.provideService(PluginPlace, { home, server: 'http://127.0.0.1:1' }),

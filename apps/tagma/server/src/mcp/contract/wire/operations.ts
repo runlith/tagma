@@ -94,10 +94,10 @@ export const MCP_OPERATIONS = {
     ...acted,
     answer,
     meaning: 'Declare a project or user MCP server. Its tools become available at the next run.',
-    grammar: `Requires the connection details and capability classification. \`\${NAME}\` anywhere in the declaration is stored literally and resolved from Tagma’s environment on connection; missing variables refuse at declaration.
+    grammar: `Requires the connection details and capability classification. \`\${NAME}\` anywhere in the declaration is stored literally and resolved on connection: first from the value the operator set for this server with set_secret, then from Tagma’s environment. A server whose names resolve from neither is declared and shows needs-value naming them.
 Returns declarations without connecting. Use read_mcp_servers for connection state.`,
     input: mcpAddParams,
-    refusals: ['mcp-server-exists', 'mcp-secret-missing', 'mcp-reconcile-stalled', 'setting-scope', 'setting-value', 'unknown-project'],
+    refusals: ['mcp-server-exists', 'mcp-reconcile-stalled', 'secret-store-failed', 'setting-scope', 'setting-value', 'unknown-project'],
     confirmation: (input, project: ProjectRef) => ({
       summary:
         mcpScopeOf(input) === 'user'
@@ -133,7 +133,7 @@ Returns declarations without connecting. Use read_mcp_servers for connection sta
     approval: ASKS_IN_REVIEW,
     ...acted,
     answer,
-    meaning: 'Remove an MCP declaration from its owning scope, withdraw its tools and stop its process.',
+    meaning: 'Remove an MCP declaration from its owning scope, withdraw its tools, stop its process and drop the secret values set for it.',
     grammar: 'A server absent from the selected scope refuses; if another scope owns it, the refusal names that scope.',
     input: Schema.Struct({
       project: projectField,
@@ -142,7 +142,7 @@ Returns declarations without connecting. Use read_mcp_servers for connection sta
       }),
       scope: mcpScope,
     }),
-    refusals: ['mcp-server-unknown', 'mcp-reconcile-stalled', 'setting-scope', 'setting-value', 'unknown-project'],
+    refusals: ['mcp-server-unknown', 'mcp-reconcile-stalled', 'secret-store-failed', 'setting-scope', 'setting-value', 'unknown-project'],
     confirmation: (input, project: ProjectRef) => ({
       summary:
         mcpScopeOf(input) === 'user'
@@ -171,7 +171,7 @@ Every other field is preserved, so switching back restores the same server rathe
       }),
       scope: mcpScope,
     }),
-    refusals: ['mcp-server-unknown', 'mcp-reconcile-stalled', 'setting-scope', 'setting-value', 'unknown-project'],
+    refusals: ['mcp-server-unknown', 'mcp-reconcile-stalled', 'secret-store-failed', 'setting-scope', 'setting-value', 'unknown-project'],
     confirmation: (input, project: ProjectRef) => {
       const off = input.enabled === false;
       const set = mcpScopeOf(input) === 'user' ? "the operator's own set, for every project" : `project “${project.name}”`;
@@ -193,11 +193,11 @@ Every other field is preserved, so switching back restores the same server rathe
     effect: 'read',
     identity: 'none',
     meaning:
-      'Read effective MCP declarations and current state: connected with tool counts, connecting, disabled or failed with its reason.',
+      'Read effective MCP declarations and current state: connected with tool counts, connecting, disabled, needs-value naming the values it still lacks, or failed with its reason.',
     grammar:
-      'Resolves user declarations then project overrides. Secrets remain environment references, not resolved values. Does not connect servers.',
+      'Resolves user declarations then project overrides. Secrets remain `${NAME}` references, never resolved values; a needed value is the operator’s to give on the server’s card (set_secret, owner mcp, id `<scope>/<server>`). Does not connect servers.',
     input: Schema.Struct({ project: projectField }),
-    refusals: ['unknown-project'],
+    refusals: ['secret-store-failed', 'unknown-project'],
     confirmation: () => ({ summary: 'Read the MCP server declarations and their current state?' }),
     confirmLabel: 'Read',
     presentation: {

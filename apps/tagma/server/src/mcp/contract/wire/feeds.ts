@@ -8,6 +8,7 @@ export const MCP_APP_REFUSALS = [
   'mcp-tool-unoffered',
   'mcp-call-failed',
   'mcp-reconcile-stalled',
+  'secret-store-failed',
   'unknown-project',
 ] as const;
 

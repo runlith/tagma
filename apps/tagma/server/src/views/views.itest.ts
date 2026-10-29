@@ -10,6 +10,8 @@ import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { PluginPlace, Plugins } from '../plugins/contract/service/supervision.js';
 import { plugins as pluginsModule } from '../plugins/plugins.js';
 import { Projects } from '../projects/contract/service/registry.js';
+import { SecretsPlace } from '../secrets/contract/service/secrets.js';
+import { secrets } from '../secrets/secrets.js';
 import { SettingChanges } from '../settings/contract/service/changes.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { PluginViews, type ViewSites, ViewStorage } from './contract/service/views.js';
@@ -75,7 +77,10 @@ const setup = Effect.fnUntraced(function* (withProcess = false) {
     await writeFile(join(root, 'ui', 'board.html'), '<!doctype html><p>board</p>');
     await writeFile(join(root, 'plugin.json'), manifest(withProcess ? contributes : staticContributions, withProcess));
   });
-  const built = yield* Layer.build(viewsLayer.pipe(Layer.provideMerge(pluginsModule.lifetimes.installation))).pipe(
+  const secretsAt = secrets.lifetimes.installation.pipe(Layer.provide(Layer.succeed(SecretsPlace, { home })));
+  const built = yield* Layer.build(
+    viewsLayer.pipe(Layer.provideMerge(pluginsModule.lifetimes.installation), Layer.provide(Layer.merge(secretsAt, BunFileSystem.layer))),
+  ).pipe(
     Effect.provideService(Settings, Context.get(demo.context, Settings)),
     Effect.provideService(SettingChanges, Context.get(demo.context, SettingChanges)),
     Effect.provideService(Projects, Context.get(demo.context, Projects)),

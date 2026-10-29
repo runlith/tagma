@@ -15,7 +15,7 @@ import { config } from '../config/config.js';
 import { mcp } from '../mcp/mcp.js';
 import { plugins } from '../plugins/plugins.js';
 import { views } from '../views/views.js';
-import { pluginSecrets } from '../plugin-secrets/plugin-secrets.js';
+import { secrets } from '../secrets/secrets.js';
 import { artifacts } from '../artifacts/artifacts.js';
 import { executions } from '../executions/executions.js';
 import { worktrees } from '../worktrees/worktrees.js';
@@ -60,7 +60,7 @@ export const CORE_MODULES = [
   mcp,
   plugins,
   views,
-  pluginSecrets,
+  secrets,
   artifacts,
   executions,
   worktrees,

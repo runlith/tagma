@@ -30,12 +30,14 @@ export type McpServerRow = {
   readonly status: McpServerRowStatus;
   readonly tools: number;
   readonly failure?: string;
+  readonly needs?: readonly string[];
   readonly shadows?: SettableScope;
   readonly measuredAt: number;
 };
 
-const STATUS_WORDS: Record<McpServerStatus | 'pending', null> = {
+const STATUS_WORDS: Record<McpServerStatus | 'pending' | 'needs-value', null> = {
   pending: null,
+  'needs-value': null,
   connecting: null,
   connected: null,
   failed: null,
@@ -56,6 +58,9 @@ export const mcpServerRowSchema = Schema.Struct({
   status: Schema.Literals(MCP_SERVER_STATUSES),
   tools: Schema.Number,
   failure: Schema.optional(Schema.String),
+  needs: Schema.optional(
+    Schema.Array(Schema.String).annotate({ description: 'The `${NAME}` references no secret value and no environment variable holds.' }),
+  ),
   shadows: Schema.optional(Schema.Literals(SETTABLE_SCOPES)),
   measuredAt: Schema.Number,
 });

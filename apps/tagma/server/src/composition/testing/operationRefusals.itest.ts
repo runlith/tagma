@@ -73,11 +73,6 @@ layer(demoGraphLayer(), { excludeTestServices: true })('operation refusals', (it
 
         yield* run(servers.add({ ...project, declaration: stdio('files') }));
         names('add_mcp_server', yield* demo.refusal(servers.add({ ...project, declaration: stdio('files') })), 'mcp-server-exists');
-        names(
-          'add_mcp_server',
-          yield* demo.refusal(servers.add({ ...project, declaration: stdio('secret', { env: { TOKEN: '${NOPE}' } }) })),
-          'mcp-secret-missing',
-        );
         names('remove_mcp_server', yield* demo.refusal(servers.remove({ ...project, name: 'absent' })), 'mcp-server-unknown');
 
         const unclassified = Schema.decodeUnknownResult(OPERATIONS.add_mcp_server.params)({
