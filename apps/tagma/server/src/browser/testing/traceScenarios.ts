@@ -108,9 +108,23 @@ export const traceScenarios = (input: EngineHost): void => {
     const ref = /button "Block" \[ref=(e\d+)\]/u.exec(shot.text)?.[1];
     if (ref === undefined) return yield* Effect.die(`no Block button in:\n${shot.text}`);
     yield* calling(PAGE.act_on_page.body.execute({ page, steps: [{ action: 'click', ref }] }, undefined, agent));
+    const gesture = yield* calling(
+      PAGE.evaluate_in_page.body.execute({ page, expression: 'performance.eventCounts.get("click")' }, undefined, agent),
+    );
+    expect(gesture).toMatchObject({ status: 'evaluated', value: '1' });
     yield* calling(
       PAGE.evaluate_in_page.body.execute(
-        { page, expression: 'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))' },
+        {
+          page,
+          expression: `new Promise((done) => {
+            const observer = new PerformanceObserver((entries) => {
+              if (!entries.getEntries().some((entry) => entry.name === 'click' && entry.interactionId > 0)) return;
+              observer.disconnect();
+              done(true);
+            });
+            observer.observe({ type: 'event', buffered: true });
+          })`,
+        },
         undefined,
         agent,
       ),
