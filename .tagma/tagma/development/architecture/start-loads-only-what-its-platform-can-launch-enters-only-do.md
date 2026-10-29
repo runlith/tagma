@@ -7,12 +7,7 @@ fields:
   {
     "delivery": "code",
     "enforcement": {
-      "debt": [
-        {
-          "fingerprint": "apps/tagma/server/src/native-harness/transcript/rested.worker.ts [bun] -> unresolved source @ apps/tagma/server/src/native-harness/transcript/rested.worker.ts",
-          "owner": "e5e5c094"
-        }
-      ],
+      "debt": [],
       "escaped": [],
       "inspection": "platforms",
       "on": [
