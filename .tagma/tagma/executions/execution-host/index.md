@@ -82,7 +82,8 @@ fields:
       {
         "at": "src/Bindings.ts",
         "for": [
-          "921755ee"
+          "921755ee",
+          "d2a60527"
         ]
       }
     ],
