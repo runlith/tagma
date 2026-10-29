@@ -15,7 +15,7 @@ sources:
 ---
 **Value.** A package written for the agent ecosystem — skills, commands, MCP servers, agents and hooks — works in Tagma without being rewritten for it, so a team keeps one plugin for every agent it uses.
 
-**How.** `install_plugin` takes a folder or a git URL, `enable_plugin` runs it per project, `uninstall_plugin` removes it, `read_plugins` lists what each plugin gives the agent and what Tagma ignores in it with the reason. Its skills and commands join the `$` catalog, its MCP servers the project's pool, its agents the agent library, its command hooks the agent's tool, step and close points — each named `<plugin>-<name>`.
+**How.** `install_plugin` takes a folder or a git URL, `enable_plugin` runs it per project, `uninstall_plugin` removes it, `read_plugins` lists what each plugin gives the agent and what Tagma ignores in it with the reason. Its skills and commands join the `$` catalog, its MCP servers the project's pool, its agents the agent library, its command hooks the agent's tool, step and close points — each named `<plugin>-<name>`. In the app the Plugins settings section does the same: it installs from a folder or a git URL, switches a plugin per project, uninstalls it, and shows each plugin's card with what was taken, what is ignored and its options.
 
 **Behaviour.**
 - A directory is read as Claude Code when it has `.claude-plugin/plugin.json`, as Agent Plugins when its root `plugin.json` names that schema, and as Claude Code's default layout otherwise; a package carrying both manifests is read as Claude Code.
@@ -23,4 +23,4 @@ sources:
 - A plugin's MCP server sees only its own format's variables, never Tagma's environment.
 - Options a Claude Code plugin asks for are kept in `plugins.options`, secret ones in the key store under the plugin.
 
-**Limits.** Plugin marketplaces, LSP servers, output styles, themes, monitors, `bin/`, plugin settings, HTTP/MCP/prompt/agent hook handlers, Claude Code hook events other than the six mapped, and the HTTP+SSE and WebSocket MCP transports are listed as ignored. The plugin page in the app is not built yet.
+**Limits.** Plugin marketplaces, LSP servers, output styles, themes, monitors, `bin/`, plugin settings, HTTP/MCP/prompt/agent hook handlers, Claude Code hook events other than the six mapped, and the HTTP+SSE and WebSocket MCP transports are listed as ignored.

@@ -10,7 +10,7 @@ fields:
 ---
 ## What the person gets
 
-The person installs a plugin written for the agent ecosystem, from a folder or a git URL, and Tagma's agent works with it unchanged: its skills, MCP servers and agents. A plugin is installed once per machine and enabled per project, like today's apps. Its page lists what Tagma took from it and what Tagma ignores, by name, so nothing is dropped silently.
+The person installs a plugin written for the agent ecosystem, from a folder or a git URL, and Tagma's agent works with it unchanged: its skills, MCP servers and agents. A plugin is installed once per machine and enabled per project, like today's apps. Its card in the Plugins settings section lists what Tagma took from it and what Tagma ignores, by name, so nothing is dropped silently.
 
 ## Step 1: rename today's plugins to `TagmaApp`
 
@@ -65,7 +65,7 @@ Each format is an adapter module (`claude-code-format`, `agent-plugins-format`) 
   - **Classification.** A server is classified as mutating with every permission kind (`McpCapabilities`), so its tools ask in review mode.
   - **Consent.** Install and enable raise what `add_mcp_server` raises for the same server: the `execute` and `network` subjects, and `mcp-env-resolving`.
   - **Sign-in.** Remote servers sign in through the MCP layer.
-- **User configuration.** Claude Code `userConfig` values marked `sensitive` live in the key store under the plugin owner. The others live in a setting of the plugin. Both are asked for on the plugin's page.
+- **User configuration.** Claude Code `userConfig` values marked `sensitive` live in the key store under the plugin owner. The others live in the `plugins.options` setting. Both are asked for on the plugin's card, which shows each option's declared default; a secret option is entered once the plugin runs in the project, since its key-store holder exists only there.
 - **Agents.** `agents/*.md` become agent definitions `<plugin>-<agent>`. The Claude Code adapter owns one table from that format's tool names to Tagma's (for example `Read` → `read`, `Bash` → `bash`). A tool with no equivalent is dropped and listed on the plugin page. The mapped tools are the agent's whitelist. Like a project file, a plugin agent is offered to the operator alone until `agent.offered` opens it to agents, and its thread is born in the usual mode.
 - **Commands.** `commands/*.md` are read as skills of the plugin, named `<plugin>-<command>`, in the same `plugin` scope and the same `$` catalog. Claude Code already treats a command and a skill as one thing, and Codex has deprecated its own prompts in favour of skills. Tagma's `/` stays for Tagma's own acts, each of which runs Tagma's code; a plugin brings prompt text, not such an act. `$ARGUMENTS` in a command takes the text of the message that invokes it, without its `$<name>` reference.
 - **Hooks.** The `command` handlers of `hooks/hooks.json` run as the operator on the events Tagma's agent has:
