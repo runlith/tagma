@@ -28,11 +28,13 @@ sources:
 ---
 **Value.** Repeatable know-how — how to review, how to write a report, how to work with an internal service — lies once as a folder with `SKILL.md`, and the agent picks it up only when the task fits, without inflating every start.
 
-**How.** The server walks project skill directories (by default `.agents/skills`, `.claude/skills`, `.codex/skills`) and operator ones (`~/.agents/skills`, `~/.claude/skills`); directories are set by `skills.directories.*`, `skills.project.enabled` and `skills.global.enabled` switch them off entirely. The agent sees the list of skills with descriptions in its instructions and loads the needed one with the `load_skill` tool.
+**How.** The server walks project skill directories (by default `.agents/skills`, `.claude/skills`, `.codex/skills`) and operator ones (`~/.agents/skills`, `~/.claude/skills`); directories are set by `skills.directories.*`, `skills.project.enabled` and `skills.global.enabled` switch them off entirely. A plugin enabled in the project adds its skills and its commands under `<plugin>-<name>` in the `plugin` scope; the skills screen names the plugin of each. The agent sees the list of skills with descriptions in its instructions and loads the needed one with the `load_skill` tool.
 
 **Behaviour.**
-- The skill name is its folder name; `SKILL.md` must carry frontmatter with a `description` and a non-empty body, otherwise the file goes to rejected with a reason instead of vanishing silently.
-- On name clashes the later-read directory wins: project overrides personal, an enabled built-in server skill overrides both.
+- The skill name is its folder name, except a plugin skill, which is offered under the name its plugin composed; `SKILL.md` must carry frontmatter with a `description` and a non-empty body, otherwise the file goes to rejected with a reason instead of vanishing silently.
+- On name clashes the later-read directory wins: plugin skills are read first, personal overrides plugin, project overrides personal, an enabled built-in server skill overrides all. A replaced plugin skill stays on the skills screen as replaced, naming the scope that stands in its place, so a clash is never silent.
+- A plugin command is a skill whose instructions are the command's text; `$ARGUMENTS` in it becomes the words of the reader message that requested it with `$<name>`, without the reference itself. A new request with other words loads it again.
+- `skills.disabled` switches a plugin skill or command off by name, like any other. Disabling the plugin in the project withdraws all of them at the next catalog read, whatever `skills.rescan` says.
 - Loading hands the instructions as the tool result, the system prompt does not change; a skill with a file also hands the absolute path of its folder. Re-loading answers briefly that the skill is already in history.
 - Markdown files of the `references/` folder are skill sections: the catalog row lists them as `refs: name (first line of the file)`, `load_skill` with `references` hands the named ones with the body, the agent reads the rest by its folder path.
 - Tools a skill brings stay closed until its instructions lie in visible history; compaction that dropped them closes them again.
