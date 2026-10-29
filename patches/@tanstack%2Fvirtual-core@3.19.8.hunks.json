@@ -16,6 +16,10 @@
     "live-correction-basis": {
       "markers": ["_syncScrollOffset", "_onScroll", "this._lastElementOffset = this._readElementOffset()"],
       "tests": [{ "package": "packages/virtual-list", "file": "./src/liveOffset.test.ts" }]
+    },
+    "resized-positions": {
+      "markers": ["_resizedIndexes", "_measuredWith"],
+      "tests": [{ "package": "packages/virtual-list", "file": "./src/positions.test.ts" }]
     }
   }
 }

@@ -69,9 +69,15 @@ test('a batch of corrections within the laid scroll range rebuilds measurements 
     scrollEndThreshold: Number.NEGATIVE_INFINITY,
     getScrollElement: () => root,
     getItemKey: (index) => `row-${index}`,
-    estimateSize: (index) => {
-      if (index === 7) builds += 1;
-      return 10;
+    estimateSize: () => 10,
+  });
+  let laid = list.measurementsCache;
+  Object.defineProperty(list, 'measurementsCache', {
+    configurable: true,
+    get: () => laid,
+    set: (next: typeof laid) => {
+      builds += 1;
+      laid = next;
     },
   });
   try {
