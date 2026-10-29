@@ -7,19 +7,19 @@ import type { SettableScope, SettingKey } from '../platform/contract/wire/settin
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { session } from '../platform/store/writers.js';
 import { SettingChanges } from './contract/service/changes.js';
-import type { ManagedWriteInput, ManagedWriter, SettingWritten } from './contract/service/managed.js';
+import type { ManagedWriteInput, ManagedWriter, ManagedWriteRefusal, SettingWritten } from './contract/service/managed.js';
 import { SettingReaction } from './contract/service/reaction.js';
 import type { SettingLandRefusal, SettingWriteInput, SettingWriteRefusal } from './contract/service/values.js';
 import { resolveSetting, type SettingLayer } from './resolution.js';
 import { shapeOf } from './shape.js';
-import { scopeRows, storedValue, storeRow } from './store/rows.js';
+import { scopeRows, standingRow, storedValue, storeRow } from './store/rows.js';
 import { setting } from './store/table.js';
 
 type SettingLand<Code extends string> = {
   readonly key: SettingKey<unknown>;
   readonly scope: SettableScope;
   readonly projectId: number | undefined;
-  readonly declined: boolean;
+  readonly declined: boolean | 'standing';
   readonly value: Effect.Effect<unknown, StoreFailure | GateRefusal<Code>>;
 };
 
@@ -87,9 +87,13 @@ export const makeWrites = Effect.fnUntraced(function* (input: {
           projectId,
           Effect.gen(function* () {
             const offered = yield* landing.value;
+            const declined =
+              landing.declined === 'standing'
+                ? (yield* standingRow(store.db, key.id, landing.scope, projectId)).declined
+                : landing.declined;
             const beneath = resolveSetting(key, beneathOf(landing.scope, yield* layers(landing.projectId)));
-            const stored = storedValue(key, offered, landing.declined, beneath);
-            return yield* settle(key, landing.scope, projectId, stored, landing.declined, unit);
+            const stored = storedValue(key, offered, declined, beneath);
+            return yield* settle(key, landing.scope, projectId, stored, declined, unit);
           }),
         ),
       { onCommit: (written) => reacting.committed(written.announce) },
@@ -103,7 +107,8 @@ export const makeWrites = Effect.fnUntraced(function* (input: {
     projectId: number | undefined,
     offered: unknown,
     declined: boolean,
-  ): Effect.fn.Return<void, StoreFailure | GateRefusal<SettingLandRefusal | 'setting-conflict'>> {
+    declinedGiven: boolean,
+  ): Effect.fn.Return<void, StoreFailure | GateRefusal<ManagedWriteRefusal>> {
     const chain = yield* layers(projectId);
     const stored = storedValue(key, offered, declined, resolveSetting(key, beneathOf(scope, chain)));
     const values = new Map<string, unknown>();
@@ -115,6 +120,7 @@ export const makeWrites = Effect.fnUntraced(function* (input: {
       projectId: scope === 'project' ? (projectId ?? null) : null,
       value: offered,
       declined,
+      declinedGiven,
       resolved: resolveSetting(key, [...chain.filter((layer) => layer.scope !== scope), prospective]).value,
     });
   });
@@ -155,7 +161,9 @@ export const makeWrites = Effect.fnUntraced(function* (input: {
       }
     }
     const declined = offer.declined ?? false;
-    if (writer !== undefined) return yield* managedWrite(writer, key, scope, offer.projectId, offer.value, declined);
+    if (writer !== undefined) {
+      return yield* managedWrite(writer, key, scope, offer.projectId, offer.value, declined, offer.declined !== undefined);
+    }
     yield* land<never>({ key, scope, projectId: offer.projectId, declined, value: Effect.succeed(offer.value) });
   });
 
@@ -171,7 +179,7 @@ export const makeWrites = Effect.fnUntraced(function* (input: {
       key: declaration,
       scope,
       projectId,
-      declined: false,
+      declined: 'standing',
       value: Effect.gen(function* () {
         const { value: current, spare } = yield* scopeRows(store.db, key, scope, scope === 'project' ? (projectId ?? null) : null);
         const changed = yield* Schema.encodeEffect(key.schema)((yield* change(current)) as never).pipe(
@@ -193,8 +201,9 @@ export const makeWrites = Effect.fnUntraced(function* (input: {
 
   const managed = Effect.fnUntraced(function* <A>(unit: WriteUnit<'graph'>, written: ManagedWriteInput<A>) {
     const key = written.key as SettingKey<unknown>;
-    const stored =
-      written.pinned === true && written.value !== undefined
+    const stored = written.kept
+      ? (yield* standingRow(store.db, key.id, written.scope, written.projectId)).value
+      : written.pinned === true && written.value !== undefined
         ? JSON.stringify(written.value)
         : storedValue(
             key,

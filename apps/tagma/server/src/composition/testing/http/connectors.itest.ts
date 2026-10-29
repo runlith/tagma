@@ -2,8 +2,9 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { keyedServer } from '@runlith/mcp/testing/keyed';
 import { oauthServer } from '@runlith/mcp/testing/oauth';
-import { Effect } from 'effect';
+import { Context, Effect } from 'effect';
 import type { ConnectorEntry, ConnectorSignIn } from '../../../connectors/contract/wire/entry.js';
+import { McpServers } from '../../../mcp/contract/service/servers.js';
 import type { ConnectorRow } from '../../../connectors/contract/wire/rows.js';
 import type { McpServerRow } from '../../../mcp/contract/wire/servers.js';
 import { doorFixture, DoorFixture, projectLeaving } from '../doorFixture.js';
@@ -93,6 +94,56 @@ layer(doorFixture(), { excludeTestServices: true })('connectors', (it) => {
         expect((yield* answered('connect_service', { id: 'keyed' })).connector?.state).toBe('needs-value');
         yield* answered('disconnect_service', { id: 'keyed' });
         yield* answered('disconnect_service', { id: 'signed' });
+      }),
+  );
+
+  it.effect(
+    'a project declining the operator’s servers reads its connector connected, off in this project, keeps declining while it declares its own and takes them back',
+    () =>
+      Effect.gen(function* () {
+        const world = yield* DoorFixture;
+        const oauth = yield* oauthServer();
+        const keyed = yield* keyedServer(KEY);
+        yield* world.lend({ connectors: [entry('shared', oauth.url, { kind: 'oauth' })] });
+        const project = yield* world.plainProject();
+        yield* projectLeaving(world, project);
+        const servers = Context.get(world.runtime.owners, McpServers);
+        const call = (id: string, input: unknown) => world.op(id, input, `project=${project}`);
+        const answered = Effect.fnUntraced(function* (id: string, input: unknown) {
+          const answer = yield* call(id, input);
+          if (answer.status !== 200) return yield* Effect.die(new Error(`${id} answered ${answer.status}: ${JSON.stringify(answer.body)}`));
+          return answer.body as Answer;
+        });
+        const shared = Effect.map(answered('read_connectors', {}), (read) => read.connectors?.find((row) => row.id === 'shared'));
+        const offered = () => servers.palette(project).map((tool) => tool.declaration.name);
+        const declining = (declined: boolean) => answered('write_setting_layer', { scope: 'project', key: 'mcp.servers', declined });
+
+        const connected = yield* answered('connect_service', { id: 'shared', scope: 'user' });
+        yield* Effect.addFinalizer(() => Effect.orDie(Effect.asVoid(call('remove_mcp_server', { name: 'shared', scope: 'user' }))));
+        const returned = yield* oauth.follow(connected.url ?? '');
+        expect((yield* world.call(`${returned.pathname}${returned.search}`)).status).toBe(200);
+        yield* servers.reconcile(project);
+        expect([(yield* shared)?.state, offered()]).toEqual(['connected', ['shared']]);
+
+        yield* declining(true);
+        expect([yield* shared, offered()]).toMatchObject([{ state: 'declined', server: { scope: 'user' } }, []]);
+        const own = {
+          name: 'own',
+          transport: 'http',
+          url: keyed.url,
+          headers: { Authorization: `Bearer ${KEY}` },
+          capabilities: { kinds: ['network'], mutates: false },
+        };
+        yield* answered('add_mcp_server', own);
+        expect([(yield* shared)?.state, offered()]).toEqual(['declined', ['own']]);
+        const valued = yield* call('write_setting_layer', { scope: 'project', key: 'mcp.servers', value: [], declined: false });
+        const cleared = yield* call('write_setting', { key: 'mcp.servers' });
+        expect([valued.body, cleared.body]).toMatchObject([{ code: 'setting-managed' }, { code: 'setting-managed' }]);
+        expect((yield* shared)?.state).toBe('declined');
+
+        yield* declining(false);
+        expect([(yield* shared)?.state, offered().sort()]).toEqual(['connected', ['own', 'shared']]);
+        yield* answered('remove_mcp_server', { name: 'own' });
       }),
   );
 });

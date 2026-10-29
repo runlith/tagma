@@ -39,6 +39,8 @@ export type WriteOutcome =
 const SAVED_SHOWN_MS = 2_000;
 const NONE: readonly SettingEntry[] = [];
 
+const STORED_UNAPPLIED = 'setting-unapplied';
+
 type Settings = ReturnType<typeof SettingsRepo.use>;
 
 export type SettingsCatalogOptions = { projectId: number };
@@ -126,7 +128,9 @@ export class SettingsCatalog extends Process<SettingsCatalog, SettingsCatalogOpt
       this.fading.add(timer);
     } catch (caught) {
       if (this.scope.signal.aborted) return;
-      this.record(input.key, refusedOutcome(caught));
+      const outcome = refusedOutcome(caught);
+      this.record(input.key, outcome);
+      if (outcome.kind === 'refused' && outcome.code === STORED_UNAPPLIED) await this.load();
     } finally {
       this.busyKey = null;
     }

@@ -19,7 +19,7 @@ export const mcpServers = settingListKey({
   order: 750,
   title: 'Servers',
   description:
-    'Each declaration names the server, how it is reached and the capabilities its calls are judged by; a secret is written as a ${NAME} reference and resolved when the server connects.',
+    'Each declaration names the server, how it is reached and the capabilities its calls are judged by; a secret is written as a ${NAME} reference and resolved when the server connects. A project declines the operator’s own servers by writing declined alone in its layer, keeping the servers it declares itself.',
   control: { kind: 'managed', by: 'add_mcp_server' },
   member: McpServerSetting,
   fallback: [] as readonly McpServerSetting[],

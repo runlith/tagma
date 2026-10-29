@@ -19,6 +19,7 @@ export const OPEN_REFUSALS = [
   'setting-conflict',
   'unknown-setting',
   'setting-managed',
+  'setting-unapplied',
   'setting-scope',
   'setting-value',
 ] as const;

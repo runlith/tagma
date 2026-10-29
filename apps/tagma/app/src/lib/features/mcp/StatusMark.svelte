@@ -12,6 +12,7 @@
     'needs-sign-in': 'bg-status-open',
     failed: 'bg-severity-lie',
     disabled: 'bg-status-closed',
+    declined: 'bg-status-closed',
   };
 </script>
 

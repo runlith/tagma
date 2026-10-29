@@ -11,13 +11,15 @@ export type ManagedWriteInput<A> = {
   readonly projectId: number | null;
   readonly value?: unknown;
   readonly declined: boolean;
+  readonly declinedGiven?: boolean;
   readonly pinned?: boolean;
+  readonly kept?: boolean;
   readonly resolved: A;
 };
 
-export type ManagedWriter<A> = (
-  input: ManagedWriteInput<A>,
-) => Effect.Effect<void, StoreFailure | GateRefusal<SettingLandRefusal | 'setting-conflict'>>;
+export type ManagedWriteRefusal = SettingLandRefusal | 'setting-conflict' | 'setting-managed' | 'setting-unapplied';
+
+export type ManagedWriter<A> = (input: ManagedWriteInput<A>) => Effect.Effect<void, StoreFailure | GateRefusal<ManagedWriteRefusal>>;
 
 export type SettingWritten = { readonly announce: Effect.Effect<void> };
 

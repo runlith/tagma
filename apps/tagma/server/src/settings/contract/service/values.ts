@@ -28,6 +28,7 @@ export type SettingWriteRefusal =
   | 'setting-conflict'
   | 'unknown-setting'
   | 'setting-managed'
+  | 'setting-unapplied'
   | 'setting-scope'
   | 'setting-value';
 

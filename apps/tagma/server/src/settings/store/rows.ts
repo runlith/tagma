@@ -52,6 +52,13 @@ export const valueRows = (db: StoreDb<'graph'>, projectId: number | undefined, k
 export const rowOf = (keyId: string, scope: SettableScope, projectId: number | null) =>
   and(eq(setting.scope, scope), eq(setting.key, keyId), projectId === null ? isNull(setting.projectId) : eq(setting.projectId, projectId));
 
+export const standingRow = (db: StoreDb<'graph'>, keyId: string, scope: SettableScope, projectId: number | null) =>
+  db
+    .select({ value: setting.value, declined: setting.declined })
+    .from(setting)
+    .where(rowOf(keyId, scope, projectId))
+    .pipe(Effect.map((rows) => rows[0] ?? { value: null, declined: false }));
+
 export const storedValue = (key: SettingKey<unknown>, offered: unknown, declined: boolean, beneath: Resolved<unknown>): string | null => {
   const echoesBeneath =
     offered !== undefined && !declined && JSON.stringify(offered) === JSON.stringify(Schema.encodeSync(key.schema)(beneath.value as never));

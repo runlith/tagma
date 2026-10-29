@@ -51,7 +51,7 @@ export const CONNECTOR_PAIRS = {
         }
         yield* servers.add({ projectId: project, scope, declaration: declarationOf(entry), connector: entry.id });
         const declared = (yield* servers.raise(project, entry.id)).find((row) => row.name === entry.id && row.scope === scope);
-        if (signIn.kind !== 'oauth' || redirect === null || declared?.status === 'connected') {
+        if (signIn.kind !== 'oauth' || redirect === null || declared?.status === 'connected' || declared?.status === 'declined') {
           return { status: 'ok' as const, connector: connectorRow(entry, declared) };
         }
         const client = signIn.client !== undefined && signIn.client.redirects.includes(redirect) ? { id: signIn.client.id } : undefined;

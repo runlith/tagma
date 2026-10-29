@@ -90,6 +90,7 @@ export const SETTINGS_OPERATIONS = {
     refusals: [
       'unknown-setting',
       'setting-managed',
+      'setting-unapplied',
       'setting-scope',
       'setting-value',
       'setting-conflict',
@@ -147,6 +148,7 @@ export const SETTINGS_OPERATIONS = {
     refusals: [
       'unknown-setting',
       'setting-managed',
+      'setting-unapplied',
       'setting-scope',
       'setting-value',
       'setting-conflict',

@@ -53,7 +53,8 @@ export type McpServerRow = {
   readonly measuredAt: number;
 };
 
-const STATUS_WORDS: Record<McpServerStatus | 'pending' | 'needs-value', null> = {
+const STATUS_WORDS: Record<McpServerStatus | 'pending' | 'needs-value' | 'declined', null> = {
+  declined: null,
   pending: null,
   'needs-value': null,
   'needs-sign-in': null,

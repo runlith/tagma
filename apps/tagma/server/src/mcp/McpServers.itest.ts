@@ -9,6 +9,9 @@ import { mcpServers as mcpServersKey } from './contract/wire/settings.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { McpServers } from './contract/service/servers.js';
 import { mcpServersLayer } from './testing/doubles.js';
+import { mcpServersLayer as poolLayer } from './serverPool.js';
+import { McpPlaces } from './contract/service/places.js';
+import { memorySecretsLayer } from '../secrets/testing/doubles.js';
 
 const mcpGraph = graphFixture();
 const MCP_SERVER = resolve(import.meta.dir, '../../../../../packages/mcp/test/mcpTestServer.ts');
@@ -86,5 +89,53 @@ it.live('a view starts only its scoped server, carries its caller and loses its 
     expect(servers.palette(projectId).map((entry) => entry.declaration.name)).toEqual(['files']);
     yield* servers.release(projectId);
     expect(servers.palette(projectId)).toEqual([]);
+  }),
+);
+
+it.live('a project declining the operator’s servers while its pool opens leaves none of them in the pool', () =>
+  Effect.gen(function* () {
+    const opened = yield* Effect.acquireRelease(mcpGraph.openEffect(), () => Effect.orDie(mcpGraph.releaseEffect));
+    const demo = opened.effects;
+    const projectId = demo.projectId;
+    const settings = Context.get(demo.context, Settings);
+    const entered = yield* Deferred.make<void>();
+    const held = yield* Deferred.make<void>();
+    const places = McpPlaces.of({
+      of: () => Effect.andThen(Deferred.succeed(entered, undefined), Effect.as(Deferred.await(held), [])),
+      onMoved: () => () => undefined,
+    });
+    const context = yield* Layer.build(
+      poolLayer({}).pipe(Layer.provide(Layer.succeed(McpPlaces, places)), Layer.provideMerge(memorySecretsLayer())),
+    ).pipe(Effect.provide(demo.context));
+    const servers = Context.get(context, McpServers);
+    const files: McpServerDeclaration = {
+      name: 'files',
+      transport: 'stdio',
+      command: process.execPath,
+      args: [MCP_SERVER],
+      capabilities: { kinds: ['read'], mutates: false },
+      enabled: true,
+    };
+    yield* settings.amend(mcpServersKey, 'user', undefined, () => Effect.succeed([files]));
+
+    const opening = yield* Effect.forkChild(servers.reconcile(projectId));
+    yield* Deferred.await(entered);
+    const declined = yield* Effect.forkChild(
+      servers.rows(projectId).pipe(
+        Stream.filter((rows) => rows.some((row) => row.status === 'declined')),
+        Stream.take(1),
+        Stream.runDrain,
+      ),
+    );
+    const declining = yield* Effect.forkChild(settings.write({ scope: 'project', projectId, key: mcpServersKey.id, declined: true }));
+    yield* Fiber.join(declined);
+    yield* Deferred.succeed(held, undefined);
+    yield* Fiber.join(opening);
+    yield* Fiber.join(declining);
+    expect([servers.palette(projectId), (yield* servers.list(projectId)).map((row) => [row.name, row.status])]).toEqual([
+      [],
+      [['files', 'declined']],
+    ]);
+    yield* servers.release(projectId);
   }),
 );

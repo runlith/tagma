@@ -51,7 +51,9 @@
           ? `needs ${(row.needs ?? []).join(', ')}`
           : row.status === 'needs-sign-in'
             ? 'needs a sign-in'
-            : row.status,
+            : row.status === 'declined'
+              ? 'off in this project'
+              : row.status,
   );
 
   const CLIENT: Record<NonNullable<NonNullable<McpServerRow['signIn']>['client']>, string> = {

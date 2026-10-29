@@ -39,6 +39,7 @@
     'needs-sign-in': 'needs a sign-in',
     failed: 'failed',
     disabled: 'switched off',
+    declined: 'connected, off in this project',
   };
 </script>
 

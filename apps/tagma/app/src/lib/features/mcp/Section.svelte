@@ -12,6 +12,7 @@
   import McpDeclarationForm from '$lib/features/mcp/DeclarationForm.svelte';
   import McpServerCard from '$lib/features/mcp/ServerCard.svelte';
   import Connectors from '$lib/features/mcp/Connectors.svelte';
+  import SwitchControl from '$lib/features/settings/controls/SwitchControl.svelte';
   import type { ConnectorRow } from '@tagma/server/connectors/contract/wire/rows';
   import { SecretsRepo } from '$lib/features/secrets/Repo.js';
   import { rest, type SectionProps } from '$lib/features/settings/section.js';
@@ -26,6 +27,10 @@
   const rows = $derived(mcp.servers.key(project?.id).data ?? []);
   const projectId = $derived(project?.id);
   const sets = $derived(projectId === undefined ? [] : (secrets.sets.key({ projectId, owner: 'mcp' }).data ?? []));
+
+  const serversEntry = $derived(catalog.entriesOf('mcp').find((entry) => entry.id === 'mcp.servers'));
+  const declines = $derived(serversEntry !== undefined && catalog.answerOf(serversEntry, 'project').declined);
+  const declineOutcome = $derived(catalog.outcomes['mcp.servers']);
 
   const connectors = $derived(mcp.connectors.key(project?.id).data ?? []);
   const connectorOf = (row: McpServerRow) =>
@@ -120,6 +125,11 @@
     }
   }
 
+  async function decline(declined: boolean): Promise<void> {
+    await catalog.write({ scope: 'project', key: 'mcp.servers', declined });
+    await refreshed();
+  }
+
   async function connecting(row: ConnectorRow, act: () => Promise<string | undefined>): Promise<void> {
     busy = row.id;
     connectorRefusal = undefined;
@@ -208,6 +218,20 @@
     {/snippet}
 
     <div class="grid gap-3 pt-1">
+      {#if scope === 'project' && project !== null && serversEntry !== undefined}
+        <div class="grid gap-0.5">
+          <div class="flex items-center gap-3">
+            <span class="flex-1 text-ui">Use your own servers in this project</span>
+            <SwitchControl
+              label="Use your own servers in this project"
+              value={!declines}
+              disabled={catalog.busyKey === 'mcp.servers'}
+              onwrite={(on) => void decline(!on)}
+            />
+          </div>
+          {#if declineOutcome?.kind === 'refused'}{@render refused(declineOutcome)}{/if}
+        </div>
+      {/if}
       {#if adding}
         <div class="overflow-hidden rounded-lg border">
           <p class="bg-sunken px-3 pt-3 text-small text-muted-foreground">

@@ -6,7 +6,11 @@ import type { McpResourceEvent } from './contract/wire/feeds.js';
 import { Clock, Effect, Exit, FiberSet, Layer, PubSub, Scope, Semaphore, Stream } from 'effect';
 import { flight } from '@runlith/held/Flight';
 import type { HoldStalled, ReentrantCall } from '@runlith/held/failures';
-import type { StoreFailure } from '../platform/contract/service/store.js';
+import { GraphStore, type StoreFailure } from '../platform/contract/service/store.js';
+import { writes } from '../platform/contract/service/writes.js';
+import { session } from '../platform/store/writers.js';
+import { ManagedWrite, type ManagedWriter } from '../settings/contract/service/managed.js';
+import { setting } from '../settings/store/table.js';
 import type { SettableScope } from '../platform/contract/wire/setting.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { type McpServerSetting, mcpServers } from './contract/wire/settings.js';
@@ -33,7 +37,9 @@ import {
   SecretOwners,
 } from '../secrets/contract/service/secrets.js';
 import {
+  declinedRowOf,
   mcpDeclared,
+  mcpDeclinedHere,
   rowOf,
   mcpMissingReferences,
   mcpReferences,
@@ -127,6 +133,8 @@ const makeMcpServers = Effect.fnUntraced(function* ({
   const settings = yield* Settings;
   const places = yield* McpPlaces;
   const owners = yield* SecretOwners;
+  const store = yield* GraphStore;
+  const managed = yield* ManagedWrite;
   const scope = yield* Effect.scope;
   const opening = yield* flight<number, McpPool, never>({ name: 'mcp-pool-open', owner: 'mcp', key: String, ceiling: '30 seconds' });
   const pools = new Map<number, Pooled>();
@@ -191,11 +199,12 @@ const makeMcpServers = Effect.fnUntraced(function* ({
   });
 
   const list: McpServers['Service']['list'] = Effect.fn('McpServers.list')(function* (projectId) {
-    const resolved = mcpDeclared(yield* settings.read(mcpServers, projectId));
+    const read = yield* settings.read(mcpServers, projectId);
+    const resolved = mcpDeclared(read);
     const given = yield* handouts;
     const measured = new Map((pools.get(projectId)?.pool.states() ?? []).map((state) => [state.name, state]));
     const now = yield* Clock.currentTimeMillis;
-    return yield* Effect.forEach(resolved, (entry) =>
+    const effective = yield* Effect.forEach(resolved, (entry) =>
       Effect.map(
         entry.declaration.transport === 'http'
           ? signInRow(given, keyOf(entry.scope, projectId, entry.declaration.name), now)
@@ -203,6 +212,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
         (signIn) => rowOf(entry, measured.get(entry.declaration.name), now, resolver(given, projectId, entry), signIn),
       ),
     );
+    return [...effective, ...mcpDeclinedHere(read).map((entry) => declinedRowOf(entry, now))];
   });
 
   const rows: McpServers['Service']['rows'] = (projectId) =>
@@ -359,7 +369,9 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     function* (
       projectId: number,
       widen: (pooled: Pooled) => void,
+      openOnly = false,
     ): Effect.fn.Return<void, StoreFailure | GateRefusal<McpReconcileRefusal>> {
+      if (openOnly && !pools.has(projectId)) return;
       const pool = poolOf(projectId);
 
       const given = yield* handouts;
@@ -597,8 +609,38 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     ),
   };
 
+  const decline: ManagedWriter<readonly McpServerSetting[]> = Effect.fn('McpServers.decline')(function* (input) {
+    if (input.scope !== 'project' || input.projectId === null || input.value !== undefined || input.declinedGiven !== true) {
+      return yield* new GateRefusal(
+        'setting-managed',
+        `${mcpServers.id} lists the servers add_mcp_server declares and remove_mcp_server drops; this door only lets a project decline the operator's own servers, keeping its own.`,
+        ['send declined alone, in project scope', 'add_mcp_server and remove_mcp_server change the servers themselves'],
+      );
+    }
+    const projectId = input.projectId;
+    yield* store.transaction(writes('settings', [session, setting]), (unit) => managed.write(unit, { ...input, kept: true }), {
+      onCommit: (written) => Effect.andThen(written.announce, moved(projectId)),
+    });
+    yield* Effect.andThen(
+      settle(projectId, kept, true),
+      Effect.suspend(() => pools.get(projectId)?.pool.awaitHandshakes() ?? Effect.void),
+    ).pipe(
+      Effect.catchTag('GateRefusal', (refusal) =>
+        Effect.fail(
+          new GateRefusal(
+            'setting-unapplied',
+            `The project ${input.declined ? 'declines' : 'takes'} the operator's MCP servers now, but its pool did not follow: ${refusal.message}`,
+            ['read_mcp_servers names each server’s state', 'the next thread turn reconciles the pool again'],
+          ),
+        ),
+      ),
+    );
+    yield* moved(projectId);
+  });
+
   return {
     owner,
+    decline,
     servers: McpServers.of({
       list,
       rows,
@@ -624,11 +666,12 @@ const makeMcpServers = Effect.fnUntraced(function* ({
 
 export const mcpServersLayer = (
   environment: Readonly<Record<string, string | undefined>> = process.env,
-): Layer.Layer<McpServers, never, Settings | ProjectChanges | McpPlaces | SecretOwners> =>
+): Layer.Layer<McpServers, never, Settings | ProjectChanges | McpPlaces | SecretOwners | GraphStore | ManagedWrite> =>
   Layer.effect(
     McpServers,
     Effect.gen(function* () {
-      const { servers, owner } = yield* makeMcpServers({ environment });
+      const { servers, owner, decline } = yield* makeMcpServers({ environment });
+      yield* (yield* ManagedWrite).register(mcpServers, decline);
       const unsubscribe = (yield* ProjectChanges).removed.subscribe(({ projectId }) => servers.release(projectId));
       yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
       yield* Effect.acquireRelease((yield* SecretOwners).register(owner), (withdraw) => Effect.sync(withdraw));

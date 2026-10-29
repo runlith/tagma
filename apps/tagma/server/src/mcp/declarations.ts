@@ -23,6 +23,28 @@ export function mcpDeclared(resolved: Resolved<readonly McpServerSetting[]>): re
   return [...byName.values()];
 }
 
+export function mcpDeclinedHere(resolved: Resolved<readonly McpServerSetting[]>): readonly McpServerResolution[] {
+  const own = resolved.layers.project;
+  if (own?.declined !== true) return [];
+  const named = new Set((own.value ?? []).map((member) => member.name));
+  return (resolved.layers.user?.value ?? []).flatMap(({ connector, ...declaration }) =>
+    named.has(declaration.name) ? [] : [{ declaration, scope: 'user' as const, connector }],
+  );
+}
+
+export const declinedRowOf = (resolved: McpServerResolution, at: number): McpServerRow => ({
+  name: resolved.declaration.name,
+  scope: resolved.scope,
+  reach: mcpReachOf(resolved.declaration),
+  capabilities: resolved.declaration.capabilities,
+  enabled: resolved.declaration.enabled,
+  connector: resolved.connector,
+  identity: mcpDeclarationFingerprint(resolved.declaration),
+  status: 'declined',
+  tools: 0,
+  measuredAt: at,
+});
+
 export function mcpReachOf(declaration: McpServerDeclaration): McpServerReach {
   return declaration.transport === 'stdio'
     ? {
