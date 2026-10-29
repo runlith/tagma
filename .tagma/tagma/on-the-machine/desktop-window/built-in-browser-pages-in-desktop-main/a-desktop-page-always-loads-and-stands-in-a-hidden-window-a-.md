@@ -10,7 +10,7 @@ sources:
     ref: apps/tagma/desktop/src/browser/page.ts
     symbol: HeldPage
 ---
-A webContents into which no document was ever loaded does not answer `Page.enable`, and the core would wait for it forever. So a new page always goes through `loadURL`, including `about:blank`, or through history restoration. `open` answers once that main-frame document commits or fails: until then the navigation is pending, and Chromium refuses debugger commands such as `Page.crash` against a pending navigation.
+A webContents into which no document was ever loaded does not answer `Page.enable`, and the core would wait for it forever. So a new page always goes through `loadURL`, including `about:blank`, or through history restoration. `open` answers once that first navigation ends: it commits, fails, or stops loading without committing (a 204, a cancelled redirect). Until then the navigation is pending, and Chromium refuses debugger commands such as `Page.crash` against a pending navigation.
 
 A page keeps its webContents from creation: a destroyed `WebContentsView`, which closing a popup's window makes, hands out no webContents, and placement still settles the page after that.
 
