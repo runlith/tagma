@@ -121,7 +121,7 @@ export const blockBirth = Effect.gen(function* () {
     return yield* new GateRefusal('parent-required', 'a block is born under what it is about, and this one names no parent', [
       "parentId of the module owning the block's code — read_owners on its path answers the blocks over it; take the module they stand under",
       'parentId of the page of its topic — search_blocks finds it by its words',
-      `parentId ${blockName(root.uuid)}, the root named explicitly — only for a part of the project or what concerns the whole of it`,
+      `parentId ${blockName(root.uuid)}, the root named explicitly — only for a part of the project or the rare block no part owns`,
     ]);
   });
 

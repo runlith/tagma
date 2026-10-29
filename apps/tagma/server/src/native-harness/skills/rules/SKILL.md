@@ -1,6 +1,6 @@
 ---
 name: rules
-description: A project's rules end to end — `#rule` law in the graph, the checks `tagma.config.ts` describes with `@runlith/tagma/rules`, enforce_rule, debt and escapes, and the format commands commits are formatted by. Load when the operator states a norm for agents or code, to record it and offer a check when it is measurable; to turn a rule into a check (builtin, linter, the project's own program), try it with check_rules, enforce it, change its strictness or triggers, own, absorb or retire debt, read escapes; when a landing refuses rule-violated, module-map-invalid, inspection-failed, config-invalid or format-*; when the owner asks to format on commit, set up format commands, keep agents' commits in the repository's form or fix CI formatting failures; to explain the Rules screen.
+description: A project's rules end to end — `#rule` law in the graph, the checks `tagma.config.ts` describes with `@runlith/tagma/rules`, enforce_rule, debt and escapes, and the format commands commits are formatted by. Load when the operator asks to record a norm for agents or code, to record it and offer a check when it is measurable; to turn a rule into a check (builtin, linter, the project's own program), try it with check_rules, enforce it, change its strictness or triggers, own, absorb or retire debt, read escapes; when a landing refuses rule-violated, module-map-invalid, inspection-failed, config-invalid or format-*; when the owner asks to format on commit, set up format commands, keep agents' commits in the repository's form or fix CI formatting failures; to explain the Rules screen.
 ---
 
 # Rules
@@ -15,17 +15,17 @@ An enforced rule joins them: its enforcement document names a key of `tagma.conf
 
 ## A rule, or an order for now
 
-The operator correcting how agents work beyond this task — what they would want from any agent tomorrow — is a rule: write it in that turn and name it in the answer. Priorities, plans and orders for now are not rules; in doubt, offer one in a line. A wish about the product's behaviour is a spec or a task, not a rule.
+A rule is recorded when the operator asks for one: write it in that turn and name it in the answer. A correction he gives without asking for a record is followed; when it reads as a norm any agent would need tomorrow, offer the rule in one line, naming the standing rule it would edit. Priorities, plans and orders for now are not rules. A wish about the product's behaviour is a spec or a task.
 
 ## Writing a `#rule`
 
 The `#rule` tag prompt governs its form: one norm, the title states the obligation, the body only what the title cannot work without. What else decides how it works:
 
 - **Sources** draw its reach: the code it is about, the code its check measures. A rule without sources measures the whole project within the inspection's base. An empty path in a reach means "the whole base"; an empty list reaches nothing. Anchor a symbol to the file declaring it.
-- **`delivery`** decides where its text reaches agents. `prompt`: every thread's startup instructions — a norm across the project or wider than the code it was born in. `code`: when an agent reads or writes code its sources name — a norm about that code. Unset, a rule with sources is `code`, one without `prompt`. `set_rule_delivery` switches it and keeps the sources; its answer names how each thread's startup cost moved. Choosing `code` without sources succeeds with a warning: its text reaches no agent, while any check still measures the whole project; add sources with anchor_block or choose `prompt`. Delivery never changes the reach.
+- **`delivery`** decides where its text reaches agents; choose the narrowest reach that serves the norm. `code`: when an agent reads or writes code its sources name — a norm about code, sourced to that code; for code spread over many callers, source the door they all pass and offer a check on its callers. `prompt`: every thread's startup instructions for as long as the rule lives — only a norm every thread needs whatever it works on. Unset, a rule with sources is `code`, one without `prompt`. `set_rule_delivery` switches it and keeps the sources; its answer names how each thread's startup cost moved. Choosing `code` without sources succeeds with a warning: its text reaches no agent, while any check still measures the whole project; add sources with anchor_block or choose `prompt`. Delivery never changes the reach.
 - **`set_rule_enabled`** false: the rule is not delivered, its check judges nothing and a new enforce_rule refuses `rule-disabled`; switch it on with set_rule_enabled `enabled: true` before enforcing it. Its document and debt stay. It is for correct law that should not bind now; a wrong rule is rewritten or replaced.
 - Write the switch and delivery through set_rule_enabled and set_rule_delivery; these fields belong to their operations, so create_block and update_block direct their caller there.
-- A rule stands under what it governs — the module its sources name, or the root for law over the whole project; its place serves the reader, and its delivery and sources decide who receives it. A nested rule overrides no ancestor.
+- A rule's place in the outline decides only where readers find it, never who receives it, and a nested rule overrides no ancestor.
 - A rule in the global graph rides every project as `prompt` text and is never enforced: checks judge only the project's own rules.
 
 ## A measurable norm gets a check offered

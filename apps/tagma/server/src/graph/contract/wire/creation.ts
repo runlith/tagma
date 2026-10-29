@@ -11,7 +11,7 @@ export const creationFields = <Ref extends Schema.Top, Target extends Schema.Top
   body: Schema.optional(body).annotate({ description: 'Markdown.' }),
   parentId: Schema.optional(reference).annotate({
     description:
-      'The block it stands under: the owner of what it is about. The root only for a part of the project or what concerns the whole of it.',
+      'The block it stands under: the owner of what it is about. The root only for a part of the project or the rare block no part owns.',
   }),
   contract: Schema.optional(contractIdSchema).annotate({
     description:
