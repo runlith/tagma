@@ -43,6 +43,8 @@ edges:
   - kind: imports-tests
     to: 01a174f2-3d74-74cb-a0f8-1c008f8b93e1
   - kind: imports-tests
+    to: 01a174f2-3d7f-7ca2-9e04-eb039cc7259f
+  - kind: imports-tests
     to: 01a174f2-3d8d-7fa1-bc61-069b96400e93
 sources:
   - kind: dir
