@@ -102,6 +102,18 @@ fields:
       },
       {
         "at": "src/mcpApps.ts"
+      },
+      {
+        "at": "src/McpAuth.ts",
+        "for": [
+          "f3b6b585"
+        ]
+      },
+      {
+        "at": "src/mcpOAuth.ts",
+        "for": [
+          "f3b6b585"
+        ]
       }
     ],
     "id": "@runlith/mcp",
