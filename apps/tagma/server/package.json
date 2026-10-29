@@ -1080,6 +1080,13 @@
       "node": "./src/browser/contract/wire/pageOperations.ts",
       "default": "./src/browser/contract/wire/pageOperations.ts"
     },
+    "./browser/contract/wire/recordOperations": {
+      "types": "./src/browser/contract/wire/recordOperations.ts",
+      "browser": "./src/browser/contract/wire/recordOperations.ts",
+      "bun": "./src/browser/contract/wire/recordOperations.ts",
+      "node": "./src/browser/contract/wire/recordOperations.ts",
+      "default": "./src/browser/contract/wire/recordOperations.ts"
+    },
     "./browser/contract/wire/pick": {
       "types": "./src/browser/contract/wire/pick.ts",
       "browser": "./src/browser/contract/wire/pick.ts",

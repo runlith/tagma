@@ -14,6 +14,7 @@ import { CurrentCaller } from '../../invocation/contract/service/admission.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { entryAt } from '../../checkout-files/entry.js';
 import { PREVIEW_BYTES } from '../../checkout-files/contract/wire/place.js';
+import { rangedFile } from './ranged.js';
 
 const COMMIT_END = /^[0-9a-f]{40}(?:[0-9a-f]{24})?\^?$/;
 
@@ -27,7 +28,7 @@ export const checkoutsHandler = (
     Effect.fn(function* (handlers) {
       const scopes = yield* GraphScopes;
       return handlers
-        .handle('preview', ({ query }) =>
+        .handle('preview', ({ query, headers }) =>
           answering(
             Effect.gen(function* () {
               if ((yield* CurrentCaller).actor.kind !== 'operator') {
@@ -50,8 +51,14 @@ export const checkoutsHandler = (
                   }),
                 );
               const media = file.mediaType;
-              const visual = media.startsWith('image/') || media === 'application/pdf';
               const source = Bun.file(file.path);
+              if (media.startsWith('video/'))
+                return rangedFile(source, file.bytes, headers.range, {
+                  'content-type': media,
+                  'cache-control': 'no-store',
+                  'x-content-type-options': 'nosniff',
+                });
+              const visual = media.startsWith('image/') || media === 'application/pdf';
               return HttpServerResponse.fromWeb(
                 new Response(query.full === 'true' || visual ? source : source.slice(0, PREVIEW_BYTES), {
                   headers: {

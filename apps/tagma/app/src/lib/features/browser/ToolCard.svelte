@@ -54,6 +54,7 @@
       ? diskAddress(door, answered.path)
       : null,
   );
+  const clip = $derived(answered.status === 'recorded' && answered.path !== undefined ? diskAddress(door, answered.path) : null);
 </script>
 
 {#if entry.toolRefusal}
@@ -93,5 +94,10 @@
   {/if}
   {#if frame !== null}
     <img src={frame} alt="What the page showed" class="max-h-96 w-full rounded-md object-contain object-left-top" />
+  {/if}
+  {#if clip !== null}
+    <video src={clip} class="max-h-96 w-full rounded-md bg-sunken object-contain object-left-top" controls preload="metadata"
+      ><track kind="captions" /></video
+    >
   {/if}
 </div>

@@ -3,13 +3,11 @@ import { Film, VIDEO_BITS_PER_PIXEL } from '../artifacts/contract/service/film.j
 import { Render } from '../artifacts/contract/service/render.js';
 import { frameCount } from '../artifacts/contract/wire/timeline.js';
 import { Hosts } from '../browser/contract/service/hosts.js';
-import { encoder } from './encoder.js';
+import { ENCODER_CANVAS, encoder } from './encoder.js';
 import { muxer } from './mux.js';
 import { capturing, unavailable } from './render.js';
 
 const QUALITY = 95;
-
-const SMALLEST = { width: 16, height: 16, scale: 1 } as const;
 
 export const makeFilm = Effect.gen(function* () {
   const hosts = yield* Hosts;
@@ -24,7 +22,7 @@ export const makeFilm = Effect.gen(function* () {
           const height = timeline.height * scale;
           const total = frameCount(timeline);
           const capture = yield* capturing(hosts);
-          const session = yield* Effect.mapError(capture.target(SMALLEST), unavailable);
+          const session = yield* Effect.mapError(capture.target(ENCODER_CANVAS), unavailable);
           const encoding = yield* encoder(session, {
             width,
             height,
@@ -43,7 +41,9 @@ export const makeFilm = Effect.gen(function* () {
             })
             .pipe(
               Stream.mapEffect((shot) =>
-                encoding.frame(shot.k, shot.bytes).pipe(Effect.flatMap(muxing.add), Effect.as(shot.k + 1), Effect.withSpan('Film.frame')),
+                encoding
+                  .frame(Buffer.from(shot.bytes.buffer, shot.bytes.byteOffset, shot.bytes.byteLength).toString('base64'), shot.k, 1)
+                  .pipe(Effect.flatMap(muxing.add), Effect.as(shot.k + 1), Effect.withSpan('Film.frame')),
               ),
             );
           const written = Stream.fromEffect(

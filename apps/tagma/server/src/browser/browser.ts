@@ -27,11 +27,18 @@ export const browser = manifest({
     },
   ],
   bodies: async () => {
-    const [{ COOKIE_PAIRS, PAGE_PAIRS, PROFILE_PAIRS }, { TRACE_PAIRS }] = await Promise.all([
+    const [{ COOKIE_PAIRS, PAGE_PAIRS, PROFILE_PAIRS }, { TRACE_PAIRS }, { RECORD_PAIRS }] = await Promise.all([
       import('./operations.js'),
       import('./traces.js'),
+      import('./recordings.js'),
     ]);
-    return [...Object.values(PAGE_PAIRS), ...Object.values(PROFILE_PAIRS), ...Object.values(COOKIE_PAIRS), ...Object.values(TRACE_PAIRS)];
+    return [
+      ...Object.values(PAGE_PAIRS),
+      ...Object.values(PROFILE_PAIRS),
+      ...Object.values(COOKIE_PAIRS),
+      ...Object.values(TRACE_PAIRS),
+      ...Object.values(RECORD_PAIRS),
+    ];
   },
   live,
   tables: async () => {

@@ -5,6 +5,7 @@ import type { ArtifactRecord } from '../../artifacts/contract/wire/artifacts.js'
 import { pagePolicy } from '../../artifacts/contract/wire/policy.js';
 import { readShelfCursor, shelfCursor } from '../../artifacts/cursor.js';
 import { ARTIFACT_PREFIX } from '../../http/contract/wire/served.js';
+import { rangedFile } from './ranged.js';
 
 const VERSION_CACHE = 'private, max-age=31536000, immutable';
 
@@ -68,38 +69,15 @@ export const artifactRoutes = (store: ArtifactStore['Service'], door: ArtifactDo
   return door.index === '/' ? Layer.mergeAll(HttpRouter.add('GET', '/', shelf), pages) : pages;
 };
 
-const span = (range: string | undefined, size: number): { readonly start: number; readonly end: number } | 'unsatisfiable' | null => {
-  const asked = range === undefined ? null : /^bytes=(\d*)-(\d*)$/u.exec(range.trim());
-  const from = asked?.[1] ?? '';
-  const to = asked?.[2] ?? '';
-  if (asked === null || (from === '' && to === '')) return null;
-  const start = from === '' ? Math.max(0, size - Number(to)) : Number(from);
-  const end = from === '' || to === '' ? size - 1 : Math.min(Number(to), size - 1);
-  return start > end || start >= size ? 'unsatisfiable' : { start, end };
-};
-
 const video = (path: string, download: string, range: string | undefined, missing: HttpServerResponse.HttpServerResponse) =>
   Effect.promise(async () => {
     const file = Bun.file(path);
     if (!(await file.exists())) return missing;
-    const size = file.size;
-    const asked = span(range, size);
-    const headers = {
+    return rangedFile(file, file.size, range, {
       'content-type': 'video/mp4',
-      'accept-ranges': 'bytes',
       'content-disposition': `attachment; filename="${download}"`,
       'cache-control': VERSION_CACHE,
-    };
-    if (asked === 'unsatisfiable') {
-      return HttpServerResponse.fromWeb(new Response(null, { status: 416, headers: { ...headers, 'content-range': `bytes */${size}` } }));
-    }
-    if (asked === null) return HttpServerResponse.fromWeb(new Response(file, { status: 200, headers }));
-    return HttpServerResponse.fromWeb(
-      new Response(file.slice(asked.start, asked.end + 1), {
-        status: 206,
-        headers: { ...headers, 'content-range': `bytes ${asked.start}-${asked.end}/${size}` },
-      }),
-    );
+    });
   });
 
 function indexPage(records: readonly ArtifactRecord[], total: number, next: string | null): string {

@@ -1,4 +1,5 @@
 import { screencastScenarios } from '../browser/testing/screencast.js';
+import { clipsLayer } from '../page-render/layer.js';
 import { MANAGED_AGENT, managedAdapter } from './adapter.js';
 import { managedFixture } from './testing/host.js';
 
@@ -7,4 +8,5 @@ screencastScenarios({
   adapter: managedAdapter,
   profile: MANAGED_AGENT,
   fixture: managedFixture,
+  clips: clipsLayer,
 });

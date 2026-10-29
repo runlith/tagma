@@ -24,6 +24,7 @@ export const CheckoutsGroup = HttpApiGroup.make('checkouts')
         full: Schema.optional(Schema.String),
         save: Schema.optional(Schema.NonEmptyString).annotate({ description: 'Answer the whole file as a download under this name.' }),
       }),
+      headers: Schema.Struct({ range: Schema.optional(Schema.String) }),
       error: refusalSchema,
     }),
   );

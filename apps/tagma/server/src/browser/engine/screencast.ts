@@ -49,10 +49,13 @@ type Params = {
   readonly everyNthFrame: number;
 };
 
-type Held = { readonly event: Frame; readonly ack: number | null };
+type Held = { readonly event: Frame; readonly ack: number | null; readonly at: number };
+
+export type Shot = { readonly data: string; readonly at: number };
 
 type Viewer = {
   readonly id: string;
+  readonly keep: boolean;
   budget: Budget;
   readonly notices: ScreencastEvent[];
   frame: Held | null;
@@ -143,6 +146,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
 
   const notice = (cast: Cast, event: ScreencastEvent) => {
     for (const viewer of cast.viewers.values()) {
+      if (viewer.keep) continue;
       viewer.notices.push(event);
       wake(viewer);
     }
@@ -153,7 +157,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     let evicted = false;
     for (const viewer of cast.viewers.values()) {
       if (viewer.frame !== null && viewer.stalled === null) viewer.stalled = now;
-      if (viewer.received > 0 && viewer.stalled !== null && now - viewer.stalled >= EVICT_MS) {
+      if (!viewer.keep && viewer.received > 0 && viewer.stalled !== null && now - viewer.stalled >= EVICT_MS) {
         cast.viewers.delete(viewer.id);
         viewer.ending = 'evicted';
         viewer.frame = null;
@@ -223,8 +227,13 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     const sliced = sliceData(text);
     if (sliced === undefined) return yield* Effect.logWarning(`browser: the screenshot of page ${cast.page} carried no picture`);
     if (cast.params !== params) return;
-    const held: Held = { event: { type: 'frame', data: sliced.data, width: view.clientWidth, height: view.clientHeight }, ack: null };
-    if (deliver(cast, held, yield* Clock.currentTimeMillis)) yield* Effect.forkIn(settled(cast), scope);
+    const now = yield* Clock.currentTimeMillis;
+    const held: Held = {
+      event: { type: 'frame', data: sliced.data, width: view.clientWidth, height: view.clientHeight },
+      ack: null,
+      at: now,
+    };
+    if (deliver(cast, held, now)) yield* Effect.forkIn(settled(cast), scope);
   });
 
   const restart = Effect.fnUntraced(function* (cast: Cast): Effect.fn.Return<void, CommandFailure> {
@@ -258,8 +267,13 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
       if (frame === undefined) return yield* Effect.logWarning(`browser: a frame of page ${cast.page} was unreadable`);
       cast.arrived += 1;
       cast.pending = frame.ack;
-      const held: Held = { event: { type: 'frame', data: frame.data, width: frame.width, height: frame.height }, ack: frame.ack };
-      if (deliver(cast, held, yield* Clock.currentTimeMillis)) yield* Effect.forkIn(settled(cast), scope);
+      const now = yield* Clock.currentTimeMillis;
+      const held: Held = {
+        event: { type: 'frame', data: frame.data, width: frame.width, height: frame.height },
+        ack: frame.ack,
+        at: frame.shownAt ?? now,
+      };
+      if (deliver(cast, held, now)) yield* Effect.forkIn(settled(cast), scope);
       return;
     }
     if (event.method !== 'Page.fileChooserOpened') return;
@@ -368,7 +382,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     yield* Effect.forkIn(layout(cast), scope);
   });
 
-  const join = Effect.fnUntraced(function* (page: PageId, budget: Budget) {
+  const join = Effect.fnUntraced(function* (page: PageId, budget: Budget, keep: boolean) {
     const state = yield* drive.paged(page);
     const lock = yield* Semaphore.make(1);
     const cast: Cast = casts.get(page) ?? {
@@ -391,6 +405,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     named += 1;
     const viewer: Viewer = {
       id: `v${named}`,
+      keep,
       budget,
       notices: [],
       frame: cast.last,
@@ -403,7 +418,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
       buttons: 0,
     };
     cast.viewers.set(viewer.id, viewer);
-    if (cast.chooser !== null) viewer.notices.push({ type: 'chooser', multiple: cast.chooser.multiple });
+    if (cast.chooser !== null && !keep) viewer.notices.push({ type: 'chooser', multiple: cast.chooser.multiple });
     yield* cast.lock.withPermits(1)(Effect.suspend(() => (cast.life === null ? start(cast) : tune(cast))));
     return { cast, viewer };
   });
@@ -415,7 +430,11 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     yield* settled(cast);
   });
 
-  const pull = (cast: Cast, viewer: Viewer): Effect.Effect<ScreencastEvent, Cause.Done | GateRefusal<DriveRefusal>> =>
+  const next = (
+    cast: Cast,
+    viewer: Viewer,
+    until?: Deferred.Deferred<void>,
+  ): Effect.Effect<ScreencastEvent | Held, Cause.Done | GateRefusal<DriveRefusal>> =>
     Effect.suspend(() => {
       const told = viewer.notices.shift();
       if (told !== undefined) return Effect.succeed(told);
@@ -424,16 +443,38 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
         viewer.frame = null;
         viewer.received += 1;
         viewer.stalled = null;
-        if (held.ack === null || held.ack !== cast.pending || cast.attached === null) return Effect.succeed(held.event);
+        if (held.ack === null || held.ack !== cast.pending || cast.attached === null) return Effect.succeed(held);
         cast.pending = null;
-        return Effect.as(cast.attached.session.post('Page.screencastFrameAck', { sessionId: held.ack }), held.event);
+        return Effect.as(cast.attached.session.post('Page.screencastFrameAck', { sessionId: held.ack }), held);
       }
       if (viewer.ending === 'evicted') return Cause.done();
       if (viewer.ending !== null) return Effect.fail(viewer.ending);
+      if (until !== undefined && Deferred.isDoneUnsafe(until)) return Cause.done();
       const waiting = Deferred.makeUnsafe<void>();
       viewer.wake = waiting;
-      return Effect.andThen(Deferred.await(waiting), pull(cast, viewer));
+      const woken = until === undefined ? Deferred.await(waiting) : Effect.raceFirst(Deferred.await(waiting), Deferred.await(until));
+      return Effect.andThen(woken, next(cast, viewer, until));
     });
+
+  const pull = (cast: Cast, viewer: Viewer) => Effect.map(next(cast, viewer), (got) => ('ack' in got ? got.event : got));
+
+  const shot = (cast: Cast, viewer: Viewer, until: Deferred.Deferred<void>): Effect.Effect<Shot, Cause.Done | GateRefusal<DriveRefusal>> =>
+    Effect.flatMap(next(cast, viewer, until), (got) =>
+      'ack' in got ? Effect.succeed({ data: got.event.data, at: got.at }) : shot(cast, viewer, until),
+    );
+
+  const viewing = <A>(
+    page: PageId,
+    budget: Budget,
+    keep: boolean,
+    read: (cast: Cast, viewer: Viewer) => Stream.Stream<A, GateRefusal<DriveRefusal>>,
+  ) =>
+    Stream.unwrap(
+      Effect.map(
+        Effect.acquireRelease(join(page, budget, keep), ({ cast, viewer }) => leave(cast, viewer)),
+        ({ cast, viewer }) => read(cast, viewer),
+      ),
+    );
 
   const selection = Effect.fnUntraced(function* (attached: Attached) {
     const context = yield* world(attached, attached.main).pipe(Effect.catchTag('GateRefusal', () => Effect.succeed(null)));
@@ -534,17 +575,12 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     return { copied };
   });
 
-  return Screencast.of({
+  const screencast = Screencast.of({
     watch: (page, budget) =>
-      Stream.unwrap(
-        Effect.map(
-          Effect.acquireRelease(join(page, budget), ({ cast, viewer }) => leave(cast, viewer)),
-          ({ cast, viewer }) => {
-            const named: ScreencastEvent = { type: 'viewer', viewer: viewer.id };
-            return Stream.concat(Stream.succeed(named), Stream.fromEffectRepeat(pull(cast, viewer)));
-          },
-        ),
-      ),
+      viewing(page, budget, false, (cast, viewer) => {
+        const named: ScreencastEvent = { type: 'viewer', viewer: viewer.id };
+        return Stream.concat(Stream.succeed(named), Stream.fromEffectRepeat(pull(cast, viewer)));
+      }),
     input: Effect.fn('Screencast.input')(function* (page, id, seq, events) {
       const cast = casts.get(page);
       const viewer = cast?.viewers.get(id);
@@ -591,4 +627,12 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
       return taken.length;
     }),
   });
+
+  return {
+    screencast,
+    shots: (page: PageId, budget: Budget, until: Deferred.Deferred<void>): Stream.Stream<Shot, GateRefusal<DriveRefusal>> =>
+      viewing(page, budget, true, (cast, viewer) => Stream.fromEffectRepeat(shot(cast, viewer, until))),
+  };
 });
+
+export type Shots = Effect.Success<ReturnType<typeof makeScreencast>>['shots'];

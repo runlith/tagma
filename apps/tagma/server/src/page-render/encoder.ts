@@ -47,6 +47,16 @@ const ENCODER = `(() => {
     if (failure !== null) throw failure;
     return chunks.splice(0);
   };
+  let canvas = null;
+  const fitted = (bitmap) => {
+    const { width, height } = canvas.canvas;
+    const scale = Math.min(width / bitmap.width, height / bitmap.height);
+    const drawn = { width: bitmap.width * scale, height: bitmap.height * scale };
+    canvas.fillStyle = '#000';
+    canvas.fillRect(0, 0, width, height);
+    canvas.drawImage(bitmap, (width - drawn.width) / 2, (height - drawn.height) / 2, drawn.width, drawn.height);
+    return canvas.canvas;
+  };
   window.tagmaEncoder = {
     open: async (codecs, width, height, fps, bitrate) => {
       if (typeof VideoEncoder !== 'function' || typeof Uint8Array.fromBase64 !== 'function') return null;
@@ -56,13 +66,15 @@ const ENCODER = `(() => {
         if (!answer.supported) continue;
         encoder = new VideoEncoder({ output, error: (error) => { failure = error; } });
         encoder.configure(config);
+        canvas = new OffscreenCanvas(width, height).getContext('2d');
         return codec;
       }
       return null;
     },
     frame: async (data, timestamp, duration, key) => {
       const bitmap = await createImageBitmap(new Blob([Uint8Array.fromBase64(data)], { type: 'image/jpeg' }));
-      const frame = new VideoFrame(bitmap, { timestamp, duration });
+      const same = bitmap.width === canvas.canvas.width && bitmap.height === canvas.canvas.height;
+      const frame = new VideoFrame(same ? bitmap : fitted(bitmap), { timestamp, duration });
       bitmap.close();
       encoder.encode(frame, { keyFrame: key });
       frame.close();
@@ -143,12 +155,18 @@ export const encoder = Effect.fnUntraced(function* (session: Session, size: Enco
       ['export at scale 1, or declare a smaller size or a lower fps and publish the page again'],
     );
   }
-  const at = (k: number) => Math.round((k * 1e6) / size.fps);
+  const time = (k: number) => Math.round((k * 1e6) / size.fps);
+  const keyEvery = size.fps * 2;
+  let keyed = -1;
   return {
-    frame: (k: number, jpeg: Uint8Array) =>
-      drained(
-        `tagmaEncoder.frame(${JSON.stringify(Buffer.from(jpeg.buffer, jpeg.byteOffset, jpeg.byteLength).toString('base64'))}, ${at(k)}, ${at(k + 1) - at(k)}, ${k % (size.fps * 2) === 0})`,
-      ),
+    frame: (picture: string, at: number, span: number) =>
+      Effect.suspend(() => {
+        const key = Math.floor(at / keyEvery) !== keyed;
+        keyed = Math.floor(at / keyEvery);
+        return drained(`tagmaEncoder.frame(${JSON.stringify(picture)}, ${time(at)}, ${time(at + span) - time(at)}, ${key})`);
+      }),
     flush: drained('tagmaEncoder.flush()'),
   };
 });
+
+export const ENCODER_CANVAS = { width: 16, height: 16, scale: 1 } as const;
