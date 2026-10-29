@@ -33,7 +33,7 @@ The MCP servers settings section opens with **Connectors**: the services Tagma k
 - The connected state is a projection of the calling project's MCP rows by their mark (`connectors/states.ts`). No second list of connected services exists, and a live feed (`connectors`) carries it to the view as the rows move.
 
 **Edge cases.**
-- `connect_service` refuses `mcp-server-exists` when a server of that name is already declared in the target scope.
+- `connect_service` refuses `mcp-server-exists` when a server of that name is already declared in the target scope, and, before writing anything, when it would connect for all projects a name this project declares for itself, whose declaration would stand in front of it.
 - A catalog update never rewrites a declared server. When an entry's URL changes, the row reads `changed` and the view offers to reconnect.
 
 **Catalog source.** The catalog ships inside Tagma as data owned by the `connectors` server module, so it works offline and with no account. The operations read entries of one shape through one port (`ConnectorCatalog`), which composition fills with the shipped data. A hosted catalog, if one comes, fills that port and changes no reader.
@@ -57,7 +57,7 @@ Every check runs through the operations, against the MCP layer's test servers (`
 
 - `connect_service` on a test `oauth` entry declares the server in the scope it was given and answers the authorization URL. After the test sign-in, `read_connectors` shows it connected, and `read_mcp_servers` shows one row carrying its mark.
 - `connect_service` on a test `key` entry shows `needs-value` until `set_secret` sets the key, then connected.
-- `connect_service` for a name already declared refuses `mcp-server-exists`.
+- `connect_service` for a name already declared refuses `mcp-server-exists`, as does connecting for all projects a name the project declares itself.
 - `disconnect_service` leaves no declaration, token, value or client registration of that server: connecting again reads signed out with no client, and a keyed one needs its value again.
 - Every catalog entry has a unique id and an HTTPS URL. This is checked over the shipped data, because types cannot check it.
 
