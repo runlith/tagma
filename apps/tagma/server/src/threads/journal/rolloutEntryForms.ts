@@ -1,6 +1,6 @@
 import { createHash, type Hash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { rename, rm } from 'node:fs/promises';
+import { rename, rm, stat } from 'node:fs/promises';
 import { once } from 'node:events';
 import { Transform, type Readable, type Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -176,22 +176,69 @@ async function staged(
   wanted: ReadonlySet<number>,
   lines: RecordForm,
   read: ReadRollout,
+  suffix: string,
 ): Promise<Staged> {
-  const forming = `${path}.forming`;
+  const forming = `${path}${suffix}`;
   const source = form === 'plain' ? rolloutStream(path, read) : packedSource(compressedRollout(path), read);
   const formed = await formLines(source, createWriteStream(forming), wanted, lines);
   if (form === 'plain' || !formed.changed) return { formed, staged: forming, published: path };
   const packed = compressedRollout(path);
   const hash = createHash('sha256');
-  await pipeline(rolloutStream(forming, read), createZstdCompress(), hashing(hash), createWriteStream(`${packed}.forming`));
+  await pipeline(rolloutStream(forming, read), createZstdCompress(), hashing(hash), createWriteStream(`${packed}${suffix}`));
   await rm(forming, { force: true });
-  return { formed: { ...formed, sha256: hash.digest('hex') }, staged: `${packed}.forming`, published: packed };
+  return { formed: { ...formed, sha256: hash.digest('hex') }, staged: `${packed}${suffix}`, published: packed };
 }
 
-async function cleared(path: string): Promise<void> {
-  await rm(`${path}.forming`, { force: true });
-  await rm(`${compressedRollout(path)}.forming`, { force: true });
+async function cleared(path: string, suffix: string): Promise<void> {
+  await rm(`${path}${suffix}`, { force: true });
+  await rm(`${compressedRollout(path)}${suffix}`, { force: true });
 }
+
+type Basis = {
+  readonly form: string | null;
+  readonly cursor: number | undefined;
+  readonly refused: number | undefined;
+  readonly restedAt: number | null;
+  readonly file: string | null;
+};
+
+const basisOf = Effect.fnUntraced(function* (db: StoreDb<'machine'>, threadId: string, path: string) {
+  const done = yield* rolloutFormOf(db, threadId);
+  const cursor = yield* db
+    .select({ bytes: threadRolloutCursor.nextByteOffset, restedAt: threadRolloutCursor.restedAt })
+    .from(threadRolloutCursor)
+    .where(eq(threadRolloutCursor.threadId, threadId))
+    .get();
+  const refused = yield* db
+    .select({ bytes: threadRolloutRefusal.nextByteOffset })
+    .from(threadRolloutRefusal)
+    .where(eq(threadRolloutRefusal.threadId, threadId))
+    .get();
+  const state = yield* rolloutStateOf(path);
+  const file =
+    state === null
+      ? null
+      : yield* Effect.promise(() =>
+          stat(state.path).then(
+            (standing) => `${state.form}:${standing.size}:${standing.mtimeMs}`,
+            () => null,
+          ),
+        );
+  return {
+    form: done === undefined ? null : JSON.stringify([done.step, done.refusal, done.publishing?.sha256 ?? null]),
+    cursor: cursor?.bytes,
+    refused: refused?.bytes,
+    restedAt: cursor?.restedAt == null ? null : cursor.restedAt.getTime(),
+    file,
+  } satisfies Basis;
+});
+
+const sameBasis = (one: Basis, other: Basis): boolean =>
+  one.form === other.form &&
+  one.cursor === other.cursor &&
+  one.refused === other.refused &&
+  one.restedAt === other.restedAt &&
+  one.file === other.file;
 
 export type RolloutFormWrite = <A, E>(
   operation: WriteSet,
@@ -291,6 +338,14 @@ const settledWith = (db: StoreDb<'machine'>, write: RolloutFormWrite, threadId: 
   write(
     FORMING,
     Effect.fnUntraced(function* (unit) {
+      const standing = yield* unit.run(
+        db
+          .select({ publishing: threadRolloutForm.publishing })
+          .from(threadRolloutForm)
+          .where(eq(threadRolloutForm.threadId, threadId))
+          .get(),
+      );
+      if (standing?.publishing?.sha256 !== publishing.sha256) return;
       if (publishing.cursorBytes !== null) {
         yield* unit.run(
           db
@@ -323,24 +378,33 @@ export const settledRollout = Effect.fnUntraced(function* (
   write: RolloutFormWrite,
   threadId: string,
   path: string,
-): Effect.fn.Return<void, RolloutUnreadable | StoreFailure> {
-  const publishing = (yield* rolloutFormOf(db, threadId))?.publishing;
-  if (publishing == null || !(yield* publishedHere(path, publishing))) return;
-  yield* settledWith(db, write, threadId, publishing);
+  kinds: ThreadEntryReader,
+): Effect.fn.Return<void, RolloutUnformable | RolloutUnreadable | StoreFailure> {
+  const standing = yield* rolloutFormOf(db, threadId);
+  const publishing = standing?.publishing;
+  if (publishing == null) return;
+  if (yield* publishedHere(path, publishing)) return yield* settledWith(db, write, threadId, publishing);
+  if (kinds.base !== null && standing?.step === kinds.base.step) return yield* olderRollout(threadId, path, null, kinds.base);
 });
 
-//! Runs inside the thread's journal lane: nothing else moves the file, its cursor or its refusal while it works.
-export const formRollout = Effect.fnUntraced(function* (
+export type RolloutStaged = {
+  readonly kind: 'staged';
+  readonly commit: Effect.Effect<RolloutForm | { readonly kind: 'moved' }, RolloutUnreadable | StoreFailure>;
+  readonly discard: Effect.Effect<void, RolloutUnreadable>;
+};
+
+const MOVED = { kind: 'moved' } as const;
+
+//! Writes nothing but a settle guarded inside its own unit, so it may stage beside the lane; `commit` runs inside the journal lane.
+export const stagedRollout = Effect.fnUntraced(function* (
   db: StoreDb<'machine'>,
   write: RolloutFormWrite,
   threadId: string,
   path: string,
   kinds: ThreadEntryReader,
-): Effect.fn.Return<RolloutForm, RolloutUnreadable | StoreFailure> {
-  const settled = (publishing: RolloutPublishing) => settledWith(db, write, threadId, publishing);
-
-  const unmark = write(FORMING, (unit) => unit.run(db.delete(threadRolloutForm).where(eq(threadRolloutForm.threadId, threadId))));
-
+  aside: boolean,
+): Effect.fn.Return<RolloutForm | RolloutStaged, RolloutUnreadable | StoreFailure> {
+  const suffix = aside ? '.staging' : '.forming';
   const read = yield* RolloutReads;
   const done = yield* rolloutFormOf(db, threadId);
   if (done === undefined && kinds.last === null) return FORMED;
@@ -351,6 +415,7 @@ export const formRollout = Effect.fnUntraced(function* (
       .from(threadRolloutCursor)
       .where(eq(threadRolloutCursor.threadId, threadId))
       .get())?.at != null;
+  if (aside && !rested) return FORMED;
   const reached = done?.step ?? null;
   if (kinds.base !== null && kinds.below(reached) && state !== null && done?.refusal == null && (rested || done?.publishing != null)) {
     return { kind: 'refused', refusal: olderRollout(threadId, path, reached, kinds.base) };
@@ -358,18 +423,16 @@ export const formRollout = Effect.fnUntraced(function* (
   let mark: string | null = null;
   if (done?.publishing != null) {
     if (yield* publishedHere(path, done.publishing)) {
-      yield* settled(done.publishing);
+      yield* settledWith(db, write, threadId, done.publishing);
       if (!kinds.lags(done.step)) return FORMED;
     } else if (kinds.base !== null && done.step === kinds.base.step) {
       return { kind: 'refused', refusal: olderRollout(threadId, path, null, kinds.base) };
     }
-    yield* unmark;
   } else if (done !== undefined && done.refusal !== null) {
     return { kind: 'refused', refusal: new RolloutUnformable({ threadId, path, reason: done.refusal }) };
   } else if (done !== undefined) {
     if (!kinds.lags(done.step) || state === null || (!rested && (done.step === null || !eventless(kinds.after(done.step))))) return FORMED;
     mark = done.step;
-    yield* unmark;
   }
   if (state === null) return FORMED;
   const hasRow = (yield* db.select({ id: threadRecord.id }).from(threadRecord).where(eq(threadRecord.id, threadId)).get()) !== undefined;
@@ -378,31 +441,16 @@ export const formRollout = Effect.fnUntraced(function* (
   const step = stepping ? kinds.last : null;
   const form = recordForm(kinds, pending);
 
-  const cursor = yield* db
-    .select({ bytes: threadRolloutCursor.nextByteOffset })
-    .from(threadRolloutCursor)
-    .where(eq(threadRolloutCursor.threadId, threadId))
-    .get();
-  const refused = yield* db
-    .select({ bytes: threadRolloutRefusal.nextByteOffset })
-    .from(threadRolloutRefusal)
-    .where(eq(threadRolloutRefusal.threadId, threadId))
-    .get();
-  const wanted = new Set([cursor?.bytes, refused?.bytes].filter((bytes): bytes is number => bytes !== undefined && bytes > 0));
-
-  const attempt = yield* Effect.result(
-    Effect.tryPromise({
-      try: () => staged(path, state.form, wanted, form, read),
-      catch: (error) =>
-        error instanceof LineUnformable ? new RolloutUnformable({ threadId, path, reason: error.message }) : io(path)(error),
-    }),
-  );
-  const clear = Effect.tryPromise({ try: () => cleared(path), catch: io(path) });
+  const basis = yield* basisOf(db, threadId, path);
+  const wanted = new Set([basis.cursor, basis.refused].filter((bytes): bytes is number => bytes !== undefined && bytes > 0));
+  const clear = Effect.tryPromise({ try: () => cleared(path, suffix), catch: io(path) });
+  const unmarked = (unit: WriteUnit<'machine'>) => unit.run(db.delete(threadRolloutForm).where(eq(threadRolloutForm.threadId, threadId)));
   const refuse = (failure: RolloutUnformable) =>
     Effect.as(
       write(
         FORMING,
         Effect.fnUntraced(function* (unit) {
+          yield* unmarked(unit);
           if ((yield* heldThread(db, unit, threadId)) === undefined) return;
           yield* unit.run(
             db.insert(threadRolloutForm).values({ threadId, formedAt: new Date(yield* Clock.currentTimeMillis), refusal: failure.reason }),
@@ -411,44 +459,76 @@ export const formRollout = Effect.fnUntraced(function* (
       ),
       { kind: 'refused', refusal: failure } as const,
     );
+  const unmoved = <A, E>(work: Effect.Effect<A, E>): Effect.Effect<A | typeof MOVED, E | RolloutUnreadable | StoreFailure> =>
+    Effect.flatMap(basisOf(db, threadId, path), (now): Effect.Effect<A | typeof MOVED, E | RolloutUnreadable> =>
+      sameBasis(basis, now) ? work : Effect.as(clear, MOVED),
+    );
+
+  const attempt = yield* Effect.result(
+    Effect.tryPromise({
+      try: () => staged(path, state.form, wanted, form, read, suffix),
+      catch: (error) =>
+        error instanceof LineUnformable ? new RolloutUnformable({ threadId, path, reason: error.message }) : io(path)(error),
+    }),
+  );
   if (Result.isFailure(attempt)) {
     yield* clear;
     const failure = attempt.failure;
     if (failure._tag === 'RolloutUnreadable') return yield* failure;
-    return yield* refuse(failure);
+    return { kind: 'staged', commit: unmoved(refuse(failure)), discard: Effect.void } satisfies RolloutStaged;
   }
   const { formed, staged: from, published } = attempt.success;
   const moved = (bytes: number | undefined) => (bytes === undefined ? null : (formed.moved.get(bytes) ?? bytes));
   const publishing: RolloutPublishing | null = formed.changed
-    ? { sha256: formed.sha256, cursorBytes: moved(cursor?.bytes), refusalBytes: moved(refused?.bytes) }
+    ? { sha256: formed.sha256, cursorBytes: moved(basis.cursor), refusalBytes: moved(basis.refused) }
     : null;
-  const recording = yield* Effect.result(
-    write(
-      FORMING,
-      Effect.fnUntraced(function* (unit) {
-        if ((yield* heldThread(db, unit, threadId)) === undefined) return false;
-        yield* unit.run(
-          db.insert(threadRolloutForm).values({ threadId, formedAt: new Date(yield* Clock.currentTimeMillis), publishing, step }),
-        );
-        yield* formStoredIn(db, unit, threadId, kinds, pending);
-        return true;
-      }),
-    ),
-  );
-  if (Result.isFailure(recording)) {
+  const commit = Effect.gen(function* () {
+    const recording = yield* Effect.result(
+      write(
+        FORMING,
+        Effect.fnUntraced(function* (unit) {
+          yield* unmarked(unit);
+          if ((yield* heldThread(db, unit, threadId)) === undefined) return false;
+          yield* unit.run(
+            db.insert(threadRolloutForm).values({ threadId, formedAt: new Date(yield* Clock.currentTimeMillis), publishing, step }),
+          );
+          yield* formStoredIn(db, unit, threadId, kinds, pending);
+          return true;
+        }),
+      ),
+    );
+    if (Result.isFailure(recording)) {
+      yield* clear;
+      const failure = recording.failure;
+      if (failure._tag !== 'ThreadFormRefused') return yield* failure;
+      return yield* refuse(new RolloutUnformable({ threadId, path, reason: failure.message }));
+    }
+    const recorded = recording.success;
+    if (publishing === null) {
+      yield* clear;
+      return FORMED;
+    }
+    const renamed = yield* Effect.result(Effect.tryPromise({ try: () => rename(from, published), catch: io(path) }));
     yield* clear;
-    const failure = recording.failure;
-    if (failure._tag !== 'ThreadFormRefused') return yield* failure;
-    return yield* refuse(new RolloutUnformable({ threadId, path, reason: failure.message }));
-  }
-  const recorded = recording.success;
-  if (publishing === null) {
-    yield* clear;
+    if (Result.isFailure(renamed)) return yield* renamed.failure;
+    if (recorded) yield* settledWith(db, write, threadId, publishing);
     return FORMED;
+  });
+  return { kind: 'staged', commit: unmoved(commit), discard: clear } satisfies RolloutStaged;
+});
+
+//! Runs inside the thread's journal lane: nothing else moves the file, its cursor or its refusal while it works.
+export const formRollout = Effect.fnUntraced(function* (
+  db: StoreDb<'machine'>,
+  write: RolloutFormWrite,
+  threadId: string,
+  path: string,
+  kinds: ThreadEntryReader,
+): Effect.fn.Return<RolloutForm, RolloutUnreadable | StoreFailure> {
+  for (;;) {
+    const staging = yield* stagedRollout(db, write, threadId, path, kinds, false);
+    if (staging.kind !== 'staged') return staging;
+    const outcome = yield* staging.commit;
+    if (outcome.kind !== 'moved') return outcome;
   }
-  const renamed = yield* Effect.result(Effect.tryPromise({ try: () => rename(from, published), catch: io(path) }));
-  yield* clear;
-  if (Result.isFailure(renamed)) return yield* renamed.failure;
-  if (recorded) yield* settled(publishing);
-  return FORMED;
 });

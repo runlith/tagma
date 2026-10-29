@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Effect, Layer } from 'effect';
+import { Effect, Layer, Result } from 'effect';
 import { sql } from 'drizzle-orm';
 import { ThreadEntryKinds, makeThreadEntryReader, type ThreadEntryReader, type ThreadFormStep } from '@runlith/agent/transcript/kinds';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
@@ -91,6 +91,31 @@ layer(machine)('rollout publication', (it) => {
         mark: yield* db.all(sql`select publishing, step from thread_rollout_form where thread_id = ${id}`),
       }).toEqual({ cursor: [{ bytes: Buffer.byteLength(bytes), generation: 1 }], mark: [{ publishing: null, step: step.name }] });
       expect(readFileSync(path, 'utf8')).toBe(bytes);
+    }),
+  );
+
+  it.effect('a read of a publication interrupted before rename at the folded base is refused, and the file stands as it did', () =>
+    Effect.gen(function* () {
+      const id = 'unrenamed-base';
+      const path = join(root, `${id}.jsonl`);
+      const before = text(id, 'before');
+      writeFileSync(path, before);
+      const publishing = JSON.stringify({
+        sha256: createHash('sha256').update(text(id, 'after')).digest('hex'),
+        cursorBytes: Buffer.byteLength(text(id, 'after')),
+        refusalBytes: null,
+      });
+      yield* plant(id, Buffer.byteLength(before), publishing);
+      const folded = makeThreadEntryReader({ products: [], base: { step: step.name, release: '0.2.0' } });
+      const read = yield* makeRolloutForms({ journal: (_id, work) => work }).pipe(
+        Effect.provideService(ThreadEntryKinds, folded),
+        Effect.flatMap((forms) => Effect.result(forms.readable(id, path))),
+      );
+      expect(Result.isFailure(read) && read.failure._tag === 'RolloutUnformable' && read.failure.older).toEqual({
+        step: step.name,
+        release: '0.2.0',
+      });
+      expect(readFileSync(path, 'utf8')).toBe(before);
     }),
   );
 

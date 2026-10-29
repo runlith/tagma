@@ -3,7 +3,10 @@ import type { HarnessFailure } from '../contract/service/failure.js';
 import type { ThreadEvictionVerdict } from '../contract/wire/eviction.js';
 import type { RolloutContext } from './rolloutContext.js';
 import type { RolloutForms } from './rolloutForming.js';
+import type { RolloutStaged } from './rolloutEntryForms.js';
 import type { ThreadUses } from './uses.js';
+
+const BUSY = { kind: 'busy' } as const;
 
 const later = (threadId: string, work: Effect.Effect<void, unknown>): Effect.Effect<void> =>
   Effect.flatMap(Effect.exit(work), (exit) =>
@@ -21,6 +24,8 @@ export const rolloutWhole = (
   uses: ThreadUses,
 ) => {
   const going = new Set<string>();
+  const deferred = new Set<string>();
+  const recalled = new Set<string>();
 
   const placed = Effect.fnUntraced(function* (threadId: string) {
     if (ctx.home === undefined || !(yield* forms.lags(threadId))) return null;
@@ -57,14 +62,45 @@ export const rolloutWhole = (
     Effect.suspend(() => {
       if (ctx.kinds.last === null || going.has(threadId)) return Effect.void;
       going.add(threadId);
+      deferred.delete(threadId);
       return later(
         threadId,
         Effect.gen(function* () {
           const place = yield* placed(threadId);
-          if (place !== null) yield* ctx.inJournal(threadId, uses.rest(threadId, forms.formedHere(threadId, place.path), undefined));
+          if (place === null) return;
+          const staging = yield* forms.staged(threadId, place.path);
+          if (staging === null) return;
+          const outcome = yield* ctx
+            .inJournal(
+              threadId,
+              uses.rest<Effect.Success<RolloutStaged['commit']> | typeof BUSY, Effect.Error<RolloutStaged['commit']>, never>(
+                threadId,
+                staging.commit,
+                BUSY,
+              ),
+            )
+            .pipe(Effect.tapError(() => staging.discard));
+          if (outcome.kind === 'refused') return yield* outcome.refusal;
+          if (outcome.kind === 'formed') return;
+          deferred.add(threadId);
+          if (outcome.kind === 'busy') yield* staging.discard;
         }),
-      ).pipe(Effect.ensuring(Effect.sync(() => going.delete(threadId))));
+      ).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            going.delete(threadId);
+            if (recalled.delete(threadId) && deferred.has(threadId)) runAppend(restedNow(threadId));
+          }),
+        ),
+      );
     });
 
-  return { resident, rested: (threadId: string): void => runAppend(restedNow(threadId)) };
+  return {
+    resident,
+    rested: (threadId: string): void => runAppend(restedNow(threadId)),
+    released: (threadId: string): void => {
+      if (going.has(threadId)) recalled.add(threadId);
+      else if (deferred.has(threadId)) runAppend(restedNow(threadId));
+    },
+  };
 };

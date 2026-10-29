@@ -1857,13 +1857,6 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     why: "The orientation opens an output scope only to name its tools; disposing it is release, and the orientation's own outcome reaches the caller.",
   },
   {
-    path: 'apps/tagma/server/src/threads/journal/projectionSweep.ts',
-    symbol: 'formingSweep',
-    form: 'catchCause',
-    site: '5dc21499',
-    why: 'The forming sweep is maintenance at startup and daily; a failed pass is logged, lagging journals stay as they are, and the next scheduled pass forms them.',
-  },
-  {
     path: 'apps/tagma/server/src/graph/vocabulary/layers.ts',
     symbol: 'textOf',
     form: 'failureConditional',

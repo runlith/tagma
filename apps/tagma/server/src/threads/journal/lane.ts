@@ -67,7 +67,10 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
   const kinds = yield* ThreadEntryKinds;
   const ctx = rolloutContext({ records, floor, projection, graph, parts, kinds, journal, home: rolloutHome });
   const { rehydrate, wake } = rolloutRehydrating(ctx, forms, scratch);
-  const uses = threadUses((threadId) => shelve([threadId]));
+  const uses = threadUses((threadId) => {
+    shelve([threadId]);
+    whole.released(threadId);
+  });
   const exporting = rolloutExporting(ctx);
   const { ensure, behind, owed, exportStanding, written, rewrite } = exporting;
   const { evict, rest, sweep } = rolloutEvicting(ctx, threads, ledger, resourceKinds, settings, uses, rewrite, exporting.whole);

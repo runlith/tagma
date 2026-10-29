@@ -15,7 +15,9 @@ import {
   rolloutFormOf,
   RolloutUnformable,
   settledRollout,
+  stagedRollout,
   type RolloutFormWrite,
+  type RolloutStaged,
 } from './rolloutEntryForms.js';
 import type { RolloutUnreadable } from './rolloutFile.js';
 import { openRollout, rolloutStateOf } from './rolloutForms.js';
@@ -98,8 +100,12 @@ export const makeRolloutForms = Effect.fnUntraced(function* ({ journal }: { read
       const standing = yield* checked(threadId, path);
       const state = yield* rolloutStateOf(path);
       if (standing?.publishing == null && state?.form !== 'compressed') return;
-      yield* within(threadId, settledRollout(db, write, threadId, path).pipe(Effect.andThen(openRollout(path))));
+      yield* within(threadId, settledRollout(db, write, threadId, path, kinds).pipe(Effect.andThen(openRollout(path))));
     }),
+    staged: (threadId: string, path: string): Effect.Effect<RolloutStaged | null, RolloutFormFailure> =>
+      Effect.flatMap(stagedRollout(db, write, threadId, path, kinds, true), (outcome) =>
+        outcome.kind === 'refused' ? Effect.fail(outcome.refusal) : Effect.succeed(outcome.kind === 'staged' ? outcome : null),
+      ),
     formedOpen: Effect.fnUntraced(function* (threadId: string, path: string) {
       const standing = yield* rolloutFormOf(db, threadId);
       const state = yield* rolloutStateOf(path);

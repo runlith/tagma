@@ -216,6 +216,44 @@ it.live(
 );
 
 it.live(
+  'a record written to an offloaded thread while its file is staged stops that cast, and the next cast leaves the record as written',
+  Effect.fnUntraced(function* () {
+    const { runtime, raise, owner, stored } = yield* setup();
+    const files = Context.get(runtime, FileSystem.FileSystem);
+    const path = yield* raise('t-written', 'old');
+    expect(
+      yield* Effect.provide(evictThreadProjection({ threadId: 't-written', path, parts: nativeOnlyParts, returning: true }), runtime),
+    ).toMatchObject({ outcome: 'evicted' });
+    const forms = yield* owner();
+    const written = `${JSON.stringify({
+      kind: 'event',
+      row: {
+        threadId: 't-written',
+        position: 2,
+        id: 't-written:e2',
+        kind: 'message',
+        payload: { entry: message('t-written:m2', 'current') },
+      },
+    })}\n`;
+    const first = yield* Effect.provide(forms.staged('t-written', path), runtime);
+    yield* files.writeFileString(path, written, { flag: 'a' });
+    const standing = yield* files.readFileString(path);
+    expect((yield* Effect.provide(first!.commit, runtime)).kind).toBe('moved');
+    expect(yield* files.readFileString(path)).toBe(standing);
+    expect((yield* stored('t-written')).step).toBeNull();
+    const second = yield* Effect.provide(forms.staged('t-written', path), runtime);
+    expect((yield* Effect.provide(second!.commit, runtime)).kind).toBe('formed');
+    expect((yield* stored('t-written')).step).toBe(dated.name);
+    expect((yield* files.readFileString(path)).endsWith(written)).toBe(true);
+    expect(yield* Effect.provide(fileEntries(path), runtime)).toEqual([
+      message('t-written:m', 'current'),
+      message('t-written:m2', 'current'),
+    ]);
+    expect(yield* files.exists(`${path}.staging`)).toBe(false);
+  }),
+);
+
+it.live(
   'forming the file of a thread whose rows stand in the database leaves its file and its mark as they stood',
   Effect.fnUntraced(function* () {
     const { runtime, raise, owner, returned, stored } = yield* setup();
