@@ -90,6 +90,25 @@ Across the five final transfer brackets, GPU CPU was 0.406–4.123 ms, while the
 
 The 96 KiB IO.read request yields at most 131,072 base64 characters per answer. Direct timing of the actual Driven reply fulfillment includes JSON.stringify and report sending; those IO.read callbacks stayed below 1.625 ms CPU in the five final transfers. The five transfer windows retained 484 actual reply fulfillments. Two tiny Runtime.releaseObjectGroup replies took 12.388 and 10.120 ms CPU, so the IO.read bound is not a bound over all native replies. An earlier exploratory 54.392 ms timer gap had 31.083 ms loop CPU and 14/15 samples in Driven's reply callback, without retained per-method timing; the method/cause cannot be reconstructed from that profile alone. It did not establish a large-payload cause, and reducing the IO.read size is not a demonstrated remedy. The additional macOS sample did not identify a producer inside that earlier interval.
 
+## Exploratory desktop figures
+
+Before the final stage-split/interleaved rig, five complete large desktop recordings established the tail that required attribution. They did not timestamp the renderer handler, so their acknowledgement tail cannot be retrospectively called handler latency. Values below are p50/p95/p99/max in ms. `desktop-3` completed its measurement assertions but failed the already-closed-page cleanup described below; its observations remain measurements, not a passing test. The earlier `desktop-1` calibration had a gzip-versus-uncompressed size assertion error and included profiler-start work in its first loop tick, so it is excluded from acceptance figures.
+
+| Exploratory window | Duration ms / inputs | Ack roundtrip p50/p95/p99/max ms | Main lateness p50/p95/p99/max ms |
+| --- | ---: | --- | --- |
+| desktop-2 idle | 2,000.899 / 119 | 0.880/2.487/15.662/19.587 | 0.689/1.316/3.044/17.262 |
+| desktop-2 transfer | 7,426.672 / 438 | 0.801/5.658/13.876/31.617 | 0.682/1.499/8.387/36.805 |
+| desktop-3 idle | 2,001.175 / 113 | 1.723/12.821/22.750/38.447 | 0.776/5.957/13.697/27.408 |
+| desktop-3 transfer | 26,870.023 / 1,484 | 3.487/37.191/66.557/192.880 | 0.935/9.218/20.438/140.722 |
+| desktop-4 idle | 2,002.289 / 113 | 1.966/13.108/21.118/37.013 | 0.835/7.662/15.689/32.436 |
+| desktop-4 transfer | 14,486.198 / 822 | 2.101/30.509/45.649/84.434 | 0.770/7.172/15.931/95.575 |
+| desktop-5 idle | 2,001.490 / 116 | 1.628/20.484/50.722/56.093 | 0.719/5.282/14.290/28.959 |
+| desktop-5 transfer | 11,866.398 / 687 | 1.617/11.150/30.292/54.910 | 0.753/3.704/11.845/56.716 |
+| desktop-6 idle | 2,000.321 / 112 | 2.472/22.716/57.814/64.057 | 0.782/6.722/20.542/28.638 |
+| desktop-6 transfer | 12,149.766 / 693 | 1.990/23.835/107.083/214.377 | 0.770/5.861/14.443/148.206 |
+
+Those five traces were 102,037,269 / 102,059,266 / 102,060,603 / 101,968,491 / 102,039,756 B uncompressed and 7,360,798 / 7,585,321 / 7,562,221 / 7,652,094 / 7,572,009 B gzip. In the last three exploratory transfers the directly instrumented reply-fulfillment CPU maxima were 1.060/0.925/0.540 ms; the first had 97 measured callbacks and an IO.read maximum elapsed time of 6.688 ms. A 36.805 ms timer gap in desktop-2 sampled idle (3/3) and used 3.957 ms process CPU; a 140.722 ms gap in desktop-3 used 2.056 ms loop CPU. These narrowed the question but did not identify OS scheduling or eliminate renderer/IPC waits; the final split method above resolves those boundaries.
+
 ## Native sample and buffer pair
 
 One additional same-rig run (`native-1`, seed 1) passed with a macOS sample of Electron main. The sampler began about 25 s after launch and retained an aggregate 3,410 CrBrowserMain observations, including 3,070 in Mach-port waiting. Its nearest-export native symbols and anonymous JIT frames are not precise symbolication and have no per-stall timeline; they cannot retrospectively identify the earlier 54.392 ms callback. This is additional sampled-load evidence, not a source attribution.
