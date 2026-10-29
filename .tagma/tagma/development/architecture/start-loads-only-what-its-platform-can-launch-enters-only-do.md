@@ -10,10 +10,6 @@ fields:
       "debt": [
         {
           "fingerprint": "apps/tagma/server/src/native-harness/transcript/rested.worker.ts [bun] -> unresolved source @ apps/tagma/server/src/native-harness/transcript/rested.worker.ts",
-          "held": {
-            "base": "bbe67c1c5960823b773786003f898409b8645b44",
-            "path": "apps/tagma/server/src/native-harness/transcript/rested.worker.ts"
-          },
           "owner": "e5e5c094"
         }
       ],
