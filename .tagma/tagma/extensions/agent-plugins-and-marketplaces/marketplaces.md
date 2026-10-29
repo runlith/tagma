@@ -1,7 +1,7 @@
 ---
 id: 01a189a0-4b54-758e-bef7-1061d6fd5286
 title: Marketplaces
-ord: 53
+ord: 5
 tags: ["module"]
 fields:
   {
@@ -14,6 +14,7 @@ fields:
       }
     ],
     "id": "marketplaces",
+    "kind": "product",
     "order": [
       [
         "contract/wire/"

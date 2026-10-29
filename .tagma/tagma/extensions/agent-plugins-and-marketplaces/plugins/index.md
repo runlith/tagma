@@ -1,7 +1,7 @@
 ---
 id: 01a18921-8504-7058-9d53-62c5e9aa47fc
 title: Plugins
-ord: 47
+ord: 1
 tags: ["module"]
 fields:
   {

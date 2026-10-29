@@ -1,7 +1,7 @@
 ---
 id: 01a18921-850b-74c0-a119-c016a939df5d
 title: Agent Plugins format
-ord: 49
+ord: 3
 tags: ["module"]
 fields:
   {

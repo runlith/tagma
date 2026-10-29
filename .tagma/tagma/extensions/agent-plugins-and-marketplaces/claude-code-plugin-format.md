@@ -1,7 +1,7 @@
 ---
 id: 01a18921-8509-7ad6-b9a4-fd45d6ac5676
 title: Claude Code plugin format
-ord: 48
+ord: 2
 tags: ["module"]
 fields:
   {

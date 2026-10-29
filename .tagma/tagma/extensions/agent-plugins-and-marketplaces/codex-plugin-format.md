@@ -1,7 +1,7 @@
 ---
 id: 01a18993-811d-7dd2-af22-f3dd4210622f
 title: Codex plugin format
-ord: 52
+ord: 4
 tags: ["module"]
 fields:
   {
