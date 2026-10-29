@@ -1,12 +1,13 @@
 import type { ScrollRecording } from '@runlith/e2e/ios';
 
-export type Pace = { speed: number; span: number; frame: number };
+export type Pace = { speed: number; span: number };
 export type Motion = {
   distance: number;
   velocity: number;
   ratio: number;
   steps: number[];
   paces: Pace[];
+  cadence: number;
   endSpeed: number;
 };
 export type Calibration = { count: number; minRatio: number; maxRatio: number; endSpeed: number };
@@ -29,8 +30,15 @@ export function pace(frames: readonly Sample[], index: number, direction: number
   const middle = frames[index - 1];
   const after = frames[index];
   if (before === undefined || middle === undefined || after === undefined) throw new Error('A two-frame pace needs two earlier frames');
+  if (middle.t <= before.t || after.t <= middle.t) throw new Error('Fling frame times did not increase');
   const span = after.t - before.t;
-  return { speed: (direction * (after.offset - before.offset)) / span, span, frame: Math.min(after.t - middle.t, middle.t - before.t) };
+  return { speed: (direction * (after.offset - before.offset)) / span, span };
+}
+
+export function cadence(frames: readonly Sample[]): number {
+  const intervals = frames.slice(1).map((frame, index) => frame.t - frames[index]!.t);
+  if (intervals.length === 0) throw new Error('A frame cadence needs two frames');
+  return intervals.sort((a, b) => a - b)[Math.floor(intervals.length / 2)]!;
 }
 
 export function motion(recording: ScrollRecording, until = Infinity): Motion {
@@ -54,7 +62,7 @@ export function motion(recording: ScrollRecording, until = Infinity): Motion {
   const distance = direction * (frames.at(-1)!.offset - release.offset);
   const velocity = Math.abs(release.velocity);
   const endSpeed = paces.findLast((one) => one.speed > 0)?.speed ?? 0;
-  return { distance, velocity, ratio: distance / velocity, steps, paces, endSpeed };
+  return { distance, velocity, ratio: distance / velocity, steps, paces, cadence: cadence(frames), endSpeed };
 }
 
 export function calibrate(controls: readonly ScrollRecording[]): Calibration {
@@ -72,7 +80,7 @@ function moving(frames: readonly Sample[], time: number, direction: number): boo
   const index = frames.findLastIndex((frame) => frame.t <= time);
   if (index < 2) return true;
   const before = pace(frames, index, direction);
-  return before.speed * (before.span - before.frame) >= missedPixels;
+  return before.speed * (before.span - cadence(frames)) >= missedPixels;
 }
 
 export function momentum(recording: ScrollRecording, control: Calibration, writes: readonly MomentumWrite[] = []): MomentumVerdict {
@@ -89,7 +97,7 @@ export function momentum(recording: ScrollRecording, control: Calibration, write
   for (let index = 1; index < measured.paces.length; index += 1) {
     const current = measured.paces[index]!;
     const previous = measured.paces[index - 1]!;
-    if (current.speed <= 0 && previous.speed * (current.span - current.frame) >= missedPixels) interruptions += 1;
+    if (current.speed <= 0 && previous.speed * (current.span - measured.cadence) >= missedPixels) interruptions += 1;
   }
   const stoppingWrites = during.filter((write) => moving(after, write.time, direction)).length;
   const floor = floorShare * control.minRatio;

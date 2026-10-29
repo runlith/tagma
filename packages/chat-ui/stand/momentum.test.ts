@@ -2,8 +2,8 @@ import { expect, test } from 'bun:test';
 import { calibrate, momentum } from './momentum.fixture';
 import type { ScrollRecording } from '@runlith/e2e/ios';
 
-const fling = (offsets: readonly number[], velocity = 1): ScrollRecording => ({
-  frames: offsets.map((offset, index) => ({ t: (index + 1) * 10, offset })),
+const fling = (offsets: readonly number[], velocity = 1, times = offsets.map((_, index) => (index + 1) * 10)): ScrollRecording => ({
+  frames: offsets.map((offset, index) => ({ t: times[index]!, offset })),
   touches: [{ type: 'touchend', t: 0, offset: 0, x: 0, y: 0, trusted: true }],
   scrolls: [],
   release: { t: 0, offset: 0, velocity, touchVelocity: null, velocitySource: 'first-momentum-frames' },
@@ -22,6 +22,8 @@ test('a fling passes decay, out-of-phase samples and a fold at rest, and fails p
   expect(momentum(fling([10, 30, 30, 37, 39, 40, 40, 41, 41, 41]), control).interruptions).toBe(0);
   expect(momentum(fling([10, 20, 18, 25, 26, 26]), control).reversals).toBe(1);
   expect(momentum(fling([10, 20, 20, 20, 20]), control).interruptions).toBe(1);
+  const caughtUp = fling([10, 20, 30, 40, 70, 70, 70, 80, 90], 1, [10, 20, 30, 40, 70, 72, 80, 90, 100]);
+  expect(momentum(caughtUp, control).interruptions).toBe(0);
   const folded = momentum(fling([10, 20, 25, 27, 28, 28, 28, 60]), control, [{ time: 75, from: 28, to: 60 }]);
   expect([folded.stoppingWrites, folded.reversals, folded.aboveFloor]).toEqual([0, 0, true]);
   expect(momentum(fling([10, 20, 25, 25, 25]), control, [{ time: 25, from: 25, to: 24 }]).stoppingWrites).toBe(1);
