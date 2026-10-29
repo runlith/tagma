@@ -33,16 +33,29 @@ const claim = (): void => {
   beforeAll(handoff, HANG_MS);
 };
 
-const registering = <F extends object>(fn: F, owner?: object): F =>
+type Callback = (...args: unknown[]) => unknown;
+
+const authored = (bed: Bed, file: string, fn: Callback): Callback =>
+  Object.defineProperties(
+    function (this: unknown, ...args: unknown[]) {
+      return bed.within(file, () => Reflect.apply(fn, this, args));
+    },
+    { length: { value: fn.length }, name: { value: fn.name } },
+  );
+
+const registering = <F extends object>(bed: Bed | undefined, fn: F, owner?: object): F =>
   new Proxy(fn, {
     apply(target, self, args) {
       claim();
-      const result: unknown = Reflect.apply(target as (...args: unknown[]) => unknown, owner ?? self, args);
-      return typeof result === 'function' ? registering(result) : result;
+      const file = Bun.main;
+      const given =
+        bed === undefined ? args : args.map((arg: unknown) => (typeof arg === 'function' ? authored(bed, file, arg as Callback) : arg));
+      const result: unknown = Reflect.apply(target as Callback, owner ?? self, given);
+      return typeof result === 'function' ? registering(bed, result) : result;
     },
     get(target, key) {
       const value: unknown = Reflect.get(target, key);
-      return typeof value === 'function' ? registering(value, target) : value;
+      return typeof value === 'function' ? registering(bed, value, target) : value;
     },
   });
 
@@ -84,7 +97,7 @@ const prepare = async (): Promise<Bed> => {
   bed.install();
   confineHome();
   const real = { ...runner };
-  const wrapped = Object.fromEntries(REGISTERS.map((name) => [name, registering(real[name])]));
+  const wrapped = Object.fromEntries(REGISTERS.map((name) => [name, registering(name === 'describe' ? undefined : bed, real[name])]));
   const required = createRequire(import.meta.url)('bun:test') as typeof runner;
   Object.assign(required, wrapped);
   mock.module('bun:test', () => ({ ...real, ...wrapped }));

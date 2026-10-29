@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { FileRow, WorldRow } from './core/ledger.ts';
+import type { FileRow, RefusalRow, WorldRow } from './core/ledger.ts';
 import type { FileVerdict } from './report.ts';
 
 const PRELOAD = join(import.meta.dir, 'bun.ts');
@@ -183,6 +183,80 @@ test('takes the world', async () => { await open(fresh, null); });
   const child = Bun.spawn(['bun', 'test', '--parallel=1', './a.itest.ts', './b.itest.ts'], { cwd: root, stdout: 'pipe', stderr: 'pipe' });
   const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
   expect(code, stdout + stderr).toBe(0);
+});
+
+test("a shared world's background process under a following unit file is the world's, while the unit file's own call is still refused", async () => {
+  const root = join(process.env['TMPDIR']!, `mixed-${crypto.randomUUID()}`);
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, 'bunfig.toml'), `[test]\npreload = [${JSON.stringify(PRELOAD)}]\n`);
+  writeFileSync(
+    join(root, 'kinds.ts'),
+    `import { Context, Effect } from ${JSON.stringify(EFFECT)};
+import { kind } from ${JSON.stringify(WORLDS)};
+export class Background extends Context.Service<Background, {}>()('test/Background') {}
+const spawned = () =>
+  Effect.sync(() => {
+    try {
+      Bun.spawn(['sleep', '321'], { stdout: 'ignore', stderr: 'ignore' }).unref();
+      return 'spawned';
+    } catch (error) {
+      return String(error);
+    }
+  });
+export const background = kind(Background, (_: null) =>
+  Effect.as(
+    Effect.forkScoped(
+      Effect.gen(function* () {
+        while ((globalThis as { go?: true }).go === undefined) yield* Effect.sleep('5 millis');
+        (globalThis as { spawned?: string }).spawned = yield* spawned();
+      }),
+    ),
+    {},
+  ),
+);
+`,
+  );
+  writeFileSync(
+    join(root, 'a.itest.ts'),
+    `import { test } from 'bun:test';
+import { open } from ${JSON.stringify(WORLDS)};
+import { background } from './kinds.ts';
+test('takes the world', async () => { await open(background, null); });
+`,
+  );
+  writeFileSync(
+    join(root, 'b.test.ts'),
+    `import { expect, test } from 'bun:test';
+test("the world's background spawn is not this file's call", async () => {
+  (globalThis as { go?: true }).go = true;
+  while ((globalThis as { spawned?: string }).spawned === undefined) await Bun.sleep(5);
+  expect((globalThis as { spawned?: string }).spawned).toBe('spawned');
+});
+test('its own spawn is refused', () => {
+  expect(() => Bun.spawnSync(['true'])).toThrow('b.test.ts × process');
+});
+`,
+  );
+  const report = join(root, 'report.jsonl');
+  const child = Bun.spawn(['bun', CLI, 'bun', 'test', '--no-isolate', '--parallel=1', './a.itest.ts', './b.test.ts'], {
+    cwd: root,
+    env: { ...process.env, RUNLITH_TEST_REPORT: report },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  expect(code, stdout + stderr).toBe(0);
+  const rows = readFileSync(report, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as FileRow | RefusalRow);
+  expect(rows.flatMap((row) => (row.type === 'refusal' ? [[row.file.split('/').at(-1), row.via]] : []))).toEqual([
+    ['b.test.ts', 'spawnSync'],
+  ]);
+  expect(rows.flatMap((row) => (row.type === 'file' ? [[row.file.split('/').at(-1), row.residue]] : []))).toEqual([
+    ['a.itest.ts', 0],
+    ['b.test.ts', 0],
+  ]);
 });
 
 test('a run world is built once for every worker of the run, and each reads the value its builder published', async () => {

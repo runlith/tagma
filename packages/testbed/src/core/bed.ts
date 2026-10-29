@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { join, relative } from 'node:path';
 import { kindOf, type Kind } from './files.ts';
 import { installGuards, type GuardHooks, type Reach } from './guards.ts';
@@ -40,7 +41,15 @@ export const makeBed = (options: BedOptions) => {
   let last: Meter | undefined;
   const lingering: string[] = [];
   const seen = new Set<string>();
-  const watch = makeWatch({ processes: () => processes, file: options.file, site: (stack) => siteOf(stack, SKIP), cwd: options.repo });
+  const origin = new AsyncLocalStorage<string>();
+  const author = (): string => origin.getStore() ?? options.file();
+  const watch = makeWatch({
+    processes: () => processes,
+    file: options.file,
+    author,
+    site: (stack) => siteOf(stack, SKIP),
+    cwd: options.repo,
+  });
   const ledger = makeLedger({
     runner: options.runner,
     repo: options.repo,
@@ -49,11 +58,11 @@ export const makeBed = (options: BedOptions) => {
   });
 
   const reach: GuardHooks['reach'] = (found: Reach, via) => {
-    const file = options.file();
+    const file = author();
     if (kindOf(file) === 'unit' && !(options.exempt?.(new Error().stack) ?? false)) {
       const name = relative(options.repo, file);
       const refusal = new Refused(name, found.resource, via);
-      const loading = current?.file !== file || !current.ready;
+      const loading = file === options.file() && (current?.file !== file || !current.ready);
       const key = `${name}\0${found.resource}\0${loading}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -89,6 +98,7 @@ export const makeBed = (options: BedOptions) => {
     install(): void {
       installGuards({ reach, process: watch.process, expose: options.expose });
     },
+    within: <T>(file: string, work: () => T): T => origin.run(file, work),
     pend(from: Meter, to: Meter): void {
       pending = { from, to };
     },
