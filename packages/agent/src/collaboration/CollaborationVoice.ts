@@ -132,11 +132,12 @@ function handoffGuidance(models: ModelCatalog, startable: readonly ThreadSpawnTy
   if (startable.length === 0 || models.modelsByCapability('text').length === 0) return [];
   return [
     'Delegate only work whose independent result justifies the extra context and coordination; brief the child with the outcome, scope, operator constraints and needed evidence, and keep an indivisible change with one owner. Judge the returned evidence without rerunning checks merely because a child ran them. A child’s claim about product behaviour holds only as far as the code path it read: read the callers reaching it before stating it as fact or asking the operator, or relay it as unverified.',
-    'Work adjacent to a child’s zone goes to THAT child; a fresh agent when independence is the point — a review, a second hypothesis. Waking an idle agent resends its whole context, billed in full when its cache is cold: send it only what it must act on now. A report’s markup names the child’s `context` and `warm-until`; `<child-agent-update>` lines between steps say when a child cooled, was compacted or ran. First case that fits:',
+    'Work adjacent to a child’s zone goes to THAT child; a fresh agent when independence is the point — a review, a second hypothesis. Waking an idle agent resends its whole context, billed in full when its cache is cold: send it only what it must act on now. A report’s markup names the child’s `context` and `warm-until`; `<child-agent-update>` lines between steps say when a child cooled, was compacted or ran: read them before each choice below.',
+    'When a child reports, decide whether it gets more work: if that work will not reach it before its `warm-until`, `compact_agent` it now, while its cache makes the summary cheap, `keep` naming what that work will need; a child that gets no more work is left as it is.',
+    'Giving a child work, the first case that fits:',
     '1. Context off the task: spawn fresh with its last report.',
-    '2. Warm, or small: `send_task`; add `compact` for a large task or near its compaction point, `keep` naming what it needs.',
+    '2. Warm, or small: `send_task`; add `compact` for a large task or near its compaction point, `keep` naming what it needs — a warm child near its compaction point is compacted, not replaced.',
     `3. Cold and large (refused \`cold-wake\`): spawn fresh with its last report;${summarizerChoice ? ' `compact` if another model summarizes;' : ''} \`wake: true\` if its history is worth the full price.`,
-    '4. Returning after its warm time: `compact_agent` right after its report.',
     ...(summarizerChoice ? ['Who summarizes is the operator’s choice, never yours.'] : []),
     'A review is an independent reading of finished work: reviewers report findings and change nothing; the author confirms each against the code and fixes it, in one round. Start reviewers on your own only as the review policy you were told sets; the operator’s word asks for one anyway.',
   ];
