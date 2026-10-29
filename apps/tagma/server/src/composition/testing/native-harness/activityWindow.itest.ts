@@ -110,5 +110,57 @@ layer(doorFixture({ own: 'it asserts completeness of the global activity loss le
         }
       }),
     );
+
+    it.effect('list_threads pages a fixed activity selection with a population-independent cursor', () =>
+      Effect.gen(function* () {
+        const world = yield* DoorFixture;
+        const project = yield* world.knowledgeProject();
+        const threads: string[] = [];
+        for (let index = 0; index < 3; index += 1) {
+          const created = yield* world.op('create_thread', {}, `project=${project}`);
+          expect(created.status).toBe(200);
+          threads.push((created.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id);
+        }
+        const store = yield* Effect.provide(ActivityStore, yield* Effect.promise(() => world.runtime.runtime.context()));
+        const record = (thread: string) =>
+          activity(TOOL, { toolName: 'read' }, Effect.void, { thread }).pipe(Effect.provideService(ActivityLog, store.log));
+        yield* record(threads[0]!);
+        yield* record(threads[1]!);
+        yield* store.settled;
+        const since = new Date((yield* Clock.currentTimeMillis) - 24 * 60 * 60 * 1000).toISOString();
+        const ask = { activeSince: since, limit: 1 };
+        type Page = { threads: { id: string }[]; total: number; cursor: string | null };
+        const listing = Effect.fnUntraced(function* (input: typeof ask & { cursor?: string }) {
+          const response = yield* world.op('list_threads', input, `project=${project}`);
+          expect(response.status).toBe(200);
+          return response.body as Page;
+        });
+        const first = yield* listing(ask);
+        expect(first.total).toBe(2);
+        expect(first.threads.map((row) => row.id)).toEqual([threads[1]!]);
+        yield* record(threads[2]!);
+        yield* store.settled;
+        const started = yield* Clock.monotonicTimeNanos;
+        const expanded = yield* listing(ask);
+        const elapsedMs = Number((yield* Clock.monotonicTimeNanos) - started) / 1_000_000;
+        console.log(JSON.stringify({ sample: 'list_threads day window', threads: 3, activities: 3, limit: 1, elapsedMs }));
+        expect(expanded.total).toBe(3);
+        expect(Buffer.byteLength(expanded.cursor!)).toBe(Buffer.byteLength(first.cursor!));
+        const archived = yield* world.op('archive_thread', { threadId: threads[0]!, archived: true }, `project=${project}`);
+        expect(archived.status).toBe(200);
+        const rest = yield* listing({ ...ask, cursor: first.cursor! });
+        expect(rest.threads.map((row) => row.id)).toEqual([threads[0]!]);
+        expect(rest.total).toBe(2);
+        expect(rest.cursor).toBeNull();
+        const seen = [...expanded.threads];
+        for (let cursor = expanded.cursor; cursor !== null;) {
+          const page = yield* listing({ ...ask, cursor });
+          expect(page.total).toBe(3);
+          seen.push(...page.threads);
+          cursor = page.cursor;
+        }
+        expect(seen.map((row) => row.id)).toEqual(threads.toReversed());
+      }),
+    );
   },
 );

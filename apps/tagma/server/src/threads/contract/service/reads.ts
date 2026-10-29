@@ -4,7 +4,7 @@ import { Context, type Effect } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { Unit } from '../../../platform/contract/service/units.js';
 import type { HarnessId } from '../../../platform/contract/wire/session.js';
-import type { ThreadSelection, ThreadPage, ThreadWindow, ThreadFamily } from '../../list/select.js';
+import type { ThreadSelection, ThreadPage, ThreadWindow, ThreadFamily, ThreadSelectionPage } from '../../list/select.js';
 import type { PlacedEntry, SubtreeMember, ThreadGate, ThreadMetadata } from '../../list/store.js';
 import type { ThreadListMove, ThreadSummary } from '../../list/summary.js';
 import type { ArchiveWork } from './list.js';
@@ -31,14 +31,17 @@ export class ThreadLookup extends Context.Service<
 export class ThreadWindows extends Context.Service<
   ThreadWindows,
   {
-    list(ownerId: string, projectId: number, selection: ThreadSelection): Effect.Effect<ThreadPage, StoreFailure | ThreadStorageFailed>;
-    attention(ownerId: string): Effect.Effect<readonly ThreadSummary[], StoreFailure | ThreadStorageFailed>;
-    pulse(ownerId: string): Effect.Effect<readonly ThreadSummary[], StoreFailure | ThreadStorageFailed>;
-    ids(
+    list(ownerId: string, projectId: number, selection: ThreadSelection): Effect.Effect<ThreadPage, HarnessFailure>;
+    pin(ownerId: string, projectId: number, selection: ThreadSelection): Effect.Effect<string, HarnessFailure>;
+    page(
       ownerId: string,
       projectId: number,
-      selection: Omit<ThreadSelection, 'limit' | 'before'>,
-    ): Effect.Effect<readonly string[], StoreFailure | ThreadStorageFailed>;
+      reading: string,
+      offset: number,
+      limit: number,
+    ): Effect.Effect<ThreadSelectionPage, HarnessFailure>;
+    attention(ownerId: string): Effect.Effect<readonly ThreadSummary[], StoreFailure | ThreadStorageFailed>;
+    pulse(ownerId: string): Effect.Effect<readonly ThreadSummary[], StoreFailure | ThreadStorageFailed>;
     families(
       ownerId: string,
       member: ThreadSummary,

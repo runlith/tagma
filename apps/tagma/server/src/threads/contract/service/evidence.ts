@@ -39,6 +39,8 @@ export type EvidencePinnedThread = {
   };
 };
 
+export type EvidenceListing = { readonly reading: string; readonly total: number; readonly project: number };
+
 export type EvidencePin = {
   readonly id: string;
   readonly asks: EvidenceQuery;
@@ -46,6 +48,7 @@ export type EvidencePin = {
   readonly pinnedAt: string;
   readonly selection?: string;
   readonly named?: string;
+  readonly listing?: EvidenceListing;
   readonly activity?: { readonly project: number; readonly window?: ActivityWindow; readonly members?: true };
 };
 
@@ -140,6 +143,7 @@ export type ToolOutputPage = { readonly text: string; readonly from: number; rea
 
 export type ExpandInput = {
   readonly addresses: readonly EvidenceAddress[];
+  readonly envelopeBytes: number;
   readonly around?: number;
   readonly fields?: readonly string[];
   readonly outputFrom?: number;

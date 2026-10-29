@@ -66,6 +66,28 @@ export type ThreadWindow = {
   readonly windowBefore: Date | null;
 };
 
+export const selected = (ownerId: string, projectId: number, selection: ThreadSelection): SQL | undefined =>
+  and(
+    eq(recordFacts.principalId, ownerId),
+    eq(recordFacts.projectId, projectId),
+    archivedView(selection.view),
+    stateOf(selection.state),
+    selection.ids === undefined ? undefined : inArray(recordFacts.id, [...selection.ids]),
+    namedBy(selection.title),
+    reachOf(selection.of),
+    ranBy(selection.ran),
+    clockRange(recordFacts.createdAt, selection.createdAt),
+    clockRange(sql`coalesce(${thread.updatedAt}, ${recordFacts.movedAt})`, selection.updatedAt),
+    clockRange(recordFacts.readerOrderAt, selection.readerOrderAt),
+    clockRange(recordFacts.archivedAt, selection.archivedAt),
+  );
+
+export type ThreadSelectionPage = {
+  readonly ids: readonly string[];
+  readonly total: number;
+  readonly reading: string;
+};
+
 const ASKING = sql.raw('n.pending_interaction');
 
 export const outcomeRunOf = (threadId: SQLiteColumn): SQL<string | null> => sql<string | null>`(

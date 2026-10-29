@@ -84,6 +84,7 @@ import { ThreadAsks as ThreadAsksTag, makeThreadAsks } from '../turns/asks.js';
 import { makeReaderMarks } from '../turns/reader.js';
 import { ThreadList as ThreadListTag } from '../contract/service/list.js';
 import { makeThreadListReads } from '../list/store.js';
+import { ActivityRecord } from '@runlith/activity/store/record';
 import { ThreadMetadataSource } from '../contract/service/parts.js';
 import type { ThreadMetadataReads } from '../contract/service/rows.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
@@ -302,6 +303,7 @@ export const threadListReads = (
     Effect.provideService(ThreadRecords, records),
     Effect.provideService(ThreadEntryKinds, kinds),
     Effect.provideService(OwnWork, own),
+    Effect.provide(Layer.mock(ActivityRecord, {})),
   );
 
 export const threadLiveSpells = () => makeThreadLiveSpells;

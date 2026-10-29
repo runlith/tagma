@@ -18,6 +18,7 @@ import { restedAtOf } from '../rest.js';
 import { sessionOf } from '../store/harnessFacet.js';
 import type { HarnessId } from '../../platform/contract/wire/session.js';
 import { workingThreads } from './working.js';
+import { makeThreadSelections } from './active.js';
 import { parseExternalSession, type ExternalSession } from '../contract/wire/harness/externalSession.js';
 import { trusted } from '../../platform/store/crossing.js';
 import { among } from '../../platform/store/rows.js';
@@ -31,22 +32,17 @@ import { endSubscriptions, threadSubscription } from '../store/subscriptions.js'
 import { moveOf, summaryOf, type SummaryRow, type ThreadSummary } from './summary.js';
 import {
   activeSessions,
-  archivedView,
-  clockRange,
   heldSessions,
   heldUp,
   pinnedRoots,
   runningRoots,
   liveFamilyOf,
   liveRoot,
-  namedBy,
   outcomeRunOf,
   pastCursor,
   pulseDriven,
-  ranBy,
-  reachOf,
   rootsOf,
-  stateOf,
+  selected,
   summariesOf,
   type ThreadSelection,
 } from './select.js';
@@ -77,22 +73,6 @@ export type ThreadGate = {
   readonly evictedAt: Date | null;
 };
 
-const selected = (ownerId: string, projectId: number, selection: ThreadSelection): SQL | undefined =>
-  and(
-    eq(recordFacts.principalId, ownerId),
-    eq(recordFacts.projectId, projectId),
-    archivedView(selection.view),
-    stateOf(selection.state),
-    selection.ids === undefined ? undefined : inArray(recordFacts.id, [...selection.ids]),
-    namedBy(selection.title),
-    reachOf(selection.of),
-    ranBy(selection.ran),
-    clockRange(recordFacts.createdAt, selection.createdAt),
-    clockRange(sql`coalesce(${thread.updatedAt}, ${recordFacts.movedAt})`, selection.updatedAt),
-    clockRange(recordFacts.readerOrderAt, selection.readerOrderAt),
-    clockRange(recordFacts.archivedAt, selection.archivedAt),
-  );
-
 const matchedWhere = (ownerId: string, projectId: number, selection: ThreadSelection, spared: string | null) =>
   and(selected(ownerId, projectId, selection), spared === null ? undefined : sql`${recordFacts.id} not in ${lineageOf(spared)}`);
 
@@ -110,6 +90,7 @@ export const makeThreadListReads = Effect.gen(function* () {
   const records = yield* ThreadRecords;
   const kinds = yield* ThreadEntryKinds;
   const own = yield* OwnWork;
+  const selections = yield* makeThreadSelections;
 
   const summarized = Effect.fnUntraced(function* (call: string, rows: readonly SummaryRow[]) {
     const now = new Date(yield* Clock.currentTimeMillis);
@@ -212,6 +193,14 @@ export const makeThreadListReads = Effect.gen(function* () {
           ),
 
     list: (ownerId, projectId, selection) => {
+      if (selection.active !== undefined)
+        return Effect.gen(function* () {
+          const reading = yield* selections.pin(ownerId, projectId, selection);
+          const page = yield* selections.page(ownerId, projectId, reading, 0, selection.limit ?? -1);
+          const { active: _active, ...metadata } = selection;
+          const listed = yield* reads.list(ownerId, projectId, { ...metadata, ids: page.ids });
+          return { ...listed, total: page.total };
+        });
       if (selection.view === 'live' && selection.archivedAt !== undefined) {
         return Effect.die(
           new ThreadInputRefused('selection-shape', 'A range on archivedAt narrows the archived set; the live set carries no such clock.', [
@@ -277,20 +266,8 @@ export const makeThreadListReads = Effect.gen(function* () {
         ),
       ),
 
-    ids: (ownerId, projectId, selection) =>
-      units.read((unit) =>
-        Effect.map(
-          unit.run(
-            db
-              .select({ id: recordFacts.id })
-              .from(recordFacts)
-              .leftJoin(thread, eq(thread.id, recordFacts.id))
-              .where(selected(ownerId, projectId, selection))
-              .orderBy(desc(selection.view === 'archived' ? recordFacts.archivedAt : recordFacts.readerOrderAt), desc(recordFacts.id)),
-          ),
-          (rows) => rows.map((row) => row.id),
-        ),
-      ),
+    pin: selections.pin,
+    page: selections.page,
 
     rootWindow: Effect.fn('ThreadListReads.rootWindow')(function* (
       ownerId: string,

@@ -1,4 +1,6 @@
 import { pageRows } from '@runlith/paging';
+import { TOOL_OUTPUT_MAX_BYTES } from '@runlith/agent/ToolOutputSpool';
+import { expandedDisplay } from '../voice/display.js';
 import { Effect } from 'effect';
 import type { Actor } from '../../platform/contract/wire/actor.js';
 import type { Caller } from '../../platform/contract/wire/caller.js';
@@ -257,6 +259,13 @@ export const READ_PAIRS = {
               kind: 'records' as const,
               records: yield* (yield* EvidenceQueries).expand(project, {
                 addresses,
+                envelopeBytes: Buffer.byteLength(
+                  JSON.stringify({
+                    status: 'ok',
+                    expanded: [],
+                    _meta: { toolDisplay: expandedDisplay(input.threadId, TOOL_OUTPUT_MAX_BYTES * 2, TOOL_OUTPUT_MAX_BYTES) },
+                  }),
+                ),
                 around: input.around,
                 fields: input.fields,
                 outputFrom: input.outputFrom,

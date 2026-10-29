@@ -47,6 +47,7 @@ export const evidencePinSchema = Schema.Struct({
   pinnedAt: Schema.String.check(Schema.isMinLength(1)),
   selection: Schema.optional(Schema.String),
   named: Schema.optional(Schema.String),
+  listing: Schema.optional(Schema.Struct({ reading: Schema.String, total: Schema.Int, project: Schema.Int })),
   activity: Schema.optional(
     Schema.Struct({
       project: Schema.Int,
@@ -328,7 +329,7 @@ function admitStop(pin: EvidencePin, stop: EvidenceStop): Effect.Effect<Evidence
     }
     return Effect.succeed(stop);
   }
-  if (stop.at > pin.threads.length) return stale('This cursor stands past the reading it names.');
+  if (stop.at > (pin.listing?.total ?? pin.threads.length)) return stale('This cursor stands past the reading it names.');
   if (stop.sourceKey === null) return Effect.succeed(stop);
   const target = pin.threads[stop.at];
   if (target === undefined) return stale('This cursor stands past the reading it names.');

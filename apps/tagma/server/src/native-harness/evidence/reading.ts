@@ -179,16 +179,21 @@ export const evidenceReading = Effect.fnUntraced(function* ({ runs, gate }: Evid
               asks: { kind: 'list', selection: request.asked },
               threads: [],
             });
+      const at = resumed?.from.kind === 'source' ? resumed.from.at : 0;
+      const reading = resumed?.pin.listing?.reading ?? (yield* threads.pin(OPERATOR_PRINCIPAL, projectId, request.selection));
+      const selected = yield* threads.page(OPERATOR_PRINCIPAL, projectId, reading, at, limit);
       const pin =
         resumed?.pin ??
         (yield* reads.pin(reader, {
           asks: { kind: 'list', selection: request.asked },
-          threads: (yield* threads.ids(OPERATOR_PRINCIPAL, projectId, request.selection)).map((threadId) => ({
-            threadId,
-          })),
+          threads: [],
+          listing: { reading, total: selected.total, project: projectId },
         }));
-      const at = resumed?.from.kind === 'source' ? resumed.from.at : 0;
-      const slice = pin.threads.slice(at, at + limit).map((target) => target.threadId);
+      if (pin.listing?.project !== projectId)
+        return yield* new ThreadInputRefused('cursor-stale', 'This cursor names another thread project.', [
+          'open the thread listing again without a cursor',
+        ]);
+      const slice = selected.ids;
       const page = slice.length === 0 ? { rows: [] } : yield* list.list(projectId, { view: 'all', ids: slice });
       const held = new Map(page.rows.map((row) => [row.id, row]));
       const rows = slice.flatMap((threadId) => {
@@ -198,8 +203,8 @@ export const evidenceReading = Effect.fnUntraced(function* ({ runs, gate }: Evid
       const stop = at + slice.length;
       return {
         rows,
-        total: pin.threads.length,
-        cursor: stop >= pin.threads.length ? null : reads.cursor(reader, pin, { kind: 'source', at: stop, sourceKey: null }),
+        total: selected.total,
+        cursor: stop >= selected.total ? null : reads.cursor(reader, pin, { kind: 'source', at: stop, sourceKey: null }),
         set: request.selection.view,
       };
     }),
@@ -415,7 +420,7 @@ export const evidenceReading = Effect.fnUntraced(function* ({ runs, gate }: Evid
             'drop around, or read the neighbours in a call without outputFrom',
           ]),
         );
-      let left = TOOL_OUTPUT_MAX_BYTES - encodedBytes({ status: 'ok', expanded: [] });
+      let left = TOOL_OUTPUT_MAX_BYTES - input.envelopeBytes;
       const unread = (address: EvidenceAddress): ExpandedEvidenceRecord => ({
         ...address,
         unread:

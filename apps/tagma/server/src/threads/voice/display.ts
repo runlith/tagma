@@ -3,6 +3,17 @@ import { TITLE_FAILURES } from '../contract/wire/titles.js';
 import type { ThreadToolAnswer } from '../contract/wire/evidenceInput.js';
 import type { ThreadToolInput } from '../contract/wire/called.js';
 
+export function expandedDisplay(threadId: string | undefined, total: number, missing: number): ToolDisplay {
+  return {
+    form: 'none',
+    title: threadId,
+    facts: [
+      { label: 'expanded', value: String(total - missing) },
+      ...(missing === 0 ? [] : [{ label: 'missing', value: String(missing) }]),
+    ],
+  };
+}
+
 export function threadSettledDisplay(input: ThreadToolInput, result: ThreadToolAnswer): ToolDisplay | undefined {
   if (result.status === 'refused') return undefined;
   if (result.status === 'switched') {
@@ -122,15 +133,8 @@ export function threadSettledDisplay(input: ThreadToolInput, result: ThreadToolA
     };
   }
   if ('expanded' in result) {
-    const found = result.expanded.filter((held) => !('missing' in held)).length;
-    return {
-      form: 'none',
-      title: input.threadId,
-      facts: [
-        { label: 'expanded', value: String(found) },
-        ...(found === result.expanded.length ? [] : [{ label: 'missing', value: String(result.expanded.length - found) }]),
-      ],
-    };
+    const missing = result.expanded.filter((held) => 'missing' in held).length;
+    return expandedDisplay(input.threadId, result.expanded.length, missing);
   }
   if (result.status === 'deleted') {
     return { form: 'none', mutates: true, title: result.threadId, details: [{ label: 'deleted', value: result.threadId }] };

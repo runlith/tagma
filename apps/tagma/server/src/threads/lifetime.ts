@@ -42,8 +42,6 @@ import { threadReleasing } from './harness/releasing.js';
 import { ThreadReleasing } from './contract/service/releasing.js';
 import { makeThreadList } from './list/threadList.js';
 import { ThreadList } from './contract/service/list.js';
-import { ActivityRecord } from '@runlith/activity/store/record';
-import { activeNarrowed } from './list/active.js';
 import { letGoDetached } from '@runlith/agent/resources/threadResourceLedger';
 import { ROLLOUT_HOME } from './contract/wire/rolloutHome.js';
 import { OwnWork } from './contract/service/ownWork.js';
@@ -83,7 +81,6 @@ export const makeThreadsLifetime = Effect.fnUntraced(function* ({ rolloutHome }:
   const sandboxes = yield* Sandboxes;
   const parts: RolloutParts = { native: yield* NativeRolloutPart, external: yield* ExternalRolloutPart };
   const harnessKinds = yield* NativeResourceKinds;
-  const activity = yield* ActivityRecord;
   const order = yield* threadJournalLane;
   const registry = harnessRegistry();
   const own = yield* makeOwnWork;
@@ -144,13 +141,7 @@ export const makeThreadsLifetime = Effect.fnUntraced(function* ({ rolloutHome }:
     Context.add(ThreadReleasing, releasing),
     Context.add(ThreadList, list),
     Context.add(ThreadLookup, reads),
-    Context.add(ThreadWindows, {
-      ...reads,
-      list: (ownerId, projectId, selection) =>
-        Effect.flatMap(activeNarrowed(activity, projectId, selection), (narrowed) => reads.list(ownerId, projectId, narrowed)),
-      ids: (ownerId, projectId, selection) =>
-        Effect.flatMap(activeNarrowed(activity, projectId, selection), (narrowed) => reads.ids(ownerId, projectId, narrowed)),
-    }),
+    Context.add(ThreadWindows, reads),
     Context.add(ThreadRunning, reads),
     Context.add(ThreadPlaces, reads),
     Context.add(ThreadShelving, reads),
