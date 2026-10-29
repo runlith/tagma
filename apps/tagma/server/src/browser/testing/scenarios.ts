@@ -34,7 +34,7 @@ export type EngineHost = {
 };
 
 export const engineScenarios = (input: EngineHost): void => {
-  const { at, crossSite, domains, spinning, childSpinning, pickThrough, frameOrigin } = engineSite();
+  const { at, crossSite, domains, spinning, recover, recovering, childSpinning, pickThrough, frameOrigin } = engineSite();
   const home = mkdtempSync(join(tmpdir(), 'browser-engine-'));
   const world = Layer.effect(
     EnginePage,
@@ -444,33 +444,89 @@ export const engineScenarios = (input: EngineHost): void => {
       }),
     );
 
-    it.effect('a large snapshot respects its limit, a CPU-hung action and later snapshot refuse, and reload recovers the page', () =>
+    it.effect('a limited snapshot and a CPU-hung action refuse, closing ends its renderer, and a fresh same-site page works', () =>
       Effect.gen(function* () {
-        const profiles = yield* Profiles;
-        const source = yield* profiles.record(input.profile);
-        const profile = yield* profiles.create({
-          name: 'CPU-hung page',
-          adapter: source.adapter,
-          document: source.document,
-          console: source.console,
-        });
-        yield* Effect.addFinalizer(() => profiles.remove(profile.id).pipe(Effect.orDie));
-        const opened = yield* calling(PAGE.open_page.body.execute({ url: at('/heavy'), profile: profile.id }, undefined, agent));
-        const page = opened.page.id;
+        const page = yield* open('/heavy');
         const pages = yield* Pages;
-        yield* Effect.addFinalizer(() => pages.close(page).pipe(Effect.orDie));
+        const other = (yield* calling(
+          PAGE.open_page.body.execute({ url: crossSite('/second'), profile: input.profile }, undefined, OPERATOR),
+        )).page.id;
+        yield* Effect.addFinalizer(() => (pages.live(other) === undefined ? Effect.void : pages.close(other).pipe(Effect.orDie)));
+        yield* loaded(other);
+        expect(refIn(yield* snapshot(other), /heading "Second page"/)).toMatch(/^e\d+$/);
+        const moves = yield* pages.moves(page);
+        const closed = yield* Deferred.make<void>();
+        let crashed = false;
+        yield* Stream.runForEach(moves, (move) =>
+          Effect.gen(function* () {
+            crashed ||= move.live.crashed;
+            if (move.signal === 'closed') yield* Deferred.succeed(closed, undefined);
+          }),
+        ).pipe(Effect.forkScoped);
         yield* loaded(page);
         const shot = yield* calling(PAGE.snapshot_page.body.execute({ page, limit: 300 }, undefined, agent));
         expect([shot.shown, shot.more]).toEqual([300, true]);
         const ref = refIn(shot.text, /button "Spin"/);
         const acting = yield* Effect.forkChild(act(page, { action: 'click', ref }));
         yield* Deferred.await(spinning);
-        yield* TestClock.adjust('6 seconds');
         expect((yield* refusalOf(Fiber.join(acting))).code).toBe('page-unresponsive');
         expect((yield* refusalOf(snapshot(page))).code).toBe('page-unresponsive');
-        yield* calling(PAGE.navigate_page.body.execute({ page, go: 'reload' }, undefined, agent));
-        expect(refIn(yield* snapshot(page), /button "Spin"/)).toMatch(/^e\d+$/);
-      }).pipe(Effect.provide(TestClock.layer())),
+        yield* Effect.all(
+          [
+            calling(PAGE.close_page.body.execute({ page }, undefined, agent)),
+            calling(PAGE.close_page.body.execute({ page }, undefined, agent)),
+          ],
+          { concurrency: 'unbounded' },
+        );
+        yield* Deferred.await(closed);
+        expect(crashed).toBe(true);
+        expect(refIn(yield* snapshot(other), /heading "Second page"/)).toMatch(/^e\d+$/);
+        const fresh = yield* open('/second');
+        expect(refIn(yield* snapshot(fresh), /heading "Second page"/)).toMatch(/^e\d+$/);
+      }).pipe(
+        Effect.onError(() =>
+          Effect.gen(function* () {
+            const record = yield* (yield* Profiles).record(input.profile);
+            const host = yield* (yield* Hosts).reach(record.adapter);
+            yield* host.profiles.remove(input.profile);
+          }).pipe(Effect.orDie),
+        ),
+      ),
+    );
+
+    it.effect('closing a recovered page with a stale unresponsive mark preserves its same-renderer popup', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/recovering');
+        const pages = yield* Pages;
+        yield* loaded(page);
+        yield* Deferred.await(recovering);
+        const changes = yield* pages.changes((yield* Seeded).id);
+        const popup = yield* changes.pipe(
+          Stream.filter((event) => event.type === 'put' && event.page.url === at('/recovering-peer')),
+          Stream.runHead,
+          Effect.forkChild,
+        );
+        yield* evaluate(page, 'window.open("/recovering-peer"); true');
+        const opened = yield* Fiber.join(popup);
+        if (opened._tag === 'None' || opened.value.type !== 'put') return yield* Effect.die('the recovery popup never opened');
+        const peer = opened.value.page.id;
+        yield* Effect.addFinalizer(() => (pages.live(peer) === undefined ? Effect.void : pages.close(peer).pipe(Effect.orDie)));
+        expect(refIn(yield* snapshot(peer), /heading "Recovery peer"/)).toMatch(/^e\d+$/);
+        const acting = yield* Effect.forkChild(act(page, { action: 'click', ref: refIn(yield* snapshot(page), /button "Spin"/) }));
+        expect((yield* refusalOf(Fiber.join(acting))).code).toBe('page-unresponsive');
+        const host = yield* pages.hold(page);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            yield* host.pages.strain(page, { factor: 1, paused: true });
+            recover();
+            yield* calling(PAGE.close_page.body.execute({ page }, undefined, agent));
+          }),
+        );
+        const moves = yield* pages.moves(peer);
+        if (pages.live(peer)?.responsive === false)
+          yield* Stream.runHead(Stream.filter(moves, (move) => move.live.responsive || move.live.crashed));
+        expect(refIn(yield* snapshot(peer), /heading "Recovery peer"/)).toMatch(/^e\d+$/);
+      }).pipe(Effect.ensuring(Effect.sync(recover))),
     );
 
     it.effect('a crashed renderer is published, refuses actions and recovers after reload', () =>

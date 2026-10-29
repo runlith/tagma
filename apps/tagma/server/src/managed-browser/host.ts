@@ -32,7 +32,7 @@ import type { Build } from './builds/build.js';
 import { makeChromeForTesting } from './builds/chromeForTesting.js';
 import { makeInstalledChrome } from './builds/installedChrome.js';
 import { committed } from './commit.js';
-import { captureHost, hiddenTarget, lost, quiet } from './targets.js';
+import { captureHost, hiddenTarget, lost, makeTargets, quiet, type Targets } from './targets.js';
 import { makePermissions, type Permissions } from './permissions.js';
 import { makeNavigation, type NavigationGate } from './navigation.js';
 
@@ -81,6 +81,7 @@ type Running = {
   readonly scope: Scope.Closeable;
   readonly tabs: Map<string, Tab>;
   readonly downloads: Downloads;
+  readonly targets: Targets;
   readonly permissions: Permissions;
   readonly navigation: NavigationGate;
   readonly strains: Set<Strain>;
@@ -378,7 +379,11 @@ export const makeManagedHost = Effect.gen(function* () {
       const connection = yield* Scope.provide(connect(transport), held);
       const permissions = yield* makePermissions({ browser: connection.root });
       const navigation = yield* Scope.provide(makeNavigation({ connection, events, nextRevision }), held);
+      yield* connection.root.send('Target.setDiscoverTargets', { discover: true }).pipe(Effect.mapError(lost));
+      const { targetInfos } = yield* connection.root.send('Target.getTargets').pipe(Effect.mapError(lost));
+      const targets = yield* makeTargets(connection, UNRESPONSIVE_AFTER).pipe(Effect.mapError(lost));
       const state: Running = {
+        targets,
         profile: profile.id,
         connection,
         scope: held,
@@ -394,10 +399,8 @@ export const makeManagedHost = Effect.gen(function* () {
       };
       const stream = yield* Scope.provide(connection.root.events(), held);
       yield* Stream.runForEach(stream, (event) => onBrowser(state, event).pipe(quiet('a browser event'))).pipe(Effect.forkIn(held));
-      yield* connection.root.send('Target.setDiscoverTargets', { discover: true }).pipe(Effect.mapError(lost));
       yield* state.downloads.start(connection.root).pipe(Effect.mapError(lost));
-      const { targetInfos } = yield* connection.root.send('Target.getTargets').pipe(Effect.mapError(lost));
-      yield* connection.root.send('Target.createTarget', { url: 'about:blank', background: true }).pipe(Effect.mapError(lost));
+
       for (const info of targetInfos) {
         if (info.type === 'page')
           yield* connection.root.send('Target.closeTarget', { targetId: info.targetId }).pipe(Effect.mapError(lost));
@@ -465,7 +468,7 @@ export const makeManagedHost = Effect.gen(function* () {
 
   const replace = Effect.fnUntraced(function* (state: Running, tab: Tab, page: PageId): Effect.fn.Return<PageChange, CommandFailure> {
     const url = tab.url || 'about:blank';
-    const { targetId } = yield* state.connection.root.send('Target.createTarget', { url: 'about:blank' });
+    const { targetId } = yield* state.targets.create({ url: 'about:blank' });
     yield* state.navigation.swap(tab.target, targetId);
     yield* unbind(state, tab);
     yield* state.connection.root.send('Target.closeTarget', { targetId: tab.target });
@@ -536,7 +539,7 @@ export const makeManagedHost = Effect.gen(function* () {
       open: Effect.fn('ManagedHost.open')(function* (opening) {
         const state = yield* ensure(opening.profile);
         const url = opening.history?.entries[opening.history.at]?.url ?? opening.url;
-        const { targetId } = yield* state.connection.root.send('Target.createTarget', { url: 'about:blank' }).pipe(Effect.mapError(lost));
+        const { targetId } = yield* state.targets.create({ url: 'about:blank' }).pipe(Effect.mapError(lost));
         yield* Effect.gen(function* () {
           const service = yield* bind(state, targetId, opening.page);
           yield* state.navigation.open(targetId, opening.policy);
@@ -605,6 +608,13 @@ export const makeManagedHost = Effect.gen(function* () {
           );
           if (stayed) return yield* stayedFailure;
           return;
+        }
+        if (tab !== undefined && !tab.responsive && !tab.crashed && service !== null) {
+          const eligible = () => located.get(page)?.target === at.target && !tab.responsive && !tab.crashed;
+          if (yield* at.state.targets.crash(at.target, service, eligible).pipe(Effect.mapError(lost))) {
+            tab.crashed = true;
+            yield* emit({ kind: 'crashed', page });
+          }
         }
         if (tab !== undefined) yield* unbind(at.state, tab);
         yield* at.state.connection.root.send('Target.closeTarget', { targetId: at.target }).pipe(

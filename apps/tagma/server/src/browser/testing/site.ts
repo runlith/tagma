@@ -78,6 +78,8 @@ const HEAVY = `<!doctype html><title>Heavy</title><button id="spin" onclick="fet
 export const engineSite = () => {
   const domains = domainFixture();
   const spinning = Deferred.makeUnsafe<void>();
+  const recovery = Promise.withResolvers<Response>();
+  const recovering = Deferred.makeUnsafe<void>();
   const childSpinning = Deferred.makeUnsafe<void>();
   const pickThrough = Deferred.makeUnsafe<void>();
   const frameServer = Bun.serve({
@@ -89,7 +91,7 @@ export const engineSite = () => {
   const server: Bun.Server<undefined> = Bun.serve({
     port: 0,
     hostname: '127.0.0.1',
-    fetch: (request): Response => {
+    fetch: (request): Response | Promise<Response> => {
       const url = new URL(request.url);
       const path = url.pathname;
       const domainResponse = domains.respond(url, server.port!);
@@ -130,6 +132,31 @@ export const engineSite = () => {
         return new Response(`<!doctype html><iframe src="http://hung.localhost:${server.port}/hung-inner"></iframe>`, {
           headers: { 'content-type': 'text/html; charset=utf-8' },
         });
+      if (path === '/recovering-release') {
+        Deferred.doneUnsafe(recovering, Exit.void);
+        return recovery.promise;
+      }
+      if (path === '/recovering-worker')
+        return new Response(
+          'onmessage = async ({ data }) => { await fetch("/recovering-release"); Atomics.store(new Int32Array(data), 0, 1); };',
+          { headers: { 'content-type': 'text/javascript', 'cross-origin-embedder-policy': 'require-corp' } },
+        );
+      if (path === '/recovering' || path === '/recovering-peer')
+        return new Response(
+          path === '/recovering-peer'
+            ? '<!doctype html><h1>Recovery peer</h1>'
+            : `<!doctype html><button onclick="fetch('/spinning'); while (!Atomics.load(flag, 0)) {}">Spin</button><script>
+          const flag = new Int32Array(new SharedArrayBuffer(4));
+          const worker = new Worker('/recovering-worker'); worker.postMessage(flag.buffer);
+        </script>`,
+          {
+            headers: {
+              'content-type': 'text/html',
+              'cross-origin-opener-policy': 'same-origin',
+              'cross-origin-embedder-policy': 'require-corp',
+            },
+          },
+        );
       if (path === '/favicon.ico') return new Response(null, { status: 204 });
       if (path === '/heavy') return new Response(HEAVY, { headers: { 'content-type': 'text/html; charset=utf-8' } });
       if (path === '/scrolled-frame') {
@@ -165,6 +192,8 @@ export const engineSite = () => {
   return {
     domains,
     spinning,
+    recover: () => recovery.resolve(new Response(null, { status: 204 })),
+    recovering,
     childSpinning,
     pickThrough,
     frameOrigin,
