@@ -1,5 +1,5 @@
-import type { CommandFailure, Session } from '@runlith/cdp/session';
-import { Effect, Exit, Scope } from 'effect';
+import { type CommandFailure, type Session, SessionEnded } from '@runlith/cdp/session';
+import { Effect, Exit, PubSub, Result, Schema, Scope } from 'effect';
 import type { EmulationChange } from '../contract/service/automation.js';
 import { hostRefusal, Pages } from '../contract/service/pages.js';
 import { ThreadRuns } from '../contract/service/runs.js';
@@ -16,6 +16,7 @@ import { type Strain, strainOf } from '../contract/wire/host.js';
 import type { Attached, Paged } from './drive.js';
 import { unknownPage } from './refusal.js';
 import { endsWithRun } from './lifetime.js';
+import { actionFailed, world } from './target.js';
 
 export const nextEmulation = (current: Emulation, change: EmulationChange): Emulation => {
   if (change.clear) return NO_EMULATION;
@@ -213,15 +214,140 @@ export const changeConditions = Effect.fnUntraced(function* (state: Paged, attac
   }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(held, Exit.void) : Effect.void)));
 });
 
+const Size = Schema.Struct({ width: Schema.Finite, height: Schema.Finite });
+type Size = typeof Size.Type;
+type MetricFailure = CommandFailure | ReturnType<typeof actionFailed>;
+type PendingMetrics = {
+  readonly expected: Size | null;
+  readonly previous: Size | null;
+  readonly clearing: boolean;
+  readonly uncertain: boolean;
+  readonly revision: number;
+};
+
+export type Metrics = {
+  native: Result.Result<Size, MetricFailure> | null;
+  override: Size | null;
+  uncertain: boolean;
+  revision: number;
+  pending: PendingMetrics | null;
+  readonly changes: PubSub.PubSub<void>;
+};
+
+export const makeMetrics = Effect.gen(function* () {
+  const changes = yield* Effect.acquireRelease(PubSub.unbounded<void>(), PubSub.shutdown);
+  const metrics: Metrics = { native: null, override: null, uncertain: false, revision: 0, pending: null, changes };
+  return metrics;
+});
+
+const sizeOf = Effect.fn('browser.metrics')(function* (attached: Attached): Effect.fn.Return<Size, MetricFailure> {
+  const { cssVisualViewport: view } = yield* attached.session.send('Page.getLayoutMetrics');
+  const context = yield* world(attached, attached.main).pipe(
+    Effect.catchTag('GateRefusal', (failure) => Effect.fail(actionFailed(failure.reason))),
+  );
+  const viewport = yield* attached.session.send('Runtime.evaluate', {
+    expression:
+      '(() => { const root = document.scrollingElement; const view = visualViewport; const scale = Math.min(1, view.scale); return { width: view.width * view.scale + (root ? Math.floor((innerWidth - root.clientWidth) * scale) : 0), height: view.height * view.scale + (root ? Math.floor((innerHeight - root.clientHeight) * scale) : 0) }; })()',
+    contextId: context,
+    returnByValue: true,
+  });
+  if (viewport.exceptionDetails !== undefined) return yield* actionFailed('the page could not report its full viewport dimensions');
+  const size = yield* Schema.decodeUnknownEffect(Size)(viewport.result.value).pipe(
+    Effect.mapError((failure) => actionFailed(`the page returned unreadable viewport dimensions: ${failure.message}`)),
+  );
+  const zoom = view.zoom ?? 1;
+  return { width: Math.round(size.width * zoom), height: Math.round(size.height * zoom) };
+});
+
+export const nativeMetrics = Effect.fnUntraced(function* (attached: Attached) {
+  const metrics = attached.metrics;
+  const revision = metrics.revision;
+  const native = yield* Effect.result(sizeOf(attached));
+  if (metrics.override === null && metrics.pending === null && metrics.revision === revision) metrics.native = native;
+});
+
+export const resizedMetrics = Effect.fnUntraced(function* (attached: Attached) {
+  const metrics = attached.metrics;
+  metrics.revision += 1;
+  if (metrics.override !== null && metrics.pending === null) metrics.uncertain = true;
+  const native = metrics.override === null && metrics.pending === null;
+  if (native) metrics.native = null;
+  yield* PubSub.publish(metrics.changes, undefined);
+  if (native) yield* Effect.forkIn(nativeMetrics(attached), attached.scope);
+});
+
+const sameSize = (left: Size | null, right: Size | null): boolean =>
+  left !== null && right !== null && left.width === right.width && left.height === right.height;
+
+export const syncMetrics = Effect.fn('browser.syncMetrics')(function* (attached: Attached) {
+  const metrics = attached.metrics;
+  const pending = metrics.pending;
+  if (pending === null) return;
+  const changes = yield* PubSub.subscribe(metrics.changes);
+  const stopped = Effect.flatMap(attached.session.ended, (end) =>
+    Effect.fail(new SessionEnded({ message: 'the browser session ended before its viewport settled', end, pending: false })),
+  );
+  for (;;) {
+    const revision = metrics.revision;
+    const current = yield* sizeOf(attached);
+    if (metrics.revision !== revision) continue;
+    if (sameSize(current, pending.expected) || (pending.clearing && pending.uncertain && revision > pending.revision)) {
+      yield* attached.syncEvents();
+      if (metrics.revision !== revision) continue;
+      metrics.pending = null;
+      if (pending.clearing) {
+        metrics.native = Result.succeed(current);
+        metrics.uncertain = false;
+      }
+      return;
+    }
+    if (pending.clearing && (pending.expected === null || (pending.uncertain && sameSize(current, pending.previous)))) {
+      metrics.native = null;
+      metrics.pending = null;
+      metrics.uncertain = false;
+      return;
+    }
+    if (metrics.revision === revision) yield* Effect.raceFirst(PubSub.take(changes), stopped);
+  }
+}, Effect.scoped);
+
 export const applyEmulation = Effect.fnUntraced(function* (
-  session: Session,
+  attached: Attached,
   emulation: Emulation,
   previous: Emulation = NO_EMULATION,
-): Effect.fn.Return<void, CommandFailure> {
+): Effect.fn.Return<void, MetricFailure> {
+  const { session } = attached;
   const metrics = metricsOf(emulation);
   const before = metricsOf(previous);
-  if (metrics !== null) yield* session.send('Emulation.setDeviceMetricsOverride', metrics);
-  else if (before !== null) yield* session.send('Emulation.clearDeviceMetricsOverride');
+  const resized =
+    metrics?.width !== before?.width ||
+    metrics?.height !== before?.height ||
+    metrics?.deviceScaleFactor !== before?.deviceScaleFactor ||
+    metrics?.mobile !== before?.mobile;
+  if (resized) {
+    const held = attached.metrics;
+    yield* attached.syncEvents();
+    if (held.native === null && held.override === null && held.pending === null) {
+      for (;;) {
+        const revision = held.revision;
+        yield* nativeMetrics(attached);
+        yield* attached.syncEvents();
+        if (held.revision === revision) break;
+      }
+    }
+    const native = held.native === null ? null : yield* Effect.fromResult(held.native);
+    const expected = metrics === null ? native : { width: metrics.width, height: metrics.height };
+    held.pending = {
+      expected,
+      previous: held.override,
+      clearing: metrics === null,
+      uncertain: held.uncertain,
+      revision: held.revision,
+    };
+    held.override = metrics === null ? null : expected;
+    if (metrics !== null) yield* session.send('Emulation.setDeviceMetricsOverride', metrics);
+    else yield* session.send('Emulation.clearDeviceMetricsOverride');
+  }
   if ((metrics?.mobile ?? false) !== (before?.mobile ?? false)) {
     yield* session.send('Emulation.setTouchEmulationEnabled', { enabled: metrics?.mobile ?? false });
   }

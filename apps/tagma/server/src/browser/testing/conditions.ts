@@ -1,5 +1,5 @@
 import { expect } from 'bun:test';
-import { Effect, Fiber, Stream } from 'effect';
+import { Clock, Effect, Fiber, Stream } from 'effect';
 import type { Caller } from '../../platform/contract/wire/caller.js';
 import { Pages } from '../contract/service/pages.js';
 import { NETWORKS } from '../contract/wire/emulation.js';
@@ -29,6 +29,7 @@ export const refusedConditionScenario = Effect.fnUntraced(function* (profile: Pr
       ),
     ).pipe(Effect.map((answer) => ('value' in answer ? (JSON.parse(answer.value) as unknown) : answer.exception)));
   const before = yield* measured();
+  const refusedAt = yield* Clock.currentTimeMillis;
   const refused = yield* refusalOf(
     calling(
       PAGE.emulate_page.body.execute(
@@ -38,9 +39,21 @@ export const refusedConditionScenario = Effect.fnUntraced(function* (profile: Pr
       ),
     ),
   );
+  const refusedMs = (yield* Clock.currentTimeMillis) - refusedAt;
   expect(refused.code).toBe('host-refused');
-  yield* calling(PAGE.emulate_page.body.execute({ page: page.id, clear: true }, undefined, caller));
   expect(yield* measured()).toEqual(before);
+  const noOpAt = yield* Clock.currentTimeMillis;
+  yield* calling(PAGE.emulate_page.body.execute({ page: page.id, clear: true }, undefined, caller));
+  const noOpMs = (yield* Clock.currentTimeMillis) - noOpAt;
+  expect(yield* measured()).toEqual(before);
+  const setAt = yield* Clock.currentTimeMillis;
+  yield* calling(PAGE.emulate_page.body.execute({ page: page.id, device: 'iphone-15' }, undefined, caller));
+  const setMs = (yield* Clock.currentTimeMillis) - setAt;
+  const clearAt = yield* Clock.currentTimeMillis;
+  yield* calling(PAGE.emulate_page.body.execute({ page: page.id, clear: true }, undefined, caller));
+  const clearMs = (yield* Clock.currentTimeMillis) - clearAt;
+  expect(yield* measured()).toEqual(before);
+  console.log(JSON.stringify({ viewportWrites: { refusedMs, noOpMs, setMs, clearMs } }));
 });
 
 export const conditionScenario = Effect.fnUntraced(function* (input: {

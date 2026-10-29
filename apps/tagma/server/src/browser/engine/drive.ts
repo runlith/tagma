@@ -15,7 +15,16 @@ import type { PageId, ProfileId } from '../contract/wire/ids.js';
 import type { ConsoleEntry, NetworkEntry } from '../contract/wire/rows.js';
 import { capture, consoleRing, networkRing, type Request } from './capture.js';
 import { adoptPicking, type Mark } from './cursor.js';
-import { applyConditions, applyEmulation, effectiveOf } from './emulate.js';
+import {
+  applyConditions,
+  applyEmulation,
+  effectiveOf,
+  makeMetrics,
+  type Metrics,
+  nativeMetrics,
+  resizedMetrics,
+  syncMetrics,
+} from './emulate.js';
 import { commitFrame, detachFrame, type Frame, joinChild, leaveChild, readTree, retireChild } from './frames.js';
 import type { Strain } from '../contract/wire/host.js';
 import { isLocal } from './local.js';
@@ -53,6 +62,7 @@ export type Attached = {
   readonly syncing: Semaphore.Semaphore;
   group: string;
   conditions: Scope.Closeable | null;
+  readonly metrics: Metrics;
   readonly emulating: Semaphore.Semaphore;
   readonly strain: StrainState;
   overlaid: boolean;
@@ -191,6 +201,8 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
 
   const onEvent = Effect.fnUntraced(function* (state: Paged, attached: Attached, event: CdpEvent) {
     switch (event.method) {
+      case 'Page.frameResized':
+        return event.child === undefined ? yield* resizedMetrics(attached) : undefined;
       case 'Page.frameNavigated': {
         const { frame } = yield* eventParams('Page.frameNavigated', event);
         return yield* navigated(state, attached, frame, event.child);
@@ -318,7 +330,9 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
     yield* attached.session.send('Emulation.setFocusEmulationEnabled', { enabled: true });
     yield* readTree(attached, undefined);
     state.refs.keep(new Set([...attached.frames.values()].map((frame) => frame.loader)));
-    yield* applyEmulation(attached.session, effectiveOf(state.emulation, state.layout));
+    yield* nativeMetrics(attached);
+    yield* applyEmulation(attached, effectiveOf(state.emulation, state.layout));
+    yield* syncMetrics(attached);
     yield* syncRuntime(state, attached);
   });
 
@@ -392,6 +406,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         syncing: yield* Semaphore.make(1),
         group: 'engine',
         conditions: null,
+        metrics: yield* Scope.provide(makeMetrics, attachment),
         emulating: yield* Semaphore.make(1),
         strain,
         overlaid: false,
@@ -546,6 +561,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
           let answer: A;
           if (attached === null) answer = yield* work(state, attached);
           else {
+            yield* syncMetrics(attached);
             if (thread !== null) yield* drove(state, thread);
             groups += 1;
             const group = `engine-${groups}`;

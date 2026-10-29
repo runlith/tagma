@@ -50,7 +50,7 @@ const caller: Caller = {
 };
 
 const engine = Effect.fnUntraced(function* (
-  mode: 'dialog' | 'detach' | 'conditions' | 'replacement' | 'late-adoption' | 'pick-detach' | 'heap',
+  mode: 'dialog' | 'detach' | 'conditions' | 'replacement' | 'late-adoption' | 'pick-detach' | 'heap' | 'viewport',
 ) {
   const incoming = yield* Queue.unbounded<string>();
   const frameTrees = yield* Queue.unbounded<string>();
@@ -61,6 +61,12 @@ const engine = Effect.fnUntraced(function* (
   const adopted = yield* Deferred.make<void>();
   let latency = 0;
   let clicks = 0;
+  let native = { width: 1280, height: 800 };
+  let viewport = native;
+  let holdViewport = false;
+  let viewportRead: { readonly id: number; readonly sessionId: string | undefined } | null = null;
+  const resizing = yield* Deferred.make<void>();
+  const changingViewport = yield* Deferred.make<void>();
   const inspecting = new Set<string>();
   const rates = new Map<string, number>();
   const strains = new Set<Strain>();
@@ -76,6 +82,9 @@ const engine = Effect.fnUntraced(function* (
           readonly key?: string;
           readonly mode?: string;
           readonly rate?: number;
+          readonly width?: number;
+          readonly height?: number;
+          readonly expression?: string;
           readonly matchedNetworkConditions?: readonly { readonly latency: number }[];
         };
       };
@@ -121,29 +130,67 @@ const engine = Effect.fnUntraced(function* (
         yield* Queue.offer(frameTrees, command.sessionId);
         if (mode === 'late-adoption' && command.sessionId === 'child-old') yield* Deferred.await(release);
       }
+      if (mode === 'viewport') {
+        if (command.method === 'Emulation.setDeviceMetricsOverride') {
+          viewport = { width: command.params?.width ?? 0, height: command.params?.height ?? 0 };
+          yield* Deferred.succeed(changingViewport, undefined);
+        } else if (command.method === 'Emulation.clearDeviceMetricsOverride') viewport = native;
+        if (command.method === 'Runtime.evaluate' && command.params?.expression?.includes('visualViewport')) {
+          if (holdViewport) {
+            holdViewport = false;
+            viewportRead = { id: command.id, sessionId: command.sessionId };
+            yield* Deferred.succeed(resizing, undefined);
+            return;
+          }
+          if (Deferred.isDoneUnsafe(resizing)) yield* Deferred.succeed(changingViewport, undefined);
+        }
+      }
+      const layoutViewport = { pageX: 0, pageY: 0, clientWidth: viewport.width, clientHeight: viewport.height };
+      const visualViewport = { ...layoutViewport, offsetX: 0, offsetY: 0, scale: 1, zoom: 1 };
+      const contentSize = { x: 0, y: 0, ...viewport };
       const result =
-        command.method === 'Accessibility.getRootAXNode'
-          ? { node: { nodeId: 'root', role: { value: 'RootWebArea' }, childIds: ['button'] } }
-          : command.method === 'Accessibility.getChildAXNodes'
-            ? { nodes: [{ nodeId: 'button', role: { value: 'button' }, name: { value: command.sessionId }, backendDOMNodeId: 2 }] }
-            : command.method === 'Runtime.evaluate'
-              ? { result: mode === 'pick-detach' ? { type: 'number', value: clicks } : { type: 'object', subtype: 'null', value: null } }
-              : command.method === 'Page.createIsolatedWorld'
-                ? { executionContextId: 1 }
-                : command.method === 'Page.getFrameTree'
-                  ? {
-                      frameTree: {
-                        frame: command.sessionId?.startsWith('child')
-                          ? {
-                              id: 'child-frame',
-                              parentId: 'frame',
-                              loaderId: `${command.sessionId}-document`,
-                              url: 'https://frame.example/',
-                            }
-                          : { id: 'frame', loaderId: 'document', url: 'https://example.test/' },
-                      },
-                    }
-                  : {};
+        command.method === 'Page.getLayoutMetrics'
+          ? {
+              layoutViewport,
+              visualViewport,
+              contentSize,
+              cssLayoutViewport: layoutViewport,
+              cssVisualViewport: visualViewport,
+              cssContentSize: contentSize,
+            }
+          : command.method === 'Accessibility.getRootAXNode'
+            ? { node: { nodeId: 'root', role: { value: 'RootWebArea' }, childIds: ['button'] } }
+            : command.method === 'Accessibility.getChildAXNodes'
+              ? { nodes: [{ nodeId: 'button', role: { value: 'button' }, name: { value: command.sessionId }, backendDOMNodeId: 2 }] }
+              : command.method === 'Runtime.evaluate'
+                ? {
+                    result:
+                      mode === 'viewport'
+                        ? {
+                            type: 'object',
+                            value:
+                              command.params?.expression === '[innerWidth, innerHeight]' ? [viewport.width, viewport.height] : viewport,
+                          }
+                        : mode === 'pick-detach'
+                          ? { type: 'number', value: clicks }
+                          : { type: 'object', subtype: 'null', value: null },
+                  }
+                : command.method === 'Page.createIsolatedWorld'
+                  ? { executionContextId: 1 }
+                  : command.method === 'Page.getFrameTree'
+                    ? {
+                        frameTree: {
+                          frame: command.sessionId?.startsWith('child')
+                            ? {
+                                id: 'child-frame',
+                                parentId: 'frame',
+                                loaderId: `${command.sessionId}-document`,
+                                url: 'https://frame.example/',
+                              }
+                            : { id: 'frame', loaderId: 'document', url: 'https://example.test/' },
+                        },
+                      }
+                    : {};
       yield* Queue.offer(incoming, JSON.stringify({ id: command.id, result }));
       if (command.method === 'Page.getFrameTree' && command.sessionId?.startsWith('child'))
         yield* Queue.offer(answeredTrees, command.sessionId);
@@ -331,8 +378,8 @@ const engine = Effect.fnUntraced(function* (
   return {
     act,
     pick: channels['browser.pick']({ projectId: 1, page: PAGE }),
-    evaluate: () =>
-      (PAGE_PAIRS.evaluate_in_page.body.execute({ page: PAGE, expression: 'globalThis.clicks' }, undefined, caller) as EvaluateCall).pipe(
+    evaluate: (expression = 'globalThis.clicks') =>
+      (PAGE_PAIRS.evaluate_in_page.body.execute({ page: PAGE, expression }, undefined, caller) as EvaluateCall).pipe(
         forProject(Effect.succeed({ project: { id: 1, name: 'browser' } })),
         Effect.provideService(Pages, pages),
         Effect.provideService(Automation, automation),
@@ -389,10 +436,39 @@ const engine = Effect.fnUntraced(function* (
     latency: () => latency,
     rate: (session = 'engine') => rates.get(session) ?? 1,
     strain: () => strainOf(strains),
-    release: Deferred.succeed(release, undefined),
+    release: Effect.gen(function* () {
+      yield* Deferred.succeed(release, undefined);
+      if (viewportRead !== null) {
+        const reply = viewportRead;
+        viewportRead = null;
+        yield* Queue.offer(incoming, JSON.stringify({ ...reply, result: { result: { type: 'object', value: native } } }));
+      }
+    }),
+    resize: Effect.gen(function* () {
+      native = { width: 900, height: 700 };
+      viewport = native;
+      holdViewport = true;
+      yield* Queue.offer(incoming, JSON.stringify({ method: 'Page.frameResized', params: {}, sessionId: 'engine' }));
+      yield* Deferred.await(resizing);
+    }),
+    changingViewport: Deferred.await(changingViewport),
     join: join('child'),
   };
 });
+
+it.effect('a native resize before a device override becomes the restored viewport', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('viewport');
+    yield* browser.emulate({ conditions: false });
+    yield* browser.resize;
+    const changing = yield* Effect.forkChild(browser.emulate({ device: 'iphone-15' }), { startImmediately: true });
+    yield* browser.changingViewport;
+    yield* browser.release;
+    yield* Fiber.join(changing);
+    yield* browser.emulate({ clear: true });
+    expect(yield* browser.evaluate('[innerWidth, innerHeight]')).toMatchObject({ status: 'evaluated', value: '[900,700]' });
+  }),
+);
 
 it.effect('CPU emulation sends the renderer rate and scopes the matching strain until it is cleared', () =>
   Effect.gen(function* () {

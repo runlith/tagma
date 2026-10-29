@@ -191,13 +191,14 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
 
   const quiet =
     (page: PageId, what: string) =>
-    <A>(effect: Effect.Effect<A, CommandFailure>): Effect.Effect<A | void> =>
+    <A>(effect: Effect.Effect<A, CommandFailure | GateRefusal<'action-failed'>>): Effect.Effect<A | void> =>
       effect.pipe(
         Effect.catchTags({
           SessionEnded: () => Effect.void,
           CommandRefused: (refused) => Effect.logWarning(`browser: page ${page} refused ${what}: ${refused.message}`),
           PayloadUnreadable: (unreadable) => Effect.logWarning(`browser: ${what} of page ${page} was unreadable: ${unreadable.message}`),
           WorkerUnavailable: (gone) => Effect.logWarning(`browser: ${what} of page ${page} was not read: ${gone.message}`),
+          GateRefusal: (refused) => Effect.logWarning(`browser: ${what} of page ${page} was not applied: ${refused.reason}`),
         }),
       );
 
@@ -209,7 +210,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
         const before = effectiveOf(cast.state.emulation, cast.state.layout);
         cast.state.layout = wanted;
         const attached = cast.state.attached;
-        if (attached !== null) yield* applyEmulation(attached.session, effectiveOf(cast.state.emulation, wanted), before);
+        if (attached !== null) yield* applyEmulation(attached, effectiveOf(cast.state.emulation, wanted), before);
       }).pipe(quiet(cast.page, 'the size of its viewer')),
     );
 

@@ -19,7 +19,7 @@ import type { Attached, Drive, Paged } from './drive.js';
 import { picking } from './cursor.js';
 import { operatorQuiet } from './operator.js';
 import { navigationBlocked, unknownPage } from './refusal.js';
-import { applyEmulation, changeConditions, effectiveOf, nextEmulation } from './emulate.js';
+import { applyEmulation, changeConditions, effectiveOf, nextEmulation, syncMetrics } from './emulate.js';
 import { describePick, screenshot, snapshot } from './read.js';
 import { world } from './target.js';
 import { makeHeap } from './heap.js';
@@ -198,18 +198,20 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
           const previous = state.emulation;
           const next = nextEmulation(previous, change);
           return yield* Effect.gen(function* () {
-            yield* applyEmulation(attached.session, effectiveOf(next, state.layout), effectiveOf(previous, state.layout));
+            yield* applyEmulation(attached, effectiveOf(next, state.layout), effectiveOf(previous, state.layout));
             if (next.cpu !== previous.cpu || next.network !== previous.network || next.geolocation !== previous.geolocation)
               yield* changeConditions(state, attached, next, thread).pipe(
                 Effect.provideService(Pages, pages),
                 Effect.provideService(ThreadRuns, runs),
               );
             else state.emulation = next;
+            yield* syncMetrics(attached);
             return { page: pages.glance(page, false), emulation: effectiveOf(next, state.layout) };
           }).pipe(
             Effect.onExit((exit) =>
               Exit.isFailure(exit)
-                ? applyEmulation(attached.session, effectiveOf(previous, state.layout), effectiveOf(next, state.layout)).pipe(
+                ? applyEmulation(attached, effectiveOf(previous, state.layout), effectiveOf(next, state.layout)).pipe(
+                    Effect.andThen(syncMetrics(attached)),
                     Effect.catchIf(isCommandFailure, (failure) =>
                       Effect.logWarning(`browser: layout on ${page} could not be restored after refused emulation: ${failure.message}`),
                     ),
