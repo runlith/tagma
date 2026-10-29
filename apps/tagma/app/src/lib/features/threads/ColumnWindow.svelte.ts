@@ -1,5 +1,6 @@
 import { defaultRangeExtractor, type Range, type VirtualItem } from '@tanstack/virtual-core';
 import { VirtualList } from '@runlith/virtual-list/VirtualList';
+import { untrack } from 'svelte';
 import type { Attachment } from 'svelte/attachments';
 
 const GAP_PX = 1;
@@ -74,38 +75,41 @@ export class ColumnWindow<T extends { readonly key: string }> {
     this.window.scrollToIndex(index, { align: 'auto' });
   }
 
-  readonly column: Attachment<HTMLElement> = (scroller) => {
-    this.scroller = scroller;
-    this.window.configure(this.options());
-    this.window.connect();
-    return () => {
-      this.window.dispose();
-      this.scroller = null;
-    };
-  };
+  readonly column: Attachment<HTMLElement> = (scroller) =>
+    untrack(() => {
+      this.scroller = scroller;
+      this.window.configure(this.options());
+      this.window.connect();
+      return () => {
+        this.window.dispose();
+        this.scroller = null;
+      };
+    });
 
-  readonly span: Attachment<HTMLElement> = (sizer) => {
-    this.sizer = sizer;
-    const release = this.window.span(sizer);
-    const prefix = sizer.previousElementSibling;
-    const observer = new ResizeObserver(() => this.readMargin());
-    if (prefix !== null) observer.observe(prefix);
-    this.readMargin();
-    return () => {
-      observer.disconnect();
-      release();
-      this.sizer = null;
-    };
-  };
+  readonly span: Attachment<HTMLElement> = (sizer) =>
+    untrack(() => {
+      this.sizer = sizer;
+      const release = this.window.span(sizer);
+      const prefix = sizer.previousElementSibling;
+      const observer = new ResizeObserver(() => this.readMargin());
+      if (prefix !== null) observer.observe(prefix);
+      this.readMargin();
+      return () => {
+        observer.disconnect();
+        release();
+        this.sizer = null;
+      };
+    });
 
   measure(key: string): Attachment<HTMLElement> {
     const held = this.attachments.get(key);
     if (held !== undefined) return held;
-    const attachment: Attachment<HTMLElement> = (line) => {
-      const release = this.window.box(key, line);
-      this.window.mountRow(line, key);
-      return release;
-    };
+    const attachment: Attachment<HTMLElement> = (line) =>
+      untrack(() => {
+        const release = this.window.box(key, line);
+        this.window.mountRow(line, key);
+        return release;
+      });
     this.attachments.set(key, attachment);
     return attachment;
   }
