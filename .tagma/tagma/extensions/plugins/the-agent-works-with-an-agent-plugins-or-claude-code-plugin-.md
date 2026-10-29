@@ -12,6 +12,8 @@ sources:
     ref: apps/tagma/server/src/plugins/plugins.ts
   - kind: file
     ref: apps/tagma/server/src/plugins/contract/wire/operations.ts
+  - kind: dir
+    ref: apps/tagma/app/src/lib/features/plugins
 ---
 **Value.** A package written for the agent ecosystem — skills, commands, MCP servers, agents and hooks — works in Tagma without being rewritten for it, so a team keeps one plugin for every agent it uses.
 
