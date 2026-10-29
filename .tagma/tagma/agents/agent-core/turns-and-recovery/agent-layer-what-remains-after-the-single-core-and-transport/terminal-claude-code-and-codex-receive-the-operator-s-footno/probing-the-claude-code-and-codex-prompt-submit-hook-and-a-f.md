@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a18896-d1ee-78b2-9183-8c250a095c00",
-    "status": "in_work"
+    "status": "done"
   }
 edges:
   - kind: implements
@@ -20,4 +20,6 @@ Done when the spec's hook system test passes for each measured CLI.
 
 **Brought through (`ca545b1bfa`).** The answer limit counts on the resulting document: the server builds orientation in `prompt`-shape `guide_harness` (`orient: {projectId, cwd}`) and fits it with `Orientation.firstPrompt` measured with footnotes; the "a Codex prompt…" test holds the answer within `PROMPT_CONTEXT_CHARS` with orientation at the very limit (25 rules). A graph refusal at orientation is a declared `orientation-unavailable`, and the hook asks again without it, so footnotes still arrive. An evidence repeat answers with the recorded text before orientation builds. `read_operator_notes` answers `withheld` for a thread whose CLI takes no prompt-hook answer (the `NotesReach` port of the threads module fills it from external-harnesses); test on Claude Code (line) and Codex (null). Codex compaction checked ([[45dee318]]): the hook text never survives it, but Codex sends `SessionStart` with `source: compact`, and Tagma speaks the orientation again. Second-round review: both P2s (undeclared graph refusals, the repeat depended on the graph) fixed; the `orientation-unavailable` path uncovered by test.
 
-**Open.** The Claude Code probe — after its subscription limit lifts (22:00 UTC 2026-10-19), as a separate task; `promptSupported` not extended to Claude Code.
+**Correction (2026-10-29).** Code at `94a3fa4d21`'s parent had no `orient`/`Orientation.firstPrompt`/`orientation-unavailable` in the prompt path: `prompt`-shape guidance carries footnotes only, and orientation reaches Claude Code and Codex through the session-start answer (again after compaction). The "Brought through" paragraph above overstated it; spec [[6166d4dd]] now says so.
+
+**Done for Claude Code (`94a3fa4d21`).** Probe [[86226056]] (Claude Code 2.1.312): the same `UserPromptSubmit` `additionalContext` envelope reaches the model. `promptSupported` now reads the adapter row's `hooks.promptContext` (Claude Code, Codex, Cursor), not the hook format, so Grok and OpenCode — which share format `claude-code` — stay silent and `read_operator_notes` answers `withheld` for them. Test: `hooks/dispatch.test.ts` "Codex and Claude Code prompt notes replay…".

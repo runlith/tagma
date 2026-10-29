@@ -5,7 +5,7 @@ ord: 9
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 ---
 The 7–8 October refactor of the agent part is built: one run core, questions and approvals in one core, native, ACP and terminal behind the transport contract. This spec holds only what the code at `2774db6ebe` (2026-10-19) still does not do. Each remainder is a task under it; unstarted work needing design is a child spec. The spec closes when its children close; operator check is not a closing condition.
