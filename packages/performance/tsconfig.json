@@ -2,6 +2,7 @@
   "extends": "@runlith/tsconfig/bun.json",
   "compilerOptions": {
     "rootDir": "src",
+    "allowImportingTsExtensions": true,
     "composite": true,
     "incremental": true,
     "tsBuildInfoFile": "dist/.tsbuildinfo"
