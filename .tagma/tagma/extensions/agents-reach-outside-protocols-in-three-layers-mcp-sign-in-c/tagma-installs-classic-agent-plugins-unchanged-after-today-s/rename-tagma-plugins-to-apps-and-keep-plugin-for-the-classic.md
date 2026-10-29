@@ -12,6 +12,8 @@ edges:
     to: 01a184c6-16dd-744f-b710-46e663966472
   - kind: relates
     to: 01a184a7-bd46-7bf8-8006-9e1db540be67
+  - kind: waits-on
+    to: 01a18816-519c-7c83-bdca-b99294978b89
 ---
 What the code calls a plugin is an app inside Tagma: its own process, views, agents, secrets and schedules. The word "plugin" stays free for the classic agent package. Rename now: every app still lives in this monorepo, and no outside author depends on the names yet.
 
