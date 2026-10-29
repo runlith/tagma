@@ -219,16 +219,14 @@ type Size = typeof Size.Type;
 type MetricFailure = CommandFailure | ReturnType<typeof actionFailed>;
 type PendingMetrics = {
   readonly expected: Size | null;
-  readonly previous: Size | null;
+  readonly previous: Size;
   readonly clearing: boolean;
-  readonly uncertain: boolean;
   readonly revision: number;
 };
 
 export type Metrics = {
   native: Result.Result<Size, MetricFailure> | null;
   override: Size | null;
-  uncertain: boolean;
   revision: number;
   pending: PendingMetrics | null;
   readonly changes: PubSub.PubSub<void>;
@@ -236,7 +234,7 @@ export type Metrics = {
 
 export const makeMetrics = Effect.gen(function* () {
   const changes = yield* Effect.acquireRelease(PubSub.unbounded<void>(), PubSub.shutdown);
-  const metrics: Metrics = { native: null, override: null, uncertain: false, revision: 0, pending: null, changes };
+  const metrics: Metrics = { native: null, override: null, revision: 0, pending: null, changes };
   return metrics;
 });
 
@@ -269,7 +267,6 @@ export const nativeMetrics = Effect.fnUntraced(function* (attached: Attached) {
 export const resizedMetrics = Effect.fnUntraced(function* (attached: Attached) {
   const metrics = attached.metrics;
   metrics.revision += 1;
-  if (metrics.override !== null && metrics.pending === null) metrics.uncertain = true;
   const native = metrics.override === null && metrics.pending === null;
   if (native) metrics.native = null;
   yield* PubSub.publish(metrics.changes, undefined);
@@ -291,20 +288,12 @@ export const syncMetrics = Effect.fn('browser.syncMetrics')(function* (attached:
     const revision = metrics.revision;
     const current = yield* sizeOf(attached);
     if (metrics.revision !== revision) continue;
-    if (sameSize(current, pending.expected) || (pending.clearing && pending.uncertain && revision > pending.revision)) {
+    const applied = revision > pending.revision && (!pending.clearing || !sameSize(current, pending.previous));
+    if (sameSize(current, pending.expected) || applied) {
       yield* attached.syncEvents();
       if (metrics.revision !== revision) continue;
       metrics.pending = null;
-      if (pending.clearing) {
-        metrics.native = Result.succeed(current);
-        metrics.uncertain = false;
-      }
-      return;
-    }
-    if (pending.clearing && (pending.expected === null || (pending.uncertain && sameSize(current, pending.previous)))) {
-      metrics.native = null;
-      metrics.pending = null;
-      metrics.uncertain = false;
+      if (pending.clearing) metrics.native = Result.succeed(current);
       return;
     }
     if (metrics.revision === revision) yield* Effect.raceFirst(PubSub.take(changes), stopped);
@@ -326,25 +315,20 @@ export const applyEmulation = Effect.fnUntraced(function* (
     metrics?.mobile !== before?.mobile;
   if (resized) {
     const held = attached.metrics;
-    yield* attached.syncEvents();
-    if (held.native === null && held.override === null && held.pending === null) {
-      for (;;) {
-        const revision = held.revision;
-        yield* nativeMetrics(attached);
-        yield* attached.syncEvents();
-        if (held.revision === revision) break;
-      }
+    for (;;) {
+      yield* attached.syncEvents();
+      const revision = held.revision;
+      const previous = yield* sizeOf(attached);
+      yield* attached.syncEvents();
+      if (held.revision !== revision) continue;
+      if (held.override === null && held.pending === null) held.native = Result.succeed(previous);
+      const snapshot = held.native;
+      const native = snapshot === null ? null : Result.isSuccess(snapshot) ? snapshot.success : yield* Effect.fail(snapshot.failure);
+      const expected = metrics === null ? native : { width: metrics.width, height: metrics.height };
+      held.pending = { expected, previous, clearing: metrics === null, revision };
+      held.override = metrics === null ? null : expected;
+      break;
     }
-    const native = held.native === null ? null : yield* Effect.fromResult(held.native);
-    const expected = metrics === null ? native : { width: metrics.width, height: metrics.height };
-    held.pending = {
-      expected,
-      previous: held.override,
-      clearing: metrics === null,
-      uncertain: held.uncertain,
-      revision: held.revision,
-    };
-    held.override = metrics === null ? null : expected;
     if (metrics !== null) yield* session.send('Emulation.setDeviceMetricsOverride', metrics);
     else yield* session.send('Emulation.clearDeviceMetricsOverride');
   }

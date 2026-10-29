@@ -50,7 +50,7 @@ const caller: Caller = {
 };
 
 const engine = Effect.fnUntraced(function* (
-  mode: 'dialog' | 'detach' | 'conditions' | 'replacement' | 'late-adoption' | 'pick-detach' | 'heap' | 'viewport',
+  mode: 'dialog' | 'detach' | 'conditions' | 'replacement' | 'late-adoption' | 'pick-detach' | 'heap' | 'viewport' | 'viewport-quantized',
 ) {
   const incoming = yield* Queue.unbounded<string>();
   const frameTrees = yield* Queue.unbounded<string>();
@@ -63,6 +63,8 @@ const engine = Effect.fnUntraced(function* (
   let clicks = 0;
   let native = { width: 1280, height: 800 };
   let viewport = native;
+  let overridden = false;
+  const sizing = mode === 'viewport' || mode === 'viewport-quantized';
   let holdViewport = false;
   let viewportRead: { readonly id: number; readonly sessionId: string | undefined } | null = null;
   const resizing = yield* Deferred.make<void>();
@@ -130,11 +132,18 @@ const engine = Effect.fnUntraced(function* (
         yield* Queue.offer(frameTrees, command.sessionId);
         if (mode === 'late-adoption' && command.sessionId === 'child-old') yield* Deferred.await(release);
       }
-      if (mode === 'viewport') {
+      if (sizing) {
+        const before = viewport;
         if (command.method === 'Emulation.setDeviceMetricsOverride') {
+          overridden = true;
           viewport = { width: command.params?.width ?? 0, height: command.params?.height ?? 0 };
           yield* Deferred.succeed(changingViewport, undefined);
-        } else if (command.method === 'Emulation.clearDeviceMetricsOverride') viewport = native;
+        } else if (command.method === 'Emulation.clearDeviceMetricsOverride') {
+          overridden = false;
+          viewport = native;
+        }
+        if (before.width !== viewport.width || before.height !== viewport.height)
+          yield* Queue.offer(incoming, JSON.stringify({ method: 'Page.frameResized', params: {}, sessionId: 'engine' }));
         if (command.method === 'Runtime.evaluate' && command.params?.expression?.includes('visualViewport')) {
           if (holdViewport) {
             holdViewport = false;
@@ -164,16 +173,19 @@ const engine = Effect.fnUntraced(function* (
               ? { nodes: [{ nodeId: 'button', role: { value: 'button' }, name: { value: command.sessionId }, backendDOMNodeId: 2 }] }
               : command.method === 'Runtime.evaluate'
                 ? {
-                    result:
-                      mode === 'viewport'
-                        ? {
-                            type: 'object',
-                            value:
-                              command.params?.expression === '[innerWidth, innerHeight]' ? [viewport.width, viewport.height] : viewport,
-                          }
-                        : mode === 'pick-detach'
-                          ? { type: 'number', value: clicks }
-                          : { type: 'object', subtype: 'null', value: null },
+                    result: sizing
+                      ? {
+                          type: 'object',
+                          value:
+                            command.params?.expression === '[innerWidth, innerHeight]'
+                              ? [viewport.width, viewport.height]
+                              : mode === 'viewport-quantized'
+                                ? { width: viewport.width - 1, height: viewport.height }
+                                : viewport,
+                        }
+                      : mode === 'pick-detach'
+                        ? { type: 'number', value: clicks }
+                        : { type: 'object', subtype: 'null', value: null },
                   }
                 : command.method === 'Page.createIsolatedWorld'
                   ? { executionContextId: 1 }
@@ -451,6 +463,13 @@ const engine = Effect.fnUntraced(function* (
       yield* Queue.offer(incoming, JSON.stringify({ method: 'Page.frameResized', params: {}, sessionId: 'engine' }));
       yield* Deferred.await(resizing);
     }),
+    resizeNative: Effect.gen(function* () {
+      native = { width: 900, height: 700 };
+      if (!overridden) {
+        viewport = native;
+        yield* Queue.offer(incoming, JSON.stringify({ method: 'Page.frameResized', params: {}, sessionId: 'engine' }));
+      }
+    }),
     changingViewport: Deferred.await(changingViewport),
     join: join('child'),
   };
@@ -466,6 +485,25 @@ it.effect('a native resize before a device override becomes the restored viewpor
     yield* browser.release;
     yield* Fiber.join(changing);
     yield* browser.emulate({ clear: true });
+    expect(yield* browser.evaluate('[innerWidth, innerHeight]')).toMatchObject({ status: 'evaluated', value: '[900,700]' });
+  }),
+);
+
+it.effect('clearing a device accepts a native resize hidden by the override', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('viewport');
+    yield* browser.emulate({ device: 'iphone-15' });
+    yield* browser.resizeNative;
+    expect(yield* browser.evaluate('[innerWidth, innerHeight]')).toMatchObject({ status: 'evaluated', value: '[393,852]' });
+    yield* browser.emulate({ clear: true });
+    expect(yield* browser.evaluate('[innerWidth, innerHeight]')).toMatchObject({ status: 'evaluated', value: '[900,700]' });
+  }),
+);
+
+it.effect('a post-write resize settles an override with non-exact normalized dimensions', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('viewport-quantized');
+    yield* browser.emulate({ viewport: { width: 900, height: 700, scale: 1 } });
     expect(yield* browser.evaluate('[innerWidth, innerHeight]')).toMatchObject({ status: 'evaluated', value: '[900,700]' });
   }),
 );
