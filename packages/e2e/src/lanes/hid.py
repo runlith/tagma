@@ -21,17 +21,27 @@ async def events():
         lambda: asyncio.StreamReaderProtocol(reader), sys.stdin
     )
     last = None
-    while line := await reader.readline():
+    while True:
+        pending = asyncio.ensure_future(reader.readline())
+        while not pending.done():
+            await asyncio.wait({pending}, timeout=INTERVAL)
+            if not pending.done() and last is not None:
+                yield sample(*last)
+        line = pending.result()
+        if not line:
+            break
         command = json.loads(line)
         phase = command["phase"]
         x, y = command["x"], command["y"]
         if phase == "press":
             yield sample(x, y)
         elif phase == "move":
-            steps = max(1, math.ceil(math.dist(last, (x, y)) / STEP))
+            steps = max(2, math.ceil(math.dist(last, (x, y)) / STEP) * 2)
             for index in range(1, steps + 1):
                 await asyncio.sleep(INTERVAL)
-                yield sample(last[0] + (x - last[0]) * index / steps, last[1] + (y - last[1]) * index / steps)
+                t = index / steps
+                eased = t * t * t * (t * (t * 6 - 15) + 10)
+                yield sample(last[0] + (x - last[0]) * eased, last[1] + (y - last[1]) * eased)
         elif phase == "release":
             yield sample(x, y, HIDDirection.UP)
         else:

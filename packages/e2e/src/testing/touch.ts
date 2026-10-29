@@ -62,8 +62,17 @@ export const proveTouch = Effect.fn('e2e.proveTouch')(function* (fixture: Fixtur
     );
     expect(panned.active).toBe(1);
     expect(panned.top).toBeGreaterThan(before);
+    const rested = await evaluate(
+      'new Promise(resolve => setTimeout(() => resolve(document.querySelector("#list").scrollTop), 300))',
+      Schema.Number,
+    );
     await touch.release();
     await evaluate('heldTouch.wait("touchend", 1)', Schema.Void);
+    const drift = await evaluate(
+      `new Promise(resolve => { let frames = 0; const tick = () => (++frames < 20 ? requestAnimationFrame(tick) : resolve(document.querySelector("#list").scrollTop - ${rested})); requestAnimationFrame(tick); })`,
+      Schema.Number,
+    );
+    expect(drift).toBe(0);
     const events = await evaluate('heldTouch.events', Events);
     expect(events.filter((one) => one.type === 'touchstart').length).toBe(1);
     expect(events.filter((one) => one.type === 'touchend').length).toBe(1);
