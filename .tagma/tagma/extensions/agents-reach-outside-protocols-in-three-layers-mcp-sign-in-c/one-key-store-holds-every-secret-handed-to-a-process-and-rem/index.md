@@ -5,7 +5,7 @@ ord: 1
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 ---
 ## What the person gets
