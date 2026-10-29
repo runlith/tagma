@@ -629,6 +629,11 @@
       "browser": "./src/mcp/contract/wire/feeds.ts",
       "default": "./src/mcp/contract/wire/feeds.ts"
     },
+    "./connectors/contract/wire/rows": {
+      "types": "./src/connectors/contract/wire/rows.ts",
+      "browser": "./src/connectors/contract/wire/rows.ts",
+      "default": "./src/connectors/contract/wire/rows.ts"
+    },
     "./views/contract/wire/feeds": {
       "types": "./src/views/contract/wire/feeds.ts",
       "browser": "./src/views/contract/wire/feeds.ts",

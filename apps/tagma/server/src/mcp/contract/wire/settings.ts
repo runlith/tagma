@@ -1,6 +1,18 @@
-import { McpServerDeclaration } from '@runlith/mcp/declaration';
+import { McpHttpServerDeclaration, McpStdioServerDeclaration } from '@runlith/mcp/declaration';
 import { Schema } from 'effect';
 import { SETTABLE_SCOPES, settingKey, settingListKey } from '../../../platform/contract/wire/setting.js';
+
+const marked = {
+  connector: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
+    description: 'The connector this server was declared from, by its catalog id.',
+  }),
+};
+
+export const McpServerSetting = Schema.Union([
+  Schema.Struct({ ...McpStdioServerDeclaration.fields, ...marked }),
+  Schema.Struct({ ...McpHttpServerDeclaration.fields, ...marked }),
+]);
+export type McpServerSetting = typeof McpServerSetting.Type;
 
 export const mcpServers = settingListKey({
   id: 'mcp.servers',
@@ -9,8 +21,8 @@ export const mcpServers = settingListKey({
   description:
     'Each declaration names the server, how it is reached and the capabilities its calls are judged by; a secret is written as a ${NAME} reference and resolved when the server connects.',
   control: { kind: 'managed', by: 'add_mcp_server' },
-  member: McpServerDeclaration,
-  fallback: [] as readonly McpServerDeclaration[],
+  member: McpServerSetting,
+  fallback: [] as readonly McpServerSetting[],
   scopes: SETTABLE_SCOPES,
   merge: 'concat',
 });

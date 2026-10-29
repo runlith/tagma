@@ -1,11 +1,10 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { resolve } from 'node:path';
+import { keyedServer } from '@runlith/mcp/testing/keyed';
 import { Context, Effect } from 'effect';
 import { McpServers } from '../../../mcp/contract/service/servers.js';
 import { doorFixture, DoorFixture, projectLeaving } from '../doorFixture.js';
 
-const KEYED = resolve(import.meta.dir, '../../../../../../../packages/mcp/test/mcpKeyedServer.ts');
 const FIRST = 'keyed-first-6f1c9e';
 const SECOND = 'keyed-second-27d4b0';
 const WRONG = 'keyed-wrong-81aa3d';
@@ -18,34 +17,13 @@ type Row = {
   readonly failure?: string;
 };
 
-const keyedServer = Effect.acquireRelease(
-  Effect.promise(async () => {
-    const child = Bun.spawn([process.execPath, KEYED, FIRST, SECOND], { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' });
-    const reader = child.stdout.getReader();
-    const decoder = new TextDecoder();
-    let printed = '';
-    while (!printed.includes('\n')) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      printed += decoder.decode(value);
-    }
-    reader.releaseLock();
-    return { child, url: `http://127.0.0.1:${printed.trim()}/mcp` };
-  }),
-  ({ child }) =>
-    Effect.promise(async () => {
-      child.kill();
-      await child.exited;
-    }),
-);
-
 layer(doorFixture(), { excludeTestServices: true })('mcp secrets', (it) => {
   it.effect(
     'a ${NAME} set through set_secret connects its server in its own project only, removing the server drops it, and no answer carries it',
     () =>
       Effect.gen(function* () {
         const world = yield* DoorFixture;
-        const { url } = yield* keyedServer;
+        const { url } = yield* keyedServer(FIRST, SECOND);
         const first = yield* world.plainProject();
         const second = yield* world.plainProject();
         yield* projectLeaving(world, first, second);

@@ -73,6 +73,10 @@
       "types": "./src/testing/oauthServer.ts",
       "default": "./src/testing/oauthServer.ts"
     },
+    "./testing/keyed": {
+      "types": "./src/testing/keyedServer.ts",
+      "default": "./src/testing/keyedServer.ts"
+    },
     "./server": {
       "types": "./src/sdkServer.ts",
       "default": "./src/sdkServer.ts"

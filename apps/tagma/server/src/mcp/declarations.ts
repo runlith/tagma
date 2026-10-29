@@ -4,18 +4,20 @@ import { mcpDeclarationFingerprint } from '@runlith/mcp/mcpDeclarationFingerprin
 import type { McpServerReach, McpServerRow, McpSignInRow } from './contract/wire/servers.js';
 import type { Resolved } from '../settings/contract/service/values.js';
 import type { McpServerResolution } from './contract/service/servers.js';
+import type { McpServerSetting } from './contract/wire/settings.js';
 
-export function mcpDeclared(resolved: Resolved<readonly McpServerDeclaration[]>): readonly McpServerResolution[] {
+export function mcpDeclared(resolved: Resolved<readonly McpServerSetting[]>): readonly McpServerResolution[] {
   const own = resolved.layers.project;
   const user = own?.declined === true ? [] : (resolved.layers.user?.value ?? []);
   const project = own?.value ?? [];
   const byName = new Map<string, McpServerResolution>();
-  for (const [scope, declarations] of [
+  for (const [scope, members] of [
     ['user', user],
     ['project', project],
   ] as const) {
-    for (const declaration of declarations) {
-      byName.set(declaration.name, byName.has(declaration.name) ? { declaration, scope, shadows: 'user' } : { declaration, scope });
+    for (const { connector, ...declaration } of members) {
+      const shadows = byName.has(declaration.name) ? ('user' as const) : undefined;
+      byName.set(declaration.name, { declaration, scope, shadows, connector });
     }
   }
   return [...byName.values()];
@@ -51,6 +53,7 @@ export const rowOf = (
     enabled: declaration.enabled,
     signIn,
     shadows: resolved.shadows,
+    connector: resolved.connector,
   };
   const identity = mcpDeclarationFingerprint(expandEnvReferences(declaration, resolve));
   const needs = declaration.enabled ? mcpMissingReferences(declaration, resolve) : [];

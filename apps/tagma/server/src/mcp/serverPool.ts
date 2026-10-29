@@ -9,7 +9,7 @@ import type { HoldStalled, ReentrantCall } from '@runlith/held/failures';
 import type { StoreFailure } from '../platform/contract/service/store.js';
 import type { SettableScope } from '../platform/contract/wire/setting.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
-import { mcpServers } from './contract/wire/settings.js';
+import { type McpServerSetting, mcpServers } from './contract/wire/settings.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { ProjectChanges } from '../projects/contract/service/changes.js';
 import {
@@ -273,7 +273,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
   });
 
   const add: McpServers['Service']['add'] = Effect.fn('McpServers.add')(function* (input) {
-    const declaration: McpServerDeclaration = { ...input.declaration, version: 1 };
+    const declaration: McpServerSetting = { ...input.declaration, version: 1, connector: input.connector };
     const listing = list(input.projectId);
     const reconciling = reaching(input.scope, input.projectId);
 
@@ -483,18 +483,24 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     );
   };
 
+  const reachedPool = (projectId: number, server: string) =>
+    Effect.suspend(() => {
+      const held = pools.get(projectId);
+      if (held !== undefined && (held.reached === null || held.reached.has(server))) return Effect.succeed(held.pool);
+      const widened = settle(projectId, (pooled) => pooled.narrowed?.add(server));
+      return Effect.andThen(widened, poolOf(projectId));
+    }).pipe(Effect.catchTags({ HoldStalled: stalledOpen, ReentrantCall: reentrantOpen }));
+
   const serving = <A, R>(
     mount: McpMount,
     work: (pool: McpPool) => Effect.Effect<A, McpAppFailure, R>,
-  ): Effect.Effect<A, McpViewFailure, R> => {
-    const opened = Effect.suspend(() => {
-      const held = pools.get(mount.projectId);
-      if (held !== undefined && (held.reached === null || held.reached.has(mount.server))) return Effect.succeed(held.pool);
-      const widened = settle(mount.projectId, (pooled) => pooled.narrowed?.add(mount.server));
-      return Effect.andThen(widened, poolOf(mount.projectId));
-    }).pipe(Effect.catchTags({ HoldStalled: stalledOpen, ReentrantCall: reentrantOpen }));
-    return Effect.flatMap(opened, (pool) => work(pool).pipe(Effect.mapError(servingRefusal)));
-  };
+  ): Effect.Effect<A, McpViewFailure, R> =>
+    Effect.flatMap(reachedPool(mount.projectId, mount.server), (pool) => work(pool).pipe(Effect.mapError(servingRefusal)));
+
+  const raise: McpServers['Service']['raise'] = Effect.fn('McpServers.raise')(function* (projectId, name) {
+    yield* (yield* reachedPool(projectId, name)).awaitHandshake(name);
+    return yield* list(projectId);
+  });
 
   const release: McpServers['Service']['release'] = Effect.fn('McpServers.release')((projectId) => {
     return Effect.suspend(() => {
@@ -604,6 +610,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       finishSignIn: signIns.finish,
       reconcile,
       reconcileAll,
+      raise,
       palette,
       caller,
       appView,

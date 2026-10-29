@@ -19,13 +19,22 @@ export class McpFeed extends Service<McpFeed>()('McpFeed', { tier: 'app' }) {
   }
 
   hold(projectId: number): () => void {
-    const held = this.live.hold(
+    const failed = (reason: { readonly kind: string; readonly message: string }) => {
+      if (reason.kind === 'subscription') this.failure.report(new Error(reason.message));
+    };
+    const servers = this.live.hold(
       (client) => client['mcp.servers']({ projectId }),
       (rows) => this.repo.servers.key(projectId).setCache(rows),
-      (reason) => {
-        if (reason.kind === 'subscription') this.failure.report(new Error(reason.message));
-      },
+      failed,
     );
-    return () => held.unsubscribe();
+    const connectors = this.live.hold(
+      (client) => client.connectors({ projectId }),
+      (rows) => this.repo.connectors.key(projectId).setCache(rows),
+      failed,
+    );
+    return () => {
+      servers.unsubscribe();
+      connectors.unsubscribe();
+    };
   }
 }

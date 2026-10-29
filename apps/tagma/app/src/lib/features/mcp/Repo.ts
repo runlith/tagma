@@ -57,6 +57,21 @@ export const McpRepo = Repo.define(
       mutator: async (input: { projectId?: number; scope: SettableScope; name: string }, { signal }, door) =>
         (await door.perform('sign_out_mcp_server', { name: input.name, scope: input.scope }, lens(input.projectId), { signal })).mcp,
     }),
+
+    connectors: keyed({
+      loader: async ({ key, signal }: KeyedLoaderContext<number | undefined>, door) =>
+        (await door.perform('read_connectors', {}, lens(key), { signal })).connectors,
+    }),
+
+    connect: mutation({
+      mutator: async (input: { projectId?: number; scope: SettableScope; id: string }, { signal }, door) =>
+        await door.perform('connect_service', { id: input.id, scope: input.scope }, lens(input.projectId), { signal }),
+    }),
+
+    disconnect: mutation({
+      mutator: async (input: { projectId?: number; scope: SettableScope; id: string }, { signal }, door) =>
+        (await door.perform('disconnect_service', { id: input.id, scope: input.scope }, lens(input.projectId), { signal })).connector,
+    }),
   }),
   { tier: 'app', door: Door },
 );

@@ -12,9 +12,13 @@
   import { scopeName } from '$lib/features/settings/scope.js';
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
   import type { McpSignIn } from '$lib/features/mcp/Repo.js';
+  import StatusMark from '$lib/features/mcp/StatusMark.svelte';
+  import type { ConnectorRow } from '@tagma/server/connectors/contract/wire/rows';
+  import ConnectorMark from '$lib/features/mcp/ConnectorMark.svelte';
 
   let {
     row,
+    connector,
     scope,
     project,
     busy = false,
@@ -26,6 +30,7 @@
     onsignout,
   }: {
     row: McpServerRow;
+    connector?: ConnectorRow;
     scope: SettableScope;
     project: Project | null;
     busy?: boolean;
@@ -36,16 +41,6 @@
     onsignin: (client: McpSignIn['client']) => void;
     onsignout: () => void;
   } = $props();
-
-  const TONE: Record<McpServerRow['status'], string> = {
-    connected: 'bg-status-done',
-    connecting: 'bg-status-in-work',
-    pending: 'bg-vein-strong',
-    'needs-value': 'bg-status-open',
-    'needs-sign-in': 'bg-status-open',
-    failed: 'bg-severity-lie',
-    disabled: 'bg-status-closed',
-  };
 
   const standing = $derived(
     row.status === 'connected'
@@ -88,13 +83,12 @@
 
 <section class="overflow-hidden rounded-lg border bg-raised" aria-label={row.name}>
   <div class="flex min-h-9 flex-wrap items-center gap-2 px-3 py-1">
-    <h4 class="text-ui font-semibold">{row.name}</h4>
+    {#if connector}<ConnectorMark icon={connector.icon} />{/if}
+    <h4 class="text-ui font-semibold">{connector?.title ?? row.name}</h4>
     <span class="eyebrow rounded-md bg-selected px-1.5 py-0.5 text-muted-foreground">
       {scopeName(row.scope, project)}
     </span>
-    <Tooltip text={row.status}>
-      <span class="size-2 shrink-0 rounded-full {TONE[row.status]}"></span>
-    </Tooltip>
+    <StatusMark status={row.status} />
     <span class="text-ui text-muted-foreground tabular">{standing}</span>
     {#if row.shadows}
       <span class="text-small text-muted-foreground">· stands in front of the {row.shadows} entry</span>

@@ -53,7 +53,7 @@ export class McpServers extends Context.Service<
     list(projectId: number): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpListRefusal>>;
     rows(projectId: number): Stream.Stream<readonly McpServerRow[], StoreFailure | GateRefusal<McpListRefusal>>;
     add(
-      input: McpServerScopeInput & { readonly declaration: McpServerDeclaration },
+      input: McpServerScopeInput & { readonly declaration: McpServerDeclaration; readonly connector?: string },
     ): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpServerAddRefusal | OpenRefusal>>;
     remove(
       input: McpServerScopeInput & { readonly name: string },
@@ -70,6 +70,7 @@ export class McpServers extends Context.Service<
     finishSignIn(answer: McpSignInAnswer): Effect.Effect<McpSignedIn, McpSignInRejected>;
     reconcile(projectId: number): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>>;
     reconcileAll(): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>>;
+    raise(projectId: number, name: string): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpReconcileRefusal>>;
     palette(projectId: number): McpPalette;
     caller(projectId: number): McpToolCaller;
     release(projectId: number): Effect.Effect<void>;
@@ -101,4 +102,5 @@ export type McpServerResolution = {
   readonly declaration: McpServerDeclaration;
   readonly scope: SettableScope;
   readonly shadows?: SettableScope;
+  readonly connector?: string;
 };

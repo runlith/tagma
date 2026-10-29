@@ -49,6 +49,7 @@ export type McpServerRow = {
   readonly needs?: readonly string[];
   readonly signIn?: McpSignInRow;
   readonly shadows?: SettableScope;
+  readonly connector?: string;
   readonly measuredAt: number;
 };
 
@@ -81,5 +82,6 @@ export const mcpServerRowSchema = Schema.Struct({
   ),
   signIn: Schema.optional(mcpSignInSchema),
   shadows: Schema.optional(Schema.Literals(SETTABLE_SCOPES)),
+  connector: Schema.optional(Schema.String).annotate({ description: 'The connector this server was declared from, by its catalog id.' }),
   measuredAt: Schema.Number,
 });

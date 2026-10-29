@@ -1,11 +1,9 @@
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import { Effect } from 'effect';
 import { body, pair } from '../platform/contract/service/body.js';
-import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
-import { McpSignInDoor } from './contract/service/door.js';
+import { callbackOf, McpSignInDoor, servedCallback } from './contract/service/door.js';
 import { McpServers } from './contract/service/servers.js';
-import { MCP_CALLBACK_PATH } from './contract/wire/callback.js';
 import {
   MCP_APP_OPERATIONS as APPS,
   MCP_OPERATIONS as OPS,
@@ -14,10 +12,7 @@ import {
 } from './contract/wire/operations.js';
 import { mcpRowsAt, type McpServerRow } from './contract/wire/servers.js';
 
-const callback = Effect.map(McpSignInDoor, (door) => {
-  const origin = door.origin();
-  return origin === null ? null : `${origin}${MCP_CALLBACK_PATH}`;
-});
+const callback = Effect.map(McpSignInDoor, callbackOf);
 
 const answer = (rows: readonly McpServerRow[]) => Effect.map(callback, (at) => ({ status: 'ok' as const, mcp: mcpRowsAt(rows, at) }));
 
@@ -103,13 +98,7 @@ export const MCP_PAIRS = {
     SIGN_IN.sign_in_mcp_server,
     body(SIGN_IN.sign_in_mcp_server, {
       execute: Effect.fnUntraced(function* (input) {
-        const redirect = yield* callback;
-        if (redirect === null) {
-          return yield* new GateRefusal('mcp-sign-in-unserved', 'This door has no address yet that a sign-in could return to.', [
-            'sign in once read_remote_access reports the door ready',
-            'or sign in from the machine Tagma runs on',
-          ]);
-        }
+        const redirect = yield* servedCallback;
         const started = yield* (yield* McpServers).signIn({
           projectId: yield* projectId,
           scope: mcpScopeOf(input),

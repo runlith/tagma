@@ -147,6 +147,7 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
   });
 
   const begin = Effect.fn('McpSignIns.begin')(function* (start: SignInStart) {
+    const lifetime = lifetimeOf(start.key);
     const own: McpOAuthClient | undefined =
       start.client === undefined ? undefined : { kind: 'pre-registered', id: start.client.id, secret: start.client.secret, redirects: [] };
     if (own !== undefined) {
@@ -159,6 +160,13 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
     const { client, skipped } = own === undefined ? yield* identity(record, server, start) : { client: own, skipped: undefined };
     const state = Base64Url.encode(crypto.getRandomValues(new Uint8Array(32)));
     const opened = yield* mcpOAuthAuthorization(server, client, { redirect: start.redirect, state }).pipe(Effect.mapError(failedRefusal));
+    if (lifetimeOf(start.key) !== lifetime) {
+      return yield* new GateRefusal(
+        'mcp-sign-in-failed',
+        `${start.name} was removed or signed out while its sign-in was being prepared, so none was started.`,
+        ['read_mcp_servers names the server and its state', 'sign in again if it is still declared'],
+      );
+    }
     const now = yield* Clock.currentTimeMillis;
     withdrawn(start.key);
     pendings.set(state, {
@@ -169,7 +177,7 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
       server,
       client,
       expiresAt: now + PENDING_MS,
-      lifetime: lifetimeOf(start.key),
+      lifetime,
     });
     yield* FiberMap.run(expiries, start.key, Effect.andThen(Effect.sleep(Duration.millis(PENDING_MS)), expired(state, start.key)));
     yield* input.moved(start.key);
