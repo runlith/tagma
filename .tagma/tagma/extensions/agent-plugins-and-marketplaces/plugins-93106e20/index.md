@@ -31,7 +31,11 @@ edges:
   - kind: imports
     to: 01a174f2-3d65-7e23-bb0f-9d871e061782
   - kind: imports
+    to: 01a174f2-3d67-75cf-b329-5f82212858cf
+  - kind: imports
     to: 01a18921-8504-7058-9d53-62c5e9aa47fc
+  - kind: imports
+    to: 01a189a0-4b54-758e-bef7-1061d6fd5286
 sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/plugins
