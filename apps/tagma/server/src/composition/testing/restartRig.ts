@@ -17,6 +17,8 @@ import { TAGMA_SOCKET_PATH } from '../../socket/rpc.js';
 import { LiveRpc } from '../rpc.js';
 import { rolloutReadSchema } from '../../threads/contract/service/rolloutReads.js';
 import { restartDataset, type RestartDataset, type RestartPlace } from './restartDataset.js';
+import { RESTART_STEP_ENV } from './restartStep.js';
+import type { WireSnapshot } from '../../threads/contract/wire/snapshot.js';
 
 const checkpoint = Schema.decodeUnknownEffect(
   Schema.fromJsonString(
@@ -46,6 +48,9 @@ export type RestartSample = {
   readonly dataset: RestartDataset;
   readonly place: RestartPlace;
   readonly windowMs: number;
+  readonly acceptedMs: number;
+  readonly frameMs: number;
+  readonly transcript: WireSnapshot['transcript'];
   readonly serverMs: number | null;
   readonly recoveryStartedAt: number | null;
   readonly recoveryDelayMs: number | null;
@@ -57,19 +62,21 @@ export type RestartSample = {
 };
 const storedRestart = Schema.decodeUnknownEffect(Schema.fromJsonString(restartRecordSchema));
 
-const freePort = Effect.acquireUseRelease(
-  Effect.sync(() => Bun.serve({ port: 0, fetch: () => new Response('') })),
-  (listener) => (listener.port === undefined ? Effect.die('the listener named no port') : Effect.succeed(listener.port)),
-  (listener) => Effect.promise(() => listener.stop(true)),
+const freePorts = Effect.acquireUseRelease(
+  Effect.sync(() => Array.from({ length: 4 }, () => Bun.serve({ port: 0, fetch: () => new Response('') }))),
+  (listeners) => {
+    const ports = listeners.flatMap((listener) => (listener.port === undefined ? [] : [listener.port]));
+    return ports.length === listeners.length ? Effect.succeed(ports) : Effect.die('a listener named no port');
+  },
+  (listeners) => Effect.promise(() => Promise.all(listeners.map((listener) => listener.stop(true)))),
 );
 
 export const makeRestartRig = Effect.fn('restart.rig')(function* () {
   const files = yield* FileSystem.FileSystem;
   const root = yield* files.realPath(yield* files.makeTempDirectoryScoped({ prefix: 'restart-window-' }));
-  const port = yield* freePort;
-  const artifact = yield* freePort;
-  const sandbox = yield* freePort;
-  const remote = yield* freePort;
+  const [port, artifact, sandbox, remote] = yield* freePorts;
+  if (port === undefined || artifact === undefined || sandbox === undefined || remote === undefined)
+    return yield* Effect.die('the rig did not get four ports');
   const origin = `http://127.0.0.1:${port}`;
   const wall = yield* Clock.currentTimeMillis;
   const monotonic = yield* Clock.monotonicTimeNanos;
@@ -182,17 +189,19 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
     }).pipe(Effect.ensuring(stop()), Effect.orDie),
   );
 
-  const prepare = Effect.fn('restart.prepare')(function* (messages: number) {
+  const stepMarker = join(root, 'successor-step');
+  const prepare = Effect.fn('restart.prepare')(function* (messages: number, rested = false) {
     if (launch !== null) return yield* Effect.die('stop the owned server before changing its dataset');
-    dataset = yield* restartDataset(root, messages, dataset ?? undefined);
+    dataset = yield* restartDataset(root, messages, dataset ?? undefined, rested);
     yield* install();
     const inherited = Object.fromEntries(
       Object.entries(process.env).filter(([key, value]) => !key.startsWith('TAGMA_') && value !== undefined),
     );
     launch = new ServerLaunch(
-      [process.execPath, join(import.meta.dir, '../entries/cli.ts'), 'serve'],
+      [process.execPath, join(import.meta.dir, 'restartServe.ts'), 'serve'],
       {
         ...inherited,
+        [RESTART_STEP_ENV]: stepMarker,
         HOME: root,
         TAGMA_DATABASE_PATH: join(root, 'data/tagma.sqlite'),
         TAGMA_SEED_DIRECTORY: join(root, 'seeds'),
@@ -239,7 +248,7 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
     );
     return Effect.flatMap(Layer.build(protocol), (context) => Effect.provide(RpcClient.make(LiveRpc), context));
   };
-  const sample = Effect.fn('restart.sample')(function* (location: RestartPlace) {
+  const sample = Effect.fn('restart.sample')(function* (location: RestartPlace, successor: { readonly step?: boolean } = {}) {
     if (dataset === null || launch === null) return yield* Effect.die('the rig has not prepared a dataset');
     const heldDataset = dataset;
     const before = yield* ready();
@@ -251,6 +260,7 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
           Stream.take(client['thread.subscribe']({ projectId: location.projectId, threadId: location.threadId }), 1),
         );
         yield* install();
+        if (successor.step === true) yield* files.writeFileString(stepMarker, '');
         yield* op('restart_server', {});
         return yield* guarded(Deferred.await(closed));
       }),
@@ -259,17 +269,21 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
     yield* files.writeFileString(saved, JSON.stringify({ ...location, startedAt }));
     const after = yield* ready(before.pid);
     const restored = yield* checkpoint(yield* files.readFileString(saved));
-    const { record, windowMs } = yield* Effect.scoped(
+    const { record, windowMs, acceptedMs, frameMs, transcript } = yield* Effect.scoped(
       Effect.flatMap(connect(), (client) =>
         Effect.gen(function* () {
+          const requestedAt = yield* clock;
           const frames = yield* Stream.runCollect(
             Stream.take(client['thread.subscribe']({ projectId: restored.projectId, threadId: restored.threadId }), 1),
           );
           const first = frames[0];
           if (first?.type !== 'snapshot' || first.payload.snapshot.thread.id !== restored.threadId)
             return yield* Effect.die('the client returned to another thread');
-          const windowMs = (yield* clock) - restored.startedAt;
+          const framedAt = yield* clock;
+          const windowMs = framedAt - restored.startedAt;
+          const frameMs = framedAt - requestedAt;
           yield* op('set_thread_title', { threadId: restored.threadId, title: 'returned place' }, restored.projectId);
+          const acceptedMs = (yield* clock) - restored.startedAt;
           const state = yield* machine(yield* op('read_machine_state', {}));
           if (state.status !== 'read') return yield* Effect.die('the successor did not return its machine state');
           const current = yield* machineState(state.machine);
@@ -285,7 +299,13 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
             }),
           );
           if (answered.status !== 'recorded') return yield* Effect.die('the successor did not record the client window');
-          return { record: yield* restartRecord(answered.restart), windowMs };
+          return {
+            record: yield* restartRecord(answered.restart),
+            windowMs,
+            acceptedMs,
+            frameMs,
+            transcript: first.payload.snapshot.transcript,
+          };
         }),
       ),
     );
@@ -303,6 +323,9 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
       place: location,
       restored,
       windowMs,
+      acceptedMs,
+      frameMs,
+      transcript,
       record,
       serverMs: record.frames.find((frame) => frame.door === 'local')?.intervalMs ?? null,
       recoveryStartedAt,

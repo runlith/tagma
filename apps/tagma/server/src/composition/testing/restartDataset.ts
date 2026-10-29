@@ -1,6 +1,8 @@
 import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Context, Effect, FileSystem, Layer } from 'effect';
+import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
+import { nativeOnlyParts } from '../../native-harness/testing/rollout.js';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import type { ThreadMessageEntry } from '@runlith/agent/transcript/entries';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -8,7 +10,8 @@ import { MachineUnits } from '../../platform/contract/service/units.js';
 import { ProjectLifecycle } from '../../graph/contract/service/serving.js';
 import { ThreadJournal } from '../../threads/contract/service/engine.js';
 import { ThreadRollouts } from '../../threads/contract/service/rollouts.js';
-import { birthsOf, threadEntry } from '../../threads/testing/doubles.js';
+import { birthsOf, exportThreadRollout, threadEntry, threadProjection } from '../../threads/testing/doubles.js';
+import { ENTRY_KINDS } from '../manifest.js';
 import { testGrantSigner } from '../../platform/testing/grants.js';
 import { makeRuntime } from '../runtime.js';
 import { TESTING_ADAPTERS } from './adapters.js';
@@ -20,10 +23,12 @@ export type RestartDataset = {
   readonly historyMessages: number;
   readonly projects: number;
   readonly threads: number;
+  readonly rested: boolean;
 };
 
 export const restartDataset = Effect.fn('restart.dataset')(
-  function* (root: string, messages: number, previous?: RestartDataset) {
+  function* (root: string, messages: number, previous?: RestartDataset, rested = false) {
+    if (previous?.rested === true) return yield* Effect.die('an offloaded dataset is not extended');
     const files = yield* FileSystem.FileSystem;
     const data = join(root, 'data');
     const runtime = yield* makeRuntime(
@@ -90,8 +95,23 @@ export const restartDataset = Effect.fn('restart.dataset')(
         );
       }
     }
-    yield* Context.get(runtime.owners, ThreadRollouts).exportStanding();
-    return { places, historyMessages: messages, projects: 2, threads: places.length } satisfies RestartDataset;
+    const rollouts = Context.get(runtime.owners, ThreadRollouts);
+    yield* rollouts.exportStanding();
+    if (rested) {
+      const projection = yield* threadProjection(ENTRY_KINDS).pipe(Effect.provide(runtime.graph));
+      for (const place of places) {
+        const path = rollouts.pathOf(place.projectId, place.threadId);
+        if (path === undefined) return yield* Effect.die(`thread ${place.threadId} has no rollout place`);
+        yield* exportThreadRollout({ threadId: place.threadId, path, parts: nativeOnlyParts }).pipe(
+          Effect.provideService(MachineStore, store),
+          Effect.provideService(ThreadEntryKinds, ENTRY_KINDS),
+        );
+        yield* projection.run({ threadId: place.threadId, path }).pipe(Effect.provide(runtime.graph));
+        const verdict = yield* rollouts.evict(place.projectId, place.threadId);
+        if (verdict.outcome !== 'evicted') return yield* Effect.die(`thread ${place.threadId} stayed in the database: ${verdict.reason}`);
+      }
+    }
+    return { places, historyMessages: messages, projects: 2, threads: places.length, rested } satisfies RestartDataset;
   },
   Effect.provide(BunFileSystem.layer),
   Effect.scoped,
