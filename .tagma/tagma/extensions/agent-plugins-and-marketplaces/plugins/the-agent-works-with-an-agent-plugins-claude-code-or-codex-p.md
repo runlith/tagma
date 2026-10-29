@@ -1,6 +1,6 @@
 ---
 id: 01a18926-2da8-763c-ae41-cdf18b835e91
-title: The agent works with an Agent Plugins, Claude Code or Codex plugin installed unchanged from a folder or a git URL
+title: The agent works with an Agent Plugins, Claude Code or Codex plugin installed unchanged from a folder, a git URL or a marketplace entry
 ord: 5
 tags: ["feature"]
 fields:
@@ -17,7 +17,7 @@ sources:
 ---
 **Value.** A package written for the agent ecosystem — skills, commands, MCP servers, agents and hooks — works in Tagma without being rewritten for it, so a team keeps one plugin for every agent it uses.
 
-**How.** `install_plugin` takes a folder or a git URL, `enable_plugin` runs it per project, `uninstall_plugin` removes it, `read_plugins` lists what each plugin gives the agent and what Tagma ignores in it with the reason. Its skills and commands join the `$` catalog, its MCP servers the project's pool, its agents the agent library, its command hooks the agent's tool, step and close points — each named `<plugin>-<name>`. In the app the Plugins settings section does the same: it installs from a folder or a git URL, switches a plugin per project, uninstalls it, and shows each plugin's card with what was taken, what is ignored and its options.
+**How.** `install_plugin` takes a folder, a git URL or a revision `preview_plugin` prepared from a marketplace entry, `enable_plugin` runs it per project, `uninstall_plugin` removes it, `read_plugins` lists what each plugin gives the agent and what Tagma ignores in it with the reason. Its skills and commands join the `$` catalog, its MCP servers the project's pool, its agents the agent library, its command hooks the agent's tool, step and close points — each named `<plugin>-<name>`. In the app the Plugins settings section does the same: it installs from a folder or a git URL, switches a plugin per project, uninstalls it, and shows each plugin's card with what was taken, what is ignored and its options.
 
 **Behaviour.**
 - A directory is read as Claude Code when it has `.claude-plugin/plugin.json`, as Codex when it has `.codex-plugin/plugin.json` or a root Agent Plugins `plugin.json` whose `extensions["com.openai"]` is an object, as Agent Plugins when its root `plugin.json` names that schema, and as Claude Code's default layout otherwise; the first of those that applies wins, so a package carrying a Claude and a Codex manifest is read as Claude Code.
@@ -26,4 +26,4 @@ sources:
 - A plugin's MCP server sees only its own format's variables, never Tagma's environment.
 - Options a Claude Code plugin asks for are kept in `plugins.options`, secret ones in the key store under the plugin.
 
-**Limits.** Plugin marketplaces, LSP servers, output styles, themes, monitors, `bin/`, plugin settings, ChatGPT app connections, HTTP/MCP/prompt/agent hook handlers, Claude Code and Codex hook events other than the six mapped, and the HTTP+SSE and WebSocket MCP transports are listed as ignored.
+**Limits.** LSP servers, output styles, themes, monitors, `bin/`, plugin settings, ChatGPT app connections, HTTP/MCP/prompt/agent hook handlers, Claude Code and Codex hook events other than the six mapped, and the HTTP+SSE and WebSocket MCP transports are listed as ignored.
