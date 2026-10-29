@@ -120,6 +120,10 @@ A server offering none of these refuses `sign_in_mcp_server` with that reason.
 6. `sign_out_mcp_server` drops the tokens and keeps the client identity.
 7. A refresh the authorization server refuses drops the tokens and moves the row back to `needs-sign-in`; a transient failure leaves them and fails only that connection.
 
+## What remains
+
+Publishing the client metadata document and setting `mcp.clientDocument` to its address; until then a sign-in uses a client the operator registered, then dynamic registration.
+
 ## Owners touched
 
 - New `secrets`.
