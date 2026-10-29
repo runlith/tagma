@@ -15,7 +15,7 @@ sources:
   - kind: dir
     ref: test
 ---
-**What.** A new kit package — the core of test layers. It takes `test/layers.ts`, `test/residue.ts`, `test/noNetwork.ts`, and `test/vitestResidue.ts`: the `test/` directory ceases to exist, one implementation for both runners. The package name is chosen at build; `@runlith/testing` is already taken by Svelte helpers, and its jsdom setup moves into this package's vitest binding.
+**What.** A kit package, `@runlith/testbed` (`packages/testbed`) — the core of test layers. It took `test/layers.ts`, `test/residue.ts`, `test/noNetwork.ts`, and `test/vitestResidue.ts`: the `test/` directory no longer exists, one implementation serves both runners. `@runlith/testing` stays Svelte helpers; its jsdom setup moved into this package's vitest binding.
 
 **Package inputs.**
 - *Core* — preload, bare TypeScript with no dependencies: it loads before every test file. Today preload costs 6 ms CPU on an empty unit file, while importing `effect` costs 27–80 ms CPU; for 780 non-Effect test files that would tax every file.
