@@ -1,7 +1,7 @@
 ---
 id: 01a14bf1-c8c1-7ce0-9d6e-628bc57e2aa9
 title: Opening anything in the graph answers the press at once and shows contents in 50–100 ms; 1 second is the ideal ceiling
-ord: 101
+ord: 6
 tags: ["rule"]
 fields:
   {

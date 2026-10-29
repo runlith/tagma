@@ -1,7 +1,7 @@
 ---
 id: 01a185bb-fbfa-7a6b-bde8-4c8b45b4288b
 title: load_skill keeps a skill's reference list from thread start while serving its current body
-ord: 1202
+ord: 66
 tags: ["reflection"]
 fields:
   {
