@@ -20,6 +20,7 @@ import { commitFrame, detachFrame, type Frame, joinChild, leaveChild, readTree, 
 import type { Strain } from '../contract/wire/host.js';
 import { isLocal } from './local.js';
 import { Refs } from './refs.js';
+import { makePictures, type Pictures } from './pictures.js';
 import { operatorQuiet } from './operator.js';
 import { crashed, devtoolsOpen, ended, frameUnresponsive, navigationBlocked, unknownPage, unresponsive } from './refusal.js';
 import { drive } from '../../platform/contract/service/drives.js';
@@ -35,6 +36,7 @@ export type Attached = {
   readonly page: PageId;
   readonly session: Session;
   readonly domains: Domains;
+  readonly pictures: Pictures;
   readonly scope: Scope.Closeable;
   readonly frames: Map<string, Frame>;
   readonly children: Map<string, string>;
@@ -223,6 +225,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
       }
       case 'Target.attachedToTarget': {
         const joined = yield* eventParams('Target.attachedToTarget', event);
+        if (attached.pictures.accepts(joined.targetInfo)) return;
         if (joined.targetInfo.type !== 'iframe') {
           yield* Effect.exit(attached.session.send('Target.detachFromTarget', { sessionId: joined.sessionId }));
           return;
@@ -372,6 +375,7 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         page: state.page,
         session,
         domains,
+        pictures: yield* Scope.provide(makePictures(session), attachment),
         scope: attachment,
         frames: new Map(),
         children: new Map(),

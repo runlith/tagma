@@ -19,7 +19,7 @@ const obscured = (ref: string, by: { readonly ref: string | null; readonly named
       : `act on ${by.ref} first if it is a dialog or banner, or scroll the page`,
   ]);
 
-type Aimed = { readonly point: Point; readonly located: Located | null };
+type Aimed = { readonly point: Point; readonly local: Point; readonly located: Located | null };
 
 const pointAt = (state: Paged, attached: Attached, point: Point) => mark(state, attached, { kind: 'point', ...point });
 
@@ -66,7 +66,7 @@ const aimAt = Effect.fnUntraced(function* (
 ): Effect.fn.Return<Aimed, CommandFailure | Refused> {
   if (!('ref' in aim)) {
     yield* pointAt(state, attached, aim);
-    return { point: { x: aim.x, y: aim.y }, located: null };
+    return { point: { x: aim.x, y: aim.y }, local: { x: aim.x, y: aim.y }, located: null };
   }
   const located = yield* locate(state, attached, aim.ref);
   const box = yield* boxOf(attached, located);
@@ -76,7 +76,7 @@ const aimAt = Effect.fnUntraced(function* (
     const cover = yield* coverOf(state, attached, located, point);
     if (cover !== null) return yield* obscured(aim.ref, cover);
   }
-  return { point, located };
+  return { point, local: box.localCenter, located };
 });
 
 const focusOn = Effect.fnUntraced(function* (
@@ -94,7 +94,11 @@ const focusOn = Effect.fnUntraced(function* (
   const located = yield* locate(state, attached, aim.ref);
   yield* attached.session
     .send('DOM.focus', { backendNodeId: located.anchor.node }, located.child)
-    .pipe(Effect.catchTag('CommandRefused', () => Effect.flatMap(pointOf(attached, located), (point) => click(attached.session, point))));
+    .pipe(
+      Effect.catchTag('CommandRefused', () =>
+        Effect.flatMap(pointOf(attached, located), (point) => click(attached.session, point, {}, located.child)),
+      ),
+    );
   yield* markElement(state, attached, located);
 });
 
@@ -206,8 +210,10 @@ const setChecked = Effect.fnUntraced(function* (
     return yield* actionFailed(`${what} is neither a checkbox, a radio nor an element with aria-checked`);
   }
   if (before === wanted) return;
-  const point = 'ref' in aim ? (yield* aimAt(state, attached, aim, true)).point : { x: aim.x, y: aim.y };
-  yield* click(attached.session, point);
+  if ('ref' in aim) {
+    const aimed = yield* aimAt(state, attached, aim, true);
+    yield* click(attached.session, aimed.local, {}, located.child);
+  } else yield* click(attached.session, aim);
   const after = yield* call<boolean | null>(attached, 'ref' in aim ? yield* locate(state, attached, aim.ref) : located, CHECKED);
   if (after !== wanted) return yield* actionFailed(`clicking ${named} left it ${after === true ? 'checked' : 'unchecked'}`);
 });
@@ -225,11 +231,11 @@ const performed = Effect.fnUntraced(function* (
     case 'click':
     case 'double-click': {
       const aimed = yield* aimAt(state, attached, action.aim, true);
-      return yield* click(session, aimed.point, { count: action.kind === 'click' ? 1 : 2 });
+      return yield* click(session, aimed.local, { count: action.kind === 'click' ? 1 : 2 }, aimed.located?.child);
     }
     case 'hover': {
       const aimed = yield* aimAt(state, attached, action.aim, false);
-      return yield* move(session, aimed.point);
+      return yield* move(session, aimed.local, 0, aimed.located?.child);
     }
     case 'focus':
       return yield* focusOn(state, attached, action.aim);

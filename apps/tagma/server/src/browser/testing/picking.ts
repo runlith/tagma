@@ -9,11 +9,11 @@ import type { Picked } from '../contract/wire/pick.js';
 import { browserChannels } from '../feeds.js';
 import { PAGE_PAIRS as PAGE } from '../operations.js';
 import { neutral, pixelOf } from './pixels.js';
-import { calling, refIn, Seeded } from './world.js';
+import { calling, OPERATOR, refIn, Seeded } from './world.js';
 
 export const PICK_FRAME = `<!doctype html><body style="margin:0;background:white">
   <button id="frame-pick" style="position:absolute;left:20px;top:20px;width:160px;height:60px;background:#ddd;border:0"
-    onclick="fetch('/pick-through')">FRAME_NAME</button>`;
+    onclick="this.dataset.clicks = String(Number(this.dataset.clicks || 0) + 1); this.textContent = 'Clicked ' + this.dataset.clicks; fetch('/pick-through')">FRAME_NAME</button>`;
 
 export const framePickScenario = Effect.fnUntraced(function* (input: {
   readonly page: PageId;
@@ -42,6 +42,16 @@ export const framePickScenario = Effect.fnUntraced(function* (input: {
   const act = (action: 'click' | 'hover', ref: string) =>
     calling(PAGE.act_on_page.body.execute({ page, steps: [{ action, ref }] }, undefined, caller));
   const described = Effect.raceFirst(Queue.take(descriptions), Effect.as(Deferred.await(input.through), null));
+  yield* calling(
+    PAGE.evaluate_in_page.body.execute(
+      {
+        page,
+        expression: `document.documentElement.insertAdjacentHTML('afterbegin', '<style>html { overflow:scroll } html::-webkit-scrollbar { width:16px; height:16px }</style>'); true`,
+      },
+      undefined,
+      caller,
+    ),
+  );
   const first = refIn((yield* snapshot()).text, /button "First frame"/);
   yield* act('click', first);
   const initial = yield* described;
@@ -75,6 +85,43 @@ export const framePickScenario = Effect.fnUntraced(function* (input: {
   yield* act('click', later);
   expect((yield* described)?.ref).toBe(later);
   yield* Fiber.interrupt(picking);
-  yield* act('click', later);
-  yield* Deferred.await(input.through);
+  const rootClick = () =>
+    calling(PAGE.act_on_page.body.execute({ page, steps: [{ action: 'click', x: 180, y: 310 }] }, undefined, OPERATOR));
+  yield* rootClick();
+  expect(refIn((yield* snapshot()).text, /button "Clicked 1"/)).toBe(later);
+  const element = yield* calling(PAGE.capture_page.body.execute({ page, what: 'element', ref: first }, undefined, caller));
+  if (element.status !== 'captured') return yield* Effect.die('the element capture answered a heap');
+  expect([element.width, element.height]).toEqual([160, 60]);
+  yield* rootClick();
+  expect(refIn((yield* snapshot()).text, /button "Clicked 2"/)).toBe(later);
+  yield* calling(
+    PAGE.evaluate_in_page.body.execute(
+      {
+        page,
+        expression: `document.body.insertAdjacentHTML('beforeend', '<div role="button" aria-label="Large region" style="position:fixed;left:0;top:0;width:1200px;height:900px;background:white;z-index:-1"></div><div style="position:absolute;top:1800px;width:1px;height:100px"></div>'); true`,
+      },
+      undefined,
+      caller,
+    ),
+  );
+  const large = refIn((yield* snapshot()).text, /button "Large region"/);
+  const oversized = yield* calling(PAGE.capture_page.body.execute({ page, what: 'element', ref: large }, undefined, caller));
+  if (oversized.status !== 'captured') return yield* Effect.die('the element capture answered a heap');
+  expect([oversized.width, oversized.height]).toEqual([1200, 900]);
+  yield* rootClick();
+  expect(refIn((yield* snapshot()).text, /button "Clicked 3"/)).toBe(later);
+  const full = yield* calling(PAGE.capture_page.body.execute({ page, what: 'full' }, undefined, caller));
+  if (full.status !== 'captured') return yield* Effect.die('the full-page capture answered a heap');
+  expect(full.height).toBeGreaterThanOrEqual(1900);
+  yield* rootClick();
+  expect(refIn((yield* snapshot()).text, /button "Clicked 4"/)).toBe(later);
+  yield* calling(PAGE.emulate_page.body.execute({ page, viewport: { width: 1024, height: 768, scale: 3 } }, undefined, caller));
+  const dense = yield* calling(PAGE.capture_page.body.execute({ page, what: 'element', ref: first }, undefined, caller));
+  if (dense.status !== 'captured') return yield* Effect.die('the element capture answered a heap');
+  expect([dense.width, dense.height]).toEqual([480, 180]);
+  yield* rootClick();
+  expect(refIn((yield* snapshot()).text, /button "Clicked 5"/)).toBe(later);
+  yield* calling(PAGE.capture_page.body.execute({ page, what: 'full' }, undefined, caller));
+  yield* rootClick();
+  expect(refIn((yield* snapshot()).text, /button "Clicked 6"/)).toBe(later);
 });

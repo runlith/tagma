@@ -103,11 +103,13 @@ const offsetOf = Effect.fnUntraced(function* (attached: Attached, child: string 
 
 export type Box = { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
 
+type PlacedBox = Box & { readonly center: Point; readonly localCenter: Point };
+
 export const boxOf = Effect.fnUntraced(function* (
   attached: Attached,
   located: Located,
   reveal = true,
-): Effect.fn.Return<Box & { readonly center: Point }, CommandFailure | GateRefusal<'action-failed'>> {
+): Effect.fn.Return<PlacedBox, CommandFailure | GateRefusal<'action-failed'>> {
   if (reveal)
     yield* attached.session
       .send('DOM.scrollIntoViewIfNeeded', { backendNodeId: located.anchor.node }, located.child)
@@ -127,11 +129,12 @@ export const boxOf = Effect.fnUntraced(function* (
     width: Math.max(...xs) - Math.min(...xs),
     height: Math.max(...ys) - Math.min(...ys),
     center: { x: middle.x + offset.x, y: middle.y + offset.y },
+    localCenter: middle,
   };
 });
 
 export const pointOf = (attached: Attached, located: Located): Effect.Effect<Point, CommandFailure | GateRefusal<'action-failed'>> =>
-  Effect.map(boxOf(attached, located), (box) => box.center);
+  Effect.map(boxOf(attached, located), (box) => box.localCenter);
 
 const COVERS = `function (hit) { let at = hit; while (at) { if (at === this) return true; at = at.parentNode || at.host || null; } return false; }`;
 

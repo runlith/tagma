@@ -18,39 +18,44 @@ const EDITING: Readonly<Record<string, readonly string[]>> = {
 
 export const TEXT_CHUNK = 1000;
 
-export const move = (session: Session, to: Point, modifiers = 0): Effect.Effect<void, CommandFailure> =>
-  session.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: to.x, y: to.y, modifiers, button: 'none', buttons: 0 });
+export const move = (session: Session, to: Point, modifiers = 0, child?: string): Effect.Effect<void, CommandFailure> =>
+  session.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: to.x, y: to.y, modifiers, button: 'none', buttons: 0 }, child);
 
 export const click = Effect.fnUntraced(function* (
   session: Session,
   at: Point,
   options: { readonly button?: MouseButton; readonly count?: number; readonly modifiers?: number } = {},
+  child?: string,
 ) {
   const button = options.button ?? 'left';
   const modifiers = options.modifiers ?? 0;
-  yield* move(session, at, modifiers);
+  yield* move(session, at, modifiers, child);
   let down: number | null = null;
   yield* Effect.gen(function* () {
     for (let clickCount = 1; clickCount <= (options.count ?? 1); clickCount += 1) {
       const event = { x: at.x, y: at.y, button, clickCount, modifiers } as const;
       down = clickCount;
-      yield* session.send('Input.dispatchMouseEvent', { ...event, type: 'mousePressed', buttons: BUTTONS[button] });
-      yield* session.send('Input.dispatchMouseEvent', { ...event, type: 'mouseReleased', buttons: 0 });
+      yield* session.send('Input.dispatchMouseEvent', { ...event, type: 'mousePressed', buttons: BUTTONS[button] }, child);
+      yield* session.send('Input.dispatchMouseEvent', { ...event, type: 'mouseReleased', buttons: 0 }, child);
       down = null;
     }
   }).pipe(
     Effect.onError(() =>
       down === null
         ? Effect.void
-        : session.post('Input.dispatchMouseEvent', {
-            type: 'mouseReleased',
-            x: at.x,
-            y: at.y,
-            button,
-            clickCount: down,
-            modifiers,
-            buttons: 0,
-          }),
+        : session.post(
+            'Input.dispatchMouseEvent',
+            {
+              type: 'mouseReleased',
+              x: at.x,
+              y: at.y,
+              button,
+              clickCount: down,
+              modifiers,
+              buttons: 0,
+            },
+            child,
+          ),
     ),
   );
 });

@@ -216,25 +216,28 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
   const tune = (cast: Cast): Effect.Effect<void> =>
     Effect.andThen(restart(cast).pipe(quiet(cast.page, 'the budget of its viewers')), Effect.forkIn(layout(cast), scope));
 
-  const screenshot = Effect.fnUntraced(function* (cast: Cast, session: Session, params: Params): Effect.fn.Return<void, CommandFailure> {
-    const { cssVisualViewport: view } = yield* session.send('Page.getLayoutMetrics');
-    const scale = Math.min(1, params.maxWidth / view.clientWidth, params.maxHeight / view.clientHeight);
-    const text = yield* session.reply('Page.captureScreenshot', {
-      format: 'jpeg',
-      quality: params.quality,
-      clip: { x: view.pageX, y: view.pageY, width: view.clientWidth, height: view.clientHeight, scale },
-    });
-    const sliced = sliceData(text);
-    if (sliced === undefined) return yield* Effect.logWarning(`browser: the screenshot of page ${cast.page} carried no picture`);
-    if (cast.params !== params) return;
-    const now = yield* Clock.currentTimeMillis;
-    const held: Held = {
-      event: { type: 'frame', data: sliced.data, width: view.clientWidth, height: view.clientHeight },
-      ack: null,
-      at: now,
-    };
-    if (deliver(cast, held, now)) yield* Effect.forkIn(settled(cast), scope);
-  });
+  const screenshot = Effect.fnUntraced(
+    function* (cast: Cast, attached: Attached, params: Params): Effect.fn.Return<void, CommandFailure> {
+      const { cssVisualViewport: view } = yield* attached.session.send('Page.getLayoutMetrics');
+      const scale = Math.min(1, params.maxWidth / view.clientWidth, params.maxHeight / view.clientHeight);
+      const text = yield* attached.pictures.capture({
+        format: 'jpeg',
+        quality: params.quality,
+        clip: { x: view.pageX, y: view.pageY, width: view.clientWidth, height: view.clientHeight, scale },
+      });
+      const sliced = sliceData(text);
+      if (sliced === undefined) return yield* Effect.logWarning(`browser: the screenshot of page ${cast.page} carried no picture`);
+      if (cast.params !== params) return;
+      const now = yield* Clock.currentTimeMillis;
+      const held: Held = {
+        event: { type: 'frame', data: sliced.data, width: view.clientWidth, height: view.clientHeight },
+        ack: null,
+        at: now,
+      };
+      if (deliver(cast, held, now)) yield* Effect.forkIn(settled(cast), scope);
+    },
+    (effect, cast) => cast.state.queue.withPermits(1)(effect),
+  );
 
   const restart = Effect.fnUntraced(function* (cast: Cast): Effect.fn.Return<void, CommandFailure> {
     const attached = cast.attached;
@@ -254,7 +257,7 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     );
     yield* Effect.sleep(FIRST_FRAME).pipe(
       Effect.andThen(
-        Effect.suspend(() => (cast.arrived === mark && cast.params === params ? screenshot(cast, attached.session, params) : Effect.void)),
+        Effect.suspend(() => (cast.arrived === mark && cast.params === params ? screenshot(cast, attached, params) : Effect.void)),
       ),
       quiet(cast.page, 'the first picture'),
       Effect.forkIn(held),

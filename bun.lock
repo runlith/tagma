@@ -200,6 +200,7 @@
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "mediabunny": "1.62.1",
+        "sharp": "catalog:",
         "uuidv7": "1.2.1",
         "web-push": "3.6.7",
       },
