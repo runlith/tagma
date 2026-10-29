@@ -18,6 +18,6 @@ A page shown in no panel stands in a hidden `BrowserWindow` rather than hanging 
 
 While the browser host runs, the process starts with `disable-backgrounding-occluded-windows`: a window occluded by other windows does not push its pages into the background. The price — Tagma's own windows also save nothing while occluded; an attempt to lift throttling on a page only for an agent session instead broke the next session after a deliberate renderer restart (the system scenario of element-picking after a hung page), so the process switch was chosen.
 
-A popup lives in its own window with an origin bar, and that window is its home instead of the stand: `Placement` returns the view there with those bounds, otherwise the view would end up in two parents at once, and the next hold would give it the stand's bounds over the bar.
+A popup lives in its own window with an origin bar, and that window is its home instead of the stand: `Placement` returns the view there with those bounds, otherwise the view would end up in two parents at once, and the next hold would give it the stand's bounds over the bar. Showing that window is the application's act (`HostActs.reveal`). The Electron test host keeps it hidden: a popup shown on the developer's screen takes their real clicks and wheel as the operator's input, and the engine then refuses the agent's acts on it as `operator-input`.
 
 Eviction for memory takes only unshown pages with no agent and no hold: their history goes into the page record, and the page is raised again by the same `open`.
