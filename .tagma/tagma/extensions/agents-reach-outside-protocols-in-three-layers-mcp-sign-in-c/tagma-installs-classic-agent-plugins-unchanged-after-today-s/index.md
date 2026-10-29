@@ -51,7 +51,7 @@ Each format is an adapter that turns a directory into one plugin description: na
 - Two components whose names collide after this are refused with both names.
 
 **Components.**
-- **Skills.** A new skill scope `plugin` beside `global`, `project` and `built-in` (`native-harness/contract/wire/sourceSettings.ts`), fed to the same discovery (`agent-sources` `SkillDirectories`). A plugin skill shows its plugin on the skills screen and is disabled by name like any other.
+- **Skills.** A new skill scope `plugin` beside `global`, `project` and `built-in` (`native-harness/contract/wire/sourceSettings.ts`), fed to the same discovery (`agent-sources` `SkillDirectories`). A plugin skill shows its plugin on the skills screen and is disabled by name like any other. Plugin skills are read before the operator's and the project's, so a global or project skill of the same name wins and the plugin skill is listed as replaced.
 - **MCP servers.**
   - **Port.** `mcp` gains a port for contributed declarations, and the plugins module fills it. `mcp` knows no plugin, and plugin declarations are not a settings layer.
   - **Shadowing.** A user or project declaration of the same name shadows a contributed one.
@@ -66,8 +66,8 @@ Each format is an adapter that turns a directory into one plugin description: na
   - **Consent.** Install and enable raise what `add_mcp_server` raises for the same server: the `execute` and `network` subjects, and `mcp-env-resolving`.
   - **Sign-in.** Remote servers sign in through the MCP layer.
 - **User configuration.** Claude Code `userConfig` values marked `sensitive` live in the key store under the plugin owner. The others live in a setting of the plugin. Both are asked for on the plugin's page.
-- **Agents.** `agents/*.md` become agent definitions `<plugin>-<agent>`. The Claude Code adapter owns one table from that format's tool names to Tagma's (for example `Read` → `read`, `Bash` → `bash`). A tool with no equivalent is dropped and listed on the plugin page.
-- **Commands.** `commands/*.md` are read as skills of the plugin, named `<plugin>-<command>`, in the same `plugin` scope and the same `$` catalog. Claude Code already treats a command and a skill as one thing, and Codex has deprecated its own prompts in favour of skills. Tagma's `/` stays for Tagma's own acts, each of which runs Tagma's code; a plugin brings prompt text, not such an act. `$ARGUMENTS` in a command takes the text of the message that invokes it.
+- **Agents.** `agents/*.md` become agent definitions `<plugin>-<agent>`. The Claude Code adapter owns one table from that format's tool names to Tagma's (for example `Read` → `read`, `Bash` → `bash`). A tool with no equivalent is dropped and listed on the plugin page. The mapped tools are the agent's whitelist. Like a project file, a plugin agent is offered to the operator alone until `agent.offered` opens it to agents, and its thread is born in the usual mode.
+- **Commands.** `commands/*.md` are read as skills of the plugin, named `<plugin>-<command>`, in the same `plugin` scope and the same `$` catalog. Claude Code already treats a command and a skill as one thing, and Codex has deprecated its own prompts in favour of skills. Tagma's `/` stays for Tagma's own acts, each of which runs Tagma's code; a plugin brings prompt text, not such an act. `$ARGUMENTS` in a command takes the text of the message that invokes it, without its `$<name>` reference.
 - **Hooks.** The `command` handlers of `hooks/hooks.json` run as the operator on the events Tagma's agent has:
   - `PreToolUse` at tool admission (`beforeTool`) and `PostToolUse` after execution (`afterTool`);
   - `UserPromptSubmit` before the step a message opens (`beforeStep`);
