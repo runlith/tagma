@@ -27,6 +27,10 @@ ios.effect('MobileSafari preserves native momentum until a page write stops it',
     yield* Effect.promise(() => phone.open(`${server.url.href}#section`));
     yield* Effect.promise(() => phone.open(`${server.url.href}#section`));
     expect(yield* Effect.promise(() => phone.evaluate('location.hash', Schema.String))).toBe('#section');
+    for (const search of ['?document=2', '?document=3']) {
+      yield* Effect.promise(() => phone.open(`${server.url.href}${search}`));
+      expect(yield* Effect.promise(() => phone.evaluate('Promise.resolve(location.search)', Schema.String))).toBe(search);
+    }
     yield* Effect.promise(() =>
       phone.evaluate(
         '(() => { console.error(new Error("diagnostic only")); Promise.reject("diagnostic only"); return new Promise(resolve => requestAnimationFrame(() => resolve())); })()',

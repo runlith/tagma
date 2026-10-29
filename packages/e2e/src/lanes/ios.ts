@@ -239,6 +239,7 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
   const { udid, runtime, timing } = held;
   let selected: RemoteDebugger | undefined;
   let application: number | undefined;
+  let page = '';
   const console: string[] = [];
   const failed = yield* Deferred.make<never, PageFailed | IOSUnavailable>();
   let stopBootstrap: (() => void) | undefined;
@@ -299,11 +300,12 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
         const pages = (await selected.selectApp()).filter(
           (one) => one.bundleId === 'com.apple.mobilesafari' && Number(String(one.id).split('.')[0]) === pid,
         );
-        const page = pages.find((one) => one.isKey) ?? pages[0];
-        if (page === undefined) throw new IOSUnavailable({ message: `MobileSafari ${pid} exposed no browsing page` });
-        const pageId = Number(String(page.id).split('.')[1]);
+        const browsing = pages.find((one) => one.isKey) ?? pages[0];
+        if (browsing === undefined) throw new IOSUnavailable({ message: `MobileSafari ${pid} exposed no browsing page` });
+        const pageId = Number(String(browsing.id).split('.')[1]);
         await selected.selectPage(pid, pageId, true);
         application = pid;
+        page = String(pageId);
         stopBootstrap = await bootstrap(selected, { appId: pid, pageId }, script, (cause) =>
           Deferred.doneUnsafe(failed, Effect.fail(new IOSUnavailable({ message: 'the page error bootstrap failed', cause }))),
         );
@@ -336,8 +338,15 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
         });
         debugger_.once('remote_debugger_disconnect', disconnect);
       });
-      await evaluatePage(debugger_, `window.location.href = ${JSON.stringify(to.href)}`);
+      if (application === undefined) throw new IOSUnavailable({ message: 'open a page before navigating it' });
+      await debugger_.requireRpcClient().send('Runtime.evaluate', {
+        expression: `window.location.href = ${JSON.stringify(to.href)};`,
+        appIdKey: `PID:${application}`,
+        pageIdKey: page,
+      });
       await loaded;
+      const landed = decode(Schema.String, await evaluatePage(debugger_, 'location.href'));
+      if (landed !== to.href) throw new IOSUnavailable({ message: `MobileSafari loaded ${landed} while opening ${to.href}` });
     },
     evaluate: async (expression, schema) => decode(schema, await evaluatePage(inspect(), expression)),
     swipe: held.swipe,
