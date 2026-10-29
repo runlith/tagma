@@ -27,13 +27,13 @@ type Entry = 'first' | 'content' | 'none';
 
 interface Aim {
   readonly sub: Menu;
-  readonly apex: Point;
+  from: Point;
   over: EventTarget | null;
 }
 
 const CONTEXT = Symbol.for('@runlith/primitives/menu');
-const REST_MS = 150;
-const APEX_PX = 5;
+const REST_MS = 50;
+const STEP_PX = 4;
 const OPENING_KEYS = new Set(['Enter', ' ', 'ArrowDown']);
 
 const within = (box: DOMRect, point: Point): boolean =>
@@ -48,9 +48,9 @@ function inTriangle(p: Point, a: Point, b: Point, c: Point): boolean {
   return (ab >= 0 && bc >= 0 && ca >= 0) || (ab <= 0 && bc <= 0 && ca <= 0);
 }
 
-function onPath(point: Point, apex: Point, box: DOMRect): boolean {
-  const edge = box.left >= apex.x ? box.left : box.right;
-  return inTriangle(point, apex, { x: edge, y: box.top }, { x: edge, y: box.bottom });
+function heading(from: Point, to: Point, box: DOMRect): boolean {
+  const edge = box.left >= from.x ? box.left : box.right;
+  return inTriangle(to, from, { x: edge, y: box.top }, { x: edge, y: box.bottom });
 }
 
 export class Menu {
@@ -78,7 +78,10 @@ export class Menu {
     $effect.pre(() => {
       const open = this.opened();
       untrack(() => {
-        if (!open) return this.layer.close();
+        if (!open) {
+          this.parent?.endAimAt(this);
+          return this.layer.close();
+        }
         this.layer.open();
         this.openings += 1;
       });
@@ -101,7 +104,10 @@ export class Menu {
     if (parent === undefined) throw new Error('A submenu stands outside a menu');
     const sub = Menu.build(id, parent, open, change);
     parent.subs.add(sub);
-    onDestroy(() => parent.subs.delete(sub));
+    onDestroy(() => {
+      parent.subs.delete(sub);
+      parent.endAimAt(sub);
+    });
     return sub;
   }
 
@@ -351,11 +357,9 @@ export class Menu {
   }
 
   private aimAt(sub: Menu, event: PointerEvent): void {
-    const content = sub.contentElement;
-    if (content === null) return;
+    if (sub.contentElement === null) return;
     this.endAim();
-    const toRight = content.getBoundingClientRect().left >= event.clientX;
-    this.aim = { sub, over: event.relatedTarget, apex: { x: event.clientX + (toRight ? -APEX_PX : APEX_PX), y: event.clientY } };
+    this.aim = { sub, from: { x: event.clientX, y: event.clientY }, over: event.relatedTarget };
     this.rest();
     document.addEventListener('pointermove', this.follow, true);
   }
@@ -363,9 +367,13 @@ export class Menu {
   private readonly follow = (event: PointerEvent): void => {
     const aim = this.aim;
     if (aim === null) return;
-    const point = { x: event.clientX, y: event.clientY };
+    const to = { x: event.clientX, y: event.clientY };
     const box = aim.sub.contentElement?.getBoundingClientRect();
-    if (box === undefined || within(box, point) || !onPath(point, aim.apex, box)) return this.endAim();
+    if (event.pointerType === 'touch' || box === undefined || within(box, to)) return this.endAim();
+    if (Math.hypot(to.x - aim.from.x, to.y - aim.from.y) >= STEP_PX) {
+      if (!heading(aim.from, to, box)) return this.endAim();
+      aim.from = to;
+    }
     aim.over = event.target;
     this.rest();
   };
@@ -381,6 +389,10 @@ export class Menu {
     if (row === undefined) return;
     this.collection.point(row);
     for (const sub of this.subs) if (sub.subTriggerElement === row) sub.reach();
+  }
+
+  private endAimAt(sub: Menu): void {
+    if (this.aim?.sub === sub) this.endAim();
   }
 
   private endAim(): void {

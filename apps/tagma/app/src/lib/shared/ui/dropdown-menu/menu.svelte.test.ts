@@ -126,24 +126,36 @@ test('ArrowRight opens a submenu on its first item, ArrowLeft and Escape close o
   expect(isOpen()).toBe(true);
 });
 
-test('a pointer moving on the path to a tall submenu keeps it, and one resting on the row above hands the pointer to it', () => {
+test('a pointer leaving a submenu trigger for the row above, not heading into its tall submenu, opens that row at once', () => {
   menu();
   open();
   pointer('pointermove', sub(), { clientX: 100, clientY: 50 });
   expect(sub().getAttribute('aria-expanded')).toBe('true');
-  vi.spyOn(document.querySelector<HTMLElement>('[data-sub]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(200, -800, 100, 1000));
+  vi.spyOn(document.querySelector<HTMLElement>('[data-sub]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(300, -600, 100, 800));
+  pointer('pointerleave', sub(), { clientX: 150, clientY: 50, bubbles: false });
+  pointer('pointermove', item('Spacing'), { clientX: 151, clientY: 44 });
+  expect(item('Spacing').hasAttribute('data-highlighted')).toBe(true);
+  expect(item('Spacing').getAttribute('aria-expanded')).toBe('true');
+  expect(sub().getAttribute('aria-expanded')).toBe('false');
+});
+
+test('a pointer heading into a submenu keeps it over other rows, and one resting on a row hands that row the pointer', () => {
+  menu();
+  open();
+  pointer('pointermove', sub(), { clientX: 100, clientY: 50 });
+  vi.spyOn(document.querySelector<HTMLElement>('[data-sub]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(300, -600, 100, 800));
   vi.useFakeTimers();
   try {
     pointer('pointerleave', sub(), { clientX: 150, clientY: 50, bubbles: false });
-    pointer('pointermove', item('Spacing'), { clientX: 152, clientY: 45 });
-    vi.advanceTimersByTime(100);
-    pointer('pointermove', item('Spacing'), { clientX: 154, clientY: 40 });
-    vi.advanceTimersByTime(100);
+    pointer('pointermove', item('Spacing'), { clientX: 160, clientY: 40 });
+    vi.advanceTimersByTime(40);
+    pointer('pointermove', item('Spacing'), { clientX: 170, clientY: 30 });
+    vi.advanceTimersByTime(40);
     flushSync();
     expect(sub().getAttribute('aria-expanded')).toBe('true');
     expect(item('Spacing').hasAttribute('data-highlighted')).toBe(false);
 
-    vi.advanceTimersByTime(100);
+    vi.advanceTimersByTime(20);
     flushSync();
     expect(item('Spacing').hasAttribute('data-highlighted')).toBe(true);
     expect(item('Spacing').getAttribute('aria-expanded')).toBe('true');
@@ -153,15 +165,44 @@ test('a pointer moving on the path to a tall submenu keeps it, and one resting o
   }
 });
 
-test('a pointer crossing to a far submenu keeps it through steps that do not advance toward it and off its path over no row', () => {
+test('a pending handover yields to the keyboard closing the submenu and to touch', () => {
+  menu();
+  open();
+  pointer('pointermove', sub(), { clientX: 100, clientY: 50 });
+  vi.spyOn(document.querySelector<HTMLElement>('[data-sub]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(300, -600, 100, 800));
+  vi.useFakeTimers();
+  try {
+    pointer('pointerleave', sub(), { clientX: 150, clientY: 50, bubbles: false });
+    pointer('pointermove', item('Spacing'), { clientX: 160, clientY: 40 });
+    key('Escape');
+    vi.advanceTimersByTime(200);
+    flushSync();
+    expect(sub().getAttribute('aria-expanded')).toBe('false');
+    expect(item('Spacing').getAttribute('aria-expanded')).toBe('false');
+    expect(item('Spacing').hasAttribute('data-highlighted')).toBe(false);
+
+    pointer('pointermove', sub(), { clientX: 100, clientY: 50 });
+    vi.spyOn(document.querySelector<HTMLElement>('[data-sub]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(300, -600, 100, 800));
+    pointer('pointerleave', sub(), { clientX: 150, clientY: 50, bubbles: false });
+    pointer('pointermove', item('Spacing'), { clientX: 160, clientY: 40, pointerType: 'touch' });
+    vi.advanceTimersByTime(200);
+    flushSync();
+    expect(sub().getAttribute('aria-expanded')).toBe('true');
+    expect(item('Spacing').hasAttribute('data-highlighted')).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a pointer crossing to a far submenu keeps it through jitter and off its path over no row', () => {
   menu();
   open();
   pointer('pointermove', sub(), { clientX: 100, clientY: 50 });
   vi.spyOn(document.querySelector<HTMLElement>('[data-sub]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(200, 0, 100, 200));
   pointer('pointerleave', sub(), { clientX: 150, clientY: 50, bubbles: false });
   pointer('pointermove', item('Omega'), { clientX: 160, clientY: 55 });
-  pointer('pointermove', item('Omega'), { clientX: 160, clientY: 60 });
-  pointer('pointermove', item('Omega'), { clientX: 159, clientY: 66 });
+  pointer('pointermove', item('Omega'), { clientX: 161, clientY: 57 });
+  pointer('pointermove', item('Omega'), { clientX: 159, clientY: 58 });
   expect(sub().getAttribute('aria-expanded')).toBe('true');
   expect(item('Omega').hasAttribute('data-highlighted')).toBe(false);
   pointer('pointermove', document.body, { clientX: 150, clientY: 190 });
