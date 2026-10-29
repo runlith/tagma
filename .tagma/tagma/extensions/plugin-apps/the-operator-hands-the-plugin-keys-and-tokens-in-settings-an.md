@@ -12,9 +12,9 @@ edges:
     to: 01a14c08-8336-7b3c-965a-b09415a61526
 sources:
   - kind: dir
-    ref: apps/tagma/app/src/lib/features/plugin-secrets
+    ref: apps/tagma/app/src/lib/features/secrets
   - kind: dir
-    ref: apps/tagma/server/src/plugin-secrets
+    ref: apps/tagma/server/src/secrets
 ---
 **Value.** An API key or token the plugin needs is entered once by the operator in settings, and never lands in `plugin.json`, the graph, or the feed.
 

@@ -5,9 +5,9 @@ ord: 1
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/plugin-secrets/shelf.ts
+    ref: apps/tagma/server/src/secrets/keeper.ts
   - kind: file
-    ref: apps/tagma/server/src/plugin-secrets/store.ts
+    ref: apps/tagma/server/src/secrets/store.ts
 ---
 A plugin's secret value lives only in the `plugin-secrets.json` file of the data directory (0600, through `CredentialFile`) and in the plugin process's env. It never enters settings, the graph, feeds, or operation answers: reading answers `{name, description, set}`, writing answers with no value string, and store refusals do not repeat the file error text, because parsing the document quotes what lies in it. So a secret cannot be a setting: settings are read through `read_settings` and the live channel.
 

@@ -11,7 +11,7 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/plugins
   - kind: dir
-    ref: apps/tagma/server/src/plugin-secrets
+    ref: apps/tagma/server/src/secrets
   - kind: dir
     ref: apps/tagma/server/src/plugins
   - kind: dir

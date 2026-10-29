@@ -28,6 +28,6 @@ edges:
     to: 01a174f2-3d53-77eb-b835-34ca4f0a6d9b
 sources:
   - kind: dir
-    ref: apps/tagma/app/src/lib/features/plugin-secrets
+    ref: apps/tagma/app/src/lib/features/secrets
 ---
 A plugin needs keys and tokens, which the operator enters in a settings section; the module shows the declared secrets and writes them to the server.

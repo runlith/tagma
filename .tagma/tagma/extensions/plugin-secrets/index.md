@@ -44,6 +44,6 @@ edges:
     to: 01a0fd8b-beeb-7ef2-bff4-d6d3b824564e
 sources:
   - kind: dir
-    ref: apps/tagma/server/src/plugin-secrets
+    ref: apps/tagma/server/src/secrets
 ---
 Plugins need keys and tokens that belong neither in `plugin.json` nor in the graph. The module declares the `secrets` point (each secret's name and description), stores the values the operator enters in the plugin's settings, hands them to the process in env at startup, and registers them in its session's redactor so the value never leaks into feeds, tool answers, or refusal reasons. The process, its startup and restart are the `plugins` module's; this module only owns what goes into the environment and when it changed.
