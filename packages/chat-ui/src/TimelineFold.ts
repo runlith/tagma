@@ -210,8 +210,19 @@ export class TimelineFold implements RowModel {
   }
 
   private take(rows: readonly FeedChange<ChatEntry>[], live: readonly FeedChange<ActivityEntry>[]): void {
-    for (const change of rows) this.local(change);
     for (const change of live) this.takeLive(change);
+    if (this.liveStructural) this.dropLeft();
+    for (const change of rows) this.local(change);
+  }
+
+  private dropLeft(): void {
+    let end = this.bases.length;
+    for (let at = end - 1; at >= this.bodyCount - 1; at -= 1) {
+      const item = at < this.bodyCount ? undefined : this.bases.at(at);
+      if (item?.kind === 'step' && !this.liveInput.has(item.key)) continue;
+      if (end > at + 1) this.replaceItems(at + 1, end - at - 1, []);
+      end = at;
+    }
   }
 
   private takeLive(change: FeedChange<ActivityEntry>): void {

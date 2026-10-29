@@ -734,6 +734,20 @@ describe('rewound turns in the timeline', () => {
   });
 });
 
+describe('a long feed whose running call settles', () => {
+  test('every row stays found by its key after the call moves from the live tail into the body in one sync', () => {
+    const shown = chain({ id: 'run-1', phase: 'working' });
+    const before = [user('u', 'run-1'), ...Array.from({ length: 10 }, (_, at) => assistant(`a${at}`))];
+    const after = Array.from({ length: 200 }, (_, at) => assistant(`b${at}`));
+    const more = Array.from({ length: 50 }, (_, at) => assistant(`c${at}`));
+    shown.show([...before, tool('x', { toolState: 'input-available' }), ...after]);
+
+    const items = shown.show([...before, tool('x'), ...after, ...more]);
+
+    expect(items.map((item) => shown.rows.indexOf(item.key))).toEqual(items.map((_, at) => at));
+  });
+});
+
 describe('a streaming run draws its parts in the order they arrived', () => {
   test('a finished thought stays above the answer streaming after it, before and after its record lands', () => {
     const fold = new ChatFold();
