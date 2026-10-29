@@ -11,6 +11,7 @@ export const CHECKOUT: Surface = 'checkout';
 
 export type SurfaceDeclaration = {
   readonly surface: Surface;
+  readonly formerly?: Surface;
   readonly route: string;
   readonly place?: string;
   readonly label: string;
@@ -55,6 +56,7 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
   private readonly fixed: readonly SurfaceDeclaration[];
   private readonly fixedRail: readonly SurfaceDeclaration[];
   private readonly bySurface = new Map<Surface, SurfaceDeclaration>();
+  private readonly former = new Map<Surface, Surface>();
   private readonly byRoute = new Map<string, SurfaceDeclaration>();
   private readonly members = new SvelteMap<Surface, SurfaceDeclaration>();
   private readonly memberRoutes = new SvelteMap<string, SurfaceDeclaration>();
@@ -79,6 +81,11 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
       }
     }
     for (const declaration of declarations) {
+      if (declaration.formerly !== undefined) {
+        const holder = this.bySurface.get(declaration.formerly)?.surface ?? this.former.get(declaration.formerly);
+        if (holder !== undefined) throw clashOf(`Surface "${declaration.formerly}"`, holder, declaration.surface);
+        this.former.set(declaration.formerly, declaration.surface);
+      }
       if (declaration.under !== undefined && !this.bySurface.has(declaration.under)) {
         throw new RegistryClash({
           message: `Surface "${declaration.surface}" stands under "${declaration.under}", which is not declared.`,
@@ -130,6 +137,13 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
       this.members.delete(declaration.surface);
       this.memberRoutes.delete(declaration.route);
     };
+  }
+
+  named(stored: string): Surface {
+    const cut = stored.indexOf('/');
+    const head = cut === -1 ? stored : stored.slice(0, cut);
+    const now = this.former.get(head);
+    return now === undefined ? stored : `${now}${stored.slice(head.length)}`;
   }
 
   portable(surface: Surface): boolean {

@@ -1,6 +1,7 @@
 import { Platform, type PlatformStorage } from '@runlith/layer/Platform';
 import { Service } from '@runlith/layer/key';
 import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
+import { launchNamed } from './place.js';
 
 const STORAGE_KEY = 'tagma.rail';
 
@@ -11,14 +12,12 @@ type Stored = {
 
 const NOTHING: Stored = { pinned: [], unpinned: [] };
 
-const names = (value: unknown): readonly string[] =>
-  Array.isArray(value) ? [...new Set(value.filter((one): one is string => typeof one === 'string'))] : [];
-
 export class RailPins extends Service<RailPins>()('RailPins', { tier: 'app' }) {
   static *make() {
     const platform = yield* Platform;
-    const daily = (yield* SurfaceRegistry).rail.filter((entry) => entry.pinned === true).map((entry) => entry.surface);
-    return new RailPins(platform.storage.local, daily);
+    const surfaces = yield* SurfaceRegistry;
+    const daily = surfaces.rail.filter((entry) => entry.pinned === true).map((entry) => entry.surface);
+    return new RailPins(platform.storage.local, daily, surfaces);
   }
 
   private stored = $state.raw<Stored>(NOTHING);
@@ -27,6 +26,7 @@ export class RailPins extends Service<RailPins>()('RailPins', { tier: 'app' }) {
   constructor(
     private readonly storage: PlatformStorage,
     private readonly daily: readonly string[],
+    private readonly surfaces: SurfaceRegistry,
   ) {
     super();
     this.stored = this.read();
@@ -68,7 +68,12 @@ export class RailPins extends Service<RailPins>()('RailPins', { tier: 'app' }) {
     }
     if (typeof parsed !== 'object' || parsed === null) return NOTHING;
     const document = parsed as Record<string, unknown>;
-    return { pinned: names(document.pinned), unpinned: names(document.unpinned) };
+    return { pinned: this.names(document.pinned), unpinned: this.names(document.unpinned) };
+  }
+
+  private names(value: unknown): readonly string[] {
+    if (!Array.isArray(value)) return [];
+    return [...new Set(value.filter((one): one is string => typeof one === 'string').map((one) => launchNamed(this.surfaces.named(one))))];
   }
 
   private write(next: Stored): void {

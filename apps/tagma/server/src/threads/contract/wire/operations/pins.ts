@@ -27,7 +27,7 @@ export const PIN_OPERATIONS = {
   pin_view: operation('pin_view', {
     ...shape,
     meaning:
-      'Pin a plugin view and its resource key above the thread feed; the view must be named in the plugin’s contributes.pins. Repeating the same address keeps one pin.',
+      'Pin an app view and its resource key above the thread feed; the view must be named in the app’s contributes.pins. Repeating the same address keeps one pin.',
     refusals: [...shape.refusals, 'view-not-pinnable'],
     answer: arms({ pinned: { threadId: ThreadId, ...pinnedViewSchema.fields } }),
     confirmation: () => ({ summary: 'Pin this view?' }),
@@ -36,7 +36,7 @@ export const PIN_OPERATIONS = {
   }),
   unpin_view: operation('unpin_view', {
     ...shape,
-    meaning: 'Remove a plugin view and its resource key from the thread pins. Repeating removal leaves it removed.',
+    meaning: 'Remove an app view and its resource key from the thread pins. Repeating removal leaves it removed.',
     answer: arms({ unpinned: { threadId: ThreadId, ...pinnedViewSchema.fields } }),
     confirmation: () => ({ summary: 'Unpin this view?' }),
     confirmLabel: 'Unpin',

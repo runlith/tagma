@@ -10,7 +10,7 @@ import type { ViewShelf } from './shelf.js';
 const VALUE_BYTES = 1024 * 1024;
 const STORE = 'view-storage';
 const failed = (reason: string) =>
-  new GateRefusal<StorageRefusalCode>('view-storage-failed', reason, ['make the plugin’s data directory writable, then try again']);
+  new GateRefusal<StorageRefusalCode>('view-storage-failed', reason, ['make the app’s data directory writable, then try again']);
 const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 const absent = (error: unknown): boolean => typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 
@@ -18,9 +18,9 @@ export const makeValues = (input: { readonly shelf: ViewShelf }) => {
   const { shelf } = input;
   let written = 0;
   const placeOf = Effect.fnUntraced(function* (mount: ViewMount, key: string) {
-    const plugin = yield* shelf.mounted(mount);
-    if (plugin.data === null) return yield* failed('this server keeps no home directory, so the plugin has no data directory');
-    const directory = join(plugin.data, STORE);
+    const app = yield* shelf.mounted(mount);
+    if (app.data === null) return yield* failed('this server keeps no home directory, so the app has no data directory');
+    const directory = join(app.data, STORE);
     return { directory, file: join(directory, `${createHash('sha256').update(key).digest('hex')}.json`) };
   });
   return ViewStorage.of({
@@ -50,7 +50,7 @@ export const makeValues = (input: { readonly shelf: ViewShelf }) => {
         return yield* new GateRefusal<StorageRefusalCode>(
           'view-storage-too-large',
           `The value ${key} passes the 1 MiB a view keeps under one key.`,
-          ['split it over several keys', 'or keep it in the plugin’s process'],
+          ['split it over several keys', 'or keep it in the app’s process'],
         );
       written += 1;
       const staged = `${file}.${process.pid}.${written}`;

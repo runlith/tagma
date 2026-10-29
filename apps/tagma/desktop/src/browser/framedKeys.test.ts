@@ -36,7 +36,7 @@ test('a chord the app takes from one framed page reaches it from that page alone
   forwardFramed(owner as unknown as WebContents, () => [{ chord: ZOOM_IN, frame: PAGE }]);
 
   expect(press(owner, 'Equal')).toBe(false);
-  owner.focusedFrame = { frameTreeNodeId: 7, url: 'http://127.0.0.1:5635/views/plugin/' };
+  owner.focusedFrame = { frameTreeNodeId: 7, url: 'http://127.0.0.1:5635/views/board/' };
   expect(press(owner, 'Equal')).toBe(false);
   owner.focusedFrame = { frameTreeNodeId: 8, url: `${PAGE}#totals` };
   expect(press(owner, 'KeyK')).toBe(false);

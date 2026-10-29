@@ -52,7 +52,7 @@ test('counts and groups separate what needs the operator from what only finished
 
 const notice = (id: string, at: string, asks: boolean): Notification => ({
   id,
-  sender: 'plugin:poker',
+  sender: 'app:poker',
   title: id,
   body: '',
   at,

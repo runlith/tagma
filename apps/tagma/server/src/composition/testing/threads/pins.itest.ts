@@ -9,7 +9,7 @@ import { ThreadInputRefused } from '../../../threads/contract/service/failure.js
 import type { PinnedView } from '../../../threads/contract/wire/pins.js';
 import { threadStoreFixture } from '../threadStoreFixture.js';
 
-const pin = { plugin: 'poker', view: 'table', key: 'table:1' };
+const pin = { app: 'poker', view: 'table', key: 'table:1' };
 const setup = Effect.gen(function* () {
   const fixture = yield* threadStoreFixture;
   const owners = { store: Context.get(fixture.context, MachineStore), units: fixture.units, records: fixture.records };

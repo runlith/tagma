@@ -24,7 +24,7 @@ import { Refusal } from '$lib/wire/refusal.js';
 import { Failure } from '@runlith/layer/Failure';
 import type { DesktopWindows } from '@tagma/desktop/bridge';
 import { type PrepareRung, ProjectPrefetch } from '$lib/features/projects/Prefetch.js';
-import { MainWindowShell } from '$lib/features/plugins/windows/MainWindowShell.js';
+import { MainWindowShell } from '$lib/features/tagma-apps/windows/MainWindowShell.js';
 import { THREAD_PANE } from '$lib/features/threads/seats/pane.js';
 import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
 import { testArea, testKind } from '../panes/testing.js';

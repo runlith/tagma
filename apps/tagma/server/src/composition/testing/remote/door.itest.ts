@@ -78,7 +78,7 @@ const reachedIn = (world: World, state: string) =>
 
 const setup = Effect.gen(function* () {
   const world = yield* makeDoorWorld({
-    own: 'it installs a plugin and changes remote access for the whole server',
+    own: 'it installs an app and changes remote access for the whole server',
     exposure: exposedAt(
       ORIGIN,
       certified,
@@ -91,10 +91,10 @@ const setup = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
   const root = yield* world.directory('project');
   const project = yield* world.stealthProject(root);
-  const ui = join(root, '.plugins', 'static', 'ui');
+  const ui = join(root, '.tagma-apps', 'static', 'ui');
   yield* files.makeDirectory(ui, { recursive: true });
   yield* files.writeFileString(
-    join(ui, '..', 'plugin.json'),
+    join(ui, '..', 'tagma-app.json'),
     JSON.stringify({
       id: 'static',
       title: 'Static',
@@ -103,7 +103,7 @@ const setup = Effect.gen(function* () {
   );
   yield* files.writeFileString(join(ui, 'page.html'), '<!doctype html><script type="module" src="./view.js"></script>');
   yield* files.writeFileString(join(ui, 'view.js'), 'export default 42;');
-  expect(yield* world.op('install_plugin', { id: 'static' }, `project=${project}`)).toMatchObject({ status: 200 });
+  expect(yield* world.op('install_app', { id: 'static' }, `project=${project}`)).toMatchObject({ status: 200 });
   const home = yield* world.directory('remote');
   const shell = yield* world.directory('shell');
   yield* files.writeFileString(join(shell, 'index.html'), '<!doctype html><title>Tagma</title>');
@@ -311,7 +311,7 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
     }),
   );
 
-  it.effect('a phone is handed each plugin’s own remote site, which alone serves its views and whose pages the door refuses', () =>
+  it.effect('a phone is handed each app’s own remote site, which alone serves its views and whose pages the door refuses', () =>
     Effect.gen(function* () {
       const { world, project } = yield* Remote;
       const device = yield* paired();
@@ -321,14 +321,14 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
           const client = yield* Effect.provide(RpcClient.make(LiveRpc), yield* Layer.build(protocol));
           const served = yield* Stream.runHead(
             client['views.subscribe']({ projectId: project }).pipe(
-              Stream.map((state) => state.plugins.find((set) => set.plugin === 'static')?.site),
+              Stream.map((state) => state.apps.find((set) => set.app === 'static')?.site),
               Stream.filter((found) => found?._tag === 'served'),
             ),
           );
           return Option.getOrThrow(served);
         }),
       );
-      expect(site?._tag, 'the phone was handed no site for the plugin').toBe('served');
+      expect(site?._tag, 'the phone was handed no site for the app').toBe('served');
       if (site?._tag !== 'served') return;
       expect(site.origin).toBe(SITE);
       const host = new URL(site.origin).host;
@@ -571,7 +571,7 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
     }),
   );
 
-  it.effect('a plugin site refused once leaves the door ready, is placed again when the access is read, and keeps its port', () =>
+  it.effect('an app site refused once leaves the door ready, is placed again when the access is read, and keeps its port', () =>
     Effect.gen(function* () {
       const { world } = yield* Remote;
       const siteOf = Effect.suspend(() =>

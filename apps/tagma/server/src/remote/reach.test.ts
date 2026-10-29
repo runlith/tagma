@@ -215,7 +215,7 @@ it.effect('a site whose port cannot be read is blocked with the store’s reason
     expect(reach.site('music')).toEqual({
       _tag: 'blocked',
       problem: 'refused',
-      detail: 'the ports of plugin sites could not be read: the machine store is down',
+      detail: 'the ports of app sites could not be read: the machine store is down',
       command: null,
       link: null,
     });

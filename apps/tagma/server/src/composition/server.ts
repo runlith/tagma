@@ -434,7 +434,7 @@ const tagma: ServerRuntime = await Effect.runPromise(
           leaving: succession.leaving,
           opened: attempt.opened,
           hostTakenAfter: attempt.trial === null ? undefined : attempt.opened,
-          pluginServer: `http://${LOOPBACK_HOST}:${port}`,
+          tagmaAppServer: `http://${LOOPBACK_HOST}:${port}`,
           localOrigin: `http://${LOOPBACK_HOST}:${port}`,
           commitGate:
             installation === undefined
@@ -717,8 +717,8 @@ const announced = Layer.effectDiscard(
       ),
     );
     tagma.runtime.runFork(
-      Effect.andThen(userEnvironment.ready, tagma.plugins.start()).pipe(
-        Effect.tapCause((cause) => Effect.sync(() => console.error('[tagma] the installed plugins did not start', Cause.squash(cause)))),
+      Effect.andThen(userEnvironment.ready, tagma.tagmaApps.start()).pipe(
+        Effect.tapCause((cause) => Effect.sync(() => console.error('[tagma] the installed apps did not start', Cause.squash(cause)))),
       ),
     );
   }),

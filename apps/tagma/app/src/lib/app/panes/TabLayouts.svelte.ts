@@ -3,8 +3,9 @@ import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
 import { SvelteMap } from 'svelte/reactivity';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
 import { type PaneContent, type PaneOpening, sameContent, type SidePane } from '$lib/shared/panes/pane.js';
-import type { Holder } from '$lib/shared/panes/holder.js';
+import { type Holder, holderSection, sectionHolder, storedHolder } from '$lib/shared/panes/holder.js';
 import { PaneRegistry } from './PaneRegistry.js';
 
 export type TabLayout = {
@@ -31,7 +32,13 @@ export const EMPTY_LAYOUT: TabLayout = { tabs: [], active: null, open: true, rec
 export class TabLayouts extends Service<TabLayouts>()('TabLayouts', { tier: 'project' }) {
   static *make() {
     const platform = yield* Platform;
-    const layouts = new TabLayouts((yield* ProjectRung.Current).projectId, platform.storage.local, yield* PaneRegistry, Date.now);
+    const layouts = new TabLayouts(
+      (yield* ProjectRung.Current).projectId,
+      platform.storage.local,
+      yield* PaneRegistry,
+      yield* SurfaceRegistry,
+      Date.now,
+    );
     (yield* Scope).defer(() => layouts.release());
     return layouts;
   }
@@ -46,6 +53,7 @@ export class TabLayouts extends Service<TabLayouts>()('TabLayouts', { tier: 'pro
     readonly projectId: number,
     private readonly storage: PlatformStorage,
     private readonly kinds: PaneRegistry,
+    private readonly surfaces: SurfaceRegistry,
     private readonly now: () => number,
   ) {
     super();
@@ -184,6 +192,15 @@ export class TabLayouts extends Service<TabLayouts>()('TabLayouts', { tier: 'pro
 
   private sweep(): void {
     const prefix = `${PREFIX}${this.projectId}:`;
+    for (const key of this.storage.keys(prefix)) {
+      const section = holderSection(storedHolder(key.slice(prefix.length)));
+      const named = section === null ? null : this.surfaces.named(section);
+      if (named === null || named === section) continue;
+      const renamed = this.keyOf(sectionHolder(named));
+      const value = this.storage.getItem(key);
+      if (value !== null && this.storage.getItem(renamed) === null) this.storage.setItem(renamed, value);
+      this.storage.removeItem(key);
+    }
     const dated = this.storage.keys(prefix).map((key) => ({ key, at: this.stamp(this.storage.getItem(key)) }));
     const oldest = this.now() - KEPT_DAYS * DAY_MS;
     dated.sort((one, two) => two.at - one.at);
@@ -208,7 +225,7 @@ export class TabLayouts extends Service<TabLayouts>()('TabLayouts', { tier: 'pro
       const tabs = (Array.isArray(stored.tabs) ? stored.tabs : []).flatMap((tab: Partial<SidePane> | null): SidePane[] => {
         if (typeof tab?.key !== 'string' || typeof tab.kind !== 'string') return [];
         if (tab.id !== null && typeof tab.id !== 'string') return [];
-        const content = { kind: tab.kind, id: tab.id ?? null };
+        const content = { kind: this.kinds.named(tab.kind), id: tab.id ?? null };
         if (this.kinds.refusal(content, holder) !== null) return [];
         return [{ key: tab.key, ...content, ...(tab.agent === true ? { agent: true as const } : {}) }];
       });

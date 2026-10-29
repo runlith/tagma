@@ -538,7 +538,7 @@ it.live.each(['silence', 'teardown'])('%s stops the browser voice while its audi
   }),
 );
 
-it.live('a foreign MCP App gets unavailable for speech and a plugin cannot choose another project', () =>
+it.live('a foreign MCP App gets unavailable for speech and an app cannot choose another project', () =>
   Effect.gen(function* () {
     const view = yield* rig();
     yield* Effect.promise(async () => {

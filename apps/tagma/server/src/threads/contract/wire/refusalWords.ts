@@ -75,7 +75,7 @@ export const REFUSAL_WORDS = {
   'parent-archived': 'Parent thread is archived',
   'placement-refused': 'Thread could not be placed',
   'placement-unreadable': 'Thread placement unreadable',
-  'plugin-thread-mismatch': 'Thread not bound to this plugin',
+  'app-thread-mismatch': 'Thread not bound to this app',
   'read-failed': 'Reading failed',
   'read-inaccessible': 'Reading cannot be opened',
   'read-not-retained': 'Reading could not be kept',

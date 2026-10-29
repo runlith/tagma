@@ -23,6 +23,7 @@ export type PaneHold = Component<{ pane: SidePane }>;
 
 export type PaneKind = {
   readonly kind: string;
+  readonly formerly?: string;
   readonly noun: string;
   readonly view: () => Promise<{ readonly default: PaneView }>;
   readonly title: PaneTitle;

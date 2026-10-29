@@ -22,7 +22,7 @@ export type AgentFrontmatter = typeof agentFrontmatterSchema.Type;
 export const agentFileScopeSchema = Schema.Literals(['project', 'personal']);
 export type AgentFileScope = typeof agentFileScopeSchema.Type;
 export const agentOriginSchema = Schema.Struct({
-  scope: Schema.Literals(['builtin', 'project', 'personal', 'plugin', 'thread']),
+  scope: Schema.Literals(['builtin', 'project', 'personal', 'app', 'thread']),
   path: Schema.NullOr(Schema.String),
   revision: Schema.NullOr(Schema.String),
 });
@@ -134,7 +134,7 @@ export type AgentFile = {
   readonly source: string;
 };
 
-export type AgentFileOrigin = AgentFileScope | 'plugin';
+export type AgentFileOrigin = AgentFileScope | 'app';
 
 export type AgentFloor = { readonly directory: string; readonly origin: AgentFileScope };
 

@@ -48,7 +48,7 @@
     { id: 'builtin', label: 'Built-in' },
     { id: 'project', label: 'Project' },
     { id: 'personal', label: 'Personal' },
-    { id: 'plugin', label: 'Plugins' },
+    { id: 'app', label: 'Apps' },
   ] as const;
   const shownScopes = $derived(search.trim() === '' ? scopes : byBest(scopes, found, (scope, entry) => entry.origin.scope === scope.id));
   const tabs = [

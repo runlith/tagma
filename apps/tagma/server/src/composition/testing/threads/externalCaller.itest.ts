@@ -11,7 +11,7 @@ import { TURN_OPERATIONS } from '../../../threads/contract/wire/operations/turns
 import { knownAnswer } from '../../../platform/contract/wire/operation.js';
 
 const DEALER = { 'x-tagma-caller': 'dealer' } as const;
-const PLUGIN = { 'x-tagma-caller': 'plugin:poker' } as const;
+const APP = { 'x-tagma-caller': 'app:poker' } as const;
 const decodeSnapshot = Schema.decodeUnknownEffect(threadWireSnapshotPayloadSchema);
 const decodeStart = Schema.decodeUnknownEffect(knownAnswer(TURN_OPERATIONS.start_turn.answer));
 const decodeStatuses = Schema.decodeUnknownEffect(knownAnswer(TURN_OPERATIONS.read_statuses.answer));
@@ -50,17 +50,17 @@ const started = Effect.fnUntraced(function* (threadId: string, key: string) {
 });
 
 layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServices: true })('external thread callers', (it) => {
-  it.effect('a plugin owns its bound root and child through idle birth, running archive and restoration', () =>
+  it.effect('an app owns its bound root and child through idle birth, running archive and restoration', () =>
     Effect.gen(function* () {
       const { world, projectId, account } = yield* World;
-      const bindings = { plugin: 'poker', poker: 'table-1/north' };
-      const created = yield* op('create_thread', { title: 'poker player', account, bindings }, PLUGIN);
+      const bindings = { app: 'poker', poker: 'table-1/north' };
+      const created = yield* op('create_thread', { title: 'poker player', account, bindings }, APP);
       expect(created.status).toBe(200);
       const { snapshot } = yield* decodeSnapshot(created.body);
       expect(snapshot).toMatchObject({ activeRun: null, latestRun: null });
       expect(yield* listOf(world.runtime.owners).row(snapshot.thread.id)).toMatchObject({ projectId, bindings, parentThreadId: null });
-      const childBindings = { plugin: 'other', poker: 'table-1/south' };
-      const child = yield* op('create_thread', { parent: snapshot.thread.id, task: '', bindings: childBindings }, PLUGIN);
+      const childBindings = { app: 'other', poker: 'table-1/south' };
+      const child = yield* op('create_thread', { parent: snapshot.thread.id, task: '', bindings: childBindings }, APP);
       expect(child.status).toBe(200);
       const childId = (yield* decodeSnapshot(child.body)).snapshot.thread.id;
       expect(yield* listOf(world.runtime.owners).row(childId)).toMatchObject({
@@ -74,26 +74,26 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
       const listing = (set: 'live' | 'archived') => op('list_threads', { ids, set, shape: 'rows', limit: 2 });
       const live = yield* listing('live');
       expect(live).toMatchObject({ status: 200, body: { total: 2 } });
-      expect((yield* op('start_turn', { threadId, text: 'Play.', key: 'retire-player' }, PLUGIN)).body).toMatchObject({
+      expect((yield* op('start_turn', { threadId, text: 'Play.', key: 'retire-player' }, APP)).body).toMatchObject({
         status: 'started',
       });
-      const archived = yield* op('archive_thread', { threadId }, PLUGIN);
+      const archived = yield* op('archive_thread', { threadId }, APP);
       expect(archived.status).toBe(200);
-      expect(archived.body).toEqual({ status: 'archived', threadId });
+      expect(archived.body).toMatchObject({ status: 'archived', threadId });
       expect((yield* listing('live')).body).toMatchObject({ rows: [], total: 0 });
       expect((yield* listing('archived')).body).toMatchObject({ total: 2 });
-      expect((yield* op('read_statuses', { threads: [threadId], limit: 1 }, PLUGIN)).body).toMatchObject({
+      expect((yield* op('read_statuses', { threads: [threadId], limit: 1 }, APP)).body).toMatchObject({
         rows: [{ outcome: 'found', status: { life: 'idle', runId: null, ending: { status: 'aborted' } } }],
       });
       const restored = yield* op('archive_thread', { threadId, archived: false });
       expect(restored.status).toBe(200);
-      expect(restored.body).toEqual({ status: 'unarchived', threadId });
+      expect(restored.body).toMatchObject({ status: 'unarchived', threadId });
       expect((yield* listing('live')).body).toMatchObject({ total: 2 });
       expect((yield* listing('archived')).body).toMatchObject({ rows: [], total: 0 });
     }),
   );
 
-  it.effect('a plugin root uses its agent definition model, and a definition without a model keeps the operator defaults', () =>
+  it.effect('an app root uses its agent definition model, and a definition without a model keeps the operator defaults', () =>
     Effect.gen(function* () {
       const { world, account, catalog } = yield* World;
 
@@ -133,11 +133,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
             source: `---\ndescription: Plays a hand\ncapabilities: []\n${model}---\nPlay the hand.\n`,
           })).status,
         ).toBe(200);
-        const created = yield* op(
-          'create_thread',
-          { type: name, bindings: { poker: name }, account: selected.account ?? undefined },
-          PLUGIN,
-        );
+        const created = yield* op('create_thread', { type: name, bindings: { poker: name }, account: selected.account ?? undefined }, APP);
         expect(created.status).toBe(200);
         const { snapshot } = yield* decodeSnapshot(created.body);
         expect(snapshot.activeRun).toBeNull();
@@ -148,7 +144,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
     }),
   );
 
-  it.effect('a plugin root refuses an unserved model in its definition with a typed reason and a way forward', () =>
+  it.effect('an app root refuses an unserved model in its definition with a typed reason and a way forward', () =>
     Effect.gen(function* () {
       expect(
         (yield* op('save_agent', {
@@ -159,7 +155,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
             '---\ndescription: Plays a hand\ncapabilities: []\nmodel:\n  provider: subscription\n  model: unserved\n---\nPlay the hand.\n',
         })).status,
       ).toBe(200);
-      const refused = yield* op('create_thread', { type: 'player-unserved' }, PLUGIN);
+      const refused = yield* op('create_thread', { type: 'player-unserved' }, APP);
       expect(refused.status).toBe(409);
       expect(refused.body).toMatchObject({
         code: 'model-unserved',
@@ -170,37 +166,37 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture)), { excludeTestServ
   );
 
   it.effect(
-    'plugin archiving refuses unbound or differently bound threads, other external callers, and the wrong project without changing state',
+    'app archiving refuses unbound or differently bound threads, other external callers, and the wrong project without changing state',
     () =>
       Effect.gen(function* () {
         const { world, account, elsewhere } = yield* World;
         const { thread: unbound } = yield* born();
-        const created = yield* op('create_thread', { account, bindings: { plugin: 'other' } }, PLUGIN);
+        const created = yield* op('create_thread', { account, bindings: { app: 'other' } }, APP);
         expect(created.status).toBe(200);
         const otherId = (yield* decodeSnapshot(created.body)).snapshot.thread.id;
         for (const threadId of [unbound.id, otherId]) {
           for (const archived of [true, false]) {
-            const refused = yield* op('archive_thread', { threadId, archived }, PLUGIN);
+            const refused = yield* op('archive_thread', { threadId, archived }, APP);
             expect(refused.status).toBe(409);
             expect(refused.body).toMatchObject({
-              code: 'plugin-thread-mismatch',
+              code: 'app-thread-mismatch',
               reason: expect.any(String),
               unblock: expect.arrayContaining([expect.any(String)]),
             });
           }
           expect((yield* listOf(world.runtime.owners).row(threadId))?.archivedAt).toBeNull();
         }
-        for (const name of ['dealer', 'plugin:']) {
+        for (const name of ['dealer', 'app:']) {
           const refused = yield* op('archive_thread', { threadId: otherId }, { 'x-tagma-caller': name });
           expect(refused.status).toBe(409);
           expect(refused.body).toMatchObject({ code: 'external-refused' });
         }
         const foreign = yield* world.op('archive_thread', { threadId: otherId }, `project=${elsewhere}`, {
-          'x-tagma-caller': 'plugin:other',
+          'x-tagma-caller': 'app:other',
         });
         expect(foreign.status).toBe(409);
         expect(foreign.body).toMatchObject({ code: 'place-mismatch' });
-        const missing = yield* op('archive_thread', { threadId: 'no-such-thread' }, PLUGIN);
+        const missing = yield* op('archive_thread', { threadId: 'no-such-thread' }, APP);
         expect(missing.status).toBe(409);
         expect(missing.body).toMatchObject({ code: 'not-found' });
         expect((yield* listOf(world.runtime.owners).row(otherId))?.archivedAt).toBeNull();

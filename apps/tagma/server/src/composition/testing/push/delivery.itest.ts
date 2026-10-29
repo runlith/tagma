@@ -51,7 +51,7 @@ const failed = Effect.fnUntraced(function* (threadId: string, runId: string): Ef
 const asked = Effect.fnUntraced(function* (id: string, title = id): Effect.fn.Return<Notification> {
   return {
     id,
-    sender: 'plugin:poker',
+    sender: 'app:poker',
     title,
     body: '',
     at: new Date(yield* Clock.currentTimeMillis).toISOString(),

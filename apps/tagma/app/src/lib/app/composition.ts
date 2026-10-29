@@ -29,12 +29,12 @@ import { BrowserLayer } from '$lib/features/browser/layer.js';
 import { DevicesRepo } from '$lib/features/devices/Repo.js';
 import { McpRepo } from '$lib/features/mcp/Repo.js';
 import { McpFeed } from '$lib/features/mcp/Feed.js';
-import { PluginActions } from '$lib/features/plugins/PluginActions.svelte.js';
-import { Sections } from '$lib/features/plugins/Sections.svelte.js';
-import { ViewSets } from '$lib/features/plugins/ViewSets.svelte.js';
-import { FloatingPanels } from '$lib/features/plugins/windows/FloatingPanels.svelte.js';
-import { NativeWindows } from '$lib/features/plugins/windows/NativeWindows.js';
-import { ViewWindows } from '$lib/features/plugins/windows/ViewWindows.js';
+import { Sections } from '$lib/features/tagma-apps/Sections.svelte.js';
+import { TagmaAppActions } from '$lib/features/tagma-apps/TagmaAppActions.svelte.js';
+import { ViewSets } from '$lib/features/tagma-apps/ViewSets.svelte.js';
+import { FloatingPanels } from '$lib/features/tagma-apps/windows/FloatingPanels.svelte.js';
+import { NativeWindows } from '$lib/features/tagma-apps/windows/NativeWindows.js';
+import { ViewWindows } from '$lib/features/tagma-apps/windows/ViewWindows.js';
 import { PaletteRepo } from '$lib/features/palette/Repo.js';
 import { ProjectPrefetch } from '$lib/features/projects/Prefetch.js';
 import { ProjectsLayer } from '$lib/features/projects/layer.js';
@@ -171,7 +171,7 @@ export function appLayers(desktop: DesktopApi | undefined) {
     SecretsRepo,
     ViewSets,
     Sections,
-    PluginActions,
+    TagmaAppActions,
     FloatingPanels,
     Layer.provide(ViewWindows, function* () {
       return (yield* Host).isDesktop ? new NativeWindows(bridged((bridge) => bridge.windows)()) : yield* FloatingPanels;

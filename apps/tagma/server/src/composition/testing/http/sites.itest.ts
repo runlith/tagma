@@ -15,19 +15,19 @@ import { makeDoorWorld } from '../doorFixture.js';
 
 const SANDBOX_PORT = portBlock(CHANNEL.port).sandbox;
 const setup = Effect.gen(function* () {
-  const world = yield* makeDoorWorld({ own: 'it installs a plugin for the machine' });
+  const world = yield* makeDoorWorld({ own: 'it installs an app for the machine' });
   const files = yield* FileSystem.FileSystem;
   const root = yield* world.directory('project');
   const project = yield* world.stealthProject(root);
   for (const id of ['board', 'other']) {
-    const plugin = join(root, '.plugins', id);
-    yield* files.makeDirectory(join(plugin, 'ui'), { recursive: true });
+    const app = join(root, '.tagma-apps', id);
+    yield* files.makeDirectory(join(app, 'ui'), { recursive: true });
     yield* files.writeFileString(
-      join(plugin, 'plugin.json'),
+      join(app, 'tagma-app.json'),
       JSON.stringify({ id, title: id, contributes: { views: [{ id: 'page', entry: `ui/${id}.html` }] } }),
     );
-    yield* files.writeFileString(join(plugin, 'ui', `${id}.html`), `<!doctype html><p>${id}</p>`);
-    expect(yield* world.op('install_plugin', { id }, `project=${project}`)).toMatchObject({ status: 200 });
+    yield* files.writeFileString(join(app, 'ui', `${id}.html`), `<!doctype html><p>${id}</p>`);
+    expect(yield* world.op('install_app', { id }, `project=${project}`)).toMatchObject({ status: 200 });
   }
   const routes = yield* HttpRouter.toHttpEffect(
     sandboxRoutes(world.runtime.views, Context.get(world.runtime.door, Access), Context.get(world.runtime.door, PlacedSites)).pipe(
@@ -57,14 +57,14 @@ const asked = Effect.fnUntraced(function* (url: string) {
 
 layer(Layer.merge(Layer.effect(Sites, setup), HttpPlatform.layer).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
-})('local plugin origins', (it) => {
-  it.effect('the local door names each plugin an origin of its own, and only that origin serves the plugin’s views', () =>
+})('local app origins', (it) => {
+  it.effect('the local door names each app an origin of its own, and only that origin serves the app’s views', () =>
     Effect.gen(function* () {
       const { world, project } = yield* Sites;
       const [state] = yield* Stream.runCollect(
         Stream.take(world.runtime.views.sets(project, Context.get(world.runtime.door, ViewSites)), 1),
       );
-      expect(new Map(state?.plugins.map((set) => [set.plugin, set.site]))).toEqual(
+      expect(new Map(state?.apps.map((set) => [set.app, set.site]))).toEqual(
         new Map([
           ['board', { _tag: 'served', origin: `http://board.localhost:${SANDBOX_PORT}` }],
           ['other', { _tag: 'served', origin: `http://other.localhost:${SANDBOX_PORT}` }],
@@ -78,7 +78,7 @@ layer(Layer.merge(Layer.effect(Sites, setup), HttpPlatform.layer).pipe(Layer.pro
     }),
   );
   it.effect(
-    'a plugin’s page may be framed only by the doors of this server and keeps its own origin; the MCP App proxy stands nowhere else',
+    'an app’s page may be framed only by the doors of this server and keeps its own origin; the MCP App proxy stands nowhere else',
     () =>
       Effect.gen(function* () {
         const page = yield* asked(`http://board.localhost:${SANDBOX_PORT}/ui/board.html`);
@@ -93,7 +93,7 @@ layer(Layer.merge(Layer.effect(Sites, setup), HttpPlatform.layer).pipe(Layer.pro
   );
 });
 
-it.live('a program holding the IPv6 loopback of the sandbox port turns local plugin views away instead of answering as them', () =>
+it.live('a program holding the IPv6 loopback of the sandbox port turns local app views away instead of answering as them', () =>
   Effect.gen(function* () {
     const sites = yield* makeLocalSites(SANDBOX_PORT);
     const holder = yield* Effect.acquireRelease(

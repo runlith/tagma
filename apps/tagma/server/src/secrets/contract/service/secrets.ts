@@ -72,5 +72,6 @@ export class SecretOwners extends Context.Service<
     ): Effect.Effect<void, E | SecretStoreFailed, R>;
     drop(kind: string, key: string): Effect.Effect<void, SecretStoreFailed>;
     adopt(kind: string, values: Readonly<Record<string, Readonly<Record<string, string>>>>): Effect.Effect<void, SecretStoreFailed>;
+    move(kind: string, into: string): Effect.Effect<void, SecretStoreFailed>;
   }
 >()('tagma/secrets/SecretOwners') {}

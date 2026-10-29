@@ -1,16 +1,19 @@
 import { makeStorage } from '@runlith/layer/testing';
 import { expect, test } from 'vitest';
-import { draftHolder, type Holder, threadHolder as held } from '$lib/shared/panes/holder.js';
+import { testSurfaces } from '$lib/app/testing.js';
+import { draftHolder, type Holder, sectionHolder, threadHolder as held } from '$lib/shared/panes/holder.js';
+import { panes as tagmaAppKinds } from '$lib/features/tagma-apps/panes.js';
 import { panes as threadKinds } from '$lib/features/threads/panes.js';
 import { PaneRegistry } from './PaneRegistry.js';
 import { KEPT_DAYS, KEPT_HOLDERS, TabLayouts } from './TabLayouts.svelte.js';
 import { testKind } from './testing.js';
 
-const KINDS = new PaneRegistry([...threadKinds, testKind('file'), testKind('browser')]);
+const KINDS = new PaneRegistry([...threadKinds, ...tagmaAppKinds, testKind('file'), testKind('browser')]);
+const SURFACES = testSurfaces();
 const DAY_MS = 86_400_000;
 
 function layoutsOn(storage = makeStorage(), now = () => 1_000 * DAY_MS) {
-  return new TabLayouts(1, storage, KINDS, now);
+  return new TabLayouts(1, storage, KINDS, SURFACES, now);
 }
 
 const ids = (layouts: TabLayouts, holder: Holder) => layouts.layout(holder).tabs.map((tab) => `${tab.kind}:${tab.id}`);
@@ -112,6 +115,26 @@ test('the start sweep drops layouts unused past the age limit and the oldest pas
   expect(ids(swept, held('t0'))).toEqual([]);
   expect(ids(swept, held('t1'))).toEqual(['file:x']);
   expect(storage.keys('tagma.tabs:1:')).toHaveLength(KEPT_HOLDERS);
+});
+
+test('tabs saved under the former plugin kind and section reload as app tabs of the app section, stored under its new key', () => {
+  const storage = makeStorage();
+  const tabs = [
+    { key: 'k1', kind: 'plugin', id: 'crm/board' },
+    { key: 'k2', kind: 'file', id: 'one.ts' },
+  ];
+  storage.setItem(
+    'tagma.tabs:1:section:plugin/crm/deals',
+    JSON.stringify({ tabs, active: 'k1', open: true, recent: [], at: 1_000 * DAY_MS }),
+  );
+  storage.setItem('tagma.tabs:1:a', JSON.stringify({ tabs: [tabs[0]], active: 'k1', open: true, recent: [], at: 1_000 * DAY_MS }));
+
+  const layouts = layoutsOn(storage);
+
+  expect(ids(layouts, sectionHolder('app/crm/deals'))).toEqual(['app:crm/board', 'file:one.ts']);
+  expect(layouts.layout(sectionHolder('app/crm/deals')).active).toBe('k1');
+  expect(ids(layouts, A)).toEqual(['app:crm/board']);
+  expect(storage.keys('tagma.tabs:1:').toSorted()).toEqual(['tagma.tabs:1:a', 'tagma.tabs:1:section:app/crm/deals']);
 });
 
 test('writing one thread’s layout leaves another thread’s stored layout as it was', () => {

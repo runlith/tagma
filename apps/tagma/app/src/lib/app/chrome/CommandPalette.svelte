@@ -11,7 +11,7 @@
   import { Tabs } from '$lib/features/checkout/files/Tabs.svelte.js';
   import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
   import type { ActionEnv } from '$lib/features/workspace/action.js';
-  import { PluginActions } from '$lib/features/plugins/PluginActions.svelte.js';
+  import { TagmaAppActions } from '$lib/features/tagma-apps/TagmaAppActions.svelte.js';
   import { ActionRegistry } from './ActionRegistry.js';
   import { ASK_VALUE, type FilesPort, PaletteModel, type Row as PaletteRow, SHOWN } from '$lib/features/palette/Palette.svelte.js';
   import type { GroupId } from '$lib/app/panes/palette.js';
@@ -101,7 +101,7 @@
     },
   };
 
-  const pluginActions = PluginActions.use();
+  const tagmaAppActions = TagmaAppActions.use();
   const declared = ActionRegistry.use().of(app);
 
   const model = new PaletteModel(
@@ -109,7 +109,7 @@
     () => reach?.tags ?? null,
     PaletteRepo.use(),
     SettingsRepo.use(),
-    () => [...declared, ...pluginActions.actions],
+    () => [...declared, ...tagmaAppActions.actions],
     env,
     files,
     Door.use(),

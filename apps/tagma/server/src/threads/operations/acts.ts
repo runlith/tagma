@@ -1,7 +1,7 @@
 import { Effect } from 'effect';
 import { OPERATOR_PRINCIPAL, threadIdOf } from '../../platform/contract/wire/actor.js';
 import { ThreadLookup } from '../contract/service/reads.js';
-import { PLUGIN_BINDING } from '../contract/wire/pluginEndings.js';
+import { TAGMA_APP_BINDING } from '../contract/wire/tagmaAppEndings.js';
 import type { Caller } from '../../platform/contract/wire/caller.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { body, pair, type RefusalOf } from '../../platform/contract/service/body.js';
@@ -152,10 +152,10 @@ export const ACT_PAIRS = {
       execute: Effect.fnUntraced(function* (input, _terms: ArchiveTerms, caller) {
         const call = yield* yield* CurrentProject;
         if (caller.actor.kind === 'external') {
-          const plugin = caller.actor.name.startsWith('plugin:') ? caller.actor.name.slice('plugin:'.length) : '';
-          if (plugin === '') {
-            return yield* new GateRefusal('external-refused', 'Archiving externally requires a plugin caller.', [
-              'call as plugin:<id>, or ask the operator to archive the thread',
+          const app = caller.actor.name.startsWith('app:') ? caller.actor.name.slice('app:'.length) : '';
+          if (app === '') {
+            return yield* new GateRefusal('external-refused', 'Archiving externally requires an app caller.', [
+              'call as app:<id>, or ask the operator to archive the thread',
             ]);
           }
           const target = yield* answering('archive_thread', (yield* ThreadLookup).find(input.threadId, OPERATOR_PRINCIPAL));
@@ -169,9 +169,9 @@ export const ACT_PAIRS = {
               `call archive_thread in project ${target.projectId}`,
             ]);
           }
-          if (target.bindings[PLUGIN_BINDING] !== plugin) {
-            return yield* new GateRefusal('plugin-thread-mismatch', `Thread ${input.threadId} is not bound to plugin ${plugin}.`, [
-              `archive a thread whose bindings.plugin names ${plugin}, or ask the operator to archive this thread`,
+          if (target.bindings[TAGMA_APP_BINDING] !== app) {
+            return yield* new GateRefusal('app-thread-mismatch', `Thread ${input.threadId} is not bound to app ${app}.`, [
+              `archive a thread whose bindings.app names ${app}, or ask the operator to archive this thread`,
             ]);
           }
         }

@@ -1,11 +1,11 @@
 import { views as declaration } from './contract/wire/module.js';
 import { Context } from 'effect';
 import { lazyLayer, type LiveDeclaration, liveOf, manifest } from '../platform/contract/service/manifest.js';
-import { PluginViews, ViewSites } from './contract/service/views.js';
+import { TagmaAppViews, ViewSites } from './contract/service/views.js';
 import { VIEW_FEEDS } from './contract/wire/feeds.js';
 
-const live: LiveDeclaration<typeof VIEW_FEEDS, PluginViews | ViewSites> = liveOf(VIEW_FEEDS, async (door) =>
-  (await import('./feeds.js')).viewChannels(Context.get(door, PluginViews), Context.get(door, ViewSites)),
+const live: LiveDeclaration<typeof VIEW_FEEDS, TagmaAppViews | ViewSites> = liveOf(VIEW_FEEDS, async (door) =>
+  (await import('./feeds.js')).viewChannels(Context.get(door, TagmaAppViews), Context.get(door, ViewSites)),
 );
 
 export const views = manifest({

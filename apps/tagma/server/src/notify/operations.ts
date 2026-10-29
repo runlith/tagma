@@ -12,12 +12,12 @@ export const NOTIFY_PAIRS: { readonly [K in NotifyOperationId]: OperationPair<(t
       execute: Effect.fnUntraced(function* (input, _prepared, caller) {
         if (caller.actor.kind !== 'external') {
           return yield* new GateRefusal('sender-required', 'a notification belongs to the external process that sends it', [
-            'send it from a plugin process, which calls as plugin:<id>',
+            'send it from an app process, which calls as app:<id>',
           ]);
         }
         if (!(yield* Senders).accepts(caller.actor.name)) {
           return yield* new GateRefusal('sender-required', `${caller.actor.name} declares no active notification receiver`, [
-            'declare contributes.notify with its outcome tool and enable the plugin on this machine',
+            'declare contributes.notify with its outcome tool and enable the app on this machine',
           ]);
         }
         const sent = yield* (yield* Notifications).send(caller.actor.name, {

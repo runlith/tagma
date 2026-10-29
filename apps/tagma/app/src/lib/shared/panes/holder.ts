@@ -14,4 +14,6 @@ export const sectionHolder = (surface: string): Holder => `${SECTION}${surface}`
 
 export const storedHolder = (stored: string): Holder => stored as Holder;
 
+export const holderSection = (holder: Holder): string | null => (holder.startsWith(SECTION) ? holder.slice(SECTION.length) : null);
+
 export const holderThread = (holder: Holder): string | null => (holder.startsWith(DRAFT) || holder.startsWith(SECTION) ? null : holder);

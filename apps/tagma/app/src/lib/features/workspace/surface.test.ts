@@ -80,24 +80,24 @@ test('a doubled surface or route, a missing or doubled home, an undeclared under
 test('a section registered on the fly joins the rail and answers its route until its disposer runs', () => {
   const surfaces = new SurfaceRegistry([
     declared('mail', { rail: 10, home: true }),
-    declared('plugin', { route: 'p', nested: true, remembers: false }),
+    declared('app', { route: 'p', nested: true, remembers: false }),
   ]);
-  const params = { project: 'runlith', plugin: 'crm', view: 'deals' };
-  const section = declared('plugin/crm/deals', { route: 'p/crm/deals', rail: 100, remembers: false });
+  const params = { project: 'runlith', app: 'crm', view: 'deals' };
+  const section = declared('app/crm/deals', { route: 'p/crm/deals', rail: 100, remembers: false });
 
-  expect(surfaces.of('/[project]/p/[plugin]/[view]', params)).toBe('plugin');
+  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app');
   const release = surfaces.register(section);
-  expect(surfaces.of('/[project]/p/[plugin]/[view]', params)).toBe('plugin/crm/deals');
-  expect(surfaces.of('/[project]/p/[plugin]/[view]', { ...params, view: 'other' })).toBe('plugin');
-  expect(surfaces.rail.map((one) => one.surface)).toEqual(['mail', 'plugin/crm/deals']);
-  expect(surfaces.pathOf('runlith', 'plugin/crm/deals')).toBe('/runlith/p/crm/deals');
-  expect(surfaces.portable('plugin/crm/deals')).toBe(false);
+  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app/crm/deals');
+  expect(surfaces.of('/[project]/p/[app]/[view]', { ...params, view: 'other' })).toBe('app');
+  expect(surfaces.rail.map((one) => one.surface)).toEqual(['mail', 'app/crm/deals']);
+  expect(surfaces.pathOf('runlith', 'app/crm/deals')).toBe('/runlith/p/crm/deals');
+  expect(surfaces.portable('app/crm/deals')).toBe(false);
   expect(() => surfaces.register(section)).toThrow(RegistryClash);
 
   release();
-  expect(surfaces.of('/[project]/p/[plugin]/[view]', params)).toBe('plugin');
+  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app');
   expect(surfaces.rail.map((one) => one.surface)).toEqual(['mail']);
-  expect(surfaces.find('plugin/crm/deals')).toBeUndefined();
+  expect(surfaces.find('app/crm/deals')).toBeUndefined();
 });
 
 test('a visit remembers a place only on the surfaces that declared it', () => {

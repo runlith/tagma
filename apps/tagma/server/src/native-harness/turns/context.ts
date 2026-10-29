@@ -20,7 +20,7 @@ import { Settings } from '../../settings/contract/service/values.js';
 import { Tags } from '../../graph/contract/service/vocabulary.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import type { McpServers } from '../../mcp/contract/service/servers.js';
-import type { PluginTools, ProjectTools } from '../../plugins/contract/service/tools.js';
+import type { ProjectTools, TagmaAppTools } from '../../tagma-apps/contract/service/tools.js';
 import type { ProjectRef } from '../../projects/contract/wire/project.js';
 import type { CheckoutMode, CommandDescription } from '@runlith/agent-tools/workspace';
 import type { CommandDescriptions } from './commandDescriptions.js';
@@ -87,7 +87,7 @@ export type ThreadContext = {
   readonly commandDescription: CommandDescription;
   readonly mcp: () => ReturnType<McpServers['Service']['palette']>;
   readonly mcpBound: McpBoundTools;
-  readonly plugins: ProjectTools;
+  readonly tagmaApps: ProjectTools;
   readonly webSearch: Context.Service.Shape<typeof WebSearch>;
   readonly web: ThreadWeb;
   readonly images: boolean;
@@ -129,7 +129,7 @@ export function threadContext(
   artifacts: ArtifactStore['Service'],
   mcp: Context.Service.Shape<typeof McpServers>,
   mcpBound: McpBoundTools,
-  plugins: PluginTools['Service'],
+  tagmaApps: TagmaAppTools['Service'],
   webSearch: Context.Service.Shape<typeof WebSearch>,
   models: ModelRequester,
   webs: RunWebs,
@@ -194,7 +194,7 @@ export function threadContext(
       const origin = originOf(target);
       const sourceRoot = world.facts.shared ? target.workingRoot : project.rootPath;
       const sources = yield* sourceCache.resolve({ threadId: thread.id, projectId, root: sourceRoot }, use, atOf(target));
-      const pluginTools = yield* plugins.of(projectId);
+      const appTools = yield* tagmaApps.of(projectId);
       const session: SessionRef = { harness: NATIVE_HARNESS, key: thread.id };
       const governing = governingProject(world.facts.shared ? (at) => places.resource(at) : null, projectId);
       return {
@@ -235,7 +235,7 @@ export function threadContext(
         servingGit,
         mcp: () => mcp.palette(projectId),
         mcpBound,
-        plugins: pluginTools,
+        tagmaApps: appTools,
         unavailableCapabilities: [],
         worktreeSetup,
         webSearch,

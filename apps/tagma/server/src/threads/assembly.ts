@@ -99,7 +99,7 @@ import { OperatorNotes } from './contract/service/notes.js';
 import { makeOperatorNotes } from './notes/owner.js';
 import { notesRule } from './notes/rule.js';
 import { AgentRules } from './contract/service/rules.js';
-import { PluginPoints } from '../plugins/contract/service/points.js';
+import { TagmaAppPoints } from '../tagma-apps/contract/service/points.js';
 import { ProjectChanges } from '../projects/contract/service/changes.js';
 import { ModelChanges } from './contract/service/modelChanges.js';
 import { makeModelChanges } from './events/modelChanges.js';
@@ -112,7 +112,7 @@ export const threadStoresLayer = Layer.effectContext(
     const places = yield* makeWorkingPlaces;
     const notes = yield* makeOperatorNotes;
     const pinnable = makePinnableViews();
-    yield* Effect.acquireRelease((yield* PluginPoints).declare(pinnable.point), (withdraw) => Effect.sync(withdraw));
+    yield* Effect.acquireRelease((yield* TagmaAppPoints).declare(pinnable.point), (withdraw) => Effect.sync(withdraw));
     return Context.make(ThreadInbox, yield* makeThreadInbox).pipe(
       Context.add(WorkPlaces, places),
       Context.add(PinOffers, pinnable),

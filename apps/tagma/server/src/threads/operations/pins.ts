@@ -14,7 +14,7 @@ export const PIN_PAIRS = {
           Effect.gen(function* () {
             const { project } = yield* yield* CurrentProject;
             const { threadId, ...pin } = input;
-            yield* (yield* PinOffers).require(pin.plugin, pin.view);
+            yield* (yield* PinOffers).require(pin.app, pin.view);
             yield* (yield* ThreadPins).pin(threadId, project.id, pin);
             return { status: 'pinned' as const, ...input };
           }),

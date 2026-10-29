@@ -28,7 +28,7 @@ const storage = Layer.unwrap(
   ),
 );
 
-const plugin: Caller = { actor: { kind: 'external', name: 'plugin:poker' }, files: null };
+const app: Caller = { actor: { kind: 'external', name: 'app:poker' }, files: null };
 const operator: Caller = { actor: { kind: 'operator' }, files: null };
 
 const question = { text: 'Raise to 40?', options: ['Yes', 'No'] };
@@ -39,8 +39,8 @@ const admittedSenders = Layer.effect(
   Senders,
   Effect.gen(function* () {
     const senders = yield* Senders;
-    senders.register('plugin:poker', { deliver: () => Effect.void });
-    senders.register('plugin:crm', { deliver: () => Effect.void });
+    senders.register('app:poker', { deliver: () => Effect.void });
+    senders.register('app:crm', { deliver: () => Effect.void });
     return senders;
   }),
 ).pipe(Layer.provide(sendersLayer));
@@ -51,7 +51,7 @@ const call = <A, E>(work: Effect.Effect<A, E, unknown>, notifications: Notificat
 const send = (
   notifications: Notifications['Service'],
   input: { title: string; body?: string; question?: typeof question; key?: string },
-  as = plugin,
+  as = app,
 ) => call(PAIRS.send_notification.body.execute(input, undefined, as), notifications);
 
 const answer = (notifications: Notifications['Service'], id: string, value: string) =>
@@ -106,14 +106,14 @@ it.effect(
         const sent = yield* send(notifications, { title: 'Table 3', body: 'Dealer is waiting', question });
         expect(yield* Queue.take(seen)).toMatchObject({
           _tag: 'put',
-          row: { id: sent.id, sender: 'plugin:poker', title: 'Table 3', question },
+          row: { id: sent.id, sender: 'app:poker', title: 'Table 3', question },
         });
 
         const first = yield* answer(notifications, sent.id, 'Yes');
         expect(first).toMatchObject({ status: 'resolved', id: sent.id, repeated: false, outcome: { kind: 'answered', answer: 'Yes' } });
         expect(yield* Queue.take(seen)).toEqual({ _tag: 'gone', id: sent.id });
         yield* until(Effect.sync(() => handed.length === 1));
-        expect(handed[0]).toMatchObject({ id: sent.id, sender: 'plugin:poker', kind: 'answered', answer: 'Yes' });
+        expect(handed[0]).toMatchObject({ id: sent.id, sender: 'app:poker', kind: 'answered', answer: 'Yes' });
 
         const again = yield* answer(notifications, sent.id, 'No');
         expect(again).toMatchObject({ repeated: true, outcome: first.outcome });
@@ -137,7 +137,7 @@ it.effect(
         expect(yield* Effect.flip(answer(notifications, asking.id, 'Maybe'))).toMatchObject({ code: 'bad-answer' });
         expect(yield* Effect.flip(send(notifications, { title: 'Hello' }, operator))).toMatchObject({ code: 'sender-required' });
         expect(
-          yield* Effect.flip(send(notifications, { title: 'Hello' }, { actor: { kind: 'external', name: 'plugin:unknown' }, files: null })),
+          yield* Effect.flip(send(notifications, { title: 'Hello' }, { actor: { kind: 'external', name: 'app:unknown' }, files: null })),
         ).toMatchObject({ code: 'sender-required' });
         expect(yield* Effect.flip(dismiss(notifications, 'unknown'))).toMatchObject({ code: 'not-found' });
 
@@ -161,7 +161,7 @@ it.effect('an outcome the receiver refuses is handed again later and again after
               Effect.sync(() => void handed.push(outcome)),
               attempted,
             )
-          : Effect.tapError(Effect.fail(new OutcomeRefused({ reason: 'the plugin is not running' })), attempted);
+          : Effect.tapError(Effect.fail(new OutcomeRefused({ reason: 'the app is not running' })), attempted);
       const store = yield* MachineStore;
       const owed = Effect.orDie(
         Effect.map(
@@ -231,7 +231,7 @@ it.effect(
   () =>
     world(
       Effect.gen(function* () {
-        const crm: Caller = { actor: { kind: 'external', name: 'plugin:crm' }, files: null };
+        const crm: Caller = { actor: { kind: 'external', name: 'app:crm' }, files: null };
         const first = yield* boot(() => Effect.void);
         const seen = yield* watch(first.notifications);
         expect(yield* Queue.take(seen)).toEqual({ _tag: 'all', rows: [] });
@@ -284,7 +284,7 @@ it.effect(
         expect(yield* send(notifications, { title: 'Issue 7', key: 'issue-7' })).toMatchObject({ id: sends[0]!.id, repeated: true });
         expect(yield* Effect.flip(send(notifications, { title: 'Issue 8', key: 'issue-8' }))).toMatchObject({ code: 'too-many-open' });
         expect(
-          yield* send(notifications, { title: 'another sender' }, { actor: { kind: 'external', name: 'plugin:crm' }, files: null }),
+          yield* send(notifications, { title: 'another sender' }, { actor: { kind: 'external', name: 'app:crm' }, files: null }),
         ).toMatchObject({ repeated: false });
       }),
     ),

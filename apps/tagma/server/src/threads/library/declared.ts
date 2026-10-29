@@ -155,7 +155,7 @@ export const makeDeclaredAgents = Effect.fnUntraced(function* ({
     }
     const packaged = yield* packages.agentIn(projectId, typeId);
     if (packaged !== undefined && validate(packaged) === undefined) {
-      return yield* offerTo(caller, projectId, typeId, PLUGIN_AGENT, () => ({
+      return yield* offerTo(caller, projectId, typeId, APP_AGENT, () => ({
         ...offerOf(files.profileOf(packaged)),
         approvalMode: trust.id,
       }));
@@ -219,12 +219,12 @@ const OFFERED: Judge = () => null;
 
 const CODE_TYPE: Standing = { to: 'agents', what: 'an agent of this server' };
 const HARNESS_TYPE: Standing = { to: 'agents', what: 'a harness of this server' };
-const PLUGIN_AGENT: Standing = { to: 'operator', what: "a plugin's agent" };
+const APP_AGENT: Standing = { to: 'operator', what: "an app's agent" };
 
 const STANDINGS: Record<AgentFile['origin'], Standing> = {
   personal: { to: 'agents', what: "a file of the operator's personal agents" },
   project: { to: 'operator', what: "a file of this project's agents" },
-  plugin: PLUGIN_AGENT,
+  app: APP_AGENT,
 };
 
 function withheld(typeId: string, standing: Standing, set: boolean): ThreadTypeWithheld {

@@ -16,7 +16,7 @@
   const question = $derived(row.question);
   const reply = $derived(attention.noticeReplyOf(row));
   const busy = $derived(reply?.state === 'sending');
-  const sender = $derived(row.sender.replace(/^plugin:/, ''));
+  const sender = $derived(row.sender.replace(/^app:/, ''));
 
   const choice = $derived(cn('rounded-full font-medium disabled:opacity-60', touch ? 'min-h-9 px-4 text-ui' : 'h-6 px-2 text-small'));
 

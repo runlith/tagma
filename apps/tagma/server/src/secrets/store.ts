@@ -71,5 +71,18 @@ export const adopted = (held: Held, kind: string, given: Readonly<Record<string,
     held,
   );
 
+export const moved = (held: Held, kind: string, into: string): Held => {
+  const leaving = held.owners[kind];
+  if (leaving === undefined || kind === into) return held;
+  const { [kind]: _kind, ...rest } = held.owners;
+  return Object.entries(leaving).reduce(
+    (standing: Held, [key, kept]) => {
+      const values = adopted(standing, into, { [key]: kept.values });
+      return kept.signIn === undefined || signInOf(values, into, key) !== undefined ? values : withSignIn(values, into, key, kept.signIn);
+    },
+    { owners: rest },
+  );
+};
+
 export const openStore = (home: string): CredentialFile<Held> =>
   makeCredentialFile<Held>({ path: join(home, SECRETS_FILE), codec: { empty: () => EMPTY, decode: decodeHeld } });

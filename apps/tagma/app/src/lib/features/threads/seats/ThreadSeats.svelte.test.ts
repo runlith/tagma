@@ -4,6 +4,7 @@ import { PaneRegistry } from '$lib/app/panes/PaneRegistry.js';
 import type { MainSeat, SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
 import { TabLayouts } from '$lib/app/panes/TabLayouts.svelte.js';
 import { testArea, testKind } from '$lib/app/panes/testing.js';
+import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
 import { threadHolder } from '$lib/shared/panes/holder.js';
 import type { PaneKind } from '$lib/shared/panes/pane.js';
 import { ThreadSeats } from './ThreadSeats.svelte.js';
@@ -44,7 +45,7 @@ test('a page an agent opens lands without focus in the layout of the screen that
 test('a page of another project’s agent lands in the screen that shows that agent as a tab', () => {
   const { panes } = testArea(KINDS);
   const seats = new ThreadSeats(panes);
-  const home = new TabLayouts(2, makeStorage(), new PaneRegistry(KINDS), () => 1);
+  const home = new TabLayouts(2, makeStorage(), new PaneRegistry(KINDS), new SurfaceRegistry([]), () => 1);
   panes.seatMain(slot('lead'));
   panes.open({ kind: 'thread', id: '2:sub' });
 

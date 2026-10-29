@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { WORLD_COMMAND, dataDirectory, hostBinary, installationsRoot } from '../../installation/contract/wire/layout.js';
 import { worldDirectory } from '../../installation/setup/launcher.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
-import { PLUGIN_ENVIRONMENT } from '../../plugins/contract/wire/environment.js';
+import { TAGMA_APP_ENVIRONMENT } from '../../tagma-apps/contract/wire/environment.js';
 import { CHANNEL } from '../developer/channel.js';
 
 type Running = { readonly pid: number; readonly ppid: number; readonly command: string };
@@ -61,7 +61,7 @@ const installs =
   refuse('no-home', `HOME names no home directory, so where ${CHANNEL.name} is installed is unknown`, []);
 const cli = join(worldDirectory(installs), WORLD_COMMAND);
 const window = `/${hostBinary(CHANNEL.name)}`;
-const plugin = ` ${PLUGIN_ENVIRONMENT.data}=${data}/`;
+const appData = ` ${TAGMA_APP_ENVIRONMENT.data}=${data}/`;
 
 const listed = (args: readonly string[]): readonly string[] =>
   Bun.spawnSync(['ps', ...args])
@@ -74,8 +74,8 @@ const running = (): readonly Running[] =>
     return row === null ? [] : [{ pid: Number(row[1]), ppid: Number(row[2]), command: row[3]! }];
   });
 
-const plugged = (): ReadonlySet<number> =>
-  new Set(listed(['-E', '-axww', '-o', 'pid=,command=']).flatMap((line) => (line.includes(plugin) ? [Number.parseInt(line, 10)] : [])));
+const tagmaApps = (): ReadonlySet<number> =>
+  new Set(listed(['-E', '-axww', '-o', 'pid=,command=']).flatMap((line) => (line.includes(appData) ? [Number.parseInt(line, 10)] : [])));
 
 const subtree = (all: readonly Running[], roots: readonly Running[]): readonly Running[] => {
   const children = Map.groupBy(all, (one) => one.ppid);
@@ -96,14 +96,12 @@ const windows = (all: readonly Running[]): readonly Running[] =>
   );
 
 const world = (all: readonly Running[]): readonly Running[] => {
-  const plugins = plugged();
+  const apps = tagmaApps();
   return subtree(
     all,
     all.filter(
       (one) =>
-        one.command.includes(window) ||
-        (one.command.startsWith(`${data}/`) && !one.command.includes(' mcp-serve ')) ||
-        plugins.has(one.pid),
+        one.command.includes(window) || (one.command.startsWith(`${data}/`) && !one.command.includes(' mcp-serve ')) || apps.has(one.pid),
     ),
   );
 };

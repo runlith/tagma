@@ -14,7 +14,7 @@ import {
   type SignInRefresh,
 } from './contract/service/secrets.js';
 import { SECRET_VALUE_MAX, type SecretRow, type SecretSet } from './contract/wire/rows.js';
-import { adopted, dropped, EMPTY, type Held, put, signInOf, valuesOf, withSignIn, without } from './store.js';
+import { adopted, dropped, EMPTY, type Held, moved, put, signInOf, valuesOf, withSignIn, without } from './store.js';
 
 const storeFailed = () => new SecretStoreFailed({ message: 'the secret store could not be read or written' });
 
@@ -204,6 +204,9 @@ export const makeKeeper = (input: { readonly file: CredentialFile<Held> | null }
     adopt: Effect.fn('SecretOwners.adopt')(function* (kind, given) {
       if (file === null) return yield* new SecretStoreFailed({ message: 'this server keeps no data directory to move secrets into' });
       yield* change((current) => adopted(current, kind, given));
+    }),
+    move: Effect.fn('SecretOwners.move')(function* (kind, into) {
+      yield* change((current) => moved(current, kind, into));
     }),
   });
 

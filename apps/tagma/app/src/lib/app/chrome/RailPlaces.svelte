@@ -2,11 +2,11 @@
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
   import { Router } from '@runlith/layer/Router';
   import { Overlay } from '@runlith/primitives/Overlay.svelte';
-  import { launchesOf } from '$lib/features/plugins/launchers.js';
-  import PluginIcon from '$lib/features/plugins/PluginIcon.svelte';
-  import { ViewSets } from '$lib/features/plugins/ViewSets.svelte.js';
-  import { ViewWindows } from '$lib/features/plugins/windows/ViewWindows.js';
-  import WindowIcon from '$lib/features/plugins/windows/WindowIcon.svelte';
+  import { launchesOf } from '$lib/features/tagma-apps/launchers.js';
+  import TagmaAppIcon from '$lib/features/tagma-apps/TagmaAppIcon.svelte';
+  import { ViewSets } from '$lib/features/tagma-apps/ViewSets.svelte.js';
+  import { ViewWindows } from '$lib/features/tagma-apps/windows/ViewWindows.js';
+  import WindowIcon from '$lib/features/tagma-apps/windows/WindowIcon.svelte';
   import { AgentTypes } from '$lib/features/threads/AgentTypes.svelte.js';
   import LibraryIcon from '$lib/features/threads/LibraryIcon.svelte';
   import { AgentLibraryOverlay } from '$lib/features/threads/overlay.js';
@@ -18,7 +18,7 @@
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import { cn } from '$lib/shared/utils.js';
   import MorePlaces from './MorePlaces.svelte';
-  import type { RailPlace } from './place.js';
+  import { launchPlaceId, type RailPlace } from './place.js';
   import { RailPins } from './RailPins.svelte.js';
 
   let { project }: { project: Project } = $props();
@@ -58,7 +58,7 @@
       } satisfies RailPlace,
     }));
     const launches = launchesOf(sets.sets, project).map((launch): RailPlace => ({
-      id: `plugin.${launch.plugin}.${launch.view}`,
+      id: launchPlaceId(launch.tagmaApp, launch.view),
       label: launch.title,
       icon: WindowIcon,
       current: false,
@@ -113,7 +113,7 @@
             >
               <RailMark current={place.current} />
               {#if place.iconUrl !== undefined}
-                <PluginIcon src={place.iconUrl} class="size-4" />
+                <TagmaAppIcon src={place.iconUrl} class="size-4" />
               {:else}
                 <Icon class="size-4" />
               {/if}

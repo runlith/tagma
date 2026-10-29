@@ -321,7 +321,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           expect(ids).toContain('the-shared-checkout');
           expect(ids).toContain('keep-warm');
           expect(ids).toContain('mcp-servers');
-          expect(ids).toContain('plugins');
+          expect(ids).toContain('apps');
           expect(ids).not.toContain('browser-pages');
           expect(ids).not.toContain('held-processes');
           expect(narrowed.toolCatalog?.tools.map((tool) => tool.name)).toEqual(['ask_user', 'bash', 'tool_search']);

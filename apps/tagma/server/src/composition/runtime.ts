@@ -177,13 +177,13 @@ import { ConnectorCatalog } from '../connectors/contract/service/catalog.js';
 import { shippedCatalog } from '../connectors/shipped.js';
 import { McpServers } from '../mcp/contract/service/servers.js';
 import { mcp } from '../mcp/mcp.js';
-import { plugins } from '../plugins/plugins.js';
+import { tagmaApps } from '../tagma-apps/tagma-apps.js';
 import { views } from '../views/views.js';
 import { secrets } from '../secrets/secrets.js';
 import { SecretsPlace } from '../secrets/contract/service/secrets.js';
-import { PluginViews, ViewSites } from '../views/contract/service/views.js';
+import { TagmaAppViews, ViewSites } from '../views/contract/service/views.js';
 import { WantedSites } from '../remote/contract/service/sites.js';
-import { PluginPlace, Plugins } from '../plugins/contract/service/supervision.js';
+import { TagmaAppPlace, TagmaApps } from '../tagma-apps/contract/service/supervision.js';
 import { machineStoreLayer } from '../installation/registry/restore.js';
 import { installation } from '../installation/installation.js';
 import { portBlock } from '../installation/contract/wire/ports.js';
@@ -265,8 +265,8 @@ export type ServerRuntime = {
   openMaintenance: Effect.Effect<void>;
   measurement: Measurement;
   mcp: Context.Service.Shape<typeof McpServers>;
-  plugins: Plugins['Service'];
-  views: PluginViews['Service'];
+  tagmaApps: TagmaApps['Service'];
+  views: TagmaAppViews['Service'];
   artifacts: ArtifactStore['Service'];
   status: RuntimeStatus;
   door: Context.Context<RuntimeDoor>;
@@ -329,7 +329,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     exposure?: (standing: Exposure['Service']) => Exposure['Service'];
     connectors?: ConnectorCatalog['Service'];
     sender?: Sender['Service'];
-    pluginServer?: string;
+    tagmaAppServer?: string;
     localOrigin?: string;
     adapters?: readonly AdapterSource[];
     userEnvironment?: UserEnvironment['Service'];
@@ -511,9 +511,9 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       ? accountCliLayer.pipe(Layer.provide(Layer.merge(executionsLayerWithDeps, installedHarnesses)))
       : Layer.succeed(AccountCli, options.accountCli);
   const readyProviders = providerLayer.pipe(Layer.provide(accountCli));
-  const pluginPlace = Layer.succeed(PluginPlace, {
+  const tagmaAppPlace = Layer.succeed(TagmaAppPlace, {
     home: dataPath,
-    server: options.pluginServer ?? null,
+    server: options.tagmaAppServer ?? null,
   });
   const browsers = closing(
     'browser',
@@ -576,7 +576,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                 Layer.provide(
                   Layer.effect(
                     WantedSites,
-                    Effect.map(PluginViews, (shown) => ({ names: shown.standing })),
+                    Effect.map(TagmaAppViews, (shown) => ({ names: shown.standing })),
                   ),
                 ),
               ),
@@ -636,12 +636,12 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                 ),
               ),
             ),
-            Layer.provideMerge(closing('plugin views', views.lifetimes.installation)),
+            Layer.provideMerge(closing('app views', views.lifetimes.installation)),
             Layer.provideMerge(
               closing(
-                'plugins',
-                plugins.lifetimes.installation.pipe(
-                  Layer.provide(pluginPlace),
+                'apps',
+                tagmaApps.lifetimes.installation.pipe(
+                  Layer.provide(tagmaAppPlace),
                   Layer.provide(BunFileSystem.layer),
                   Layer.provideMerge(
                     closing('secrets', secrets.lifetimes.installation.pipe(Layer.provide(Layer.succeed(SecretsPlace, { home: dataPath })))),
@@ -840,8 +840,8 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       Context.add(HeapSnapshots, Context.get(built, HeapSnapshots)),
     ),
     mcp: Context.get(built, McpServers),
-    plugins: Context.get(built, Plugins),
-    views: Context.get(built, PluginViews),
+    tagmaApps: Context.get(built, TagmaApps),
+    views: Context.get(built, TagmaAppViews),
     artifacts: shelf,
     status,
     bindings,

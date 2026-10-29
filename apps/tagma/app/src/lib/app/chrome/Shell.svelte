@@ -13,7 +13,7 @@
   import DesktopTabKeys from '$lib/features/checkout/files/DesktopTabKeys.svelte';
   import DictationKeys from '$lib/features/speech/dictation/Keys.svelte';
   import CallKeys from '$lib/features/speech/calls/CallKeys.svelte';
-  import ShellPlugins from '$lib/features/plugins/ShellPlugins.svelte';
+  import ShellTagmaApps from '$lib/features/tagma-apps/ShellTagmaApps.svelte';
   import DictationArm from '$lib/features/speech/dictation/Arm.svelte';
   import TerminalCloses from '$lib/features/executions/terminal/CloseDialogs.svelte';
   import TerminalPanel from '$lib/features/executions/terminal/Panel.svelte';
@@ -158,7 +158,7 @@
 
 <DictationKeys />
 <CallKeys />
-<ShellPlugins />
+<ShellTagmaApps />
 <WarmHolds />
 <DictationArm />
 {#if host.isDesktop && host.os === 'macos'}

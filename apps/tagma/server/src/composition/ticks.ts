@@ -1,5 +1,6 @@
 import { Context, Effect, Layer } from 'effect';
-import { PluginPoints, PluginPointRefused } from '../plugins/contract/service/points.js';
+import { TagmaAppPoints, TagmaAppPointRefused } from '../tagma-apps/contract/service/points.js';
+import { tagmaAppCaller } from '../tagma-apps/contract/wire/manifest.js';
 import { ScheduleContributions } from '../schedule/contract/service/contributions.js';
 import { TickReceivers } from '../schedule/contract/service/receivers.js';
 import { TickRefused, Ticks } from '../schedule/contract/service/ticks.js';
@@ -8,7 +9,7 @@ import { tickReceiversLayer } from '../schedule/receiving.js';
 
 export const ticks = Layer.effectContext(
   Effect.gen(function* () {
-    const points = yield* PluginPoints;
+    const points = yield* TagmaAppPoints;
     const receivers = yield* TickReceivers;
     return Context.make(Ticks, { deliver: receivers.deliver }).pipe(
       Context.add(ScheduleContributions, {
@@ -17,21 +18,21 @@ export const ticks = Layer.effectContext(
             name: 'schedule',
             owner: 'schedule',
             schema: ScheduledTools,
-            register: Effect.fnUntraced(function* ({ plugin, value, tools, caller }) {
+            register: Effect.fnUntraced(function* ({ app, value, tools, caller }) {
               const byName = new Map(value.map((entry) => [entry.name, entry.tool]));
               const available = new Set(tools?.map((descriptor) => descriptor.name));
               for (const tool of byName.values()) {
                 if (!available.has(tool)) {
-                  return yield* new PluginPointRefused({ point: 'schedule', reason: `the process serves no tool ${tool}` });
+                  return yield* new TagmaAppPointRefused({ point: 'schedule', reason: `the process serves no tool ${tool}` });
                 }
               }
-              return yield* register(`plugin:${plugin.id}`, value, {
+              return yield* register(tagmaAppCaller(app.id), value, {
                 deliver: Effect.fnUntraced(function* (tick) {
                   const tool = byName.get(tick.name);
                   if (tool === undefined) return yield* new TickRefused({ reason: `the schedule ${tick.name} has no tool` });
                   const answer = yield* caller
                     .call(
-                      plugin.id,
+                      app.id,
                       tool,
                       {
                         name: tick.name,
@@ -43,10 +44,10 @@ export const ticks = Layer.effectContext(
                     )
                     .pipe(Effect.mapError((cause) => new TickRefused({ reason: cause.message })));
                   if ('isError' in answer && answer.isError === true) {
-                    return yield* new TickRefused({ reason: `${plugin.id} answered the schedule ${tick.name} with an error` });
+                    return yield* new TickRefused({ reason: `${app.id} answered the schedule ${tick.name} with an error` });
                   }
                 }),
-              }).pipe(Effect.mapError((cause) => new PluginPointRefused({ point: 'schedule', reason: cause.message })));
+              }).pipe(Effect.mapError((cause) => new TagmaAppPointRefused({ point: 'schedule', reason: cause.message })));
             }),
           }),
       }),
