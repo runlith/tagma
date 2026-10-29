@@ -32,6 +32,8 @@ export type StoredDraft = {
 const INDEX_KEY = 'tagma.drafts';
 const DRAFT_KEY = 'tagma.draft.';
 const KEPT_MAX = 50;
+const SPEND_STEPS = 10;
+const SPEND_FROM_FIVE: Readonly<Record<number, number>> = { 1: 1, 2: 3, 3: 5, 4: 8, 5: 10 };
 
 export class DraftStore {
   constructor(private readonly storage: PlatformStorage) {}
@@ -47,7 +49,7 @@ export class DraftStore {
   }
 
   write(key: string, draft: StoredDraft): void {
-    this.storage.setItem(DRAFT_KEY + key, JSON.stringify(draft));
+    this.storage.setItem(DRAFT_KEY + key, JSON.stringify({ ...draft, spendSteps: SPEND_STEPS }));
     const kept = new Set(readIndex(this.storage));
     if (kept.has(key)) return;
     kept.add(key);
@@ -127,7 +129,7 @@ function draftOf(value: unknown): StoredDraft | null {
     switches: switchesOf(row.switches),
     approvalMode: typeof row.approvalMode === 'string' ? row.approvalMode : null,
     delegation: typeof row.delegation === 'boolean' ? row.delegation : null,
-    team: Option.getOrNull(teamOf(row.team)),
+    team: Option.getOrNull(Option.map(teamOf(row.team), (team) => (row.spendSteps === SPEND_STEPS ? team : spendOnTen(team)))),
     newWorktree: newWorktreeOf(row.newWorktree),
     images: idsOf(row.images),
     files: idsOf(row.files),
@@ -149,6 +151,13 @@ function newWorktreeOf(value: unknown): DraftNewWorktree | null {
 }
 
 const teamOf = Schema.decodeUnknownOption(TeamLayer);
+
+const spendOnTen = (team: TeamLayer): TeamLayer => ({
+  ...team,
+  models: team.models.map((edit) =>
+    'model' in edit && edit.spend !== undefined ? { ...edit, spend: SPEND_FROM_FIVE[edit.spend] ?? edit.spend } : edit,
+  ),
+});
 
 const documentOf = Schema.decodeUnknownOption(Schema.Struct({ id: Schema.String, title: Schema.String, text: Schema.String }));
 

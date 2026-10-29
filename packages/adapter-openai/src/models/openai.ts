@@ -137,8 +137,8 @@ const OPENAI_SPECS = {
 } satisfies ModelSpecs;
 
 const OPENAI_TEAM: readonly TeamRating[] = [
-  { model: 'gpt-6.1-sol', reasoning: 'high', open: 4, depth: 7, taste: 6, ui: 5, spend: 3, not: ['design'] },
-  { model: 'gpt-6.1-sol', reasoning: 'xhigh', open: 5, depth: 8, taste: 7, ui: 5, spend: 4 },
+  { model: 'gpt-6.1-sol', reasoning: 'high', open: 4, depth: 7, taste: 6, ui: 5, spend: 5, not: ['design'] },
+  { model: 'gpt-6.1-sol', reasoning: 'xhigh', open: 5, depth: 8, taste: 7, ui: 5, spend: 8 },
   {
     model: 'gpt-6-luna',
     reasoning: 'medium',
@@ -150,7 +150,7 @@ const OPENAI_TEAM: readonly TeamRating[] = [
     only: ['research', 'fix'],
     note: 'lookups and small edits',
   },
-  { model: 'gpt-6-astra', reasoning: 'high', open: 9, depth: 9, taste: 8, ui: 7, spend: 5, operatorOnly: true },
+  { model: 'gpt-6-astra', reasoning: 'high', open: 9, depth: 9, taste: 8, ui: 7, spend: 10, operatorOnly: true },
 ];
 
 export const openaiConsoleDescription: ProviderDescription = {

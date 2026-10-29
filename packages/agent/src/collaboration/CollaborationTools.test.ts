@@ -362,7 +362,19 @@ describe('collaborationTools', () => {
     }),
   );
   test('spawn_agent names each enabled row of the sub-agent list in its model parameter, and no disabled one', () => {
-    const row = { open: 5, depth: 5, taste: 5, ui: 5, spend: 3, only: [], not: [], note: null, operatorOnly: false, shipped: true };
+    const row = {
+      open: 5,
+      depth: 5,
+      taste: 5,
+      ui: 5,
+      spend: 5,
+      favor: 0,
+      only: [],
+      not: [],
+      note: null,
+      operatorOnly: false,
+      shipped: true,
+    };
     const team = {
       models: [
         { ...row, provider: ordinaryModel.provider, model: ordinaryModel.id, reasoning: ordinaryRung, on: true },

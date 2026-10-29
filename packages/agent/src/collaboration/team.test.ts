@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { modelCatalog } from '@runlith/llm/models/catalog';
 import type { ProviderDescription, TeamRating } from '@runlith/llm/models/description';
-import { enabledModels, NO_REVIEW, reviewers, teamOf, type TeamEdit } from './team';
+import { enabledModels, NO_REVIEW, reviewers, teamModelsWords, teamOf, type TeamEdit } from './team';
 
 const provider = (id: string, team: readonly TeamRating[]): ProviderDescription => ({
   id,
@@ -56,6 +56,27 @@ describe('teamOf', () => {
       ['quick', null, 5, 5, 1, true, false],
     ]);
     expect(after.models[0]).toMatchObject({ open: 8, depth: 4 });
+  });
+
+  test('agents compare spend minus favor, and the row keeps both as set', () => {
+    const team = teamOf({
+      catalog: catalog(7),
+      connected: new Set(['alpha']),
+      edits: [
+        { provider: 'alpha', model: 'deep', reasoning: 'high', on: true, spend: 6, favor: 2 },
+        { provider: 'alpha', model: 'deep', reasoning: 'xhigh', on: true, favor: -1 },
+      ],
+      review: NO_REVIEW,
+    });
+    expect(team.models.map((row) => [row.spend, row.favor])).toEqual([
+      [6, 2],
+      [3, -1],
+    ]);
+    const compared = [...teamModelsWords(team).matchAll(/alpha\/deep (\w+) — [^;]*spend (-?\d+)/g)].map((hit) => [hit[1], Number(hit[2])]);
+    expect(compared).toEqual([
+      ['high', 4],
+      ['xhigh', 4],
+    ]);
   });
 
   test('a provider switched off disables its rows, keeps their own on, and leaves them in the reviewer pool', () => {

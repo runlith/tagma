@@ -14,7 +14,8 @@ export const NOTE_WORDS = 6;
 
 const Name = Schema.String.check(Schema.isMinLength(1));
 const Rating = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10 }));
-const Spend = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 5 }));
+const Spend = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10 }));
+const Favor = Schema.Int.check(Schema.isBetween({ minimum: -5, maximum: 5 }));
 const Work = Schema.Array(Schema.Literals(TEAM_WORK));
 const Note = Schema.String.check(
   Schema.makeFilter((text: string) => text.trim().split(/\s+/u).length <= NOTE_WORDS || `a note holds at most ${NOTE_WORDS} words`),
@@ -30,6 +31,7 @@ export const TeamModelEdit = Schema.Struct({
   taste: Schema.optionalKey(Rating),
   ui: Schema.optionalKey(Rating),
   spend: Schema.optionalKey(Spend),
+  favor: Schema.optionalKey(Favor),
   only: Schema.optionalKey(Work),
   not: Schema.optionalKey(Work),
   note: Schema.optionalKey(Schema.NullOr(Note)),
@@ -65,6 +67,7 @@ export const TeamModel = Schema.Struct({
   taste: Rating,
   ui: Rating,
   spend: Spend,
+  favor: Favor,
   only: Work,
   not: Work,
   note: Schema.NullOr(Schema.String),
@@ -86,7 +89,19 @@ export type TeamSources = {
 
 const keyOf = (row: TeamModelKey): string => JSON.stringify([row.provider, row.model, row.reasoning]);
 
-const UNRATED = { open: 5, depth: 5, taste: 5, ui: 5, spend: 3, only: [], not: [], note: null, operatorOnly: false, on: true } as const;
+const UNRATED = {
+  open: 5,
+  depth: 5,
+  taste: 5,
+  ui: 5,
+  spend: 5,
+  favor: 0,
+  only: [],
+  not: [],
+  note: null,
+  operatorOnly: false,
+  on: true,
+} as const;
 
 const served = (catalog: ModelCatalog, row: TeamModelKey): boolean => {
   const option = catalog.modelsFor(row.provider, 'text').find((candidate) => candidate.id === row.model);
@@ -108,6 +123,7 @@ export function teamOf({ catalog, connected, edits, review }: TeamSources): Team
         taste: rating.taste,
         ui: rating.ui,
         spend: rating.spend,
+        favor: 0,
         only: rating.only ?? [],
         not: rating.not ?? [],
         note: rating.note ?? null,
@@ -144,7 +160,7 @@ function rowWords(row: TeamModel): string {
     ...(row.note === null ? [] : [row.note]),
     ...(row.operatorOnly ? ['operator-only'] : []),
   ];
-  const ratings = `open ${row.open}, depth ${row.depth}, taste ${row.taste}, ui ${row.ui}, spend ${row.spend}`;
+  const ratings = `open ${row.open}, depth ${row.depth}, taste ${row.taste}, ui ${row.ui}, spend ${row.spend - row.favor}`;
   return `${teamModelWords(row)} — ${[ratings, ...limits].join('; ')}`;
 }
 
@@ -155,7 +171,7 @@ export function modelChoiceWords(team: Team): string {
   if (enabled.length === 0)
     return 'Omit it: the child inherits yours. No model is chosen for sub-agents; name one only when the operator names it in the conversation.';
   return [
-    'A model id; absent, the child inherits yours. Rate the task 1–10 on open (how much it decides itself instead of following a given design), depth (hidden causes, races, invariants, optimization), taste (structure, names, boundaries, readability) and ui (what a person sees: the interface and its words); take the row meeting every need with the lowest spend (1–5). `only` and `not` bind; an operator-only row runs only on the operator’s word; a model the operator named in the conversation wins over the list. Pass the row’s provider, model and reasoning.',
+    'A model id; absent, the child inherits yours. Rate the task 1–10 on open (how much it decides itself instead of following a given design), depth (hidden causes, races, invariants, optimization), taste (structure, names, boundaries, readability) and ui (what a person sees: the interface and its words); take the row meeting every need with the lowest spend. `only` and `not` bind; an operator-only row runs only on the operator’s word; a model the operator named in the conversation wins over the list. Pass the row’s provider, model and reasoning.',
     ...enabled.map(rowWords),
   ].join('\n');
 }

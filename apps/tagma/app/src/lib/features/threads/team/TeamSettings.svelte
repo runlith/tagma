@@ -30,12 +30,22 @@
   const MODELS = 'agent.models';
   const REVIEW = 'agent.review';
   const RATINGS = [
-    { field: 'open', label: 'Open', top: 10 },
-    { field: 'depth', label: 'Depth', top: 10 },
-    { field: 'taste', label: 'Taste', top: 10 },
-    { field: 'ui', label: 'UI', top: 10 },
-    { field: 'spend', label: 'Spend', top: 5 },
+    { field: 'open', label: 'Open', from: 1, to: 10 },
+    { field: 'depth', label: 'Depth', from: 1, to: 10 },
+    { field: 'taste', label: 'Taste', from: 1, to: 10 },
+    { field: 'ui', label: 'UI', from: 1, to: 10 },
+    { field: 'spend', label: 'Spend', from: 1, to: 10 },
+    {
+      field: 'favor',
+      label: 'Favor',
+      from: -5,
+      to: 5,
+      title: 'Subtracted from the spend agents compare: above 0 they pick this row more often',
+    },
   ] as const;
+  const steps = (rating: (typeof RATINGS)[number]): readonly number[] =>
+    Array.from({ length: rating.to - rating.from + 1 }, (_, at) => rating.from + at);
+  const stepWords = (rating: (typeof RATINGS)[number], step: number): string => (rating.from < 0 && step > 0 ? `+${step}` : String(step));
   type RatingField = (typeof RATINGS)[number]['field'];
   type RowFields = Partial<Omit<TeamModelEdit, keyof TeamModelKey>>;
 
@@ -156,8 +166,8 @@
   <div class="grid gap-2" data-setting={MODELS}>
     <p class="text-small text-muted-foreground">
       Agents pick a child’s model from the rows switched on; none is on until you choose it. Rate 1–10 how much it decides itself (open),
-      how it holds on hard problems (depth), its code taste and the interface it makes (ui); spend 1–5. Rows show while their provider has a
-      connected account.
+      how it holds on hard problems (depth), its code taste and the interface it makes (ui), and what it costs (spend). Favor tilts the
+      choice without changing the ratings: agents compare spend minus favor. Rows show while their provider has a connected account.
     </p>
     <div class="overflow-x-auto">
       <table class="w-full text-small">
@@ -165,7 +175,8 @@
           <tr>
             <th class={CELL} title="Agents may start children on it">On</th>
             <th class={CELL}>Model</th>
-            {#each RATINGS as rating (rating.field)}<th class={CELL}>{rating.label}</th>{/each}
+            {#each RATINGS as rating (rating.field)}<th class={CELL} title={'title' in rating ? rating.title : undefined}>{rating.label}</th
+              >{/each}
             <th class={CELL}>Only</th>
             <th class={CELL}>Not</th>
             <th class={CELL}>Note</th>
@@ -186,7 +197,7 @@
                   onchange={(event) => void write(MODELS, withEdit(edits, { provider: group.provider, on: event.currentTarget.checked }))}
                 />
               </td>
-              <td class="px-1 pt-3 pb-1 text-small font-medium text-muted-foreground" colspan="11">{providers.modeName(group.provider)}</td>
+              <td class="px-1 pt-3 pb-1 text-small font-medium text-muted-foreground" colspan="12">{providers.modeName(group.provider)}</td>
             </tr>
             {#each group.rows as row (rowKey(row))}
               {@const name = rowName(providers.models, row)}
@@ -213,8 +224,7 @@
                       disabled={busy}
                       onchange={(event) => rate(row, rating.field, Number(event.currentTarget.value))}
                     >
-                      {#each Array.from({ length: rating.top }, (_, at) => at + 1) as step (step)}<option value={step}>{step}</option
-                        >{/each}
+                      {#each steps(rating) as step (step)}<option value={step}>{stepWords(rating, step)}</option>{/each}
                     </select>
                   </td>
                 {/each}
@@ -276,7 +286,7 @@
               </tr>
             {/each}
           {:else}
-            <tr><td class="py-3 text-muted-foreground" colspan="12">No rows: connect a provider or add a model.</td></tr>
+            <tr><td class="py-3 text-muted-foreground" colspan="13">No rows: connect a provider or add a model.</td></tr>
           {/each}
         </tbody>
       </table>
