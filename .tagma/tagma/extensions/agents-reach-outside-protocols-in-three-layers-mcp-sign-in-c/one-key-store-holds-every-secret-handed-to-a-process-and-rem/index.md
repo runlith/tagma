@@ -112,7 +112,7 @@ A server offering none of these refuses `sign_in_mcp_server` with that reason.
 - **Exchange.** The code is exchanged through a kit entry (`@runlith/mcp/auth`) over the SDK's discovery, registration, authorization, exchange and refresh functions, never its `auth()` orchestrator, so server code never imports the SDK and no transport is needed.
 
 **Flow.**
-1. `add_mcp_server` for an HTTP server whose first answer is a 401 carrying a Bearer challenge declares it and answers after that first handshake, so the row shows `needs-sign-in`.
+1. `add_mcp_server` for an HTTP server whose first answer is a 401 carrying a Bearer challenge declares it and answers after that first handshake, so the row shows `needs-sign-in` in every open pool that runs it; a project whose pool is not open, or is narrowed to other servers, reads `pending` until it runs it.
 2. `sign_in_mcp_server` (operator-only) discovers and resolves the client identity, and answers the authorization URL.
 3. The app opens it (`links.open`, as provider sign-in does).
 4. The callback completes the exchange, and the pool connects.
@@ -138,7 +138,7 @@ A server offering none of these refuses `sign_in_mcp_server` with that reason.
 Every check runs through the operations a caller uses, against an in-process test MCP server behind an in-process test authorization server.
 
 - **Sign-in.**
-  - `add_mcp_server` answers a `needs-sign-in` row, and `sign_in_mcp_server` answers an authorization URL.
+  - `add_mcp_server` in a project answers a `needs-sign-in` row, and `sign_in_mcp_server` answers an authorization URL.
   - Following the URL through the local door's callback connects the server and lists its tools.
   - The same works through the remote door's callback, with no device cookie.
 - **Rejected callbacks.** A callback is refused, and nothing is stored, for:
