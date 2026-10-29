@@ -13,7 +13,7 @@ edges:
     to: 01a188b7-9e8a-7d0d-bd44-2c1207ffe778
 sources:
   - kind: file
-    ref: apps/tagma/server/src/native-harness/transcript/rested.worker.ts
+    ref: apps/tagma/server/src/native-harness/transcript/foldServer.ts
 ---
 The rested fold worker (`native-harness/transcript/rested.worker.ts`) loads the thread entry reader it decodes with by `import(source)`, `source` being the module the main thread's reader names (`ThreadEntryReader.source`: `composition/entryKinds.ts` for the composed reader, the agent kit itself for a core-only reader). The platforms inspection of rule 50520d64 cannot resolve that non-literal load, and its `loaders` declaration admits only code installed outside the tree, so the load stands as debt.
 
