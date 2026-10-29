@@ -5,10 +5,16 @@ import type { ExecutionsFailure } from '@runlith/executions/Executions';
 import type { HostAuthority } from '@runlith/executions/HostAuthority';
 import type { HostLifecycle } from '@runlith/executions/HostLifecycle';
 import type { HostAddress } from '@runlith/executions/hostAddress';
-import { ARTIFACT_FILE, type ArtifactManifest, type ArtifactPlatform } from '@runlith/executions/protocol/artifact';
+import { ARTIFACT_FILE, type ArtifactManifest, type ArtifactPlatform, type Digest } from '@runlith/executions/protocol/artifact';
 import { pathOf, readArtifact } from '@runlith/executions/hostArtifacts';
 import type { HostRegistration } from '@runlith/executions/HostRegistration';
-import { bootPath, HostBoot as HostBootFile, type HostLifetime, OUTPUT_LIMIT_VARIABLE } from '@runlith/executions/protocol/boot';
+import {
+  bootPath,
+  HostBoot as HostBootFile,
+  type HostLifetime,
+  loadRefusalOf,
+  OUTPUT_LIMIT_VARIABLE,
+} from '@runlith/executions/protocol/boot';
 import type { Registration } from '@runlith/executions/protocol/registration';
 import type { ExecutionPolicy } from '@runlith/executions/protocol/capacity';
 import { type InstallationId, type HostRequestRef, HostRequestKey } from '@runlith/executions/protocol/execution';
@@ -148,6 +154,22 @@ export const bootInput = (
 };
 
 export const bootText = Schema.encodeSync(Schema.fromJsonString(HostBootFile));
+
+export const logicFell = Effect.fnUntraced(function* (
+  files: FileSystem.FileSystem,
+  state: string,
+  digest: Digest,
+): Effect.fn.Return<string | undefined> {
+  const read = yield* Effect.result(files.readFileString(loadRefusalOf(bootPath(state, digest))));
+  if (read._tag === 'Failure') {
+    if (read.failure.reason._tag !== 'NotFound') {
+      yield* Effect.logDebug('the load refusal a host logic leaves could not be read', { reason: read.failure.reason._tag });
+    }
+    return undefined;
+  }
+  const cause = read.success.trim();
+  return cause.length > 0 ? `the logic of ${digest} does not come up: ${cause}` : undefined;
+});
 
 export const hostRaisable = Effect.fnUntraced(function* (files: FileSystem.FileSystem, bundle: string) {
   const read = yield* Effect.result(files.exists(`${bundle}/${ARTIFACT_FILE}`));

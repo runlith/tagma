@@ -61,7 +61,6 @@ struct Holder<P: Platform> {
     returning: Option<Return>,
     unsealed: bool,
     rejected: Vec<Prepared>,
-    abandoned: Vec<Prepared>,
 }
 
 impl<P: Platform> Holder<P> {
@@ -237,8 +236,7 @@ impl<P: Platform> Holder<P> {
         }
         eprintln!("execution-holder: the logic of the activated bundle never came up; the prior bundle stands again");
         self.table.logic = back.logic;
-        self.rejected.push(back.from.clone());
-        self.abandoned.push(back.from);
+        self.rejected.push(back.from);
         true
     }
 
@@ -432,8 +430,8 @@ impl<P: Platform> Holder<P> {
                     return self.refuse(request, Failure::new(Reason::Running, "the holder is already preparing a change"));
                 }
                 self.table.prepared = None;
-                if self.abandoned.contains(&prepared) {
-                    return self.refuse(request, Failure::new(Reason::Invalid, "the holder turned back from this bundle, whose logic never came up"));
+                if self.rejected.contains(&prepared) {
+                    return self.refuse(request, Failure::new(Reason::Invalid, "the holder turned back from this bundle: its logic never came up or its holder did not take over"));
                 }
                 match self.platform.differs(&prepared.holder) {
                     Err(failure) => self.refuse(request, failure),
@@ -693,7 +691,6 @@ pub fn run<P: Platform>() -> Result<i32, String> {
         returning: None,
         unsealed,
         rejected,
-        abandoned: Vec::new(),
     };
     holder.children();
     holder.start();

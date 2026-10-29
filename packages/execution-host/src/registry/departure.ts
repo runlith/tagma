@@ -1,6 +1,7 @@
 import { Clock, Deferred, Duration, Effect, FileSystem, Ref, Schema, Semaphore } from 'effect';
-import { partOf, verifyArtifact, type ArtifactFailure } from '@runlith/executions/hostArtifacts';
-import { bootPath, yieldRefusalPath } from '@runlith/executions/protocol/boot';
+import { partOf, readArtifact, verifyArtifact, type ArtifactFailure } from '@runlith/executions/hostArtifacts';
+import type { Digest } from '@runlith/executions/protocol/artifact';
+import { bootPath, YieldRefusal, yieldRefusalPath } from '@runlith/executions/protocol/boot';
 import { HostRequestRef } from '@runlith/executions/protocol/execution';
 import type { StreamPositions } from '@runlith/executions/protocol/record';
 import type { Refusal } from '@runlith/executions/protocol/host';
@@ -194,6 +195,7 @@ export type Departure = {
 type Activation = { readonly _tag: 'Departing' } | { readonly _tag: 'Refused'; readonly refusal: Refusal };
 
 const decodeOperation = Schema.decodeUnknownEffect(HostRequestRef);
+const encodeRefusal = Schema.encodeSync(Schema.fromJsonString(YieldRefusal));
 
 export const departure = (registry: RegistryState): Departure => {
   const { admission, quiescence, holder, lost, registryScope, fs, path, entered } = registry;
@@ -243,8 +245,13 @@ export const departure = (registry: RegistryState): Departure => {
   });
 
   const state = entered.registration.state;
-  const refuse = (detail: string) =>
-    Effect.flatMap(Effect.result(fs.writeFileString(yieldRefusalPath(state), `${detail}\n`)), (written) =>
+  const candidateOf = Effect.provideService(readArtifact(path.join(state, NEXT)), FileSystem.FileSystem, fs).pipe(
+    Effect.map((manifest): Digest | undefined => manifest.identity.digest),
+    Effect.catchTag('ArtifactMissing', () => Effect.succeed(undefined)),
+    Effect.result,
+  );
+  const refuse = (candidate: Digest | undefined, detail: string) =>
+    Effect.flatMap(Effect.result(fs.writeFileString(yieldRefusalPath(state), encodeRefusal({ candidate, detail }))), (written) =>
       written._tag === 'Failure'
         ? Effect.logError(`the refusal of the asked yield could not be written: ${detail}`, written.failure)
         : Effect.logWarning(`the asked yield was refused: ${detail}`),
@@ -272,20 +279,24 @@ export const departure = (registry: RegistryState): Departure => {
       Effect.gen(function* () {
         if ((yield* Deferred.isDone(accepted)) || (yield* Ref.get(ending)) !== 'open') return;
         const phase = yield* admission.phase();
-        if (phase === 'fenced') return yield* refuse('its admission is fenced, and a yield signal does not open it');
-        if (phase !== 'open') return;
+        if (phase !== 'open' && phase !== 'fenced') return;
+        const read = yield* candidateOf;
+        if (read._tag === 'Failure')
+          return yield* refuse(undefined, `the candidate at ${NEXT} cannot be named: ${artifactDetail(read.failure)}`);
+        const named = read.success;
+        if (phase === 'fenced') return yield* refuse(named, 'its admission is fenced, and a yield signal does not open it');
         const candidate = yield* Effect.result(fs.exists(path.join(state, NEXT)));
-        if (candidate._tag === 'Failure') return yield* refuse(`${NEXT} could not be read: ${candidate.failure.message}`);
-        if (!candidate.success) return yield* refuse(`no candidate stands at ${NEXT}`);
+        if (candidate._tag === 'Failure') return yield* refuse(named, `${NEXT} could not be read: ${candidate.failure.message}`);
+        if (!candidate.success) return yield* refuse(named, `no candidate stands at ${NEXT}`);
         const operation = yield* decodeOperation({
           installation: entered.installation,
           operation: `yield-asked:${crypto.randomUUID()}`,
         }).pipe(Effect.orDie);
         const checked = yield* candidateChecked(registry, operation, yield* broken(registry));
-        if (checked._tag === 'Unprepared') return yield* refuse(`${checked.reason}: ${checked.detail}`);
-        if (checked._tag === 'Refused') return yield* refuse(`${checked.refusal._tag}: ${checked.refusal.reason}`);
+        if (checked._tag === 'Unprepared') return yield* refuse(named, `${checked.reason}: ${checked.detail}`);
+        if (checked._tag === 'Refused') return yield* refuse(named, `${checked.refusal._tag}: ${checked.refusal.reason}`);
         const activation = yield* activated(operation.operation);
-        if (activation._tag === 'Refused') yield* refuse(`${activation.refusal._tag}: ${activation.refusal.reason}`);
+        if (activation._tag === 'Refused') yield* refuse(named, `${activation.refusal._tag}: ${activation.refusal.reason}`);
       }),
     ),
     channelLost: gate.withPermits(1)(
@@ -299,12 +310,16 @@ export const departure = (registry: RegistryState): Departure => {
         }).pipe(Effect.orDie);
         const candidate = yield* Effect.result(fs.exists(path.join(state, NEXT)));
         if (candidate._tag === 'Failure') {
-          yield* refuse(`${NEXT} could not be read: ${candidate.failure.message}`);
+          yield* Effect.logWarning(`the channel to the holder is torn and ${NEXT} could not be read: ${candidate.failure.message}`);
           return yield* depart(operation.operation, false);
         }
         if (!candidate.success) return yield* depart(operation.operation, false);
         const checked = yield* candidateChecked(registry, operation, true);
-        if (checked._tag === 'Unprepared') yield* refuse(`${checked.reason}: ${checked.detail}`);
+        if (checked._tag === 'Unprepared') {
+          yield* Effect.logWarning(
+            `the channel to the holder is torn and its candidate is not taken: ${checked.reason}: ${checked.detail}`,
+          );
+        }
         yield* depart(operation.operation, checked._tag === 'Prepared');
       }),
     ),

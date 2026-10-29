@@ -61,6 +61,10 @@ fn input(state: &mut State, requests: Vec<Vec<u8>>) {
     state.events.push_back(Event::Readable(1));
 }
 
+fn refusal(replies: &[Vec<u8>], serial: u32) -> Option<u8> {
+    replies.iter().find(|frame| frame[4] == 133 && frames::request_of(&frame[4..]) == serial).map(|frame| frame[9])
+}
+
 fn usage() -> Usage {
     Usage { user_micros: 0, system_micros: 0, peak_rss_bytes: 0 }
 }
@@ -111,6 +115,8 @@ impl Platform for Memory {
                     input(&mut state, vec![request(7, 1), prepare(2, "broken"), request(14, 3)]);
                 } else if !state.returned && state.proven == 2 {
                     input(&mut state, vec![prepare(4, "broken")]);
+                } else if state.returned && state.proven == 1 {
+                    input(&mut state, vec![prepare(8, "broken"), request(14, 9)]);
                 } else if now >= 23_750 && state.next.as_deref() == Some("broken") {
                     state.next = Some("fixed".into());
                     input(&mut state, vec![prepare(5, "stale")]);
@@ -219,8 +225,7 @@ fn returned_bundle_is_not_reactivated_and_a_fresh_entry_overrides_a_stale_prepar
     let state = state.borrow();
     assert_eq!(state.standing, "fixed");
     assert_eq!(state.prior.as_deref(), Some("proven"));
-    let refused = state.replies.iter().find(|frame| frame[4] == 133 && frames::request_of(&frame[4..]) == 4).unwrap();
-    assert_eq!(refused[9], Reason::Invalid as u8);
+    assert_eq!(refusal(&state.replies, 4), Some(Reason::Invalid as u8));
     assert!(state.replies.contains(&frames::done(5)));
     let starts: Vec<_> = state.starts.iter().map(|(at, argv)| (*at, argv[0].as_str())).collect();
     assert_eq!(&starts[..9], &[(0, "proven"), (0, "broken"), (0, "broken"), (250, "broken"), (750, "broken"), (1_750, "broken"), (3_750, "broken"), (7_750, "broken"), (7_750, "proven")]);
@@ -230,7 +235,7 @@ fn returned_bundle_is_not_reactivated_and_a_fresh_entry_overrides_a_stale_prepar
 }
 
 #[test]
-fn returned_holder_rejects_its_failed_successor_across_longest_pauses() {
+fn returned_holder_refuses_to_prepare_or_retake_its_failed_successor() {
     let state = Rc::new(RefCell::new(State {
         standing: "proven".into(), next: Some("broken".into()), alive: true, returned: true, ..State::default()
     }));
@@ -239,6 +244,8 @@ fn returned_holder_rejects_its_failed_successor_across_longest_pauses() {
     let state = state.borrow();
     assert_eq!(state.standing, "fixed");
     assert_eq!(state.prior.as_deref(), Some("proven"));
+    assert_eq!(refusal(&state.replies, 8), Some(Reason::Invalid as u8));
+    assert_eq!(refusal(&state.replies, 9), Some(Reason::Invalid as u8));
     let starts: Vec<_> = state.starts.iter().map(|(at, argv)| (*at, argv[0].as_str())).collect();
     assert_eq!(starts, [(0, "proven"), (0, "proven"), (250, "proven"), (750, "proven"), (1_750, "proven"), (3_750, "proven"), (7_750, "proven"), (15_750, "proven"), (23_750, "proven"), (23_750, "fixed")]);
     assert!(state.replies.contains(&frames::done(5)));

@@ -2,7 +2,7 @@ import { Effect, FileSystem, Runtime, Schema } from 'effect';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
-import { HostBoot } from '@runlith/executions/protocol/boot';
+import { HostBoot, loadRefusalOf } from '@runlith/executions/protocol/boot';
 import { BootRefused } from './boot';
 import { serve } from './composition/host';
 import { holderLayer } from './composition/platform';
@@ -16,9 +16,17 @@ export const bootFile = (argv: ReadonlyArray<string>): Effect.Effect<string, Boo
     : Effect.fail(new BootRefused({ detail: 'expected exactly one argument: the path of the boot file' }));
 };
 
-export const main = Effect.gen(function* () {
-  const files = yield* FileSystem.FileSystem;
-  const path = yield* bootFile(process.argv);
+const causeOf = (failure: { readonly _tag: string; readonly message: string }): string =>
+  failure.message.length > 0 ? `${failure._tag}: ${failure.message}` : failure._tag;
+
+const fell = (files: FileSystem.FileSystem, boot: string, cause: string): Effect.Effect<void> =>
+  Effect.flatMap(Effect.result(files.writeFileString(loadRefusalOf(boot), `${cause}\n`, { mode: 0o600 })), (written) =>
+    written._tag === 'Failure'
+      ? Effect.logError(`the refusal of this logic's load could not be published: ${cause}`, written.failure)
+      : Effect.void,
+  );
+
+const loaded = Effect.fnUntraced(function* (files: FileSystem.FileSystem, path: string) {
   const text = yield* files
     .readFileString(path)
     .pipe(
@@ -30,6 +38,12 @@ export const main = Effect.gen(function* () {
     Effect.catchTag('SchemaError', (error) => Effect.fail(new BootRefused({ detail: error.message }))),
   );
   return yield* serve(boot, { telemetry: {} }).pipe(Effect.provide(holderLayer(boot.library)));
+});
+
+export const main = Effect.gen(function* () {
+  const files = yield* FileSystem.FileSystem;
+  const path = yield* bootFile(process.argv);
+  return yield* loaded(files, path).pipe(Effect.tapError((failure) => fell(files, path, causeOf(failure))));
 }).pipe(
   Effect.scoped,
   Effect.provide(HostRegistration.layer),

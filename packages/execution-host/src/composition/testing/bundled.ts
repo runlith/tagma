@@ -21,8 +21,10 @@ const LIBRARY_PART = 'native/libexecution_platform.dylib';
 export type Offer = {
   readonly build: string;
   readonly holder?: 'standing' | 'distinct' | 'refusing';
-  readonly logic?: 'working' | 'boot-exit' | 'store-ahead' | 'store-repair';
+  readonly logic?: 'working' | 'boot-exit' | 'store-ahead' | 'store-repair' | 'unbundled';
 };
+
+export const NOWHERE = 'nowhere';
 
 const storeStep = (sql: string) =>
   [
@@ -135,7 +137,7 @@ export const bundledStand = async (directory: string, executions: number): Promi
         share: hostShare(funded, executions),
         limits,
         lifetime: 'with-parent',
-        artifact: bundle,
+        artifact: offer.logic === 'unbundled' ? join(directory, NOWHERE) : bundle,
       }),
       { mode: 0o600 },
     );

@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import type { Digest } from './artifact';
+import { Digest } from './artifact';
 import { ExecutionPolicy } from './capacity';
 import { Registration } from './registration';
 import { WireLimits } from './wire';
@@ -25,4 +25,12 @@ export const bootName = (digest: Digest): string => `boot-${digest.slice(digest.
 
 export const bootPath = (state: string, digest: Digest): string => `${state}/${bootName(digest)}`;
 
+export const loadRefusalOf = (boot: string): string => `${boot.endsWith('.json') ? boot.slice(0, -'.json'.length) : boot}.refused`;
+
 export const yieldRefusalPath = (state: string): string => `${state}/bundle.next.refused`;
+
+export const YieldRefusal = Schema.Struct({
+  candidate: Schema.optional(Digest),
+  detail: Schema.String,
+});
+export type YieldRefusal = typeof YieldRefusal.Type;

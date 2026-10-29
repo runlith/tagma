@@ -6,11 +6,12 @@ import type { HostRegistration } from '@runlith/executions/HostRegistration';
 import { HostRequestKey, type HostRequestRef, type InstallationId } from '@runlith/executions/protocol/execution';
 import type { QuiescenceTicket } from '@runlith/executions/protocol/runtime';
 import type { HostLifetime } from '@runlith/executions/protocol/boot';
+import type { Digest } from '@runlith/executions/protocol/artifact';
 import type { HostVerdict } from '../../installation/contract/service/steps.js';
 import { HostUnprepared } from '../../installation/contract/service/succession.js';
 import type { RestartHost } from '../../installation/contract/wire/source.js';
 import type { HostPreparationRefused } from '../contract/service/host.js';
-import { pacedClaim, type StateClaim } from './boot.js';
+import { logicFell, pacedClaim, type StateClaim } from './boot.js';
 import type { CustodyAssurance } from './custody.js';
 import { candidateOf, candidateRestart, hostBundleNext, hostBundleOwn, placeCandidate, promoteBoot, withdrawCandidate } from './offer.js';
 
@@ -182,16 +183,23 @@ const logicOf = (registrations: HostRegistration['Service'], state: string): Eff
       }) as const,
   });
 
-type Departed = { readonly _tag: 'Replaced' } | { readonly _tag: 'Yielding' } | { readonly _tag: 'Stays'; readonly detail: string };
+type Departed =
+  | { readonly _tag: 'Replaced' }
+  | { readonly _tag: 'Yielding' }
+  | { readonly _tag: 'Fallen'; readonly detail: string }
+  | { readonly _tag: 'Stays'; readonly detail: string };
 
 const departed = Effect.fnUntraced(function* (
   executions: HostLifecycle['Service'],
+  files: FileSystem.FileSystem,
   registrations: HostRegistration['Service'],
   state: string,
   leaving: LogicReading,
+  awaited: Digest | undefined,
   ticket: QuiescenceTicket,
   claim: Effect.Effect<StateClaim>,
 ): Effect.fn.Return<Departed> {
+  const fell = awaited === undefined ? Effect.succeed(undefined) : logicFell(files, state, awaited);
   const before = leaving._tag === 'Read' ? leaving.logic : undefined;
   const replaced = Effect.map(
     logicOf(registrations, state),
@@ -220,6 +228,8 @@ const departed = Effect.fnUntraced(function* (
     return undefined;
   });
   for (;;) {
+    const cause = yield* fell;
+    if (cause !== undefined) return { _tag: 'Fallen', detail: cause };
     if (yield* replaced) return { _tag: 'Replaced' };
     const verdict = yield* reasked();
     if (verdict?._tag === 'Stays' && (yield* replaced)) return { _tag: 'Replaced' };
@@ -255,6 +265,17 @@ export const yieldPlace = Effect.fnUntraced(function* (
   claim: Effect.Effect<StateClaim>,
 ) {
   const leaving = yield* logicOf(registrations, state);
+  const pending = yield* candidateOf(files, state).pipe(
+    Effect.catchTag('HostPreparationRefused', (refused) =>
+      Effect.as(
+        Effect.logWarning(
+          `the candidate of the successor could not be named, so a refusal of its logic at load is not seen: ${refused.detail}`,
+        ),
+        undefined,
+      ),
+    ),
+  );
+  const awaited = pending === undefined || pending._tag === 'Unread' ? undefined : pending.digest;
   const fenced = yield* Effect.result(executions.quiesce(keyed(installation, 'quiesce')));
   if (fenced._tag === 'Failure') {
     return yield* Effect.logError(`the execution host could not be quiesced for its successor: ${fenced.failure._tag}; its logic stays`);
@@ -279,12 +300,20 @@ export const yieldPlace = Effect.fnUntraced(function* (
     if (answered.failure._tag !== 'WireLost') {
       return yield* stays(executions, ticket, restore, `the execution host logic could not be asked to yield: ${answered.failure._tag}`);
     }
-    const after = yield* departed(executions, registrations, state, leaving, ticket, claim);
+    const after = yield* departed(executions, files, registrations, state, leaving, awaited, ticket, claim);
     switch (after._tag) {
       case 'Replaced':
         return yield* Effect.log('the execution host logic closed its connection after Yield and another logic took its place');
       case 'Yielding':
         return yield* Effect.log('the execution host logic closed its connection after Yield and, asked again, yields its place');
+      case 'Fallen': {
+        const restored = yield* Effect.result(restore);
+        return yield* Effect.logError(
+          `the execution host logic left after Yield, and ${after.detail}${
+            restored._tag === 'Failure' ? `; the boot input before it could not be put back: ${restored.failure.detail}` : ''
+          }`,
+        );
+      }
       case 'Stays':
         return yield* stays(executions, ticket, restore, `the execution host logic closed its connection after Yield; ${after.detail}`);
     }

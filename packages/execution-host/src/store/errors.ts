@@ -51,7 +51,11 @@ export class StoreUnreadable extends Data.TaggedError('StoreUnreadable')<{
 
 export class StoreAhead extends Data.TaggedError('StoreAhead')<{
   readonly detail: string;
-}> {}
+}> {
+  override get message(): string {
+    return this.detail;
+  }
+}
 
 export type StoreFailure = EffectDrizzleQueryError | SqlError;
 

@@ -5,6 +5,7 @@ import { TestClock } from 'effect/testing';
 import { WireUnavailable } from '@runlith/executions/Executions';
 import { HostRegistration, RegistrationMissing } from '@runlith/executions/HostRegistration';
 import { Digest } from '@runlith/executions/protocol/artifact';
+import { bootPath, loadRefusalOf, yieldRefusalPath } from '@runlith/executions/protocol/boot';
 import { InstallationId } from '@runlith/executions/protocol/execution';
 import type { Registration } from '@runlith/executions/protocol/registration';
 import type { RuntimeStatus } from '@runlith/executions/protocol/runtime';
@@ -51,13 +52,17 @@ const world = Effect.fnUntraced(function* (told: YieldAsk) {
   const registration = yield* Ref.make<Registration | undefined>(registered(BEFORE, 10));
   const answer = yield* Ref.make<RuntimeStatus['phase'] | undefined>(undefined);
   const claim = yield* Ref.make<StateClaim>({ _tag: 'Held', holders: [1] });
-  const refusal = yield* Ref.make<string | undefined>(undefined);
+  const written = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
+  const write = (path: string, text: string) => Ref.update(written, (files) => new Map([...files, [path, text]]));
   const watching = yield* Deferred.make<void>();
   const noop = FileSystem.makeNoop({});
   const watch = {
     files: FileSystem.makeNoop({
       readFileString: (path) =>
-        Effect.flatMap(Ref.get(refusal), (said) => (said === undefined ? noop.readFileString(path) : Effect.succeed(said))),
+        Effect.flatMap(Ref.get(written), (files) => {
+          const said = files.get(path);
+          return said === undefined ? noop.readFileString(path) : Effect.succeed(said);
+        }),
     }),
     registrations: HostRegistration.of({
       read: () =>
@@ -74,7 +79,7 @@ const world = Effect.fnUntraced(function* (told: YieldAsk) {
     state: STATE,
   };
   const arrive = Effect.tap(Effect.forkChild(awaitLogic(watch, placed)), () => Deferred.await(watching));
-  return { arrive, registration, answer, claim, refusal };
+  return { arrive, registration, answer, claim, write };
 });
 
 it.effect('a logic of this build that comes up ten minutes after the last one left is waited for and ends the wait', () =>
@@ -102,11 +107,37 @@ it.effect('a holder that lets go of the state ends the wait, so the server raise
 
 it.effect('a standing logic of another build that refuses the candidate ends the wait with its own words', () =>
   Effect.gen(function* () {
-    const { arrive, refusal } = yield* world({ _tag: 'Asked' });
+    const { arrive, write } = yield* world({ _tag: 'Asked' });
     const arriving = yield* arrive;
     yield* TestClock.adjust('5 minutes');
-    yield* Ref.set(refusal, 'the store went past this build\n');
+    yield* write(yieldRefusalPath(STATE), 'the store went past this build\n');
     yield* TestClock.adjust('100 millis');
     expect(yield* Fiber.join(arriving)).toEqual({ _tag: 'Refused', detail: 'the store went past this build' });
+  }),
+);
+
+it.effect('a refusal that names another candidate is not taken as the answer for this one', () =>
+  Effect.gen(function* () {
+    const { arrive, write } = yield* world({ _tag: 'Asked' });
+    const arriving = yield* arrive;
+    yield* TestClock.adjust('5 minutes');
+    yield* write(yieldRefusalPath(STATE), JSON.stringify({ candidate: BEFORE, detail: 'no candidate stands at bundle.next' }));
+    yield* TestClock.adjust('100 millis');
+    expect((yield* Fiber.join(arriving))._tag).toBe('Kept');
+  }),
+);
+
+it.effect('a logic of this build that falls before ready while its holder keeps executions ends the wait with its cause', () =>
+  Effect.gen(function* () {
+    const { arrive, registration, write } = yield* world({ _tag: 'Gone' });
+    const arriving = yield* arrive;
+    yield* Ref.set(registration, registered(OURS, 11));
+    yield* TestClock.adjust('5 minutes');
+    yield* write(loadRefusalOf(bootPath(STATE, OURS)), 'StoreAhead: the store went past this build\n');
+    yield* TestClock.adjust('100 millis');
+    expect(yield* Fiber.join(arriving)).toEqual({
+      _tag: 'Fallen',
+      detail: `the logic of ${OURS} does not come up: StoreAhead: the store went past this build`,
+    });
   }),
 );

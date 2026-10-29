@@ -3,7 +3,7 @@ import { Effect, FileSystem, type Scope } from 'effect';
 import { withFileLock } from '@runlith/file-lock/FileLock';
 import type { HostRegistration } from '@runlith/executions/HostRegistration';
 import type { ArtifactManifest, Digest } from '@runlith/executions/protocol/artifact';
-import { bootPath, type HostLifetime } from '@runlith/executions/protocol/boot';
+import { bootPath, type HostLifetime, loadRefusalOf } from '@runlith/executions/protocol/boot';
 import { type ArtifactFailure, readArtifact, verifyArtifact } from '@runlith/executions/hostArtifacts';
 import { bootInput, bootText, hostBundle, type StateClaim } from './boot.js';
 import { executionPolicy } from './policy.js';
@@ -149,6 +149,9 @@ const sweepBoots = Effect.fnUntraced(function* (files: FileSystem.FileSystem, st
   for (const entry of listed) {
     const path = `${state}/${entry}`;
     if (entry.startsWith('boot') && entry.endsWith('.json') && !kept.includes(path)) yield* discard(files, path);
+    if (entry.startsWith('boot-') && entry.endsWith('.refused') && !kept.some((boot) => loadRefusalOf(boot) === path)) {
+      yield* discard(files, path);
+    }
     if (entry.startsWith('boot-') && entry.endsWith('.stderr')) {
       yield* withFileLock(path, 0, () => Effect.andThen(discard(files, path), discard(files, `${path}.writing`))).pipe(
         Effect.catchTag('LockBusy', () => Effect.void),
@@ -204,6 +207,7 @@ export const placeCandidate = Effect.fnUntraced(
       }
       yield* marked(files, state, input.restart);
       yield* written(files, hostBootNext(state), text);
+      yield* discard(files, loadRefusalOf(standingBoot));
       yield* sweepBoots(files, state, [standingBoot, hostBootNext(state)]);
       return { _tag: 'Placed', digest, bundle: false, detail: `${named(source)} the host bundle in place under another boot input` };
     }
@@ -218,6 +222,7 @@ export const placeCandidate = Effect.fnUntraced(
     );
     const placedBoot = bootPath(state, digest);
     yield* written(files, placedBoot, text);
+    yield* discard(files, loadRefusalOf(placedBoot));
     yield* sweepBoots(files, state, [standingBoot, placedBoot]);
     yield* discard(files, hostBundleNext(state));
     yield* marked(files, state, input.restart);

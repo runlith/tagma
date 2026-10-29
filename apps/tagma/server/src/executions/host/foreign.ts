@@ -65,6 +65,9 @@ export const standingAfter = Effect.fnUntraced(function* (
     case 'Refused':
       yield* withdrawCandidate(files, state);
       return `the standing host of another build refused this build's candidate and stays: ${arrival.detail}`;
+    case 'Fallen':
+      yield* withdrawCandidate(files, state);
+      return `this build's host logic never came up, so no host serves this server: ${arrival.detail}`;
     case 'Kept':
       return `the standing host of another build stays: ${arrival.detail}`;
   }
