@@ -21,3 +21,5 @@ Server-to-thread messages — about a child (ended the turn, compacted, cooled, 
 The child lies inside `notice`, not in `senderThreadId`/`from`: a signal with a thread sender becomes the projection feed's agent words, visible in the normal mode, the inbox counts it as said by the agent, and model markup gains `from`/`thread`/`context` attributes — that is, what the model reads changes.
 
 Threads named by the background call come from its mapping's `reference` display (`referencedThreads`): in a native tool from the outcome display, in an operation over HTTP and MCP from its answer's `_meta.toolDisplay`. They are stored in the call's debt line until delivery: the notification assembles later, from the line.
+
+One part of a `call-ending` notice is for the model: the call's untold guides (`guides`). They become guidance messages right after the notice and never enter its text, so their told state survives ([[d1c9c481]]).
