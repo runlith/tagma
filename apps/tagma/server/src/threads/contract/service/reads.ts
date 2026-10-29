@@ -37,7 +37,7 @@ export class ThreadWindows extends Context.Service<
       ownerId: string,
       projectId: number,
       reading: string,
-      offset: number,
+      after: number,
       limit: number,
     ): Effect.Effect<ThreadSelectionPage, HarnessFailure>;
     attention(ownerId: string): Effect.Effect<readonly ThreadSummary[], StoreFailure | ThreadStorageFailed>;
