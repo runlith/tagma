@@ -98,7 +98,7 @@ layer(browserWorld({ host: Layer.empty, adapters: [desktopAdapter], home }), { e
 
         const opening = yield* Effect.forkChild(pages.open(yield* operator, { url: 'https://example.com/', profile: undefined }));
         for (let call = yield* fake.called; ; call = yield* fake.called) {
-          fake.answer(call.id);
+          fake.answer(call.id, call.call.kind === 'open' ? { restricted: false, revision: 0 } : null);
           if (call.call.kind === 'open') break;
         }
         const page = (yield* Fiber.join(opening)).id;
@@ -154,7 +154,7 @@ layer(browserWorld({ host: Layer.empty, adapters: [desktopAdapter], home }), { e
         yield* standing;
         const opening = yield* Effect.forkChild(pages.open(yield* operator, { url: 'https://example.com/kept', profile: undefined }));
         for (let call = yield* first.called; ; call = yield* first.called) {
-          first.answer(call.id);
+          first.answer(call.id, call.call.kind === 'open' ? { restricted: false, revision: 0 } : null);
           if (call.call.kind === 'open') break;
         }
         const page: PageId = (yield* Fiber.join(opening)).id;
@@ -178,7 +178,15 @@ layer(browserWorld({ host: Layer.empty, adapters: [desktopAdapter], home }), { e
         const reconcile = yield* second.called;
         expect(reconcile.call.kind).toBe('live');
         second.answer(reconcile.id, [
-          { page, local: 'page-1', profile: 'user', url: 'https://example.com/kept#back', title: 'Kept', opener: null },
+          {
+            page,
+            local: 'page-1',
+            profile: 'user',
+            url: 'https://example.com/kept#back',
+            title: 'Kept',
+            opener: null,
+            restriction: { restricted: false, revision: 0 },
+          },
         ]);
         expect(yield* Deferred.await(reached)).toBe(HOST);
         for (;;) {

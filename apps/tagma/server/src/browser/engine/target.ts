@@ -106,10 +106,12 @@ export type Box = { readonly x: number; readonly y: number; readonly width: numb
 export const boxOf = Effect.fnUntraced(function* (
   attached: Attached,
   located: Located,
+  reveal = true,
 ): Effect.fn.Return<Box & { readonly center: Point }, CommandFailure | GateRefusal<'action-failed'>> {
-  yield* attached.session
-    .send('DOM.scrollIntoViewIfNeeded', { backendNodeId: located.anchor.node }, located.child)
-    .pipe(Effect.catchTag('CommandRefused', () => Effect.void));
+  if (reveal)
+    yield* attached.session
+      .send('DOM.scrollIntoViewIfNeeded', { backendNodeId: located.anchor.node }, located.child)
+      .pipe(Effect.catchTag('CommandRefused', () => Effect.void));
   const { quads } = yield* attached.session
     .send('DOM.getContentQuads', { backendNodeId: located.anchor.node }, located.child)
     .pipe(Effect.catchTag('CommandRefused', () => Effect.succeed({ quads: [] as number[][] })));

@@ -136,6 +136,7 @@ it.effect('a repeated sweep waits for the active pass and answers its discharged
           Layer.mock(TerminalRows, { record: () => Effect.succeed(terminal) }),
           Layer.mock(CommandWaiters, { ended }),
           Layer.mock(TerminalInventory, {
+            retained: () => undefined,
             forget: () => {
               throw new Error('the sweep reads command rows');
             },

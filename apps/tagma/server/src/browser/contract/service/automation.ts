@@ -32,6 +32,10 @@ export type EmulationChange = {
   readonly viewport: Viewport | undefined;
   readonly device: Emulation['device'] | undefined;
   readonly scheme: Emulation['scheme'] | undefined;
+  readonly cpu?: Emulation['cpu'];
+  readonly network?: Emulation['network'];
+  readonly geolocation?: Emulation['geolocation'];
+  readonly conditions?: boolean;
   readonly clear: boolean;
 };
 
@@ -84,7 +88,12 @@ export type Snapshotted = { readonly page: Glance; readonly text: string; readon
 export class Automation extends Context.Service<
   Automation,
   {
-    navigate(page: PageId, to: Navigation, thread: string | null): Effect.Effect<Glance, Drive<'navigation-failed'>>;
+    navigate(
+      page: PageId,
+      to: Navigation,
+      thread: string | null,
+      agent?: boolean,
+    ): Effect.Effect<Glance, Drive<'navigation-failed' | 'operator-input'>>;
     snapshot(
       page: PageId,
       options: { readonly within: string | undefined; readonly limit: number },
@@ -94,12 +103,13 @@ export class Automation extends Context.Service<
       page: PageId,
       steps: readonly PlannedAction[],
       thread: string | null,
-    ): Effect.Effect<ActionRun, Drive<'stale-ref' | 'element-obscured' | 'action-shape'>>;
+      agent?: boolean,
+    ): Effect.Effect<ActionRun, Drive<'stale-ref' | 'element-obscured' | 'action-shape' | 'operator-input'>>;
     emulate(
       page: PageId,
       change: EmulationChange,
       thread: string | null,
-    ): Effect.Effect<{ readonly page: Glance; readonly emulation: Emulation }, Drive>;
+    ): Effect.Effect<{ readonly page: Glance; readonly emulation: Emulation }, Drive<'operator-input'>>;
     capture(
       page: PageId,
       kind: CaptureKind,
@@ -107,7 +117,7 @@ export class Automation extends Context.Service<
       thread: string | null,
     ): Effect.Effect<Captured, Drive<'stale-ref' | 'action-shape'>>;
     picture(path: string): Effect.Effect<Uint8Array>;
-    evaluate(page: PageId, expression: string, thread: string | null): Effect.Effect<Evaluated, Drive>;
+    evaluate(page: PageId, expression: string, thread: string | null, agent?: boolean): Effect.Effect<Evaluated, Drive<'operator-input'>>;
     wait(
       page: PageId,
       until: Until,
@@ -118,6 +128,6 @@ export class Automation extends Context.Service<
     network(page: PageId, query: NetworkQuery): Effect.Effect<NetworkRead, StoreFailure | GateRefusal<'page-unknown'>>;
     body(page: PageId, request: string, thread: string | null): Effect.Effect<Body, Drive<'body-unavailable'>>;
     answer(page: PageId, accept: boolean, text: string | undefined, thread: string | null): Effect.Effect<Glance, Drive<'no-dialog'>>;
-    pick(page: PageId): Effect.Effect<Stream.Stream<Picked, Drive<'stale-ref'>>, Drive, Scope.Scope>;
+    pick(page: PageId, projectId: number): Effect.Effect<Stream.Stream<Picked, Drive<'stale-ref'>>, Drive, Scope.Scope>;
   }
 >()('tagma/browser/Automation') {}

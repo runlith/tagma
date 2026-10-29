@@ -28,6 +28,11 @@ const PICKED: Picked = {
   attributes: { class: 'send' },
   styles: { color: 'rgb(0, 0, 0)' },
   rect: { x: 10, y: 20, width: 80, height: 24 },
+  component: {
+    framework: 'svelte',
+    name: 'Send',
+    source: { file: '/project/src/Send.svelte', line: 12, column: 3, basis: 'element', resolved: true, checkout: '/project' },
+  },
   picture: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
 };
 
@@ -69,5 +74,7 @@ it.live('a picked element sends a titled Markdown document and its picture throu
     const document = new TextDecoder().decode(uploaded[0]!.bytes);
     expect(threadDocumentTitle(document)).toBe(draft.documents[0]?.title);
     expect(document).toBe(draft.documents[0]?.text);
+    expect(document).toContain('Send (svelte)');
+    expect(document).toContain('/project/src/Send.svelte:12:3');
   }),
 );

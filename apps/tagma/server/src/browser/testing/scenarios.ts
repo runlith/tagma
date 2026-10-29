@@ -1,4 +1,5 @@
 import { afterAll, expect } from 'bun:test';
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7,13 +8,20 @@ import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope, Stream } from 'ef
 import { TestClock } from 'effect/testing';
 import { Pages } from '../contract/service/pages.js';
 import { Automation } from '../contract/service/automation.js';
+import { Projects } from '../../projects/contract/service/registry.js';
+import { COMPONENTS, FRAME_COMPONENT, REACT_COMPONENT, componentScenario } from './components.js';
 import { type HostAdapter, Hosts } from '../contract/service/hosts.js';
 import { Profiles } from '../contract/service/profiles.js';
 import { AGENT_PROFILE, type PageId, ProfileId } from '../contract/wire/ids.js';
 import { PAGE_PAIRS as PAGE, PROFILE_PAIRS as PROFILE } from '../operations.js';
-import { agentIn, calling, OPERATOR, refIn, refusalOf, type Served } from './world.js';
+import { neutral, pixelOf } from './pixels.js';
+import { agentIn, calling, OPERATOR, refIn, refusalOf, Seeded, type Served } from './world.js';
+
+import { BENCHMARK, conditionScenario, refusedConditionScenario } from './conditions.js';
+import { domainFixture, domainScenario } from './domains.js';
 
 const PAGES: Readonly<Record<string, string>> = {
+  '/benchmark': BENCHMARK,
   '/form': `<!doctype html><title>Form</title>
     <label>Name <input id="name"></label>
     <label>Notes <textarea id="notes"></textarea></label>
@@ -72,7 +80,8 @@ const PAGES: Readonly<Record<string, string>> = {
   '/leave': `<!doctype html><title>Leave</title><input id="draft" aria-label="Draft">
     <script>addEventListener('beforeunload', (event) => { event.preventDefault(); event.returnValue = ''; });</script>`,
   '/pick': `<!doctype html><title>Pick</title>
-    <button id="target" data-testid="pick-me" style="margin:40px;width:160px;height:50px" onclick="this.textContent = 'Clicked'">Pick me</button>`,
+    <button id="target" data-testid="pick-me" style="margin:40px;width:160px;height:50px" onclick="this.textContent = 'Clicked'">Pick me</button>
+    <script>const instance = { type: { name: 'Production', __file: 'Production.vue' }, ctx: {} }; instance.ctx._ = instance; document.getElementById('target').__vueParentComponent = instance;</script>`,
 };
 
 const HEAVY = `<!doctype html><title>Heavy</title><button id="spin" onclick="fetch('/spinning'); for (;;) {}">Spin</button>${Array.from(
@@ -93,13 +102,26 @@ export type EngineHost = {
 };
 
 export const engineScenarios = (input: EngineHost): void => {
+  const domains = domainFixture();
   const spinning = Deferred.makeUnsafe<void>();
   const childSpinning = Deferred.makeUnsafe<void>();
+  const frameServer = Bun.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    fetch: () => new Response(FRAME_COMPONENT, { headers: { 'content-type': 'text/html' } }),
+  });
+  const frameOrigin = `http://127.0.0.1:${frameServer.port}`;
   const server: Bun.Server<undefined> = Bun.serve({
     port: 0,
     hostname: '127.0.0.1',
     fetch: (request): Response => {
-      const path = new URL(request.url).pathname;
+      const url = new URL(request.url);
+      const path = url.pathname;
+      const domainResponse = domains.respond(url, server.port!);
+      if (domainResponse !== null) return domainResponse;
+      if (path === '/src/Send.tsx') return new Response(REACT_COMPONENT, { headers: { 'content-type': 'text/javascript' } });
+      if (path === '/pick-dev')
+        return new Response(COMPONENTS.replace('FRAME_ORIGIN', frameOrigin), { headers: { 'content-type': 'text/html' } });
       if (path === '/data') return Response.json({ ok: true });
       if (path === '/frame-data') return new Response('response from the other-process frame');
       if (path === '/spinning') {
@@ -146,7 +168,10 @@ export const engineScenarios = (input: EngineHost): void => {
         : new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });
     },
   });
-  afterAll(() => server.stop(true));
+  afterAll(() => {
+    server.stop(true);
+    frameServer.stop(true);
+  });
   const at = (path: string) => `http://127.0.0.1:${server.port}${path}`;
   const home = mkdtempSync(join(tmpdir(), 'browser-engine-'));
   const world = Layer.effect(
@@ -162,7 +187,7 @@ export const engineScenarios = (input: EngineHost): void => {
       );
       return held;
     }),
-  ).pipe(Layer.provideMerge(input.fixture()));
+  ).pipe(Layer.provideMerge(input.fixture()), Layer.provideMerge(BunFileSystem.layer));
   const agent = agentIn(home);
   const open = Effect.fnUntraced(function* (path: string) {
     const held = yield* EnginePage;
@@ -217,6 +242,22 @@ export const engineScenarios = (input: EngineHost): void => {
         expect(refIn(yield* snapshot(page), /heading "Second page"/)).toMatch(/^e\d+$/);
         expect((yield* refusalOf(act(page, { action: 'click', ref }))).code).toBe('stale-ref');
       }),
+    );
+
+    it.effect(
+      'domain settings gate agent documents, redirects, frames and popups before any request, while operator navigation and page fetch remain free',
+      () =>
+        Effect.gen(function* () {
+          const page = yield* open('/domains');
+          yield* domainScenario({
+            page,
+            profile: input.profile,
+            url: at('/domains'),
+            caller: agent,
+            visits: domains.visits,
+            reached: domains.reached,
+          });
+        }),
     );
 
     it.effect('one sequence fills dependent fields and submits in order', () =>
@@ -590,7 +631,8 @@ export const engineScenarios = (input: EngineHost): void => {
         const page = yield* open('/pick');
         const automation = yield* Automation;
         const picking = yield* Scope.fork(yield* Scope.Scope);
-        const stream = yield* Scope.provide(automation.pick(page), picking);
+        const project = yield* (yield* Projects).byId((yield* Seeded).id);
+        const stream = yield* Scope.provide(automation.pick(page, project.id), picking);
         const picked = yield* Effect.forkChild(Stream.runHead(stream));
         const rect = (yield* evaluate(
           page,
@@ -603,8 +645,55 @@ export const engineScenarios = (input: EngineHost): void => {
         if (described._tag !== 'Some') return;
         expect(described.value.selector).toBe('#target');
         expect(described.value.role).toBe('button');
+        expect(described.value.component).toBeUndefined();
         yield* act(page, { action: 'click', ref: described.value.ref });
         expect(yield* evaluate(page, 'document.getElementById("target").textContent')).toBe('Clicked');
+      }),
+    );
+
+    it.effect('a capture taken while the pointer hovers a picking page and the picture of the pick show no pick highlight', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/pick');
+        const automation = yield* Automation;
+        const picking = yield* Scope.fork(yield* Scope.Scope);
+        const project = yield* (yield* Projects).byId((yield* Seeded).id);
+        const picked = yield* Effect.forkChild(Stream.runHead(yield* Scope.provide(automation.pick(page, project.id), picking)));
+        const rect = (yield* evaluate(
+          page,
+          '(() => { const box = document.getElementById("target").getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, height: box.height }; })()',
+        )) as { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+        const middle = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+        yield* act(page, { action: 'hover', ...middle });
+        const captured = yield* automation.capture(page, 'viewport', undefined, 'agent');
+        const png = Buffer.from(captured.bytes).toString('base64');
+        expect(neutral(yield* pixelOf(page, 'image/png', png, Math.round(rect.x + 12), Math.round(rect.y + 12)))).toBe(true);
+        yield* act(page, { action: 'click', ...middle });
+        const described = yield* Fiber.join(picked);
+        const picture = described._tag === 'Some' ? described.value.picture : null;
+        expect(typeof picture).toBe('string');
+        if (picture === null) return;
+        expect(neutral(yield* pixelOf(page, 'image/png', picture, 12, 12))).toBe(true);
+        yield* Scope.close(picking, Exit.void);
+      }),
+    );
+
+    it.effect('a dev pick reads main-world component locations and resolves only existing checkout files', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/pick-dev');
+        yield* loaded(page);
+        yield* componentScenario({ page, caller: agent, frameOrigin });
+      }),
+    );
+
+    it.effect('a refused combined condition change leaves layout emulation clearable', () =>
+      refusedConditionScenario(input.profile, agent),
+    );
+
+    it.effect('load conditions slow every renderer, emulate network and location, and end with their run', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/benchmark');
+        yield* loaded(page);
+        yield* conditionScenario({ page, profile: input.profile, url: at('/benchmark'), caller: agent });
       }),
     );
 

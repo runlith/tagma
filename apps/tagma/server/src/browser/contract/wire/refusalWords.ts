@@ -16,6 +16,8 @@ export const REFUSAL_WORDS = {
   'key-refused': 'Browser key not available',
   'navigation-failed': 'Navigation failed',
   'no-dialog': 'No dialog is open',
+  'no-trace': 'No such trace',
+  'operator-input': 'Operator is working the page',
   'outcome-unknown': 'Outcome unknown',
   'page-crashed': 'Page crashed',
   'page-stayed': 'Page stayed open',
@@ -24,5 +26,7 @@ export const REFUSAL_WORDS = {
   'profile-unknown': 'Unknown browser profile',
   'source-unknown': 'Unknown cookie source',
   'stale-ref': 'Element reference is stale',
+  'trace-failed': 'Trace not analyzed',
+  'trace-running': 'Page is already traced',
   'wait-unmet': 'Wait condition not met',
 } as const satisfies RefusalWords;

@@ -14,10 +14,13 @@ import { NO_EMULATION, type Emulation, type Viewport } from '../contract/wire/em
 import type { PageId, ProfileId } from '../contract/wire/ids.js';
 import type { ConsoleEntry, NetworkEntry } from '../contract/wire/rows.js';
 import { capture, consoleRing, networkRing, type Request } from './capture.js';
-import { applyEmulation, effectiveOf } from './emulate.js';
+import type { Mark } from './cursor.js';
+import { applyConditions, applyEmulation, effectiveOf } from './emulate.js';
+import type { Strain } from '../contract/wire/host.js';
 import { isLocal } from './local.js';
 import { Refs } from './refs.js';
-import { crashed, devtoolsOpen, ended, frameUnresponsive, unknownPage, unresponsive } from './refusal.js';
+import { operatorQuiet } from './operator.js';
+import { crashed, devtoolsOpen, ended, frameUnresponsive, navigationBlocked, unknownPage, unresponsive } from './refusal.js';
 import { drive } from '../../platform/contract/service/drives.js';
 
 const IDLE_MS = 30_000;
@@ -44,6 +47,12 @@ export type Attached = {
   runtime: Scope.Closeable | null;
   readonly syncing: Semaphore.Semaphore;
   group: string;
+  conditions: Scope.Closeable | null;
+  readonly emulating: Semaphore.Semaphore;
+  readonly strains: Map<object, Strain>;
+  strain: Strain;
+  overlaid: boolean;
+  cursor: Mark | null;
 };
 
 export type Paged = {
@@ -72,6 +81,7 @@ export type DriveOptions<A> = {
   readonly opened?: (page: PageId) => Effect.Effect<A>;
   readonly recovers?: true;
   readonly replays?: false;
+  readonly agent?: boolean;
 };
 
 export const makeDrive = Effect.fnUntraced(function* (input: {
@@ -150,7 +160,8 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
     if (child === undefined) attached.main = frameTree.frame.id;
   });
 
-  const adoptChild = Effect.fnUntraced(function* (attached: Attached, child: string, adopted: Scope.Closeable) {
+  const adoptChild = Effect.fnUntraced(function* (state: Paged, attached: Attached, child: string, adopted: Scope.Closeable) {
+    yield* attached.emulating.withPermits(1)(Effect.suspend(() => applyConditions(attached.session, state.emulation, undefined, child)));
     for (const domain of ['Page', 'DOM', 'Network', 'Log', 'Accessibility'] as const)
       yield* Scope.provide(attached.domains.enable(domain, child), adopted);
     if (attached.runtime !== null) yield* Scope.provide(attached.domains.enable('Runtime', child), attached.runtime);
@@ -162,8 +173,21 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
   const navigated = Effect.fnUntraced(function* (state: Paged, attached: Attached, frame: Protocol.Page.Frame, child: string | undefined) {
     const before = attached.frames.get(frame.id);
     if (before !== undefined && before.loader !== frame.loaderId) {
-      state.refs.retire(before.loader);
-      attached.worlds.delete(`${frame.id}|${before.loader}`);
+      const children = new Map<string, string[]>();
+      for (const [id, held] of attached.frames) {
+        if (held.parent === null) continue;
+        const siblings = children.get(held.parent) ?? [];
+        siblings.push(id);
+        children.set(held.parent, siblings);
+      }
+      for (const pending = [frame.id]; pending.length > 0;) {
+        const id = pending.pop()!;
+        const gone = attached.frames.get(id)!;
+        state.refs.retire(gone.loader);
+        attached.worlds.delete(`${id}|${gone.loader}`);
+        attached.frames.delete(id);
+        pending.push(...(children.get(id) ?? []));
+      }
     }
     attached.frames.set(frame.id, { loader: frame.loaderId, child, url: frame.url, parent: frame.parentId ?? before?.parent ?? null });
     if (frame.parentId === undefined && child === undefined) {
@@ -243,10 +267,16 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         yield* Scope.addFinalizer(adopted, pages.mark(state.page, { responsive: true }, target));
         yield* watchResponsive(
           attached.session,
-          { every: '1 second', threshold: '5 seconds', paused: () => pages.live(state.page)?.dialog !== null, child: joined.sessionId },
+          {
+            every: '1 second',
+            threshold: '5 seconds',
+            paused: () => attached.strain.paused || pages.live(state.page)?.dialog !== null,
+            factor: () => attached.strain.factor,
+            child: joined.sessionId,
+          },
           (responsive) => pages.mark(state.page, { responsive }, { ...target, url: attached.frames.get(target.frame)?.url ?? target.url }),
         ).pipe(Effect.forkIn(adopted));
-        yield* adoptChild(attached, joined.sessionId, adopted).pipe(
+        yield* adoptChild(state, attached, joined.sessionId, adopted).pipe(
           Effect.catchTags({
             SessionEnded: () => Effect.void,
             CommandRefused: (refused) =>
@@ -358,6 +388,12 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         runtime: null,
         syncing: yield* Semaphore.make(1),
         group: 'engine',
+        conditions: null,
+        emulating: yield* Semaphore.make(1),
+        strains: new Map(),
+        strain: { factor: 1, paused: false },
+        overlaid: false,
+        cursor: null,
       };
       yield* Stream.runForEach(events, (event) =>
         onEvent(state, attached, event).pipe(
@@ -486,15 +522,33 @@ export const makeDrive = Effect.fnUntraced(function* (input: {
         yield* gate(state, recovers);
         const live = pages.live(page);
         const unavailable = live?.responsive === false || live?.crashed === true;
+        if (options.agent === true) yield* operatorQuiet(pages, page);
+        const navigation = options.agent === undefined ? null : yield* pages.navigation(page, options.agent);
         const attached = unavailable ? null : attaching ? yield* attach(state, thread) : state.attached;
         state.used = yield* Clock.currentTimeMillis;
         if (thread !== null) state.driver = thread;
-        if (attached === null) return yield* work(state, attached);
-        if (thread !== null) yield* drove(state, thread);
-        groups += 1;
-        const group = `engine-${groups}`;
-        attached.group = group;
-        return yield* work(state, attached).pipe(Effect.ensuring(Effect.forkIn(release(attached, group), attached.scope)));
+        const working = Effect.gen(function* () {
+          if (navigation !== null) yield* navigation.check.pipe(Effect.mapError(navigationBlocked));
+          if (options.agent === true)
+            yield* operatorQuiet(pages, page).pipe(Effect.tapError(() => Effect.scoped(pages.navigation(page, false))));
+          let answer: A;
+          if (attached === null) answer = yield* work(state, attached);
+          else {
+            if (thread !== null) yield* drove(state, thread);
+            groups += 1;
+            const group = `engine-${groups}`;
+            attached.group = group;
+            answer = yield* work(state, attached).pipe(Effect.ensuring(Effect.forkIn(release(attached, group), attached.scope)));
+          }
+          if (navigation !== null) yield* navigation.check.pipe(Effect.mapError(navigationBlocked));
+          return answer;
+        });
+        const checked = working.pipe(
+          Effect.tapError(() => (navigation === null ? Effect.void : navigation.check.pipe(Effect.mapError(navigationBlocked)))),
+        );
+        return yield* navigation === null
+          ? checked
+          : Effect.raceFirst(checked, navigation.blocked.pipe(Effect.mapError(navigationBlocked)));
       });
       const swapped = (failure: unknown): boolean =>
         options.replays !== false &&

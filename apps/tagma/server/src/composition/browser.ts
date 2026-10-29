@@ -14,34 +14,63 @@ import { HOST_ADAPTERS, HostAdapters } from '../browser/contract/service/hosts.j
 import { BrowserPlace } from '../browser/contract/service/place.js';
 import { ThreadRuns } from '../browser/contract/service/runs.js';
 import { ManagedPlace } from '../managed-browser/contract/service/place.js';
+import { runEnded, type ThreadRecords } from '../thread-record/contract/service/records.js';
 import type { ThreadRunning } from '../threads/contract/service/reads.js';
+
+type RunSources = { readonly running: ThreadRunning['Service']; readonly records: ThreadRecords['Service'] };
+
+type Watched = { readonly kind: 'reading' } | { readonly kind: 'run'; readonly id: string } | { readonly kind: 'any' };
 
 export const browserRuns = (): {
   readonly port: ThreadRuns['Service'];
-  readonly bind: (running: ThreadRunning['Service']) => Effect.Effect<void, never, Scope.Scope>;
+  readonly bind: (sources: RunSources) => Effect.Effect<void, never, Scope.Scope>;
 } => {
-  let current = Deferred.makeUnsafe<ThreadRunning['Service']>();
+  let current = Deferred.makeUnsafe<RunSources>();
+  const runOf = (owner: RunSources, thread: string) =>
+    owner.running.runningRunOf(thread).pipe(
+      Effect.catchTags({
+        SqlError: (failure) =>
+          Effect.as(Effect.logWarning(`browser: whether thread ${thread} runs was not read: ${failure.message}`), undefined),
+        EffectDrizzleQueryError: (failure) =>
+          Effect.as(Effect.logWarning(`browser: whether thread ${thread} runs was not read: ${failure.message}`), undefined),
+      }),
+    );
   return {
     port: {
       running: (thread) =>
         Deferred.isDoneUnsafe(current)
-          ? Effect.flatMap(Deferred.await(current), (owner) =>
-              owner.runningRunOf(thread).pipe(
-                Effect.map((run) => run !== null),
-                Effect.catchTags({
-                  SqlError: (failure) =>
-                    Effect.as(Effect.logWarning(`browser: whether thread ${thread} runs was not read: ${failure.message}`), true),
-                  EffectDrizzleQueryError: (failure) =>
-                    Effect.as(Effect.logWarning(`browser: whether thread ${thread} runs was not read: ${failure.message}`), true),
-                }),
-              ),
-            )
+          ? Effect.flatMap(Deferred.await(current), (owner) => Effect.map(runOf(owner, thread), (run) => run !== null))
           : Effect.succeed(false),
+      ending: Effect.fnUntraced(function* (thread) {
+        if (!Deferred.isDoneUnsafe(current)) return Effect.void;
+        const owner = yield* Deferred.await(current);
+        const ended = yield* Deferred.make<void>();
+        const before = new Set<string>();
+        let watched: Watched = { kind: 'reading' };
+        yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            owner.records.statusPublished((event) =>
+              Effect.suspend(() => {
+                if (event.threadId !== thread || !runEnded(event)) return Effect.void;
+                if (watched.kind === 'reading') before.add(event.fromRunId!);
+                else if (watched.kind === 'any' || watched.id === event.fromRunId) return Deferred.succeed(ended, undefined);
+                return Effect.void;
+              }),
+            ),
+          ),
+          (detach) => Effect.sync(detach),
+        );
+        const run = yield* runOf(owner, thread);
+        if (run === null) return Effect.void;
+        watched = run === undefined ? { kind: 'any' } : { kind: 'run', id: run };
+        if (run === undefined ? before.size > 0 : before.has(run)) return Effect.void;
+        return Deferred.await(ended);
+      }),
     },
-    bind: (running) =>
-      Effect.acquireRelease(Effect.asVoid(Deferred.succeed(current, running)), () =>
+    bind: (sources) =>
+      Effect.acquireRelease(Effect.asVoid(Deferred.succeed(current, sources)), () =>
         Effect.sync(() => {
-          current = Deferred.makeUnsafe<ThreadRunning['Service']>();
+          current = Deferred.makeUnsafe<RunSources>();
         }),
       ),
   };

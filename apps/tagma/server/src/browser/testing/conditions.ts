@@ -1,0 +1,126 @@
+import { expect } from 'bun:test';
+import { Effect, Stream } from 'effect';
+import type { Caller } from '../../platform/contract/wire/caller.js';
+import { Pages } from '../contract/service/pages.js';
+import { NETWORKS } from '../contract/wire/emulation.js';
+import type { PageId, ProfileId } from '../contract/wire/ids.js';
+import { PAGE_PAIRS as PAGE } from '../operations.js';
+import { RunEnds } from './runs.js';
+import { calling, OPERATOR, refusalOf } from './world.js';
+
+const LOOP = `(iterations = 5000000) => { let value = 0; const start = performance.now(); for (let i = 0; i < iterations; i++) value = (Math.imul(value, 1664525) + i) | 0; window.loopValue = value; return performance.now() - start; }`;
+export const BENCHMARK = `<!doctype html><title>Conditions</title><script>
+window.measure = ${LOOP};
+addEventListener('message', event => { if (event.data === 'measure') parent.postMessage({ elapsed: measure() }, '*'); });
+parent.postMessage('ready', '*');
+</script>`;
+
+export const refusedConditionScenario = Effect.fnUntraced(function* (profile: ProfileId, caller: Caller) {
+  const pages = yield* Pages;
+  const { page } = yield* calling(PAGE.open_page.body.execute({ profile }, undefined, OPERATOR));
+  yield* Effect.addFinalizer(() => pages.close(page.id).pipe(Effect.orDie));
+  const measured = () =>
+    calling(
+      PAGE.evaluate_in_page.body.execute(
+        { page: page.id, expression: '[innerWidth, innerHeight, navigator.userAgent]' },
+        undefined,
+        caller,
+      ),
+    ).pipe(Effect.map((answer) => ('value' in answer ? (JSON.parse(answer.value) as unknown) : answer.exception)));
+  const before = yield* measured();
+  const refused = yield* refusalOf(
+    calling(
+      PAGE.emulate_page.body.execute(
+        { page: page.id, device: 'iphone-15', geolocation: { latitude: 10, longitude: 20 } },
+        undefined,
+        caller,
+      ),
+    ),
+  );
+  expect(refused.code).toBe('host-refused');
+  yield* calling(PAGE.emulate_page.body.execute({ page: page.id, clear: true }, undefined, caller));
+  expect(yield* measured()).toEqual(before);
+});
+
+export const conditionScenario = Effect.fnUntraced(function* (input: {
+  readonly page: PageId;
+  readonly profile: ProfileId;
+  readonly url: string;
+  readonly caller: Caller;
+}) {
+  const { page, profile, url, caller } = input;
+  const pages = yield* Pages;
+  const evaluate = (expression: string) =>
+    calling(PAGE.evaluate_in_page.body.execute({ page, expression }, undefined, caller)).pipe(
+      Effect.map((answer) => {
+        if ('exception' in answer) throw new Error(answer.exception);
+        return answer.value === 'undefined' ? undefined : (JSON.parse(answer.value) as unknown);
+      }),
+    );
+  const emulate = (change: Parameters<typeof PAGE.emulate_page.body.execute>[0]) =>
+    calling(PAGE.emulate_page.body.execute({ page, ...change }, undefined, caller));
+  const other = yield* calling(PAGE.open_page.body.execute({ url, profile }, undefined, OPERATOR));
+  yield* Effect.addFinalizer(() => pages.close(other.page.id).pipe(Effect.orDie));
+  const otherValue = (expression: string) =>
+    calling(PAGE.evaluate_in_page.body.execute({ page: other.page.id, expression }, undefined, OPERATOR)).pipe(
+      Effect.map((answer) => ('value' in answer ? (JSON.parse(answer.value) as unknown) : answer.exception)),
+    );
+  const framed = `new Promise(resolve => { const frame = document.createElement('iframe'); frame.id = 'bench'; const ready = event => { if (event.source !== frame.contentWindow || event.data !== 'ready') return; removeEventListener('message', ready); resolve(true); }; addEventListener('message', ready); frame.src = ${JSON.stringify(url.replace('127.0.0.1', 'localhost'))}; document.body.append(frame); })`;
+  const child = `new Promise(resolve => { const frame = document.getElementById('bench'); const measured = event => { if (event.source !== frame.contentWindow || !event.data.elapsed) return; removeEventListener('message', measured); resolve(event.data.elapsed); }; addEventListener('message', measured); frame.contentWindow.postMessage('measure', '*'); })`;
+  yield* evaluate('measure()');
+  const baseline = (yield* evaluate('measure()')) as number;
+  yield* evaluate(framed);
+  yield* evaluate(child);
+  const childBaseline = (yield* evaluate(child)) as number;
+  yield* emulate({ cpu: 6 });
+  const slowed = (yield* evaluate('measure()')) as number;
+  const childSlowed = (yield* evaluate(child)) as number;
+  expect(slowed / baseline).toBeGreaterThanOrEqual(3);
+  expect(childSlowed / childBaseline).toBeGreaterThanOrEqual(3);
+  yield* evaluate(`document.getElementById('bench').remove()`);
+  yield* evaluate(framed);
+  expect((yield* evaluate(child)) as number).toBeGreaterThanOrEqual(childBaseline * 3);
+  yield* emulate({ cpu: 20 });
+  const strained = yield* evaluate(
+    `(() => { window.identity = 'same target'; const start = performance.now(); while (performance.now() - start < 6000) measure(100000); return performance.now() - start; })()`,
+  );
+  expect(strained as number).toBeGreaterThan(5000);
+  expect(yield* evaluate('window.identity')).toBe('same target');
+  expect(pages.live(page)?.responsive).toBe(true);
+  yield* emulate({ cpu: 1, network: 'slow-3g' });
+  const latency = yield* evaluate(
+    `(async () => { const start = performance.now(); await fetch('/data?conditions', {cache:'no-store'}); return performance.now() - start; })()`,
+  );
+  expect(latency as number).toBeGreaterThanOrEqual(NETWORKS['slow-3g'].latency);
+  yield* emulate({ network: 'offline' });
+  expect(yield* evaluate(`fetch('/data?offline', {cache:'no-store'}).then(() => 'online', () => navigator.onLine)`)).toBe(false);
+  expect(yield* otherValue('navigator.onLine')).toBe(true);
+  yield* emulate({ network: null });
+  expect(yield* evaluate(`fetch('/data?restored', {cache:'no-store'}).then(response => response.ok && navigator.onLine)`)).toBe(true);
+  const permission = yield* evaluate(`navigator.permissions.query({name:'geolocation'}).then(permission => permission.state)`);
+  yield* emulate({ geolocation: { latitude: 51.5, longitude: -0.12, accuracy: 8 } });
+  expect(
+    yield* evaluate(
+      `new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(position => resolve([position.coords.latitude, position.coords.longitude, position.coords.accuracy]), reject))`,
+    ),
+  ).toEqual([51.5, -0.12, 8]);
+  yield* calling(PAGE.navigate_page.body.execute({ page, url: url.replace('127.0.0.1', 'localhost') }, undefined, caller));
+  yield* calling(PAGE.wait_for_page.body.execute({ page, until: 'load', timeoutMs: 120000 }, undefined, caller));
+  expect(yield* evaluate(`navigator.permissions.query({name:'geolocation'}).then(permission => permission.state)`)).toBe('granted');
+  expect(
+    yield* evaluate(
+      `new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(position => resolve([position.coords.latitude, position.coords.longitude]), reject))`,
+    ),
+  ).toEqual([51.5, -0.12]);
+  yield* emulate({ geolocation: null });
+  expect(yield* evaluate(`navigator.permissions.query({name:'geolocation'}).then(permission => permission.state)`)).toBe(permission);
+  yield* emulate({ cpu: 6, network: 'fast-4g', geolocation: { latitude: 10, longitude: 20 } });
+  const moves = yield* pages.moves(page);
+  yield* (yield* RunEnds).end('agent');
+  if (pages.live(page)?.conditions.cpu !== 1) yield* Stream.runHead(Stream.filter(moves, (move) => move.live.conditions.cpu === 1));
+  expect(pages.live(page)?.conditions).toEqual({ cpu: 1, network: null, geolocation: null });
+  expect((yield* evaluate('measure()')) as number).toBeLessThan(slowed / 3);
+  console.log(
+    JSON.stringify({ conditions: { baseline, slowed, childBaseline, childSlowed, strained, latency, otherPageOnlineDuringOffline: true } }),
+  );
+});

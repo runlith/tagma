@@ -1,6 +1,18 @@
 export type Job =
   | { readonly kind: 'json'; readonly text: string; readonly trim: number | null }
-  | { readonly kind: 'bytes'; readonly text: string };
+  | { readonly kind: 'bytes'; readonly text: string }
+  | { readonly kind: 'chunk'; readonly text: string };
+
+export type Chunk = { readonly bytes: Uint8Array; readonly eof: boolean };
+
+export function chunkText(text: string): Chunk {
+  const { result } = JSON.parse(text) as {
+    readonly result?: { readonly data?: unknown; readonly base64Encoded?: unknown; readonly eof?: unknown };
+  };
+  if (typeof result?.data !== 'string') throw new Error('the stream read carries no data');
+  const decoded = result.base64Encoded === true ? Buffer.from(result.data, 'base64') : Buffer.from(result.data, 'utf8');
+  return { bytes: new Uint8Array(decoded.buffer, decoded.byteOffset, decoded.byteLength), eof: result.eof === true };
+}
 
 export type JobAsk = { readonly id: number; readonly job: Job };
 

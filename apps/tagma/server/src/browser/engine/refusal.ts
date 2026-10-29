@@ -2,9 +2,19 @@ import type { CommandFailure } from '@runlith/cdp/session';
 import { Effect } from 'effect';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { DriveRefusal } from '../contract/service/automation.js';
-import { outcomeUnknown } from '../contract/service/pages.js';
+import type { DomainBlock } from '../contract/wire/domains.js';
+import { hostRefusal, outcomeUnknown } from '../contract/service/pages.js';
+import type { HostFailure, NavigationBlocked } from '../contract/service/hosts.js';
 import type { PageId } from '../contract/wire/ids.js';
 import type { Page } from '../contract/wire/page.js';
+
+export const navigationBlocked = (block: DomainBlock) =>
+  new GateRefusal('domain-blocked', `${block.domain} was not loaded: ${block.setting} blocked agent navigation to this domain`, [
+    `choose a domain permitted by ${block.setting}; the operator can change that setting`,
+  ]);
+
+export const navigationRefusal = (failure: HostFailure | NavigationBlocked) =>
+  failure._tag === 'NavigationBlocked' ? navigationBlocked(failure) : hostRefusal(failure);
 
 export const unknownPage = (page: PageId) =>
   new GateRefusal('page-unknown', `page ${page} is no longer open`, ['list_pages — the open pages of this project']);

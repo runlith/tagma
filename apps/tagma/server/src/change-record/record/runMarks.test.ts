@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
-import type { StatusPublished } from '../../thread-record/contract/service/records.js';
+import { runEnded, type StatusPublished } from '../../thread-record/contract/service/records.js';
 import type { ThreadId } from '../../platform/contract/wire/thread.js';
-import { runEnded } from './runMarks.js';
 
 const moved = (
   fromRunId: string | null,

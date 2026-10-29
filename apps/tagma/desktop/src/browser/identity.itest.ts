@@ -31,7 +31,7 @@ void app.whenReady().then(async () => {
     if (url.pathname === '/leave') return new Response(null, { status: 302, headers: { location: 'https://fixture.invalid/complete' } });
     return new Response('<!doctype html><p>complete</p>', { headers: { 'content-type': 'text/html' } });
   });
-  const page = HeldPage.create('redirect', null, 'redirect', null, 'cleaned', { event: () => undefined, closed: () => undefined, window: () => window });
+  const page = HeldPage.create('redirect', null, 'redirect', null, 'cleaned', { event: () => undefined, closed: () => undefined, window: () => window, navigation: () => undefined, blocked: () => undefined, revision: () => 0 });
   window.contentView.addChildView(page.view);
   const visit = async (url) => {
     const stopped = once(page.contents, 'did-stop-loading');

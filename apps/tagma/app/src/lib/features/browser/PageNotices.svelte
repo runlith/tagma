@@ -1,6 +1,9 @@
 <script lang="ts">
+  import Gauge from '@lucide/svelte/icons/gauge';
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+  import { conditionsOf } from '@tagma/server/browser/contract/wire/emulation';
   import type { Page } from '@tagma/server/browser/contract/wire/page';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
   import { Door, type Lens } from '$lib/wire/Door.js';
 
@@ -31,6 +34,10 @@
     act(() => door.perform('answer_page_dialog', { page: page.id, accept, text: accept ? answer : undefined }, lens));
 
   const reload = () => act(() => door.perform('navigate_page', { page: page.id, go: 'reload' }, lens));
+
+  const conditions = $derived(conditionsOf(page.live.conditions));
+
+  const resetConditions = () => act(() => door.perform('emulate_page', { page: page.id, conditions: false }, lens));
 </script>
 
 {#if page.live.dialog !== null}
@@ -66,6 +73,13 @@
   <p class="shrink-0 border-b bg-raised px-3 py-1.5 text-small text-muted-foreground">
     The host of this page is not connected; it comes back when its host does.
   </p>
+{/if}
+{#if conditions !== null}
+  <div class="flex shrink-0 items-center gap-2 border-b bg-raised px-3 py-1.5 text-small">
+    <Gauge class="size-3.5 shrink-0 text-muted-foreground" />
+    <FadeText class="min-w-0 flex-1" text={`Under test conditions: ${conditions}`} />
+    <Button size="sm" variant="ghost" onclick={() => void resetConditions()}>Reset</Button>
+  </div>
 {/if}
 {#if problem !== null}
   <p class="shrink-0 border-b bg-sunken px-3 py-1.5 text-small text-destructive">{problem}</p>

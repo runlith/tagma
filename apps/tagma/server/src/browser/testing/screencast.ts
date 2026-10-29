@@ -5,13 +5,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Effect, Exit, Fiber, type Layer, Pull, type Scope, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
+import { Automation } from '../contract/service/automation.js';
 import { Pages } from '../contract/service/pages.js';
 import type { HostAdapter, Hosts } from '../contract/service/hosts.js';
 import { Screencast } from '../contract/service/screencast.js';
 import type { PageId, ProfileId } from '../contract/wire/ids.js';
 import type { Budget, Frame, InputEvent, ScreencastEvent } from '../contract/wire/screencast.js';
 import { PAGE_PAIRS as PAGE } from '../operations.js';
-import { agentIn, calling, type Served } from './world.js';
+import { amber, neutral, pixelOf } from './pixels.js';
+import { agentIn, calling, OPERATOR, refusalOf, type Served } from './world.js';
 
 const PAGES: Readonly<Record<string, string>> = {
   '/moving': `<title>Moving</title><p id="tick" style="font-size:48px">0</p>
@@ -97,7 +99,7 @@ export const screencastScenarios = (input: CastHost): void => {
     return opened.page.id;
   });
   const evaluate = (page: PageId, expression: string) =>
-    calling(PAGE.evaluate_in_page.body.execute({ page, expression }, undefined, agent)).pipe(
+    calling(PAGE.evaluate_in_page.body.execute({ page, expression }, undefined, OPERATOR)).pipe(
       Effect.map((answer) => ('value' in answer ? (JSON.parse(answer.value) as unknown) : answer.exception)),
     );
 
@@ -168,6 +170,35 @@ export const screencastScenarios = (input: CastHost): void => {
           ),
         ).toEqual(['note.txt', 'chosen bytes']);
       }),
+    );
+
+    it.effect('viewer input holds agent steps until it is quiet, and the agent cursor reaches viewers but no capture', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/still');
+        const screencast = yield* Screencast;
+        const viewing = yield* watching(page, { width: 400, height: 300, scale: 1, layout: true });
+        yield* frameWhere(viewing, (frame) => frame.width === 400);
+        yield* screencast.input(page, viewing.viewer, 0, click(380 / 400, 280 / 300));
+        const hover = { action: 'hover', x: 200, y: 150 } as const;
+        const held = yield* refusalOf(calling(PAGE.act_on_page.body.execute({ page, steps: [hover] }, undefined, agent)));
+        expect(held.code).toBe('operator-input');
+        yield* TestClock.adjust('5 seconds');
+        yield* calling(PAGE.act_on_page.body.execute({ page, steps: [hover] }, undefined, agent));
+        const seen = Effect.fnUntraced(function* (wanted: boolean) {
+          for (;;) {
+            const frame = yield* viewing.frame;
+            if (amber(yield* pixelOf(page, 'image/jpeg', frame.data, 204, 161)) === wanted) return;
+          }
+        });
+        yield* seen(true);
+        const captured = yield* (yield* Automation).capture(page, 'viewport', undefined, 'agent');
+        const scale = (captured.width ?? 400) / 400;
+        const png = Buffer.from(captured.bytes).toString('base64');
+        expect(neutral(yield* pixelOf(page, 'image/png', png, Math.round(204 * scale), Math.round(161 * scale)))).toBe(true);
+        yield* seen(true);
+        yield* TestClock.adjust('2 seconds');
+        yield* seen(false);
+      }).pipe(Effect.provide(TestClock.layer())),
     );
   });
 

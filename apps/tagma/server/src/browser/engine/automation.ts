@@ -1,19 +1,25 @@
 import { parsed } from '@runlith/cdp/payload';
+import { isCommandFailure } from '@runlith/cdp/session';
 import type { Protocol } from 'devtools-protocol';
-import { Clock, Effect, FileSystem, Option, Path, PubSub, Scope, Stream } from 'effect';
+import { Clock, Effect, Exit, FileSystem, Option, Path, PubSub, Scope, Stream } from 'effect';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { CheckoutPaths } from '../../workspace/contract/service/checkoutPaths.js';
+import { ServedRoots } from '../contract/service/sources.js';
 import { Automation, type ConsoleQuery, type NetworkQuery, type Until } from '../contract/service/automation.js';
 import { hostRefusal, Pages } from '../contract/service/pages.js';
 import { BrowserPlace, capturesOf } from '../contract/service/place.js';
 import { Profiles } from '../contract/service/profiles.js';
+import { ThreadRuns } from '../contract/service/runs.js';
 import type { PageId } from '../contract/wire/ids.js';
 import type { ActionRun } from '../contract/wire/pageOperations.js';
 import type { Picked } from '../contract/wire/pick.js';
 import { BODY_CHARS, CONSOLE_LEVELS, type ConsoleEntry, EVALUATED_CHARS } from '../contract/wire/rows.js';
 import { perform } from './act.js';
 import type { Attached, Drive, Paged } from './drive.js';
-import { ended, unknownPage } from './refusal.js';
-import { applyEmulation, effectiveOf, nextEmulation } from './emulate.js';
+import { PICKING } from './cursor.js';
+import { operatorQuiet } from './operator.js';
+import { ended, navigationBlocked, unknownPage } from './refusal.js';
+import { applyEmulation, changeConditions, effectiveOf, nextEmulation } from './emulate.js';
 import { describePick, screenshot, snapshot } from './read.js';
 import { world } from './target.js';
 
@@ -50,8 +56,11 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
   const { drive } = input;
   const pages = yield* Pages;
   const profiles = yield* Profiles;
+  const runs = yield* ThreadRuns;
   const place = yield* BrowserPlace;
   const files = yield* FileSystem.FileSystem;
+  const checkoutPaths = yield* CheckoutPaths;
+  const servedRoots = yield* ServedRoots;
   const path = yield* Path.Path;
 
   const navigatedSince = (attached: Attached, before: number): boolean => attached.navigations > before;
@@ -99,16 +108,17 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
     );
 
   return Automation.of({
-    navigate: Effect.fn('Automation.navigate')(function* (page, to, thread) {
-      const host = yield* pages.hold(page);
+    navigate: Effect.fn('Automation.navigate')(function* (page, to, thread, agent = thread !== null) {
       return yield* drive.run(
         page,
         thread,
         thread !== null,
         (_state, attached) =>
           Effect.gen(function* () {
+            const host = yield* pages.hold(page);
             const change = yield* host.pages.navigate(page, to).pipe(
               Effect.catchTags({
+                NavigationBlocked: (blocked) => Effect.fail(navigationBlocked(blocked)),
                 NavigationFailed: (failed) =>
                   Effect.fail(
                     new GateRefusal('navigation-failed', `the navigation failed: ${failed.code} — ${failed.message}`, [
@@ -124,7 +134,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
             yield* pages.commit(page, change);
             return pages.glance(page, to.kind !== 'stop');
           }),
-        to.kind === 'reload' || to.kind === 'stop' ? { recovers: true } : {},
+        { agent, recovers: to.kind === 'reload' || to.kind === 'stop' ? true : undefined },
       );
     }),
     snapshot: Effect.fn('Automation.snapshot')(function* (page, options, thread) {
@@ -132,7 +142,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
         Effect.map(snapshot(state, attached, options.within, options.limit), (shot) => ({ page: pages.glance(page, false), ...shot })),
       );
     }),
-    act: Effect.fn('Automation.act')(function* (page, steps, thread) {
+    act: Effect.fn('Automation.act')(function* (page, steps, thread, agent = thread !== null) {
       let completed = 0;
       let step = 1;
       let navigation: { readonly attached: Attached; readonly before: number } | null = null;
@@ -151,13 +161,14 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
               for (const action of steps) {
                 step = completed + 1;
                 if (action instanceof GateRefusal) return yield* action;
+                if (agent) yield* operatorQuiet(pages, page);
                 yield* perform(state, attached, action);
                 if (pages.live(page)?.dialog != null) return answer(step);
                 completed += 1;
               }
               return answer(null);
             }),
-          { opened: () => Effect.sync(() => answer(step)), replays: false },
+          { opened: () => Effect.sync(() => answer(step)), replays: false, agent },
         )
         .pipe(
           Effect.mapError((failure) => {
@@ -176,10 +187,39 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
     emulate: Effect.fn('Automation.emulate')(function* (page, change, thread) {
       return yield* drive.drive(page, thread, (state, attached) =>
         Effect.gen(function* () {
-          const next = nextEmulation(state.emulation, change);
-          yield* applyEmulation(attached.session, effectiveOf(next, state.layout), effectiveOf(state.emulation, state.layout));
-          state.emulation = next;
-          return { page: pages.glance(page, false), emulation: next };
+          if (thread !== null) yield* operatorQuiet(pages, page);
+          const previous = state.emulation;
+          const next = nextEmulation(previous, change);
+          return yield* Effect.gen(function* () {
+            yield* applyEmulation(attached.session, effectiveOf(next, state.layout), effectiveOf(previous, state.layout));
+            if (next.cpu !== previous.cpu || next.network !== previous.network || next.geolocation !== previous.geolocation)
+              yield* changeConditions(state, attached, next, thread).pipe(
+                Effect.provideService(Pages, pages),
+                Effect.provideService(ThreadRuns, runs),
+              );
+            else state.emulation = next;
+            return { page: pages.glance(page, false), emulation: effectiveOf(next, state.layout) };
+          }).pipe(
+            Effect.onExit((exit) =>
+              Exit.isFailure(exit)
+                ? applyEmulation(attached.session, effectiveOf(previous, state.layout), effectiveOf(next, state.layout)).pipe(
+                    Effect.catchIf(isCommandFailure, (failure) =>
+                      Effect.logWarning(`browser: layout on ${page} could not be restored after refused emulation: ${failure.message}`),
+                    ),
+                    Effect.andThen(
+                      Effect.sync(() => {
+                        state.emulation = {
+                          ...state.emulation,
+                          viewport: previous.viewport,
+                          device: previous.device,
+                          scheme: previous.scheme,
+                        };
+                      }),
+                    ),
+                  )
+                : Effect.void,
+            ),
+          );
         }),
       );
     }),
@@ -215,7 +255,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
       };
     }),
     picture: (file) => Effect.orDie(files.readFile(file)),
-    evaluate: Effect.fn('Automation.evaluate')(function* (page, expression, thread) {
+    evaluate: Effect.fn('Automation.evaluate')(function* (page, expression, thread, agent = thread !== null) {
       return yield* drive.drive(
         page,
         thread,
@@ -251,7 +291,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
             const [value, cut] = told.result.value as [string, boolean];
             return { page: pages.glance(page, false), value, cut };
           }),
-        { opened: (opened) => Effect.succeed({ page: pages.glance(opened, false), value: 'undefined', cut: false }) },
+        { opened: (opened) => Effect.succeed({ page: pages.glance(opened, false), value: 'undefined', cut: false }), agent },
       );
     }),
     wait: Effect.fn('Automation.wait')(function* (page, until, timeoutMs, thread) {
@@ -374,7 +414,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
       yield* pages.mark(page, { dialog: null });
       return pages.glance(page, false);
     }),
-    pick: Effect.fn('Automation.pick')(function* (page) {
+    pick: Effect.fn('Automation.pick')(function* (page, projectId) {
       const state = yield* drive.paged(page);
       const attached = yield* drive.drive(page, null, (_state, held) => Effect.succeed(held));
       const subscription = yield* PubSub.subscribe(attached.picks);
@@ -391,14 +431,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
         drive.drive(page, null, (_state, now) =>
           Effect.gen(function* () {
             yield* Scope.provide(painted(page), scope);
-            yield* now.session.send('Overlay.setInspectMode', {
-              mode: 'searchForNode',
-              highlightConfig: {
-                showInfo: true,
-                contentColor: { r: 111, g: 168, b: 220, a: 0.5 },
-                borderColor: { r: 255, g: 229, b: 153, a: 0.7 },
-              },
-            });
+            yield* now.session.send('Overlay.setInspectMode', { mode: 'searchForNode', highlightConfig: PICKING });
             state.picking += 1;
           }),
         ),
@@ -413,7 +446,14 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
         Stream.interruptWhen(attached.session.ended),
         Stream.mapEffect((picking) =>
           drive
-            .drive(page, null, (held, now) => describePick(held, now, page, pages.urlOf(page), picking))
+            .drive(page, null, (held, now) =>
+              describePick(held, now, page, pages.urlOf(page), picking, projectId).pipe(
+                Effect.provideService(FileSystem.FileSystem, files),
+                Effect.provideService(CheckoutPaths, checkoutPaths),
+                Effect.provideService(ServedRoots, servedRoots),
+                Effect.provideService(Path.Path, path),
+              ),
+            )
             .pipe(
               Effect.catchIf(
                 (failure) => failure._tag === 'GateRefusal' && (failure.code === 'stale-ref' || failure.code === 'action-failed'),

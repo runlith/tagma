@@ -4,6 +4,7 @@ import { connect } from '@runlith/cdp/session';
 import { it } from '@runlith/effect-test';
 import * as Memory from '@runlith/testbed/memory';
 import { Deferred, Effect, Fiber, PubSub, Queue, Stream } from 'effect';
+import { TestClock } from 'effect/testing';
 import { forProject } from '../invocation/testing/call.js';
 import type { Refused } from '../platform/contract/service/body.js';
 import type { Caller } from '../platform/contract/wire/caller.js';
@@ -19,12 +20,18 @@ import { ThreadRuns } from './contract/service/runs.js';
 import { PageId, ProfileId } from './contract/wire/ids.js';
 import type { Live, Page } from './contract/wire/page.js';
 import type { PAGE_OPERATIONS } from './contract/wire/pageOperations.js';
+import { conditionsOf, NETWORKS, NO_CONDITIONS } from './contract/wire/emulation.js';
+import { CheckoutPaths } from '../workspace/contract/service/checkoutPaths.js';
+import { ServedRoots } from './contract/service/sources.js';
+import { fixedCheckoutPaths } from '../workspace/testing/doubles.js';
 import { makeAutomation } from './engine/automation.js';
 import { makeDrive } from './engine/drive.js';
 import { PAGE_PAIRS } from './operations.js';
 
 type Act = typeof PAGE_OPERATIONS.act_on_page;
 type Call = Effect.Effect<DeclaredAnswer<Act['answer']>, Refused<Act>, Automation | Pages | CurrentProject>;
+type Emulate = typeof PAGE_OPERATIONS.emulate_page;
+type EmulateCall = Effect.Effect<DeclaredAnswer<Emulate['answer']>, Refused<Emulate>, Automation | Pages | CurrentProject>;
 const unused = () => Effect.die('this scenario does not use this port');
 const PAGE = PageId.make('01a184cf-76ca-7d83-87c6-2f78805e2612');
 const caller: Caller = {
@@ -32,17 +39,25 @@ const caller: Caller = {
   files: null,
 };
 
-const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach') {
+const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach' | 'conditions') {
   const incoming = yield* Queue.unbounded<string>();
   const started = yield* Deferred.make<void>();
   const release = yield* Deferred.make<void>();
+  const adopting = yield* Deferred.make<void>();
+  const adopted = yield* Deferred.make<void>();
+  let latency = 0;
   const connection = yield* connect({
     incoming: Stream.fromQueue(incoming),
     send: Effect.fnUntraced(function* (text) {
       const command = JSON.parse(text) as {
         readonly id: number;
         readonly method: string;
-        readonly params?: { readonly type?: string; readonly key?: string };
+        readonly sessionId?: string;
+        readonly params?: {
+          readonly type?: string;
+          readonly key?: string;
+          readonly matchedNetworkConditions?: readonly { readonly latency: number }[];
+        };
       };
       if (command.method === 'Input.dispatchKeyEvent' && command.params?.type === 'keyDown') {
         if (mode === 'dialog' && command.params.key === 'a') {
@@ -54,10 +69,30 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach') {
           return;
         }
       }
+      if (mode === 'conditions' && command.sessionId === 'child') {
+        if (command.method === 'Emulation.setCPUThrottlingRate' && !Deferred.isDoneUnsafe(adopting)) {
+          yield* Deferred.succeed(adopting, undefined);
+          yield* Deferred.await(release);
+        }
+        if (command.method === 'Network.emulateNetworkConditionsByRule')
+          latency = command.params?.matchedNetworkConditions?.[0]?.latency ?? 0;
+        if (command.method === 'Page.getFrameTree') yield* Deferred.succeed(adopted, undefined);
+      }
       const result =
-        command.method === 'Page.getFrameTree'
-          ? { frameTree: { frame: { id: 'frame', loaderId: 'document', url: 'https://example.test/' } } }
-          : {};
+        command.method === 'Runtime.evaluate'
+          ? { result: { type: 'object', subtype: 'null', value: null } }
+          : command.method === 'Page.createIsolatedWorld'
+            ? { executionContextId: 1 }
+            : command.method === 'Page.getFrameTree'
+              ? {
+                  frameTree: {
+                    frame:
+                      command.sessionId === 'child'
+                        ? { id: 'child-frame', parentId: 'frame', loaderId: 'child-document', url: 'https://frame.example/' }
+                        : { id: 'frame', loaderId: 'document', url: 'https://example.test/' },
+                  },
+                }
+              : {};
       yield* Queue.offer(incoming, JSON.stringify({ id: command.id, result }));
     }),
   });
@@ -72,6 +107,7 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach') {
     dialog: null,
     driven: null,
     shown: false,
+    conditions: NO_CONDITIONS,
   };
   const record: Page = {
     id: PAGE,
@@ -101,7 +137,10 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach') {
       close: unused,
       live: unused(),
       navigate: unused,
+      navigation: () => Effect.succeed({ changes: [], blocked: Effect.never, check: Effect.void }),
       pdf: unused,
+      strain: () => (mode === 'conditions' ? Effect.void : unused()),
+      geolocation: unused,
       answer: unused,
       events: unused(),
       paint: unused,
@@ -119,7 +158,10 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach') {
     commit: unused,
     resolve: () => Effect.sync(() => ({ ...record, live })),
     hold: () => Effect.succeed(host),
+    navigation: () => Effect.succeed({ changes: [], blocked: Effect.never, check: Effect.void }),
     live: () => live,
+    operate: unused,
+    operated: () => undefined,
     mark: Effect.fnUntraced(function* (_page, change) {
       live = { ...live, ...change };
       yield* PubSub.publish(moves, { live, signal: 'changed' } satisfies Moved);
@@ -133,6 +175,7 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach') {
       loading: live.loading,
       dialog: live.dialog,
       navigated,
+      conditions: conditionsOf(live.conditions),
     }),
     moves: () => Effect.map(PubSub.subscribe(moves), Stream.fromSubscription),
     profileOf: () => undefined,
@@ -150,11 +193,18 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach') {
     exclusive: unused,
     changes: Effect.succeed(Stream.empty),
   });
-  const drive = yield* makeDrive({ pages, profiles, runs: ThreadRuns.of({ running: () => Effect.succeed(true) }) });
+  const drive = yield* makeDrive({
+    pages,
+    profiles,
+    runs: ThreadRuns.of({ running: () => Effect.succeed(true), ending: () => Effect.succeed(Effect.never) }),
+  });
   const automation = yield* makeAutomation({ drive }).pipe(
     Effect.provideService(Pages, pages),
     Effect.provideService(Profiles, profiles),
+    Effect.provideService(ThreadRuns, ThreadRuns.of({ running: () => Effect.succeed(true), ending: () => Effect.succeed(Effect.never) })),
     Effect.provideService(BrowserPlace, { root: '/browser' }),
+    Effect.provideService(CheckoutPaths, yield* fixedCheckoutPaths(1, [])),
+    Effect.provideService(ServedRoots, { root: unused }),
     Effect.provide(BunPath.layer),
     Effect.provide(Memory.layer),
   );
@@ -164,8 +214,51 @@ const engine = Effect.fnUntraced(function* (mode: 'dialog' | 'detach') {
       Effect.provideService(Pages, pages),
       Effect.provideService(Automation, automation),
     );
-  return { act, started, pages };
+  const emulate = (change: Emulate['input']['Type']) =>
+    (PAGE_PAIRS.emulate_page.body.execute({ ...change, page: PAGE }, undefined, caller) as EmulateCall).pipe(
+      forProject(Effect.succeed({ project: { id: 1, name: 'browser' } })),
+      Effect.provideService(Pages, pages),
+      Effect.provideService(Automation, automation),
+    );
+  return {
+    act,
+    started,
+    pages,
+    emulate,
+    adopting,
+    adopted,
+    latency: () => latency,
+    release: Deferred.succeed(release, undefined),
+    join: Queue.offer(
+      incoming,
+      JSON.stringify({
+        method: 'Target.attachedToTarget',
+        params: {
+          sessionId: 'child',
+          targetInfo: { targetId: 'child-frame', type: 'iframe', url: 'https://frame.example/' },
+          waitingForDebugger: false,
+        },
+        sessionId: 'engine',
+      }),
+    ),
+  };
 });
+
+it.effect('a late frame keeps the newest network conditions when its initial CPU command overlaps an update', () =>
+  Effect.gen(function* () {
+    const browser = yield* engine('conditions');
+    yield* browser.emulate({ cpu: 6, network: 'slow-3g' });
+    yield* browser.join;
+    yield* Deferred.await(browser.adopting);
+    const changing = yield* Effect.forkChild(browser.emulate({ network: 'fast-4g' }), { startImmediately: true });
+    yield* TestClock.adjust(0);
+    yield* browser.release;
+    const changed = yield* Fiber.join(changing);
+    yield* Deferred.await(browser.adopted);
+    expect(changed.emulation.network).toBe('fast-4g');
+    expect(browser.latency()).toBe(NETWORKS['fast-4g'].latency);
+  }),
+);
 
 it.effect('a queued sequence refuses a dialog opened while the preceding call owns the page', () =>
   Effect.gen(function* () {

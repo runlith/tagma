@@ -253,6 +253,12 @@ export const makeTerminalInventory = Effect.fnUntraced(function* ({
       const read = reading();
       return { ...read, listeners: cell.listeners, stale: cell.refreshing || !read.whole } satisfies CellReading;
     }),
+    retained: (projectId: number): CellReading | undefined => {
+      const cell = cells.get(projectId);
+      if (cell === undefined) return undefined;
+      const read = reading();
+      return { ...read, listeners: cell.listeners, stale: cell.refreshing || !read.whole };
+    },
     held: (fresh: boolean): Effect.Effect<HeldReading> =>
       serial(
         Effect.gen(function* () {

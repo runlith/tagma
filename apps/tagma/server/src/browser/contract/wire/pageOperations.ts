@@ -2,7 +2,7 @@ import { placedCursor } from '../../../platform/contract/wire/place.js';
 import { Schema } from 'effect';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { ceilingOf, limitOf } from '../../../platform/contract/wire/pageFamily.js';
-import { DEVICE_NAMES, Emulation, SCHEMES, Viewport } from './emulation.js';
+import { Cpu, DEVICE_NAMES, Emulation, Geolocation, NetworkCondition, SCHEMES, Viewport } from './emulation.js';
 import { PageId, ProfileId, Ref } from './ids.js';
 import { Download, Glance, Page } from './page.js';
 import {
@@ -81,7 +81,7 @@ export const PAGE_OPERATIONS = {
       profile: Schema.optional(ProfileId).annotate({ description: 'The profile id list_profiles answered.' }),
     }),
     answer: arms({ opened: { page: Page } }),
-    refusals: [...DRIVE_REFUSALS, 'navigation-failed'],
+    refusals: [...DRIVE_REFUSALS, 'navigation-failed', 'operator-input'],
     confirmation: () => ({ summary: 'Open a page?' }),
     confirmLabel: 'Open page',
     presentation: { running: 'Opening a page', done: 'Opened a page' },
@@ -115,7 +115,7 @@ export const PAGE_OPERATIONS = {
     ...ACTING,
     meaning: 'Load an address in a page, or go back, forward, reload or stop.',
     grammar:
-      'Name `url` or `go`. The answer comes once the navigation is committed, before the page has loaded: wait_for_page with `load` waits for that. A failed navigation refuses `navigation-failed` with the network error code.',
+      'Name `url` or `go`. The answer comes once committed, before load; wait_for_page with `load` waits for that. A network failure refuses `navigation-failed`. Agent navigation, including open_page, actions, frames, redirects and popups, follows browser.blockedDomains and browser.allowedDomains: project lists replace user lists, blocked wins, both empty leave navigation unrestricted. A blocked HTTP(S) document never loads and refuses domain-blocked naming its domain and setting; a block after a completed call is surfaced once at the next agent action. Operator input or navigation lifts the policy. Non-network documents (blob/data/about) and page subresources/fetches are outside these lists. While a restricted managed page exists, other HTTP(S) documents in that profile pass through interception too; workers are untouched.',
     input: Schema.Struct({
       project,
       page,
@@ -123,7 +123,7 @@ export const PAGE_OPERATIONS = {
       go: Schema.optional(Schema.Literals(GOES)),
     }),
     answer: arms({ navigated: { page: Glance } }),
-    refusals: [...DRIVE_REFUSALS, 'navigation-failed', 'action-shape'],
+    refusals: [...DRIVE_REFUSALS, 'navigation-failed', 'action-shape', 'operator-input'],
     confirmation: (input) => ({ summary: input.url === undefined ? `Go ${input.go ?? 'nowhere'}?` : `Open ${input.url}?` }),
     confirmLabel: 'Navigate',
     presentation: { running: 'Navigating', done: 'Navigated' },
@@ -146,29 +146,33 @@ export const PAGE_OPERATIONS = {
     meaning:
       'Run an ordered sequence of browser actions: click, double-click, hover, fill, type, press, select, check, uncheck, scroll, drag, upload or focus.',
     grammar:
-      'Send `steps`, a nonempty list; one action is a one-item list. The sequence holds the page queue once, so other calls cannot interleave. It stops at the first refusal or opened dialog, without undoing earlier steps. A refusal keeps its code and recovery guidance; its reason names the 1-based stopping step and how many steps completed. Otherwise `completed` counts finished steps and `stopped` names the 1-based step that opened the dialog in `page`, or is null. The stopping step may have had effects; an unknown outcome is not retried. Aim with `ref` from a snapshot or viewport `x`/`y` in CSS pixels. A click scrolls the element into view and refuses `element-obscured` if covered. `fill` replaces with `text`; `type` inserts at the caret; `press` takes `key` like Enter, Tab or Control+A (US layout); `select` takes `values` or labels; `scroll` takes `dx`/`dy` or a `ref` to reveal; `drag` goes to `to`; `upload` sets checkout `files`. Input never takes the operator’s screen focus. The answer carries the final page state.',
+      'Send `steps`, a nonempty list; one action is a one-item list. The sequence holds the page queue once, so other calls cannot interleave. It stops at the first refusal or opened dialog, without undoing earlier steps. A refusal keeps its code and recovery guidance; its reason names the 1-based stopping step and how many steps completed. Otherwise `completed` counts finished steps and `stopped` names the 1-based step that opened the dialog in `page`, or is null. The stopping step may have had effects; an unknown outcome is not retried. Aim with `ref` from a snapshot or viewport `x`/`y` in CSS pixels. A click scrolls the element into view and refuses `element-obscured` if covered. `fill` replaces with `text`; `type` inserts at the caret; `press` takes `key` like Enter, Tab or Control+A (US layout); `select` takes `values` or labels; `scroll` takes `dx`/`dy` or a `ref` to reveal; `drag` goes to `to`; `upload` sets checkout `files`. Input never takes the operator’s screen focus. While the operator works the page with their own input, each step refuses `operator-input` until that input has been quiet a few seconds; a step already running finishes. The answer carries the final page state.',
     input: Schema.Struct({ project, page, steps: Schema.NonEmptyArray(ActionStep) }),
     answer: arms({ acted: ActionRun.fields }),
-    refusals: [...DRIVE_REFUSALS, 'stale-ref', 'element-obscured', 'action-shape'],
+    refusals: [...DRIVE_REFUSALS, 'stale-ref', 'element-obscured', 'action-shape', 'operator-input'],
     confirmation: (input) => ({ summary: `Run ${input.steps.length} steps on the page?` }),
     confirmLabel: 'Act on page',
     presentation: { running: 'Acting on the page', done: 'Acted on the page' },
   }),
   emulate_page: operation('emulate_page', {
     ...ACTING,
-    meaning: 'Set or clear the viewport size, device and color scheme a page is rendered with.',
+    meaning: 'Set or clear a page’s viewport, device, color scheme, CPU slowdown, network conditions and geolocation.',
     grammar:
-      '`device` sets size, pixel ratio, mobile mode and user agent at once; `viewport` sets size alone; `scheme` sets `prefers-color-scheme`. `clear` removes every override. Emulation lasts until it is cleared, across reconnections.',
+      '`device` sets size, pixel ratio, mobile mode and user agent; `viewport` sets size alone; `scheme` sets `prefers-color-scheme`. Those overrides survive reconnection. `cpu` is a factor from 1 to 20 (1 removes slowdown), including other-process frames; pages sharing its renderer slow too. `network` takes offline, slow-3g, fast-3g, slow-4g or fast-4g, or latency in ms and download/upload in bytes per second; null removes it. Throttling leaves navigator.connection unchanged; offline also changes navigator.onLine. `geolocation` takes latitude, longitude and optional accuracy in metres; null removes it. On the managed host its permission grant reaches same-origin pages of the profile. Conditions end with the setting thread’s run or the engine session. `conditions: false` removes only these conditions; `clear` removes all overrides.',
     input: Schema.Struct({
       project,
       page,
       viewport: Schema.optional(Viewport),
       device: Schema.optional(Schema.Literals(DEVICE_NAMES)),
       scheme: Schema.optional(Schema.Literals(SCHEMES)),
+      cpu: Schema.optional(Cpu),
+      network: Schema.optional(Schema.NullOr(NetworkCondition)),
+      geolocation: Schema.optional(Schema.NullOr(Geolocation)),
+      conditions: Schema.optional(Schema.Literal(false)),
       clear: Schema.optional(Schema.Boolean),
     }),
     answer: arms({ emulated: { page: Glance, emulation: Emulation } }),
-    refusals: [...DRIVE_REFUSALS],
+    refusals: [...DRIVE_REFUSALS, 'operator-input'],
     confirmation: () => ({ summary: 'Change how the page is rendered?' }),
     confirmLabel: 'Emulate',
     presentation: { running: 'Emulating', done: 'Emulated' },
@@ -204,7 +208,7 @@ export const PAGE_OPERATIONS = {
       evaluated: { page: Glance, value: Schema.String, cut: Schema.Boolean },
       thrown: { page: Glance, exception: Schema.String },
     }),
-    refusals: [...DRIVE_REFUSALS],
+    refusals: [...DRIVE_REFUSALS, 'operator-input'],
     confirmation: () => ({ summary: 'Run this in the page?' }),
     confirmLabel: 'Evaluate',
     presentation: { running: 'Evaluating in the page', done: 'Evaluated in the page' },
@@ -254,6 +258,7 @@ export const PAGE_OPERATIONS = {
         total: Schema.Int,
         dropped: Schema.Int,
         capturing: Schema.Boolean,
+        conditions: Schema.NullOr(Schema.String),
       },
     }),
     refusals: [...DRIVE_REFUSALS, 'console-off'],
@@ -277,8 +282,22 @@ export const PAGE_OPERATIONS = {
       body: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
     }),
     answer: arms({
-      read: { page: PageId, requests: Schema.Array(NetworkEntry), shown: Schema.Int, total: Schema.Int, dropped: Schema.Int },
-      body: { page: PageId, request: Schema.String, body: Schema.String, base64: Schema.Boolean, cut: Schema.Boolean },
+      read: {
+        page: PageId,
+        requests: Schema.Array(NetworkEntry),
+        shown: Schema.Int,
+        total: Schema.Int,
+        dropped: Schema.Int,
+        conditions: Schema.NullOr(Schema.String),
+      },
+      body: {
+        page: PageId,
+        request: Schema.String,
+        body: Schema.String,
+        base64: Schema.Boolean,
+        cut: Schema.Boolean,
+        conditions: Schema.NullOr(Schema.String),
+      },
     }),
     refusals: [...DRIVE_REFUSALS, 'body-unavailable'],
     page: NETWORK_ROWS,
@@ -291,7 +310,15 @@ export const PAGE_OPERATIONS = {
     meaning: 'List the downloads of a page, newest first, with their file, size and state; a finished file is read at its path.',
     grammar: 'The page keeps its last 50 downloads; `limit` reads the newest of them and `total` counts what it keeps.',
     input: Schema.Struct({ project, page, limit: limitOf(DOWNLOAD_ROWS) }),
-    answer: arms({ read: { page: PageId, downloads: Schema.Array(Download), shown: Schema.Int, total: Schema.Int } }),
+    answer: arms({
+      read: {
+        page: PageId,
+        downloads: Schema.Array(Download),
+        shown: Schema.Int,
+        total: Schema.Int,
+        conditions: Schema.NullOr(Schema.String),
+      },
+    }),
     refusals: ['page-unknown'],
     page: DOWNLOAD_ROWS,
     confirmation: () => ({ summary: 'List the downloads?' }),

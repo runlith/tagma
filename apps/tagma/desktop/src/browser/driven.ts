@@ -7,8 +7,32 @@ const UNRESPONSIVE_AFTER_MS = 5_000;
 
 type Command = { readonly id: number; readonly method: string; readonly params?: object; readonly sessionId?: string };
 
+const MOUSE: Readonly<Record<string, readonly string[]>> = {
+  mousePressed: ['mouseDown'],
+  mouseReleased: ['mouseUp'],
+  mouseMoved: ['mouseMove'],
+  mouseWheel: ['mouseWheel'],
+};
+
+const KEY: Readonly<Record<string, readonly string[]>> = {
+  keyDown: ['rawKeyDown', 'keyDown', 'char'],
+  rawKeyDown: ['rawKeyDown', 'keyDown', 'char'],
+  char: ['char'],
+  keyUp: ['keyUp'],
+};
+
+const injectedTypes = (command: Command): readonly string[] => {
+  const type = (command.params as { readonly type?: unknown } | undefined)?.type;
+  if (typeof type !== 'string') return [];
+  if (command.method === 'Input.dispatchMouseEvent') return MOUSE[type] ?? [];
+  if (command.method === 'Input.dispatchKeyEvent') return KEY[type] ?? [];
+  if (command.method === 'Input.dispatchTouchEvent') return [type];
+  return [];
+};
+
 export type Probed = {
   readonly paused: () => boolean;
+  readonly factor: () => number;
   readonly report: (responsive: boolean) => void;
 };
 
@@ -17,6 +41,9 @@ export class Driven {
   private probing: ReturnType<typeof setInterval> | null = null;
   private asking = false;
   private silent = false;
+  private waited = 0;
+  private previous = 0;
+  private readonly injected = new Map<number, readonly string[]>();
 
   private leaveDialog = false;
 
@@ -70,18 +97,31 @@ export class Driven {
       this.close('closed');
       return;
     }
-    const failed = (error: unknown) =>
+    const injected = injectedTypes(command);
+    if (injected.length > 0) this.injected.set(command.id, injected);
+    const answered = () => {
+      this.injected.delete(command.id);
+    };
+    const failed = (error: unknown) => {
+      answered();
       this.reporter.cdp(
         this.session,
         JSON.stringify({ id: command.id, error: { code: -32000, message: error instanceof Error ? error.message : String(error) } }),
       );
+    };
     try {
-      this.contents.debugger
-        .sendCommand(command.method, command.params, command.sessionId)
-        .then((result: unknown) => this.reporter.cdp(this.session, JSON.stringify({ id: command.id, result })), failed);
+      this.contents.debugger.sendCommand(command.method, command.params, command.sessionId).then((result: unknown) => {
+        answered();
+        this.reporter.cdp(this.session, JSON.stringify({ id: command.id, result }));
+      }, failed);
     } catch (error) {
       failed(error);
     }
+  }
+
+  injects(type: string): boolean {
+    for (const types of this.injected.values()) if (types.includes(type)) return true;
+    return false;
   }
 
   probe(probed: Probed): void {
@@ -102,15 +142,22 @@ export class Driven {
   }
 
   private ask(probed: Probed): void {
-    if (this.asking || this.ended || probed.paused()) return;
+    if (this.ended) return;
+    const now = performance.now();
+    if (this.asking) {
+      if (!probed.paused()) this.waited += (now - this.previous) / probed.factor();
+      this.previous = now;
+      if (!this.silent && this.waited >= UNRESPONSIVE_AFTER_MS) {
+        this.silent = true;
+        probed.report(false);
+      }
+      return;
+    }
+    if (probed.paused()) return;
     this.asking = true;
-    const late = setTimeout(() => {
-      if (this.silent || this.ended || probed.paused()) return;
-      this.silent = true;
-      probed.report(false);
-    }, UNRESPONSIVE_AFTER_MS);
+    this.previous = now;
+    this.waited = 0;
     const answered = () => {
-      clearTimeout(late);
       this.asking = false;
       if (!this.silent || this.ended) return;
       this.silent = false;

@@ -7,6 +7,7 @@ import {
   type Host,
   HostLost,
   HostRefused,
+  NavigationBlocked,
   NavigationFailed,
   PageMissing,
   PageStayed,
@@ -19,6 +20,11 @@ import { ANSWERS, type Call, DESKTOP, type Failure, type Order, Parts, Report, s
 const HELD_LIMIT = 4096;
 
 type Answered = { readonly value: unknown; readonly tail: string | undefined };
+
+type Watched = {
+  readonly signal: Deferred.Deferred<never, NavigationBlocked>;
+  failure: NavigationBlocked | null;
+};
 
 type Linked = {
   readonly incoming: Queue.Queue<string, TransportLost | Cause.Done>;
@@ -58,11 +64,13 @@ export const makeAttachment = Effect.fnUntraced(function* (input: {
   const calls = new Map<number, Deferred.Deferred<Answered, Failure | HostLost>>();
   const sent = new Set<number>();
   const sessions = new Map<number, Linked>();
+  const watches = new Map<number, Watched>();
   const held = new Map<number, { readonly report: Report; readonly tail: string | undefined }>();
   let parts: { readonly count: number; readonly texts: string[] } | null = null;
   let expected = 1;
   let lastCall = 0;
   let lastSession = 0;
+  let lastWatch = 0;
   let lastHold = 0;
 
   const done = () => Deferred.isDoneUnsafe(finished);
@@ -105,25 +113,35 @@ export const makeAttachment = Effect.fnUntraced(function* (input: {
       Effect.catchIf(isFailure, (failure) => Effect.fail(refusedOf(failure))),
     );
 
+  const pageFailure = (page: PageId, failure: Failure): HostRefused | HostLost | PageMissing | DebuggerTaken | NavigationFailed => {
+    switch (failure.kind) {
+      case 'missing':
+        return new PageMissing({ page, message: failure.message });
+      case 'taken':
+        return new DebuggerTaken({ page, message: failure.message });
+      case 'navigation':
+        return new NavigationFailed({ code: failure.code, message: failure.message });
+      case 'blocked':
+      case 'refused':
+      case 'stayed':
+        return refusedOf(failure);
+    }
+  };
+
   const onPage = (page: PageId, call: Call) =>
-    ask(call).pipe(
-      Effect.catchIf(
-        isFailure,
-        (failure): Effect.Effect<never, HostRefused | HostLost | PageMissing | DebuggerTaken | NavigationFailed> => {
-          switch (failure.kind) {
-            case 'missing':
-              return Effect.fail(new PageMissing({ page, message: failure.message }));
-            case 'taken':
-              return Effect.fail(new DebuggerTaken({ page, message: failure.message }));
-            case 'navigation':
-              return Effect.fail(new NavigationFailed({ code: failure.code, message: failure.message }));
-            case 'refused':
-            case 'stayed':
-              return Effect.fail(refusedOf(failure));
-          }
-        },
-      ),
+    ask(call).pipe(Effect.catchIf(isFailure, (failure) => Effect.fail(pageFailure(page, failure))));
+
+  const holdPage = Effect.fnUntraced(function* (page: PageId, acquire: (hold: number) => Call, release: (hold: number) => Call) {
+    const hold = ++lastHold;
+    yield* Effect.addFinalizer(() => post(release(hold)));
+    yield* onPage(page, acquire(hold)).pipe(
+      Effect.asVoid,
+      Effect.catchTags({
+        DebuggerTaken: (taken) => Effect.fail(new HostLost({ message: taken.message, pending: true })),
+        NavigationFailed: (failed) => Effect.fail(new HostLost({ message: failed.message, pending: true })),
+      }),
     );
+  });
 
   const unread = (what: string) => (failure: { readonly message: string }) =>
     new HostLost({ message: `the desktop host answered ${what} unreadably: ${failure.message}`, pending: true });
@@ -169,6 +187,16 @@ export const makeAttachment = Effect.fnUntraced(function* (input: {
       case 'event':
         yield* PubSub.publish(events, report.event);
         return;
+      case 'blocked': {
+        const watched = watches.get(report.watch);
+        if (watched === undefined || watched.failure !== null) return;
+        watched.failure = new NavigationBlocked({
+          ...report.block,
+          message: `navigation to ${report.block.domain} is blocked by ${report.block.setting}`,
+        });
+        yield* Deferred.fail(watched.signal, watched.failure);
+        return;
+      }
       case 'cdp': {
         if (tail === undefined) return yield* broken(`report ${report.seq} carries no CDP text`);
         const link = sessions.get(report.session);
@@ -242,22 +270,31 @@ export const makeAttachment = Effect.fnUntraced(function* (input: {
     native: true,
     pages: {
       open: Effect.fn('DesktopHost.open')(function* (opening) {
-        yield* plain({
+        const { value } = yield* ask({
           kind: 'open',
           page: opening.page,
           profile: opening.profile.id,
           context: opening.context,
           url: opening.url,
           history: opening.history,
-        });
+          policy: opening.policy,
+        }).pipe(
+          Effect.catchIf(isFailure, (failure) =>
+            Effect.fail(
+              failure.kind === 'blocked' ? new NavigationBlocked({ ...failure.block, message: failure.message }) : refusedOf(failure),
+            ),
+          ),
+        );
+        return yield* Schema.decodeUnknownEffect(ANSWERS.open)(value).pipe(Effect.mapError(unread('its opened page')));
       }),
       adopt: Effect.fn('DesktopHost.adopt')(function* (local, page) {
-        yield* onPage(page, { kind: 'adopt', local, page }).pipe(
+        const { value } = yield* onPage(page, { kind: 'adopt', local, page }).pipe(
           Effect.catchTags({
             DebuggerTaken: (taken) => Effect.fail(new HostLost({ message: taken.message, pending: true })),
             NavigationFailed: (failed) => Effect.fail(new HostLost({ message: failed.message, pending: true })),
           }),
         );
+        return yield* Schema.decodeUnknownEffect(ANSWERS.adopt)(value).pipe(Effect.mapError(unread('its adopted page')));
       }),
       close: Effect.fn('DesktopHost.close')(function* (page, asking) {
         yield* ask({ kind: 'close', page, ask: asking }).pipe(
@@ -271,10 +308,50 @@ export const makeAttachment = Effect.fnUntraced(function* (input: {
         ({ value }) => Schema.decodeUnknownEffect(ANSWERS.live)(value).pipe(Effect.mapError(unread('its live pages'))),
       ).pipe(Effect.withSpan('DesktopHost.live')),
       navigate: Effect.fn('DesktopHost.navigate')(function* (page, to) {
-        const { value } = yield* onPage(page, { kind: 'navigate', page, to }).pipe(
+        const { value } = yield* ask({ kind: 'navigate', page, to }).pipe(
+          Effect.catchIf(isFailure, (failure) =>
+            Effect.fail(
+              failure.kind === 'blocked'
+                ? new NavigationBlocked({ ...failure.block, message: failure.message })
+                : pageFailure(page, failure),
+            ),
+          ),
           Effect.catchTag('DebuggerTaken', (taken) => Effect.fail(new HostLost({ message: taken.message, pending: true }))),
         );
         return yield* Schema.decodeUnknownEffect(ANSWERS.navigate)(value).pipe(Effect.mapError(unread('a navigation')));
+      }),
+      navigation: Effect.fn('DesktopHost.navigation')(function* (page, policy) {
+        const watch = ++lastWatch;
+        const watched: Watched = { signal: yield* Deferred.make<never, NavigationBlocked>(), failure: null };
+        watches.set(watch, watched);
+        yield* Effect.addFinalizer(() => {
+          watches.delete(watch);
+          return post({ kind: 'unnavigation', watch });
+        });
+        const { value } = yield* onPage(page, { kind: 'navigation', page, watch, policy }).pipe(
+          Effect.catchTags({
+            DebuggerTaken: (taken) => Effect.fail(new HostLost({ message: taken.message, pending: true })),
+            NavigationFailed: (failed) => Effect.fail(new HostLost({ message: failed.message, pending: true })),
+          }),
+        );
+        const { blocked: pending, changes } = yield* Schema.decodeUnknownEffect(ANSWERS.navigation)(value).pipe(
+          Effect.mapError(unread('a navigation gate')),
+        );
+        if (pending !== null && watched.failure === null) {
+          watched.failure = new NavigationBlocked({
+            ...pending,
+            message: `navigation to ${pending.domain} is blocked by ${pending.setting}`,
+          });
+          yield* Deferred.fail(watched.signal, watched.failure);
+        }
+        const seen = Effect.suspend(() => post({ kind: 'navigationSeen', watch }));
+        return {
+          changes,
+          blocked: Deferred.await(watched.signal).pipe(Effect.tapError(() => seen)),
+          check: Effect.suspend(() => (watched.failure === null ? Effect.void : Effect.fail(watched.failure))).pipe(
+            Effect.tapError(() => seen),
+          ),
+        };
       }),
       pdf: Effect.fn('DesktopHost.pdf')(function* (page) {
         const { tail } = yield* onPage(page, { kind: 'pdf', page }).pipe(
@@ -297,14 +374,24 @@ export const makeAttachment = Effect.fnUntraced(function* (input: {
       }),
       events: Effect.map(PubSub.subscribe(events), (subscription) => Stream.fromSubscription(subscription)),
       paint: Effect.fn('DesktopHost.paint')(function* (page) {
-        const hold = ++lastHold;
-        yield* Effect.addFinalizer(() => post({ kind: 'unpaint', hold }));
-        yield* onPage(page, { kind: 'paint', page, hold }).pipe(
-          Effect.asVoid,
-          Effect.catchTags({
-            DebuggerTaken: (taken) => Effect.fail(new HostLost({ message: taken.message, pending: true })),
-            NavigationFailed: (failed) => Effect.fail(new HostLost({ message: failed.message, pending: true })),
-          }),
+        yield* holdPage(
+          page,
+          (hold) => ({ kind: 'paint', page, hold }),
+          (hold) => ({ kind: 'unpaint', hold }),
+        );
+      }),
+      strain: Effect.fn('DesktopHost.strain')(function* (page, strain) {
+        yield* holdPage(
+          page,
+          (hold) => ({ kind: 'strain', page, hold, strain }),
+          (hold) => ({ kind: 'unstrain', hold }),
+        );
+      }),
+      geolocation: Effect.fn('DesktopHost.geolocation')(function* (page) {
+        yield* holdPage(
+          page,
+          (hold) => ({ kind: 'geolocation', page, hold }),
+          (hold) => ({ kind: 'unlocate', hold }),
         );
       }),
       session: Effect.fn('DesktopHost.session')(function* (page) {

@@ -7,6 +7,9 @@ import { Screencast } from './contract/service/screencast.js';
 import { makeAutomation } from './engine/automation.js';
 import { makeDrive } from './engine/drive.js';
 import { makeScreencast } from './engine/screencast.js';
+import { Traces } from './contract/service/traces.js';
+import { makeAnalysis } from './engine/analysis.js';
+import { makeTraces } from './engine/trace.js';
 import { hostsLayer } from './hosts.js';
 import { pagesLayer } from './pages.js';
 import { profilesLayer } from './profiles.js';
@@ -18,7 +21,8 @@ const engineLayer = Layer.effectContext(
     const drive = yield* makeDrive({ pages, profiles: yield* Profiles, runs: yield* ThreadRuns });
     const automation = yield* makeAutomation({ drive });
     const screencast = yield* makeScreencast({ pages, drive });
-    return Context.make(Automation, automation).pipe(Context.add(Screencast, screencast));
+    const traces = yield* makeTraces({ drive, analysis: yield* makeAnalysis() });
+    return Context.make(Automation, automation).pipe(Context.add(Screencast, screencast), Context.add(Traces, traces));
   }),
 );
 

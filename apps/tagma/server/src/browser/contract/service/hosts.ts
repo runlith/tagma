@@ -2,10 +2,11 @@ import type { Session } from '@runlith/cdp/session';
 import { Context, Data, type Effect, type Schema, type Scope, type Stream } from 'effect';
 import { ContributionPoint } from '../../../platform/contract/service/contribution.js';
 import type { Unblock } from '../../../platform/contract/wire/refusal.js';
-import type { HostEvent, LivePage, Navigation, PageChange } from '../wire/host.js';
+import type { HostEvent, LivePage, Navigation, PageChange, Strain } from '../wire/host.js';
 import type { PageId, ProfileId } from '../wire/ids.js';
 import type { History, Live } from '../wire/page.js';
 import type { ConsoleCapture, Removal } from '../wire/profile.js';
+import type { DomainBlock, DomainPolicy, Restriction, RestrictionState } from '../wire/domains.js';
 
 export type ProfileRecord = {
   readonly id: ProfileId;
@@ -34,21 +35,33 @@ export class DebuggerTaken extends Data.TaggedError('DebuggerTaken')<{ readonly 
 
 export type HostFailure = HostRefused | HostLost;
 
+export class NavigationBlocked extends Data.TaggedError('NavigationBlocked')<DomainBlock & { readonly message: string }> {}
+
+export type NavigationWatch = {
+  readonly changes: readonly Restriction[];
+  readonly blocked: Effect.Effect<never, NavigationBlocked>;
+  readonly check: Effect.Effect<void, NavigationBlocked>;
+};
+
 export type Opening = {
   readonly page: PageId;
   readonly profile: ProfileRecord;
   readonly context: string | null;
   readonly url: string;
   readonly history: History | null;
+  readonly policy: DomainPolicy | null;
 };
 
 export type PageHost = {
-  open(opening: Opening): Effect.Effect<void, HostFailure>;
-  adopt(local: string, page: PageId): Effect.Effect<void, HostFailure | PageMissing>;
+  open(opening: Opening): Effect.Effect<RestrictionState, HostFailure | NavigationBlocked>;
+  adopt(local: string, page: PageId): Effect.Effect<RestrictionState, HostFailure | PageMissing>;
   close(page: PageId, ask: boolean): Effect.Effect<void, HostFailure | PageStayed>;
   readonly live: Effect.Effect<readonly LivePage[], HostFailure>;
-  navigate(page: PageId, to: Navigation): Effect.Effect<PageChange, HostFailure | PageMissing | NavigationFailed>;
+  navigate(page: PageId, to: Navigation): Effect.Effect<PageChange, HostFailure | PageMissing | NavigationFailed | NavigationBlocked>;
+  navigation(page: PageId, policy: DomainPolicy | null): Effect.Effect<NavigationWatch, HostFailure | PageMissing, Scope.Scope>;
   pdf(page: PageId): Effect.Effect<Uint8Array, HostFailure | PageMissing>;
+  strain(page: PageId, strain: Strain): Effect.Effect<void, HostFailure | PageMissing, Scope.Scope>;
+  geolocation(page: PageId): Effect.Effect<void, HostFailure | PageMissing, Scope.Scope>;
   answer(page: PageId, accept: boolean, text: string | undefined): Effect.Effect<void, HostFailure | PageMissing>;
   readonly events: Effect.Effect<Stream.Stream<HostEvent>, never, Scope.Scope>;
   paint(page: PageId): Effect.Effect<void, HostFailure | PageMissing, Scope.Scope>;

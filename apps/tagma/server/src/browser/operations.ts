@@ -8,6 +8,7 @@ import { cursorRefusal, GateRefusal } from '../platform/contract/wire/refusal.js
 import { CurrentProject } from '../projects/contract/service/caller.js';
 import { type Aim, Automation, type PlannedAction } from './contract/service/automation.js';
 import type { Navigation } from './contract/wire/host.js';
+import { conditionsOf } from './contract/wire/emulation.js';
 import { type Opener, Pages } from './contract/service/pages.js';
 import { Profiles } from './contract/service/profiles.js';
 import { COOKIE_OPERATIONS as COOKIE, type CookieOperationId } from './contract/wire/cookieOperations.js';
@@ -38,7 +39,7 @@ const openerOf = Effect.fnUntraced(function* (caller: Caller) {
   return { projectId: project.id, thread: threadOf(caller), human: caller.actor.kind === 'operator' } satisfies Opener;
 });
 
-const pageOf = Effect.fnUntraced(function* (caller: Caller, page: Parameters<Pages['Service']['resolve']>[1]) {
+export const pageOf = Effect.fnUntraced(function* (caller: Caller, page: Parameters<Pages['Service']['resolve']>[1]) {
   const opener = yield* openerOf(caller);
   const resolved = yield* (yield* Pages).resolve(opener, page);
   return { page: resolved.id, thread: opener.thread };
@@ -116,17 +117,18 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
       voice: saidLines((answer) => [
         `Opened ${answer.page.id} ${answer.page.state}${answer.page.live.loading ? ' loading' : ''} ${answer.page.url}${answer.page.title === '' ? '' : ` ${JSON.stringify(answer.page.title)}`}`,
         ...(answer.page.live.dialog === null ? [] : [`Dialog: ${JSON.stringify(answer.page.live.dialog)}`]),
+        ...(conditionsOf(answer.page.live.conditions) === null ? [] : [`Conditions: ${conditionsOf(answer.page.live.conditions)}`]),
         `snapshot_page ${JSON.stringify({ project: answer.page.projectId, page: answer.page.id, limit: SNAPSHOT_CEILING })}`,
         `capture_page ${JSON.stringify({ project: answer.page.projectId, page: answer.page.id })}`,
       ]),
       execute: Effect.fnUntraced(function* (input, _prepared, caller) {
         const opener = yield* openerOf(caller);
         const pages = yield* Pages;
-        const driven = opener.thread !== null && input.url !== undefined;
+        const driven = !opener.human && input.url !== undefined;
         const opened = yield* pages.open(opener, { url: driven ? 'about:blank' : (input.url ?? 'about:blank'), profile: input.profile });
         if (driven)
           yield* (yield* Automation)
-            .navigate(opened.id, { kind: 'url', url: input.url! }, opener.thread)
+            .navigate(opened.id, { kind: 'url', url: input.url! }, opener.thread, true)
             .pipe(
               Effect.tapError(() =>
                 pages
@@ -189,7 +191,10 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         const to = navigationOf(input);
         if (to instanceof GateRefusal) return yield* to;
         const { page, thread } = yield* pageOf(caller, input.page);
-        return { status: 'navigated' as const, page: yield* (yield* Automation).navigate(page, to, thread) };
+        return {
+          status: 'navigated' as const,
+          page: yield* (yield* Automation).navigate(page, to, thread, caller.actor.kind !== 'operator'),
+        };
       }),
     }),
   ),
@@ -212,6 +217,7 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
           page,
           input.steps.map((step) => actionOf(step, caller)),
           thread,
+          caller.actor.kind !== 'operator',
         );
         return { status: 'acted' as const, ...run };
       }),
@@ -224,7 +230,16 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         const { page, thread } = yield* pageOf(caller, input.page);
         const emulated = yield* (yield* Automation).emulate(
           page,
-          { viewport: input.viewport, device: input.device, scheme: input.scheme, clear: input.clear === true },
+          {
+            viewport: input.viewport,
+            device: input.device,
+            scheme: input.scheme,
+            cpu: input.cpu,
+            network: input.network,
+            geolocation: input.geolocation,
+            conditions: input.conditions,
+            clear: input.clear === true,
+          },
           thread,
         );
         return { status: 'emulated' as const, ...emulated };
@@ -260,7 +275,7 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
     body(PAGE.evaluate_in_page, {
       execute: Effect.fnUntraced(function* (input, _prepared, caller) {
         const { page, thread } = yield* pageOf(caller, input.page);
-        const evaluated = yield* (yield* Automation).evaluate(page, input.expression, thread);
+        const evaluated = yield* (yield* Automation).evaluate(page, input.expression, thread, caller.actor.kind !== 'operator');
         return 'exception' in evaluated ? { status: 'thrown' as const, ...evaluated } : { status: 'evaluated' as const, ...evaluated };
       }),
     }),
@@ -303,6 +318,7 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
           total: read.total,
           dropped: read.dropped,
           capturing: read.capturing,
+          conditions: (yield* Pages).glance(page, false).conditions,
         };
       }),
     }),
@@ -314,7 +330,13 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         const { page, thread } = yield* pageOf(caller, input.page);
         const automation = yield* Automation;
         if (input.body !== undefined)
-          return { status: 'body' as const, page, request: input.body, ...(yield* automation.body(page, input.body, thread)) };
+          return {
+            status: 'body' as const,
+            page,
+            request: input.body,
+            ...(yield* automation.body(page, input.body, thread)),
+            conditions: (yield* Pages).glance(page, false).conditions,
+          };
         const read = yield* automation.network(page, {
           match: input.match,
           failed: input.failed === true,
@@ -328,6 +350,7 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
           shown: read.entries.length,
           total: read.total,
           dropped: read.dropped,
+          conditions: (yield* Pages).glance(page, false).conditions,
         };
       }),
     }),
@@ -339,7 +362,14 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         const { page } = yield* pageOf(caller, input.page);
         const kept = yield* (yield* Pages).downloads(page);
         const downloads = kept.slice(-pageRows(input.limit, DOWNLOAD_ROWS, DOWNLOAD_CEILING)).reverse();
-        return { status: 'read' as const, page, downloads, shown: downloads.length, total: kept.length };
+        return {
+          status: 'read' as const,
+          page,
+          downloads,
+          shown: downloads.length,
+          total: kept.length,
+          conditions: (yield* Pages).glance(page, false).conditions,
+        };
       }),
     }),
   ),

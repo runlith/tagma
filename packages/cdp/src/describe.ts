@@ -1,3 +1,19 @@
+import { Schema } from 'effect';
+
+export const Location = Schema.Struct({
+  file: Schema.String,
+  line: Schema.NullOr(Schema.Int),
+  column: Schema.NullOr(Schema.Int),
+  basis: Schema.Literals(['element', 'component', 'stack']),
+});
+
+export const Component = Schema.Struct({
+  framework: Schema.String,
+  name: Schema.NullOr(Schema.String),
+  source: Schema.NullOr(Location),
+});
+export type Component = typeof Component.Type;
+
 export const TEXT_LIMIT = 2_000;
 export const HTML_LIMIT = 4_096;
 
@@ -101,6 +117,112 @@ export const DESCRIBE = `function (attributeNames, styleNames, textLimit, htmlLi
     attributes,
     styles,
     rect: { x: box.x, y: box.y, width: box.width, height: box.height },
+  };
+}`;
+
+export const COMPONENT = `function () {
+  const descriptor = Object.getOwnPropertyDescriptor;
+  const prototype = Object.getPrototypeOf;
+  const apply = Reflect.apply;
+  const functionText = Function.prototype.toString;
+  const own = (object, key) => {
+    if (object === null || (typeof object !== 'object' && typeof object !== 'function')) return undefined;
+    const property = descriptor(object, key);
+    return property && 'value' in property ? property.value : undefined;
+  };
+  const text = (value) => typeof value === 'string' && value.length <= 65536 ? value : null;
+  const named = (type, display = true) => {
+    for (let depth = 0; type && depth < 8; depth++) {
+      const name = text((display && own(type, 'displayName')) || own(type, 'name') || own(type, '__name'));
+      if (name) return name;
+      type = own(type, 'render') || own(type, 'type');
+    }
+    return null;
+  };
+  const source = (file, line, column, basis) => text(file) ? {
+    file, line: Number.isInteger(line) && line > 0 ? line : null,
+    column: Number.isInteger(column) && column > 0 ? column : null,
+    basis,
+  } : null;
+  const frameOf = (stack, name) => {
+    if (!text(stack) || !name) return null;
+    for (const frame of stack.split('\\n').slice(0, 20)) {
+      const match = /^\\s*at (.*?) \\((.+):(\\d+):(\\d+)\\)$/.exec(frame);
+      if (match && (match[1] === name || match[1].endsWith('.' + name))) return source(match[2], Number(match[3]), Number(match[4]), 'stack');
+    }
+    return null;
+  };
+  const withoutHook = (object) => {
+    for (let depth = 0; object && depth < 16; depth++, object = prototype(object)) {
+      if (descriptor(object, 'prepareStackTrace')) return false;
+    }
+    return object === null;
+  };
+  let nativeStack = null;
+  const svelte = (element) => {
+    const meta = own(element, '__svelte_meta');
+    const loc = own(meta, 'loc');
+    const file = text(own(loc, 'file'));
+    if (!file) return null;
+    const name = file.split(/[\\\\/]/).pop().replace(/\\.svelte$/, '');
+    return { framework: 'svelte', name, source: source(file, own(loc, 'line'), own(loc, 'column') + 1, 'element') };
+  };
+  const react = (element) => {
+    let fiber;
+    let keys = 0;
+    for (const key in element) {
+      if (++keys > 128) break;
+      if (key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$')) { fiber = own(element, key); break; }
+    }
+    if (!fiber || (!descriptor(fiber, '_debugOwner') && !descriptor(fiber, '_debugSource') && !descriptor(fiber, '_debugStack'))) return null;
+    let owner = fiber;
+    let name = null;
+    for (let depth = 0; owner && depth < 32; depth++) {
+      name = named(own(owner, 'type'));
+      if (name) break;
+      owner = own(owner, '_debugOwner') || own(owner, 'return');
+    }
+    const renderName = named(own(owner, 'type'), false) || name;
+    const loc = own(fiber, '_debugSource');
+    let location = source(own(loc, 'fileName'), own(loc, 'lineNumber'), own(loc, 'columnNumber'), 'element');
+    const error = own(fiber, '_debugStack');
+    const stack = error && descriptor(error, 'stack');
+    if (!location && stack) {
+      if ('value' in stack) location = frameOf(stack.value, renderName);
+      else if (typeof stack.get === 'function' && text(own(error, 'message'))) {
+        const constructor = own(prototype(error), 'constructor');
+        const globalError = own(globalThis, 'Error');
+        if (constructor && globalError && withoutHook(constructor) && withoutHook(globalError) && apply(functionText, constructor, []) === 'function Error() { [native code] }') {
+          const native = descriptor(new constructor(), 'stack');
+          if (native && native.get === stack.get) nativeStack = { error, get: stack.get, constructor, globalError, name: renderName };
+        }
+      }
+    }
+    return name || location ? { framework: 'react', name, source: location } : null;
+  };
+  const vue = (element) => {
+    const instance = own(element, '__vueParentComponent');
+    const type = own(instance, 'type');
+    const context = own(instance, 'ctx');
+    if (!type || !context || typeof descriptor(context, '_')?.get !== 'function') return null;
+    const file = text(own(type, '__file'));
+    const name = named(type) || (file ? file.split(/[\\\\/]/).pop().replace(/\\.vue$/, '') : null);
+    return name || file ? { framework: 'vue', name, source: source(file, null, null, 'component') } : null;
+  };
+  let element = this.nodeType === 1 ? this : this.parentElement;
+  let component = null;
+  for (let depth = 0; element && depth < 32 && !component; depth++, element = element.parentElement || (element.parentNode && element.parentNode.host)) {
+    for (const read of [svelte, react, vue]) {
+      component = read(element);
+      if (component) break;
+    }
+  }
+  return () => {
+    if (component && nativeStack && withoutHook(nativeStack.constructor) && withoutHook(nativeStack.globalError)) {
+      const location = frameOf(apply(nativeStack.get, nativeStack.error, []), nativeStack.name);
+      if (location) return { ...component, source: location };
+    }
+    return component;
   };
 }`;
 

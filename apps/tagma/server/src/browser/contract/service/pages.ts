@@ -4,9 +4,11 @@ import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { PageId, ProfileId } from '../wire/ids.js';
 import type { Download, Glance, Live, Page, PagesEvent } from '../wire/page.js';
 import type { PageChange } from '../wire/host.js';
-import type { Host, HostFailure, Moved } from './hosts.js';
+import type { DomainPolicy } from '../wire/domains.js';
+import type { Host, HostFailure, Moved, NavigationWatch } from './hosts.js';
 
-export type PageRefusal = 'page-unknown' | 'host-away' | 'profile-unknown' | 'host-refused' | 'outcome-unknown';
+export type PageRefusal = 'page-unknown' | 'host-away' | 'profile-unknown' | 'host-refused' | 'outcome-unknown' | 'domain-blocked';
+export type ReleaseRefusal = 'page-unknown' | 'host-away' | 'host-refused' | 'outcome-unknown';
 
 export const outcomeUnknown = (message: string): GateRefusal<'outcome-unknown'> =>
   new GateRefusal('outcome-unknown', `the call reached the page host, but its outcome is unknown: ${message}`, [
@@ -44,8 +46,11 @@ export class Pages extends Context.Service<
       page: PageId,
     ): Effect.Effect<void, StoreFailure | GateRefusal<'page-unknown' | 'page-stayed' | 'host-refused' | 'outcome-unknown' | 'host-away'>>;
     list(projectId: number, walk: Walk): Effect.Effect<Listing, StoreFailure>;
-    hold(page: PageId): Effect.Effect<Host, StoreFailure | GateRefusal<PageRefusal>>;
+    hold(page: PageId, policy?: DomainPolicy | null): Effect.Effect<Host, StoreFailure | GateRefusal<PageRefusal>>;
+    navigation(page: PageId, agent: boolean): Effect.Effect<NavigationWatch, StoreFailure | GateRefusal<PageRefusal>, Scope.Scope>;
     live(page: PageId): Live | undefined;
+    operate(page: PageId): Effect.Effect<void, GateRefusal<ReleaseRefusal>>;
+    operated(page: PageId): number | undefined;
     mark(page: PageId, change: Partial<Live>, frame?: FrameTarget): Effect.Effect<void>;
     hungFrame(page: PageId): FrameTarget | undefined;
     inProfile(profile: ProfileId): readonly Page[];

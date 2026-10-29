@@ -2,7 +2,17 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import type { Download } from '@tagma/server/browser/contract/wire/page';
-import { app, type BaseWindow, type DownloadItem, dialog, type Session, session, systemPreferences, type WebContents } from 'electron';
+import {
+  app,
+  type BaseWindow,
+  type DownloadItem,
+  dialog,
+  type Session,
+  session,
+  systemPreferences,
+  type WebContents,
+  webContents,
+} from 'electron';
 import { firefoxAgent, isGoogleSignIn } from './identity.js';
 
 const GRANTED = new Set(['fullscreen', 'clipboard-sanitized-write', 'pointerLock']);
@@ -13,6 +23,10 @@ export type PageOwner = {
   readonly downloaded: (contents: WebContents, download: Download) => void;
   readonly window: (contents: WebContents) => BaseWindow | null;
 };
+
+type NavigationGuard = (url: string) => boolean;
+
+type GuardedPage = { readonly session: Session; readonly id: number };
 
 type Device = 'microphone' | 'camera';
 
@@ -43,6 +57,9 @@ const systemGranted = async (devices: readonly Device[]): Promise<boolean> => {
 export class Profiles {
   private readonly prepared = new Set<string>();
   private readonly decided = new Map<string, boolean>();
+  private readonly guarded = new Map<Session, Map<number, NavigationGuard>>();
+  private readonly guardedPages = new WeakMap<WebContents, GuardedPage>();
+  private readonly geolocations = new WeakMap<WebContents, number>();
 
   constructor(
     private readonly identity: 'cleaned' | 'native',
@@ -55,6 +72,46 @@ export class Profiles {
     return held;
   }
 
+  restricted(profile: string): boolean {
+    return this.guarded.has(this.session(profile));
+  }
+
+  navigation(contents: WebContents, guard: NavigationGuard | null): void {
+    if (guard === null) {
+      const registered = this.guardedPages.get(contents);
+      if (registered === undefined) return;
+      this.guardedPages.delete(contents);
+      const guards = this.guarded.get(registered.session);
+      if (guards === undefined) return;
+      guards.delete(registered.id);
+      if (guards.size === 0) {
+        registered.session.webRequest.onBeforeRequest(null);
+        this.guarded.delete(registered.session);
+      }
+      return;
+    }
+    const held = contents.session;
+    let guards = this.guarded.get(held);
+    if (guards === undefined) {
+      guards = new Map();
+      this.guarded.set(held, guards);
+      const active = guards;
+      held.webRequest.onBeforeRequest((details, callback) => {
+        if (details.resourceType !== 'mainFrame' && details.resourceType !== 'subFrame') {
+          callback({});
+          return;
+        }
+        const id =
+          details.webContents?.id ??
+          (details.frame == null ? undefined : webContents.fromFrame(details.frame)?.id) ??
+          details.webContentsId;
+        callback({ cancel: id !== undefined && active.get(id)?.(details.url) === true });
+      });
+    }
+    guards.set(contents.id, guard);
+    this.guardedPages.set(contents, { session: held, id: contents.id });
+  }
+
   async clear(profile: string): Promise<void> {
     const held = this.session(profile);
     await held.clearStorageData();
@@ -62,9 +119,32 @@ export class Profiles {
     await held.clearAuthCache();
   }
 
+  geolocation(contents: WebContents): (() => void) | null {
+    const url = contents.getURL();
+    const origin = URL.canParse(url) ? new URL(url).origin : 'null';
+    if (origin === 'null') return null;
+    this.geolocations.set(contents, (this.geolocations.get(contents) ?? 0) + 1);
+    return () => {
+      const remaining = (this.geolocations.get(contents) ?? 1) - 1;
+      if (remaining === 0) this.geolocations.delete(contents);
+      else this.geolocations.set(contents, remaining);
+    };
+  }
+
+  private locationAllowed(contents: WebContents | null, url: string): boolean {
+    if (contents === null || (this.geolocations.get(contents) ?? 0) === 0 || !URL.canParse(url)) return false;
+    const current = contents.getURL();
+    const origin = URL.canParse(current) ? new URL(current).origin : 'null';
+    return origin !== 'null' && origin === new URL(url).origin;
+  }
+
   private prepare(held: Session, profile: string): void {
     this.prepared.add(profile);
     held.setPermissionRequestHandler((contents, permission, callback, details) => {
+      if (permission === 'geolocation') {
+        callback(this.locationAllowed(contents, details.requestingUrl));
+        return;
+      }
       if (permission !== 'media') {
         callback(GRANTED.has(permission));
         return;
@@ -81,6 +161,7 @@ export class Profiles {
       });
     });
     held.setPermissionCheckHandler((contents, permission, origin, details) => {
+      if (permission === 'geolocation') return this.locationAllowed(contents, origin);
       if (permission !== 'media') return GRANTED.has(permission);
       const type = details.mediaType;
       if ((type !== 'audio' && type !== 'video') || this.seen(contents) === null) return false;

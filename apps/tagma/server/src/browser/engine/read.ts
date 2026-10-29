@@ -3,10 +3,14 @@ import { bytesOf, parsed } from '@runlith/cdp/payload';
 import type { CommandFailure } from '@runlith/cdp/session';
 import { type AxNode, type SnapshotPart, snapshotWalk } from '@runlith/cdp/snapshot';
 import type { Protocol } from 'devtools-protocol';
-import { Effect } from 'effect';
+import { Effect, type FileSystem, type Path } from 'effect';
+import type { ServedRoots } from '../contract/service/sources.js';
+import type { CheckoutPaths } from '../../workspace/contract/service/checkoutPaths.js';
 import type { PageId } from '../contract/wire/ids.js';
 import type { Picked } from '../contract/wire/pick.js';
+import { unmarked } from './cursor.js';
 import type { Attached, Frame, Paged, Picking } from './drive.js';
+import { componentOf } from './source.js';
 import { actionFailed, anchorOf, boxOf, joined, call, frameOfNode, locate, staleRef } from './target.js';
 
 const FULL_PAGE_PX = 16_384;
@@ -174,7 +178,7 @@ export const screenshot = Effect.fnUntraced(function* (
     const located = yield* locate(state, attached, ref);
     params = { format: 'png', clip: yield* clipOf(attached, yield* boxOf(attached, located), FULL_PAGE_PX) };
   }
-  const bytes = yield* bytesOf(yield* attached.session.reply('Page.captureScreenshot', params));
+  const bytes = yield* bytesOf(yield* unmarked(state, attached, attached.session.reply('Page.captureScreenshot', params)));
   return { bytes, ...pngSize(bytes) } satisfies Shot;
 });
 
@@ -184,13 +188,25 @@ export const describePick = Effect.fnUntraced(function* (
   page: PageId,
   url: string,
   picking: Picking,
-): Effect.fn.Return<Picked | null, CommandFailure | ReturnType<typeof actionFailed> | ReturnType<typeof staleRef>> {
+  projectId: number,
+): Effect.fn.Return<
+  Picked | null,
+  CommandFailure | ReturnType<typeof actionFailed> | ReturnType<typeof staleRef>,
+  FileSystem.FileSystem | CheckoutPaths | ServedRoots | Path.Path
+> {
   const frame = yield* frameOfNode(attached, picking.child, picking.node);
   const anchor = frame === undefined ? undefined : anchorOf(attached, frame, picking.node);
   if (anchor === undefined) return null;
   const ref = state.refs.issue(anchor);
   const located = yield* locate(state, attached, ref);
   const described = redacted(yield* call<Described>(attached, located, DESCRIBE, [ATTRIBUTES, STYLES, TEXT_LIMIT, HTML_LIMIT]));
+  const component = yield* componentOf(attached, located, projectId, attached.frames.get(anchor.frame)?.url ?? url).pipe(
+    Effect.catchTags({
+      PlatformError: (failure) => actionFailed(`the picked source path could not be checked: ${failure.message}`),
+      PlaceUnread: (failure) => actionFailed(`the picked source checkout could not be read: ${failure.reason}`),
+      ServingUnread: (failure) => actionFailed(`the page's serving root could not be read: ${failure.message}`),
+    }),
+  );
   const nodes = yield* attached.session
     .send('Accessibility.getPartialAXTree', { backendNodeId: picking.node, fetchRelatives: false }, picking.child)
     .pipe(
@@ -202,7 +218,11 @@ export const describePick = Effect.fnUntraced(function* (
   const picture =
     box === null
       ? null
-      : yield* attached.session.reply('Page.captureScreenshot', { format: 'png', clip: yield* clipOf(attached, box, PICTURE_PX) }).pipe(
+      : yield* unmarked(
+          state,
+          attached,
+          attached.session.reply('Page.captureScreenshot', { format: 'png', clip: yield* clipOf(attached, box, PICTURE_PX) }),
+        ).pipe(
           Effect.flatMap((text) => parsed(text)),
           Effect.map((reply) => (reply as { readonly result?: { readonly data?: string } }).result?.data ?? null),
           Effect.catchTag('CommandRefused', () => Effect.succeed(null)),
@@ -219,6 +239,7 @@ export const describePick = Effect.fnUntraced(function* (
     html: described.html,
     attributes: described.attributes,
     styles: described.styles,
+    component,
     rect: box === null ? described.rect : { x: box.x, y: box.y, width: box.width, height: box.height },
     picture,
   };

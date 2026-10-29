@@ -22,6 +22,16 @@ const pickedText = (picked: Picked, title: string): string => {
     `- name: ${picked.name || '—'}`,
     `- tag: ${picked.tag}`,
     `- selector: \`${picked.selector}\``,
+    ...(picked.component === undefined
+      ? []
+      : [
+          `- component: ${picked.component.name ?? 'unnamed'} (${picked.component.framework})`,
+          ...(picked.component.source === null
+            ? []
+            : [
+                `- source: \`${picked.component.source.file}${picked.component.source.line === null ? '' : `:${picked.component.source.line}`}${picked.component.source.column === null ? '' : `:${picked.component.source.column}`}\` (${picked.component.source.resolved ? 'checkout' : 'unresolved'}; ${picked.component.source.basis})`,
+              ]),
+        ]),
     `- box: ${Math.round(rect.x)}, ${Math.round(rect.y)}, ${Math.round(rect.width)}×${Math.round(rect.height)}`,
     ...(Object.keys(picked.attributes).length > 0 ? ['- attributes:', rows(picked.attributes)] : []),
     ...(Object.keys(picked.styles).length > 0 ? ['- styles:', rows(picked.styles)] : []),

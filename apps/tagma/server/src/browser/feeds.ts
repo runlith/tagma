@@ -11,7 +11,7 @@ export const browserChannels = (pages: Pages['Service'], automation: Automation[
   return {
     'browser.pages': ({ projectId }: { readonly projectId: number }) => Stream.unwrap(pages.changes(projectId)),
     'browser.pick': ({ projectId, page }: { readonly projectId: number; readonly page: PageId }) =>
-      refusingStream(Stream.unwrap(Effect.andThen(resolved(projectId, page), automation.pick(page)))),
+      refusingStream(Stream.unwrap(Effect.flatMap(resolved(projectId, page), (held) => automation.pick(page, held.projectId)))),
     'browser.screencast': ({ projectId, page, ...budget }: typeof ScreencastInput.Type) =>
       refusingStream(Stream.unwrap(Effect.as(resolved(projectId, page), screencast.watch(page, budget)))),
     'browser.input': ({ projectId, page, viewer, seq, events }: InputCall) =>

@@ -117,6 +117,9 @@ const sameLayout = (a: Viewport | null, b: Viewport | null): boolean =>
 const pressed = (buttons: number): 'none' | 'left' | 'middle' | 'right' =>
   buttons & 1 ? 'left' : buttons & 2 ? 'right' : buttons & 4 ? 'middle' : 'none';
 
+const operates = (event: InputEvent, buttons: number): boolean =>
+  event.kind === 'mouse' ? event.type !== 'move' || buttons !== 0 : event.kind !== 'copy' && event.kind !== 'view';
+
 const viewerUnknown = (viewer: string) =>
   new GateRefusal('viewer-unknown', `viewer ${viewer} no longer watches this page`, ['subscribe to browser.screencast again']);
 
@@ -445,7 +448,12 @@ export const makeScreencast = Effect.fnUntraced(function* (input: { readonly pag
     const { session } = attached;
     const frame = cast.last?.event;
     let copied: string | null = null;
+    let operated = false;
     for (const event of events) {
+      if (!operated && operates(event, viewer.buttons)) {
+        operated = true;
+        yield* pages.operate(cast.page);
+      }
       switch (event.kind) {
         case 'mouse': {
           if (frame === undefined) break;

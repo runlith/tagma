@@ -1,5 +1,6 @@
 import { Schema } from 'effect';
-import { HostEvent, LivePage, Navigation, PageChange } from '../../../browser/contract/wire/host.js';
+import { DomainBlock, DomainPolicy, Restriction, RestrictionState } from '../../../browser/contract/wire/domains.js';
+import { HostEvent, LivePage, Navigation, PageChange, Strain } from '../../../browser/contract/wire/host.js';
 import { PageId, ProfileId } from '../../../browser/contract/wire/ids.js';
 import { History } from '../../../browser/contract/wire/page.js';
 import { feed } from '../../../platform/contract/wire/operation.js';
@@ -24,15 +25,23 @@ export const Call = Schema.Union([
     context: Schema.NullOr(Schema.String),
     url: Schema.String,
     history: Schema.NullOr(History),
+    policy: Schema.NullOr(DomainPolicy),
   }),
   at('adopt', { local: Schema.String, page: PageId }),
   at('close', { page: PageId, ask: Schema.Boolean }),
   at('live', {}),
   at('navigate', { page: PageId, to: Navigation }),
+  at('navigation', { page: PageId, watch: Schema.Int, policy: Schema.NullOr(DomainPolicy) }),
+  at('unnavigation', { watch: Schema.Int }),
+  at('navigationSeen', { watch: Schema.Int }),
   at('pdf', { page: PageId }),
   at('answer', { page: PageId, accept: Schema.Boolean, text: Schema.NullOr(Schema.String) }),
   at('paint', { page: PageId, hold: Schema.Int }),
   at('unpaint', { hold: Schema.Int }),
+  at('strain', { page: PageId, hold: Schema.Int, strain: Strain }),
+  at('unstrain', { hold: Schema.Int }),
+  at('geolocation', { page: PageId, hold: Schema.Int }),
+  at('unlocate', { hold: Schema.Int }),
   at('session', { page: PageId, session: Schema.Int }),
   at('profileSession', { profile: ProfileId, session: Schema.Int }),
   at('unsession', { session: Schema.Int }),
@@ -61,6 +70,7 @@ export const Failure = Schema.Union([
   at('missing', { message: Schema.String }),
   at('refused', { message: Schema.String, unblock: Schema.NonEmptyArray(Schema.String) }),
   at('navigation', { code: Schema.String, message: Schema.String }),
+  at('blocked', { block: DomainBlock, message: Schema.String }),
   at('taken', { message: Schema.String }),
   at('stayed', { message: Schema.String }),
 ]);
@@ -75,6 +85,7 @@ export const Report = Schema.Union([
   at('bytes', { seq, id: Schema.Int }),
   at('failure', { seq, id: Schema.Int, failure: Failure }),
   at('event', { seq, event: HostEvent }),
+  at('blocked', { seq, watch: Schema.Int, block: DomainBlock }),
   at('cdp', { seq, session: Schema.Int }),
   at('ended', { seq, session: Schema.Int, end: Schema.Literals(SESSION_ENDS) }),
 ]);
@@ -83,8 +94,11 @@ export type Report = typeof Report.Type;
 export const Parts = Schema.Struct({ parts: Schema.Int.check(Schema.isGreaterThan(1)) });
 
 export const ANSWERS = {
+  open: RestrictionState,
+  adopt: RestrictionState,
   live: Schema.Array(LivePage),
   navigate: PageChange,
+  navigation: Schema.Struct({ blocked: Schema.NullOr(DomainBlock), changes: Schema.Array(Restriction) }),
   key: Schema.String,
 } as const;
 

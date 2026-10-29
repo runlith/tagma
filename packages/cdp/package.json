@@ -2,7 +2,7 @@
   "name": "@runlith/cdp",
   "version": "0.1.0",
   "private": true,
-  "description": "Chrome DevTools Protocol client without a browser of its own: a session over any text transport with flattened child sessions and shared domains, protocol types, and the automation primitives built on it — accessibility snapshot, US key table, mouse input, element description, byte-bounded rings and a responsiveness probe; large payloads are read off the event loop.",
+  "description": "Chrome DevTools Protocol client without a browser of its own: a session over any text transport with flattened child sessions and shared domains, protocol types, and the automation primitives built on it — accessibility snapshot, US key table, mouse input, element description, byte-bounded rings, a responsiveness probe and IO streams written to a file in bounded reads; large payloads are read off the event loop.",
   "type": "module",
   "exports": {
     "./wire": {
@@ -43,11 +43,18 @@
     },
     "./describe": {
       "types": "./src/describe.ts",
+      "browser": "./src/describe.ts",
+      "bun": "./src/describe.ts",
+      "node": "./src/describe.ts",
       "default": "./src/describe.ts"
     },
     "./probe": {
       "types": "./src/probe.ts",
       "default": "./src/probe.ts"
+    },
+    "./stream": {
+      "types": "./src/stream.ts",
+      "default": "./src/stream.ts"
     },
     "./screencast": {
       "types": "./src/screencast.ts",

@@ -1,5 +1,6 @@
 import { Schema } from 'effect';
 import { PageId, ProfileId } from './ids.js';
+import { Conditions } from './emulation.js';
 
 export const PAGE_STATES = ['live', 'dormant', 'away'] as const;
 export type PageState = (typeof PAGE_STATES)[number];
@@ -41,6 +42,7 @@ export const Live = Schema.Struct({
   dialog: Schema.NullOr(Dialog),
   driven: Schema.NullOr(Schema.String),
   shown: Schema.Boolean,
+  conditions: Conditions,
 });
 export type Live = typeof Live.Type;
 
@@ -69,6 +71,7 @@ export const Glance = Schema.Struct({
   loading: Schema.Boolean,
   dialog: Schema.NullOr(Dialog),
   navigated: Schema.Boolean,
+  conditions: Schema.NullOr(Schema.String),
 });
 export type Glance = typeof Glance.Type;
 
