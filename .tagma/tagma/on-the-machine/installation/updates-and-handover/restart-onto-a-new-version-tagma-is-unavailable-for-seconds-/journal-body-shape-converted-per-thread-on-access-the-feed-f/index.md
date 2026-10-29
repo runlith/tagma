@@ -5,7 +5,7 @@ ord: 8
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 sources:
   - kind: file
@@ -51,7 +51,7 @@ The mechanism landed with task [[0911272b]]. The first step `20261010205500_plac
 - **Maintenance cursors after the return** (`strippedThrough`, `footprintsThrough`, `boundedThrough`) restart from nothing and each maintenance walks the thread once more. This stays by design: the return writes whole facts from the file back, which undoes exactly what those three rewrote, so carrying a cursor would strand unfolded rows for good. The same holds after every rest and return, not only a whole cast.
 - **Proven on the restart rig** (`composition/testing/restart.itest.ts` over `restartProbe.ts`): a restart onto a successor carrying one more shape step (`restartServe.ts` adds it when the rig asks), with the client in an offloaded thread of 20 000 messages whose mark lags, serves the first frame in the new shape and accepts the client's act within 1.5× + 3 s of the same restart in a 50-message thread. The assertion is that comparison, never absolute seconds; its tolerance is far above the cast of a thread this size, so it catches a frame or act waiting on a large cast, not a small one.
 - **Frame time against thread length is a measurement, not a test** (`restartFrame.bench.ts`, same rig). One sample, Apple M2 Max 12 cores 32 GB, load average 9–12, offloaded threads of 230-byte messages: first frame 61 ms at 2 000 messages and 56 ms at 20 000 — no growth with length.
-- **Proven at the owner:** a write during the file cast makes the commit stand down, and the next cast leaves the record as written (`formSteps.itest.ts`); a cast requested while the thread is in use stays owed and lands once its last use ends, awaited through `ThreadRollouts.restedFormed` (`shelf.itest.ts`); the whole cast through the real `ThreadRollouts.rehydrate` (`wholeCast.itest.ts`); the rested fold worker decodes through the same reader as the main thread (`restedWork.itest.ts`).
+- **Proven at the owner:** a write during the file cast makes the commit stand down, and the next cast leaves the record as written (`formSteps.itest.ts`); a cast requested while the thread is in use stays owed and lands once its last use ends, awaited through `ThreadRollouts.restedFormed` (`shelf.itest.ts`); the whole cast through the real `ThreadRollouts.rehydrate` (`wholeCast.itest.ts`); the rested fold worker decodes through the same reader as the main thread (`restedWork.itest.ts`), and the production bundle emits that reader as a module the worker can load (`composition/entryKinds.itest.ts`); a cast that rewrites a rested file publishes a transcript the next window reads without a rebuild (`shelf.itest.ts`); run recovery of a lagging thread adopts a run whose tail and history come out in the current shape (`native-harness/laggingRecovery.itest.ts`).
 
 **Multi-thread queries read only stable fields.** The journal owner declares the body paths SQL searches and picks by over many threads at once (today the `thread_event_entry_idx` index paths and fields from the list above). A query takes the path from that declaration by type, not by string. Shaping reconciles those paths' values before and after a step and refuses a step that changed them: such a change is a history-table schema change and runs per [[9631d38c]]. No new columns needed.
 
