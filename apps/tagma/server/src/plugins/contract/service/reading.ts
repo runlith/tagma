@@ -1,5 +1,5 @@
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { Effect, FileSystem } from 'effect';
+import { Context, Effect, FileSystem } from 'effect';
 import { type PluginIgnored, type PluginSkillFile, PluginUnreadable } from './format.js';
 
 export type PluginEntry = { readonly kind: 'absent' | 'outside' | 'file' | 'directory' | 'other'; readonly path: string };
@@ -13,10 +13,15 @@ export const within = (root: string, path: string): boolean => {
 
 const unreadable = (path: string) => (failure: { readonly message: string }) => new PluginUnreadable({ path, reason: failure.message });
 
+export const PluginReads = Context.Reference<Set<string> | null>('tagma/plugins/PluginReads', { defaultValue: () => null });
+
+const read = (path: string) => Effect.map(PluginReads, (reads) => void reads?.add(path));
+
 export const entryOf = Effect.fnUntraced(function* (root: string, path: string) {
   const files = yield* FileSystem.FileSystem;
   const asked = resolve(root, path);
   if (!within(root, asked)) return { kind: 'outside', path: asked } as PluginEntry;
+  yield* read(asked);
   if (!(yield* files.exists(asked).pipe(Effect.mapError(unreadable(asked))))) return { kind: 'absent', path: asked } as PluginEntry;
   const real = yield* files.realPath(asked).pipe(Effect.mapError(unreadable(asked)));
   if (!within(yield* files.realPath(root).pipe(Effect.mapError(unreadable(root))), real))
@@ -27,11 +32,13 @@ export const entryOf = Effect.fnUntraced(function* (root: string, path: string) 
 
 export const namesIn = Effect.fnUntraced(function* (path: string) {
   const files = yield* FileSystem.FileSystem;
+  yield* read(path);
   return (yield* files.readDirectory(path).pipe(Effect.mapError(unreadable(path)))).sort();
 });
 
 export const textOf = Effect.fnUntraced(function* (path: string) {
   const files = yield* FileSystem.FileSystem;
+  yield* read(path);
   return yield* files.readFileString(path).pipe(Effect.mapError(unreadable(path)));
 });
 
@@ -82,7 +89,7 @@ export const skillFolders = Effect.fnUntraced(function* (root: string, at: strin
       ignored.push({ component: 'skill', name, reason: 'its SKILL.md is not a file inside the plugin' });
       continue;
     }
-    skills.push({ name, directory: folder.path, file: file.path });
+    skills.push({ name, directory: folder.path, file: file.path, render: (text) => text });
   }
   return skills;
 });

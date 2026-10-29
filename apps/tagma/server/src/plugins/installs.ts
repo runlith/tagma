@@ -1,4 +1,4 @@
-import { Effect, Exit, FileSystem, Semaphore } from 'effect';
+import { Effect, FileSystem, Semaphore } from 'effect';
 import { componentName } from './contract/wire/names.js';
 import { ChildProcessSpawner } from 'effect/process';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
@@ -44,14 +44,16 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
   const owners = yield* SecretOwners;
   const files = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const locks = new Map<string, Semaphore.Semaphore>();
+  const serial = yield* Semaphore.make(1);
 
-  const locked = <A, E>(id: string, work: Effect.Effect<A, E>): Effect.Effect<A, E> =>
-    Effect.suspend(() => {
-      const lock = locks.get(id) ?? Semaphore.makeUnsafe(1);
-      locks.set(id, lock);
-      return lock.withPermit(work);
-    });
+  const locked = <A, E>(work: Effect.Effect<A, E>): Effect.Effect<A, E> => serial.withPermit(work);
+
+  const runningAnywhere = Effect.fnUntraced(function* (id: string) {
+    for (const project of yield* projects.list()) {
+      if ((yield* settings.value(pluginsEnabled, project.id)).includes(id)) return true;
+    }
+    return false;
+  });
 
   const projectRoot = (projectId: number) =>
     Effect.map(
@@ -79,7 +81,15 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     const { loaded } = yield* shelf
       .bind(read, root, yield* projectRoot(projectId))
       .pipe(Effect.catchTag('PluginUnreadable', (failure) => Effect.fail(refusedOf(failure))));
-    return { id: read.id, format: read.format, source, root, package: read.package, consent: consentOf(loaded) } satisfies PluginPrepared;
+    return {
+      id: read.id,
+      format: read.format,
+      source,
+      root,
+      package: read.package,
+      consent: consentOf(loaded),
+      running: yield* runningAnywhere(read.id),
+    } satisfies PluginPrepared;
   });
 
   const installedList = settings.value(pluginsInstalled);
@@ -105,7 +115,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         refused: reading.failure.message,
       } satisfies PluginRow;
     }
-    const { read, loaded, options } = reading.success;
+    const { read, loaded, options, skipped } = reading.success;
     const pkg = read.package;
     const dropped = new Map(pkg.agents.map((agent) => [componentName(install.id, agent.name), agent.dropped]));
     return {
@@ -115,7 +125,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       description: pkg.description,
       format: read.format,
       components: componentsOf(loaded, dropped),
-      ignored: pkg.ignored,
+      ignored: [...pkg.ignored, ...skipped],
       options: pkg.options.map((option) => ({
         key: option.key,
         type: option.type,
@@ -155,9 +165,15 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     for (const id of enabled) {
       const install = installs.find((entry) => entry.id === id);
       if (install === undefined) continue;
-      const standing = yield* Effect.exit(shelf.read(install.root));
-      if (Exit.isSuccess(standing))
-        others.push(...namesOf(standing.value.id, standing.value.package).map((named) => ({ ...named, from: `${id}'s ${named.from}` })));
+      const standing = yield* shelf.read(install.root).pipe(
+        Effect.catchTags({
+          PluginRefused: () => Effect.succeed(null),
+          PluginUnreadable: () => Effect.succeed(null),
+          NamesCollide: () => Effect.succeed(null),
+        }),
+      );
+      if (standing !== null)
+        others.push(...namesOf(standing.id, standing.package).map((named) => ({ ...named, from: `${id}'s ${named.from}` })));
     }
     const collided = collision([
       ...others,
@@ -179,10 +195,17 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     settings.amend<readonly PluginInstall[], never>(pluginsInstalled, 'user', undefined, (current) => Effect.succeed(change(current)));
 
   return Plugins.of({
-    list: Effect.fn('Plugins.list')(function* (projectId) {
+    ids: () => Effect.map(installedList, (installs) => installs.map((install) => install.id).sort()),
+    rows: Effect.fn('Plugins.rows')(function* (projectId, ids) {
       const enabled = new Set(yield* settings.value(pluginsEnabled, projectId));
-      const installs = [...(yield* installedList)].sort((a, b) => a.id.localeCompare(b.id));
-      return yield* Effect.forEach(installs, (install) => rowOf(install, projectId, enabled));
+      const installs = new Map((yield* installedList).map((install) => [install.id, install]));
+      return yield* Effect.forEach(
+        ids.flatMap((id) => {
+          const install = installs.get(id);
+          return install === undefined ? [] : [install];
+        }),
+        (install) => rowOf(install, projectId, enabled),
+      );
     }),
     prepare: Effect.fn('Plugins.prepare')(function* ({ projectId, source: given }) {
       const source = sourceOf(given, yield* projectRoot(projectId));
@@ -205,8 +228,28 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     install: Effect.fn('Plugins.install')(function* ({ projectId, prepared, enabled }) {
       const { id, source } = prepared;
       return yield* locked(
-        id,
         Effect.gen(function* () {
+          shelf.forget(prepared.root);
+          const read = yield* readOf(prepared.root);
+          if (read.id !== id) {
+            return yield* new GateRefusal(
+              'plugin-refused',
+              `The plugin at ${prepared.root} now names itself ${read.id}, not ${id}, which was approved.`,
+              ['install again'],
+            );
+          }
+          const standing = (yield* installedList).find((entry) => entry.id === id);
+          if (standing !== undefined && !sameSource(standing.source, source)) {
+            return yield* new GateRefusal('plugin-id-taken', `A plugin named ${id} was installed from another source meanwhile.`, [
+              `uninstall_plugin ${id}, then install this one`,
+            ]);
+          }
+          const enabledHere = (yield* settings.value(pluginsEnabled, projectId)).includes(id);
+          const running: number[] = enabled ? [projectId] : [];
+          for (const project of yield* projects.list()) {
+            if (project.id !== projectId && (yield* settings.value(pluginsEnabled, project.id)).includes(id)) running.push(project.id);
+          }
+          yield* Effect.forEach(running, (project) => clashes(project, read), { discard: true });
           const root =
             source.kind === 'git'
               ? yield* settleClone(prepared.root, home, id).pipe(
@@ -218,10 +261,8 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
                 )
               : prepared.root;
           shelf.forget(root);
-          const read = yield* readOf(root);
-          if (enabled) yield* clashes(projectId, read);
           yield* recorded((current) => [...current.filter((entry) => entry.id !== id), { id, source, root }]);
-          if (enabled) yield* shown(projectId, id, true);
+          if (enabled !== enabledHere) yield* shown(projectId, id, enabled);
           yield* changed(null);
           return yield* row(projectId, id);
         }),
@@ -233,7 +274,6 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     }),
     enable: Effect.fn('Plugins.enable')(function* ({ projectId, id, enabled }) {
       return yield* locked(
-        id,
         Effect.gen(function* () {
           const install = yield* installedOf(id);
           if (enabled) yield* clashes(projectId, yield* readOf(install.root));
@@ -245,7 +285,6 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     }),
     uninstall: Effect.fn('Plugins.uninstall')(function* ({ projectId, id }) {
       return yield* locked(
-        id,
         Effect.gen(function* () {
           const install = yield* installedOf(id);
           const answer = yield* row(projectId, id);

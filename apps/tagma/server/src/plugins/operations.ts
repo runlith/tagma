@@ -11,7 +11,7 @@ import type { PluginRow } from './contract/wire/rows.js';
 const questionOf = (projectId: number): PageQuestion => ({ operation: 'read_plugins', selection: { projectId }, order: PLUGIN_ROWS.order });
 const CEILING = ceilingOf(PLUGIN_ROWS);
 
-const keyOf = (row: PluginRow) => [row.id] as const;
+const keyOf = (row: { readonly id: string }) => [row.id] as const;
 
 const answer = (plugin: PluginRow) => ({ status: 'ok' as const, plugin });
 
@@ -26,10 +26,15 @@ export const PLUGIN_PAIRS = {
         const question = questionOf(project);
         const read = input.cursor === undefined ? null : readCursor(input.cursor, question);
         if (read !== null && 'refused' in read) return yield* cursorRefusal(read.refused);
-        const rows = yield* (yield* Plugins).list(project);
-        const after = read === null ? rows : pastKey(rows, keyOf, ['asc'], read.at);
-        const shown = page({ rows: after, asked: pageRows(input.limit, PLUGIN_ROWS, CEILING), keyOf, question, total: rows.length });
-        return { status: 'ok' as const, plugins: shown.rows, shown: shown.shown, total: rows.length, next: shown.next };
+        const plugins = yield* Plugins;
+        const ids = (yield* plugins.ids()).map((id) => ({ id }));
+        const after = read === null ? ids : pastKey(ids, keyOf, ['asc'], read.at);
+        const shown = page({ rows: after, asked: pageRows(input.limit, PLUGIN_ROWS, CEILING), keyOf, question, total: ids.length });
+        const rows = yield* plugins.rows(
+          project,
+          shown.rows.map((row) => row.id),
+        );
+        return { status: 'ok' as const, plugins: rows, shown: shown.shown, total: ids.length, next: shown.next };
       }),
     }),
   ),

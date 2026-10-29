@@ -124,8 +124,8 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             place: { root: pluginRoot, data: pluginRoot, options: {}, project: demo.demoRoot },
             redact: [],
             skills: [
-              { name: 'demo-review', directory: review, file: join(review, 'SKILL.md') },
-              { name: 'demo-clash', directory: clash, file: join(clash, 'SKILL.md') },
+              { name: 'demo-review', directory: review, file: join(review, 'SKILL.md'), root: pluginRoot, render: (text) => text },
+              { name: 'demo-clash', directory: clash, file: join(clash, 'SKILL.md'), root: pluginRoot, render: (text) => text },
             ],
             commands: [{ name: 'demo-fix', description: 'Fixes.', body: Effect.succeed('Fix $ARGUMENTS.') }],
             agents: [],

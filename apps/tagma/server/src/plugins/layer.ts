@@ -9,6 +9,7 @@ import { pluginsOptions } from './contract/wire/settings.js';
 import { makeEnabled } from './enabled.js';
 import { makeInstalls } from './installs.js';
 import { makeShelf } from './shelf.js';
+import { clearStaging } from './sources.js';
 
 export const pluginsLayer: Layer.Layer<
   Plugins | EnabledPlugins,
@@ -17,6 +18,7 @@ export const pluginsLayer: Layer.Layer<
 > = Layer.effectContext(
   Effect.gen(function* () {
     const { home } = yield* PluginPlaces;
+    yield* clearStaging(home).pipe(Effect.orDie);
     const pulses = yield* Effect.acquireRelease(PubSub.unbounded<number | null>(), PubSub.shutdown);
     const changed = (projectId: number | null) => Effect.asVoid(PubSub.publish(pulses, projectId));
     const shelf = yield* makeShelf({ home });

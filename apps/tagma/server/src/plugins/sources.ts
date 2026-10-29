@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { spawnGit } from '@runlith/git/Git';
 import { Data, Effect, FileSystem } from 'effect';
@@ -54,11 +53,10 @@ export const fetchSource = Effect.fn('plugins.fetch')(function* (
       root: yield* files.realPath(source.path).pipe(Effect.mapError((failure) => new SourceUnreadable({ reason: failure.message }))),
     };
   }
-  const stage = join(home, CLONES, STAGING, createHash('sha256').update(source.url).digest('hex').slice(0, 16));
-  const root = join(stage, repositoryName(source.url));
   const failed = (failure: { readonly message: string }) => new CloneFailed({ reason: failure.message });
-  yield* files.remove(stage, { recursive: true, force: true }).pipe(Effect.mapError(failed));
-  yield* files.makeDirectory(stage, { recursive: true }).pipe(Effect.mapError(failed));
+  yield* files.makeDirectory(join(home, CLONES, STAGING), { recursive: true }).pipe(Effect.mapError(failed));
+  const stage = yield* files.makeTempDirectory({ directory: join(home, CLONES, STAGING), prefix: 'clone-' }).pipe(Effect.mapError(failed));
+  const root = join(stage, repositoryName(source.url));
   const cloned = yield* spawnGit(['clone', '--depth', '1', '--', source.url, root], { extendEnv: true, capture: 4_000 }).pipe(
     Effect.mapError(failed),
   );
@@ -74,9 +72,17 @@ export const settleClone = Effect.fn('plugins.settleClone')(function* (staged: s
   const files = yield* FileSystem.FileSystem;
   const target = cloneRoot(home, id);
   if (staged === target) return target;
-  yield* files.remove(target, { recursive: true, force: true });
+  const former = `${dirname(staged)}-former`;
+  const standing = yield* files.exists(target);
   yield* files.makeDirectory(dirname(target), { recursive: true });
-  yield* files.rename(staged, target);
+  if (standing) yield* files.rename(target, former);
+  yield* files.rename(staged, target).pipe(Effect.tapError(() => (standing ? files.rename(former, target) : Effect.void)));
+  if (standing) yield* files.remove(former, { recursive: true, force: true });
   yield* files.remove(dirname(staged), { recursive: true, force: true });
   return target;
+});
+
+export const clearStaging = Effect.fn('plugins.clearStaging')(function* (home: string) {
+  const files = yield* FileSystem.FileSystem;
+  yield* files.remove(join(home, CLONES, STAGING), { recursive: true, force: true });
 });

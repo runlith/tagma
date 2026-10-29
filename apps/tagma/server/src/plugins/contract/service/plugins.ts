@@ -5,15 +5,7 @@ import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { SettingLandRefusal } from '../../../settings/contract/service/values.js';
 import type { PluginConsented } from '../wire/consent.js';
 import type { PluginHookPoint, PluginRow, PluginSource } from '../wire/rows.js';
-import type {
-  PluginHookAnswer,
-  PluginHookCall,
-  PluginHookSession,
-  PluginPackage,
-  PluginPlace,
-  PluginSkillFile,
-  PluginUnreadable,
-} from './format.js';
+import type { PluginHookAnswer, PluginHookCall, PluginHookSession, PluginPackage, PluginPlace, PluginUnreadable } from './format.js';
 
 export class PluginPlaces extends Context.Service<PluginPlaces, { readonly home: string }>()('tagma/plugins/PluginPlaces') {}
 
@@ -43,7 +35,8 @@ export type PluginFailure<Code extends string> = StoreFailure | GateRefusal<Code
 export class Plugins extends Context.Service<
   Plugins,
   {
-    list(projectId: number): Effect.Effect<readonly PluginRow[], PluginFailure<PluginListRefusal>>;
+    ids(): Effect.Effect<readonly string[], StoreFailure>;
+    rows(projectId: number, ids: readonly string[]): Effect.Effect<readonly PluginRow[], PluginFailure<PluginListRefusal>>;
     prepare(input: {
       readonly projectId: number;
       readonly source: string;
@@ -65,6 +58,14 @@ export class Plugins extends Context.Service<
     uninstall(input: { readonly projectId: number; readonly id: string }): Effect.Effect<PluginRow, PluginFailure<PluginChangeRefusal>>;
   }
 >()('tagma/plugins/Plugins') {}
+
+export type LoadedSkill = {
+  readonly name: string;
+  readonly directory: string;
+  readonly file: string;
+  readonly root: string;
+  readonly render: (text: string) => string;
+};
 
 export type LoadedCommand = {
   readonly name: string;
@@ -93,7 +94,7 @@ export type PluginLoaded = {
   readonly title: string;
   readonly place: PluginPlace;
   readonly redact: readonly string[];
-  readonly skills: readonly PluginSkillFile[];
+  readonly skills: readonly LoadedSkill[];
   readonly commands: readonly LoadedCommand[];
   readonly agents: readonly LoadedAgent[];
   readonly servers: readonly McpServerDeclaration[];

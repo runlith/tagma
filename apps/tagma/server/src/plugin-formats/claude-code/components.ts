@@ -33,7 +33,7 @@ const skillName = Effect.fnUntraced(function* (skill: PluginSkillFile) {
 const singleSkill = Effect.fnUntraced(function* (root: string, directory: string, fallback: string) {
   const file = yield* entryOf(root, join(directory, 'SKILL.md'));
   if (file.kind !== 'file') return null;
-  return yield* skillName({ name: fallback, directory, file: file.path });
+  return yield* skillName({ name: fallback, directory, file: file.path, render: (text) => text });
 });
 
 export const skillsOf = Effect.fnUntraced(function* (root: string, plugin: string, manifest: Manifest | null, ignored: PluginIgnored[]) {

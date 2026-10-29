@@ -59,6 +59,8 @@ const CHANGE_REFUSALS = [
   'setting-value',
 ] as const;
 
+const runs = (input: { readonly enabled?: boolean }, prepared: PluginConsented): boolean => input.enabled !== false || prepared.running;
+
 const consentFacts = (prepared: PluginConsented) => {
   const runs = prepared.consent.subjects.filter((subject) => subject.kind === 'execute').map((subject) => subject.value);
   const reaches = prepared.consent.subjects.filter((subject) => subject.kind === 'network').map((subject) => subject.value);
@@ -94,7 +96,7 @@ export const PLUGIN_OPERATIONS = {
     ...acted,
     answer,
     meaning:
-      'Install an agent plugin — Agent Plugins 1.0 or Claude Code — from a folder, read in place, or a git URL, cloned onto this machine; installing the same URL again updates it. `enabled: false` installs it without running it in this project.',
+      'Install an agent plugin — Agent Plugins 1.0 or Claude Code — from a folder, read in place, or a git URL, cloned onto this machine; installing the same URL again updates it. `enabled: false` installs it without running it in this project, and stops it here if it ran.',
     grammar:
       'Its skills and commands join the `$` catalog, its MCP servers this project’s pool and its agents the agent library, each named `<plugin>-<name>`; its command hooks run as the operator. A relative folder is read from the project root.',
     input: Schema.Struct({
@@ -110,13 +112,15 @@ export const PLUGIN_OPERATIONS = {
           : input.enabled === false
             ? `Install the plugin ${prepared.id} on this machine without running it?`
             : `Install the plugin ${prepared.id} and run it in this project?`,
-      facts: prepared === undefined ? [] : consentFacts(prepared),
-      consequence: 'Its MCP servers and hooks run as the operator on this machine wherever it is enabled.',
+      facts: prepared === undefined || !runs(input, prepared) ? [] : consentFacts(prepared),
+      consequence: prepared?.running
+        ? 'It is already enabled in a project, so this version runs there at once; its MCP servers and hooks run as the operator on this machine wherever it is enabled.'
+        : 'Its MCP servers and hooks run as the operator on this machine wherever it is enabled.',
     }),
     confirmLabel: 'Install',
     presentation: { running: 'Installing a plugin', done: 'Installed a plugin' },
-    subjects: (input, prepared?: PluginConsented) => (input.enabled === false || prepared === undefined ? [] : prepared.consent.subjects),
-    raises: (input, prepared?: PluginConsented) => (input.enabled === false || prepared === undefined ? [] : prepared.consent.raised),
+    subjects: (input, prepared?: PluginConsented) => (prepared !== undefined && runs(input, prepared) ? prepared.consent.subjects : []),
+    raises: (input, prepared?: PluginConsented) => (prepared !== undefined && runs(input, prepared) ? prepared.consent.raised : []),
   }),
   enable_plugin: operation('enable_plugin', {
     approval: { ...ASKS_IN_REVIEW, when: [MCP_ENV_RESOLVING] },

@@ -1,6 +1,13 @@
-import { join, resolve } from 'node:path';
-import { Effect, Schema } from 'effect';
-import type { PluginIgnored, PluginPlace, PluginServer, PluginServerReach } from '../../plugins/contract/service/format.js';
+import { basename, dirname, join, resolve } from 'node:path';
+import { Effect, FileSystem, Schema } from 'effect';
+import {
+  type PluginIgnored,
+  type PluginPlace,
+  PluginRefused,
+  type PluginServer,
+  type PluginServerReach,
+  PluginUnreadable,
+} from '../../plugins/contract/service/format.js';
 import { entryOf, jsonOf, textOf, within } from '../../plugins/contract/service/reading.js';
 
 export const MCP_SCHEMA = 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json';
@@ -39,19 +46,38 @@ const staysBelow = (rest: string): boolean => within('/data', resolve('/data', `
 const expanded = (text: string, place: PluginPlace): string =>
   text.replaceAll(PLACEHOLDER, (_whole, name: string) => (name === 'PLUGIN_ROOT' ? place.root : place.data));
 
+const resolvedWithin = Effect.fnUntraced(function* (base: string, path: string) {
+  const files = yield* FileSystem.FileSystem;
+  const failed = (failure: { readonly message: string }) => new PluginUnreadable({ path, reason: failure.message });
+  const real = yield* files.realPath(base).pipe(Effect.mapError(failed));
+  let standing = path;
+  let rest = '';
+  while (!(yield* files.exists(standing).pipe(Effect.mapError(failed)))) {
+    rest = rest === '' ? basename(standing) : join(basename(standing), rest);
+    standing = dirname(standing);
+  }
+  return within(real, join(yield* files.realPath(standing).pipe(Effect.mapError(failed)), rest));
+});
+
+const stdioReach = Effect.fnUntraced(function* (server: typeof Stdio.Type, root: string, place: PluginPlace) {
+  const env = Object.fromEntries(Object.entries(server.env ?? {}).map(([key, value]) => [key, expanded(value, place)]));
+  const cwd = server.cwd === undefined ? place.root : resolve(place.root, expanded(server.cwd, place));
+  if (server.cwd?.startsWith('${PLUGIN_DATA}') === true && !(yield* resolvedWithin(place.data, cwd))) {
+    return yield* new PluginRefused({ reason: `its cwd ${server.cwd} resolves outside the plugin's data directory` });
+  }
+  return {
+    transport: 'stdio',
+    command: server.command.startsWith('./') ? join(root, server.command) : server.command,
+    args: (server.args ?? []).map((arg) => expanded(arg, place)),
+    cwd,
+    env: { ...env, PLUGIN_ROOT: place.root, PLUGIN_DATA: place.data },
+  } satisfies PluginServerReach;
+});
+
 const reachOf =
-  (server: typeof Stdio.Type, root: string) =>
-  (place: PluginPlace): PluginServerReach => {
-    const env = Object.fromEntries(Object.entries(server.env ?? {}).map(([key, value]) => [key, expanded(value, place)]));
-    const cwd = server.cwd === undefined ? place.root : resolve(place.root, expanded(server.cwd, place));
-    return {
-      transport: 'stdio',
-      command: server.command.startsWith('./') ? join(root, server.command) : server.command,
-      args: (server.args ?? []).map((arg) => expanded(arg, place)),
-      cwd,
-      env: { ...env, PLUGIN_ROOT: place.root, PLUGIN_DATA: place.data },
-    };
-  };
+  (server: typeof Stdio.Type, root: string): PluginServer['reach'] =>
+  (place) =>
+    stdioReach(server, root, place);
 
 const stdioProblem = Effect.fnUntraced(function* (root: string, server: typeof Stdio.Type) {
   if (server.command.startsWith('./')) {
@@ -131,7 +157,7 @@ export const serversOf = Effect.fnUntraced(function* (root: string, ignored: Plu
     servers.push(
       server.type === 'stdio'
         ? { name, reach: reachOf(server, root) }
-        : { name, reach: () => ({ transport: 'http', url: server.url, headers: server.headers }) },
+        : { name, reach: () => Effect.succeed({ transport: 'http' as const, url: server.url, headers: server.headers }) },
     );
   }
   return servers;

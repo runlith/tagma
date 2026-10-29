@@ -38,22 +38,24 @@ const record = (values: Readonly<Record<string, string>> | undefined, place: Plu
   values === undefined ? undefined : Object.fromEntries(Object.entries(values).map(([key, value]) => [key, substituted(value, place)]));
 
 const stdioReach =
-  (server: typeof Stdio.Type) =>
-  (place: PluginPlace): PluginServerReach => ({
-    transport: 'stdio',
-    command: substituted(server.command, place),
-    args: all(server.args, place),
-    cwd: server.cwd === undefined ? place.root : resolve(place.root, substituted(server.cwd, place)),
-    env: { ...record(server.env, place), ...pluginEnvironment(place) },
-  });
+  (server: typeof Stdio.Type): PluginServer['reach'] =>
+  (place: PluginPlace) =>
+    Effect.succeed<PluginServerReach>({
+      transport: 'stdio',
+      command: substituted(server.command, place),
+      args: all(server.args, place),
+      cwd: server.cwd === undefined ? place.root : resolve(place.root, substituted(server.cwd, place)),
+      env: { ...record(server.env, place), ...pluginEnvironment(place) },
+    });
 
 const remoteReach =
-  (server: typeof Remote.Type) =>
-  (place: PluginPlace): PluginServerReach => ({
-    transport: 'http',
-    url: substituted(server.url, place),
-    headers: record(server.headers, place),
-  });
+  (server: typeof Remote.Type): PluginServer['reach'] =>
+  (place: PluginPlace) =>
+    Effect.succeed<PluginServerReach>({
+      transport: 'http',
+      url: substituted(server.url, place),
+      headers: record(server.headers, place),
+    });
 
 const fileMap = Effect.fnUntraced(function* (path: string, label: string, ignored: PluginIgnored[]) {
   const raw = jsonOf(yield* textOf(path));
@@ -106,11 +108,8 @@ export const serversOf = Effect.fnUntraced(function* (root: string, manifest: Ma
       continue;
     }
     if ('url' in server && server.headersHelper !== undefined) {
-      ignored.push({
-        component: 'mcp-server field',
-        name: `${name}: headersHelper`,
-        reason: 'Tagma runs no header helper; the server is reached without its headers',
-      });
+      ignored.push({ component: 'mcp-server', name, reason: 'it needs a headersHelper, and Tagma runs no header helper' });
+      continue;
     }
     servers.push({ name, reach: 'url' in server ? remoteReach(server) : stdioReach(server) });
   }

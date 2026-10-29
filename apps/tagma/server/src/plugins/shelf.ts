@@ -1,13 +1,20 @@
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
 import { PERMISSION_KINDS } from '@runlith/agent/permissions';
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
-import { Effect, Exit, FileSystem, Option } from 'effect';
+import { Effect, FileSystem, Option } from 'effect';
 import { ChildProcessSpawner } from 'effect/process';
 import { SecretOwners } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
-import { type PluginPackage, type PluginPlace, PluginFormats, type PluginRefused, PluginUnreadable } from './contract/service/format.js';
+import {
+  type PluginIgnored,
+  type PluginPackage,
+  type PluginPlace,
+  PluginFormats,
+  PluginRefused,
+  PluginUnreadable,
+} from './contract/service/format.js';
 import type { PluginLoaded } from './contract/service/plugins.js';
+import { PluginReads } from './contract/service/reading.js';
 import { componentName } from './contract/wire/names.js';
 import { pluginsOptions } from './contract/wire/settings.js';
 import { type NamesCollide, type Read, readPlugin } from './reader.js';
@@ -15,23 +22,15 @@ import { dataRoot } from './sources.js';
 
 export const SECRET_KIND = 'plugins';
 
-const WATCHED = [
-  '.',
-  '.claude-plugin/plugin.json',
-  'plugin.json',
-  'skills',
-  'commands',
-  'agents',
-  'hooks/hooks.json',
-  '.mcp.json',
-  'mcp.json',
-];
-
 export type ReadFailure = PluginRefused | PluginUnreadable | NamesCollide;
 
-type Cached = { readonly stamp: string; readonly read: Exit.Exit<Read, ReadFailure> };
+type Cached = { readonly paths: readonly string[]; readonly stamp: string; readonly read: Read };
 
-export type Bound = { readonly loaded: PluginLoaded; readonly options: Readonly<Record<string, string>> };
+export type Bound = {
+  readonly loaded: PluginLoaded;
+  readonly options: Readonly<Record<string, string>>;
+  readonly skipped: readonly PluginIgnored[];
+};
 
 export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: string }) {
   const formats = yield* PluginFormats;
@@ -42,25 +41,30 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
   const cache = new Map<string, Cached>();
   const prepared = new Set<string>();
 
-  const stampOf = (root: string) =>
+  const stampOf = (paths: readonly string[]) =>
     Effect.map(
-      Effect.forEach(WATCHED, (path) =>
-        files.stat(join(root, path)).pipe(
-          Effect.map((info) => `${path}:${Option.match(info.mtime, { onNone: () => '', onSome: (at) => at.getTime() })}`),
-          Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(`${path}:-`)),
-          Effect.mapError((failure) => new PluginUnreadable({ path: join(root, path), reason: failure.message })),
+      Effect.forEach(paths, (path) =>
+        files.stat(path).pipe(
+          Effect.map((info) => Option.match(info.mtime, { onNone: () => '', onSome: (at) => String(at.getTime()) })),
+          Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed('-')),
+          Effect.mapError((failure) => new PluginUnreadable({ path, reason: failure.message })),
         ),
       ),
       (parts) => parts.join('|'),
     );
 
   const read = Effect.fn('PluginShelf.read')(function* (root: string) {
-    const stamp = yield* stampOf(root);
     const standing = cache.get(root);
-    if (standing !== undefined && standing.stamp === stamp) return yield* standing.read;
-    const fresh = yield* Effect.exit(readPlugin(formats, root).pipe(Effect.provideService(FileSystem.FileSystem, files)));
-    cache.set(root, { stamp, read: fresh });
-    return yield* fresh;
+    if (standing !== undefined && standing.stamp === (yield* stampOf(standing.paths))) return standing.read;
+    const reads = new Set<string>([root]);
+    const fresh = yield* readPlugin(formats, root).pipe(
+      Effect.provideService(FileSystem.FileSystem, files),
+      Effect.provideService(PluginReads, reads),
+      Effect.tapError(() => Effect.sync(() => cache.delete(root))),
+    );
+    const paths = [...reads].sort();
+    cache.set(root, { paths, stamp: yield* stampOf(paths), read: fresh });
+    return fresh;
   });
 
   const values = Effect.fn('PluginShelf.values')(function* (id: string, read: PluginPackage) {
@@ -94,18 +98,31 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
     project,
   });
 
-  const declarationOf = (id: string, read: PluginPackage, place: PluginPlace) =>
-    read.servers.map((server): McpServerDeclaration => {
-      const reach = server.reach(place);
+  const declarationsOf = Effect.fnUntraced(function* (id: string, read: PluginPackage, place: PluginPlace) {
+    const declarations: McpServerDeclaration[] = [];
+    const skipped: PluginIgnored[] = [];
+    for (const server of read.servers) {
+      const reach = yield* server.reach(place).pipe(
+        Effect.provideService(FileSystem.FileSystem, files),
+        Effect.catchTag('PluginRefused', (refused) => Effect.succeed(refused)),
+      );
+      if (reach instanceof PluginRefused) {
+        skipped.push({ component: 'mcp-server', name: server.name, reason: reach.reason });
+        continue;
+      }
       const shared = {
         name: componentName(id, server.name),
         capabilities: { kinds: [...PERMISSION_KINDS], mutates: true },
         enabled: true,
       };
-      return reach.transport === 'stdio'
-        ? { ...shared, transport: 'stdio', command: reach.command, args: reach.args, cwd: reach.cwd, env: reach.env }
-        : { ...shared, transport: 'http', url: reach.url, headers: reach.headers };
-    });
+      declarations.push(
+        reach.transport === 'stdio'
+          ? { ...shared, transport: 'stdio', command: reach.command, args: reach.args, cwd: reach.cwd, env: reach.env }
+          : { ...shared, transport: 'http', url: reach.url, headers: reach.headers },
+      );
+    }
+    return { declarations, skipped };
+  });
 
   const dataReady = Effect.fn('PluginShelf.dataReady')(function* (id: string) {
     if (prepared.has(id)) return;
@@ -127,13 +144,20 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
       .update(JSON.stringify([cache.get(root)?.stamp ?? '', place]))
       .digest('hex')
       .slice(0, 16);
+    const { declarations, skipped } = yield* declarationsOf(id, pkg, place);
     const loaded: PluginLoaded = {
       id,
       revision,
       title: pkg.title ?? pkg.name,
       place,
       redact,
-      skills: pkg.skills.map((skill) => ({ ...skill, name: componentName(id, skill.name) })),
+      skills: pkg.skills.map((skill) => ({
+        name: componentName(id, skill.name),
+        directory: skill.directory,
+        file: skill.file,
+        root,
+        render: (text: string) => skill.render(text, place),
+      })),
       commands: pkg.commands.map((command) => ({
         name: componentName(id, command.name),
         description: command.description,
@@ -146,7 +170,7 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
         prompt: provided(agent.prompt(place)),
         tools: agent.tools,
       })),
-      servers: declarationOf(id, pkg, place),
+      servers: declarations,
       hooks: pkg.hooks.map((hook) => ({
         point: hook.point,
         label: hook.label,
@@ -154,7 +178,7 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
         run: (call, session) => Effect.provideService(hook.run(call, session, place), ChildProcessSpawner.ChildProcessSpawner, spawner),
       })),
     };
-    return { loaded, options } satisfies Bound;
+    return { loaded, options, skipped } satisfies Bound;
   });
 
   return { read, bind, forget: (root: string) => cache.delete(root) };

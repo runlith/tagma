@@ -11,7 +11,12 @@ export type PluginPlace = {
   readonly project: string;
 };
 
-export type PluginSkillFile = { readonly name: string; readonly directory: string; readonly file: string };
+export type PluginSkillFile = {
+  readonly name: string;
+  readonly directory: string;
+  readonly file: string;
+  readonly render: (text: string, place: PluginPlace) => string;
+};
 
 export type PluginCommandFile = {
   readonly name: string;
@@ -40,7 +45,7 @@ export type PluginServerReach =
 
 export type PluginServer = {
   readonly name: string;
-  readonly reach: (place: PluginPlace) => PluginServerReach;
+  readonly reach: (place: PluginPlace) => Effect.Effect<PluginServerReach, PluginRefused | PluginUnreadable, FileSystem.FileSystem>;
 };
 
 export type PluginHookCall =

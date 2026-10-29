@@ -1,4 +1,4 @@
-import { Effect, Exit, PubSub, Stream } from 'effect';
+import { Effect, PubSub, Stream } from 'effect';
 import { Projects } from '../projects/contract/service/registry.js';
 import { type SecretOwner, SecretOwnerFailed } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
@@ -13,6 +13,9 @@ export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf:
 
   const unreadable = (failure: { readonly message: string }) => new PluginsUnreadable({ reason: failure.message });
 
+  const refusedHere = (id: string) => (refused: { readonly message: string }) =>
+    Effect.as(Effect.logWarning(`the plugin ${id} contributes nothing while its directory is refused: ${refused.message}`), null);
+
   const of = Effect.fn('EnabledPlugins.of')(function* (projectId: number) {
     const enabled = yield* settings.value(pluginsEnabled, projectId).pipe(Effect.mapError(unreadable));
     if (enabled.length === 0) return [] as readonly PluginLoaded[];
@@ -22,8 +25,11 @@ export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf:
     for (const id of enabled) {
       const install = installs.find((entry) => entry.id === id);
       if (install === undefined) continue;
-      const bound = yield* Effect.exit(Effect.flatMap(shelf.read(install.root), (read) => shelf.bind(read, install.root, project)));
-      if (Exit.isSuccess(bound)) loaded.push(bound.value.loaded);
+      const bound = yield* Effect.flatMap(shelf.read(install.root), (read) => shelf.bind(read, install.root, project)).pipe(
+        Effect.catchTags({ PluginRefused: refusedHere(id), NamesCollide: refusedHere(id) }),
+        Effect.mapError(unreadable),
+      );
+      if (bound !== null) loaded.push(bound.loaded);
     }
     return loaded;
   });
@@ -38,12 +44,14 @@ export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf:
         for (const id of enabled) {
           const install = installs.find((entry) => entry.id === id);
           if (install === undefined) continue;
-          const read = yield* Effect.exit(shelf.read(install.root));
-          if (Exit.isFailure(read)) continue;
-          const entries = read.value.package.options
+          const read = yield* shelf
+            .read(install.root)
+            .pipe(Effect.catchTags({ PluginRefused: refusedHere(id), NamesCollide: refusedHere(id) }));
+          if (read === null) continue;
+          const entries = read.package.options
             .filter((option) => option.sensitive)
             .map((option) => ({ name: option.key, description: `${option.title}: ${option.description}` }));
-          if (entries.length > 0) holders.push({ id, key: id, title: read.value.package.title ?? read.value.package.name, entries });
+          if (entries.length > 0) holders.push({ id, key: id, title: read.package.title ?? read.package.name, entries });
         }
         return holders;
       },
