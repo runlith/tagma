@@ -30,9 +30,9 @@ sources:
 
 **Behaviour.**
 - A server is declared for a project or into the operator's personal set, for all projects; a project declaration with the same name overrides the personal one, and a project may refuse the whole personal set.
-- A server starts by a stdio command or is reached over Streamable HTTP. A secret is written as a `${NAME}` reference and taken from the Tagma server's environment at connect time; without such a variable the declaration refuses immediately, and the value is masked in answers.
+- A server starts by a stdio command or is reached over Streamable HTTP. A secret is written as a `${NAME}` reference and resolved at connect time from the value the operator set on the server's card, then from the Tagma server's environment; a server lacking one is still declared and reads `needs-value` naming it, and the value is masked in answers. Each project's server keeps its own values, and removing the server drops them.
 - The declaration names what the server's calls may demand of the host (permission kinds) and whether they change durable data — by default and per tool; the approval mode judges by that.
 - In review mode, declaring and removing ask the operator; variables changing what the program will load (`PATH`, `LD_PRELOAD`, `NODE_OPTIONS` and similar) raise a separate approval condition.
-- Disabling keeps the declaration as written and stops the process; enabling brings back the same server. States: waiting, connecting, connected with tool count, disabled, crashed with a reason.
+- Disabling keeps the declaration as written and stops the process; enabling brings back the same server. States: waiting, connecting, connected with tool count, needs a value, disabled, crashed with a reason.
 
 **Limits and divergence.** The `env` field description of `add_mcp_server` says such variables are banned, while the code accepts them and only asks the operator in review. Tagma declarations are for Tagma's own agent; they do not change foreign CLIs' MCP configuration.

@@ -76,7 +76,7 @@ A built-in browser for operator and agents, and what agents search and read the 
 
 ### A10 · Extensions: skills, instruction files, MCP, plugins, views, pages
 What extends the agent and the window beyond the built-in: project skills and instruction files, MCP servers and their App views, plugins with views, pins, secrets, and schedules, pages agents publish.
-- **Owns:** `mcp` (7), `plugins` (5), `views` (4), `plugin-secrets` (3), `artifacts` (CLI `artifacts`), `schedule`, `pin_view`, `unpin_view`, `read_agent_skills`, `read_workspace_sources`, `reload_workspace_sources`; `skills.*`, `agent.contextFiles.*`, `mcp.servers`, `plugins.*`; the `load_skill` tool; `features/mcp`, `plugins`, `views`, `plugin-secrets`, `pages`, routes `/p/[plugin]/[view]` and `/_desktop/view/…`, view windows on desktop, the skill catalog in the composer, SkillsSection.
+- **Owns:** `mcp` (7), `plugins` (5), `views` (4), `secrets` (3), `artifacts` (CLI `artifacts`), `schedule`, `pin_view`, `unpin_view`, `read_agent_skills`, `read_workspace_sources`, `reload_workspace_sources`; `skills.*`, `agent.contextFiles.*`, `mcp.servers`, `plugins.*`; the `load_skill` tool; `features/mcp`, `plugins`, `views`, `secrets`, `pages`, routes `/p/[plugin]/[view]` and `/_desktop/view/…`, view windows on desktop, the skill catalog in the composer, SkillsSection.
 - **Leaves:** agents and workflows brought by plugins — A1; bridge notifications — A2.
 
 ### A11 · Tagma on the machine: access, install, updates, window

@@ -55,7 +55,7 @@ Every Tagma surface unit stands in exactly one catalog area; the areas and their
 - artifacts (1): list_artifacts
 - mcp (7): add_mcp_server, call_mcp_app_tool, enable_mcp_server, open_mcp_app, read_mcp_resource, read_mcp_servers, remove_mcp_server
 - native-harness (3): read_agent_skills, read_workspace_sources, reload_workspace_sources
-- plugin-secrets (3): read_plugin_secrets, remove_plugin_secret, set_plugin_secret
+- secrets (3): read_secrets, remove_secret, set_secret
 - plugins (5): enable_plugin, install_plugin, read_plugin_schema, read_plugins, uninstall_plugin
 - schedule (1): read_schedules
 - threads (2): pin_view, unpin_view
@@ -119,7 +119,7 @@ The agent's remaining tools are operations and stand above in their areas.
 - A7: providers; from threads — dictation.composer
 - A8: speech; from threads — browserTools.feed
 - A9: browser; from threads — mcpApps.feed, pluginViews.feed, pins.feed, skills.composer, SkillCatalog, SkillsSection
-- A10: mcp, plugins, views, plugin-secrets, pages; from threads — pins.feed
+- A10: mcp, plugins, views, secrets, pages; from threads — pins.feed
 - A11: access
 - A12: settings, projects, workspace, palette, notices, telemetry
 
@@ -153,7 +153,7 @@ The agent's remaining tools are operations and stand above in their areas.
 - A7: providers
 - A8: speech
 - A9: browser, managed-browser, desktop-browser
-- A10: mcp, plugins, views, plugin-secrets, artifacts, schedule; native-harness skills and inputs
+- A10: mcp, plugins, views, secrets, artifacts, schedule; native-harness skills and inputs
 - A11: installation, access, release-channel, checkout-builds, mac-applications; composition/cli (serve, db) and composition/cut (release, developer only)
 - A12: settings, performance, invocation, http, socket, cli
 - substrate with no surface of its own: platform, composition (server assembly)
