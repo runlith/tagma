@@ -20,6 +20,6 @@ sources:
 
 **How** — the Connectors list at the top of the MCP servers settings; `connect_service` and `disconnect_service` for the operator, `read_connectors` for agents.
 
-**Behaviour** — connecting declares the service's remote MCP server on the page's scope, carrying the connector's mark, and opens its sign-in page, or waits for its key on the server's card. The connected service is that MCP server: its card shows the service's name and icon, and its state is the server's. Disconnecting drops the server with its tokens, values and client registration. A catalog entry whose address moved shows "moved to a new address" and offers to reconnect.
+**Behaviour** — connecting declares the service's remote MCP server on the page's scope, carrying the connector's mark, and opens its sign-in page, or waits for its key on the server's card. The connected service is that MCP server: its card shows the service's name and icon, and its state is the server's. Disconnecting drops the server with its tokens, values and client registration. A catalog entry whose address moved shows "moved to a new address" and offers to reconnect. In a project that turns off the operator's own servers, a service connected for all projects reads "connected, off in this project".
 
 **Limits** — only services whose own MCP server signs in with no client the person registers are in the catalog; any other is connected by URL as an MCP server. An agent never connects or signs in; it asks the operator.

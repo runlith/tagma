@@ -61,4 +61,4 @@ Every check runs through the operations, against the MCP layer's test servers (`
 - `disconnect_service` leaves no declaration, token, value or client registration of that server: connecting again reads signed out with no client, and a keyed one needs its value again.
 - Every catalog entry has a unique id and an HTTPS URL. This is checked over the shipped data, because types cannot check it.
 
-A project declining the person's MCP servers — read as "connected, off in this project" — waits on a door to decline them, which [[356917d4]] adds.
+- A project that declines the person's MCP servers (`write_setting_layer`, `declined` alone on `mcp.servers`) reads a connector connected for all projects as `declined`, "connected, off in this project"; built by [[356917d4]].
