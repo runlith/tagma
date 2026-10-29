@@ -53,6 +53,7 @@ const setup = Effect.gen(function* () {
   ]);
   const notices: EventLine[] = [];
   let unreadable = false;
+  let filedAt = 0;
   const lookup = yield* ThreadLookup.pipe(
     Effect.provide(
       Layer.mock(ThreadLookup, {
@@ -88,7 +89,7 @@ const setup = Effect.gen(function* () {
           holdings: ({ from }) =>
             Effect.sync(() => ({
               held: owners.get(checkout) === from.key ? [task] : [],
-              filed: [{ name: '33333333', title: 'Open work' }],
+              filed: [{ name: '33333333', title: 'Open work', changedAt: filedAt }],
             })),
           handOver: ({ from, to }) =>
             Effect.sync(() => {
@@ -149,25 +150,54 @@ const setup = Effect.gen(function* () {
     notices,
     handed,
     held: held.service,
+    rested: (runId: string) =>
+      held.recipient.handle({
+        kind: 'rested',
+        thread: child,
+        run: { runId, threadId: child.id, kind: 'turn', status: 'completed', failureReason: null, failure: null, stoppedBy: null },
+        words: null,
+        byOperator: false,
+      }),
     unreadable: () => {
       unreadable = true;
+    },
+    reopened: () => {
+      filedAt += 1;
     },
   };
 });
 
-it.effect('leaving hands work from every graph copy to the living parent and publishes one non-waking notice', () =>
+it.effect('leaving hands work from every graph copy to the living parent and names it and the open work in non-waking notices', () =>
   Effect.gen(function* () {
     const world = yield* setup;
     yield* world.held.left([world.child.id]);
     expect([...world.owners.values()]).toEqual([world.parent.id, world.parent.id]);
-    for (const name of ['11111111', '22222222', '33333333']) expect(world.notices[0]?.text).toContain(name);
-    expect(world.notices).toHaveLength(1);
-    expect(world.notices[0]).toMatchObject({
-      subscriberId: world.parent.id,
-      about: world.child.id,
-      wakes: false,
-      notice: { kind: 'child-update', child: { threadId: world.child.id }, event: 'tasks' },
-    });
+    expect(world.notices.map((line) => ['11111111', '22222222', '33333333'].filter((name) => line.text.includes(name)))).toEqual([
+      ['11111111', '22222222'],
+      ['33333333'],
+    ]);
+    for (const line of world.notices) {
+      expect(line).toMatchObject({
+        subscriberId: world.parent.id,
+        about: world.child.id,
+        wakes: false,
+        notice: { kind: 'child-update', child: { threadId: world.child.id }, event: 'tasks' },
+      });
+    }
+  }),
+);
+
+it.effect('a child resting again names unchanged open work under the line its parent already received, and changed work anew', () =>
+  Effect.gen(function* () {
+    const world = yield* setup;
+    const ids = () =>
+      new Set(world.notices.filter((line) => line.text.includes('33333333')).map((line) => `${line.type}:${line.about}:${line.key}`));
+    yield* world.rested('run-1');
+    yield* world.rested('run-2');
+    expect(ids().size).toBe(1);
+    world.reopened();
+    yield* world.rested('run-3');
+    expect(ids().size).toBe(2);
   }),
 );
 

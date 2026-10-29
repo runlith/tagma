@@ -11,49 +11,74 @@ import { threadRecord } from '../../thread-record/store/table.js';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { answerIdsOf } from '@runlith/agent/collaboration/ThreadEnvelopes';
 import { finalWords } from '../list/said.js';
-import { owedCall } from '../store/calls.js';
+import { OwnWork } from '../contract/service/ownWork.js';
 import { thread, threadRun } from '../store/kernel.js';
 import { threadInbox } from '../store/tables.js';
 
 export type EventReads = Effect.Success<typeof makeEventReads>;
 
-const busy = (threadId: string | SQLiteColumn) => sql`(
-  exists (select 1 from ${threadInbox} i where i.thread_id = ${threadId} and i.state = 'queued' and coalesce(json_extract(i.body, '$.waits'), 0) = 0)
+const busy = (threadId: string | SQLiteColumn, owing: readonly string[]) => sql`(
+  exists (select 1 from ${threadInbox} i where i.thread_id in ${subtreeOf(threadId)} and i.state = 'queued' and coalesce(json_extract(i.body, '$.waits'), 0) = 0)
   or exists (select 1 from ${threadRun} r where r.status = 'running' and r.thread_id in ${subtreeOf(threadId)})
-  or exists (select 1 from ${owedCall} o where o.thread_id = ${threadId})
+  or exists (select 1 from json_each(${JSON.stringify(owing)}) o where o.value in ${subtreeOf(threadId)})
 )`;
 
 export const makeEventReads = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
+  const own = yield* OwnWork;
+
+  const owingBelow = Effect.fn('EventReads.owingBelow')(function* (threadIds: readonly string[]) {
+    const below = yield* units.read((unit) =>
+      unit.run(
+        db.all<{ id: string }>(sql`
+          with recursive below(id) as (
+            select value from json_each(${JSON.stringify(threadIds)})
+            union
+            select t.id from ${threadRecord} t join below b on t.parent_id = b.id
+          )
+          select id from below`),
+      ),
+    );
+    const owing: string[] = [];
+    for (const ids of chunk(
+      below.map((row) => row.id),
+      rowsPerStatement(1),
+    ))
+      owing.push(...(yield* own.owing(ids)));
+    return owing;
+  });
+
   return {
     holders: (threadIds: readonly string[]) =>
-      units.read((unit) =>
-        Effect.gen(function* () {
-          const wanted = [...new Set(threadIds)];
-          const states = new Map<string, HolderState>();
-          for (const ids of chunk(wanted, rowsPerStatement(1))) {
-            const rows = yield* unit.run(
-              db
-                .select({
-                  id: threadRecord.id,
-                  parentId: threadRecord.parentId,
-                  archivedAt: threadRecord.archivedAt,
-                  status: threadRecord.status,
-                  busy: sql<number>`${busy(threadRecord.id)}`,
-                })
-                .from(threadRecord)
-                .where(inArray(threadRecord.id, ids)),
-            );
-            for (const row of rows) {
-              const standing =
-                row.archivedAt !== null ? 'gone' : row.busy === 1 ? 'working' : row.status === 'failed' ? 'failed' : 'rested';
-              states.set(row.id, { standing, child: row.parentId !== null });
+      Effect.flatMap(owingBelow(threadIds), (owing) =>
+        units.read((unit) =>
+          Effect.gen(function* () {
+            const wanted = [...new Set(threadIds)];
+            const states = new Map<string, HolderState>();
+            for (const ids of chunk(wanted, rowsPerStatement(1))) {
+              const rows = yield* unit.run(
+                db
+                  .select({
+                    id: threadRecord.id,
+                    parentId: threadRecord.parentId,
+                    archivedAt: threadRecord.archivedAt,
+                    status: threadRecord.status,
+                    busy: sql<number>`${busy(threadRecord.id, owing)}`,
+                  })
+                  .from(threadRecord)
+                  .where(inArray(threadRecord.id, ids)),
+              );
+              for (const row of rows) {
+                const standing =
+                  row.archivedAt !== null ? 'gone' : row.busy === 1 ? 'working' : row.status === 'failed' ? 'failed' : 'rested';
+                states.set(row.id, { standing, child: row.parentId !== null });
+              }
             }
-          }
-          for (const id of wanted) if (!states.has(id)) states.set(id, { standing: 'gone', child: false });
-          return states as ReadonlyMap<string, HolderState>;
-        }),
+            for (const id of wanted) if (!states.has(id)) states.set(id, { standing: 'gone', child: false });
+            return states as ReadonlyMap<string, HolderState>;
+          }),
+        ),
       ),
     cached: Effect.flatMap(Clock.currentTimeMillis, (now) =>
       units.read((unit) =>
@@ -76,7 +101,11 @@ export const makeEventReads = Effect.gen(function* () {
       ),
     ),
     quiet: (threadId: string) =>
-      units.read((unit) => Effect.map(unit.run(db.get<{ busy: number }>(sql`select ${busy(threadId)} as busy`)), (row) => row?.busy === 0)),
+      Effect.flatMap(owingBelow([threadId]), (owing) =>
+        units.read((unit) =>
+          Effect.map(unit.run(db.get<{ busy: number }>(sql`select ${busy(threadId, owing)} as busy`)), (row) => row?.busy === 0),
+        ),
+      ),
     finalWords: (threadId: string, runId: string) =>
       units.read((unit) =>
         Effect.map(

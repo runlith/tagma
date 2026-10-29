@@ -200,6 +200,8 @@ export const ServedTree = Context.Reference<{
 
 export type HeldTask = { readonly name: string; readonly title: string };
 
+export type FiledTask = HeldTask & { readonly changedAt: number };
+
 export type HolderTask = { readonly name: string; readonly title: string; readonly stealth: boolean };
 
 export class TaskHolders extends Context.Service<

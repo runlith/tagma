@@ -123,7 +123,7 @@ export class CommandWaiters extends Context.Service<
   {
     readonly owed: (execution: ExecutionRef) => Effect.Effect<CommandDelivery | null, DeliveryFailure>;
     readonly outstanding: (after?: CommandDeliveryCursor) => Effect.Effect<readonly CommandDelivery[], DeliveryFailure>;
-    readonly owing: (threads?: readonly string[]) => Effect.Effect<readonly string[], DeliveryFailure>;
+    readonly owing: (threads?: readonly string[]) => Effect.Effect<readonly string[], StoreFailure>;
     readonly accepted: (unit: WriteUnit<'machine'>, execution: ExecutionRef) => Effect.Effect<boolean, ExecutionStoreFailure>;
     readonly delivered: (execution: ExecutionRef) => Effect.Effect<void, DeliveryFailure>;
     readonly take: (execution: ExecutionRef, thread: ThreadId) => Effect.Effect<boolean, DeliveryFailure>;

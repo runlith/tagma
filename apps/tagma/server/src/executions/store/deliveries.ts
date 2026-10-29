@@ -85,8 +85,7 @@ export const makeCommandDeliveries = ({ db, installation }: { readonly db: Store
 
     owing: Effect.fn('CommandDeliveries.owing')(function* (unit: Unit<'machine'>, threads: readonly string[] | undefined) {
       if (threads?.length === 0) return [];
-      const rows = yield* queried(
-        unit,
+      const rows = yield* unit.run(
         db
           .selectDistinct({ thread: commandDelivery.threadId })
           .from(commandDelivery)

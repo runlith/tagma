@@ -333,13 +333,16 @@ export const taskHolding = Effect.gen(function* () {
       ids.length === 0
         ? []
         : yield* db
-            .select({ uuid: block.uuid, title: block.title })
+            .select({ uuid: block.uuid, title: block.title, updatedAt: block.updatedAt })
             .from(block)
             .where(and(standingWork(table, input.projectId), contractAt(table, WORK, 'initial', block.id), inArray(block.id, ids)))
             .orderBy(asc(block.createdAt), asc(block.id));
     const named = (rows: readonly { readonly uuid: string; readonly title: string }[]) =>
       rows.map((row) => ({ name: blockName(row.uuid), title: row.title }));
-    return { held: named(held), filed: named(filed) };
+    return {
+      held: named(held),
+      filed: filed.map((row) => ({ name: blockName(row.uuid), title: row.title, changedAt: row.updatedAt.getTime() })),
+    };
   });
 
   const passOn = Effect.fn('Tasks.passOn')(function* (row: BlockRow, table: TagTable, from: number, to: SessionRef | null) {
