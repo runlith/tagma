@@ -86,7 +86,7 @@ The reasons for this shape:
 
 **Client identity, in this order.**
 1. **Pre-registered.** The person enters a client id, and a secret if the service gives one; the card shows the redirect URIs to register. A catalog entry may carry such a public client id.
-2. **Client metadata document (CIMD).** Used where the authorization server supports it. Its address is the `mcp.clientDocument` setting, unset until the document is published; unset, a sign-in goes from step 1 to step 3. The document is one static public HTTPS file with no account data. It can list only loopback redirect URIs, so a remote-door sign-in falls back to step 3.
+2. **Client metadata document (CIMD).** Used where the authorization server supports it. Its address is the `mcp.clientDocument` setting, which defaults to the document Tagma publishes on its site; set to null, a sign-in goes from step 1 to step 3. The document is one static public HTTPS file with no account data, served readable cross-origin. It can list only loopback redirect URIs: `http://127.0.0.1:<port>/mcp/oauth/callback` for the default port of each channel (stable and dev). A remote-door sign-in falls back to step 3. A local door on another port (`TAGMA_PORT`) still goes out with the document, which a server that ignores the port of a loopback redirect (RFC 8252) accepts and one that matches it exactly refuses.
 3. **Dynamic registration.** Used where the server offers it, and repeated when the registered redirect URIs no longer cover the door in use.
 
 A server offering none of these refuses `sign_in_mcp_server` with that reason.
@@ -119,10 +119,6 @@ A server offering none of these refuses `sign_in_mcp_server` with that reason.
 5. A rows feed in `mcp` brings the new state to `app-mcp`, whose repo today is a `read_mcp_servers` query with no feed, so the card moves to connected without a reload.
 6. `sign_out_mcp_server` drops the tokens and keeps the client identity.
 7. A refresh the authorization server refuses drops the tokens and moves the row back to `needs-sign-in`; a transient failure leaves them and fails only that connection.
-
-## What remains
-
-Publishing the client metadata document and setting `mcp.clientDocument` to its address; until then a sign-in uses a client the operator registered, then dynamic registration.
 
 ## Owners touched
 

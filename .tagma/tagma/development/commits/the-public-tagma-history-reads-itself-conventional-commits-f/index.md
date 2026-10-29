@@ -5,7 +5,7 @@ ord: 3
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 ---
 **What we get.** A visitor of `runlith/tagma` sees a live project and understands from one commit history what is being done in it: every code commit states the type, module, what changed and why, and names the task; every knowledge commit states what opened, closed, or got fixed in the graph, with the `tagma-dev` avatar. The project graph lives in the same repo and reads on GitHub straight as Markdown: the product shows itself on itself.
