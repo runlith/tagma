@@ -1,3 +1,28 @@
+diff --git a/src/internal/client/dom/template.js b/src/internal/client/dom/template.js
+index a5d0405..359baed 100644
+--- a/src/internal/client/dom/template.js
++++ b/src/internal/client/dom/template.js
+@@ -74,9 +74,8 @@ export function from_html(content, flags) {
+ 			if (!is_fragment) node = /** @type {TemplateNode} */ (get_first_child(node));
+ 		}
+ 
+-		var clone = /** @type {TemplateNode} */ (
+-			use_import_node || is_firefox ? document.importNode(node, true) : node.cloneNode(true)
+-		);
++		// a clone of the template's inert content is adopted node by node on insertion; import it into this document
++		var clone = /** @type {TemplateNode} */ (document.importNode(node, true));
+ 
+ 		if (is_fragment) {
+ 			var start = /** @type {TemplateNode} */ (get_first_child(clone));
+@@ -131,7 +130,7 @@ function from_namespace(content, flags, ns = 'svg') {
+ 			}
+ 		}
+ 
+-		var clone = /** @type {TemplateNode} */ (node.cloneNode(true));
++		var clone = /** @type {TemplateNode} */ (document.importNode(node, true));
+ 
+ 		if (is_fragment) {
+ 			var start = /** @type {TemplateNode} */ (get_first_child(clone));
 diff --git a/src/internal/client/index.js b/src/internal/client/index.js
 index 15e92aa..9e62ac8 100644
 --- a/src/internal/client/index.js

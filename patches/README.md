@@ -226,8 +226,8 @@ build is what would fail. Both are named here rather than given a trap that cann
 
 ## `svelte@5.57.0.patch`
 
-Eight hunks. 1, 2, 5 and 6 are carried from shop `core-refactor` at `8c71394ba0`, 7 and 8 from shop
-`release` at `9de9eb1deb`, 9 and 10 are runlith's own. Three of the first four are about one thing: the
+Nine hunks. 1, 2, 5 and 6 are carried from shop `core-refactor` at `8c71394ba0`, 7 and 8 from shop
+`release` at `9de9eb1deb`, 9, 10 and 11 are runlith's own. Three of the first four are about one thing: the
 graph's services live in detached roots (`detachedRoot` in `packages/layer/src/svelte/App.svelte.ts`),
 their effects stand outside the component tree, and Svelte's batch scheduler in async mode does not
 count them as its own at time travel and at commit. On 5.57.0 `batch.js` is byte-identical to 5.56.10;
@@ -388,6 +388,42 @@ Traps: `packages/layer/src/svelte/seat-release.svelte.test.ts`, the shape alone 
 in the guarded branch's teardown; the column itself in
 `apps/tagma/app/src/lib/features/threads/Column.svelte.test.ts -t "leaves when the page"`.
 
+### 11 · `template.js`, `from_html` and `from_namespace`: templates are cloned into the document
+
+An HTML template's master copy lives in the content of a `<template>` element, which belongs to a separate
+inert document. Upstream clones it with `importNode` only in Firefox or when the compiler flags the
+template (a custom element, `<video>`), and with `cloneNode` otherwise, so the clone starts in that inert
+document, while the anchors and fragments Svelte creates itself (`create_text`, `comment()`) belong to the
+page's. Each insertion across the two adopts the moved subtree node by node, and a nested tree is adopted
+again at every level whose parent stands in the other document. The hunk clones with `importNode` always,
+so a clone belongs to the page from the start and inserting it adopts nothing. In `from_namespace` a
+multi-node SVG or MathML master is already a page-document fragment; the hunk changes only the
+single-element master, which stays in the template's document. `from_tree` keeps `cloneNode`: its master
+copy is built with the page's `createElement`.
+
+Why upstream stops at Firefox: `is_firefox` came with sveltejs/svelte#15272 (February 2025), which moved
+Firefox to `importNode` to fix lazy `<img>` attributes (#15141). Chromium and WebKit stayed on `cloneNode`
+on one remark in that review: `importNode` is "much slower in Chrome than `cloneNode`", citing Chromium
+issue 371247940, which is not publicly readable. That shape — the clone call alone — does measure slower:
+3000 clones of a 25-node tree took 7.5 ms with `cloneNode` and 10.6 ms with `importNode` in Chromium 151
+(9.9 and 14.6 ms per 1000 at 4× CPU), and 15 and 16 ms in WebKit, about a microsecond per clone. It does not
+hold for a mount, where the clone is inserted: with Svelte's nesting — a component's clone placed before a
+page-document anchor inside its parent's clone, attributes and a listener set before insertion — 1000 rows
+in the chat-ui stand's document took 13.7 ms with `cloneNode` and 11.3 ms with `importNode` in Chromium,
+32 and 25 ms in WebKit. Upstream is moving the same way: sveltejs/svelte#18834 (open) shows Chromium
+leaking responsive images through this cross-document assembly, and draft #18835 moves every `from_html`
+clone to `importNode`, "taking the slight perf hit".
+
+Symptom: in Chromium at 4× CPU throttling, mounting one heavy feed row spent most of its time in the
+native `before` of Svelte's `append`. Measured on two stand builds differing only in this call, on an idle
+M2 Max: over one recording of the chat-ui stand's scroll controls `before` totalled 63.7 ms with
+`cloneNode` and 26.3 ms with `importNode`, against 5.6 and 5.4 ms for the clone calls; opening a thread
+took 54.9 and 48.4 ms at the median at 4× (p90 62.1 and 52.3), 11.3 and 10.8 ms at 1× (p90 15.0 and 12.7).
+WebKit opened it in 19 and 20 ms (p90 23 and 25), within its one-millisecond timer.
+
+Trap: `packages/layer/src/svelte/template-document.test.ts`. A raw snippet rendered inside a template's
+element sees that element's document in `setup`; without the hunk it is the inert one.
+
 ### Tried and rejected
 
 | variant | result |
@@ -424,5 +460,7 @@ bun run --cwd packages/primitives test
    trap stays.
 8. A write by a teardown at commit no longer lets the committing batch run effects under a block it
    marked — hunk 10 goes, its traps stay.
-9. While none of this is done, the patch is regenerated for the new version by the method above,
+9. `from_html` and `from_namespace` clone templates into the page's document in every browser — hunk 11
+   goes, its trap stays.
+10. While none of this is done, the patch is regenerated for the new version by the method above,
    `patches:prove` is green whole, and the e2e trap of hunk 2 is green in shop.
