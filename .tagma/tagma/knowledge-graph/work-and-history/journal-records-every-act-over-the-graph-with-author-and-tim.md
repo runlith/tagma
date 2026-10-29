@@ -31,7 +31,7 @@ sources:
 
 **Behaviour.**
 - Consecutive acts of one author over one block pack into a batch. On screen rows group by day, a deleted block is struck through.
-- A click opens in the diff lens on the row's range.
+- A click opens in the diff lens on the row's range; a row that created its block opens the block itself.
 - What is new since the last visit is marked. Tag, author, and act filters remember for the project, new entries arrive live.
 - Registry and project enforcement acts also land in the journal.
 
