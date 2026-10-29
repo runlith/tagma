@@ -38,12 +38,12 @@ The rename is task [[05a933b6]]. It renames:
 
 **Formats and detection.** A directory is read by the first rule that matches:
 1. `.claude-plugin/plugin.json`: the Claude Code format.
-2. A root `plugin.json` whose `$schema` is the Agent Plugins 1.0 schema.
-3. The Claude Code default layout without a manifest (`skills/`, `agents/`, `commands/`, `hooks/hooks.json`, `.mcp.json`).
+2. A root `plugin.json` whose `$schema` is an Agent Plugins schema identifier; any version other than 1.0.0 is refused naming the version, so a newer package is not misread as a Claude Code layout.
+3. The Claude Code default layout without a manifest (`skills/`, `agents/`, `commands/`, `hooks/hooks.json`, `.mcp.json`), named after its directory.
 
-A package carrying both manifests is read as Claude Code, the richer of the two, so its agents are not lost. For Agent Plugins, unknown top-level fields are reported and ignored, and any other violation rejects the plugin, as that standard says.
+A package carrying both manifests is read as Claude Code, the richer of the two, so its agents are not lost. For Agent Plugins, unknown top-level fields are reported and ignored, and any other violation rejects the plugin, as that standard says; an invalid `mcp.json` or server entry is skipped with its reason (a stdio `command` must be one bare name or a `./` path).
 
-Each format is an adapter that turns a directory into one plugin description: name, version, and components with their files. The core names no format.
+Each format is an adapter module (`claude-code-format`, `agent-plugins-format`) that turns a directory into one plugin description: name, version, and components with their files. Composition gives the core the adapters in that order; the core names no format.
 
 **Names.**
 - Every component is named `<plugin>-<name>`: skills, MCP servers and agents alike. `-` is valid in all three grammars, while `:` would force quoting in the composer's `$` and `.` is refused in MCP server names (`MCP_SERVER_NAME_PATTERN`).
@@ -58,10 +58,10 @@ Each format is an adapter that turns a directory into one plugin description: na
   - **Disabling.** A contributed server is not editable: `remove_mcp_server` refuses it. Disabling one is a project setting keyed by its name (`mcp.contributionsOff`), which `enable_mcp_server` with scope `contributed` writes.
   - **Expansion.** A contributed declaration expands only its own format's variables, and never from the server environment:
     - Agent Plugins: `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` in args, env and cwd, never in the URL or headers;
-    - Claude Code: `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}` and `${user_config.KEY}`.
+    - Claude Code: `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_PROJECT_DIR}` (the pool is per project) and `${user_config.KEY}`.
 
     Any other `${…}` stays literal, so a plugin cannot pull a value of Tagma's environment into a header it sends away.
-  - **Transport.** `streamable-http` maps to `http`. `sse` is refused with a reason.
+  - **Transport.** `streamable-http` maps to `http`. `sse` is refused with a reason, as are Claude Code's `ws` servers, `.mcpb` bundles and a `headersHelper`.
   - **Classification.** A server is classified as mutating with every permission kind (`McpCapabilities`), so its tools ask in review mode.
   - **Consent.** Install and enable raise what `add_mcp_server` raises for the same server: the `execute` and `network` subjects, and `mcp-env-resolving`.
   - **Sign-in.** Remote servers sign in through the MCP layer.
@@ -78,10 +78,12 @@ Each format is an adapter that turns a directory into one plugin description: na
 - **Everything else.** LSP, output styles, themes, monitors, `bin/`, `settings.json` and workflows are listed as ignored.
 
 **Installation.**
-- From a folder, read in place.
-- From a git URL, cloned into the machine data directory. Installing the same URL again updates it.
+- From a folder, read in place; a relative folder is read from the project root.
+- From a git URL, cloned (`--depth 1`, as the operator) into `plugins/<id>/` of the data directory. The clone is made before consent, in a staging directory, so the consent names what the plugin runs; installing the same URL again replaces the clone.
+- Its persistent data directory is `plugin-data/<id>/`, the `PLUGIN_DATA` and `CLAUDE_PLUGIN_DATA` of its processes.
 - The operations reuse the ids step 1 frees: `install_plugin`, `enable_plugin`, `uninstall_plugin`, `read_plugins`. Their new inputs are a break the commit marks.
-- `uninstall_plugin` keeps the plugin's data, as apps do today.
+- `uninstall_plugin` keeps the plugin's data, as apps do today, drops its secret options and removes the clone of a git URL.
+- A plugin's reading is cached by the modification times of its manifest and component locations, so a folder edited in place is read again on its next use.
 - Plugin marketplaces are not part of this spec.
 
 ## Owners touched
