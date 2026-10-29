@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { parseTextPatch, type PatchHunk, type PatchLine } from '@runlith/utils/patch';
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, beforeAll, expect, test } from 'vitest';
 import ToolDiff from './ToolDiff.svelte';
 
 const VIEWPORT_PX = 400;
 const ROW_PX = 20;
+let rowHeight = ROW_PX;
 
 let drawn: Record<string, unknown> | undefined;
 let target: HTMLElement | undefined;
@@ -15,7 +16,7 @@ beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
     configurable: true,
     get(this: HTMLElement) {
-      return this.dataset.index === undefined ? VIEWPORT_PX : ROW_PX;
+      return this.dataset.index === undefined ? VIEWPORT_PX : this.dataset.index === '0' ? rowHeight : ROW_PX;
     },
   });
 });
@@ -25,6 +26,7 @@ afterEach(() => {
   if (target) target.remove();
   drawn = undefined;
   target = undefined;
+  rowHeight = ROW_PX;
 });
 
 function draw(props: Record<string, unknown>): HTMLElement {
@@ -90,6 +92,27 @@ test('a patch of thousands of lines holds far fewer rows than lines, and scrolli
 
   expect(host.textContent).toContain(`line ${count}`);
   expect(host.querySelectorAll('[data-index]').length).toBeLessThan(count / 10);
+});
+
+test('changing wrap invalidates measurements from outside the current window', async () => {
+  const count = 80;
+  const patch = [`@@ -1,${count} +1,${count} @@`, ...Array.from({ length: count }, (_unused, index) => ` line ${index}`)].join('\n');
+  const props = $state({ patch, wrap: true });
+  rowHeight = 40;
+  const host = draw(props);
+  await tick();
+  const list = host.querySelector<HTMLElement>('[data-index]')!.parentElement!;
+  const scroller = list.parentElement!;
+  scroller.scrollTop = Number.parseFloat(list.style.height) - VIEWPORT_PX;
+  scroller.dispatchEvent(new Event('scroll'));
+  await tick();
+  expect(host.querySelector('[data-index="0"]')).toBeNull();
+
+  rowHeight = ROW_PX;
+  props.wrap = false;
+  await tick();
+
+  expect(Number.parseFloat(list.style.height)).toBe(count * ROW_PX);
 });
 
 async function settled(): Promise<void> {

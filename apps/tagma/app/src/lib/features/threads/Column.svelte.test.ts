@@ -6,7 +6,7 @@ import { Failure } from '@runlith/layer/Failure';
 import { Layer } from '@runlith/layer/Layer';
 import { stubFamily } from '@runlith/query/testing';
 import { flushSync, tick } from 'svelte';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { AgentTypes } from './AgentTypes.svelte.js';
 import { ThreadChats } from './ThreadChats.js';
 import { ModelDefaults } from './ModelDefaults.svelte.js';
@@ -51,10 +51,31 @@ import { WorkLines } from './workLines.svelte.js';
 let app: TestApp | undefined;
 const feed = liveFeed();
 
+beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.dataset.line === undefined ? (this.dataset.drop === 'loose' ? 27 : 0) : 26;
+  });
+  vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(function (this: Element) {
+    return this.getAttribute('data-drop') === 'loose' ? 27 : 0;
+  });
+  vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(function (this: Element) {
+    return Number.parseFloat(this.querySelector<HTMLElement>('[data-line]')?.parentElement?.style.height ?? '') || 0;
+  });
+  Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+    configurable: true,
+    value(this: HTMLElement, options?: ScrollToOptions | number, y?: number) {
+      this.scrollTop = typeof options === 'number' ? (y ?? options) : (options?.top ?? this.scrollTop);
+      this.dispatchEvent(new Event('scroll'));
+    },
+  });
+});
+
 afterEach(async () => {
   if (app) await app.unmount();
   app = undefined;
   feed.frame = null;
+  vi.restoreAllMocks();
+  Reflect.deleteProperty(HTMLElement.prototype, 'scrollTo');
 });
 
 const row = (index: number): ThreadListRow => ({

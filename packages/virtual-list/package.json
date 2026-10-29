@@ -1,10 +1,16 @@
 {
-  "name": "@runlith/scroll-follow",
+  "name": "@runlith/virtual-list",
   "version": "0.1.0",
   "private": true,
-  "description": "A scroll container that rides its tail and yields to the reader: the follow state, the anchoring, and the marks that keep a programmatic scroll from reading as the reader's own.",
+  "description": "Measured-height lists with one scroll writer, synchronous geometry, and tail-following policy.",
   "type": "module",
   "exports": {
+    "./VirtualList": {
+      "types": "./src/VirtualList.ts",
+      "browser": "./src/VirtualList.ts",
+      "svelte": "./src/VirtualList.ts",
+      "default": "./src/VirtualList.ts"
+    },
     "./FollowingViewport.svelte": {
       "types": "./src/FollowingViewport.svelte.ts",
       "browser": "./src/FollowingViewport.svelte.ts",
@@ -21,6 +27,9 @@
   "scripts": {
     "test": "testbed vitest run src",
     "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@tanstack/virtual-core": "catalog:"
   },
   "devDependencies": {
     "@runlith/testbed": "workspace:*",

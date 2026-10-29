@@ -1,5 +1,5 @@
-import { canScroll, type ScrollState, wheelCrossesOut, wheelDistance } from '@runlith/scroll-follow/scrollFollow';
-import { FollowingViewport, type Hold, type ScrollOutcome } from '@runlith/scroll-follow/FollowingViewport.svelte';
+import { canScroll, type ScrollState, wheelCrossesOut, wheelDistance } from '@runlith/virtual-list/scrollFollow';
+import { FollowingViewport, type Hold, type ScrollOutcome } from '@runlith/virtual-list/FollowingViewport.svelte';
 import { tick } from 'svelte';
 import type { FeedMemory } from './FeedMemory';
 import { inView, type ReadingView, readingLine, transcriptCursorMessageId } from './transcriptCursor';

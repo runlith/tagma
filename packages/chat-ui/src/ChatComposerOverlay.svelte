@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { wheelCrossesOut, wheelDistance } from '@runlith/scroll-follow/scrollFollow';
+  import { wheelCrossesOut, wheelDistance } from '@runlith/virtual-list/scrollFollow';
   import type { Snippet } from 'svelte';
   import JumpToLatest from './JumpToLatest.svelte';
   import type { ChatLiveTail } from './liveStatus';

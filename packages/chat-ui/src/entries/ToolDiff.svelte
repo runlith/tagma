@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { elementScroll, observeElementOffset, observeElementRect, Virtualizer, type VirtualItem } from '@tanstack/virtual-core';
+  import type { VirtualItem } from '@tanstack/virtual-core';
+  import { VirtualList } from '@runlith/virtual-list/VirtualList';
   import { untrack } from 'svelte';
   import type { PatchHunk } from '@runlith/utils/patch';
   import { type DiffColours, type DiffHighlight, diffPieces } from './diffPieces';
@@ -55,9 +56,9 @@
   let widest = $state(0);
 
   let scroller: HTMLElement | undefined = $state();
-  let virtualizer = $state<Virtualizer<HTMLElement, HTMLElement> | undefined>();
-  let mounted = $state<readonly VirtualItem[]>([]);
-  let total = $state(0);
+  let virtualizer = $state.raw<VirtualList | undefined>();
+  let mounted = $state.raw<readonly VirtualItem[]>([]);
+  let list = $state<HTMLElement | undefined>();
 
   const asker = $props.id();
 
@@ -79,41 +80,25 @@
   });
 
   function options(element: HTMLElement) {
+    const order = rows;
     return {
-      count: rows.length,
+      count: order.length,
       getScrollElement: () => element,
       estimateSize: () => ROW_PX,
-      getItemKey: (index: number) => rows[index]?.key ?? index,
+      getItemKey: (index: number) => order[index]?.key ?? index,
       overscan: OVERSCAN_ROWS,
-      observeElementRect,
-      observeElementOffset,
-      scrollToFn: elementScroll,
-      onChange: () => schedulePublish(),
+      beforeMeasure: (node: HTMLElement) => {
+        const span = spanOf(node);
+        if (span > widest) widest = span;
+      },
+      onChange: () => (mounted = virtualizer?.getVirtualItems() ?? []),
     };
   }
 
-  function publish(): void {
-    const made = virtualizer;
-    if (made === undefined) return;
-    mounted = made.getVirtualItems();
-    total = made.getTotalSize();
-  }
-
-  let publishing = false;
-
-  function schedulePublish(): void {
-    if (publishing) return;
-    publishing = true;
-    queueMicrotask(() => {
-      publishing = false;
-      publish();
-    });
-  }
-
-  function measure(node: HTMLElement): void {
-    virtualizer?.measureElement(node);
-    const span = spanOf(node);
-    if (span > widest) widest = span;
+  function measure(node: HTMLElement, key: string): () => void {
+    const release = virtualizer?.box(key, node);
+    virtualizer?.mountRow(node, key);
+    return () => release?.();
   }
 
   function spanOf(node: HTMLElement): number {
@@ -125,15 +110,16 @@
 
   $effect(() => {
     const element = scroller;
-    if (element === undefined) return;
-    const made = new Virtualizer(untrack(() => options(element)));
-    const release = made._didMount();
+    const span = list;
+    if (element === undefined || span === undefined) return;
+    const made = new VirtualList(untrack(() => options(element)));
     virtualizer = made;
+    made.span(span);
+    made.connect();
     return () => {
-      release();
+      made.dispose();
       virtualizer = undefined;
       mounted = [];
-      total = 0;
     };
   });
 
@@ -142,24 +128,24 @@
     widest = 0;
   });
 
+  type Layout = { readonly wrap: boolean; readonly identity: string };
+  let layout: Layout | undefined;
+
   $effect(() => {
-    wrap;
-    const made = untrack(() => virtualizer);
-    const element = untrack(() => scroller);
-    if (made === undefined || element === undefined) return;
-    queueMicrotask(() => {
-      made.measure();
-      for (const node of element.querySelectorAll<HTMLElement>('[data-index]')) made.measureElement(node);
-    });
+    const next = { wrap, identity };
+    const made = virtualizer;
+    if (made === undefined) return;
+    const changed = layout !== undefined && (layout.wrap !== next.wrap || layout.identity !== next.identity);
+    layout = next;
+    if (changed) made.invalidateSizes();
   });
 
   $effect(() => {
     const made = virtualizer;
     const element = scroller;
     if (made === undefined || element === undefined) return;
-    made.setOptions(options(element));
-    made._willUpdate();
-    publish();
+    made.configure(options(element));
+    made.refresh();
   });
 </script>
 
@@ -215,13 +201,13 @@
     {/if}
     <div class="@container/diff flex min-h-0 w-full min-w-0 flex-1">
       <div bind:this={scroller} class="min-h-0 min-w-0 flex-1 overflow-auto font-mono text-small leading-5 [tab-size:4]">
-        <div class="relative" style={wrap ? `height:${total}px;width:100%` : `height:${total}px;min-width:100%;width:${widest}px`}>
+        <div bind:this={list} class="relative" style:width={wrap ? '100%' : `${widest}px`} style:min-width={wrap ? undefined : '100%'}>
           {#each mounted as item (item.key)}
             {@const row = rows[item.index]}
             {#if row?.kind === 'break'}
               <DiffRow
                 index={item.index}
-                top={item.start}
+                rowKey={String(item.key)}
                 class="flex h-5 items-center border-y border-border/50 bg-hover text-meta leading-none text-muted-foreground/60"
                 {measure}
                 {wrap}
@@ -231,7 +217,7 @@
                 </span>
               </DiffRow>
             {:else if row}
-              <DiffRow index={item.index} top={item.start} class={`flex items-baseline ${WASH[row.line.kind]}`} {measure} {wrap}>
+              <DiffRow index={item.index} rowKey={String(item.key)} class={`flex items-baseline ${WASH[row.line.kind]}`} {measure} {wrap}>
                 <span class="sticky left-0 z-10 flex shrink-0 items-baseline gap-x-2 bg-chat-sunken px-2 select-none">
                   <span
                     class={['text-right', row.line.after === null ? 'text-chat-diff-removed/40' : 'text-muted-foreground/35']}

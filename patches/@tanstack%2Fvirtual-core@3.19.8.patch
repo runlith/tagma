@@ -1,0 +1,71 @@
+diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
+index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..2014edb2c2e3115f776212c93d61ad42a9e8192e 100644
+--- a/dist/cjs/index.cjs
++++ b/dist/cjs/index.cjs
+@@ -371,8 +371,8 @@ class Virtualizer {
+         const prevLastKey = prevCount > 0 ? getPreviousKey(prevCount - 1) : null;
+         const didCountChange = nextCount !== prevCount;
+         const didEdgeKeysChange = didCountChange || prevCount > 0 && nextCount > 0 && (merged.getItemKey(0) !== prevFirstKey || merged.getItemKey(nextCount - 1) !== prevLastKey);
+-        if (didEdgeKeysChange) {
+-          edgeKeysChanged = true;
++        if (didEdgeKeysChange || merged.getItemKey !== prevOptions.getItemKey) {
++          edgeKeysChanged = didEdgeKeysChange;
+           const item = prevCount > 0 ? this.getVirtualItemForOffset(this.getScrollOffset()) ?? measurements[0] : null;
+           if (item) {
+             anchor = [item.key, this.getScrollOffset() - item.start];
+@@ -1012,7 +1012,7 @@ class Virtualizer {
+       const itemSize = this.itemSizeCache.get(key) ?? cachedSize;
+       const delta = size - itemSize;
+       if (delta !== 0) {
+-        const wasAtEnd = this.options.anchorTo === "end" && !isSmoothScroll(this.scrollState) && this.getVirtualDistanceFromEnd() <= this.options.scrollEndThreshold;
++        const wasAtEnd = this.options.anchorTo === "end" && this.options.scrollEndThreshold >= 0 && !isSmoothScroll(this.scrollState) && this.getVirtualDistanceFromEnd() <= this.options.scrollEndThreshold;
+         const prevTotalSize = wasAtEnd ? this._getLayoutTotalSize() : 0;
+         const scrollOffset = this.getScrollOffset();
+         const isFirstMeasure = !this.itemSizeCache.has(key);
+diff --git a/dist/esm/index.js b/dist/esm/index.js
+index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..7d90145a43640bc2aaf633a5417d6b0d7479e589 100644
+--- a/dist/esm/index.js
++++ b/dist/esm/index.js
+@@ -370,8 +370,8 @@ class Virtualizer {
+         const prevLastKey = prevCount > 0 ? getPreviousKey(prevCount - 1) : null;
+         const didCountChange = nextCount !== prevCount;
+         const didEdgeKeysChange = didCountChange || prevCount > 0 && nextCount > 0 && (merged.getItemKey(0) !== prevFirstKey || merged.getItemKey(nextCount - 1) !== prevLastKey);
+-        if (didEdgeKeysChange) {
+-          edgeKeysChanged = true;
++        if (didEdgeKeysChange || merged.getItemKey !== prevOptions.getItemKey) {
++          edgeKeysChanged = didEdgeKeysChange;
+           const item = prevCount > 0 ? this.getVirtualItemForOffset(this.getScrollOffset()) ?? measurements[0] : null;
+           if (item) {
+             anchor = [item.key, this.getScrollOffset() - item.start];
+@@ -1011,7 +1011,7 @@ class Virtualizer {
+       const itemSize = this.itemSizeCache.get(key) ?? cachedSize;
+       const delta = size - itemSize;
+       if (delta !== 0) {
+-        const wasAtEnd = this.options.anchorTo === "end" && !isSmoothScroll(this.scrollState) && this.getVirtualDistanceFromEnd() <= this.options.scrollEndThreshold;
++        const wasAtEnd = this.options.anchorTo === "end" && this.options.scrollEndThreshold >= 0 && !isSmoothScroll(this.scrollState) && this.getVirtualDistanceFromEnd() <= this.options.scrollEndThreshold;
+         const prevTotalSize = wasAtEnd ? this._getLayoutTotalSize() : 0;
+         const scrollOffset = this.getScrollOffset();
+         const isFirstMeasure = !this.itemSizeCache.has(key);
+diff --git a/src/index.ts b/src/index.ts
+index 83386f31ee894399bc6731128194ebaf2812f6fa..9e474506fa107f1f7ea5461a916e4db799f824b0 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -798,8 +798,8 @@ export class Virtualizer<
+           (merged.getItemKey(0) !== prevFirstKey ||
+             merged.getItemKey(nextCount - 1) !== prevLastKey))
+ 
+-      if (didEdgeKeysChange) {
+-        edgeKeysChanged = true
++      if (didEdgeKeysChange || merged.getItemKey !== prevOptions.getItemKey) {
++        edgeKeysChanged = didEdgeKeysChange
+         const item =
+           prevCount > 0
+             ? (this.getVirtualItemForOffset(this.getScrollOffset()) ??
+@@ -2009,6 +2009,7 @@ export class Virtualizer<
+     if (delta !== 0) {
+       const wasAtEnd =
+         this.options.anchorTo === 'end' &&
++        this.options.scrollEndThreshold >= 0 &&
+         !isSmoothScroll(this.scrollState) &&
+         this.getVirtualDistanceFromEnd() <= this.options.scrollEndThreshold
+       const prevTotalSize = wasAtEnd ? this._getLayoutTotalSize() : 0

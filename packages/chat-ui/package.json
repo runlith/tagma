@@ -440,9 +440,9 @@
     "@lucide/svelte": "1.16.0",
     "@runlith/agent": "workspace:*",
     "@runlith/error-boundary": "workspace:*",
-    "@runlith/scroll-follow": "workspace:*",
     "@runlith/search-text": "workspace:*",
     "@runlith/utils": "workspace:*",
+    "@runlith/virtual-list": "workspace:*",
     "@tanstack/virtual-core": "catalog:",
     "effect": "catalog:"
   },

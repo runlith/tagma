@@ -41,12 +41,12 @@
         "@runlith/mcp": "workspace:*",
         "@runlith/primitives": "workspace:*",
         "@runlith/query": "workspace:*",
-        "@runlith/scroll-follow": "workspace:*",
         "@runlith/seam": "workspace:*",
         "@runlith/search-text": "workspace:*",
         "@runlith/tagma": "workspace:*",
         "@runlith/testing": "workspace:*",
         "@runlith/utils": "workspace:*",
+        "@runlith/virtual-list": "workspace:*",
         "@runlith/vite-browser-guard": "workspace:*",
         "@tagma/server": "workspace:*",
         "@tanstack/query-core": "catalog:",
@@ -204,6 +204,7 @@
       },
       "devDependencies": {
         "@runlith/builtin-catalog": "workspace:*",
+        "@runlith/chat-ui": "workspace:*",
         "@runlith/e2e": "workspace:*",
         "@runlith/effect-test": "workspace:*",
         "@runlith/testbed": "workspace:*",
@@ -212,6 +213,7 @@
         "drizzle-kit": "1.0.0-rc.5-ab785fc",
         "electron": "catalog:",
         "esbuild": "catalog:",
+        "playwright-core": "catalog:",
         "typescript": "catalog:",
       },
     },
@@ -615,9 +617,9 @@
         "@lucide/svelte": "1.16.0",
         "@runlith/agent": "workspace:*",
         "@runlith/error-boundary": "workspace:*",
-        "@runlith/scroll-follow": "workspace:*",
         "@runlith/search-text": "workspace:*",
         "@runlith/utils": "workspace:*",
+        "@runlith/virtual-list": "workspace:*",
         "@tanstack/virtual-core": "catalog:",
         "effect": "catalog:",
       },
@@ -633,7 +635,6 @@
         "@runlith/testing": "workspace:*",
         "@runlith/vite-browser-guard": "workspace:*",
         "@sveltejs/vite-plugin-svelte": "catalog:",
-        "@tagma/server": "workspace:*",
         "@tailwindcss/vite": "catalog:",
         "jsdom": "catalog:",
         "playwright-core": "catalog:",
@@ -772,6 +773,7 @@
         "@effect/platform-bun": "catalog:",
         "@runlith/chrome-for-testing": "workspace:*",
         "@runlith/effect-test": "workspace:*",
+        "@runlith/file-lock": "workspace:*",
         "@runlith/testbed": "workspace:*",
         "appium-remote-debugger": "18.0.3",
         "effect": "catalog:",
@@ -1212,22 +1214,6 @@
         "@types/bun": "catalog:",
       },
     },
-    "packages/scroll-follow": {
-      "name": "@runlith/scroll-follow",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@runlith/testbed": "workspace:*",
-        "@sveltejs/vite-plugin-svelte": "catalog:",
-        "jsdom": "catalog:",
-        "svelte": "catalog:",
-        "typescript": "catalog:",
-        "vite": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "svelte": "catalog:",
-      },
-    },
     "packages/seam": {
       "name": "@runlith/seam",
       "version": "0.1.0",
@@ -1441,6 +1427,25 @@
         "uuidv7": "1.2.1",
       },
     },
+    "packages/virtual-list": {
+      "name": "@runlith/virtual-list",
+      "version": "0.1.0",
+      "dependencies": {
+        "@tanstack/virtual-core": "catalog:",
+      },
+      "devDependencies": {
+        "@runlith/testbed": "workspace:*",
+        "@sveltejs/vite-plugin-svelte": "catalog:",
+        "jsdom": "catalog:",
+        "svelte": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "svelte": "catalog:",
+      },
+    },
     "packages/vite-browser-guard": {
       "name": "@runlith/vite-browser-guard",
       "version": "0.1.0",
@@ -1505,6 +1510,7 @@
   ],
   "patchedDependencies": {
     "@effect-vfs/memory@0.9.0": "patches/@effect-vfs%2Fmemory@0.9.0.patch",
+    "@xterm/xterm@6.1.0-beta.303": "patches/@xterm%2Fxterm@6.1.0-beta.303.patch",
     "svelte-check@4.7.7": "patches/svelte-check@4.7.7.patch",
     "@effect/platform-node-shared@4.0.1": "patches/@effect%2Fplatform-node-shared@4.0.1.patch",
     "effect@4.0.1": "patches/effect@4.0.1.patch",
@@ -1512,9 +1518,9 @@
     "@xterm/headless@6.1.0-beta.302": "patches/@xterm%2Fheadless@6.1.0-beta.302.patch",
     "@xterm/addon-serialize@0.15.0-beta.300": "patches/@xterm%2Faddon-serialize@0.15.0-beta.300.patch",
     "svelte@5.57.0": "patches/svelte@5.57.0.patch",
+    "@tanstack/virtual-core@3.19.8": "patches/@tanstack%2Fvirtual-core@3.19.8.patch",
     "@xterm/addon-ligatures@0.11.0-beta.300": "patches/@xterm%2Faddon-ligatures@0.11.0-beta.300.patch",
     "@xterm/addon-webgl@0.20.0-beta.299": "patches/@xterm%2Faddon-webgl@0.20.0-beta.299.patch",
-    "@xterm/xterm@6.1.0-beta.303": "patches/@xterm%2Fxterm@6.1.0-beta.303.patch",
   },
   "overrides": {
     "@codemirror/view": "6.43.14",
@@ -2336,8 +2342,6 @@
 
     "@runlith/ripgrep": ["@runlith/ripgrep@workspace:packages/ripgrep"],
 
-    "@runlith/scroll-follow": ["@runlith/scroll-follow@workspace:packages/scroll-follow"],
-
     "@runlith/seam": ["@runlith/seam@workspace:packages/seam"],
 
     "@runlith/search-text": ["@runlith/search-text@workspace:packages/search-text"],
@@ -2363,6 +2367,8 @@
     "@runlith/tsconfig": ["@runlith/tsconfig@workspace:packages/tsconfig"],
 
     "@runlith/utils": ["@runlith/utils@workspace:packages/utils"],
+
+    "@runlith/virtual-list": ["@runlith/virtual-list@workspace:packages/virtual-list"],
 
     "@runlith/vite-browser-guard": ["@runlith/vite-browser-guard@workspace:packages/vite-browser-guard"],
 

@@ -1,12 +1,5 @@
-import {
-  elementScroll,
-  measureElement,
-  observeElementOffset,
-  observeElementRect,
-  type Range,
-  Virtualizer,
-  type VirtualItem,
-} from '@tanstack/virtual-core';
+import type { Range, Virtualizer, VirtualItem } from '@tanstack/virtual-core';
+import { type ListOptions, VirtualList } from '@runlith/virtual-list/VirtualList';
 import { flushSync } from 'svelte';
 import type { FeedMemory, MeasuredStamp } from './FeedMemory';
 import { KeptRows } from './keptRows';
@@ -29,11 +22,11 @@ const EMPTY_ROWS: RowModel = {
   indexOf: () => -1,
 };
 
-type Feed = Virtualizer<HTMLElement, HTMLElement>;
+type Feed = VirtualList;
 type Anchor = { readonly key: string; readonly index: number; readonly offset: number };
 type Pressed = { readonly key: string; readonly node: HTMLElement; readonly row: HTMLElement; inRow: number };
 type Aim = { key: string; index: number; behavior: ScrollBehavior; landed: boolean; via?: number | undefined };
-type Placed = { top: number; height: number };
+type Box = { node: HTMLElement; release: (() => void) | undefined };
 
 export class TranscriptVirtualizer {
   rows = $state.raw<readonly VirtualItem[]>([]);
@@ -49,18 +42,13 @@ export class TranscriptVirtualizer {
   private release: (() => void) | undefined;
   private root: HTMLElement | undefined;
   private list: HTMLElement | undefined;
-  private listHeight = -1;
   private threadKey: string | null = null;
   private rows_: RowModel = EMPTY_ROWS;
   private shape: number | null = null;
   private readonly kept = new KeptRows();
   private readonly stamps = new Map<string, MeasuredStamp>();
-  private readonly boxes = new Map<string, HTMLElement>();
-  private readonly placed = new WeakMap<HTMLElement, Placed>();
-  private readonly read = new Map<HTMLElement, number>();
-  private mountedRows: HTMLElement[] = [];
+  private readonly boxes = new Map<string, Box>();
   private readonly around = new RowWindow();
-  private items = new Map<string, VirtualItem>();
   private width = 0;
   private type: FeedType | undefined;
   private fonts = 0;
@@ -69,8 +57,6 @@ export class TranscriptVirtualizer {
   private aim: Aim | undefined;
   private pressed: Pressed | undefined;
   private anchor: Anchor | undefined;
-  private measuring = false;
-  private unpublished = false;
   private flushing = false;
   private itemKey = (index: number): string | number => this.rows_.keyAt(index) ?? index;
 
@@ -113,7 +99,7 @@ export class TranscriptVirtualizer {
     }
     const bound = input.list !== this.list;
     this.list = input.list;
-    if (bound) this.listHeight = -1;
+    if (bound) this.virtualizer?.span(input.list);
     if (rebuilt || bound) this.measureFeed();
     if (!input.root) {
       this.dropVirtualizer();
@@ -127,11 +113,9 @@ export class TranscriptVirtualizer {
       const widened = this.width !== this.stamped.width || this.epoch !== this.stamped.epoch;
       this.reconcile(virtualizer, input.disclosure);
       if (widened && held !== undefined && this.aim === undefined) this.freeze(virtualizer, held);
-      virtualizer.setOptions(this.options());
+      virtualizer.configure(this.options());
     }
-    this.size(virtualizer);
-    virtualizer._willUpdate();
-    this.publish();
+    virtualizer.refresh();
     if (built) this.measureMounted();
     if (reshaped) this.reaim(virtualizer);
     if (successor !== undefined) this.relocate(virtualizer, successor);
@@ -144,7 +128,7 @@ export class TranscriptVirtualizer {
     const virtualizer = this.virtualizer;
     if (!virtualizer) return;
     if (!keeps && this.aim === undefined) virtualizer.cancelScroll();
-    virtualizer.setOptions(this.options());
+    virtualizer.configure(this.options());
     if (keeps) this.toEnd();
   }
 
@@ -153,53 +137,26 @@ export class TranscriptVirtualizer {
     const margin = this.margin;
     this.measureFeed();
     if (!virtualizer || this.margin === margin) return;
-    virtualizer.setOptions(this.options());
-    this.size(virtualizer);
-    virtualizer._willUpdate();
-    this.publish();
+    virtualizer.configure(this.options());
+    virtualizer.refresh();
     this.holdTail();
   }
 
   measureRow(node: HTMLElement): void {
-    this.measureRows([node]);
+    this.virtualizer?.measureRow(node);
   }
 
   mountRow(node: HTMLElement): void {
-    if (this.mountedRows.push(node) === 1) queueMicrotask(() => this.measureRows(this.mountedRows.splice(0)));
-  }
-
-  private measureRows(nodes: readonly HTMLElement[]): void {
-    const virtualizer = this.virtualizer;
-    if (!virtualizer || nodes.length === 0) return;
-    const rows = nodes.map((node) => ({ node, key: node.dataset.timelineKey, index: this.rows_.indexOf(node.dataset.timelineKey ?? '') }));
-    rows.sort((left, right) => right.index - left.index);
-    for (const { node, key } of rows) {
-      if (key !== undefined && node.isConnected && !virtualizer.itemSizeCache.has(key)) this.read.set(node, node.offsetHeight);
-    }
-    this.measuring = true;
-    try {
-      for (const { node, key, index } of rows) {
-        virtualizer.measureElement(node);
-        const size = this.read.get(node);
-        if (index >= 0 && size !== undefined && node.isConnected && !virtualizer.itemSizeCache.has(key!)) {
-          virtualizer.resizeItem(index, this.measured(node, size, virtualizer));
-        }
-      }
-    } finally {
-      const unpublished = this.unpublished;
-      this.measuring = false;
-      this.unpublished = false;
-      this.read.clear();
-      if (unpublished) this.publish();
-    }
+    this.virtualizer?.mountRow(node);
   }
 
   readonly box = (key: string, node: HTMLElement): (() => void) => {
-    this.boxes.set(key, node);
-    const item = this.items.get(key);
-    if (item !== undefined) this.placeBox(node, item);
+    const held = { node, release: this.virtualizer?.box(key, node, true) };
+    this.boxes.set(key, held);
     return () => {
-      if (this.boxes.get(key) === node) this.boxes.delete(key);
+      if (this.boxes.get(key) !== held) return;
+      held.release?.();
+      this.boxes.delete(key);
     };
   };
 
@@ -289,20 +246,18 @@ export class TranscriptVirtualizer {
     this.dropVirtualizer();
     this.building = true;
     try {
-      const virtualizer = new Virtualizer({ ...this.options(), initialMeasurementsCache: this.rememberedRows() });
+      const virtualizer = new VirtualList({ ...this.options(), initialMeasurementsCache: this.rememberedRows() });
       this.virtualizer = virtualizer;
       this.stamped = { width: this.width, epoch: this.epoch, disclosure };
-      virtualizer.indexFromElement = (node) => this.rows_.indexOf(node.dataset.timelineKey ?? '');
-      virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, delta, instance) => this.shifts(item, delta, instance);
-      const release = virtualizer._didMount();
+      virtualizer.span(this.list);
+      for (const [key, held] of this.boxes) held.release = virtualizer.box(key, held.node, true);
       const fonts = root.ownerDocument.fonts as FontFaceSet | undefined;
       fonts?.addEventListener?.('loadingdone', this.fontsLoaded);
       this.release = () => {
         fonts?.removeEventListener?.('loadingdone', this.fontsLoaded);
-        release();
+        virtualizer.dispose();
       };
-      this.size(virtualizer);
-      virtualizer._willUpdate();
+      virtualizer.connect();
     } finally {
       this.building = false;
     }
@@ -314,7 +269,7 @@ export class TranscriptVirtualizer {
     this.measureFeed();
   };
 
-  private shifts(item: VirtualItem, delta: number, instance: Feed): boolean {
+  private shifts(item: VirtualItem, delta: number, instance: Virtualizer<HTMLElement, HTMLElement>): boolean {
     const pressed = this.pressed;
     if (pressed !== undefined && pressed.key === String(item.key) && pressed.node.isConnected) {
       const inRow = offsetIn(pressed.node, pressed.row);
@@ -416,14 +371,14 @@ export class TranscriptVirtualizer {
   }
 
   private rewindow(virtualizer: Feed): void {
-    virtualizer.setOptions({ ...virtualizer.options, rangeExtractor: (range: Range) => this.window(range) });
+    virtualizer.configure(this.options());
   }
 
   private holdTail(): void {
     if (this.keepsEnd) this.toEnd();
   }
 
-  private options() {
+  private options(): ListOptions {
     const model = this.rows_;
     const keeps = this.keepsEnd;
     return {
@@ -431,6 +386,10 @@ export class TranscriptVirtualizer {
       getScrollElement: () => this.root ?? null,
       estimateSize: (index: number) => model.itemAt(index)?.estimate ?? ESTIMATED_ROW_PX,
       getItemKey: this.itemKey,
+      indexOf: (key) => this.rows_.indexOf(String(key)),
+      keyOf: (node) => node.dataset.timelineKey,
+      reuseOnMount: true,
+      adjust: (item, delta, instance) => this.shifts(item, delta, instance),
       rangeExtractor: (range: Range) => this.window(range),
       scrollMargin: this.margin,
       scrollPaddingStart: ROW_LANDING_GAP_PX,
@@ -439,23 +398,12 @@ export class TranscriptVirtualizer {
       followOnAppend: keeps,
       scrollEndThreshold: keeps ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY,
       initialOffset: () => (this.keepsEnd ? Number.MAX_SAFE_INTEGER : 0),
-      scrollToFn: (offset: number, options: { adjustments?: number; behavior?: ScrollBehavior }, instance: Feed) => {
-        this.size(instance);
-        elementScroll(offset, options, instance);
+      onMeasure: (node) => this.measured(node),
+      onResize: () => this.resized(),
+      onScroll: (_offset, scrolling) => {
+        if (scrolling) this.moved();
       },
-      measureElement: (node: HTMLElement, entry: ResizeObserverEntry | undefined, instance: Feed) =>
-        this.measured(node, (entry === undefined ? this.read.get(node) : undefined) ?? measureElement(node, entry, instance), instance),
-      observeElementRect: (instance: Feed, changed: (rect: { width: number; height: number }) => void) =>
-        observeElementRect(instance, (rect) => {
-          changed(rect);
-          this.resized();
-        }),
-      observeElementOffset: (instance: Feed, changed: (offset: number, scrolling: boolean) => void) =>
-        observeElementOffset(instance, (offset, scrolling) => {
-          changed(offset, scrolling);
-          if (scrolling) this.moved();
-        }),
-      onChange: (_instance: Feed, sync: boolean) => this.publish(sync),
+      onChange: () => this.publish(),
     };
   }
 
@@ -465,15 +413,10 @@ export class TranscriptVirtualizer {
     this.holdTail();
   }
 
-  private measured(node: HTMLElement, size: number, virtualizer: Feed): number {
+  private measured(node: HTMLElement): void {
     const key = node.dataset.timelineKey;
     const item = key === undefined ? undefined : this.rows_.item(key);
-    if (key === undefined || item === undefined) return size;
-    this.stamps.set(key, { width: this.width, estimate: item.estimate, epoch: this.epoch });
-    if (!virtualizer.itemSizeCache.has(key) && virtualizer.measurementsCache[this.rows_.indexOf(key)]?.size === size) {
-      virtualizer.itemSizeCache.set(key, size);
-    }
-    return size;
+    if (key !== undefined && item !== undefined) this.stamps.set(key, { width: this.width, estimate: item.estimate, epoch: this.epoch });
   }
 
   private window(range: Range): number[] {
@@ -516,7 +459,7 @@ export class TranscriptVirtualizer {
   }
 
   private measureMounted(): void {
-    for (const node of this.rowNodes()) this.measureRow(node);
+    this.virtualizer?.measureRows(this.rowNodes());
   }
 
   private rowNodes(): HTMLElement[] {
@@ -537,7 +480,6 @@ export class TranscriptVirtualizer {
   private publish(now = false): void {
     const virtualizer = this.virtualizer;
     if (!virtualizer) return;
-    if (this.measuring) return void (this.unpublished = true);
     const commit = () => {
       let rows = virtualizer.getVirtualItems();
       if (this.around.short(virtualizer.measurementsCache, this.height)) {
@@ -545,7 +487,6 @@ export class TranscriptVirtualizer {
         rows = virtualizer.getVirtualItems();
       }
       this.rows = rows;
-      this.place(rows, virtualizer);
       this.publishHeld();
       this.publishVisible(virtualizer.range);
     };
@@ -559,37 +500,6 @@ export class TranscriptVirtualizer {
     } finally {
       this.flushing = false;
     }
-  }
-
-  private place(rows: readonly VirtualItem[], virtualizer: Feed): void {
-    this.size(virtualizer);
-    const items = new Map<string, VirtualItem>();
-    for (const item of rows) {
-      const key = String(item.key);
-      items.set(key, item);
-      const node = this.boxes.get(key);
-      if (node !== undefined) this.placeBox(node, item);
-    }
-    this.items = items;
-  }
-
-  private placeBox(node: HTMLElement, item: VirtualItem): void {
-    const top = item.start - this.margin;
-    const height = item.size;
-    const was = this.placed.get(node);
-    if (was !== undefined && was.top === top && was.height === height) return;
-    this.placed.set(node, { top, height });
-    node.style.top = `${top}px`;
-    node.style.height = `${height}px`;
-  }
-
-  private size(virtualizer: Feed): void {
-    const list = this.list;
-    if (!list) return;
-    const height = virtualizer.getTotalSize();
-    if (height === this.listHeight) return;
-    this.listHeight = height;
-    list.style.height = `${height}px`;
   }
 
   private publishHeld(): void {
@@ -634,7 +544,6 @@ export class TranscriptVirtualizer {
   }
 
   private dropVirtualizer(): void {
-    this.mountedRows = [];
     this.around.clear();
     this.aim = undefined;
     this.pressed = undefined;
@@ -643,7 +552,6 @@ export class TranscriptVirtualizer {
     this.stamps.clear();
     this.stamped = { width: 0, epoch: '', disclosure: -1 };
     this.heldKeys = new Set();
-    this.items = new Map();
     this.release?.();
     this.release = undefined;
     this.virtualizer = undefined;

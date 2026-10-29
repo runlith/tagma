@@ -3,16 +3,16 @@
 
   let {
     index,
-    top,
+    rowKey,
     class: styling,
     measure,
     wrap = false,
     children,
   }: {
     index: number;
-    top: number;
+    rowKey: string;
     class: string;
-    measure(node: HTMLElement): void;
+    measure(node: HTMLElement, key: string): () => void;
     wrap?: boolean;
     children: Snippet;
   } = $props();
@@ -20,12 +20,10 @@
   let node: HTMLDivElement | undefined = $state();
 
   $effect(() => {
-    index;
-    wrap;
-    if (node) measure(node);
+    if (node) return measure(node, rowKey);
   });
 </script>
 
-<div bind:this={node} data-index={index} class={['absolute left-0 w-full', !wrap && 'min-w-max', styling]} style={`top:${top}px`}>
+<div bind:this={node} data-index={index} class={['absolute left-0 w-full', !wrap && 'min-w-max', styling]}>
   {@render children()}
 </div>
