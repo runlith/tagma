@@ -7,11 +7,16 @@
   import type { SectionProps } from '$lib/features/settings/section.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { SecretsRepo } from '$lib/features/secrets/Repo.js';
+  import { scopeName } from '$lib/features/settings/scope.js';
+  import { McpFeed } from '$lib/features/mcp/Feed.js';
   import { PluginsRepo } from '$lib/features/plugins/Repo.js';
+  import { MarketplacesFeed } from '$lib/features/plugins/Feed.svelte.js';
+  import Catalog from '$lib/features/plugins/Catalog.svelte';
+  import Marketplaces from '$lib/features/plugins/Marketplaces.svelte';
   import PluginCard from '$lib/features/plugins/PluginCard.svelte';
   import { optionsWith } from '$lib/features/plugins/options.js';
 
-  let { catalog, project }: SectionProps = $props();
+  let { catalog, scope, project }: SectionProps = $props();
 
   const OPTIONS = 'plugins.options';
   const SECRET_OWNER = 'plugins';
@@ -19,8 +24,19 @@
   const repo = PluginsRepo.use();
   const secrets = SecretsRepo.use();
   const notices = Notices.use();
+  const marketplacesFeed = MarketplacesFeed.use();
+  const mcpFeed = McpFeed.use();
+
+  const marketplaces = $derived(marketplacesFeed.marketplaces);
+  const entries = $derived(marketplacesFeed.entries);
+
+  $effect(() => marketplacesFeed.hold());
 
   const projectId = $derived(project?.id);
+
+  $effect(() => {
+    if (projectId !== undefined) return mcpFeed.hold(projectId);
+  });
   const listed = $derived(projectId === undefined ? undefined : repo.plugins.key(projectId));
   const rows = $derived(listed?.data ?? []);
   const owned = $derived(projectId === undefined ? undefined : secrets.sets.key({ projectId, owner: SECRET_OWNER }));
@@ -56,13 +72,13 @@
   function install(id: number): Promise<void> {
     const from = source.trim();
     return act(id, 'install', async () => {
-      await repo.install.run({ projectId: id, source: from }, { throwOnError: true });
+      await repo.install.run({ projectId: id, source: from, scope }, { throwOnError: true });
       source = '';
     });
   }
 
   const setEnabled = (id: number, row: PluginRow, enabled: boolean) =>
-    act(id, row.id, () => repo.enable.run({ projectId: id, id: row.id, enabled }, { throwOnError: true }));
+    act(id, row.id, () => repo.enable.run({ projectId: id, id: row.id, enabled, scope }, { throwOnError: true }));
 
   const uninstall = (id: number, row: PluginRow) =>
     act(id, row.id, async () => {
@@ -87,8 +103,29 @@
 <div class="grid">
   {#if projectId === undefined}
     <p class="pt-4 text-ui text-muted-foreground">Plugins are read in a project: open this page from one.</p>
-  {:else}
+  {:else if project !== null}
     {@const id = projectId}
+    <Group title="Catalog">
+      {#snippet fact()}
+        {#if entries.length > 0}
+          <span class="tabular"
+            >{entries.length}
+            {entries.length === 1 ? 'plugin' : 'plugins'} in {marketplaces.length}
+            {marketplaces.length === 1 ? 'marketplace' : 'marketplaces'}</span
+          >
+        {/if}
+      {/snippet}
+      <div class="grid gap-3 pt-1">
+        {#if !marketplacesFeed.known}
+          <p class="text-ui text-muted-foreground">Reading the marketplaces…</p>
+        {:else if marketplaces.length === 0}
+          <p class="text-ui text-muted-foreground">No marketplace is added. Add one under Marketplaces by its git URL or folder.</p>
+        {:else}
+          <Catalog {marketplaces} {entries} {project} {scope} oninstalled={() => refreshed(id)} />
+        {/if}
+      </div>
+    </Group>
+
     <Group title="Installed">
       {#snippet fact()}
         {#if rows.length > 0}<span class="tabular">{rows.length} on this machine</span>{/if}
@@ -105,6 +142,7 @@
           <Input class="font-mono" placeholder="A plugin folder or a git URL" bind:value={source} disabled={busy !== null} />
           <Button size="sm" type="submit" disabled={busy !== null || source.trim() === ''}>Install</Button>
         </form>
+        <p class="text-small text-muted-foreground">What you install or switch on here runs in {scopeName(scope, project)}.</p>
 
         {#if listed?.error}
           <p class="text-ui text-destructive">
@@ -114,8 +152,8 @@
           <p class="text-ui text-muted-foreground">Reading the plugins…</p>
         {:else if rows.length === 0}
           <p class="text-ui text-muted-foreground">
-            No plugin is installed yet. Tagma reads Claude Code plugins and Agent Plugins packages from a folder, in place, or from a git
-            URL it clones.
+            No plugin is installed yet. Install one from the catalog, or name a Claude Code, Codex or Agent Plugins package by its folder,
+            read in place, or its git URL, cloned.
           </p>
         {/if}
 
@@ -123,6 +161,7 @@
           <PluginCard
             {row}
             projectId={id}
+            {scope}
             values={values[row.id] ?? {}}
             secrets={sets.find((set) => set.id === row.id)}
             {secretsFailed}
@@ -136,6 +175,10 @@
           />
         {/each}
       </div>
+    </Group>
+
+    <Group title="Marketplaces">
+      <Marketplaces {marketplaces} />
     </Group>
   {/if}
 </div>

@@ -664,6 +664,11 @@
       "browser": "./src/plugins/contract/wire/settings.ts",
       "default": "./src/plugins/contract/wire/settings.ts"
     },
+    "./marketplaces/contract/wire/rows": {
+      "types": "./src/marketplaces/contract/wire/rows.ts",
+      "browser": "./src/marketplaces/contract/wire/rows.ts",
+      "default": "./src/marketplaces/contract/wire/rows.ts"
+    },
     "./graph/contract/wire/law": {
       "types": "./src/graph/contract/wire/law.ts",
       "browser": "./src/graph/contract/wire/law.ts",

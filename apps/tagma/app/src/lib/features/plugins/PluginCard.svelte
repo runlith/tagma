@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { PluginComponent, PluginComponentKind, PluginRow } from '@tagma/server/plugins/contract/wire/rows';
+  import type { PluginRow } from '@tagma/server/plugins/contract/wire/rows';
+  import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
   import type { SecretSet } from '@tagma/server/secrets/contract/wire/rows';
   import Callout from '@runlith/chat-ui/Callout.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
@@ -8,11 +9,15 @@
   import SwitchControl from '$lib/features/settings/controls/SwitchControl.svelte';
   import type { WriteOutcome } from '$lib/features/settings/SettingsCatalog.svelte.js';
   import SecretFields from '$lib/features/secrets/SecretFields.svelte';
+  import Components from '$lib/features/plugins/Components.svelte';
   import OptionField from '$lib/features/plugins/OptionField.svelte';
+  import SignIns from '$lib/features/plugins/SignIns.svelte';
+  import { FORMATS } from '$lib/features/plugins/words.js';
 
   let {
     row,
     projectId,
+    scope,
     values,
     secrets,
     secretsFailed,
@@ -26,6 +31,7 @@
   }: {
     row: PluginRow;
     projectId: number;
+    scope: SettableScope;
     values: Readonly<Record<string, string>>;
     secrets?: SecretSet;
     secretsFailed?: unknown;
@@ -38,23 +44,10 @@
     onsecret: () => Promise<unknown>;
   } = $props();
 
-  const FORMATS: Readonly<Record<string, string>> = { 'claude-code': 'Claude Code', 'agent-plugins': 'Agent Plugins' };
-  const KINDS: Readonly<Record<PluginComponentKind, string>> = {
-    skill: 'Skills',
-    command: 'Commands',
-    'mcp-server': 'MCP servers',
-    agent: 'Agents',
-    hook: 'Hooks',
-  };
-
   const title = $derived(row.title ?? row.id);
   const format = $derived(row.format === null ? null : (FORMATS[row.format] ?? row.format));
-  const taken = $derived(
-    (Object.keys(KINDS) as PluginComponentKind[]).flatMap((kind) => {
-      const items: readonly PluginComponent[] = row.components.filter((component) => component.kind === kind);
-      return items.length === 0 ? [] : [{ kind, title: KINDS[kind], items }];
-    }),
-  );
+  const reach = $derived(scope === 'user' ? 'every project' : 'this project');
+  const runs = $derived(scope === 'user' ? row.everywhere : row.enabled);
   const plain = $derived(row.options.filter((option) => !option.sensitive));
   const sensitive = $derived(row.options.filter((option) => option.sensitive));
 </script>
@@ -68,11 +61,16 @@
       <span class="eyebrow rounded-md bg-selected px-1.5 py-0.5 text-muted-foreground">{format}</span>
     {/if}
     <span class="flex-1"></span>
-    <span class="text-small text-muted-foreground">Runs in this project</span>
+    {#if scope === 'project' && row.everywhere}
+      <span class="text-small text-muted-foreground"
+        >{row.enabled ? 'Enabled for every project' : 'Off here, on in every other project'}</span
+      >
+    {/if}
+    <span class="text-small text-muted-foreground">Runs in {reach}</span>
     <SwitchControl
-      label="Run {row.id} in this project"
-      value={row.enabled}
-      disabled={busy || (row.refused !== undefined && !row.enabled)}
+      label="Run {row.id} in {reach}"
+      value={runs}
+      disabled={busy || (row.refused !== undefined && !runs)}
       onwrite={onenabled}
     />
     <Button variant="outline" size="sm" disabled={busy} onclick={onuninstall}>Uninstall</Button>
@@ -83,6 +81,9 @@
       <PathText path={row.source.path} class="stamp text-muted-foreground" />
     {:else}
       <FadeText text={row.source.url} class="stamp text-muted-foreground" />
+    {/if}
+    {#if row.origin !== undefined}
+      <p class="text-small text-muted-foreground">From {row.origin.entry} in the {row.origin.marketplace} marketplace</p>
     {/if}
     {#if row.description !== null && row.description !== ''}
       <p class="text-ui text-muted-foreground">{row.description}</p>
@@ -95,37 +96,9 @@
     </div>
   {/if}
 
-  {#if taken.length > 0}
-    <div class="grid gap-3 border-t border-border px-3 py-3">
-      <p class="text-small text-muted-foreground">Taken</p>
-      {#each taken as group (group.kind)}
-        <div class="grid gap-0.5">
-          <p class="text-ui font-medium">{group.title}</p>
-          {#each group.items as item, index (index)}
-            <div class="flex min-w-0 items-baseline gap-2">
-              <FadeText text={item.name} class="stamp max-w-full shrink-0" />
-              {#if item.detail !== undefined}
-                <FadeText text={item.detail} class="text-small text-muted-foreground" />
-              {/if}
-            </div>
-          {/each}
-        </div>
-      {/each}
-    </div>
-  {/if}
+  {#if row.enabled}<SignIns {projectId} plugin={row.id} />{/if}
 
-  {#if row.ignored.length > 0}
-    <div class="grid gap-1 border-t border-border px-3 py-3">
-      <p class="text-small text-muted-foreground">Ignored</p>
-      {#each row.ignored as item, index (index)}
-        <div class="flex min-w-0 flex-wrap items-baseline gap-x-2">
-          <span class="text-ui">{item.component}</span>
-          {#if item.name !== null}<code class="stamp">{item.name}</code>{/if}
-          <span class="text-small text-muted-foreground">{item.reason}</span>
-        </div>
-      {/each}
-    </div>
-  {/if}
+  <Components components={row.components} ignored={row.ignored} />
 
   {#if row.options.length > 0}
     <div class="border-t border-border px-3 pt-3 pb-2">
