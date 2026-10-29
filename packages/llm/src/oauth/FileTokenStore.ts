@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { Clock, Duration, Effect, type Layer, Result } from 'effect';
+import { Clock, Effect, type Layer, Result } from 'effect';
 import type { HttpClient } from 'effect/http';
-import { declare } from '@runlith/held/Held';
+import { makeRefreshFlight, type RefreshRequest } from '@runlith/credential-file/RefreshFlight';
 import { HoldCut, HoldStalled } from '@runlith/held/failures';
 import type { AccountKey } from '../models/authStatus.js';
 import { SINGLE_ACCOUNT_KEY } from './accountKey.js';
@@ -17,7 +17,6 @@ import {
   type StoredRow,
   withRows,
 } from './credentialDocument.js';
-import { type LockHold, proveHold, withFileLock } from '@runlith/file-lock/FileLock';
 import { storeLockFailure, TokenStoreFailed, type TokenStoreFault } from './storeFailure.js';
 import type { SubscriptionAccounts } from './vendor.js';
 
@@ -54,19 +53,15 @@ export type FileTokenStoreOptions = {
 
 export function makeFileTokenStore({ path, schemes, wire, refreshing = schemes }: FileTokenStoreOptions): TokenStore {
   const file = makeCredentialFile({ path, codec: { empty: emptyDocument, decode: decodeDocument }, lockWaitMs: STORE_LOCK_WAIT_MS });
-  const refreshes = declare<string>({
+  const refreshes = makeRefreshFlight({
+    file,
     name: 'llm-token-refresh',
     owner: 'llm',
-    rank: 221,
-    key: (key) => key,
-    concurrency: 1,
-    threshold: Duration.seconds(30),
-    ceilings: {
-      hold: Duration.minutes(15),
-      wait: Duration.minutes(15),
-      leaves: 'the remote grant may have rotated and the stored row may have changed; read both before retrying',
+    lock: {
+      path: (key) => `${path}.${createHash('sha256').update(key).digest('hex')}.refresh.lock`,
+      waitMs: STORE_LOCK_WAIT_MS,
     },
-    external: { named: 'token refresh exchange', callsBack: false },
+    span: 'FileTokenStore.refresh',
   });
 
   const schemeOf = (provider: string): Effect.Effect<SubscriptionAccounts, TokenStoreFailed> => {
@@ -113,80 +108,72 @@ export function makeFileTokenStore({ path, schemes, wire, refreshing = schemes }
   const readAccount = (provider: string, account: AccountKey) =>
     file.read().pipe(Effect.flatMap((document) => rowOrMissing(document, provider, account)));
   const change = (update: (current: CredentialDocument) => CredentialDocument) => file.update((current) => Effect.succeed(update(current)));
-  const rebind = Effect.fnUntraced(function* (
-    current: CredentialDocument,
-    provider: string,
-    scheme: SubscriptionAccounts,
-    account: AccountKey,
-    startedFrom: string,
-    credential: StoredCredential,
-  ) {
-    const rows: ProviderRows = rowsOf(current, provider);
-    const existing = rows[account];
-    if (!existing)
-      return yield* new TokenStoreFailed({
-        kind: 'missing',
-        provider,
-        account,
-        reason: `${provider} account ${account} was removed while its token refreshed`,
-      });
-    const held = yield* decodedCredential(provider, scheme, existing.credential);
-    if (grantIdentity(held) !== startedFrom) return current;
-    return withRows(current, provider, { ...rows, [account]: { ...existing, credential } });
-  });
-  const commit = (
-    provider: string,
-    scheme: SubscriptionAccounts,
-    account: AccountKey,
-    startedFrom: string,
-    credential: StoredCredential,
-  ): Effect.Effect<void, TokenStoreFault> => {
-    const rebound = scheme.key(credential);
-    if (rebound !== account)
-      return Effect.fail(
-        new TokenStoreFailed({
-          kind: 'reconnect',
-          provider,
-          account,
-          reason: `Refreshing ${provider} account ${account} answered for account ${rebound}; the row is unchanged and this account must reconnect`,
-        }),
-      );
-    return file.update((current) => rebind(current, provider, scheme, account, startedFrom, credential));
-  };
-  const refresh = Effect.fn('FileTokenStore.refresh')(function* (provider: string, account: AccountKey, hold: LockHold, rejected?: string) {
-    const scheme = refreshing(provider) ?? (yield* schemeOf(provider));
-    const document = yield* file.readFresh();
-    const found = yield* rowOrMissing(document, provider, account);
-    if (rejected === undefined ? !expiresSoon(found.credential, yield* Clock.currentTimeMillis) : found.credential.accessToken !== rejected)
-      return;
-    const refreshToken = found.credential.refreshToken;
-    if (refreshToken === null)
-      return yield* new TokenStoreFailed({
-        kind: 'reconnect',
-        provider,
-        account,
-        reason: `The persistent ${provider} credential was rejected and must reconnect`,
-      });
-    if (scheme.refresh === undefined)
-      return yield* new TokenStoreFailed({ kind: 'refresh', provider, account, reason: `${provider} declares no token refresh` });
-    const credential = yield* scheme.refresh(refreshToken, found.credential).pipe(
-      Effect.provide(wire),
-      Effect.mapError((error) => new TokenStoreFailed({ kind: 'refresh', provider, account, reason: error.message })),
-    );
-    yield* proveHold(hold).pipe(Effect.mapError(storeLockFailure<never>));
-    yield* commit(provider, scheme, account, grantIdentity(found.credential), credential);
-  });
-  const refreshLockPath = (provider: string, account: AccountKey) =>
-    `${path}.${createHash('sha256').update(providerAccountKey(provider, account)).digest('hex')}.refresh.lock`;
   const refreshOnce = (provider: string, account: AccountKey, rejected?: string): Effect.Effect<void, TokenStoreFault> =>
     refreshes
-      .hold(
+      .run(
         providerAccountKey(provider, account),
-        withFileLock(refreshLockPath(provider, account), STORE_LOCK_WAIT_MS, (hold) => refresh(provider, account, hold, rejected)).pipe(
-          Effect.mapError(storeLockFailure<TokenStoreFault>),
-        ),
+        Effect.gen(function* () {
+          const scheme = refreshing(provider) ?? (yield* schemeOf(provider));
+          const request: RefreshRequest<CredentialDocument, StoredCredential, TokenStoreFailed> = {
+            grant: Effect.fnUntraced(function* (document, stage) {
+              if (stage === 'read') return (yield* rowOrMissing(document, provider, account)).credential;
+              const existing = rowsOf(document, provider)[account];
+              if (!existing)
+                return yield* new TokenStoreFailed({
+                  kind: 'missing',
+                  provider,
+                  account,
+                  reason: `${provider} account ${account} was removed while its token refreshed`,
+                });
+              return yield* decodedCredential(provider, scheme, existing.credential);
+            }),
+            identity: grantIdentity,
+            needed: (credential) =>
+              rejected === undefined
+                ? Effect.map(Clock.currentTimeMillis, (now) => expiresSoon(credential, now))
+                : Effect.succeed(credential.accessToken === rejected),
+            refresh: Effect.fnUntraced(function* (found) {
+              const refreshToken = found.refreshToken;
+              if (refreshToken === null)
+                return yield* new TokenStoreFailed({
+                  kind: 'reconnect',
+                  provider,
+                  account,
+                  reason: `The persistent ${provider} credential was rejected and must reconnect`,
+                });
+              if (scheme.refresh === undefined)
+                return yield* new TokenStoreFailed({ kind: 'refresh', provider, account, reason: `${provider} declares no token refresh` });
+              return yield* scheme.refresh(refreshToken, found).pipe(
+                Effect.provide(wire),
+                Effect.mapError((error) => new TokenStoreFailed({ kind: 'refresh', provider, account, reason: error.message })),
+              );
+            }),
+            validate: (credential) => {
+              const rebound = scheme.key(credential);
+              return rebound === account
+                ? Effect.void
+                : Effect.fail(
+                    new TokenStoreFailed({
+                      kind: 'reconnect',
+                      provider,
+                      account,
+                      reason: `Refreshing ${provider} account ${account} answered for account ${rebound}; the row is unchanged and this account must reconnect`,
+                    }),
+                  );
+            },
+            replace: (current, credential) => {
+              const rows: ProviderRows = rowsOf(current, provider);
+              const existing = rows[account]!;
+              return Effect.succeed(withRows(current, provider, { ...rows, [account]: { ...existing, credential } }));
+            },
+          };
+          return request;
+        }),
       )
-      .pipe(Effect.mapError((failure) => refreshHoldFailure(provider, account, failure)));
+      .pipe(
+        Effect.mapError(storeLockFailure<TokenStoreFault | HoldCut | HoldStalled>),
+        Effect.mapError((failure) => refreshHoldFailure(provider, account, failure)),
+      );
 
   const get = (provider: string, account: AccountKey) =>
     file.read().pipe(Effect.flatMap((document) => decodedAccount(document, provider, account)));

@@ -10,6 +10,11 @@
       "bun": "./src/CredentialFile.ts",
       "default": "./src/CredentialFile.ts"
     },
+    "./RefreshFlight": {
+      "types": "./src/RefreshFlight.ts",
+      "bun": "./src/RefreshFlight.ts",
+      "default": "./src/RefreshFlight.ts"
+    },
     "./failure": {
       "types": "./src/failure.ts",
       "bun": "./src/failure.ts",
