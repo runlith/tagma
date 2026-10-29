@@ -69,21 +69,25 @@ async function stop(stand: StandPage): Promise<Recording> {
     if (drag.distance === 0) continue;
     const from = recording.frames[drag.fromFrame];
     const to = recording.frames[drag.toFrame];
-    drag.speed = from === undefined || to === undefined || to.time <= from.time ? Number.NaN : (Math.abs(drag.distance) * 1000) / (to.time - from.time);
+    drag.speed =
+      from === undefined || to === undefined || to.time <= from.time
+        ? Number.NaN
+        : (Math.abs(drag.distance) * 1000) / (to.time - from.time);
   }
   return recording;
 }
-const viewportOf = async (stand: StandPage): Promise<Rect> => (await call(stand, (port) => port.targets(), TargetsSchema, undefined)).viewport;
+const viewportOf = async (stand: StandPage): Promise<Rect> =>
+  (await call(stand, (port) => port.targets(), TargetsSchema, undefined)).viewport;
 const point = (path: HeldPath, y: number): PagePoint => ({ x: path.x, y });
 
-const segment = (stand: StandPage, distance: number): Promise<void> =>
+const segment = (stand: StandPage, distance: number, quantum?: number): Promise<void> =>
   act(
     stand,
-    (port, distance) => {
+    (port, input) => {
       port.endDrag();
-      port.beginDrag(distance, distance === 0 ? 0 : 1, true);
+      port.beginDrag(input.distance, input.distance === 0 ? 0 : 1, true, input.quantum);
     },
-    distance,
+    { distance, quantum },
   );
 
 const settle = (stand: StandPage, before: number): Promise<void> =>
@@ -92,7 +96,7 @@ const settle = (stand: StandPage, before: number): Promise<void> =>
     async (port, input) => {
       while (port.state().top === input.before) await port.frames();
       let last = port.state().top;
-      for (let still = 0; still < input.rest; ) {
+      for (let still = 0; still < input.rest;) {
         await port.frames();
         const top = port.state().top;
         still = top === last ? still + 1 : 0;
@@ -195,7 +199,8 @@ export async function calibrateHeld(stand: StandPage, touch: Touch, region: Meas
 
   const first = prelude.frames[0];
   const last = prelude.frames.at(-1);
-  if (first === undefined || last === undefined || prelude.frames.length < 3) return refuse('the pan-recognition prelude sampled too few frames');
+  if (first === undefined || last === undefined || prelude.frames.length < 3)
+    return refuse('the pan-recognition prelude sampled too few frames');
   if (structural(prelude)) return refuse('the pan-recognition prelude changed structure');
   const shift = rigidShift(first, last);
   if (shift === null) return refuse('the pan-recognition prelude kept no rigid common DOM sentinel');
@@ -241,7 +246,7 @@ export async function dragPage(stand: StandPage, held: HeldTouch, name: string):
   );
   await frames(stand, 2);
   const pressedHeight = (await state(stand)).height;
-  await segment(stand, establish);
+  await segment(stand, establish, path.establish / PAN_STEPS);
   await establishPan(stand, touch, path);
   await segment(stand, path.crossing);
   await stroke(stand, touch, path, path.top + path.establish, path.crossing, STEPS);
