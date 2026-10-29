@@ -114,6 +114,12 @@ fields:
         "for": [
           "f3b6b585"
         ]
+      },
+      {
+        "at": "src/mcpGrant.ts",
+        "for": [
+          "f3b6b585"
+        ]
       }
     ],
     "id": "@runlith/mcp",
