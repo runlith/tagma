@@ -1,5 +1,5 @@
 import type { AuthorizationServerMetadata, OAuthClientInformationMixed, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
-import { Clock, Data, Duration, Effect } from 'effect';
+import { Clock, Data, Duration, Effect, Schema } from 'effect';
 import type { McpOAuthClient, McpOAuthServer, McpOAuthTokens } from './mcpGrant';
 
 const OAUTH_TIMEOUT = Duration.seconds(30);
@@ -21,7 +21,7 @@ type Loaded = Awaited<ReturnType<typeof loadAuth>>;
 
 let loading: Promise<Loaded> | undefined;
 
-export type McpOAuthStep = 'discovery' | 'registration' | 'authorization' | 'exchange' | 'refresh';
+export type McpOAuthStep = 'discovery' | 'document' | 'registration' | 'authorization' | 'exchange' | 'refresh';
 
 export type McpOAuthRefusal = 'invalid-grant' | 'invalid-client' | 'refused' | 'failed';
 
@@ -182,6 +182,40 @@ export const mcpOAuthDiscover = Effect.fn('mcp.oauth.discover')(
       };
     }),
 );
+
+const ClientDocument = Schema.Struct({ client_id: Schema.String, redirect_uris: Schema.Array(Schema.String) });
+
+const decodeClientDocument = Schema.decodeUnknownEffect(ClientDocument);
+
+export const mcpOAuthDocument = Effect.fn('mcp.oauth.document')(function* (
+  document: string,
+  redirect: string,
+  fetcher?: Fetch,
+): Effect.fn.Return<void, McpOAuthFailed> {
+  const skipped = (reason: string) => new McpOAuthFailed({ step: 'document', kind: 'failed', reason });
+  const raw = yield* Effect.tryPromise({
+    try: async (signal) => {
+      const response = await bounded(fetcher, signal)(document, { headers: { Accept: 'application/json' }, redirect: 'manual' });
+      if (response.status !== 200) {
+        await response.body?.cancel();
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const body: unknown = await response.json();
+      return body;
+    },
+    catch: (error) => skipped(`${document} could not be read: ${reasonOf(error)}`),
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: OAUTH_TIMEOUT,
+      orElse: () => Effect.fail(skipped(`${document} did not answer within ${Duration.format(OAUTH_TIMEOUT)}`)),
+    }),
+  );
+  const listed = yield* decodeClientDocument(raw).pipe(
+    Effect.mapError(() => skipped(`${document} is not a client metadata document naming its redirect addresses`)),
+  );
+  if (listed.client_id !== document) return yield* skipped(`${document} names ${listed.client_id} as its client id, not its own address`);
+  if (!listed.redirect_uris.includes(redirect)) return yield* skipped(`${document} does not list ${redirect}`);
+});
 
 export const mcpOAuthRegister = Effect.fn('mcp.oauth.register')(
   (

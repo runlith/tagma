@@ -11,6 +11,7 @@ export type OAuthServer = {
   readonly url: string;
   readonly issuer: string;
   readonly follow: (authorization: string) => Effect.Effect<URL>;
+  readonly document: (id: string, redirects: readonly string[]) => void;
   readonly expire: (held: number) => void;
   readonly shortLived: (grants: number) => void;
   readonly refreshes: () => number;
@@ -42,7 +43,7 @@ const answering = async (request: Request, authorization: string) => {
   return transport.handleRequest(request);
 };
 
-export const oauthServer = (discovery: OAuthDiscovery = 'oauth') =>
+export const oauthServer = (discovery: OAuthDiscovery = 'oauth', options: { readonly documents?: boolean } = {}) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const clients = new Map<string, Client>();
@@ -69,6 +70,7 @@ export const oauthServer = (discovery: OAuthDiscovery = 'oauth') =>
         code_challenge_methods_supported: ['S256'],
         token_endpoint_auth_methods_supported: ['none'],
         authorization_response_iss_parameter_supported: true,
+        ...(options.documents === true ? { client_id_metadata_document_supported: true } : {}),
         ...(discovery === 'oidc'
           ? { jwks_uri: `${origin}/jwks`, subject_types_supported: ['public'], id_token_signing_alg_values_supported: ['RS256'] }
           : {}),
@@ -180,6 +182,9 @@ export const oauthServer = (discovery: OAuthDiscovery = 'oauth') =>
       const server: OAuthServer = {
         url: `${origin}/mcp`,
         issuer: origin,
+        document: (id, redirects) => {
+          clients.set(id, { redirects });
+        },
         follow: (authorization) =>
           Effect.promise(async () => {
             const answered = await fetch(authorization, { redirect: 'manual' });

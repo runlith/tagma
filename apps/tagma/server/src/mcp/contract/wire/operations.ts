@@ -306,10 +306,18 @@ export const MCP_SIGN_IN_OPERATIONS = {
     ...operatorActs,
     effect: 'external',
     identity: { key: 'call' },
-    answer: arms({ ok: { url: Schema.String } }),
+    answer: arms({
+      ok: {
+        url: Schema.String,
+        skipped: Schema.optional(Schema.String).annotate({
+          description:
+            'Why the client metadata document was not used although the service accepts one, when the sign-in went on to dynamic registration.',
+        }),
+      },
+    }),
     meaning: 'Start signing an HTTP MCP server in by OAuth and answer the address of its sign-in page, for the operator to open.',
     grammar: `The service's answer returns to this door's /mcp/oauth/callback, which keeps the tokens and connects the server; a sign-in left unanswered expires in ten minutes, and a newer one for the same server replaces it.
-The client Tagma signs in as is, in order: the one given here or registered before, a client metadata document where the service accepts one, then dynamic registration. A service offering none refuses mcp-sign-in-unsupported.`,
+The client Tagma signs in as is, in order: the one given here or registered before, the client metadata document where the service accepts one and the document lists this door's callback address exactly, then dynamic registration. A service offering none refuses mcp-sign-in-unsupported.`,
     input: Schema.Struct({
       project: projectField,
       name: signedName,

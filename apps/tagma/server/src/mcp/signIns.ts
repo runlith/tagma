@@ -4,6 +4,7 @@ import {
   type McpOAuthChallenge,
   mcpOAuthAuthorization,
   mcpOAuthDiscover,
+  mcpOAuthDocument,
   mcpOAuthExchange,
   mcpOAuthIssuer,
   mcpOAuthRefresh,
@@ -11,7 +12,7 @@ import {
 } from '@runlith/mcp/auth';
 import type { HoldCut, HoldStalled } from '@runlith/held/failures';
 import type { McpServerStatus } from '@runlith/mcp/McpPool';
-import { Clock, Data, Duration, Effect, FiberMap } from 'effect';
+import { Clock, Data, Duration, Effect, FiberMap, Result } from 'effect';
 import * as Base64Url from 'effect/encoding/Base64Url';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { SecretOwners } from '../secrets/contract/service/secrets.js';
@@ -30,7 +31,6 @@ const KIND = 'mcp';
 const PENDING_MS = 10 * 60_000;
 const EXPIRY_MARGIN_MS = 60_000;
 const CLIENT_NAME = 'Tagma';
-const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 type Pending = {
   readonly key: string;
@@ -69,11 +69,6 @@ const identityOf = (tokens: McpOAuthTokens): string => tokens.refresh ?? tokens.
 
 const expiring = (tokens: McpOAuthTokens, now: number): boolean =>
   tokens.expiresAt !== undefined && tokens.expiresAt - now <= EXPIRY_MARGIN_MS;
-
-const loopback = (redirect: string): boolean => {
-  const url = new URL(redirect);
-  return url.protocol === 'http:' && LOOPBACK.has(url.hostname);
-};
 
 const storeRefusal = () =>
   new GateRefusal('secret-store-failed', 'The secret store could not be read or written, so the sign-in it keeps is out of reach.', [
@@ -124,21 +119,29 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
 
   const identity = Effect.fnUntraced(function* (record: SignInRecord, server: McpOAuthServer, start: SignInStart) {
     const standing = record.client;
-    if (standing?.kind === 'pre-registered') return standing;
-    if (standing !== undefined && record.server?.url === server.url && standing.redirects.includes(start.redirect)) return standing;
+    if (standing?.kind === 'pre-registered') return { client: standing };
+    if (standing?.kind === 'registered' && record.server?.url === server.url && standing.redirects.includes(start.redirect)) {
+      return { client: standing };
+    }
     const document = yield* settings.value(mcpClientDocument, start.projectId).pipe(Effect.mapError(storeRefusal));
-    if (server.documents && document !== null && loopback(start.redirect)) {
-      return { kind: 'document' as const, id: document, redirects: [start.redirect] };
+    let skipped: string | undefined;
+    if (server.documents && document !== null) {
+      const listing = yield* Effect.result(mcpOAuthDocument(document, start.redirect));
+      if (Result.isSuccess(listing)) return { client: { kind: 'document' as const, id: document, redirects: [start.redirect] } };
+      skipped = listing.failure.reason;
     }
     if (server.registers) {
       const covered = standing?.kind === 'registered' && record.server?.url === server.url ? standing.redirects : [];
-      return yield* mcpOAuthRegister(server, { name: CLIENT_NAME, redirects: [...new Set([...covered, start.redirect])] }).pipe(
+      const client = yield* mcpOAuthRegister(server, { name: CLIENT_NAME, redirects: [...new Set([...covered, start.redirect])] }).pipe(
         Effect.mapError(failedRefusal),
       );
+      return { client, skipped };
     }
     return yield* new GateRefusal(
       'mcp-sign-in-unsupported',
-      `The authorization server of ${start.name} accepts neither a client metadata document nor dynamic registration, and no client is registered for it.`,
+      skipped === undefined
+        ? `The authorization server of ${start.name} accepts neither a client metadata document nor dynamic registration, and no client is registered for it.`
+        : `The authorization server of ${start.name} offers no dynamic registration, and the client metadata document was skipped: ${skipped}.`,
       [`register a client with the service for ${start.redirect} and sign in with its client id`],
     );
   });
@@ -153,7 +156,7 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
     }
     const record = yield* stored(start.key).pipe(Effect.mapError(storeRefusal));
     const server = yield* mcpOAuthDiscover(start.url, start.challenge).pipe(Effect.mapError(failedRefusal));
-    const client = own ?? (yield* identity(record, server, start));
+    const { client, skipped } = own === undefined ? yield* identity(record, server, start) : { client: own, skipped: undefined };
     const state = Base64Url.encode(crypto.getRandomValues(new Uint8Array(32)));
     const opened = yield* mcpOAuthAuthorization(server, client, { redirect: start.redirect, state }).pipe(Effect.mapError(failedRefusal));
     const now = yield* Clock.currentTimeMillis;
@@ -170,7 +173,7 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
     });
     yield* FiberMap.run(expiries, start.key, Effect.andThen(Effect.sleep(Duration.millis(PENDING_MS)), expired(state, start.key)));
     yield* input.moved(start.key);
-    return { url: opened.url };
+    return { url: opened.url, skipped };
   });
 
   const finish = Effect.fn('McpSignIns.finish')(function* (answer: McpSignInAnswer): Effect.fn.Return<McpSignedIn, McpSignInRejected> {

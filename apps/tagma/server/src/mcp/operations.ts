@@ -117,7 +117,7 @@ export const MCP_PAIRS = {
           client: input.client,
           redirect,
         });
-        return { status: 'ok' as const, url: started.url };
+        return { status: 'ok' as const, url: started.url, skipped: started.skipped };
       }),
     }),
   ),

@@ -63,7 +63,7 @@ export class McpServers extends Context.Service<
     ): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpServerChangeRefusal | OpenRefusal>>;
     signIn(
       input: McpServerScopeInput & { readonly name: string; readonly client?: McpOwnClient; readonly redirect: string },
-    ): Effect.Effect<{ readonly url: string }, StoreFailure | GateRefusal<McpSignInRefusal>>;
+    ): Effect.Effect<{ readonly url: string; readonly skipped?: string }, StoreFailure | GateRefusal<McpSignInRefusal>>;
     signOut(
       input: McpServerScopeInput & { readonly name: string },
     ): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpSignOutRefusal>>;

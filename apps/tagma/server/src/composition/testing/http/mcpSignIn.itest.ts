@@ -30,8 +30,27 @@ const answered = Effect.fnUntraced(function* (id: string, input: unknown, projec
   const world = yield* DoorFixture;
   const answer = yield* world.op(id, input, `project=${project}`);
   if (answer.status !== 200) return yield* Effect.die(new Error(`${id} answered ${answer.status}: ${JSON.stringify(answer.body)}`));
-  return answer.body as { readonly mcp?: readonly Row[]; readonly url?: string };
+  return answer.body as { readonly mcp?: readonly Row[]; readonly url?: string; readonly skipped?: string };
 });
+
+const DOCUMENT = 'https://tagma.dev/oauth/client.json';
+
+const publishing = (listing: { redirects: readonly string[] }) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const real = globalThis.fetch;
+      const answering = async (input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+        String(input) === DOCUMENT
+          ? Response.json({ client_id: DOCUMENT, client_name: 'Tagma', redirect_uris: listing.redirects })
+          : real(input, init);
+      globalThis.fetch = Object.assign(answering, { preconnect: real.preconnect.bind(real) });
+      return real;
+    }),
+    (real) =>
+      Effect.sync(() => {
+        globalThis.fetch = real;
+      }),
+  );
 
 const rowIn = Effect.fnUntraced(function* (project: number, name: string) {
   return (yield* answered('read_mcp_servers', {}, project)).mcp?.find((row) => row.name === name);
@@ -115,6 +134,36 @@ layer(doorFixture(), { excludeTestServices: true })('mcp sign-in', (it) => {
           signIn: { signedIn: false, client: 'registered' },
         });
         yield* answered('remove_mcp_server', { name: 'guarded' }, project);
+      }),
+  );
+
+  it.effect(
+    'a client metadata document signs in only where it lists the calling door’s callback; one that does not list it falls to dynamic registration',
+    () =>
+      Effect.gen(function* () {
+        const world = yield* DoorFixture;
+        const oauth = yield* oauthServer('oauth', { documents: true });
+        const project = yield* world.plainProject();
+        yield* projectLeaving(world, project);
+        const door = `${DOOR_ORIGIN}/mcp/oauth/callback`;
+        const other = 'http://127.0.0.1:5643/mcp/oauth/callback';
+        const listing = { redirects: [door] };
+        yield* publishing(listing);
+
+        oauth.document(DOCUMENT, [door]);
+        yield* answered('add_mcp_server', declared('listed', oauth.url), project);
+        const used = yield* answered('sign_in_mcp_server', { name: 'listed' }, project);
+        expect(used.skipped).toBeUndefined();
+        expect(yield* callback(yield* oauth.follow(used.url ?? ''))).toBe(200);
+        expect(yield* rowIn(project, 'listed')).toMatchObject({ status: 'connected', signIn: { signedIn: true, client: 'document' } });
+
+        yield* answered('sign_out_mcp_server', { name: 'listed' }, project);
+        listing.redirects = [other];
+        oauth.document(DOCUMENT, [other]);
+        const registered = yield* answered('sign_in_mcp_server', { name: 'listed' }, project);
+        expect(registered.skipped).toContain(`does not list ${door}`);
+        expect(yield* callback(yield* oauth.follow(registered.url ?? ''))).toBe(200);
+        expect(yield* rowIn(project, 'listed')).toMatchObject({ status: 'connected', signIn: { signedIn: true, client: 'registered' } });
       }),
   );
 
