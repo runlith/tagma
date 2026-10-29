@@ -86,6 +86,9 @@ export const pluginRowSchema = Schema.Struct({
     description: 'The directory it is read from: a folder installed in place, or the copy taken from its git URL or marketplace entry.',
   }),
   enabled: Schema.Boolean.annotate({ description: 'Whether this project runs its components.' }),
+  everywhere: Schema.Boolean.annotate({
+    description: 'Whether it is enabled for every project; a project that switches it off does not run it.',
+  }),
   components: Schema.Array(pluginComponentSchema).annotate({ description: 'What Tagma took from it.' }),
   ignored: Schema.Array(pluginIgnoredSchema).annotate({ description: 'What Tagma does not take from it, each with the reason.' }),
   options: Schema.Array(pluginOptionSchema),

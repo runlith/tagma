@@ -2,6 +2,7 @@ import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import { Context, Data, type Effect, type Stream } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
+import type { SettableScope } from '../../../platform/contract/wire/setting.js';
 import type { SettingLandRefusal } from '../../../settings/contract/service/values.js';
 import type { PluginConsented } from '../wire/consent.js';
 import type { PluginDeclared, PluginHookPoint, PluginOrigin, PluginPreview, PluginRow, PluginSource } from '../wire/rows.js';
@@ -66,6 +67,7 @@ export class Plugins extends Context.Service<
       readonly projectId: number;
       readonly prepared: PluginPrepared;
       readonly enabled: boolean;
+      readonly scope: SettableScope;
     }): Effect.Effect<PluginRow, PluginFailure<PluginInstallRefusal>>;
     update(input: {
       readonly projectId: number;
@@ -79,6 +81,7 @@ export class Plugins extends Context.Service<
       readonly projectId: number;
       readonly id: string;
       readonly enabled: boolean;
+      readonly scope: SettableScope;
     }): Effect.Effect<PluginRow, PluginFailure<PluginChangeRefusal>>;
     uninstall(input: { readonly projectId: number; readonly id: string }): Effect.Effect<PluginRow, PluginFailure<PluginChangeRefusal>>;
   }

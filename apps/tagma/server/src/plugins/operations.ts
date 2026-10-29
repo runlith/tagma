@@ -3,6 +3,8 @@ import { Effect } from 'effect';
 import { body, pair } from '../platform/contract/service/body.js';
 import { ceilingOf } from '../platform/contract/wire/pageFamily.js';
 import { cursorRefusal, GateRefusal } from '../platform/contract/wire/refusal.js';
+import type { SettableScope } from '../platform/contract/wire/setting.js';
+import { McpServers } from '../mcp/contract/service/servers.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
 import { Plugins } from './contract/service/plugins.js';
 import { PLUGIN_OPERATIONS as OPS, PLUGIN_ROWS } from './contract/wire/operations.js';
@@ -16,6 +18,16 @@ const keyOf = (row: { readonly id: string }) => [row.id] as const;
 const answer = (plugin: PluginRow) => ({ status: 'ok' as const, plugin });
 
 const projectId = Effect.map(Effect.flatten(CurrentProject), (call) => call.project.id);
+
+const reached = Effect.fnUntraced(function* (project: number, plugin: PluginRow) {
+  if (!plugin.enabled) return plugin;
+  const servers = yield* McpServers;
+  const remote = (yield* servers.list(project)).filter(
+    (row) => row.scope === 'contributed' && row.contributor === plugin.id && row.enabled && row.reach.transport === 'http',
+  );
+  yield* Effect.forEach(remote, (row) => servers.raise(project, row.name), { concurrency: 'unbounded', discard: true });
+  return plugin;
+});
 
 export const PLUGIN_PAIRS = {
   read_plugins: pair(
@@ -53,7 +65,14 @@ export const PLUGIN_PAIRS = {
         ]);
       }),
       execute: Effect.fnUntraced(function* (input, prepared) {
-        return answer(yield* (yield* Plugins).install({ projectId: yield* projectId, prepared, enabled: input.enabled ?? true }));
+        const project = yield* projectId;
+        const plugin = yield* (yield* Plugins).install({
+          projectId: project,
+          prepared,
+          enabled: input.enabled ?? true,
+          scope: input.scope ?? 'project',
+        });
+        return answer(yield* reached(project, plugin));
       }),
     }),
   ),
@@ -64,8 +83,15 @@ export const PLUGIN_PAIRS = {
         if (input.enabled === false) return null;
         return yield* (yield* Plugins).installed({ projectId: yield* projectId, id: input.id });
       }),
-      execute: Effect.fnUntraced(function* (input: { readonly id: string; readonly enabled?: boolean }) {
-        return answer(yield* (yield* Plugins).enable({ projectId: yield* projectId, id: input.id, enabled: input.enabled ?? true }));
+      execute: Effect.fnUntraced(function* (input: { readonly id: string; readonly enabled?: boolean; readonly scope?: SettableScope }) {
+        const project = yield* projectId;
+        const plugin = yield* (yield* Plugins).enable({
+          projectId: project,
+          id: input.id,
+          enabled: input.enabled ?? true,
+          scope: input.scope ?? 'project',
+        });
+        return answer(yield* reached(project, plugin));
       }),
     }),
   ),

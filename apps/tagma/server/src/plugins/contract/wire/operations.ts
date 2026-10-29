@@ -4,6 +4,7 @@ import { ASKS_IN_REVIEW, ASKS_NEVER, MCP_ENV_RESOLVING } from '../../../platform
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { limitOf } from '../../../platform/contract/wire/pageFamily.js';
 import { placedCursor, projectField } from '../../../platform/contract/wire/place.js';
+import { SETTABLE_SCOPES, type SettableScope } from '../../../platform/contract/wire/setting.js';
 import type { PluginConsented } from './consent.js';
 import { PluginId } from './names.js';
 import { pluginRowSchema } from './rows.js';
@@ -28,6 +29,7 @@ export const PLUGIN_ROWS = {
     source: { kind: 'git', url: 'x'.repeat(120) },
     root: 'x'.repeat(160),
     enabled: true,
+    everywhere: true,
     components: Array.from({ length: 16 }, () => ({ kind: 'mcp-server', name: 'x'.repeat(40), detail: 'x'.repeat(80) })),
     ignored: Array.from({ length: 6 }, () => ({ component: 'x'.repeat(20), name: 'x'.repeat(30), reason: 'x'.repeat(80) })),
     options: Array.from({ length: 3 }, () => ({
@@ -59,8 +61,15 @@ const CHANGE_REFUSALS = [
   'setting-scope',
   'setting-value',
 ] as const;
+const REACH_REFUSALS = ['mcp-reconcile-stalled', 'mcp-contributions-unreadable'] as const;
 
 const runs = (input: { readonly enabled?: boolean }, prepared: PluginConsented): boolean => input.enabled !== false || prepared.running;
+
+const pluginScope = Schema.optional(Schema.Literals(SETTABLE_SCOPES)).annotate({
+  description: 'project (the default): this project. user: every project, except one that switches it off.',
+});
+
+const reachOf = (input: { readonly scope?: SettableScope }): string => (input.scope === 'user' ? 'every project' : 'this project');
 
 export const consentFacts = (prepared: PluginConsented) => {
   const runs = prepared.consent.subjects.filter((subject) => subject.kind === 'execute').map((subject) => subject.value);
@@ -97,9 +106,9 @@ export const PLUGIN_OPERATIONS = {
     ...acted,
     answer,
     meaning:
-      'Install an agent plugin — Agent Plugins 1.0, Claude Code or Codex — from a folder, read in place, a git URL, cloned onto this machine, or a revision a preview prepared; installing the same source again updates it. `enabled: false` installs it without running it in this project, and stops it here if it ran.',
+      'Install an agent plugin — Agent Plugins 1.0, Claude Code or Codex — from a folder, read in place, a git URL, cloned onto this machine, or a revision a preview prepared; installing the same source again updates it. It runs at once in this project, or with `scope: user` in every project; `enabled: false` installs it without running it in this project, and stops it here if it ran.',
     grammar:
-      'Name exactly one of `source` and `prepared`. A prepared revision, as preview_plugin answers it for a marketplace entry, is installed without fetching it again and is copied into the plugin’s own directory, so the plugin never reads its marketplace. Its skills and commands join the `$` catalog, its MCP servers this project’s pool and its agents the agent library, each named `<plugin>-<name>`; its command hooks run as the operator. A relative folder is read from the project root.',
+      'Name exactly one of `source` and `prepared`. A prepared revision, as preview_plugin answers it for a marketplace entry, is installed without fetching it again and is copied into the plugin’s own directory, so the plugin never reads its marketplace. Its skills and commands join the `$` catalog, its MCP servers the pool and its agents the agent library of each project running it, each named `<plugin>-<name>`; its command hooks run as the operator. Its remote MCP servers are connected in this project at once, so one asking for a sign-in reads `needs-sign-in` in read_mcp_servers; nothing signs in. A relative folder is read from the project root.',
     input: Schema.Struct({
       project: projectField,
       source: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
@@ -108,16 +117,24 @@ export const PLUGIN_OPERATIONS = {
       prepared: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
         description: 'The prepared revision a preview answered.',
       }),
-      enabled: Schema.optional(Schema.Boolean).annotate({ description: 'true (the default): this project runs it at once.' }),
+      enabled: Schema.optional(Schema.Boolean).annotate({ description: 'true (the default): it runs at once where `scope` says.' }),
+      scope: pluginScope,
     }),
-    refusals: [...CHANGE_REFUSALS, 'plugin-id-taken', 'plugin-pin-unreachable', 'plugin-preview-expired', 'field-invalid'],
+    refusals: [
+      ...CHANGE_REFUSALS,
+      ...REACH_REFUSALS,
+      'plugin-id-taken',
+      'plugin-pin-unreachable',
+      'plugin-preview-expired',
+      'field-invalid',
+    ],
     confirmation: (input, prepared?: PluginConsented) => ({
       summary:
         prepared === undefined
           ? `Install the plugin from ${input.source ?? 'a prepared revision'}?`
           : input.enabled === false
             ? `Install the plugin ${prepared.id} on this machine without running it?`
-            : `Install the plugin ${prepared.id} and run it in this project?`,
+            : `Install the plugin ${prepared.id} and run it in ${reachOf(input)}?`,
       facts: prepared === undefined || !runs(input, prepared) ? [] : consentFacts(prepared),
       consequence: prepared?.running
         ? 'It is already enabled in a project, so this version runs there at once; its MCP servers and hooks run as the operator on this machine wherever it is enabled.'
@@ -133,16 +150,23 @@ export const PLUGIN_OPERATIONS = {
     ...acted,
     answer,
     meaning:
-      'Run an installed plugin in this project or stop running it here: its skills, commands, MCP servers, agents and hooks reach this project only while it is enabled.',
+      'Run an installed plugin in this project or in every project, or stop running it there: its skills, commands, MCP servers, agents and hooks reach a project only while it runs there.',
+    grammar:
+      'With `scope: project`, switching off a plugin enabled for every project stops it in this project alone, and switching it on again lifts that. With `scope: user`, switching on also lifts this project’s switch-off; switching off leaves running the projects that enabled it themselves.',
     input: Schema.Struct({
       project: projectField,
       id: PluginId,
-      enabled: Schema.optional(Schema.Boolean).annotate({ description: 'true (the default): this project runs it. false: it stops here.' }),
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: 'true (the default): it runs where `scope` says. false: it stops there.',
+      }),
+      scope: pluginScope,
     }),
-    refusals: CHANGE_REFUSALS,
+    refusals: [...CHANGE_REFUSALS, ...REACH_REFUSALS],
     confirmation: (input, prepared?: PluginConsented | null) => ({
       summary:
-        input.enabled === false ? `Stop running the plugin ${input.id} in this project?` : `Run the plugin ${input.id} in this project?`,
+        input.enabled === false
+          ? `Stop running the plugin ${input.id} in ${reachOf(input)}?`
+          : `Run the plugin ${input.id} in ${reachOf(input)}?`,
       facts: prepared ? consentFacts(prepared) : [],
     }),
     confirmLabel: 'Switch',

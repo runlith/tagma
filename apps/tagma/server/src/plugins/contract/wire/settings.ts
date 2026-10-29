@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { settingKey, settingListKey } from '../../../platform/contract/wire/setting.js';
+import { SETTABLE_SCOPES, settingKey, settingListKey } from '../../../platform/contract/wire/setting.js';
 import { PluginId } from './names.js';
 import { PluginDeclared, PluginOrigin, PluginSource } from './rows.js';
 
@@ -36,8 +36,21 @@ export const pluginsInstalled = settingListKey({
 export const pluginsEnabled = settingListKey({
   id: 'plugins.enabled',
   order: 771,
-  title: 'Enabled here',
-  description: 'The installed plugins whose skills, commands, MCP servers, agents and hooks this project runs.',
+  title: 'Enabled',
+  description:
+    'The installed plugins whose skills, commands, MCP servers, agents and hooks run: your own layer runs them in every project, a project’s layer in that project.',
+  control: { kind: 'managed', by: 'enable_plugin' },
+  member: PluginId,
+  fallback: [] as readonly string[],
+  scopes: SETTABLE_SCOPES,
+  merge: 'union',
+});
+
+export const pluginsDisabled = settingListKey({
+  id: 'plugins.disabled',
+  order: 772,
+  title: 'Switched off here',
+  description: 'The plugins enabled for every project that this project does not run.',
   control: { kind: 'managed', by: 'enable_plugin' },
   member: PluginId,
   fallback: [] as readonly string[],
@@ -50,7 +63,7 @@ export type PluginOptionValues = typeof PluginOptionValues.Type;
 
 export const pluginsOptions = settingKey({
   id: 'plugins.options',
-  order: 772,
+  order: 773,
   title: 'Options',
   description: 'The values each plugin asks for that are not secret, by plugin and option; a secret one lives in the key store.',
   schema: PluginOptionValues,
@@ -64,6 +77,6 @@ export const PLUGIN_SETTING_SECTIONS = [
     id: 'plugins',
     order: 63,
     title: 'Plugins',
-    description: 'Agent plugins installed on this machine and the ones each project runs.',
+    description: 'Agent plugins installed on this machine, the marketplaces they come from, and where each one runs.',
   },
 ] as const;

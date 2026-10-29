@@ -3,7 +3,8 @@ import { Projects } from '../projects/contract/service/registry.js';
 import { type SecretOwner, SecretOwnerFailed } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { EnabledPlugins, type PluginLoaded, PluginsUnreadable } from './contract/service/plugins.js';
-import { pluginsEnabled, pluginsInstalled } from './contract/wire/settings.js';
+import { pluginsInstalled } from './contract/wire/settings.js';
+import { enablingIn } from './enabling.js';
 import { SECRET_KIND, type Shelf } from './shelf.js';
 
 export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf: Shelf; readonly pulses: PubSub.PubSub<number | null> }) {
@@ -17,8 +18,8 @@ export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf:
     Effect.as(Effect.logWarning(`the plugin ${id} contributes nothing while its directory is refused: ${refused.message}`), null);
 
   const of = Effect.fn('EnabledPlugins.of')(function* (projectId: number) {
-    const enabled = yield* settings.value(pluginsEnabled, projectId).pipe(Effect.mapError(unreadable));
-    if (enabled.length === 0) return [] as readonly PluginLoaded[];
+    const enabled = (yield* enablingIn(settings, projectId).pipe(Effect.mapError(unreadable))).running;
+    if (enabled.size === 0) return [] as readonly PluginLoaded[];
     const installs = yield* settings.value(pluginsInstalled).pipe(Effect.mapError(unreadable));
     const project = (yield* projects.byId(projectId).pipe(Effect.mapError(unreadable))).rootPath;
     const loaded: PluginLoaded[] = [];
@@ -37,7 +38,7 @@ export const makeEnabled = Effect.fnUntraced(function* (input: { readonly shelf:
     kind: SECRET_KIND,
     holders: Effect.fn('EnabledPlugins.holders')(
       function* (projectId: number) {
-        const enabled = yield* settings.value(pluginsEnabled, projectId);
+        const enabled = (yield* enablingIn(settings, projectId)).running;
         const installs = yield* settings.value(pluginsInstalled);
         const holders = [];
         for (const id of enabled) {

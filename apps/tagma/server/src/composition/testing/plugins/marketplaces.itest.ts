@@ -44,6 +44,7 @@ type Answer = {
   readonly preview?: Preview;
   readonly plugin?: Plugin;
   readonly plugins?: readonly Plugin[];
+  readonly mcp?: readonly { readonly name: string; readonly status: string }[];
 };
 
 const claudeList = (name: string, plugins: readonly unknown[]): Files => ({
@@ -208,6 +209,7 @@ layer(Layer.effect(Market, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
           ]),
         );
         expect(legacy.ignored).toContainEqual(expect.objectContaining({ component: '.app.json' }));
+        expect((yield* call('read_mcp_servers', {})).mcp?.find((row) => row.name === 'legacy-remote')?.status).toBe('failed');
 
         yield* installed('fixture-claude', 'twin');
         const twins = ((yield* call('read_marketplaces', { limit: 20 })).entries ?? []).filter((entry) => entry.name === 'twin');

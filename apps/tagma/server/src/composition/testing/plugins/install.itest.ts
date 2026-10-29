@@ -88,8 +88,8 @@ const setup = Effect.gen(function* () {
   yield* Effect.addFinalizer(() =>
     Effect.forEach(installed, (id) => world.op('uninstall_plugin', { id }, scope), { discard: true }).pipe(Effect.orDie),
   );
-  const install = Effect.fnUntraced(function* (source: string) {
-    const answer = yield* world.op('install_plugin', { source }, scope);
+  const install = Effect.fnUntraced(function* (source: string, more: { readonly scope?: string } = {}) {
+    const answer = yield* world.op('install_plugin', { source, ...more }, scope);
     const body = answer.body as { readonly plugin?: Row; readonly code?: string; readonly reason?: string };
     if (body.plugin !== undefined) installed.push(body.plugin.id);
     return body;
@@ -215,6 +215,41 @@ layer(Layer.effect(Plugins, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
       expect(colliding).toMatchObject({ code: 'plugin-names-collide' });
       expect(colliding.reason).toContain('twice-x');
     }),
+  );
+
+  it.effect(
+    'a plugin enabled for every project runs in each, a project switches it off alone, and dropping every project keeps the projects that enabled it',
+    () =>
+      Effect.gen(function* () {
+        const { world, scope, install } = yield* Plugins;
+        const other = `project=${yield* world.stealthProject()}`;
+        const root = yield* written(yield* world.directory('everywhere'), {
+          '.claude-plugin/plugin.json': JSON.stringify({ name: 'everywhere' }),
+          'skills/wave/SKILL.md': skill('Waves.'),
+        });
+        const state = Effect.fnUntraced(function* (at: string) {
+          const rows = ((yield* world.op('read_plugins', {}, at)).body as { plugins: readonly (Row & { everywhere: boolean })[] }).plugins;
+          const row = rows.find((entry) => entry.id === 'everywhere');
+          const offered = ((yield* world.op('read_agent_skills', { kind: 'draft' }, at)).body as { skills: readonly { id: string }[] })
+            .skills;
+          return { enabled: row?.enabled, everywhere: row?.everywhere, offered: offered.some((entry) => entry.id === 'everywhere-wave') };
+        });
+        const on = { enabled: true, everywhere: true, offered: true };
+        const off = { enabled: false, everywhere: true, offered: false };
+
+        expect((yield* install(root, { scope: 'user' })).plugin).toMatchObject({ enabled: true, everywhere: true });
+        expect([yield* state(scope), yield* state(other)]).toEqual([on, on]);
+
+        yield* world.op('enable_plugin', { id: 'everywhere', enabled: false }, other);
+        expect([yield* state(scope), yield* state(other)]).toEqual([on, off]);
+
+        yield* world.op('enable_plugin', { id: 'everywhere' }, other);
+        yield* world.op('enable_plugin', { id: 'everywhere', scope: 'user', enabled: false }, scope);
+        expect([yield* state(scope), yield* state(other)]).toEqual([
+          { enabled: false, everywhere: false, offered: false },
+          { enabled: true, everywhere: false, offered: true },
+        ]);
+      }),
   );
 
   it.effect('disabling a plugin in the project keeps it installed and stops it here', () =>
