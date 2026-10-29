@@ -15,7 +15,7 @@ import {
   threadWithdrawalEvent,
 } from '../../events';
 import { opensTurnEntry } from '../../rewind';
-import { isReaderWordsItem, isUnreadSteer, queuedTurnText } from '../../inboxItems';
+import { isReaderWordsItem, isUnreadSteer, queuedTurnSaid } from '../../inboxItems';
 import { actDigest, type Keyed, type TransitionOutcome } from '../../keyed';
 import { ThreadStorageFailed } from '../../persisted';
 import type { ThreadContextReading, ThreadRow, ThreadRunRow } from '../../rows';
@@ -115,16 +115,16 @@ export const makeRunClosing = Effect.fnUntraced(function* ({
     ];
     const refs = unprompted.flatMap((item) => (item.kind === 'turn' || item.kind === 'signal' ? (item.body.attachments ?? []) : []));
     const stored = refs.length === 0 ? [] : yield* attachments.resolve(run.threadId, row.ownerId, refs);
-    const text = queuedTurnText(unprompted);
+    const told = queuedTurnSaid(unprompted);
     const draft = withdrawsReader
       ? {
-          text,
+          text: told.text,
           attachments:
             stored.length === 0 ? undefined : stored.map((file) => ({ mime: file.mediaType, url: file.url, filename: file.filename })),
         }
       : null;
     if (unprompted.length > 0 && draft === null) {
-      const said = threadUserMessageEvent(run, { text, attachments: stored, reader: true });
+      const said = threadUserMessageEvent(run, { ...told, attachments: stored, reader: true });
       events.unshift({
         ...said,
         payload: { ...said.payload, entry: { ...said.payload.entry, occurredAt: written.startedAt.toISOString() } },

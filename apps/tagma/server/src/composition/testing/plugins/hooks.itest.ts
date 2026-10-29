@@ -22,7 +22,8 @@ if (event.hook_event_name === 'PreToolUse' && path.endsWith('draft.txt')) {
   console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput } }));
 }
 if (event.hook_event_name === 'PostToolUse') {
-  const additionalContext = event.tool_name + ' of ' + path.split('/').pop() + ' noted';
+  const subject = path === '' ? String(event.tool_input?.command ?? '') : path.split('/').pop();
+  const additionalContext = event.tool_name + ' of ' + subject + ' noted';
   console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext } }));
 }
 `;
@@ -35,18 +36,22 @@ const PLUGIN: Readonly<Record<string, string>> = {
   'hooks/hooks.json': JSON.stringify({
     hooks: {
       PreToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: guarded }] }],
-      PostToolUse: [{ matcher: 'Read|Write', hooks: [{ type: 'command', command: guarded }] }],
+      PostToolUse: [{ matcher: 'Read|Write|Bash', hooks: [{ type: 'command', command: guarded }] }],
     },
   }),
 };
 
-const call = (id: string, name: string, input: unknown): readonly LLMEvent[] => [
+const calls = (...made: readonly (readonly [id: string, name: string, input: unknown])[]): readonly LLMEvent[] => [
   { type: 'step-start', index: 0 },
-  { type: 'tool-input-start', id, name },
-  { type: 'tool-call', id, name, input },
+  ...made.flatMap(([id, name, input]): LLMEvent[] => [
+    { type: 'tool-input-start', id, name },
+    { type: 'tool-call', id, name, input },
+  ]),
   { type: 'step-finish', index: 0, reason: 'tool-calls' },
   { type: 'finish', reason: 'tool-calls' },
 ];
+
+const call = (id: string, name: string, input: unknown): readonly LLMEvent[] => calls([id, name, input]);
 
 const DONE: readonly LLMEvent[] = [
   { type: 'step-start', index: 0 },
@@ -60,7 +65,7 @@ const DONE: readonly LLMEvent[] = [
 class AwaitedStateNever extends Data.TaggedError('AwaitedStateNever')<{}> {}
 
 const TITLE = 'name the subject the user is working on';
-type Script = { readonly asked: string[]; readonly answer: (answered: number) => readonly LLMEvent[] };
+type Script = { readonly asked: string[]; readonly answer: (answered: number, said: string) => readonly LLMEvent[] };
 const scripts = new Map<string, Script>();
 let checkout = '';
 
@@ -80,7 +85,7 @@ const setup = Effect.gen(function* () {
               const script = said.includes(TITLE) ? undefined : [...scripts].find(([words]) => said.includes(words))?.[1];
               if (script === undefined) return request.stream(streamed);
               script.asked.push(said);
-              return Stream.fromIterable(script.answer(answeredIn(said)));
+              return Stream.fromIterable(script.answer(answeredIn(said), said));
             }),
         };
       },
@@ -204,6 +209,87 @@ layer(Layer.effect(Guarded, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
       const told = yield* until(Effect.sync(() => script.asked.find((said) => said.includes('read finished in the background'))));
 
       expect(told).toContain('Read of final.txt noted');
+    }),
+  );
+
+  it.effect('a capability cue told with the ending of a background call is not told again on the next matching call', () => {
+    const navigation = Effect.fnUntraced(function* (value: boolean) {
+      const { world, projectId } = yield* Guarded;
+      return yield* world.op('write_setting', { project: projectId, key: 'navigation.enabled', value });
+    });
+    return Effect.gen(function* () {
+      yield* navigation(true);
+      const pattern = String.raw`\.draft\(`;
+      const script = scripted('Grep twice.', (_, said) =>
+        said.includes('call-late')
+          ? DONE
+          : said.includes('grep finished in the background')
+            ? call('call-late', 'grep', { pattern, path: checkout })
+            : said.includes('call-early')
+              ? DONE
+              : call('call-early', 'grep', { pattern, path: checkout, background: true }),
+      );
+      const { threadId } = yield* born('bypass');
+      yield* turn(threadId, 'Grep twice.');
+      const last = yield* until(Effect.sync(() => script.asked.find((said) => said.includes('call-late'))));
+
+      expect(last.split('"capability-cues:navigation":true').length - 1).toBe(1);
+    }).pipe(Effect.ensuring(Effect.orDie(navigation(false))));
+  });
+
+  it.effect('a PostToolUse context reaches the thread when the call it follows is handed to the background as a command', () =>
+    Effect.gen(function* () {
+      const { world, scope } = yield* Guarded;
+      const command = 'until [ -f released ]; do sleep 0.1; done';
+      const script = scripted('Run the slow shell.', (_, said) =>
+        said.includes('call-shell') ? DONE : call('call-shell', 'bash', { command, waitMs: 60_000 }),
+      );
+      const { threadId } = yield* born('bypass');
+      const runId = yield* turn(threadId, 'Run the slow shell.');
+      yield* until(
+        Effect.map(
+          Effect.suspend(() => world.op('control_call', { runId, toolCallId: 'call-shell', control: { action: 'background' } }, scope)),
+          (answer) => ((answer.body as { control?: string } | null)?.control === 'changed' ? true : undefined),
+        ),
+      );
+      const told = yield* until(Effect.sync(() => script.asked.find((said) => said.includes(`Bash of ${command} noted`))));
+      const [, execution, incarnation] = /Moved ([\w-]+):(\d+) to the background/.exec(told) ?? [];
+      const stopped = yield* world.op(
+        'stop_command',
+        { operationId: crypto.randomUUID(), execution, incarnation: Number(incarnation), cause: 'explicit-stop' },
+        scope,
+      );
+
+      expect(told).toContain('bash finished in the background');
+      expect(stopped.status).toBe(200);
+    }),
+  );
+
+  it.effect('a PostToolUse context of a call answered beside a parked one reaches the run resumed after the approval', () =>
+    Effect.gen(function* () {
+      const { world } = yield* Guarded;
+      const script = scripted('Read and write.', (answered) =>
+        answered === 0
+          ? calls(
+              ['call-beside', 'read', { path: join(checkout, 'final.txt') }],
+              ['call-parked', 'write', { path: join(checkout, 'beside.txt'), content: 'beside\n' }],
+            )
+          : DONE,
+      );
+      const { threadId, ended } = yield* born('review');
+      yield* turn(threadId, 'Read and write.');
+      const questions = Context.get(world.runtime.owners, ThreadHarness).runs.questions();
+      const question = yield* until(Effect.map(questions.open(threadId), (open) => open[0]));
+      const answered = yield* questions.answer(
+        threadId,
+        question.questionId,
+        question.questions.map((asked) => ({ questionId: asked.id, values: [THREAD_TOOL_CONFIRM_VALUE] })),
+      );
+      if (answered === null) return yield* Effect.die(new Error('the answer opened no run'));
+      yield* ended(answered.runId);
+
+      expect(script.asked.at(-1)).toContain('Read of final.txt noted');
+      expect(script.asked.at(-1)).toContain('Write of beside.txt noted');
     }),
   );
 });

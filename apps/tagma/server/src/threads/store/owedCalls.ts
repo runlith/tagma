@@ -16,6 +16,7 @@ export type OwedEnding = {
   readonly words: string;
   readonly endedAt: Date;
   readonly threads: OwedRow['threads'];
+  readonly guides: OwedRow['guides'];
 };
 
 export type OwedCallRows = Effect.Success<typeof makeOwedCallRows>;

@@ -3,6 +3,19 @@ import { Schema } from 'effect';
 export const AgentHook = Schema.Literals(['beforeStep', 'beforeTool', 'afterTool', 'beforeClose']);
 export type AgentHook = typeof AgentHook.Type;
 
+export const AgentGuideSource = Schema.Struct({
+  hook: AgentHook,
+  ruleId: Schema.optional(Schema.String),
+  state: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  retell: Schema.optional(Schema.Literal(false)),
+  toolName: Schema.optional(Schema.String),
+  toolCallId: Schema.optional(Schema.String),
+  taskId: Schema.optional(Schema.String),
+});
+
+export const PendingRuntimeGuide = Schema.Struct({ text: Schema.String, ...AgentGuideSource.fields });
+export type PendingRuntimeGuide = typeof PendingRuntimeGuide.Type;
+
 export const AgentRuntimeGuidance = Schema.Struct({
   type: Schema.tag('runtime-guidance'),
   id: Schema.String,
@@ -10,17 +23,7 @@ export const AgentRuntimeGuidance = Schema.Struct({
   hook: Schema.Union([AgentHook, Schema.Literal('mixed')]),
   sequence: Schema.Number,
   texts: Schema.Array(Schema.String),
-  sources: Schema.Array(
-    Schema.Struct({
-      hook: AgentHook,
-      ruleId: Schema.optional(Schema.String),
-      state: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-      retell: Schema.optional(Schema.Literal(false)),
-      toolName: Schema.optional(Schema.String),
-      toolCallId: Schema.optional(Schema.String),
-      taskId: Schema.optional(Schema.String),
-    }),
-  ),
+  sources: Schema.Array(AgentGuideSource),
   ruleIds: Schema.optional(Schema.Array(Schema.String)),
   stepNumber: Schema.optional(Schema.Number),
   occurredAt: Schema.optional(Schema.String),
@@ -104,6 +107,7 @@ export const AgentCallEnding = Schema.Struct({
   tool: Schema.String,
   outcome: Schema.Literals(['completed', 'failed', 'stopped', 'interrupted']),
   threads: Schema.Array(AgentThreadRef),
+  guides: Schema.optional(Schema.Array(PendingRuntimeGuide)),
 });
 export type AgentCallEnding = typeof AgentCallEnding.Type;
 

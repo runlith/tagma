@@ -1,10 +1,15 @@
 import { Context, type Effect, type Exit } from 'effect';
 import type { CallRecord } from '@runlith/agent/callProgress';
-import type { AgentThreadRef } from '@runlith/agent/contracts';
+import type { AgentThreadRef, PendingRuntimeGuide } from '@runlith/agent/contracts';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 
 export type CallEnding =
-  | { readonly outcome: 'completed' | 'failed' | 'stopped'; readonly result: string; readonly threads?: readonly AgentThreadRef[] }
+  | {
+      readonly outcome: 'completed' | 'failed' | 'stopped';
+      readonly result: string;
+      readonly threads?: readonly AgentThreadRef[];
+      readonly guides?: readonly PendingRuntimeGuide[];
+    }
   | { readonly outcome: 'interrupted' }
   | { readonly outcome: 'elsewhere' };
 

@@ -236,10 +236,6 @@ export function agentCallDirective(directives: readonly AgentDirective[]): Agent
   return deny ?? directives.find((directive): directive is AgentCallDirective => directive.type === 'rewrite') ?? null;
 }
 
-export function agentGuidance(directives: readonly AgentDirective[]): string[] {
-  return agentGuides(directives).map((directive) => directive.text);
-}
-
 export function agentGuides(directives: readonly AgentDirective[]): AgentGuideDirective[] {
   return directives.flatMap((directive): AgentGuideDirective[] => {
     if (directive.type === 'guide') return [directive];

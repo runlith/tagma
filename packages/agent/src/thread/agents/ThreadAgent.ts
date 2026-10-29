@@ -18,7 +18,7 @@ import type { TransportCapabilities, TransportWeb } from '../record';
 import { Usage } from '@runlith/llm/schema/events';
 import type { Message } from '@runlith/llm/schema/messages';
 import { Cause, Effect, Exit } from 'effect';
-import type { AgentApprovalMode, ThreadBindings, ToolCaller } from '../../agent/contracts';
+import type { AgentApprovalMode, PendingRuntimeGuide, ThreadBindings, ToolCaller } from '../../agent/contracts';
 import type { ModeOf } from '../../modes/ApprovalMode';
 import type { AgentAside, AgentAsideHook } from '../../agent/AgentAside';
 import type { AgentOneStep, AgentStep, AgentStepIntent } from '../../agent/AgentStep';
@@ -182,6 +182,7 @@ export type ThreadAgentRunHandle = {
   readonly withheld: readonly Withheld[];
   readonly door: AgentToolDoor;
   completedSteps(): readonly AgentStep[];
+  untoldGuides(): readonly PendingRuntimeGuide[];
   stop(reason: unknown): Effect.Effect<void>;
   close(): Effect.Effect<void>;
 };
@@ -363,6 +364,7 @@ function settlingOnClose(handle: ThreadAgentRunHandle, settle: Effect.Effect<voi
     },
     door: handle.door,
     completedSteps: () => handle.completedSteps(),
+    untoldGuides: () => handle.untoldGuides(),
     stop: (reason) => handle.stop(reason),
     close: () => Effect.ensuring(handle.close(), settle),
   };

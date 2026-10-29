@@ -1,8 +1,8 @@
 import type { ThreadAttachmentRef } from '../transcript/attachments';
 import type { ThreadQueuedTurn } from '../transcript/live';
 import type { ThreadCompactionEntry } from '../transcript/entries';
-import { USER_MESSAGE_SIGNAL_TYPE } from '../agent/contracts';
-import { agentSignalMarkup } from '../agent/AgentSignal';
+import { type PendingRuntimeGuide, USER_MESSAGE_SIGNAL_TYPE } from '../agent/contracts';
+import { agentSignalGuides, agentSignalMarkup, agentSignalWords } from '../agent/AgentSignal';
 import type { ThreadSignal } from '../transcript/parts';
 import { mintThreadSignalId } from './identity';
 import { answersSummarizer, type ThreadSummarizerSelection } from './compaction/summarizer';
@@ -14,9 +14,24 @@ export type ThreadInboxWords<T extends ThreadInboxItemLike = ThreadInboxItemLike
 export type ThreadCompactionRequest<T extends ThreadInboxItemLike = ThreadInboxItem> = Extract<T, { kind: 'compaction' }>;
 
 export function queuedTurnText(queued: readonly ThreadInboxItem[]): string {
+  return queuedWords(queued, agentSignalWords);
+}
+
+export function queuedTurnSaid(queued: readonly ThreadInboxItem[]): {
+  readonly text: string;
+  readonly guides: readonly PendingRuntimeGuide[];
+} {
+  const signals = queued.filter(carriesWords).filter((item) => !isReaderWordsItem(item) && !saidAsOperator(item));
+  return {
+    text: queuedWords(queued, agentSignalMarkup),
+    guides: signals.flatMap((item) => agentSignalGuides(threadSignalOfInboxItem(item))),
+  };
+}
+
+function queuedWords(queued: readonly ThreadInboxItem[], said: (signal: ThreadSignal) => string): string {
   return queued
     .filter(carriesWords)
-    .map((item) => (isReaderWordsItem(item) || saidAsOperator(item) ? item.body.text : agentSignalMarkup(threadSignalOfInboxItem(item))))
+    .map((item) => (isReaderWordsItem(item) || saidAsOperator(item) ? item.body.text : said(threadSignalOfInboxItem(item))))
     .join('\n');
 }
 

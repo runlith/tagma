@@ -4,7 +4,7 @@ import type { AgentSink } from '../../agent/AgentRunner';
 import type { AgentRunBroke } from '../../agent/AgentFailure';
 import type { ThreadAgentRunHandle } from '../agents/ThreadAgent';
 
-export type ScriptedRun = Omit<ThreadAgentRunHandle, 'close' | 'withheld' | 'stop'> & {
+export type ScriptedRun = Omit<ThreadAgentRunHandle, 'close' | 'withheld' | 'stop' | 'untoldGuides'> & {
   readonly events: Stream.Stream<AgentEvent, AgentRunBroke>;
   readonly stop?: ThreadAgentRunHandle['stop'];
 };
@@ -22,6 +22,7 @@ export const playRun = Effect.fn(function* (script: ScriptedRun, sink: AgentSink
     withheld: [],
     door: script.door,
     completedSteps: script.completedSteps,
+    untoldGuides: () => [],
     output: {
       text: settled(script.output.text),
       steps: settled(script.output.steps),

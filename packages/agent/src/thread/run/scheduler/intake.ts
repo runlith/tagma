@@ -1,4 +1,5 @@
 import { Context, type Effect } from 'effect';
+import type { PendingRuntimeGuide } from '../../../agent/contracts';
 import type { AgentToolDoor } from '../../../agent/door/AgentToolDoor';
 import type { ThreadQuestionEntry } from '../../../transcript/entries';
 import type { ThreadRow, ThreadRunRow } from '../../rows';
@@ -12,6 +13,7 @@ export type ParkQuestion = (
   run: ThreadRunRef,
   asked: ThreadQuestionEntry | null,
   door: AgentToolDoor | null,
+  untold?: readonly PendingRuntimeGuide[],
 ) => Effect.Effect<RunParked | null, ThreadBorderFailed>;
 
 export type AskQuestion = (asking: Asking) => Effect.Effect<QuestionOutcome | QuestionRefusal | null, ThreadBorderFailed>;

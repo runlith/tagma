@@ -9,7 +9,7 @@ import { interactionQuestionEntryId, toolEntryId } from '../../transcript/entryN
 import type { ThreadRunRow } from '../rows';
 import type { ThreadTranscriptEntry } from '../../transcript/rows';
 import { entryOf } from '../../transcript/kinds';
-import { threadEntryEvent, type ThreadEventBody } from '../events';
+import { threadEntryEvent, threadGuidanceEvent, type ThreadEventBody } from '../events';
 import type { AgentStep } from '../../agent/AgentStep';
 import type { AgentToolDoor } from '../../agent/door/AgentToolDoor';
 import type { ToolCallArrival, ToolOutcome, ToolRefusal } from '../../agent/tool';
@@ -216,6 +216,10 @@ export function questionToolResultEvents(
     };
     return threadEntryEvent({ ...base, ...settled, toolDisplay: result.display });
   });
+}
+
+export function questionGuidanceEvents(question: ThreadQuestionEntry): ThreadEventBody[] {
+  return question.guidance === undefined ? [] : [threadGuidanceEvent(question.guidance)];
 }
 
 export function toolMessageFromResults(results: readonly ToolQuestionResult[]): Message {

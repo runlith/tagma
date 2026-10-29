@@ -10,7 +10,8 @@ import { answerOf, transitionDeps, transitionNow } from '../transition/kernel';
 import { ThreadActReusedError, ThreadActSpentError, type Decision } from '../transition/port';
 import { runTransition, ThreadRunSequences } from '../transition/sequence';
 import { threadGuidanceEvent, threadQuestionEvent } from '../events';
-import { AgentGuidanceJournal, type PendingRuntimeGuide, pendingRuntimeGuides } from '../../agent/AgentGuidanceJournal';
+import { AgentGuidanceJournal, pendingRuntimeGuides } from '../../agent/AgentGuidanceJournal';
+import type { AgentRuntimeGuidance, PendingRuntimeGuide } from '../../agent/contracts';
 import { sealThreadEvents } from '../ThreadEventDoor';
 import type { ThreadWriteTx } from '../ThreadPorts';
 import { disposed, makeParkedDoors } from './parkedDoor';
@@ -33,6 +34,7 @@ import {
   refusedQuestion,
   ThreadInteractionConflictError,
   ThreadQuestionNotFound,
+  questionGuidanceEvents,
   questionToolResultEvents,
   questionToolResults,
   toolMessageFromResults,
@@ -193,14 +195,23 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
       ),
     );
   };
-  const written = (threadId: string, runId: string, question: ThreadQuestionEntry | null): Effect.Effect<void, ThreadBorderFailed> =>
+  const written = (
+    threadId: string,
+    runId: string,
+    question: ThreadQuestionEntry | null,
+    untold: AgentRuntimeGuidance | null,
+  ): Effect.Effect<void, ThreadBorderFailed> =>
     Effect.flatMap(
       runTransition<undefined, ThreadWriteTx>(
         kernel,
         sequences,
         { id: runId, threadId },
         {
-          declared: question ? sealThreadEvents([threadQuestionEvent(question)]) : [],
+          declared: question
+            ? sealThreadEvents([threadQuestionEvent(question)])
+            : untold === null
+              ? []
+              : sealThreadEvents([threadGuidanceEvent(untold)]),
           decide: Effect.fnUntraced(function* ({ row }, tx) {
             const pendingInteraction =
               question === null
@@ -256,6 +267,7 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
                   cancelled.results,
                 ),
                 threadQuestionEvent(cancelled.question, [cancelled.message]),
+                ...questionGuidanceEvents(question),
               ],
               patch: { pendingInteraction: yield* slotAfter(store, threadId, question, cancelled.question, 'parked', tx) },
             } as Decision<undefined, ThreadWriteTx>;
@@ -435,6 +447,7 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
                   events: [
                     ...questionToolResultEvents(yield* store.entriesOfRun(threadId, answeredQuestion.runId, tx), answeredQuestion, results),
                     threadQuestionEvent(answeredQuestion, [toolMessage]),
+                    ...questionGuidanceEvents(question),
                     ...(told === null ? [] : [threadGuidanceEvent(told)]),
                   ],
                   patch: { pendingInteraction: yield* slotAfter(store, threadId, row.pendingInteraction, answeredQuestion, 'parked', tx) },
@@ -510,6 +523,7 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
                 events: [
                   ...questionToolResultEvents(yield* store.entriesOfRun(threadId, expired.runId, tx), cleared, results),
                   threadQuestionEvent(cleared, [toolMessage]),
+                  ...questionGuidanceEvents(expired),
                 ],
                 patch: { pendingInteraction: yield* slotAfter(store, threadId, row.pendingInteraction, cleared, 'parked', tx) },
               } as Decision<undefined, ThreadWriteTx>;
@@ -574,6 +588,7 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
             events: [
               ...questionToolResultEvents(yield* store.entriesOfRun(threadId, runId, tx), question, cancelled.results),
               threadQuestionEvent(next, [cancelled.message]),
+              ...(complete ? questionGuidanceEvents(question) : []),
             ],
             patch: { pendingInteraction: yield* slotAfter(store, threadId, question, next, 'parked', tx) },
           } as Decision<undefined, ThreadWriteTx>;
@@ -601,8 +616,10 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
     run: ThreadRunRef,
     asked: ThreadQuestionEntry | null,
     door: AgentToolDoor | null,
+    untold: readonly PendingRuntimeGuide[] = [],
   ): Effect.fn.Return<RunParked | null, ThreadBorderFailed> {
-    const question =
+    const told = new AgentGuidanceJournal(run.id).emit(door?.runState.stepNumber ?? 0, untold);
+    const routed =
       asked === null
         ? null
         : yield* routedTo(approvers, run.threadId, {
@@ -612,8 +629,9 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
                 ? (asked.timeoutMs ?? null)
                 : withinOf(asked, door.resolutionsOf(asked.toolCalls.map((call) => call.toolCallId))),
           });
+    const question = routed === null || told === null ? routed : { ...routed, guidance: told };
     if (question !== null && door !== null) hold(run, question, door);
-    yield* written(run.threadId, run.id, question);
+    yield* written(run.threadId, run.id, question, told);
     if (question !== null) yield* announcedTo(approvers, run.threadId, question);
     if (asked === null) return null;
     const parked = yield* lifecycle.park(run);

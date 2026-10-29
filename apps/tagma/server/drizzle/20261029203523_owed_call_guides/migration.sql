@@ -1,0 +1,1 @@
+ALTER TABLE `owed_call` ADD `guides` text;

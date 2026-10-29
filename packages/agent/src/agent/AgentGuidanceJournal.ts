@@ -1,17 +1,6 @@
 import { uuidv7 } from 'uuidv7';
-import type { AgentHook, AgentRuntimeGuidance } from './contracts';
+import type { AgentHook, AgentRuntimeGuidance, PendingRuntimeGuide } from './contracts';
 import { type AgentDirective, agentGuides } from './policy/AgentRuntimePolicy';
-
-export type PendingRuntimeGuide = {
-  readonly text: string;
-  readonly ruleId?: string;
-  readonly state?: Readonly<Record<string, unknown>>;
-  readonly retell?: false;
-  readonly hook: AgentHook;
-  readonly toolName?: string;
-  readonly toolCallId?: string;
-  readonly taskId?: string;
-};
 
 type AgentRuntimeGuidanceSource = AgentRuntimeGuidance['sources'][number];
 

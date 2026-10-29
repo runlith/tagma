@@ -9,7 +9,7 @@ import {
   isUnreadSteer,
   opensTurn,
   openingWords,
-  queuedTurnText,
+  queuedTurnSaid,
   readableBefore,
   saidAsOperator,
   spokenByAgent,
@@ -98,7 +98,7 @@ export const makeQueues = Effect.fnUntraced(function* ({
     const opened = yield* openings.open(thread, {
       turn:
         said.length > 0
-          ? (runId: string) => threadUserMessageEvent({ id: runId }, { text: queuedTurnText(said), attachments: stored, reader, turnKey })
+          ? (runId: string) => threadUserMessageEvent({ id: runId }, { ...queuedTurnSaid(said), attachments: stored, reader, turnKey })
           : undefined,
       facts: (runId) => [
         ...under(signals, stopped ? runId : source.runId, runId),

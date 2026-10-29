@@ -43,6 +43,36 @@ describe('queuedTurnText', () => {
     );
   });
 
+  test('a call ending tells the guides its call left untold after its words', () => {
+    const ending: ThreadInboxItem = {
+      id: 'tool-result:call-1',
+      threadId: 'thread-1',
+      sender: { kind: 'host' },
+      kind: 'signal',
+      body: {
+        type: 'tool-result',
+        addressee: 'transport',
+        text: 'read finished in the background.',
+        notice: {
+          kind: 'call-ending',
+          runId: 'run-1',
+          toolCallId: 'call-1',
+          tool: 'read',
+          outcome: 'completed',
+          threads: [],
+          guides: [{ hook: 'afterTool', text: 'Read of final.txt noted', state: { cue: true } }],
+        },
+      },
+      state: 'queued',
+      deliveredToRunId: null,
+      occurredAt: '2026-06-26T10:00:02.000Z',
+    };
+    expect(queuedTurnText([ending]).split('\n')).toEqual([
+      '<tool-result>read finished in the background.</tool-result>',
+      '<runtime-guidance>Read of final.txt noted</runtime-guidance>',
+    ]);
+  });
+
   test('a turn carrying both says which words are whose', () => {
     expect(queuedTurnText([words, task]).split('\n')).toEqual([
       'and check the second file too',

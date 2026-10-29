@@ -1,7 +1,8 @@
 import type { Effect, Fiber, Scope } from 'effect';
 import type { JsonSchema } from '@runlith/llm/schema/ids';
 import { ToolResultValue, type Message } from '@runlith/llm/schema/messages';
-import type { AgentGuidanceJournal, PendingRuntimeGuide } from '../../agent/AgentGuidanceJournal';
+import type { AgentGuidanceJournal } from '../../agent/AgentGuidanceJournal';
+import type { PendingRuntimeGuide } from '../../agent/contracts';
 import type { ModeOf } from '../../modes/ApprovalMode';
 import type { RunStop } from '../../agent/RunStop';
 import type { AgentToolOutcome } from '../../agent/door/types';

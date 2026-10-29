@@ -6,6 +6,7 @@ import type { ToolDisplay } from '../../tool/display';
 import type { CallHooks } from '../AgentCalls';
 import type { AgentToolFailure } from '../AgentFailure';
 import type { CallAdmission, CallRecord } from '../callProgress';
+import type { PendingRuntimeGuide } from '../contracts';
 import type { AgentToolOutputProjection } from '../ToolOutput';
 import type {
   Tool,
@@ -28,7 +29,7 @@ export type AgentToolOutcome = AgentToolOutputProjection & {
   readonly durationMs?: number;
   readonly display: ToolDisplay;
   readonly completion?: 'command';
-  readonly guidance?: readonly string[];
+  readonly guides?: readonly PendingRuntimeGuide[];
 };
 
 export function doorToolOutcome(settled: AgentToolOutcome): ToolOutcome {

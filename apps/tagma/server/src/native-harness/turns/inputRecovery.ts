@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { Cause, Effect } from 'effect';
 import { AgentHostFailed } from '@runlith/agent/AgentFailure';
 import type { AgentInterruptedCall, AgentRecovery, AgentRecoveryRequest } from '@runlith/agent/AgentRecovery';
-import type { PendingRuntimeGuide } from '@runlith/agent/AgentGuidanceJournal';
+import type { PendingRuntimeGuide } from '@runlith/agent/contracts';
 import type { ThreadInterruptedInput } from '@runlith/agent/transcript/entries';
 import type { ThreadBorderFailed } from '@runlith/agent/thread/ThreadBorder';
 import { readConfirmedField } from '@runlith/utils/json';

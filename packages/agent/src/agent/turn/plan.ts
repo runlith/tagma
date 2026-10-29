@@ -5,12 +5,13 @@ import { activity } from '@runlith/activity/Activity';
 import { PROJECTION } from '../activities';
 import type { AgentContext, AgentContextProjection } from '../AgentContext';
 import type { AgentHostFailed } from '../AgentFailure';
-import type { AgentGuidanceJournal, PendingRuntimeGuide } from '../AgentGuidanceJournal';
+import type { AgentGuidanceJournal } from '../AgentGuidanceJournal';
 import { pendingRuntimeGuides } from '../AgentGuidanceJournal';
+import type { PendingRuntimeGuide } from '../contracts';
 import type { AgentSink } from '../AgentRunner';
 import { type AgentDirective, type AgentStepToolPolicy, agentStepToolPolicy } from '../policy/AgentRuntimePolicy';
 import type { AgentSignal } from '../contracts';
-import { agentReaderInput, agentRuntimeGuidanceMessage, agentSignalMessage, trailingReaderInputs } from '../AgentSignal';
+import { agentGuideMessage, agentReaderInput, agentSignalMessages, trailingReaderInputs } from '../AgentSignal';
 import type { AgentToolDoor } from '../door/AgentToolDoor';
 import { wireToolDefinitions } from '../ModelRequests';
 import type { ModelCallStep, ModelRequest } from '../modelPort';
@@ -46,8 +47,6 @@ export type AgentStepPlanInput = {
   readonly stop: RunStop;
   readonly injected: { current: AgentStepInjection | null };
 };
-
-const guidanceMessage = (guide: PendingRuntimeGuide) => agentRuntimeGuidanceMessage(guide.text, guide.state, guide.retell);
 
 export const planStep = Effect.fn('planStep')(function* (input: AgentStepPlanInput) {
   const { request } = input;
@@ -87,13 +86,13 @@ export const planStep = Effect.fn('planStep')(function* (input: AgentStepPlanInp
   if (input.injected.current === null) {
     const signals = input.signals ? yield* input.stop.cut(input.signals.drain(input.stepNumber), null) : [];
     if (signals === null) return null;
-    input.injected.current = { signals: signals.map((signal) => agentSignalMessage(signal, signal.attached)), guides: [] };
+    input.injected.current = { signals: signals.flatMap((signal) => agentSignalMessages(signal, signal.attached)), guides: [] };
   }
   const held = input.injected.current;
   const directives = yield* input.stop.cut(
     input.door.evaluate({
       hook: 'beforeStep',
-      modelMessages: [...projected, ...held.signals, ...held.guides.map(guidanceMessage)],
+      modelMessages: [...projected, ...held.signals, ...held.guides.map(agentGuideMessage)],
       readerInputs: [
         ...(input.opening ? trailingReaderInputs(input.messages) : []),
         ...held.signals.flatMap((signal) => agentReaderInput(signal) ?? []),
@@ -107,7 +106,7 @@ export const planStep = Effect.fn('planStep')(function* (input: AgentStepPlanInp
   const injected = yield* injection(input, held, directives);
   input.injected.current = injected;
   return {
-    callMessages: [...projected, ...injected.signals, ...injected.guides.map(guidanceMessage)],
+    callMessages: [...projected, ...injected.signals, ...injected.guides.map(agentGuideMessage)],
     policy: agentStepToolPolicy(directives, input.toolNames, request.toolChoice),
   } satisfies AgentStepPlan;
 });

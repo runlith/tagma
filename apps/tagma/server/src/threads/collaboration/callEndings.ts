@@ -43,6 +43,7 @@ const noticeOf = (row: OwedRow): AgentCallEnding => ({
   tool: row.name,
   outcome: row.outcome ?? 'interrupted',
   threads: row.threads ?? [],
+  ...(row.guides === null ? {} : { guides: row.guides }),
 });
 
 const recordOf = (row: OwedRow, epoch: string): CallRecord => ({
@@ -99,8 +100,14 @@ export const makeCallEndings = Effect.fnUntraced(function* ({
               const at = new Date(yield* Clock.currentTimeMillis);
               const owed: OwedEnding =
                 ending.outcome === 'interrupted'
-                  ? { outcome: ending.outcome, words: CUT_WORDS, endedAt: at, threads: null }
-                  : { outcome: ending.outcome, words: ending.result, endedAt: at, threads: ending.threads ?? null };
+                  ? { outcome: ending.outcome, words: CUT_WORDS, endedAt: at, threads: null, guides: null }
+                  : {
+                      outcome: ending.outcome,
+                      words: ending.result,
+                      endedAt: at,
+                      threads: ending.threads ?? null,
+                      guides: ending.guides ?? null,
+                    };
               if (yield* rows.end(unit, call, owed)) return true;
               return yield* rows.ended(unit, {
                 runId: call.runId,

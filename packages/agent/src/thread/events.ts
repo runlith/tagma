@@ -7,8 +7,14 @@ import { decodeThreadEventPayloadResult, type ThreadCallMeasurement, threadEvent
 import { ThreadEntryUndecodable, coreEntry, entryOf, type ThreadEntryReader } from '../transcript/kinds';
 import type { AgentToolModelOutput } from '../agent/ToolOutput';
 import type { StructuredValue } from '@runlith/utils/object';
-import { agentRuntimeGuidanceMessage, agentSignalMessage, withAgentOrigin, withAgentReaderInput } from '../agent/AgentSignal';
-import type { AgentSignalPart, AgentRuntimeGuidance } from '../agent/contracts';
+import {
+  agentGuideMessage,
+  agentRuntimeGuidanceMessage,
+  agentSignalMessages,
+  withAgentOrigin,
+  withAgentReaderInput,
+} from '../agent/AgentSignal';
+import type { AgentSignalPart, AgentRuntimeGuidance, PendingRuntimeGuide } from '../agent/contracts';
 import type {
   ThreadAttachment,
   ThreadCompactionEntry,
@@ -518,12 +524,10 @@ export function threadSignalEvent(
     kind: 'signal',
     payload: {
       entry: options.title ? { ...entry, title: options.title } : entry,
-      messages: [
-        agentSignalMessage(
-          options.modelText ? { ...signal, text: options.modelText } : signal,
-          options.attachments === undefined ? undefined : attachmentParts(options.attachments),
-        ),
-      ],
+      messages: agentSignalMessages(
+        options.modelText ? { ...signal, text: options.modelText } : signal,
+        options.attachments === undefined ? undefined : attachmentParts(options.attachments),
+      ),
     },
   };
 }
@@ -568,6 +572,7 @@ export type ThreadUserTurnInput = {
   readonly attachments?: readonly StoredThreadAttachment[];
   readonly turnKey?: string;
   readonly reader: boolean;
+  readonly guides?: readonly PendingRuntimeGuide[];
 };
 
 export function threadUserMessageEvent(run: { readonly id: string }, input: ThreadUserTurnInput): ThreadTurnEvent<ThreadMessageEntry> {
@@ -580,7 +585,10 @@ export function threadUserMessageEvent(run: { readonly id: string }, input: Thre
         ...threadMessageEntry(entryId, 'user', run.id, input.text, new Date().toISOString(), attachments),
         turnKey: input.turnKey || undefined,
       },
-      messages: [input.reader ? withAgentReaderInput(userMessage(input), entryId) : userMessage(input)],
+      messages: [
+        input.reader ? withAgentReaderInput(userMessage(input), entryId) : userMessage(input),
+        ...(input.guides ?? []).map(agentGuideMessage),
+      ],
     },
   };
 }

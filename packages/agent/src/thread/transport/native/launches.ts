@@ -58,7 +58,7 @@ export const makeLaunches = Effect.gen(function* () {
       onComplete: Effect.fnUntraced(function* ({ text: replyText, steps, usage }) {
         yield* parts.recorder.stop();
         const question = yield* pendingQuestionFromSteps(run, steps, parts.questionForTools);
-        const parked = yield* intake.park(run, question, handle.door);
+        const parked = yield* intake.park(run, question, handle.door, handle.untoldGuides());
         return {
           parked,
           hasVisibleOutput:

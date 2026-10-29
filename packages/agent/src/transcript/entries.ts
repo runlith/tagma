@@ -544,6 +544,7 @@ export const ThreadQuestionEntry = Schema.Struct({
   answers: Schema.optional(Schema.Array(ThreadInteractionAnswer)),
   deliveryUnknown: Schema.optional(Schema.Boolean),
   deliveryNote: Schema.optional(Schema.String),
+  guidance: Schema.optional(AgentRuntimeGuidance),
   occurredAt: Schema.optional(Schema.String),
   updatedAt: Schema.optional(Schema.String),
   rewound,

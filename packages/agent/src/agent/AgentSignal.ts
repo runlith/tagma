@@ -1,6 +1,6 @@
 import { type MediaPart, Message, type TextPart } from '@runlith/llm/schema/messages';
 import { Schema } from 'effect';
-import { type AgentSignal, type AgentSignalPart, isReaderWords } from './contracts';
+import { type AgentSignal, type AgentSignalPart, isReaderWords, type PendingRuntimeGuide } from './contracts';
 import { skillReferences } from './skillReferences';
 import { clockFigure, tokensFigure } from './figures';
 
@@ -59,6 +59,26 @@ export function agentSignalMessage(signal: AgentSignal, attached?: readonly Agen
   return isReaderWords(signal)
     ? withAgentReaderInput(withAgentInputSkills(message, requestedSkills(signal.text), signal.text), signal.id, signal.readerPosition)
     : message;
+}
+
+export function agentSignalGuides(signal: Pick<AgentSignal, 'notice'>): readonly PendingRuntimeGuide[] {
+  return signal.notice?.kind === 'call-ending' ? (signal.notice.guides ?? []) : [];
+}
+
+export function agentSignalMessages(signal: AgentSignal, attached?: readonly AgentSignalPart[]): readonly Message[] {
+  return [agentSignalMessage(signal, attached), ...agentSignalGuides(signal).map(agentGuideMessage)];
+}
+
+export function agentSignalWords(signal: AgentSignal): string {
+  return [agentSignalMarkup(signal), ...agentSignalGuides(signal).map(agentGuideMarkup)].join('\n');
+}
+
+export function agentGuideMessage(guide: PendingRuntimeGuide): Message {
+  return agentRuntimeGuidanceMessage(guide.text, guide.state, guide.retell);
+}
+
+function agentGuideMarkup(guide: PendingRuntimeGuide): string {
+  return agentSignalMarkup({ type: AGENT_RUNTIME_GUIDANCE_SIGNAL_TYPE, text: guide.text });
 }
 
 function contentPart(part: AgentSignalPart): MediaPart | TextPart {

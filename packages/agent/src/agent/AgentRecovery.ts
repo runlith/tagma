@@ -1,7 +1,7 @@
 import type { Effect } from 'effect';
 import type { WireFailureRecord } from '@runlith/llm/schema/errors';
 import type { AgentHostFailed } from './AgentFailure';
-import type { PendingRuntimeGuide } from './AgentGuidanceJournal';
+import type { PendingRuntimeGuide } from './contracts';
 import type { ToolRecovery } from './tool';
 
 export type AgentInterruptedCall = {

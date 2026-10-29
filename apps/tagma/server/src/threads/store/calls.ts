@@ -1,6 +1,6 @@
 import { check, index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-import type { AgentThreadRef } from '@runlith/agent/contracts';
+import type { AgentThreadRef, PendingRuntimeGuide } from '@runlith/agent/contracts';
 import { threadRecord } from '../../thread-record/store/table.js';
 
 export const threadCall = sqliteTable(
@@ -35,6 +35,7 @@ export const owedCall = sqliteTable(
     outcome: text('outcome', { enum: ['completed', 'failed', 'stopped', 'interrupted'] }),
     words: text('words'),
     threads: text('threads', { mode: 'json' }).$type<readonly AgentThreadRef[]>(),
+    guides: text('guides', { mode: 'json' }).$type<readonly PendingRuntimeGuide[]>(),
     unstarted: integer('unstarted', { mode: 'boolean' }),
   },
   (table) => [

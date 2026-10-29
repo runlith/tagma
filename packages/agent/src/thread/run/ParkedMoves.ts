@@ -16,7 +16,7 @@ import { disposed, type ParkedDoors } from './parkedDoor';
 import { isOpenQuestion, slotAfter } from './pendingSlot';
 import { RunScheduler } from './scheduler/RunScheduler';
 import type { AskQuestion, QuestionIntake } from './scheduler/intake';
-import { questionToolResultEvents, toolInputFromTranscript, toolMessageFromResults } from './ThreadQuestion';
+import { questionGuidanceEvents, questionToolResultEvents, toolInputFromTranscript, toolMessageFromResults } from './ThreadQuestion';
 import type { ToolQuestionResult } from './ToolQuestion';
 import { ThreadRunLedger, type ThreadRunRef } from './ThreadRunLedger';
 import { ThreadSnapshots } from './ThreadSnapshots';
@@ -145,6 +145,7 @@ export const makeParkedMoves = Effect.fnUntraced(function* (input: {
               events: [
                 ...questionToolResultEvents(yield* store.entriesOfRun(threadId, run.id, tx), standing, [result]),
                 threadQuestionEvent(next, [toolMessageFromResults([result])]),
+                ...(complete ? questionGuidanceEvents(standing) : []),
               ],
               patch: { pendingInteraction: yield* slotAfter(store, threadId, standing, next, 'parked', tx) },
               participants: (unit) => owing.owe(adoption.call, unit),
