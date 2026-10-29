@@ -80,6 +80,7 @@ function resolution(toolCallId: string): AgentToolResolution {
     toolCallId,
     name: 'read_selection',
     input: { of: 'root-1' },
+    judged: { of: 'root-1' },
     generation: 0,
     preparation: { subjects: [{ kind: 'read', value: 'thread://owner/thread-a' }], prepared: ['thread-a'] },
   };

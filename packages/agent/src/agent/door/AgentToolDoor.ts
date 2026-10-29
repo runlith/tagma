@@ -120,11 +120,13 @@ export const makeAgentToolDoor = <TCtx>({
       called(call.name, call.options.toolCallId, 'host', call.arguments, Effect.succeed(outcome)),
     );
 
-  const claims = (call: AgentPermissionQuestion): Effect.Effect<readonly Claim[], AgentToolFailed> =>
-    Effect.flatMap(admission.decode(call), (input) =>
-      toolClaims(call.tool, input, { toolCallId: call.toolCallId, caller: run.caller }).pipe(
-        Effect.mapError((cause) => new AgentToolFailed({ toolName: call.name, toolCallId: call.toolCallId, cause })),
-      ),
+  const claims = (call: AgentPermissionQuestion): Effect.Effect<readonly Claim[], AgentToolFailed | AgentRuleFailed> =>
+    Effect.flatMap(admission.judge(call), ({ input, denied }) =>
+      denied !== null
+        ? Effect.succeed([])
+        : toolClaims(call.tool, input, { toolCallId: call.toolCallId, caller: run.caller }).pipe(
+            Effect.mapError((cause) => new AgentToolFailed({ toolName: call.name, toolCallId: call.toolCallId, cause })),
+          ),
     );
 
   const turn = (call: AgentPermissionQuestion, queued: (standing: boolean) => void): Effect.Effect<void, AgentToolFailed> =>
@@ -248,7 +250,7 @@ export const makeAgentToolDoor = <TCtx>({
 
     parked: execution.parked,
 
-    adopt: (call: AgentToolInvocation, prepared: AgentToolPreflight): Effect.Effect<AgentCallAdoption, AgentToolFailed> =>
+    adopt: (call: AgentToolInvocation, prepared: AgentToolPreflight): Effect.Effect<AgentCallAdoption, AgentToolFailed | AgentRuleFailed> =>
       Effect.flatMap(claims(questionOf(call)), (held) => execution.adopt(call, prepared, held)),
 
     keep: (call: AgentToolInvocation): Effect.Effect<AgentToolOutcome | null, AgentToolFailure> =>

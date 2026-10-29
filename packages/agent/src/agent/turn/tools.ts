@@ -5,6 +5,7 @@ import type { ProviderMetadata } from '@runlith/llm/schema/ids';
 import {
   agentToolRefusal,
   type AgentHostFailed,
+  type AgentRuleFailed,
   type AgentRunFailure,
   type AgentToolCallRegenerated,
   type AgentToolCallReused,
@@ -169,7 +170,7 @@ type AgentClaimedCall = {
 
 const scheduleCalls = Effect.fnUntraced(function* (input: AgentStepToolsInput, parts: readonly ClientToolCallPart[]) {
   const claimed = yield* Effect.all(
-    parts.map((part): Effect.Effect<AgentStepCall | AgentClaimedCall | null> => {
+    parts.map((part): Effect.Effect<AgentStepCall | AgentClaimedCall | null, AgentRuleFailed> => {
       if (part.unparsed !== undefined) return Effect.succeed(null);
       const receipt = input.door.receipt(part.id, part.name, part.input);
       if (receipt !== null) return Effect.succeed({ kind: 'replay', part, replay: receipt });

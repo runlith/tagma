@@ -71,6 +71,7 @@ export type AgentToolPreflight = AgentPermissionQuestion &
     readonly confirmation: ToolConfirmation | undefined;
     readonly reader?: ToolReader;
     readonly contributor?: ToolContributor;
+    readonly rewritten?: true;
   };
 
 export type AgentToolStop = {
@@ -113,6 +114,8 @@ export type AgentToolResolution = {
   readonly toolCallId: string;
   readonly name: string;
   readonly input: unknown;
+  readonly judged: unknown;
+  readonly rewritten?: true;
   readonly generation: number;
   readonly preparation: ToolPreparation<unknown>;
   readonly reader?: ToolReader;

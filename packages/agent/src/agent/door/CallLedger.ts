@@ -163,11 +163,17 @@ export const makeCallLedger = ({
       for (const toolCallId of toolCallIds) {
         const ready = prepared.get(toolCallId);
         const contributor = ready?.contributor;
-        if (!ready || (toolPrepare(ready.tool) === null && ready.reader === undefined && contributor === undefined)) continue;
+        if (
+          !ready ||
+          (toolPrepare(ready.tool) === null && ready.reader === undefined && contributor === undefined && ready.rewritten === undefined)
+        )
+          continue;
         resolved.push({
           toolCallId,
           name: ready.name,
           input: ready.rawInput,
+          judged: ready.input,
+          rewritten: ready.rewritten,
           generation: preflights.get(toolCallId)?.generation ?? current,
           preparation: { subjects: ready.subjects, prepared: ready.prepared },
           reader: ready.reader,

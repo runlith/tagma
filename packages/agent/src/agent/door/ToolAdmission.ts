@@ -1,6 +1,6 @@
 import { Clock, Effect } from 'effect';
 import type { PermissionSubject } from '../../permissions/vocabulary';
-import { AgentToolFailed, type AgentToolFailure } from '../AgentFailure';
+import { AgentToolFailed, type AgentRuleFailed, type AgentToolFailure } from '../AgentFailure';
 import {
   contributorAbsent,
   type Tool,
@@ -22,6 +22,8 @@ import type { ToolRun } from './ToolRun';
 import type { AgentPermissionQuestion, AgentToolInvocation, AgentToolPreflight } from './types';
 
 const RULE_DENIED = 'permission-denied';
+
+type Judged = { readonly input: unknown; readonly denied: string | null; readonly rewritten: boolean };
 
 export type ToolAdmission<TCtx> = ReturnType<typeof makeToolAdmission<TCtx>>;
 
@@ -59,8 +61,37 @@ export const makeToolAdmission = <TCtx>({
       ),
     );
 
+  const judged = new Map<string, Judged>();
+
+  const judge = Effect.fnUntraced(function* (call: AgentPermissionQuestion): Effect.fn.Return<Judged, AgentToolFailed | AgentRuleFailed> {
+    const held = judged.get(call.toolCallId);
+    if (held !== undefined) return held;
+    const handed = ledger.resolutionFor(call.toolCallId, call.name, call.input);
+    if (handed !== undefined) return { input: handed.judged, denied: null, rewritten: handed.rewritten === true };
+    const runState = run.runState;
+    runState.noteToolInput(call.name, call.input, call.toolCallId, runState.stepNumber);
+    const decoded = yield* decode(call);
+    const before = yield* rules.evaluate({
+      hook: 'beforeTool',
+      tool: { name: call.name, input: decoded, toolCallId: call.toolCallId },
+      invocationKey: call.toolCallId,
+      ordinal: runState.count(call.name),
+    });
+    rules.guide(before, { hook: 'beforeTool', toolName: call.name, toolCallId: call.toolCallId });
+    const directed = agentCallDirective(before);
+    const verdict: Judged = {
+      input: directed?.type === 'rewrite' ? yield* rewritten(call, directed.input, directed.ruleId) : decoded,
+      denied: directed?.type === 'deny' ? directed.reason : null,
+      rewritten: directed?.type === 'rewrite',
+    };
+    judged.set(call.toolCallId, verdict);
+    return verdict;
+  });
+
   return {
     decode,
+
+    judge,
 
     lostResolution: (name: string, toolCallId: string): AgentToolFailed =>
       new AgentToolFailed({
@@ -82,20 +113,10 @@ export const makeToolAdmission = <TCtx>({
 
     inspect: Effect.fnUntraced(function* (call: AgentPermissionQuestion): Effect.fn.Return<AgentToolPreflight, AgentToolFailure> {
       const openedAt = yield* Clock.currentTimeMillis;
-      const runState = run.runState;
-      runState.noteToolInput(call.name, call.input, call.toolCallId, runState.stepNumber);
-      const decoded = yield* decode(call);
-      const before = yield* rules.evaluate({
-        hook: 'beforeTool',
-        tool: { name: call.name, input: decoded, toolCallId: call.toolCallId },
-        invocationKey: call.toolCallId,
-        ordinal: runState.count(call.name),
-      });
-      rules.guide(before, { hook: 'beforeTool', toolName: call.name, toolCallId: call.toolCallId });
-      const directed = agentCallDirective(before);
-      const input = directed?.type === 'rewrite' ? yield* rewritten(call, directed.input, directed.ruleId) : decoded;
+      const { input, denied, rewritten: changed } = yield* judge(call);
+      judged.delete(call.toolCallId);
       const display = yield* previewed(() => toolDisplay(call.tool, input));
-      if (directed?.type === 'deny') {
+      if (denied !== null) {
         return {
           name: call.name,
           tool: call.tool,
@@ -105,7 +126,7 @@ export const makeToolAdmission = <TCtx>({
           display,
           subjects: [],
           prepared: undefined,
-          permission: { verdict: 'deny', code: RULE_DENIED, reason: directed.reason },
+          permission: { verdict: 'deny', code: RULE_DENIED, reason: denied },
           confirmation: undefined,
           reader: undefined,
           openedAt,
@@ -149,6 +170,7 @@ export const makeToolAdmission = <TCtx>({
         openedAt,
         resultRetention: call.resultRetention,
         contributor: contributor,
+        rewritten: changed ? true : undefined,
       };
     }),
   };

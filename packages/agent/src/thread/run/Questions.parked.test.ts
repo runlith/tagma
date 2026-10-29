@@ -258,6 +258,7 @@ describe('the deadline a parked question declares', () => {
     toolCallId,
     name: toolCallId,
     input: {},
+    judged: {},
     generation: 0,
     preparation: { subjects: [], prepared: [] },
     reader: withinMs === undefined ? undefined : { withinMs },

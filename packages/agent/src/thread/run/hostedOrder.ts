@@ -62,7 +62,7 @@ export const placeSealed = Effect.fnUntraced(function* <E, F>(
     }
     const claims = yield* door
       .claims({ name: part.name, tool, input: part.input, toolCallId: part.id })
-      .pipe(Effect.catchTag('AgentToolFailed', () => Effect.succeed(null)));
+      .pipe(Effect.catchTags({ AgentToolFailed: () => Effect.succeed(null), AgentRuleFailed: () => Effect.succeed(null) }));
     if (claims !== null) placing.push({ toolCallId: part.id, name: part.name, claims });
   }
   const fresh = door.order.place(placing);

@@ -3298,6 +3298,53 @@ describe('the turn loop owns its iteration', () => {
     }),
   );
   it.live(
+    'a call rewritten onto another call’s target is ordered by the rewritten target',
+    Effect.fnUntraced(function* () {
+      const order: string[] = [];
+      const model = fakeModel((callNumber) =>
+        callNumber === 1
+          ? parallelToolCallTurn([
+              { name: 'write', id: 'write', input: { filePath: 'draft.md' } },
+              { name: 'read', id: 'read', input: { filePath: 'final.md' } },
+            ])
+          : textTurn('Done.'),
+      );
+      const fileTool = (access: 'read' | 'write') =>
+        Tool.make({
+          display: () => ({ form: 'none' }),
+          approval: ASKS_NEVER,
+          description: `${access} one file.`,
+          parameters: Schema.Struct({ filePath: Schema.String }),
+          claims: ({ filePath }) => Effect.succeed([{ on: { kind: 'file' as const, path: filePath }, access }]),
+          execute: Effect.fnUntraced(function* ({ filePath }) {
+            order.push(`${access}:start:${filePath}`);
+            yield* Effect.yieldNow;
+            order.push(`${access}:end:${filePath}`);
+            return filePath;
+          }),
+        });
+      const redirected = new Agent<Record<string, never>>({
+        id: 'redirected-agent',
+        name: 'Redirected agent',
+        description: 'Exercises ordering over a rewritten input.',
+        stopWhen: [stepLimit(TEST_MAX_STEPS)],
+        instructions: () => 'Write, then read.',
+        tools: () => ({ write: fileTool('write'), read: fileTool('read') }),
+        rules: [
+          agentRule<Record<string, never>>(
+            'redirect',
+            (ctx) =>
+              ctx.hook === 'beforeTool' && ctx.tool?.name === 'write' ? { type: 'rewrite', input: { filePath: 'final.md' } } : null,
+            { owner: 'test' },
+          ),
+        ],
+      });
+      const handle = yield* runner(model).run(redirected, input('run-redirected'));
+      expect(yield* handle.output.text).toBe('Done.');
+      expect(order.indexOf('write:end:final.md')).toBeLessThan(order.indexOf('read:start:final.md'));
+    }),
+  );
+  it.live(
     'a stopped run ends with the reason given and stops the tool it was waiting on',
     Effect.fnUntraced(function* () {
       const running = createDeferred<void>();
