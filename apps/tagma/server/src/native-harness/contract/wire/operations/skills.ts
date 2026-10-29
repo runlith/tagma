@@ -15,7 +15,7 @@ export const SKILL_OPERATIONS = {
       'Read the skills a thread, or a draft of the named type, would be offered: each with its description, on the basis the catalog was read from.',
     input: agentSkillAimSchema,
     answer: arms({ read: agentSkillCatalogSchema.fields }),
-    refusals: ['unknown-project', 'not-found', 'unknown-type', 'agent-not-found', 'source-unreadable'],
+    refusals: ['unknown-project', 'not-found', 'foreign-project', 'unknown-type', 'agent-not-found', 'source-unreadable'],
     effect: 'read',
     identity: 'none',
     subjects: () => [],
