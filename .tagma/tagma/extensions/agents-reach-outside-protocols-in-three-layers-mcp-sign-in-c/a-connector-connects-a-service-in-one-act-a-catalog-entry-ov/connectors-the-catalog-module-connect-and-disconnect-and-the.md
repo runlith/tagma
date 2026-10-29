@@ -5,7 +5,8 @@ ord: 1
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "holder": "tagma:01a18881-b4e6-7d5c-8ed1-51293e11cd9b",
+    "status": "in_work"
   }
 edges:
   - kind: implements
