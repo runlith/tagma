@@ -265,32 +265,39 @@ layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer
     }),
   );
 
-  it.effect('the MCP rows feed answers a project’s servers, then the row a finished sign-in connects', () =>
+  it.effect('the MCP rows feed follows a declaration no pool runs, a server asking for a sign-in, and the sign-in that connects it', () =>
     Effect.gen(function* () {
       const { client, runtime } = yield* World;
       const servers = Context.get(runtime.owners, McpServers);
-      const oauth = yield* oauthServer;
+      const oauth = yield* oauthServer();
       const { id: projectId } = yield* addProject('mcp-rows');
-      const declaration = {
-        name: 'guarded',
-        transport: 'http' as const,
-        url: oauth.url,
-        capabilities: { kinds: [], mutates: false },
-        enabled: true,
-      };
-      yield* servers.add({ projectId, scope: 'project', declaration });
-      yield* Effect.addFinalizer(() => Effect.orDie(servers.remove({ projectId, scope: 'project', name: 'guarded' })));
-      const frames = yield* Queue.make<readonly { readonly name: string; readonly status: string }[]>();
+      type Row = { readonly name: string; readonly status: string };
+      const frames = yield* Queue.make<readonly Row[]>();
+      const until = Effect.fnUntraced(function* (name: string, status: string) {
+        let rows = yield* Queue.take(frames);
+        while (!rows.some((row) => row.name === name && row.status === status)) rows = yield* Queue.take(frames);
+        return rows;
+      });
       yield* Effect.forkScoped(Stream.runForEach(client['mcp.servers']({ projectId }), (rows) => Queue.offer(frames, rows)));
-      expect(yield* Queue.take(frames)).toMatchObject([{ name: 'guarded', status: 'needs-sign-in' }]);
+      expect(yield* Queue.take(frames)).toEqual([]);
 
+      const capabilities = { kinds: [], mutates: false };
+      const keyed = { name: 'keyed', transport: 'http' as const, url: '${KEYED_URL}', capabilities, enabled: true };
+      yield* servers.add({ projectId, scope: 'project', declaration: keyed });
+      expect(yield* until('keyed', 'needs-value')).toMatchObject([{ name: 'keyed', status: 'needs-value' }]);
+      yield* servers.remove({ projectId, scope: 'project', name: 'keyed' });
+      let rows = yield* Queue.take(frames);
+      while (rows.length > 0) rows = yield* Queue.take(frames);
+
+      const guarded = { name: 'guarded', transport: 'http' as const, url: oauth.url, capabilities, enabled: true };
+      yield* servers.add({ projectId, scope: 'project', declaration: guarded });
+      yield* Effect.addFinalizer(() => Effect.orDie(servers.remove({ projectId, scope: 'project', name: 'guarded' })));
+      yield* until('guarded', 'needs-sign-in');
       const { url } = yield* servers.signIn({ projectId, scope: 'project', name: 'guarded', redirect: 'http://tagma/mcp/oauth/callback' });
       const returned = yield* oauth.follow(url);
       const answer = (name: string) => returned.searchParams.get(name);
       yield* servers.finishSignIn({ state: answer('state'), code: answer('code'), iss: answer('iss'), error: null, description: null });
-      let rows = yield* Queue.take(frames);
-      while (rows[0]?.status !== 'connected') rows = yield* Queue.take(frames);
-      expect(rows).toMatchObject([{ name: 'guarded', status: 'connected' }]);
+      expect(yield* until('guarded', 'connected')).toMatchObject([{ name: 'guarded', status: 'connected' }]);
     }),
   );
 });

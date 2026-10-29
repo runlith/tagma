@@ -19,7 +19,6 @@
     project,
     busy = false,
     secrets,
-    callback,
     onenabled,
     onremove,
     onsecret,
@@ -31,7 +30,6 @@
     project: Project | null;
     busy?: boolean;
     secrets?: SecretSet;
-    callback: string;
     onenabled: (enabled: boolean) => void;
     onremove: () => void;
     onsecret: () => Promise<unknown>;
@@ -72,7 +70,7 @@
   let own = $state(false);
 
   const signIn = $derived(row.signIn);
-  const asks = $derived(signIn !== undefined && !signIn.signedIn && (row.status === 'needs-sign-in' || signIn.pending));
+  const asks = $derived(signIn !== undefined && (row.status === 'needs-sign-in' || signIn.pending));
 
   const reach = $derived(
     row.reach.transport === 'stdio'
@@ -130,23 +128,26 @@
   {#if signIn !== undefined && (asks || signIn.signedIn)}
     <div class="grid gap-2 border-t border-border bg-sunken px-3 py-3">
       <div class="flex flex-wrap items-center gap-2">
-        {#if signIn.signedIn}
+        {#if signIn.pending}
+          <Waiting class="size-3" />
+          <span class="text-ui text-muted-foreground">Waiting for the sign-in in your browser</span>
+        {:else if asks && signIn.signedIn}
+          <span class="text-ui text-muted-foreground">The service asks for a new sign-in before it serves these tools</span>
+        {:else if asks}
+          <span class="text-ui text-muted-foreground">The service asks Tagma to sign in before it serves its tools</span>
+        {:else}
           <span class="text-ui">Signed in</span>
           {#if signIn.client !== null}<span class="text-ui text-muted-foreground">{CLIENT[signIn.client]}</span>{/if}
-          <span class="flex-1"></span>
+        {/if}
+        <span class="flex-1"></span>
+        {#if signIn.signedIn}
           <Button variant="outline" size="sm" disabled={busy} onclick={onsignout}>Sign out</Button>
-        {:else}
-          {#if signIn.pending}
-            <Waiting class="size-3" />
-            <span class="text-ui text-muted-foreground">Waiting for the sign-in in your browser</span>
-          {:else}
-            <span class="text-ui text-muted-foreground">The service asks Tagma to sign in before it serves its tools</span>
-          {/if}
-          <span class="flex-1"></span>
+        {/if}
+        {#if asks}
           <Button size="sm" disabled={busy} onclick={() => onsignin(undefined)}>{signIn.pending ? 'Sign in again' : 'Sign in'}</Button>
         {/if}
       </div>
-      {#if !signIn.signedIn}
+      {#if asks && signIn.redirect !== null}
         <Disclosure bind:open={own} summaryClass="text-small">
           {#snippet summary()}Sign in with a client you registered{/snippet}
           <form
@@ -158,7 +159,7 @@
             }}
           >
             <p class="text-small text-muted-foreground">
-              Register <code class="stamp break-all text-foreground">{callback}</code> as its redirect address with the service.
+              Register <code class="stamp break-all text-foreground">{signIn.redirect}</code> as its redirect address with the service.
             </p>
             <div class="grid gap-2 sm:grid-cols-2">
               <label class="grid gap-1 text-small text-muted-foreground">

@@ -604,6 +604,7 @@ const resourceFailure = (
     uri: uri === undefined ? undefined : said(options, uri),
     method,
     reason: said(options, reasonOf(error)),
+    signIn: error instanceof SignInRequired ? signInOf(connection, error) : undefined,
   });
 
 export const mcpListResources = Effect.fn('mcp.listResources')(

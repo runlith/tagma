@@ -6,8 +6,6 @@
   import { McpRepo, type McpDeclarationInput, type McpSignIn } from '$lib/features/mcp/Repo.js';
   import { McpFeed } from '$lib/features/mcp/Feed.js';
   import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
-  import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
-  import { MCP_CALLBACK_PATH } from '@tagma/server/mcp/contract/wire/callback';
   import { scopeName } from '$lib/features/settings/scope.js';
   import Group from '$lib/features/settings/Group.svelte';
   import KeyCard from '$lib/features/settings/KeyCard.svelte';
@@ -22,7 +20,6 @@
   const mcp = McpRepo.use();
   const feed = McpFeed.use();
   const links = ExternalLinks.use();
-  const callback = new URL(MCP_CALLBACK_PATH, ServerOrigin.use().http).href;
   const secrets = SecretsRepo.use();
   const rows = $derived(mcp.servers.key(project?.id).data ?? []);
   const projectId = $derived(project?.id);
@@ -168,7 +165,6 @@
           {project}
           busy={busy === row.name}
           secrets={setOf(row)}
-          {callback}
           onenabled={(enabled) => void setEnabled(row, enabled)}
           onremove={() => void remove(row)}
           onsecret={() => mcp.servers.key(project?.id).refresh()}

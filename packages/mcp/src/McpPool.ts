@@ -1,14 +1,15 @@
 import { Cause, Clock, Deferred, Duration, Effect, Exit, Fiber, FiberMap, PubSub, Scope, Stream } from 'effect';
 import { declare, type Held } from '@runlith/held/Held';
 import { flight } from '@runlith/held/Flight';
-import type { HoldStalled, ReentrantCall } from '@runlith/held/failures';
+import type { HoldCut, HoldStalled, ReentrantCall } from '@runlith/held/failures';
 import { type McpAppFailure, type McpAppTarget, mcpVisibleTo } from './mcpApps';
 import {
   McpCallFailed,
   McpConnectFailed,
   type McpFailure,
+  McpNeedsSignIn,
   McpNotConnected,
-  type McpResourceFailed,
+  McpResourceFailed,
   McpServerReplaced,
   McpToolUnoffered,
 } from './McpFailure';
@@ -335,17 +336,18 @@ const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) 
     options: McpCallOptions,
   ): Effect.Effect<A, E> =>
     request.pipe(
-      Effect.tapError(() =>
-        Effect.matchEffect(session.ping(), {
-          onSuccess: () => Effect.void,
-          onFailure: Effect.fnUntraced(function* (failure) {
-            const entry = entries.get(server);
-            if (entry === undefined || entry.session !== session) return;
-            yield* failed(entry, failure);
-            yield* teardown(server);
-          }),
-        }),
-      ),
+      Effect.tapError((refused) => {
+        const dropped = Effect.fnUntraced(function* (failure: McpFailure) {
+          const entry = entries.get(server);
+          if (entry === undefined || entry.session !== session) return;
+          yield* failed(entry, failure);
+          yield* teardown(server);
+        });
+        const asked = refused instanceof McpNeedsSignIn ? refused : refused instanceof McpResourceFailed ? refused.signIn : undefined;
+        return asked !== undefined
+          ? dropped(asked)
+          : Effect.matchEffect(session.ping(), { onSuccess: () => Effect.void, onFailure: dropped });
+      }),
     );
 
   const stillAnswers = (session: McpSession, options: McpCallOptions) =>
@@ -491,7 +493,9 @@ const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) 
     return yield* FiberMap.run(connects, entry.declaration.name)(connect(entry.declaration, entry.generation));
   });
 
-  const reconnect = Effect.fn('McpPool.reconnect')(function* (name: string) {
+  const reconnect = Effect.fn('McpPool.reconnect')(function* (
+    name: string,
+  ): Effect.fn.Return<McpServerStatus | undefined, HoldStalled | HoldCut> {
     const attempt = yield* passes.hold(
       'pass',
       Effect.suspend(() => {
@@ -504,6 +508,7 @@ const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) 
       }),
     );
     if (attempt !== undefined) yield* Fiber.await(attempt);
+    return entries.get(name)?.status;
   });
 
   const entryOf = (declaration: McpServerDeclaration): Entry => {

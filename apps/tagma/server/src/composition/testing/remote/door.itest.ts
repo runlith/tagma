@@ -596,7 +596,7 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
   it.effect('an MCP sign-in begun on a paired device returns to this door, admitted by its state alone with no device cookie', () =>
     Effect.gen(function* () {
       const { world, project } = yield* Remote;
-      const oauth = yield* oauthServer;
+      const oauth = yield* oauthServer();
       const { credential } = yield* paired();
       const declaration = { name: 'guarded', transport: 'http', url: oauth.url, capabilities: { kinds: ['network'], mutates: false } };
       expect(yield* world.op('add_mcp_server', declaration, `project=${project}`)).toMatchObject({ status: 200 });

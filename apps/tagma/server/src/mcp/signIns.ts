@@ -10,12 +10,19 @@ import {
   mcpOAuthRegister,
 } from '@runlith/mcp/auth';
 import type { HoldCut, HoldStalled } from '@runlith/held/failures';
-import { Clock, Data, Effect } from 'effect';
+import type { McpServerStatus } from '@runlith/mcp/McpPool';
+import { Clock, Data, Duration, Effect, FiberMap } from 'effect';
 import * as Base64Url from 'effect/encoding/Base64Url';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { SecretOwners } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
-import { type McpOwnClient, type McpSignInAnswer, McpSignInRejected, type McpSignInRejection } from './contract/service/servers.js';
+import {
+  type McpOwnClient,
+  type McpSignedIn,
+  type McpSignInAnswer,
+  McpSignInRejected,
+  type McpSignInRejection,
+} from './contract/service/servers.js';
 import { mcpClientDocument } from './contract/wire/settings.js';
 import { kept, recordOf, type SignInRecord, type SignInUnreadable } from './record.js';
 
@@ -33,6 +40,7 @@ type Pending = {
   readonly server: McpOAuthServer;
   readonly client: McpOAuthClient;
   readonly expiresAt: number;
+  readonly lifetime: number;
 };
 
 type Grant = {
@@ -52,6 +60,8 @@ export type SignInStart = {
 };
 
 class SignedOut extends Data.TaggedError('SignedOut') {}
+
+class SignInEnded extends Data.TaggedError('SignInEnded') {}
 
 class RefreshRefused extends Data.TaggedError('RefreshRefused')<{ readonly identity: string; readonly client: boolean }> {}
 
@@ -81,12 +91,34 @@ const rejected = (rejection: McpSignInRejection, reason: string, server?: string
 const unavailable = (failure: { readonly message: string }) => new McpAuthUnavailable({ reason: failure.message });
 
 export const makeSignIns = Effect.fnUntraced(function* (input: {
-  readonly reconnect: (key: string) => Effect.Effect<void, HoldStalled | HoldCut>;
-  readonly moved: Effect.Effect<void>;
+  readonly reconnect: (key: string) => Effect.Effect<readonly McpServerStatus[], HoldStalled | HoldCut>;
+  readonly moved: (key: string) => Effect.Effect<void>;
 }) {
   const owners = yield* SecretOwners;
   const settings = yield* Settings;
   const pendings = new Map<string, Pending>();
+  const lifetimes = new Map<string, number>();
+  const expiries = yield* FiberMap.make<string>();
+
+  const lifetimeOf = (key: string): number => lifetimes.get(key) ?? 0;
+
+  const withdrawn = (key: string): boolean => {
+    let left = false;
+    for (const [state, held] of pendings) {
+      if (held.key !== key) continue;
+      pendings.delete(state);
+      left = true;
+    }
+    return left;
+  };
+
+  const ended = Effect.fnUntraced(function* (key: string) {
+    lifetimes.set(key, lifetimeOf(key) + 1);
+    yield* FiberMap.remove(expiries, key);
+    if (withdrawn(key)) yield* input.moved(key);
+  });
+
+  const expired = (state: string, key: string) => Effect.suspend(() => (pendings.delete(state) ? input.moved(key) : Effect.void));
 
   const stored = (key: string) => Effect.flatMap(owners.handout(KIND), (given) => recordOf(key, given(key).signIn));
 
@@ -125,7 +157,7 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
     const state = Base64Url.encode(crypto.getRandomValues(new Uint8Array(32)));
     const opened = yield* mcpOAuthAuthorization(server, client, { redirect: start.redirect, state }).pipe(Effect.mapError(failedRefusal));
     const now = yield* Clock.currentTimeMillis;
-    for (const [held, pending] of pendings) if (pending.key === start.key || pending.expiresAt <= now) pendings.delete(held);
+    withdrawn(start.key);
     pendings.set(state, {
       key: start.key,
       name: start.name,
@@ -134,17 +166,20 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
       server,
       client,
       expiresAt: now + PENDING_MS,
+      lifetime: lifetimeOf(start.key),
     });
-    yield* input.moved;
+    yield* FiberMap.run(expiries, start.key, Effect.andThen(Effect.sleep(Duration.millis(PENDING_MS)), expired(state, start.key)));
+    yield* input.moved(start.key);
     return { url: opened.url };
   });
 
-  const finish = Effect.fn('McpSignIns.finish')(function* (answer: McpSignInAnswer) {
+  const finish = Effect.fn('McpSignIns.finish')(function* (answer: McpSignInAnswer): Effect.fn.Return<McpSignedIn, McpSignInRejected> {
     const now = yield* Clock.currentTimeMillis;
     const pending = answer.state === null ? undefined : pendings.get(answer.state);
     if (pending !== undefined && answer.state !== null) {
       pendings.delete(answer.state);
-      yield* input.moved;
+      yield* FiberMap.remove(expiries, pending.key);
+      yield* input.moved(pending.key);
     }
     if (pending === undefined || pending.expiresAt <= now) {
       return yield* rejected('unknown', 'This sign-in is not one Tagma started, or it was already used or has expired.');
@@ -171,19 +206,27 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
       redirect: pending.redirect,
     }).pipe(Effect.mapError((failure) => rejected('failed', failure.message, pending.name)));
     yield* owners
-      .keepSignIn(KIND, pending.key, (signIn) =>
-        Effect.map(recordOf(pending.key, signIn), (record) => ({ ...record, client: pending.client, server: pending.server, tokens })),
+      .keepSignIn<SignInEnded | SignInUnreadable>(KIND, pending.key, (signIn) =>
+        lifetimeOf(pending.key) === pending.lifetime
+          ? Effect.map(recordOf(pending.key, signIn), (record) => ({ ...record, client: pending.client, server: pending.server, tokens }))
+          : Effect.fail(new SignInEnded()),
       )
       .pipe(
-        Effect.mapError(() => rejected('failed', 'The tokens could not be kept: the secret store could not be written.', pending.name)),
+        Effect.mapError((failure) =>
+          failure._tag === 'SignInEnded'
+            ? rejected('unknown', 'The server was removed or signed out while this sign-in finished, so nothing is kept.', pending.name)
+            : rejected('failed', 'The tokens could not be kept: the secret store could not be written.', pending.name),
+        ),
       );
-    yield* input
+    yield* input.moved(pending.key);
+    const statuses = yield* input
       .reconnect(pending.key)
       .pipe(Effect.mapError((held) => rejected('failed', `Signed in, but the server did not reconnect: ${held.message}`, pending.name)));
-    return { server: pending.name };
+    return { server: pending.name, connected: statuses.length === 0 ? null : statuses.includes('connected') };
   });
 
   const signOut = Effect.fn('McpSignIns.signOut')(function* (key: string) {
+    yield* ended(key);
     yield* owners
       .keepSignIn(KIND, key, (signIn) => Effect.map(recordOf(key, signIn), (record) => kept({ ...record, tokens: undefined })))
       .pipe(Effect.mapError(storeRefusal));
@@ -199,18 +242,7 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
       );
   });
 
-  const forget = (key: string): Effect.Effect<void> =>
-    Effect.suspend(() => {
-      let left = false;
-      for (const [state, pending] of pendings) {
-        if (pending.key !== key) continue;
-        pendings.delete(state);
-        left = true;
-      }
-      return left ? input.moved : Effect.void;
-    });
-
-  const pending = (key: string): boolean => [...pendings.values()].some((held) => held.key === key);
+  const pending = (key: string, now: number): boolean => [...pendings.values()].some((held) => held.key === key && held.expiresAt > now);
 
   const grantOf = (record: SignInRecord): Effect.Effect<Grant, SignedOut> =>
     record.client === undefined || record.server === undefined || record.tokens === undefined
@@ -280,7 +312,7 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
     };
   };
 
-  return { begin, finish, signOut, forget, pending, auth, stored };
+  return { begin, finish, signOut, forget: ended, pending, auth, stored };
 });
 
 export type SignIns = Effect.Success<ReturnType<typeof makeSignIns>>;

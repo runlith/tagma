@@ -28,8 +28,16 @@ const answered = (servers: McpServers['Service']) => (request: HttpServerRequest
     })
     .pipe(
       Effect.match({
-        onSuccess: ({ server }) =>
-          page(`Signed in to ${server}`, 'Tagma keeps the sign-in and has connected the server. You can close this tab.', 200),
+        onSuccess: ({ server, connected }) =>
+          page(
+            `Signed in to ${server}`,
+            connected === null
+              ? 'Tagma keeps the sign-in; the server connects when a project uses it. You can close this tab.'
+              : connected
+                ? 'Tagma keeps the sign-in and has connected the server. You can close this tab.'
+                : 'Tagma keeps the sign-in, but the server did not connect; its card in Tagma says why.',
+            200,
+          ),
         onFailure: (refused) =>
           page(refused.server === undefined ? 'Sign-in refused' : `Sign-in to ${refused.server} refused`, refused.reason, 400),
       }),

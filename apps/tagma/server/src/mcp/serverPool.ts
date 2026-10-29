@@ -69,14 +69,11 @@ type Pooled = {
   readonly pool: McpPool;
   readonly scope: Scope.Closeable;
   readonly secrets: Set<string>;
-  readonly tokens: Map<string, string>;
   readonly keys: Map<string, string>;
   readonly redaction: { of: (text: string) => string };
   narrowed: Set<string> | null;
   reached: Set<string> | null;
 };
-
-const redactorOf = (pooled: Pooled): ((text: string) => string) => mcpRedactor([...pooled.secrets, ...pooled.tokens.values()]);
 
 const whole = (pooled: Pooled): void => {
   pooled.narrowed = null;
@@ -146,8 +143,9 @@ const makeMcpServers = Effect.fnUntraced(function* ({
 
   const handouts = owners.handout(KIND).pipe(Effect.mapError(storeRefusal));
 
-  const pulses = yield* Effect.acquireRelease(PubSub.sliding<void>(1), PubSub.shutdown);
-  const moved = PubSub.publish(pulses, undefined).pipe(Effect.asVoid);
+  const pulses = yield* Effect.acquireRelease(PubSub.unbounded<number | null>(), PubSub.shutdown);
+  const moved = (projectId: number | null) => PubSub.publish(pulses, projectId).pipe(Effect.asVoid);
+  const movedFor = (scope: SettableScope, projectId: number) => moved(scope === 'user' ? null : projectId);
 
   const readers = (key: string): ReadonlyArray<readonly [McpPool, string]> =>
     [...pools.values()].flatMap((pooled) =>
@@ -155,14 +153,16 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     );
 
   const reconnected = (key: string) =>
-    Effect.forEach(readers(key), ([pool, name]) => pool.reconnect(name), { concurrency: 'unbounded', discard: true });
+    Effect.forEach(readers(key), ([pool, name]) => pool.reconnect(name), { concurrency: 'unbounded' }).pipe(
+      Effect.map((statuses) => statuses.flatMap((status) => (status === undefined ? [] : [status]))),
+    );
 
-  const signIns = yield* makeSignIns({ reconnect: reconnected, moved });
+  const signIns = yield* makeSignIns({ reconnect: reconnected, moved: (key) => moved(projectOfKey(key)) });
 
-  const masked = (pooled: Pooled, name: string, token: string): void => {
-    if (pooled.tokens.get(name) === token) return;
-    pooled.tokens.set(name, token);
-    pooled.redaction.of = redactorOf(pooled);
+  const masked = (pooled: Pooled, token: string): void => {
+    if (pooled.secrets.has(token)) return;
+    pooled.secrets.add(token);
+    pooled.redaction.of = mcpRedactor([...pooled.secrets]);
   };
 
   const settling = new Map<number, Semaphore.Semaphore>();
@@ -179,9 +179,14 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     return (name) => values[name] ?? environment[name];
   };
 
-  const signInRow = Effect.fnUntraced(function* (given: Handouts, key: string) {
+  const signInRow = Effect.fnUntraced(function* (given: Handouts, key: string, now: number) {
     const record = yield* recordOf(key, given(key).signIn).pipe(Effect.mapError(storeRefusal));
-    const row: McpSignInRow = { signedIn: record.tokens !== undefined, pending: signIns.pending(key), client: record.client?.kind ?? null };
+    const row: McpSignInRow = {
+      signedIn: record.tokens !== undefined,
+      pending: signIns.pending(key, now),
+      client: record.client?.kind ?? null,
+      redirect: null,
+    };
     return row;
   });
 
@@ -193,7 +198,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     return yield* Effect.forEach(resolved, (entry) =>
       Effect.map(
         entry.declaration.transport === 'http'
-          ? signInRow(given, keyOf(entry.scope, projectId, entry.declaration.name))
+          ? signInRow(given, keyOf(entry.scope, projectId, entry.declaration.name), now)
           : Effect.succeed(undefined),
         (signIn) => rowOf(entry, measured.get(entry.declaration.name), now, resolver(given, projectId, entry), signIn),
       ),
@@ -203,7 +208,13 @@ const makeMcpServers = Effect.fnUntraced(function* ({
   const rows: McpServers['Service']['rows'] = (projectId) =>
     Stream.unwrap(
       Effect.map(PubSub.subscribe(pulses), (moves) =>
-        Stream.concat(Stream.succeed(undefined), Stream.fromSubscription(moves)).pipe(Stream.mapEffect(() => list(projectId))),
+        Stream.concat(
+          Stream.succeed(projectId),
+          Stream.fromSubscription(moves).pipe(
+            Stream.filter((moved) => moved === null || moved === projectId),
+            Stream.buffer({ capacity: 1, strategy: 'sliding' }),
+          ),
+        ).pipe(Stream.mapEffect(() => list(projectId))),
       ),
     );
 
@@ -257,6 +268,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
   const signOut: McpServers['Service']['signOut'] = Effect.fn('McpServers.signOut')(function* (input) {
     yield* declaredIn(input);
     yield* signIns.signOut(keyOf(input.scope, input.projectId, input.name));
+    yield* movedFor(input.scope, input.projectId);
     return yield* list(input.projectId);
   });
 
@@ -280,6 +292,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       concurrency: 'unbounded',
       discard: true,
     });
+    yield* movedFor(input.scope, input.projectId);
     return yield* listing;
   });
 
@@ -291,8 +304,8 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     const elsewhere = mcpDeclared(resolved).some((entry) => entry.declaration.name === input.name);
     if ((resolved.layers[input.scope]?.value ?? []).some((entry) => entry.name === input.name)) {
       const key = keyOf(input.scope, input.projectId, input.name);
-      yield* owners.drop(KIND, key).pipe(Effect.mapError(storeRefusal));
       yield* signIns.forget(key);
+      yield* owners.drop(KIND, key).pipe(Effect.mapError(storeRefusal));
     }
     yield* settings.amend(mcpServers, input.scope, input.projectId, (current) => {
       if (current.some((entry) => entry.name === input.name)) {
@@ -309,6 +322,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       );
     });
     yield* reconciling;
+    yield* movedFor(input.scope, input.projectId);
     return yield* listing;
   });
 
@@ -332,6 +346,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       return Effect.succeed(current.map((entry) => (entry.name === input.name ? { ...entry, enabled: input.enabled } : entry)));
     });
     yield* reconciling;
+    yield* movedFor(input.scope, input.projectId);
     return yield* listing;
   });
 
@@ -407,7 +422,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     if (entry === undefined) return;
     const before = entry.secrets.size;
     for (const value of values) entry.secrets.add(value);
-    if (entry.secrets.size !== before) entry.redaction.of = redactorOf(entry);
+    if (entry.secrets.size !== before) entry.redaction.of = mcpRedactor([...entry.secrets]);
   };
 
   const reconcileAll: McpServers['Service']['reconcileAll'] = Effect.fn('McpServers.reconcileAll')(() =>
@@ -502,7 +517,6 @@ const makeMcpServers = Effect.fnUntraced(function* ({
           return Effect.gen(function* () {
             const own = yield* Scope.fork(scope);
             const keys = new Map<string, string>();
-            const tokens = new Map<string, string>();
             const redaction = { of: (text: string) => text };
             let pooled: Pooled | undefined;
             const pool = yield* Scope.provide(
@@ -513,7 +527,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
                   return key === undefined
                     ? undefined
                     : signIns.auth(key, (token) => {
-                        if (pooled !== undefined) masked(pooled, name, token);
+                        if (pooled !== undefined) masked(pooled, token);
                       });
                 },
               }),
@@ -521,10 +535,10 @@ const makeMcpServers = Effect.fnUntraced(function* ({
             );
             yield* pool.place(yield* places.of(projectId));
             yield* Effect.forkIn(
-              Stream.runForEach(pool.changes, () => moved),
+              Stream.runForEach(pool.changes, () => moved(projectId)),
               own,
             );
-            pooled = { pool, scope: own, secrets: new Set(), tokens, keys, redaction, narrowed: new Set(), reached: new Set() };
+            pooled = { pool, scope: own, secrets: new Set(), keys, redaction, narrowed: new Set(), reached: new Set() };
             pools.set(projectId, pooled);
             return pool;
           });
@@ -571,6 +585,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
         const touched = yield* Effect.filter(open, reads);
         yield* Effect.forEach(touched, (id) => settle(id, kept), { discard: true });
         yield* Effect.forEach(touched, (id) => pools.get(id)?.pool.awaitHandshakes() ?? Effect.void, { discard: true });
+        yield* moved(projectId);
       },
       (effect) => Effect.mapError(effect, ownerFailed),
     ),

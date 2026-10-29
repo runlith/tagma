@@ -1,6 +1,7 @@
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import { Effect } from 'effect';
 import { body, pair } from '../platform/contract/service/body.js';
+import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
 import { McpSignInDoor } from './contract/service/door.js';
 import { McpServers } from './contract/service/servers.js';
@@ -11,9 +12,14 @@ import {
   MCP_SIGN_IN_OPERATIONS as SIGN_IN,
   mcpScopeOf,
 } from './contract/wire/operations.js';
-import type { McpServerRow } from './contract/wire/servers.js';
+import { mcpRowsAt, type McpServerRow } from './contract/wire/servers.js';
 
-const answer = (mcp: readonly McpServerRow[]) => ({ status: 'ok' as const, mcp });
+const callback = Effect.map(McpSignInDoor, (door) => {
+  const origin = door.origin();
+  return origin === null ? null : `${origin}${MCP_CALLBACK_PATH}`;
+});
+
+const answer = (rows: readonly McpServerRow[]) => Effect.map(callback, (at) => ({ status: 'ok' as const, mcp: mcpRowsAt(rows, at) }));
 
 const projectId = Effect.map(Effect.flatten(CurrentProject), (call) => call.project.id);
 
@@ -22,7 +28,7 @@ export const MCP_PAIRS = {
     OPS.read_mcp_servers,
     body(OPS.read_mcp_servers, {
       execute: Effect.fnUntraced(function* () {
-        return answer(yield* (yield* McpServers).list(yield* projectId));
+        return yield* answer(yield* (yield* McpServers).list(yield* projectId));
       }),
     }),
   ),
@@ -33,7 +39,7 @@ export const MCP_PAIRS = {
       execute: Effect.fnUntraced(function* (input) {
         const { scope, enabled, project: _project, ...declared } = input;
         const declaration = { ...declared, enabled: enabled ?? true } as McpServerDeclaration;
-        return answer(yield* (yield* McpServers).add({ projectId: yield* projectId, scope: mcpScopeOf(input), declaration }));
+        return yield* answer(yield* (yield* McpServers).add({ projectId: yield* projectId, scope: mcpScopeOf(input), declaration }));
       }),
     }),
   ),
@@ -42,7 +48,7 @@ export const MCP_PAIRS = {
     body(OPS.enable_mcp_server, {
       prepare: () => Effect.map(Effect.flatten(CurrentProject), (call) => call.project),
       execute: Effect.fnUntraced(function* (input) {
-        return answer(
+        return yield* answer(
           yield* (yield* McpServers).setEnabled({
             projectId: yield* projectId,
             scope: mcpScopeOf(input),
@@ -97,13 +103,19 @@ export const MCP_PAIRS = {
     SIGN_IN.sign_in_mcp_server,
     body(SIGN_IN.sign_in_mcp_server, {
       execute: Effect.fnUntraced(function* (input) {
-        const origin = yield* (yield* McpSignInDoor).origin;
+        const redirect = yield* callback;
+        if (redirect === null) {
+          return yield* new GateRefusal('mcp-sign-in-unserved', 'This door has no address yet that a sign-in could return to.', [
+            'sign in once read_remote_access reports the door ready',
+            'or sign in from the machine Tagma runs on',
+          ]);
+        }
         const started = yield* (yield* McpServers).signIn({
           projectId: yield* projectId,
           scope: mcpScopeOf(input),
           name: input.name,
           client: input.client,
-          redirect: `${origin}${MCP_CALLBACK_PATH}`,
+          redirect,
         });
         return { status: 'ok' as const, url: started.url };
       }),
@@ -113,7 +125,9 @@ export const MCP_PAIRS = {
     SIGN_IN.sign_out_mcp_server,
     body(SIGN_IN.sign_out_mcp_server, {
       execute: Effect.fnUntraced(function* (input) {
-        return answer(yield* (yield* McpServers).signOut({ projectId: yield* projectId, scope: mcpScopeOf(input), name: input.name }));
+        return yield* answer(
+          yield* (yield* McpServers).signOut({ projectId: yield* projectId, scope: mcpScopeOf(input), name: input.name }),
+        );
       }),
     }),
   ),
@@ -122,7 +136,9 @@ export const MCP_PAIRS = {
     body(OPS.remove_mcp_server, {
       prepare: () => Effect.map(Effect.flatten(CurrentProject), (call) => call.project),
       execute: Effect.fnUntraced(function* (input) {
-        return answer(yield* (yield* McpServers).remove({ projectId: yield* projectId, scope: mcpScopeOf(input), name: input.name }));
+        return yield* answer(
+          yield* (yield* McpServers).remove({ projectId: yield* projectId, scope: mcpScopeOf(input), name: input.name }),
+        );
       }),
     }),
   ),

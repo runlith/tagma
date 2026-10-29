@@ -8,12 +8,16 @@ export const mcpSignInSchema = Schema.Struct({
   signedIn: Schema.Boolean,
   pending: Schema.Boolean,
   client: Schema.NullOr(Schema.Literals(MCP_OAUTH_CLIENT_KINDS)),
+  redirect: Schema.NullOr(Schema.String),
 }).annotate({
   description:
-    'For an HTTP server: whether Tagma holds its tokens, whether a sign-in waits on its callback, and the kind of OAuth client it signs in with.',
+    'For an HTTP server: whether Tagma holds its tokens, whether a sign-in waits on its callback, the kind of OAuth client it signs in with, and the address a sign-in begun through this door returns to — the one to register for a client of your own.',
 });
 
 export type McpSignInRow = typeof mcpSignInSchema.Type;
+
+export const mcpRowsAt = (rows: readonly McpServerRow[], redirect: string | null): readonly McpServerRow[] =>
+  rows.map((row) => (row.signIn === undefined ? row : { ...row, signIn: { ...row.signIn, redirect } }));
 
 export const mcpReachSchema = Schema.Union([
   Schema.Struct({

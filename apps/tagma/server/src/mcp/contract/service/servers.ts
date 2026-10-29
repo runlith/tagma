@@ -35,6 +35,8 @@ export type McpSignInAnswer = {
 
 export type McpSignInRejection = 'unknown' | 'forged' | 'refused' | 'failed';
 
+export type McpSignedIn = { readonly server: string; readonly connected: boolean | null };
+
 export class McpSignInRejected extends Data.TaggedError('McpSignInRejected')<{
   readonly rejection: McpSignInRejection;
   readonly reason: string;
@@ -65,7 +67,7 @@ export class McpServers extends Context.Service<
     signOut(
       input: McpServerScopeInput & { readonly name: string },
     ): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpSignOutRefusal>>;
-    finishSignIn(answer: McpSignInAnswer): Effect.Effect<{ readonly server: string }, McpSignInRejected>;
+    finishSignIn(answer: McpSignInAnswer): Effect.Effect<McpSignedIn, McpSignInRejected>;
     reconcile(projectId: number): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>>;
     reconcileAll(): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>>;
     palette(projectId: number): McpPalette;

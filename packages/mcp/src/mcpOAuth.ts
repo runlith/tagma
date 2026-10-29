@@ -7,13 +7,14 @@ const OAUTH_TIMEOUT = Duration.seconds(30);
 type Fetch = (url: string | URL, init?: RequestInit) => Promise<Response>;
 
 const loadAuth = async () => {
-  const [client, shared, utils, errors] = await Promise.all([
+  const [client, shared, utils, errors, types] = await Promise.all([
     import('@modelcontextprotocol/sdk/client/auth.js'),
     import('@modelcontextprotocol/sdk/shared/auth.js'),
     import('@modelcontextprotocol/sdk/shared/auth-utils.js'),
     import('@modelcontextprotocol/sdk/server/auth/errors.js'),
+    import('@modelcontextprotocol/sdk/types.js'),
   ]);
-  return { client, shared, utils, OAuthError: errors.OAuthError };
+  return { client, shared, utils, OAuthError: errors.OAuthError, protocol: types.LATEST_PROTOCOL_VERSION };
 };
 
 type Loaded = Awaited<ReturnType<typeof loadAuth>>;
@@ -54,7 +55,24 @@ const kindOf = (loaded: Loaded, error: unknown): McpOAuthRefusal => {
 
 const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-const asking = <A>(step: McpOAuthStep, request: (loaded: Loaded, signal: AbortSignal) => Promise<A>): Effect.Effect<A, McpOAuthFailed> =>
+const formsOf = (secret: string): readonly string[] => [
+  secret,
+  encodeURIComponent(secret),
+  new URLSearchParams({ x: secret }).toString().slice(2),
+  JSON.stringify(secret).slice(1, -1),
+];
+
+const scrubbed = (reason: string, sent: readonly (string | undefined)[]): string =>
+  sent
+    .flatMap((secret) => (secret === undefined || secret === '' ? [] : formsOf(secret)))
+    .sort((left, right) => right.length - left.length)
+    .reduce((said, form) => said.replaceAll(form, '[redacted]'), reason);
+
+const asking = <A>(
+  step: McpOAuthStep,
+  sent: readonly (string | undefined)[],
+  request: (loaded: Loaded, signal: AbortSignal) => Promise<A>,
+): Effect.Effect<A, McpOAuthFailed> =>
   Effect.flatMap(
     Effect.tryPromise({
       try: () =>
@@ -67,7 +85,7 @@ const asking = <A>(step: McpOAuthStep, request: (loaded: Loaded, signal: AbortSi
     (loaded) =>
       Effect.tryPromise({
         try: (signal) => request(loaded, signal),
-        catch: (error) => new McpOAuthFailed({ step, kind: kindOf(loaded, error), reason: reasonOf(error) }),
+        catch: (error) => new McpOAuthFailed({ step, kind: kindOf(loaded, error), reason: scrubbed(reasonOf(error), sent) }),
       }),
   ).pipe(
     Effect.timeoutOrElse({
@@ -107,14 +125,39 @@ const resourceOf = (server: McpOAuthServer) => (server.resource === undefined ? 
 
 const flagged = (metadata: Readonly<Record<string, unknown>> | undefined, key: string): boolean => metadata?.[key] === true;
 
+const protectedResource = async (loaded: Loaded, serverUrl: string, challenge: McpOAuthChallenge, fetchFn: Fetch) => {
+  try {
+    return await loaded.client.discoverOAuthProtectedResourceMetadata(
+      serverUrl,
+      { resourceMetadataUrl: challenge.resourceMetadata === undefined ? undefined : new URL(challenge.resourceMetadata) },
+      fetchFn,
+    );
+  } catch {
+    return undefined;
+  }
+};
+
+const serverMetadata = async (loaded: Loaded, url: string, fetchFn: Fetch): Promise<Readonly<Record<string, unknown>> | undefined> => {
+  for (const { url: endpoint, type } of loaded.client.buildDiscoveryUrls(url)) {
+    const response = await fetchFn(endpoint, { headers: { 'MCP-Protocol-Version': loaded.protocol, Accept: 'application/json' } });
+    if (!response.ok) {
+      await response.body?.cancel();
+      if (response.status >= 400 && response.status < 500) continue;
+      throw new Error(`HTTP ${response.status} trying to load ${type === 'oauth' ? 'OAuth' : 'OpenID provider'} metadata from ${endpoint}`);
+    }
+    const raw: unknown = await response.json();
+    (type === 'oauth' ? loaded.shared.OAuthMetadataSchema : loaded.shared.OpenIdProviderDiscoveryMetadataSchema).parse(raw);
+    return raw as Readonly<Record<string, unknown>>;
+  }
+  return undefined;
+};
+
 export const mcpOAuthDiscover = Effect.fn('mcp.oauth.discover')(
   (serverUrl: string, challenge: McpOAuthChallenge, fetcher?: Fetch): Effect.Effect<McpOAuthServer, McpOAuthFailed> =>
-    asking('discovery', async (loaded, signal) => {
-      const info = await loaded.client.discoverOAuthServerInfo(serverUrl, {
-        resourceMetadataUrl: challenge.resourceMetadata === undefined ? undefined : new URL(challenge.resourceMetadata),
-        fetchFn: bounded(fetcher, signal),
-      });
-      const declared = info.resourceMetadata?.resource;
+    asking('discovery', [], async (loaded, signal) => {
+      const fetchFn = bounded(fetcher, signal);
+      const resourceMetadata = await protectedResource(loaded, serverUrl, challenge, fetchFn);
+      const declared = resourceMetadata?.resource;
       if (
         declared !== undefined &&
         !loaded.utils.checkResourceAllowed({
@@ -124,14 +167,15 @@ export const mcpOAuthDiscover = Effect.fn('mcp.oauth.discover')(
       ) {
         throw new Error(`the protected resource ${declared} does not cover ${serverUrl}`);
       }
-      const metadata = info.authorizationServerMetadata;
-      const supported = info.resourceMetadata?.scopes_supported;
+      const url = resourceMetadata?.authorization_servers?.[0] ?? String(new URL('/', serverUrl));
+      const metadata = await serverMetadata(loaded, url, fetchFn);
+      const supported = resourceMetadata?.scopes_supported;
       return {
-        url: info.authorizationServerUrl,
-        issuer: metadata?.issuer,
+        url,
+        issuer: typeof metadata?.issuer === 'string' ? metadata.issuer : undefined,
         issuerInRedirect: flagged(metadata, 'authorization_response_iss_parameter_supported'),
-        registers: metadata === undefined || metadata.registration_endpoint !== undefined,
-        documents: metadata?.client_id_metadata_document_supported === true,
+        registers: metadata === undefined || typeof metadata.registration_endpoint === 'string',
+        documents: flagged(metadata, 'client_id_metadata_document_supported'),
         metadata,
         resource: declared,
         scope: challenge.scope ?? (supported === undefined || supported.length === 0 ? undefined : supported.join(' ')),
@@ -145,7 +189,7 @@ export const mcpOAuthRegister = Effect.fn('mcp.oauth.register')(
     input: { readonly name: string; readonly redirects: readonly string[] },
     fetcher?: Fetch,
   ): Effect.Effect<McpOAuthClient, McpOAuthFailed> =>
-    asking('registration', async (loaded, signal) => {
+    asking('registration', [], async (loaded, signal) => {
       const registered = await loaded.client.registerClient(server.url, {
         metadata: metadataOf(loaded, server),
         clientMetadata: {
@@ -174,7 +218,7 @@ export const mcpOAuthAuthorization = Effect.fn('mcp.oauth.authorization')(
     client: McpOAuthClient,
     input: { readonly redirect: string; readonly state: string },
   ): Effect.Effect<{ readonly url: string; readonly verifier: string }, McpOAuthFailed> =>
-    asking('authorization', async (loaded) => {
+    asking('authorization', [client.secret], async (loaded) => {
       const started = await loaded.client.startAuthorization(server.url, {
         metadata: metadataOf(loaded, server),
         clientInformation: informationOf(client),
@@ -193,7 +237,7 @@ export const mcpOAuthExchange = Effect.fn('mcp.oauth.exchange')(function* (
   input: { readonly code: string; readonly verifier: string; readonly redirect: string },
   fetcher?: Fetch,
 ) {
-  const tokens = yield* asking('exchange', (loaded, signal) =>
+  const tokens = yield* asking('exchange', [client.secret, input.code, input.verifier], (loaded, signal) =>
     loaded.client.exchangeAuthorization(server.url, {
       metadata: metadataOf(loaded, server),
       clientInformation: informationOf(client),
@@ -213,7 +257,7 @@ export const mcpOAuthRefresh = Effect.fn('mcp.oauth.refresh')(function* (
   refresh: string,
   fetcher?: Fetch,
 ) {
-  const tokens = yield* asking('refresh', (loaded, signal) =>
+  const tokens = yield* asking('refresh', [client.secret, refresh], (loaded, signal) =>
     loaded.client.refreshAuthorization(server.url, {
       metadata: metadataOf(loaded, server),
       clientInformation: informationOf(client),

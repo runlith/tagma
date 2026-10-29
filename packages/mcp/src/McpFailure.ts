@@ -29,6 +29,7 @@ export class McpResourceFailed extends Data.TaggedError('McpResourceFailed')<{
   readonly uri?: string;
   readonly method: 'resources/list' | 'resources/read' | 'resources/subscribe' | 'resources/unsubscribe';
   readonly reason: string;
+  readonly signIn?: McpNeedsSignIn;
 }> {
   override get message(): string {
     const resource = this.uri === undefined ? '' : ` for ${this.uri}`;

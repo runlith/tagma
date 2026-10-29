@@ -629,11 +629,6 @@
       "browser": "./src/mcp/contract/wire/feeds.ts",
       "default": "./src/mcp/contract/wire/feeds.ts"
     },
-    "./mcp/contract/wire/callback": {
-      "types": "./src/mcp/contract/wire/callback.ts",
-      "browser": "./src/mcp/contract/wire/callback.ts",
-      "default": "./src/mcp/contract/wire/callback.ts"
-    },
     "./views/contract/wire/feeds": {
       "types": "./src/views/contract/wire/feeds.ts",
       "browser": "./src/views/contract/wire/feeds.ts",
