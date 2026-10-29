@@ -1,6 +1,6 @@
 ---
 id: 01a11127-7009-727d-9639-b5f1db7ababc
-title: "A cheap thread question — title, recap, decision — goes through one chain: the role's configured model, the decision model, the provider's light model, a one-shot CLI, the thread's model on the bottom rung"
+title: "A cheap question — title, recap, decision, translation — goes through one chain: a named or the role's configured model, the decision model, the provider's light model, a one-shot CLI, the thread's model on the bottom rung"
 ord: 1
 tags: ["explanation"]
 edges:
@@ -20,5 +20,7 @@ A title with no warm copy, a manual journal recap, and a thread decision ([[8105
 - **One-shot CLI call** — a harness adapter capability (`launch.oneShot`), the vendor core does not know it. It answers text with no schema, so a schema role skips that road with reason `no-schema`. A probe on Claude Code 2.1.291 showed: `claude -p --no-session-persistence` with no tools, settings or MCP leaves no session file and no `ai-title` of its own; its spend exists only when the CLI reported it.
 - **The thread's model on the bottom rung** — only for a native thread: an external one has no model of its own in Tagma.
 - **Nothing fit** — the `none` road; what it means is the role's call: "Generate title" refuses `title-model-missing`, manual recap — `recap-unavailable`, a decision — `no-model`.
+
+The chain asks for an asker — the provider, model, account and harness a thread runs on — not a thread, so a caller with no thread passes none: a block translation ([[1d5f53a4]]) does. With no asker the provider light model is that of the first connected provider declaring one in the catalog's provider order, and the CLI and thread-model roads are rejected `no-thread`. A caller may name a model for one ask; it comes before the role's setting as the `named` road and, unresolvable, yields `invalid-selection` the same way.
 
 The role's rung from settings applies to the chain-picked model only when it offers one; otherwise the road's rung stays. The excerpt under the picked model's window for title and recap is cut by `naming/excerpt.ts`; a decision does not cut the input but refuses `input-too-large`.
