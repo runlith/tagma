@@ -33,7 +33,7 @@ const CONSOLE_CEILING = ceilingOf(CONSOLE_ROWS);
 const CONSOLE_STACK_CEILING = ceilingOf(CONSOLE_STACK_ROWS);
 const NETWORK_CEILING = ceilingOf(NETWORK_ROWS);
 
-const threadOf = (caller: Caller): string | null => (caller.actor.kind === 'thread' ? caller.actor.threadId : null);
+export const threadOf = (caller: Caller): string | null => (caller.actor.kind === 'thread' ? caller.actor.threadId : null);
 
 const openerOf = Effect.fnUntraced(function* (caller: Caller) {
   const { project } = yield* Effect.flatten(CurrentProject);

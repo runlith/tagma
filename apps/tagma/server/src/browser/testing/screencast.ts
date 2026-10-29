@@ -7,7 +7,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Clock, Effect, Exit, Fiber, type Layer, Pull, Queue, type Scope, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
-import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { Automation } from '../contract/service/automation.js';
 import type { Clips } from '../contract/service/clips.js';
 import { Pages } from '../contract/service/pages.js';
@@ -298,12 +297,12 @@ export const screencastScenarios = (input: CastHost): void => {
         );
         yield* (yield* RunEnds).end('agent');
         while (!existsSync(begun.path)) yield* Queue.take(changes);
-        const settled = yield* Effect.result(record(page, 'stop'));
-        expect(
-          settled._tag === 'Success'
-            ? settled.success.status === 'recorded' && settled.success.path
-            : (settled.failure as unknown as GateRefusal).reason,
-        ).toContain(begun.path);
+        expect(yield* record(page, 'stop')).toMatchObject({
+          status: 'recorded',
+          path: begun.path,
+          ending: { cause: 'run-ended', by: 'agent' },
+        });
+        expect((yield* refusalOf(record(page, 'stop'))).code).toBe('no-recording');
         const clip = yield* clipOf(begun.path);
         expect(clip.codec).toBe('avc');
         expect(clip.packets).toBeGreaterThan(0);
@@ -331,8 +330,36 @@ export const screencastScenarios = (input: CastHost): void => {
         const stopped = yield* calling(
           RECORD.record_page.body.execute({ page, action: 'stop' }, undefined, OPERATOR).pipe(Effect.provide(input.clips)),
         );
-        expect(stopped.status).toBe('recorded');
+        expect(stopped).toMatchObject({ status: 'recorded', ending: { cause: 'stopped', by: null } });
         expect(pages.live(page)?.recording).toBeNull();
+        if (stopped.status !== 'recorded') return;
+        expect(yield* record(page, 'stop')).toMatchObject({
+          status: 'recorded',
+          path: stopped.path,
+          ending: { cause: 'stopped', by: null },
+        });
+        expect((yield* refusalOf(record(page, 'stop'))).code).toBe('no-recording');
+      }),
+    );
+
+    it.effect('the operator stops a recording on a crashed page', () =>
+      Effect.gen(function* () {
+        const page = yield* open('/still');
+        const pages = yield* Pages;
+        const begun = yield* record(page, 'start');
+        if (begun.status !== 'recording') return yield* Effect.die('the recording did not start');
+        const moves = yield* pages.moves(page);
+        const host = yield* pages.hold(page);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            yield* (yield* host.pages.session(page)).post('Page.crash');
+            if (!pages.live(page)?.crashed) yield* Stream.runHead(Stream.filter(moves, (move) => move.live.crashed));
+          }),
+        );
+        const stopped = yield* calling(
+          RECORD.record_page.body.execute({ page, action: 'stop' }, undefined, OPERATOR).pipe(Effect.provide(input.clips)),
+        );
+        expect(stopped).toMatchObject({ status: 'recorded', path: begun.path, ending: { cause: 'stopped', by: null } });
       }),
     );
 
@@ -361,11 +388,21 @@ export const screencastScenarios = (input: CastHost): void => {
         yield* (yield* (yield* Hosts).reach(source.adapter)).profiles.remove(profile.id);
         while (!existsSync(begun.path)) yield* Queue.take(changes);
         expect((yield* clipOf(begun.path)).packets).toBeGreaterThan(0);
-        expect((yield* refusalOf(record(page, 'stop'))).reason).toContain(begun.path);
+        expect(yield* record(page, 'stop')).toMatchObject({
+          status: 'recorded',
+          path: begun.path,
+          ending: { cause: 'session-ended', by: null },
+        });
         const again = yield* record(page, 'start');
-        expect(again.status).toBe('recording');
+        if (again.status !== 'recording') return yield* Effect.die('the restored page did not record');
         expect(pages.live(page)?.recording?.by).toBe('agent');
-        expect((yield* record(page, 'stop')).status).toBe('recorded');
+        yield* calling(PAGE.close_page.body.execute({ page }, undefined, agent));
+        expect(yield* record(page, 'stop')).toMatchObject({
+          status: 'recorded',
+          path: again.path,
+          ending: { cause: 'session-ended', by: null },
+        });
+        expect((yield* refusalOf(record(page, 'stop'))).code).toBe('page-unknown');
       }),
     );
   });

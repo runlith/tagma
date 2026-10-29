@@ -4,10 +4,11 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { type Clip, Clips } from '../contract/service/clips.js';
 import { Pages } from '../contract/service/pages.js';
 import { BrowserPlace, recordingsOf } from '../contract/service/place.js';
-import { Recordings } from '../contract/service/recordings.js';
+import { Recordings, type Stopped } from '../contract/service/recordings.js';
 import { ThreadRuns } from '../contract/service/runs.js';
 import type { PageId } from '../contract/wire/ids.js';
-import type { Recorded } from '../contract/wire/recording.js';
+import type { Glance } from '../contract/wire/page.js';
+import type { Ending, Recorded } from '../contract/wire/recording.js';
 import type { Budget } from '../contract/wire/screencast.js';
 import type { Attached, Drive } from './drive.js';
 import { endsWithRun } from './lifetime.js';
@@ -28,13 +29,22 @@ type Running = {
   readonly life: Scope.Closeable;
   readonly stopped: Deferred.Deferred<void>;
   stoppedAt: number | null;
+  ending: Ending | null;
+  glance: Glance;
   readonly ready: Deferred.Deferred<void, Failed>;
   readonly done: Deferred.Deferred<Recorded, Failed>;
 };
 
 type Placed = { readonly picture: string; readonly at: number };
 
-type Ended = { readonly path: string } | { readonly failure: Failed };
+type Kept = {
+  readonly by: string | null;
+  readonly file: string;
+  readonly glance: Glance;
+  readonly outcome: { readonly recorded: Recorded } | { readonly failure: Failed };
+};
+
+const SESSION_ENDED: Ending = { cause: 'session-ended', by: null };
 
 const whoOf = (by: string | null): string => (by === null ? 'the operator or an outside caller' : `thread ${by}`);
 
@@ -50,7 +60,7 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
   const path = yield* Path.Path;
   const scope = yield* Effect.scope;
   const running = new Map<PageId, Running>();
-  const ended = new Map<PageId, Ended>();
+  const ended = new Map<PageId, Kept>();
 
   const prune = Effect.fn('Recordings.prune')(function* (dir: string) {
     const names = yield* files.readDirectory(dir);
@@ -70,13 +80,13 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
     yield* files
       .makeDirectory(path.dirname(held.file), { recursive: true })
       .pipe(Effect.mapError((failure) => failed(`its directory was not made: ${failure.message}`)));
-    if (held.by !== null) yield* Scope.provide(endsWithRun(runs, held.by, stopping(held)), held.life);
+    if (held.by !== null) yield* Scope.provide(endsWithRun(runs, held.by, stopping(held, { cause: 'run-ended', by: held.by })), held.life);
     const moves = yield* Scope.provide(pages.moves(held.page), held.life);
     yield* Stream.runHead(Stream.filter(moves, (move) => move.signal === 'closed')).pipe(
-      Effect.andThen(stopping(held)),
+      Effect.andThen(stopping(held, SESSION_ENDED)),
       Effect.forkIn(held.life),
     );
-    yield* Effect.andThen(attached.session.ended, stopping(held)).pipe(Effect.forkIn(held.life));
+    yield* Effect.andThen(attached.session.ended, stopping(held, SESSION_ENDED)).pipe(Effect.forkIn(held.life));
 
     const open = Effect.fnUntraced(function* (shot: Shot) {
       const size = pictureSize(shot.data);
@@ -123,6 +133,7 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
       width: clip.width,
       height: clip.height,
       fps: held.fps,
+      ending: held.ending ?? SESSION_ENDED,
     };
   });
 
@@ -137,19 +148,34 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
       running.delete(held.page);
       yield* pages.mark(held.page, { recording: null });
     }
-    const outcome: Ended | undefined = Exit.isSuccess(exit)
-      ? { path: exit.value.path }
+    const outcome: Kept['outcome'] | undefined = Exit.isSuccess(exit)
+      ? { recorded: exit.value }
       : Option.match(Cause.findErrorOption(exit.cause), { onNone: () => undefined, onSome: (failure) => ({ failure }) });
-    if (outcome !== undefined) ended.set(held.page, outcome);
+    const glance = pages.live(held.page) === undefined ? held.glance : pages.glance(held.page, false);
+    if (outcome !== undefined) ended.set(held.page, { by: held.by, file: held.file, glance, outcome });
     if (Exit.isFailure(exit)) yield* Deferred.failCause(held.ready, exit.cause);
     yield* Deferred.done(held.done, exit);
   });
 
-  const stopping = (held: Running) =>
+  const stopping = (held: Running, ending: Ending) =>
     Effect.flatMap(Clock.currentTimeMillis, (now) => {
       held.stoppedAt ??= now;
+      held.ending ??= ending;
+      if (pages.live(held.page) !== undefined) held.glance = pages.glance(held.page, false);
       return Deferred.succeed(held.stopped, undefined);
     });
+
+  const collected = (page: PageId, thread: string | null, file: string) =>
+    Effect.sync(() => {
+      const kept = ended.get(page);
+      if (kept !== undefined && kept.file === file && kept.by === thread) ended.delete(page);
+    });
+
+  const answerKept = (page: PageId, kept: Kept, thread: string | null): Effect.Effect<Stopped, Failed> =>
+    Effect.andThen(
+      collected(page, thread, kept.file),
+      'failure' in kept.outcome ? Effect.fail(kept.outcome.failure) : Effect.succeed({ page: kept.glance, ...kept.outcome.recorded }),
+    );
 
   const begin = Effect.fn('Recordings.begin')(function* (
     page: PageId,
@@ -178,6 +204,8 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
       life,
       stopped: Deferred.makeUnsafe<void>(),
       stoppedAt: null,
+      ending: null,
+      glance: pages.glance(page, false),
       ready: Deferred.makeUnsafe<void, Failed>(),
       done: Deferred.makeUnsafe<Recorded, Failed>(),
     };
@@ -207,23 +235,25 @@ export const makeRecordings = Effect.fnUntraced(function* (input: { readonly dri
     stop: Effect.fn('Recordings.stop')(function* (page, thread) {
       const held = running.get(page);
       if (held === undefined) {
-        const last = ended.get(page);
-        if (last !== undefined && 'failure' in last) {
-          ended.delete(page);
-          return yield* last.failure;
-        }
-        return yield* new GateRefusal(
-          'no-recording',
-          last === undefined
-            ? `no recording is running on page ${page}`
-            : `no recording is running on page ${page}; the last one ended and is at ${last.path}`,
-          ['record_page with action start records one'],
-        );
+        const kept = ended.get(page);
+        if (kept !== undefined) return yield* answerKept(page, kept, thread);
+        return yield* new GateRefusal('no-recording', `nothing was recorded on page ${page} since its last recording was collected`, [
+          'record_page with action start records one',
+        ]);
       }
-      yield* drive.drive(page, thread, () => Effect.void);
-      yield* stopping(held);
-      const recorded = yield* Deferred.await(held.done);
+      yield* stopping(held, { cause: 'stopped', by: thread });
+      const recorded = yield* Deferred.await(held.done).pipe(Effect.ensuring(collected(page, thread, held.file)));
       return { page: pages.glance(page, false), ...recorded };
+    }),
+    kept: Effect.fnUntraced(function* (page, thread) {
+      if (pages.live(page) !== undefined) return undefined;
+      const held = running.get(page);
+      if (held !== undefined && held.by === thread) {
+        yield* stopping(held, SESSION_ENDED);
+        yield* Effect.exit(Deferred.await(held.done));
+      }
+      const kept = ended.get(page);
+      return kept === undefined || kept.by !== thread ? undefined : yield* answerKept(page, kept, thread);
     }),
   });
 });
