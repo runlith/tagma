@@ -5,7 +5,7 @@ ord: 51
 tags: ["spec"]
 fields:
   {
-    "status": "closed"
+    "status": "open"
   }
 edges:
   - kind: relates
