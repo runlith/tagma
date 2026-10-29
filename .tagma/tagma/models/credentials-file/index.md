@@ -27,4 +27,4 @@ sources:
   - kind: dir
     ref: packages/credential-file
 ---
-Tokens, keys and secrets live as a JSON document in a 0600 file read by several processes, which must never be left half-written. The package reads the document by the file's stamp, replaces it atomically under an inter-process lock, and picks up an interrupted replacement on the next read; the document's format and the meaning of its fields stay with whoever holds the file. What the document means and who receives it is the embedding product's business.
+Tokens, keys and secrets live as a JSON document in a 0600 file read by several processes, which must never be left half-written. The package reads the document by the file's stamp, replaces it atomically under an inter-process lock, and picks up an interrupted replacement on the next read; the document's format and the meaning of its fields stay with whoever holds the file. A keyed refresh flight serializes grant exchange and conditionally stores its result, with optional cross-process exclusion; the caller owns grant identity, refresh policy and exchange. What the document means and who receives it is the embedding product's business.
