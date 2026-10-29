@@ -78,6 +78,9 @@ Each format is an adapter module (`claude-code-format`, `agent-plugins-format`) 
   - A `UserPromptSubmit` block reaches the model as guidance beside the message: the message is already the operator's, and Tagma never withdraws it.
   - A `Stop` block keeps the run going with the reason, within its step limit; `stop_hook_active` tells the hook it already continued this run.
   - `SessionEnd` runs when a thread is archived or deleted, for a thread that ran natively since the server started: its hooks need the place that run stood in.
+  - `continue: false` refuses the pending call at `PreToolUse` with its `stopReason`, and at `Stop` lets the run end.
+  - A handler marked `async` is listed as ignored: Tagma runs no hook in the background.
+  - `transcript_path` is empty: Tagma keeps no transcript file in Claude Code's format.
 
   Other events and the `http`, `mcp_tool`, `prompt` and `agent` handler types are listed as ignored. Install and enable raise the `execute` subject for a plugin with hooks, as for a stdio server.
 - **Everything else.** LSP, output styles, themes, monitors, `bin/`, `settings.json` and workflows are listed as ignored.
