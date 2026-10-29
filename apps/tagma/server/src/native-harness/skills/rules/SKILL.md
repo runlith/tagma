@@ -1,6 +1,6 @@
 ---
 name: rules
-description: A project's rules end to end — `#rule` law in the graph, the checks `tagma.config.ts` describes with `@runlith/tagma/rules`, enforce_rule, debt and escapes, and the format commands commits are formatted by. Load when the operator asks to record a norm for agents or code, to record it and offer a check when it is measurable; to turn a rule into a check (builtin, linter, the project's own program), try it with check_rules, enforce it, change its strictness or triggers, own, absorb or retire debt, read escapes; when a landing refuses rule-violated, module-map-invalid, inspection-failed, config-invalid or format-*; when the owner asks to format on commit, set up format commands, keep agents' commits in the repository's form or fix CI formatting failures; to explain the Rules screen.
+description: A project's rules end to end — `#rule` law in the graph, the checks `tagma.config.ts` describes with `@runlith/tagma/rules`, enforce_rule, debt and escapes, and the format commands commits are formatted by. Load when a norm for agents or code is to be recorded, to record it and offer a check when it is measurable; to turn a rule into a check (builtin, linter, the project's own program), try it with check_rules, enforce it, change its strictness or triggers, own, absorb or retire debt, read escapes; when a landing refuses rule-violated, module-map-invalid, inspection-failed, config-invalid or format-*; when the owner asks to format on commit, set up format commands, keep agents' commits in the repository's form or fix CI formatting failures; to explain the Rules screen.
 ---
 
 # Rules
@@ -15,7 +15,7 @@ An enforced rule joins them: its enforcement document names a key of `tagma.conf
 
 ## A rule, or an order for now
 
-A rule is recorded when the operator asks for one: write it in that turn and name it in the answer. A correction he gives without asking for a record is followed; when it reads as a norm any agent would need tomorrow, offer the rule in one line, naming the standing rule it would edit. Priorities, plans and orders for now are not rules. A wish about the product's behaviour is a spec or a task.
+When a correction becomes a rule is the graph-writing law in every thread's instructions. A wish about the product's behaviour is a spec or a task.
 
 ## Writing a `#rule`
 
