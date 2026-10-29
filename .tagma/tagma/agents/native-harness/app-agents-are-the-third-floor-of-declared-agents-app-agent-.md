@@ -9,7 +9,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/threads/library/declared.ts
 ---
-The `agents` point is declared by native-harness, because it owns both the capability definitions and agent-file parsing; `declaredAgents` receives the floor through the `AgentPackages` port and knows nothing of apps.
+The `agents` point is declared by native-harness, because it owns both the capability definitions and agent-file parsing; `declaredAgents` receives the floor through the `AgentPackages` port, beside the plugins' floor, and knows nothing of apps.
 
 - Registration on every process generation: each agent's file is read and parsed like `.agents`, under the `<app>.<agent>` id; then the `app:<id>` capability and its tool source are registered (`own` from the thread project's `TagmaAppTools.of`). An error in any file refuses the whole contribution, and the app row shows the reason.
 - An app agent file must list capabilities, and `app:<id>` is appended to them. It cannot be added through `extends` without a list: an overlay only narrows, so the agent would get the whole base and none of its own tools. An empty list yields an agent with no standard Tagma tools — only its own app's tools.

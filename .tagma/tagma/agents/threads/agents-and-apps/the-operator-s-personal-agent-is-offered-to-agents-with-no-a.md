@@ -14,7 +14,7 @@ sources:
 ---
 Who is offered a type with no `agent.offered` record is decided by the type's origin:
 - an agent in code, a harness, and the operator's personal agents file (`agents/` in Tagma's data directory) — to agents too. The operator alone, or an agent on his word, writes the personal floor for Tagma, so an agent he wrote is started by his agent with no second act.
-- the project's `.agents` file and an app agent — to the operator only. Repository and app authors write them, not the operator; an agent receives such a type once the operator opens it with an `{type, to: "agents"}` record.
+- the project's `.agents` file, an app agent and a plugin agent — to the operator only. Repository, app and plugin authors write them, not the operator; an agent receives such a type once the operator opens it with an `{type, to: "agents"}` record.
 
 An `agent.offered` record overrides origin in both directions.
 

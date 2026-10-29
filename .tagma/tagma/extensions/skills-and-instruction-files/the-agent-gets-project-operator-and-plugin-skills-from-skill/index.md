@@ -1,6 +1,6 @@
 ---
 id: 01a14c08-8335-7c28-8f6b-267b0bb6f81f
-title: The agent gets project and operator skills from SKILL.md folders and loads the needed one when the task fits
+title: The agent gets project, operator and plugin skills from SKILL.md folders and loads the needed one when the task fits
 ord: 1
 tags: ["feature"]
 fields:
@@ -25,6 +25,8 @@ sources:
     ref: packages/agent-sources/src/SkillDirectories.ts
   - kind: file
     ref: packages/agent/src/agent/AgentSkill.ts
+  - kind: file
+    ref: apps/tagma/server/src/native-harness/inputs/plugins.ts
 ---
 **Value.** Repeatable know-how — how to review, how to write a report, how to work with an internal service — lies once as a folder with `SKILL.md`, and the agent picks it up only when the task fits, without inflating every start.
 
