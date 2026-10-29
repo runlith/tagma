@@ -200,6 +200,13 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     );
   });
 
+  const rows: McpServers['Service']['rows'] = (projectId) =>
+    Stream.unwrap(
+      Effect.map(PubSub.subscribe(pulses), (moves) =>
+        Stream.concat(Stream.succeed(undefined), Stream.fromSubscription(moves)).pipe(Stream.mapEffect(() => list(projectId))),
+      ),
+    );
+
   const declaredIn = Effect.fnUntraced(function* (input: McpServerScopeInput & { readonly name: string }) {
     const effective = mcpDeclared(yield* settings.read(mcpServers, input.projectId));
     const entry = effective.find((candidate) => candidate.declaration.name === input.name && candidate.scope === input.scope);
@@ -573,6 +580,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     owner,
     servers: McpServers.of({
       list,
+      rows,
       add,
       remove,
       setEnabled,

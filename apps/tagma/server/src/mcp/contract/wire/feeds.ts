@@ -1,5 +1,6 @@
 import { Schema } from 'effect';
 import { feed } from '../../../platform/contract/wire/operation.js';
+import { mcpServerRowSchema } from './servers.js';
 
 export const MCP_APP_REFUSALS = [
   'mcp-server-unavailable',
@@ -42,4 +43,13 @@ export const MCP_RESOURCE_FEED = feed('mcp.resource.subscribe', {
   admission: 'project',
 });
 
-export const MCP_FEEDS = [MCP_RESOURCE_FEED] as const;
+export const MCP_SERVERS_FEED = feed('mcp.servers', {
+  input: Schema.Struct({ projectId: Schema.Int.check(Schema.isGreaterThan(0)) }),
+  event: Schema.Array(mcpServerRowSchema),
+  refusals: ['secret-store-failed', 'unknown-project'],
+  callers: 'operator',
+  admission: 'project',
+  graph: 'none',
+});
+
+export const MCP_FEEDS = [MCP_RESOURCE_FEED, MCP_SERVERS_FEED] as const;

@@ -3,7 +3,11 @@
   import Plus from '@lucide/svelte/icons/plus';
   import { Button } from '$lib/shared/ui/button/index.js';
   import { Refusal } from '$lib/wire/refusal.js';
-  import { McpRepo, type McpDeclarationInput } from '$lib/features/mcp/Repo.js';
+  import { McpRepo, type McpDeclarationInput, type McpSignIn } from '$lib/features/mcp/Repo.js';
+  import { McpFeed } from '$lib/features/mcp/Feed.js';
+  import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
+  import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
+  import { MCP_CALLBACK_PATH } from '@tagma/server/mcp/contract/wire/callback';
   import { scopeName } from '$lib/features/settings/scope.js';
   import Group from '$lib/features/settings/Group.svelte';
   import KeyCard from '$lib/features/settings/KeyCard.svelte';
@@ -16,6 +20,9 @@
 
   const MANAGED = ['mcp.servers'];
   const mcp = McpRepo.use();
+  const feed = McpFeed.use();
+  const links = ExternalLinks.use();
+  const callback = new URL(MCP_CALLBACK_PATH, ServerOrigin.use().http).href;
   const secrets = SecretsRepo.use();
   const rows = $derived(mcp.servers.key(project?.id).data ?? []);
   const projectId = $derived(project?.id);
@@ -81,19 +88,34 @@
     }
   }
 
-  const connecting = $derived(rows.some((row) => row.status === 'connecting'));
+  async function signIn(row: McpServerRow, client: McpSignIn['client']): Promise<void> {
+    busy = row.name;
+    refusal = undefined;
+    try {
+      const url = await mcp.signIn.run({ projectId: project?.id, scope: row.scope, name: row.name, client }, { throwOnError: true });
+      if (url !== undefined) links.open(url);
+    } catch (caught) {
+      refusal = said(caught);
+    } finally {
+      busy = null;
+    }
+  }
 
-  const WHILE_CONNECTING_MS = 1000;
+  async function signOut(row: McpServerRow): Promise<void> {
+    busy = row.name;
+    refusal = undefined;
+    try {
+      await mcp.signOut.run({ projectId: project?.id, scope: row.scope, name: row.name }, { throwOnError: true });
+      await mcp.servers.key(project?.id).refresh();
+    } catch (caught) {
+      refusal = said(caught);
+    } finally {
+      busy = null;
+    }
+  }
 
   $effect(() => {
-    if (!connecting) return;
-    const again = setInterval(() => {
-      void mcp.servers
-        .key(project?.id)
-        .refresh()
-        .catch(() => undefined);
-    }, WHILE_CONNECTING_MS);
-    return () => clearInterval(again);
+    if (projectId !== undefined) return feed.hold(projectId);
   });
 </script>
 
@@ -146,9 +168,12 @@
           {project}
           busy={busy === row.name}
           secrets={setOf(row)}
+          {callback}
           onenabled={(enabled) => void setEnabled(row, enabled)}
           onremove={() => void remove(row)}
           onsecret={() => mcp.servers.key(project?.id).refresh()}
+          onsignin={(client) => void signIn(row, client)}
+          onsignout={() => void signOut(row)}
         />
       {/each}
 

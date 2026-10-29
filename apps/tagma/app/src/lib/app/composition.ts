@@ -28,6 +28,7 @@ import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
 import { BrowserLayer } from '$lib/features/browser/layer.js';
 import { DevicesRepo } from '$lib/features/devices/Repo.js';
 import { McpRepo } from '$lib/features/mcp/Repo.js';
+import { McpFeed } from '$lib/features/mcp/Feed.js';
 import { PluginActions } from '$lib/features/plugins/PluginActions.svelte.js';
 import { Sections } from '$lib/features/plugins/Sections.svelte.js';
 import { ViewSets } from '$lib/features/plugins/ViewSets.svelte.js';
@@ -166,6 +167,7 @@ export function appLayers(desktop: DesktopApi | undefined) {
     PaletteRepo,
     Layer.of(ActionRegistry, DECLARED_ACTIONS),
     McpRepo,
+    McpFeed,
     SecretsRepo,
     ViewSets,
     Sections,

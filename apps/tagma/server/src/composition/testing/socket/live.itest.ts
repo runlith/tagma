@@ -21,6 +21,8 @@ import { LiveRpc } from '../../rpc.js';
 import type { ServerRuntime } from '../../runtime.js';
 import { makeDoorWorld } from '../doorFixture.js';
 import { liveDoorLayer } from '../socketDoor.js';
+import { McpServers } from '../../../mcp/contract/service/servers.js';
+import { oauthServer } from '@runlith/mcp/testing/oauth';
 
 type LiveClient = RpcClient.RpcClient<RpcGroup.Rpcs<typeof LiveRpc>, RpcClientError.RpcClientError>;
 
@@ -260,6 +262,35 @@ layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer
       expect(closed?.attributes.get('generation')).toBe(generation);
       expect(closed?.attributes.get('closeCause')).toBe('interrupted');
       expect(spans.some((span) => span.name === 'http.server GET' && span.attributes.get('http.route') === TAGMA_SOCKET_PATH)).toBe(false);
+    }),
+  );
+
+  it.effect('the MCP rows feed answers a project’s servers, then the row a finished sign-in connects', () =>
+    Effect.gen(function* () {
+      const { client, runtime } = yield* World;
+      const servers = Context.get(runtime.owners, McpServers);
+      const oauth = yield* oauthServer;
+      const { id: projectId } = yield* addProject('mcp-rows');
+      const declaration = {
+        name: 'guarded',
+        transport: 'http' as const,
+        url: oauth.url,
+        capabilities: { kinds: [], mutates: false },
+        enabled: true,
+      };
+      yield* servers.add({ projectId, scope: 'project', declaration });
+      yield* Effect.addFinalizer(() => Effect.orDie(servers.remove({ projectId, scope: 'project', name: 'guarded' })));
+      const frames = yield* Queue.make<readonly { readonly name: string; readonly status: string }[]>();
+      yield* Effect.forkScoped(Stream.runForEach(client['mcp.servers']({ projectId }), (rows) => Queue.offer(frames, rows)));
+      expect(yield* Queue.take(frames)).toMatchObject([{ name: 'guarded', status: 'needs-sign-in' }]);
+
+      const { url } = yield* servers.signIn({ projectId, scope: 'project', name: 'guarded', redirect: 'http://tagma/mcp/oauth/callback' });
+      const returned = yield* oauth.follow(url);
+      const answer = (name: string) => returned.searchParams.get(name);
+      yield* servers.finishSignIn({ state: answer('state'), code: answer('code'), iss: answer('iss'), error: null, description: null });
+      let rows = yield* Queue.take(frames);
+      while (rows[0]?.status !== 'connected') rows = yield* Queue.take(frames);
+      expect(rows).toMatchObject([{ name: 'guarded', status: 'connected' }]);
     }),
   );
 });

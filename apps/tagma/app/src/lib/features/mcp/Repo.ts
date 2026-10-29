@@ -8,6 +8,13 @@ export type McpDeclarationInput =
   | (Omit<McpStdioServerDeclaration, 'enabled'> & { readonly enabled?: boolean })
   | (Omit<McpHttpServerDeclaration, 'enabled'> & { readonly enabled?: boolean });
 
+export type McpSignIn = {
+  readonly projectId?: number;
+  readonly scope: SettableScope;
+  readonly name: string;
+  readonly client?: { readonly id: string; readonly secret?: string };
+};
+
 const lens = (projectId: number | undefined): Lens => (projectId === undefined ? {} : { project: String(projectId) });
 
 export const McpRepo = Repo.define(
@@ -35,6 +42,20 @@ export const McpRepo = Repo.define(
     remove: mutation({
       mutator: async (input: { projectId?: number; scope: SettableScope; name: string }, { signal }, door) =>
         (await door.perform('remove_mcp_server', { name: input.name, scope: input.scope }, lens(input.projectId), { signal })).mcp,
+    }),
+
+    signIn: mutation({
+      mutator: async (input: McpSignIn, { signal }, door) =>
+        (
+          await door.perform('sign_in_mcp_server', { name: input.name, scope: input.scope, client: input.client }, lens(input.projectId), {
+            signal,
+          })
+        ).url,
+    }),
+
+    signOut: mutation({
+      mutator: async (input: { projectId?: number; scope: SettableScope; name: string }, { signal }, door) =>
+        (await door.perform('sign_out_mcp_server', { name: input.name, scope: input.scope }, lens(input.projectId), { signal })).mcp,
     }),
   }),
   { tier: 'app', door: Door },
