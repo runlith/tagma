@@ -21,4 +21,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/plugin-formats/claude-code
 ---
-Tagma reads a Claude Code plugin as that format defines it: `.claude-plugin/plugin.json` or its default layout, skills, commands, agents with that format's tool names mapped to Tagma's, `.mcp.json` servers with its own variables, `userConfig` options and command hooks run under its process contract. It turns the directory into the plugins module's package and declares nothing about other formats.
+Tagma reads a Claude Code plugin as that format defines it: `.claude-plugin/plugin.json` or its default layout, skills, commands, agents with that format's tool names mapped to Tagma's, `.mcp.json` servers with its own variables, `userConfig` options and command hooks run by the plugins module's hook runner under this format's tool names, variables and timeouts. It turns the directory into the plugins module's package and declares nothing about other formats.
