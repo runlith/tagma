@@ -24,6 +24,10 @@
   let only = $state<string | null>(null);
 
   const byId = $derived(new Map(marketplaces.map((marketplace) => [marketplace.id, marketplace])));
+  const rank = $derived(new Map(marketplaces.map((marketplace, at) => [marketplace.id, at])));
+  const ordered = $derived(
+    entries.toSorted((a, b) => (rank.get(a.marketplace) ?? marketplaces.length) - (rank.get(b.marketplace) ?? marketplaces.length)),
+  );
   const words = $derived(
     query
       .trim()
@@ -32,7 +36,7 @@
       .filter((word) => word !== ''),
   );
   const shown = $derived(
-    entries.filter((entry) => {
+    ordered.filter((entry) => {
       if (only !== null && entry.marketplace !== only) return false;
       if (words.length === 0) return true;
       const text = [entry.name, entry.title, entry.description, entry.category, entry.author].join(' ').toLowerCase();

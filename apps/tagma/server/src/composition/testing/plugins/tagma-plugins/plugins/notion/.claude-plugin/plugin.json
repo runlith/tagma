@@ -1,0 +1,13 @@
+{
+  "name": "notion",
+  "displayName": "Notion",
+  "version": "1.0.0",
+  "description": "Search, read and edit Notion pages and databases.",
+  "author": {
+    "name": "Tagma",
+    "url": "https://tagma.dev"
+  },
+  "homepage": "https://github.com/runlith/tagma-plugins",
+  "repository": "https://github.com/runlith/tagma-plugins",
+  "keywords": ["notion", "pages", "databases", "docs"]
+}

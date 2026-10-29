@@ -1,0 +1,24 @@
+{
+  "name": "notion",
+  "version": "1.0.0",
+  "description": "Search, read and edit Notion pages and databases.",
+  "author": {
+    "name": "Tagma",
+    "url": "https://tagma.dev"
+  },
+  "homepage": "https://github.com/runlith/tagma-plugins",
+  "repository": "https://github.com/runlith/tagma-plugins",
+  "keywords": ["notion", "pages", "databases", "docs"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Notion",
+    "shortDescription": "Search, read and edit Notion pages and databases",
+    "longDescription": "Work in Notion through its remote MCP server: find pages, read a database's schema before writing to it, and edit content without losing what is there.",
+    "developerName": "Tagma",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://www.notion.com/",
+    "defaultPrompt": ["Find the Notion page for this project and summarize its open decisions"]
+  }
+}

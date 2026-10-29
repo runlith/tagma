@@ -1,0 +1,13 @@
+{
+  "name": "linear",
+  "displayName": "Linear",
+  "version": "1.0.0",
+  "description": "Find, create and update Linear issues, projects and comments.",
+  "author": {
+    "name": "Tagma",
+    "url": "https://tagma.dev"
+  },
+  "homepage": "https://github.com/runlith/tagma-plugins",
+  "repository": "https://github.com/runlith/tagma-plugins",
+  "keywords": ["linear", "issues", "projects"]
+}

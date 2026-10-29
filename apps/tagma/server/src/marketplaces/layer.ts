@@ -8,7 +8,7 @@ import type { PluginSource } from '../plugins/contract/wire/rows.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { ListFormats } from './contract/service/lists.js';
 import { MarketplacePlaces, MarketplacePresets, Marketplaces, type Picked } from './contract/service/marketplaces.js';
-import { type EntryRow, MARKETPLACE_ID_PATTERN, type MarketplaceRow, type MarketplaceSource } from './contract/wire/rows.js';
+import { type EntryRow, MARKETPLACE_ID_PATTERN, type MarketplaceRow, type MarketplaceSource, TRUST_LABELS } from './contract/wire/rows.js';
 import { type MarketplaceAdded, marketplacesAdded, marketplacesPresets } from './contract/wire/settings.js';
 import { entryRowOf, entryRows, escapes, installedOf } from './entries.js';
 import {
@@ -33,6 +33,8 @@ const READ = 'read_marketplaces names every marketplace added and its entries';
 
 const sameSource = (a: MarketplaceSource, b: MarketplaceSource): boolean =>
   a.kind === 'git' ? b.kind === 'git' && a.url === b.url : b.kind === 'folder' && a.path === b.path;
+
+const byTrust = (a: MarketplaceAdded, b: MarketplaceAdded): number => TRUST_LABELS.indexOf(a.label) - TRUST_LABELS.indexOf(b.label);
 
 const byKey = (a: EntryRow, b: EntryRow): number =>
   a.marketplace !== b.marketplace ? (a.marketplace < b.marketplace ? -1 : 1) : a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
@@ -232,7 +234,7 @@ export const makeMarketplaces = Effect.gen(function* () {
   });
 
   return Marketplaces.of({
-    rows: () => Effect.map(added, (registrations) => registrations.map(rowOf)),
+    rows: () => Effect.map(added, (registrations) => registrations.toSorted(byTrust).map(rowOf)),
     entries: Effect.fn('Marketplaces.entries')(function* (marketplace) {
       const installed = installedOf(yield* plugins.installs());
       return (yield* added)

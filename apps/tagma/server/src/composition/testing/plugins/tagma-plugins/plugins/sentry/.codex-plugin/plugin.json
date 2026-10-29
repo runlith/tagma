@@ -1,0 +1,24 @@
+{
+  "name": "sentry",
+  "version": "1.0.0",
+  "description": "Investigate Sentry issues, events and releases.",
+  "author": {
+    "name": "Tagma",
+    "url": "https://tagma.dev"
+  },
+  "homepage": "https://github.com/runlith/tagma-plugins",
+  "repository": "https://github.com/runlith/tagma-plugins",
+  "keywords": ["sentry", "errors", "monitoring", "triage"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Sentry",
+    "shortDescription": "Investigate Sentry issues, events and releases",
+    "longDescription": "Work in Sentry through its remote MCP server: find the issue behind an error, read its events and stack traces, and trace it to the code and the release that brought it.",
+    "developerName": "Tagma",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://sentry.io/",
+    "defaultPrompt": ["Find the most frequent unresolved Sentry errors in production this week and where they come from"]
+  }
+}

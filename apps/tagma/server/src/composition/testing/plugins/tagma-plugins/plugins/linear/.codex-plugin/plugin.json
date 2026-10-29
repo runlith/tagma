@@ -1,0 +1,24 @@
+{
+  "name": "linear",
+  "version": "1.0.0",
+  "description": "Find, create and update Linear issues, projects and comments.",
+  "author": {
+    "name": "Tagma",
+    "url": "https://tagma.dev"
+  },
+  "homepage": "https://github.com/runlith/tagma-plugins",
+  "repository": "https://github.com/runlith/tagma-plugins",
+  "keywords": ["linear", "issues", "projects"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Linear",
+    "shortDescription": "Find, create and update Linear issues",
+    "longDescription": "Work in Linear through its remote MCP server: find issues, projects and teams, draft changes and keep issues accurate.",
+    "developerName": "Tagma",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://linear.app/",
+    "defaultPrompt": ["Find the Linear issues assigned to me and summarize what is blocked"]
+  }
+}

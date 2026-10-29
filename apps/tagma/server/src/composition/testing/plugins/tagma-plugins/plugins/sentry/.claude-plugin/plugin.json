@@ -1,0 +1,13 @@
+{
+  "name": "sentry",
+  "displayName": "Sentry",
+  "version": "1.0.0",
+  "description": "Investigate Sentry issues, events and releases.",
+  "author": {
+    "name": "Tagma",
+    "url": "https://tagma.dev"
+  },
+  "homepage": "https://github.com/runlith/tagma-plugins",
+  "repository": "https://github.com/runlith/tagma-plugins",
+  "keywords": ["sentry", "errors", "monitoring", "triage"]
+}

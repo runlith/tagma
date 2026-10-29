@@ -1,0 +1,32 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "tagma",
+  "description": "Plugins for the services Tagma connects to. Each carries a skill on working with the service and the service's own remote MCP server.",
+  "owner": {
+    "name": "Tagma",
+    "url": "https://tagma.dev"
+  },
+  "plugins": [
+    {
+      "name": "linear",
+      "displayName": "Linear",
+      "description": "Find, create and update Linear issues, projects and comments.",
+      "category": "productivity",
+      "source": "./plugins/linear"
+    },
+    {
+      "name": "notion",
+      "displayName": "Notion",
+      "description": "Search, read and edit Notion pages and databases.",
+      "category": "productivity",
+      "source": "./plugins/notion"
+    },
+    {
+      "name": "sentry",
+      "displayName": "Sentry",
+      "description": "Investigate Sentry issues, events and releases.",
+      "category": "monitoring",
+      "source": "./plugins/sentry"
+    }
+  ]
+}

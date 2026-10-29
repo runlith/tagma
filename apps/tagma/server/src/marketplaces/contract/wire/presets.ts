@@ -4,6 +4,12 @@ export type MarketplacePreset = MarketplaceAdded & { readonly title: string };
 
 export const SHIPPED_PRESETS: readonly MarketplacePreset[] = [
   {
+    id: 'tagma',
+    title: 'Tagma',
+    label: 'tagma',
+    source: { kind: 'git', url: 'https://github.com/runlith/tagma-plugins.git' },
+  },
+  {
     id: 'claude-plugins-official',
     title: 'Anthropic',
     label: 'vendor',

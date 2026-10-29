@@ -72,7 +72,7 @@ export const MARKETPLACE_OPERATIONS = {
     meaning:
       'Read the plugin marketplaces this machine reads, with Tagma’s trust label and stored list of each, and a page of their entries with each one’s install state.',
     grammar:
-      'Entries come from each marketplace’s stored list, ordered by marketplace and name; `next` continues the walk. An entry is installed from its marketplace by preview_plugin, then install_plugin with the revision it prepared. A refused entry says why Tagma does not install it; a taken one names where its plugin is installed from.',
+      'Marketplaces stand in trust order — Tagma’s own, the vendors’, then those added by address — each kind in the order it was added. Entries come from each marketplace’s stored list, ordered by marketplace and name; `next` continues the walk. An entry is installed from its marketplace by preview_plugin, then install_plugin with the revision it prepared. A refused entry says why Tagma does not install it; a taken one names where its plugin is installed from.',
     input: Schema.Struct({
       marketplace: Schema.optional(MarketplaceId).annotate({ description: 'Only this marketplace and its entries.' }),
       limit: limitOf(MARKETPLACE_ENTRIES),
