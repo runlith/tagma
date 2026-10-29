@@ -295,18 +295,21 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                   projectId: row.id,
                   scope,
                 });
-              const commits =
-                layout.mode === 'team' && !temporary
-                  ? treeCommits({
-                      git,
-                      checkout,
-                      treeRoot: layout.treeRoot,
-                      journal: journalOf('team'),
-                      permit: overTree(gates, layout.treeRoot),
-                      policy: Effect.map(Context.get(machine, Settings).read(graphCommit, row.id), (resolved) => resolved.value),
-                      fork,
-                    })
-                  : undefined;
+              let checkoutCommits: Context.Service.Shape<typeof TreeCommits>;
+              const committer = () => {
+                const treeRoot = join(checkout, CHECKOUT_DIRECTORY);
+                return (checkoutCommits ??= treeCommits({
+                  git,
+                  checkout,
+                  treeRoot,
+                  journal: layout.mode === 'team' ? journalOf('team') : null,
+                  permit: overTree(gates, treeRoot),
+                  policy: Effect.map(Context.get(machine, Settings).read(graphCommit, row.id), (resolved) => resolved.value),
+                  fork,
+                }));
+              };
+              const checkoutChanged = Effect.suspend(() => (temporary ? Effect.void : committer().carry([])));
+              const commits = layout.mode === 'team' && !temporary ? committer() : undefined;
               const poolContext = Context.add(Context.add(opening, VocabularyFormat, format), TreeCommits, commits);
               const filled = yield* refused(fill(poolContext, row, layout, stealthRoot, shadow, opened.standing, input.scan));
               const advance = (fromTree: boolean) =>
@@ -465,6 +468,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                 if (commits !== undefined) yield* commits.carry([FORMAT_FILE]);
               }
               if (!temporary) yield* refused(startCommitJournals(store));
+              if (commits !== undefined) yield* commits.carry([]);
               const write = writeThrough({
                 projectId: row.id,
                 layout,
@@ -514,6 +518,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                 ledger,
                 batches,
                 topology,
+                checkoutChanged,
                 scope: runtime.scope,
                 dispose: async () => {
                   try {

@@ -246,6 +246,7 @@ export type ServedGraph = CopyWriting & {
 };
 
 export type HeldGraph = ServedGraph & {
+  readonly checkoutChanged: Effect.Effect<void>;
   readonly project: Pick<ProjectPolicyRow, 'repoKey' | 'rootPath' | 'storage'>;
   readonly batches: TreeBatches | null;
 };
@@ -309,6 +310,7 @@ export type MirrorBuilt = {
   readonly ledger: TreeLedger;
   readonly batches: TreeBatches | null;
   readonly topology: TopologySync | null;
+  readonly checkoutChanged: Effect.Effect<void>;
   readonly scope: Scope.Scope;
   readonly dispose: () => Promise<void>;
 };

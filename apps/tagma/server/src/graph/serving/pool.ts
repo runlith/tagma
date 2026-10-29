@@ -432,6 +432,7 @@ export const makeGraphPool = Effect.gen(function* () {
               checkout,
               project: { repoKey: row.repoKey, rootPath: row.rootPath, storage: row.storage },
               batches: built.batches,
+              checkoutChanged: built.checkoutChanged,
               fresh: () => both((treeRoot) => freshnessGate.fresh(treeRoot)),
               copyFailures: () => freshnessGate.copyFailures(layout.treeRoot),
               settled: (force = false) => both((treeRoot) => freshnessGate.settled(treeRoot, force)),
@@ -667,6 +668,7 @@ export const makeGraphPool = Effect.gen(function* () {
           resolveFresh: Effect.fnUntraced(function* (projectId: number) {
             const served = yield* within(projectId, null);
             yield* served.settled(true);
+            yield* served.checkoutChanged;
           }),
           kept: Effect.fnUntraced(function* (projectId: number, names: readonly string[]) {
             const served = yield* within(projectId, null);

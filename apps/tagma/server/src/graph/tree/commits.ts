@@ -103,7 +103,7 @@ export type TreeCommitsOptions = {
   readonly git: Git['Service'];
   readonly checkout: string;
   readonly treeRoot: string;
-  readonly journal: CommitJournal;
+  readonly journal: CommitJournal | null;
   readonly permit: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   readonly policy: Effect.Effect<GraphCommitPolicy, StoreFailure>;
   readonly fork: (effect: Effect.Effect<void>) => unknown;
@@ -155,7 +155,7 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
     Effect.gen(function* () {
       if (!existsSync(treeRoot)) return { kind: 'clean' } as const;
       yield* settleOwed;
-      yield* journal.recover(landedAt(git, checkout));
+      if (journal !== null) yield* journal.recover(landedAt(git, checkout));
       const taken = pending;
       for (let attempt = 1; ; attempt += 1) {
         const paths = yield* dirt;
@@ -181,16 +181,16 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
                 ),
                 (failure) => new OwnGitFailed({ op: 'graph-capture', message: failure.message, ran: false }),
               ),
-              journal.words,
+              journal === null ? Effect.succeed({ reach: 0, lines: [], agents: [] }) : journal.words,
             );
           }),
         ).pipe(Effect.onError(() => restore));
         const shape = yield* shapeOf(git, checkout).pipe(Effect.onError(() => restore));
         const published = yield* Effect.uninterruptible(
           Effect.gen(function* () {
-            yield* journal.landing(words.reach);
+            if (journal !== null) yield* journal.landing(words.reach);
             const outcome = yield* publishToCheckout(git, checkout, capture, messageOf(words, shape));
-            if (outcome.kind === 'committed' || outcome.kind === 'clean') yield* journal.committed(words.reach);
+            if (journal !== null && (outcome.kind === 'committed' || outcome.kind === 'clean')) yield* journal.committed(words.reach);
             return outcome;
           }),
         ).pipe(Effect.onError(() => restore));
