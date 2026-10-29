@@ -11,6 +11,7 @@ import {
   RootRefused,
   RootUnavailable,
   isRegistryChanged,
+  isUnidentified,
   type FileRoot,
   type RootBinding,
   type RootFootprint,
@@ -23,6 +24,7 @@ import { type FileRootStore, storageUnavailable, type RootStoreFailure } from '.
 import {
   FileRoots,
   RootReservations,
+  type AncestorKeys,
   type DirectoryFact,
   type RootAdoption,
   type RootScope,
@@ -133,8 +135,8 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
   const matching = Effect.fn('FileRoots.matching')(
     function* (path: string): Effect.fn.Return<RootMatch | null, RootFailure> {
       if ((yield* io(files.stat(path), path)).type !== 'Directory') return null;
-      const fact = yield* probe(path);
-      if (fact.type !== 'Directory') return null;
+      const fact = yield* probe(path).pipe(Effect.catchIf(isUnidentified, () => Effect.succeed(null)));
+      if (fact === null || fact.type !== 'Directory') return null;
       const candidates = yield* store.candidates(namespaceId, fact.path, fact.witness);
       const root = candidates.find((root) => same(root.witness, fact.witness));
       return root === undefined ? null : { root, path: fact.path };
@@ -282,7 +284,7 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
         if (binding !== undefined) yield* read(binding.rootId, binding.locationRevision);
         let footprint = admitted.get(path);
         if (footprint === undefined) {
-          const ancestors = new Map<string, string>();
+          const ancestors: AncestorKeys = new Map();
           const fact = yield* probe(path, ancestors);
           if (index === undefined) {
             index = yield* snapshot(ancestors, path, fact);
@@ -331,7 +333,7 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
     };
   }
 
-  const standing = Effect.fn('FileRoots.standing')(function* (root: FileRoot, ancestors: Map<string, string>) {
+  const standing = Effect.fn('FileRoots.standing')(function* (root: FileRoot, ancestors: AncestorKeys) {
     const checked = yield* Effect.result(check(root, ancestors));
     if (checked._tag === 'Success') return checked.success;
     const refused = checked.failure;
@@ -341,7 +343,7 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
   });
 
   const snapshot = Effect.fn('FileRoots.snapshot')(function* (
-    ancestors: Map<string, string>,
+    ancestors: AncestorKeys,
     path: string,
     fact: DirectoryFact,
   ): Effect.fn.Return<FootprintIndex, RootFailure> {
@@ -373,7 +375,7 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
 
   const refresh = Effect.fn('FileRoots.refresh')(function* (
     index: FootprintIndex,
-    ancestors: Map<string, string>,
+    ancestors: AncestorKeys,
   ): Effect.fn.Return<void, RootFailure> {
     for (;;) {
       const changed = yield* store.changesSince(namespaceId, index.revision);
@@ -422,7 +424,7 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
           }
         }
         const additions = changed.roots.filter((root) => root.state === 'active' && !roots.has(root.rootId));
-        const ancestors = additions.length === 0 ? undefined : new Map<string, string>();
+        const ancestors: AncestorKeys | undefined = additions.length === 0 ? undefined : new Map();
         const current = yield* probe(path, ancestors);
         if (!same(footprint.witness, current.witness) || current.path !== footprint.resource.path) {
           return yield* new RootConflict({
@@ -526,7 +528,7 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
 
   const check = Effect.fn('FileRoots.check')(function* (
     root: FileRoot,
-    ancestors?: Map<string, string>,
+    ancestors?: AncestorKeys,
   ): Effect.fn.Return<DirectoryFact, RootFailure> {
     const fact = yield* probe(root.path, ancestors);
     if (!same(root.witness, fact.witness)) {
@@ -540,7 +542,7 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
 
   const probe = Effect.fn('FileRoots.probe')(function* (
     path: string,
-    cache?: Map<string, string>,
+    cache?: AncestorKeys,
   ): Effect.fn.Return<DirectoryFact, RootResolutionFailure> {
     if (!paths.isAbsolute(path)) {
       return yield* new RootInvalid({
@@ -559,10 +561,10 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
       while (parent !== canonical) {
         let identity = cache.get(parent);
         if (identity === undefined) {
-          identity = yield* physicalKey(yield* io(files.stat(parent), parent), parent);
+          identity = keyOf(yield* io(files.stat(parent), parent));
           cache.set(parent, identity);
         }
-        ancestors.add(identity);
+        if (Result.isSuccess(identity)) ancestors.add(identity.success);
         const next = paths.dirname(parent);
         if (next === parent) break;
         parent = next;
@@ -600,9 +602,13 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
     });
   }
 
+  function keyOf(info: FileSystem.File.Info): Result.Result<string, 'coordinate'> {
+    return coordinateOf({ type: info.type, device: info.dev, inode: Option.getOrNull(info.ino) });
+  }
+
   function physicalKey(info: FileSystem.File.Info, path: string): Effect.Effect<string, RootUnavailable> {
-    const coordinate = coordinateOf({ type: info.type, device: info.dev, inode: Option.getOrNull(info.ino) });
-    return Result.isFailure(coordinate)
+    const key = keyOf(info);
+    return Result.isFailure(key)
       ? Effect.fail(
           new RootUnavailable({
             namespaceId,
@@ -611,7 +617,7 @@ export const makeRootRegistry = Effect.fnUntraced(function* ({
             message: 'The filesystem did not supply a usable device and inode.',
           }),
         )
-      : Effect.succeed(coordinate.success);
+      : Effect.succeed(key.success);
   }
 
   function same(left: IdentityWitness, right: IdentityWitness): boolean {

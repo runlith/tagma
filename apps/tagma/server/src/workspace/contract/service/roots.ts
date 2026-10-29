@@ -26,6 +26,8 @@ export type DirectoryFact = {
   readonly ancestors: ReadonlySet<string>;
 };
 
+export type AncestorKeys = Map<string, Result.Result<string, 'coordinate'>>;
+
 export type RootAdoption = {
   readonly root: FileRoot;
   readonly facet: RootGit | null | undefined;
@@ -63,7 +65,7 @@ export class FileRoots extends Context.Service<
     retireMissing(rootId: RootId, unit: WriteUnit<'machine'>): Effect.Effect<FileRoot, RootResolutionFailure>;
     removed(rootId: RootId): Effect.Effect<boolean, RootResolutionFailure>;
     locate(root: FileRoot, path: string): Effect.Effect<ResourceAddress, RootResolutionFailure>;
-    probe(path: string, cache?: Map<string, string>): Effect.Effect<DirectoryFact, RootResolutionFailure>;
+    probe(path: string, cache?: AncestorKeys): Effect.Effect<DirectoryFact, RootResolutionFailure>;
     matching(path: string): Effect.Effect<RootMatch | null, RootResolutionFailure>;
     relocate(match: RootMatch, git?: RootGit | null): Effect.Effect<FileRoot, RootResolutionFailure>;
   }

@@ -91,6 +91,9 @@ export class RootConflict extends Data.TaggedError('RootConflict')<{
 export const isRegistryChanged = (failure: unknown): failure is RootConflict =>
   failure instanceof RootConflict && failure.reason === 'registry-changed';
 
+export const isUnidentified = (failure: unknown): failure is RootUnavailable =>
+  failure instanceof RootUnavailable && failure.reason === 'identity-unavailable';
+
 export class RootRefused extends Data.TaggedError('RootRefused')<{
   readonly namespaceId: NamespaceId;
   readonly path: string;

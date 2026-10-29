@@ -17,7 +17,7 @@ import {
   type WithheldCheckout,
 } from '../contract/wire/coverage.js';
 import type { RootId } from '../contract/wire/ids.js';
-import { RootUnavailable, isRegistryChanged, type RootGit, type RootResolutionFailure } from '../contract/wire/roots.js';
+import { RootUnavailable, isRegistryChanged, isUnidentified, type RootGit, type RootResolutionFailure } from '../contract/wire/roots.js';
 import { Coverage, FileRoots, type RootAdmissionRequest, type RootAdoption } from '../contract/service/roots.js';
 import { Repositories } from '../contract/service/repositories.js';
 import { Projects } from '../../projects/contract/service/registry.js';
@@ -308,7 +308,10 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({
       if (gone.length === 0) return false;
       const records = yield* roots.live(gone);
       for (let at = path; at !== dirname(at); at = dirname(at)) {
-        const fact = yield* roots.probe(at).pipe(Effect.catchTag('RootMissing', () => Effect.succeed(null)));
+        const fact = yield* roots.probe(at).pipe(
+          Effect.catchTag('RootMissing', () => Effect.succeed(null)),
+          Effect.catchIf(isUnidentified, () => Effect.succeed(null)),
+        );
         if (fact === null) continue;
         const root = records.find((one) => sameWitness(one.witness, fact.witness));
         if (root === undefined) continue;

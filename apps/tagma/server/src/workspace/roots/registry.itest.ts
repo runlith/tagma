@@ -408,20 +408,27 @@ it.live('a filesystem without a birthtime witness cannot adopt or condemn a root
   ),
 );
 
-it.live('ancestor containment remains provable when only an ancestor lacks birthtime', () =>
+it.live('ancestor containment remains provable when only an ancestor lacks birthtime or a usable inode', () =>
   run(
     Effect.gen(function* () {
       const { files, paths, records, home, roots } = yield* fixture;
       const root = yield* roots.register({ path: home, provenance });
+      const child = paths.join(home, 'child');
+      yield* files.makeDirectory(child);
       const ancestor = paths.parse(home).root;
-      const reader = yield* over(records, {
-        ...files,
-        stat: (path) =>
-          Effect.map(files.stat(path), (info) => (path === ancestor ? { ...info, birthtime: Option.some(new Date(0)) } : info)),
-      });
-      const footprint = yield* reader.resolveFootprint(home);
-      expect(footprint.status).toBe('complete');
-      expect(footprint.roots.map(({ root }) => root.rootId)).toEqual([root.rootId]);
+      const losses = [
+        (info: FileSystem.File.Info) => ({ ...info, birthtime: Option.some(new Date(0)) }),
+        (info: FileSystem.File.Info) => ({ ...info, ino: Option.none() }),
+      ];
+      for (const lose of losses) {
+        const reader = yield* over(records, {
+          ...files,
+          stat: (path) => Effect.map(files.stat(path), (info) => (path === ancestor ? lose(info) : info)),
+        });
+        const footprint = yield* reader.scope().resolve(child);
+        expect(footprint.status).toBe('complete');
+        expect(footprint.roots.map(({ root, relation }) => [root.rootId, relation])).toEqual([[root.rootId, 'ancestor']]);
+      }
     }),
   ),
 );

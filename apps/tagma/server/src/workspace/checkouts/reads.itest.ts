@@ -1,6 +1,6 @@
 import { layer } from '@runlith/effect-test';
 import { expect } from 'bun:test';
-import { Effect, FileSystem, Layer, Path } from 'effect';
+import { Effect, FileSystem, Layer, Option, Path } from 'effect';
 import { NamespaceId } from '@runlith/files/namespace';
 import { commitOf } from '@runlith/git/repository';
 import { Git } from '@runlith/git/Git';
@@ -92,6 +92,23 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(Layer.merge(BunFileSystem.layer, 
           yield* files.writeFileString(`${checkout}/src/a.ts`, 'a\n');
           const paths = yield* checkoutPaths(coverage, demo.graph.projects);
           expect((yield* paths.placeAcross(`${checkout}/src/A.ts`))?.path).toBe('src/A.ts');
+        }),
+      ),
+    );
+
+    it.effect('a path beneath a directory whose inode is unusable lies outside every checkout', () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const files = yield* FileSystem.FileSystem;
+          const sealed = yield* files.realPath(yield* files.makeTempDirectoryScoped({ prefix: 'sealed-' }));
+          yield* files.makeDirectory(`${sealed}/bin`);
+          const blind: FileSystem.FileSystem = {
+            ...files,
+            stat: (path) => Effect.map(files.stat(path), (info) => (path === sealed ? { ...info, ino: Option.none() } : info)),
+          };
+          const { coverage } = yield* Effect.provideService(composed(demo), FileSystem.FileSystem, blind);
+          const paths = yield* checkoutPaths(coverage, demo.graph.projects);
+          expect(yield* paths.placeAcross(`${sealed}/bin`)).toBeNull();
         }),
       ),
     );
