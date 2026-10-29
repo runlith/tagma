@@ -90,9 +90,12 @@ export const framePickScenario = Effect.fnUntraced(function* (input: {
     calling(PAGE.act_on_page.body.execute({ page, steps: [{ action: 'click', x: 180, y: 310 }] }, undefined, OPERATOR));
   yield* rootClick();
   expect(refIn((yield* snapshot()).text, /button "Clicked 1"/)).toBe(later);
+  const ratio = yield* calling(PAGE.evaluate_in_page.body.execute({ page, expression: 'devicePixelRatio' }, undefined, caller));
+  if (!('value' in ratio)) return yield* Effect.die('the device pixel ratio was not evaluated');
+  const scale = Number(ratio.value);
   const element = yield* calling(PAGE.capture_page.body.execute({ page, what: 'element', ref: first }, undefined, caller));
   if (element.status !== 'captured') return yield* Effect.die('the element capture answered a heap');
-  expect([element.width, element.height]).toEqual([160, 60]);
+  expect([element.width, element.height]).toEqual([160 * scale, 60 * scale]);
   yield* rootClick();
   expect(refIn((yield* snapshot()).text, /button "Clicked 2"/)).toBe(later);
   yield* calling(
@@ -108,7 +111,7 @@ export const framePickScenario = Effect.fnUntraced(function* (input: {
   const large = refIn((yield* snapshot()).text, /button "Large region"/);
   const oversized = yield* calling(PAGE.capture_page.body.execute({ page, what: 'element', ref: large }, undefined, caller));
   if (oversized.status !== 'captured') return yield* Effect.die('the element capture answered a heap');
-  expect([oversized.width, oversized.height]).toEqual([1200, 900]);
+  expect([oversized.width, oversized.height]).toEqual([1200 * scale, 900 * scale]);
   yield* rootClick();
   expect(refIn((yield* snapshot()).text, /button "Clicked 3"/)).toBe(later);
   const full = yield* calling(PAGE.capture_page.body.execute({ page, what: 'full' }, undefined, caller));

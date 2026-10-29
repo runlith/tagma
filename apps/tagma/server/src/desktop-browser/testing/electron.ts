@@ -114,5 +114,6 @@ export const electronHost = (home: string) =>
       });
       const electron = yield* launchElectron(home, url);
       yield* Effect.raceFirst(Deferred.await(attached), Effect.flatMap(electron.exited, Effect.die));
+      yield* Effect.forkScoped(Effect.flatMap(electron.exited, (said) => Effect.logError(said)));
     }),
   );
