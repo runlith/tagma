@@ -7,12 +7,12 @@ import type { ThreadQuestionEntry } from '@runlith/agent/transcript/entries';
 import { eq, sql } from 'drizzle-orm';
 import { Clock, Effect, Queue } from 'effect';
 import { ExecutionId, InstallationId, type ExecutionRef } from '@runlith/executions/protocol/execution';
-import { commandSignalId } from '../../../executions/contract/wire/commands.js';
+import { COMMAND_RESULT_SIGNAL, commandSignalId } from '../../../executions/contract/wire/commands.js';
 import { CommandWaiters } from '../../../executions/contract/service/commands.js';
 import { commandNoticeQueue } from '../../../executions/testing/doubles.js';
 import { storesOver } from '../../../executions/testing/stores.js';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
-import { ownWork, standingOfSummary, threadListReads } from '../../../threads/testing/doubles.js';
+import { ownWork, standingOfSummary, threadInbox, threadListReads } from '../../../threads/testing/doubles.js';
 import { externalSession, thread, threadRun, unmeasuredObservation } from '../../../threads/testing/doubles.js';
 import { transcript } from './transcript.js';
 import { saidOfRuns } from '../../../threads/list/said.js';
@@ -855,50 +855,115 @@ it.live(
   }),
 );
 
-it.live(
-  'a root whose turn ended while its own background command runs owes that end and stands as finished only once the end is taken',
-  Effect.fnUntraced(function* () {
-    const demo = yield* threadStoreFixture;
-    const { store, records, ids } = yield* project(demo, 1);
-    const tester = ids[0] as string;
+const owingReads = Effect.fnUntraced(function* (demo: ThreadStoreFixture, store: ThreadStoreFixture['store']) {
+  const installation = InstallationId.make('list-owes');
+  const deliveries = storesOver(demo.db, installation).deliveries;
+  const waiters = yield* commandNoticeQueue({
+    deliveries,
+    ended: yield* Queue.unbounded<ExecutionRef>(),
+    takeBack: Effect.die(new Error('the list takes back no notice')),
+  }).pipe(Effect.provide(demo.context));
+  const own = yield* ownWork().pipe(Effect.provideService(CommandWaiters, waiters), Effect.provide(demo.context));
+  const reads = yield* Effect.provide(threadListReads(store, demo.records, ENTRY_KINDS, own), demo.context);
+  const ended = Effect.fnUntraced(function* (threadId: string, runId: string) {
     yield* demo.db
       .insert(threadRun())
-      .values({
-        id: 'run-owing',
-        threadId: tester,
-        ownerId: 'operator',
-        status: 'completed',
-        finishedAt: new Date(yield* Clock.currentTimeMillis),
-      })
+      .values({ id: runId, threadId, ownerId: 'operator', status: 'completed', finishedAt: new Date(yield* Clock.currentTimeMillis) })
       .pipe(Effect.orDie);
-    const deliveries = storesOver(demo.db, InstallationId.make('list-owes')).deliveries;
-    const waiters = yield* commandNoticeQueue({
-      deliveries,
-      ended: yield* Queue.unbounded<ExecutionRef>(),
-      takeBack: Effect.die(new Error('the list takes back no notice')),
-    }).pipe(Effect.provide(demo.context));
-    const own = yield* ownWork().pipe(Effect.provideService(CommandWaiters, waiters), Effect.provide(demo.context));
-    const reads = yield* Effect.provide(threadListReads(store, records, ENTRY_KINDS, own), demo.context);
-    const suite = { installation: InstallationId.make('list-owes'), execution: ExecutionId.make('exec-list-owes'), incarnation: 1 };
+  });
+  const owe = Effect.fnUntraced(function* (threadId: string, name: string) {
+    const execution = { installation, execution: ExecutionId.make(`exec-${name}`), incarnation: 1 };
     const openedAt = yield* Clock.currentTimeMillis;
     yield* demo.units
       .write('listStore.owedCommand', (unit) =>
-        deliveries.openDelivery(unit, {
-          execution: suite,
-          thread: ThreadId.make(tester),
-          signalId: commandSignalId(suite, 'call-e2e'),
-          openedAt,
+        deliveries.openDelivery(unit, { execution, thread: ThreadId.make(threadId), signalId: commandSignalId(execution, name), openedAt }),
+      )
+      .pipe(Effect.orDie);
+    return execution;
+  });
+  const arrive = (threadId: string, execution: ExecutionRef, waits: boolean) =>
+    demo.units
+      .write('listStore.endArrives', (unit) =>
+        Effect.andThen(
+          deliveries.acceptDelivery(unit, execution),
+          unit.run(
+            demo.db.insert(threadInbox()).values({
+              id: `signal:${execution.execution}`,
+              threadId,
+              sender: { kind: 'host' },
+              kind: 'signal',
+              body: { type: COMMAND_RESULT_SIGNAL, addressee: 'transport', text: 'exit 0', ...(waits ? { waits: true as const } : {}) },
+              occurredAt: new Date(),
+            }),
+          ),
+        ),
+      )
+      .pipe(Effect.orDie);
+  const read = (threadId: string) =>
+    demo.units
+      .write('listStore.endRead', (unit) =>
+        unit.run(demo.db.update(threadInbox()).set({ state: 'acknowledged' }).where(eq(threadInbox().threadId, threadId))),
+      )
+      .pipe(Effect.orDie);
+  return { reads, ended, owe, arrive, read };
+});
+
+it.live(
+  'a root between turns stays owed its own command end while the end runs and while it waits unread in the inbox, and stands as finished only once read',
+  Effect.fnUntraced(function* () {
+    const demo = yield* threadStoreFixture;
+    const { store, ids } = yield* project(demo, 2);
+    const [tester, stopped] = ids as [string, string];
+    const world = yield* owingReads(demo, store);
+    const standing = Effect.fnUntraced(function* (threadId: string) {
+      const summary = yield* world.reads.summary(threadId).pipe(Effect.orDie);
+      return { owes: summary?.owes, standing: summary === undefined ? undefined : (standingOfSummary(summary)?.kind ?? null) };
+    });
+    yield* world.ended(tester, 'run-owing');
+    const suite = yield* world.owe(tester, 'call-e2e');
+    expect(yield* standing(tester)).toEqual({ owes: true, standing: null });
+
+    yield* world.arrive(tester, suite, false);
+    expect(yield* standing(tester)).toEqual({ owes: true, standing: null });
+
+    yield* world.read(tester);
+    expect(yield* standing(tester)).toEqual({ owes: false, standing: 'finished' });
+
+    yield* world.ended(stopped, 'run-stopped');
+    yield* world.arrive(stopped, yield* world.owe(stopped, 'call-stopped'), true);
+    expect((yield* standing(stopped)).owes).toBe(false);
+  }),
+);
+
+it.live(
+  'an old root whose grandchild is owed its own command end keeps its place in the opening window',
+  Effect.fnUntraced(function* () {
+    const demo = yield* threadStoreFixture;
+    const { store, ids } = yield* project(demo, 2);
+    const [old, newer] = ids as [string, string];
+    const [middle, tester] = yield* demo.units
+      .write('ThreadStore.children', (unit) =>
+        Effect.gen(function* () {
+          const made: string[] = [];
+          let parent = old;
+          for (const name of ['middle', 'tester']) {
+            const created = yield* store.insertChild(parent, { ownerId: 'operator', agentId: 'tagma', name }, unit);
+            yield* demo.threads.rows.inheritFacet({ threadId: created.id, fromThreadId: parent, agentId: 'tagma' }, unit);
+            made.push(created.id);
+            parent = created.id;
+          }
+          return made as [string, string];
         }),
       )
       .pipe(Effect.orDie);
+    const world = yield* owingReads(demo, store);
+    const window = () => world.reads.rootWindow('operator', demo.projectId, { limit: 1 }).pipe(Effect.orDie);
+    expect((yield* window()).rows.map((row) => row.id)).toEqual([newer]);
 
-    const owing = yield* reads.summary(tester).pipe(Effect.orDie);
-    expect(owing?.owes).toBe(true);
-    expect(owing === undefined ? undefined : standingOfSummary(owing)).toBeNull();
-
-    yield* demo.units.write('listStore.takenCommand', (unit) => deliveries.acceptDelivery(unit, suite)).pipe(Effect.orDie);
-    const ended = yield* reads.summary(tester).pipe(Effect.orDie);
-    expect(ended?.owes).toBe(false);
-    expect(ended === undefined ? undefined : standingOfSummary(ended)?.kind).toBe('finished');
+    yield* world.ended(tester, 'run-grandchild');
+    yield* world.owe(tester, 'call-grandchild');
+    const opened = yield* window();
+    expect(opened.rows.map((row) => row.id).sort()).toEqual([old, newer, middle, tester].sort());
+    expect(opened.rows.find((row) => row.id === tester)?.owes).toBe(true);
   }),
 );
