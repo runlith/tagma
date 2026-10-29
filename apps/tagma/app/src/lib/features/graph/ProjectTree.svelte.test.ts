@@ -23,13 +23,7 @@ import { loadOperations } from '$lib/wire/operation.js';
 await loadOperations();
 
 function json(body: unknown): Response {
-  const text = JSON.stringify(body);
-  const bytes = new TextEncoder().encode(text);
-  const buffer = new ArrayBuffer(bytes.length);
-  new Uint8Array(buffer).set(bytes);
-  return Object.assign(new Response(text, { headers: { 'content-type': 'application/json' } }), {
-    arrayBuffer: async () => buffer,
-  });
+  return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 }
 
 const EARLIER = '2026-09-05T00:00:00Z';

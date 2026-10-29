@@ -23,13 +23,7 @@ import { loadOperations } from '$lib/wire/operation.js';
 await loadOperations();
 
 function json(body: unknown, init: ResponseInit = {}): Response {
-  const text = JSON.stringify(body);
-  const bytes = new TextEncoder().encode(text);
-  const buffer = new ArrayBuffer(bytes.length);
-  new Uint8Array(buffer).set(bytes);
-  return Object.assign(new Response(text, { ...init, headers: { 'content-type': 'application/json' } }), {
-    arrayBuffer: async () => buffer,
-  });
+  return new Response(JSON.stringify(body), { ...init, headers: { 'content-type': 'application/json' } });
 }
 
 let refuse: () => Response = () => json([]);

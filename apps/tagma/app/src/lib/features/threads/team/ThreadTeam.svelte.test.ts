@@ -36,11 +36,7 @@ const PROJECT_REVIEW: ReviewPolicy = { reviewers: 1, pool: [OPUS], split: 'same'
 type Project = { models: readonly TeamEdit[] | null; review: ReviewPolicy | null };
 
 function json(body: unknown): Response {
-  const text = JSON.stringify(body);
-  const bytes = new TextEncoder().encode(text);
-  const buffer = new ArrayBuffer(bytes.length);
-  new Uint8Array(buffer).set(bytes);
-  return Object.assign(new Response(text, { headers: { 'content-type': 'application/json' } }), { arrayBuffer: async () => buffer });
+  return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 }
 
 class Server {

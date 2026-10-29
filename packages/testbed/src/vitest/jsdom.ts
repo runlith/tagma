@@ -31,6 +31,16 @@ if (dom !== undefined) {
   }
 }
 
+if (dom !== undefined && typeof Response !== 'undefined') {
+  const read = Response.prototype.arrayBuffer;
+  Response.prototype.arrayBuffer = async function (this: Response) {
+    const bytes = new Uint8Array(await read.call(this));
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    return buffer;
+  };
+}
+
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   window.matchMedia = ((query: string) => {
     return {

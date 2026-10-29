@@ -26,13 +26,7 @@ import { SettingChips } from './SettingChips.svelte.js';
 await loadOperations();
 
 function json(body: unknown): Response {
-  const text = JSON.stringify(body);
-  const bytes = new TextEncoder().encode(text);
-  const buffer = new ArrayBuffer(bytes.length);
-  new Uint8Array(buffer).set(bytes);
-  return Object.assign(new Response(text, { status: 200, headers: { 'content-type': 'application/json' } }), {
-    arrayBuffer: async () => buffer,
-  });
+  return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 }
 
 function catalog(on: boolean | undefined) {

@@ -272,14 +272,7 @@ test('a project whose catalog nobody holds yet is asked for once, and its look l
   await requested.promise;
   expect(asked).toHaveLength(1);
   const text = JSON.stringify({ status: 'ok', project: { id: 7, name: 'demo' }, settings: { sections: [], entries: [], rejections: [] } });
-  const bytes = new TextEncoder().encode(text);
-  const buffer = new ArrayBuffer(bytes.length);
-  new Uint8Array(buffer).set(bytes);
-  answer(
-    Object.assign(new Response(text, { headers: { 'content-type': 'application/json' } }), {
-      arrayBuffer: async () => buffer,
-    }),
-  );
+  answer(new Response(text, { headers: { 'content-type': 'application/json' } }));
   await waitUntil(() => owner.known);
   expect(asked).toHaveLength(1);
 });

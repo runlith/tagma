@@ -47,12 +47,7 @@ it.live('a picked element sends a titled Markdown document and its picture throu
       uploaded.push({ mediaType, bytes: init.body });
       const id = `00000000-0000-7000-8000-000000000001.${mediaType === 'text/markdown' ? 'md' : 'png'}`;
       const text = JSON.stringify({ id, mediaType, url: `/api/threads/${threadId}/attachments/${id}` });
-      const bytes = new TextEncoder().encode(text);
-      const buffer = new ArrayBuffer(bytes.length);
-      new Uint8Array(buffer).set(bytes);
-      return Object.assign(new Response(text, { status: 201, headers: { 'content-type': 'application/json' } }), {
-        arrayBuffer: async () => buffer,
-      });
+      return new Response(text, { status: 201, headers: { 'content-type': 'application/json' } });
     });
     const mounted = mountRepo(ThreadsRepo, { door, queryClient: new QueryClient() });
     yield* Effect.addFinalizer(() => Effect.promise(mounted.unmount));
