@@ -46,7 +46,7 @@ Rebuilding rows in place, with no unload, is impossible: event append runs past 
 
 ## What is built and what stays open
 
-The mechanism landed with task [[0911272b]]. The first step `20261010205500_place_guidance` moves single-project law to the project map on record decode; resident-thread maintenances never wait for the shared mark. Still open:
+The mechanism landed with task [[0911272b]]. The first step `20261010205500_place_guidance` moves single-project law to the project map on record decode; resident-thread maintenances never wait for the shared mark. The forming walk at start and every 24 h is deleted ([[189c0df4]]); a null mark — a row from before the `step` column — counts as lagging and is cast on its next access. A read of an unloaded thread no longer shapes its file in the read ([[a920fd6d]]): it refuses an unformable or older-than-base file, settles a publication a crash left behind, opens a compressed file and queues the shaping. Still open:
 
 - **Unloaded-thread worker** (`rested.worker.ts`), which builds `.entries` and history, sees only record steps before background file shaping; payload and message steps it sees after shaping.
 - **After whole cast** maintenance cursors reset with the return, and maintenance walks the thread anew once.
