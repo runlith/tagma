@@ -2,7 +2,7 @@ import { page, type PageQuestion, pageRows, pastKey, readCursor } from '@runlith
 import { Effect } from 'effect';
 import { body, pair } from '../platform/contract/service/body.js';
 import { ceilingOf } from '../platform/contract/wire/pageFamily.js';
-import { cursorRefusal } from '../platform/contract/wire/refusal.js';
+import { cursorRefusal, GateRefusal } from '../platform/contract/wire/refusal.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
 import { Plugins } from './contract/service/plugins.js';
 import { PLUGIN_OPERATIONS as OPS, PLUGIN_ROWS } from './contract/wire/operations.js';
@@ -42,7 +42,15 @@ export const PLUGIN_PAIRS = {
     OPS.install_plugin,
     body(OPS.install_plugin, {
       prepare: Effect.fnUntraced(function* (input) {
-        return yield* (yield* Plugins).prepare({ projectId: yield* projectId, source: input.source });
+        const plugins = yield* Plugins;
+        const project = yield* projectId;
+        if (input.prepared !== undefined && input.source === undefined)
+          return yield* plugins.held({ projectId: project, token: input.prepared });
+        if (input.source !== undefined && input.prepared === undefined)
+          return yield* plugins.prepare({ projectId: project, source: input.source });
+        return yield* new GateRefusal('field-invalid', 'install_plugin takes exactly one of source and prepared.', [
+          'name the folder or git URL as source, or the prepared revision a preview answered as prepared',
+        ]);
       }),
       execute: Effect.fnUntraced(function* (input, prepared) {
         return answer(yield* (yield* Plugins).install({ projectId: yield* projectId, prepared, enabled: input.enabled ?? true }));

@@ -10,6 +10,11 @@
       "node": "./src/apart.ts",
       "default": "./src/apart.ts"
     },
+    "./clone": {
+      "types": "./src/clone.ts",
+      "node": "./src/clone.ts",
+      "default": "./src/clone.ts"
+    },
     "./disk": {
       "types": "./src/disk.ts",
       "node": "./src/disk.ts",

@@ -1,37 +1,85 @@
-import { Effect, FileSystem, Semaphore } from 'effect';
-import { componentName } from './contract/wire/names.js';
+import { randomUUID } from 'node:crypto';
+import type { CloneFailed, CommitUnreachable } from '@runlith/git/clone';
+import { Clock, Duration, Effect, FileSystem, Semaphore } from 'effect';
 import { ChildProcessSpawner } from 'effect/process';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { Projects } from '../projects/contract/service/registry.js';
 import { SecretOwners } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
-import type { PluginRefused, PluginUnreadable } from './contract/service/format.js';
+import type { PluginPackage, PluginRefused, PluginUnreadable } from './contract/service/format.js';
 import { type PluginPrepared, Plugins } from './contract/service/plugins.js';
-import type { PluginRow } from './contract/wire/rows.js';
-import { type PluginInstall, pluginsEnabled, pluginsInstalled, pluginsOptions } from './contract/wire/settings.js';
+import { componentName } from './contract/wire/names.js';
+import type { PluginDeclared, PluginOrigin, PluginRow, PluginSource } from './contract/wire/rows.js';
+import { installedFrom, type PluginInstall, pluginsEnabled, pluginsInstalled, pluginsOptions } from './contract/wire/settings.js';
 import { componentsOf, consentOf } from './consent.js';
 import { collision, type NamesCollide, namesOf, type Read } from './reader.js';
-import { SECRET_KIND, type Shelf } from './shelf.js';
-import { type CloneFailed, fetchSource, sameSource, settleClone, sourceOf, type SourceUnreadable } from './sources.js';
+import { type Bound, SECRET_KIND, type Shelf } from './shelf.js';
+import { cloneRoot, dropStage, fetchSource, sameSource, settle, sourceOf, type SourceUnreadable } from './sources.js';
 
 const READ_PLUGINS = 'read_plugins names what is installed and what each plugin carries';
 
-const refusedOf = (failure: PluginRefused | PluginUnreadable | NamesCollide | SourceUnreadable | CloneFailed) => {
+const KEPT = Duration.hours(24);
+
+type Wanted = { readonly source: PluginSource; readonly origin: PluginOrigin | null; readonly declared: PluginDeclared | null };
+
+type Held = Wanted & {
+  readonly token: string;
+  readonly fetched: PluginSource;
+  readonly root: string;
+  readonly stage: string | null;
+  readonly expires: number;
+};
+
+const refusedOf = (failure: PluginRefused | PluginUnreadable | NamesCollide) =>
+  failure._tag === 'NamesCollide'
+    ? new GateRefusal('plugin-names-collide', failure.reason, ['rename one of the two components in the plugin, then install again'])
+    : new GateRefusal('plugin-refused', failure.message, ['correct the plugin as the reason says, then install again']);
+
+const unfetchedOf = (failure: SourceUnreadable | CloneFailed | CommitUnreachable) => {
   switch (failure._tag) {
-    case 'NamesCollide':
-      return new GateRefusal('plugin-names-collide', failure.reason, [
-        'rename one of the two components in the plugin, then install again',
-      ]);
     case 'SourceUnreadable':
       return new GateRefusal('plugin-source-unreadable', failure.reason, ['name a plugin directory the server can read, or a git URL']);
     case 'CloneFailed':
-      return new GateRefusal('plugin-clone-failed', failure.reason, [
+      return new GateRefusal('plugin-clone-failed', failure.message, [
         'check the URL and that git can reach it as the operator, then install again',
       ]);
-    default:
-      return new GateRefusal('plugin-refused', failure.message, ['correct the plugin as the reason says, then install again']);
+    case 'CommitUnreachable':
+      return new GateRefusal('plugin-pin-unreachable', failure.message, [
+        'the source pins a commit its repository no longer serves: install a revision it serves',
+      ]);
   }
 };
+
+const sameOrigin = (a: PluginOrigin | null, b: PluginOrigin | null): boolean =>
+  a !== null && b !== null && a.marketplace === b.marketplace && a.entry === b.entry;
+
+const sameInstall = (standing: PluginInstall, wanted: Wanted): boolean =>
+  standing.origin !== undefined || wanted.origin !== null
+    ? sameOrigin(standing.origin ?? null, wanted.origin)
+    : sameSource(standing.source, wanted.source);
+
+const sameAsked = (held: Held, wanted: Wanted): boolean =>
+  sameOrigin(held.origin, wanted.origin) &&
+  JSON.stringify(held.source) === JSON.stringify(wanted.source) &&
+  JSON.stringify(held.declared) === JSON.stringify(wanted.declared);
+
+const optionRows = (pkg: PluginPackage, values: Readonly<Record<string, string>>) =>
+  pkg.options.map((option) => ({
+    key: option.key,
+    type: option.type,
+    title: option.title,
+    description: option.description,
+    sensitive: option.sensitive,
+    required: option.required,
+    set: values[option.key] !== undefined,
+    fallback: option.sensitive ? null : option.fallback,
+  }));
+
+const shownOf = (read: Read, bound: Bound) => ({
+  components: componentsOf(bound.loaded, new Map(read.package.agents.map((agent) => [componentName(read.id, agent.name), agent.dropped]))),
+  ignored: [...read.package.ignored, ...bound.skipped],
+  options: optionRows(read.package, bound.options),
+});
 
 export const makeInstalls = Effect.fnUntraced(function* (input: {
   readonly shelf: Shelf;
@@ -44,7 +92,9 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
   const owners = yield* SecretOwners;
   const files = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const scope = yield* Effect.scope;
   const serial = yield* Semaphore.make(1);
+  const holding = new Map<string, Held>();
 
   const locked = <A, E>(work: Effect.Effect<A, E>): Effect.Effect<A, E> => serial.withPermit(work);
 
@@ -68,7 +118,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       (project) => project.rootPath,
     );
 
-  const readOf = (root: string, declared: PluginInstall['declared']) =>
+  const readOf = (root: string, declared: PluginDeclared | null | undefined) =>
     shelf.read(root, declared ?? null).pipe(
       Effect.catchTags({
         PluginRefused: (failure) => Effect.fail(refusedOf(failure)),
@@ -77,29 +127,108 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       }),
     );
 
-  const preparedOf = Effect.fnUntraced(function* (read: Read, root: string, source: PluginInstall['source'], projectId: number) {
-    const { loaded } = yield* shelf
+  const boundOf = Effect.fnUntraced(function* (read: Read, root: string, projectId: number) {
+    return yield* shelf
       .bind(read, root, yield* projectRoot(projectId))
       .pipe(Effect.catchTag('PluginUnreadable', (failure) => Effect.fail(refusedOf(failure))));
-    return {
-      id: read.id,
-      format: read.format,
-      source,
-      root,
-      package: read.package,
-      consent: consentOf(loaded),
-      running: yield* runningAnywhere(read.id),
-    } satisfies PluginPrepared;
   });
 
   const installedList = settings.value(pluginsInstalled);
 
+  const untaken = Effect.fnUntraced(function* (id: string, wanted: Wanted) {
+    const standing = (yield* installedList).find((entry) => entry.id === id);
+    if (standing === undefined || sameInstall(standing, wanted)) return standing !== undefined;
+    return yield* new GateRefusal('plugin-id-taken', `A plugin named ${id} is already installed from ${installedFrom(standing)}.`, [
+      `uninstall_plugin ${id}, then install this one`,
+    ]);
+  });
+
+  const preparedOf = Effect.fnUntraced(function* (held: Held, read: Read, projectId: number) {
+    const bound = yield* boundOf(read, held.root, projectId);
+    const consent = consentOf(bound.loaded);
+    const pkg = read.package;
+    return {
+      id: read.id,
+      consent,
+      running: yield* runningAnywhere(read.id),
+      token: held.token,
+      format: read.format,
+      source: held.fetched,
+      origin: held.origin,
+      declared: held.declared,
+      root: held.root,
+      stage: held.stage,
+      package: pkg,
+      preview: {
+        prepared: held.token,
+        expires: new Date(held.expires).toISOString(),
+        id: read.id,
+        title: pkg.title ?? pkg.name,
+        version: pkg.version,
+        description: pkg.description,
+        format: read.format,
+        about: pkg.about,
+        source: held.fetched,
+        origin: held.origin ?? undefined,
+        replaces: yield* untaken(read.id, held),
+        ...shownOf(read, bound),
+        consent: {
+          runs: consent.subjects.filter((subject) => subject.kind === 'execute').map((subject) => subject.value),
+          reaches: consent.subjects.filter((subject) => subject.kind === 'network').map((subject) => subject.value),
+          raises: consent.raised.map((raised) => raised.fact),
+        },
+      },
+    } satisfies PluginPrepared;
+  });
+
+  const expired = (token: string) =>
+    new GateRefusal(
+      'plugin-preview-expired',
+      `No prepared plugin ${token} is held: it was installed, or dropped after a day or a server restart.`,
+      ['prepare it again — preview_plugin for a marketplace entry, install_plugin for a folder or git URL — and install what that answers'],
+    );
+
+  const expire = (token: string) =>
+    locked(
+      Effect.gen(function* () {
+        const held = holding.get(token);
+        if (held === undefined) return;
+        holding.delete(token);
+        shelf.forget(held.root);
+        if (held.stage !== null) yield* dropStage(held.stage).pipe(Effect.provideService(FileSystem.FileSystem, files));
+      }),
+    ).pipe(Effect.tapError((failure) => Effect.logWarning(`a dropped plugin preview could not be removed: ${failure.message}`)));
+
+  const fetched = Effect.fnUntraced(function* (wanted: Wanted) {
+    const reused = wanted.origin === null ? undefined : [...holding.values()].find((held) => sameAsked(held, wanted));
+    if (reused !== undefined) return reused;
+    const got = yield* fetchSource(wanted.source, home, wanted.origin !== null).pipe(
+      Effect.provideService(FileSystem.FileSystem, files),
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.mapError(unfetchedOf),
+    );
+    const held: Held = {
+      ...wanted,
+      token: randomUUID(),
+      fetched: got.source,
+      root: got.root,
+      stage: got.stage,
+      expires: (yield* Clock.currentTimeMillis) + Duration.toMillis(KEPT),
+    };
+    shelf.forget(held.root);
+    if (held.stage !== null) {
+      holding.set(held.token, held);
+      yield* Effect.forkIn(Effect.delay(expire(held.token), KEPT), scope);
+    }
+    return held;
+  });
+
   const rowOf = Effect.fn('Plugins.rowOf')(function* (install: PluginInstall, projectId: number, enabled: ReadonlySet<string>) {
     const project = yield* projectRoot(projectId);
-    const base = { id: install.id, source: install.source, root: install.root, enabled: enabled.has(install.id) };
+    const base = { id: install.id, source: install.source, origin: install.origin, root: install.root, enabled: enabled.has(install.id) };
     const reading = yield* Effect.result(
       Effect.flatMap(shelf.read(install.root, install.declared ?? null), (read) =>
-        Effect.map(shelf.bind(read, install.root, project), (bound) => ({ read, ...bound })),
+        Effect.map(shelf.bind(read, install.root, project), (bound) => ({ read, bound })),
       ),
     );
     if (reading._tag === 'Failure') {
@@ -115,35 +244,16 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         refused: reading.failure.message,
       } satisfies PluginRow;
     }
-    const { read, loaded, options, skipped } = reading.success;
+    const { read, bound } = reading.success;
     const pkg = read.package;
-    const dropped = new Map(pkg.agents.map((agent) => [componentName(install.id, agent.name), agent.dropped]));
     return {
       ...base,
       title: pkg.title ?? pkg.name,
       version: pkg.version,
       description: pkg.description,
       format: read.format,
-      components: componentsOf(loaded, dropped),
-      ignored: [...pkg.ignored, ...skipped],
-      options: pkg.options.map((option) => ({
-        key: option.key,
-        type: option.type,
-        title: option.title,
-        description: option.description,
-        sensitive: option.sensitive,
-        required: option.required,
-        set: options[option.key] !== undefined,
-        fallback: option.sensitive ? null : option.fallback,
-      })),
+      ...shownOf(read, bound),
     } satisfies PluginRow;
-  });
-
-  const row = Effect.fnUntraced(function* (projectId: number, id: string) {
-    const install = (yield* installedList).find((entry) => entry.id === id);
-    const enabled = new Set(yield* settings.value(pluginsEnabled, projectId));
-    if (install === undefined) return yield* notInstalled(id);
-    return yield* rowOf(install, projectId, enabled);
   });
 
   const notInstalled = (id: string) =>
@@ -157,6 +267,11 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
   const installedOf = Effect.fnUntraced(function* (id: string) {
     const install = (yield* installedList).find((entry) => entry.id === id);
     return install ?? (yield* notInstalled(id));
+  });
+
+  const row = Effect.fnUntraced(function* (projectId: number, id: string) {
+    const install = yield* installedOf(id);
+    return yield* rowOf(install, projectId, new Set(yield* settings.value(pluginsEnabled, projectId)));
   });
 
   const clashes = Effect.fnUntraced(function* (projectId: number, read: Read) {
@@ -197,6 +312,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
 
   return Plugins.of({
     ids: () => Effect.map(installedList, (installs) => installs.map((install) => install.id).sort()),
+    installs: () => installedList,
     rows: Effect.fn('Plugins.rows')(function* (projectId, ids) {
       const enabled = new Set(yield* settings.value(pluginsEnabled, projectId));
       const installs = new Map((yield* installedList).map((install) => [install.id, install]));
@@ -209,60 +325,70 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       );
     }),
     prepare: Effect.fn('Plugins.prepare')(function* ({ projectId, source: given }) {
-      const source = sourceOf(given, yield* projectRoot(projectId));
-      const fetched = yield* fetchSource(source, home).pipe(
-        Effect.provideService(FileSystem.FileSystem, files),
-        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-        Effect.mapError(refusedOf),
-      );
-      shelf.forget(fetched.root);
-      const read = yield* readOf(fetched.root, undefined);
-      const standing = (yield* installedList).find((entry) => entry.id === read.id);
-      if (standing !== undefined && !sameSource(standing.source, source)) {
-        const from = standing.source.kind === 'git' ? standing.source.url : standing.source.path;
-        return yield* new GateRefusal('plugin-id-taken', `A plugin named ${read.id} is already installed from ${from}.`, [
-          `uninstall_plugin ${read.id}, then install this one`,
-        ]);
-      }
-      return yield* preparedOf(read, fetched.root, source, projectId);
+      const wanted: Wanted =
+        typeof given === 'string'
+          ? { source: sourceOf(given, yield* projectRoot(projectId)), origin: null, declared: null }
+          : { source: given.source, origin: given.origin, declared: given.declared };
+      const held = yield* fetched(wanted);
+      return yield* preparedOf(held, yield* readOf(held.root, held.declared), projectId);
+    }),
+    held: Effect.fn('Plugins.held')(function* ({ projectId, token }) {
+      const held = holding.get(token);
+      if (held === undefined) return yield* expired(token);
+      return yield* preparedOf(held, yield* readOf(held.root, held.declared), projectId);
     }),
     install: Effect.fn('Plugins.install')(function* ({ projectId, prepared, enabled }) {
-      const { id, source } = prepared;
+      const { id } = prepared;
       return yield* locked(
         Effect.gen(function* () {
-          shelf.forget(prepared.root);
-          const read = yield* readOf(prepared.root, undefined);
+          const held: Held | undefined =
+            prepared.stage === null
+              ? {
+                  token: prepared.token,
+                  source: prepared.source,
+                  fetched: prepared.source,
+                  origin: prepared.origin,
+                  declared: prepared.declared,
+                  root: prepared.root,
+                  stage: null,
+                  expires: 0,
+                }
+              : holding.get(prepared.token);
+          if (held === undefined) return yield* expired(prepared.token);
+          shelf.forget(held.root);
+          const read = yield* readOf(held.root, held.declared);
           if (read.id !== id) {
             return yield* new GateRefusal(
               'plugin-refused',
-              `The plugin at ${prepared.root} now names itself ${read.id}, not ${id}, which was approved.`,
+              `The plugin at ${held.root} now names itself ${read.id}, not ${id}, which was approved.`,
               ['install again'],
             );
           }
-          const standing = (yield* installedList).find((entry) => entry.id === id);
-          if (standing !== undefined && !sameSource(standing.source, source)) {
-            return yield* new GateRefusal('plugin-id-taken', `A plugin named ${id} was installed from another source meanwhile.`, [
-              `uninstall_plugin ${id}, then install this one`,
-            ]);
-          }
+          yield* untaken(id, held);
           const enabledHere = (yield* settings.value(pluginsEnabled, projectId)).includes(id);
           const running: number[] = enabled ? [projectId] : [];
           for (const project of yield* projects.list()) {
             if (project.id !== projectId && (yield* settings.value(pluginsEnabled, project.id)).includes(id)) running.push(project.id);
           }
           yield* Effect.forEach(running, (project) => clashes(project, read), { discard: true });
+          const stage = held.stage;
           const root =
-            source.kind === 'git'
-              ? yield* settleClone(prepared.root, home, id).pipe(
+            stage === null
+              ? held.root
+              : yield* settle({ root: held.root, stage }, cloneRoot(home, id)).pipe(
                   Effect.provideService(FileSystem.FileSystem, files),
                   Effect.mapError(
                     (failure) =>
-                      new GateRefusal('plugin-clone-failed', `The clone could not be put in place: ${failure.message}`, ['install again']),
+                      new GateRefusal('plugin-clone-failed', `The plugin could not be put in place: ${failure.message}`, ['install again']),
                   ),
-                )
-              : prepared.root;
+                );
+          holding.delete(prepared.token);
+          shelf.forget(held.root);
           shelf.forget(root);
-          yield* recorded((current) => [...current.filter((entry) => entry.id !== id), { id, source, root }]);
+          yield* recorded((current) => [
+            ...current.filter((entry) => entry.id !== id),
+            { id, source: held.fetched, root, origin: held.origin ?? undefined, declared: held.declared ?? undefined },
+          ]);
           if (enabled !== enabledHere) yield* shown(projectId, id, enabled);
           yield* changed(null);
           return yield* row(projectId, id);
@@ -271,7 +397,9 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     }),
     installed: Effect.fn('Plugins.installed')(function* ({ projectId, id }) {
       const install = yield* installedOf(id);
-      return yield* preparedOf(yield* readOf(install.root, install.declared), install.root, install.source, projectId);
+      const read = yield* readOf(install.root, install.declared);
+      const bound = yield* boundOf(read, install.root, projectId);
+      return { id: read.id, consent: consentOf(bound.loaded), running: yield* runningAnywhere(read.id) };
     }),
     enable: Effect.fn('Plugins.enable')(function* ({ projectId, id, enabled }) {
       return yield* locked(
@@ -299,7 +427,7 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
                   ]),
               ),
             );
-          if (install.source.kind === 'git') {
+          if (install.root === cloneRoot(home, id)) {
             yield* files
               .remove(install.root, { recursive: true, force: true })
               .pipe(
@@ -307,8 +435,8 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
                   (failure) =>
                     new GateRefusal(
                       'plugin-clone-failed',
-                      `${id} stays installed: its clone at ${install.root} could not be removed: ${failure.message}`,
-                      ['make the clone writable to the server, then uninstall again'],
+                      `${id} stays installed: its copy at ${install.root} could not be removed: ${failure.message}`,
+                      ['make the copy writable to the server, then uninstall again'],
                     ),
                 ),
               );

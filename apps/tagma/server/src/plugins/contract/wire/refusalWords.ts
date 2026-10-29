@@ -5,6 +5,8 @@ export const REFUSAL_WORDS = {
   'plugin-id-taken': 'Plugin name taken',
   'plugin-names-collide': 'Plugin names collide',
   'plugin-not-installed': 'Plugin not installed',
+  'plugin-pin-unreachable': 'Pinned commit not served',
+  'plugin-preview-expired': 'Plugin preview expired',
   'plugin-refused': 'Plugin not readable',
   'plugin-source-unreadable': 'Plugin folder unreadable',
 } as const satisfies RefusalWords;

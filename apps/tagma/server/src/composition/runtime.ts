@@ -90,6 +90,12 @@ import { PluginFormats } from '../plugins/contract/service/format.js';
 import { claudeCodeFormat } from '../plugin-formats/claude-code/format.js';
 import { agentPluginsFormat } from '../plugin-formats/agent-plugins/format.js';
 import { codexFormat } from '../plugin-formats/codex/format.js';
+import { claudeCodeList } from '../plugin-formats/claude-code/list.js';
+import { codexList } from '../plugin-formats/codex/list.js';
+import { marketplaces } from '../marketplaces/marketplaces.js';
+import { ListFormats } from '../marketplaces/contract/service/lists.js';
+import { MarketplacePlaces, MarketplacePresets } from '../marketplaces/contract/service/marketplaces.js';
+import type { MarketplacePreset } from '../marketplaces/contract/wire/presets.js';
 import { Coverage } from '../workspace/contract/service/roots.js';
 import { mcpPlaces } from './mcpPlaces.js';
 import { MachineWorld } from '../executions/contract/service/worlds.js';
@@ -335,6 +341,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     hostTakenAfter?: Effect.Effect<void>;
     exposure?: (standing: Exposure['Service']) => Exposure['Service'];
     connectors?: ConnectorCatalog['Service'];
+    marketplaces?: readonly MarketplacePreset[];
     sender?: Sender['Service'];
     tagmaAppServer?: string;
     localOrigin?: string;
@@ -522,9 +529,17 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     home: dataPath,
     server: options.tagmaAppServer ?? null,
   });
-  const pluginsInstallation = plugins.lifetimes.installation.pipe(
-    Layer.provide(Layer.succeed(PluginPlaces, { home: dataPath ?? join(tmpdir(), `tagma-plugins-${instanceId.slice(0, 8)}`) })),
-    Layer.provide(Layer.succeed(PluginFormats, [claudeCodeFormat, codexFormat, agentPluginsFormat])),
+  const pluginsHome = dataPath ?? join(tmpdir(), `tagma-plugins-${instanceId.slice(0, 8)}`);
+  const pluginsInstallation = marketplaces.lifetimes.installation.pipe(
+    Layer.provide(Layer.succeed(MarketplacePlaces, { home: pluginsHome })),
+    Layer.provide(Layer.succeed(MarketplacePresets, options.marketplaces ?? [])),
+    Layer.provide(Layer.succeed(ListFormats, [claudeCodeList, codexList])),
+    Layer.provideMerge(
+      plugins.lifetimes.installation.pipe(
+        Layer.provide(Layer.succeed(PluginPlaces, { home: pluginsHome })),
+        Layer.provide(Layer.succeed(PluginFormats, [claudeCodeFormat, codexFormat, agentPluginsFormat])),
+      ),
+    ),
     Layer.provide(BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)))),
     Layer.provide(BunFileSystem.layer),
   );

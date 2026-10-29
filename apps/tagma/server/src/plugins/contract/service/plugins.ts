@@ -4,31 +4,47 @@ import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { SettingLandRefusal } from '../../../settings/contract/service/values.js';
 import type { PluginConsented } from '../wire/consent.js';
-import type { PluginHookPoint, PluginRow, PluginSource } from '../wire/rows.js';
+import type { PluginDeclared, PluginHookPoint, PluginOrigin, PluginPreview, PluginRow, PluginSource } from '../wire/rows.js';
+import type { PluginInstall } from '../wire/settings.js';
 import type { PluginHookAnswer, PluginHookCall, PluginHookSession, PluginPackage, PluginPlace, PluginUnreadable } from './format.js';
 
 export class PluginPlaces extends Context.Service<PluginPlaces, { readonly home: string }>()('tagma/plugins/PluginPlaces') {}
 
+export type PluginResolved = {
+  readonly source: PluginSource;
+  readonly origin: PluginOrigin;
+  readonly declared: PluginDeclared | null;
+};
+
 export type PluginPrepared = PluginConsented & {
+  readonly token: string;
   readonly format: string;
   readonly source: PluginSource;
+  readonly origin: PluginOrigin | null;
+  readonly declared: PluginDeclared | null;
   readonly root: string;
+  readonly stage: string | null;
   readonly package: PluginPackage;
+  readonly preview: PluginPreview;
 };
 
 export type PluginListRefusal = 'unknown-project' | 'secret-store-failed';
-export type PluginInstallRefusal =
+export type PluginPrepareRefusal =
   | PluginListRefusal
   | 'plugin-source-unreadable'
   | 'plugin-clone-failed'
+  | 'plugin-pin-unreachable'
   | 'plugin-refused'
   | 'plugin-names-collide'
-  | 'plugin-id-taken'
+  | 'plugin-id-taken';
+export type PluginInstallRefusal =
+  | PluginPrepareRefusal
   | 'plugin-not-installed'
+  | 'plugin-preview-expired'
   | SettingLandRefusal
   | 'setting-scope'
   | 'setting-value';
-export type PluginChangeRefusal = Exclude<PluginInstallRefusal, 'plugin-id-taken'>;
+export type PluginChangeRefusal = Exclude<PluginInstallRefusal, 'plugin-id-taken' | 'plugin-pin-unreachable' | 'plugin-preview-expired'>;
 
 export type PluginFailure<Code extends string> = StoreFailure | GateRefusal<Code>;
 
@@ -36,11 +52,16 @@ export class Plugins extends Context.Service<
   Plugins,
   {
     ids(): Effect.Effect<readonly string[], StoreFailure>;
+    installs(): Effect.Effect<readonly PluginInstall[], StoreFailure>;
     rows(projectId: number, ids: readonly string[]): Effect.Effect<readonly PluginRow[], PluginFailure<PluginListRefusal>>;
     prepare(input: {
       readonly projectId: number;
-      readonly source: string;
-    }): Effect.Effect<PluginPrepared, PluginFailure<PluginInstallRefusal>>;
+      readonly source: string | PluginResolved;
+    }): Effect.Effect<PluginPrepared, PluginFailure<PluginPrepareRefusal>>;
+    held(input: {
+      readonly projectId: number;
+      readonly token: string;
+    }): Effect.Effect<PluginPrepared, PluginFailure<PluginPrepareRefusal | 'plugin-preview-expired'>>;
     install(input: {
       readonly projectId: number;
       readonly prepared: PluginPrepared;
@@ -49,7 +70,7 @@ export class Plugins extends Context.Service<
     installed(input: {
       readonly projectId: number;
       readonly id: string;
-    }): Effect.Effect<PluginPrepared, PluginFailure<PluginChangeRefusal>>;
+    }): Effect.Effect<PluginConsented, PluginFailure<PluginChangeRefusal>>;
     enable(input: {
       readonly projectId: number;
       readonly id: string;

@@ -12,6 +12,15 @@ export const PluginInstall = Schema.Struct({
 });
 export type PluginInstall = typeof PluginInstall.Type;
 
+export const installedFrom = (install: Pick<PluginInstall, 'source' | 'origin'>): string =>
+  install.origin !== undefined
+    ? `${install.origin.entry}@${install.origin.marketplace}`
+    : install.source.kind === 'folder'
+      ? install.source.path
+      : install.source.path === undefined
+        ? install.source.url
+        : `${install.source.url} ${install.source.path}`;
+
 export const pluginsInstalled = settingListKey({
   id: 'plugins.installed',
   order: 770,

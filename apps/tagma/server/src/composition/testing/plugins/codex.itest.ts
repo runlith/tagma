@@ -1,13 +1,9 @@
 import { expect } from 'bun:test';
-import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Context, Effect, FileSystem, Layer } from 'effect';
+import { Context, Effect, Layer } from 'effect';
 import { makeDoorWorld } from '../doorFixture.js';
-
-type Files = Readonly<Record<string, string>>;
-
-const skill = (description: string) => `---\ndescription: ${description}\n---\n\nDo it well.\n`;
+import { type Files, skill, written } from './files.js';
 
 const LEGACY: Files = {
   '.codex-plugin/plugin.json': JSON.stringify({
@@ -48,15 +44,6 @@ const PORTABLE: Files = {
   }),
   'skills/plan/SKILL.md': skill('Plans.'),
 };
-
-const written = Effect.fnUntraced(function* (root: string, files: Files) {
-  const fs = yield* FileSystem.FileSystem;
-  for (const [path, text] of Object.entries(files)) {
-    yield* fs.makeDirectory(join(root, path, '..'), { recursive: true });
-    yield* fs.writeFileString(join(root, path), text);
-  }
-  return root;
-});
 
 type Row = {
   readonly id: string;

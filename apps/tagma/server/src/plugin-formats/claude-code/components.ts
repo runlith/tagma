@@ -8,8 +8,8 @@ import type {
   PluginSkillFile,
   PluginUnreadable,
 } from '../../plugins/contract/service/format.js';
-import { entryOf, firstLine, frontmatterOf, namesIn, skillFolders, textOf } from '../../plugins/contract/service/reading.js';
-import { commandEntryOf, declaredPath, listed, type Manifest } from './manifest.js';
+import { declaredPath, entryOf, firstLine, frontmatterOf, namesIn, skillFolders, textOf } from '../../plugins/contract/service/reading.js';
+import { commandEntryOf, listed, type Manifest } from './manifest.js';
 import { tagmaTool, type ToolNaming } from './tools.js';
 import { contentSubstitution, substituted } from './variables.js';
 

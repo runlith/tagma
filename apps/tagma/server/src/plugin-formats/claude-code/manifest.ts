@@ -1,6 +1,6 @@
 import { Effect, Schema } from 'effect';
-import { type PluginAbout, type PluginIgnored, type PluginOption, PluginRefused } from '../../plugins/contract/service/format.js';
-import { entryOf, jsonOf, type PluginEntry, textOf } from '../../plugins/contract/service/reading.js';
+import { type PluginAbout, type PluginOption, PluginRefused } from '../../plugins/contract/service/format.js';
+import { entryOf, jsonOf, textOf } from '../../plugins/contract/service/reading.js';
 
 export const MANIFEST = '.claude-plugin/plugin.json';
 
@@ -100,7 +100,7 @@ export const entryManifest = (entry: Readonly<Record<string, unknown>>) =>
 export const entryFields = (entry: Readonly<Record<string, unknown>>) =>
   decodeDeclared(entry).pipe(Effect.mapError((failure) => new PluginRefused({ reason: `${ENTRY}: ${failure.message}` })));
 
-const named = (value: unknown, key: 'name' | 'url'): string | null => {
+export const named = (value: unknown, key: 'name' | 'url'): string | null => {
   if (typeof value === 'string') return value.length > 0 ? value : null;
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
   const inner = (value as Readonly<Record<string, unknown>>)[key];
@@ -148,21 +148,3 @@ export const commandEntryOf = Effect.fnUntraced(function* (name: string, raw: un
 
 export const listed = (value: string | readonly string[] | undefined): readonly string[] =>
   value === undefined ? [] : typeof value === 'string' ? [value] : value;
-
-export const declaredPath = Effect.fnUntraced(function* (
-  root: string,
-  component: string,
-  path: string,
-  ignored: PluginIgnored[],
-  allowRoot = false,
-) {
-  if (!path.startsWith('./') && !(allowRoot && path === '.')) {
-    ignored.push({ component, name: path, reason: 'a manifest path starts with ./' });
-    return null;
-  }
-  const entry: PluginEntry = yield* entryOf(root, path);
-  if (entry.kind === 'outside') ignored.push({ component, name: path, reason: 'the path escapes the plugin directory' });
-  else if (entry.kind === 'absent') ignored.push({ component, name: path, reason: 'the path does not exist' });
-  else return entry;
-  return null;
-});

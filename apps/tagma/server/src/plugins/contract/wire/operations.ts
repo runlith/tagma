@@ -62,7 +62,7 @@ const CHANGE_REFUSALS = [
 
 const runs = (input: { readonly enabled?: boolean }, prepared: PluginConsented): boolean => input.enabled !== false || prepared.running;
 
-const consentFacts = (prepared: PluginConsented) => {
+export const consentFacts = (prepared: PluginConsented) => {
   const runs = prepared.consent.subjects.filter((subject) => subject.kind === 'execute').map((subject) => subject.value);
   const reaches = prepared.consent.subjects.filter((subject) => subject.kind === 'network').map((subject) => subject.value);
   return [
@@ -97,19 +97,24 @@ export const PLUGIN_OPERATIONS = {
     ...acted,
     answer,
     meaning:
-      'Install an agent plugin — Agent Plugins 1.0 or Claude Code — from a folder, read in place, or a git URL, cloned onto this machine; installing the same URL again updates it. `enabled: false` installs it without running it in this project, and stops it here if it ran.',
+      'Install an agent plugin — Agent Plugins 1.0, Claude Code or Codex — from a folder, read in place, a git URL, cloned onto this machine, or a revision a preview prepared; installing the same source again updates it. `enabled: false` installs it without running it in this project, and stops it here if it ran.',
     grammar:
-      'Its skills and commands join the `$` catalog, its MCP servers this project’s pool and its agents the agent library, each named `<plugin>-<name>`; its command hooks run as the operator. A relative folder is read from the project root.',
+      'Name exactly one of `source` and `prepared`. A prepared revision, as preview_plugin answers it for a marketplace entry, is installed without fetching it again and is copied into the plugin’s own directory, so the plugin never reads its marketplace. Its skills and commands join the `$` catalog, its MCP servers this project’s pool and its agents the agent library, each named `<plugin>-<name>`; its command hooks run as the operator. A relative folder is read from the project root.',
     input: Schema.Struct({
       project: projectField,
-      source: Schema.String.check(Schema.isMinLength(1)).annotate({ description: 'The plugin folder, or the git URL it is cloned from.' }),
+      source: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
+        description: 'The plugin folder, or the git URL it is cloned from.',
+      }),
+      prepared: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
+        description: 'The prepared revision a preview answered.',
+      }),
       enabled: Schema.optional(Schema.Boolean).annotate({ description: 'true (the default): this project runs it at once.' }),
     }),
-    refusals: [...CHANGE_REFUSALS, 'plugin-id-taken'],
+    refusals: [...CHANGE_REFUSALS, 'plugin-id-taken', 'plugin-pin-unreachable', 'plugin-preview-expired', 'field-invalid'],
     confirmation: (input, prepared?: PluginConsented) => ({
       summary:
         prepared === undefined
-          ? `Install the plugin from ${input.source}?`
+          ? `Install the plugin from ${input.source ?? 'a prepared revision'}?`
           : input.enabled === false
             ? `Install the plugin ${prepared.id} on this machine without running it?`
             : `Install the plugin ${prepared.id} and run it in this project?`,

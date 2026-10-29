@@ -41,6 +41,7 @@ import { requestLine } from '../http/door.js';
 import { routedContext } from '../graph/serving/routing.js';
 import { makeRuntime, type ServerRuntime } from './runtime.js';
 import { RECORDINGS } from '../speech/contract/service/recording.js';
+import { SHIPPED_PRESETS } from '../marketplaces/contract/wire/presets.js';
 import { PREPARATION } from './manifest.js';
 import { RolloutReads } from '../threads/contract/service/rolloutReads.js';
 import {
@@ -436,6 +437,7 @@ const tagma: ServerRuntime = await Effect.runPromise(
           hostTakenAfter: attempt.trial === null ? undefined : attempt.opened,
           tagmaAppServer: `http://${LOOPBACK_HOST}:${port}`,
           localOrigin: `http://${LOOPBACK_HOST}:${port}`,
+          marketplaces: SHIPPED_PRESETS,
           commitGate:
             installation === undefined
               ? {

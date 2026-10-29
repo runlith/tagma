@@ -1,6 +1,6 @@
 import { Effect } from 'effect';
 import { type PluginIgnored, PluginRefused } from '../../plugins/contract/service/format.js';
-import { entryOf } from '../../plugins/contract/service/reading.js';
+import { entryOf, isObject } from '../../plugins/contract/service/reading.js';
 import { type Declared, ENTRY, entryFields, entryManifest, listed, type Manifest } from './manifest.js';
 
 const COMPONENTS = ['commands', 'agents', 'skills', 'hooks', 'outputStyles', 'themes'] as const;
@@ -12,9 +12,6 @@ export type Combined = Own & {
   readonly hooks: Readonly<Record<string, unknown>> | null;
   readonly ignored: readonly PluginIgnored[];
 };
-
-const isMap = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
 
 const standing = Effect.fnUntraced(function* (root: string, value: string | readonly string[] | undefined, fallback: string) {
   if (value !== undefined) return listed(value);
@@ -28,8 +25,8 @@ const commandsOf = Effect.fnUntraced(function* (
   ignored: PluginIgnored[],
 ) {
   if (added === undefined) return own;
-  if (isMap(own) && isMap(added)) return { ...own, ...added };
-  if (isMap(own) || isMap(added)) {
+  if (isObject(own) && isObject(added)) return { ...own, ...added };
+  if (isObject(own) || isObject(added)) {
     ignored.push({
       component: 'commands',
       name: ENTRY,
@@ -58,7 +55,7 @@ export const combined = Effect.fnUntraced(function* (root: string, own: Own | nu
     reason: `an entry’s ${field} applies only to a plugin without its own plugin.json`,
   }));
   const added = yield* entryFields(entry);
-  if (added.hooks !== undefined && !isMap(added.hooks)) {
+  if (added.hooks !== undefined && !isObject(added.hooks)) {
     ignored.push({ component: 'hooks', name: ENTRY, reason: 'an entry’s hooks are an inline map of events; a path or a list is not read' });
   }
   const manifest: Manifest = {
@@ -80,7 +77,7 @@ export const combined = Effect.fnUntraced(function* (root: string, own: Own | nu
   return {
     manifest,
     fields: [...new Set([...own.fields, ...declaring])],
-    hooks: isMap(added.hooks) ? added.hooks : null,
+    hooks: isObject(added.hooks) ? added.hooks : null,
     ignored,
   } satisfies Combined;
 });

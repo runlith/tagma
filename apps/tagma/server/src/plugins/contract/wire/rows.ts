@@ -88,3 +88,30 @@ export const pluginRowSchema = Schema.Struct({
   }),
 });
 export type PluginRow = typeof pluginRowSchema.Type;
+
+const Said = Schema.NullOr(Schema.String);
+
+export const pluginPreviewSchema = Schema.Struct({
+  prepared: Schema.String.annotate({
+    description: 'The prepared revision: install_plugin installs it as `prepared`, without fetching it again.',
+  }),
+  expires: Schema.String.annotate({ description: 'When the prepared revision is dropped, ISO 8601.' }),
+  id: Schema.String.annotate({ description: 'The plugin it installs as, which names its components `<plugin>-<name>`.' }),
+  title: Said,
+  version: Said,
+  description: Said,
+  format: Schema.String.annotate({ description: 'The format its package was read in.' }),
+  about: Schema.Struct({ author: Said, homepage: Said, repository: Said, license: Said }),
+  source: PluginSource,
+  origin: Schema.optional(PluginOrigin),
+  replaces: Schema.Boolean.annotate({ description: 'Whether installing it replaces the version of this plugin installed now.' }),
+  components: Schema.Array(pluginComponentSchema).annotate({ description: 'What Tagma takes from it.' }),
+  ignored: Schema.Array(pluginIgnoredSchema).annotate({ description: 'What Tagma does not take from it, each with the reason.' }),
+  options: Schema.Array(pluginOptionSchema),
+  consent: Schema.Struct({
+    runs: Schema.Array(Schema.String).annotate({ description: 'What it runs as the operator: stdio MCP servers and hook commands.' }),
+    reaches: Schema.Array(Schema.String).annotate({ description: 'The remote MCP servers it reaches.' }),
+    raises: Schema.Array(Schema.String).annotate({ description: 'The further facts installing it asks consent for.' }),
+  }).annotate({ description: 'What installing it asks consent for wherever it runs.' }),
+});
+export type PluginPreview = typeof pluginPreviewSchema.Type;

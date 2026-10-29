@@ -1,19 +1,15 @@
 import { expect } from 'bun:test';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Context, Effect, FileSystem, Layer } from 'effect';
+import { Context, Effect, Layer } from 'effect';
 import { mcpToolCatalog } from '@runlith/mcp/mcpToolCatalog';
 import { McpServers } from '../../../mcp/contract/service/servers.js';
 import { ASKS_IN_REVIEW } from '../../../platform/contract/wire/conditions.js';
-import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { makeDoorWorld } from '../doorFixture.js';
+import { committed, type Files, repository, skill, written } from './files.js';
 
 const MCP_SERVER = resolve(import.meta.dir, '../../../../../../../packages/mcp/test/mcpTestServer.ts');
-
-type Files = Readonly<Record<string, string>>;
-
-const skill = (description: string) => `---\ndescription: ${description}\n---\n\nDo it well.\n`;
 
 const CLAUDE_CODE: Files = {
   '.claude-plugin/plugin.json': JSON.stringify({ name: 'cc-demo', version: '1.0.0', outputStyles: './styles/' }),
@@ -66,15 +62,6 @@ const COLLIDING: Files = {
   'skills/x/SKILL.md': skill('A skill named x.'),
   'commands/x.md': 'A command named x.\n',
 };
-
-const written = Effect.fnUntraced(function* (root: string, files: Files) {
-  const fs = yield* FileSystem.FileSystem;
-  for (const [path, text] of Object.entries(files)) {
-    yield* fs.makeDirectory(join(root, path, '..'), { recursive: true });
-    yield* fs.writeFileString(join(root, path), text);
-  }
-  return root;
-});
 
 type McpRow = {
   readonly name: string;
@@ -205,22 +192,14 @@ layer(Layer.effect(Plugins, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
   it.effect('a plugin is installed from a git URL into the data directory, and installing the URL again updates it', () =>
     Effect.gen(function* () {
       const { world, install } = yield* Plugins;
-      const repository = yield* written(yield* world.directory('repository'), {
-        ...CLAUDE_CODE,
-        '.claude-plugin/plugin.json': JSON.stringify({ name: 'cloned' }),
-      });
-      const git = (args: readonly string[]) => spawnedEffect(['git', ...args], { cwd: repository });
-      yield* git(['init', '-q', '-b', 'main']);
-      yield* git(['add', '.']);
-      yield* git(['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'one']);
-      const first = (yield* install(`file://${repository}`)).plugin;
+      const root = yield* world.directory('repository');
+      yield* repository(root, { ...CLAUDE_CODE, '.claude-plugin/plugin.json': JSON.stringify({ name: 'cloned' }) });
+      const first = (yield* install(`file://${root}`)).plugin;
       expect(first?.source.kind).toBe('git');
       expect((first as unknown as { root: string }).root.startsWith(world.dataHome)).toBe(true);
 
-      yield* written(repository, { 'skills/wave/SKILL.md': skill('Waves.') });
-      yield* git(['add', '.']);
-      yield* git(['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'two']);
-      const again = (yield* install(`file://${repository}`)).plugin;
+      yield* committed(root, { 'skills/wave/SKILL.md': skill('Waves.') });
+      const again = (yield* install(`file://${root}`)).plugin;
       expect(again?.components).toEqual(expect.arrayContaining([{ kind: 'skill', name: 'cloned-wave' }]));
     }),
   );
