@@ -1,4 +1,4 @@
-import { beforeAll } from 'bun:test';
+import { afterAll, beforeAll } from 'bun:test';
 import { createRemoteDebugger, type RemoteDebugger } from 'appium-remote-debugger';
 import { it } from '@runlith/effect-test';
 import { Data, Deferred, Effect, Schema, type Scope } from 'effect';
@@ -7,7 +7,7 @@ import { onFailure, recorded } from '../artifacts.ts';
 import { errorScript, flushErrors, pageFailure, PageException, PageFailed } from '../pageErrors.ts';
 import { bootstrap } from './inspector.ts';
 import { makeTouch, type Touch } from '../touch.ts';
-import { prepareSimulator, simulator } from './simulator.ts';
+import { holdLane, prepareSimulator, simulator } from './simulator.ts';
 
 export type Point = { readonly x: number; readonly y: number };
 export type Swipe = { readonly from: Point; readonly to: Point; readonly duration?: number; readonly delta?: number };
@@ -410,7 +410,15 @@ const runtimes = (options: IOSRun): readonly string[] => {
 };
 const register = (name: string, body: (fixture: IOSTest) => Promise<void>, options: IOSRun = {}): void =>
   registerEffect(name, (fixture) => Effect.promise(() => body(fixture)), options);
+let lane: (() => void) | undefined;
 const registerEffect = <E>(name: string, body: (fixture: IOSTest) => Effect.Effect<void, E, Scope.Scope>, options: IOSRun = {}): void => {
+  if (runtimes(options).length > 0 && lane === undefined) {
+    lane = holdLane();
+    afterAll(() => {
+      lane?.();
+      lane = undefined;
+    });
+  }
   for (const runtime of runtimes(options)) {
     const title = `${name} [ios-${runtime}]`;
     beforeAll(() => Effect.runPromise(prepareSimulator({ runtime, deviceType: options.deviceType })));

@@ -2,7 +2,9 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { withFileLock } from '@runlith/file-lock/FileLock';
 import { runLiveness, runRoot } from '@runlith/testbed/fixture';
 import { once, runKind } from '@runlith/testbed/worlds';
+import { closeOnExec, lockExclusive } from '@runlith/file-lock/flock';
 import { Clock, Effect, FileSystem, Schema, type Scope } from 'effect';
+import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { elementsOf, PositionedFrame, readAX } from './accessibility.ts';
@@ -108,6 +110,16 @@ const parameters = (options: SimulatorOptions): TemplateParams => ({
   python: PYTHON_VERSION,
 });
 export const prepareSimulator = (options: SimulatorOptions) => once(templates, parameters(options)).pipe(Effect.asVoid);
+export const holdLane = (): (() => void) => {
+  const base = join(Effect.runSync(cacheDirectory()), 'simulators');
+  mkdirSync(base, { recursive: true });
+  const handle = openSync(join(base, 'lane.lock'), 'a', 0o600);
+  closeOnExec(handle);
+  console.info('iOS lane: waiting for the machine-wide Simulator lane lock');
+  while (lockExclusive(handle) === 'held') Bun.sleepSync(100);
+  console.info('iOS lane: holding the Simulator lane lock');
+  return () => closeSync(handle);
+};
 export const prepareTemplate = Effect.fn('e2e.iosTemplateAhead')(function* (options: SimulatorOptions) {
   const tools = yield* cachedTools().pipe(Effect.mapError((cause) => new SimulatorUnavailable({ message: cause.message, cause })));
   const base = join(
