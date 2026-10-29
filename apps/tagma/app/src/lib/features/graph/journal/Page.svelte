@@ -91,7 +91,12 @@
                   <span class="stamp tabular shrink-0 text-muted-foreground">×{row.entries}</span>
                 {/if}
               </Tooltip>
-              <a href={addresses.block(row.blockName, { diff: diffParam(runRange(row)) })} class="flex min-w-0 flex-1 items-center gap-2">
+              <a
+                href={row.ops.includes('create')
+                  ? addresses.block(row.blockName)
+                  : addresses.block(row.blockName, { diff: diffParam(runRange(row)) })}
+                class="flex min-w-0 flex-1 items-center gap-2"
+              >
                 {#if block}
                   <span class="size-1.5 shrink-0 rounded-full" style:background={tags.statusVar(block)}></span>
                   <TagIcon tag={tags.tagOf(block)} class="size-3.5 shrink-0 text-muted-foreground" />

@@ -20,6 +20,12 @@ export function placedHref(
   return place.checkout === project.rootPath ? addresses.block(name, { project: project.name, branch: null, diff }) : null;
 }
 
+export function placedLens(place: BlockPlace, project: Project | null): GraphLens | null {
+  if (place.branch !== undefined) return { project: String(place.projectId), branch: place.branch ?? undefined };
+  if (place.checkout === null) return { project: String(place.projectId) };
+  return project !== null && place.checkout === project.rootPath ? { project: String(place.projectId) } : null;
+}
+
 export type BlockRefFailure = { readonly error: Refusal };
 export type BlockRefPeer =
   | { readonly title: string; readonly project: string; readonly branch?: string | null }

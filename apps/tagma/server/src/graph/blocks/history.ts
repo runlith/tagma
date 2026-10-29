@@ -132,7 +132,7 @@ export const historyLayer: Layer.Layer<History, never, Selection | GraphJournal>
           const bodies = yield* bodiesFrom(self, newer, input.to);
           const before = born ? '' : bodies.before;
           if (before === null || bodies.after === null) bodyUnknown = true;
-          else if (before !== bodies.after) body = mergedMarkdown(before, bodies.after);
+          else if (before !== bodies.after) body = born ? bodies.after : mergedMarkdown(before, bodies.after);
         }
 
         const raw = [

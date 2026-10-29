@@ -216,14 +216,15 @@ layer(demoGraphLayer())('graph history', (it) => {
     ),
   );
 
-  it.effect('a block born inside the range reads as a whole insertion', () =>
+  it.effect('a block born inside the range reads with its body plain and its creation in the ops', () =>
     withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
         const from = (yield* graph.journal.events({ limit: 1 }))[0]?.id ?? 0;
         const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'fresh', body: 'brand new', parentId: root });
         const diff = yield* graph.history.blockDiff({ blockId: id, from, to: 10_000 });
         expect(diff.bodyUnknown).toBe(false);
-        expect(diff.body).toBe('<ins>brand new</ins>');
+        expect(diff.body).toBe('brand new');
+        expect(diff.ops).toContain('create');
       }),
     ),
   );

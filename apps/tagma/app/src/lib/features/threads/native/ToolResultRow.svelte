@@ -7,11 +7,10 @@
   import ToolRow from '@runlith/chat-ui/entries/ToolRow.svelte';
   import Well from '@runlith/chat-ui/entries/Well.svelte';
   import type { Snippet } from 'svelte';
-  import { diffParam } from '$lib/features/workspace/address.js';
   import Told from '$lib/shared/Told.svelte';
   import { refusalOf } from '$lib/wire/refusal.js';
   import BlockCard from '../BlockCard.svelte';
-  import ToolBlockDiff from './ToolBlockDiff.svelte';
+  import ToolBlockWrite from './ToolBlockWrite.svelte';
 
   let { entry, markdown }: { entry: ChatEntryOf<'tool'>; markdown: Snippet<[ChatMarkdownBody]> } = $props();
 
@@ -30,10 +29,8 @@
   const result = $derived(entry.toolOutput as GraphToolAnswer | PerformanceAnswer | undefined);
   const rows = $derived(result?.status !== 'ok' ? [] : 'blocks' in result ? result.blocks : 'tasks' in result ? result.tasks : []);
 
-  const wrote = $derived(
-    result?.status === 'ok' && 'block' in result && 'journal' in result && result.journal !== undefined
-      ? { name: result.block.name, range: result.journal }
-      : null,
+  const wroteRange = $derived(
+    result?.status === 'ok' && 'block' in result && 'journal' in result && result.journal !== undefined ? result.journal : null,
   );
 </script>
 
@@ -66,14 +63,15 @@
 {:else if result?.status === 'ok' && 'page' in result}
   <Well id={entry.id} text={result.page} />
 {:else if result?.status === 'ok' && 'block' in result}
-  <div class="grid min-w-0 gap-1.5">
-    <Well id={entry.id} copy={null} rows>
-      <BlockCard block={result.block} diff={wrote === null ? undefined : diffParam(wrote.range)} place={result.graphCopy} />
-    </Well>
-    {#if wrote !== null}
-      <ToolBlockDiff name={wrote.name} range={wrote.range} />
-    {/if}
-  </div>
+  {#if wroteRange !== null}
+    <ToolBlockWrite id={entry.id} block={result.block} range={wroteRange} place={result.graphCopy} />
+  {:else}
+    <div class="grid min-w-0 gap-1.5">
+      <Well id={entry.id} copy={null} rows>
+        <BlockCard block={result.block} place={result.graphCopy} />
+      </Well>
+    </div>
+  {/if}
 {:else if rows.length > 0}
   <Well id={entry.id} copy={null} count={String(rows.length)} rows>
     {#each rows as block (block.name)}
