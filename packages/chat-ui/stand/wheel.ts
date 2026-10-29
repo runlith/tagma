@@ -1,4 +1,4 @@
-import type { Recording, WheelRun } from './recording';
+import type { Recording, ScrollWrite, WheelRun } from './recording';
 
 type WheelRange = { min: number; max: number };
 type WheelReference = {
@@ -11,7 +11,7 @@ type WheelReference = {
   observed: number;
   uncertainty: WheelRange;
 };
-type Wheels = { ordered: WheelReference[]; problems: WheelIssue[]; late: LateWheel[] };
+type Wheels = { ordered: WheelReference[]; problems: WheelIssue[]; late: CausalWheel[] };
 type WheelLimits = { delta: number; minimum: number; maximum: number };
 export type WheelPosition = { active: WheelReference | undefined; reference: WheelRun | undefined };
 type PageInterval = { kind: 'frame-interval'; from: number; to: number };
@@ -21,8 +21,7 @@ export type WheelIssue = {
   frame: number;
   reason: 'invalid-wheel' | 'wheel-scrolls-missing' | 'wheel-frame-missing' | 'wheel-unit' | 'overlapping-wheels';
 };
-export type LateWheel = {
-  kind: 'wheel-late';
+type WheelTiming = {
   frame: number;
   stamp: number;
   received: number;
@@ -32,6 +31,7 @@ export type LateWheel = {
   scroll: number | null;
   writes: number;
 };
+export type CausalWheel = WheelTiming & ({ kind: 'wheel-late' } | { kind: 'wheel-after-write'; write: ScrollWrite; gap: number });
 
 function lowerBound(times: readonly number[], time: number, inclusive = false): number {
   let low = 0;
@@ -76,10 +76,12 @@ export function wheelLimits(wheel: WheelReference, frame: number, change: number
 export function wheelsOf(recording: Recording, judgement: WheelJudgement): Wheels {
   const ordered: WheelReference[] = [];
   const problems: WheelIssue[] = [];
-  const lateWheels: LateWheel[] = [];
+  const lateWheels: CausalWheel[] = [];
   const frameTimes = recording.frames.map((frame) => frame.time);
-  const writes = (recording.writes ?? []).map((write) => write.time).sort((a, b) => a - b);
-  const scrolls = (recording.scrolls ?? []).map((scroll) => scroll.stamp).sort((a, b) => a - b);
+  const ownWrites = [...(recording.writes ?? [])].sort((a, b) => a.time - b.time);
+  const writes = ownWrites.map((write) => write.time);
+  const nativeScrolls = [...(recording.scrolls ?? [])].sort((a, b) => a.stamp - b.stamp);
+  const scrolls = nativeScrolls.map((scroll) => scroll.stamp);
   const ticks = recording.ticks?.length ? recording.ticks : recording.frames.map((frame) => frame.time);
   const intervals = ticks
     .slice(1)
@@ -120,6 +122,11 @@ export function wheelsOf(recording: Recording, judgement: WheelJudgement): Wheel
     for (const step of run.steps) {
       const lag = step.received - step.stamp;
       const delta = -step.deltaY;
+      const prior = ownWrites[lowerBound(writes, step.stamp, true) - 1];
+      const gap = prior === undefined ? Infinity : step.stamp - prior.time;
+      const afterWrite = gap <= refresh ? prior : undefined;
+      let uncertainFrame = step.frame;
+      let uncertainDelta = delta;
       if (judgement === 'full' || lag <= refresh) {
         const first = judgement === 'full' ? step.frame : Math.max(run.fromFrame + 1, lowerBound(frameTimes, step.stamp));
         const deadline = judgement === 'full' ? step.frame : Math.max(first, lowerBound(frameTimes, step.received, true));
@@ -129,17 +136,17 @@ export function wheelsOf(recording: Recording, judgement: WheelJudgement): Wheel
         shiftRange(changes, first, delta, 1);
         shiftRange(changes, last, delta, -1);
         through = Math.max(through, last);
-        continue;
+        if (judgement === 'full' || afterWrite === undefined) continue;
+        uncertainFrame = last;
+        uncertainDelta = -delta;
       }
       if (recording.scrolls === undefined) problems.push({ frame: step.frame, reason: 'wheel-scrolls-missing' });
-      const range = late.get(step.frame) ?? { min: 0, max: 0 };
-      range.min += Math.min(0, delta);
-      range.max += Math.max(0, delta);
-      late.set(step.frame, range);
-      const scroll = scrolls[lowerBound(scrolls, step.stamp)] ?? null;
+      shiftRange(late, uncertainFrame, uncertainDelta, 1);
+      let scrollIndex = lowerBound(scrolls, step.stamp);
+      if (afterWrite !== undefined && nativeScrolls[scrollIndex]?.top === afterWrite.to) scrollIndex += 1;
+      const scroll = scrolls[scrollIndex] ?? null;
       const until = scroll ?? recording.frames.at(-1)!.sampled;
-      lateWheels.push({
-        kind: 'wheel-late',
+      const timing: WheelTiming = {
         frame: step.frame,
         stamp: step.stamp,
         received: step.received,
@@ -148,7 +155,10 @@ export function wheelsOf(recording: Recording, judgement: WheelJudgement): Wheel
         task: { kind: 'frame-interval', from: recording.frames[step.frame - 1]!.time, to: recording.frames[step.frame]!.time },
         scroll,
         writes: Math.max(0, lowerBound(writes, until, true) - lowerBound(writes, step.received)),
-      });
+      };
+      lateWheels.push(
+        afterWrite === undefined ? { ...timing, kind: 'wheel-late' } : { ...timing, kind: 'wheel-after-write', write: afterWrite, gap },
+      );
     }
     const early = new Map<number, WheelRange>();
     let minimum = 0;

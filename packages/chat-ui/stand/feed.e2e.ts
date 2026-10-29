@@ -16,7 +16,13 @@ import { observeInput, readInput } from './input.fixture';
 
 const served = stand(fileURLToPath(new URL('./vite.config.ts', import.meta.url)));
 const envelopes = new Map<string, ControlEnvelope>();
-const win32Scenarios: readonly ScenarioName[] = ['fling-touch', 'drag-page-landing', 'page-mid-fling', 'rail-during-fling', 'thumb-history'];
+const win32Scenarios: readonly ScenarioName[] = [
+  'fling-touch',
+  'drag-page-landing',
+  'page-mid-fling',
+  'rail-during-fling',
+  'thumb-history',
+];
 
 function anchorDrift(recording: Recording): number {
   const first = recording.frames[0];
@@ -35,45 +41,61 @@ function anchorDrift(recording: Recording): number {
 type ContactState = { target: Element | null; terminal: string | null };
 type ContactGlobal = typeof globalThis & { contactState?: ContactState };
 
-e2e('records touch termination after the pressed descendant leaves the DOM', async ({ page, touch, artifacts }) => {
-  if (touch === undefined) throw new Error('The touch lifecycle regression requires native touch input');
-  await page.goto(served.url());
-  await ready(page);
-  await page.evaluate(() => {
-    const state: ContactState = { target: null, terminal: null };
-    (globalThis as ContactGlobal).contactState = state;
-    const root = document.querySelector('[data-scrollable][role="group"]')!;
-    root.addEventListener('touchstart', (event) => {
-      if (!(event.target instanceof Element) || event.target === root || event.target.closest('[data-timeline-key]') === null) throw new Error('The contact must start on a rendered row descendant');
-      state.target = event.target;
-      for (const type of ['touchend', 'touchcancel']) state.target.addEventListener(type, (ended) => { state.terminal = ended.type; }, { once: true, passive: true });
-    }, { once: true, capture: true, passive: true });
-    window.feedStand!.start('detached-touch-target');
-  });
-  const point = await page.evaluate(() => window.feedStand!.point());
-  try {
-    await touch.press(point);
-    await page.evaluate(async () => {
-      await window.feedStand!.pressed();
-      await window.feedStand!.frames(2);
-      const target = (globalThis as ContactGlobal).contactState!.target;
-      if (target === null) throw new Error('No trusted touch target was observed');
-      target.remove();
+e2e(
+  'records touch termination after the pressed descendant leaves the DOM',
+  async ({ page, touch, artifacts }) => {
+    if (touch === undefined) throw new Error('The touch lifecycle regression requires native touch input');
+    await page.goto(served.url());
+    await ready(page);
+    await page.evaluate(() => {
+      const state: ContactState = { target: null, terminal: null };
+      (globalThis as ContactGlobal).contactState = state;
+      const root = document.querySelector('[data-scrollable][role="group"]')!;
+      root.addEventListener(
+        'touchstart',
+        (event) => {
+          if (!(event.target instanceof Element) || event.target === root || event.target.closest('[data-timeline-key]') === null)
+            throw new Error('The contact must start on a rendered row descendant');
+          state.target = event.target;
+          for (const type of ['touchend', 'touchcancel'])
+            state.target.addEventListener(
+              type,
+              (ended) => {
+                state.terminal = ended.type;
+              },
+              { once: true, passive: true },
+            );
+        },
+        { once: true, capture: true, passive: true },
+      );
+      window.feedStand!.start('detached-touch-target');
     });
-  } finally {
-    await touch.release();
-  }
-  await page.waitForFunction(() => (globalThis as ContactGlobal).contactState?.terminal != null);
-  const captured = await page.evaluate(async () => {
-    await window.feedStand!.frames(2);
-    const state = (globalThis as ContactGlobal).contactState!;
-    return { terminal: state.terminal, connected: state.target!.isConnected, recording: window.feedStand!.stop() };
-  });
-  await writeFile(join(artifacts, 'contact.json'), JSON.stringify(captured));
-  expect(captured.connected).toBe(false);
-  expect(captured.recording.touches.map((event) => event.type)).toEqual(['touchstart', captured.terminal!]);
-  expect(captured.recording.frames.at(-1)!.touching).toBe(false);
-}, { lanes: ['chromium'], context: { viewport: { width: 1280, height: 900 }, hasTouch: true } });
+    const point = await page.evaluate(() => window.feedStand!.point());
+    try {
+      await touch.press(point);
+      await page.evaluate(async () => {
+        await window.feedStand!.pressed();
+        await window.feedStand!.frames(2);
+        const target = (globalThis as ContactGlobal).contactState!.target;
+        if (target === null) throw new Error('No trusted touch target was observed');
+        target.remove();
+      });
+    } finally {
+      await touch.release();
+    }
+    await page.waitForFunction(() => (globalThis as ContactGlobal).contactState?.terminal != null);
+    const captured = await page.evaluate(async () => {
+      await window.feedStand!.frames(2);
+      const state = (globalThis as ContactGlobal).contactState!;
+      return { terminal: state.terminal, connected: state.target!.isConnected, recording: window.feedStand!.stop() };
+    });
+    await writeFile(join(artifacts, 'contact.json'), JSON.stringify(captured));
+    expect(captured.connected).toBe(false);
+    expect(captured.recording.touches.map((event) => event.type)).toEqual(['touchstart', captured.terminal!]);
+    expect(captured.recording.frames.at(-1)!.touching).toBe(false);
+  },
+  { lanes: ['chromium'], context: { viewport: { width: 1280, height: 900 }, hasTouch: true } },
+);
 
 for (const lane of ['chromium', 'webkit'] as const)
   for (const branch of lane === 'chromium' ? (['host', 'Win32'] as const) : (['host'] as const))
@@ -145,7 +167,8 @@ for (const lane of ['chromium', 'webkit'] as const)
               ...result,
               displacement: {
                 maxError: movement.maxError,
-                lateWheels: movement.lateWheels.length,
+                lateWheels: movement.lateWheels.filter((step) => step.kind === 'wheel-late').length,
+                postWriteWheels: movement.lateWheels.filter((step) => step.kind === 'wheel-after-write').length,
                 cumulativeDrift: movement.cumulativeDrift,
                 failures: movement.failures.length,
                 unchecked: movement.unchecked.length,

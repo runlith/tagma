@@ -526,6 +526,65 @@ test('only causal late-wheel judgement exempts ambiguous input and ends write at
   });
 });
 
+test('WebKit input immediately after an own rebase reports that write and keeps the causal write gate', () => {
+  const write = { time: 6986, frame: 0, method: 'scrollTo' as const, from: 2710, to: 53631 };
+  const sample: Recording = {
+    ...recording(
+      'post-write-wheel',
+      [6989, 7012, 7016, 7029, 7043].map((time) => frame(time, 100, { scrollTop: 53631 })),
+    ),
+    wheels: [{ fromFrame: 0, toFrame: 4, steps: [{ frame: 1, deltaY: -116, deltaMode: 0, stamp: 6989, received: 6993 }] }],
+    scrolls: [{ stamp: 6989, received: 6989, top: 53631 }],
+    writes: [write],
+  };
+  expect(displacement(sample).failures).toContainEqual({ kind: 'wheel', frame: 1, sentinel: null, pixels: 116, limit: 1 });
+  const causal = displacement(sample, undefined, 'causal-late');
+  expect(causal.failures).toEqual([]);
+  expect(causal.unchecked).toEqual([]);
+  expect(causal.lateWheels).toEqual([
+    {
+      kind: 'wheel-after-write',
+      frame: 1,
+      stamp: 6989,
+      received: 6993,
+      lag: 4,
+      refresh: 14,
+      task: { kind: 'frame-interval', from: 6989, to: 7012 },
+      scroll: null,
+      writes: 0,
+      write,
+      gap: 3,
+    },
+  ]);
+  const interrupted = displacement(
+    {
+      ...sample,
+      writes: [write, { ...write, time: 7000, frame: 1, from: 53631, to: 53632 }],
+    },
+    undefined,
+    'causal-late',
+  );
+  expect(interrupted.failures).toContainEqual({ kind: 'wheel-write', frame: 1, sentinel: null, pixels: 1, limit: 0 });
+  const landed = displacement(
+    {
+      ...sample,
+      frames: sample.frames.map((one, index) => frame(one.time, index === 0 ? 100 : 216, { scrollTop: index === 0 ? 53631 : 53515 })),
+      scrolls: [...sample.scrolls!, { stamp: 6991, received: 6991, top: 53515 }],
+      writes: [write, { ...write, time: 6994, frame: 1, from: 53515, to: 53515 }],
+    },
+    undefined,
+    'causal-late',
+  );
+  expect(landed.failures).toEqual([]);
+  expect(landed.lateWheels[0]!.writes).toBe(0);
+  const outside = displacement({ ...sample, writes: [{ ...write, time: 6974 }] }, undefined, 'causal-late');
+  expect(outside.lateWheels).toEqual([]);
+  expect(outside.failures).toContainEqual({ kind: 'wheel', frame: 1, sentinel: null, pixels: 116, limit: 1 });
+  const erased = displacement({ ...sample, writes: [{ ...write, time: 6990 }] }, undefined, 'causal-late');
+  expect(erased.lateWheels).toEqual([]);
+  expect(erased.failures).toContainEqual({ kind: 'wheel', frame: 1, sentinel: null, pixels: 116, limit: 1 });
+});
+
 test('prompt WebKit wheels conserve their full delta across native and delivered frame boundaries', () => {
   const cases = [
     {

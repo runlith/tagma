@@ -1,7 +1,7 @@
 import { anchorFlow, type AnchorFlow, type AnchorIssue } from './anchor';
 import { causes, type CauseEvidence } from './causes';
 import type { Drag, Frame, Navigation, Recording, Rect, Sentinel } from './recording';
-import { wheelLimits, wheelReader, wheelsOf, type LateWheel, type WheelIssue, type WheelJudgement, type WheelPosition } from './wheel';
+import { wheelLimits, wheelReader, wheelsOf, type CausalWheel, type WheelIssue, type WheelJudgement, type WheelPosition } from './wheel';
 
 const TOLERANCE = 0.5;
 const REQUIRED_CONTROLS = 5;
@@ -106,7 +106,7 @@ export type DisplacementEvidence = {
   comparisons: number;
   anchorComparisons: number;
   causes: CauseEvidence;
-  lateWheels: LateWheel[];
+  lateWheels: CausalWheel[];
   maxError: number;
   cumulativeDrift: number;
   failures: DisplacementFailure[];
