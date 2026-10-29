@@ -30,6 +30,7 @@ export function startLines(answer: object): readonly string[] {
   const start: unknown = 'start' in answer ? answer.start : undefined;
   if (!isStartPrice(start)) return [];
   if ('unmeasured' in start) return [`start of a new thread: not measured — ${start.unmeasured}`];
-  const change = start.delta === 0 ? 'unchanged' : `${start.delta > 0 ? '+' : '−'}${Math.abs(start.delta)} characters`;
-  return [`start of a new ${start.agent} thread: ${change}, ${start.chars} characters now`];
+  if (start.delta === 0) return [`start of a new ${start.agent} thread: unchanged, ${start.chars} characters`];
+  const change = `${Math.abs(start.delta)} ${start.delta > 0 ? 'more' : 'fewer'} characters`;
+  return [`every new ${start.agent} thread of this project now reads ${change} before its first word, ${start.chars} in all`];
 }
