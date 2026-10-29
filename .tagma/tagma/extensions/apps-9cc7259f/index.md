@@ -10,7 +10,7 @@ fields:
         "at": "."
       }
     ],
-    "id": "app-plugins",
+    "id": "app-tagma-apps",
     "kind": "product"
   }
 edges:

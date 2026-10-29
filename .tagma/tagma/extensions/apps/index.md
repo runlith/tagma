@@ -10,10 +10,10 @@ fields:
         "at": "contract/"
       },
       {
-        "at": "plugins.ts"
+        "at": "tagma-apps.ts"
       }
     ],
-    "id": "plugins",
+    "id": "tagma-apps",
     "kind": "product",
     "order": [
       [
