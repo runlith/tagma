@@ -1,7 +1,7 @@
 import { anchorFlow, type AnchorFlow, type AnchorIssue } from './anchor';
 import { causes, type CauseEvidence } from './causes';
-import type { Drag, Frame, Navigation, Recording, Rect, Sentinel, WheelRun } from './recording';
-import { wheelReader, wheelsOf, type LateWheel, type WheelIssue, type WheelJudgement } from './wheel';
+import type { Drag, Frame, Navigation, Recording, Rect, Sentinel } from './recording';
+import { wheelLimits, wheelReader, wheelsOf, type LateWheel, type WheelIssue, type WheelJudgement, type WheelPosition } from './wheel';
 
 const TOLERANCE = 0.5;
 const REQUIRED_CONTROLS = 5;
@@ -200,7 +200,7 @@ function validNavigation(command: Navigation, frames: number): boolean {
   );
 }
 
-function pairOf(previous: Frame, current: Frame, index: number, drag?: Drag, wheel?: WheelRun): Pair | PairProblem {
+function pairOf(previous: Frame, current: Frame, index: number, drag?: Drag, wheel?: WheelPosition): Pair | PairProblem {
   const dt = current.time - previous.time;
   if (!Number.isFinite(dt) || dt <= 0) return { frame: index, reason: 'invalid-time' };
   const pixel = devicePixel(current);
@@ -263,8 +263,9 @@ function pairOf(previous: Frame, current: Frame, index: number, drag?: Drag, whe
   const active = drag !== undefined && index > drag.fromFrame && index <= drag.toFrame;
   const dragging = active && drag.preventFling;
   const stationary = dragging && drag.distance === 0 && drag.speed === 0;
-  const wheelActive = wheel !== undefined && index > wheel.fromFrame && index <= wheel.toFrame;
-  const afterWheel = wheel !== undefined && index > wheel.toFrame && (drag === undefined || drag.fromFrame <= wheel.toFrame);
+  const wheelActive = wheel?.active !== undefined;
+  const reference = wheel?.reference;
+  const afterWheel = reference !== undefined && !wheelActive && (drag === undefined || drag.fromFrame <= reference.toFrame);
   const touching = wheelActive ? false : drag === undefined ? previous.touching || current.touching : dragging;
   const moving =
     wheelActive ||
@@ -447,7 +448,7 @@ export function displacement(
     const drag = segment?.command;
     const tracking = drag !== undefined;
     const dragging = drag?.preventFling === true;
-    const pair = pairOf(before, after, index, position.reference, wheelPosition.reference);
+    const pair = pairOf(before, after, index, position.reference, wheelPosition);
     if ('reason' in pair) {
       result.unchecked.push(pair);
       cumulative.clear();
@@ -505,14 +506,12 @@ export function displacement(
       const distance = quiet ? flow?.shift : measured.commonDelta;
       if (distance !== undefined && distance !== null) active!.evidence.commonDistance += distance;
     }
-    const uncertainWheel = wheel?.late.get(index);
-    if (wheel !== undefined && (uncertainWheel === undefined || wheel.deltas.has(index))) {
-      measured.wheelDelta = wheel.deltas.get(index) ?? 0;
+    const wheelRange = wheel === undefined ? undefined : wheelLimits(wheel, index, measured.commonDelta!);
+    if (wheelRange !== undefined) {
+      measured.wheelDelta = wheelRange.delta;
       measured.change = measured.commonDelta!;
       measured.limit = measured.pixel;
-      const minimum = measured.wheelDelta + (uncertainWheel?.min ?? 0);
-      const maximum = measured.wheelDelta + (uncertainWheel?.max ?? 0);
-      fail(index, 'wheel', Math.max(0, minimum - measured.change, measured.change - maximum), measured.pixel);
+      fail(index, 'wheel', Math.max(0, wheelRange.minimum - measured.change, measured.change - wheelRange.maximum), measured.pixel);
     }
     if (dragging && !quiet) measured.change = Math.abs(measured.commonDelta!);
     let validRate = true;

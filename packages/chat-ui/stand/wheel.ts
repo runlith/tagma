@@ -1,15 +1,25 @@
 import type { Recording, WheelRun } from './recording';
 
 type WheelRange = { min: number; max: number };
-type WheelReference = { run: WheelRun; deltas: Map<number, number>; late: Map<number, WheelRange> };
+type WheelReference = {
+  run: WheelRun;
+  through: number;
+  deltas: Map<number, number>;
+  late: Map<number, WheelRange>;
+  early: Map<number, WheelRange>;
+  expected: number;
+  observed: number;
+  uncertainty: WheelRange;
+};
 type Wheels = { ordered: WheelReference[]; problems: WheelIssue[]; late: LateWheel[] };
-type WheelPosition = { active: WheelReference | undefined; reference: WheelRun | undefined };
+type WheelLimits = { delta: number; minimum: number; maximum: number };
+export type WheelPosition = { active: WheelReference | undefined; reference: WheelRun | undefined };
 type PageInterval = { kind: 'frame-interval'; from: number; to: number };
 
 export type WheelJudgement = 'full' | 'causal-late';
 export type WheelIssue = {
   frame: number;
-  reason: 'invalid-wheel' | 'wheel-scrolls-missing' | 'wheel-unit' | 'overlapping-wheels';
+  reason: 'invalid-wheel' | 'wheel-scrolls-missing' | 'wheel-frame-missing' | 'wheel-unit' | 'overlapping-wheels';
 };
 export type LateWheel = {
   kind: 'wheel-late';
@@ -34,10 +44,40 @@ function lowerBound(times: readonly number[], time: number, inclusive = false): 
   return low;
 }
 
+function shiftRange(changes: Map<number, WheelRange>, frame: number, delta: number, direction: number): void {
+  const range = changes.get(frame) ?? { min: 0, max: 0 };
+  range.min += direction * Math.min(0, delta);
+  range.max += direction * Math.max(0, delta);
+  changes.set(frame, range);
+}
+
+export function wheelLimits(wheel: WheelReference, frame: number, change: number): WheelLimits | undefined {
+  const late = wheel.late.get(frame);
+  const early = wheel.early.get(frame);
+  const lateOnly = late !== undefined && !wheel.deltas.has(frame) && early === undefined && wheel.expected === 0 && wheel.observed === 0;
+  const previous = wheel.observed;
+  wheel.expected += wheel.deltas.get(frame) ?? 0;
+  wheel.observed += change;
+  wheel.uncertainty.min += late?.min ?? 0;
+  wheel.uncertainty.max += late?.max ?? 0;
+  const limits = {
+    delta: wheel.expected - previous,
+    minimum: wheel.expected + (early?.min ?? 0) + wheel.uncertainty.min - previous,
+    maximum: wheel.expected + (early?.max ?? 0) + wheel.uncertainty.max - previous,
+  };
+  if (early === undefined) {
+    wheel.expected = 0;
+    wheel.observed = 0;
+    wheel.uncertainty = { min: 0, max: 0 };
+  }
+  return lateOnly ? undefined : limits;
+}
+
 export function wheelsOf(recording: Recording, judgement: WheelJudgement): Wheels {
   const ordered: WheelReference[] = [];
   const problems: WheelIssue[] = [];
   const lateWheels: LateWheel[] = [];
+  const frameTimes = recording.frames.map((frame) => frame.time);
   const writes = (recording.writes ?? []).map((write) => write.time).sort((a, b) => a - b);
   const scrolls = (recording.scrolls ?? []).map((scroll) => scroll.stamp).sort((a, b) => a - b);
   const ticks = recording.ticks?.length ? recording.ticks : recording.frames.map((frame) => frame.time);
@@ -75,11 +115,20 @@ export function wheelsOf(recording: Recording, judgement: WheelJudgement): Wheel
     }
     const deltas = new Map<number, number>();
     const late = new Map<number, WheelRange>();
+    const changes = new Map<number, WheelRange>();
+    let through = run.toFrame;
     for (const step of run.steps) {
       const lag = step.received - step.stamp;
       const delta = -step.deltaY;
       if (judgement === 'full' || lag <= refresh) {
-        deltas.set(step.frame, (deltas.get(step.frame) ?? 0) + delta);
+        const first = judgement === 'full' ? step.frame : Math.max(run.fromFrame + 1, lowerBound(frameTimes, step.stamp));
+        const deadline = judgement === 'full' ? step.frame : Math.max(first, lowerBound(frameTimes, step.received, true));
+        if (deadline >= frameTimes.length) problems.push({ frame: step.frame, reason: 'wheel-frame-missing' });
+        const last = Math.min(deadline, frameTimes.length - 1);
+        deltas.set(last, (deltas.get(last) ?? 0) + delta);
+        shiftRange(changes, first, delta, 1);
+        shiftRange(changes, last, delta, -1);
+        through = Math.max(through, last);
         continue;
       }
       if (recording.scrolls === undefined) problems.push({ frame: step.frame, reason: 'wheel-scrolls-missing' });
@@ -101,7 +150,15 @@ export function wheelsOf(recording: Recording, judgement: WheelJudgement): Wheel
         writes: Math.max(0, lowerBound(writes, until, true) - lowerBound(writes, step.received)),
       });
     }
-    ordered.push({ run, deltas, late });
+    const early = new Map<number, WheelRange>();
+    let minimum = 0;
+    let maximum = 0;
+    for (let frame = run.fromFrame + 1; frame <= through; frame += 1) {
+      minimum += changes.get(frame)?.min ?? 0;
+      maximum += changes.get(frame)?.max ?? 0;
+      if (minimum !== 0 || maximum !== 0) early.set(frame, { min: minimum, max: maximum });
+    }
+    ordered.push({ run, through, deltas, late, early, expected: 0, observed: 0, uncertainty: { min: 0, max: 0 } });
   }
   ordered.sort((a, b) => a.run.fromFrame - b.run.fromFrame);
   let end = -1;
@@ -111,7 +168,7 @@ export function wheelsOf(recording: Recording, judgement: WheelJudgement): Wheel
       problems.push({ frame: wheel.run.fromFrame + 1, reason: 'overlapping-wheels' });
       overlap = true;
     }
-    end = Math.max(end, wheel.run.toFrame);
+    end = Math.max(end, wheel.through);
   }
   return { ordered: overlap ? [] : ordered, problems, late: lateWheels };
 }
@@ -120,7 +177,7 @@ export function wheelReader(ordered: readonly WheelReference[]): (frame: number)
   let cursor = 0;
   let previous: WheelReference | undefined;
   return (frame) => {
-    while (cursor < ordered.length && frame > ordered[cursor]!.run.toFrame) previous = ordered[cursor++];
+    while (cursor < ordered.length && frame > ordered[cursor]!.through) previous = ordered[cursor++];
     const next = ordered[cursor];
     const active = next !== undefined && frame > next.run.fromFrame ? next : undefined;
     return { active, reference: active?.run ?? previous?.run };

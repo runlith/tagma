@@ -396,9 +396,9 @@ test('discrete wheel steps sum trusted frame deltas through structural changes w
     fromFrame: 0,
     toFrame: 3,
     steps: [
-      { frame: 1, deltaY: -10, deltaMode: 0 },
-      { frame: 1, deltaY: -5, deltaMode: 0 },
-      { frame: 3, deltaY: 4, deltaMode: 0 },
+      { frame: 1, deltaY: -10, deltaMode: 0, stamp: 4, received: 5 },
+      { frame: 1, deltaY: -5, deltaMode: 0, stamp: 6, received: 7 },
+      { frame: 3, deltaY: 4, deltaMode: 0, stamp: 25, received: 26 },
     ],
   };
   const clean = displacement({ ...recording('wheel', frames), wheels: [run] });
@@ -426,12 +426,12 @@ test('discrete wheel steps sum trusted frame deltas through structural changes w
       (failure) => failure.kind === 'common' && failure.limit === 0.5,
     ),
   ).toBe(true);
-  const lines = { ...run, steps: [{ frame: 1, deltaY: -1, deltaMode: 1 }] };
+  const lines = { ...run, steps: [{ frame: 1, deltaY: -1, deltaMode: 1, stamp: 4, received: 5 }] };
   expect(displacement({ ...recording('wheel-unit', frames), wheels: [lines] }).unchecked).toContainEqual({
     frame: 1,
     reason: 'wheel-unit',
   });
-  const outside = { ...run, steps: [{ frame: 4, deltaY: 4, deltaMode: 0 }] };
+  const outside = { ...run, steps: [{ frame: 4, deltaY: 4, deltaMode: 0, stamp: 35, received: 36 }] };
   expect(displacement({ ...recording('wheel-range', frames), wheels: [outside] }).unchecked).toContainEqual({
     frame: 0,
     reason: 'invalid-wheel',
@@ -524,6 +524,58 @@ test('only causal late-wheel judgement exempts ambiguous input and ends write at
     frame: 2,
     reason: 'wheel-scrolls-missing',
   });
+});
+
+test('prompt WebKit wheels conserve their full delta across native and delivered frame boundaries', () => {
+  const cases = [
+    {
+      times: [7030, 7065, 7068, 7085],
+      samples: [7032, 7067, 7070, 7088],
+      tops: [3058, 3058, 2942, 2942],
+      input: { frame: 1, stamp: 7063, received: 7065 },
+    },
+    {
+      times: [1421, 1457, 1460, 1473],
+      samples: [1423, 1459, 1461, 1475],
+      tops: [49495, 49379, 49379, 49379],
+      input: { frame: 2, stamp: 1455, received: 1459 },
+    },
+  ];
+  for (const sample of cases) {
+    const frames = sample.times.map((time, index) =>
+      frame(time, 100 + sample.tops[0]! - sample.tops[index]!, {
+        sampled: sample.samples[index]!,
+        scrollTop: sample.tops[index]!,
+      }),
+    );
+    const captured: Recording = {
+      ...recording('webkit-frame-boundary', frames),
+      wheels: [{ fromFrame: 0, toFrame: 3, steps: [{ ...sample.input, deltaY: -116, deltaMode: 0 }] }],
+      scrolls: [],
+      writes: [],
+    };
+    const accepted = displacement(captured, undefined, 'causal-late');
+    expect(accepted.failures).toEqual([]);
+    expect(accepted.unchecked).toEqual([]);
+    expect(accepted.lateWheels).toEqual([]);
+    const lost = displacement(
+      { ...captured, frames: frames.map((one) => frame(one.time, 100, { scrollTop: sample.tops[0]! })) },
+      undefined,
+      'causal-late',
+    );
+    expect(lost.failures.some((failure) => failure.kind === 'wheel')).toBe(true);
+    const doubled = displacement(
+      {
+        ...captured,
+        frames: frames.map((one, index) =>
+          frame(one.time, 100 + 2 * (sample.tops[0]! - sample.tops[index]!), { scrollTop: 2 * sample.tops[index]! - sample.tops[0]! }),
+        ),
+      },
+      undefined,
+      'causal-late',
+    );
+    expect(doubled.failures.some((failure) => failure.kind === 'wheel')).toBe(true);
+  }
 });
 
 test('control calibration discards dirty recordings and requires five clean, observed flings', () => {
