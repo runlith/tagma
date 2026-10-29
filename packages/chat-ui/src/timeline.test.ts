@@ -746,6 +746,30 @@ describe('a long feed whose running call settles', () => {
 
     expect(items.map((item) => shown.rows.indexOf(item.key))).toEqual(items.map((_, at) => at));
   });
+
+  test('every row stays found by its key after the call settles and runs again within one feed sync', () => {
+    const store = new ChatFold();
+    const feed = new VisibleFeed(kinds);
+    const rows = new TimelineFold(kinds);
+    const run: FeedRun = { id: 'run-1', phase: 'working' };
+    const view = untouched();
+    const after = Array.from({ length: 210 }, (_, at) => assistant(`b${at}`));
+    const more = Array.from({ length: 50 }, (_, at) => assistant(`c${at}`));
+    const running = tool('x', { toolState: 'input-available' });
+    const sync = () => {
+      feed.sync(store, true, run);
+      rows.sync(feed, view, { runId: run.id, status: true }, []);
+      return rows.slice();
+    };
+    store.entries = [running, ...after];
+    sync();
+    store.entries = [tool('x'), ...after, ...more];
+    store.entries = [running, ...after, ...more];
+
+    const items = sync();
+
+    expect(items.map((item) => rows.indexOf(item.key))).toEqual(items.map((_, at) => at));
+  });
 });
 
 describe('a streaming run draws its parts in the order they arrived', () => {
