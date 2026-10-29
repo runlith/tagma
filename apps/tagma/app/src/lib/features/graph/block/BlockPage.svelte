@@ -10,7 +10,6 @@
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import type { BlockDiff, BlockMark } from '@tagma/server/graph/contract/wire/reads';
   import type { Block, BlockRead, TreeBlock } from '@tagma/server/graph/contract/wire/rows';
-  import { AMENDMENT } from '@tagma/server/graph/contract/wire/tags/amendment';
   import { LEAF } from '@tagma/server/graph/contract/wire/tags/leaf';
   import { SPEC } from '@tagma/server/graph/contract/wire/tags/spec';
   import { WORK } from '@tagma/server/graph/contract/wire/tags/work';
@@ -29,7 +28,6 @@
   import TagIcon from '$lib/features/graph/TagIcon.svelte';
   import MarkdownBody from '$lib/features/graph/MarkdownBody.svelte';
   import Outline from '$lib/features/graph/outline/Tree.svelte';
-  import ProposalsSection from '$lib/features/graph/block/ProposalsSection.svelte';
   import BlockFacts from '$lib/features/graph/block/BlockFacts.svelte';
   import BlockLinks, { hasLinks } from '$lib/features/graph/block/BlockLinks.svelte';
   import StatusChip from '$lib/features/graph/StatusChip.svelte';
@@ -60,6 +58,7 @@
   import { GraphRung } from '$lib/features/workspace/GraphRung.js';
   import { cn } from '$lib/shared/utils.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+  import { labelOf } from '$lib/features/workspace/mark.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
   import PathText from '$lib/shared/PathText.svelte';
@@ -71,12 +70,14 @@
     enforcement,
     aside = false,
     diff = null,
+    ready = true,
     read: shown = $bindable(null),
   }: {
     blockName?: string;
     enforcement?: Snippet<[BlockRead]>;
     aside?: boolean;
     diff?: string | null;
+    ready?: boolean;
     read?: BlockRead | null;
   } = $props();
 
@@ -100,6 +101,7 @@
   const opening = Opening.use();
   const checkout = Checkout.use();
   const graph = GraphRung.Current.use();
+  const project = $derived(workspace.find(graph.projectId));
   const here = App.current();
   const roads = PathRoads.use();
   let crumbModified = false;
@@ -160,17 +162,17 @@
   const reading = $derived(read === null ? null : tags.readingOf(read));
 
   let baseline = $state<string | undefined>(undefined);
-  let baselineFor: string | null = null;
+  let arrived: string | null = null;
 
   $effect(() => {
     const current = rootBlock;
     if (!current) return;
-    if (baselineFor !== current.name) {
-      baselineFor = current.name;
+    if (arrived !== current.name) {
+      arrived = current.name;
       baseline = untrack(() => readState.seenAt(current.name));
+      if (blockName !== undefined) readState.visited(current.name);
     }
     readState.markRead(current.name, current.updatedAt);
-    if (blockName !== undefined) readState.visited(current.name);
   });
 
   const ancestors = $derived.by(() => {
@@ -191,6 +193,7 @@
   }
 
   function crumbTitle(block: TreeBlock): string {
+    if (block.parentName === null && project !== null) return labelOf(project);
     return block.title.trim() || 'Untitled';
   }
 
@@ -213,7 +216,7 @@
   let appeared = $state(false);
 
   $effect.pre(() => {
-    if (rootBlock !== undefined && read !== null && lensSettled) appeared = true;
+    if (rootBlock !== undefined && read !== null && lensSettled && ready) appeared = true;
   });
 
   const lensAvailable = $derived(
@@ -343,7 +346,7 @@
   <TrashedBlock name={unavailable.name} {store} restored={() => subject.retry()} />
 {:else if unavailable?.kind === 'failed'}
   <UnreadableBlock error={unavailable.error} retry={() => subject.retry()} />
-{:else if rootBlock && read && (appeared || lensSettled)}
+{:else if rootBlock && read && (appeared || (lensSettled && ready))}
   <div
     class={cn(
       'page-reading grid grid-cols-1 gap-x-8 pt-8 pb-16',
@@ -412,10 +415,17 @@
       ></div>
 
       <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span class="flex items-center gap-1.5 text-muted-foreground">
-          <TagIcon tag={rootBlock.parentName === null ? 'project' : tags.tagOf(rootBlock)} class="size-3.5" />
-          <span class="eyebrow capitalize">{rootBlock.parentName === null ? 'project' : tags.word(tags.tagOf(rootBlock))}</span>
-        </span>
+        {#if rootBlock.parentName === null}
+          <span class="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+            <TagIcon tag="project" class="size-3.5" />
+            <FadeText class="eyebrow min-w-0" text={project === null ? 'Project' : labelOf(project)} />
+          </span>
+        {:else}
+          <span class="flex items-center gap-1.5 text-muted-foreground">
+            <TagIcon tag={tags.tagOf(rootBlock)} class="size-3.5" />
+            <span class="eyebrow capitalize">{tags.word(tags.tagOf(rootBlock))}</span>
+          </span>
+        {/if}
         <StatusChip block={rootBlock} {store} always />
         {#if tags.supports(rootBlock, WORK) || tags.supports(rootBlock, SPEC)}
           {#if tags.holderOf(rootBlock) !== null}
@@ -423,8 +433,6 @@
           {:else if read.ending}
             <WriterBadge writer={read.ending.writer} />
           {/if}
-        {:else if tags.supports(rootBlock, AMENDMENT) && read.author}
-          <WriterBadge writer={sessions.writerOf(read.author)} />
         {/if}
         {#if reading}
           <Tooltip text="The system this reading measured, and which state of it">
@@ -522,8 +530,6 @@
       <BlockFacts {read} {enforcement} />
 
       {#if placed}
-        <ProposalsSection {read} {store} />
-
         {#if tags.supports(rootBlock, LEAF)}
           {@const query = tags.queryOf(read)}
           {#if read.results && query}
@@ -536,7 +542,7 @@
             {#if filterable}<FilterBar lens={store.readingLens} {store} diff={lensAvailable && !aside} />{/if}
           </div>
           <div class="mt-1">
-            <Outline {store} />
+            <Outline {store} click={aside ? undefined : 'full'} />
           </div>
         {/if}
       {/if}

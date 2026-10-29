@@ -1,7 +1,6 @@
 import { Schema } from 'effect';
 import type { Tagged } from './tags/roles.js';
 import type { TagReading } from './tags/reading.js';
-import { AMENDMENT } from './tags/amendment.js';
 import { OBSERVATION } from './tags/observation.js';
 
 export type BlockState = {
@@ -18,10 +17,6 @@ export const subtreeShapeSchema = Schema.Struct({
   widest: Schema.Number,
 });
 export type SubtreeShape = typeof subtreeShapeSchema.Type;
-
-export function standsInOutline(table: TagReading, row: Tagged): boolean {
-  return !(table.supports(row, AMENDMENT) && table.isTerminal(row));
-}
 
 export function rests(table: TagReading, row: Tagged & { superseded?: boolean; answered?: boolean }): boolean {
   if (row.superseded === true) return true;

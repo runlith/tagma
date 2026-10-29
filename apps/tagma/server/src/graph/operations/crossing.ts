@@ -324,7 +324,7 @@ const placeOf = Effect.fn('crossing.placeOf')(function* (
   const current = yield* CurrentGraph;
   const measured = target.graph === null ? yield* MeasuredCheckout : Context.get(target.graph, MeasuredCheckout);
   const checkout =
-    measured?.projectId === target.projectId ? measured.path : current?.projectId === target.projectId ? current.checkout : null;
+    current?.projectId === target.projectId ? current.checkout : measured?.projectId === target.projectId ? measured.path : null;
   const pool = yield* RoutedGraphs;
   const branch =
     current?.projectId === target.projectId && current.checkout === checkout

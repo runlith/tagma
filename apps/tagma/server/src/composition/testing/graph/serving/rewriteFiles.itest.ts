@@ -17,8 +17,9 @@ layer(servingLayer, { excludeTestServices: true })('file rewriting', (it) => {
         const blocks = yield* Blocks;
         const db = (yield* GraphStore).db;
         const fs = yield* FileSystem.FileSystem;
+        const root = yield* blocks.rootBlockOf(projectId);
         const made = yield* signedBy({ harness: 'claude-code', key: 'rewrite' })(
-          blocks.create({ projectId, tags: ['spec'], title: 'An old form', body: 'kept as written' }),
+          blocks.create({ projectId, parentId: root.id, tags: ['spec'], title: 'An old form', body: 'kept as written' }),
         );
         const row = yield* blocks.rawBlockById(made.id);
         if (row.path === null) return yield* Effect.die('the projected block has no path');

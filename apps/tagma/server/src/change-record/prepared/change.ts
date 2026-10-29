@@ -99,6 +99,7 @@ export const prepareChange = Effect.fn('prepared.prepare')(function* <Row extend
           carriers,
           paths,
           explicit: selection.explicit,
+          team: selection.team,
           pairs,
           message: '',
           index,

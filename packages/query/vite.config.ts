@@ -6,7 +6,7 @@ const CONDITIONS = ['browser', 'module', 'node', 'development|production'];
 export default defineConfig({
   resolve: { conditions: CONDITIONS },
   ssr: { resolve: { conditions: CONDITIONS } },
-  plugins: [svelte({ compilerOptions: { dev: true, experimental: { async: true } } })],
+  plugins: [svelte({ compilerOptions: { dev: true, experimental: { async: false } } })],
   test: {
     isolate: false,
     experimental: { fsModuleCache: true, fsModuleCachePath: 'node_modules/.vitest-module-cache' },

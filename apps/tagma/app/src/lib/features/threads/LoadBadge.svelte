@@ -53,7 +53,7 @@
 {#if row !== undefined && count > 0}
   <span
     bind:this={badge}
-    class="inline-flex h-4.5 shrink-0 items-center gap-0.5 rounded-sm px-1 text-meta leading-none tabular text-status-open transition-colors outline-none hover:bg-hover focus-visible:bg-selected data-[state=open]:bg-selected"
+    class="inline-flex h-4.5 shrink-0 items-center gap-0.5 rounded-sm px-1 text-meta leading-none tabular text-muted-foreground transition-colors outline-none hover:bg-hover focus-visible:bg-selected data-[state=open]:bg-selected"
     role="button"
     tabindex="0"
     aria-label={label}

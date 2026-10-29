@@ -98,6 +98,7 @@ export interface DesktopBrowser {
   host(): Promise<string | null>;
   show(shown: PageShown, rect: PageRect): void;
   hide(shown: PageShown): void;
+  freeze(shown: PageShown, frozen: boolean): void;
   onElsewhere(listener: (lost: PageShown) => void): () => void;
   keys(chords: readonly Chord[], framed: readonly FramedChord[]): void;
   onKey(listener: (key: PageKey) => void): () => void;

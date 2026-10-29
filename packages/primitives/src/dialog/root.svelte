@@ -14,6 +14,7 @@
     escapeKeydownBehavior?: EscapeKeydownBehavior;
     motion?: DialogMotion;
     overlayKey?: string;
+    announced?: boolean;
     onOpenChange?: (open: boolean) => void;
     onEscapeIgnored?: () => void;
     children: Snippet;
@@ -25,6 +26,7 @@
     escapeKeydownBehavior = 'close',
     motion,
     overlayKey,
+    announced = false,
     onOpenChange,
     onEscapeIgnored,
     children,
@@ -51,7 +53,12 @@
       layer.close(reason);
       setOpen(false);
     },
-    { modal: true },
+    {
+      modal: true,
+      get announced() {
+        return announced;
+      },
+    },
   );
 
   $effect.pre(() => {

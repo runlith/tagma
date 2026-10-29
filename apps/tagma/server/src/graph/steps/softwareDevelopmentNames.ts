@@ -19,7 +19,7 @@ const NOW = 'software-development';
 const NOTES = 'notes';
 const NOTE = 'note';
 const EXPLANATION = 'explanation';
-const MOVED: ReadonlySet<string> = new Set(['proposal', 'reflection', 'view']);
+const MOVED: ReadonlySet<string> = new Set(['reflection', 'view']);
 const PREFIX = shippedTypeId(WAS, '');
 
 const successor = (exported: string): ShippedRef =>
@@ -190,7 +190,7 @@ export const softwareDevelopmentNames = Effect.fn('GraphStep.softwareDevelopment
       yield* projection.derive([...changed], ['tags', 'search']);
       if (changed.size > 0) yield* vocabulary.forget(project.id);
       const after = yield* vocabulary.of(project.id);
-      const fieldsOf = yield* storedFields(after, documents, properties({ tags: each(word) }), (key) => typeId(key) as string);
+      const fieldsOf = storedFields(after, documents, (key) => typeId(key) as string);
       const spelled = [`%${WAS}%`, ...[...renamed.keys()].map((key) => `%${JSON.stringify(key)}%`)];
       const carriers = yield* db
         .select()
@@ -205,7 +205,7 @@ export const softwareDevelopmentNames = Effect.fn('GraphStep.softwareDevelopment
       for (const row of carriers) {
         if (row.tags.includes(TAG_DECLARATION.id) || row.tags.includes(CATALOG_DECLARATION.id)) continue;
         const tags = row.tags.map((tag) => word(tag) as string);
-        const fields = yield* fieldsOf(after.tagsOf({ tags }), row.fields);
+        const fields = fieldsOf(after.tagsOf({ tags }), row.fields);
         if (JSON.stringify(tags) === JSON.stringify(row.tags) && JSON.stringify(fields) === JSON.stringify(row.fields)) continue;
         yield* db.update(block).set({ tags, fields, updatedAt: now }).where(eq(block.id, row.id));
         carried.add(row.id);

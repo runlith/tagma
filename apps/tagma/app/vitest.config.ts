@@ -5,6 +5,7 @@ import app from './svelte.config.js';
 
 const isolatedUnit = [
   'src/lib/app/chrome/projectSwitch.svelte.test.ts',
+  'src/lib/features/browser/view/NativeView.svelte.test.ts',
   'src/lib/features/checkout/DiffStage.svelte.test.ts',
   'src/lib/features/executions/terminal/Divider.svelte.test.ts',
   'src/lib/features/graph/block/Body.svelte.test.ts',

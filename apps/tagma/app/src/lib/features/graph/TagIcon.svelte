@@ -2,7 +2,6 @@
   import Box from '@lucide/svelte/icons/box';
   import CalendarDays from '@lucide/svelte/icons/calendar-days';
   import FileText from '@lucide/svelte/icons/file-text';
-  import GitPullRequestArrow from '@lucide/svelte/icons/git-pull-request-arrow';
   import Hash from '@lucide/svelte/icons/hash';
   import Library from '@lucide/svelte/icons/library';
   import Lightbulb from '@lucide/svelte/icons/lightbulb';
@@ -23,7 +22,6 @@
   const ICONS: Record<string, Component<{ class?: string }>> = {
     tag: Tag,
     catalog: Library,
-    proposal: GitPullRequestArrow,
     reflection: MessageCircleWarning,
     view: Table2,
     module: Package,

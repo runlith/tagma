@@ -6,4 +6,9 @@ export class BrowserPlace extends Context.Service<BrowserPlace, { readonly root:
 export const capturesOf = (path: Path.Path, place: BrowserPlace['Service'], page: PageId): string =>
   path.join(place.root, 'captures', page);
 
+export const tracesOf = (path: Path.Path, place: BrowserPlace['Service'], page: PageId): string => path.join(place.root, 'traces', page);
+
+export const recordingsOf = (path: Path.Path, place: BrowserPlace['Service'], page: PageId): string =>
+  path.join(place.root, 'recordings', page);
+
 export const chosenOf = (path: Path.Path, place: BrowserPlace['Service'], page: PageId): string => path.join(place.root, 'chosen', page);

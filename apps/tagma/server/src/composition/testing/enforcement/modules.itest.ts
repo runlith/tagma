@@ -56,10 +56,11 @@ layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
                 inWorkspace({ root: homeRoot, origin: null }),
               ),
             );
+          const parent = yield* rootName(fx);
           yield* call({
             modules: [
-              { id: 'ui', title: 'UI', root: 'src/ui', entries: { put: [{ at: 'panel.ts' }] } },
-              { id: 'web', title: 'Web', root: 'src/app', imports: { put: ['ui'] } },
+              { id: 'ui', title: 'UI', parent, root: 'src/ui', entries: { put: [{ at: 'panel.ts' }] } },
+              { id: 'web', title: 'Web', parent, root: 'src/app', imports: { put: ['ui'] } },
             ],
           });
           const rule = yield* fx.created(['rule'], 'Module relations stand without cycles');

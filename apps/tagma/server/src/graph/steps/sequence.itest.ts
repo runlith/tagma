@@ -15,7 +15,6 @@ import { ruleInspections } from './ruleInspections.js';
 import { type LawEnforcement, lawEnforcementSchema } from '../contract/wire/enforcement.js';
 import { closedParsing } from '../contract/wire/fields.js';
 import { provenanceLeaves } from './provenanceLeaves.js';
-import { creationEdges } from './creationEdges.js';
 
 type Raw = Record<string, unknown>;
 
@@ -57,9 +56,15 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, projectId } = demo;
-        const hub = yield* create(demo, { projectId, tags: ['spec'], title: 'the hub' });
+        const hub = yield* create(demo, { projectId, parentId: demo.root, tags: ['spec'], title: 'the hub' });
         const part = yield* create(demo, { projectId, tags: ['spec'], title: 'a part of it', parentId: hub });
-        const builder = yield* create(demo, { projectId, tags: ['task'], title: 'build it', edges: [{ kind: 'implements', to: hub }] });
+        const builder = yield* create(demo, {
+          projectId,
+          parentId: demo.root,
+          tags: ['task'],
+          title: 'build it',
+          edges: [{ kind: 'implements', to: hub }],
+        });
         const delta = yield* create(demo, {
           projectId,
           tags: ['spec'],
@@ -92,7 +97,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, projectId } = demo;
-        const hub = yield* create(demo, { projectId, tags: ['spec'], title: 'the hub' });
+        const hub = yield* create(demo, { projectId, parentId: demo.root, tags: ['spec'], title: 'the hub' });
         const shipped = yield* declarationOf(demo, 'spec');
         if (shipped === undefined) return yield* Effect.die('the fixture installs no spec');
         yield* retire(demo);
@@ -140,11 +145,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
     ),
   );
 
-  it.effect('claims and their proposals retire, surviving children rise, and declarations lose the claim role', () =>
+  it.effect('claims retire, surviving children rise, and declarations lose the claim role', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, projectId } = demo;
-        const home = yield* create(demo, { projectId, tags: ['idea'], title: 'home' });
+        const home = yield* create(demo, { projectId, parentId: demo.root, tags: ['idea'], title: 'home' });
         const { db } = graph.graphStore;
         const insert = Effect.fnUntraced(function* (values: { parentId: number; tags: string[]; fields: Raw; title: string }) {
           const row = yield* db
@@ -163,7 +168,6 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
           title: '#claim',
         });
         const claim = yield* insert({ parentId: home, tags: ['claim'], fields: {}, title: 'a claim' });
-        const proposal = yield* insert({ parentId: claim, tags: ['proposal'], fields: {}, title: 'amend the claim' });
         const kept = yield* insert({ parentId: claim, tags: ['idea'], fields: {}, title: 'an idea under the claim' });
         const idea = yield* declarationOf(demo, 'idea');
         if (idea === undefined) return yield* Effect.die('the fixture installs no idea');
@@ -173,7 +177,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
           .where(eq(block.id, idea.id));
         yield* claimsLeave(yield* graph.projects.byId(projectId));
         yield* graph.tags.forget(projectId);
-        for (const id of [declaration, claim, proposal]) expect((yield* graph.blocks.rawBlockById(id)).deletedAt).toBeInstanceOf(Date);
+        for (const id of [declaration, claim]) expect((yield* graph.blocks.rawBlockById(id)).deletedAt).toBeInstanceOf(Date);
         const survivor = yield* graph.blocks.rawBlockById(kept);
         expect([survivor.parentId, survivor.deletedAt]).toEqual([home, null]);
         expect(((yield* graph.blocks.rawBlockById(idea.id)).fields.roles as Raw).claim).toBeUndefined();
@@ -188,13 +192,15 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
         const { graph, projectId } = demo;
         const declaration = yield* graph.blocks.create({
           projectId,
+          parentId: demo.root,
           tags: ['tag'],
           title: '#finding',
           fields: { id: 'finding', edges: ['relates', 'discovered-from', { kind: 'discovered-from', to: ['task'] }] },
         });
-        const origin = yield* create(demo, { projectId, tags: ['task'], title: 'origin' });
+        const origin = yield* create(demo, { projectId, parentId: demo.root, tags: ['task'], title: 'origin' });
         const found = yield* create(demo, {
           projectId,
+          parentId: demo.root,
           tags: ['finding'],
           title: 'found',
           edges: [{ kind: 'discovered-from', to: origin }],
@@ -208,77 +214,6 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
         expect((yield* graph.blocks.rawBlockById(declaration.id)).fields.edges).toEqual(['relates']);
         expect((yield* graph.reading.show(found, 0)).edgesOut.map((edge) => [edge.kind, edge.toId])).toEqual([['discovered-from', origin]]);
         expect((yield* demo.table()).unreadable).toEqual([]);
-      }),
-    ),
-  );
-
-  it.effect('stored amendment creation relations migrate in a custom field and can be accepted after the idempotent step', () =>
-    withDemo((demo) =>
-      Effect.gen(function* () {
-        const { graph, projectId } = demo;
-        yield* graph.blocks.create({
-          projectId,
-          tags: ['tag'],
-          title: '#finding',
-          fields: {
-            id: 'finding',
-            fields: {
-              phase: { type: 'enum', values: ['draft', 'applied', 'rejected', 'upheld'] },
-              changes: { type: 'schema', name: 'amendmentOps' },
-              enabled: 'boolean',
-              source: { type: 'schema', name: 'researchSource' },
-            },
-            roles: {
-              status: { field: 'phase', initial: 'draft' },
-              amendment: { field: 'changes', run: 'applied', declined: 'rejected', answered: 'upheld' },
-            },
-            gates: ['applied', 'rejected', 'upheld'].map((to) => ({ gate: 'transition', field: 'phase', from: 'draft', to })),
-          },
-        });
-        const target = yield* create(demo, { projectId, tags: ['spec'], title: 'target' });
-        const name = yield* demo.nameOf(target);
-        const core = { op: 'create', $id: 'builder', tags: ['task'], title: 'migrated work', parentId: name, body: 'before' };
-        const edit = { op: 'edit', id: '$builder', old: 'before', new: 'after' };
-        const source = { name: 'System', ref: 'record' };
-        const proposal = yield* graph.blocks.create({
-          projectId,
-          tags: ['finding'],
-          title: 'stored finding',
-          amendsId: target,
-          fields: { enabled: true, source, changes: [{ ...core, edges: [{ kind: 'implements', to: name }] }, edit] },
-        });
-        yield* graph.graphStore.db
-          .update(block)
-          .set({ fields: { ...proposal.fields, changes: [{ ...core, implementsId: name, discoveredFromId: name }, edit] } })
-          .where(eq(block.id, proposal.id));
-        const project = yield* graph.projects.byId(projectId);
-        yield* creationEdges(project);
-        const once = yield* rows(demo);
-        yield* creationEdges(project);
-        expect(yield* rows(demo)).toEqual(once);
-        expect((yield* graph.blocks.rawBlockById(proposal.id)).fields).toEqual({
-          ...proposal.fields,
-          changes: [
-            {
-              ...core,
-              edges: [
-                { kind: 'implements', to: name },
-                { kind: 'discovered-from', to: name },
-              ],
-            },
-            edit,
-          ],
-        });
-        yield* graph.review.accept({ id: proposal.id });
-        const child = (yield* graph.blocks.childrenOf(target)).find((row) => row.title === core.title);
-        if (child === undefined) return yield* Effect.die('the migrated create did not land');
-        expect(child.body).toBe(edit.new);
-        expect(
-          (yield* graph.reading.show(child.id, 0)).edgesOut
-            .filter((edge) => edge.toId === target)
-            .map((edge) => edge.kind)
-            .sort(),
-        ).toEqual(['discovered-from', 'implements']);
       }),
     ),
   );
@@ -303,7 +238,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
             thresholds: [{ glob: '**', metric: 'non-import', lines: 650 }],
           },
         };
-        const rule = yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'files stay small' });
+        const rule = yield* graph.blocks.create({ projectId, parentId: demo.root, tags: ['rule'], title: 'files stay small' });
         yield* graph.graphStore.db
           .update(block)
           .set({

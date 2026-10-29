@@ -130,9 +130,9 @@ const newestOf = (graph: DemoOwners, blockId: number) => Effect.map(graph.journa
 
 layer(demoGraphLayer())('graph history', (it) => {
   it.effect('a body is reconstructed at any journal position', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'd', body: 'first' });
+        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'd', body: 'first', parentId: root });
         const afterCreate = yield* newestOf(graph, id);
         yield* graph.blocks.update({ id, body: 'first and second' });
         const afterSecond = yield* newestOf(graph, id);
@@ -147,9 +147,9 @@ layer(demoGraphLayer())('graph history', (it) => {
   );
 
   it.effect('an anchored edit reconstructs like any other write', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'd', body: 'alpha beta gamma' });
+        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'd', body: 'alpha beta gamma', parentId: root });
         const before = yield* newestOf(graph, id);
         yield* graph.blocks.edit({ id, old: 'beta', new: 'delta' });
         expect(yield* graph.history.bodyAt(id, before)).toBe('alpha beta gamma');
@@ -159,9 +159,9 @@ layer(demoGraphLayer())('graph history', (it) => {
   );
 
   it.effect('a body change with no delta reads as unknown, never as a guess', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'd', body: 'original' });
+        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'd', body: 'original', parentId: root });
         const born = yield* newestOf(graph, id);
         yield* graph.graphStore.db.insert(event).values({
           ts: new Date(yield* Clock.currentTimeMillis),
@@ -182,8 +182,8 @@ layer(demoGraphLayer())('graph history', (it) => {
   it.effect('a stored payload no reader can decode refuses the diff, and a missing block refuses as not found', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'd', body: 'original' });
+        const { graph, projectId, root } = demo;
+        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'd', body: 'original', parentId: root });
         const born = yield* newestOf(graph, id);
         yield* graph.graphStore.db.insert(event).values({
           ts: new Date(yield* Clock.currentTimeMillis),
@@ -198,9 +198,9 @@ layer(demoGraphLayer())('graph history', (it) => {
   );
 
   it.effect('a range diff carries the body chunks, the title pair and the status pair', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Old title', body: 'alpha beta' });
+        const { id } = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Old title', body: 'alpha beta', parentId: root });
         const from = yield* newestOf(graph, id);
         yield* graph.blocks.update({ id, title: 'New title', body: 'alpha gamma' });
         yield* graph.tasks.claim({ id });
@@ -217,10 +217,10 @@ layer(demoGraphLayer())('graph history', (it) => {
   );
 
   it.effect('a block born inside the range reads as a whole insertion', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
         const from = (yield* graph.journal.events({ limit: 1 }))[0]?.id ?? 0;
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'fresh', body: 'brand new' });
+        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'fresh', body: 'brand new', parentId: root });
         const diff = yield* graph.history.blockDiff({ blockId: id, from, to: 10_000 });
         expect(diff.bodyUnknown).toBe(false);
         expect(diff.body).toBe('<ins>brand new</ins>');
@@ -229,9 +229,9 @@ layer(demoGraphLayer())('graph history', (it) => {
   );
 
   it.effect('a reading mark resolves to the position that produced the seen body', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'd', body: 'first' });
+        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'd', body: 'first', parentId: root });
         const born = (yield* graph.journal.events({ blockId: id }))[0];
         const seen = (yield* graph.selection.records([id]))[0]?.updatedAt;
         expect(born).toBeDefined();
@@ -254,11 +254,11 @@ layer(demoGraphLayer())('graph history', (it) => {
   it.effect('marks name what happened to each block of the range', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
-        const parent = (yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'area' })).id;
+        const { graph, projectId, root } = demo;
+        const parent = (yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'area', parentId: root })).id;
         const kept = (yield* graph.blocks.create({ projectId, parentId: parent, tags: ['idea'], title: 'kept', body: 'a' })).id;
         const doomed = (yield* graph.blocks.create({ projectId, parentId: parent, tags: ['idea'], title: 'doomed' })).id;
-        const elsewhere = (yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'elsewhere' })).id;
+        const elsewhere = (yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'elsewhere', parentId: root })).id;
         const from = (yield* graph.journal.events({ limit: 1 }))[0]?.id ?? 0;
 
         const born = (yield* graph.blocks.create({ projectId, parentId: parent, tags: ['idea'], title: 'born' })).id;
@@ -282,10 +282,10 @@ layer(demoGraphLayer())('graph history', (it) => {
     () =>
       withDemo((demo) =>
         Effect.gen(function* () {
-          const { graph, projectId } = demo;
-          const parent = (yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'scope' })).id;
+          const { graph, projectId, root } = demo;
+          const parent = (yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'scope', parentId: root })).id;
           const inside = (yield* graph.blocks.create({ projectId, parentId: parent, tags: ['idea'], title: 'inside' })).id;
-          const outside = (yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'outside' })).id;
+          const outside = (yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'outside', parentId: root })).id;
           const from = (yield* graph.journal.events({ limit: 1 }))[0]?.id ?? 0;
           const ts = new Date(yield* Clock.currentTimeMillis);
           yield* graph.graphStore.db.insert(event).values({ ts, op: 'link', blockId: outside, projectId, payload: '{"toId":' });

@@ -34,7 +34,7 @@ layer(demoGraphLayer())('journal session names', (it) => {
           { harness: 'tagma', key: 'thread-builder' },
           { harness: 'claude-code', key: 'transcript-1' },
         ]) {
-          yield* signedBy(session)(graph.blocks.create({ projectId, tags: ['idea'], title: session.key }));
+          yield* signedBy(session)(graph.blocks.create({ projectId, parentId: demo.root, tags: ['idea'], title: session.key }));
         }
         const page = yield* HISTORY_PAIRS.read_journal.body
           .execute({ limit: 2 }, undefined, { actor: { kind: 'operator' }, files: null })

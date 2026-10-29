@@ -12,15 +12,17 @@ import { mapBudget } from '../settings.js';
 import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture.js';
 
 const region = Effect.fnUntraced(function* (projectId: number, title: string, dir: string, parentId?: number) {
-  return (yield* (yield* Blocks).create({ projectId, tags: ['zone'], title, parentId, sources: [{ kind: 'dir', ref: dir }] })).id;
+  const blocks = yield* Blocks;
+  const under = parentId ?? (yield* blocks.rootBlockOf(projectId)).id;
+  return (yield* blocks.create({ projectId, tags: ['zone'], title, parentId: under, sources: [{ kind: 'dir', ref: dir }] })).id;
 });
 
 layer(demoGraphLayer(), { excludeTestServices: true })('prime', (it) => {
   it.effect('the orientation carries the law whole only when handed it, bare or scoped', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root: home }) =>
       Effect.gen(function* () {
         const area = yield* region(projectId, 'product', 'src');
-        const root = yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'Bun only', body: 'No node.' });
+        const root = yield* graph.blocks.create({ projectId, parentId: home, tags: ['rule'], title: 'Bun only', body: 'No node.' });
         const nested = yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'Svelte runes', body: 'No stores.', parentId: area });
         for (const scopeId of [undefined, area]) {
           const bare = yield* graph.orientation.render({ projectId, scopeId });
@@ -99,7 +101,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('prime', (it) => {
           ['spec', 'cross decision'],
           ['idea', 'cross region'],
         ] as const) {
-          yield* graph.blocks.create({ projectId: globalId, tags: [tag], title });
+          yield* graph.blocks.create({ projectId: globalId, parentId: globalRoot.id, tags: [tag], title });
         }
         expect(yield* graph.orientation.render({ projectId })).toBe(before);
         expect(yield* graph.selection.ready({ projectId })).toEqual(beforeReady);
@@ -108,11 +110,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('prime', (it) => {
   );
 
   it.effect('work in progress is named once claimed, and a scope names only its own', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
         const area = yield* region(projectId, 'product', 'src');
         const inside = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'inside', parentId: area })).id;
-        const outside = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'outside' })).id;
+        const outside = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'outside' })).id;
         const open = yield* graph.orientation.render({ projectId });
         expect(open).not.toContain(yield* nameOf(inside));
         expect(open).not.toContain(yield* nameOf(outside));
@@ -144,6 +146,14 @@ layer(demoGraphLayer(), { excludeTestServices: true })('prime', (it) => {
         const scoped = yield* graph.orientation.render({ projectId, scopeId: engine });
         expect(scoped).toContain('src/engine');
         expect(scoped).not.toContain('src/store');
+        const part = (yield* graph.blocks.create({
+          projectId,
+          title: 'Payments',
+          parentId: area,
+          sources: [{ kind: 'dir', ref: 'src/pay' }],
+        })).id;
+        yield* region(projectId, 'ledger', 'src/pay/ledger', part);
+        expect(yield* graph.orientation.render({ projectId, scopeId: part })).toMatch(/Payments · src\/pay(\s|$)/m);
       }),
     ),
   );

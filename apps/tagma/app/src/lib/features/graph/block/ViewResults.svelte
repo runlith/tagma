@@ -245,7 +245,7 @@
     {#snippet title()}
       <span
         class={cn(
-          'min-w-0 flex-1 py-px text-body leading-6 break-words select-none',
+          'min-w-0 flex-1 text-body leading-6 break-words select-none',
           // A column is narrow enough that a long word would leave a ragged hole; the document declares its language, so the browser can hyphenate.
           boarded && 'hyphens-auto',
           tags.isResting(row) && 'text-muted-foreground',

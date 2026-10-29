@@ -5,7 +5,7 @@ import { type OpenRefusal, GateRefusal, refusalBody } from '../../platform/contr
 import { Act, BlockAnswers, BlockNames, BlockProjection, BlockReferences } from '../contract/service/acts.js';
 import { InstalledCatalogs } from '../contract/service/vocabulary.js';
 import { CatalogGraph } from '../vocabulary/install.js';
-import { Amendments, Batch, Reflections, Review, Supersession, Tasks } from '../contract/service/work.js';
+import { Documents, Batch, Reflections, Supersession, Tasks } from '../contract/service/work.js';
 import { Blocks, Edges, Trash } from '../contract/service/blocks.js';
 import { Digest } from '../contract/service/orientation.js';
 import { Sources } from '../contract/service/sources.js';
@@ -158,7 +158,7 @@ export const titlesAcross = Effect.fn('GraphPool.titlesAcross')(function* (
 
 export const ROUTED = [
   Act,
-  Amendments,
+  Documents,
   Batch,
   BlockAnswers,
   BlockNames,
@@ -177,7 +177,6 @@ export const ROUTED = [
   Ranking,
   BlockReads,
   Reflections,
-  Review,
   Selection,
   SourceProject,
   WriterRegister,

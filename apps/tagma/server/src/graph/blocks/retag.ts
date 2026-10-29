@@ -15,7 +15,6 @@ import { CATALOG_DECLARATION, type Tag, TAG_DECLARATION } from '../contract/wire
 import { hasTag, tagLabel, type Tagged } from '../contract/wire/tags/roles.js';
 import { LIFECYCLE, lifecycleOf } from '../contract/wire/tags/lifecycle.js';
 import { HOLDER, HOLDER_SLOT } from '../contract/wire/tags/holder.js';
-import { AMENDMENT } from '../contract/wire/tags/amendment.js';
 import { MODULE } from '../contract/wire/tags/moduleContract.js';
 import { blockName } from '../contract/wire/references.js';
 import { assertComposable } from '../vocabulary/declarationRules.js';
@@ -136,7 +135,7 @@ export const blockRetag = Effect.gen(function* () {
     }
     yield* assertRequiredSources(retag.tags, carried, `anchor_block on ${name} over the place it stands over first, then change the tags`);
     if (table.supports({ tags: retag.ids }, LEAF)) {
-      const children = (yield* rows.childrenOf(fresh.id)).filter((child) => !table.supports(child, AMENDMENT));
+      const children = yield* rows.childrenOf(fresh.id);
       if (children.length > 0) {
         return yield* new GateRefusal('leaf', `${retagLabel(retag.tags)} holds no children, and ${name} holds ${children.length}`, [
           `update_block each child of ${name} with another parentId first, then change the tags`,
@@ -159,13 +158,6 @@ export const blockRetag = Effect.gen(function* () {
         'operation-only',
         `${name} would ${hasTag(current, declaration) ? 'stop' : 'start'} declaring vocabulary as a #${declaration}, and a declaration is born as one`,
         [`create_block with tags ['${declaration}'] for a new declaration`, 'supersede_block or delete_block to retire one that stands'],
-      );
-    }
-    if (table.supports(current, AMENDMENT) || table.supports(future, AMENDMENT)) {
-      return yield* new GateRefusal(
-        'amends-shape',
-        `${name} would ${table.supports(current, AMENDMENT) ? 'stop' : 'start'} amending a block, and an amendment is filed as one and ends on its verdict`,
-        ['create_block with amendsId to file a finding', 'accept_amendment, reject_amendment or uphold_amendment to end one'],
       );
     }
     yield* assertStanding(rows, names, current.id, 'change its tags');

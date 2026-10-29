@@ -1,7 +1,6 @@
-import type { AmendmentOp } from '@tagma/server/graph/contract/wire/batch';
 import type { BlockQuery, ViewLayout } from '@tagma/server/graph/contract/wire/query';
 import { VIEW_LAYOUT, VIEW_QUERY } from '@tagma/server/graph/contract/wire/query';
-import { rests, standsInOutline } from '@tagma/server/graph/contract/wire/standing';
+import { rests } from '@tagma/server/graph/contract/wire/standing';
 import {
   type StatusPhase,
   type Tagged,
@@ -10,7 +9,6 @@ import {
   initialStatus,
   statusTargets,
   statusWords,
-  terminalStatuses,
 } from '@tagma/server/graph/contract/wire/tags/roles';
 import type { Vocabulary } from '@tagma/server/graph/contract/wire/tags/table';
 import type { TagReading } from '@tagma/server/graph/contract/wire/tags/reading';
@@ -18,7 +16,6 @@ import { ServedTags } from '@tagma/server/graph/contract/wire/tags/served';
 import type { ContractId } from '@tagma/server/graph/contract/wire/tags/behaviour';
 import { moveOwners, type NodeActions } from '@tagma/server/graph/contract/wire/tags/actions';
 import { LIFECYCLE, lifecycleOf } from '@tagma/server/graph/contract/wire/tags/lifecycle';
-import { AMENDMENT, amendmentOf } from '@tagma/server/graph/contract/wire/tags/amendment';
 import { OBSERVATION } from '@tagma/server/graph/contract/wire/tags/observation';
 import { WORK } from '@tagma/server/graph/contract/wire/tags/work';
 import { REFLECTION, reflectionOf } from '@tagma/server/graph/contract/wire/tags/reflection';
@@ -27,7 +24,7 @@ import { Failure } from '@runlith/layer/Failure';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
 import { untrack } from 'svelte';
-import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
 import { TagsRepo } from './TagsRepo.js';
 import { type RestingState, type StateMark, type StatusAction, isStatusOp, statusColor, statusLabel } from './status.js';
 
@@ -44,7 +41,6 @@ const TAG_PLURAL: Record<string, string> = {
   task: 'Tasks',
   rule: 'Rules',
   idea: 'Ideas',
-  proposal: 'Proposals',
   reflection: 'Reflections',
   research: 'Research',
   view: 'Views',
@@ -68,10 +64,10 @@ const NOTHING_SERVED: Vocabulary = {
   revision: { format: 2, revision: '' },
 };
 
-export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app', eager: true }) {
+export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'project', eager: true }) {
   static *make() {
-    const catalog = new TagCatalog(yield* TagsRepo, yield* Workspace, yield* Scope, yield* Failure);
-    catalog.follow();
+    const catalog = new TagCatalog(yield* TagsRepo, (yield* ProjectRung.Current).projectId, yield* Scope, yield* Failure);
+    catalog.start();
     return catalog;
   }
 
@@ -83,37 +79,26 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app
   error = $state<unknown>(null);
 
   private generation = 0;
-  private projectId: number | null = null;
 
   constructor(
     private readonly repo: ReturnType<typeof TagsRepo.use>,
-    private readonly workspace: Workspace,
+    private readonly projectId: number,
     private readonly scope: Scope,
     private readonly failure: Failure,
   ) {
     super();
   }
 
-  private follow(): void {
-    $effect(() => {
-      const projectId = this.workspace.contextId;
-      untrack(() => void this.read(projectId));
-    });
+  private start(): void {
+    $effect(() => untrack(() => void this.read()));
   }
 
-  async read(projectId: number | null, refresh = false): Promise<void> {
+  async read(refresh = false): Promise<void> {
     const generation = ++this.generation;
-    if (projectId !== this.projectId) {
-      this.table = new ServedTags(NOTHING_SERVED);
-      this.findings = [];
-      this.served = false;
-    }
-    this.projectId = projectId;
-    this.fetching = projectId !== null;
+    this.fetching = true;
     this.error = null;
-    if (projectId === null) return;
     try {
-      const answer = await this.repo.of.key(projectId).loadOrThrow(refresh ? { refresh: true } : undefined);
+      const answer = await this.repo.of.key(this.projectId).loadOrThrow(refresh ? { refresh: true } : undefined);
       if (answer === undefined || this.scope.signal.aborted || generation !== this.generation) return;
       this.table = new ServedTags(answer);
       this.findings = answer.findings;
@@ -129,12 +114,7 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app
   }
 
   retry(): Promise<void> {
-    return this.read(this.workspace.contextProject?.id ?? null, true);
-  }
-
-  resync(projectId: number): void {
-    if (this.workspace.contextProject?.id !== projectId) return;
-    void this.read(projectId, true);
+    return this.read(true);
   }
 
   tagOf(row: Tagged): string | null {
@@ -163,7 +143,7 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app
   }
 
   standsInOutline(row: MarkedRow): boolean {
-    return this.served && row.actions.revision === this.table.revision().revision && standsInOutline(this.table, row);
+    return this.served && row.actions.revision === this.table.revision().revision;
   }
 
   showsInOutline(row: MarkedRow, hidden: ReadonlySet<RestingState>): boolean {
@@ -232,11 +212,6 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app
     const tag = this.table.bindingTag(row, LIFECYCLE);
     const status = this.statusOf(row);
     return tag !== null && status !== null && activeStatuses(tag).includes(status);
-  }
-
-  verdictsOf(row: Tagged): readonly string[] {
-    const tag = this.table.bindingTag(row, AMENDMENT);
-    return tag === null ? [] : terminalStatuses(tag);
   }
 
   statusVar(row: MarkedRow): string {
@@ -330,13 +305,6 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'app
     if (slots === null) return null;
     const [command, expected, actual] = [row.fields[slots.command], row.fields[slots.expected], row.fields[slots.actual]];
     return typeof command === 'string' && typeof expected === 'string' && typeof actual === 'string' ? { command, expected, actual } : null;
-  }
-
-  opsOf(row: Tagged): readonly AmendmentOp[] {
-    const tag = this.table.bindingTag(row, AMENDMENT);
-    const name = tag === null ? undefined : amendmentOf(tag)?.ops;
-    const ops = name === undefined ? undefined : row.fields[name];
-    return Array.isArray(ops) ? (ops as readonly AmendmentOp[]) : [];
   }
 
   queryOf(row: Tagged): BlockQuery | null {

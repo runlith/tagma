@@ -200,6 +200,9 @@ const rootsAbove = (ownerId: string, projectId: number, seeds: SQL, seeded: SQL)
 export const runningRoots = (ownerId: string, projectId: number): SQL =>
   rootsAbove(ownerId, projectId, sql`${threadRun} r cross join ${recordsAs('seed')} on seed.id = r.thread_id`, sql`r.status = 'running'`);
 
+export const rootsOf = (ownerId: string, projectId: number, ids: readonly string[]): SQL =>
+  rootsAbove(ownerId, projectId, sql`${recordsAs('seed')}`, sql`seed.id in (select value from json_each(${JSON.stringify(ids)}))`);
+
 export const pinnedRoots = (ownerId: string, projectId: number): SQL =>
   rootsAbove(ownerId, projectId, sql`${recordsAs('seed')}`, sql`seed.pinned_at is not null and seed.parent_id is not null`);
 

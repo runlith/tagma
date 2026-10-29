@@ -12,11 +12,11 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('projects a reference, collision, directory rename and trash without rewriting an unmentioned file', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const fs = yield* FileSystem.FileSystem;
         const treeRoot = yield* demo.fixture.directory('tree');
         const delta = (blockIds: number[]) => projectDelta({ projectId, treeRoot, blockIds });
-        const doctrine = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Doctrine' });
+        const doctrine = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Doctrine', parentId: root });
         const charter = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'The Charter', parentId: doctrine.id, body: 'law' });
         yield* projectToTree({ projectId, treeRoot });
         const charterPath = join(treeRoot, 'demo/doctrine/the-charter.md');
@@ -66,11 +66,11 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('a block gaining its first child and a new parent in one act moves both into the new shelf', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const fs = yield* FileSystem.FileSystem;
         const treeRoot = yield* demo.fixture.directory('tree');
-        const from = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'From' });
-        const to = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'To' });
+        const from = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'From', parentId: root });
+        const to = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'To', parentId: root });
         const mover = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Mover', parentId: from.id, body: 'moves and grows' });
         yield* projectToTree({ projectId, treeRoot });
         const kid = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Kid', parentId: mover.id, body: 'kid' });
@@ -94,10 +94,10 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('recreates a vanished flat file while projecting its first child', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const fs = yield* FileSystem.FileSystem;
         const treeRoot = yield* demo.fixture.directory('tree');
-        const from = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'From' });
+        const from = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'From', parentId: root });
         const mover = yield* graph.blocks.create({
           projectId,
           tags: ['idea'],

@@ -40,7 +40,7 @@ import { GraphScopes, ProjectLifecycle, ProjectPolicy } from '../../graph/contra
 import { BlockReads, History, Ranking, Selection } from '../../graph/contract/service/reads.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { Tags } from '../../graph/contract/service/vocabulary.js';
-import { Amendments, Batch, Reflections, Review, Supersession, Tasks } from '../../graph/contract/service/work.js';
+import { Batch, Reflections, Supersession, Tasks } from '../../graph/contract/service/work.js';
 import { SourceProject } from '../../graph/contract/service/source.js';
 import type { GraphSteps } from '../../graph/contract/service/steps.js';
 import { Touches } from '../../graph/contract/service/orientation.js';
@@ -52,6 +52,7 @@ import type { Descriptor } from '../../config/contract/wire/config.js';
 import { describedBy } from '../../enforcement/testing/doubles.js';
 import { LAYERED, LAYERED_KEY } from '../../enforcement/testing/layered.js';
 import { Capacity, serverCapacity, thisMachine } from '../../platform/contract/service/capacity.js';
+import { OperationOwners } from '../../platform/contract/service/operationOwners.js';
 import type { Background } from '../../platform/contract/service/background.js';
 
 export type DemoServices =
@@ -67,6 +68,7 @@ export type DemoServices =
   | WorkDebt
   | ProjectLaw
   | Capacity
+  | OperationOwners
   | HolderStandings;
 
 const fixtureRoot = () => fixtureRootAt('tagma-graph-fixture', randomUUID());
@@ -80,7 +82,6 @@ export type DemoOwners = {
   blockAnswers: Context.Service.Shape<typeof BlockAnswers>;
   blockNames: Context.Service.Shape<typeof BlockNames>;
   blockProjection: Context.Service.Shape<typeof BlockProjection>;
-  amendments: Context.Service.Shape<typeof Amendments>;
   batch: Context.Service.Shape<typeof Batch>;
   blocks: Context.Service.Shape<typeof Blocks>;
   digest: Context.Service.Shape<typeof Digest>;
@@ -98,7 +99,6 @@ export type DemoOwners = {
   reading: Context.Service.Shape<typeof BlockReads>;
   reflection: Context.Service.Shape<typeof Reflections>;
   sourceProject: SourceProject['Service'];
-  review: Context.Service.Shape<typeof Review>;
   selection: Context.Service.Shape<typeof Selection>;
   sessions: Context.Service.Shape<typeof WriterRegister>;
   settings: Context.Service.Shape<typeof Settings>;
@@ -120,6 +120,7 @@ export type DemoState = {
   described: Map<string, Descriptor>;
   fixture: FixtureScope;
   projectId: number;
+  root: number;
   demoRoot: string;
   project(name: string): FixtureProject;
 };
@@ -357,8 +358,10 @@ const restored = Effect.fn('graphFixture.restore')(function* (template: string, 
 });
 
 export const zoneDeclared = Effect.fnUntraced(function* (projectId: number) {
-  yield* (yield* Blocks).create({
+  const blocks = yield* Blocks;
+  yield* blocks.create({
     projectId,
+    parentId: (yield* blocks.rootBlockOf(projectId)).id,
     tags: ['tag'],
     title: '#zone',
     body: 'A grouping inside a module.',
@@ -407,6 +410,7 @@ export function graphFixture(settings: GraphFixtureOptions = {}) {
         Layer.sync(WorkEnds, workEndsOver),
         Layer.succeed(WorkDebt, WorkDebt.of({ remaining: () => Effect.die('debt inspections require the enforcement fixture') })),
         Layer.succeed(ProjectLaw, ProjectLaw.of({ read: () => Effect.die('reading a project law requires the enforcement fixture') })),
+        Layer.succeed(OperationOwners, OperationOwners.of({ of: () => null })),
         fixtureGraph({
           catalogs: SHIPPED_CATALOGS,
           sourcePath: options.sourcePath ?? sourcePath,
@@ -439,7 +443,6 @@ export function graphFixture(settings: GraphFixtureOptions = {}) {
       blockAnswers: Context.get(context, BlockAnswers),
       blockNames: Context.get(context, BlockNames),
       blockProjection: Context.get(context, BlockProjection),
-      amendments: Context.get(context, Amendments),
       batch: Context.get(context, Batch),
       blocks: Context.get(context, Blocks),
       digest: Context.get(context, Digest),
@@ -457,7 +460,6 @@ export function graphFixture(settings: GraphFixtureOptions = {}) {
       reading: Context.get(context, BlockReads),
       reflection: Context.get(context, Reflections),
       sourceProject: Context.get(context, SourceProject),
-      review: Context.get(context, Review),
       selection: Context.get(context, Selection),
       sessions: Context.get(context, WriterRegister),
       settings: Context.get(context, Settings),
@@ -490,6 +492,7 @@ export function graphFixture(settings: GraphFixtureOptions = {}) {
       nameOf: graph.blockNames.nameOf,
       table: (id) => graph.tags.of(id ?? projectId),
       projectId,
+      root: (yield* Effect.provide(graph.blocks.rootBlockOf(projectId), context)).id,
       demoRoot,
       project,
     };

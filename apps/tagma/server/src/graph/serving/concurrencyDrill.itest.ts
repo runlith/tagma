@@ -52,9 +52,16 @@ layer(demoGraphLayer({ repos: ['drill'] }).pipe(Layer.provideMerge(BunFileSystem
               );
               yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined));
               const served = yield* pool.resolve({ projectId });
+              const drillRoot = (yield* Context.get(served.context, Blocks).rootBlockOf(projectId).pipe(Effect.provide(served.context))).id;
               const target = yield* as(
                 'drill',
-                Context.get(served.context, Blocks).create({ projectId, tags: ['idea'], title: 'Read Target', body: 'committed' }),
+                Context.get(served.context, Blocks).create({
+                  projectId,
+                  parentId: drillRoot,
+                  tags: ['idea'],
+                  title: 'Read Target',
+                  body: 'committed',
+                }),
               ).pipe(Effect.provide(served.context));
               yield* served.settled(true);
               const store = Context.get(served.context, GraphStore);
@@ -119,9 +126,10 @@ layer(demoGraphLayer({ repos: ['drill'] }).pipe(Layer.provideMerge(BunFileSystem
               const git = (...args: string[]) => runGit(graph.git, 'drill', args, { cwd: again.layout.treeRoot });
               const before = yield* git('rev-parse', 'HEAD');
               const create = (title: string) =>
-                as('drill', Context.get(again.context, Blocks).create({ projectId, tags: ['idea'], title, body: title })).pipe(
-                  Effect.provide(again.context),
-                );
+                as(
+                  'drill',
+                  Context.get(again.context, Blocks).create({ projectId, parentId: drillRoot, tags: ['idea'], title, body: title }),
+                ).pipe(Effect.provide(again.context));
               holding = true;
               const first = yield* create('First');
               yield* Deferred.await(open);

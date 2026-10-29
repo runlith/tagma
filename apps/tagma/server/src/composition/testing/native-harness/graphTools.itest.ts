@@ -40,25 +40,27 @@ const coreProject = Effect.fnUntraced(function* (prefix: string) {
 });
 
 layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (it) => {
-  it.effect('native reads expose the values a node’s tags declare, deferred operations included', () =>
+  it.effect('native reads expose the values a node’s tags declare', () =>
     Effect.gen(function* () {
-      const { demo, graph, ctx, call, modelText, tableOf } = yield* GraphTools;
+      const { demo, graph, ctx, call } = yield* GraphTools;
       const projectId = ctx.projectId;
-      const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'target', body: 'before' });
-      const targetName = yield* demo.nameOf(target.id);
-      const ops = [{ op: 'edit' as const, id: targetName, old: 'before', new: 'replacement\nsecond line' }];
-      const proposal = yield* graph.review.propose({ projectId, amendsId: target.id, title: 'proposal', ops });
+      const rootId = (yield* graph.blocks.rootBlockOf(projectId)).id;
       const query = { tags: ['task'], sort: { by: 'created' as const, order: 'asc' as const } };
       const source = { name: 'Effect', ref: '4.0.0' };
       const facts = { command: 'read', expected: 'whole payload', actual: 'missing payload' };
       const entries = [
-        { row: proposal, fields: { status: 'open', ops } },
         {
-          row: yield* graph.blocks.create({ projectId, tags: ['view'], title: 'view', fields: { query } }),
+          row: yield* graph.blocks.create({ projectId, parentId: rootId, tags: ['view'], title: 'view', fields: { query } }),
           fields: { query: { ...query, tags: ['shipped:software-development/task'] } },
         },
-        { row: yield* graph.blocks.create({ projectId, tags: ['research'], title: 'research', fields: { source } }), fields: { source } },
-        { row: yield* graph.blocks.create({ projectId, tags: ['reflection'], title: 'reflection', fields: facts }), fields: facts },
+        {
+          row: yield* graph.blocks.create({ projectId, parentId: rootId, tags: ['research'], title: 'research', fields: { source } }),
+          fields: { source },
+        },
+        {
+          row: yield* graph.blocks.create({ projectId, parentId: rootId, tags: ['reflection'], title: 'reflection', fields: facts }),
+          fields: facts,
+        },
       ] as const;
       for (const { row, fields } of entries) {
         expect(row.fields).toEqual(fields);
@@ -67,20 +69,15 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
           reads: [{ fields }],
         });
       }
-      const name = yield* demo.nameOf(proposal.id);
-      expect(yield* call('read_amendments', {})).toMatchObject({ proposals: [{ name, fields: { ops } }] });
-      for (const text of [yield* modelText('read_block', { blockIds: [name] }), yield* modelText('read_amendments', {})]) {
-        for (const value of [targetName, 'before', 'replacement', 'second line']) expect(text).toContain(value);
-      }
-      expect(yield* graph.blocks.blockById(target.id)).toMatchObject({ body: 'before' });
-      expect((yield* tableOf(demo, projectId)).statusOf(yield* graph.blocks.blockById(proposal.id))).toBe('open');
     }),
   );
 
   it.effect('read_journal carries batch provenance and continuation to the model instead of a block-list projection', () =>
     Effect.gen(function* () {
-      const { call, modelText, form } = yield* GraphTools;
-      const created = (yield* call('create_block', { title: 'Journal subject', tags: ['idea'] })) as { block: { name: string } };
+      const { call, modelText, form, rootName } = yield* GraphTools;
+      const created = (yield* call('create_block', { parentId: yield* rootName(), title: 'Journal subject', tags: ['idea'] })) as {
+        block: { name: string };
+      };
       yield* call('update_block', { blockId: created.block.name, title: 'Updated subject' });
       const input = { tags: ['idea'], limit: 1 };
       const page = (yield* call('read_journal', input)) as JournalPageBody;
@@ -110,6 +107,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       const { graph, ctx, call, modelText } = yield* GraphTools;
       yield* graph.blocks.create({
         projectId: ctx.projectId,
+        parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
         tags: ['tag'],
         title: 'the invoice tag',
         fields: { id: 'invoice', fields: { total: 'number' } },
@@ -123,19 +121,23 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
 
   it.effect('a project-declared edge crosses the native tool door and block read', () =>
     Effect.gen(function* () {
-      const { demo, graph, ctx, nativeCall } = yield* GraphTools;
+      const { demo, graph, ctx, nativeCall, rootName } = yield* GraphTools;
+      const rootId = (yield* graph.blocks.rootBlockOf(ctx.projectId)).id;
+      const parentId = yield* rootName();
       yield* graph.blocks.create({
         projectId: ctx.projectId,
+        parentId: rootId,
         tags: ['tag'],
         title: '#meeting',
         body: 'A meeting record.',
         fields: { id: 'meeting', edges: ['reviews'] },
       });
-      const first = yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['meeting'], title: 'first' });
-      const second = yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['meeting'], title: 'second' });
+      const first = yield* graph.blocks.create({ projectId: ctx.projectId, parentId: rootId, tags: ['meeting'], title: 'first' });
+      const second = yield* graph.blocks.create({ projectId: ctx.projectId, parentId: rootId, tags: ['meeting'], title: 'second' });
       const fromId = yield* demo.nameOf(first.id);
       const toId = yield* demo.nameOf(second.id);
       const created = (yield* nativeCall('create_block', {
+        parentId,
         title: 'Born with review',
         tags: ['meeting'],
         edges: [
@@ -154,9 +156,10 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
           },
         ],
       });
-      const foreign = yield* graph.blocks.create({ projectId: demo.projectId, title: 'foreign origin' });
+      const foreign = yield* graph.blocks.create({ projectId: demo.projectId, parentId: demo.root, title: 'foreign origin' });
       expect(
         yield* nativeCall('create_block', {
+          parentId,
           title: 'Foreign review',
           tags: ['meeting'],
           edges: [{ kind: 'discovered-from', to: yield* demo.nameOf(foreign.id) }],
@@ -169,7 +172,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       });
       expect(yield* nativeCall('unlink_blocks', { fromId, kind: 'reviews', toId })).toMatchObject({ status: 'ok' });
       expect(yield* nativeCall('read_block', { blockIds: [fromId], depth: 0 })).toMatchObject({ reads: [{ edgesOut: [] }] });
-      const task = yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['task'], title: 'task' });
+      const task = yield* graph.blocks.create({ projectId: ctx.projectId, parentId: rootId, tags: ['task'], title: 'task' });
       const refused = yield* nativeCall('link_blocks', { fromId: yield* demo.nameOf(task.id), kind: 'reviews', toId });
       expect(refused).toMatchObject({ status: 'refused', code: 'edge-undeclared' });
       expect(refused.reason as string).toContain('reviews');
@@ -178,16 +181,26 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
 
   it.effect('untagged notes relate in their own project and across projects, from a project with the system library alone', () =>
     Effect.gen(function* () {
-      const { demo, graph, ctx, nativeCall } = yield* GraphTools;
+      const { demo, graph, ctx, nativeCall, rootName } = yield* GraphTools;
       const { id: notes, tools: inNotes } = yield* coreProject('notes-');
-      const elsewhere = yield* graph.blocks.create({ projectId: ctx.projectId, title: 'a note elsewhere' });
+      const notesRoot = (yield* graph.blocks.rootBlockOf(notes)).id;
+      const parentId = yield* rootName(notes);
+      const elsewhere = yield* graph.blocks.create({
+        projectId: ctx.projectId,
+        parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
+        title: 'a note elsewhere',
+      });
       const elsewhereName = yield* demo.nameOf(elsewhere.id);
-      const born = (yield* nativeCall('create_block', { title: 'a note', edges: [{ kind: 'relates', to: elsewhereName }] }, inNotes)) as {
+      const born = (yield* nativeCall(
+        'create_block',
+        { parentId, title: 'a note', edges: [{ kind: 'relates', to: elsewhereName }] },
+        inNotes,
+      )) as {
         status: string;
         block: { name: string };
       };
       expect(born.status).toBe('ok');
-      const beside = (yield* nativeCall('create_block', { title: 'a note beside it' }, inNotes)) as { block: { name: string } };
+      const beside = (yield* nativeCall('create_block', { parentId, title: 'a note beside it' }, inNotes)) as { block: { name: string } };
       expect(
         yield* nativeCall('link_blocks', { fromId: beside.block.name, kind: 'relates', toId: born.block.name }, inNotes),
       ).toMatchObject({ status: 'ok' });
@@ -201,7 +214,14 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
         ['person', []],
         ['contact', [{ kind: 'relates', to: ['person'] }]],
       ] as const) {
-        yield* graph.blocks.create({ projectId: notes, tags: ['tag'], title: `#${id}`, body: id, fields: { id, edges } });
+        yield* graph.blocks.create({
+          projectId: notes,
+          parentId: notesRoot,
+          tags: ['tag'],
+          title: `#${id}`,
+          body: id,
+          fields: { id, edges },
+        });
       }
       const retag = (tags: readonly string[]) => nativeCall('update_block', { blockId: beside.block.name, tags }, inNotes);
       expect(yield* retag(['contact'])).toMatchObject({ status: 'refused', code: 'edge-shape' });
@@ -216,8 +236,15 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
 
   it.effect('a body naming a block by its project address is refused at each write door, which names the bare name instead', () =>
     Effect.gen(function* () {
-      const { demo, graph, ctx, nativeCall } = yield* GraphTools;
-      const target = yield* demo.nameOf((yield* graph.blocks.create({ projectId: ctx.projectId, title: 'cited' })).id);
+      const { demo, graph, ctx, nativeCall, rootName } = yield* GraphTools;
+      const parentId = yield* rootName();
+      const target = yield* demo.nameOf(
+        (yield* graph.blocks.create({
+          projectId: ctx.projectId,
+          parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
+          title: 'cited',
+        })).id,
+      );
       const addressed = `See [[${ctx.projectId}/${target}|the citation]].`;
       const bare = `See [[${target}|the citation]].`;
       const refused = {
@@ -225,46 +252,16 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
         code: 'body-address',
         unblock: expect.arrayContaining([expect.stringContaining(`[[${target}|the citation]]`)]),
       };
-      expect(yield* nativeCall('create_block', { title: 'cites by address', body: addressed })).toMatchObject(refused);
-      const citing = (yield* nativeCall('create_block', { title: 'cites', body: 'See below.' })) as { block: { name: string } };
+      expect(yield* nativeCall('create_block', { parentId, title: 'cites by address', body: addressed })).toMatchObject(refused);
+      const citing = (yield* nativeCall('create_block', { parentId, title: 'cites', body: 'See below.' })) as { block: { name: string } };
       const edit = { blockId: citing.block.name, oldString: 'See below.' };
       expect(yield* nativeCall('edit_block', { ...edit, newString: addressed })).toMatchObject(refused);
-      const deferred = [{ op: 'update', id: citing.block.name, body: addressed }];
-      expect(yield* nativeCall('apply_batch', { ops: deferred })).toMatchObject({ status: 'refused', code: 'body-address' });
-      expect(
-        yield* nativeCall('create_block', {
-          tags: ['proposal'],
-          title: 'cite by address',
-          amendsId: citing.block.name,
-          fields: { ops: deferred },
-        }),
-      ).toMatchObject(refused);
+      const ops = [{ op: 'update', id: citing.block.name, body: addressed }];
+      expect(yield* nativeCall('apply_batch', { ops })).toMatchObject({ status: 'refused', code: 'body-address' });
       expect(yield* nativeCall('edit_block', { ...edit, newString: bare })).toMatchObject({ status: 'ok' });
       expect(yield* nativeCall('read_block', { blockIds: [citing.block.name, target] })).toMatchObject({
         reads: [{ refsOut: [target] }, { refsIn: [citing.block.name] }],
       });
-    }),
-  );
-
-  it.effect('a proposal written by create_block or update_block passes the filing gates on its ops', () =>
-    Effect.gen(function* () {
-      const { demo, graph, nativeCall } = yield* GraphTools;
-      const { id: projectId, tools } = yield* coreProject('review-');
-      const amended = yield* demo.nameOf((yield* graph.blocks.create({ projectId, title: 'amended' })).id);
-      const outside = yield* demo.nameOf((yield* graph.blocks.create({ projectId, title: 'outside' })).id);
-      const outsideOps = [{ op: 'update', id: outside, title: 'rewritten from afar' }];
-      const proposal = { tags: ['proposal'], title: 'a finding', amendsId: amended };
-      const outsideRefusal = { status: 'refused', code: 'amendment-outside' };
-      expect(yield* nativeCall('create_block', { ...proposal, fields: { ops: outsideOps } }, tools)).toMatchObject(outsideRefusal);
-      const filed = (yield* nativeCall(
-        'create_block',
-        { ...proposal, fields: { ops: [{ op: 'update', id: amended, title: 'amended well' }] } },
-        tools,
-      )) as { status: string; block: { name: string } };
-      expect(filed.status).toBe('ok');
-      expect(yield* nativeCall('update_block', { blockId: filed.block.name, fields: { ops: outsideOps } }, tools)).toMatchObject(
-        outsideRefusal,
-      );
     }),
   );
 
@@ -273,9 +270,12 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       const { demo, graph, ctx, call, modelText } = yield* GraphTools;
       const names: string[] = [];
       const bodies = ['The body of the first claim.', 'The body of the second claim.'];
+      const rootId = (yield* graph.blocks.rootBlockOf(ctx.projectId)).id;
       for (const [index, title] of ['first claim', 'second claim'].entries()) {
         names.push(
-          yield* demo.nameOf((yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['idea'], title, body: bodies[index] })).id),
+          yield* demo.nameOf(
+            (yield* graph.blocks.create({ projectId: ctx.projectId, parentId: rootId, tags: ['idea'], title, body: bodies[index] })).id,
+          ),
         );
       }
       const answered = (yield* call('read_block', { blockIds: names, depth: 0 })) as {
@@ -297,7 +297,12 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
   it.effect('a gate refusal reaches the model as a result, with its code and its way out', () =>
     Effect.gen(function* () {
       const { demo, graph, ctx, call, tableOf } = yield* GraphTools;
-      const areaId = (yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['zone'], title: 'область' })).id;
+      const areaId = (yield* graph.blocks.create({
+        projectId: ctx.projectId,
+        parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
+        tags: ['zone'],
+        title: 'область',
+      })).id;
       const refusal = yield* call('update_block', { blockId: yield* demo.nameOf(areaId), status: 'in_work' });
       expect(refusal.status).toBe('refused');
       expect(refusal.code).toBe('no-status');
@@ -312,7 +317,12 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       Effect.gen(function* () {
         const { graph, ctx, answerWith } = yield* GraphTools;
         const title = 'stands in the graph the call cannot open';
-        yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['idea'], title });
+        yield* graph.blocks.create({
+          projectId: ctx.projectId,
+          parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
+          tags: ['idea'],
+          title,
+        });
         expect(JSON.stringify(yield* answerWith(ctx, 'search_blocks', { query: title }))).toContain(title);
         const merging = new GateRefusal('tree-mid-merge', 'a merge stands in the tree', ['finish or abort the merge']);
         expect(yield* answerWith({ ...ctx, refused: merging }, 'search_blocks', { query: title })).toMatchObject({
@@ -325,7 +335,12 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
   it.effect('a finish gate reaches the model with its ways out of it', () =>
     Effect.gen(function* () {
       const { demo, graph, ctx, call, tableOf } = yield* GraphTools;
-      const taskId = (yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['task'], title: 'работа' })).id;
+      const taskId = (yield* graph.blocks.create({
+        projectId: ctx.projectId,
+        parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
+        tags: ['task'],
+        title: 'работа',
+      })).id;
       expect(yield* call('finish_block', { blockId: yield* demo.nameOf(taskId) })).toMatchObject({ status: 'ok' });
       expect((yield* tableOf(demo, ctx.projectId)).statusOf(yield* graph.blocks.blockById(taskId))).toBe('done');
       const refusal = yield* call('finish_block', { blockId: yield* demo.nameOf(taskId) });
@@ -341,8 +356,9 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
         const { demo, graph, ctx, graphCatalog, tableOf } = yield* GraphTools;
         const catalog = yield* graphCatalog(ctx);
         const table = yield* tableOf(demo, ctx.projectId);
+        const rootId = (yield* graph.blocks.rootBlockOf(ctx.projectId)).id;
         const task = Effect.fnUntraced(function* (title: string, holder: string | null) {
-          const row = yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['task'], title });
+          const row = yield* graph.blocks.create({ projectId: ctx.projectId, parentId: rootId, tags: ['task'], title });
           if (holder !== null) yield* demo.as(holder, graph.tasks.claim({ id: row.id }));
           return { id: row.id, name: yield* demo.nameOf(row.id) };
         });
@@ -465,8 +481,9 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
   it.effect('supersede_block closes the replacement it starts', () =>
     Effect.gen(function* () {
       const { demo, graph, ctx, call } = yield* GraphTools;
-      const oldId = (yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['spec'], title: 'старое' })).id;
-      const newId = (yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['spec'], title: 'замена' })).id;
+      const rootId = (yield* graph.blocks.rootBlockOf(ctx.projectId)).id;
+      const oldId = (yield* graph.blocks.create({ projectId: ctx.projectId, parentId: rootId, tags: ['spec'], title: 'старое' })).id;
+      const newId = (yield* graph.blocks.create({ projectId: ctx.projectId, parentId: rootId, tags: ['spec'], title: 'замена' })).id;
       expect(yield* call('supersede_block', { oldId: yield* demo.nameOf(oldId), withId: yield* demo.nameOf(newId) })).toMatchObject({
         status: 'ok',
       });
@@ -483,7 +500,12 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
     Effect.gen(function* () {
       const { demo, graph, ctx, call } = yield* GraphTools;
       yield* (yield* FileSystem.FileSystem).writeFileString(join(ctx.graphRoot, 'gate.ts'), 'export class Gate {}\n');
-      const id = (yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['idea'], title: 'док' })).id;
+      const id = (yield* graph.blocks.create({
+        projectId: ctx.projectId,
+        parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
+        tags: ['idea'],
+        title: 'док',
+      })).id;
       yield* graph.sources.attach({ blockId: id, kind: 'file', ref: 'gate.ts' });
       yield* graph.sources.attach({ blockId: id, kind: 'symbol', ref: 'gate.ts', symbol: 'Gate' });
       expect(yield* call('unanchor_block', { blockId: yield* demo.nameOf(id), ref: 'gate.ts', symbol: 'Gate' })).toMatchObject({
@@ -502,7 +524,14 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       const { demo, graph, ctx, root, call } = yield* GraphTools;
       const files = yield* FileSystem.FileSystem;
       yield* files.writeFileString(join(root, 'door.ts'), 'export const Door = 1;\nexport const Other = 2;\n');
-      const id = yield* demo.nameOf((yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['idea'], title: 'door' })).id);
+      const id = yield* demo.nameOf(
+        (yield* graph.blocks.create({
+          projectId: ctx.projectId,
+          parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
+          tags: ['idea'],
+          title: 'door',
+        })).id,
+      );
       expect(yield* call('anchor_block', { blockId: id, kind: 'symbol', ref: 'door.ts#Door', symbol: 'Door' })).toMatchObject({
         status: 'ok',
       });
@@ -520,6 +549,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       yield* files.writeFileString(join(root, 'owned.ts'), 'export const owned = 1;\n');
       const areaId = (yield* graph.blocks.create({
         projectId: ctx.projectId,
+        parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
         tags: ['zone'],
         title: 'file territory',
         sources: [{ kind: 'file', ref: 'owned.ts' }],
@@ -540,9 +570,11 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
   it.effect('update_block rewrites the query a view saves', () =>
     Effect.gen(function* () {
       const { demo, graph, ctx, call } = yield* GraphTools;
-      yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['idea'], title: 'standing doc' });
+      const rootId = (yield* graph.blocks.rootBlockOf(ctx.projectId)).id;
+      yield* graph.blocks.create({ projectId: ctx.projectId, parentId: rootId, tags: ['idea'], title: 'standing doc' });
       const viewId = (yield* graph.blocks.create({
         projectId: ctx.projectId,
+        parentId: rootId,
         tags: ['view'],
         title: 'slice',
         fields: { query: { tags: ['task'], sort: { by: 'updated', order: 'desc' } } },
@@ -560,7 +592,13 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
   it.effect('read_zone answers the zone whole, page by page, under the budget', () =>
     Effect.gen(function* () {
       const { demo, graph, ctx, call } = yield* GraphTools;
-      const areaId = (yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['zone'], title: 'zone', body: 'The zone.' })).id;
+      const areaId = (yield* graph.blocks.create({
+        projectId: ctx.projectId,
+        parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
+        tags: ['zone'],
+        title: 'zone',
+        body: 'The zone.',
+      })).id;
       const long = 'c'.repeat(Math.floor(ZONE_PAGE_BUDGET() / 2) + 1);
       const docIds: number[] = [];
       for (let index = 0; index < 2; index += 1)
@@ -597,12 +635,13 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
 
   it.effect('apply_batch makes a research source actionable and preserves it on a valid create', () =>
     Effect.gen(function* () {
-      const { graph, nativeCall, call } = yield* GraphTools;
+      const { graph, nativeCall, call, rootName } = yield* GraphTools;
+      const parentId = yield* rootName();
       const files = yield* FileSystem.FileSystem;
       const refused = yield* nativeCall('apply_batch', {
         ops: [
-          { op: 'create', tags: ['idea'], title: 'must not be born' },
-          { op: 'create', tags: ['research'], title: 'source-less reading' },
+          { op: 'create', parentId, tags: ['idea'], title: 'must not be born' },
+          { op: 'create', parentId, tags: ['research'], title: 'source-less reading' },
         ],
       });
       expect(refused).toMatchObject({ status: 'refused', code: 'field-required' });
@@ -618,7 +657,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       yield* files.writeFileString(refused.inputFile as string, `${JSON.stringify(recovered, null, 2)}\n`);
       expect(yield* nativeCall('apply_batch', { file: refused.inputFile })).toMatchObject({ status: 'ok' });
       const invalid = yield* nativeCall('apply_batch', {
-        ops: [{ op: 'create', tags: ['research'], title: 'invalid source', fields: { source: { name: 'effect', ref: '  ' } } }],
+        ops: [{ op: 'create', parentId, tags: ['research'], title: 'invalid source', fields: { source: { name: 'effect', ref: '  ' } } }],
       });
       expect(invalid).toMatchObject({ status: 'refused', code: 'field-invalid' });
       expect(invalid.reason as string).toContain('research.source');
@@ -628,6 +667,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
           {
             op: 'create',
             $id: 'reading',
+            parentId,
             tags: ['research'],
             title: 'sourceful reading',
             fields: { source: { name: 'effect', ref: '.external/effect@main' } },
@@ -645,12 +685,17 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
 
   it.effect('apply_batch corrects the selected operation grammar', () =>
     Effect.gen(function* () {
-      const { graph, nativeCall, call } = yield* GraphTools;
+      const { graph, nativeCall, call, rootName } = yield* GraphTools;
       const files = yield* FileSystem.FileSystem;
       const update = yield* nativeCall('apply_batch', { ops: [{ op: 'update', blockId: '5940aab8', title: 'wrong field' }] });
       expect(update).toMatchObject({ status: 'refused', code: 'bad-document' });
       expect(update.inputFile).toBeString();
-      const standing = (yield* call('create_block', { tags: ['idea'], title: 'round trip', body: 'the standing words' })) as {
+      const standing = (yield* call('create_block', {
+        parentId: yield* rootName(),
+        tags: ['idea'],
+        title: 'round trip',
+        body: 'the standing words',
+      })) as {
         block: { name: string };
       };
       const edit = yield* nativeCall('apply_batch', { ops: [{ op: 'edit', id: standing.block.name, new: 'the replacing words' }] });
@@ -682,18 +727,24 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
 
   it.effect('the parity tools: batch with handles, verdicts, reanchor, law, owners, events', () =>
     Effect.gen(function* () {
-      const { graph, ctx, root, call, graphCatalog } = yield* GraphTools;
+      const { graph, ctx, root, call, graphCatalog, rootName } = yield* GraphTools;
       const files = yield* FileSystem.FileSystem;
       const applied = yield* call('apply_batch', {
         ops: [
-          { op: 'create', $id: 'root', tags: ['spec'], title: 'shape' },
+          { op: 'create', $id: 'root', parentId: yield* rootName(), tags: ['spec'], title: 'shape' },
           { op: 'create', $id: 'kid', tags: ['spec'], title: 'детali', parentId: '$root' },
         ],
       });
       expect(applied.status).toBe('ok');
       expect(applied.overview).toContain('$root →');
       yield* files.writeFileString(join(root, 'old.ts'), 'export const x = 1;\n');
-      const doc = (yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['idea'], title: 'claim', body: 'b' })).id;
+      const doc = (yield* graph.blocks.create({
+        projectId: ctx.projectId,
+        parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
+        tags: ['idea'],
+        title: 'claim',
+        body: 'b',
+      })).id;
       yield* graph.sources.attach({ blockId: doc, kind: 'file', ref: 'old.ts' });
       yield* files.writeFileString(join(root, 'new.ts'), 'export const x = 1;\n');
       expect((yield* call('reanchor_path', { from: 'old.ts', to: 'new.ts' })).overview).toContain('old.ts → new.ts');
@@ -723,18 +774,17 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       });
       expect(filed.status).toBe('ok');
       expect(Array.isArray(filed.already)).toBe(true);
-      const listed = yield* call('read_amendments', {});
-      expect(Array.isArray(listed.proposals)).toBe(true);
-      expect(Array.isArray(listed.conflicts)).toBe(true);
     }),
   );
 
   it.effect('create_block project tagma writes an idea into the project covering the server, from any project', () =>
     Effect.gen(function* () {
-      const { graph, ctx, graphCatalog } = yield* GraphTools;
+      const { graph, ctx, graphCatalog, rootName } = yield* GraphTools;
       const home = yield* graph.sourceProject.project();
       if (home === undefined) return yield* Effect.die('the fixture has no home');
       expect(home.id).not.toBe(ctx.projectId);
+      const homeRoot = yield* rootName(home.id);
+      const localRoot = yield* rootName();
       let callNumber = 0;
       const from = Effect.fnUntraced(function* (projectId: number, input: Record<string, unknown>) {
         const project = yield* graph.projects.byId(projectId);
@@ -747,6 +797,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
         return (answered instanceof ToolAnswer ? answered.value : answered) as { status: string; block: { name: string } };
       });
       const crossed = yield* from(ctx.projectId, {
+        parentId: homeRoot,
         tags: ['idea'],
         title: 'a thought from elsewhere',
         body: 'Tagma could, seen from another repository.',
@@ -756,9 +807,15 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       const landed = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(crossed.block.name));
       expect(landed.projectId).toBe(home.id);
       expect(landed.tags).toEqual(['idea']);
-      const own = yield* from(home.id, { tags: ['idea'], title: 'a thought at home', body: 'Tagma could.', project: 'tagma' });
+      const own = yield* from(home.id, {
+        parentId: homeRoot,
+        tags: ['idea'],
+        title: 'a thought at home',
+        body: 'Tagma could.',
+        project: 'tagma',
+      });
       expect((yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(own.block.name))).projectId).toBe(home.id);
-      const theirs = yield* from(ctx.projectId, { tags: ['idea'], title: 'their own', body: 'x' });
+      const theirs = yield* from(ctx.projectId, { parentId: localRoot, tags: ['idea'], title: 'their own', body: 'x' });
       expect((yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(theirs.block.name))).projectId).toBe(ctx.projectId);
     }),
   );

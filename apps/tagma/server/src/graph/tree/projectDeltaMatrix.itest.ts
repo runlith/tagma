@@ -27,14 +27,14 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('projects unplaced ancestors, empty slugs and collisions, then collapses the last-child directory', () =>
     withTree((demo, treeRoot) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const fs = yield* FileSystem.FileSystem;
-        const one = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'One' });
+        const one = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'One', parentId: root });
         const two = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Two', parentId: one.id, body: 'kept parent' });
         const three = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Three', parentId: two.id, body: 'deep body' });
-        const empty = yield* graph.blocks.create({ projectId, tags: ['idea'], title: '###' });
-        const a = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Same Name' });
-        const b = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Same Name' });
+        const empty = yield* graph.blocks.create({ projectId, tags: ['idea'], title: '###', parentId: root });
+        const a = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Same Name', parentId: root });
+        const b = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Same Name', parentId: root });
         yield* projectDelta({ projectId, treeRoot, blockIds: [one.id, two.id, three.id, empty.id, a.id, b.id] });
         const paths = [
           'demo/one/index.md',
@@ -66,11 +66,23 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('hands bare leaf and directory names to siblings without overwriting either identity or descendant', () =>
     withTree((demo, treeRoot) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
-        const leafHeir = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Shared Leaf', body: 'leaf heir' });
-        const leafHolder = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Shared Leaf', body: 'leaf holder' });
-        const hallHeir = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Shared Hall', body: 'hall heir' });
-        const hallHolder = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Shared Hall', body: 'hall holder' });
+        const { graph, projectId, root } = demo;
+        const leafHeir = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Shared Leaf', body: 'leaf heir', parentId: root });
+        const leafHolder = yield* graph.blocks.create({
+          projectId,
+          tags: ['idea'],
+          title: 'Shared Leaf',
+          body: 'leaf holder',
+          parentId: root,
+        });
+        const hallHeir = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Shared Hall', body: 'hall heir', parentId: root });
+        const hallHolder = yield* graph.blocks.create({
+          projectId,
+          tags: ['zone'],
+          title: 'Shared Hall',
+          body: 'hall holder',
+          parentId: root,
+        });
         const holderKid = yield* graph.blocks.create({
           projectId,
           tags: ['idea'],
@@ -118,9 +130,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('a retitle onto the place of a block re-parented in the same act lands both', () =>
     withTree((demo, treeRoot) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
-        const before = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Old Shelf' });
-        const after = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'New Shelf' });
+        const { graph, projectId, root } = demo;
+        const before = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Old Shelf', parentId: root });
+        const after = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'New Shelf', parentId: root });
         const stayer = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Stayer', parentId: before.id, body: 'stays' });
         const leaver = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Leaver', parentId: before.id, body: 'leaves' });
         yield* projectDelta({ projectId, treeRoot, blockIds: [before.id, after.id, stayer.id, leaver.id] });
@@ -142,9 +154,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('collapsing the emptied directory preserves a moved child and its grandchild', () =>
     withTree((demo, treeRoot) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
-        const emptied = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Emptied', body: 'emptied' });
-        const receiver = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Receiver' });
+        const { graph, projectId, root } = demo;
+        const emptied = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Emptied', body: 'emptied', parentId: root });
+        const receiver = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Receiver', parentId: root });
         const middle = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Middle', parentId: emptied.id, body: 'middle' });
         const deep = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Deep', parentId: middle.id, body: 'deep body' });
         yield* projectDelta({ projectId, treeRoot, blockIds: [emptied.id, receiver.id, middle.id, deep.id] });
@@ -166,8 +178,8 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('renames a directory while evacuating a child subtree to the root in the same act', () =>
     withTree((demo, treeRoot) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
-        const outer = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Outer Old' });
+        const { graph, projectId, root } = demo;
+        const outer = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Outer Old', parentId: root });
         const leaving = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Leaving', parentId: outer.id, body: 'leaving' });
         const staying = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Staying', parentId: outer.id, body: 'staying' });
         const carried = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Carried', parentId: leaving.id, body: 'carried' });
@@ -191,9 +203,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('refuses to overwrite a foreign file and undoes only changed paths beside an external edit', () =>
     withTree((demo, treeRoot) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const fs = yield* FileSystem.FileSystem;
-        const shelf = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Undo Shelf' });
+        const shelf = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Undo Shelf', parentId: root });
         const moving = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Mover Before', parentId: shelf.id, body: 'moving' });
         const beside = yield* graph.blocks.create({
           projectId,
@@ -241,11 +253,11 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('a directory name containing an underscore moves only its own subtree', () =>
     withTree((demo, treeRoot) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const fs = yield* FileSystem.FileSystem;
-        const odd = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Hxll' });
+        const odd = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Hxll', parentId: root });
         const oddChild = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Odd Child', parentId: odd.id, body: 'odd' });
-        const plain = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Hall' });
+        const plain = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Hall', parentId: root });
         const plainChild = yield* graph.blocks.create({
           projectId,
           tags: ['idea'],
@@ -273,10 +285,10 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('re-encodes body references, ord, sources and edges without a move, and writes nothing when unchanged', () =>
     withTree((demo, treeRoot) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const fs = yield* FileSystem.FileSystem;
-        const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Cited' });
-        const owner = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Owner', body: 'nothing yet' });
+        const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Cited', parentId: root });
+        const owner = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Owner', body: 'nothing yet', parentId: root });
         yield* projectDelta({ projectId, treeRoot, blockIds: [target.id, owner.id] });
         const delta = () => projectDelta({ projectId, treeRoot, blockIds: [owner.id] });
         const body = `now cites [[${yield* demo.nameOf(target.id)}]]`;
@@ -303,10 +315,10 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('keeps an edge to a trashed subtree identical through delta, full projection and ledger comparison', () =>
     withTree((demo, treeRoot) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const fs = yield* FileSystem.FileSystem;
-        const holder = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Holder' });
-        const gone = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Trashed Target' });
+        const holder = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Holder', parentId: root });
+        const gone = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Trashed Target', parentId: root });
         const child = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Memo', parentId: gone.id });
         yield* graph.edges.link({ fromId: holder.id, toId: gone.id, kind: 'relates' });
         yield* projectDelta({ projectId, treeRoot, blockIds: [holder.id, gone.id, child.id] });
@@ -328,9 +340,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('a file an act moved away by retitling its block is reflected at both paths', () =>
     withTree((demo, treeRoot) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const fs = yield* FileSystem.FileSystem;
-        const moved = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Old Name' });
+        const moved = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Old Name', parentId: root });
         yield* projectDelta({ projectId, treeRoot, blockIds: [moved.id] });
         yield* graph.blocks.update({ id: moved.id, title: 'New Name' });
         yield* projectDelta({ projectId, treeRoot, blockIds: [moved.id] });

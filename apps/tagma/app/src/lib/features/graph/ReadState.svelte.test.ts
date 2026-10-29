@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { Layer } from '@runlith/layer/Layer';
+import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
@@ -39,6 +40,19 @@ test('a block marked read in one open graph leaves the marks of the other standi
     'main\talpha': '2026-09-05T00:00:00Z',
     'feature/one\tbeta': '2026-09-05T01:00:00Z',
   });
+});
+
+test('two pages marking one block read at different stamps leave the later mark standing', () => {
+  const { here } = two();
+
+  const stop = $effect.root(() => {
+    $effect(() => here.markRead('alpha', '2026-09-05T01:00:00Z'));
+    $effect(() => here.markRead('alpha', '2026-09-05T00:00:00Z'));
+  });
+  flushSync();
+  stop();
+
+  expect(here.seenAt('alpha')).toBe('2026-09-05T01:00:00Z');
 });
 
 test('the visit trail of one open graph survives a visit in the other', () => {

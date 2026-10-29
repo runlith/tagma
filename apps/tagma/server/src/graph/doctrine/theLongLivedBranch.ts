@@ -22,7 +22,7 @@ travels with the code at merge.
   change. A block both sides edited stands unmerged in the tree, and the resolve
   act picks one.
 - **A project keeping ONE graph for its whole repository is the exception**: its
-  sources name places in the canonical checkout wherever you stand, and a node
-  true only of your branch is filed as a proposal sourced to the files it speaks
-  about. Every answer to a caller standing outside that tree says so in one line.
+  sources name places in the canonical checkout wherever you stand, so a node
+  true only of your branch waits until the branch merges. Every answer to a
+  caller standing outside that tree says so in one line.
 `;

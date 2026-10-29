@@ -36,7 +36,13 @@ layer(demoGraphLayer({ repos: ['alpha', 'beta'] }).pipe(Layer.provideMerge(BunFi
               (held) => held.dispose(),
             );
             const create = (uuid: string, title: string) =>
-              signed(Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: beta.id, uuid, title })));
+              signed(
+                Effect.flatMap(Blocks, (blocks) =>
+                  Effect.flatMap(blocks.rootBlockOf(beta.id), (top) =>
+                    blocks.create({ projectId: beta.id, parentId: top.id, uuid, title }),
+                  ),
+                ),
+              );
             const main = yield* pool.resolve({ projectId: beta.id });
             yield* create(mainUuid, 'Main reference').pipe(Effect.provide(main.context));
             yield* syncGraph({ commits: Context.get(main.context, TreeCommits), policy: Effect.succeed('auto') });

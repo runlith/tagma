@@ -44,7 +44,12 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const target = (added.body as { project: { id: number } }).project.id;
       const op = (id: string, input: unknown, cwd = root) => world.op(id, input, `project=${target}&cwd=${encodeURIComponent(cwd)}`);
       expect(yield* op('write_setting', { key: 'graph.commit', value: 'manual' })).toMatchObject({ status: 200 });
-      const madeRule = yield* op('create_block', { tags: ['rule'], title: 'Keep source files within their line budget' });
+      const rootName = ((yield* op('list_root_blocks', {})).body as { blocks: { name: string }[] }).blocks[0]!.name;
+      const madeRule = yield* op('create_block', {
+        tags: ['rule'],
+        parentId: rootName,
+        title: 'Keep source files within their line budget',
+      });
       const rule = (madeRule.body as { block: { name: string } }).block.name;
       const initialOwner = yield* op('create_block', { tags: ['task'], parentId: rule, title: 'Shorten existing files' });
       expect(initialOwner.status).toBe(200);
@@ -121,7 +126,11 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const owner = (madeOwner.value as { block: { name: string } }).block.name;
       expect(yield* op('sync_graph', {}, destination)).toMatchObject({ status: 200 });
       const debtHead = yield* suiteGit(destination, 'rev-parse', 'HEAD');
-      const later = yield* op('create_block', { tags: ['task'], title: 'A task main wrote after the branch parted' });
+      const later = yield* op('create_block', {
+        tags: ['task'],
+        parentId: rootName,
+        title: 'A task main wrote after the branch parted',
+      });
       expect(later.status).toBe(200);
       const mainOwner = (later.body as { block: { name: string } }).block.name;
       expect(yield* op('sync_graph', {})).toMatchObject({ status: 200 });
@@ -189,7 +198,12 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
         body: { total: 1, blocks: [{ name: mainOwner }] },
       });
       expect(
-        yield* byThread('create_block', { checkout: destination, tags: ['task'], title: 'Pending work after the merge' }),
+        yield* byThread('create_block', {
+          checkout: destination,
+          parentId: rootName,
+          tags: ['task'],
+          title: 'Pending work after the merge',
+        }),
       ).toMatchObject({
         class: 'answer',
       });

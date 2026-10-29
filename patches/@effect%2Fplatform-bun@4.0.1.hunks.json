@@ -2,8 +2,8 @@
   "package": "@effect/platform-bun@4.0.1",
   "hunks": {
     "worker-close-before-ready": {
-      "markers": ["listening"],
-      "tests": [{ "package": "packages/execution-host", "file": "./src/hostExit.itest.ts" }]
+      "markers": ["listening", "onClose"],
+      "tests": [{ "package": "packages/execution-host", "file": "./src/workerLifecycle.itest.ts" }]
     }
   }
 }

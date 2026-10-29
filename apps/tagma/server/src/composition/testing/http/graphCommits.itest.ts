@@ -35,9 +35,10 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
     const project = (born.body as { project: { id: number } }).project.id;
     yield* projectLeaving(world, project);
     expect((yield* world.op('sync_graph', { project })).status).toBe(200);
+    const parentId = ((yield* world.op('list_root_blocks', { project })).body as { blocks: { name: string }[] }).blocks[0]!.name;
     const created = (input: Record<string, unknown>) =>
-      Effect.map(world.op('create_block', { project, ...input }), (answer) => (answer.body as Written).block.name);
-    return { world, root, project, created };
+      Effect.map(world.op('create_block', { project, parentId, ...input }), (answer) => (answer.body as Written).block.name);
+    return { world, root, project, created, parentId };
   });
 
   it.effect(
@@ -103,7 +104,7 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
 
   it.effect('the stealth graph commits through the same assembler, and the team commit of a mixed act names only team blocks', () =>
     Effect.gen(function* () {
-      const { world, root, project, created } = yield* teamProject('stealth', ['feat(core): seed the code']);
+      const { world, root, project, created, parentId } = yield* teamProject('stealth', ['feat(core): seed the code']);
       const terms = yield* created({ title: 'Vendor terms', storage: 'stealth' });
       yield* world.runtime.pool.releaseProject(project);
       const hidden = yield* lastCommit(join(graphHome(world.dataHome, project), 'layers', stealthTreeName(root)));
@@ -116,8 +117,8 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
         project,
         source: JSON.stringify({
           ops: [
-            { op: 'create', title: 'Deals', storage: 'stealth' },
-            { op: 'create', title: 'Changelog' },
+            { op: 'create', title: 'Deals', storage: 'stealth', parentId },
+            { op: 'create', title: 'Changelog', parentId },
           ],
         }),
       });

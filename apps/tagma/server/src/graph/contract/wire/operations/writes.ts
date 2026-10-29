@@ -10,7 +10,7 @@ import { placeRole } from '../../../../platform/contract/wire/place.js';
 import { STORAGE_MODES } from '../../../../projects/contract/wire/project.js';
 import { BlockName } from '../references.js';
 
-const CREATE_GRAMMAR = `An untagged note may carry file, directory or symbol sources, which support ownership and navigation, and the edges every block carries: \`relates\` and \`discovered-from\`. To deliver a note to file readers and writers, use a type supporting \`core/explanation\`. What a tagged node carries — its fields, edges, sources and the word it is born at — is its tags' declaration in your instructions; a proposal is born under \`amendsId\` with deferred \`ops\` (create/edit/update/delete/link/unlink) restricted to that subtree, and a move amends the moving block.`;
+const CREATE_GRAMMAR = `An untagged note may carry file, directory or symbol sources, which support ownership and navigation, and the edges every block carries: \`relates\` and \`discovered-from\`. To deliver a note to file readers and writers, use a type supporting \`core/explanation\`. What a tagged node carries — its fields, edges, sources and the word it is born at — is its tags' declaration in your instructions.`;
 
 const deleteBlockConsequence = (): string => 'The subtree disappears from every live read until it is restored.';
 
@@ -18,7 +18,7 @@ export const WRITE_OPERATIONS = {
   create_block: operation('create_block', {
     ...GRAPH_DIRECT_ACT,
     meaning:
-      'Create a block with optional sources. Without parentId, uses the selected project root. With claim: true, atomically take the new block for the calling session through its declared holder lifecycle.',
+      'Create a block with optional sources under `parentId`, the block it is about. With claim: true, atomically take the new block for the calling session through its declared holder lifecycle.',
     grammar: `${CREATE_GRAMMAR} \`checkout\` selects the graph copy where the block is born.`,
     input: graphInput({
       checkout: Schema.optional(Schema.NonEmptyString.annotate(placeRole('checkout'))).annotate({
@@ -49,9 +49,7 @@ export const WRITE_OPERATIONS = {
       'field-target',
       'source-required',
       'operation-only',
-      'amends-missing',
-      'amends-shape',
-      'tree-not-measured',
+      'parent-required',
       'leaf',
       'edge-undeclared',
       'edge-shape',
@@ -59,12 +57,6 @@ export const WRITE_OPERATIONS = {
       'cross-project',
       'superseded',
       'duplicate-source',
-      'amends-an-amendment',
-      'amendment-empty',
-      'amendment-ref',
-      'amendment-op',
-      'amendment-outside',
-      'amendment-shape',
       'cross-project-parent',
       'storage-unavailable',
       'stealth-dependency',
@@ -161,6 +153,7 @@ A \`parentId\` in another project’s graph moves the block with its subtree and
       'vocabulary-older',
       'project-root',
       'cross-project-parent',
+      'parent-required',
       'relocation-shape',
       'tag-undeclared',
       'creation-default-missing',
@@ -173,9 +166,6 @@ A \`parentId\` in another project’s graph moves the block with its subtree and
       'edge-shape',
       'wait-cycle',
       'cross-project',
-      'amends-missing',
-      'amends-shape',
-      'tree-not-measured',
       'no-root',
       'source-required',
       'source-outside',
@@ -198,14 +188,6 @@ A \`parentId\` in another project’s graph moves the block with its subtree and
       'deleted',
       'retag-status',
       'not-measurable',
-      'amends-shape',
-      'amendment-empty',
-      'amendment-op',
-      'amendment-ref',
-      'amendment-outside',
-      'amends-an-amendment',
-      'amendment-shape',
-      'verdict-standing',
       'storage-unavailable',
       'stealth-dependency',
     ],
@@ -297,7 +279,7 @@ A \`parentId\` in another project’s graph moves the block with its subtree and
     ...GRAPH_ACT,
     meaning: 'Add a typed edge between blocks.',
     grammar:
-      '`kind` is `relates` or `discovered-from`, which every block carries — an untagged note included — or an edge a tag of the FROM block declares; a tag declaring targets for an edge narrows where its blocks point along it. `discovered-from` points at a block’s origin. `waits-on` points from waiting work to its blocker and affects readiness. `supersedes` and `amends` belong to their lifecycle operations. A TO block in another project is linked into its graph: the edge lives in the FROM graph and names that graph by its root, so a colleague’s clone resolves it too.',
+      '`kind` is `relates` or `discovered-from`, which every block carries — an untagged note included — or an edge a tag of the FROM block declares; a tag declaring targets for an edge narrows where its blocks point along it. `discovered-from` points at a block’s origin. `waits-on` points from waiting work to its blocker and affects readiness. `supersedes` belongs to its lifecycle operation. A TO block in another project is linked into its graph: the edge lives in the FROM graph and names that graph by its root, so a colleague’s clone resolves it too.',
     input: graphInput({
       fromId: blockRef.annotate({ description: 'For "waits-on": the work that waits.' }),
       kind: edgeNameSchema,

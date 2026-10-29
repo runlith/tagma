@@ -115,6 +115,21 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(doorFixture())), { excl
     }),
   );
 
+  it.effect('reading the skills of a thread from another project refuses foreign-project with its home', () =>
+    Effect.gen(function* () {
+      const { world, home, elsewhere } = yield* Place;
+      const stranger = yield* born(elsewhere, 'the stranger');
+      const refused = yield* world.call(`/api/op/read_agent_skills?project=${home}`, {
+        method: 'POST',
+        body: { kind: 'thread', id: stranger },
+      });
+      expect({ status: refused.status, body: refused.body }).toMatchObject({
+        status: 409,
+        body: { code: 'foreign-project', unblock: [`read it with project: ${elsewhere}`] },
+      });
+    }),
+  );
+
   it.effect('a thread nobody holds is one declared refusal on every operation that names it, never an answer of its own', () =>
     Effect.gen(function* () {
       const { world, home } = yield* Place;

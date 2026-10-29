@@ -104,7 +104,12 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         Effect.gen(function* () {
           const { nextTurn, takeOut } = yield* setup(demo);
           const first = yield* nextTurn();
-          const task = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['task'], title: 'взятая задача' });
+          const task = yield* demo.graph.blocks.create({
+            projectId: demo.projectId,
+            parentId: demo.root,
+            tags: ['task'],
+            title: 'взятая задача',
+          });
           yield* demo.graph.tasks.claim({ id: task.id });
           expect((yield* nextTurn())?.parts?.map((part) => part.name)).toEqual(['Graph']);
           takeOut(-1);
@@ -123,7 +128,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         const { nextTurn, takeOut } = yield* setup(demo);
         const first = yield* nextTurn();
         const claimed = Effect.fnUntraced(function* (title: string) {
-          const task = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['task'], title });
+          const task = yield* demo.graph.blocks.create({ projectId: demo.projectId, parentId: demo.root, tags: ['task'], title });
           yield* demo.graph.tasks.claim({ id: task.id });
           return yield* demo.nameOf(task.id);
         });
@@ -150,7 +155,12 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         const chars = first?.parts?.reduce((sum, part) => sum + part.chars, 0) ?? 0;
         expect(chars).toBeGreaterThan(0);
         expect(chars).toBeLessThan(contextText(first).length);
-        const task = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['task'], title: 'a fresh task' });
+        const task = yield* demo.graph.blocks.create({
+          projectId: demo.projectId,
+          parentId: demo.root,
+          tags: ['task'],
+          title: 'a fresh task',
+        });
         yield* demo.graph.tasks.claim({ id: task.id });
         expect((yield* nextTurn())?.parts?.map((part) => part.name)).toEqual(['Graph']);
       }),
@@ -162,7 +172,12 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       Effect.gen(function* () {
         const { nextTurn } = yield* setup(demo);
         yield* nextTurn();
-        const task = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['task'], title: 'свежая задача' });
+        const task = yield* demo.graph.blocks.create({
+          projectId: demo.projectId,
+          parentId: demo.root,
+          tags: ['task'],
+          title: 'свежая задача',
+        });
         yield* demo.graph.tasks.claim({ id: task.id });
         const changed = contextText(yield* nextTurn());
         expect(changed).toContain(`${yield* demo.nameOf(task.id)} [#task/in_work] свежая задача`);
@@ -174,17 +189,20 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('another session’s change is told by line only where it reaches the reader’s own work; the rest is counted in one line', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const { nextTurn } = yield* setup(demo);
         yield* nextTurn();
-        const mine = yield* demo.as('reader', graph.blocks.create({ projectId, tags: ['idea'], title: 'what the reader wrote' }));
-        const task = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'the reader’s task' });
+        const mine = yield* demo.as(
+          'reader',
+          graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'what the reader wrote' }),
+        );
+        const task = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'the reader’s task' });
         yield* demo.as('reader', graph.tasks.claim({ id: task.id }));
         yield* nextTurn();
         yield* demo.as('peer', graph.blocks.update({ id: mine.id, title: 'what the reader wrote, retitled' }));
         yield* demo.as('peer', graph.blocks.update({ id: task.id, body: 'the peer moved it' }));
-        yield* demo.as('peer', graph.blocks.create({ projectId, tags: ['idea'], title: 'far away' }));
-        yield* demo.as('peer', graph.blocks.create({ projectId, tags: ['idea'], title: 'further away' }));
+        yield* demo.as('peer', graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'far away' }));
+        yield* demo.as('peer', graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'further away' }));
         const told = contextText(yield* nextTurn());
         expect(told).toContain(yield* demo.nameOf(mine.id));
         expect(told).toContain(yield* demo.nameOf(task.id));
@@ -198,7 +216,10 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       Effect.gen(function* () {
         const { nextTurn } = yield* setup(demo);
         yield* nextTurn();
-        yield* demo.as('reader', demo.graph.blocks.create({ projectId: demo.projectId, tags: ['idea'], title: 'written here' }));
+        yield* demo.as(
+          'reader',
+          demo.graph.blocks.create({ projectId: demo.projectId, parentId: demo.root, tags: ['idea'], title: 'written here' }),
+        );
         expect(yield* nextTurn()).toBeNull();
       }),
     ),
@@ -217,6 +238,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           'peer',
           demo.graph.blocks.create({
             projectId: demo.projectId,
+            parentId: demo.root,
             tags: ['idea'],
             title: 'over the reader’s file',
             sources: [{ kind: 'file', ref: 'src/mine.ts' }],
@@ -230,10 +252,10 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('an agent without the graph is told the world and nothing of the graph, and its cursor never moves', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const { threads, threadId } = yield* setup(demo);
         const before = yield* threads.rows.graphCursor(threadId);
-        const task = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'невидимая задача' });
+        const task = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'невидимая задача' });
         yield* graph.tasks.claim({ id: task.id });
         const first = yield* nativeTurnContext({
           threads: threads.rows,

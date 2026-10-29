@@ -59,11 +59,11 @@ test('a blockless entry joins no batch', () => {
 
 layer(demoGraphLayer(), { excludeTestServices: true })('graph journal', (it) => {
   it.effect('a journal window is cut by tag, session and op, and the groups intersect', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
-        const area = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Area' });
+        const area = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Area', parentId: root });
         const doc = yield* graph.blocks.create({ projectId, parentId: area.id, tags: ['idea'], title: 'Doc' });
-        const idea = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Idea' });
+        const idea = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'Idea', parentId: root });
         yield* graph.blocks.update({ id: doc.id, title: 'Doc, renamed' });
 
         const blocksOf = (rows: { blockId: number | null }[]) => rows.map((row) => row.blockId);
@@ -82,11 +82,17 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph journal', (it) => 
   it.effect('a call is identified beside the session that signed it, or as unsigned, never by its id alone', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const call = 'call-1';
-        const mine = yield* demo.as('mine', signedCall(call)(graph.blocks.create({ projectId, tags: ['idea'], title: 'mine' })));
-        const theirs = yield* demo.as('theirs', signedCall(call)(graph.blocks.create({ projectId, tags: ['idea'], title: 'theirs' })));
-        const operators = yield* signedCall(call)(graph.blocks.create({ projectId, tags: ['idea'], title: 'operator' }));
+        const mine = yield* demo.as(
+          'mine',
+          signedCall(call)(graph.blocks.create({ projectId, tags: ['idea'], title: 'mine', parentId: root })),
+        );
+        const theirs = yield* demo.as(
+          'theirs',
+          signedCall(call)(graph.blocks.create({ projectId, tags: ['idea'], title: 'theirs', parentId: root })),
+        );
+        const operators = yield* signedCall(call)(graph.blocks.create({ projectId, tags: ['idea'], title: 'operator', parentId: root }));
         const entriesOf = Effect.fnUntraced(function* (key: string) {
           const session = yield* demo.as(
             key,
@@ -102,10 +108,10 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph journal', (it) => 
   );
 
   it.effect('events page down with beforeId and a limit', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
         const ids: number[] = [];
-        for (const n of [1, 2, 3]) ids.push((yield* graph.blocks.create({ projectId, tags: ['idea'], title: `t${n}` })).id);
+        for (const n of [1, 2, 3]) ids.push((yield* graph.blocks.create({ projectId, tags: ['idea'], title: `t${n}`, parentId: root })).id);
         const all = yield* graph.journal.events({ projectId });
         const newest = all[0];
         expect(newest?.blockId).toBe(ids[2]);
@@ -121,10 +127,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph journal', (it) => 
   it.effect('the journal scopes by project through the touched block; trashed blocks testify, blockless entries show unscoped only', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const other = yield* graph.projectLifecycle.create({ name: 'other', rootPath: yield* demo.fixture.directory('other') });
-        const mine = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'mine' })).id;
-        const theirs = (yield* graph.blocks.create({ projectId: other.id, tags: ['task'], title: 'theirs' })).id;
+        const otherRoot = yield* graph.blocks.rootBlockOf(other.id);
+        const mine = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'mine', parentId: root })).id;
+        const theirs = (yield* graph.blocks.create({ projectId: other.id, tags: ['task'], title: 'theirs', parentId: otherRoot.id })).id;
         const scoped = yield* graph.journal.events({ projectId });
         expect(scoped.some((entry) => entry.blockId === mine)).toBe(true);
         expect(scoped.some((entry) => entry.blockId === theirs)).toBe(false);

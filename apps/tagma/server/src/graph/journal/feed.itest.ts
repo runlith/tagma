@@ -35,12 +35,13 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
   it.effect('a batch publishes one frame per commit and nothing at all when it is refused', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
+        const rootName = yield* demo.nameOf(root);
         const feed = yield* watch(graph, projectId);
         yield* graph.batch.apply(
           batchDocument([
-            { op: 'create', $id: 's', tags: ['spec'], title: 'spec' },
-            { op: 'create', tags: ['task'], title: 'task', edges: [{ kind: 'implements', to: '$s' }] },
+            { op: 'create', $id: 's', tags: ['spec'], title: 'spec', parentId: rootName },
+            { op: 'create', tags: ['task'], title: 'task', parentId: rootName, edges: [{ kind: 'implements', to: '$s' }] },
           ]),
           projectId,
         );
@@ -49,7 +50,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
         const refusal = yield* demo.refusal(
           graph.batch.apply(
             batchDocument([
-              { op: 'create', tags: ['task'], title: 'rolled back' },
+              { op: 'create', tags: ['task'], title: 'rolled back', parentId: rootName },
               { op: 'update', id: 'deadbeef', title: 'no such block' },
             ]),
             projectId,
@@ -57,7 +58,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
         );
         expect(refusal.code).toBe('not-found');
 
-        const after = yield* demo.nameOf((yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'after' })).id);
+        const after = yield* demo.nameOf((yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'after', parentId: root })).id);
         expect((yield* feed.change(2)).blocks.map((row) => row.name)).toEqual([after]);
         expect(feed.frames).toHaveLength(2);
       }),
@@ -67,9 +68,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
   it.effect('a frame names the session behind the write, born after the subscriber attached', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const feed = yield* watch(graph, projectId);
-        yield* demo.as('late-arrival', graph.blocks.create({ projectId, tags: ['idea'], title: 'signed' }));
+        yield* demo.as('late-arrival', graph.blocks.create({ projectId, tags: ['idea'], title: 'signed', parentId: root }));
 
         const frame = yield* feed.change(1);
         expect(frame.sessions.map((row) => `${row.harness}:${row.key}`)).toEqual(['test:late-arrival']);
@@ -81,14 +82,16 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
   it.effect('one commit publishes one change to the touched project, rows read post-commit', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
+        const rootName = yield* demo.nameOf(root);
         const other = (yield* graph.projectLifecycle.create({ name: 'other', rootPath: yield* demo.fixture.directory('other') })).id;
+        const otherRoot = (yield* graph.blocks.rootBlockOf(other)).id;
         const mine = yield* watch(graph, projectId);
         const theirs = yield* watch(graph, other);
         const result = yield* graph.batch.apply(
           batchDocument([
-            { op: 'create', $id: 'a', tags: ['idea'], title: 'first', body: 'see [[$b]]' },
-            { op: 'create', $id: 'b', tags: ['idea'], title: 'second' },
+            { op: 'create', $id: 'a', tags: ['idea'], title: 'first', body: 'see [[$b]]', parentId: rootName },
+            { op: 'create', $id: 'b', tags: ['idea'], title: 'second', parentId: rootName },
           ]),
           projectId,
         );
@@ -102,7 +105,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
         expect(change.events.map((entry) => entry.op)).toContain('create');
         expect(change.refs).toEqual([{ fromName: a as string, toName: b as string }]);
 
-        const there = yield* demo.nameOf((yield* graph.blocks.create({ projectId: other, tags: ['idea'], title: 'there' })).id);
+        const there = yield* demo.nameOf(
+          (yield* graph.blocks.create({ projectId: other, tags: ['idea'], title: 'there', parentId: otherRoot })).id,
+        );
         expect((yield* theirs.change(1)).blocks.map((row) => row.name)).toEqual([there]);
         expect(mine.frames).toHaveLength(1);
       }),
@@ -112,10 +117,13 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
   it.effect('one commit touching two projects gives each its own rows and sets', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const other = (yield* graph.projectLifecycle.create({ name: 'other', rootPath: yield* demo.fixture.directory('other') })).id;
-        const here = yield* demo.nameOf((yield* graph.blocks.create({ projectId, tags: ['task'], title: 'here' })).id);
-        const there = yield* demo.nameOf((yield* graph.blocks.create({ projectId: other, tags: ['task'], title: 'there' })).id);
+        const otherRoot = (yield* graph.blocks.rootBlockOf(other)).id;
+        const here = yield* demo.nameOf((yield* graph.blocks.create({ projectId, tags: ['task'], title: 'here', parentId: root })).id);
+        const there = yield* demo.nameOf(
+          (yield* graph.blocks.create({ projectId: other, tags: ['task'], title: 'there', parentId: otherRoot })).id,
+        );
         const mine = yield* watch(graph, projectId);
         const theirs = yield* watch(graph, other);
         yield* graph.batch.apply(
@@ -139,17 +147,17 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
   it.effect('writes committed with nobody attached are neither replayed nor stall the feed', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
-        const unwatched = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'nobody watching' })).id;
+        const { graph, projectId, root } = demo;
+        const unwatched = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'nobody watching', parentId: root })).id;
         const first = yield* watch(graph, projectId);
         expect(first.frames).toHaveLength(0);
-        const watched = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'watched' })).id;
+        const watched = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'watched', parentId: root })).id;
         expect((yield* first.change(1)).blocks.map((row) => row.name)).toEqual([yield* demo.nameOf(watched)]);
 
         first.stop();
-        yield* graph.blocks.create({ projectId, tags: ['task'], title: 'between subscribers' });
+        yield* graph.blocks.create({ projectId, tags: ['task'], title: 'between subscribers', parentId: root });
         const second = yield* watch(graph, projectId);
-        const last = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'after the gap' })).id;
+        const last = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'after the gap', parentId: root })).id;
         const frame = yield* second.change(1);
         expect(frame.blocks.map((row) => row.name)).toEqual([yield* demo.nameOf(last)]);
         expect(frame.events.map((entry) => entry.blockName)).not.toContain(yield* demo.nameOf(unwatched));
@@ -160,9 +168,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
   it.effect('link ships the rows and the edge of both endpoints', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
-        const spec = (yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'spec' })).id;
-        const task = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'task' })).id;
+        const { graph, projectId, root } = demo;
+        const spec = (yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'spec', parentId: root })).id;
+        const task = (yield* graph.blocks.create({ projectId, tags: ['task'], title: 'task', parentId: root })).id;
         const feed = yield* watch(graph, projectId);
         yield* graph.edges.link({ fromId: task, kind: 'implements', toId: spec });
 
@@ -178,9 +186,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
   it.effect('supersede ships one entry and the rows of both blocks', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
-        const oldSpec = (yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'old' })).id;
-        const newSpec = (yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'new' })).id;
+        const { graph, projectId, root } = demo;
+        const oldSpec = (yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'old', parentId: root })).id;
+        const newSpec = (yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'new', parentId: root })).id;
         const oldName = yield* demo.nameOf(oldSpec);
         const feed = yield* watch(graph, projectId);
         yield* graph.standing.supersede({ oldId: oldSpec, withId: newSpec });
@@ -196,7 +204,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
   );
 
   it.effect('a graph write started inside a thread unit waits for it and then lands', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
         const before = (yield* graph.graphStore.db.select({ id: block.id }).from(block)).length;
         const outside = yield* Effect.context<never>();
@@ -205,7 +213,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
           Effect.gen(function* () {
             const writing = yield* Effect.forkIn(
               Effect.updateContext(
-                graph.blocks.create({ projectId, tags: ['task'], title: 'after a foreign unit' }),
+                graph.blocks.create({ projectId, tags: ['task'], title: 'after a foreign unit', parentId: root }),
                 (_: Context.Context<never>) => outside,
               ),
               scope,
@@ -223,16 +231,17 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
   );
 
   it.effect('a write that moves a declaration resyncs the subscriber, and an ordinary write changes it', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
         const feed = yield* watch(graph, projectId);
-        yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'an ordinary node' });
+        yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'an ordinary node', parentId: root });
         expect((yield* feed.nth(1)).type).toBe('change');
         yield* graph.blocks.create({
           projectId,
           tags: ['tag'],
           title: '#invoice',
           body: 'what somebody owes',
+          parentId: root,
           fields: { id: 'invoice', fields: { total: 'number' } },
         });
         expect((yield* feed.nth(2)).type).toBe('resync');
@@ -243,7 +252,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
   it.effect('a subscriber applying every change holds the frontier and the trash a full read answers', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const ready = new Set((yield* graph.selection.ready({ projectId })).map((row) => blockName(row.uuid)));
         const trash = new Map((yield* graph.trash.roots(projectId)).map((row) => [blockName(row.uuid), wireTreeBlock(row)]));
         const feed = yield* watch(graph, projectId);
@@ -262,14 +271,14 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
           return result;
         });
 
-        const blocker = (yield* step(graph.blocks.create({ projectId, tags: ['task'], title: 'blocker' }))).id;
-        const waiter = (yield* step(graph.blocks.create({ projectId, tags: ['task'], title: 'waiter' }))).id;
+        const blocker = (yield* step(graph.blocks.create({ projectId, tags: ['task'], title: 'blocker', parentId: root }))).id;
+        const waiter = (yield* step(graph.blocks.create({ projectId, tags: ['task'], title: 'waiter', parentId: root }))).id;
         yield* step(graph.edges.link({ fromId: waiter, kind: 'waits-on', toId: blocker }));
         expect(ready.has(yield* demo.nameOf(waiter))).toBe(false);
         yield* step(graph.tasks.finish({ id: blocker }));
         expect(ready.has(yield* demo.nameOf(waiter))).toBe(true);
 
-        const parent = (yield* step(graph.blocks.create({ projectId, tags: ['task'], title: 'parent' }))).id;
+        const parent = (yield* step(graph.blocks.create({ projectId, tags: ['task'], title: 'parent', parentId: root }))).id;
         const child = (yield* step(graph.blocks.create({ projectId, tags: ['task'], title: 'child', parentId: parent }))).id;
         yield* step(graph.trash.delete({ id: child }));
         yield* step(graph.trash.delete({ id: parent }));

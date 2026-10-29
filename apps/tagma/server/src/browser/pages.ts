@@ -5,14 +5,17 @@ import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { type Host, HostAdapters, Hosts, type Moved, type ProfileRecord, type Signal } from './contract/service/hosts.js';
 import type { HostEvent, PageChange } from './contract/wire/host.js';
-import { hostRefusal, type Opener, type PageRefusal, Pages } from './contract/service/pages.js';
+import { type FrameTarget, hostRefusal, type Opener, type PageRefusal, Pages } from './contract/service/pages.js';
 import { PageId, type ProfileId } from './contract/wire/ids.js';
+import { conditionsOf, NO_CONDITIONS } from './contract/wire/emulation.js';
 import type { Download, Glance, Live, Page, PagesEvent, PageState } from './contract/wire/page.js';
 import { DOWNLOADS_KEPT } from './contract/wire/rows.js';
-import { agentProfile, userProfile } from './contract/wire/settings.js';
+import { agentProfile, allowedDomains, blockedDomains, userProfile } from './contract/wire/settings.js';
+import { domainBlock, type DomainPolicy, type Restriction, type RestrictionState } from './contract/wire/domains.js';
+import { navigationBlocked, navigationRefusal } from './engine/refusal.js';
 import { Ledger, type PagePatch, type PageRow } from './store/ledger.js';
 
-type Held = { row: PageRow; live: Live; holder: Host | null };
+type Held = { row: PageRow; live: Live; holder: Host | null; restricted: boolean; restrictionRevision: number };
 
 const QUIET: Live = {
   loading: false,
@@ -23,6 +26,9 @@ const QUIET: Live = {
   dialog: null,
   driven: null,
   shown: false,
+  conditions: NO_CONDITIONS,
+  trace: null,
+  recording: null,
 };
 
 const ACTIVE_WRITE_MS = 10_000;
@@ -38,6 +44,29 @@ export const makePages = Effect.gen(function* () {
   const scope = yield* Effect.scope;
 
   const held = new Map<PageId, Held>();
+  const restrictions = new Map<ProfileId, number>();
+  const acquiring = new Map<ProfileId, number>();
+  const setRestriction = (page: Held, active: boolean) => {
+    if (page.restricted === active) return;
+    page.restricted = active;
+    const count = (restrictions.get(page.row.profile) ?? 0) + (active ? 1 : -1);
+    if (count === 0) restrictions.delete(page.row.profile);
+    else restrictions.set(page.row.profile, count);
+  };
+  const acceptRestriction = (page: Held, state: RestrictionState) => {
+    if (state.revision < page.restrictionRevision) return;
+    page.restrictionRevision = state.revision;
+    setRestriction(page, state.restricted);
+  };
+  const applyRestrictions = (host: Host, changes: readonly Restriction[]) => {
+    for (const change of changes) {
+      const page = held.get(change.page);
+      if (page !== undefined && page.holder === host) acceptRestriction(page, change);
+    }
+  };
+  const hasRestrictions = (profile: ProfileId) => restrictions.has(profile) || acquiring.has(profile);
+  const unresponsive = new Map<PageId, Map<string, FrameTarget | null>>();
+  const operatedAt = new Map<PageId, number>();
   const byThread = new Map<string, PageId>();
   const profiles = new Map<ProfileId, ProfileRecord>();
   const prepared = new WeakMap<Host, Set<ProfileId>>();
@@ -46,7 +75,8 @@ export const makePages = Effect.gen(function* () {
   const published = yield* PubSub.unbounded<{ readonly projectId: number; readonly event: PagesEvent }>();
   const moved = yield* PubSub.unbounded<{ readonly page: PageId; readonly moved: Moved }>();
 
-  for (const row of yield* Effect.orDie(ledger.openPages)) held.set(row.id, { row, live: QUIET, holder: null });
+  for (const row of yield* Effect.orDie(ledger.openPages))
+    held.set(row.id, { row, live: QUIET, holder: null, restricted: false, restrictionRevision: -1 });
 
   const profileOf = Effect.fnUntraced(function* (id: ProfileId) {
     const known = profiles.get(id);
@@ -95,7 +125,10 @@ export const makePages = Effect.gen(function* () {
     Effect.andThen(announce(page, { type: 'put', page: wire(page) }), move(page, signal));
 
   const forget = Effect.fnUntraced(function* (page: Held) {
+    setRestriction(page, false);
     held.delete(page.row.id);
+    unresponsive.delete(page.row.id);
+    operatedAt.delete(page.row.id);
     for (const [thread, id] of byThread) if (id === page.row.id) byThread.delete(thread);
     yield* announce(page, { type: 'gone', id: page.row.id });
     yield* move(page, 'closed');
@@ -164,10 +197,19 @@ export const makePages = Effect.gen(function* () {
     if (now - page.row.activeAt.getTime() > ACTIVE_WRITE_MS) yield* persist(page, { activeAt: new Date(now) });
   });
 
+  const policyOf = Effect.fnUntraced(function* (projectId: number) {
+    const blocked = (yield* settings.held(blockedDomains, projectId))();
+    const allowed = (yield* settings.held(allowedDomains, projectId))();
+    return blocked.length === 0 && allowed.length === 0 ? null : { blocked, allowed };
+  });
+
   const open = Effect.fn('Pages.open')(function* (
     opener: Opener,
     input: { readonly url: string; readonly profile: ProfileId | undefined },
   ) {
+    const policy = opener.human ? null : yield* policyOf(opener.projectId);
+    const blocked = policy === null ? null : domainBlock(policy, input.url);
+    if (blocked !== null) return yield* navigationBlocked(blocked);
     const id = input.profile ?? (yield* settings.value(opener.human ? userProfile : agentProfile, opener.projectId));
     const profile = yield* profileOf(id);
     if ((profile === undefined || profile.removal === 'delete') && input.profile === undefined) {
@@ -201,9 +243,10 @@ export const makePages = Effect.gen(function* () {
       closedAt: null,
     };
     yield* ledger.putPage(row);
-    const page: Held = { row, live: { ...QUIET, loading: true }, holder: host };
+    const page: Held = { row, live: { ...QUIET, loading: true }, holder: host, restricted: false, restrictionRevision: -1 };
     held.set(row.id, page);
-    yield* host.pages.open({ page: row.id, profile, context: null, url: input.url, history: null }).pipe(
+    setRestriction(page, policy !== null);
+    const opened = yield* host.pages.open({ page: row.id, profile, context: null, url: input.url, history: null, policy }).pipe(
       Effect.tapError((failure) =>
         failure._tag === 'HostLost' && failure.pending
           ? Effect.suspend(() => {
@@ -214,8 +257,9 @@ export const makePages = Effect.gen(function* () {
             })
           : Effect.andThen(Effect.orDie(ledger.dropPage(row.id)), forget(page)),
       ),
-      Effect.mapError(hostRefusal),
+      Effect.mapError(navigationRefusal),
     );
+    acceptRestriction(page, opened);
     if (opener.thread !== null) byThread.set(opener.thread, row.id);
     yield* publish(page);
     return wire(page);
@@ -240,7 +284,7 @@ export const makePages = Effect.gen(function* () {
     const page = held.get(id);
     if (page === undefined) return yield* unknownPage(id);
     if (page.holder !== null) {
-      yield* page.holder.pages.close(id, true).pipe(
+      yield* page.holder.pages.close(id, page.live.responsive && !page.live.crashed).pipe(
         Effect.catchTags({
           HostLost: (lost) => Effect.fail(hostRefusal(lost)),
           HostRefused: (refused) => Effect.fail(hostRefusal(refused)),
@@ -258,21 +302,26 @@ export const makePages = Effect.gen(function* () {
     yield* forget(page);
   });
 
-  const restore = Effect.fnUntraced(function* (page: Held) {
+  const restore = Effect.fnUntraced(function* (page: Held, policy: DomainPolicy | null) {
+    const url = page.row.history?.entries[page.row.history.at]?.url ?? page.row.url;
+    const blocked = policy === null ? null : domainBlock(policy, url);
+    if (blocked !== null) return yield* navigationBlocked(blocked);
     const profile = yield* profileOf(page.row.profile);
     if (profile === undefined) return yield* Effect.flatMap(unknownProfile(page.row.profile), Effect.fail);
     const host = yield* reachHost(profile);
     if (page.holder !== null) return page.holder;
-    yield* host.pages
-      .open({ page: page.row.id, profile, context: page.row.context, url: page.row.url, history: page.row.history })
-      .pipe(Effect.mapError(hostRefusal));
+    const opened = yield* host.pages
+      .open({ page: page.row.id, profile, context: page.row.context, url: page.row.url, history: page.row.history, policy })
+      .pipe(Effect.mapError(navigationRefusal));
     page.holder = host;
+    page.restrictionRevision = -1;
+    acceptRestriction(page, opened);
     page.live = { ...QUIET, loading: true };
     yield* publish(page);
     return host;
   });
 
-  const hold = Effect.fn('Pages.hold')(function* (id: PageId) {
+  const hold = Effect.fn('Pages.hold')(function* (id: PageId, policy: DomainPolicy | null = null) {
     const page = held.get(id);
     if (page === undefined) return yield* unknownPage(id);
     if (page.holder !== null) return page.holder;
@@ -280,7 +329,7 @@ export const makePages = Effect.gen(function* () {
     if (running !== undefined) return yield* Deferred.await(running);
     const done = yield* Deferred.make<Host, StoreFailure | GateRefusal<PageRefusal>>();
     restoring.set(id, done);
-    return yield* restore(page).pipe(
+    return yield* restore(page, policy).pipe(
       Effect.onExit((exit) =>
         Effect.andThen(
           Deferred.done(done, exit),
@@ -326,22 +375,25 @@ export const makePages = Effect.gen(function* () {
       closedAt: null,
     };
     yield* ledger.putPage(row);
-    const page: Held = { row, live: { ...QUIET, loading: true }, holder: host };
+    const page: Held = { row, live: { ...QUIET, loading: true }, holder: host, restricted: false, restrictionRevision: -1 };
     held.set(row.id, page);
+    acceptRestriction(page, event.restriction);
     const adopted = yield* host.pages.adopt(event.local, row.id).pipe(
-      Effect.as(true),
+      Effect.map((restriction) => ({ restriction })),
       Effect.catchTags({
-        HostLost: (lost) => Effect.as(Effect.logWarning(`browser: popup ${event.local} was not adopted: ${lost.message}`), false),
-        HostRefused: (refused) => Effect.as(Effect.logWarning(`browser: popup ${event.local} was not adopted: ${refused.message}`), false),
+        HostLost: (lost) => Effect.as(Effect.logWarning(`browser: popup ${event.local} was not adopted: ${lost.message}`), null),
+        HostRefused: (refused) => Effect.as(Effect.logWarning(`browser: popup ${event.local} was not adopted: ${refused.message}`), null),
         PageMissing: (missing) =>
-          Effect.as(Effect.logInfo(`browser: popup ${event.local} closed before adoption: ${missing.message}`), false),
+          Effect.as(Effect.logInfo(`browser: popup ${event.local} closed before adoption: ${missing.message}`), null),
       }),
     );
-    if (!adopted) {
+    if (adopted === null) {
       yield* ledger.dropPage(row.id);
+      setRestriction(page, false);
       held.delete(row.id);
       return;
     }
+    acceptRestriction(page, adopted.restriction);
     yield* publish(page);
   });
 
@@ -351,7 +403,49 @@ export const makePages = Effect.gen(function* () {
     return [...downloads, download].sort((one, other) => one.at.localeCompare(other.at)).slice(-DOWNLOADS_KEPT);
   };
 
+  const respond = (page: Held, responsive: boolean, frame?: FrameTarget): void => {
+    const key = frame === undefined ? 'host' : `frame:${frame.session}`;
+    const silent = unresponsive.get(page.row.id) ?? new Map<string, FrameTarget | null>();
+    if (responsive) silent.delete(key);
+    else silent.set(key, frame ?? null);
+    if (silent.size === 0) unresponsive.delete(page.row.id);
+    else unresponsive.set(page.row.id, silent);
+    page.live = { ...page.live, responsive: silent.size === 0 };
+  };
+
+  const watchNavigation = Effect.fnUntraced(function* (page: Held, host: Host, policy: DomainPolicy | null) {
+    const profile = page.row.profile;
+    acquiring.set(profile, (acquiring.get(profile) ?? 0) + 1);
+    return yield* host.pages.navigation(page.row.id, policy).pipe(
+      Effect.catchTags({
+        PageMissing: () => Effect.fail(unknownPage(page.row.id)),
+        HostLost: (failure) => Effect.fail(hostRefusal(failure)),
+        HostRefused: (failure) => Effect.fail(hostRefusal(failure)),
+      }),
+      Effect.tap((watch) => Effect.sync(() => applyRestrictions(host, watch.changes))),
+      Effect.ensuring(
+        Effect.sync(() => {
+          const count = acquiring.get(profile)! - 1;
+          if (count === 0) acquiring.delete(profile);
+          else acquiring.set(profile, count);
+        }),
+      ),
+    );
+  });
+
+  const operate = Effect.fnUntraced(function* (id: PageId) {
+    const page = held.get(id);
+    if (page === undefined) return;
+    operatedAt.set(id, yield* Clock.currentTimeMillis);
+    if (!hasRestrictions(page.row.profile) || page.holder === null) return;
+    yield* Effect.scoped(watchNavigation(page, page.holder, null));
+  });
+
   const arrive = Effect.fnUntraced(function* (host: Host, event: HostEvent) {
+    if (event.kind === 'restrictions') {
+      applyRestrictions(host, event.changes);
+      return;
+    }
     if (event.kind === 'opened') return yield* adoptPopup(host, event);
     const page = held.get(event.page);
     if (page === undefined) return;
@@ -363,9 +457,13 @@ export const makePages = Effect.gen(function* () {
         return yield* publish(page, 'swapped');
       case 'released':
         return yield* publish(page, 'released');
+      case 'operated':
+        operatedAt.set(page.row.id, yield* Clock.currentTimeMillis);
+        applyRestrictions(host, event.changes);
+        return;
       case 'unresponsive':
       case 'responsive':
-        page.live = { ...page.live, responsive: event.kind === 'responsive' };
+        respond(page, event.kind === 'responsive');
         return yield* publish(page);
       case 'crashed':
         page.live = { ...page.live, crashed: true, loading: false };
@@ -380,6 +478,8 @@ export const makePages = Effect.gen(function* () {
         yield* ledger.closePages([page.row.id], new Date(yield* Clock.currentTimeMillis));
         return yield* forget(page);
       case 'dropped':
+        setRestriction(page, false);
+        unresponsive.delete(page.row.id);
         page.holder = null;
         page.live = { ...QUIET };
         return yield* publish(page, 'dropped');
@@ -396,7 +496,9 @@ export const makePages = Effect.gen(function* () {
     for (const standing of live) {
       const page = standing.page === null ? undefined : held.get(standing.page);
       if (page !== undefined) {
+        if (page.holder !== host) page.restrictionRevision = -1;
         page.holder = host;
+        acceptRestriction(page, standing.restriction);
         yield* Effect.orDie(changed(page, { url: standing.url, title: standing.title }));
       } else if (standing.page !== null)
         yield* host.pages.close(standing.page, false).pipe(
@@ -414,6 +516,7 @@ export const makePages = Effect.gen(function* () {
             profile: standing.profile,
             opener: standing.opener,
             url: standing.url,
+            restriction: standing.restriction,
           }),
         );
     }
@@ -443,6 +546,7 @@ export const makePages = Effect.gen(function* () {
       if (hostScope !== undefined) yield* Scope.close(hostScope, Exit.void);
       for (const page of held.values()) {
         if (page.holder === host) {
+          unresponsive.delete(page.row.id);
           page.holder = null;
           page.live = { ...QUIET };
         }
@@ -459,19 +563,37 @@ export const makePages = Effect.gen(function* () {
       const listed = yield* ledger.walk(projectId, walk);
       for (const row of listed.rows) if (!profiles.has(row.profile)) yield* profileOf(row.profile);
       return {
-        pages: listed.rows.map((row) => wire(held.get(row.id) ?? { row, live: QUIET, holder: null })),
+        pages: listed.rows.map((row) =>
+          wire(held.get(row.id) ?? { row, live: QUIET, holder: null, restricted: false, restrictionRevision: -1 }),
+        ),
         total: listed.total,
       };
     }),
     hold,
+    navigation: Effect.fnUntraced(function* (id, agent) {
+      const page = held.get(id);
+      if (page === undefined) return yield* unknownPage(id);
+      const policy = agent ? yield* policyOf(page.row.projectId) : null;
+      if (policy === null && !hasRestrictions(page.row.profile)) return { changes: [], blocked: Effect.never, check: Effect.void };
+      const host = yield* hold(id, policy);
+      return yield* watchNavigation(page, host, policy);
+    }),
     live: (id) => held.get(id)?.live,
-    mark: (id, change) =>
+    operate,
+    operated: (id) => operatedAt.get(id),
+    mark: (id, change, frame) =>
       Effect.suspend(() => {
         const page = held.get(id);
         if (page === undefined) return Effect.void;
         page.live = { ...page.live, ...change };
+        if (change.responsive !== undefined) respond(page, change.responsive, frame);
         return publish(page);
       }),
+    hungFrame: (id) => {
+      for (const frame of unresponsive.get(id)?.values() ?? []) if (frame !== null) return frame;
+      return undefined;
+    },
+    inProfile: (profile) => [...held.values()].filter((page) => page.row.profile === profile).map(wire),
     commit: (id, change) =>
       Effect.suspend(() => {
         const page = held.get(id);
@@ -486,6 +608,7 @@ export const makePages = Effect.gen(function* () {
         loading: page?.live.loading ?? false,
         dialog: page?.live.dialog ?? null,
         navigated,
+        conditions: conditionsOf(page?.live.conditions ?? NO_CONDITIONS),
       };
     },
     changes: Effect.fnUntraced(function* (projectId) {

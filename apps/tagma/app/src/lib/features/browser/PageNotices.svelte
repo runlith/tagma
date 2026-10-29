@@ -3,6 +3,7 @@
   import type { Page } from '@tagma/server/browser/contract/wire/page';
   import { Button } from '$lib/shared/ui/button/index.js';
   import { Door, type Lens } from '$lib/wire/Door.js';
+  import Measuring from './Measuring.svelte';
 
   let { page, lens, close }: { page: Page; lens: Lens; close: () => void } = $props();
 
@@ -67,6 +68,7 @@
     The host of this page is not connected; it comes back when its host does.
   </p>
 {/if}
+<Measuring {page} />
 {#if problem !== null}
   <p class="shrink-0 border-b bg-sunken px-3 py-1.5 text-small text-destructive">{problem}</p>
 {/if}

@@ -16,6 +16,7 @@ import type { Scope } from '@runlith/layer/Scope';
 
 import { createSubscriber } from 'svelte/reactivity';
 
+import { deliver } from './core/deliver.svelte.js';
 import { defineHiddenGetters, fetchFresh, isAbortError, toUndefined } from './core/utils.js';
 import type { BaseQueryOptions, BaseQuery, QueryLoadOptions } from './types.js';
 
@@ -105,6 +106,9 @@ export function createQuery<TData, TError = DefaultError>(config: QueryConfig<TD
     return observer;
   };
 
+  const queryHash = hashKey(queryKey);
+  const pending = () => queryClient.getQueryCache().get<TData, TError>(queryHash)?.promise;
+
   const buildFetchOptions = (options?: QueryLoadOptions): FetchQueryOptions<TData, TError, TData, QueryKey> => {
     const resolvedStaleTime = options?.refresh === true ? 0 : staleTime;
 
@@ -182,7 +186,7 @@ export function createQuery<TData, TError = DefaultError>(config: QueryConfig<TD
   const cacheVersion = createSubscriber((update) => {
     const hash = hashKey(queryKey);
     return queryClient.getQueryCache().subscribe((event) => {
-      if (event.query.queryHash === hash) update();
+      if (event.query.queryHash === hash) deliver(update);
     });
   });
 
@@ -303,16 +307,13 @@ export function createQuery<TData, TError = DefaultError>(config: QueryConfig<TD
   defineHiddenGetters(query, {
     promise: () => {
       scope.assertOpen();
-
       autoAttach();
 
-      const current = ensureObserver();
-      if (!current) scope.assertOpen();
-      const query = current!.getCurrentQuery();
-      if (query.promise) return query.promise;
+      const held = pending();
+      if (held) return held;
 
       const fetchPromise = queryClient.fetchQuery(buildFetchOptions());
-      return current!.getCurrentQuery().promise ?? fetchPromise;
+      return pending() ?? fetchPromise;
     },
     data: () => {
       ensureObserved();

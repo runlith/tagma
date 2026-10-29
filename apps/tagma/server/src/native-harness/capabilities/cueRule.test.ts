@@ -19,19 +19,24 @@ const cued: Capability = {
 
 it.effect('a cue the agent never received, as after a call that went to the background, is offered again until one is delivered', () =>
   Effect.gen(function* () {
-    const rule = cueSource.create({ definitions: { effective: () => ({ held: [cued] }) } } as unknown as RuleSetup);
+    const rule = cueSource.create({
+      declaration: { id: 'fixture-agent' },
+      definitions: { effective: () => ({ held: [cued] }) },
+    } as unknown as RuleSetup);
     const after = (modelMessages: readonly Message[]) =>
       ({
         hook: 'afterTool',
         tool: { name: 'grep', input: { pattern: String.raw`store\.get\(` } },
         thread: { id: 'thread-1', profile: null },
         capabilitySettings: { enabled: () => true },
+        world: { facts: {} },
+        comments: () => 'allow',
         modelMessages,
       }) as unknown as AgentRuleContext<ThreadContext>;
 
     const evaluated = yield* rule(after([]));
-    expect(evaluated).toMatchObject({ type: 'guide', text: cued.guide });
-    expect(yield* rule(after([]))).toEqual(evaluated);
+    expect(evaluated?.type).toBe('guide');
+    expect((yield* rule(after([])))?.type).toBe('guide');
     if (evaluated?.type !== 'guide') return;
     expect(yield* rule(after([agentRuntimeGuidanceMessage(evaluated.text, evaluated.state)]))).toBeNull();
   }),

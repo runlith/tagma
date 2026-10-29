@@ -7,13 +7,14 @@ import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture
 
 layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices: true })('source changes', (it) => {
   it.effect('a tag that stands over a place is held to it on the way out, not only at birth', () =>
-    withDemo(({ graph, projectId, demoRoot, refusal }) =>
+    withDemo(({ graph, projectId, demoRoot, refusal, root }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         yield* fs.makeDirectory(join(demoRoot, 'territory'), { recursive: true });
         yield* fs.writeFileString(join(demoRoot, 'territory', 'one.ts'), 'export const one = 1;\n');
         yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['tag'],
           title: '#part',
           fields: {
@@ -26,6 +27,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
         yield* graph.tags.forget(projectId);
         const { id } = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['part'],
           title: 'a part with a law of its own',
           sources: [{ kind: 'dir', ref: 'territory' }],
@@ -33,7 +35,7 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
         const unanchor = yield* refusal(graph.sources.unanchor({ blockId: id, kind: 'dir', ref: 'territory' }));
         expect(unanchor.code).toBe('source-required');
         expect((yield* graph.sources.of(id)).map((row) => row.ref)).toEqual(['territory']);
-        const receiver = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'a receiver' });
+        const receiver = yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'a receiver' });
         const transfer = yield* refusal(graph.sources.attach({ blockId: receiver.id, kind: 'dir', ref: 'territory', fromId: id }));
         expect(transfer.code).toBe('source-required');
         expect((yield* graph.sources.of(id)).map((row) => row.ref)).toEqual(['territory']);
@@ -57,13 +59,13 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
   );
 
   it.effect('--from hands one over in one transaction, and a donor that never held it refuses', () =>
-    withDemo(({ graph, projectId, demoRoot, refusal }) =>
+    withDemo(({ graph, projectId, demoRoot, refusal, root }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         yield* fs.writeFileString(join(demoRoot, 'owner.ts'), 'export const owner = 1;\n');
         yield* fs.writeFileString(join(demoRoot, 'other.ts'), 'export const other = 1;\n');
-        const from = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'used to own it' });
-        const to = yield* graph.blocks.create({ projectId, title: 'owns it now' });
+        const from = yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'used to own it' });
+        const to = yield* graph.blocks.create({ projectId, parentId: root, title: 'owns it now' });
         yield* graph.sources.attach({ blockId: from.id, kind: 'symbol', ref: 'owner.ts', symbol: 'owner' });
         const moved = yield* graph.sources.attach({ blockId: to.id, kind: 'symbol', ref: 'owner.ts', symbol: 'owner', fromId: from.id });
         expect(moved.blockId).toBe(to.id);

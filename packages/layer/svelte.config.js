@@ -1,3 +1,3 @@
 export default {
-  compilerOptions: { experimental: { async: true } },
+  compilerOptions: { experimental: { async: false } },
 };

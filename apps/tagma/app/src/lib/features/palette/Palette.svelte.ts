@@ -107,7 +107,7 @@ export class PaletteModel {
 
   constructor(
     private readonly workspace: Workspace,
-    private readonly tags: TagCatalog,
+    private readonly tags: () => TagCatalog | null,
     repo: Repo,
     private readonly settings: Settings,
     private readonly declared: () => readonly PaletteAction[],
@@ -133,7 +133,8 @@ export class PaletteModel {
 
   private get parsed(): Parsed {
     const { aim, text } = prefixed(this.query);
-    return { aim, words: narrowed(text, this.tags.declared, this.tags.statuses) };
+    const tags = this.tags();
+    return { aim, words: narrowed(text, tags?.declared ?? [], tags?.statuses ?? []) };
   }
 
   get text(): string {

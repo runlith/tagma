@@ -24,16 +24,23 @@ const shared = Effect.gen(function* () {
 class JournalProject extends Context.Service<JournalProject, Effect.Success<typeof shared>>()('testing/JournalProject') {}
 const op = (id: string, input: unknown, project: number) =>
   Effect.flatMap(DoorFixture, (world) => world.op(id, input, `project=${project}`));
-const born = (project: number, input: unknown) =>
-  Effect.map(op('create_block', input, project), (answer) => (answer.body as { block: { name: string } }).block.name);
+const rootOf = Effect.fnUntraced(function* (project: number) {
+  const roots = yield* op('list_root_blocks', {}, project);
+  return (roots.body as { blocks: { name: string }[] }).blocks[0]!.name;
+});
+const born = Effect.fnUntraced(function* (project: number, input: Record<string, unknown>) {
+  const answer = yield* op('create_block', { ...input, parentId: yield* rootOf(project) }, project);
+  return (answer.body as { block: { name: string } }).block.name;
+});
 
 layer(Layer.effect(JournalProject, shared).pipe(Layer.provideMerge(doorFixture())), { excludeTestServices: true })('journal door', (it) => {
   it.effect('journal pages preserve missing-block events and filter their tag and operation windows', () =>
     Effect.gen(function* () {
       const { id: projectId } = yield* JournalProject;
+      const parentId = yield* rootOf(projectId);
       const filled = yield* op(
         'apply_batch',
-        batchDocument(Array.from({ length: 3 }, (_, index) => ({ op: 'create', tags: ['idea'], title: `d${index}` }))),
+        batchDocument(Array.from({ length: 3 }, (_, index) => ({ op: 'create', tags: ['idea'], title: `d${index}`, parentId }))),
         projectId,
       );
       expect(filled.status).toBe(200);

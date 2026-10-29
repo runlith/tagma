@@ -97,7 +97,13 @@ layer(graphs, { excludeTestServices: true })('touch guidance', (it) => {
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, root, projectId, areaId, afterTool } = yield* setup(demo);
-        yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'Root law', body: 'MUST bind everywhere.' });
+        yield* graph.blocks.create({
+          projectId,
+          parentId: (yield* graph.blocks.rootBlockOf(projectId)).id,
+          tags: ['rule'],
+          title: 'Root law',
+          body: 'MUST bind everywhere.',
+        });
         yield* graph.blocks.create({
           projectId,
           tags: ['rule'],

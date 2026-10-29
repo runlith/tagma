@@ -1,7 +1,7 @@
 <script module lang="ts">
   import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
 
-  export type ThreadState = 'working' | 'stalled' | 'waiting' | 'failed' | 'unread' | 'cut' | 'quiet';
+  export type ThreadState = 'working' | 'owes' | 'stalled' | 'waiting' | 'failed' | 'unread' | 'cut' | 'quiet';
   export type ThreadMark = { state: ThreadState; label: string };
 
   export function threadMark(row: ThreadListRow): ThreadMark {
@@ -12,6 +12,7 @@
     const outcome = row.outcome;
     if (outcome?.status === 'failed') return { state: 'failed', label: 'failed' };
     if (outcome?.status === 'cut') return { state: 'cut', label: 'cut short — not finished' };
+    if (row.owes === true) return { state: 'owes', label: 'waiting on its background work — wakes when it ends' };
     if (outcome?.status === 'completed') {
       const unread = !outcome.isSeen && row.parentThreadId === null;
       return unread ? { state: 'unread', label: 'finished — unread' } : { state: 'quiet', label: 'finished' };
@@ -80,6 +81,10 @@
 
   [data-mark='unread'] .mark {
     background: var(--status-done);
+  }
+
+  [data-mark='owes'] .mark {
+    background: var(--status-in-work);
   }
 
   [data-mark='stalled'] .mark,

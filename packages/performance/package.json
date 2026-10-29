@@ -25,6 +25,17 @@
       "node": "./src/HeapSnapshot.ts",
       "default": "./src/HeapSnapshot.ts"
     },
+    "./HeapSummary": {
+      "types": "./src/HeapSummary.ts",
+      "browser": "./src/HeapSummary.ts",
+      "bun": "./src/HeapSummary.ts",
+      "node": "./src/HeapSummary.ts"
+    },
+    "./HeapReader": {
+      "types": "./src/HeapReader.ts",
+      "bun": "./src/HeapReader.ts",
+      "node": "./src/HeapReader.ts"
+    },
     "./HeapSnapshots": {
       "types": "./src/HeapSnapshots.ts",
       "default": "./src/HeapSnapshots.ts"

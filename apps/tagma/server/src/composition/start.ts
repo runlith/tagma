@@ -15,6 +15,8 @@ import { OperationCatalog } from '../invocation/contract/service/catalog.js';
 import { operationCatalog } from './operationCatalog.js';
 import { OperationSubjects } from '../enforcement/contract/service/operationSubjects.js';
 import { checkSubjectOf } from './catalog.js';
+import { ownerOf } from './manifest.js';
+import { OperationOwners } from '../platform/contract/service/operationOwners.js';
 
 export class AssemblyInvalid extends Data.TaggedError('AssemblyInvalid')<{
   readonly unregistered: readonly { readonly key: string; readonly by: string }[];
@@ -36,7 +38,15 @@ export type Started = {
   readonly migrations: MigrationChain<'machine'>;
   readonly graphMigrations: MigrationChain<'graph'>;
   readonly bindings: Context.Context<
-    SessionIdentity | GrantSigner | StoreSnapshots | GraphDirectory | OperationCatalog | OperationSubjects | Maintenance | Background
+    | SessionIdentity
+    | GrantSigner
+    | StoreSnapshots
+    | GraphDirectory
+    | OperationCatalog
+    | OperationSubjects
+    | OperationOwners
+    | Maintenance
+    | Background
   >;
   readonly maintenance: Deferred.Deferred<void>;
   readonly scope: Scope.Closeable;
@@ -67,6 +77,7 @@ export const start = Effect.fn('composition.start')(function* (
       Context.add(GraphDirectory, CHECKOUT_DIRECTORY),
       Context.add(OperationCatalog, yield* Effect.provide(operationCatalog, approvalModesLayer)),
       Context.add(OperationSubjects, { of: checkSubjectOf }),
+      Context.add(OperationOwners, { of: ownerOf }),
       Context.add(Maintenance, { opened: Deferred.await(maintenance), isOpen: Deferred.isDone(maintenance) }),
       Context.add(Background, yield* makeBackground),
     ),

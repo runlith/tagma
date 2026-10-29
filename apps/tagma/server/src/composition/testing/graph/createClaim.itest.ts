@@ -1,7 +1,10 @@
 import { expect } from 'bun:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { layer } from '@runlith/effect-test';
 import { Effect, Schema } from 'effect';
 import { ToolAnswer, toolExecute, toolPrepare } from '@runlith/agent/tool';
+import { toolDecode } from '@runlith/agent/tool/arguments';
 import { unthreadedCaller } from '../callers.js';
 import { fixtureNativeCatalog } from '../nativeCatalog.js';
 import { type EffectDemo, demoGraphLayer, withDemo } from '../graphFixture.js';
@@ -37,17 +40,24 @@ const callsFor = Effect.fnUntraced(function* (demo: EffectDemo) {
       graphRoot: demo.demoRoot,
       owners: demo.context,
     },
-    ['create_block', 'apply_batch', 'claim_block', 'read_tags'],
+    ['create_block', 'update_block', 'apply_batch', 'claim_block', 'read_tags'],
   );
   let calls = 0;
   const call = Effect.fnUntraced(function* (id: string, input: Record<string, unknown>) {
     const tool = tools[id]!;
     const toolCallId = `create-claim-${++calls}`;
-    const prepared = yield* toolPrepare(tool)!(input, { toolCallId, caller: unthreadedCaller });
-    const answered = yield* toolExecute(tool)!(input, { toolCallId, caller: unthreadedCaller, messages: [], prepared: prepared.prepared });
+    const decoded = yield* toolDecode(tool, input);
+    const prepared = yield* toolPrepare(tool)!(decoded, { toolCallId, caller: unthreadedCaller });
+    const answered = yield* toolExecute(tool)!(decoded, {
+      toolCallId,
+      caller: unthreadedCaller,
+      messages: [],
+      prepared: prepared.prepared,
+    });
     return answered instanceof ToolAnswer ? answered.value : answered;
   });
-  const create = (input: Record<string, unknown>) => Effect.flatMap(call('create_block', input), born);
+  const rootName = yield* demo.nameOf(demo.root);
+  const create = (input: Record<string, unknown>) => Effect.flatMap(call('create_block', { parentId: rootName, ...input }), born);
   const held = Effect.fnUntraced(function* (name: string, status: string) {
     const row = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(name));
     const table = yield* demo.table();
@@ -71,14 +81,75 @@ const callsFor = Effect.fnUntraced(function* (demo: EffectDemo) {
         gates: transitions.map(([from, to]) => ({ gate: 'transition', field: 'phase', from, to })),
       },
     });
-  return { call, create, held, children, declare };
+  return { call, create, held, children, declare, rootName };
+});
+
+layer(demoGraphLayer())('a birth names its parent', (it) => {
+  it.effect(
+    'a create naming no parent refuses, naming the root among its ways out and writing nothing; a page past a screen of one role is named',
+    () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const { graph, projectId } = demo;
+          const { call, create, children, rootName } = yield* callsFor(demo);
+          yield* Effect.sync(() => {
+            mkdirSync(join(demo.demoRoot, 'engine'), { recursive: true });
+            writeFileSync(join(demo.demoRoot, 'engine', 'core.ts'), 'export const core = 1;\n');
+          });
+          const [engineId] = yield* graph.blocks.writeModules(
+            projectId,
+            [{ id: 'engine', title: 'Engine', parent: demo.root, root: 'engine' }],
+            [],
+          );
+          const engine = { id: engineId! };
+          const engineName = yield* demo.nameOf(engine.id);
+          const before = yield* children();
+          const stray = yield* Effect.flatMap(
+            call('create_block', { tags: ['idea'], title: 'Stray', sources: [{ kind: 'file', ref: 'engine/core.ts' }] }),
+            refused,
+          );
+          expect(stray.code).toBe('parent-required');
+          expect(stray.unblock.some((way) => way.includes(rootName))).toBe(true);
+          expect(yield* children()).toEqual(before);
+          for (let at = 0; at < 20; at += 1)
+            yield* graph.blocks.create({ projectId, parentId: engine.id, tags: ['idea'], title: `idea ${at}` });
+          const past = yield* create({ parentId: engineName, tags: ['idea'], title: 'one more idea' });
+          expect(past.crowded).toEqual({ parent: engineName, title: 'Engine', role: 'knowledge', children: 21 });
+          const part = yield* create({ parentId: engineName, tags: ['zone'], title: 'a part' });
+          expect(part.crowded).toBeUndefined();
+          const retagged = yield* Effect.flatMap(call('update_block', { blockId: part.block.name, tags: ['idea'] }), born);
+          expect(retagged.crowded).toEqual({ parent: engineName, title: 'Engine', role: 'knowledge', children: 22 });
+        }),
+      ),
+  );
+});
+
+layer(demoGraphLayer())('native tag words', (it) => {
+  it.effect('a displayed tag word creates a declared type and an undeclared word refuses', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const { call, rootName } = yield* callsFor(demo);
+        const answer = yield* call('create_block', { parentId: rootName, tags: ['#rule'], title: 'A declared rule' });
+        expect(answer).toMatchObject({ status: 'ok' });
+        const created = yield* born(answer);
+        expect(created.block.tags).toEqual(['rule']);
+        const row = yield* demo.graph.blocks.blockById(yield* demo.graph.blockNames.idOfName(created.block.name));
+        expect(row.tags).toEqual(['rule']);
+        const unknown = yield* Effect.flatMap(
+          call('create_block', { parentId: rootName, tags: ['#undeclared'], title: 'An undeclared type' }),
+          refused,
+        );
+        expect(unknown.code).toBe('tag-undeclared');
+      }),
+    ),
+  );
 });
 
 layer(demoGraphLayer())('atomic native create claims', (it) => {
   it.effect('direct, batch and later claims bind custom fields to the caller and return their committed state', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { call, create, held, declare } = yield* callsFor(demo);
+        const { call, create, held, declare, rootName } = yield* callsFor(demo);
         const created = yield* create({ tags: ['task'], title: 'Taken at birth', claim: true });
         expect(created.block.fields).toMatchObject({ status: 'in_work' });
         yield* held(created.block.name, 'in_work');
@@ -92,7 +163,9 @@ layer(demoGraphLayer())('atomic native create claims', (it) => {
         ]);
         yield* held((yield* create({ tags: ['assignment'], title: 'Custom hold', claim: true })).block.name, 'busy');
         const batch = yield* Effect.flatMap(
-          call('apply_batch', { ops: [{ op: 'create', $id: 'taken', tags: ['assignment'], title: 'Batch hold', claim: true }] }),
+          call('apply_batch', {
+            ops: [{ op: 'create', $id: 'taken', parentId: rootName, tags: ['assignment'], title: 'Batch hold', claim: true }],
+          }),
           batched,
         );
         yield* held(batch.ids.taken!, 'busy');
@@ -106,29 +179,22 @@ layer(demoGraphLayer())('atomic native create claims', (it) => {
   it.effect('refused claims roll back direct and batch births, and incomplete lifecycles offer executable recovery', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { call, create, children, declare } = yield* callsFor(demo);
+        const { call, create, children, declare, rootName } = yield* callsFor(demo);
         yield* declare('gated-assignment', [
           ['waiting', 'ended'],
           ['busy', 'waiting'],
         ]);
-        const target = (yield* create({ tags: ['idea'], title: 'Amendment target' })).block.name;
         const attempts = [
-          [call('create_block', { tags: ['idea'], title: 'Cannot hold', claim: true }), 'no-holder'],
-          [call('create_block', { tags: ['gated-assignment'], title: 'Blocked claim', claim: true }), 'illegal-transition'],
+          [call('create_block', { parentId: rootName, tags: ['idea'], title: 'Cannot hold', claim: true }), 'no-holder'],
           [
-            call('create_block', {
-              tags: ['proposal'],
-              title: 'Deferred hold',
-              amendsId: target,
-              fields: { ops: [{ op: 'create', parentId: target, tags: ['task'], title: 'Deferred task', claim: true }] },
-            }),
-            'field-invalid',
+            call('create_block', { parentId: rootName, tags: ['gated-assignment'], title: 'Blocked claim', claim: true }),
+            'illegal-transition',
           ],
           [
             call('apply_batch', {
               ops: [
-                { op: 'create', $id: 'taken', tags: ['task'], title: 'Rolled back hold', claim: true },
-                { op: 'create', tags: ['idea'], title: 'Refused hold', claim: true },
+                { op: 'create', $id: 'taken', parentId: rootName, tags: ['task'], title: 'Rolled back hold', claim: true },
+                { op: 'create', parentId: rootName, tags: ['idea'], title: 'Refused hold', claim: true },
               ],
             }),
             'no-holder',
@@ -154,7 +220,10 @@ layer(demoGraphLayer())('atomic native create claims', (it) => {
             fields: { id, fields, roles, gates: lifecycle ? [{ gate: 'transition', field: 'phase', from: 'waiting', to: 'ended' }] : [] },
           });
           const before = yield* children();
-          const refusal = yield* Effect.flatMap(call('create_block', { tags: [id], title: 'Cannot claim yet', claim: true }), refused);
+          const refusal = yield* Effect.flatMap(
+            call('create_block', { parentId: rootName, tags: [id], title: 'Cannot claim yet', claim: true }),
+            refused,
+          );
           expect(refusal.code).toBe('illegal-status');
           expect(yield* call(refusal.unblock[0]!.split(' ')[0]!, {})).toMatchObject({ status: 'ok' });
           expect(yield* children()).toEqual(before);

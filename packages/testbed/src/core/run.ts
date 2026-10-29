@@ -107,8 +107,6 @@ export const openRun = (owner: { readonly pid: number; readonly start: number } 
   return { root: remember(root), report: process.env[REPORT_ENV] || join(REPORTS, `${name}.jsonl`), fresh };
 };
 
-const modified = (files: Fs, path: string): number | undefined => files.statSync(path, { throwIfNoEntry: false })?.mtimeMs;
-
 export const runLiveness = (processes: Processes, root: string): RunLiveness => ownerLiveness(processes, basename(root));
 
 export const sweepRuns = (processes: Processes): { readonly stranded: number; readonly roots: number } => {
@@ -131,8 +129,8 @@ export const sweepRuns = (processes: Processes): { readonly stranded: number; re
     .filter((entry) => entry.endsWith('.jsonl'))
     .filter((entry) => ended.has(entry.replace(/\.jsonl$/, '')) || !files.existsSync(join(BASE, entry.replace(/\.jsonl$/, ''))))
     .flatMap((entry) => {
-      const at = modified(files, join(REPORTS, entry));
-      return at === undefined ? [] : [{ path: join(REPORTS, entry), at }];
+      const found = files.statSync(join(REPORTS, entry), { throwIfNoEntry: false });
+      return found === undefined || !found.isFile() ? [] : [{ path: join(REPORTS, entry), at: found.mtimeMs }];
     })
     .sort((left, right) => right.at - left.at);
   for (const old of reports.slice(KEPT_REPORTS)) {

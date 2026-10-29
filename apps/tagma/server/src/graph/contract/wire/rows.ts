@@ -101,16 +101,6 @@ export type Source = typeof sourceSchema.Type;
 
 export const writerSchema = Schema.NullOr(Schema.Struct({ id: Schema.Number, harness: Schema.String, key: Schema.String }));
 
-export const proposalVerdictSchema = Schema.Struct({
-  status: Schema.String,
-  writer: writerSchema,
-  reason: Schema.NullOr(Schema.String),
-  by: Schema.Array(Schema.String),
-  at: Schema.String,
-  unreadable: Schema.optional(Schema.String),
-});
-export type ProposalVerdict = typeof proposalVerdictSchema.Type;
-
 export interface BlockRead extends Block, GraphReport {
   readonly edgesOut: readonly Edge[];
   readonly edgesIn: readonly Edge[];
@@ -122,7 +112,6 @@ export interface BlockRead extends Block, GraphReport {
   readonly restingIn: { readonly edges: readonly Edge[]; readonly refs: readonly string[] };
   readonly sources: readonly Source[];
   readonly reach: string | null;
-  readonly verdict: ProposalVerdict | null;
   readonly ending: BlockEndingBody | null;
   readonly author: number | null;
   readonly answeredBy: string | null;
@@ -166,7 +155,6 @@ export const blockReadSchema: Schema.Codec<BlockRead> = Schema.Struct({
   restingIn: Schema.Struct({ edges: Schema.Array(edgeSchema), refs: Schema.Array(BlockName) }),
   sources: Schema.Array(sourceSchema),
   reach: Schema.NullOr(Schema.String),
-  verdict: Schema.NullOr(proposalVerdictSchema),
   ending: Schema.NullOr(blockEndingSchema),
   author: Schema.NullOr(Schema.Number),
   answeredBy: Schema.NullOr(Schema.String),

@@ -510,7 +510,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     'browser',
     Layer.merge(cookieSourcesLayer, pageRender.lifetimes.installation).pipe(
       Layer.provideMerge(Layer.merge(managedBrowser.lifetimes.installation, desktopBrowser.lifetimes.installation)),
-      Layer.provideMerge(browser.lifetimes.installation),
+      Layer.provideMerge(browser.lifetimes.installation.pipe(Layer.provide(executionsLayerWithDeps))),
       Layer.provide(browserBindings({ data: storeDirectory(storePath), runs: browserThreads.port })),
     ),
   );
@@ -751,7 +751,10 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     stackScope,
     Effect.sync(() => unheld.forEach((leave) => leave())),
   );
-  yield* Scope.provide(browserThreads.bind(Context.get(owners, ThreadRunning)), stackScope);
+  yield* Scope.provide(
+    browserThreads.bind({ running: Context.get(owners, ThreadRunning), records: Context.get(built, ThreadRecords) }),
+    stackScope,
+  );
   yield* Scope.provide(
     mcpPlacesPort.bind({ coverage: Context.get(owners, Coverage), bases: [scratch.root, options.attachmentsPath] }),
     stackScope,

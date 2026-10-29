@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { BLOCKS, EVENTS, GAUGES, PROPOSALS, TASKS } from './operations/shared.js';
+import { BLOCKS, EVENTS, GAUGES, TASKS } from './operations/shared.js';
 import { WRITERS } from './operations/history.js';
 import { blockQuerySchema } from './query.js';
 import { typeSelectorSchema } from './tags/selector.js';
@@ -19,13 +19,6 @@ export const READY_WALK = {
   operation: 'ready_work',
   order: TASKS.order,
   selection: Schema.Struct({ projectId: Schema.optional(Schema.Number), checkout, scopeId: Schema.optional(Schema.String) }),
-  key: stamped,
-};
-
-export const AMENDMENTS_WALK = {
-  operation: 'read_amendments',
-  order: PROPOSALS.order,
-  selection: Schema.Struct({ projectId: Schema.Number, checkout, decided: Schema.Boolean, scopeId: Schema.optional(Schema.String) }),
   key: stamped,
 };
 

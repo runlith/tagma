@@ -16,7 +16,7 @@ function palette(): PaletteModel {
     $effect.root(() => {
       model = new PaletteModel(
         { projects, active: null, contextProject: null } as never,
-        { declared: [], statuses: [] } as never,
+        () => null,
         { threads: stubFamily(), blocks: stubFamily(), commits: stubFamily() } as never,
         { catalog: stubFamily() } as never,
         () => [],

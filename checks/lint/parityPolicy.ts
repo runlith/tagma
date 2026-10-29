@@ -7,7 +7,7 @@ export const parityPolicy: Options = {
   literals: [
     {
       region: ['graph/**'],
-      words: ['module', 'area', 'claim', 'decision', 'task', 'rule', 'idea', 'research', 'view', 'proposal', 'reflection'],
+      words: ['module', 'area', 'claim', 'decision', 'task', 'rule', 'idea', 'research', 'view', 'reflection'],
       positions: ['compare', 'argument', 'property', 'lookup'],
       allowIn: [],
     },

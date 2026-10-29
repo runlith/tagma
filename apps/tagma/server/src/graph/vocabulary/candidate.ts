@@ -2,6 +2,7 @@ import { Result } from 'effect';
 import { canonicalJson } from '@runlith/utils/object';
 import { sha256 } from '@runlith/utils/sha256';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { blockName } from '../contract/wire/references.js';
 import type { BehaviourRegistry } from '../contract/service/behaviours.js';
 import type { Catalogs } from '../contract/wire/catalogs.js';
 import {
@@ -172,6 +173,15 @@ const settling = (row: StandingType): Settling => ({ declaration: row.declaratio
 
 type SettledCatalog = { readonly write: CatalogWrite; readonly findings: readonly CatalogFinding[] };
 
+function retiredMembers(table: TagTable, installed: Installed, library: string, exports: ReadonlySet<string>): Set<string> {
+  return new Set(
+    installed.types.flatMap((row) => {
+      const origin = row.identity?.shipped ?? table.identities.declaredBy(row.name)?.shipped;
+      return origin?.library === library && !exports.has(origin.export) ? [row.name] : [];
+    }),
+  );
+}
+
 function settleCatalog(
   catalog: Catalog,
   standing: StandingCatalog | undefined,
@@ -191,6 +201,7 @@ function settleCatalog(
       );
     exports.add(tag.id);
   }
+  const retired = retiredMembers(table, installed, catalog.id, exports);
   const structure = (declaration: Declaration) => retarget(declaration, catalog.id, exports);
   const releaseTags: Tag[] = [];
   const joining: string[] = [];
@@ -297,8 +308,8 @@ function settleCatalog(
       layer: outcome?.kind === 'shipped' ? outcome.layer : (standing?.layer ?? null),
       fork: standing?.fork ?? null,
       release,
-      members: standing?.members ?? [],
-      listed: standing?.listed ?? [],
+      members: (standing?.members ?? []).filter((name) => !retired.has(name)),
+      listed: (standing?.listed ?? []).filter((name) => !retired.has(blockName(name.toLowerCase()))),
       joining,
     },
     findings,
@@ -525,10 +536,20 @@ export function shippedIdentityMissing(table: TagTable, installed: Installed): b
   );
 }
 
-export function releasesCurrent(installed: Installed, shipped: Catalogs['Service'], catalogIds: readonly string[]): boolean {
+export function releasesCurrent(
+  table: TagTable,
+  installed: Installed,
+  shipped: Catalogs['Service'],
+  catalogIds: readonly string[],
+): boolean {
   const retained = installed.catalogs.flatMap((row) => (row.release !== null ? [row.id] : []));
   for (const id of wanted(shipped, catalogIds, retained)) {
-    if (!releaseCurrent(id, installed.catalogs.find((row) => row.id === id)?.release ?? null, shipped)) return false;
+    const standing = installed.catalogs.find((row) => row.id === id);
+    if (!releaseCurrent(id, standing?.release ?? null, shipped)) return false;
+    const catalog = shipped.byId(id);
+    if (catalog === null || standing === undefined) continue;
+    const retired = retiredMembers(table, installed, id, new Set(catalog.tags.map((tag) => tag.id)));
+    if (standing.members.some((name) => retired.has(name))) return false;
   }
   return true;
 }

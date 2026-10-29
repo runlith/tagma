@@ -99,6 +99,23 @@ describe('inf()', () => {
     }
   });
 
+  it('pages on from a first page awaited outside any reader', async () => {
+    const feed = single<{ page: number }, Error, number>({
+      name: 'Test',
+      queryClient: createQueryClient(),
+      scope: Scope.make(),
+      staleTime: 60_000,
+      loader: async ({ pageParam }) => ({ page: pageParam ?? 1 }),
+      initialPageParam: 1,
+      getNextPageParam: (lastPage) => (lastPage.page < 2 ? lastPage.page + 1 : undefined),
+    }).inf();
+
+    await feed.promise;
+    await feed.fetchNextPage();
+
+    expect(feed.watch()?.pages).toEqual([{ page: 1 }, { page: 2 }]);
+  });
+
   it('requires initialPageParam without inventing a numeric cursor', () => {
     const queryClient = createQueryClient();
     const loader = vi.fn(async () => ({ cursor: 'unused' }));

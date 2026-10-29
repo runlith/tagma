@@ -25,6 +25,8 @@ export const OPERATION_IDS = Object.keys(OPERATIONS) as readonly CatalogOperatio
 export const operationsOwnedBy = (module: (typeof CATALOG_MODULES)[number]['id']): readonly CatalogOperationId[] =>
   OPERATION_IDS.filter((id) => collected.owners.get(id) === module);
 
+export const operationOwnerOf = (operation: string): string | null => collected.owners.get(operation) ?? null;
+
 export type SocketOnlyOperationId = {
   [K in CatalogOperationId]: (typeof OPERATIONS)[K] extends { readonly doors: { readonly socket: true; readonly http: false } } ? K : never;
 }[CatalogOperationId];

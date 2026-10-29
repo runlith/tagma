@@ -25,7 +25,7 @@ export default defineConfig({
       },
     },
     tailwindcss(),
-    svelte({ compilerOptions: { experimental: { async: true } } }),
+    svelte({ compilerOptions: { experimental: { async: false } } }),
     browserGuard(),
   ],
   resolve: {

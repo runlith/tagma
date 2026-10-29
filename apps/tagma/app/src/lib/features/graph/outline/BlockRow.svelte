@@ -5,7 +5,6 @@
   import type { Snippet } from 'svelte';
   import type { HTMLAnchorAttributes } from 'svelte/elements';
   import type { ListedBlock } from '@tagma/server/graph/contract/wire/rows';
-  import { CONTAINER } from '@tagma/server/graph/contract/wire/tags/container';
   import { LIFECYCLE } from '@tagma/server/graph/contract/wire/tags/lifecycle';
   import TagIcon from '$lib/features/graph/TagIcon.svelte';
   import StatusChip from '$lib/features/graph/StatusChip.svelte';
@@ -54,12 +53,17 @@
   const holder = $derived(tags.holderOf(block));
   const lives = $derived(tags.supports(block, LIFECYCLE));
   const work = $derived(lives && !tags.isResting(block));
-  const container = $derived(childCount > 0 || tags.supports(block, CONTAINER));
 </script>
+
+{#snippet state()}
+  {#if lives}
+    <span class="size-2 shrink-0 rounded-none" style:background={tags.statusVar(block)}></span>
+  {/if}
+{/snippet}
 
 <div
   class={cn(
-    'block-row group/row relative -mx-2 flex rounded-md px-2 py-px transition-colors duration-100 ease-instrument hover:bg-hover',
+    'block-row group/row relative -mx-2 flex rounded-md px-2 py-0.5 transition-colors duration-100 ease-instrument hover:bg-hover',
     layout === 'stacked' ? 'flex-col' : 'items-start',
     className,
   )}
@@ -73,26 +77,12 @@
     data-block={block.name}
   ></a>
 
-  <div
-    class={cn(
-      'flex min-w-0',
-      layout === 'compact' ? 'items-center' : 'items-start',
-      layout === 'stacked' ? 'w-full' : 'flex-1',
-      container && 'font-medium',
-    )}
-  >
+  <div class={cn('flex min-w-0', layout === 'compact' ? 'items-center' : 'items-start', layout === 'stacked' ? 'w-full' : 'flex-1')}>
     {@render leading?.()}
 
-    <span class={cn('pointer-events-none mr-1.5 grid h-4 w-2 shrink-0 place-items-center', layout !== 'compact' && 'mt-1')}>
-      {#if lives}
-        <span
-          class="size-2 rounded-none transition-transform duration-150 ease-instrument group-hover/row:scale-125"
-          style:background={tags.statusVar(block)}
-        ></span>
-      {/if}
+    <span class="pointer-events-none mr-2 grid h-6 w-4 shrink-0 place-items-center">
+      <TagIcon tag={tags.tagOf(block)} class="size-3.5 text-muted-foreground/70" />
     </span>
-
-    <TagIcon tag={tags.tagOf(block)} class={cn('mr-1.5 size-3.5 shrink-0 text-muted-foreground/70', layout !== 'compact' && 'mt-1')} />
 
     {@render title()}
   </div>
@@ -100,6 +90,9 @@
   {#if layout === 'compact'}
     {#if childCount > 0}
       <span class="stamp tabular ml-2 shrink-0 self-center text-muted-foreground/60">{childCount}</span>
+    {/if}
+    {#if lives}
+      <span class="ml-2 flex shrink-0 self-center">{@render state()}</span>
     {/if}
     {#if trailing}
       <div class="relative ml-2 flex shrink-0 items-center gap-1.5 self-center">
@@ -110,7 +103,7 @@
     <div
       class={cn(
         'pointer-events-none flex shrink-0 items-center gap-1.5',
-        layout === 'stacked' ? 'pb-px pl-10' : 'ml-2 pt-1',
+        layout === 'stacked' ? 'pl-6' : 'ml-3 h-6',
         trailing && 'group-hover/row:fade-under group-has-[[data-state=open]]/row:fade-under',
       )}
     >
@@ -142,6 +135,7 @@
       {#if childCount > 0}
         <span class="stamp tabular whitespace-nowrap text-muted-foreground/60">{childCount}</span>
       {/if}
+      {@render state()}
       {#if work}
         <span
           class={cn(
@@ -154,7 +148,7 @@
       {/if}
     </div>
     {#if trailing}
-      <div class="absolute top-px right-1 flex items-center">
+      <div class="absolute top-0.5 right-1 flex h-6 items-center">
         {@render trailing()}
       </div>
     {/if}

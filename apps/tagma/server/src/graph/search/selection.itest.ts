@@ -9,10 +9,10 @@ import { demoGraphLayer, type EffectDemo, withDemo } from '../../composition/tes
 const created = { by: 'created', order: 'asc' } as const;
 
 const lens = (demo: EffectDemo) => {
-  const { graph, projectId } = demo;
+  const { graph, projectId, root } = demo;
   const query = (input: Parameters<EffectDemo['graph']['selection']['query']>[1]) => graph.selection.query(projectId, input);
   const make = (tag: string, title: string, extra: { edges?: readonly { kind: string; to: number }[]; parentId?: number } = {}) =>
-    Effect.map(graph.blocks.create({ projectId, tags: [tag], title, ...extra }), (row) => row.id);
+    Effect.map(graph.blocks.create({ projectId, tags: [tag], title, parentId: root, ...extra }), (row) => row.id);
   const idsOf = (page: { readonly items: readonly { readonly name: string }[] }) =>
     Effect.forEach(page.items, (row) => graph.blockNames.idOfName(row.name));
   const found = (input: Parameters<EffectDemo['graph']['selection']['query']>[1]) => Effect.flatMap(query(input), idsOf);
@@ -36,20 +36,33 @@ layer(demoGraphLayer(), { excludeTestServices: true })('selection queries', (it)
   );
 
   it.effect('list rows keep typed list fields, including singleton, empty, and order', () =>
-    withLens(({ graph, projectId, make, nameOf, query }) =>
+    withLens(({ graph, projectId, make, nameOf, query, root }) =>
       Effect.gen(function* () {
         yield* graph.blocks.create({
           projectId,
           tags: ['tag'],
           title: '#meeting',
           body: 'A meeting record.',
+          parentId: root,
           fields: { id: 'meeting', fields: { attendees: { type: 'ref', many: true } } },
         });
         const firstName = yield* nameOf(yield* make('task', 'first attendee'));
         const secondName = yield* nameOf(yield* make('task', 'second attendee'));
-        yield* graph.blocks.create({ projectId, tags: ['meeting'], title: 'singleton', fields: { attendees: [firstName] } });
-        yield* graph.blocks.create({ projectId, tags: ['meeting'], title: 'empty', fields: { attendees: [] } });
-        yield* graph.blocks.create({ projectId, tags: ['meeting'], title: 'ordered', fields: { attendees: [secondName, firstName] } });
+        yield* graph.blocks.create({
+          projectId,
+          tags: ['meeting'],
+          title: 'singleton',
+          parentId: root,
+          fields: { attendees: [firstName] },
+        });
+        yield* graph.blocks.create({ projectId, tags: ['meeting'], title: 'empty', parentId: root, fields: { attendees: [] } });
+        yield* graph.blocks.create({
+          projectId,
+          tags: ['meeting'],
+          title: 'ordered',
+          parentId: root,
+          fields: { attendees: [secondName, firstName] },
+        });
         const expected = [[firstName], [], [secondName, firstName]];
         expect((yield* query({ tags: ['meeting'], sort: created })).items.map((row) => row.fields.attendees)).toEqual(expected);
         const tree = yield* graph.selection.tree(projectId);
@@ -58,8 +71,8 @@ layer(demoGraphLayer(), { excludeTestServices: true })('selection queries', (it)
     ),
   );
 
-  it.effect('resting work and decided proposals require an explicit historical selection', () =>
-    withLens(({ graph, projectId, make, nameOf, found }) =>
+  it.effect('resting work requires an explicit historical selection', () =>
+    withLens(({ graph, make, found }) =>
       Effect.gen(function* () {
         const open = yield* make('task', 'open');
         const done = yield* make('task', 'done');
@@ -67,26 +80,10 @@ layer(demoGraphLayer(), { excludeTestServices: true })('selection queries', (it)
         yield* graph.tasks.finish({ id: done });
         const replacement = yield* make('task', 'replacement');
         yield* graph.standing.supersede({ oldId: done, withId: replacement });
-        const target = yield* make('idea', 'target');
-        const targetName = yield* nameOf(target);
-        const propose = (title: string, changed: string) =>
-          graph.review.propose({ projectId, amendsId: target, title, ops: [{ op: 'update', id: targetName, title: changed }] });
-        const pending = yield* propose('pending', 'changed once');
-        const decided = yield* propose('decided', 'changed twice');
-        yield* graph.review.accept({ id: decided.id });
-        expect(yield* found({ tags: ['task', 'proposal'], sort: created })).toEqual([open, replacement, pending.id]);
-        expect(yield* found({ tags: ['task', 'proposal'], fields: { status: ['done', 'applied'] }, sort: created })).toEqual([
-          done,
-          decided.id,
-        ]);
+        expect(yield* found({ tags: ['task'], sort: created })).toEqual([open, replacement]);
+        expect(yield* found({ tags: ['task'], fields: { status: ['done'] }, sort: created })).toEqual([done]);
         expect(yield* found({ tags: ['task'], superseded: true, sort: created })).toEqual([done]);
-        expect(yield* found({ tags: ['task', 'proposal'], includeResting: true, sort: created })).toEqual([
-          open,
-          done,
-          replacement,
-          pending.id,
-          decided.id,
-        ]);
+        expect(yield* found({ tags: ['task'], includeResting: true, sort: created })).toEqual([open, done, replacement]);
       }),
     ),
   );
@@ -118,11 +115,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('selection queries', (it)
   );
 
   it.effect('answered and superseded reflections require an explicit true fact', () =>
-    withLens(({ graph, projectId, make, found }) =>
+    withLens(({ graph, projectId, make, found, root }) =>
       Effect.gen(function* () {
         const facts = { command: 'tagma query', expected: 'standing rows', actual: 'history' };
         const reflect = (title: string) =>
-          Effect.map(graph.blocks.create({ projectId, tags: ['reflection'], title, fields: facts }), (row) => row.id);
+          Effect.map(graph.blocks.create({ projectId, tags: ['reflection'], title, parentId: root, fields: facts }), (row) => row.id);
         const standing = yield* reflect('standing');
         const answered = yield* reflect('answered');
         const answer = yield* make('task', 'answer');
@@ -177,12 +174,13 @@ layer(demoGraphLayer(), { excludeTestServices: true })('selection queries', (it)
   );
 
   it.effect('a status filter beside tags that report no work is refused, not silently empty', () =>
-    withLens(({ graph, projectId, make, found, refusal }) =>
+    withLens(({ graph, projectId, make, found, refusal, root }) =>
       Effect.gen(function* () {
         const saved = (yield* graph.blocks.create({
           projectId,
           tags: ['view'],
           title: 'a slice',
+          parentId: root,
           fields: { query: { tags: ['task'], sort: created } },
         })).id;
         const work = yield* make('task', 'alpha');
@@ -209,7 +207,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('selection queries', (it)
   );
 
   it.effect('an edge filter reads one direction and one hop, and accepts a project-declared edge name', () =>
-    withLens(({ graph, projectId, make, nameOf, found }) =>
+    withLens(({ graph, projectId, make, nameOf, found, root }) =>
       Effect.gen(function* () {
         const decision = yield* make('spec', 'spec');
         const work = yield* make('task', 'work', { edges: [{ kind: 'implements', to: decision }] });
@@ -223,10 +221,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('selection queries', (it)
           tags: ['tag'],
           title: '#meeting',
           body: 'A meeting record.',
+          parentId: root,
           fields: { id: 'meeting', edges: ['reviews'] },
         });
-        const first = yield* graph.blocks.create({ projectId, tags: ['task', 'meeting'], title: 'first' });
-        const second = yield* graph.blocks.create({ projectId, tags: ['meeting'], title: 'second' });
+        const first = yield* graph.blocks.create({ projectId, tags: ['task', 'meeting'], title: 'first', parentId: root });
+        const second = yield* graph.blocks.create({ projectId, tags: ['meeting'], title: 'second', parentId: root });
         yield* graph.edges.link({ fromId: first.id, kind: 'reviews', toId: second.id });
         expect(yield* found({ edge: { kind: 'reviews', to: yield* nameOf(second.id) }, sort: created })).toEqual([first.id]);
       }),

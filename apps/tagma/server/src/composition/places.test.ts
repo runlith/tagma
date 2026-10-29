@@ -18,7 +18,6 @@ const SUBJECT_NAMES = new Set([
   'toId',
   'oldId',
   'withId',
-  'amendsId',
   'ontoId',
   'rule',
   'rules',

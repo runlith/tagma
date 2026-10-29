@@ -34,7 +34,11 @@ export function feedOrder(left: ThreadListRow, right: ThreadListRow): number {
 }
 
 export function isQuiet(node: ThreadTreeNode): boolean {
-  return node.life === 'idle' && node.lifeBelow === 'idle';
+  return node.life === 'idle' && node.row.owes !== true && node.lifeBelow === 'idle';
+}
+
+function works(node: ThreadTreeNode): boolean {
+  return node.life === 'working' || (node.life === 'idle' && node.row.owes === true);
 }
 
 export function unseenFailure(row: ThreadListRow, life: RunLife): 'failed' | 'cut' | null {
@@ -73,21 +77,21 @@ function sameNames(left: readonly string[], right: readonly string[]): boolean {
 }
 
 function sameWorkers(was: ThreadTreeNode | null, now: ThreadTreeNode | null): boolean {
-  const wasWorking = was?.life === 'working';
-  const nowWorking = now?.life === 'working';
+  const wasWorking = was !== null && works(was);
+  const nowWorking = now !== null && works(now);
   if (wasWorking !== nowWorking) return false;
   if (was !== null && now !== null && wasWorking && workerName(was) !== workerName(now)) return false;
   return sameNames(was?.team.workers ?? [], now?.team.workers ?? []);
 }
 
 function namesWork(node: ThreadTreeNode): boolean {
-  return node.life === 'working' || node.team.workers.length > 0;
+  return works(node) || node.team.workers.length > 0;
 }
 
 function namedWorkers(children: readonly ThreadTreeNode[]): readonly string[] {
   const named: string[] = [];
   for (const child of children) {
-    if (child.life === 'working') named.push(workerName(child));
+    if (works(child)) named.push(workerName(child));
     for (const name of child.team.workers) {
       if (named.length >= TEAM_NAMED) break;
       named.push(name);
@@ -100,7 +104,7 @@ function namedWorkers(children: readonly ThreadTreeNode[]): readonly string[] {
 type Share = { active: number; working: number; asking: number; failed: number; cut: number; unseen: number; pinned: number; size: number };
 
 export function unseenOutcome(row: ThreadListRow, life: RunLife): boolean {
-  return life === 'idle' && row.outcome?.status === 'completed' && !row.outcome.isSeen;
+  return life === 'idle' && row.owes !== true && row.outcome?.status === 'completed' && !row.outcome.isSeen;
 }
 
 function share(node: ThreadTreeNode | null): Share {
@@ -108,7 +112,7 @@ function share(node: ThreadTreeNode | null): Share {
   const failure = unseenFailure(node.row, node.life);
   return {
     active: isQuiet(node) ? 0 : 1,
-    working: (node.life === 'working' ? 1 : 0) + node.team.working,
+    working: (works(node) ? 1 : 0) + node.team.working,
     asking: (node.life === 'awaiting' ? 1 : 0) + node.team.asking,
     failed: (failure === 'failed' ? 1 : 0) + node.team.failed,
     cut: (failure === 'cut' ? 1 : 0) + node.team.cut,

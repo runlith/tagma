@@ -2,14 +2,7 @@ import { Clock, Effect, Layer, Result } from 'effect';
 import type { Git } from '@runlith/git/Git';
 import { Tasks } from '../contract/service/work.js';
 import { Selection } from '../contract/service/reads.js';
-import {
-  type BlockUpdate,
-  type BlockUpdateRefusal,
-  Blocks,
-  Edges,
-  type RetagRefusal,
-  type RevisionRefusal,
-} from '../contract/service/blocks.js';
+import { type BlockUpdate, type BlockUpdateRefusal, Blocks, Edges, type RetagRefusal } from '../contract/service/blocks.js';
 import { Catalogs } from '../contract/wire/catalogs.js';
 import { Behaviours } from '../contract/service/behaviours.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
@@ -27,7 +20,7 @@ import { hasTag, tagLabel } from '../contract/wire/tags/roles.js';
 import { CATALOG_DECLARATION, type Tag, TAG_DECLARATION } from '../contract/wire/tags/declaration.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
 import { assertCatalog } from '../vocabulary/catalogs.js';
-import { assertRequiredFields, declarationId, declaringTag, readField, validateFields } from '../vocabulary/declarationRules.js';
+import { assertRequiredFields, declarationId, declaringTag, validateFields } from '../vocabulary/declarationRules.js';
 import { fieldKeysOf, namedWrite } from '../vocabulary/naming.js';
 import { advanceLaw, lawShapingTypes } from '../store/lawRevision.js';
 import { assertCarried, blockRetag, retagBase } from './retag.js';
@@ -38,7 +31,6 @@ import { Projects } from '../../projects/contract/service/registry.js';
 import { BlockNames, BlockProjection, BlockReferences } from '../contract/service/acts.js';
 import { BlockRows } from '../acts/rows.js';
 import { assertBareRefs, assertBodyCap, assertNoBoundary, assertNotOperated, assertTagNode, leafRefusal } from './guards.js';
-import { amendmentField, payloadGate } from '../work/proposals/payload.js';
 import { checkedText } from '../vocabulary/layerWrite.js';
 import { fieldTargetGuard, vocabularyCloser } from '../vocabulary/carriers.js';
 import { blockBirth } from './birth.js';
@@ -50,7 +42,6 @@ import { blockModules } from './modules.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { projecting, referencing } from '../store/actWrites.js';
 import { LIFECYCLE, lifecycleOf } from '../contract/wire/tags/lifecycle.js';
-import { AMENDMENT } from '../contract/wire/tags/amendment.js';
 import { LEAF } from '../contract/wire/tags/leaf.js';
 
 const updating = writes('Blocks.update', [block], projecting, referencing);
@@ -89,7 +80,6 @@ export const blockUpdate = Effect.gen(function* () {
   const assertFieldTargets = yield* fieldTargetGuard;
   const closeVocabulary = yield* vocabularyCloser;
   const { plan: retagPlan, settle: settleRetag } = yield* blockRetag;
-  const payload = yield* payloadGate;
 
   const assertNoTreeCycle = Effect.fn('Blocks.assertNoTreeCycle')(function* (
     id: number,
@@ -109,7 +99,7 @@ export const blockUpdate = Effect.gen(function* () {
 
   const write = Effect.fn('Blocks.update')(function* (
     input: BlockUpdate,
-  ): Effect.fn.Return<BlockWrite, StoreFailure | GateRefusal<BlockUpdateRefusal | RevisionRefusal | RetagRefusal>> {
+  ): Effect.fn.Return<BlockWrite, StoreFailure | GateRefusal<BlockUpdateRefusal | RetagRefusal>> {
     const asked = input;
     const current = yield* blockRows.blockById(input.id);
     const table = yield* vocabulary.of(current.projectId);
@@ -153,7 +143,7 @@ export const blockUpdate = Effect.gen(function* () {
           `name a parent of project ${current.projectId}: a block never leaves its own graph`,
         ]);
       }
-      if (!table.supports(current, AMENDMENT) && table.supports(parent, LEAF)) {
+      if (table.supports(parent, LEAF)) {
         return yield* leafRefusal(`${blockName(parent.uuid)}`);
       }
       yield* assertNoTreeCycle(input.id, parentId);
@@ -197,11 +187,6 @@ export const blockUpdate = Effect.gen(function* () {
     if (moved !== undefined) {
       yield* validateFields(tags, moved);
       yield* assertFieldTargets(table, current.projectId, tags, moved);
-    }
-    const deferred = amendmentField(table, node);
-    const revising = deferred !== null && moved?.[deferred] !== undefined;
-    if (deferred !== null && revising) {
-      yield* payload.assertRevised(table, current, yield* readField({ uuid: current.uuid, fields: moved ?? {} }, deferred, 'amendmentOps'));
     }
     const kept = (fields: Readonly<Record<string, unknown>>): Record<string, unknown> =>
       Object.fromEntries(Object.entries(fields).filter(([name]) => !cleared.includes(name)));
@@ -250,8 +235,7 @@ export const blockUpdate = Effect.gen(function* () {
         const fresh = writesFields ? yield* blockRows.blockById(input.id) : current;
         const stale =
           JSON.stringify(fresh.tags) !== JSON.stringify(current.tags) ||
-          (retag !== null && (JSON.stringify(fresh.fields) !== JSON.stringify(current.fields) || fresh.body !== current.body)) ||
-          (revising && JSON.stringify(fresh.fields) !== JSON.stringify(current.fields));
+          (retag !== null && (JSON.stringify(fresh.fields) !== JSON.stringify(current.fields) || fresh.body !== current.body));
         if (stale) return yield* write(asked);
         if (retag !== null) yield* settleRetag(table, fresh, retag);
         const standing = kept({ ...(retag === null ? fresh.fields : retagBase(table, fresh, retag)), ...moved });

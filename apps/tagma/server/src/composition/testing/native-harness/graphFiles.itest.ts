@@ -14,7 +14,8 @@ import { GraphTools, graphToolsFixture } from './graphTools.fixture.js';
 layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (it) => {
   it.effect('sourced notes are navigable through the graph doors while only explanations reach a session touching their code', () =>
     Effect.gen(function* () {
-      const { demo, graph, root, ctx, nativeCall } = yield* GraphTools;
+      const { demo, graph, root, ctx, nativeCall, rootName } = yield* GraphTools;
+      const parentId = yield* rootName();
       const files = yield* FileSystem.FileSystem;
       const path = join(root, 'sourced-note.ts');
       yield* files.writeFileString(path, 'export const entry = 1;\n');
@@ -25,6 +26,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
           ops: [
             {
               op: 'create',
+              parentId,
               title: 'A navigable note',
               sources: [
                 { kind: 'file', ref: 'sourced-note.ts' },
@@ -38,6 +40,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
       const batched = yield* nativeCall('apply_batch', { file: document });
       expect(batched.status).toBe('ok');
       const born = yield* nativeCall('create_block', {
+        parentId,
         title: 'A file note',
         body: 'Navigation without prompt delivery.',
         sources: [{ kind: 'file', ref: 'sourced-note.ts' }],
@@ -54,6 +57,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
         reads: [{ tags: [], sources: [{ kind: 'file', ref: 'sourced-note.ts' }] }],
       });
       const explanation = yield* nativeCall('create_block', {
+        parentId,
         tags: ['explanation'],
         title: 'The entry remains stable',
         body: 'Consumers retain its identity.',
@@ -69,11 +73,12 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
 
   it.effect('a body arrives as a file in the thread’s scratch, and the refusal names that file to edit', () =>
     Effect.gen(function* () {
-      const { demo, graph, ctx, call, nativeCall } = yield* GraphTools;
+      const { demo, graph, ctx, call, nativeCall, rootName } = yield* GraphTools;
+      const parentId = yield* rootName();
       const files = yield* FileSystem.FileSystem;
       const scratchPath = ctx.scratch.path;
       yield* files.writeFileString(join(scratchPath, 'body.md'), 'A body the agent wrote as a file, with "quotes" and a\nnewline.');
-      const born = (yield* call('create_block', { tags: ['idea'], title: 'Written from a file', bodyFile: 'body.md' })) as {
+      const born = (yield* call('create_block', { parentId, tags: ['idea'], title: 'Written from a file', bodyFile: 'body.md' })) as {
         block: { name: string };
       };
       expect((yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(born.block.name))).body).toBe(
@@ -88,7 +93,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
         status: 'refused',
         code: 'body-source',
       });
-      const missing = yield* nativeCall('create_block', { tags: ['idea'], title: 'no such body', bodyFile: 'absent.md' });
+      const missing = yield* nativeCall('create_block', { parentId, tags: ['idea'], title: 'no such body', bodyFile: 'absent.md' });
       expect(missing).toMatchObject({ status: 'refused', code: 'body-source' });
       expect(missing.reason as string).toContain(join(scratchPath, 'absent.md'));
     }),
@@ -134,7 +139,12 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
       type Listed = { blocks: { name: string; sightings: number }[]; total: number };
       const listed = (yield* call('read_reflections', {})) as Listed;
       expect(listed.blocks.find((row) => row.name === first.block.name)?.sightings).toBe(2);
-      const fix = yield* graph.blocks.create({ projectId: home.id, tags: ['rule'], title: 'The failure is fixed.' });
+      const fix = yield* graph.blocks.create({
+        projectId: home.id,
+        parentId: (yield* graph.blocks.rootBlockOf(home.id)).id,
+        tags: ['rule'],
+        title: 'The failure is fixed.',
+      });
       const by = yield* demo.nameOf(fix.id);
       expect(yield* call('answer_reflection', { blockId: first.block.name, by })).toMatchObject({ status: 'ok' });
       const promoted = (yield* call('read_reflections', {})) as Listed;
@@ -182,18 +192,21 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
 
   it.effect('a document named by a bare path is re-read from this thread’s scratch after refusal', () =>
     Effect.gen(function* () {
-      const { graph, ctx, nativeCall } = yield* GraphTools;
+      const { graph, ctx, nativeCall, rootName } = yield* GraphTools;
+      const parentId = yield* rootName();
       const files = yield* FileSystem.FileSystem;
       const document = join(ctx.scratch.path, 'document.json');
       const chapter = join(ctx.scratch.path, 'chapter.md');
       yield* files.writeFileString(chapter, 'The stale chapter.');
-      yield* files.writeFileString(document, JSON.stringify({ ops: [{ op: 'create', $id: 'c', tags: ['idea'] }] }));
+      yield* files.writeFileString(document, JSON.stringify({ ops: [{ op: 'create', $id: 'c', parentId, tags: ['idea'] }] }));
       const refused = yield* nativeCall('apply_batch', { file: 'document.json' });
       expect(refused).toMatchObject({ status: 'refused', code: 'bad-document', inputFile: document });
       yield* files.writeFileString(chapter, 'The chapter body, beside its document.');
       yield* files.writeFileString(
         document,
-        JSON.stringify({ ops: [{ op: 'create', $id: 'c', tags: ['idea'], title: 'from the scratch', body: { file: 'chapter.md' } }] }),
+        JSON.stringify({
+          ops: [{ op: 'create', $id: 'c', parentId, tags: ['idea'], title: 'from the scratch', body: { file: 'chapter.md' } }],
+        }),
       );
       const applied = yield* nativeCall('apply_batch', { file: 'document.json' });
       expect(applied.status).toBe('ok');
@@ -205,7 +218,8 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
 
   it.effect('a nested scratch document written through the workspace door is readable by apply_batch immediately', () =>
     Effect.gen(function* () {
-      const { ctx, nativeCall } = yield* GraphTools;
+      const { ctx, nativeCall, rootName } = yield* GraphTools;
+      const parentId = yield* rootName();
       const document = join(ctx.scratch.path, 'spec', 'land-b.json');
       const workspaceWrite = createWriteTool(toolOptions({ cwd: ctx.scratch.path }));
       yield* Effect.acquireUseRelease(
@@ -215,7 +229,9 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
             name: 'write',
             input: {
               path: document,
-              content: JSON.stringify({ ops: [{ op: 'create', $id: 'first', tags: ['idea'], title: 'first nested absolute read' }] }),
+              content: JSON.stringify({
+                ops: [{ op: 'create', $id: 'first', parentId, tags: ['idea'], title: 'first nested absolute read' }],
+              }),
             },
             tool: workspaceWrite,
             options: { toolCallId: 'call-workspace-write', messages: [] },
@@ -230,7 +246,8 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
 
   it.effect('a file a graph act reads is judged under the spelling a workspace write of that file carries', () =>
     Effect.gen(function* () {
-      const { demo, graph, graphCatalog, ctx } = yield* GraphTools;
+      const { demo, graph, graphCatalog, ctx, rootName } = yield* GraphTools;
+      const parentId = yield* rootName();
       const files = yield* FileSystem.FileSystem;
       const prepareWrite = toolPrepare(createWriteTool(toolOptions({ cwd: ctx.workingRoot, allowOutsideCwd: true })));
       if (prepareWrite === null) return yield* Effect.die('The workspace write resolves nothing before it is judged.');
@@ -241,11 +258,16 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
         return { kind: 'read' as const, value: subject.value, file: true as const };
       });
       const tools = yield* graphCatalog(ctx);
-      const block = yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['idea'], title: 'file input target' });
+      const block = yield* graph.blocks.create({
+        projectId: ctx.projectId,
+        parentId: (yield* graph.blocks.rootBlockOf(ctx.projectId)).id,
+        tags: ['idea'],
+        title: 'file input target',
+      });
       const blockId = yield* demo.nameOf(block.id);
       const body = yield* readOf(join(ctx.scratch.path, 'notes', 'body.md'));
       const create = yield* toolPrepare(tools.create_block!)!(
-        { title: 'from a file', bodyFile: 'notes/body.md' },
+        { parentId, title: 'from a file', bodyFile: 'notes/body.md' },
         { toolCallId: 'create-body', caller: unthreadedCaller },
       );
       const update = yield* toolPrepare(tools.update_block!)!(
@@ -257,7 +279,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
       yield* files.makeDirectory(join(ctx.scratch.path, 'notes'), { recursive: true });
       yield* files.writeFileString(
         join(ctx.scratch.path, 'notes', 'batch.json'),
-        JSON.stringify({ ops: [{ op: 'create', title: 'from a file' }] }),
+        JSON.stringify({ ops: [{ op: 'create', parentId, title: 'from a file' }] }),
       );
       const batch = yield* toolPrepare(tools.apply_batch!)!(
         { file: 'notes/batch.json' },
@@ -266,7 +288,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
       expect(batch.subjects).toContainEqual(yield* readOf(join(ctx.scratch.path, 'notes', 'batch.json')));
       const inline = join(ctx.scratch.path, 'inline.md');
       const prepared = yield* toolPrepare(tools.apply_batch!)!(
-        { ops: [{ op: 'create', title: 'absolute body', body: { file: inline } }] },
+        { ops: [{ op: 'create', parentId, title: 'absolute body', body: { file: inline } }] },
         { toolCallId: 'batch-body', caller: unthreadedCaller },
       );
       expect(prepared.subjects).toContainEqual(yield* readOf(inline));
@@ -288,8 +310,10 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
 
   it.effect('a refusal reaching the model spells operations in the names it calls them by', () =>
     Effect.gen(function* () {
-      const { call } = yield* GraphTools;
-      const born = (yield* call('create_block', { tags: ['idea'], title: 'Gone' })) as { block: { name: string } };
+      const { call, rootName } = yield* GraphTools;
+      const born = (yield* call('create_block', { parentId: yield* rootName(), tags: ['idea'], title: 'Gone' })) as {
+        block: { name: string };
+      };
       yield* call('delete_block', { blockId: born.block.name });
       const refused = (yield* call('read_block', { blockIds: [born.block.name] })) as { status: string; code: string; unblock: string[] };
       expect(refused.status).toBe('refused');
@@ -331,36 +355,15 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
     }),
   );
 
-  it.effect('a finding is filed and corrected one at a time, through the same gates a batch faces', () =>
-    Effect.gen(function* () {
-      const { call } = yield* GraphTools;
-      const target = (yield* call('create_block', { tags: ['idea'], title: 'Under review' })) as { block: { name: string } };
-      const filed = (yield* call('create_block', {
-        tags: ['proposal'],
-        title: 'The claim moved',
-        amendsId: target.block.name,
-        fields: { ops: [{ op: 'edit', id: target.block.name, old: 'Under review', new: 'Read' }] },
-      })) as { status: string; block: { name: string; tags: readonly string[]; parentName: string } };
-      expect(filed.status).toBe('ok');
-      expect(filed.block.tags).toEqual(['proposal']);
-      expect(filed.block.parentName).toBe(target.block.name);
-      expect(
-        yield* call('revise_amendment', { blockId: filed.block.name, ops: [{ op: 'update', id: target.block.name, title: 'Read' }] }),
-      ).toMatchObject({ status: 'ok' });
-      yield* call('reject_amendment', { blockId: filed.block.name, reason: 'the claim is right as it stands' });
-      expect(
-        yield* call('revise_amendment', { blockId: filed.block.name, ops: [{ op: 'update', id: target.block.name, title: 'Read' }] }),
-      ).toMatchObject({ status: 'refused' });
-    }),
-  );
-
   it.effect(
     'a graph act settles from the journal after a death: landed with what it wrote, or aborted; an act the journal does not record reads nothing back from it',
     () =>
       Effect.gen(function* () {
-        const { ctx, root, graphCatalog, call } = yield* GraphTools;
+        const { ctx, root, graphCatalog, call, rootName } = yield* GraphTools;
         const files = yield* FileSystem.FileSystem;
-        const born = (yield* call('create_block', { tags: ['idea'], title: 'Measured' })) as { block: { name: string } };
+        const born = (yield* call('create_block', { parentId: yield* rootName(), tags: ['idea'], title: 'Measured' })) as {
+          block: { name: string };
+        };
         yield* files.writeFileString(join(root, 'settled.ts'), 'export const settled = 1;\n');
         const tools = yield* graphCatalog(ctx);
         const anchor = tools.anchor_block!;
@@ -407,9 +410,10 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
 
   it.effect('a write names the journal range its call left, and that range opens on what it changed', () =>
     Effect.gen(function* () {
-      const { graph, callAt } = yield* GraphTools;
+      const { graph, callAt, rootName } = yield* GraphTools;
       type Ranged = { block: { name: string }; journal?: { from: number; to: number; chars?: { from: number; to: number } } };
       const born = (yield* callAt('call-ranged-born', 'create_block', {
+        parentId: yield* rootName(),
         tags: ['idea'],
         title: 'Measured against its own change',
         body: 'The first body.',
@@ -437,14 +441,19 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
 
   it.effect('a step that wrote a block’s title or body opens in the feed, and a step that only moved it stays folded', () =>
     Effect.gen(function* () {
-      const { answer } = yield* GraphTools;
+      const { answer, rootName } = yield* GraphTools;
       const step = Effect.fnUntraced(function* (name: string, input: Record<string, unknown>) {
         const answered = yield* answer(name, input);
         if (!(answered instanceof ToolAnswer) || answered.display === undefined)
           return yield* Effect.die(`The tool ${name} answered no form.`);
         return { block: (answered.value as { block: { name: string } }).block.name, opens: toolDisplayOpensByDefault(answered.display) };
       });
-      const born = yield* step('create_block', { tags: ['idea'], title: 'Unfolded where it was written', body: 'The first body.' });
+      const born = yield* step('create_block', {
+        parentId: yield* rootName(),
+        tags: ['idea'],
+        title: 'Unfolded where it was written',
+        body: 'The first body.',
+      });
       expect(born.opens).toBe(true);
       expect((yield* step('edit_block', { blockId: born.block, oldString: 'first', newString: 'second' })).opens).toBe(true);
       expect((yield* step('update_block', { blockId: born.block, title: 'Retitled where it was written' })).opens).toBe(true);

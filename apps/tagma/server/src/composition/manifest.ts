@@ -8,7 +8,7 @@ import type { SubjectPlace } from '../platform/contract/service/place.js';
 import type { DoctrineFact, DoctrineSection } from '../platform/contract/wire/section.js';
 import type { SnapshotHome, SnapshotParticipant } from '../platform/contract/service/snapshots.js';
 import type { SettingKey, SettingSectionDeclaration } from '../platform/contract/wire/setting.js';
-import { OPERATION_IDS } from './catalog.js';
+import { OPERATION_IDS, operationOwnerOf } from './catalog.js';
 import { MODULES } from '@tagma/server/composition/modules';
 import type { DeclaredCapability } from '../native-harness/contract/service/capabilities.js';
 import { BEHAVIOURS, type BehaviourRegistry } from '../graph/contract/service/behaviours.js';
@@ -34,6 +34,15 @@ export const POOLS = (machine: Machine): readonly PoolDeclaration[] => modules.f
 export const CAPABILITIES: readonly DeclaredCapability[] = modules.flatMap((module) =>
   (module.capabilities ?? []).map((declaration) => ({ owner: module.id, declaration })),
 );
+
+const toolOwners = new Map(
+  CAPABILITIES.flatMap(({ declaration }) => {
+    const code = declaration.toolCode;
+    return code === undefined ? [] : code.names.map((name) => [name, code.module] as const);
+  }),
+);
+
+export const ownerOf = (name: string): string | null => operationOwnerOf(name) ?? toolOwners.get(name) ?? null;
 
 export const FACTS: readonly DoctrineFact[] = modules.flatMap((module) => module.facts ?? []);
 

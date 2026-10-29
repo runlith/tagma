@@ -21,7 +21,8 @@ export class ReadState extends Service<ReadState>()('ReadState', { tier: 'graph'
   }
 
   markRead(name: string, updatedAt: string): void {
-    if (this.marks.seen.get(this.key(name)) === updatedAt) return;
+    const mark = this.marks.seen.get(this.key(name));
+    if (mark !== undefined && mark >= updatedAt) return;
     this.marks.seen.set(this.key(name), updatedAt);
   }
 

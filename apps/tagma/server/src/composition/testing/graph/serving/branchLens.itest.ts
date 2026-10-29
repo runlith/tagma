@@ -20,11 +20,16 @@ layer(servingLayer, { excludeTestServices: true })('branch lenses', (it) => {
           { branch: 'feature', worktree: feature, canonical: false },
         ]);
         const served = yield* pool.resolve({ projectId, branch: 'feature' });
+        const root = yield* Effect.provide(
+          Effect.flatMap(Blocks, (blocks) => blocks.rootBlockOf(projectId)),
+          served.context,
+        );
         const made = yield* demo
           .as(
             'branch',
             Context.get(served.context, Blocks).create({
               projectId,
+              parentId: root.id,
               tags: ['idea'],
               title: 'On The Branch',
               body: 'written under the aim',

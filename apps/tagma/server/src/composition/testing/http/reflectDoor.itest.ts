@@ -16,8 +16,14 @@ const setup = Effect.gen(function* () {
 class Filing extends Context.Service<Filing, Effect.Success<typeof setup>>()('testing/Filing') {}
 const op = (id: string, input: unknown, project?: number) =>
   Effect.flatMap(Filing, ({ world }) => world.op(id, input, project === undefined ? '' : `project=${project}`));
-const born = (project: number, input: unknown) =>
-  Effect.map(op('create_block', input, project), (answer) => (answer.body as { block: { name: string } }).block.name);
+const rootOf = Effect.fnUntraced(function* (project: number) {
+  const roots = yield* op('list_root_blocks', {}, project);
+  return (roots.body as { blocks: { name: string }[] }).blocks[0]!.name;
+});
+const born = Effect.fnUntraced(function* (project: number, input: Record<string, unknown>) {
+  const answer = yield* op('create_block', { parentId: yield* rootOf(project), ...input }, project);
+  return (answer.body as { block: { name: string } }).block.name;
+});
 const read = Effect.fnUntraced(function* (name: string, project: number) {
   const response = yield* op('read_block', { blockIds: [name] }, project);
   expect(response.status).toBe(200);
@@ -60,7 +66,11 @@ const otherProject = Effect.gen(function* () {
 const serverModule = Effect.fnUntraced(function* (sourceProjectId: number) {
   const { world } = yield* Filing;
   yield* (yield* FileSystem.FileSystem).makeDirectory(join(world.sourceCheckout, 'server'), { recursive: true });
-  const set = yield* op('set_module', { modules: [{ id: 'server', title: 'The Server', root: 'server' }] }, sourceProjectId);
+  const set = yield* op(
+    'set_module',
+    { modules: [{ id: 'server', title: 'The Server', parent: yield* rootOf(sourceProjectId), root: 'server' }] },
+    sourceProjectId,
+  );
   expect(set).toMatchObject({ status: 200 });
   return (set.body as { modules: { card: string }[] }).modules[0]!.card;
 });

@@ -8,7 +8,7 @@ import { workspaceChange } from '../store/tables.js';
 import type { WindowBase } from '../store/commandTables.js';
 import type { CommandWrites } from './commands.js';
 import type { CommandJournal, JournalWindow } from './journal.js';
-import type { CommandUnattributed } from '../contract/service/commands.js';
+import { ABSENT_DIGEST, type CommandUnattributed } from '../contract/service/commands.js';
 import type { Commanding } from './commandRows.js';
 import type { CommandMoves } from '@runlith/agent-tools/WorkspaceChanges';
 import { type Lives, WRITE_GAP_MS } from './lives.js';
@@ -164,6 +164,7 @@ export const recoverCommands = Effect.fn('ChangeRecord.recoverCommands')(functio
             path: name,
             reason: RESTART_REASON,
             team: null,
+            digest: now.present ? now.digest : ABSENT_DIGEST,
             at: restartAt,
           });
         }

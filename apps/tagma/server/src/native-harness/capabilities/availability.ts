@@ -4,6 +4,7 @@ import type { Capability, CapabilitySettings } from './contract.js';
 import type { ThreadContext } from '../turns/context.js';
 import type { NativeRuleSource } from '../contract/service/rules.js';
 import { toldState } from '../turns/guidance.js';
+import { guidanceCapabilities } from '../agents/effectiveAgent.js';
 
 export const readCapabilitySettings = Effect.fnUntraced(function* (capabilities: readonly Capability[], ctx: ThreadContext) {
   const gates = new Map<string, () => boolean>();
@@ -37,9 +38,13 @@ export const availabilitySource: NativeRuleSource = {
         const last = toldState(ctx.modelMessages, TOLD, codec) ?? seen.get(ctx.thread.id) ?? settings.initial;
         seen.set(ctx.thread.id, current);
         if (last === current) return null;
-        const text = definitions
-          .effective(declaration, ctx.thread.profile?.overlay)
-          .held.flatMap((capability) => {
+        const overlay = ctx.thread.profile?.overlay;
+        const text = guidanceCapabilities(declaration.id, definitions.effective(declaration, overlay), overlay, ctx.offers, {
+          world: ctx.world.facts,
+          comments: ctx.comments(),
+          images: ctx.images,
+        })
+          .flatMap((capability) => {
             const notice = capability.catalog === undefined ? [] : [capability.catalog.notice(ctx)];
             if (capability.enabledBy === undefined) return notice;
             const names = ctx.offers

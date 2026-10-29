@@ -7,7 +7,7 @@ const isolatedUnit = ['src/Seam.svelte.test.ts', 'src/SeamHandle.svelte.test.ts'
 export default defineConfig({
   resolve: { conditions: CONDITIONS },
   ssr: { resolve: { conditions: CONDITIONS } },
-  plugins: [svelte({ compilerOptions: { experimental: { async: true } } })],
+  plugins: [svelte({ compilerOptions: { experimental: { async: false } } })],
   test: {
     environment: 'jsdom',
     experimental: { fsModuleCache: true, fsModuleCachePath: 'node_modules/.vitest-module-cache' },

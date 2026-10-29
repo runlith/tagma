@@ -159,9 +159,9 @@ layer(demoGraphLayer({ repos: ['repo'] }).pipe(Layer.provideMerge(BunFileSystem.
     );
 
     it.effect('an explicit scope selects its project while a request checkout supplies an implicit place', () =>
-      withDemo(({ graph, projectId, demoRoot, fixture, nameOf, refusal }) =>
+      withDemo(({ graph, projectId, demoRoot, fixture, nameOf, refusal, root }) =>
         Effect.gen(function* () {
-          const area = (yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'scoped' })).id;
+          const area = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'scoped' })).id;
           const scopeName = yield* nameOf(area);
           const otherRoot = yield* fixture.directory('other');
           const other = yield* graph.projectLifecycle.create({ name: 'other', rootPath: otherRoot });
@@ -279,7 +279,12 @@ layer(demoGraphLayer({ repos: ['repo'] }).pipe(Layer.provideMerge(BunFileSystem.
           Effect.gen(function* () {
             const root = yield* fixture.directory('spare');
             const spare = yield* graph.projectLifecycle.create({ name: 'spare-settings', rootPath: root });
-            const kept = yield* graph.blocks.create({ projectId: spare.id, tags: ['idea'], title: 'kept' });
+            const kept = yield* graph.blocks.create({
+              projectId: spare.id,
+              parentId: (yield* graph.blocks.rootBlockOf(spare.id)).id,
+              tags: ['idea'],
+              title: 'kept',
+            });
             yield* signedBy(null)(
               graph.settings.write({
                 scope: 'project',
@@ -360,11 +365,11 @@ layer(demoGraphLayer({ repos: ['repo'] }).pipe(Layer.provideMerge(BunFileSystem.
     );
 
     it.effect('ready and search narrow to the live subtree of the scope block', () =>
-      withDemo(({ graph, projectId, nameOf }) =>
+      withDemo(({ graph, projectId, nameOf, root }) =>
         Effect.gen(function* () {
-          const area = (yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'zone' })).id;
+          const area = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'zone' })).id;
           const inside = (yield* graph.blocks.create({ projectId, parentId: area, tags: ['task'], title: 'inside' })).id;
-          yield* graph.blocks.create({ projectId, tags: ['task'], title: 'outside' });
+          yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'outside' });
           expect((yield* graph.selection.ready({ projectId, scopeId: area })).map((row) => row.id)).toEqual([inside]);
           expect((yield* graph.ranking.search({ query: '', projectId, scopeId: area })).items.map((row) => row.name).sort()).toEqual(
             [yield* nameOf(area), yield* nameOf(inside)].sort(),
@@ -376,12 +381,12 @@ layer(demoGraphLayer({ repos: ['repo'] }).pipe(Layer.provideMerge(BunFileSystem.
     );
 
     it.effect('dir sources choose the deepest scope and symbol or exact-file owners beat containing directories', () =>
-      withDemo(({ graph, projectId, demoRoot, refusal }) =>
+      withDemo(({ graph, projectId, demoRoot, refusal, root }) =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           yield* fs.makeDirectory(join(demoRoot, 'apps/x/src'), { recursive: true });
           yield* fs.writeFileString(join(demoRoot, 'apps/x/src/owner.ts'), 'export const owner = 1;\nexport const other = 2;\n');
-          const area = (yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'x' })).id;
+          const area = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'x' })).id;
           yield* graph.sources.attach({ blockId: area, kind: 'dir', ref: 'apps/x' });
           const inner = (yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'src', parentId: area })).id;
           yield* graph.sources.attach({ blockId: inner, kind: 'dir', ref: 'apps/x/src' });
@@ -409,11 +414,11 @@ layer(demoGraphLayer({ repos: ['repo'] }).pipe(Layer.provideMerge(BunFileSystem.
           expect(yield* owners('apps/x/src/owner.ts#owner')).toEqual([symbolDoc]);
           yield* graph.tasks.close({ id: symbolDoc });
           expect((yield* owners('apps/x/src/owner.ts#owner')).sort((a, b) => a - b)).toEqual([fileDoc, twin]);
-          const top = (yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'the root' })).id;
+          const top = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'the root' })).id;
           yield* graph.sources.attach({ blockId: top, kind: 'dir', ref: '.' });
           expect(yield* owners('apps/y/nothing.ts')).toEqual([top]);
           expect(yield* owners('apps/x/src/else.ts')).toEqual([inner]);
-          const letter = (yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'a' })).id;
+          const letter = (yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'a' })).id;
           yield* graph.sources.attach({ blockId: letter, kind: 'dir', ref: 'a' });
           yield* graph.sources.attach({ blockId: area, kind: 'file', ref: 'apps/x/src/drawn.ts' });
           expect(yield* owners('a/one.ts')).toEqual([letter]);

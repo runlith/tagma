@@ -23,7 +23,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('knowledge migration', (i
     () =>
       withDemo((demo) =>
         Effect.gen(function* () {
-          const { graph, projectId } = demo;
+          const { graph, projectId, root } = demo;
           const { db } = graph.graphStore;
           yield* installNotes(projectId);
           const rows = yield* db.select().from(block).where(eq(block.projectId, projectId));
@@ -71,10 +71,17 @@ layer(demoGraphLayer(), { excludeTestServices: true })('knowledge migration', (i
               },
             })
             .where(eq(block.id, catalog.id));
-          const person = yield* graph.blocks.create({ projectId, tags: ['person'], title: 'Ada', fields: { nickname: 'A' } });
+          const person = yield* graph.blocks.create({
+            projectId,
+            parentId: root,
+            tags: ['person'],
+            title: 'Ada',
+            fields: { nickname: 'A' },
+          });
           const personName = yield* demo.nameOf(person.id);
           const meeting = yield* graph.blocks.create({
             projectId,
+            parentId: root,
             tags: ['meeting'],
             title: 'planning',
             fields: { held: '2026-10-20', attendees: [personName] },
@@ -87,9 +94,10 @@ layer(demoGraphLayer(), { excludeTestServices: true })('knowledge migration', (i
             body: `Ask [[${personName}]]`,
             edges: [{ kind: 'relates', to: person.id }],
           });
-          const recipe = yield* graph.blocks.create({ projectId, tags: ['recipe'], title: 'a method', body: 'one step' });
+          const recipe = yield* graph.blocks.create({ projectId, parentId: root, tags: ['recipe'], title: 'a method', body: 'one step' });
           const memo = yield* graph.blocks.create({
             projectId,
+            parentId: root,
             tags: ['tag'],
             title: '#memo',
             fields: {
@@ -105,6 +113,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('knowledge migration', (i
           });
           const memoRecord = yield* graph.blocks.create({
             projectId,
+            parentId: root,
             tags: ['memo'],
             title: 'linked thought',
             fields: { author: personName, method: yield* demo.nameOf(recipe.id), literal: oldType('person') },
@@ -112,39 +121,23 @@ layer(demoGraphLayer(), { excludeTestServices: true })('knowledge migration', (i
           const sort = { by: 'created', order: 'asc' } as const;
           const selection = yield* graph.blocks.create({
             projectId,
+            parentId: root,
             contract: 'core/selection',
             title: 'dated meetings',
             fields: { query: { tags: [oldType('meeting')], fields: { [fieldIdOf(oldType('meeting'), 'held')]: '2026-10-20' }, sort } },
           });
           const notes = yield* graph.blocks.create({
             projectId,
+            parentId: root,
             contract: 'core/selection',
             title: 'thoughts',
             fields: { query: { selector: { kind: 'descendants', types: [oldType('note')] }, sort } },
-          });
-          const meetingName = yield* demo.nameOf(meeting.id);
-          const proposal = yield* graph.blocks.create({
-            projectId,
-            contract: 'core/amendment',
-            amendsId: meeting.id,
-            title: 'another meeting',
-            fields: {
-              ops: [
-                {
-                  op: 'create',
-                  parentId: meetingName,
-                  tags: [oldType('meeting')],
-                  title: 'follow-up',
-                  fields: { [fieldIdOf(oldType('meeting'), 'held')]: '2026-10-21', attendees: [personName] },
-                },
-                { op: 'create', parentId: meetingName, tags: [oldType('note')], title: 'follow-up thought', body: 'still editable' },
-              ],
-            },
           });
           const project = yield* graph.projects.byId(projectId);
           yield* knowledgeNames(project);
           const localCatalog = yield* graph.blocks.create({
             projectId,
+            parentId: root,
             tags: ['catalog'],
             title: 'project notes',
             fields: { id: 'notes', tags: [] },
@@ -200,13 +193,28 @@ layer(demoGraphLayer(), { excludeTestServices: true })('knowledge migration', (i
           yield* graph.blocks.edit({ id: recipe.id, old: 'one', new: 'two' });
           expect((yield* graph.blocks.blockById(note.id)).fields).toEqual({ topic: 'migration' });
           expect((yield* graph.blocks.blockById(recipe.id)).body).toBe('two step');
-          yield* graph.review.accept({ id: proposal.id });
+          yield* graph.blocks.create({
+            projectId,
+            parentId: meeting.id,
+            tags: [newType('meeting')],
+            title: 'follow-up',
+            fields: { [fieldIdOf(newType('meeting'), 'held')]: '2026-10-21', attendees: [personName] },
+          });
+          yield* graph.blocks.create({
+            projectId,
+            parentId: meeting.id,
+            tags: [localType(noteType.uuid)],
+            title: 'follow-up thought',
+            body: 'still editable',
+          });
           const children = yield* graph.blocks.childrenOf(meeting.id);
           const followup = children.find((row) => row.title === 'follow-up');
           const thought = children.find((row) => row.title === 'follow-up thought');
           expect(followup?.fields).toEqual({ held: '2026-10-21', attendees: [personName] });
           expect(thought?.tags).toEqual(['note']);
-          expect((yield* graph.blocks.create({ projectId, tags: ['person'], title: 'Grace', fields: { nickname: 'G' } })).fields).toEqual({
+          expect(
+            (yield* graph.blocks.create({ projectId, parentId: root, tags: ['person'], title: 'Grace', fields: { nickname: 'G' } })).fields,
+          ).toEqual({
             nickname: 'G',
           });
         }),

@@ -25,6 +25,8 @@ export type StatusPublished = {
   readonly fromRunId: string | null;
 };
 
+export const runEnded = (event: StatusPublished): boolean => event.fromRunId !== null && event.runningRunId !== event.fromRunId;
+
 export type ShelfRecorded = { readonly threadIds: readonly ThreadId[] };
 
 export type RecordBirth = {

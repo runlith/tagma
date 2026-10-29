@@ -22,7 +22,8 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
       const project = (added.body as { project: { id: number } }).project.id;
       const op = (id: string, input: unknown, cwd = root) => world.op(id, input, `project=${project}&cwd=${encodeURIComponent(cwd)}`);
       expect((yield* op('write_setting', { key: 'graph.commit', value: 'manual', project })).status).toBe(200);
-      const made = yield* op('create_block', { title: 'Shared knowledge', body: 'branch knowledge' });
+      const parentId = ((yield* op('list_root_blocks', {})).body as { blocks: { name: string }[] }).blocks[0]!.name;
+      const made = yield* op('create_block', { title: 'Shared knowledge', body: 'branch knowledge', parentId });
       expect(made.status).toBe(200);
       const name = (made.body as { block: { name: string } }).block.name;
       expect((yield* op('sync_graph', {})).status).toBe(200);
@@ -38,7 +39,7 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
         body: { reads: [{ name, body: 'branch knowledge' }] },
       });
       for (const [id, input] of [
-        ['create_block', { title: 'Cannot be written here' }],
+        ['create_block', { title: 'Cannot be written here', parentId }],
         ['rewrite_graph_files', {}],
         ['sync_graph', {}],
         ['resolve_graph_conflict', {}],
@@ -58,19 +59,26 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
       const project = yield* world.stealthProject(root);
       yield* suiteGit(root, 'commit', '--allow-empty', '-qm', 'code born');
       const op = (id: string, input: unknown, cwd = root) => world.op(id, input, `project=${project}&cwd=${encodeURIComponent(cwd)}`);
-      const made = yield* op('create_block', { title: 'Canonical knowledge' });
+      const parentId = ((yield* op('list_root_blocks', {})).body as { blocks: { name: string }[] }).blocks[0]!.name;
+      const made = yield* op('create_block', { title: 'Canonical knowledge', parentId });
       expect(made.status).toBe(200);
       const name = (made.body as { block: { name: string } }).block.name;
       const detached = join(yield* files.realPath(yield* world.directory('stealth-copies')), 'detached');
       yield* suiteGit(root, 'worktree', 'add', '--detach', detached, 'HEAD');
       expect((yield* op('read_block', { blockIds: [name] }, detached)).status).toBe(200);
-      const later = yield* op('create_block', { title: 'Main wrote this after the detached read' });
+      const later = yield* op('create_block', { title: 'Main wrote this after the detached read', parentId });
       expect(later.status).toBe(200);
       const laterName = (later.body as { block: { name: string } }).block.name;
       expect((yield* op('read_block', { blockIds: [laterName] }, detached)).status).toBe(200);
-      expect(yield* op('create_block', { title: 'Detached cannot change the shared graph' }, detached)).toMatchObject({
-        status: 409,
-        body: { code: 'detached-checkout' },
+      for (const [id, input] of [
+        ['update_block', { blockId: name, title: 'Cannot rename from detached HEAD' }],
+        ['create_block', { title: 'Cannot be written here', parentId }],
+      ] as const) {
+        expect(yield* op(id, input, detached)).toMatchObject({ status: 409, body: { code: 'detached-checkout' } });
+      }
+      expect(yield* op('read_block', { blockIds: [name] })).toMatchObject({
+        status: 200,
+        body: { reads: [{ name, title: 'Canonical knowledge' }] },
       });
       expect(world.runtime.pool.held().filter((copy) => copy.projectId === project)).toMatchObject([{ checkout: root }]);
       expect(yield* suiteGit(detached, 'status', '--porcelain')).toBe('');

@@ -16,6 +16,8 @@ import { endHosts } from '../../../executions/testing/doubles.js';
 import { Catalogs } from '../../../graph/contract/wire/catalogs.js';
 import { CHECKOUT_DIRECTORY, FORMAT_FILE } from '../../../graph/contract/wire/storage.js';
 import { type Catalog, sectioned } from '../../../graph/contract/wire/tags/declaration.js';
+import { Blocks } from '../../../graph/contract/service/blocks.js';
+import { blockName } from '../../../graph/contract/wire/references.js';
 import { GraphSteps } from '../../../graph/contract/service/steps.js';
 import { ProjectLifecycle, ServedGraphs } from '../../../graph/contract/service/serving.js';
 import { makeGraphDelivery } from '../../../graph/serving/delivery.js';
@@ -228,7 +230,16 @@ it.live(
       const home = mirrorHome(appHome, project.id);
       const mainMirror = mirrorPath(appHome, project.id, join(root, CHECKOUT_DIRECTORY));
       const setupDoors = yield* Scope.provide(doors(born, yield* fixture.directory('doors-setup')), setup);
-      const rule = yield* setupDoors.op('create_block', { tags: ['rule'], title: 'No module re-exports another' }, project.id);
+      const served = yield* born.pool.resolve({ projectId: project.id });
+      const projectRoot = yield* Effect.provide(
+        Effect.flatMap(Blocks, (blocks) => blocks.rootBlockOf(project.id)),
+        served.context,
+      );
+      const rule = yield* setupDoors.op(
+        'create_block',
+        { parentId: blockName(projectRoot.uuid), tags: ['rule'], title: 'No module re-exports another' },
+        project.id,
+      );
       expect(rule.status).toBe(200);
       const enforced = yield* setupDoors.op(
         'enforce_rule',

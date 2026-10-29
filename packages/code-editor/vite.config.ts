@@ -2,7 +2,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  plugins: [svelte({ compilerOptions: { experimental: { async: true } } })],
+  plugins: [svelte({ compilerOptions: { experimental: { async: false } } })],
   resolve: { conditions: ['browser'] },
   test: {
     isolate: false,

@@ -30,9 +30,14 @@ const setup = Effect.gen(function* () {
   const project = (added.body as { project: { id: number } }).project.id;
   yield* projectLeaving(world, project);
   expect((yield* world.op('write_setting', { project, key: 'graph.commit', value: 'manual' }, `project=${project}`)).status).toBe(200);
-  const module = yield* world.op('set_module', { modules: [{ id: 'server', title: 'The server', root: 'server' }] }, `project=${project}`);
+  const parent = ((yield* world.op('list_root_blocks', {}, `project=${project}`)).body as { blocks: { name: string }[] }).blocks[0]!.name;
+  const module = yield* world.op(
+    'set_module',
+    { modules: [{ id: 'server', title: 'The server', parent, root: 'server' }] },
+    `project=${project}`,
+  );
   expect(module.status).toBe(200);
-  return { world, project, area: (module.body as { modules: { card: string }[] }).modules[0]!.card };
+  return { world, project, parent, area: (module.body as { modules: { card: string }[] }).modules[0]!.card };
 });
 class Place extends Context.Service<Place, Effect.Success<typeof setup>>()('testing/ReflectWorktree') {}
 
@@ -57,7 +62,7 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
 })('reflections from a worktree', (it) => {
   it.effect('thread credentials keep rules local and file, read and answer reflections in main at both doors', () =>
     Effect.gen(function* () {
-      const { world, project, area } = yield* Place;
+      const { world, project, area, parent } = yield* Place;
       const files = yield* FileSystem.FileSystem;
       yield* Context.get(world.runtime.workspace, Coverage).cover(project);
       const main = yield* world.runtime.pool.resolve({ projectId: project });
@@ -67,7 +72,7 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       if (repository === undefined) return yield* Effect.die(new Error('the source project covers no repository'));
       const approvedValue = yield* suiteGitText(world.sourceCheckout, 'show', 'HEAD:server/value.ts');
       yield* files.writeFileString(join(world.sourceCheckout, 'server', 'value.ts'), 'export const value = 2;\n');
-      const ruleCreated = yield* op('create_block', { tags: ['rule'], title: 'One branch enforces this rule' });
+      const ruleCreated = yield* op('create_block', { tags: ['rule'], title: 'One branch enforces this rule', parentId: parent });
       const rule = (ruleCreated.body as { block: { name: string } }).block.name;
       const destination = join(yield* files.realPath(yield* world.directory('worktrees')), 'reflection');
       expect(
@@ -78,7 +83,11 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
           mode: { kind: 'new-branch', branch: 'reflection', start: 'HEAD' },
         })).status,
       ).toBe(200);
-      const inherited = yield* op('create_block', { tags: ['task'], title: 'A task written after preparing the worktree' });
+      const inherited = yield* op('create_block', {
+        tags: ['task'],
+        title: 'A task written after preparing the worktree',
+        parentId: parent,
+      });
       const inheritedTask = (inherited.body as { block: { name: string } }).block.name;
       yield* world.runtime.pool.releaseProject(project);
       const created = yield* op('create_worktree', { operationId: 'reflection' });
@@ -171,7 +180,7 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
 
   it.effect('a base past new code stays the approved one, and graph.commit off keeps it and reports the graph files left in main', () =>
     Effect.gen(function* () {
-      const { world, project } = yield* Place;
+      const { world, project, parent } = yield* Place;
       const files = yield* FileSystem.FileSystem;
       yield* Context.get(world.runtime.workspace, Coverage).cover(project);
       const repositories = (yield* op('read_repositories', {})).body as CoveredRepositoriesAnswer;
@@ -186,7 +195,7 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       const approvedBase = (approved.body as { operation: { base: string } }).operation.base;
       yield* files.writeFileString(join(world.sourceCheckout, 'server', 'value.ts'), 'export const value = 3;\n');
       yield* suiteGit(world.sourceCheckout, 'commit', '-qm', 'code moves after the approval', '--', 'server/value.ts');
-      expect((yield* op('create_block', { tags: ['task'], title: 'A graph change beside new code' })).status).toBe(200);
+      expect((yield* op('create_block', { tags: ['task'], title: 'A graph change beside new code', parentId: parent })).status).toBe(200);
       expect(yield* op('create_worktree', { operationId: 'code' })).toMatchObject({
         status: 200,
         body: { operation: { base: approvedBase } },
@@ -200,7 +209,7 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
           .pipe(Effect.orDie),
       );
       expect((yield* op('write_setting', { project, key: 'graph.commit', value: 'off' })).status).toBe(200);
-      const task = yield* op('create_block', { tags: ['task'], title: 'An uncommitted main task under off' });
+      const task = yield* op('create_block', { tags: ['task'], title: 'An uncommitted main task under off', parentId: parent });
       const name = (task.body as { block: { name: string } }).block.name;
       const destination = join(yield* files.realPath(yield* world.directory('off-worktree')), 'off');
       const prepared = yield* op('prepare_worktree', {

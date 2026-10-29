@@ -17,7 +17,7 @@ export default defineConfig({
     alias: [{ find: '$app', replacement: fileURLToPath(new URL('./node_modules/@sveltejs/kit/src/runtime/app', import.meta.url)) }],
   },
   ssr: { resolve: { conditions: CONDITIONS } },
-  plugins: [sveltekitModules, svelte({ compilerOptions: { dev: true, experimental: { async: true } } })],
+  plugins: [sveltekitModules, svelte({ compilerOptions: { dev: true, experimental: { async: false } } })],
   test: {
     experimental: { fsModuleCache: true, fsModuleCachePath: 'node_modules/.vitest-module-cache' },
     environment: 'jsdom',

@@ -10,6 +10,7 @@ import { GraphFeed } from '../../graph/contract/service/journal.js';
 import { COMMIT_HOOKS, type HookCli, installCommitHooks } from '../../enforcement/commits/hooks.js';
 import { Blocks } from '../../graph/contract/service/blocks.js';
 import { BlockNames } from '../../graph/contract/service/acts.js';
+import { blockName } from '../../graph/contract/wire/references.js';
 import type { LawEnforcement } from '../../graph/contract/wire/enforcement.js';
 import { GRANT_VARIABLE } from '../../platform/contract/service/credentials.js';
 import { unsignedEnvironment } from '../../platform/credentials/grants.js';
@@ -77,8 +78,14 @@ const makeCommitFixture = Effect.fn('commitFixture.make')(function* () {
     const projectId = (yield* Context.get(world.runtime.graph, ProjectLifecycle)
       .create({ name: `gated-${randomUUID()}`, rootPath: repo })
       .pipe(Effect.provide(world.runtime.graph))).id;
+    const root = yield* Context.get(world.runtime.graph, Blocks).rootBlockOf(projectId).pipe(Effect.provide(world.runtime.graph));
     const made = yield* world.tagma(
-      ['op', 'create_block', '--json', JSON.stringify({ title: 'No module forwards another module', tags: ['rule'] })],
+      [
+        'op',
+        'create_block',
+        '--json',
+        JSON.stringify({ title: 'No module forwards another module', tags: ['rule'], parentId: blockName(root.uuid) }),
+      ],
       { cwd: repo, env: OPERATOR },
     );
     expect(made.code, made.err || made.out).toBe(0);

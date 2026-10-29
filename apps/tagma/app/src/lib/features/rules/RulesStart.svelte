@@ -3,6 +3,7 @@
   import Sparkles from '@lucide/svelte/icons/sparkles';
   import { Router } from '@runlith/layer/Router';
   import { BlocksRepo } from '$lib/features/graph/BlocksRepo.js';
+  import { ProjectTree } from '$lib/features/graph/ProjectTree.svelte.js';
   import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { Asking } from '$lib/features/threads/Asking.js';
@@ -13,6 +14,7 @@
 
   const asking = Asking.use();
   const blocks = BlocksRepo.use();
+  const tree = ProjectTree.use();
   const tags = TagCatalog.use();
   const notices = Notices.use();
   const router = Router.use();
@@ -28,9 +30,10 @@
   }
 
   async function write(): Promise<void> {
-    if (tag === null) return;
+    const root = tree.rootName;
+    if (tag === null || root === null) return;
     try {
-      const block = await blocks.create.run({ title: 'New rule', tags: [tag] }, { throwOnError: true });
+      const block = await blocks.create.run({ parentId: root, title: 'New rule', tags: [tag] }, { throwOnError: true });
       if (block !== undefined) void router.goto(addresses.block(block.name));
     } catch (error) {
       notices.refusal(error);
@@ -63,7 +66,9 @@
           <p class="text-body font-medium text-foreground">Write one yourself</p>
           <p class="text-ui text-muted-foreground">A rule in your words. Make it a check later.</p>
         </div>
-        <Button size="sm" variant="outline" disabled={blocks.create.pending} onclick={() => void write()}>Write</Button>
+        <Button size="sm" variant="outline" disabled={blocks.create.pending || tree.rootName === null} onclick={() => void write()}
+          >Write</Button
+        >
       </div>
     {/if}
   </div>

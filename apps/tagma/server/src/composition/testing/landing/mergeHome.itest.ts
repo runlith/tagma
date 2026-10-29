@@ -66,7 +66,8 @@ const setup = Effect.gen(function* () {
     ['clean', 'gate', 'before'],
     ['marked', 'watch', 'after'],
   ] as const) {
-    const created = yield* op('create_block', { tags: ['rule'], title: `The ${inspection} rule` });
+    const parentId = ((yield* op('list_root_blocks', {})).body as { blocks: { name: string }[] }).blocks[0]!.name;
+    const created = yield* op('create_block', { tags: ['rule'], title: `The ${inspection} rule`, parentId });
     expect(created.status).toBe(200);
     const rule = (created.body as { block: { name: string } }).block.name;
     expect(

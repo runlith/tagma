@@ -5,7 +5,6 @@ import { GraphStore, type StoreFailure } from '../../../platform/contract/servic
 import { type WriterRef, WriterRegister } from '../../../platform/contract/service/writers.js';
 import { SessionIdentity } from '../../../platform/contract/wire/session.js';
 import { block, touch } from '../../store/tables.js';
-import { verdictReason } from '../../acts/records.js';
 import { Act, BlockNames, BlockProjection } from '../../contract/service/acts.js';
 import { BlockRows } from '../../acts/rows.js';
 import { type BlockRow } from '../../contract/service/acts.js';
@@ -30,7 +29,6 @@ import { writes } from '../../../platform/contract/service/writes.js';
 import { projecting } from '../../store/actWrites.js';
 import { LIFECYCLE } from '../../contract/wire/tags/lifecycle.js';
 import { HOLDER } from '../../contract/wire/tags/holder.js';
-import { AMENDMENT } from '../../contract/wire/tags/amendment.js';
 
 const finishing = writes('Tasks.finish', [block, touch], projecting);
 const closing = writes('Tasks.close', [block, touch], projecting);
@@ -103,18 +101,6 @@ const taskEnding = Effect.gen(function* () {
 
   const endingWord = Effect.fn('Tasks.endingWord')(function* (current: BlockRow, table: TagTable, outcome: 'done' | 'closed') {
     const standingStatus = table.statusOf(current);
-    const verdicts = table.bindingTag(current, AMENDMENT);
-    if (verdicts !== null) {
-      return yield* new GateRefusal(
-        'status-operation',
-        `${tagLabel(verdicts)} ends on a verdict, never on a generic ${outcome === 'done' ? 'finish' : 'close'}`,
-        [
-          `reject_amendment ${blockName(current.uuid)} with the reason it was declined`,
-          `accept_amendment ${blockName(current.uuid)} — run what it defers`,
-          `uphold_amendment ${blockName(current.uuid)} — take it, when standing work already answers it`,
-        ],
-      );
-    }
     const endingTag = table.bindingTag(current, LIFECYCLE);
     const ending = endingTag === null ? null : endingStatus(endingTag, outcome);
     if (ending === null) {
@@ -182,7 +168,7 @@ const taskEnding = Effect.gen(function* () {
         Effect.gen(function* () {
           const row = yield* writeEnding(input.id, current, table, ending, now);
           const move = endingTag === null ? {} : (statusMove(endingTag, standingStatus, ending) ?? {});
-          yield* act.record('done', row.id, { ...move, commit: input.commit ?? null, reason: verdictReason(undefined) }, now);
+          yield* act.record('done', row.id, { ...move, commit: input.commit ?? null, reason: null }, now);
           return yield* blockRows.recordOf(row);
         }),
       );
@@ -197,7 +183,7 @@ const taskEnding = Effect.gen(function* () {
         closing,
         Effect.gen(function* () {
           const row = yield* writeEnding(input.id, current, table, ending, now);
-          const cause = { reason: verdictReason(input.reason) };
+          const cause = { reason: input.reason?.trim() || null };
           const move = endingTag === null ? {} : (statusMove(endingTag, standingStatus, ending) ?? {});
           yield* act.record('close', row.id, { ...move, ...cause }, now);
           return yield* blockRows.recordOf(row);

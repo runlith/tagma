@@ -152,6 +152,10 @@ const makePlace = Effect.gen(function* () {
     return yield* holdings.read(RootId.make(place.checkout));
   });
   const nameOf = (answer: unknown) => (answer as { block: { name: string } }).block.name;
+  const top = Effect.fnUntraced(function* (project = target.id) {
+    const roots = yield* op('list_root_blocks', {}, project);
+    return (roots.body as { blocks: { name: string }[] }).blocks[0]!.name;
+  });
 
   const store = Context.get(world.runtime.graph, MachineStore);
   const instance = yield* Effect.acquireRelease(claimPreparedInstance(preparedBase(store)), (instance) => instance.release);
@@ -189,7 +193,7 @@ const makePlace = Effect.gen(function* () {
   actor = first.doors;
   const actorPrincipal = first.principal;
   peer = (yield* born(target.id)).doors;
-  rule = nameOf((yield* op('create_block', { tags: ['rule'], title: 'Do not forward modules' })).body);
+  rule = nameOf((yield* op('create_block', { tags: ['rule'], title: 'Do not forward modules', parentId: yield* top() })).body);
   const enforced = yield* op('enforce_rule', {
     blockId: rule,
     base: null,
@@ -199,7 +203,7 @@ const makePlace = Effect.gen(function* () {
   });
   expect(enforced.status).toBe(200);
   ruleRevision = (enforced.body as { revision: string }).revision;
-  const spec = nameOf((yield* op('create_block', { tags: ['spec'], title: 'Target work' })).body);
+  const spec = nameOf((yield* op('create_block', { tags: ['spec'], title: 'Target work', parentId: yield* top() })).body);
   task = nameOf(
     (yield* op('create_block', { tags: ['task'], title: 'Target task', edges: [{ kind: 'implements', to: spec }], parentId: spec })).body,
   );
@@ -209,7 +213,7 @@ const makePlace = Effect.gen(function* () {
     expect((yield* op('read_block', { blockIds: [task] }, target.id, actor)).status).toBe(200);
   }
   expect(yield* op('claim_block', { blockId: task }, target.id, actor)).toMatchObject({ status: 200 });
-  const homeSpec = nameOf((yield* op('create_block', { tags: ['spec'], title: 'Home work' }, home.id)).body);
+  const homeSpec = nameOf((yield* op('create_block', { tags: ['spec'], title: 'Home work', parentId: yield* top(home.id) }, home.id)).body);
   const homeTask = nameOf(
     (yield* op(
       'create_block',
@@ -248,6 +252,7 @@ const makePlace = Effect.gen(function* () {
     native,
     catalogAt,
     nameOf,
+    top,
     write,
     held,
     out,
@@ -456,7 +461,7 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
     'a size rule refusing the form a format command gave the change leaves that form in the working file, held by the thread, and check_rules names it',
     () =>
       Effect.gen(function* () {
-        const { world, files, home, actor, actorPrincipal, op, catalogAt, nameOf, native, write, held, out } = yield* PlaceFixture;
+        const { world, files, home, actor, actorPrincipal, op, catalogAt, nameOf, top, native, write, held, out } = yield* PlaceFixture;
         const root = yield* files.realPath(yield* world.directory('formed'));
         yield* seedRepository(root);
         yield* files.writeFileString(join(root, 'shared.ts'), BASE);
@@ -481,7 +486,9 @@ layer(Layer.effect(PlaceFixture, makePlace).pipe(Layer.provide(doorFixture()), L
         const registered = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
         expect(registered.status).toBe(200);
         const project = { id: (registered.body as { project: { id: number } }).project.id, root };
-        const rule = nameOf((yield* op('create_block', { tags: ['rule'], title: 'Small files' }, project.id)).body);
+        const rule = nameOf(
+          (yield* op('create_block', { tags: ['rule'], title: 'Small files', parentId: yield* top(project.id) }, project.id)).body,
+        );
         expect(
           yield* op(
             'enforce_rule',

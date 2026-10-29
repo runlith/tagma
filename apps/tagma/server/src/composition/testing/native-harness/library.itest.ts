@@ -155,6 +155,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           yield* served.graph.blocks
             .create({
               projectId: served.projectId,
+              parentId: served.root,
               tags: ['rule'],
               title: 'The served graph is where this project’s law stands',
             })
@@ -303,6 +304,29 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           expect(yield* sectionIds).not.toContain('code-navigation');
           yield* demo.graph.settings.write({ scope: 'project', projectId: demo.projectId, key: 'navigation.enabled', value: true });
           expect(yield* sectionIds).toContain('code-navigation');
+        }),
+      ),
+    ),
+  );
+  it.effect('a tools whitelist narrows capability sections while preserving standing sources and the built-in composition', () =>
+    withDemo((demo) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { library } = yield* world(demo);
+          const shown = yield* library.preview(demo.projectId, { id: 'tagma' });
+          expect(shown.capabilities).toContain('browser');
+          expect(shown.prompt.sections.map((section) => section.id)).toContain('browser-pages');
+          const narrowed = yield* library.preview(demo.projectId, { source: '---\nextends: tagma\ntools: [bash]\n---\n' });
+          const ids = narrowed.prompt.sections.map((section) => section.id);
+          expect(ids).toContain('the-shared-checkout');
+          expect(ids).toContain('keep-warm');
+          expect(ids).toContain('mcp-servers');
+          expect(ids).toContain('plugins');
+          expect(ids).not.toContain('browser-pages');
+          expect(ids).not.toContain('held-processes');
+          expect(narrowed.toolCatalog?.tools.map((tool) => tool.name)).toEqual(['ask_user', 'bash', 'tool_search']);
+          const browser = yield* library.preview(demo.projectId, { source: '---\nextends: tagma\ntools: [open_page]\n---\n' });
+          expect(browser.prompt.sections.map((section) => section.id)).toContain('browser-pages');
         }),
       ),
     ),

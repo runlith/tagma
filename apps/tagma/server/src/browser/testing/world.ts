@@ -1,7 +1,8 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { join } from 'node:path';
-import { Clock, Context, Effect, Layer } from 'effect';
+import { eq } from 'drizzle-orm';
+import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
 import { migrationsFolder, seedDirectory } from '../../installation/testing/doubles.js';
 import { forProject } from '../../invocation/testing/call.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -12,30 +13,50 @@ import { storeLayer } from '../../platform/store/open.js';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { unitsLayer } from '../../platform/store/units.js';
 import type { CurrentProject } from '../../projects/contract/service/caller.js';
+import type { Projects } from '../../projects/contract/service/registry.js';
+import { projectsLayer } from '../../projects/testing/doubles.js';
+import { CheckoutPaths } from '../../workspace/contract/service/checkoutPaths.js';
+import { ServedOrigins, sourceRoots } from './sourceRoots.js';
+import { fixedCheckoutPaths } from '../../workspace/testing/doubles.js';
 import { project } from '../../projects/store/table.js';
 import { Settings } from '../../settings/contract/service/values.js';
+import { resolveSetting, type SettingLayer } from '../../settings/resolution.js';
 import { ProfileId } from '../contract/wire/ids.js';
 import type { Automation } from '../contract/service/automation.js';
 import { type HostAdapter, HostAdapters, type Hosts } from '../contract/service/hosts.js';
 import type { Pages } from '../contract/service/pages.js';
 import { BrowserPlace } from '../contract/service/place.js';
 import type { Profiles } from '../contract/service/profiles.js';
-import { ThreadRuns } from '../contract/service/runs.js';
+import { RunEnds, runsLayer } from './runs.js';
 import type { Screencast } from '../contract/service/screencast.js';
 import { browserLayer } from '../layer.js';
 import { COOKIE_PAIRS, PAGE_PAIRS } from '../operations.js';
 
-const settings = Layer.succeed(
+const settings = Layer.effect(
   Settings,
-  Settings.of({
-    value: (key) => Effect.succeed(key.fallback),
-    read: () => Effect.die('settings are not read here'),
-    chain: () => Effect.die('settings are not chained here'),
-    live: () => Effect.die('settings are not watched here'),
-    held: () => Effect.die('settings are not held here'),
-    changes: () => Effect.die('settings are not watched here'),
-    write: () => Effect.die('settings are not written here'),
-    amend: () => Effect.die('settings are not amended here'),
+  Effect.sync(() => {
+    const values = new Map<string, Map<string, unknown>>();
+    const chain = (projectId?: number): SettingLayer[] => [
+      { scope: 'user', values: values.get('user') ?? new Map(), declined: new Set(), writers: new Map() },
+      { scope: 'project', values: values.get(`project:${projectId}`) ?? new Map(), declined: new Set(), writers: new Map() },
+    ];
+    return Settings.of({
+      value: (key, projectId) => Effect.sync(() => resolveSetting(key, chain(projectId)).value),
+      read: (key, projectId) => Effect.sync(() => resolveSetting(key, chain(projectId))),
+      chain: () => Effect.die('settings are not chained here'),
+      live: () => Effect.die('settings are not watched here'),
+      held: (key, projectId) => Effect.succeed(() => resolveSetting(key, chain(projectId)).value),
+      changes: () => Effect.die('settings are not watched here'),
+      write: (input) =>
+        Effect.sync(() => {
+          const at = input.scope === 'user' ? 'user' : `project:${input.projectId}`;
+          const layer = values.get(at) ?? new Map<string, unknown>();
+          values.set(at, layer);
+          if (input.value === undefined) layer.delete(input.key);
+          else layer.set(input.key, input.value);
+        }),
+      amend: () => Effect.die('settings are not amended here'),
+    });
   }),
 );
 
@@ -45,7 +66,7 @@ export const PAGE = PAGE_PAIRS;
 
 export const COOKIE = COOKIE_PAIRS;
 
-export type Served = Pages | Automation | Screencast | Profiles | Seeded;
+export type Served = Pages | Automation | Screencast | Profiles | Seeded | Projects | RunEnds | Settings | ServedOrigins;
 
 export type BrowserFixture = { readonly home: string; readonly services: Context.Context<Served | Hosts> };
 
@@ -96,7 +117,7 @@ export const browserWorld = (input: WorldInput) => {
     Seeded,
     Effect.gen(function* () {
       const { db } = yield* MachineStore;
-      const standing = yield* db.select().from(project).limit(1).get();
+      const standing = yield* db.select().from(project).where(eq(project.rootPath, input.home)).limit(1).get();
       if (standing !== undefined) return Seeded.of({ id: standing.id, name: standing.name });
       const createdAt = new Date(yield* Clock.currentTimeMillis);
       const row = yield* db
@@ -109,12 +130,30 @@ export const browserWorld = (input: WorldInput) => {
   );
   return input.host.pipe(
     Layer.provideMerge(browserLayer),
+    Layer.provideMerge(
+      Layer.effect(
+        CheckoutPaths,
+        Effect.gen(function* () {
+          const { id } = yield* Seeded;
+          const files = yield* FileSystem.FileSystem;
+          yield* files.makeDirectory(join(input.home, 'dev'), { recursive: true });
+          yield* files.makeDirectory(join(input.home, 'frame'), { recursive: true });
+          return yield* fixedCheckoutPaths(id, [
+            { checkout: 'main', root: input.home },
+            { checkout: 'dev', root: join(input.home, 'dev') },
+            { checkout: 'frame', root: join(input.home, 'frame') },
+          ]);
+        }),
+      ),
+    ),
     Layer.provideMerge(projected),
+    Layer.provideMerge(projectsLayer()),
+    Layer.provideMerge(runsLayer),
+    Layer.provideMerge(sourceRoots(input.home)),
+    Layer.provideMerge(settings),
     Layer.provide(
       Layer.mergeAll(
-        settings,
         Layer.succeed(HostAdapters, { all: input.adapters }),
-        Layer.succeed(ThreadRuns, { running: () => Effect.succeed(true) }),
         Layer.succeed(BrowserPlace, { root: join(input.home, 'browser') }),
         BunFileSystem.layer,
         BunPath.layer,

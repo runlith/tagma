@@ -2,7 +2,8 @@ import type { ThreadMetadataRow } from '@runlith/agent/thread/rows';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, not, or, sql, type SQL } from 'drizzle-orm';
 import { Clock, Effect } from 'effect';
-import { MachineStore } from '../../platform/contract/service/store.js';
+import type { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
+import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits, type Unit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { thread, threadRun, threadRunTally } from '../store/kernel.js';
@@ -25,6 +26,7 @@ import type { ThreadLookup, ThreadPlaces, ThreadReading, ThreadRunning, ThreadSh
 import { ThreadInputRefused } from '../contract/service/failure.js';
 import type { ArchiveWork } from '../contract/service/list.js';
 import { standingDriven, standingOf } from '../events/standing.js';
+import { OwnWork } from '../contract/service/ownWork.js';
 import { endSubscriptions, threadSubscription } from '../store/subscriptions.js';
 import { moveOf, summaryOf, type SummaryRow, type ThreadSummary } from './summary.js';
 import {
@@ -43,6 +45,7 @@ import {
   pulseDriven,
   ranBy,
   reachOf,
+  rootsOf,
   stateOf,
   summariesOf,
   type ThreadSelection,
@@ -106,11 +109,23 @@ export const makeThreadListReads = Effect.gen(function* () {
   const threads = yield* ThreadMetadataSource;
   const records = yield* ThreadRecords;
   const kinds = yield* ThreadEntryKinds;
+  const own = yield* OwnWork;
 
   const summarized = Effect.fnUntraced(function* (call: string, rows: readonly SummaryRow[]) {
     const now = new Date(yield* Clock.currentTimeMillis);
     return yield* trusted(call, () => rows.map((row) => summaryOf(kinds, row, true, now)));
   });
+
+  const owingOf = (ids?: readonly string[]) => Effect.map(own.owing(ids), (owing): ReadonlySet<string> => new Set(owing));
+
+  const marked = <Row extends ThreadSummary>(owing: ReadonlySet<string>, rows: readonly Row[]): readonly Row[] =>
+    owing.size === 0 ? rows : rows.map((row) => (row.activeRun === null && owing.has(row.id) ? { ...row, owes: true } : row));
+
+  const markedOne = (
+    ids: readonly string[],
+    read: Effect.Effect<ThreadSummary | undefined, StoreFailure | ThreadStorageFailed>,
+  ): Effect.Effect<ThreadSummary | undefined, StoreFailure | ThreadStorageFailed> =>
+    Effect.flatMap(owingOf(ids), (owing) => Effect.map(read, (row) => (row === undefined ? undefined : marked(owing, [row])[0])));
 
   const summaryIn = (unit: Unit<'machine'>, call: string, threadId: string) =>
     Effect.flatMap(unit.run(summariesOf(db, eq(recordFacts.id, threadId)).get()), (row) =>
@@ -178,13 +193,22 @@ export const makeThreadListReads = Effect.gen(function* () {
         }),
       ),
 
-    summary: (threadId) => units.read((unit) => summaryIn(unit, 'summary', threadId)),
+    summary: (threadId) =>
+      markedOne(
+        [threadId],
+        units.read((unit) => summaryIn(unit, 'summary', threadId)),
+      ),
 
     summaries: (ids) =>
       ids.length === 0
         ? Effect.succeed([])
-        : units.read((unit) =>
-            Effect.flatMap(unit.run(summariesOf(db, inArray(recordFacts.id, among(ids)))), (rows) => summarized('summaries', rows)),
+        : Effect.flatMap(owingOf(ids), (owing) =>
+            Effect.map(
+              units.read((unit) =>
+                Effect.flatMap(unit.run(summariesOf(db, inArray(recordFacts.id, among(ids)))), (rows) => summarized('summaries', rows)),
+              ),
+              (rows) => marked(owing, rows),
+            ),
           ),
 
     list: (ownerId, projectId, selection) => {
@@ -200,7 +224,7 @@ export const makeThreadListReads = Effect.gen(function* () {
       const clock = selection.view === 'archived' ? recordFacts.archivedAt : recordFacts.readerOrderAt;
       const counting = selected(ownerId, projectId, selection);
       const where = and(counting, pastCursor(clock, selection.before));
-      return units.read((unit) =>
+      const page = units.read((unit) =>
         Effect.gen(function* () {
           let page = summariesOf(db, where).orderBy(desc(clock), desc(recordFacts.id)).$dynamic();
           if (selection.limit !== undefined) page = page.limit(selection.limit);
@@ -224,21 +248,32 @@ export const makeThreadListReads = Effect.gen(function* () {
           };
         }),
       );
+      return Effect.flatMap(owingOf(), (owing) => Effect.map(page, (read) => ({ ...read, rows: marked(owing, read.rows) })));
     },
 
     attention: (ownerId) =>
-      units.read((unit) =>
-        Effect.flatMap(
-          unit.run(summariesOf(db, and(sql`+${recordFacts.principalId} = ${ownerId}`, isNull(recordFacts.archivedAt), standingDriven))),
-          (rows) => Effect.map(summarized('attention', rows), (summaries) => summaries.filter((row) => standingOf(row) !== null)),
+      Effect.flatMap(owingOf(), (owing) =>
+        Effect.map(
+          units.read((unit) =>
+            Effect.flatMap(
+              unit.run(summariesOf(db, and(sql`+${recordFacts.principalId} = ${ownerId}`, isNull(recordFacts.archivedAt), standingDriven))),
+              (rows) => summarized('attention', rows),
+            ),
+          ),
+          (summaries) => marked(owing, summaries).filter((row) => standingOf(row) !== null),
         ),
       ),
 
     pulse: (ownerId) =>
-      units.read((unit) =>
-        Effect.flatMap(
-          unit.run(summariesOf(db, and(sql`+${recordFacts.principalId} = ${ownerId}`, isNull(recordFacts.archivedAt), pulseDriven))),
-          (rows) => summarized('pulse', rows),
+      Effect.flatMap(owingOf(), (owing) =>
+        Effect.map(
+          units.read((unit) =>
+            Effect.flatMap(
+              unit.run(summariesOf(db, and(sql`+${recordFacts.principalId} = ${ownerId}`, isNull(recordFacts.archivedAt), pulseDriven))),
+              (rows) => summarized('pulse', rows),
+            ),
+          ),
+          (summaries) => marked(owing, summaries),
         ),
       ),
 
@@ -265,13 +300,22 @@ export const makeThreadListReads = Effect.gen(function* () {
       yield* Effect.annotateCurrentSpan({ projectId, limit: page.limit });
       const roots = and(selected(ownerId, projectId, { view: 'live' }), liveRoot(ownerId, projectId));
       const cut = page.before === undefined ? roots : and(roots, sql`${recordFacts.readerOrderAt} < ${page.before.getTime()}`);
-      return yield* units.read((unit) =>
+      const owing = yield* owingOf();
+      const window = yield* units.read((unit) =>
         Effect.gen(function* () {
           const working = yield* unit.run(
             db
               .select({ id: recordFacts.id })
               .from(recordFacts)
-              .where(and(roots, sql`${recordFacts.id} in ${runningRoots(ownerId, projectId)}`)),
+              .where(
+                and(
+                  roots,
+                  or(
+                    sql`${recordFacts.id} in ${runningRoots(ownerId, projectId)}`,
+                    owing.size === 0 ? undefined : sql`${recordFacts.id} in ${rootsOf(ownerId, projectId, [...owing])}`,
+                  ),
+                ),
+              ),
           );
           const workingIds = working.map((row) => row.id);
           const pinned = yield* unit.run(
@@ -317,39 +361,45 @@ export const makeThreadListReads = Effect.gen(function* () {
           };
         }),
       );
+      return { ...window, rows: marked(owing, window.rows) };
     }),
 
     families: (ownerId, member, projects) =>
       projects.length === 0
         ? Effect.succeed([])
-        : units.read((unit) =>
-            Effect.gen(function* () {
-              const roots = yield* unit.run(
-                db
-                  .select({ id: recordFacts.id, projectId: sql<number>`${recordFacts.projectId}` })
-                  .from(recordFacts)
-                  .where(
-                    and(
-                      eq(recordFacts.principalId, ownerId),
-                      isNull(recordFacts.archivedAt),
-                      inArray(recordFacts.projectId, [...projects]),
-                      sql`${recordFacts.id} in ${lineageOf(member.id)}`,
-                      liveRoot(ownerId, recordFacts.projectId),
-                    ),
-                  ),
-              );
-              return yield* Effect.forEach(roots, (root) =>
+        : Effect.flatMap(owingOf(), (owing) =>
+            Effect.map(
+              units.read((unit) =>
                 Effect.gen(function* () {
-                  const rows = yield* unit.run(
-                    summariesOf(
-                      db,
-                      and(sql`${recordFacts.id} in ${liveFamilyOf(ownerId, [root.id])}`, sql`${recordFacts.id} != ${member.id}`),
-                    ),
+                  const roots = yield* unit.run(
+                    db
+                      .select({ id: recordFacts.id, projectId: sql<number>`${recordFacts.projectId}` })
+                      .from(recordFacts)
+                      .where(
+                        and(
+                          eq(recordFacts.principalId, ownerId),
+                          isNull(recordFacts.archivedAt),
+                          inArray(recordFacts.projectId, [...projects]),
+                          sql`${recordFacts.id} in ${lineageOf(member.id)}`,
+                          liveRoot(ownerId, recordFacts.projectId),
+                        ),
+                      ),
                   );
-                  return { projectId: root.projectId, rows: [member, ...(yield* summarized('families', rows))] };
+                  return yield* Effect.forEach(roots, (root) =>
+                    Effect.gen(function* () {
+                      const rows = yield* unit.run(
+                        summariesOf(
+                          db,
+                          and(sql`${recordFacts.id} in ${liveFamilyOf(ownerId, [root.id])}`, sql`${recordFacts.id} != ${member.id}`),
+                        ),
+                      );
+                      return { projectId: root.projectId, rows: [member, ...(yield* summarized('families', rows))] };
+                    }),
+                  );
                 }),
-              );
-            }),
+              ),
+              (families) => families.map((family) => ({ ...family, rows: marked(owing, family.rows) })),
+            ),
           ),
 
     setArchived: (threadId, at) => archive([threadId], at, 'ThreadListReads.setArchived'),
@@ -589,17 +639,20 @@ export const makeThreadListReads = Effect.gen(function* () {
       ),
 
     see: (threadId, runId) =>
-      units.write(writes('ThreadListReads.see', [threadSeen, threadRunTally]), (unit) =>
-        Effect.gen(function* () {
-          const read = summaryIn(unit, 'see', threadId);
-          const before = yield* read;
-          if (before?.outcome?.runId !== runId) return before;
-          yield* unit.run(
-            db.insert(threadSeen).values({ threadId, runId }).onConflictDoUpdate({ target: threadSeen.threadId, set: { runId } }),
-          );
-          yield* unit.run(db.update(threadRunTally).set({ unseen: false }).where(eq(threadRunTally.threadId, threadId)));
-          return yield* read;
-        }),
+      markedOne(
+        [threadId],
+        units.write(writes('ThreadListReads.see', [threadSeen, threadRunTally]), (unit) =>
+          Effect.gen(function* () {
+            const read = summaryIn(unit, 'see', threadId);
+            const before = yield* read;
+            if (before?.outcome?.runId !== runId) return before;
+            yield* unit.run(
+              db.insert(threadSeen).values({ threadId, runId }).onConflictDoUpdate({ target: threadSeen.threadId, set: { runId } }),
+            );
+            yield* unit.run(db.update(threadRunTally).set({ unseen: false }).where(eq(threadRunTally.threadId, threadId)));
+            return yield* read;
+          }),
+        ),
       ),
 
     gateFacet: (id) =>

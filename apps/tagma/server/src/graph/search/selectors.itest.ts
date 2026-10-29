@@ -8,11 +8,12 @@ import { demoGraphLayer, type EffectDemo, withDemo } from '../../composition/tes
 
 const sort = { by: 'created', order: 'asc' } as const;
 
-const subtype = ({ graph, projectId }: EffectDemo) =>
+const subtype = ({ graph, projectId, root }: EffectDemo) =>
   graph.blocks.create({
     projectId,
     tags: ['tag'],
     title: 'A specialized task',
+    parentId: root,
     fields: { id: 'chore', extends: 'task', identity: { name: 'special' } },
   });
 
@@ -21,13 +22,14 @@ layer(demoGraphLayer({ projects: ['other'] }), { excludeTestServices: true })('s
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, projectId, nameOf, refusal, table } = demo;
-        const root = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Scope' });
+        const root = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Scope', parentId: demo.root });
         const scope = [yield* nameOf(root.id)];
         const base = yield* graph.blocks.create({ projectId, parentId: root.id, tags: ['task'], title: 'Base work' });
         const view = yield* graph.blocks.create({
           projectId,
           tags: ['view'],
           title: 'Exact work',
+          parentId: demo.root,
           fields: { query: { tags: ['task'], scope, sort } },
         });
         const namesOfView = (id: number) => Effect.map(graph.reading.show(id, 0), (page) => page.results?.items.map((row) => row.name));
@@ -56,6 +58,7 @@ layer(demoGraphLayer({ projects: ['other'] }), { excludeTestServices: true })('s
           projectId,
           tags: ['view'],
           title: 'Inherited work',
+          parentId: demo.root,
           fields: { query: { selector: { kind: 'descendants', types: ['task', 'special'] }, scope, sort } },
         });
         expect((yield* graph.blocks.blockById(inherited.id)).fields.query).toEqual({
@@ -72,7 +75,7 @@ layer(demoGraphLayer({ projects: ['other'] }), { excludeTestServices: true })('s
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, projectId, refusal, table } = demo;
-        const parent = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Parent' });
+        const parent = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Parent', parentId: demo.root });
         const exact = yield* graph.blocks.create({ projectId, parentId: parent.id, tags: ['task'], title: 'Exact child' });
         expect((yield* refusal(graph.tasks.close({ id: parent.id }))).code).toBe('open-children');
         yield* subtype(demo);
@@ -88,19 +91,20 @@ layer(demoGraphLayer({ projects: ['other'] }), { excludeTestServices: true })('s
   );
 
   it.effect('cross-project selectors resolve each identity in its own vocabulary and reject references unknown everywhere', () =>
-    withDemo(({ graph, projectId, project, nameOf, refusal, table }) =>
+    withDemo(({ graph, projectId, project, nameOf, refusal, table, root }) =>
       Effect.gen(function* () {
         const other = project('other').id;
-        for (const [owner, id] of [
-          [projectId, 'record'],
-          [other, 'record'],
-          [other, 'memo'],
+        const otherRoot = (yield* graph.blocks.rootBlockOf(other)).id;
+        for (const [owner, parentId, id] of [
+          [projectId, root, 'record'],
+          [other, otherRoot, 'record'],
+          [other, otherRoot, 'memo'],
         ] as const) {
-          yield* graph.blocks.create({ projectId: owner, tags: ['tag'], title: id, fields: { id } });
+          yield* graph.blocks.create({ projectId: owner, tags: ['tag'], title: id, parentId, fields: { id } });
         }
-        const first = yield* graph.blocks.create({ projectId, tags: ['record'], title: 'crossselector first' });
-        yield* graph.blocks.create({ projectId: other, tags: ['record'], title: 'crossselector unrelated' });
-        const second = yield* graph.blocks.create({ projectId: other, tags: ['memo'], title: 'crossselector second' });
+        const first = yield* graph.blocks.create({ projectId, tags: ['record'], title: 'crossselector first', parentId: root });
+        yield* graph.blocks.create({ projectId: other, tags: ['record'], title: 'crossselector unrelated', parentId: otherRoot });
+        const second = yield* graph.blocks.create({ projectId: other, tags: ['memo'], title: 'crossselector second', parentId: otherRoot });
         const own = (yield* table(projectId)).identities.typeOf('record')!.id;
         const foreign = (yield* table(other)).identities.typeOf('memo')!.id;
         const selector = { kind: 'exact' as const, types: [own, foreign] };
@@ -116,17 +120,24 @@ layer(demoGraphLayer({ projects: ['other'] }), { excludeTestServices: true })('s
   );
 
   it.effect('query and search continuations retain the selected type identities after an alias rename', () =>
-    withDemo(({ graph, projectId, nameOf, table }) =>
+    withDemo(({ graph, projectId, nameOf, table, root }) =>
       Effect.gen(function* () {
         const declared = yield* graph.blocks.create({
           projectId,
           tags: ['tag'],
           title: 'Record',
+          parentId: root,
           fields: { id: 'record', identity: { name: 'entry' } },
         });
-        const first = yield* graph.blocks.create({ projectId, tags: ['entry'], title: 'selector record first' });
-        yield* graph.blocks.create({ projectId, tags: ['tag'], title: 'Detailed record', fields: { id: 'detail', extends: 'entry' } });
-        const second = yield* graph.blocks.create({ projectId, tags: ['detail'], title: 'selector record second' });
+        const first = yield* graph.blocks.create({ projectId, tags: ['entry'], title: 'selector record first', parentId: root });
+        yield* graph.blocks.create({
+          projectId,
+          tags: ['tag'],
+          title: 'Detailed record',
+          parentId: root,
+          fields: { id: 'detail', extends: 'entry' },
+        });
+        const second = yield* graph.blocks.create({ projectId, tags: ['detail'], title: 'selector record second', parentId: root });
         const selector = { kind: 'descendants', types: ['entry'] };
         const caller = { actor: { kind: 'operator' as const }, files: null };
         const call = Effect.gen(function* () {
@@ -168,7 +179,7 @@ layer(demoGraphLayer({ projects: ['other'] }), { excludeTestServices: true })('s
   );
 
   it.effect('unknown references refuse, while a registered contract with no matching nodes answers zero', () =>
-    withDemo(({ graph, projectId, nameOf, refusal }) =>
+    withDemo(({ graph, projectId, nameOf, refusal, root: projectRoot }) =>
       Effect.gen(function* () {
         for (const selector of [
           { kind: 'exact', types: ['local:missing'] },
@@ -177,7 +188,7 @@ layer(demoGraphLayer({ projects: ['other'] }), { excludeTestServices: true })('s
           expect((yield* refusal(graph.selection.query(projectId, { selector, sort }))).code).toBe('query-shape');
         }
         expect((yield* refusal(graph.selection.query(projectId, { tags: ['missing'], sort }))).code).toBe('query-shape');
-        const root = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Empty scope' });
+        const root = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'Empty scope', parentId: projectRoot });
         const page = yield* graph.selection.query(projectId, {
           selector: { kind: 'supports', contract: 'core/lifecycle' },
           scope: [yield* nameOf(root.id)],

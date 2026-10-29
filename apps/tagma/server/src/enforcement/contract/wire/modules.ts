@@ -1,6 +1,7 @@
 import { Schema } from 'effect';
 import { countedDebtSchema } from '../../../graph/contract/wire/enforcement.js';
 import { blockRef } from '../../../graph/contract/wire/fields.js';
+import { crowdedSchema } from '../../../graph/contract/wire/answers.js';
 import { placeRole } from '../../../platform/contract/wire/place.js';
 import { insidePath, moduleOrderSchema, ROOT_FLOOR } from '../../../graph/contract/wire/modules.js';
 
@@ -59,7 +60,8 @@ export const ModuleSet = Schema.Struct({
   ),
   parent: Schema.optional(
     blockRef.annotate({
-      description: 'Where the card stands: a new card is born there, the project root when absent; a standing one moves there.',
+      description:
+        'Where the card stands: its part — a page for one area of what the user gets —, the card of the application it makes up as a whole, or the project root named explicitly. A new card names it; a standing one moves there.',
     }),
   ),
   remove: Schema.optional(
@@ -123,5 +125,6 @@ export type ModulesPlan = typeof ModulesPlan.Type;
 export const ModulesSet = Schema.Struct({
   ...ModulesPlan.fields,
   graph: Schema.NullOr(Schema.String),
+  crowded: Schema.optional(Schema.Array(crowdedSchema)),
 });
 export type ModulesSet = typeof ModulesSet.Type;

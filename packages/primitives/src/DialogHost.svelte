@@ -30,6 +30,7 @@
     onEscapeIgnored={entry.onEscapeIgnored}
     motion={entry.motion ?? motion}
     overlayKey={entry.key}
+    announced
   >
     <Portal>
       {#if entry.scrim}

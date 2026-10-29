@@ -1,9 +1,5 @@
 import { Clock, Effect } from 'effect';
-import { Git } from '@runlith/git/Git';
-import { CallerAim } from '../../platform/contract/service/place.js';
-import { gitRefusal } from '../../platform/git/readings.js';
-import { checkoutAt, standsAside } from '../../workspace/checkouts/git.js';
-import { ServedStorage, measuredRoot } from '../contract/service/serving.js';
+import { ServedStorage } from '../contract/service/serving.js';
 import type { StorageMode } from '../../projects/contract/wire/project.js';
 import { attachedStealth } from './storage.js';
 import { Tasks } from '../contract/service/work.js';
@@ -19,7 +15,6 @@ import { mintBlockId } from '../contract/wire/identity.js';
 import { blockName } from '../contract/wire/references.js';
 import { hasTag, tagLabel } from '../contract/wire/tags/roles.js';
 import { lifecycleOf } from '../contract/wire/tags/lifecycle.js';
-import { AMENDMENT } from '../contract/wire/tags/amendment.js';
 import { LEAF } from '../contract/wire/tags/leaf.js';
 import { CONTAINER } from '../contract/wire/tags/container.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
@@ -29,11 +24,9 @@ import { assertComposable, assertRequiredFields, validateFields } from '../vocab
 import { namedWrite } from '../vocabulary/naming.js';
 import { Tags } from '../contract/service/vocabulary.js';
 import { Catalogs } from '../contract/wire/catalogs.js';
-import { Projects } from '../../projects/contract/service/registry.js';
 import { BlockProjection, BlockReferences } from '../contract/service/acts.js';
 import { BlockRows } from '../acts/rows.js';
 import { assertBareRefs, assertBodyCap, assertNotOperated, assertTagNode, boundaryRefusal, leafRefusal } from './guards.js';
-import { payloadGate } from '../work/proposals/payload.js';
 import { MODULE } from '../contract/wire/tags/moduleContract.js';
 import { fieldTargetGuard, vocabularyCloser } from '../vocabulary/carriers.js';
 import { checkedLayer } from '../vocabulary/layerWrite.js';
@@ -115,8 +108,6 @@ export const blockBirth = Effect.gen(function* () {
   const blockProjection = yield* BlockProjection;
   const blockReferences = yield* BlockReferences;
   const blockRows = yield* BlockRows;
-  const projects = yield* Projects;
-  const git = yield* Git;
   const edges = yield* Edges;
   const sources = yield* Sources;
   const vocabulary = yield* Tags;
@@ -124,13 +115,20 @@ export const blockBirth = Effect.gen(function* () {
   const tasks = yield* Tasks;
   const assertFieldTargets = yield* fieldTargetGuard;
   const closeVocabulary = yield* vocabularyCloser;
-  const payload = yield* payloadGate;
+
+  const parentRequired = Effect.fn('Blocks.parentRequired')(function* (projectId: number) {
+    const root = yield* blockRows.rootBlockOf(projectId);
+    return yield* new GateRefusal('parent-required', 'a block is born under what it is about, and this one names no parent', [
+      "parentId of the module owning the block's code — read_owners on its path answers the blocks over it; take the module they stand under",
+      'parentId of the page of its topic — search_blocks finds it by its words',
+      `parentId ${blockName(root.uuid)}, the root named explicitly — only for a part of the project or what concerns the whole of it`,
+    ]);
+  });
 
   return Effect.fn('Blocks.create')(function* (
     input: BlockCreate & { readonly farEdges?: readonly FarLink[] },
   ): Effect.fn.Return<BlockWrite, StoreFailure | GateRefusal<BlockCreateRefusal>> {
     const now = new Date(yield* Clock.currentTimeMillis);
-    const project = yield* projects.byId(input.projectId);
     const table = yield* vocabulary.of(input.projectId);
     const selected =
       input.tags === undefined && input.contract !== undefined ? [(yield* table.creationType(input.contract)).id] : (input.tags ?? []);
@@ -153,40 +151,11 @@ export const blockBirth = Effect.gen(function* () {
     yield* assertFieldTargets(table, input.projectId, tags, born.fields);
     const fields = bornFields(tags, born.fields);
     yield* assertRequiredFields(tags, fields);
-    const amends = table.supports(born, AMENDMENT);
-    if (amends && input.amendsId === undefined) {
-      return yield* new GateRefusal('amends-missing', `${tagLabel(table.tagOf(born))} amends one node, named as it is filed`, [
-        'name the block this amendment is about: it is born under it, with the amends edge',
-      ]);
-    }
-    if (!amends && input.amendsId !== undefined) {
-      return yield* new GateRefusal('amends-shape', `${tagLabel(table.tagOf(born))} supports no ${AMENDMENT}, so it amends nothing`, [
-        'link_blocks with relates or discovered-from — a connection that is not an amendment',
-      ]);
-    }
     const uuid = input.uuid ?? mintBlockId();
-    if (amends && input.amendsId !== undefined) {
-      yield* payload.assertFiled(table, {
-        projectId: input.projectId,
-        amendsId: input.amendsId,
-        parentId: input.parentId,
-        node: { uuid, tags: ids, fields },
-      });
-    }
-    if (amends && (input.sources?.length ?? 0) > 0) {
-      const cwd = (yield* CallerAim)?.cwd;
-      if (cwd !== undefined) {
-        const measured = yield* measuredRoot(project);
-        if (standsAside(yield* Effect.mapError(checkoutAt(git, cwd), gitRefusal), project.repoKey, measured)) {
-          return yield* new GateRefusal('tree-not-measured', `proposal sources name ${cwd}, and this graph measures ${measured}`, [
-            `file the proposal from ${measured} — the checkout every source of this graph names`,
-            'or aim the proposal at the branch you read: each checkout serves its own graph, measured where it stands',
-          ]);
-        }
-      }
-    }
     yield* assertBodyCap(tags, input.body ?? '');
     yield* assertBareRefs(layered.prompt ?? input.body ?? '');
+    const named = input.parentId;
+    if (named === undefined) return yield* parentRequired(input.projectId);
     if (input.parentId !== undefined) {
       const parent = yield* blockRows.blockById(input.parentId);
       if (parent.projectId !== input.projectId) {
@@ -194,10 +163,9 @@ export const blockBirth = Effect.gen(function* () {
           `name a parent of project ${input.projectId}, or create the block in the parent's project`,
         ]);
       }
-      if (!amends && table.supports(parent, LEAF)) return yield* leafRefusal(`${blockName(parent.uuid)}`);
+      if (table.supports(parent, LEAF)) return yield* leafRefusal(`${blockName(parent.uuid)}`);
     }
-    const named = input.amendsId ?? input.parentId;
-    const parentRow = named === undefined ? yield* blockRows.rootBlockOf(input.projectId) : yield* blockRows.blockById(named);
+    const parentRow = yield* blockRows.blockById(named);
     const parentId = parentRow.id;
     const stealth = yield* bornStealth(parentRow, input.storage);
     const future = { tags: ids, projectId: input.projectId, uuid };
@@ -243,7 +211,6 @@ export const blockBirth = Effect.gen(function* () {
         yield* act.record('create', row, { kind: table.tagOf(born)?.id ?? null, chars: row.body.length }, now);
         for (const link of near) yield* blockRows.insertEdge(row.id, link.kind, link.to);
         for (const link of far) yield* blockRows.insertFarEdge(row.id, link.kind, link.end.target);
-        if (input.amendsId !== undefined) yield* blockRows.insertEdge(row.id, 'amends', input.amendsId);
         for (const source of input.sources ?? []) yield* sources.place(row, source);
         yield* assertRequiredSources(
           tags,

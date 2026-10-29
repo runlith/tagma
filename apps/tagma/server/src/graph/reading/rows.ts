@@ -99,7 +99,6 @@ export function wireRead(row: BlockDetail): BlockRead {
     restingIn: { edges: row.restingIn.edges.map(wireEdge), refs: row.restingIn.refs },
     sources: row.sources.map(wireSource),
     reach: row.reach,
-    verdict: row.verdict === null ? null : { ...row.verdict, at: at(row.verdict.at) },
     ending: row.ending === null ? null : { ...row.ending, at: at(row.ending.at) },
     author: row.author,
     answeredBy: row.answeredBy,

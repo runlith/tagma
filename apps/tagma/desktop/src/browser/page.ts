@@ -1,12 +1,29 @@
-import type { HostEvent, Navigation, PageChange } from '@tagma/server/browser/contract/wire/host';
+import type { HostEvent, Navigation, PageChange, Strain } from '@tagma/server/browser/contract/wire/host';
+import {
+  type DomainBlock,
+  type DomainPolicy,
+  domainBlock,
+  type Restriction,
+  type RestrictionState,
+} from '@tagma/server/browser/contract/wire/domains';
 import type { PageId, ProfileId } from '@tagma/server/browser/contract/wire/ids';
 import type { Dialog, History } from '@tagma/server/browser/contract/wire/page';
 import type { Failure } from '@tagma/server/desktop-browser/contract/wire/channel';
-import { type BaseWindow, dialog, type WebContents, WebContentsView, type WebFrameMain } from 'electron';
+import {
+  type BaseWindow,
+  dialog,
+  type Event,
+  type WebContents,
+  type WebContentsDidStartNavigationEventParams,
+  WebContentsView,
+  type WebFrameMain,
+  webFrameMain,
+} from 'electron';
 import type { Driven } from './driven.js';
 import { firefoxAgent, isGoogleSignIn } from './identity.js';
 import { type Placed, VIEWPORT } from './placement.js';
 import { partitionOf } from './profiles.js';
+import type { RendererStrain } from './strain.js';
 
 const ABORTED = -3;
 
@@ -42,10 +59,25 @@ type RunDialog = {
   readonly messageText: string;
 };
 
+export type GateFailure = { readonly block: DomainBlock; seen: boolean };
+
+export type NavigationGate = {
+  policy: DomainPolicy;
+  source: HeldPage;
+  watch: number | null;
+  pending: GateFailure | null;
+  failure: GateFailure | null;
+};
+
+export type NavigationAdmission = { readonly gate: NavigationGate | null; readonly changes: readonly Restriction[] };
+
 export type PageEvents = {
+  readonly revision: () => number;
   readonly event: (page: HeldPage, event: HostEvent) => void;
   readonly closed: (page: HeldPage) => void;
   readonly window: (page: HeldPage) => BaseWindow | null;
+  readonly navigation: (page: HeldPage, active: boolean) => void;
+  readonly blocked: (watch: number, block: DomainBlock) => void;
 };
 
 export const viewPreferences = (profile: string) =>
@@ -56,13 +88,19 @@ export class HeldPage {
   driven: Driven | null = null;
   unloading = false;
   readonly placed: Placed;
+  private gate: NavigationGate | null = null;
+  private restrictionRevision: number;
+  private parent: HeldPage | null = null;
+  private readonly children = new Set<HeldPage>();
   private held: Held | null = null;
   private going: Going | null = null;
+  private readonly pending = new Map<number | symbol, string>();
   private leaving: Leaving | null = null;
   private closing: Closing | null = null;
   private allowLeave = false;
   private responsive = true;
   private restarting = false;
+  private unresponsive: ReturnType<typeof setInterval> | null = null;
   private readonly firefox: string | null;
 
   constructor(
@@ -72,9 +110,11 @@ export class HeldPage {
     readonly opener: PageId | null,
     readonly view: WebContentsView,
     identity: 'cleaned' | 'native',
+    private readonly strains: RendererStrain,
     private readonly events: PageEvents,
   ) {
     this.id = id;
+    this.restrictionRevision = events.revision();
     this.firefox = identity === 'cleaned' ? firefoxAgent() : null;
     this.placed = { view, home: null, parking: null, shown: null, size: { ...VIEWPORT }, holds: new Set(), shownAt: Date.now() };
     this.follow();
@@ -86,6 +126,7 @@ export class HeldPage {
     profile: ProfileId,
     opener: PageId | null,
     identity: 'cleaned' | 'native',
+    strains: RendererStrain,
     events: PageEvents,
     contents?: WebContents,
   ): HeldPage {
@@ -94,7 +135,7 @@ export class HeldPage {
         ? { webPreferences: viewPreferences(profile) }
         : { webPreferences: viewPreferences(profile), webContents: contents },
     );
-    return new HeldPage(local, id, profile, opener, view, identity, events);
+    return new HeldPage(local, id, profile, opener, view, identity, strains, events);
   }
 
   get contents(): WebContents {
@@ -107,6 +148,18 @@ export class HeldPage {
 
   get dialogOpen(): boolean {
     return this.held !== null || this.leaving !== null;
+  }
+
+  get navigationPending(): boolean {
+    return this.pending.size > 0;
+  }
+
+  get restricted(): boolean {
+    return this.gate !== null;
+  }
+
+  get restriction(): RestrictionState {
+    return { restricted: this.restricted, revision: this.restrictionRevision };
   }
 
   state(): PageChange {
@@ -122,16 +175,114 @@ export class HeldPage {
     };
   }
 
-  load(url: string, history: History | null): void {
+  navigation(policy: DomainPolicy | null, watch: number | null): NavigationAdmission {
+    if (policy === null || (policy.allowed.length === 0 && policy.blocked.length === 0)) {
+      return { gate: null, changes: this.operated(true) };
+    }
+    const pending = this.gate?.pending;
+    const previous = pending != null && !pending.seen ? pending : null;
+    if (this.gate !== null) {
+      this.gate.policy = policy;
+      this.gate.source = this;
+      this.gate.watch = watch;
+      this.gate.pending = previous;
+      this.gate.failure = previous;
+    } else {
+      this.restrictionRevision = this.events.revision();
+      this.gate = { policy, source: this, watch, pending: previous, failure: previous };
+    }
+    this.events.navigation(this, true);
+    const changes: Restriction[] = [];
+    for (const page of this.family()) {
+      if (page !== this) page.inheritGate(this.gate);
+      if (page.id !== null) changes.push({ page: page.id, ...page.restriction });
+    }
+    return { gate: this.gate, changes };
+  }
+
+  inherit(opener: HeldPage): void {
+    this.parent?.children.delete(this);
+    this.parent = opener;
+    opener.children.add(this);
+    if (opener.gate !== null) this.inheritGate(opener.gate);
+  }
+
+  private inheritGate(gate: NavigationGate): void {
+    if (this.gate === null) {
+      this.restrictionRevision = this.events.revision();
+      this.gate = { policy: gate.policy, source: gate.source, watch: null, pending: null, failure: null };
+    } else {
+      this.gate.policy = gate.policy;
+      this.gate.source = gate.source;
+    }
+    this.events.navigation(this, true);
+  }
+
+  operated(snapshot = false): readonly Restriction[] {
+    const changes: Restriction[] = [];
+    for (const page of this.family()) {
+      const restricted = page.gate !== null;
+      if (restricted) {
+        page.gate = null;
+        page.restrictionRevision = page.events.revision();
+        page.events.navigation(page, false);
+      }
+      if (page.id !== null && (snapshot || restricted)) changes.push({ page: page.id, ...page.restriction });
+    }
+    return changes;
+  }
+
+  private *family(): Generator<HeldPage> {
+    let root: HeldPage = this;
+    while (root.parent !== null) root = root.parent;
+    const pending: HeldPage[] = [root];
+    while (pending.length > 0) {
+      const page = pending.pop()!;
+      yield page;
+      for (const child of page.children) pending.push(child);
+    }
+  }
+
+  block(url: string): DomainBlock | null {
+    const gate = this.gate;
+    if (gate === null) return null;
+    const block = domainBlock(gate.policy, url);
+    if (block === null) return null;
+    this.refuseNavigation(block);
+    if (gate.source !== this) gate.source.refuseNavigation(block);
+    return block;
+  }
+
+  private refuseNavigation(block: DomainBlock): void {
+    const gate = this.gate;
+    if (gate !== null && (gate.watch === null || gate.failure === null)) {
+      const pending = gate.pending;
+      gate.pending = pending !== null && !pending.seen ? pending : { block, seen: false };
+      if (gate.watch !== null) {
+        gate.failure = gate.pending;
+        this.events.blocked(gate.watch, gate.failure.block);
+      }
+    }
+    this.emit((page) => ({ kind: 'navigation-blocked', page, block }));
+  }
+
+  load(url: string, history: History | null): DomainBlock | null {
+    const target = history !== null && history.entries.length > 0 ? (history.entries[history.at]?.url ?? url) : url;
+    const block = this.block(target);
+    if (block !== null) {
+      this.load('about:blank', null);
+      return block;
+    }
     const restoring = history !== null && history.entries.length > 0;
     this.agentFor(restoring ? (history.entries[history.at]?.url ?? url) : url);
     if (restoring) {
       this.contents.navigationHistory
         .restore({ entries: history.entries.map((entry) => ({ url: entry.url, title: entry.title })), index: history.at })
         .catch((error: unknown) => console.info(`[tagma-desktop] page ${this.local} restored with: ${String(error)}`));
-      return;
+      return null;
     }
     this.contents.loadURL(url).catch((error: unknown) => console.info(`[tagma-desktop] page ${this.local} opened with: ${String(error)}`));
+    return null;
   }
 
   navigate(to: Navigation): Promise<Settled> {
@@ -145,6 +296,14 @@ export class HeldPage {
       });
     }
     const history = this.contents.navigationHistory;
+    const offset = to.kind === 'back' ? -1 : to.kind === 'forward' ? 1 : 0;
+    const target = to.kind === 'url' ? to.url : history.getEntryAtIndex(history.getActiveIndex() + offset)?.url;
+    const block = target === undefined ? null : this.block(target);
+    if (block !== null) {
+      return Promise.resolve({
+        failure: { kind: 'blocked', block, message: `navigation to ${block.domain} is blocked by ${block.setting}` },
+      });
+    }
     if ((to.kind === 'back' && !history.canGoBack()) || (to.kind === 'forward' && !history.canGoForward())) {
       return Promise.resolve({ change: this.state() });
     }
@@ -199,9 +358,18 @@ export class HeldPage {
     return done;
   }
 
+  private get strain(): Strain {
+    return this.strains.current(this.contents.getOSProcessId(), this.profile);
+  }
+
   driving(driven: Driven | null): void {
     this.driven = driven;
-    driven?.probe({ paused: () => this.dialogOpen, report: (responsive) => this.respond(responsive) });
+    if (driven !== null) this.clearUnresponsive();
+    driven?.probe({
+      paused: () => this.dialogOpen || this.strain.paused,
+      factor: () => this.strain.factor,
+      report: (responsive) => this.respond(responsive),
+    });
     if (driven === null && this.held !== null && !this.held.told) this.surface(this.held);
   }
 
@@ -293,6 +461,31 @@ export class HeldPage {
     }
   }
 
+  private clearUnresponsive(): void {
+    if (this.unresponsive !== null) clearInterval(this.unresponsive);
+    this.unresponsive = null;
+  }
+
+  private nativeUnresponsive(): void {
+    if (this.driven !== null || this.unresponsive !== null) return;
+    const strain = this.strain;
+    if (!strain.paused && !this.dialogOpen && strain.factor === 1) {
+      this.respond(false);
+      return;
+    }
+    let previous = performance.now();
+    let waited = 0;
+    this.unresponsive = setInterval(() => {
+      const now = performance.now();
+      const strain = this.strain;
+      if (!strain.paused && !this.dialogOpen) waited += (now - previous) / strain.factor;
+      previous = now;
+      if (waited < 5_000) return;
+      this.clearUnresponsive();
+      this.respond(false);
+    }, 1_000);
+  }
+
   private respond(responsive: boolean): void {
     if (this.responsive === responsive) return;
     this.responsive = responsive;
@@ -367,6 +560,43 @@ export class HeldPage {
     return { kind: 'beforeunload', message: '', prompt: null, url: this.contents.getURL() };
   }
 
+  private disconnect(): void {
+    for (const page of this.family()) {
+      if (page !== this && page.gate?.source === this) page.gate.source = page;
+    }
+    if (this.gate !== null) {
+      this.gate.source = this;
+      this.gate.watch = null;
+      this.gate.pending = null;
+      this.gate.failure = null;
+      this.gate = null;
+      this.restrictionRevision = this.events.revision();
+    }
+    let parent = this.parent;
+    parent?.children.delete(this);
+    this.parent = null;
+    for (const child of this.children) {
+      child.parent = parent;
+      if (parent === null) parent = child;
+      else parent.children.add(child);
+    }
+    this.children.clear();
+  }
+
+  private finishNavigation(url: string, main: boolean, process: number, routing: number): void {
+    const frame = webFrameMain.fromId(process, routing);
+    const key = main ? this.contents.mainFrame.frameTreeNodeId : frame?.frameTreeNodeId;
+    if (key !== undefined && this.pending.has(key)) {
+      if (this.pending.get(key) === url) this.pending.delete(key);
+      return;
+    }
+    for (const [key, address] of this.pending) {
+      if (typeof key !== 'symbol' || address !== url) continue;
+      this.pending.delete(key);
+      return;
+    }
+  }
+
   private follow(): void {
     const contents = this.contents;
     const emitter = contents as unknown as NodeJS.EventEmitter;
@@ -390,15 +620,33 @@ export class HeldPage {
     contents.on('will-navigate', (event, url) => {
       if (!allowedUrl(url)) event.preventDefault();
     });
-    contents.on('will-redirect', (event, url) => {
-      if (!allowedUrl(url)) event.preventDefault();
+    contents.on('will-frame-navigate', (event) => {
+      if (this.block(event.url) !== null) event.preventDefault();
     });
-    const identified = (details: { readonly url: string; readonly isMainFrame: boolean; readonly isSameDocument: boolean }) => {
-      if (details.isMainFrame && !details.isSameDocument) this.agentFor(details.url);
+    contents.on('will-redirect', (event, url) => {
+      if (!allowedUrl(url) || this.block(url) !== null) event.preventDefault();
+    });
+    const identified = (details: Event<WebContentsDidStartNavigationEventParams>) => {
+      if (details.isSameDocument) return;
+      const key = details.isMainFrame ? contents.mainFrame.frameTreeNodeId : details.frame?.frameTreeNodeId;
+      this.pending.set(key ?? Symbol(), details.url);
+      if (details.isMainFrame) this.agentFor(details.url);
     };
     contents.on('did-start-navigation', identified);
+    contents.on('did-redirect-navigation', (details) => {
+      const key = details.isMainFrame ? contents.mainFrame.frameTreeNodeId : details.frame?.frameTreeNodeId;
+      if (key !== undefined && this.pending.has(key)) this.pending.set(key, details.url);
+    });
+    contents.on('did-frame-navigate', (_event, url, _code, _status, main, process, routing) =>
+      this.finishNavigation(url, main, process, routing),
+    );
+    const failed = (_event: Event, _code: number, _description: string, url: string, main: boolean, process: number, routing: number) =>
+      this.finishNavigation(url, main, process, routing);
+    contents.on('did-fail-provisional-load', failed);
+    contents.on('did-fail-load', failed);
     contents.on('did-start-loading', () => this.changed({ loading: true }));
     contents.on('did-stop-loading', () => {
+      this.pending.clear();
       this.agentFor(contents.getURL());
       this.changed({ ...this.state(), loading: false });
     });
@@ -408,9 +656,14 @@ export class HeldPage {
     });
     contents.on('page-title-updated', (_event, title) => this.changed({ title }));
     contents.on('page-favicon-updated', (_event, favicons) => this.changed({ favicon: favicons[0] ?? null }));
-    contents.on('unresponsive', () => this.respond(false));
-    contents.on('responsive', () => this.respond(true));
+    contents.on('unresponsive', () => this.nativeUnresponsive());
+    contents.on('responsive', () => {
+      this.clearUnresponsive();
+      this.respond(true);
+    });
     contents.on('render-process-gone', () => {
+      this.pending.clear();
+      this.clearUnresponsive();
       this.held = null;
       this.leaving = null;
       if (this.closing !== null) contents.close();
@@ -418,6 +671,11 @@ export class HeldPage {
       else this.emit((page) => ({ kind: 'crashed', page }));
     });
     contents.on('devtools-closed', () => this.emit((page) => ({ kind: 'released', page })));
-    contents.once('destroyed', () => this.events.closed(this));
+    contents.once('destroyed', () => {
+      this.pending.clear();
+      this.disconnect();
+      this.clearUnresponsive();
+      this.events.closed(this);
+    });
   }
 }

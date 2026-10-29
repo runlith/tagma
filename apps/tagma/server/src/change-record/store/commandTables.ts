@@ -74,6 +74,7 @@ export const commandUnattributed = sqliteTable(
     path: text('path').notNull(),
     reason: text('reason').notNull(),
     team: text('team'),
+    digest: text('digest'),
     at: integer('at').notNull(),
   },
   (table) => [

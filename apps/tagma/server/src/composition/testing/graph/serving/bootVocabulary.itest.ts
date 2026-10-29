@@ -33,15 +33,23 @@ layer(servingLayer, { excludeTestServices: true })('machine vocabulary order', (
         const prior = sequence[sequence.findIndex((step) => step.id === '20261020160000_knowledge_names') - 1]?.id;
         if (prior === undefined) return yield* Effect.die('the fixture has no graph step before knowledge names');
         yield* installNotes(legacy.id);
-        const person = yield* graph.blocks.create({ projectId: legacy.id, tags: ['person'], title: 'Ada' });
+        const legacyRoot = (yield* graph.blocks.rootBlockOf(legacy.id)).id;
+        const person = yield* graph.blocks.create({ projectId: legacy.id, parentId: legacyRoot, tags: ['person'], title: 'Ada' });
         const personName = yield* demo.nameOf(person.id);
         const meeting = yield* graph.blocks.create({
           projectId: legacy.id,
+          parentId: legacyRoot,
           tags: ['meeting'],
           title: 'planning',
           fields: { held: '2026-10-20', attendees: [personName] },
         });
-        const note = yield* graph.blocks.create({ projectId: legacy.id, tags: ['note'], title: 'a thought', body: 'kept' });
+        const note = yield* graph.blocks.create({
+          projectId: legacy.id,
+          parentId: legacyRoot,
+          tags: ['note'],
+          title: 'a thought',
+          body: 'kept',
+        });
         const before = yield* db.select().from(block).where(eq(block.projectId, legacy.id)).orderBy(block.id);
         const noteType = before.find((row) => row.tags.includes('tag') && row.fields.id === 'note');
         const catalog = before.find((row) => row.tags.includes('catalog') && row.fields.id === 'notes');

@@ -1,4 +1,4 @@
-import { Schema, type SchemaAST } from 'effect';
+import { Schema, SchemaGetter, type SchemaAST } from 'effect';
 import { BLOCK_ADDRESS, BLOCK_NAME } from './references.js';
 import { trimmed } from '../../../platform/contract/wire/text.js';
 import { placeRole } from '../../../platform/contract/wire/place.js';
@@ -30,7 +30,14 @@ export const filePath = trimmed(Schema.String.check(Schema.isMinLength(1)));
 
 export const line = trimmed(Schema.String.check(Schema.isMinLength(1)));
 
-export const tagsField = Schema.Array(Schema.String.check(Schema.isMinLength(1)));
+export const tagWord = Schema.NonEmptyString.pipe(
+  Schema.decodeTo(Schema.NonEmptyString, {
+    decode: SchemaGetter.transform((word) => (word.startsWith('#') ? word.slice(1) : word)),
+    encode: SchemaGetter.passthrough(),
+  }),
+);
+
+export const tagsField = Schema.Array(tagWord);
 export const fieldsField = Schema.Record(Schema.String, Schema.Unknown);
 
 const parseStored =

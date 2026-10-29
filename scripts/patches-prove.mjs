@@ -283,6 +283,23 @@ for (const manifestName of readdirSync(patchesDir).filter((name) => name.endsWit
   const patchText = readFileSync(join(patchesDir, manifestName.replace(/\.hunks\.json$/, '.patch')), 'utf8');
   const files = parsePatch(patchText);
   const problems = classify(files, manifest.hunks);
+  for (const file of files) {
+    file.blocks.forEach((block, index) => {
+      for (const id of block.owners) {
+        if (manifest.hunks[id].off !== undefined) problems.push(`${file.path} block ${index + 1}: hunk ${id} is off and still applied`);
+      }
+    });
+  }
+  const off = Object.entries(manifest.hunks).filter(([, hunk]) => hunk.off !== undefined);
+  if (off.length > 0) {
+    const offName = manifestName.replace(/\.hunks\.json$/, '.off.patch');
+    const offPath = join(patchesDir, offName);
+    if (!existsSync(offPath)) problems.push(`hunks ${off.map(([id]) => id).join(', ')} are off and ${offName} is missing`);
+    else
+      problems.push(
+        ...classify(parsePatch(readFileSync(offPath, 'utf8')), Object.fromEntries(off)).map((problem) => `${offName}: ${problem}`),
+      );
+  }
   if (problems.length > 0) {
     console.error(`${manifest.package}: every diff block must belong to exactly one hunk\n  ${problems.join('\n  ')}`);
     failed = true;
@@ -312,6 +329,10 @@ for (const manifestName of readdirSync(patchesDir).filter((name) => name.endsWit
   try {
     for (const [id, hunk] of Object.entries(manifest.hunks)) {
       if (only !== undefined && id !== only) continue;
+      if (hunk.off !== undefined) {
+        console.log(`${manifest.package} ${id}: off, kept unapplied: ${hunk.off}`);
+        continue;
+      }
       if (!hunk.tests?.length) {
         const traps = hunk.e2e.map((trap) => `${trap.app} ${trap.spec} -g "${trap.names}"`).join('; ');
         console.log(`${manifest.package} ${id}: proven by e2e elsewhere only\n  ${traps}`);
@@ -326,8 +347,9 @@ for (const manifestName of readdirSync(patchesDir).filter((name) => name.endsWit
     }
     {
       const allTests = Object.entries(manifest.hunks).flatMap(([id, hunk]) =>
-        only === undefined || id === only ? (hunk.tests ?? []) : [],
+        hunk.off === undefined && (only === undefined || id === only) ? (hunk.tests ?? []) : [],
       );
+      if (allTests.length === 0) continue;
       const { status, summaries } = runTests(allTests, { name, installed, work: full }, scratch);
       console.log(`${manifest.package} whole patch: ${status === 0 ? 'green' : 'RED'}\n  ${summaries.join('\n  ')}`);
       if (status !== 0) failed = true;

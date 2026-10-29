@@ -73,7 +73,6 @@ export const REFUSAL_WORDS = {
   'notes-over-budget': 'Notes exceed the size limit',
   'own-lineage': 'Cannot delete own lineage',
   'parent-archived': 'Parent thread is archived',
-  'parent-required': 'Opening task needs a parent',
   'placement-refused': 'Thread could not be placed',
   'placement-unreadable': 'Thread placement unreadable',
   'plugin-thread-mismatch': 'Thread not bound to this plugin',

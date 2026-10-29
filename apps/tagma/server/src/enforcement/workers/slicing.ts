@@ -134,9 +134,8 @@ export const slicedJudge = Effect.fnUntraced(function* <E extends Failure>(
     return { verdict: { violations: [], unjudged: [] }, read: [], ms: 0 } satisfies Judged;
   const job = randomUUID();
   const at = { root: message.root, inspection: message.inspection, places: message.places, job, checkout: message.checkout };
-  const base = yield* slicedReading(answer, { ...at, commit: message.base }, failing);
-  const { compared } = base;
-  const built = yield* slicedReading(answer, { ...at, commit: message.built, compared, installed: base.installed }, failing, {
+  const base = yield* slicedReading(answer, { ...at, commit: message.base, compared: [] }, failing);
+  const built = yield* slicedReading(answer, { ...at, commit: message.built, installed: base.installed }, failing, {
     commit: message.base,
     reading: base.reading,
     headroom: base.headroom,
@@ -145,7 +144,7 @@ export const slicedJudge = Effect.fnUntraced(function* <E extends Failure>(
   const readings = {
     base: base.reading,
     built: built.reading,
-    compared,
+    compared: built.compared,
     installed: { base: base.installed, built: built.installed },
     headroom: { base: base.headroom, built: built.headroom },
   };

@@ -3,7 +3,7 @@ import type { WorldFacts } from '../../executions/contract/service/worlds.js';
 import { instructionFilesSection, placementSection, scratchSection, setupSection } from '../turns/worldState.js';
 import type { CapabilityBehaviour } from './contract.js';
 
-const FILE_TOOLS = { read: 'eager', write: 'eager', edit: 'eager', delete: 'deferred', rename: 'deferred', ls: 'eager' } as const;
+import { FILE_TOOLS } from '../contract/wire/capability.js';
 
 function treeSections(facts: WorldFacts): readonly SectionId[] {
   if (facts.shared) return ['typed-tools', 'the-shared-checkout', 'branches-and-worktrees'];

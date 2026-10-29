@@ -19,10 +19,11 @@ const setup = Effect.gen(function* () {
   const blocks = Context.get(world.runtime.graph, Blocks);
   const sources = [{ kind: 'file' as const, ref: 'gate.ts' }];
   yield* Effect.provide(
-    Effect.andThen(
-      blocks.create({ projectId: project.id, tags: ['rule'], title: RULE, sources }),
-      blocks.create({ projectId: project.id, tags: ['explanation'], title: NOTE, body: BODY, sources }),
-    ),
+    Effect.gen(function* () {
+      const parentId = (yield* blocks.rootBlockOf(project.id)).id;
+      yield* blocks.create({ projectId: project.id, parentId, tags: ['rule'], title: RULE, sources });
+      yield* blocks.create({ projectId: project.id, parentId, tags: ['explanation'], title: NOTE, body: BODY, sources });
+    }),
     world.runtime.owners,
   );
   return { project, threads: hookThreads(world) };

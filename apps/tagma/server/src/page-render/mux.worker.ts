@@ -14,9 +14,12 @@ const handle = async (ask: MuxAsk): Promise<void> => {
   switch (ask.kind) {
     case 'open': {
       fps = ask.fps;
-      output = new Output({ format: new Mp4OutputFormat({ fastStart: 'reserve' }), target: new FilePathTarget(ask.file) });
+      output = new Output({
+        format: new Mp4OutputFormat({ fastStart: ask.total === null ? false : 'reserve' }),
+        target: new FilePathTarget(ask.file),
+      });
       source = new EncodedVideoPacketSource('avc');
-      output.addVideoTrack(source, { frameRate: ask.fps, maximumPacketCount: ask.total });
+      output.addVideoTrack(source, ask.total === null ? { frameRate: ask.fps } : { frameRate: ask.fps, maximumPacketCount: ask.total });
       await output.start();
       return;
     }

@@ -1,30 +1,24 @@
 import { ATTRIBUTES, type Described, DESCRIBE, HTML_LIMIT, redacted, STYLES, TEXT_LIMIT } from '@runlith/cdp/describe';
-import { bytesOf, parsed } from '@runlith/cdp/payload';
+import { bytesOf } from '@runlith/cdp/payload';
 import type { CommandFailure } from '@runlith/cdp/session';
 import { type AxNode, type SnapshotPart, snapshotWalk } from '@runlith/cdp/snapshot';
 import type { Protocol } from 'devtools-protocol';
-import { Effect } from 'effect';
+import { Effect, type FileSystem, type Path } from 'effect';
+import type { ServedRoots } from '../contract/service/sources.js';
+import type { CheckoutPaths } from '../../workspace/contract/service/checkoutPaths.js';
 import type { PageId } from '../contract/wire/ids.js';
 import type { Picked } from '../contract/wire/pick.js';
-import type { Attached, Frame, Paged, Picking } from './drive.js';
-import { actionFailed, anchorOf, boxOf, joined, call, frameOfNode, locate, staleRef } from './target.js';
+import { unmarked } from './cursor.js';
+import type { Attached, Paged, Picking } from './drive.js';
+import { componentOf } from './source.js';
+import { crop, pngSize } from './pictures.js';
+import { actionFailed, anchorOf, type Box, boxOf, joined, call, frameOfNode, locate, staleRef, world } from './target.js';
 
 const FULL_PAGE_PX = 16_384;
 const PICTURE_PX = 1_600;
 
 export const snapshot = Effect.fnUntraced(function* (state: Paged, attached: Attached, within: string | undefined, limit: number) {
   const loaders = new Map<string, string>();
-  const frames = new Map<string, Frame | undefined>(attached.frames);
-  const children = new Map<string, string>();
-  for (const [child, frame] of attached.children) {
-    children.set(frame, child);
-    if (!frames.has(frame)) frames.set(frame, undefined);
-  }
-  const ordered = [...frames]
-    .filter(
-      ([id, frame]) => id === attached.main || children.has(id) || (frame !== undefined && frame.url !== '' && frame.url !== 'about:blank'),
-    )
-    .sort(([left], [right]) => (left === attached.main ? -1 : right === attached.main ? 1 : 0));
   const target = within === undefined ? null : yield* locate(state, attached, within);
   const gone = <A>(effect: Effect.Effect<A, CommandFailure>, empty: A): Effect.Effect<A, CommandFailure> =>
     effect.pipe(
@@ -83,7 +77,7 @@ export const snapshot = Effect.fnUntraced(function* (state: Paged, attached: Att
   if (target !== null && start === null) return yield* staleRef(within ?? '');
   const rootOf = Effect.fnUntraced(function* (frameId: string, child: string | undefined) {
     const target = child === undefined ? undefined : attached.children.get(child);
-    if (target !== undefined) yield* joined(attached, target);
+    if (target !== undefined) yield* joined(attached, target, child);
     const { node } = yield* attached.session.send('Accessibility.getRootAXNode', { frameId }, child);
     return node;
   });
@@ -94,27 +88,42 @@ export const snapshot = Effect.fnUntraced(function* (state: Paged, attached: Att
     );
     if (!remote) return null;
     yield* joined(attached, frameId);
-    const adopted = [...attached.children].find(([, root]) => root === frameId)?.[0];
+    const adopted = attached.sessions.get(frameId);
     return adopted === undefined ? null : yield* gone(rootOf(frameId, adopted), null);
   });
-  const parts =
-    target === null
-      ? ordered.map(([frameId, frame], at) => {
-          const child = children.get(frameId) ?? frame?.child;
-          return partOf(
-            frameId,
-            child,
-            child === undefined && at > 0
-              ? rootOf(frameId, undefined).pipe(Effect.catchTag('CommandRefused', () => remoteRoot(frameId)))
-              : gone(rootOf(frameId, child), null),
-            at === 0 ? null : (frame?.url ?? ''),
-          );
-        })
-      : [partOf(target.anchor.frame, target.child, Effect.succeed(start), null)];
-  const shot = yield* snapshotWalk(
-    parts.map((held) => held.part),
-    limit,
-  );
+  const parts: ReturnType<typeof partOf>[] = [];
+  function* candidates(): Generator<readonly [string, string | undefined]> {
+    yield [attached.main, undefined];
+    yield* attached.sessions;
+    for (const [id, frame] of attached.frames) {
+      if (frame.url !== '' && frame.url !== 'about:blank') yield [id, frame.child];
+    }
+  }
+  function* walking(): Generator<SnapshotPart<CommandFailure>> {
+    if (target !== null) {
+      const held = partOf(target.anchor.frame, target.child, Effect.succeed(start), null);
+      parts.push(held);
+      yield held.part;
+      return;
+    }
+    const seen = new Set<string>();
+    for (const [frameId, child] of candidates()) {
+      if (seen.has(frameId)) continue;
+      seen.add(frameId);
+      const main = frameId === attached.main;
+      const held = partOf(
+        frameId,
+        child,
+        child === undefined && !main
+          ? rootOf(frameId, undefined).pipe(Effect.catchTag('CommandRefused', () => remoteRoot(frameId)))
+          : gone(rootOf(frameId, child), null),
+        main ? null : (attached.frames.get(frameId)?.url ?? ''),
+      );
+      parts.push(held);
+      yield held.part;
+    }
+  }
+  const shot = yield* snapshotWalk(walking(), limit);
   const lines = shot.lines.map((line, at) => {
     const node = shot.nodes[at]!;
     if (node < 0) return line;
@@ -127,26 +136,27 @@ export const snapshot = Effect.fnUntraced(function* (state: Paged, attached: Att
 
 export type Shot = { readonly bytes: Uint8Array; readonly width: number | null; readonly height: number | null };
 
-export const pngSize = (bytes: Uint8Array): { readonly width: number | null; readonly height: number | null } => {
-  if (bytes.length < 24 || bytes[12] !== 0x49 || bytes[13] !== 0x48 || bytes[14] !== 0x44 || bytes[15] !== 0x52)
-    return { width: null, height: null };
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  return { width: view.getUint32(16), height: view.getUint32(20) };
-};
+const captured = (attached: Attached, params: Protocol.Page.CaptureScreenshotRequest) =>
+  attached.pictures.capture(params).pipe(Effect.flatMap(bytesOf));
 
-const clipOf = Effect.fnUntraced(function* (
-  attached: Attached,
-  box: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
-  ceiling: number,
-) {
-  const metrics = yield* attached.session.send('Page.getLayoutMetrics');
-  return {
-    x: box.x + metrics.cssVisualViewport.pageX,
-    y: box.y + metrics.cssVisualViewport.pageY,
-    width: Math.max(1, Math.min(box.width, ceiling)),
-    height: Math.max(1, Math.min(box.height, ceiling)),
-    scale: 1,
-  } satisfies Protocol.Page.Viewport;
+type View = Box & { readonly pageX: number; readonly pageY: number; readonly scale: number };
+
+const elementPicture = Effect.fnUntraced(function* (attached: Attached, box: Box, ceiling: number) {
+  const viewport = (yield* attached.session.send('Runtime.evaluate', {
+    expression:
+      '({ x: visualViewport.offsetLeft, y: visualViewport.offsetTop, width: visualViewport.width, height: visualViewport.height, pageX: scrollX, pageY: scrollY, scale: devicePixelRatio * visualViewport.scale })',
+    contextId: yield* world(attached, attached.main),
+    returnByValue: true,
+  })).result.value as View;
+  const region = { ...box, width: Math.max(1, Math.min(box.width, ceiling)), height: Math.max(1, Math.min(box.height, ceiling)) };
+  const visible = { ...region, x: region.x - viewport.x, y: region.y - viewport.y };
+  if (visible.x >= 0 && visible.y >= 0 && visible.x + visible.width <= viewport.width && visible.y + visible.height <= viewport.height) {
+    return yield* crop(yield* captured(attached, { format: 'png' }), visible, viewport.scale);
+  }
+  return yield* captured(attached, {
+    format: 'png',
+    clip: { x: region.x + viewport.pageX, y: region.y + viewport.pageY, width: region.width, height: region.height, scale: 1 },
+  });
 });
 
 export const screenshot = Effect.fnUntraced(function* (
@@ -156,6 +166,7 @@ export const screenshot = Effect.fnUntraced(function* (
   ref: string | undefined,
 ) {
   let params: Protocol.Page.CaptureScreenshotRequest = { format: 'png' };
+  let element: Box | null = null;
   if (kind === 'full') {
     const metrics = yield* attached.session.send('Page.getLayoutMetrics');
     params = {
@@ -172,9 +183,13 @@ export const screenshot = Effect.fnUntraced(function* (
   } else if (kind === 'element') {
     if (ref === undefined) return yield* actionFailed('an element capture names the `ref` of the element');
     const located = yield* locate(state, attached, ref);
-    params = { format: 'png', clip: yield* clipOf(attached, yield* boxOf(attached, located), FULL_PAGE_PX) };
+    element = yield* boxOf(attached, located);
   }
-  const bytes = yield* bytesOf(yield* attached.session.reply('Page.captureScreenshot', params));
+  const bytes = yield* unmarked(
+    state,
+    attached,
+    element === null ? captured(attached, params) : elementPicture(attached, element, FULL_PAGE_PX),
+  );
   return { bytes, ...pngSize(bytes) } satisfies Shot;
 });
 
@@ -184,13 +199,25 @@ export const describePick = Effect.fnUntraced(function* (
   page: PageId,
   url: string,
   picking: Picking,
-): Effect.fn.Return<Picked | null, CommandFailure | ReturnType<typeof actionFailed> | ReturnType<typeof staleRef>> {
+  projectId: number,
+): Effect.fn.Return<
+  Picked | null,
+  CommandFailure | ReturnType<typeof actionFailed> | ReturnType<typeof staleRef>,
+  FileSystem.FileSystem | CheckoutPaths | ServedRoots | Path.Path
+> {
   const frame = yield* frameOfNode(attached, picking.child, picking.node);
   const anchor = frame === undefined ? undefined : anchorOf(attached, frame, picking.node);
   if (anchor === undefined) return null;
   const ref = state.refs.issue(anchor);
   const located = yield* locate(state, attached, ref);
   const described = redacted(yield* call<Described>(attached, located, DESCRIBE, [ATTRIBUTES, STYLES, TEXT_LIMIT, HTML_LIMIT]));
+  const component = yield* componentOf(attached, located, projectId, attached.frames.get(anchor.frame)?.url ?? url).pipe(
+    Effect.catchTags({
+      PlatformError: (failure) => actionFailed(`the picked source path could not be checked: ${failure.message}`),
+      PlaceUnread: (failure) => actionFailed(`the picked source checkout could not be read: ${failure.reason}`),
+      ServingUnread: (failure) => actionFailed(`the page's serving root could not be read: ${failure.message}`),
+    }),
+  );
   const nodes = yield* attached.session
     .send('Accessibility.getPartialAXTree', { backendNodeId: picking.node, fetchRelatives: false }, picking.child)
     .pipe(
@@ -202,9 +229,8 @@ export const describePick = Effect.fnUntraced(function* (
   const picture =
     box === null
       ? null
-      : yield* attached.session.reply('Page.captureScreenshot', { format: 'png', clip: yield* clipOf(attached, box, PICTURE_PX) }).pipe(
-          Effect.flatMap((text) => parsed(text)),
-          Effect.map((reply) => (reply as { readonly result?: { readonly data?: string } }).result?.data ?? null),
+      : yield* unmarked(state, attached, elementPicture(attached, box, PICTURE_PX)).pipe(
+          Effect.map((bytes) => Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')),
           Effect.catchTag('CommandRefused', () => Effect.succeed(null)),
         );
   return {
@@ -219,6 +245,7 @@ export const describePick = Effect.fnUntraced(function* (
     html: described.html,
     attributes: described.attributes,
     styles: described.styles,
+    component,
     rect: box === null ? described.rect : { x: box.x, y: box.y, width: box.width, height: box.height },
     picture,
   };

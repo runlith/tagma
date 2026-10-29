@@ -3,40 +3,50 @@ import { Effect } from 'effect';
 import { body, type OperationPair, pair } from '../platform/contract/service/body.js';
 import type { Caller } from '../platform/contract/wire/caller.js';
 import { ceilingOf } from '../platform/contract/wire/pageFamily.js';
+import { saidLines } from '../platform/contract/service/presentation.js';
 import { cursorRefusal, GateRefusal } from '../platform/contract/wire/refusal.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
-import { type Action, type Aim, Automation } from './contract/service/automation.js';
+import { type Aim, Automation, type PlannedAction } from './contract/service/automation.js';
 import type { Navigation } from './contract/wire/host.js';
+import { HEAP_CLASSES } from './contract/wire/heap.js';
+import { conditionsOf } from './contract/wire/emulation.js';
 import { type Opener, Pages } from './contract/service/pages.js';
 import { Profiles } from './contract/service/profiles.js';
 import { COOKIE_OPERATIONS as COOKIE, type CookieOperationId } from './contract/wire/cookieOperations.js';
-import { type ActionName, PAGE_OPERATIONS as PAGE, type PageOperationId } from './contract/wire/pageOperations.js';
+import { type ActionName, type ActionStep, PAGE_OPERATIONS as PAGE, type PageOperationId } from './contract/wire/pageOperations.js';
 import { cookieSources, importCookies, type Origin } from './cookies.js';
 import { PROFILE_OPERATIONS as PROFILE, type ProfileOperationId } from './contract/wire/profileOperations.js';
-import { CONSOLE_ROWS, DOWNLOAD_ROWS, NETWORK_ROWS, PAGE_ROWS, PICTURE_BYTES, SNAPSHOT_LINES } from './contract/wire/rows.js';
+import {
+  CONSOLE_ROWS,
+  CONSOLE_STACK_ROWS,
+  DOWNLOAD_ROWS,
+  NETWORK_ROWS,
+  PAGE_ROWS,
+  PICTURE_BYTES,
+  SNAPSHOT_LINES,
+} from './contract/wire/rows.js';
 
 const PAGE_CEILING = ceilingOf(PAGE_ROWS);
 const DOWNLOAD_CEILING = ceilingOf(DOWNLOAD_ROWS);
 const SNAPSHOT_CEILING = ceilingOf(SNAPSHOT_LINES);
 const CONSOLE_CEILING = ceilingOf(CONSOLE_ROWS);
+const CONSOLE_STACK_CEILING = ceilingOf(CONSOLE_STACK_ROWS);
 const NETWORK_CEILING = ceilingOf(NETWORK_ROWS);
 
-const threadOf = (caller: Caller): string | null => (caller.actor.kind === 'thread' ? caller.actor.threadId : null);
+export const threadOf = (caller: Caller): string | null => (caller.actor.kind === 'thread' ? caller.actor.threadId : null);
 
 const openerOf = Effect.fnUntraced(function* (caller: Caller) {
   const { project } = yield* Effect.flatten(CurrentProject);
   return { projectId: project.id, thread: threadOf(caller), human: caller.actor.kind === 'operator' } satisfies Opener;
 });
 
-const pageOf = Effect.fnUntraced(function* (caller: Caller, page: Parameters<Pages['Service']['resolve']>[1]) {
+export const pageOf = Effect.fnUntraced(function* (caller: Caller, page: Parameters<Pages['Service']['resolve']>[1]) {
   const opener = yield* openerOf(caller);
   const resolved = yield* (yield* Pages).resolve(opener, page);
   return { page: resolved.id, thread: opener.thread };
 });
 
 const shape = (reason: string) => new GateRefusal('action-shape', reason, ['send the fields this action takes']);
-
-type ActInput = (typeof PAGE.act_on_page)['input']['Type'];
 
 const aimOf = (ref: string | undefined, x: number | undefined, y: number | undefined): Aim | null =>
   ref !== undefined ? { ref } : x !== undefined && y !== undefined ? { x, y } : null;
@@ -53,7 +63,7 @@ const NEEDS_AIM: ReadonlySet<ActionName> = new Set([
   'upload',
 ]);
 
-const actionOf = (input: ActInput, caller: Caller): Action | GateRefusal<'action-shape'> => {
+const actionOf = (input: ActionStep, caller: Caller): PlannedAction => {
   const aim = aimOf(input.ref, input.x, input.y);
   if (aim === null && NEEDS_AIM.has(input.action)) return shape(`${input.action} needs \`ref\` or both \`x\` and \`y\``);
   const aimed = aim as Aim;
@@ -105,14 +115,21 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
   open_page: pair(
     PAGE.open_page,
     body(PAGE.open_page, {
+      voice: saidLines((answer) => [
+        `Opened ${answer.page.id} ${answer.page.state}${answer.page.live.loading ? ' loading' : ''} ${answer.page.url}${answer.page.title === '' ? '' : ` ${JSON.stringify(answer.page.title)}`}`,
+        ...(answer.page.live.dialog === null ? [] : [`Dialog: ${JSON.stringify(answer.page.live.dialog)}`]),
+        ...(conditionsOf(answer.page.live.conditions) === null ? [] : [`Conditions: ${conditionsOf(answer.page.live.conditions)}`]),
+        `snapshot_page ${JSON.stringify({ project: answer.page.projectId, page: answer.page.id, limit: SNAPSHOT_CEILING })}`,
+        `capture_page ${JSON.stringify({ project: answer.page.projectId, page: answer.page.id })}`,
+      ]),
       execute: Effect.fnUntraced(function* (input, _prepared, caller) {
         const opener = yield* openerOf(caller);
         const pages = yield* Pages;
-        const driven = opener.thread !== null && input.url !== undefined;
+        const driven = !opener.human && input.url !== undefined;
         const opened = yield* pages.open(opener, { url: driven ? 'about:blank' : (input.url ?? 'about:blank'), profile: input.profile });
         if (driven)
           yield* (yield* Automation)
-            .navigate(opened.id, { kind: 'url', url: input.url! }, opener.thread)
+            .navigate(opened.id, { kind: 'url', url: input.url! }, opener.thread, true)
             .pipe(
               Effect.tapError(() =>
                 pages
@@ -175,7 +192,10 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         const to = navigationOf(input);
         if (to instanceof GateRefusal) return yield* to;
         const { page, thread } = yield* pageOf(caller, input.page);
-        return { status: 'navigated' as const, page: yield* (yield* Automation).navigate(page, to, thread) };
+        return {
+          status: 'navigated' as const,
+          page: yield* (yield* Automation).navigate(page, to, thread, caller.actor.kind !== 'operator'),
+        };
       }),
     }),
   ),
@@ -193,10 +213,14 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
     PAGE.act_on_page,
     body(PAGE.act_on_page, {
       execute: Effect.fnUntraced(function* (input, _prepared, caller) {
-        const action = actionOf(input, caller);
-        if (action instanceof GateRefusal) return yield* action;
         const { page, thread } = yield* pageOf(caller, input.page);
-        return { status: 'acted' as const, page: yield* (yield* Automation).act(page, action, thread) };
+        const run = yield* (yield* Automation).act(
+          page,
+          input.steps.map((step) => actionOf(step, caller)),
+          thread,
+          caller.actor.kind !== 'operator',
+        );
+        return { status: 'acted' as const, ...run };
       }),
     }),
   ),
@@ -207,7 +231,16 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         const { page, thread } = yield* pageOf(caller, input.page);
         const emulated = yield* (yield* Automation).emulate(
           page,
-          { viewport: input.viewport, device: input.device, scheme: input.scheme, clear: input.clear === true },
+          {
+            viewport: input.viewport,
+            device: input.device,
+            scheme: input.scheme,
+            cpu: input.cpu,
+            network: input.network,
+            geolocation: input.geolocation,
+            conditions: input.conditions,
+            clear: input.clear === true,
+          },
           thread,
         );
         return { status: 'emulated' as const, ...emulated };
@@ -219,6 +252,10 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
     body(PAGE.capture_page, {
       execute: Effect.fnUntraced(function* (input, _prepared, caller) {
         const { page, thread } = yield* pageOf(caller, input.page);
+        if (input.what === 'heap') {
+          const captured = yield* (yield* Automation).heap(page, pageRows(input.limit, HEAP_CLASSES, ceilingOf(HEAP_CLASSES)), thread);
+          return { status: 'heap' as const, ...captured };
+        }
         const captured = yield* (yield* Automation).capture(page, input.what ?? 'viewport', input.ref, thread);
         return {
           status: 'captured' as const,
@@ -231,7 +268,7 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         };
       }),
       media: (answer) =>
-        answer.mediaType !== 'image/png' || answer.bytes > PICTURE_BYTES
+        answer.status === 'heap' || answer.mediaType !== 'image/png' || answer.bytes > PICTURE_BYTES
           ? Effect.succeed([])
           : Effect.flatMap(Automation, (automation) =>
               Effect.map(automation.picture(answer.path), (bytes) => [{ bytes, mediaType: answer.mediaType, label: answer.path }]),
@@ -243,7 +280,7 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
     body(PAGE.evaluate_in_page, {
       execute: Effect.fnUntraced(function* (input, _prepared, caller) {
         const { page, thread } = yield* pageOf(caller, input.page);
-        const evaluated = yield* (yield* Automation).evaluate(page, input.expression, thread);
+        const evaluated = yield* (yield* Automation).evaluate(page, input.expression, thread, caller.actor.kind !== 'operator');
         return 'exception' in evaluated ? { status: 'thrown' as const, ...evaluated } : { status: 'evaluated' as const, ...evaluated };
       }),
     }),
@@ -266,7 +303,16 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         const { page, thread } = yield* pageOf(caller, input.page);
         const read = yield* (yield* Automation).console(
           page,
-          { level: input.level, match: input.match, after: input.after, limit: pageRows(input.limit, CONSOLE_ROWS, CONSOLE_CEILING) },
+          {
+            level: input.level,
+            match: input.match,
+            after: input.after,
+            limit: input.stack
+              ? pageRows(input.limit, CONSOLE_STACK_ROWS, CONSOLE_STACK_CEILING)
+              : pageRows(input.limit, CONSOLE_ROWS, CONSOLE_CEILING),
+            seq: input.seq,
+            stack: input.stack === true,
+          },
           thread,
         );
         return {
@@ -277,6 +323,7 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
           total: read.total,
           dropped: read.dropped,
           capturing: read.capturing,
+          conditions: (yield* Pages).glance(page, false).conditions,
         };
       }),
     }),
@@ -288,7 +335,13 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         const { page, thread } = yield* pageOf(caller, input.page);
         const automation = yield* Automation;
         if (input.body !== undefined)
-          return { status: 'body' as const, page, request: input.body, ...(yield* automation.body(page, input.body, thread)) };
+          return {
+            status: 'body' as const,
+            page,
+            request: input.body,
+            ...(yield* automation.body(page, input.body, thread)),
+            conditions: (yield* Pages).glance(page, false).conditions,
+          };
         const read = yield* automation.network(page, {
           match: input.match,
           failed: input.failed === true,
@@ -302,6 +355,7 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
           shown: read.entries.length,
           total: read.total,
           dropped: read.dropped,
+          conditions: (yield* Pages).glance(page, false).conditions,
         };
       }),
     }),
@@ -313,7 +367,14 @@ export const PAGE_PAIRS: { readonly [K in PageOperationId]: OperationPair<(typeo
         const { page } = yield* pageOf(caller, input.page);
         const kept = yield* (yield* Pages).downloads(page);
         const downloads = kept.slice(-pageRows(input.limit, DOWNLOAD_ROWS, DOWNLOAD_CEILING)).reverse();
-        return { status: 'read' as const, page, downloads, shown: downloads.length, total: kept.length };
+        return {
+          status: 'read' as const,
+          page,
+          downloads,
+          shown: downloads.length,
+          total: kept.length,
+          conditions: (yield* Pages).glance(page, false).conditions,
+        };
       }),
     }),
   ),

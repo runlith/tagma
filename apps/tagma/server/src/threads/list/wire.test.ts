@@ -88,6 +88,7 @@ function row(over: Partial<ThreadListProjection> = {}): ThreadListProjection {
     detachedFrom: null,
     activeRun: null,
     life: 'idle',
+    owes: false,
     outcome: null,
     ask: null,
     saidLine: null,

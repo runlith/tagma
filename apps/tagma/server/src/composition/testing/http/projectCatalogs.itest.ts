@@ -6,6 +6,11 @@ import { CORE_LIBRARY } from '../../../graph/contract/wire/tags/identity.js';
 import { DoorFixture, doorFixture } from '../doorFixture.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { graphCatalogs } from '../../../catalogs/contract/wire/settings.js';
+import { and, eq, isNull } from 'drizzle-orm';
+import { GraphStore } from '../../../platform/contract/service/store.js';
+import { block } from '../../../graph/store/tables.js';
+import { blockName } from '../../../graph/contract/wire/references.js';
+import { CATALOG_DECLARATION, TAG_DECLARATION } from '../../../graph/contract/wire/tags/declaration.js';
 
 type Born = { project: { id: number; name: string } };
 
@@ -73,6 +78,43 @@ layer(doorFixture(), { excludeTestServices: true })('project catalogs', (it) => 
       yield* world.runtime.pool.releaseProject(chosen);
       expect(yield* installedOf(chosen)).toEqual({ ids: new Set([CORE_LIBRARY, 'software-development']), bindsCode: true });
       expect(yield* projectLayerOf(chosen)).toEqual([CORE_LIBRARY, 'software-development']);
+    }),
+  );
+
+  it.effect('a catalog update keeps declarations in their moved and renamed container without creating another', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const projectId = yield* bornWith('moved-vocabulary', ['software-development']);
+      const op = (id: string, input: unknown) => world.op(id, input, `project=${projectId}`);
+      const served = yield* world.runtime.pool.resolve({ projectId });
+      const { db } = Context.get(served.context, GraphStore);
+      const rows = () =>
+        db
+          .select()
+          .from(block)
+          .where(and(eq(block.projectId, projectId), isNull(block.deletedAt)));
+      const before = yield* rows();
+      const catalog = before.find((row) => row.tags.includes(CATALOG_DECLARATION.id));
+      const container = before.find((row) => row.id === catalog?.parentId);
+      const root = before.find((row) => row.id === container?.parentId);
+      if (container === undefined || root === undefined) return yield* Effect.die('catalog container is missing');
+      const shelf = yield* op('create_block', { title: 'Project vocabulary', parentId: blockName(root.uuid) });
+      expect(shelf.status).toBe(200);
+      const shelfName = (shelf.body as { block: { name: string } }).block.name;
+      expect(yield* op('update_block', { blockId: blockName(container.uuid), parentId: shelfName, title: 'Declarations' })).toMatchObject({
+        status: 200,
+      });
+      const placed = yield* rows();
+      expect(
+        yield* op('write_setting', { key: 'graph.catalogs', value: [CORE_LIBRARY, 'software-development', 'knowledge'] }),
+      ).toMatchObject({
+        status: 200,
+      });
+      const after = yield* rows();
+      expect(after.filter((row) => row.tags.length === 0)).toEqual(placed.filter((row) => row.tags.length === 0));
+      const declarations = after.filter((row) => row.tags.includes(TAG_DECLARATION.id) || row.tags.includes(CATALOG_DECLARATION.id));
+      expect(declarations.find((row) => row.tags.includes(CATALOG_DECLARATION.id) && row.fields.id === 'knowledge')).toBeDefined();
+      expect(new Set(declarations.map((row) => row.parentId))).toEqual(new Set([container.id]));
     }),
   );
 

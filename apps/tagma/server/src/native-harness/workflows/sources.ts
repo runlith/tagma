@@ -7,7 +7,7 @@ import { CHECKOUT_DIRECTORY, WORKFLOWS_DIRECTORY } from '../../graph/contract/wi
 
 export const WORKFLOW_DIRECTORY = path.join(CHECKOUT_DIRECTORY, WORKFLOWS_DIRECTORY);
 
-export const WORKFLOW_VOCABULARY = { seams: ['standing-proposals'], conditions: [] as string[] };
+export const WORKFLOW_VOCABULARY = { seams: [] as string[], conditions: [] as string[] };
 
 export const readWorkflowLibrary = Effect.fn('workflowSources.library')(function* (input: {
   readonly projectRoot: string;

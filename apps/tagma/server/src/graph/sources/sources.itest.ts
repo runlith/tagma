@@ -6,9 +6,9 @@ import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture
 
 layer(demoGraphLayer(), { excludeTestServices: true })('source placement', (it) => {
   it.effect('a source kind outside the reader vocabulary is refused at placement', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root }) =>
       Effect.gen(function* () {
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'foreign source kind' });
+        const { id } = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'foreign source kind' });
         const refused = yield* refusal(graph.sources.attach({ blockId: id, kind: 'fil' as SourceKind, ref: 'owned.ts' }));
         expect(refused.code).toBe('illegal-kind');
       }),
@@ -16,10 +16,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('source placement', (it) 
   );
 
   it.effect('a tag that binds no source kind refuses a source, while the untagged project root takes one', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root: home }) =>
       Effect.gen(function* () {
         const view = yield* graph.blocks.create({
           projectId,
+          parentId: home,
           tags: ['view'],
           title: 'a slice',
           fields: { query: { sort: { by: 'updated', order: 'desc' } } },

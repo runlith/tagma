@@ -1,5 +1,6 @@
 import { bytesOf } from '@runlith/cdp/payload';
 import { pipeTransport } from '@runlith/cdp/pipe';
+import { heapToFile } from '@runlith/cdp/stream';
 import { watchResponsive } from '@runlith/cdp/probe';
 import {
   type CdpEvent,
@@ -22,16 +23,18 @@ import {
   PageStayed,
   type ProfileRecord,
 } from '../browser/contract/service/hosts.js';
-import type { HostEvent, LivePage, Navigation, PageChange } from '../browser/contract/wire/host.js';
+import { type HostEvent, type LivePage, type Navigation, type PageChange, type Strain, strainOf } from '../browser/contract/wire/host.js';
 import type { PageId, ProfileId } from '../browser/contract/wire/ids.js';
-import type { Download } from '../browser/contract/wire/page.js';
+import { type Downloads, makeDownloads } from './downloads.js';
 import { ManagedPlace } from './contract/service/place.js';
 import { type BuildId, MANAGED, ManagedDocument } from './contract/wire/document.js';
 import type { Build } from './builds/build.js';
 import { makeChromeForTesting } from './builds/chromeForTesting.js';
 import { makeInstalledChrome } from './builds/installedChrome.js';
 import { committed } from './commit.js';
-import { captureHost, hiddenTarget, lost, quiet } from './targets.js';
+import { captureHost, hiddenTarget, lost, makeTargets, quiet, type Targets } from './targets.js';
+import { makePermissions, type Permissions } from './permissions.js';
+import { makeNavigation, type NavigationGate } from './navigation.js';
 
 const PROBE_EVERY = '1 second';
 const UNRESPONSIVE_AFTER = '5 seconds';
@@ -49,12 +52,12 @@ type Tab = {
   scope: Scope.Closeable | null;
   dialog: boolean;
   responsive: boolean;
+  crashed: boolean;
   url: string;
   title: string;
   readonly opener: PageId | null;
   sessions: number;
   quietSince: number | null;
-  readonly frames: Set<string>;
 };
 
 const tabOn = (target: string, opener: PageId | null, url = '', title = ''): Tab => ({
@@ -64,12 +67,12 @@ const tabOn = (target: string, opener: PageId | null, url = '', title = ''): Tab
   scope: null,
   dialog: false,
   responsive: true,
+  crashed: false,
   url,
   title,
   opener,
   sessions: 0,
   quietSince: null,
-  frames: new Set(),
 });
 
 type Running = {
@@ -77,7 +80,12 @@ type Running = {
   readonly connection: Connection;
   readonly scope: Scope.Closeable;
   readonly tabs: Map<string, Tab>;
-  readonly downloads: Map<string, { readonly page: PageId; download: Download }>;
+  readonly downloads: Downloads;
+  readonly targets: Targets;
+  readonly permissions: Permissions;
+  readonly navigation: NavigationGate;
+  readonly strains: Set<Strain>;
+  strain: Strain;
   readonly dir: string;
   users: number;
   idleSince: number | null;
@@ -98,8 +106,26 @@ export const makeManagedHost = Effect.gen(function* () {
   const starting = new Map<ProfileId, Deferred.Deferred<Running, HostFailure>>();
   const located = new Map<PageId, { readonly state: Running; readonly target: string }>();
   const closings = new Map<PageId, Deferred.Deferred<boolean, HostFailure>>();
+  let revision = 0;
+  const nextRevision = () => ++revision;
 
   const emit = (event: HostEvent) => Effect.asVoid(PubSub.publish(events, event));
+
+  const holdStrain = Effect.fnUntraced(function* (state: Running, strain: Strain) {
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const held = { ...strain };
+        state.strains.add(held);
+        state.strain = strainOf(state.strains);
+        return held;
+      }),
+      (held) =>
+        Effect.sync(() => {
+          state.strains.delete(held);
+          state.strain = strainOf(state.strains);
+        }),
+    );
+  });
 
   const refused = (message: string) => new HostRefused({ message, unblock: ['open the page again'] });
 
@@ -192,16 +218,6 @@ export const makeManagedHost = Effect.gen(function* () {
         });
         return;
       }
-      case 'Page.frameAttached': {
-        const { frameId } = yield* eventParams('Page.frameAttached', event);
-        tab.frames.add(frameId);
-        return;
-      }
-      case 'Page.frameDetached': {
-        const { frameId, reason } = yield* eventParams('Page.frameDetached', event);
-        if (reason === 'remove') tab.frames.delete(frameId);
-        return;
-      }
       case 'Page.javascriptDialogClosed':
         tab.dialog = false;
         yield* emit({ kind: 'dialog', page, dialog: null });
@@ -224,19 +240,25 @@ export const makeManagedHost = Effect.gen(function* () {
     yield* Stream.runForEach(stream, (event) => onPage(tab, service, event).pipe(quiet(`an event of page ${page}`))).pipe(
       Effect.forkIn(held),
     );
+    yield* Scope.provide(state.navigation.bind(target, page, service), held);
     yield* service.send('Page.enable');
     const { frameTree } = yield* service.send('Page.getFrameTree');
-    for (const nested = [...(frameTree.childFrames ?? [])]; nested.length > 0;) {
-      const node = nested.pop()!;
-      tab.frames.add(node.frame.id);
-      nested.push(...(node.childFrames ?? []));
-    }
+    yield* state.navigation.tree(target, frameTree);
     tab.service = service;
     yield* changed(tab, yield* historyOf(service));
-    yield* watchResponsive(service, { every: PROBE_EVERY, threshold: UNRESPONSIVE_AFTER, paused: () => tab.dialog }, (responsive) => {
-      tab.responsive = responsive;
-      return tab.page === null ? Effect.void : emit({ kind: responsive ? 'responsive' : 'unresponsive', page: tab.page });
-    }).pipe(Effect.forkIn(held));
+    yield* watchResponsive(
+      service,
+      {
+        every: PROBE_EVERY,
+        threshold: UNRESPONSIVE_AFTER,
+        paused: () => tab.dialog || state.strain.paused,
+        factor: () => state.strain.factor,
+      },
+      (responsive) => {
+        tab.responsive = responsive;
+        return tab.page === null ? Effect.void : emit({ kind: responsive ? 'responsive' : 'unresponsive', page: tab.page });
+      },
+    ).pipe(Effect.forkIn(held));
     return service;
   });
 
@@ -247,6 +269,7 @@ export const makeManagedHost = Effect.gen(function* () {
     tab.scope = null;
     tab.service = null;
     if (held !== null) yield* Scope.close(held, Exit.void);
+    yield* state.navigation.forget(tab.target).pipe(quiet(`releasing the navigation gate of target ${tab.target}`));
   });
 
   const abandon = Effect.fnUntraced(function* (state: Running, target: string) {
@@ -259,11 +282,19 @@ export const makeManagedHost = Effect.gen(function* () {
     switch (event.method) {
       case 'Target.targetCreated': {
         const { targetInfo: info } = yield* eventParams('Target.targetCreated', event);
+        yield* state.navigation.created(info);
         if (info.type !== 'page' || info.openerId === undefined || state.tabs.has(info.targetId)) return;
         const opener = state.tabs.get(info.openerId)?.page ?? null;
         if (opener === null) return;
         state.tabs.set(info.targetId, tabOn(info.targetId, opener, info.url, info.title));
-        yield* emit({ kind: 'opened', local: info.targetId, profile: state.profile, opener, url: info.url });
+        yield* emit({
+          kind: 'opened',
+          local: info.targetId,
+          profile: state.profile,
+          opener,
+          url: info.url,
+          restriction: state.navigation.state(info.targetId),
+        });
         return;
       }
       case 'Target.targetInfoChanged': {
@@ -275,7 +306,10 @@ export const makeManagedHost = Effect.gen(function* () {
       case 'Target.targetDestroyed': {
         const { targetId } = yield* eventParams('Target.targetDestroyed', event);
         const tab = state.tabs.get(targetId);
-        if (tab === undefined) return;
+        if (tab === undefined) {
+          yield* state.navigation.forget(targetId);
+          return;
+        }
         const page = tab.page;
         yield* unbind(state, tab);
         if (page !== null) yield* emit({ kind: 'closed', page });
@@ -283,40 +317,18 @@ export const makeManagedHost = Effect.gen(function* () {
       }
       case 'Target.targetCrashed': {
         const { targetId } = yield* eventParams('Target.targetCrashed', event);
-        const page = state.tabs.get(targetId)?.page ?? null;
+        const tab = state.tabs.get(targetId);
+        if (tab !== undefined) tab.crashed = true;
+        const page = tab?.page ?? null;
         if (page !== null) yield* emit({ kind: 'crashed', page });
         return;
       }
-      case 'Browser.downloadWillBegin': {
-        const begun = yield* eventParams('Browser.downloadWillBegin', event);
-        const page =
-          state.tabs.get(begun.frameId)?.page ?? [...state.tabs.values()].find((tab) => tab.frames.has(begun.frameId))?.page ?? null;
-        if (page === null) return;
-        const download: Download = {
-          id: begun.guid,
-          name: begun.suggestedFilename,
-          path: path.join(place.downloads, state.profile, begun.guid),
-          bytes: null,
-          state: 'running',
-          at: new Date(yield* Clock.currentTimeMillis).toISOString(),
-        };
-        state.downloads.set(begun.guid, { page, download });
-        yield* emit({ kind: 'download', page, download });
+      case 'Fetch.requestPaused':
+        yield* state.navigation.request(yield* eventParams('Fetch.requestPaused', event));
         return;
-      }
-      case 'Browser.downloadProgress': {
-        const progress = yield* eventParams('Browser.downloadProgress', event);
-        const held = state.downloads.get(progress.guid);
-        if (held === undefined || progress.state === 'inProgress') return;
-        held.download = {
-          ...held.download,
-          bytes: progress.receivedBytes,
-          state: progress.state === 'completed' ? 'done' : 'cancelled',
-        };
-        state.downloads.delete(progress.guid);
-        yield* emit({ kind: 'download', page: held.page, download: held.download });
-        return;
-      }
+      case 'Browser.downloadWillBegin':
+      case 'Browser.downloadProgress':
+        return yield* state.downloads.take(event);
     }
   });
 
@@ -365,24 +377,30 @@ export const makeManagedHost = Effect.gen(function* () {
       );
       const transport = yield* Scope.provide(pipeTransport({ writer: handle.getInputFd(3), reader: handle.getOutputFd(4) }), held);
       const connection = yield* Scope.provide(connect(transport), held);
+      const permissions = yield* makePermissions({ browser: connection.root });
+      const navigation = yield* Scope.provide(makeNavigation({ connection, events, nextRevision }), held);
+      yield* connection.root.send('Target.setDiscoverTargets', { discover: true }).pipe(Effect.mapError(lost));
+      const { targetInfos } = yield* connection.root.send('Target.getTargets').pipe(Effect.mapError(lost));
+      const targets = yield* makeTargets(connection, UNRESPONSIVE_AFTER).pipe(Effect.mapError(lost));
       const state: Running = {
+        targets,
         profile: profile.id,
         connection,
         scope: held,
         tabs: new Map(),
-        downloads: new Map(),
+        downloads: makeDownloads({ directory: downloads, navigation, events }),
+        permissions,
+        navigation,
+        strains: new Set(),
+        strain: { factor: 1, paused: false },
         dir,
         users: 0,
         idleSince: null,
       };
       const stream = yield* Scope.provide(connection.root.events(), held);
       yield* Stream.runForEach(stream, (event) => onBrowser(state, event).pipe(quiet('a browser event'))).pipe(Effect.forkIn(held));
-      yield* connection.root.send('Target.setDiscoverTargets', { discover: true }).pipe(Effect.mapError(lost));
-      yield* connection.root
-        .send('Browser.setDownloadBehavior', { behavior: 'allowAndName', downloadPath: downloads, eventsEnabled: true })
-        .pipe(Effect.mapError(lost));
-      const { targetInfos } = yield* connection.root.send('Target.getTargets').pipe(Effect.mapError(lost));
-      yield* connection.root.send('Target.createTarget', { url: 'about:blank', background: true }).pipe(Effect.mapError(lost));
+      yield* state.downloads.start(connection.root).pipe(Effect.mapError(lost));
+
       for (const info of targetInfos) {
         if (info.type === 'page')
           yield* connection.root.send('Target.closeTarget', { targetId: info.targetId }).pipe(Effect.mapError(lost));
@@ -449,9 +467,9 @@ export const makeManagedHost = Effect.gen(function* () {
   yield* Effect.forkScoped(Effect.forever(Effect.andThen(Effect.sleep(SWEEP), sweep())));
 
   const replace = Effect.fnUntraced(function* (state: Running, tab: Tab, page: PageId): Effect.fn.Return<PageChange, CommandFailure> {
-    const standing = tab.service === null ? {} : yield* historyOf(tab.service);
-    const url = standing.url ?? 'about:blank';
-    const { targetId } = yield* state.connection.root.send('Target.createTarget', { url: 'about:blank' });
+    const url = tab.url || 'about:blank';
+    const { targetId } = yield* state.targets.create({ url: 'about:blank' });
+    yield* state.navigation.swap(tab.target, targetId);
     yield* unbind(state, tab);
     yield* state.connection.root.send('Target.closeTarget', { targetId: tab.target });
     const service = yield* bind(state, targetId, page);
@@ -477,6 +495,7 @@ export const makeManagedHost = Effect.gen(function* () {
         let loader: string | undefined | null = null;
         switch (to.kind) {
           case 'url': {
+            yield* state.navigation.check(tab.target, to.url);
             const went = yield* service.send('Page.navigate', { url: to.url });
             if (went.errorText !== undefined && went.errorText !== '') {
               return yield* new NavigationFailed({ code: went.errorText, message: `${to.url} did not load` });
@@ -490,11 +509,13 @@ export const makeManagedHost = Effect.gen(function* () {
             const { currentIndex, entries } = yield* service.send('Page.getNavigationHistory');
             const entry = entries[currentIndex + (to.kind === 'back' ? -1 : 1)];
             if (entry === undefined) return yield* historyOf(service);
+            yield* state.navigation.check(tab.target, entry.url);
             yield* service.send('Page.navigateToHistoryEntry', { entryId: entry.id });
             break;
           }
           case 'reload':
-            if (!tab.responsive) return yield* replace(state, tab, page);
+            yield* state.navigation.check(tab.target, tab.url);
+            if (!tab.responsive || tab.crashed) return yield* replace(state, tab, page);
             yield* service.send('Page.reload');
             break;
           case 'stop':
@@ -502,6 +523,7 @@ export const makeManagedHost = Effect.gen(function* () {
             return { ...(yield* historyOf(service)), loading: false };
         }
         const url = yield* committed(tab.target, stream, loader);
+        yield* state.permissions.synchronize(service);
         const change = yield* historyOf(service);
         return { ...change, url: url ?? change.url };
       }),
@@ -517,17 +539,20 @@ export const makeManagedHost = Effect.gen(function* () {
       open: Effect.fn('ManagedHost.open')(function* (opening) {
         const state = yield* ensure(opening.profile);
         const url = opening.history?.entries[opening.history.at]?.url ?? opening.url;
-        const { targetId } = yield* state.connection.root.send('Target.createTarget', { url: 'about:blank' }).pipe(Effect.mapError(lost));
+        const { targetId } = yield* state.targets.create({ url: 'about:blank' }).pipe(Effect.mapError(lost));
         yield* Effect.gen(function* () {
           const service = yield* bind(state, targetId, opening.page);
+          yield* state.navigation.open(targetId, opening.policy);
           if (url === 'about:blank') return;
+          yield* state.navigation.check(targetId, url);
           const went = yield* service.send('Page.navigate', { url });
           if (went.errorText !== undefined && went.errorText !== '')
             yield* Effect.logInfo(`managed browser: page ${opening.page} opened on ${url} with ${went.errorText}`);
         }).pipe(
           Effect.onError(() => abandon(state, targetId)),
-          Effect.mapError(lost),
+          Effect.catchIf(isCommandFailure, (failure) => Effect.fail(lost(failure))),
         );
+        return state.navigation.state(targetId);
       }),
       adopt: Effect.fn('ManagedHost.adopt')(function* (local, page) {
         const state = [...running.values()].find((held) => held.tabs.has(local));
@@ -536,6 +561,7 @@ export const makeManagedHost = Effect.gen(function* () {
           Effect.onError(() => abandon(state, local)),
           Effect.mapError(lost),
         );
+        return state.navigation.state(local);
       }),
       close: Effect.fn('ManagedHost.close')(function* (page, ask) {
         const stayedFailure = new PageStayed({ page, message: 'the page asked to stay, and leaving it was dismissed' });
@@ -583,6 +609,13 @@ export const makeManagedHost = Effect.gen(function* () {
           if (stayed) return yield* stayedFailure;
           return;
         }
+        if (tab !== undefined && !tab.responsive && !tab.crashed && service !== null) {
+          const eligible = () => located.get(page)?.target === at.target && !tab.responsive && !tab.crashed;
+          if (yield* at.state.targets.crash(at.target, service, eligible).pipe(Effect.mapError(lost))) {
+            tab.crashed = true;
+            yield* emit({ kind: 'crashed', page });
+          }
+        }
         if (tab !== undefined) yield* unbind(at.state, tab);
         yield* at.state.connection.root.send('Target.closeTarget', { targetId: at.target }).pipe(
           Effect.catchTag('CommandRefused', (refusal) =>
@@ -600,21 +633,52 @@ export const makeManagedHost = Effect.gen(function* () {
             url: tab.url,
             title: tab.title,
             opener: tab.opener,
+            restriction: state.navigation.state(tab.target),
           })),
         ),
       ),
       navigate,
+      navigation: Effect.fnUntraced(function* (page, policy) {
+        const { state, tab } = yield* tabOf(page);
+        return yield* state.navigation.watch(tab.target, policy).pipe(Effect.mapError(lost));
+      }),
       pdf: Effect.fn('ManagedHost.pdf')(function* (page) {
         const { service } = yield* serviceOf(page);
         const text = yield* service.reply('Page.printToPDF', { printBackground: true }).pipe(Effect.mapError(lost));
         return yield* bytesOf(text).pipe(Effect.mapError((failure) => new HostLost({ message: failure.message, pending: false })));
       }),
+      heap: Effect.fn('ManagedHost.heap')(
+        function* (page, path) {
+          const { state, service } = yield* serviceOf(page);
+          yield* holdStrain(state, { factor: 1, paused: true });
+          yield* heapToFile(service, path).pipe(
+            Effect.provideService(FileSystem.FileSystem, files),
+            Effect.mapError(
+              (failure) =>
+                new HostRefused({
+                  message: `the page heap was not captured: ${failure.message}`,
+                  unblock: ['capture_page with what: heap again'],
+                }),
+            ),
+          );
+        },
+        Effect.uninterruptible,
+        Effect.scoped,
+      ),
       answer: Effect.fn('ManagedHost.answer')(function* (page, accept, text) {
         const { service } = yield* serviceOf(page);
         yield* service.send('Page.handleJavaScriptDialog', { accept, promptText: text }).pipe(Effect.mapError(lost));
       }),
       events: Effect.map(PubSub.subscribe(events), (subscription) => Stream.fromSubscription(subscription)),
       paint: (page) => Effect.asVoid(tabOf(page)),
+      strain: Effect.fn('ManagedHost.strain')(function* (page, strain) {
+        const { state } = yield* tabOf(page);
+        yield* holdStrain(state, strain);
+      }),
+      geolocation: Effect.fn('ManagedHost.geolocation')(function* (page) {
+        const { state, service } = yield* serviceOf(page);
+        yield* state.permissions.geolocation(service);
+      }),
       session: Effect.fn('ManagedHost.session')(function* (page) {
         const { state, tab } = yield* tabOf(page);
         const at = located.get(page)!;

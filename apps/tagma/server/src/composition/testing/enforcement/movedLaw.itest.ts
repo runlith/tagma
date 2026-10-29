@@ -33,6 +33,12 @@ const answered = (outcome: Outcome): Record<string, unknown> => {
 
 const named = (outcome: Outcome): string => (answered(outcome).block as { name: string }).name;
 
+const topOf = Effect.fnUntraced(function* (project: number) {
+  const world = yield* DoorFixture;
+  const roots = yield* world.op('list_root_blocks', {}, `project=${project}`);
+  return (roots.body as { blocks: { name: string }[] }).blocks[0]!.name;
+});
+
 const project = Effect.fnUntraced(function* (name: string, files: Readonly<Record<string, string>>) {
   const world = yield* DoorFixture;
   const root = yield* (yield* FileSystem.FileSystem).realPath(yield* world.directory(name));
@@ -69,13 +75,14 @@ layer(Layer.effect(Moving, setup).pipe(Layer.provideMerge(fixture)), { excludeTe
       const thread = (born.body as { snapshot: { thread: { id: string; ownerId: string } } }).snapshot.thread;
       const at = yield* doors.doorsFor(thread.id, thread.ownerId);
 
-      const shelf = named(yield* doors.atNative('create_block', { title: 'Shelf' }, at));
+      const fromTop = yield* topOf(from);
+      const shelf = named(yield* doors.atNative('create_block', { title: 'Shelf', parentId: fromTop }, at));
       const drawn = answered(
         yield* doors.atNative(
           'set_module',
           {
             modules: [
-              { id: 'lib', title: 'Lib', root: 'lib' },
+              { id: 'lib', title: 'Lib', root: 'lib', parent: fromTop },
               { id: 'app', title: 'The app', root: 'src', parent: shelf },
               { id: 'extra', title: 'Extra', root: 'extra', parent: shelf, entries: { replace: [{ at: '.', for: ['lib'] }] } },
             ],
@@ -101,11 +108,17 @@ layer(Layer.effect(Moving, setup).pipe(Layer.provideMerge(fixture)), { excludeTe
       named(
         yield* doors.atNative(
           'create_block',
-          { project: third, tags: ['idea'], title: 'Points at the law', edges: [{ kind: 'relates', to: rule }] },
+          {
+            project: third,
+            parentId: yield* topOf(third),
+            tags: ['idea'],
+            title: 'Points at the law',
+            edges: [{ kind: 'relates', to: rule }],
+          },
           at,
         ),
       );
-      const landing = named(yield* doors.atNative('create_block', { project: to, title: 'Landing' }, at));
+      const landing = named(yield* doors.atNative('create_block', { project: to, title: 'Landing', parentId: yield* topOf(to) }, at));
 
       expect(yield* doors.atNative('update_block', { blockId: shelf, parentId: landing }, at)).toMatchObject({
         class: 'refusal',

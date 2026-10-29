@@ -41,9 +41,18 @@ layer(demoGraphLayer({ repos: [] }).pipe(Layer.provideMerge(BunFileSystem.layer)
         const main = yield* pool.resolve({ projectId: global.id });
         expect(yield* pool.branches(global.id)).toEqual([{ branch: 'main', worktree: global.rootPath, canonical: true }]);
         const create = (copy: typeof main, title: string) =>
-          as('op', Context.get(copy.context, Blocks).create({ projectId: global.id, tags: ['rule'], title })).pipe(
-            Effect.provide(copy.context),
-          );
+          as(
+            'op',
+            Effect.gen(function* () {
+              const blocks = Context.get(copy.context, Blocks);
+              return yield* blocks.create({
+                projectId: global.id,
+                parentId: (yield* blocks.rootBlockOf(global.id)).id,
+                tags: ['rule'],
+                title,
+              });
+            }),
+          ).pipe(Effect.provide(copy.context));
         yield* create(main, 'Common law');
         const other = yield* pool.resolve({ projectId });
         const law = () =>
@@ -67,11 +76,15 @@ layer(demoGraphLayer({ repos: [] }).pipe(Layer.provideMerge(BunFileSystem.layer)
         yield* git('-c', 'user.name=test', '-c', 'user.email=test@x', 'commit', '-qm', 'project born');
         const owner = yield* as(
           'op',
-          Context.get(main.context, Blocks).create({
-            projectId: global.id,
-            tags: ['idea'],
-            title: 'Work file',
-            sources: [{ kind: 'file', ref: 'work.txt' }],
+          Effect.gen(function* () {
+            const blocks = Context.get(main.context, Blocks);
+            return yield* blocks.create({
+              projectId: global.id,
+              parentId: (yield* blocks.rootBlockOf(global.id)).id,
+              tags: ['idea'],
+              title: 'Work file',
+              sources: [{ kind: 'file', ref: 'work.txt' }],
+            });
           }),
         ).pipe(Effect.provide(main.context));
         expect(
@@ -113,7 +126,15 @@ layer(demoGraphLayer({ repos: [] }).pipe(Layer.provideMerge(BunFileSystem.layer)
           const layout = served.layout;
           const doc = yield* as(
             'op',
-            Context.get(served.context, Blocks).create({ projectId: global.id, title: 'Kept knowledge', body: 'kept body' }),
+            Effect.gen(function* () {
+              const blocks = Context.get(served.context, Blocks);
+              return yield* blocks.create({
+                projectId: global.id,
+                parentId: (yield* blocks.rootBlockOf(global.id)).id,
+                title: 'Kept knowledge',
+                body: 'kept body',
+              });
+            }),
           ).pipe(Effect.provide(served.context));
           const journal = yield* Context.get(served.context, GraphStore).db.select().from(event).where(eq(event.projectId, global.id));
           yield* pool.releaseProject(global.id);
@@ -157,7 +178,14 @@ layer(demoGraphLayer({ repos: [] }).pipe(Layer.provideMerge(BunFileSystem.layer)
           );
           const added = yield* as(
             'op',
-            Context.get(migrated.context, Blocks).create({ projectId: global.id, title: 'Writable after upgrade' }),
+            Effect.gen(function* () {
+              const blocks = Context.get(migrated.context, Blocks);
+              return yield* blocks.create({
+                projectId: global.id,
+                parentId: (yield* blocks.rootBlockOf(global.id)).id,
+                title: 'Writable after upgrade',
+              });
+            }),
           ).pipe(Effect.provide(migrated.context));
           expect(yield* store.db.select().from(block).where(eq(block.uuid, added.uuid)).get()).toMatchObject({ title: added.title });
         }),

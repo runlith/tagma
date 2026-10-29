@@ -28,8 +28,18 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
         yield* gitEffect(demo.demoRoot, ['config', 'user.email', 'tagma@test']);
         yield* gitEffect(demo.demoRoot, ['config', 'user.name', 'tagma']);
         yield* commit();
-        const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Small files' });
-        const owner = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['task'], title: 'Split files' });
+        const rule = yield* demo.graph.blocks.create({
+          projectId: demo.projectId,
+          parentId: demo.root,
+          tags: ['rule'],
+          title: 'Small files',
+        });
+        const owner = yield* demo.graph.blocks.create({
+          projectId: demo.projectId,
+          parentId: demo.root,
+          tags: ['task'],
+          title: 'Split files',
+        });
         const ownerName = yield* demo.nameOf(owner.id);
         const context = withLanes(demo.context, workers);
         demo.described.set('small', {

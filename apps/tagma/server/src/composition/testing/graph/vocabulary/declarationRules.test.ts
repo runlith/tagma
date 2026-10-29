@@ -30,7 +30,6 @@ it.effect('catalog field grammars accept their values and identify the refused f
       [view, { query: { tags: ['task'] } }, 'view.query'],
       [meeting, { held: 'the third' }, 'meeting.held'],
       [meeting, { attendees: ['$person'] }, 'meeting.attendees'],
-      [tagNamed(coreLibrary, 'proposal'), { ops: [] }, 'proposal.ops'],
     ];
     for (const [tag, fields, field] of invalid) {
       const refused = yield* validateFields([tag], fields).pipe(Effect.flip);

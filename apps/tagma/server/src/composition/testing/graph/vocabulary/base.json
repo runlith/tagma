@@ -193,61 +193,6 @@
         "prompt": "An `#idea` is the one node that is honestly NOT a spec: worth remembering, genuinely open. It may die freely. A half-made choice written as a `#spec` binds the next session as though it were settled, and this is where that material goes instead."
       },
       {
-        "id": "proposal",
-        "fields": {
-          "status": {
-            "type": "enum",
-            "values": ["open", "applied", "rejected", "upheld"]
-          },
-          "ops": {
-            "type": "schema",
-            "name": "amendmentOps"
-          }
-        },
-        "edges": ["validates", "relates"],
-        "sources": ["file", "dir", "symbol"],
-        "gates": [
-          {
-            "gate": "required",
-            "field": "ops"
-          },
-          {
-            "gate": "transition",
-            "field": "status",
-            "from": "open",
-            "to": "applied"
-          },
-          {
-            "gate": "transition",
-            "field": "status",
-            "from": "open",
-            "to": "rejected"
-          },
-          {
-            "gate": "transition",
-            "field": "status",
-            "from": "open",
-            "to": "upheld"
-          }
-        ],
-        "roles": {
-          "status": {
-            "field": "status",
-            "initial": "open"
-          },
-          "amendment": {
-            "field": "ops",
-            "run": "applied",
-            "declined": "rejected",
-            "answered": "upheld"
-          }
-        },
-        "body": {
-          "shape": "content"
-        },
-        "prompt": "A `#proposal` is a reviewed amendment of one node: the finding in its body, and the operations a verdict runs in its `ops`. A reviewer files it and never judges it. Its sources are the evidence in the code, pinned as it is filed, so the look it was written from is what a later reading is measured against."
-      },
-      {
         "id": "reflection",
         "fields": {
           "command": {

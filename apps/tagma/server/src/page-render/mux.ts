@@ -3,13 +3,13 @@ import { Effect, Queue } from 'effect';
 import type { Chunk } from './encoder.js';
 
 export type MuxAsk =
-  | { readonly kind: 'open'; readonly file: string; readonly fps: number; readonly total: number }
+  | { readonly kind: 'open'; readonly file: string; readonly fps: number; readonly total: number | null }
   | { readonly kind: 'add'; readonly chunks: readonly Chunk[] }
   | { readonly kind: 'finish' };
 
 export type MuxReply = { readonly kind: 'ready' } | { readonly kind: 'done' } | { readonly kind: 'failed'; readonly reason: string };
 
-export const muxer = Effect.fnUntraced(function* (open: { readonly file: string; readonly fps: number; readonly total: number }) {
+export const muxer = Effect.fnUntraced(function* (open: { readonly file: string; readonly fps: number; readonly total: number | null }) {
   const replies = yield* Queue.unbounded<MuxReply>();
   const thread = yield* Effect.acquireRelease(
     Effect.sync(() => {

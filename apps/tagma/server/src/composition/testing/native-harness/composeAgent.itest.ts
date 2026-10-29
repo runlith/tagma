@@ -539,17 +539,31 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           const fs = yield* FileSystem.FileSystem;
           yield* fs.writeFileString(join(demo.demoRoot, 'NOTE.txt'), 'the reader sees this file\n');
           const metadata = 'A fixture declaration carried only to graph readers.';
-          yield* graph.blocks.create({ projectId, tags: ['tag'], title: 'Case', body: metadata, fields: { id: 'case' } });
+          yield* graph.blocks.create({
+            projectId,
+            parentId: demo.root,
+            tags: ['tag'],
+            title: 'Case',
+            body: metadata,
+            fields: { id: 'case' },
+          });
           const law = 'Keep the fixture cursor monotonic.';
           const explanation = 'Rewinding the cursor would replay the fixture.';
           for (const [tags, title, body] of [
             [['rule', 'case'], 'Fixture law', law],
             [['explanation', 'case'], 'Fixture explanation', explanation],
           ] as const) {
-            yield* graph.blocks.create({ projectId, tags, title, body, sources: [{ kind: 'file', ref: 'NOTE.txt' }] });
+            yield* graph.blocks.create({
+              projectId,
+              parentId: demo.root,
+              tags,
+              title,
+              body,
+              sources: [{ kind: 'file', ref: 'NOTE.txt' }],
+            });
           }
           const peer = { harness: 'test', key: 'peer' };
-          const task = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Move the fixture cursor' });
+          const task = yield* graph.blocks.create({ projectId, parentId: demo.root, tags: ['task'], title: 'Move the fixture cursor' });
           yield* graph.tasks.claim({ id: task.id }).pipe(signedBy(peer));
           yield* graph.touches.touch({ projectId, shown: [{ path: 'NOTE.txt', as: 'wrote' }] }).pipe(signedBy(peer));
           const execution: ThreadExecution['Service'] = {
@@ -1468,12 +1482,18 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             const { graph, projectId } = instructionWorld;
             const tag = yield* graph.blocks.create({
               projectId,
+              parentId: demo.root,
               tags: ['tag'],
               title: 'Case',
               body: 'Initial case guidance.',
               fields: { id: 'case' },
             });
-            const law = yield* graph.blocks.create({ projectId, tags: ['rule'], title: 'Preserve the fixture data' });
+            const law = yield* graph.blocks.create({
+              projectId,
+              parentId: demo.root,
+              tags: ['rule'],
+              title: 'Preserve the fixture data',
+            });
             const initial = yield* graph.orientation.instructions({ projectId, audience: 'graph' });
             const expected: InstructionSet[] = [initial];
             const offered: {

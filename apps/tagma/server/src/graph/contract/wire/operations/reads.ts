@@ -1,30 +1,18 @@
 import { Schema } from 'effect';
 import { PageCursor, pageRows } from '@runlith/paging';
-import { BlockName } from '../references.js';
 import { operation } from '../../../../platform/contract/wire/operation.js';
 import { graphArms as arms } from '../answers.js';
 import { ceilingOf, limitOf } from '../../../../platform/contract/wire/pageFamily.js';
-import { blockAnswerSchema, eventRowSchema, listingFacts, overviewFields, proposalConflictSchema } from '../answers.js';
+import { blockAnswerSchema, eventRowSchema, listingFacts, overviewFields } from '../answers.js';
 import { holderStandingSchema } from '../holders.js';
-import { blockMention, blockRef, codePlace } from '../fields.js';
+import { blockMention, blockRef, codePlace, tagWord } from '../fields.js';
 import { placedCursor, placeRole } from '../../../../platform/contract/wire/place.js';
 import { BLOCK_SORT_KEYS, blockQuerySchema } from '../query.js';
 import { typeSelectorSchema } from '../tags/selector.js';
 import { blockListRowSchema } from '../reads.js';
 import { blockReadSchema } from '../rows.js';
 import { farHoldSchema } from '../far.js';
-import {
-  BLOCKS,
-  EVENTS,
-  EVENTS_PAGE_SIZE,
-  GAUGES,
-  GRAPH_DIRECT_READ,
-  GRAPH_READ,
-  PROPOSALS,
-  TASKS,
-  noSubjects,
-  graphInput,
-} from './shared.js';
+import { BLOCKS, EVENTS, EVENTS_PAGE_SIZE, GAUGES, GRAPH_DIRECT_READ, GRAPH_READ, TASKS, noSubjects, graphInput } from './shared.js';
 
 export const readyTaskSchema = Schema.Struct({
   ...blockAnswerSchema.fields,
@@ -40,7 +28,7 @@ const SEARCH_GRAMMAR = `- Matches all query terms, not necessarily a phrase. Tit
 - When no block holds every term, words of four letters or more are searched by their nearest spellings in the graph — one typo, two from eight letters — and the page answers \`approximate: true\`.
 - Cyrillic matches word forms; other scripts match literal substrings. Use base forms: "gate" finds "gates", not vice versa. No transliteration; mixed-script queries require every term.
 - Hex-only queries look up identity suffixes, then carried names, then text mentions; identity lookup includes replaced blocks.
-- By default, hides ended work, decided proposals and replaced blocks. Use \`history\` or a historical status; "superseded" is not a status.
+- By default, hides ended work and replaced blocks. Use \`history\` or a historical status; "superseded" is not a status.
 - Query text includes anchor paths. The \`path\` filter instead requires an anchor on that file or under that directory.
 - \`tag\` selects an exact type. Alternatively, \`selector\` selects exact types, types with descendants, or a supported contract, with the same grammar as query_blocks.
 - The page is \`limit\` rows, ${pageRows(undefined, BLOCKS, ceilingOf(BLOCKS))} by default and ${ceilingOf(BLOCKS)} at most: it answers that page, the total match count, and the \`cursor\` that continues the reading. Hand back the cursor alone to continue the same filters; a different question refuses it, so omit the cursor to begin anew.`;
@@ -52,7 +40,7 @@ const QUERY_GRAMMAR = `Filters are optional: OR within lists, AND between fields
 - \`edge\`: choose exactly one direction — \`to\` for an outgoing edge, \`from\` for an incoming edge. One hop unless \`transitive: true\`.
 - \`assigneeSessionId\`: task holder. \`since\`: ISO last-touch lower bound. Boolean filters select measured facts.
 - \`sort\` is required on the first page; a cursor handed back alone continues its query and sort. Ties use id in the same direction. \`ended\` uses the ending journal entry. \`limit\` is the page — ${pageRows(undefined, BLOCKS, ceilingOf(BLOCKS))} rows where you name none and ${ceilingOf(BLOCKS)} at most at this door, while a stored view keeps the limit it was saved with — and \`total\` counts every match behind it. A cursor handed to another question or another sort is refused.
-Hides resting work, decided proposals, answered reflections and replaced blocks unless selected by historical status, \`answered\`, \`superseded\` or \`includeResting\`. Returns rows without bodies.`;
+Hides resting work, answered reflections and replaced blocks unless selected by historical status, \`answered\`, \`superseded\` or \`includeResting\`. Returns rows without bodies.`;
 
 export const READ_OPERATIONS = {
   read_tags: operation('read_tags', {
@@ -83,14 +71,14 @@ export const READ_OPERATIONS = {
       query: Schema.optional(Schema.String).annotate({
         description: 'Words to find; omit to list the freshest blocks.',
       }),
-      tag: Schema.optional(Schema.String),
+      tag: Schema.optional(tagWord),
       selector: Schema.optional(typeSelectorSchema),
       status: Schema.optional(Schema.String),
       path: Schema.optional(codePlace).annotate({
         description: 'Only blocks whose gauge lies in this place, spelled the way sources are.',
       }),
       history: Schema.optional(Schema.Boolean).annotate({
-        description: 'Include resting work, decided proposals and replaced blocks.',
+        description: 'Include resting work and replaced blocks.',
       }),
       cursor: placedCursor,
       limit: limitOf(BLOCKS),
@@ -150,7 +138,7 @@ export const READ_OPERATIONS = {
   read_block: operation('read_block', {
     ...GRAPH_DIRECT_READ,
     meaning:
-      'Read full blocks: bodies and size limits, edges, references in both directions, sources, verdicts/endings and subtree outlines. Executes saved views.',
+      'Read full blocks: bodies and size limits, edges, references in both directions, sources, endings and subtree outlines. Executes saved views.',
     grammar:
       'Pass multiple ids in one call, including lists returned by searches or reference updates. All-or-nothing: a refusal identifies the failing block.',
     input: graphInput({
@@ -179,7 +167,7 @@ export const READ_OPERATIONS = {
     ...GRAPH_DIRECT_READ,
     meaning: 'Read a subtree in outline order, with each block’s body and sources, page by page.',
     grammar:
-      'Continue with the returned last-block cursor until none remains. Always includes the requested root, even if retired. Hides resting work, decided proposals and replaced descendants; their standing children appear under the nearest standing ancestor. Does not execute views.',
+      'Continue with the returned last-block cursor until none remains. Always includes the requested root, even if retired. Hides resting work and replaced descendants; their standing children appear under the nearest standing ancestor. Does not execute views.',
     input: graphInput({
       scopeId: blockRef.annotate({ description: 'The block whose subtree to read; an area for a zone.' }),
       cursor: Schema.optional(Schema.String).annotate({ ...placeRole('cursor'), description: 'The cursor of the page before this one.' }),
@@ -269,7 +257,7 @@ export const READ_OPERATIONS = {
     ...GRAPH_DIRECT_READ,
     meaning: 'Find the narrowest owner of a code path: symbol anchor, then file, then deepest directory anchor.',
     grammar:
-      'Read before changing anchored code or investigating a path from doctor. No owner means the code is undocumented; a review proposes its owner under the nearest area. Requires one path, not the whole ownership table.',
+      'Read before changing anchored code or investigating a path from doctor. No owner means the code is undocumented; document its ownership under the nearest area. Requires one path, not the whole ownership table.',
     input: graphInput({
       path: codePlace.annotate({
         description: 'A project-relative place, or an absolute path, which names its project: the file or symbol about to be changed.',
@@ -308,38 +296,6 @@ export const READ_OPERATIONS = {
     }),
     confirmLabel: 'Read',
     presentation: { running: 'Reading the gauges on a place', done: 'Read the gauges on a place' },
-    subjects: noSubjects,
-  }),
-
-  read_amendments: operation('read_amendments', {
-    ...GRAPH_READ,
-    page: PROPOSALS,
-    meaning: 'List a scope’s open amendments and conflicts over the same block text or code.',
-    grammar: "The answer carries the queue's whole count beside the page, so amendments behind the cut are named rather than hidden.",
-    input: graphInput({
-      decided: Schema.optional(Schema.Boolean).annotate({
-        description: 'The verdicts of this scope — applied, rejected and upheld — freshest first, instead of the open queue.',
-      }),
-      scopeId: Schema.optional(blockRef).annotate({ description: 'Narrow to one subtree.' }),
-      limit: limitOf(PROPOSALS),
-      cursor: placedCursor,
-    }),
-    answer: arms({
-      ok: {
-        decided: Schema.Boolean,
-        proposals: Schema.Array(blockAnswerSchema),
-        conflicts: Schema.Array(proposalConflictSchema),
-        totalConflicts: Schema.Number,
-        unread: Schema.Array(Schema.Struct({ name: BlockName, reason: Schema.String })).annotate({
-          description: 'Open amendments whose deferred operations do not read, so their conflicts could not be measured.',
-        }),
-        ...listingFacts,
-      },
-    }),
-    refusals: ['not-found', 'deleted', 'source-outside', 'query-shape', 'unknown-project', 'bad-cursor', 'cursor-stale'],
-    confirmation: () => ({ summary: 'Read the open amendment queue?' }),
-    confirmLabel: 'Read',
-    presentation: { running: 'Reading the amendments', done: 'Read the amendments' },
     subjects: noSubjects,
   }),
 };

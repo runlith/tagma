@@ -3,8 +3,7 @@ import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { carriedSelection, pageRows } from '@runlith/paging';
 import { BlockNames, type BlockRecord, type BlockRow } from '../contract/service/acts.js';
 import { GateRefusal, walks } from '../../platform/contract/wire/refusal.js';
-import { AMENDMENTS_WALK, READY_WALK } from '../contract/wire/walks.js';
-import { body, pair } from '../../platform/contract/service/body.js';
+import { READY_WALK } from '../contract/wire/walks.js';
 import { REFLECTION_OPERATIONS } from '../contract/wire/operations/reflections.js';
 import { admitted, pairsOf, routed, routesOf } from '../../platform/contract/service/routed.js';
 import { READ_OPERATIONS, type ReadyTaskAnswer } from '../contract/wire/operations/reads.js';
@@ -13,7 +12,7 @@ import { WriterRegister } from '../../platform/contract/service/writers.js';
 import { SessionIdentity, sessionName } from '../../platform/contract/wire/session.js';
 import { WORK_OPERATIONS } from '../contract/wire/operations/work.js';
 import { callerPath, documentReads, readSubject } from '../../platform/contract/service/subjects.js';
-import { type ClaimFacts, heldRaised, PROPOSALS, TASKS } from '../contract/wire/operations/shared.js';
+import { type ClaimFacts, heldRaised, TASKS } from '../contract/wire/operations/shared.js';
 import { Tags } from '../contract/service/vocabulary.js';
 import type { Raised } from '@runlith/agent/permissions';
 import { ceilingOf } from '../../platform/contract/wire/pageFamily.js';
@@ -23,21 +22,11 @@ import { heldGroups, measuredOnce } from '../acts/far.js';
 import type { FarHold } from '../contract/wire/far.js';
 import { inlineBodyFiles } from '../work/Batch.js';
 import { announceEnd } from '../work/tasks/ended.js';
-import {
-  Batch,
-  Reflections,
-  Review,
-  Supersession,
-  Tasks,
-  type OpOutcome,
-  type ProposalListRow,
-  type ReviewConflict,
-  type ReviewConflicts,
-} from '../contract/service/work.js';
+import { Batch, Reflections, Supersession, Tasks, type OpOutcome } from '../contract/service/work.js';
 import { batchSource, type BatchInput } from '../contract/wire/batch.js';
 import { blockName } from '../contract/wire/references.js';
-import type { IdleSpecAnswer } from '../contract/wire/answers.js';
-import { blockResult, blockSummary, endResult, pricedBlockResult, pricedResult, specAnswers } from './answers.js';
+import type { Crowded, IdleSpecAnswer } from '../contract/wire/answers.js';
+import { blockResult, blockSummary, endResult, pricedResult, specAnswers } from './answers.js';
 import { priced } from '../../platform/contract/service/start.js';
 import type { StartPrice } from '../../platform/contract/wire/start.js';
 import { lawPricing, nodePricing } from './start.js';
@@ -59,8 +48,6 @@ import type { GraphServices } from '../contract/service/services.js';
 const READS = READ_OPERATIONS;
 
 const taskKey = (row: BlockRecord): readonly [number, number] => [row.createdAt.getTime(), row.id];
-
-const proposalKey = (row: ProposalListRow): readonly [number, number] => [row.updatedAt.getTime(), row.id];
 
 const answerNamed = <C extends string | true>(input: {
   readonly by?: string | undefined;
@@ -176,73 +163,6 @@ const WORK_READ_ROUTED = {
       held: frontier.held.length === 0 ? undefined : frontier.held,
       idle: frontier.idle === 0 ? undefined : frontier.idle,
       workless: frontier.workless === 0 ? undefined : frontier.workless,
-    }),
-  }),
-
-  read_amendments: routed(READS.read_amendments, {
-    ...targeted(
-      (input: (typeof READS.read_amendments)['input']['Type']) => input.scopeId ?? carriedSelection(AMENDMENTS_WALK, input.cursor)?.scopeId,
-      Effect.fnUntraced(function* (input: (typeof READS.read_amendments)['input']['Type']) {
-        const call = yield* yield* GraphCall;
-        const review = yield* Review;
-        const recovered =
-          input.cursor === undefined || input.scopeId !== undefined || input.decided !== undefined
-            ? undefined
-            : yield* walks.recall(AMENDMENTS_WALK, input.cursor);
-        const scopeName = input.scopeId ?? recovered?.scopeId;
-        const decided = input.decided ?? recovered?.decided ?? false;
-        const scope = scopeName === undefined ? undefined : yield* scoped(scopeName);
-        const projectId = scope?.projectId ?? call.project.id;
-        const scopeId = scope?.id;
-        const cut = yield* walks.page({
-          walk: AMENDMENTS_WALK,
-          selection: { projectId, checkout: (yield* CurrentGraph)?.checkout ?? null, decided, scopeId: scopeName },
-          cursor: input.cursor,
-          asked: pageRows(input.limit, PROPOSALS, ceilingOf(PROPOSALS)),
-          keyOf: proposalKey,
-          read: (after, rows) => review.proposalsPage({ projectId, scopeId, decided }, after, rows),
-        });
-        const conflicts = decided
-          ? { found: [], total: 0, unread: [] }
-          : yield* review.conflicts({ projectId, scopeId, names: cut.rows.map((row) => blockName(row.uuid)) });
-        return {
-          decided,
-          proposals: cut.rows,
-          shown: cut.shown,
-          total: cut.total,
-          next: cut.next,
-          complete: cut.complete,
-          conflicts: conflicts.found,
-          totalConflicts: conflicts.total,
-          unread: conflicts.unread,
-        };
-      }),
-    ),
-    answer: (answer: {
-      readonly decided: boolean;
-      readonly proposals: readonly ProposalListRow[];
-      readonly shown: number;
-      readonly total: number;
-      readonly next: string | null;
-      readonly complete: boolean;
-      readonly conflicts: readonly ReviewConflict[];
-      readonly totalConflicts: number;
-      readonly unread: ReviewConflicts['unread'];
-    }) => ({
-      status: 'ok' as const,
-      decided: answer.decided,
-      total: answer.total,
-      shown: answer.shown,
-      next: answer.next,
-      complete: answer.complete,
-      proposals: answer.proposals.map((row) => ({ ...blockSummary(row), fields: row.fields })),
-      conflicts: answer.conflicts.map((fight) => ({
-        a: fight.a,
-        b: fight.b,
-        region: fight.region.kind === 'text' ? `text ${fight.region.blockName}` : `code ${fight.region.anchor}`,
-      })),
-      totalConflicts: answer.totalConflicts,
-      unread: answer.unread,
     }),
   }),
 };
@@ -421,6 +341,7 @@ const WORK_ROUTED = {
           ops: result.ops,
           ids: result.ids,
           specs: specAnswers(result.specs ?? []),
+          crowded: result.crowded,
           start,
         };
       });
@@ -432,57 +353,16 @@ const WORK_ROUTED = {
       readonly ops: OpOutcome[];
       readonly ids: Record<string, string>;
       readonly specs: readonly IdleSpecAnswer[] | undefined;
+      readonly crowded: readonly Crowded[] | undefined;
       readonly start: StartPrice | undefined;
-    }) => ({ status: applied.status, overview: applied.overview, ids: applied.ids, specs: applied.specs, start: applied.start }),
-  }),
-
-  accept_amendment: routed(W.accept_amendment, {
-    ...targeted(
-      (input: (typeof W.accept_amendment)['input']['Type']) => input.blockId,
-      Effect.fnUntraced(function* (input: (typeof W.accept_amendment)['input']['Type'], _prepared: number | undefined) {
-        const row = yield* scoped(input.blockId);
-        return yield* priced(lawPricing(row.projectId, true), (yield* Review).accept({ id: row.id, reason: input.reason }));
-      }),
-    ),
-    answer: pricedBlockResult,
-  }),
-
-  revise_amendment: routed(W.revise_amendment, {
-    ...targeted(
-      (input: (typeof W.revise_amendment)['input']['Type']) => input.blockId,
-      Effect.fnUntraced(function* (input: (typeof W.revise_amendment)['input']['Type'], _prepared: number | undefined) {
-        const { id } = yield* scoped(input.blockId);
-        return yield* (yield* Review).revise({ id, ops: input.ops });
-      }),
-    ),
-    answer: blockResult,
-  }),
-
-  uphold_amendment: routed(W.uphold_amendment, {
-    ...targeted(
-      (input: (typeof W.uphold_amendment)['input']['Type']) => [input.blockId, ...input.by],
-      Effect.fnUntraced(function* (input: (typeof W.uphold_amendment)['input']['Type'], _prepared: number | undefined) {
-        const proposal = yield* scoped(input.blockId);
-        const { id } = proposal;
-        return yield* (yield* Review).uphold({
-          id,
-          reason: input.reason,
-          by: yield* Effect.forEach(input.by, (name) => Effect.map(peer(name, proposal, 'cross-project'), (row) => row.id)),
-        });
-      }),
-    ),
-    answer: blockResult,
-  }),
-
-  reject_amendment: routed(W.reject_amendment, {
-    ...targeted(
-      (input: (typeof W.reject_amendment)['input']['Type']) => input.blockId,
-      Effect.fnUntraced(function* (input: (typeof W.reject_amendment)['input']['Type'], _prepared: number | undefined) {
-        const { id } = yield* scoped(input.blockId);
-        return yield* (yield* Review).reject({ id, reason: input.reason });
-      }),
-    ),
-    answer: blockResult,
+    }) => ({
+      status: applied.status,
+      overview: applied.overview,
+      ids: applied.ids,
+      specs: applied.specs,
+      crowded: applied.crowded,
+      start: applied.start,
+    }),
   }),
 
   supersede_block: routed(W.supersede_block, {

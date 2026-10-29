@@ -3,15 +3,9 @@ import { inArray, sql } from 'drizzle-orm';
 import type { StoreDb } from '../../platform/contract/service/store.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
 import type { SubtreeShape } from '../contract/wire/standing.js';
-import { AMENDMENT } from '../contract/wire/tags/amendment.js';
-import { LIFECYCLE } from '../contract/wire/tags/lifecycle.js';
 import { block } from '../store/tables.js';
-import { carriesContract, contractAt } from '../vocabulary/projection.js';
 import { measuredCondition } from '../acts/measurement.js';
 import { standingCondition } from '../work/standingCondition.js';
-
-const admitted = (table: TagTable) =>
-  sql`not (${carriesContract(table, AMENDMENT, block.id)} and ${contractAt(table, LIFECYCLE, 'terminal', block.id)})`;
 
 export const outlineRows = Effect.fn('Selection.outlineRows')(function* (
   db: StoreDb<'graph'>,
@@ -27,7 +21,7 @@ export const outlineRows = Effect.fn('Selection.outlineRows')(function* (
       select ${block.id}, ${block.parentId}, o.depth + o.visible,
         case when ${all ? sql`1` : standingCondition(table)} then 1 else 0 end
       from ${block} join outline o on ${block.parentId} = o.id
-      where ${block.deletedAt} is null and o.depth + o.visible <= ${depth} and ${admitted(table)}
+      where ${block.deletedAt} is null and o.depth + o.visible <= ${depth}
     )
     select o.id, o.parent_id as parentId, o.visible from outline o join ${block} on ${block.id} = o.id
     order by ${block.ord}, ${block.id}
@@ -85,7 +79,7 @@ export const subtreeShapes = Effect.fn('Selection.shapes')(function* (
         case when ${selected} then 0 else s.distance + case when ${retired} then 0 else 1 end end,
         s.level + 1
       from ${block} join shape_tree s on ${block.parentId} = s.id
-      where ${block.deletedAt} is null and ${admitted(table)}
+      where ${block.deletedAt} is null
     ), shelves as (
       select parent_id, count(*) as width from shape_tree where not retired and parent_id is not null group by parent_id
     ), parts as (

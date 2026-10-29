@@ -17,7 +17,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('ending the last task of 
   it.effect('names the open spec left without active work, whether its tasks stand under it or implement it', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const caller: Caller = { actor: { kind: 'operator' }, files: null };
         const here = Effect.succeed({
           project: { id: projectId, name: 'demo' },
@@ -34,10 +34,10 @@ layer(demoGraphLayer(), { excludeTestServices: true })('ending the last task of 
           const raw = yield* call({ ...WORK_PAIRS.finish_block.body, id: WORK_PAIRS.finish_block.id }, { blockId: yield* demo.nameOf(id) });
           return yield* ended(raw);
         });
-        const spec = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'Built in two tasks' });
+        const spec = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'Built in two tasks' });
         const first = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'First', parentId: spec.id });
         const second = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Second', parentId: spec.id });
-        const outside = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Implements from outside' });
+        const outside = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'Implements from outside' });
         yield* graph.edges.link({ fromId: outside.id, kind: 'implements', toId: spec.id });
 
         expect((yield* finish(first.id)).specs).toBeUndefined();
@@ -47,7 +47,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('ending the last task of 
           { name: yield* demo.nameOf(spec.id), title: 'Built in two tasks' },
         ]);
 
-        const tree = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'Built under itself' });
+        const tree = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'Built under itself' });
         const only = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Only', parentId: tree.id });
         expect((yield* finish(only.id)).specs?.map(({ name }) => name)).toEqual([yield* demo.nameOf(tree.id)]);
       }),
@@ -57,7 +57,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('ending the last task of 
   it.effect('apply_batch names the spec its finish, close and supersede ops leave without open work', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const caller: Caller = { actor: { kind: 'operator' }, files: null };
         const here = Effect.succeed({
           project: { id: projectId, name: 'demo' },
@@ -74,11 +74,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('ending the last task of 
           );
           return yield* batched(raw);
         });
-        const spec = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'Ended by batch' });
+        const spec = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'Ended by batch' });
         const kept = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Kept', parentId: spec.id });
         const closed = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Closed', parentId: spec.id });
         const replaced = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Replaced', parentId: spec.id });
-        const successor = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Successor' });
+        const successor = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'Successor' });
         const specName = yield* demo.nameOf(spec.id);
 
         expect(
@@ -90,7 +90,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('ending the last task of 
         const last = yield* batch([{ op: 'supersede', oldId: yield* demo.nameOf(replaced.id), withId: yield* demo.nameOf(successor.id) }]);
         expect(last.specs?.map(({ name }) => name)).toEqual([specName]);
 
-        const whole = yield* graph.blocks.create({ projectId, tags: ['spec'], title: 'Ended by one batch' });
+        const whole = yield* graph.blocks.create({ projectId, parentId: root, tags: ['spec'], title: 'Ended by one batch' });
         const parts = yield* Effect.forEach(['One', 'Two', 'Three'], (title) =>
           graph.blocks.create({ projectId, tags: ['task'], title, parentId: whole.id }),
         );

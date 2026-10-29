@@ -143,7 +143,7 @@ export function measuredCondition(table: TagTable): Record<Exclude<keyof BlockMe
 }
 
 export const ENDED_AT = sql`(select max(e.ts) from ${event} e
-  where e.block_id = ${block.id} and e.op in ('done', 'close', 'accept', 'reject', 'uphold'))`;
+  where e.block_id = ${block.id} and e.op in ('done', 'close'))`;
 
 export function actMarks(db: GraphStore['Service']['db'], tags: Tags['Service']) {
   const records = Effect.fnUntraced(function* <

@@ -6,6 +6,7 @@ import {
   REPORT_PATH,
   type Report,
 } from '@tagma/server/desktop-browser/contract/wire/channel';
+import type { DomainBlock } from '@tagma/server/browser/contract/wire/domains';
 import type { HostEvent } from '@tagma/server/browser/contract/wire/host';
 import { liveSerialization, rpcOf } from '@tagma/server/platform/contract/wire/live';
 import { TAGMA_SOCKET_PATH } from '@tagma/server/socket/rpc';
@@ -26,6 +27,7 @@ export type Reporter = {
   bytes(id: number, base64: string): void;
   fail(id: number, failure: Failure): void;
   event(event: HostEvent): void;
+  blocked(watch: number, block: DomainBlock): void;
   cdp(session: number, text: string): void;
   ended(session: number, end: SessionEnd): void;
 };
@@ -91,6 +93,7 @@ const reporterOn = (socket: WebSocket): Reporter => {
     bytes: (id, base64) => send({ kind: 'bytes', seq: ++seq, id }, `{"result":{"data":"${base64}"}}`),
     fail: (id, failure) => send({ kind: 'failure', seq: ++seq, id, failure }),
     event: (event) => send({ kind: 'event', seq: ++seq, event }),
+    blocked: (watch, block) => send({ kind: 'blocked', seq: ++seq, watch, block }),
     cdp: (session, text) => send({ kind: 'cdp', seq: ++seq, session }, text),
     ended: (session, end) => send({ kind: 'ended', seq: ++seq, session, end }),
   };

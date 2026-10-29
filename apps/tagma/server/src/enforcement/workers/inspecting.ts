@@ -117,11 +117,17 @@ const settled = Effect.fn('inspecting.settled')(function* (
       facet !== undefined ? facetHeld(facets, ADAPTERS, facet, object, path) : memoHolds(imports, ADAPTERS, object, path);
     const words = sides.map(() => new Map<string, ReadonlySet<string>>());
     const checkout = new Map<string, Installed | null>([
-      ...(compared ?? []).map(([path, text]) => [path, text === null ? null : { text, at: path }] as const),
       ...installed,
+      ...(compared ?? []).map(([path, text]) => [path, text === null ? null : { text, at: path }] as const),
     ]);
     const placed = yield* checkoutAt(checkoutRoot);
-    const working: Working = { files: checkout, asked: new Set(), installed: new Set(), depth: placed.depth };
+    const working: Working = {
+      files: checkout,
+      asked: new Set(),
+      installed: new Set(),
+      compared: compared === undefined ? undefined : new Set(compared.map(([path]) => path)),
+      depth: placed.depth,
+    };
     const fetchedBudget = budgetOf(inspection.builtin, envelopeOf(inspection.builtin));
     let wanted = sides.map((side) => ({
       ...side,
@@ -340,7 +346,7 @@ const readingHeld = Effect.fn('inspecting.readingHeld')(function* (
     if (installed.every(([, file], at) => installedStamp(file ?? undefined) === known.installed[at]![1]))
       return { reading: known.reading, headroom: known.headroom, installed };
   }
-  if (ask.from === undefined) return undefined;
+  if (ask.from === undefined || compared.length > 0) return undefined;
   const from = yield* treeIdOf(git, ask.root, ask.from.commit);
   if (from === tree) return { same: true, headroom: ask.from.headroom };
   const changes = yield* changesBetween(git, ask.root, from, tree).pipe(Effect.mapError(gitUnread));
@@ -470,7 +476,7 @@ const change = Effect.fn('inspecting.change')(function* (git: Git['Service'], as
   if (ask.readings !== undefined && cache !== undefined) {
     const { baseTree, builtTree } = yield* treeIdsOf(git, ask.root, ask.base, ask.built);
     const { base, built, compared, headroom } = ask.readings;
-    keepReading(cache.memo, ask.inspection, ask.places, compared, baseTree, base, headroom.base, ask.readings.installed.base);
+    keepReading(cache.memo, ask.inspection, ask.places, [], baseTree, base, headroom.base, ask.readings.installed.base);
     keepReading(cache.memo, ask.inspection, ask.places, compared, builtTree, built, headroom.built, ask.readings.installed.built);
   }
   const parts = lists(ask.inspection);

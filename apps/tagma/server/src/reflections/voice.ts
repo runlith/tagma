@@ -9,6 +9,7 @@ const sightings = (count: number): string => `${count} ${count === 1 ? 'sighting
 export function filedText(result: ReflectionFiled): string {
   return [
     `${result.block.name} ${result.block.title}${underParent(result.block.parentName)}`,
+    ...(result.unplaced === undefined ? [] : [result.unplaced]),
     ...(result.body ?? []),
     `${sightings(result.sightings)} on record`,
     ...(result.receivedBy === null ? [] : [`received by a server ${provenanceLine(result.receivedBy)}`]),

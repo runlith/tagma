@@ -22,9 +22,12 @@ it.live('set_module answers its declared shape and only the modules that call wr
     yield* git(root, 'commit', '-q', '--allow-empty', '-m', 'born');
     const op = (input: unknown) => world.op('set_module', input, `project=${projectId}`);
 
-    expect(yield* op({ modules: [{ id: 'kernel', title: 'Kernel', root: 'kernel' }] })).toMatchObject({ status: 200 });
+    const parent = ((yield* world.op('list_root_blocks', {}, `project=${projectId}`)).body as { blocks: { name: string }[] }).blocks[0]!
+      .name;
+
+    expect(yield* op({ modules: [{ id: 'kernel', title: 'Kernel', parent, root: 'kernel' }] })).toMatchObject({ status: 200 });
     const alone = yield* op({ modules: [{ id: 'kernel', entries: { put: [{ at: '.' }] } }] });
-    const born = yield* op({ modules: [{ id: 'other', title: 'Other', root: 'other', imports: { put: ['kernel'] } }] });
+    const born = yield* op({ modules: [{ id: 'other', title: 'Other', parent, root: 'other', imports: { put: ['kernel'] } }] });
     const crowded = yield* op({ modules: [{ id: 'kernel', entries: { replace: [{ at: '.', role: 'port' }] } }] });
 
     for (const answered of [alone, crowded]) {

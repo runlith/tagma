@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { Component } from 'svelte';
+import { mount as mountComponent, unmount as unmountComponent, type Component } from 'svelte';
 import { describe, expect, it } from 'vitest';
 
 import { Layer } from '@runlith/layer/Layer';
@@ -15,6 +15,9 @@ import { watch } from './test-utils/watch.svelte.js';
 import { Dialogs } from './DialogRegistry.svelte.js';
 import { Launchers } from './Launchers.svelte.js';
 import { Overlay, OverlayNotBound } from './Overlay.svelte.js';
+import { overlayLayers } from './OverlayLayers.svelte.js';
+import DialogStack from './test-utils/DialogStack.svelte';
+import Probe from './test-utils/Probe.svelte';
 import { Profile } from './test-utils/profile.svelte.js';
 
 type PromoProps = { bonus: number };
@@ -46,6 +49,7 @@ const Panel = Overlay.define()('overlay-test/panel', { as: 'dialog', dialog: { s
 const PanelView = {} as Component<Record<string, never>>;
 const PanelStep = Overlay.define()('overlay-test/panel-step', { as: 'dialog', dialog: { scrim: false } });
 const PanelStepView = {} as Component<Record<string, never>>;
+const Drawn = Overlay.define<{ name: string }>()('overlay-test/drawn', { as: 'dialog' });
 
 function mount(...extra: Layer<never, never>[]) {
   return mountApp(Layer.mergeAll(Dialogs, Launchers, Overlay, Profile, PromoDialog.present(PromoView), ...extra), Layer.mergeAll(), {
@@ -100,6 +104,26 @@ describe('Overlay: the door', () => {
     expect(again.closed).toBe(first.closed);
 
     await app.unmount();
+  });
+
+  it('announces a dialog’s opening once, from the door to the drawn host', async () => {
+    const app = mount(Drawn.present(Probe));
+    const target = document.createElement('div');
+    document.body.append(target);
+    const host = mountComponent(DialogStack, { target, props: { app: app.app } });
+    let intents = 0;
+    const stop = overlayLayers.onIntent(() => (intents += 1));
+
+    app.get(Overlay).open(Drawn, { name: 'drawn' });
+    await flush();
+    stop();
+
+    expect(document.querySelector('[data-runlith-dialog-content]')).not.toBeNull();
+    expect(intents).toBe(1);
+
+    await unmountComponent(host);
+    await app.unmount();
+    target.remove();
   });
 
   it('refuses a key this manifest never bound', async () => {

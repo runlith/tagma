@@ -19,16 +19,6 @@ export const TASKS = family('tasks', 1, 'text', { text: 155, json: 358 }, 100, (
   status: 'open',
   title: 'x'.repeat(120),
 }));
-export const PROPOSALS = family('proposals', 1, 'text', { text: 667, json: 1018 }, 100, () => ({
-  name: '59a39d70',
-  tags: ['p'.repeat(8)],
-  status: 'open',
-  title: 'x'.repeat(50),
-  ops: [
-    { op: 'edit', id: '26981caa', old: 'x'.repeat(6), new: 'x'.repeat(50) },
-    { op: 'create', parentId: '26981caa', tags: ['task'], title: 'x'.repeat(12), body: 'x'.repeat(23) },
-  ],
-}));
 export const GAUGES = family('gauges', 2, 'text', { text: 257, json: 264 }, 100, () => ({
   blockName: '9ac665e5',
   title: 'x'.repeat(110),

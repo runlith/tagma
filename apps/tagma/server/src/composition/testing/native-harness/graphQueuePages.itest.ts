@@ -46,7 +46,8 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
     withGraphTools(function* () {
       const { demo, graph, ctx, call } = yield* GraphTools;
       const projectId = ctx.projectId;
-      const area = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'work area' });
+      const root = (yield* graph.blocks.rootBlockOf(projectId)).id;
+      const area = yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'work area' });
       for (let at = 0; at < 5; at += 1) yield* graph.blocks.create({ projectId, parentId: area.id, tags: ['task'], title: `work ${at}` });
       const areaName = yield* demo.nameOf(area.id);
       const whole = yield* call('ready_work', {});
@@ -101,49 +102,12 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
       expect(walked.pages).toBe(3);
       expect(walked.seen).toEqual(keysOf(rowsIn(whole, 'blocks')));
       expect(new Set(walked.seen).size).toBe(5);
-      for (let at = 0; at < 3; at += 1) yield* graph.blocks.create({ projectId: ctx.projectId, tags: ['task'], title: `elsewhere ${at}` });
+      const root = (yield* graph.blocks.rootBlockOf(ctx.projectId)).id;
+      for (let at = 0; at < 3; at += 1)
+        yield* graph.blocks.create({ projectId: ctx.projectId, parentId: root, tags: ['task'], title: `elsewhere ${at}` });
       const other = yield* call('ready_work', { limit: 2 });
       expect(typeof other.next).toBe('string');
       expect((yield* refusalOf('read_reflections', { cursor: other.next as string })).code).toBe('cursor-stale');
-    }),
-  );
-
-  it.effect(
-    'the proposal queue pages, its fights are not cut with it, and a verdict walk refuses its cursor',
-    withGraphTools(function* () {
-      const { demo, graph, ctx, call } = yield* GraphTools;
-      const projectId = ctx.projectId;
-      const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'target', body: 'before' });
-      const targetName = yield* demo.nameOf(target.id);
-      for (let at = 0; at < 5; at += 1)
-        yield* graph.review.propose({
-          projectId,
-          amendsId: target.id,
-          title: `finding ${at}`,
-          ops: [{ op: 'edit', id: targetName, old: 'before', new: `replacement ${at}` }],
-        });
-      const whole = yield* call('read_amendments', {});
-      expect(rowsIn(whole, 'proposals')).toHaveLength(5);
-      expect(whole.total).toBe(5);
-      expect(whole.decided).toBe(false);
-      expect(Array.isArray(whole.conflicts)).toBe(true);
-      const first = yield* call('read_amendments', { limit: 2 });
-      expect(rowsIn(first, 'proposals')).toHaveLength(2);
-      expect(first.total).toBe(5);
-      expect(first.totalConflicts).toBe(10);
-      expect((first.conflicts as unknown[]).length).toBe(7);
-      const pageNames = new Set(keysOf(rowsIn(first, 'proposals')));
-      for (const fight of first.conflicts as { a: string; b: string }[])
-        expect(pageNames.has(fight.a) || pageNames.has(fight.b)).toBe(true);
-      const next = yield* call('read_amendments', { cursor: first.next as string, limit: 2 });
-      expect(next.totalConflicts).toBe(10);
-      expect(new Set([...keysOf(rowsIn(first, 'proposals')), ...keysOf(rowsIn(next, 'proposals'))]).size).toBe(4);
-      const walked = yield* walk('read_amendments', {}, 'proposals', 2);
-      expect(walked.pages).toBe(3);
-      expect(walked.seen).toEqual(keysOf(rowsIn(whole, 'proposals')));
-      expect(new Set(walked.seen).size).toBe(5);
-      const open = yield* call('read_amendments', { limit: 2 });
-      expect((yield* refusalOf('read_amendments', { decided: true, cursor: open.next as string })).code).toBe('cursor-stale');
     }),
   );
 
@@ -152,7 +116,8 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
     withGraphTools(function* () {
       const { demo, graph, ctx, call } = yield* GraphTools;
       const projectId = ctx.projectId;
-      const area = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'lapis area' });
+      const root = (yield* graph.blocks.rootBlockOf(projectId)).id;
+      const area = yield* graph.blocks.create({ projectId, parentId: root, tags: ['zone'], title: 'lapis area' });
       for (let at = 0; at < 3; at += 1) yield* graph.blocks.create({ projectId, parentId: area.id, tags: ['idea'], title: `lapis ${at}` });
       const search = yield* call('search_blocks', { query: 'lapis', tag: 'idea', limit: 2 });
       const nextSearch = yield* call('search_blocks', { cursor: search.next as string, limit: 2 });
@@ -175,25 +140,14 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
   );
 
   it.effect(
-    'proposal, search and query cursors refuse a conflicting explicit project',
+    'search and query cursors refuse a conflicting explicit project',
     withGraphTools(function* () {
       const { demo, graph, ctx, call } = yield* GraphTools;
       const projectId = ctx.projectId;
-      const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'target', body: 'before' });
-      const name = yield* demo.nameOf(target.id);
-      for (let at = 0; at < 2; at += 1) {
-        yield* graph.review.propose({
-          projectId,
-          amendsId: target.id,
-          title: `finding ${at}`,
-          ops: [{ op: 'edit', id: name, old: 'before', new: `after ${at}` }],
-        });
-        yield* graph.blocks.create({ projectId, tags: ['idea'], title: `claim ${at}` });
-      }
-      const proposals = yield* call('read_amendments', { limit: 1 });
+      const root = (yield* graph.blocks.rootBlockOf(projectId)).id;
+      for (let at = 0; at < 2; at += 1) yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: `claim ${at}` });
       const search = yield* call('search_blocks', { query: 'claim', tag: 'idea', limit: 1 });
       const query = yield* call('query_blocks', { tags: ['idea'], sort: { by: 'created', order: 'asc' }, limit: 1 });
-      expect(typeof proposals.next).toBe('string');
       expect(typeof search.next).toBe('string');
       expect(typeof query.next).toBe('string');
       const otherRoot = yield* tempRootEffect(demo.fixture, 'tagma-other-');
@@ -205,9 +159,6 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
         graphRoot: otherRoot,
         vocabulary: yield* graph.tags.reader(other.id),
       };
-      expect((yield* refusalOf('read_amendments', { project: String(other.id), cursor: proposals.next as string }, context)).code).toBe(
-        'place-mismatch',
-      );
       expect((yield* refusalOf('search_blocks', { project: String(other.id), cursor: search.next as string }, context)).code).toBe(
         'place-mismatch',
       );

@@ -40,7 +40,10 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         );
         yield* withDemo((demo) =>
           Effect.gen(function* () {
-            yield* demo.as('worktree', demo.graph.blocks.create({ projectId: demo.projectId, title: 'Written first in this copy' }));
+            yield* demo.as(
+              'worktree',
+              demo.graph.blocks.create({ projectId: demo.projectId, parentId: demo.root, title: 'Written first in this copy' }),
+            );
             expect(yield* demo.graph.sessions.idOf({ harness: 'test', key: 'worktree' })).toBe(main.holder);
             const treeRoot = yield* demo.fixture.directory('worktree');
             yield* writeBlockTree(treeRoot, main.files);

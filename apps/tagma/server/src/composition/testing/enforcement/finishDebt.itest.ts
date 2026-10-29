@@ -69,10 +69,13 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const doors = makeThreadDoors(world, home, ['create_block', 'claim_block', 'enforce_rule', 'submit_work', 'finish_block']);
       const native = yield* doors.doorsFor(thread.id, thread.ownerId);
       const call = (id: string, input: Record<string, unknown>) => doors.atNative(id, { project, ...input }, native);
+      const parentId = ((yield* world.op('list_root_blocks', {}, `project=${project}`)).body as { blocks: { name: string }[] }).blocks[0]!
+        .name;
       const owner = (
-        answered(yield* call('create_block', { tags: ['task'], title: 'Shorten rates', claim: true })).block as { name: string }
+        answered(yield* call('create_block', { tags: ['task'], parentId, title: 'Shorten rates', claim: true })).block as { name: string }
       ).name;
-      const rule = (answered(yield* call('create_block', { tags: ['rule'], title: 'Small files' })).block as { name: string }).name;
+      const rule = (answered(yield* call('create_block', { tags: ['rule'], parentId, title: 'Small files' })).block as { name: string })
+        .name;
       expect(
         answered(
           yield* call('enforce_rule', {

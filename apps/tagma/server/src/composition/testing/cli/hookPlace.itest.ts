@@ -51,11 +51,23 @@ const setup = Effect.gen(function* () {
   }
   const blocks = Context.get(world.runtime.graph, Blocks);
   const owned = <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.provide(work, world.runtime.owners);
-  const homeRule = blockName((yield* owned(blocks.create({ projectId: home.id, tags: ['rule'], title: 'Правило дома' }))).uuid);
-  const foreignRule = blockName((yield* owned(blocks.create({ projectId: foreign.id, tags: ['rule'], title: 'Правило места' }))).uuid);
+  const homeTop = (yield* owned(blocks.rootBlockOf(home.id))).id;
+  const foreignTop = (yield* owned(blocks.rootBlockOf(foreign.id))).id;
+  const homeRule = blockName(
+    (yield* owned(blocks.create({ projectId: home.id, parentId: homeTop, tags: ['rule'], title: 'Правило дома' }))).uuid,
+  );
+  const foreignRule = blockName(
+    (yield* owned(blocks.create({ projectId: foreign.id, parentId: foreignTop, tags: ['rule'], title: 'Правило места' }))).uuid,
+  );
   const regionalRule = blockName(
     (yield* owned(
-      blocks.create({ projectId: foreign.id, tags: ['rule'], title: 'Правило файла', sources: [{ kind: 'file', ref: 'gate.ts' }] }),
+      blocks.create({
+        projectId: foreign.id,
+        parentId: foreignTop,
+        tags: ['rule'],
+        title: 'Правило файла',
+        sources: [{ kind: 'file', ref: 'gate.ts' }],
+      }),
     )).uuid,
   );
   yield* world.warm(home.id);
@@ -177,7 +189,10 @@ layer(Layer.effect(HookPlace, setup).pipe(Layer.provideMerge(BunFileSystem.layer
       const question = post(
         `${world.url}/api/op/create_block?project=${foreign.id}`,
         { [GRANT_HEADER]: grantFor(id) },
-        JSON.stringify({ title: 'A note of the place' }),
+        JSON.stringify({
+          title: 'A note of the place',
+          parentId: blockName((yield* owned(Context.get(world.runtime.graph, Blocks).rootBlockOf(foreign.id))).uuid),
+        }),
       );
       const first = yield* question;
       expect(first.status).toBe(409);
@@ -235,8 +250,14 @@ layer(Layer.effect(HookPlace, setup).pipe(Layer.provideMerge(BunFileSystem.layer
           .toSorted(),
       );
       const served = yield* owned(world.runtime.pool.resolve({ projectId: foreign.id }));
-      const added = yield* Context.get(served.context, Blocks)
-        .create({ projectId: foreign.id, tags: ['rule'], title: 'Правило после touch' })
+      const servedBlocks = Context.get(served.context, Blocks);
+      const added = yield* servedBlocks
+        .create({
+          projectId: foreign.id,
+          parentId: (yield* servedBlocks.rootBlockOf(foreign.id).pipe(Effect.provide(served.context))).id,
+          tags: ['rule'],
+          title: 'Правило после touch',
+        })
         .pipe(Effect.provide(served.context));
       yield* owned(Context.get(world.runtime.owners, HarnessGuidance).touch(id, 'delayed-current-law', touched.briefs, touched.places));
       const transcript = yield* owned(native.threads.transcriptWindow(id, { limit: 20, bytes: 262144 }));

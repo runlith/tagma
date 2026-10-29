@@ -30,8 +30,15 @@ layer(Layer.effect(Reports, setup).pipe(Layer.provideMerge(BunFileSystem.layer))
       const threadId = yield* threads.bornThread(crypto.randomUUID(), project.id, yield* running(born('devin', 'root')));
       const served = yield* world.runtime.pool.resolve({ projectId: project.id }).pipe(Effect.provide(world.runtime.owners));
       const law = 'law-body-7f3a '.repeat(1_000);
-      yield* Context.get(served.context, Blocks)
-        .create({ projectId: project.id, tags: ['rule'], title: 'A long law', body: law })
+      const blocks = Context.get(served.context, Blocks);
+      yield* blocks
+        .create({
+          projectId: project.id,
+          parentId: (yield* blocks.rootBlockOf(project.id).pipe(Effect.provide(served.context))).id,
+          tags: ['rule'],
+          title: 'A long law',
+          body: law,
+        })
         .pipe(Effect.provide(served.context));
       const unsigned = yield* Effect.promise(() =>
         fetch(`${world.url}/api/op/report_harness_event`, {

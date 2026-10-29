@@ -17,6 +17,11 @@ built beforehand is the caller's to build. A diff block with no owner or two own
 tests, a green without the hunk — each refuses. `bun run patches:prove <hunk>` proves one hunk inside the thirty-second gate; a hunk whose only
 proof is an e2e elsewhere is printed, not run.
 
+A hunk switched off without being lost carries `off` in the manifest — the reason, in one line — and its
+blocks stand in `<pkg>@<version>.off.patch`, a diff on top of the applied patch, which bun never reads.
+`patches:prove` names an off hunk and proves nothing for it; an off hunk still in the applied patch, or
+an off patch missing or holding a block no off hunk owns, refuses.
+
 Regenerating a patch: the pristine package from bun's cache (`$(bun pm cache)/<pkg>@<version>@@@1`), a
 git repository outside the checkout, `git apply` of the previous patch, and `git diff` is the new one;
 `bun install` then re-links the patched copy. bun applies a patch by line, so a hunk header cut for
@@ -40,7 +45,7 @@ Read `Statement.SpanPropagationEnabled` and `Statement.withConnectionSpan` in th
 
 `File.write` and `File.writeAll` pass undefined offset and length to `fs.write`. Bun 1.4.2 ignores the explicit file position in that call: writing `XY` at byte 8 of `abcdefgh` overwrites the first two bytes. The patch supplies offset 0 and the buffer's byte length in both calls, so seek governs writes as well as reads. `BunFileSystem.layer` uses this same implementation.
 
-Regenerate with `bun patches/platform-positional-write.mjs <pristine-package> patches/@effect%2Fplatform-node-shared@4.0.1.patch`, then `bun install`. The `file-positional-write` hunk's trap is `packages/executions/src/FilePosition.itest.ts`, proving both public write operations on a real r+ file. Run `bun run patches:prove file-positional-write`.
+Regenerate with `bun patches/platform-positional-write.mjs <pristine-package> patches/@effect%2Fplatform-node-shared@4.0.1.patch`, then `bun install`. The `file-positional-write` hunk's trap is `packages/files/src/position.itest.ts`, proving both public write operations through `BunFileSystem.layer` on a real r+ file. Run `bun run patches:prove file-positional-write`.
 
 When upgrading the platform package or Bun, run the trap without the hunk; remove it only when both sought writes land at the declared byte offset.
 
@@ -50,7 +55,7 @@ When upgrading the platform package or Bun, run the trap without the hunk; remov
 
 `BunWorker.layerPlatform` closes a worker by posting the close message and waiting up to five seconds for its `close` event; finalizers run uninterruptibly, so nothing cuts that wait short. Bun drops a message a worker receives before it attaches a listener, and `BunWorkerRunner` attaches its listener only when the worker's runner starts, so a scope that closes while the worker is still booting loses the close message and holds the parent for the whole five seconds. The patch terminates a worker that has not yet said anything — its first message is the runner's readiness signal — and asks only a listening worker to close.
 
-The `worker-close-before-ready` hunk is generated from Bun's pristine 4.0.1 package. Its trap is `packages/execution-host/src/hostExit.itest.ts`: a host that refuses its own boot must leave within the test's deadline while its performance worker is still starting. Run `bun run patches:prove worker-close-before-ready`.
+The `worker-close-before-ready` hunk is generated from Bun's pristine 4.0.1 package. Its trap is `packages/execution-host/src/workerLifecycle.itest.ts`: closing a real worker before readiness must release its runner without advancing the shutdown grace period on `TestClock`. Run `bun run patches:prove worker-close-before-ready`.
 
 ### When upgrading @effect/platform-bun
 
@@ -226,7 +231,8 @@ build is what would fail. Both are named here rather than given a trap that cann
 
 ## `svelte@5.57.0.patch`
 
-Nine hunks. 1, 2, 5 and 6 are carried from shop `core-refactor` at `8c71394ba0`, 7 and 8 from shop
+Nine hunks: 1, 2, 7, 10 and 11 stand in the applied patch; 5, 6, 8 and 9 are off while Tagma compiles
+without `experimental.async` (below), kept in `svelte@5.57.0.off.patch`. 1, 2, 5 and 6 are carried from shop `core-refactor` at `8c71394ba0`, 7 and 8 from shop
 `release` at `9de9eb1deb`, 9, 10 and 11 are runlith's own. Three of the first four are about one thing: the
 graph's services live in detached roots (`detachedRoot` in `packages/layer/src/svelte/App.svelte.ts`),
 their effects stand outside the component tree, and Svelte's batch scheduler in async mode does not
@@ -360,7 +366,7 @@ Trap: `packages/layer/src/svelte/branch-removal.svelte.test.ts`, the column's sh
 nearest-decision rule has no trap: a third batch intersecting a removal and a nearer return merges into
 the return once its own `await` ends, so a wrong skip only delays it; a scheduler trace shows the skip.
 
-### 10 · `batch.js`, `#process`: a teardown at commit updates the blocks it marks first
+### 10 · `batch.js`, `#process`: a teardown while a batch processes updates the blocks it marks first
 
 In async mode a branch an `{#if}`, `{#each}` or `{#key}` leaves is destroyed by the batch's commit
 callbacks, after `current_batch` was cleared and before the render and user effects the traversal
@@ -374,19 +380,76 @@ before the next effect. The hunk opens that collection for the commit callbacks 
 the start of the queue flush; the loop moved into `flush_eager_block_effects`, shared by both. A
 `flushSync` inside such a teardown or inside an eager update processes another batch with its own
 collection: `#process` restores the collector it replaced once it ends, and the flush walks the set it
-started with, so the nested flush neither drops the outer collection nor clears it under the walk. A
-write during the traversal itself stays as upstream has it. Pristine 5.57.0 and upstream `main` run the commit
-callbacks the same way; no upstream issue reports it.
+started with, so the nested flush neither drops the outer collection nor clears it under the walk. Pristine 5.57.0
+and upstream `main` run the commit callbacks the same way; no upstream issue reports it.
+
+Without async mode the same write happens earlier: a branch the traversal leaves is destroyed inside
+`#traverse`, and its teardown's write goes through `legacy_updates` into the next batch. A block earlier
+in the tree, which the traversal has already passed, is marked there; this batch then runs the effects
+it collected under that block before the next batch updates it. So in sync mode the collection opens
+before the traversal. In async mode it still opens only at the commit callbacks: `should_defer_append`
+answers false while a collector stands, and a collector open during the traversal would stop every
+branch switch from waiting for the commit. The flush skips a collected block that is no longer dirty,
+since a block later in the tree is updated by the traversal itself after the write marked it, and it
+takes each block out of the set as it reaches it: a block whose teardown clears a guard the walk has
+already updated marks that guard again, and the walk reaches it once more instead of leaving it marked
+under the batch's effects. When the cleared guard stands above the removed branch, the traversal is
+still inside it: from there on it runs no render, block or pre effect under a collected block that is
+still marked, and queues it with the render effects instead, which the sync traversal otherwise leaves
+empty. The queue flush updates the blocks first and then runs what still stands; the effect is not
+asked whether it is dirty before that, since asking recomputes the deriveds it reads.
 
 Symptom: the agents column of the Tagma window fell into its error boundary with
 `Cannot read properties of null (reading 'activeId')` when a project the window stood on was renamed:
 the stack ends in a row's template effect run by `flush`; the batch that removed the thread page had
 reached the column's rows, and the page's teardown released the main seat (`ThreadSeats.page`) the
-column is guarded on.
+column is guarded on. In sync mode the whole window fell into its `window` boundary with
+`Cannot read properties of null (reading 'measure')`: the top row's seam handles stand under
+`{#if columnSeam !== null}` and `{#if areaSeam !== null}` in `TopBar`, earlier in the tree than the
+section column and the right area, whose teardowns clear those seams in `AreaFrame`.
 
-Traps: `packages/layer/src/svelte/seat-release.svelte.test.ts`, the shape alone and with a `flushSync`
-in the guarded branch's teardown; the column itself in
-`apps/tagma/app/src/lib/features/threads/Column.svelte.test.ts -t "leaves when the page"`.
+Traps: `packages/layer/src/svelte/nested-eager-flush.svelte.test.ts`, the nested flush in sync mode;
+`packages/layer/src/svelte/passed-guard.svelte.test.ts`, a guard the sync traversal passed, cleared by
+the teardown of a later branch, cleared once more by a block the walk runs after it, and cleared by a
+teardown inside the guarded branch;
+`packages/layer/src/svelte/seat-release.svelte.test.ts`, the shape alone and with a `flushSync` in the
+guarded branch's teardown; the column itself in
+`apps/tagma/app/src/lib/features/threads/Column.svelte.test.ts -t "leaves when the page"`. The last two
+are async-mode traps and stay green without the hunk in sync mode.
+
+### Async mode is off
+
+The app and every package config compile with `experimental: { async: false }`. Hunks 5, 6, 8 and 9
+fix batches held by an `await`, which exist only in async mode; their traps use `await` in markup and
+do not compile without it. Hunk 10 stays: its commit-callback case is async-only — without the flag a
+branch switch commits at once (`should_defer_append` answers false) — but in sync mode the same teardown
+runs during the traversal, which the hunk collects from (`passed-guard.svelte.test.ts`), and its
+nested-flush half holds as well. A queued effect that closes a branch puts the block in the eager set, the
+branch's teardown flushes, the nested flush ends by clearing the shared collector, and the outer flush
+then reads `null`; `nested-eager-flush.svelte.test.ts` is that trap, red without the hunk. Hunks 1 and
+7 stay red without themselves in sync mode, and 2 is not tied to the mode.
+
+Tests that need async mode are parked, not deleted, in `svelte@5.57.0.off/` at their repository paths:
+neither Vitest nor svelte-check reads that directory, and svelte-check compiles every `.svelte` file of
+a package whatever its tsconfig excludes, so a fixture with `await` cannot stay in place. Parked:
+
+- `packages/layer`: the traps of 8 and 9 (`rebase`, `branch-removal`) with their fixtures; the
+  originals of `time-travel.svelte.test.ts` and its `Host.svelte` with `Page.svelte` — the traps of 5
+  and 6 are its `pending` and `blocking` doors, and the copies in place keep the `handle` door, which
+  reads a deferred key's `.current` in any mode; `deferred-tree.svelte.test.ts` with `DeferredApp` and
+  `DeferredConsumer`, a deferred key awaited in a component under a `pending` boundary; and the
+  originals of `session-handoff.svelte.test.ts`, `HandoffFrame.svelte` and `HandoffProbe.svelte`, whose
+  second case lets the incoming frame await its chunk — the copies in place keep the first case alone;
+- `packages/query`: `single.fork.test.ts` with `ForkRouteProbe`, since `fork` throws without the flag;
+- `apps/tagma/app`: `RenderingPorts.svelte.test.ts` with `RewindClaim.fixture.svelte`, a rewind claim
+  taken while its release's batch awaits.
+
+Turning async mode back on: `async: true` in `apps/tagma/app/svelte.config.js`, every package Vite
+config and `packages/layer/svelte.config.js`; copy `svelte@5.57.0.off/` over the repository root, the
+parked originals replacing the reduced time-travel and session-handoff files in place; apply `svelte@5.57.0.off.patch` on top
+of the applied patch and `git diff` the result against the pristine package as the new
+`svelte@5.57.0.patch`; remove the off patch, the parked directory and the `off` fields; `bun install`;
+`bun run patches:prove`.
 
 ### 11 · `template.js`, `from_html` and `from_namespace`: templates are cloned into the document
 
@@ -458,8 +521,8 @@ bun run --cwd packages/primitives test
 6. PR #18896 landed, or #18895 is closed otherwise — hunk 8 goes, its trap stays.
 7. A batch's traversal no longer enters a branch an intersecting earlier batch removes — hunk 9 goes, its
    trap stays.
-8. A write by a teardown at commit no longer lets the committing batch run effects under a block it
-   marked — hunk 10 goes, its traps stay.
+8. A write by a teardown at commit, or during a sync-mode traversal, no longer lets the batch run
+   effects under a block it marked — hunk 10 goes, its traps stay.
 9. `from_html` and `from_namespace` clone templates into the page's document in every browser — hunk 11
    goes, its trap stays.
 10. While none of this is done, the patch is regenerated for the new version by the method above,

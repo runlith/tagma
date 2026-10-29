@@ -45,7 +45,7 @@ export const sourcesLayer: Layer.Layer<
 
     const parts: SourceParts = { db, act, blockRows, blockNames, blockProjection, projects, scopes, vocabulary, tableOf };
     const { byBlock, of } = sourceReads(parts);
-    const { atPlacePage, ownersOf } = sourceOwnership(parts);
+    const { atPlacePage, ownersOf, containersOf } = sourceOwnership(parts);
     const { relocate } = sourceRelocation(parts);
 
     const assertSourceKind = (kind: string): Effect.Effect<void, GateRefusal<'illegal-kind'>> =>
@@ -246,6 +246,7 @@ export const sourcesLayer: Layer.Layer<
       relocate,
       atPlacePage,
       ownersOf,
+      containersOf,
     });
   }),
 );

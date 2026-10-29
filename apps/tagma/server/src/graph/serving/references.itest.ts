@@ -34,9 +34,13 @@ layer(demoGraphLayer({ repos: ['beta'] }).pipe(Layer.provideMerge(BunFileSystem.
             const routed = routedContext(machine, pool);
             const betaGraph = yield* pool.resolve({ projectId: beta.id });
             const uuid = '0199bbbb-0000-7000-8000-0000cafe0001';
-            yield* signed(Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: beta.id, uuid, title: 'Foreign reference' }))).pipe(
-              Effect.provide(betaGraph.context),
-            );
+            yield* signed(
+              Effect.flatMap(Blocks, (blocks) =>
+                Effect.flatMap(blocks.rootBlockOf(beta.id), (top) =>
+                  blocks.create({ projectId: beta.id, parentId: top.id, uuid, title: 'Foreign reference' }),
+                ),
+              ),
+            ).pipe(Effect.provide(betaGraph.context));
             yield* syncGraph({ commits: Context.get(betaGraph.context, TreeCommits), policy: Effect.succeed('auto') });
             const current = yield* pool.resolve({ projectId });
             const short = blockName(uuid);
@@ -50,8 +54,14 @@ layer(demoGraphLayer({ repos: ['beta'] }).pipe(Layer.provideMerge(BunFileSystem.
             const global = (yield* graph.projects.global())!;
             const canonical = yield* pool.resolve({ projectId: global.id });
             const globalBlocks = Context.get(canonical.context, Blocks);
+            const globalTop = yield* globalBlocks.rootBlockOf(global.id).pipe(Effect.provide(canonical.context));
             yield* signed(
-              globalBlocks.create({ projectId: global.id, uuid: '0199cccc-0000-7000-8000-0000cafe0001', title: 'Second reference' }),
+              globalBlocks.create({
+                projectId: global.id,
+                parentId: globalTop.id,
+                uuid: '0199cccc-0000-7000-8000-0000cafe0001',
+                title: 'Second reference',
+              }),
             ).pipe(Effect.provide(canonical.context));
             const refused = yield* Effect.result(read([short]));
             expect(refused._tag).toBe('Failure');
@@ -65,17 +75,25 @@ layer(demoGraphLayer({ repos: ['beta'] }).pipe(Layer.provideMerge(BunFileSystem.
             const branch = yield* pool.resolve({ projectId: beta.id, cwd: worktree });
             const born = yield* signed(
               Effect.flatMap(Blocks, (blocks) =>
-                blocks.create({
-                  projectId: beta.id,
-                  uuid: '0199bbbb-0000-7000-8000-0000cafe0005',
-                  title: 'Branch reference',
-                }),
+                Effect.flatMap(blocks.rootBlockOf(beta.id), (top) =>
+                  blocks.create({
+                    projectId: beta.id,
+                    parentId: top.id,
+                    uuid: '0199bbbb-0000-7000-8000-0000cafe0005',
+                    title: 'Branch reference',
+                  }),
+                ),
               ),
             ).pipe(Effect.provide(branch.context));
             const name = blockName(born.uuid);
             expect(yield* read([name])).toEqual([{ name, title: 'Branch reference', projectId: beta.id, branch: 'subject' }]);
             yield* signed(
-              globalBlocks.create({ projectId: global.id, uuid: '0199cccc-0000-7000-8000-0000cafe0005', title: 'Canonical collision' }),
+              globalBlocks.create({
+                projectId: global.id,
+                parentId: globalTop.id,
+                uuid: '0199cccc-0000-7000-8000-0000cafe0005',
+                title: 'Canonical collision',
+              }),
             ).pipe(Effect.provide(canonical.context));
             const answer = yield* Effect.result(read([name]));
             expect(answer._tag).toBe('Failure');

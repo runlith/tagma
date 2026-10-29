@@ -40,4 +40,5 @@ export const DRIVE_REFUSALS = [
   'devtools-open',
   'dialog-open',
   'action-failed',
+  'domain-blocked',
 ] as const;

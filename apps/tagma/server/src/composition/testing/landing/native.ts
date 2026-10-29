@@ -12,8 +12,13 @@ import { lineWrites } from '../../lineWrites.js';
 import { makeDoorWorld } from '../doorFixture.js';
 import { git, makeThreadDoors } from '../threadDoors.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
+import type { ModelAccess } from '../../../providers/contract/service/access.js';
+import { holdThreads } from '../threadScope.js';
 
-type Options = { readonly tools?: readonly string[] };
+type Options = {
+  readonly tools?: readonly string[];
+  readonly models?: (standing: ModelAccess['Service']) => ModelAccess['Service'];
+};
 
 class RepositorySeed extends Context.Service<RepositorySeed, { readonly root: string }>()('testing/LandingRepositorySeed') {}
 
@@ -33,7 +38,8 @@ export const seedRepository = Effect.fn('landing.seedRepository')(function* (roo
 });
 
 export const nativeLanding = Effect.fnUntraced(function* (committed: Readonly<Record<string, string>>, options: Options = {}) {
-  const world = yield* makeDoorWorld();
+  const world = yield* makeDoorWorld({ models: options.models });
+  yield* holdThreads(world);
   const files = yield* FileSystem.FileSystem;
   const root = yield* files.realPath(yield* world.directory('checkout'));
   yield* seedRepository(root);
@@ -56,8 +62,9 @@ export const nativeLanding = Effect.fnUntraced(function* (committed: Readonly<Re
     projectId,
     options.tools ?? ['submit_work'],
   );
-  const born = Effect.fnUntraced(function* () {
-    const response = yield* world.op('create_thread', { approvalMode: 'trust' }, `project=${projectId}`);
+  const born = Effect.fnUntraced(function* (parent?: string) {
+    const input = parent === undefined ? { approvalMode: 'trust' } : { parent, task: 'format the shared test' };
+    const response = yield* world.op('create_thread', input, `project=${projectId}`);
     const {
       snapshot: { thread },
     } = yield* Schema.decodeUnknownEffect(threadWireSnapshotPayloadSchema)(response.body);

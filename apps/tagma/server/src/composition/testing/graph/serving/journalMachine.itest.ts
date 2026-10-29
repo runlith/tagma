@@ -14,8 +14,9 @@ layer(servingLayer, { excludeTestServices: true })('machine journal', (it) => {
     withServing(({ served, projectId }) =>
       Effect.gen(function* () {
         const db = (yield* GraphStore).db;
+        const root = yield* (yield* Blocks).rootBlockOf(projectId);
         const made = yield* signedBy({ harness: 'claude-code', key: 'machine-key' })(
-          (yield* Blocks).create({ projectId, tags: ['idea'], title: 'Machine Truth', body: 'an act to remember' }),
+          (yield* Blocks).create({ projectId, parentId: root.id, tags: ['idea'], title: 'Machine Truth', body: 'an act to remember' }),
         );
         expect(yield* db.select().from(event).where(eq(event.blockId, made.id))).toContainEqual(
           expect.objectContaining({ op: 'create', blockId: made.id }),

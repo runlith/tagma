@@ -88,7 +88,12 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
         const { world, projectId, inspected } = yield* Place;
         const files = yield* FileSystem.FileSystem;
         const query = `project=${projectId}`;
-        const created = yield* world.op('create_block', { tags: ['idea'], title: 'Merge subject', body: 'initial knowledge' }, query);
+        const parentId = ((yield* world.op('list_root_blocks', {}, query)).body as { blocks: { name: string }[] }).blocks[0]!.name;
+        const created = yield* world.op(
+          'create_block',
+          { tags: ['idea'], title: 'Merge subject', body: 'initial knowledge', parentId },
+          query,
+        );
         expect(created.status).toBe(200);
         const name = (created.body as { block: { name: string } }).block.name;
         const graph = yield* world.runtime.pool.resolve({ projectId });
@@ -129,7 +134,7 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
         expect(finished.status).toBe(200);
         expect(finished.body).toMatchObject({ status: 'ok', resolved: [row.path] });
         const notice = yield* world.op('read_graph_recovery', { branch: 'main' }, query);
-        expect(notice.body).toEqual({ status: 'ok', recovery: null });
+        expect(notice.body).toMatchObject({ status: 'ok', recovery: null });
         const restored = yield* world.op('read_block', { blockIds: [name] }, query);
         expect(restored.status).toBe(200);
         expect((restored.body as { reads: readonly { body: string }[] }).reads[0]?.body.trim()).toBe('current and incoming knowledge');

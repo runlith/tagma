@@ -63,8 +63,12 @@ layer(servingLayer, { excludeTestServices: true })('native graph storage', (it) 
     withServing(({ demo, pool, served, projectId, repo }) =>
       Effect.gen(function* () {
         yield* demo.graph.settings.write({ scope: 'project', projectId, key: graphCommit.id, value: 'manual' });
+        const root = yield* Effect.provide(
+          Effect.flatMap(Blocks, (blocks) => blocks.rootBlockOf(projectId)),
+          served.context,
+        );
         const note = yield* demo
-          .as('fixture', Context.get(served.context, Blocks).create({ projectId, title: 'record', body: 'before' }))
+          .as('fixture', Context.get(served.context, Blocks).create({ projectId, parentId: root.id, title: 'record', body: 'before' }))
           .pipe(Effect.provide(served.context));
         const catalog = yield* fixtureOperationCatalog;
         const enforcement = Context.make(

@@ -68,7 +68,7 @@ it.live(
       const click = Effect.fnUntraced(function* (page: PageId) {
         const automation = yield* Automation;
         const shot = yield* automation.snapshot(page, { within: undefined, limit: 200 }, THREAD);
-        yield* automation.act(page, { kind: 'click', aim: { ref: refIn(shot.text, /button "Add"/) } }, THREAD);
+        yield* automation.act(page, [{ kind: 'click', aim: { ref: refIn(shot.text, /button "Add"/) } }], THREAD);
       });
 
       const first = yield* Scope.fork(yield* Effect.scope);

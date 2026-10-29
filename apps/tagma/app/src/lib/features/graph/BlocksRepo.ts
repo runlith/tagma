@@ -99,21 +99,6 @@ export const BlocksRepo = Repo.define(
       mutator: (name: string, { signal }, door) => door.perform('close_block', { blockId: name }, { signal }),
     }),
 
-    accept: mutation({
-      mutator: (input: { name: string; reason?: string }, { signal }, door) =>
-        door.perform('accept_amendment', { blockId: input.name, reason: input.reason }, { signal }),
-    }),
-
-    reject: mutation({
-      mutator: (input: { name: string; reason: string }, { signal }, door) =>
-        door.perform('reject_amendment', { blockId: input.name, reason: input.reason }, { signal }),
-    }),
-
-    uphold: mutation({
-      mutator: (input: { name: string; reason: string; by: readonly string[] }, { signal }, door) =>
-        door.perform('uphold_amendment', { blockId: input.name, reason: input.reason, by: input.by }, { signal }),
-    }),
-
     setLawEnabled: mutation({
       mutator: (input: { name: string; enabled: boolean }, { signal }, door) =>
         door.perform('set_rule_enabled', { blockId: input.name, enabled: input.enabled }, { signal }),

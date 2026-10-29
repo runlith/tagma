@@ -43,23 +43,8 @@ export type TagWriteRefusal = FieldWriteRefusal | 'tag-undeclared';
 
 export type EdgeRefusal = 'edge-undeclared' | 'edge-shape' | 'wait-cycle' | 'superseded' | 'operation-only';
 
-export type AmendmentRefusal =
-  | CreationDefaultRefusal
-  | 'creation-contract'
-  | 'amendment-empty'
-  | 'amendment-op'
-  | 'amendment-ref'
-  | 'amendment-outside'
-  | 'leaf'
-  | 'not-found'
-  | 'bad-name'
-  | 'ambiguous-name';
-
-export type AmendmentPayloadRefusal = AmendmentRefusal | 'body-capped' | 'body-address' | 'deleted';
-
 export type BlockCreateRefusal =
   | GitRefusal
-  | 'tree-not-measured'
   | CreationDefaultRefusal
   | 'creation-contract'
   | TransitionRefusal
@@ -72,19 +57,14 @@ export type BlockCreateRefusal =
   | 'not-found'
   | 'deleted'
   | 'no-root'
+  | 'parent-required'
   | 'cross-project-parent'
   | 'leaf'
-  | 'amends-missing'
-  | 'amends-shape'
   | 'body-capped'
   | 'body-address'
   | 'source-required'
   | 'source-outside'
   | 'carriers-invalid'
-  | AmendmentPayloadRefusal
-  | 'cross-project'
-  | 'amends-an-amendment'
-  | 'amendment-shape'
   | StorageRefusal;
 
 export type StorageRefusal = 'storage-unavailable' | 'stealth-dependency';
@@ -109,8 +89,6 @@ export type BlockUpdateRefusal =
   | 'carriers-invalid'
   | 'operation-only';
 
-export type RevisionRefusal = AmendmentPayloadRefusal | 'verdict-standing';
-
 export type BlockUpdate = {
   id: number;
   title?: string;
@@ -122,14 +100,7 @@ export type BlockUpdate = {
   fields?: Readonly<Record<string, unknown>>;
 };
 
-export type RetagRefusal =
-  | 'tag-undeclared'
-  | 'amends-shape'
-  | 'retag-status'
-  | 'edge-undeclared'
-  | 'edge-shape'
-  | 'source-required'
-  | 'not-measurable';
+export type RetagRefusal = 'tag-undeclared' | 'retag-status' | 'edge-undeclared' | 'edge-shape' | 'source-required' | 'not-measurable';
 
 export type BlockEditRefusal = BlockUpdateRefusal | 'anchor-empty' | 'anchor-noop' | 'anchor-not-found' | 'anchor-ambiguous';
 
@@ -159,7 +130,15 @@ export type RestoreRefusal =
   | 'carriers-invalid'
   | 'field-invalid';
 
-export type ModuleRefusal = FloorRefusal | 'not-found' | 'deleted' | 'field-invalid' | 'field-required' | 'tag-undeclared' | 'module-shape';
+export type ModuleRefusal =
+  | FloorRefusal
+  | 'not-found'
+  | 'deleted'
+  | 'field-invalid'
+  | 'field-required'
+  | 'tag-undeclared'
+  | 'module-shape'
+  | 'parent-required';
 
 export type ArrivalRefusal = BlockCreateRefusal | 'relocation-shape';
 
@@ -182,10 +161,7 @@ export class Blocks extends Context.Service<
     update(
       input: BlockUpdate & { tags?: undefined; fields?: undefined },
     ): Effect.Effect<BlockWrite, StoreFailure | GateRefusal<BlockUpdateRefusal>>;
-    update(
-      input: BlockUpdate & { tags?: undefined },
-    ): Effect.Effect<BlockWrite, StoreFailure | GateRefusal<BlockUpdateRefusal | RevisionRefusal>>;
-    update(input: BlockUpdate): Effect.Effect<BlockWrite, StoreFailure | GateRefusal<BlockUpdateRefusal | RevisionRefusal | RetagRefusal>>;
+    update(input: BlockUpdate): Effect.Effect<BlockWrite, StoreFailure | GateRefusal<BlockUpdateRefusal | RetagRefusal>>;
     edit(input: BlockEdit): Effect.Effect<BlockWrite, StoreFailure | GateRefusal<BlockEditRefusal>>;
     setEnabled(input: { id: number; enabled: boolean }): Effect.Effect<BlockRecord, StoreFailure | GateRefusal<SwitchRefusal>>;
     setDelivery(input: { id: number; delivery: Delivery | null }): Effect.Effect<BlockRecord, StoreFailure | GateRefusal<DeliveryRefusal>>;

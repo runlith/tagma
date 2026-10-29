@@ -35,7 +35,9 @@ it.live('submit_work carries a holderâ€™s lines without attributing that holderâ
     });
     const holder = yield* born();
     const lander = yield* born();
-    const created = yield* world.op('create_block', { tags: ['task'], title: 'Holder work' }, `project=${projectId}`);
+    const parentId = ((yield* world.op('list_root_blocks', {}, `project=${projectId}`)).body as { blocks: { name: string }[] }).blocks[0]!
+      .name;
+    const created = yield* world.op('create_block', { tags: ['task'], title: 'Holder work', parentId }, `project=${projectId}`);
     const task = (created.body as { block: { name: string } }).block.name;
     const claim = () => world.op('claim_block', { blockId: task }, `project=${projectId}`, { [GRANT_HEADER]: holder.grant });
     const claimed = yield* claim();

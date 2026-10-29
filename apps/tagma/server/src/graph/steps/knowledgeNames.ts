@@ -151,7 +151,7 @@ export const knowledgeNames = Effect.fn('GraphStep.knowledgeNames')(function* (p
       yield* projection.derive([...changed], ['tags', 'search']);
       if (changed.size > 0) yield* vocabulary.forget(project.id);
       const after = yield* vocabulary.of(project.id);
-      const fieldsOf = yield* storedFields(after, documents, properties({ tags: each(reference) }), (key) => reference(key) as string);
+      const fieldsOf = storedFields(after, documents, (key) => reference(key) as string);
       const carriers = yield* db
         .select()
         .from(block)
@@ -159,7 +159,7 @@ export const knowledgeNames = Effect.fn('GraphStep.knowledgeNames')(function* (p
       const carried = new Set<number>();
       for (const row of carriers) {
         const tags = row.tags.map((tag) => reference(tag) as string);
-        const fields = yield* fieldsOf(after.tagsOf({ tags }), row.fields);
+        const fields = fieldsOf(after.tagsOf({ tags }), row.fields);
         if (JSON.stringify(fields) === JSON.stringify(row.fields) && JSON.stringify(tags) === JSON.stringify(row.tags)) continue;
         yield* save(row, fields, row.title, tags);
         carried.add(row.id);

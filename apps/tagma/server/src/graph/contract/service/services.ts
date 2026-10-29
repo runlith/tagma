@@ -10,7 +10,7 @@ import type { BlockRows } from '../../acts/rows.js';
 import type { BatchFiles } from '../../work/batchFiles.js';
 import type { Act, BlockAnswers, BlockNames, BlockProjection, BlockReferences } from './acts.js';
 import type { Blocks, Edges, Trash } from './blocks.js';
-import type { Amendments, Batch, Reflections, Review, Supersession, Tasks } from './work.js';
+import type { Documents, Batch, Reflections, Supersession, Tasks } from './work.js';
 import type { Digest, Orientation, SessionNames, Touches } from './orientation.js';
 import type { Sources } from './sources.js';
 import type { GraphFeed, GraphJournal } from './journal.js';
@@ -57,9 +57,8 @@ export type GraphServices =
   | History
   | Tasks
   | Supersession
-  | Amendments
+  | Documents
   | GraphFeed
-  | Review
   | Reflections
   | GraphSource
   | SourceProject

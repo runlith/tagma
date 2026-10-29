@@ -21,12 +21,17 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
     withDemo(({ graph, projectId, fixture, nameOf }) =>
       Effect.gen(function* () {
         const root = yield* graph.blocks.rootBlockOf(projectId);
-        const old = yield* graph.blocks.create({ projectId, title: 'Old claim' });
+        const old = yield* graph.blocks.create({ projectId, parentId: root.id, title: 'Old claim' });
         const kept = yield* graph.blocks.create({ projectId, parentId: old.id, title: 'Kept', body: 'orchid' });
-        const task = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Held work' });
+        const task = yield* graph.blocks.create({ projectId, parentId: root.id, tags: ['task'], title: 'Held work' });
         yield* graph.tasks.claim({ id: task.id });
         const held = yield* graph.blocks.blockById(task.id);
-        const pointer = yield* graph.blocks.create({ projectId, title: 'Pointer', body: `[[${yield* nameOf(kept.id)}]]` });
+        const pointer = yield* graph.blocks.create({
+          projectId,
+          parentId: root.id,
+          title: 'Pointer',
+          body: `[[${yield* nameOf(kept.id)}]]`,
+        });
         yield* graph.graphStore.db
           .update(block)
           .set({ tags: ['claim'] })
@@ -57,9 +62,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
   );
 
   it.effect('a tree written before claims left reads its claim-era frontmatter, and the steps rewrite it in the current form', () =>
-    withDemo(({ graph, projectId, fixture }) =>
+    withDemo(({ graph, projectId, fixture, root }) =>
       Effect.gen(function* () {
-        const measured = yield* graph.blocks.create({ projectId, title: 'Measured once' });
+        const measured = yield* graph.blocks.create({ projectId, parentId: root, title: 'Measured once' });
         const treeRoot = yield* fixture.directory('claim-era-tree');
         yield* runGit(graph.git, 'init', ['init', '-q'], { cwd: treeRoot });
         yield* projectToTree({ projectId, treeRoot });
@@ -92,12 +97,17 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
   it.effect(
     'the steps prove the numbered holders this copy claimed and keep the others numbered, so the branch merges cleanly with the copy that proves them',
     () =>
-      withDemo(({ graph, projectId, fixture, as, table }) =>
+      withDemo(({ graph, projectId, fixture, as, table, root }) =>
         Effect.gen(function* () {
-          const claimed = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Claimed in this copy' });
+          const claimed = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'Claimed in this copy' });
           const held = yield* as('here', graph.tasks.claim({ id: claimed.id }));
           const number = (yield* table()).holderOf(held)!;
-          const carried = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'Held by a number another copy gave' });
+          const carried = yield* graph.blocks.create({
+            projectId,
+            parentId: root,
+            tags: ['task'],
+            title: 'Held by a number another copy gave',
+          });
           yield* graph.graphStore.db.update(block).set({ fields: held.fields }).where(eq(block.id, carried.id));
           const treeRoot = yield* fixture.directory('proven-tree');
           const git = (...args: string[]) =>

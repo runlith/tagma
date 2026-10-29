@@ -22,7 +22,9 @@ layer(Layer.merge(terminalFixture, BunFileSystem.layer), { excludeTestServices: 
       const world = yield* TerminalFixture;
       const checkout = yield* world.checkout();
       const files = yield* FileSystem.FileSystem;
-      const area = yield* created(checkout, { tags: ['idea'], title: 'landing area' });
+      const roots = yield* op(checkout, 'list_root_blocks', {});
+      const root = (JSON.parse(roots.out) as { blocks: { name: string }[] }).blocks[0]!.name;
+      const area = yield* created(checkout, { tags: ['idea'], title: 'landing area', parentId: root });
       const elsewhere = yield* world.directory('outside');
       const document = join(elsewhere, 'document.json');
       yield* files.writeFileString(

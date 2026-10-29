@@ -25,10 +25,10 @@ const ticketDeclaration = (id: string, words: readonly string[]) => ({
   gates: TICKET_GATES.map((gate) => ({ ...gate })),
 });
 
-const lens = ({ graph, projectId }: EffectDemo) => {
+const lens = ({ graph, projectId, root }: EffectDemo) => {
   const declare = (fields: Record<string, unknown>) =>
-    graph.blocks.create({ projectId, tags: ['tag'], title: `#${fields.id as string}`, body: 'declared here', fields });
-  const born = (tags: string[], title: string) => graph.blocks.create({ projectId, tags, title });
+    graph.blocks.create({ projectId, parentId: root, tags: ['tag'], title: `#${fields.id as string}`, body: 'declared here', fields });
+  const born = (tags: string[], title: string) => graph.blocks.create({ projectId, parentId: root, tags, title });
   return { declare, born };
 };
 
@@ -180,7 +180,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('status binding', (it) =>
   );
 
   it.effect('a node carrying two tags is worked through the tag that owns the role, and two status bindings refuse', () =>
-    withLens(({ graph, projectId, declare, born, as, refusal, table }) =>
+    withLens(({ graph, projectId, declare, born, as, refusal, table, root }) =>
       Effect.gen(function* () {
         yield* graph.settings.write({
           scope: 'project',
@@ -204,11 +204,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('status binding', (it) =>
             { gate: 'transition', field: 'state', from: 'open', to: 'dropped' },
           ],
         });
-        const clash = yield* refusal(graph.blocks.create({ projectId, tags: ['task', 'errand'], title: 'both at once' }));
+        const clash = yield* refusal(graph.blocks.create({ projectId, parentId: root, tags: ['task', 'errand'], title: 'both at once' }));
         expect(clash.code).toBe('role-conflict');
         expect(clash.reason).toContain('status');
         yield* declare({ id: 'batch', fields: { status: 'number' } });
-        const fields = yield* refusal(graph.blocks.create({ projectId, tags: ['task', 'batch'], title: 'both again' }));
+        const fields = yield* refusal(graph.blocks.create({ projectId, parentId: root, tags: ['task', 'batch'], title: 'both again' }));
         expect(fields.code).toBe('field-conflict');
         expect(fields.reason).toContain('status');
       }),

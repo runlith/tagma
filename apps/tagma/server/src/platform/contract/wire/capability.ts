@@ -13,6 +13,7 @@ export type CapabilityDeclaration = {
   readonly sections: readonly string[];
   readonly runtimeSources?: readonly string[];
   readonly joins?: readonly string[];
+  readonly toolCode?: { readonly module: string; readonly names: readonly string[] };
 };
 
 export const AGENT_NEEDS = ['shared', 'history', 'forbids-comments', 'images'] as const;

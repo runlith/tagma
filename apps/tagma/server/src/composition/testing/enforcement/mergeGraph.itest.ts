@@ -37,7 +37,12 @@ const enforced = Effect.fnUntraced(
   function* (graph: EffectDemo, projectId: number, checkout: string, modules: readonly ModuleSet[], workers: Lanes) {
     const under = yield* graph.graph.blocks.rootBlockOf(projectId);
     yield* modulesDrawn({ projectId, caller: null, subjectOf: () => null, modules: modules.map((one) => ({ ...one, under })) });
-    const made = yield* graph.graph.blocks.create({ projectId, tags: ['rule'], title: 'Import only along declared relations' });
+    const made = yield* graph.graph.blocks.create({
+      projectId,
+      parentId: under.id,
+      tags: ['rule'],
+      title: 'Import only along declared relations',
+    });
     const row = yield* graph.graph.blocks.blockById(made.id);
     yield* enforcementApplied(row, {
       strictness: 'gate',

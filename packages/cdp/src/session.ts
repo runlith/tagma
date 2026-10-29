@@ -1,5 +1,5 @@
 import type { ProtocolMapping } from 'devtools-protocol/types/protocol-mapping.js';
-import { Data, Deferred, Effect, Queue, type Scope, Stream } from 'effect';
+import { type Cause, Data, Deferred, Effect, Queue, type Scope, Stream } from 'effect';
 import type { WorkerUnavailable } from '@runlith/utils/worker';
 import { commandText, header } from './wire.js';
 import { parsed, type PayloadUnreadable } from './payload.js';
@@ -62,7 +62,7 @@ export interface Connection {
   readonly ended: Effect.Effect<SessionEnd>;
 }
 
-type Listener = { readonly wanted: (method: string) => boolean; readonly queue: Queue.Queue<CdpEvent> };
+type Listener = { readonly wanted: (method: string) => boolean; readonly queue: Queue.Queue<CdpEvent, Cause.Done> };
 
 type Owner = {
   readonly id: string | undefined;
@@ -229,7 +229,7 @@ export const connect = Effect.fnUntraced(function* (transport: Transport) {
       events: (wanted = every) =>
         Effect.map(
           Effect.acquireRelease(
-            Effect.map(Queue.unbounded<CdpEvent>(), (queue) => {
+            Effect.map(Queue.unbounded<CdpEvent, Cause.Done>(), (queue) => {
               const listener: Listener = { wanted, queue };
               owner.listeners.add(listener);
               return listener;
@@ -237,7 +237,7 @@ export const connect = Effect.fnUntraced(function* (transport: Transport) {
             (listener) =>
               Effect.suspend(() => {
                 owner.listeners.delete(listener);
-                return Queue.shutdown(listener.queue);
+                return Queue.end(listener.queue);
               }),
           ),
           ({ queue }) => Stream.fromQueue(queue).pipe(Stream.interruptWhen(Deferred.await(owner.ended))),

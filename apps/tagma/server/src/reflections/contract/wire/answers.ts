@@ -28,6 +28,9 @@ export const reflectionFiledFields = {
   sightings: Schema.Number,
   already: Schema.Array(Schema.Struct({ name: Schema.String, title: Schema.String, shared: Schema.Number })),
   receivedBy: Schema.NullOr(processProvenanceSchema),
+  unplaced: Schema.optional(Schema.String).annotate({
+    description: 'Why the entry stands outside the owner of the code declaring the operation it is about, and what to do.',
+  }),
 };
 
 export type ReflectionFiled = Schema.Struct.Type<typeof reflectionFiledFields> & { readonly status: 'ok' };

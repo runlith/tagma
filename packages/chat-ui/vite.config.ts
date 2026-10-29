@@ -15,7 +15,7 @@ const isolatedUnit = [
 ];
 
 export default defineConfig({
-  plugins: [svelte({ compilerOptions: { experimental: { async: true } } })],
+  plugins: [svelte({ compilerOptions: { experimental: { async: false } } })],
   test: {
     environment: 'jsdom',
     setupFiles: ['@runlith/testbed/vitest/setup', '@runlith/testbed/vitest/jsdom'],

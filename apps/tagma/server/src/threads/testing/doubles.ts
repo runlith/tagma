@@ -136,6 +136,8 @@ import {
 import type { IdleDelivery } from '../collaboration/signals.js';
 import { makeOwnWork } from '../collaboration/ownWork.js';
 import { makeEventReads } from '../events/reads.js';
+import { OwnWork } from '../contract/service/ownWork.js';
+import { standingOf } from '../events/standing.js';
 import { makeThreadsLifetime } from '../lifetime.js';
 import { harnessSpend as harnessSpendOver } from '../store/harnessSpend.js';
 import { harnessRefusal as harnessRefusalOver } from '../refusals.js';
@@ -285,11 +287,21 @@ export const republishOnMachineFlip = (
 
 export const readerMarks = () => makeReaderMarks;
 
-export const threadListReads = (threads: ThreadMetadataReads, records: ThreadRecords['Service'], kinds: ThreadEntryReader) =>
+export const standingOfSummary = (...input: Parameters<typeof standingOf>): ReturnType<typeof standingOf> => standingOf(...input);
+
+export const owingNothing: OwnWork['Service'] = OwnWork.of({ owing: () => Effect.succeed([]), endings: new Set() });
+
+export const threadListReads = (
+  threads: ThreadMetadataReads,
+  records: ThreadRecords['Service'],
+  kinds: ThreadEntryReader,
+  own: OwnWork['Service'] = owingNothing,
+) =>
   makeThreadListReads.pipe(
     Effect.provideService(ThreadMetadataSource, threads),
     Effect.provideService(ThreadRecords, records),
     Effect.provideService(ThreadEntryKinds, kinds),
+    Effect.provideService(OwnWork, own),
   );
 
 export const threadLiveSpells = () => makeThreadLiveSpells;

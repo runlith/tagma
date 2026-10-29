@@ -16,7 +16,6 @@ import { Catalogs } from '../contract/wire/catalogs.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
 import type { Tag } from '../contract/wire/tags/declaration.js';
 import { CATALOG_DECLARATION, TAG_DECLARATION } from '../contract/wire/tags/declaration.js';
-import { AMENDMENT } from '../contract/wire/tags/amendment.js';
 import { LEAF } from '../contract/wire/tags/leaf.js';
 import { blockName } from '../contract/wire/references.js';
 import { farText } from '../contract/wire/far.js';
@@ -114,7 +113,7 @@ export const blockArrival = Effect.gen(function* () {
           if (above === undefined) return yield* Effect.die(`${name} arrived before its parent ${one.parent}`);
           const ids = keyed.get(one.uuid) ?? [];
           const declared = tags.get(one.uuid) ?? [];
-          if (!table.supports({ tags: ids }, AMENDMENT) && table.supports(above, LEAF)) return yield* leafRefusal(blockName(above.uuid));
+          if (table.supports(above, LEAF)) return yield* leafRefusal(blockName(above.uuid));
           const fields: Record<string, unknown> = { ...one.fields };
           for (const { field, writer } of one.sessions) fields[field] = (yield* writers.resolve(yield* transactionUnit, writer)).id;
           yield* validateFields(declared, fields).pipe(Effect.mapError((refused) => renamed(name, refused)));

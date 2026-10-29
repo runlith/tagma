@@ -30,6 +30,11 @@ const setup = Effect.gen(function* () {
 class Bridges extends Context.Service<Bridges, Effect.Success<typeof setup>>()('testing/Bridges') {}
 const called = (connection: McpSdkConnection, tool: string, input: Record<string, unknown>) =>
   Effect.flatMap(Bridges, ({ call }) => mcpCallTool(connection, tool, input, call));
+const rootOf = Effect.fnUntraced(function* () {
+  const { world, project } = yield* Bridges;
+  const roots = yield* world.tagma(['op', 'list_root_blocks', '--json', '--project', project.name], { cwd: project.root });
+  return (JSON.parse(roots.out) as { blocks: { name: string }[] }).blocks[0]!.name;
+});
 const contentSchema = Schema.Struct({
   content: Schema.Array(Schema.Struct({ type: Schema.String, text: Schema.optional(Schema.String) })),
 });
@@ -108,12 +113,13 @@ layer(Layer.effect(Bridges, setup), { excludeTestServices: true })('MCP CLI', (i
   it.effect('a call through the bridge answers text, its document when it asks with json, and the display of its feed row', () =>
     Effect.gen(function* () {
       const { direct } = yield* Bridges;
-      const told = yield* called(direct, 'create_block', { title: 'Written over MCP', body: 'Its first body.' });
+      const parentId = yield* rootOf();
+      const told = yield* called(direct, 'create_block', { title: 'Written over MCP', body: 'Its first body.', parentId });
       expect(yield* textOf(told)).toContain('Written over MCP');
       const shown = (yield* displayOf(told))._meta.toolDisplay;
       expect(shown.title).toEndWith('Written over MCP');
       expect(toolDisplayOpensByDefault(shown)).toBe(true);
-      const answer = yield* documentOf(yield* called(direct, 'create_block', { title: 'Written as a document', json: true }));
+      const answer = yield* documentOf(yield* called(direct, 'create_block', { title: 'Written as a document', parentId, json: true }));
       expect(answer.status).toBe('ok');
       expect((answer.block as { title?: string } | undefined)?.title).toBe('Written as a document');
       expect(answer._meta).toBeUndefined();
@@ -141,15 +147,16 @@ layer(Layer.effect(Bridges, setup), { excludeTestServices: true })('MCP CLI', (i
       const { gemini, call } = yield* Bridges;
       const page = yield* mcpListTools(gemini, call);
       expect(page.tools.map((tool) => tool.name)).toEqual(['list_operations', 'call_operation']);
-      const listed = yield* documentOf(yield* called(gemini, 'list_operations', { match: 'amendment', json: true }));
+      const listed = yield* documentOf(yield* called(gemini, 'list_operations', { match: 'create_block', json: true }));
       const ids = (listed.operations as ReadonlyArray<{ id: string }>).map((entry) => entry.id);
-      expect(ids.length).toBeGreaterThan(0);
-      expect(ids.every((id) => id.includes('amendment'))).toBe(true);
-      expect(ids).toContain('accept_amendment');
+      expect(ids).toEqual(['create_block']);
       const found = yield* textOf(yield* called(gemini, 'list_operations', { match: 'create_block' }));
       expect(found).toContain('create_block — ');
       expect(found).toMatch(/input: \{[^}]*title: string/u);
-      const made = yield* called(gemini, 'call_operation', { operation: 'create_block', input: { title: 'Found in text' } });
+      const made = yield* called(gemini, 'call_operation', {
+        operation: 'create_block',
+        input: { title: 'Found in text', parentId: yield* rootOf() },
+      });
       expect(yield* textOf(made)).toContain('Found in text');
     }),
   );
@@ -185,7 +192,9 @@ layer(Layer.effect(Bridges, setup), { excludeTestServices: true })('MCP CLI', (i
     Effect.gen(function* () {
       const { world, project, direct } = yield* Bridges;
       expect(
-        (yield* documentOf(yield* called(direct, 'create_block', { title: 'Written by the pinned harness', json: true }))).status,
+        (yield* documentOf(
+          yield* called(direct, 'create_block', { title: 'Written by the pinned harness', parentId: yield* rootOf(), json: true }),
+        )).status,
       ).toBe('ok');
       const sessions = yield* world.tagma(['sessions', '--json'], { cwd: project.root });
       expect(sessions.code).toBe(0);

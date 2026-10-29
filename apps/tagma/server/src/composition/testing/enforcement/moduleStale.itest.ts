@@ -27,7 +27,13 @@ layer(enforceFixture(), { excludeTestServices: true })('enforcement', (it) => {
             yield* set(fx, {
               modules: [
                 { id: 'app', entries: { put: [{ at: '.' }] } },
-                { id: 'consumer', title: 'Consumer', root: 'src/app', imports: { put: ['app'] } },
+                {
+                  id: 'consumer',
+                  title: 'Consumer',
+                  parent: yield* fx.demo.nameOf(fx.demo.root),
+                  root: 'src/app',
+                  imports: { put: ['app'] },
+                },
               ],
             });
             const rule = yield* fx.created(['rule'], 'Import only downward');

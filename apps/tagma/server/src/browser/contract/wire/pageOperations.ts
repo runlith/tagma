@@ -1,13 +1,15 @@
 import { placedCursor } from '../../../platform/contract/wire/place.js';
 import { Schema } from 'effect';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
-import { limitOf } from '../../../platform/contract/wire/pageFamily.js';
-import { DEVICE_NAMES, Emulation, SCHEMES, Viewport } from './emulation.js';
+import { ceilingOf, limitOf } from '../../../platform/contract/wire/pageFamily.js';
+import { Cpu, DEVICE_NAMES, Emulation, Geolocation, NetworkCondition, SCHEMES, Viewport } from './emulation.js';
 import { PageId, ProfileId, Ref } from './ids.js';
+import { HEAP_CLASSES, HeapCaptured } from './heap.js';
 import { Download, Glance, Page } from './page.js';
 import {
   CONSOLE_LEVELS,
   CONSOLE_ROWS,
+  CONSOLE_STACK_ROWS,
   ConsoleEntry,
   DOWNLOAD_ROWS,
   NETWORK_ROWS,
@@ -34,7 +36,7 @@ export const ACTIONS = [
 ] as const;
 export type ActionName = (typeof ACTIONS)[number];
 
-export const CAPTURES = ['viewport', 'full', 'element', 'pdf'] as const;
+export const CAPTURES = ['viewport', 'full', 'element', 'pdf', 'heap'] as const;
 
 export const WAITS = ['load', 'text', 'url', 'element'] as const;
 
@@ -42,11 +44,33 @@ export const GOES = ['back', 'forward', 'reload', 'stop'] as const;
 
 const Point = { x: Schema.optional(Schema.Finite), y: Schema.optional(Schema.Finite) };
 
+export const ActionStep = Schema.Struct({
+  action: Schema.Literals(ACTIONS),
+  ref: Schema.optional(Ref),
+  ...Point,
+  text: Schema.optional(Schema.String),
+  key: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  values: Schema.optional(Schema.Array(Schema.String)),
+  to: Schema.optional(Schema.Struct({ ref: Schema.optional(Ref), ...Point })),
+  dx: Schema.optional(Schema.Finite),
+  dy: Schema.optional(Schema.Finite),
+  files: Schema.optional(Schema.Array(Schema.String.check(Schema.isMinLength(1)))),
+});
+export type ActionStep = typeof ActionStep.Type;
+
+export const ActionRun = Schema.Struct({
+  page: Glance,
+  completed: Schema.Int,
+  stopped: Schema.NullOr(Schema.Int),
+});
+export type ActionRun = typeof ActionRun.Type;
+
 export const WAIT_CEILING_MS = 120_000;
 
 export const PAGE_OPERATIONS = {
   open_page: operation('open_page', {
     ...ACTING,
+    tool: { ...ACTING.tool, companions: ['snapshot_page', 'capture_page'] },
     meaning: 'Open a page of the browser built into Tagma in this project and answer its id and state.',
     grammar:
       'Without `profile` a thread opens in the `browser.agentProfile` setting and the operator in `browser.userProfile`. A profile whose host is not connected refuses `host-away` naming the profiles of connected hosts; nothing is opened in another profile instead. The page this call opens becomes the page this thread works with by default.',
@@ -58,7 +82,7 @@ export const PAGE_OPERATIONS = {
       profile: Schema.optional(ProfileId).annotate({ description: 'The profile id list_profiles answered.' }),
     }),
     answer: arms({ opened: { page: Page } }),
-    refusals: [...DRIVE_REFUSALS, 'navigation-failed'],
+    refusals: [...DRIVE_REFUSALS, 'navigation-failed', 'operator-input'],
     confirmation: () => ({ summary: 'Open a page?' }),
     confirmLabel: 'Open page',
     presentation: { running: 'Opening a page', done: 'Opened a page' },
@@ -92,7 +116,7 @@ export const PAGE_OPERATIONS = {
     ...ACTING,
     meaning: 'Load an address in a page, or go back, forward, reload or stop.',
     grammar:
-      'Name `url` or `go`. The answer comes once the navigation is committed, before the page has loaded: wait_for_page with `load` waits for that. A failed navigation refuses `navigation-failed` with the network error code.',
+      'Name `url` or `go`. The answer comes once committed, before load; wait_for_page with `load` waits for that. A network failure refuses `navigation-failed`. Agent navigation, including open_page, actions, frames, redirects and popups, follows browser.blockedDomains and browser.allowedDomains: project lists replace user lists, blocked wins, both empty leave navigation unrestricted. A blocked HTTP(S) document never loads and refuses domain-blocked naming its domain and setting; a block after a completed call is surfaced once at the next agent action. Operator input or navigation lifts the policy. Non-network documents (blob/data/about) and page subresources/fetches are outside these lists. While a restricted managed page exists, other HTTP(S) documents in that profile pass through interception too; workers are untouched.',
     input: Schema.Struct({
       project,
       page,
@@ -100,7 +124,7 @@ export const PAGE_OPERATIONS = {
       go: Schema.optional(Schema.Literals(GOES)),
     }),
     answer: arms({ navigated: { page: Glance } }),
-    refusals: [...DRIVE_REFUSALS, 'navigation-failed', 'action-shape'],
+    refusals: [...DRIVE_REFUSALS, 'navigation-failed', 'action-shape', 'operator-input'],
     confirmation: (input) => ({ summary: input.url === undefined ? `Go ${input.go ?? 'nowhere'}?` : `Open ${input.url}?` }),
     confirmLabel: 'Navigate',
     presentation: { running: 'Navigating', done: 'Navigated' },
@@ -121,55 +145,51 @@ export const PAGE_OPERATIONS = {
   act_on_page: operation('act_on_page', {
     ...ACTING,
     meaning:
-      'Act on a page as a person would: click, double-click, hover, fill, type, press a key, select, check, uncheck, scroll, drag, upload or focus.',
+      'Run an ordered sequence of browser actions: click, double-click, hover, fill, type, press, select, check, uncheck, scroll, drag, upload or focus.',
     grammar:
-      'Aim with `ref` from a snapshot or with `x`/`y` in CSS pixels of the viewport. Before a click the element is scrolled into view, and a point covered by another element refuses `element-obscured` naming it. `fill` replaces the value with `text`; `type` inserts `text` at the caret; `press` takes `key` like `Enter`, `Tab` or `Control+A` (US layout); `select` takes option `values` or labels; `scroll` takes `dx`/`dy`, or scrolls `ref` into view; `drag` goes to `to`; `upload` sets `files`, paths in this checkout. Input never takes the focus of the operator’s screen. The answer carries the page as the action left it: its address, title, an opened dialog, and whether a navigation started.',
-    input: Schema.Struct({
-      project,
-      page,
-      action: Schema.Literals(ACTIONS),
-      ref: Schema.optional(Ref),
-      ...Point,
-      text: Schema.optional(Schema.String),
-      key: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-      values: Schema.optional(Schema.Array(Schema.String)),
-      to: Schema.optional(Schema.Struct({ ref: Schema.optional(Ref), ...Point })),
-      dx: Schema.optional(Schema.Finite),
-      dy: Schema.optional(Schema.Finite),
-      files: Schema.optional(Schema.Array(Schema.String.check(Schema.isMinLength(1)))),
-    }),
-    answer: arms({ acted: { page: Glance } }),
-    refusals: [...DRIVE_REFUSALS, 'stale-ref', 'element-obscured', 'action-shape'],
-    confirmation: (input) => ({ summary: `${input.action} on the page?` }),
+      'Send `steps`, a nonempty list; one action is a one-item list. The sequence holds the page queue once, so other calls cannot interleave. It stops at the first refusal or opened dialog, without undoing earlier steps. A refusal keeps its code and recovery guidance; its reason names the 1-based stopping step and how many steps completed. Otherwise `completed` counts finished steps and `stopped` names the 1-based step that opened the dialog in `page`, or is null. The stopping step may have had effects; an unknown outcome is not retried. Aim with `ref` from a snapshot or viewport `x`/`y` in CSS pixels. A click scrolls the element into view and refuses `element-obscured` if covered. `fill` replaces with `text`; `type` inserts at the caret; `press` takes `key` like Enter, Tab or Control+A (US layout); `select` takes `values` or labels; `scroll` takes `dx`/`dy` or a `ref` to reveal; `drag` goes to `to`; `upload` sets checkout `files`. Input never takes the operator’s screen focus. While the operator works the page with their own input, each step refuses `operator-input` until that input has been quiet a few seconds; a step already running finishes. The answer carries the final page state.',
+    input: Schema.Struct({ project, page, steps: Schema.NonEmptyArray(ActionStep) }),
+    answer: arms({ acted: ActionRun.fields }),
+    refusals: [...DRIVE_REFUSALS, 'stale-ref', 'element-obscured', 'action-shape', 'operator-input'],
+    confirmation: (input) => ({ summary: `Run ${input.steps.length} steps on the page?` }),
     confirmLabel: 'Act on page',
     presentation: { running: 'Acting on the page', done: 'Acted on the page' },
   }),
   emulate_page: operation('emulate_page', {
     ...ACTING,
-    meaning: 'Set or clear the viewport size, device and color scheme a page is rendered with.',
+    meaning: 'Set or clear a page’s viewport, device, color scheme, CPU slowdown, network conditions and geolocation.',
     grammar:
-      '`device` sets size, pixel ratio, mobile mode and user agent at once; `viewport` sets size alone; `scheme` sets `prefers-color-scheme`. `clear` removes every override. Emulation lasts until it is cleared, across reconnections.',
+      '`device` sets size, pixel ratio, mobile mode and user agent; `viewport` sets size alone; `scheme` sets `prefers-color-scheme`. Those overrides survive reconnection. `cpu` is a factor from 1 to 20 (1 removes slowdown), including other-process frames; pages sharing its renderer slow too. Desktop CPU watchdog strain follows exact renderer processes, widening to the profile only during pending navigation toward an unknown speculative renderer and returning on commit or failure. Managed watchdogs and engine frame probes without renderer identity use profile scope, delaying detection of a genuinely hung sibling until strain ends. `network` takes offline, slow-3g, fast-3g, slow-4g or fast-4g, or latency in ms and download/upload in bytes per second; null removes it. Throttling leaves navigator.connection unchanged; offline also changes navigator.onLine. `geolocation` takes latitude, longitude and optional accuracy in metres; null removes it. On the managed host its permission grant reaches same-origin pages of the profile. Conditions end with the setting thread’s run or the engine session. `conditions: false` removes only these conditions; `clear` removes all overrides.',
     input: Schema.Struct({
       project,
       page,
       viewport: Schema.optional(Viewport),
       device: Schema.optional(Schema.Literals(DEVICE_NAMES)),
       scheme: Schema.optional(Schema.Literals(SCHEMES)),
+      cpu: Schema.optional(Cpu),
+      network: Schema.optional(Schema.NullOr(NetworkCondition)),
+      geolocation: Schema.optional(Schema.NullOr(Geolocation)),
+      conditions: Schema.optional(Schema.Literal(false)),
       clear: Schema.optional(Schema.Boolean),
     }),
     answer: arms({ emulated: { page: Glance, emulation: Emulation } }),
-    refusals: [...DRIVE_REFUSALS],
+    refusals: [...DRIVE_REFUSALS, 'operator-input'],
     confirmation: () => ({ summary: 'Change how the page is rendered?' }),
     confirmLabel: 'Emulate',
     presentation: { running: 'Emulating', done: 'Emulated' },
   }),
   capture_page: operation('capture_page', {
     ...ACTING,
-    meaning:
-      'Capture a page as a picture — the visible part, the whole page or one element — or print it to PDF; the file is kept and named in the answer.',
+    meaning: 'Capture a page as a picture, PDF or heap snapshot; the local file is kept and named in the answer.',
     grammar:
-      'A picture up to 5 MiB reaches the agent as an image; a larger one, as a whole tall page can be, is only the file. `element` takes `ref`. A PDF is a file to read.',
-    input: Schema.Struct({ project, page, what: Schema.optional(Schema.Literals(CAPTURES)), ref: Schema.optional(Ref) }),
+      'A picture up to 5 MiB reaches the agent as an image; a larger one stays file-only. `element` takes `ref`. `heap` pauses the main frame’s V8 isolate and writes a .heapsnapshot that Chrome DevTools opens; other-process frames are outside it and same-isolate pages can appear. It summarizes self size, object count, detached native nodes, the largest classes and growth against this page’s previous capture, each list bounded by `limit`. `pausedMs` measures the capture’s pause hold, an upper bound on the renderer pause. An admitted capture waits for its producer even after caller cancellation or a chunk-write failure. Managed watchdogs and unknown-identity engine frame probes pause for the profile, so a genuinely hung sibling is detected only after capture ends. Desktop heap pause stays on the captured PID; concurrent CPU strain widens to the profile only during navigation toward an unknown speculative renderer and returns to exact membership on commit or failure. Heap files contain all heap strings, including sign-in tokens; only class names enter the answer. The newest four heap files stay per page; `removed` names any pruned files.',
+    input: Schema.Struct({
+      project,
+      page,
+      what: Schema.optional(Schema.Literals(CAPTURES)),
+      ref: Schema.optional(Ref),
+      limit: limitOf(HEAP_CLASSES),
+    }),
     answer: arms({
       captured: {
         page: Glance,
@@ -179,8 +199,9 @@ export const PAGE_OPERATIONS = {
         width: Schema.NullOr(Schema.Int),
         height: Schema.NullOr(Schema.Int),
       },
+      heap: HeapCaptured.fields,
     }),
-    refusals: [...DRIVE_REFUSALS, 'stale-ref', 'action-shape'],
+    refusals: [...DRIVE_REFUSALS, 'stale-ref', 'action-shape', 'heap-failed'],
     confirmation: () => ({ summary: 'Capture the page?' }),
     confirmLabel: 'Capture page',
     presentation: { running: 'Capturing the page', done: 'Captured the page' },
@@ -194,7 +215,7 @@ export const PAGE_OPERATIONS = {
       evaluated: { page: Glance, value: Schema.String, cut: Schema.Boolean },
       thrown: { page: Glance, exception: Schema.String },
     }),
-    refusals: [...DRIVE_REFUSALS],
+    refusals: [...DRIVE_REFUSALS, 'operator-input'],
     confirmation: () => ({ summary: 'Run this in the page?' }),
     confirmLabel: 'Evaluate',
     presentation: { running: 'Evaluating in the page', done: 'Evaluated in the page' },
@@ -223,7 +244,7 @@ export const PAGE_OPERATIONS = {
     ...READING,
     meaning: 'Read the console messages and exceptions of a page, newest last, with the total held.',
     grammar:
-      'Capture follows the profile: `auto` on loopback and private-network pages, and on any page from its first console read on; `always`; `never` refuses `console-off`. `level` keeps that level and more severe ones; `match` keeps entries whose text or address holds it; `after` reads past a `seq` already seen. `dropped` counts entries the buffer let go.',
+      'Capture follows the profile: `auto` on loopback and private-network pages, and on any page from its first console read on; `always`; `never` refuses `console-off`. Text reads as the DevTools console shows it: objects from their previews, format specifiers applied; a message logged before capture began shows objects by class name. `level` keeps that level and more severe ones; `match` keeps entries whose text or address holds it; `after` reads past a `seq` already seen. `dropped` counts entries the buffer let go.',
     input: Schema.Struct({
       project,
       page,
@@ -231,6 +252,10 @@ export const PAGE_OPERATIONS = {
       match: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
       after: Schema.optional(Schema.Int),
       limit: limitOf(CONSOLE_ROWS),
+      seq: Schema.optional(Schema.Int).annotate({ description: 'Answer only the entry with this `seq`, whatever the filters.' }),
+      stack: Schema.optional(Schema.Boolean).annotate({
+        description: `Add each entry's stack; such a read answers ${CONSOLE_STACK_ROWS.defaultRows} rows by default and ${ceilingOf(CONSOLE_STACK_ROWS)} at most.`,
+      }),
     }),
     answer: arms({
       read: {
@@ -240,6 +265,7 @@ export const PAGE_OPERATIONS = {
         total: Schema.Int,
         dropped: Schema.Int,
         capturing: Schema.Boolean,
+        conditions: Schema.NullOr(Schema.String),
       },
     }),
     refusals: [...DRIVE_REFUSALS, 'console-off'],
@@ -263,8 +289,22 @@ export const PAGE_OPERATIONS = {
       body: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
     }),
     answer: arms({
-      read: { page: PageId, requests: Schema.Array(NetworkEntry), shown: Schema.Int, total: Schema.Int, dropped: Schema.Int },
-      body: { page: PageId, request: Schema.String, body: Schema.String, base64: Schema.Boolean, cut: Schema.Boolean },
+      read: {
+        page: PageId,
+        requests: Schema.Array(NetworkEntry),
+        shown: Schema.Int,
+        total: Schema.Int,
+        dropped: Schema.Int,
+        conditions: Schema.NullOr(Schema.String),
+      },
+      body: {
+        page: PageId,
+        request: Schema.String,
+        body: Schema.String,
+        base64: Schema.Boolean,
+        cut: Schema.Boolean,
+        conditions: Schema.NullOr(Schema.String),
+      },
     }),
     refusals: [...DRIVE_REFUSALS, 'body-unavailable'],
     page: NETWORK_ROWS,
@@ -277,7 +317,15 @@ export const PAGE_OPERATIONS = {
     meaning: 'List the downloads of a page, newest first, with their file, size and state; a finished file is read at its path.',
     grammar: 'The page keeps its last 50 downloads; `limit` reads the newest of them and `total` counts what it keeps.',
     input: Schema.Struct({ project, page, limit: limitOf(DOWNLOAD_ROWS) }),
-    answer: arms({ read: { page: PageId, downloads: Schema.Array(Download), shown: Schema.Int, total: Schema.Int } }),
+    answer: arms({
+      read: {
+        page: PageId,
+        downloads: Schema.Array(Download),
+        shown: Schema.Int,
+        total: Schema.Int,
+        conditions: Schema.NullOr(Schema.String),
+      },
+    }),
     refusals: ['page-unknown'],
     page: DOWNLOAD_ROWS,
     confirmation: () => ({ summary: 'List the downloads?' }),

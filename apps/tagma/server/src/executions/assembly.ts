@@ -109,6 +109,8 @@ import { makeCommandDeliveries, CommandDeliveries } from './store/deliveries.js'
 import { currentRules } from './store/standingRules.js';
 import { makeTerminalTargets } from './terminals/targets.js';
 import { makeTerminalThreads } from './terminals/threads.js';
+import { ServedRoots } from '../browser/contract/service/sources.js';
+import { makeServedRoots } from './servedRoots.js';
 
 export type ExecutionsUnavailable = HostAddressInvalid | TerminalUnavailable;
 
@@ -197,7 +199,8 @@ export type ExecutionServices =
   | ViewLeases
   | ViewLanes
   | TerminalGrids
-  | ExecutionHistory;
+  | ExecutionHistory
+  | ServedRoots;
 
 export const executionsLayer: Layer.Layer<
   ExecutionServices,
@@ -641,6 +644,7 @@ export const executionsLayer: Layer.Layer<
         Context.add(HostPace, hostPace),
         Context.add(SuccessionSteps, succession),
         Context.add(ExecutionHistory, yield* makeExecutionHistory),
+        Context.add(ServedRoots, yield* makeServedRoots.pipe(Effect.provide(owners))),
       );
   }),
 );

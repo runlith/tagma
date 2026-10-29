@@ -86,12 +86,15 @@ export const graphScopes = (input: {
       const row = yield* byId(projectId);
       const { ref: rawPath, symbol } = sourceSpelling(spelling);
       const dir = isAbsolute(rawPath) ? yield* relativePlace(row, dirname(rawPath)) : undefined;
+      const rooted = isAbsolute(rawPath) && dir === undefined && (yield* relativePlace(row, rawPath)) === '.';
       const place = isAbsolute(rawPath)
-        ? dir === undefined
-          ? undefined
-          : dir === '.'
-            ? basename(rawPath)
-            : `${dir}/${basename(rawPath)}`
+        ? rooted
+          ? '.'
+          : dir === undefined
+            ? undefined
+            : dir === '.'
+              ? basename(rawPath)
+              : `${dir}/${basename(rawPath)}`
         : sourcePath(rawPath);
       if (place === undefined || place === null) {
         return yield* new GateRefusal('source-outside', `"${rawPath}" is not a place inside the project`, [

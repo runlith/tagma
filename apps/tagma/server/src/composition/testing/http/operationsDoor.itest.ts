@@ -178,13 +178,14 @@ layer(Layer.effect(Place, setup), { excludeTestServices: true })('operation HTTP
   it.effect('the op road answers the document, its journal range on a graph act, and the text beside it only when asked', () =>
     Effect.gen(function* () {
       const { projectId } = yield* Place;
-      const plain = yield* answered('create_block', { title: 'Answered as a document' }, projectId, {
+      const parentId = ((yield* answered('list_root_blocks', {}, projectId)).body as { blocks: { name: string }[] }).blocks[0]!.name;
+      const plain = yield* answered('create_block', { title: 'Answered as a document', parentId }, projectId, {
         [CALL_HEADER]: 'http-plain',
         [MCP_SESSION_HEADER]: 'claude-code:journaled',
       });
       expect(plain.body).toMatchObject({ status: 'ok', block: { title: 'Answered as a document' }, journal: { from: expect.any(Number) } });
       expect((plain.body as { readonly _meta?: { readonly text?: unknown } })._meta?.text).toBeUndefined();
-      const told = yield* answered('create_block', { title: 'Answered with its text' }, projectId, {
+      const told = yield* answered('create_block', { title: 'Answered with its text', parentId }, projectId, {
         [CALL_HEADER]: 'http-told',
         [ANSWER_HEADER]: ANSWER_TEXT,
       });

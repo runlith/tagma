@@ -2,6 +2,8 @@ import { type Tagged } from '../contract/wire/tags/roles.js';
 import { isEnabled } from '../contract/wire/tags/law.js';
 import type { TagReading } from '../contract/wire/tags/reading.js';
 import { type SubtreeShape } from '../contract/wire/standing.js';
+import type { Crowded } from '../contract/wire/answers.js';
+import { SCREEN_ROWS } from '../contract/wire/tags/pageRole.js';
 
 export type BlockLine = Tagged & {
   readonly name: string;
@@ -39,6 +41,10 @@ export function underParent(parentName: string | null | undefined, enclosing: st
 
 export function refsInLine(names: readonly string[]): string {
   return `refs ← ${names.join(', ')} — their sentences were written against what this said; read them`;
+}
+
+export function crowdedLine(page: Crowded): string {
+  return `past a screen: ${page.parent} ${page.title} holds ${page.children} standing ${page.role} children, more than ${SCREEN_ROWS} — group them by subject under it in this work`;
 }
 
 export function outlineIndent(depth: number): string {

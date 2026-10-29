@@ -21,7 +21,7 @@ import { sessionFields } from '../tree/sessions.js';
 import { carriesTag } from '../vocabulary/projection.js';
 import { readFieldOption } from '../vocabulary/declarationRules.js';
 
-const PROVENANCE: readonly string[] = ['supersedes', 'amends'];
+const PROVENANCE: readonly string[] = ['supersedes'];
 
 const RUNS: ReadonlySet<string> = new Set(['watch', 'gate']);
 

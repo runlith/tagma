@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { Clock, Effect, Result } from 'effect';
 import { canonicalJson } from '@runlith/utils/object';
 import { GraphStore, type StoreDb, type StoreFailure } from '../../platform/contract/service/store.js';
@@ -96,8 +96,8 @@ const current = Effect.fnUntraced(function* (
   if (rows.some((row) => withoutWhy(row) !== row)) return false;
   const installed = installedOf(rows);
   if (installed.catalogs.some((catalog) => catalog.release?.blocked !== undefined)) return false;
-  if (!releasesCurrent(installed, road.shipped, catalogIds)) return false;
   const table = yield* road.tags.of(projectId);
+  if (!releasesCurrent(table, installed, road.shipped, catalogIds)) return false;
   return (
     !shippedIdentityMissing(table, installed) &&
     !carryMissing(table, installed, road.shipped, catalogIds) &&
@@ -179,13 +179,10 @@ export const installCatalogs = Effect.fn('installCatalogs')(function* (
     byId.set(row.id, normal === row ? row : yield* save(row, row.title, row.body, [...row.tags], { ...normal.fields }, row.parentId));
   }
   if (candidate.catalogs.length > 0) {
-    const root = yield* road.rows.rootBlockOf(projectId);
-    const container =
-      (yield* road.db
-        .select()
-        .from(block)
-        .where(and(eq(block.parentId, root.id), eq(block.title, CONTAINER_TITLE), isNull(block.deletedAt)))
-        .all()).find((row) => row.tags.length === 0) ?? (yield* save(undefined, CONTAINER_TITLE, CONTAINER_BODY, [], {}, root.id));
+    const containerId =
+      rows[0] === undefined
+        ? (yield* save(undefined, CONTAINER_TITLE, CONTAINER_BODY, [], {}, (yield* road.rows.rootBlockOf(projectId)).id)).id
+        : rows[0].parentId;
     const names = new Map<string, string>();
     for (const row of rows)
       if (row.tags.includes(TAG_DECLARATION.id) && typeof row.fields.id === 'string') names.set(row.fields.id, blockName(row.uuid));
@@ -194,7 +191,7 @@ export const installCatalogs = Effect.fn('installCatalogs')(function* (
       const own = compose({ name: `#${type.key}`, declaration: type.declaration }, null, road.behaviours);
       const body =
         type.keepBody === true && at !== undefined ? at.body : Result.isSuccess(own) ? own.success.tag.prompt : type.declaration.prompt;
-      const row = yield* save(at, `#${type.key}`, body, [TAG_DECLARATION.id], nodeFields(type), at?.parentId ?? container.id);
+      const row = yield* save(at, `#${type.key}`, body, [TAG_DECLARATION.id], nodeFields(type), at?.parentId ?? containerId);
       names.set(type.key, blockName(row.uuid));
     }
     for (const write of candidate.catalogs) {
@@ -212,7 +209,7 @@ export const installCatalogs = Effect.fn('installCatalogs')(function* (
           layer: write.layer ?? undefined,
           fork: write.fork ?? undefined,
         },
-        at?.parentId ?? container.id,
+        at?.parentId ?? containerId,
       );
     }
   }

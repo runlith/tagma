@@ -13,6 +13,7 @@ layer(landingFixture(), { excludeTestServices: true })('landing enforcement', (i
         yield* gate.enforced(MINE, { blockId: gate.rule, strictness: 'off' });
         yield* gate.demo.graph.blocks.create({
           projectId: gate.demo.projectId,
+          parentId: gate.demo.root,
           tags: ['tag'],
           title: '#statute',
           fields: {

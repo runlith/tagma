@@ -16,13 +16,16 @@ const program = withDemo((demo) =>
   Effect.gen(function* () {
     const root = yield* tempRootEffect(demo.fixture, 'probe-');
     const projectId = (yield* demo.graph.projectLifecycle.create({ name: 'probe', rootPath: root })).id;
+    const parentId = (yield* demo.graph.blocks.rootBlockOf(projectId)).id;
     for (let round = 0; round < 3; round += 1) {
-      yield* timed('one create', demo.graph.blocks.create({ projectId, tags: ['idea'], title: `one ${randomUUID()}` }));
+      yield* timed('one create', demo.graph.blocks.create({ projectId, parentId, tags: ['idea'], title: `one ${randomUUID()}` }));
     }
     yield* timed(
       'ten creates, one at a time',
       Effect.gen(function* () {
-        for (let n = 0; n < 10; n += 1) yield* demo.graph.blocks.create({ projectId, tags: ['idea'], title: `single ${randomUUID()}` });
+        for (let n = 0; n < 10; n += 1) {
+          yield* demo.graph.blocks.create({ projectId, parentId, tags: ['idea'], title: `single ${randomUUID()}` });
+        }
       }),
     );
   }),

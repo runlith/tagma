@@ -40,7 +40,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('work ends', (it) => {
         const close = { ...WORK_PAIRS.close_block.body, id: WORK_PAIRS.close_block.id };
         const heard: WorkEnded[] = [];
         const leave = (yield* WorkEnds).subscribe((event) => Effect.sync(() => void heard.push(event)));
-        const created = (tag: string, title: string) => graph.blocks.create({ projectId, tags: [tag], title });
+        const created = (tag: string, title: string) => graph.blocks.create({ projectId, parentId: demo.root, tags: [tag], title });
         const finished = yield* created('task', 'Ship it');
         const closed = yield* created('task', 'Drop it');
         const spec = yield* created('spec', 'Agree it');

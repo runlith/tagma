@@ -6,9 +6,9 @@ import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture
 
 layer(demoGraphLayer(), { excludeTestServices: true })('stored block columns', (it) => {
   it.effect('a stored tags or fields column of the wrong shape is refused at the read, never handed on mistyped', () =>
-    withDemo(({ graph, projectId }) =>
+    withDemo(({ graph, projectId, root }) =>
       Effect.gen(function* () {
-        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'stored', body: 'shape' });
+        const { id } = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'stored', body: 'shape', parentId: root });
         yield* graph.graphStore.db.run(sql`update block set tags = '{"a":1}' where id = ${id}`);
         expect((yield* Effect.exit(graph.blocks.blockById(id)))._tag).toBe('Failure');
         yield* graph.graphStore.db.run(sql`update block set tags = '["claim"]', fields = '[1]' where id = ${id}`);

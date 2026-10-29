@@ -277,27 +277,14 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
     ),
   );
 
-  it.effect('document references retain their identities when a proposal sorts before its target', () =>
+  it.effect('document references retain their identities when a view sorts before its target', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const proposal = '0198a000-0000-7000-8000-000000000001';
         const target = '0198f000-0000-7000-8000-0000000000ff';
-        const view = '0198f000-0000-7000-8000-0000000000aa';
+        const view = '0198a000-0000-7000-8000-000000000001';
         const spoken = (uuid: string) => uuid.replaceAll('-', '').slice(-8);
         const { built } = yield* prepare(demo, [
           { parentId: null, frontmatter: { id: target, tags: ['module'], title: 'Root', ord: 1 }, body: 'the target' },
-          {
-            parentId: target,
-            frontmatter: {
-              id: proposal,
-              tags: ['proposal'],
-              title: 'An amendment',
-              ord: 1,
-              fields: { status: 'open', ops: [{ op: 'edit', id: spoken(target), old: 'the target', new: 'amended' }] },
-              edges: [{ kind: 'amends', to: target }],
-            },
-            body: 'what it proposes',
-          },
           {
             parentId: target,
             frontmatter: {
@@ -310,14 +297,11 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             body: 'what it selects',
           },
         ]);
-        expect((yield* demo.graph.blocks.rawBlockById(built.ids.get(proposal)!)).fields['ops']).toEqual([
-          { op: 'edit', id: spokenId(target), old: 'the target', new: 'amended' },
-        ]);
         expect((yield* demo.graph.blocks.rawBlockById(built.ids.get(view)!)).fields['query']).toEqual({
           scope: [spokenId(target)],
           sort: { by: 'updated', order: 'desc' },
         });
-        expect(built.ids.get(proposal)).toBeLessThan(built.ids.get(target)!);
+        expect(built.ids.get(view)).toBeLessThan(built.ids.get(target)!);
       }),
     ),
   );

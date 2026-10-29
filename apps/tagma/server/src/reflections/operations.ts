@@ -48,6 +48,7 @@ const FILING_ROUTED = {
       block: blockSummary(filed.entry),
       sightings: filed.entry.sightings,
       receivedBy: filed.receivedBy,
+      unplaced: filed.unplaced ?? undefined,
       already: filed.already.map((echo) => ({
         name: blockName(echo.entry.uuid),
         title: echo.entry.title,

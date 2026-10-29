@@ -4,18 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { MountedApp } from '../App.js';
 import { Visitor } from '../testing.js';
-import {
-  Engine,
-  gatedEngine,
-  Probe,
-  ProbeContinuation,
-  ProbeGuard,
-  ProbeLateDependency,
-  SecondEngine,
-  World,
-  type Gate,
-} from './test-utils/time-travel/fixtures.svelte.js';
-import Host, { type Door } from './test-utils/time-travel/Host.svelte';
+import { gatedEngine, Probe, ProbeGuard, ProbeLateDependency, World } from './test-utils/time-travel/fixtures.svelte.js';
+import Host from './test-utils/time-travel/Host.svelte';
 
 type HostProps = ComponentProps<typeof Host>;
 
@@ -23,18 +13,15 @@ function macrotask(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-async function mountHost(door: Door, gates: readonly Gate[] = [gatedEngine()], second = false) {
-  const [gate] = gates;
-  if (!gate) throw new Error('a host holds at least one gate');
+async function mountHost() {
+  const gate = gatedEngine();
   const target = document.createElement('div');
   document.body.appendChild(target);
   let mounted: MountedApp | undefined;
   const state = $state<HostProps>({
-    door,
-    engines: gates.map((gate) => gate.layer),
+    engines: [gate.layer],
     session: Visitor.user('1'),
     open: false,
-    second,
     twin: false,
     onApp: (app) => {
       mounted = app;
@@ -56,7 +43,6 @@ async function mountHost(door: Door, gates: readonly Gate[] = [gatedEngine()], s
     world: () => app().resolve(World),
     probe: () => app().resolve(Probe),
     late: () => app().resolve(ProbeLateDependency),
-    continuation: () => app().resolve(ProbeContinuation),
     guard: () => app().resolve(ProbeGuard),
     text: (id: string) => [...target.querySelectorAll(`[data-testid="${id}"]`)].map((node) => node.textContent),
     unmount: async () => {
@@ -74,25 +60,19 @@ async function respondThenRelease(app: Awaited<ReturnType<typeof mountHost>>): P
   await flush();
 }
 
-const doors: readonly { door: Door; transit: boolean }[] = [
-  { door: 'pending', transit: false },
-  { door: 'blocking', transit: true },
-  { door: 'handle', transit: false },
-];
-
-describe.each(doors)('an effect outside the tree sees one world · $door', ({ door, transit }) => {
+describe('an effect outside the tree sees one world · handle', () => {
   it('a response inside the chunk window reaches the effect together with the mount', async () => {
-    const app = await mountHost(door);
+    const app = await mountHost();
     await respondThenRelease(app);
 
     expect(app.text('found')).toEqual(['hit:book']);
     expect(app.probe().runs.at(-1)).toEqual([1, 2]);
-    if (!transit) expect(app.probe().runs).not.toContainEqual([undefined, 2]);
+    expect(app.probe().runs).not.toContainEqual([undefined, 2]);
     await app.unmount();
   });
 
   it('a dependency the effect takes on only with the response is the committed one', async () => {
-    const app = await mountHost(door);
+    const app = await mountHost();
     await respondThenRelease(app);
 
     expect(app.late().runs.at(-1)).toEqual([1, 2]);
@@ -100,7 +80,7 @@ describe.each(doors)('an effect outside the tree sees one world · $door', ({ do
   });
 
   it('a derived over the held value settles on the committed pair', async () => {
-    const app = await mountHost(door);
+    const app = await mountHost();
     await respondThenRelease(app);
 
     expect(app.world().ab).toBe('1/2');
@@ -108,7 +88,7 @@ describe.each(doors)('an effect outside the tree sees one world · $door', ({ do
   });
 
   it('a teardown armed by the mount is never run by the response', async () => {
-    const app = await mountHost(door);
+    const app = await mountHost();
     app.guard();
     await respondThenRelease(app);
 
@@ -117,7 +97,7 @@ describe.each(doors)('an effect outside the tree sees one world · $door', ({ do
   });
 
   it('a response that writes the held value merges into the mount instead of undoing it', async () => {
-    const app = await mountHost(door);
+    const app = await mountHost();
     await macrotask();
     app.world().a = 5;
     app.world().b = 2;
@@ -131,7 +111,7 @@ describe.each(doors)('an effect outside the tree sees one world · $door', ({ do
   });
 
   it('a second window opened by a later batch commits whole as well', async () => {
-    const app = await mountHost(door);
+    const app = await mountHost();
     await macrotask();
     app.state.twin = true;
     flushSync();
@@ -147,7 +127,7 @@ describe.each(doors)('an effect outside the tree sees one world · $door', ({ do
   });
 
   it('a session change during the window closes the probe, and nothing runs on it afterwards', async () => {
-    const app = await mountHost(door);
+    const app = await mountHost();
     const probe = app.probe();
     await macrotask();
     app.state.session = Visitor.user('2');
@@ -165,8 +145,8 @@ describe.each(doors)('an effect outside the tree sees one world · $door', ({ do
 });
 
 describe('a failed chunk', () => {
-  it.each(['pending', 'handle'] as const)('leaves the world the mount put on screen · %s', async (door) => {
-    const app = await mountHost(door);
+  it('leaves the world the mount put on screen · handle', async () => {
+    const app = await mountHost();
     await macrotask();
     app.world().b = 2;
     await flush();
@@ -175,41 +155,6 @@ describe('a failed chunk', () => {
 
     expect(app.probe().runs.at(-1)).toEqual([1, 2]);
     expect(app.text('found')).toEqual([]);
-    await app.unmount();
-  });
-
-  it('under a blocking await shows the failure and keeps the probe alive', async () => {
-    const app = await mountHost('blocking');
-    await macrotask();
-    app.world().b = 2;
-    await flush();
-    app.gate.fail(new Error('chunk 404'));
-    await flush();
-
-    expect(app.text('failed')).toEqual(['Error: chunk 404']);
-    expect(app.probe().runsAtClose).toBeUndefined();
-    app.world().b = 3;
-    await flush();
-    expect(app.probe().runs.at(-1)?.[1]).toBe(3);
-    await app.unmount();
-  });
-});
-
-describe('a write after the first await', () => {
-  it.each(['pending', 'blocking'] as const)('is what a batch arriving before the second await sees · %s', async (door) => {
-    const first = gatedEngine(Engine);
-    const second = gatedEngine(SecondEngine);
-    const app = await mountHost(door, [first, second], true);
-    first.release();
-    await flush();
-    await macrotask();
-    app.world().b = 2;
-    await flush();
-    second.release();
-    await flush();
-
-    expect(app.continuation().runs.at(-1)).toEqual([3, 2]);
-    expect(app.text('found')).toEqual(['hit:book']);
     await app.unmount();
   });
 });

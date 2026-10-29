@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Copy from '@lucide/svelte/icons/copy';
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
   import EyeOff from '@lucide/svelte/icons/eye-off';
   import FolderGit2 from '@lucide/svelte/icons/folder-git-2';
@@ -7,7 +6,6 @@
   import PanelBottom from '@lucide/svelte/icons/panel-bottom';
   import PanelRight from '@lucide/svelte/icons/panel-right';
   import PencilLine from '@lucide/svelte/icons/pencil-line';
-  import Play from '@lucide/svelte/icons/play';
   import Plus from '@lucide/svelte/icons/plus';
   import Power from '@lucide/svelte/icons/power';
   import Send from '@lucide/svelte/icons/send';
@@ -15,6 +13,11 @@
   import Square from '@lucide/svelte/icons/square';
   import Trash2 from '@lucide/svelte/icons/trash-2';
   import { Router } from '@runlith/layer/Router';
+  import { App } from '@runlith/layer/svelte/App.svelte';
+  import { blockLink } from '$lib/features/graph/links.js';
+  import type { LinkAct, LinkHow } from '$lib/features/opening/Link.js';
+  import { Opening } from '$lib/features/opening/Opening.svelte.js';
+  import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import type { TreeBlock } from '@tagma/server/graph/contract/wire/rows';
   import { LEAF } from '@tagma/server/graph/contract/wire/tags/leaf';
@@ -30,15 +33,16 @@
   import type { TreeScreen } from '$lib/features/graph/TreeScreen.svelte.js';
   import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
-  import { START_WORDS, startable, ThreadWork } from '$lib/features/graph/ThreadWork.svelte.js';
   import { cn } from '$lib/shared/utils.js';
 
   const tags = TagCatalog.use();
   const router = Router.use();
   const addresses = Addresses.use();
-  const work = ThreadWork.use();
   const door = GraphDoor.use();
   const workspace = Workspace.use();
+  const opening = Opening.use();
+  const notices = Notices.use();
+  const here = App.current();
 
   let {
     block,
@@ -46,6 +50,7 @@
     author = null,
     linksPlacement,
     rename,
+    steps,
     triggerClass,
     onDeleted,
   }: {
@@ -54,25 +59,45 @@
     author?: SessionHandle | null | undefined;
     linksPlacement?: { readonly beside: boolean; readonly toggle: () => void } | undefined;
     rename?: (() => void) | undefined;
+    steps?: { readonly click: LinkHow | undefined } | undefined;
     triggerClass?: string;
     onDeleted?: (parentName: string | null) => void;
   } = $props();
+
+  let open = $state(false);
+  let at = $state<{ readonly x: number; readonly y: number } | undefined>(undefined);
+
+  export function show(point?: { readonly x: number; readonly y: number }): void {
+    at = point;
+    open = true;
+  }
+
+  function run(act: () => void | Promise<void>): void {
+    Promise.resolve()
+      .then(act)
+      .catch((error: unknown) => notices.refusal(error));
+  }
 
   async function remove(): Promise<void> {
     const { name, parentName } = block;
     if (await store.remove(name)) onDeleted?.(parentName);
   }
 
+  const link = $derived(blockLink({ name: block.name, copy: door.aim }));
+  const shape = $derived(opening.shape(link, here, steps?.click));
+  const ways = $derived(steps === undefined ? [] : (shape?.steps ?? []));
+  const places = $derived(shape?.places ?? []);
+  const copies = $derived(shape?.copies ?? []);
+
   const leaf = $derived(tags.supports(block, LEAF));
-  const starts = $derived(startable(tags, block));
   const moves = $derived(tags.actions(block).length > 0);
   const status = $derived(tags.statusOf(block));
   const law = $derived(tags.supports(block, LAW));
   const team = $derived(workspace.find(block.projectId)?.storage === 'team');
   const stealth = $derived(block.stealth === true);
   const storable = $derived(team && block.parentName !== null && (stealth ? store.block(block.parentName)?.stealth !== true : true));
-  const acting = $derived(rename !== undefined || starts || !leaf || moves || law || storable);
-  const opening = $derived(!leaf || linksPlacement !== undefined);
+  const acting = $derived(rename !== undefined || places.length > 0 || !leaf || moves || law || storable);
+  const going = $derived(ways.length > 0 || !leaf || linksPlacement !== undefined);
 
   const BY_SOURCES = 'sources';
   const DELIVERY_CHOICES = [
@@ -82,7 +107,13 @@
   ] as const;
 </script>
 
-<DropdownMenu.Root>
+{#snippet acts(list: readonly LinkAct[])}
+  {#each list as act (act.id)}
+    <DropdownMenu.Item icon={act.icon} onSelect={() => run(act.run)}>{act.words}</DropdownMenu.Item>
+  {/each}
+{/snippet}
+
+<DropdownMenu.Root bind:open onOpenChange={(next) => !next && (at = undefined)}>
   <DropdownMenu.Trigger
     class={cn(
       'grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground data-[state=open]:bg-selected data-[state=open]:text-foreground',
@@ -92,16 +123,18 @@
   >
     <Ellipsis class="size-3.5" />
   </DropdownMenu.Trigger>
-  <DropdownMenu.Content align="end" class="min-w-56" returnFocus={false}>
+  <DropdownMenu.Content
+    anchor={at}
+    align={at === undefined ? 'end' : 'start'}
+    sideOffset={at === undefined ? 4 : 0}
+    class="min-w-56"
+    returnFocus={false}
+  >
     {#if acting}
       {#if rename !== undefined}
         <DropdownMenu.Item icon={PencilLine} keys="F2" onSelect={() => rename?.()}>Rename</DropdownMenu.Item>
       {/if}
-      {#if starts}
-        <DropdownMenu.Item icon={Play} onSelect={() => void work.start({ name: block.name, title: block.title, copy: door.aim })}>
-          {START_WORDS}
-        </DropdownMenu.Item>
-      {/if}
+      {@render acts(places)}
       {#if !leaf}
         <DropdownMenu.Sub>
           <DropdownMenu.SubTrigger icon={Plus}>Add child</DropdownMenu.SubTrigger>
@@ -171,7 +204,10 @@
       {/if}
       <DropdownMenu.Separator />
     {/if}
-    {#if opening}
+    {#if going}
+      {#each ways as way (way.how)}
+        <DropdownMenu.Item icon={way.icon} keys={way.keys} onSelect={() => run(way.run)}>{way.words}</DropdownMenu.Item>
+      {/each}
       {#if !leaf}
         <DropdownMenu.Item icon={Share2} onSelect={() => void router.goto(addresses.scoped('graph', block.name))}>
           Open in graph
@@ -188,9 +224,10 @@
       {/if}
       <DropdownMenu.Separator />
     {/if}
-    <DropdownMenu.Item icon={Copy} hint={block.name} onSelect={() => navigator.clipboard.writeText(block.name)}>Copy name</DropdownMenu.Item
-    >
-    <DropdownMenu.Separator />
+    {#if copies.length > 0}
+      {@render acts(copies)}
+      <DropdownMenu.Separator />
+    {/if}
     <DropdownMenu.Item variant="destructive" icon={Trash2} onSelect={() => void remove()}>Delete</DropdownMenu.Item>
     {#if author !== null}
       <DropdownMenu.Separator />

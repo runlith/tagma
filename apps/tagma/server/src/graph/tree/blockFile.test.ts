@@ -42,11 +42,11 @@ describe('block file codec', () => {
 
   test('a block written from two stores holding its edges in different row orders serializes to the same bytes', () => {
     const edges = [
-      { kind: 'amends', to: '0198c3d4-7b2a-7f00-8000-cccccccccccc' },
+      { kind: 'relates', to: '0198c3d4-7b2a-7f00-8000-cccccccccccc' },
       { kind: 'discovered-from', to: '0198c3d4-7b2a-7f00-8000-bbbbbbbbbbbb' },
       { kind: 'discovered-from', to: '0198c3d4-7b2a-7f00-8000-aaaaaaaaaaaa' },
     ] as const;
-    const row = { id: full.id, title: full.title, ord: 1, tags: ['proposal'], fields: {}, sources: [] };
+    const row = { id: full.id, title: full.title, ord: 1, tags: ['idea'], fields: {}, sources: [] };
     const written = (order: readonly (typeof edges)[number][]) =>
       encodeBlockFile({ frontmatter: blockFrontmatterOf({ ...row, edges: order }), body: 'x' });
     expect(written([edges[2], edges[0], edges[1]])).toBe(written(edges));

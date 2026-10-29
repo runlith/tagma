@@ -9,7 +9,7 @@ import type { TypeSelector } from '../wire/tags/selector.js';
 import type { BlockDiff, BlockListRow, BlockMark, BlockPage, SearchPage, ViewResults } from '../wire/reads.js';
 import type { SubtreeShape } from '../wire/standing.js';
 import type { AnsweredCheck } from '../wire/rows.js';
-import { type BlockEnding, type ProposalVerdictRow } from './work.js';
+import { type BlockEnding } from './work.js';
 import type { FarEnd, RefElsewhere } from '../wire/far.js';
 import type { FarHeld } from './foreign.js';
 
@@ -153,7 +153,6 @@ export type BlockDetail = BlockRecord & {
   };
   sources: SourceRow[];
   reach: string | null;
-  verdict: ProposalVerdictRow | null;
   ending: BlockEnding | null;
   author: number | null;
   answeredBy: string | null;

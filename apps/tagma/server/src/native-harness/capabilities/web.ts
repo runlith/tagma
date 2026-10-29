@@ -2,7 +2,7 @@ import { vendorWebTools } from '../tools/vendorWeb.js';
 import type { CapabilityBehaviour } from './contract.js';
 import { pick, worldTools } from './worldTools.js';
 
-const WEB_TOOLS = ['webfetch', 'websearch'] as const;
+import { WEB_TOOLS } from '../contract/wire/capability.js';
 
 export const web: CapabilityBehaviour = {
   toolNames: WEB_TOOLS,

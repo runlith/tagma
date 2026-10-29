@@ -14,9 +14,16 @@ import { LAYERED, LAYERED_KEY } from '../../../enforcement/testing/layered.js';
 
 const READS = ['read_enforcement', 'read_inspections', 'check_rules', 'create_block', 'enforce_rule', 'set_module'];
 
-const LAYERS = { modules: [{ id: 'app', title: 'The app', root: 'src', order: [['core/'], ['ui/']] }] };
+const layersUnder = (parent: string) => ({ modules: [{ id: 'app', title: 'The app', parent, root: 'src', order: [['core/'], ['ui/']] }] });
 
 class Copied extends Context.Service<Copied, { readonly project: number; readonly root: string }>()('testing/CopiedLaw') {}
+
+const rootName = Effect.fnUntraced(function* () {
+  const world = yield* DoorFixture;
+  const { project } = yield* Copied;
+  const roots = yield* world.op('list_root_blocks', {}, `project=${project}`);
+  return (roots.body as { blocks: { name: string }[] }).blocks[0]!.name;
+});
 
 const wrote = Effect.fnUntraced(function* (at: string, path: string, text: string) {
   const files = yield* FileSystem.FileSystem;
@@ -91,9 +98,10 @@ layer(Layer.effect(Copied, setup).pipe(Layer.provideMerge(fixture)), {
       const { project, root } = yield* Copied;
       const doors = makeThreadDoors(world, project, READS);
       const { doors: placed } = yield* threadIn(doors);
-      const created = answered(yield* doors.atNative('create_block', { tags: ['rule'], title: 'Import only downward' }, placed));
+      const parentId = yield* rootName();
+      const created = answered(yield* doors.atNative('create_block', { tags: ['rule'], parentId, title: 'Import only downward' }, placed));
       const rule = (created.block as { name: string }).name;
-      answered(yield* doors.atNative('set_module', LAYERS, placed));
+      answered(yield* doors.atNative('set_module', layersUnder(parentId), placed));
       answered(
         yield* doors.atNative(
           'enforce_rule',
@@ -136,14 +144,18 @@ layer(Layer.effect(Copied, setup).pipe(Layer.provideMerge(fixture)), {
       });
       const placed = yield* doors.doorsFor(thread.id, thread.ownerId);
       expect(placed.root).toBe(destination);
-      const created = answered(yield* doors.atNative('create_block', { tags: ['rule'], title: 'Import only downward here' }, placed));
+      const parentId = yield* rootName();
+      const created = answered(
+        yield* doors.atNative('create_block', { tags: ['rule'], parentId, title: 'Import only downward here' }, placed),
+      );
       const rule = (created.block as { name: string }).name;
       const owner = (
-        answered(yield* doors.atNative('create_block', { tags: ['task'], title: 'Move the view off the panel' }, placed)).block as {
+        answered(yield* doors.atNative('create_block', { tags: ['task'], parentId, title: 'Move the view off the panel' }, placed))
+          .block as {
           name: string;
         }
       ).name;
-      answered(yield* doors.atNative('set_module', LAYERS, placed));
+      answered(yield* doors.atNative('set_module', layersUnder(parentId), placed));
       expect(
         yield* doors.atNative('enforce_rule', { blockId: rule, base: null, strictness: 'gate', inspection: LAYERED_KEY }, placed),
       ).toMatchObject({ class: 'refusal', code: 'not-found' });

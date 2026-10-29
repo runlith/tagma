@@ -33,11 +33,15 @@
   const label = $derived(block.title.trim() || 'Untitled');
 </script>
 
-<BlockRow {block} {href} {childCount} layout="compact" {attributes} class={className} {leading} {trailing}>
+{#snippet gutter()}
+  <span class="w-4 shrink-0"></span>
+{/snippet}
+
+<BlockRow {block} {href} {childCount} layout="compact" {attributes} class={className} leading={leading ?? gutter} {trailing}>
   {#snippet title()}
     <FadeText
       class={cn(
-        'pointer-events-none flex-1 py-px text-body leading-6',
+        'pointer-events-none flex-1 text-body leading-6',
         (tags.isResting(block) || !block.title.trim()) && 'text-muted-foreground',
       )}
       text={label}

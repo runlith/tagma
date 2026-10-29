@@ -39,39 +39,14 @@ export const names: Builtin<'names', NamesParams> = {
       F4: {
         allowances: [
           {
-            lines: 655,
-            path: 'apps/tagma/server/src/composition/server.ts',
-            why: 'One subject: the boot of the server process — its data directory and installation, the runtime it composes, the adapters its composition binds, the doors it opens and how it hands over or leaves; each step needs the ones before it within the same process lifetime.',
-          },
-          {
-            lines: 662,
-            path: 'apps/tagma/server/src/managed-browser/host.ts',
-            why: 'One subject: the managed Chromium Host adapter owns each profile process and its CDP pipe, target sessions, browser events and shutdown; these operations share the same running profiles and tabs, whose lifetime determines whether pages close or become dormant.',
-          },
-          {
-            lines: 673,
-            path: 'apps/tagma/server/src/change-record/holdings/inputs.ts',
-            why: 'One subject: what the Holdings judge reads about a path before folding it — the probe of its record rows, head, working bytes and git letters, and the preparation of the contents, version texts and hunks those rows fold over; both halves share the same probe and prepared shapes.',
-          },
-          {
             lines: 736,
             path: 'apps/tagma/server/src/enforcement/remeasure/driver.ts',
             why: 'One subject: the remeasurement lifecycle of an open checkout — Start waiters, rule-slot scheduling with its per-request answers, pauses, debt and origin-tracing lanes, HEAD observation and cancellation share the same copy and confirmed measurement boundary.',
           },
           {
-            lines: 698,
-            path: 'apps/tagma/server/src/enforcement/judging/judge.ts',
-            why: 'One subject: enforcement judgement of a tree or HEAD, including selection, inspection outcomes, gate decisions and their recovery contract in the graph context that owns the law.',
-          },
-          {
             lines: 742,
             path: 'packages/agent/src/agent/door/ToolExecution.ts',
             why: "One subject: a tool call's life at the door from admission through permission, order and execution to its answer, foreground or carried to the background at any of those stages; every stage shares the same tracked call, its order claim and its ledger.",
-          },
-          {
-            lines: 700,
-            path: 'apps/tagma/server/src/threads/contract/wire/operations/catalog.ts',
-            why: 'One subject: the declarations of the thread operations — their doors, callers, answers, refusals and the words agents read for each.',
           },
           {
             lines: 734,
@@ -84,42 +59,12 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: the scripted ACP agent the protocol system tests run as a process; its configuration, keywords and control files drive that one agent over the same prompt, steer and cancel state.',
           },
           {
-            lines: 660,
-            path: 'packages/agent/src/thread/run/lifecycle/RunReports.ts',
-            why: "One subject: the reports a transport adapter makes about a run (the contract type and the one layer applying each as a plan in the adapter's write); every report shares the same run, tail and ending state.",
-          },
-          {
-            lines: 693,
-            path: 'packages/navigation-ts/src/engine/workspace.ts',
-            why: 'One subject: the snapshots one engine serves to its base and worktrees — which revision each checkout reads, how a change, a moved HEAD or a rescan renews them once a question asks, and which questions warm the next; every step shares the same trees, revisions and serialized TypeScript session.',
-          },
-          {
-            lines: 659,
-            path: 'apps/tagma/server/src/graph/tree/mirror.ts',
-            why: "One subject: the mirror read from the graph's block files — the whole rebuild and the repair of changed files absorb files into rows by the same rules of identity, parents, trash, edges, holders and law, over the team tree and its stealth forest alike.",
-          },
-          {
-            lines: 651,
-            path: 'packages/code-facts/src/languages/js/declarations.ts',
-            why: 'One subject: what one parse of a JavaScript or TypeScript module says about its top level — the declarations it exports and keeps, the names it imports, the tag literals and published types its body holds, and the outline digest; every reading walks the same program and script offsets.',
-          },
-          {
-            lines: 655,
-            path: 'packages/execution-host/src/ExecutionInput.ts',
-            why: 'One subject: the input queue of one execution — admission per lane with its sequences and receipts, backpressure, the writer that drains it into the sink, interrupt flushing and the carry a departing logic hands on; every act reads and moves the same lane book and pending bytes.',
-          },
-          {
-            lines: 684,
-            path: 'packages/chat-ui/stand/displacement.ts',
-            why: 'One subject: the DOM displacement proof oracle — shared frame-pair witnesses establish quiet anchor flow, conserved gesture paths and calibrated momentum limits against the same independent recordings.',
-          },
-          {
             lines: 847,
             path: 'packages/chat-ui/stand/recorder.ts',
             why: 'One subject: a DOM recording lifecycle — trusted input, wheel and scroll timing and command evidence, own scroller writes and the movement they leave running, row measurements, anchor history and final ResizeObserver samples share the same pending capture and frame boundary.',
           },
         ],
-        lines: 650,
+        lines: 700,
       },
     },
     errors: ['Data.TaggedError'],

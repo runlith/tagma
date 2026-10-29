@@ -81,7 +81,15 @@ layer(demoGraphLayer({ repos: ['front', 'back'] }).pipe(Layer.provideMerge(BunFi
           const create = (served: ServedGraph, projectId: number, tag: string, title: string, parentId?: number) =>
             within(
               served,
-              Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId, tags: [tag], title, parentId })),
+              Effect.gen(function* () {
+                const blocks = yield* Blocks;
+                return yield* blocks.create({
+                  projectId,
+                  tags: [tag],
+                  title,
+                  parentId: parentId ?? (yield* blocks.rootBlockOf(projectId)).id,
+                });
+              }),
             );
 
           const spec = yield* create(servedBack, back.id, 'spec', 'Served from the back');

@@ -6,7 +6,6 @@ import { measurementsLeave } from './measurementsLeave.js';
 import { moduleCards } from './moduleCards.js';
 import { reachLeaves } from './reachLeaves.js';
 import { provenanceLeaves } from './provenanceLeaves.js';
-import { creationEdges } from './creationEdges.js';
 import { operationNames, ruleOperationNames } from './operationNames.js';
 import { platformsDeclared } from './platformsDeclared.js';
 import { coreNames } from './coreNames.js';
@@ -30,7 +29,6 @@ export const GRAPH_STEPS: readonly GraphStep[] = [
   { id: 'reach-leaves', run: reachLeaves },
   { id: 'measurements-leave', run: measurementsLeave },
   { id: 'provenance-leaves', run: provenanceLeaves },
-  { id: 'creation-edges', run: creationEdges },
   { id: 'operation-names', run: operationNames },
   { id: 'platforms-declared', run: platformsDeclared },
   { id: 'core-names', run: coreNames },

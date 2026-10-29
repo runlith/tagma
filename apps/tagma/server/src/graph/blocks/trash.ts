@@ -90,7 +90,7 @@ export const trashLayer: Layer.Layer<Trash, never, GraphStore | Act | BlockProje
               for (const link of yield* db.select().from(edge).where(inArray(edge.toId, page))) {
                 if (uuids.has(link.fromId)) continue;
                 const to = blockName(uuids.get(link.toId) ?? '');
-                if (link.kind === 'supersedes' || link.kind === 'amends') {
+                if (link.kind === 'supersedes') {
                   const from = blockName((yield* blockRows.rawBlockById(link.fromId)).uuid);
                   return yield* new GateRefusal('relocation-shape', `${from} ${link.kind} ${to}, and that edge stays in one graph`, [
                     `move ${from} together with ${to}: its own operation writes a ${link.kind} edge, inside one graph`,

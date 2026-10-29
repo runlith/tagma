@@ -97,9 +97,14 @@ export default { repeated: ({ tree, base }) => ({ tree: { findings: found(tree) 
       const doors = makeThreadDoors(world, project, ['create_block', 'enforce_rule', 'check_rules', 'submit_work', 'read_enforcement']);
       const native = yield* doors.doorsFor(thread.id, thread.ownerId);
       const call = (id: string, input: Record<string, unknown>) => doors.atNative(id, input, native);
-      const owner = (answered(yield* call('create_block', { tags: ['task'], title: 'Shorten oversized files' })).block as { name: string })
+      const parentId = ((yield* world.op('list_root_blocks', {}, `project=${project}`)).body as { blocks: { name: string }[] }).blocks[0]!
         .name;
-      const rule = (answered(yield* call('create_block', { tags: ['rule'], title: 'Small source files' })).block as { name: string }).name;
+      const owner = (
+        answered(yield* call('create_block', { tags: ['task'], parentId, title: 'Shorten oversized files' })).block as { name: string }
+      ).name;
+      const rule = (
+        answered(yield* call('create_block', { tags: ['rule'], parentId, title: 'Small source files' })).block as { name: string }
+      ).name;
       expect(
         answered(
           yield* call('enforce_rule', {

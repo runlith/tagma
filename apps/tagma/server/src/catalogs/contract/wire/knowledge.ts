@@ -11,7 +11,7 @@ const decision: Tag = {
   roles: {},
   body: { shape: 'content' },
   prompt:
-    'A #decision records an accepted choice and its reasons, including the conditions that could change it. It remains in force until supersede_block replaces it with a new decision; the core supersedes relation records that state and names the successor. A decision made at a meeting relates to its #meeting. Link supporting #source records where the reasons depend on them.',
+    'A #decision records an accepted choice and its reasons, including the conditions that could change it. It stands under the page of the topic it decides. It remains in force until supersede_block replaces it with a new decision; the core supersedes relation records that state and names the successor. A decision made at a meeting relates to its #meeting. Link supporting #source records where the reasons depend on them.',
 };
 
 const person: Tag = {
@@ -22,7 +22,7 @@ const person: Tag = {
   roles: {},
   body: { shape: 'content' },
   prompt:
-    'A #person identifies someone other records refer to. Reuse that address instead of repeating their name; keep only context relevant to this graph.',
+    'A #person identifies someone other records refer to. It stands under the page of the group or topic they belong to. Reuse that address instead of repeating their name; keep only context relevant to this graph.',
 };
 
 const meeting: Tag = {
@@ -36,7 +36,7 @@ const meeting: Tag = {
   roles: {},
   body: { shape: 'content' },
   prompt:
-    'A #meeting records a conversation on its required held date; attendees references #person records. Keep the useful context and unresolved points here. Record each accepted choice as a separate #decision related to this meeting, so it can be found and replaced independently.',
+    'A #meeting records a conversation on its required held date; attendees references #person records. It stands under the page of the topic or series it belongs to. Keep the useful context and unresolved points here. Record each accepted choice as a separate #decision related to this meeting, so it can be found and replaced independently.',
 };
 
 const source: Tag = {
@@ -47,7 +47,7 @@ const source: Tag = {
   roles: {},
   body: { shape: 'content' },
   prompt:
-    'A #source identifies material supporting a claim. Its required location is a URL, path or citation precise enough to find it. Record the relevant version, passage or access conditions when they affect what it establishes. Link claims to this record and distinguish the source from your interpretation.',
+    'A #source identifies material supporting a claim. It stands under the page of the topic it supports. Its required location is a URL, path or citation precise enough to find it. Record the relevant version, passage or access conditions when they affect what it establishes. Link claims to this record and distinguish the source from your interpretation.',
 };
 
 export const knowledgeProfile: CatalogProfile = { checks: { code: false } };

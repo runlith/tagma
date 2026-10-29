@@ -91,10 +91,10 @@ const AHEAD = 8;
 
 const parent = (node: AxNode): boolean => !LEAVES.has(said(node.role)) && (node.childIds ?? []).length > 0;
 
-export const snapshotWalk = <E>(parts: readonly SnapshotPart<E>[], limit: number): Effect.Effect<Snapshot, E> =>
+export const snapshotWalk = <E>(parts: Iterable<SnapshotPart<E>>, limit: number): Effect.Effect<Snapshot, E> =>
   Effect.scoped(walked(parts, limit));
 
-const walked = Effect.fnUntraced(function* <E>(parts: readonly SnapshotPart<E>[], limit: number) {
+const walked = Effect.fnUntraced(function* <E>(parts: Iterable<SnapshotPart<E>>, limit: number) {
   const scope = yield* Effect.scope;
   const lines: string[] = [];
   const nodes: number[] = [];
@@ -110,7 +110,13 @@ const walked = Effect.fnUntraced(function* <E>(parts: readonly SnapshotPart<E>[]
     frames.push(frame);
     return true;
   };
-  for (const [frame, part] of parts.entries()) {
+  let frame = -1;
+  for (const part of parts) {
+    if (lines.length >= limit) {
+      more = true;
+      break;
+    }
+    frame += 1;
     const root = yield* part.root;
     if (root === null) continue;
     let depth = 0;

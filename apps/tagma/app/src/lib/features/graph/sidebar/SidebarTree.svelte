@@ -55,7 +55,7 @@
           {@const block = tree.block(line.name)}
           {@const open = tree.expanded.has(line.name)}
           {#if block}
-            <div style:padding-left="calc(var(--spacing) * {(line.depth - 1) * 3})" onfocusin={() => (focused = line.name)}>
+            <div style:padding-left="calc(var(--spacing) * {(line.depth - 1) * 4})" onfocusin={() => (focused = line.name)}>
               <SidebarRow
                 {block}
                 {project}
@@ -75,14 +75,14 @@
                     <button
                       type="button"
                       tabindex="-1"
-                      class="relative mr-0.5 grid size-4 shrink-0 place-items-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+                      class="relative grid h-6 w-4 shrink-0 place-items-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
                       aria-label={open ? `Collapse ${line.name}` : `Expand ${line.name}`}
                       onclick={() => tree.toggle(line.name)}
                     >
                       <ChevronRight class={cn('size-3 transition-transform duration-150 ease-instrument', open && 'rotate-90')} />
                     </button>
                   {:else}
-                    <span class="mr-0.5 size-4 shrink-0"></span>
+                    <span class="w-4 shrink-0"></span>
                   {/if}
                 {/snippet}
               </SidebarRow>

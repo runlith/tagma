@@ -20,7 +20,7 @@ type Raw = Record<string, unknown>;
 
 const WAS = 'code-project';
 const NOW = softwareDevelopment.id;
-const MOVED = ['proposal', 'reflection', 'view'];
+const MOVED = ['reflection', 'view'];
 const EARLIER = 'A #note explains what the code cannot.';
 const EARLIER_VIEW = 'A #view saves a selection.';
 
@@ -45,15 +45,21 @@ layer(demoGraphLayer(), { excludeTestServices: true })('software-development nam
   it.effect('a code-project graph takes the new catalog, #explanation and core ids once, and installation accepts it', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
-        const { graph, projectId } = demo;
+        const { graph, projectId, root } = demo;
         const { db } = graph.graphStore;
         yield* graph.settings.write({ scope: 'project', projectId, key: SHIPPED_CATALOGS.key.id, value: [NOW] });
         yield* installNotes(projectId);
-        const explained = yield* graph.blocks.create({ projectId, tags: ['explanation'], title: 'the cursor only moves forward' });
-        const noted = yield* graph.blocks.create({ projectId, tags: ['note'], title: 'a thought' });
-        const task = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'open work' });
+        const explained = yield* graph.blocks.create({
+          projectId,
+          parentId: root,
+          tags: ['explanation'],
+          title: 'the cursor only moves forward',
+        });
+        const noted = yield* graph.blocks.create({ projectId, parentId: root, tags: ['note'], title: 'a thought' });
+        const task = yield* graph.blocks.create({ projectId, parentId: root, tags: ['task'], title: 'open work' });
         const reflection = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           contract: 'core/reflection',
           title: 'a refusal',
           fields: { command: 'read', expected: 'an answer', actual: 'a refusal' },
@@ -62,47 +68,33 @@ layer(demoGraphLayer(), { excludeTestServices: true })('software-development nam
         const sort = { by: 'created', order: 'asc' } as const;
         const work = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           contract: 'core/selection',
           title: 'open work',
           fields: { query: { tags: [shippedTypeId(NOW, 'task')], fields: { [status]: 'open' }, sort } },
         });
         const sightings = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           contract: 'core/selection',
           title: 'sightings',
           fields: { query: { tags: [shippedTypeId(CORE_LIBRARY, 'reflection')], sort } },
         });
         const chosen = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           contract: 'core/selection',
           title: 'chosen work',
           fields: { query: { selector: { kind: 'exact', types: [shippedTypeId(NOW, 'task')] }, sort } },
         });
         const memo = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['tag'],
           title: '#memo',
           fields: { id: 'memo', extends: 'explanation', fields: { about: { type: 'ref', tag: 'explanation' } } },
         });
         const memoFields = (yield* graph.blocks.blockById(memo.id)).fields;
-        const deferredQuery = { tags: [shippedTypeId(NOW, 'task')], sort };
-        const proposal = yield* graph.blocks.create({
-          projectId,
-          contract: 'core/amendment',
-          amendsId: (yield* graph.blocks.rootBlockOf(projectId)).id,
-          title: 'deferred views',
-          fields: {
-            ops: [
-              { op: 'create', tags: [shippedTypeId(CORE_LIBRARY, 'view')], title: 'deferred view', fields: { query: deferredQuery } },
-              {
-                op: 'update',
-                id: yield* demo.nameOf(sightings.id),
-                fields: { [fieldIdOf(shippedTypeId(CORE_LIBRARY, 'view'), 'query')]: deferredQuery },
-              },
-            ],
-          },
-        });
-        const deferred = (yield* graph.blocks.blockById(proposal.id)).fields;
         const own = yield* graph.blocks.blockById(work.id);
         for (const row of yield* db.select().from(block).where(eq(block.projectId, projectId))) {
           const vocabulary = row.tags.includes('tag') || row.tags.includes('catalog');
@@ -204,7 +196,6 @@ layer(demoGraphLayer(), { excludeTestServices: true })('software-development nam
           yield* db.select({ tag: blockTag.tag, typeId: blockTag.typeId }).from(blockTag).where(eq(blockTag.blockId, explained.id)),
         ).toEqual([{ tag: 'explanation', typeId: shippedTypeId(NOW, 'explanation') }]);
         expect((yield* graph.blocks.blockById(work.id)).fields).toEqual(own.fields);
-        expect((yield* graph.blocks.blockById(proposal.id)).fields).toEqual(deferred);
         expect(yield* selected(chosen.id)).toEqual([yield* demo.nameOf(task.id)]);
         expect((yield* graph.blocks.blockById(memo.id)).fields).toEqual(memoFields);
         expect(table.tagById('memo')?.extends).toBe('explanation');

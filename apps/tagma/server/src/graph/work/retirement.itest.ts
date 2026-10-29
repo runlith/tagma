@@ -3,9 +3,9 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { demoGraphLayer, type EffectDemo, withDemo } from '../../composition/testing/graphFixture.js';
 
-const lens = ({ graph, projectId }: EffectDemo) => {
+const lens = ({ graph, projectId, root }: EffectDemo) => {
   const make = (tag: 'spec' | 'task' | 'idea', title: string, parentId?: number) =>
-    Effect.map(graph.blocks.create({ projectId, tags: [tag], title, parentId }), (row) => row.id);
+    Effect.map(graph.blocks.create({ projectId, tags: [tag], title, parentId: parentId ?? root }), (row) => row.id);
   const replaced = Effect.fnUntraced(function* (tag: 'spec' | 'task') {
     const old = yield* make(tag, 'replaced');
     const heir = yield* make(tag, 'successor');

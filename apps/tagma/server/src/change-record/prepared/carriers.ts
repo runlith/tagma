@@ -11,7 +11,7 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { holdersOf } from '../holdings/totals.js';
 import { changedWithin, standingAmong } from './eligible.js';
 import { movesAt, NO_MOVES } from '../record/moves.js';
-import { TEAM_REASON } from '../contract/service/commands.js';
+import { ABSENT_DIGEST, TEAM_REASON } from '../contract/service/commands.js';
 
 type StoreShape = Context.Service.Shape<typeof MachineStore>;
 
@@ -22,6 +22,7 @@ export type Selection = {
   readonly explicit: ReadonlySet<string>;
   readonly unmatched: readonly string[];
   readonly unattributed: readonly string[];
+  readonly team: ReadonlyMap<string, string>;
   readonly pairs: ReadonlyMap<string, ReadonlySet<string>>;
 };
 
@@ -31,8 +32,13 @@ export const carriersOf = (origin: LandingOrigin, input: Pick<ChangeInput, 'taki
   return [...carriers.values()];
 };
 
-export const bearsNobody = (origin: LandingOrigin, explicit: ReadonlySet<string>, path: string): boolean =>
-  origin.work === null && explicit.has(path);
+export const bearsNobody = (
+  origin: LandingOrigin,
+  explicit: ReadonlySet<string>,
+  team: ReadonlyMap<string, string>,
+  path: string,
+  digest: string | null | undefined,
+): boolean => (digest !== undefined && team.get(path) === (digest ?? ABSENT_DIGEST)) || (origin.work === null && explicit.has(path));
 
 const askedAt = (path: string, root?: string): string =>
   posix.normalize(isAbsolute(path) && root !== undefined ? relative(root, path) : path);
@@ -72,14 +78,21 @@ export const heldPaths = Effect.fn('prepared.heldPaths')(function* <Row extends 
     projectId === null ? [] : [...reads.commands.retained({ projectId, threadId }, checkout).values()];
   const taken = carriers.filter((who) => who.threadId !== own);
   const retained = unique(carriers.flatMap(retainedOf).map((row) => row.path));
-  const teamOnly = (path: string): boolean =>
-    reads.commands.unattributedUnder(checkout, path).every((row) => row.path !== path || (row.reason === TEAM_REASON && row.team === own));
-  const team = unique(
+  const team = new Map<string, string>();
+  for (const path of unique(
     taken
       .flatMap(retainedOf)
       .filter((row) => own !== null && row.reason === TEAM_REASON && row.team === own)
       .map((row) => row.path),
-  ).filter(teamOnly);
+  )) {
+    const observations = reads.commands.unattributedUnder(checkout, path).filter((row) => row.path === path);
+    if (observations.some((row) => row.reason !== TEAM_REASON || row.team !== own)) continue;
+    const latest = observations.reduce<(typeof observations)[number] | undefined>(
+      (latest, row) => (latest === undefined || row.at >= latest.at ? row : latest),
+      undefined,
+    );
+    if (latest?.digest !== null && latest?.digest !== undefined) team.set(path, latest.digest);
+  }
   const asked = input.paths?.map((one) => ({ spelled: one, at: askedAt(one, root) }));
   const inside = (asked ?? []).map((one) => one.at).filter((at) => at !== '..' && !at.startsWith('../') && !isAbsolute(at));
   const explicit = inside.length === 0 ? [] : [...(yield* fns.eligiblePaths(git, root, yield* changedWithin(git, root, inside)))];
@@ -87,7 +100,7 @@ export const heldPaths = Effect.fn('prepared.heldPaths')(function* <Row extends 
   const moves = known.length === 0 ? NO_MOVES : yield* movesAt({ units, store, git }, { checkout, dir: root, head }, known, true);
   const namedAt = (path: string): boolean => asked?.some((name) => within(path, name.at)) ?? false;
   const named = (path: string): boolean => asked === undefined || namedAt(path) || anyOf(moves.partners(path), namedAt);
-  const candidates = yield* fns.eligiblePaths(git, root, recorded.filter(named));
+  const candidates = yield* fns.eligiblePaths(git, root, unique([...recorded, ...team.keys()]).filter(named));
   const judged = yield* fns.judged({ git, root, store, units, checkout }, candidates);
   const holders = new Set(carriers.map((who) => who.threadId));
   const held: string[] = [];
@@ -102,7 +115,16 @@ export const heldPaths = Effect.fn('prepared.heldPaths')(function* <Row extends 
     if (holdersOf(one.holding).some((holder) => holders.has(holder))) held.push(path);
   }
   const retainedHere = (asked ?? []).length === 0 ? [] : retained.filter(named);
-  const selected = unique([...held, ...retainedHere, ...team.filter(named), ...explicit]);
+  const teamPaths = [...team].flatMap(([path, digest]) => {
+    const one = judged.get(path);
+    return one?.digests !== null &&
+      one?.digests !== undefined &&
+      digest === (one.digests.working ?? ABSENT_DIGEST) &&
+      holdersOf(one.holding).every((holder) => holders.has(holder))
+      ? [path]
+      : [];
+  });
+  const selected = unique([...held, ...retainedHere, ...teamPaths.filter(named), ...explicit]);
   const paired = unique([...selected, ...selected.flatMap((path) => [...moves.partners(path)])]);
   const vetted = new Set([...candidates, ...explicit]);
   const paths = [
@@ -124,5 +146,12 @@ export const heldPaths = Effect.fn('prepared.heldPaths')(function* <Row extends 
   }
   const leftBehind = retained.filter((path) => !carried.has(path));
   const unattributed = leftBehind.length === 0 ? [] : [...(yield* standingAmong(git, root, leftBehind)).standing].sort();
-  return { paths, explicit: new Set([...retainedHere, ...explicit]), unmatched, unattributed, pairs };
+  return {
+    paths,
+    explicit: new Set([...retainedHere, ...explicit]),
+    team: new Map(teamPaths.map((path) => [path, team.get(path)!])),
+    unmatched,
+    unattributed,
+    pairs,
+  };
 });

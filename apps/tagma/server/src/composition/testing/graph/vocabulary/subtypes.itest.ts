@@ -5,10 +5,17 @@ import { demoGraphLayer, withDemo } from '../../graphFixture.js';
 
 layer(demoGraphLayer(), { excludeTestServices: true })('subtypes', (it) => {
   it.effect('subtypes inherit carrier validation and refuse a field retype or an undeclared base', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, root, refusal }) =>
       Effect.gen(function* () {
         const declare = (id: string, fields: Record<string, unknown>) =>
-          graph.blocks.create({ projectId, tags: ['tag'], title: `#${id}`, body: `A #${id}.`, fields: { id, ...fields } });
+          graph.blocks.create({
+            projectId,
+            parentId: root,
+            tags: ['tag'],
+            title: `#${id}`,
+            body: `A #${id}.`,
+            fields: { id, ...fields },
+          });
         yield* declare('finding', {
           fields: { severity: { type: 'enum', values: ['low', 'high'] } },
           gates: [{ gate: 'required', field: 'severity' }],
@@ -17,15 +24,24 @@ layer(demoGraphLayer(), { excludeTestServices: true })('subtypes', (it) => {
         expect((yield* refusal(declare('orphan', { extends: 'nothing' }))).code).toBe('tag-incoherent');
         yield* declare('defect', { extends: 'finding', fields: { component: 'string' } });
         expect(
-          (yield* refusal(graph.blocks.create({ projectId, tags: ['defect'], title: 'unsized', fields: { component: 'ui' } }))).code,
+          (yield* refusal(
+            graph.blocks.create({ projectId, parentId: root, tags: ['defect'], title: 'unsized', fields: { component: 'ui' } }),
+          )).code,
         ).toBe('field-required');
         expect(
           (yield* refusal(
-            graph.blocks.create({ projectId, tags: ['defect'], title: 'mis-sized', fields: { severity: 'huge', component: 'ui' } }),
+            graph.blocks.create({
+              projectId,
+              parentId: root,
+              tags: ['defect'],
+              title: 'mis-sized',
+              fields: { severity: 'huge', component: 'ui' },
+            }),
           )).code,
         ).toBe('field-invalid');
         const carrier = yield* graph.blocks.create({
           projectId,
+          parentId: root,
           tags: ['defect'],
           title: 'sized',
           fields: { severity: 'high', component: 'ui' },

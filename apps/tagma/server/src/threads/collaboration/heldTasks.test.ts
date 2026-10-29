@@ -24,6 +24,7 @@ const setup = Effect.gen(function* () {
       title: row.id,
       titleOrigin: 'random',
       life: 'idle',
+      owes: false,
       scopeBlockUuid: null,
       readerOrderAt: row.createdAt,
       liveSpellStartedAt: null,

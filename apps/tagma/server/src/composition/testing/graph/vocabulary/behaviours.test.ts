@@ -3,7 +3,6 @@ import { it } from '@runlith/effect-test';
 import { Effect, Result } from 'effect';
 import { assertComposable } from '../../../../graph/vocabulary/declarationRules.js';
 import { CATALOG_IDS, tagsOfCatalogs } from '../../../../catalogs/contract/wire/registry.js';
-import { AMENDMENT } from '../../../../graph/contract/wire/tags/amendment.js';
 import { SPEC } from '../../../../graph/contract/wire/tags/spec.js';
 import { LEAF } from '../../../../graph/contract/wire/tags/leaf.js';
 import { LIFECYCLE } from '../../../../graph/contract/wire/tags/lifecycle.js';
@@ -136,7 +135,6 @@ test('a role binds its meaning only where the declaration carries what that mean
   const tagma = new TagIndex(tagsOfCatalogs(CATALOG_IDS), BEHAVIOUR_REGISTRY);
   const contractsOf = (id: string) => Object.keys(tagma.tagById(id)?.contracts ?? {}).sort();
   expect(contractsOf('reflection')).toEqual([OBSERVATION, REFLECTION].sort());
-  expect(contractsOf('proposal')).toEqual([AMENDMENT, LIFECYCLE].sort());
   expect(contractsOf('spec')).toEqual([LIFECYCLE, SPEC].sort());
   expect(contractsOf('view')).toEqual([LEAF, SELECTION].sort());
   const sighting = new TagIndex(
@@ -148,7 +146,7 @@ test('a role binds its meaning only where the declaration carries what that mean
   expect(Object.keys(shelf.tagById('shelf')?.contracts ?? {})).toEqual([LEAF]);
 });
 
-test('a contract-only lifecycle is held to its endings, and a contract-only amendment ends on verdicts alone', () => {
+test('a contract-only lifecycle is held to its endings', () => {
   const state = { type: 'enum', values: ['open', 'done', 'dropped'] } as const;
   const moves = [
     { gate: 'transition', field: 'phase', from: 'open', to: 'done' },
@@ -166,19 +164,6 @@ test('a contract-only lifecycle is held to its endings, and a contract-only amen
   expect(unread(chore('done'))).toEqual([]);
   expect(unread(chore('open'))).toEqual(['chore']);
   expect(unread(chore('done', [...moves, { gate: 'transition', field: 'phase', from: 'done', to: 'dropped' }]))).toEqual(['chore']);
-  const finding = (run: string, ended: boolean): Declaration => ({
-    id: 'finding',
-    fields: { phase: state, changes: { type: 'schema', name: 'amendmentOps' } },
-    gates: [...moves],
-    contracts: {
-      [LIFECYCLE]: { slots: { status: 'phase' }, words: { initial: 'open', ...(ended ? { done: 'done' } : {}) } },
-      [AMENDMENT]: { slots: { ops: 'changes' }, words: { run, declined: 'dropped', answered: 'dropped' } },
-    },
-    prompt: '',
-  });
-  expect(unread(finding('done', false))).toEqual([]);
-  expect(unread(finding('open', false))).toEqual(['finding']);
-  expect(unread(finding('done', true))).toEqual(['finding']);
 });
 
 it.effect('two tags on one node compose a contract only when both bind it the same way', () =>

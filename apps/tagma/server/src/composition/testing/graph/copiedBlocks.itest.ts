@@ -84,7 +84,7 @@ layer(demoGraphLayer({ repos: ['law'], prepareEffect: prepareTeamCopies(['law'])
   excludeTestServices: true,
 })('a block copied into another project', (it) => {
   it.effect('is refused by its name alone with an address per copy, and the address or the project reaches the copy from any field', () =>
-    withDemo(({ graph, context, project, demoRoot, projectId }) =>
+    withDemo(({ graph, context, project, demoRoot, projectId, root, nameOf }) =>
       Effect.scoped(
         Effect.gen(function* () {
           const files = yield* FileSystem.FileSystem;
@@ -98,7 +98,13 @@ layer(demoGraphLayer({ repos: ['law'], prepareEffect: prepareTeamCopies(['law'])
           const servedLaw = yield* pool.resolve({ projectId: law.id });
           const rule = yield* Effect.provide(
             onGraph(servedLaw)(
-              signed(Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: law.id, tags: ['rule'], title: 'Law' }))),
+              signed(
+                Effect.flatMap(Blocks, (blocks) =>
+                  Effect.flatMap(blocks.rootBlockOf(law.id), (root) =>
+                    blocks.create({ projectId: law.id, parentId: root.id, tags: ['rule'], title: 'Law' }),
+                  ),
+                ),
+              ),
             ),
             routed,
           );
@@ -126,8 +132,11 @@ layer(demoGraphLayer({ repos: ['law'], prepareEffect: prepareTeamCopies(['law'])
           expect(addressIn(alone, law.id)).not.toBe(atCopy);
           expect(yield* call('update_block', { ...retitle, project: copy.id })).toMatchObject({ status: 'ok' });
 
-          const citing = ((yield* call('create_block', { tags: ['idea'], title: 'Cites the law' })) as { block: { name: string } }).block
-            .name;
+          const citing = (
+            (yield* call('create_block', { parentId: yield* nameOf(root), tags: ['idea'], title: 'Cites the law' })) as {
+              block: { name: string };
+            }
+          ).block.name;
           const link = { fromId: citing, kind: 'relates', toId: name };
           const linked = { ...link, toId: addressIn(yield* call('link_blocks', link), law.id) };
           expect(yield* call('link_blocks', linked)).toMatchObject({ status: 'ok' });
@@ -167,7 +176,13 @@ layer(demoGraphLayer({ repos: ['law'], prepareEffect: prepareTeamCopies(['law'])
           const servedLaw = yield* pool.resolve({ projectId: law.id });
           const idea = yield* Effect.provide(
             onGraph(servedLaw)(
-              signed(Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: law.id, tags: ['idea'], title: 'Moving idea' }))),
+              signed(
+                Effect.flatMap(Blocks, (blocks) =>
+                  Effect.flatMap(blocks.rootBlockOf(law.id), (root) =>
+                    blocks.create({ projectId: law.id, parentId: root.id, tags: ['idea'], title: 'Moving idea' }),
+                  ),
+                ),
+              ),
             ),
             routed,
           );
@@ -193,7 +208,13 @@ layer(demoGraphLayer({ repos: ['law'], prepareEffect: prepareTeamCopies(['law'])
           const servedLanding = yield* pool.resolve({ projectId: moved.id });
           yield* Effect.provide(
             onGraph(servedLanding)(
-              signed(Effect.flatMap(Blocks, (blocks) => blocks.create({ projectId: moved.id, tags: ['idea'], title: 'Already here' }))),
+              signed(
+                Effect.flatMap(Blocks, (blocks) =>
+                  Effect.flatMap(blocks.rootBlockOf(moved.id), (root) =>
+                    blocks.create({ projectId: moved.id, parentId: root.id, tags: ['idea'], title: 'Already here' }),
+                  ),
+                ),
+              ),
             ),
             routed,
           );

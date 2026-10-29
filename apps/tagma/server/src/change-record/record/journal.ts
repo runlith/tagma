@@ -54,7 +54,7 @@ export type UnownedMark = {
   readonly at: number;
 };
 
-const UNATTRIBUTED_PER_STATEMENT = rowsPerStatement(8);
+const UNATTRIBUTED_PER_STATEMENT = rowsPerStatement(9);
 
 const OPERATOR_KEY = holderKey(OPERATOR);
 
@@ -320,6 +320,7 @@ export const makeCommandJournal = Effect.fnUntraced(function* ({ walks }: { read
               path: commandUnattributed.path,
               reason: commandUnattributed.reason,
               team: commandUnattributed.team,
+              digest: commandUnattributed.digest,
               at: commandUnattributed.at,
             })
             .from(commandUnattributed)

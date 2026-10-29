@@ -14,52 +14,37 @@ const source = { name: 'codex', ref: '.external/codex@ab12cd3' };
 
 layer(demoGraphLayer(), { excludeTestServices: true })('record blocks', (it) => {
   it.effect('a view holds no children, and every door that names a parent says so', () =>
-    withDemo(({ graph, projectId, nameOf, refusal }) =>
+    withDemo(({ graph, projectId, nameOf, refusal, root }) =>
       Effect.gen(function* () {
-        const { id: saved } = yield* graph.blocks.create({ projectId, tags: ['view'], title: 'open tasks', fields: { query: slice } });
+        const { id: saved } = yield* graph.blocks.create({
+          projectId,
+          tags: ['view'],
+          title: 'open tasks',
+          parentId: root,
+          fields: { query: slice },
+        });
         expect((yield* refusal(graph.blocks.create({ projectId, tags: ['task'], title: 'under', parentId: saved }))).code).toBe('leaf');
-        const loose = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'loose' });
+        const loose = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'loose', parentId: root });
         expect((yield* refusal(graph.blocks.update({ id: loose.id, parentId: saved }))).code).toBe('leaf');
         const name = yield* nameOf(saved);
         const batched = yield* refusal(
           graph.batch.apply(batchDocument([{ op: 'create', tags: ['task'], title: 'batched', parentId: name }]), projectId),
         );
         expect(batched.code).toBe('leaf');
-        const filed = yield* refusal(
-          graph.batch.apply(
-            batchDocument([
-              {
-                op: 'propose',
-                amendsId: name,
-                title: 'a finding',
-                ops: [{ op: 'create', tags: ['task'], title: 'proposed', parentId: name }],
-              },
-            ]),
-            projectId,
-          ),
-        );
-        expect(filed.code).toBe('leaf');
-        const amendment = yield* graph.batch.apply(
-          batchDocument([
-            {
-              op: 'propose',
-              amendsId: name,
-              title: 'the slice is too wide',
-              ops: [{ op: 'update', id: name, title: 'open tasks of this area' }],
-            },
-          ]),
-          projectId,
-        );
-        const proposalId = (amendment.ops[0] as { id: number }).id;
-        expect((yield* graph.reading.show(saved, 1)).children.map((child) => child.id)).toEqual([proposalId]);
       }),
     ),
   );
 
   it.effect('a view names a selection, not a place in the code, so it takes no source', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root }) =>
       Effect.gen(function* () {
-        const saved = yield* graph.blocks.create({ projectId, tags: ['view'], title: 'open tasks', fields: { query: slice } });
+        const saved = yield* graph.blocks.create({
+          projectId,
+          tags: ['view'],
+          title: 'open tasks',
+          parentId: root,
+          fields: { query: slice },
+        });
         const refused = yield* refusal(
           graph.sources.attach({ blockId: saved.id, kind: 'file', ref: 'apps/tagma/server/src/graph/Graph.ts' }),
         );
@@ -69,26 +54,37 @@ layer(demoGraphLayer(), { excludeTestServices: true })('record blocks', (it) => 
   );
 
   it.effect('opening a view runs it: the page stands beside the children, never among them', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
-        const first = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'first' });
-        const second = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'second' });
-        const saved = yield* graph.blocks.create({ projectId, tags: ['view'], title: 'open tasks', fields: { query: slice } });
+        const first = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'first', parentId: root });
+        const second = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'second', parentId: root });
+        const saved = yield* graph.blocks.create({
+          projectId,
+          tags: ['view'],
+          title: 'open tasks',
+          parentId: root,
+          fields: { query: slice },
+        });
         const opened = yield* graph.reading.show(saved.id, 1);
         expect(opened.children).toEqual([]);
         expect(opened.results?.items.map((row) => row.name)).toEqual([yield* nameOf(first.id), yield* nameOf(second.id)]);
         expect(opened.results?.total).toBe(2);
-        const root = yield* graph.blocks.rootBlockOf(projectId);
-        const above = yield* graph.reading.show(root.id, 2);
+        const above = yield* graph.reading.show(root, 2);
         expect(above.children.find((child) => child.id === saved.id)?.results).toBeNull();
       }),
     ),
   );
 
   it.effect('a saved query that no longer fits the schema refuses on read', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root }) =>
       Effect.gen(function* () {
-        const saved = yield* graph.blocks.create({ projectId, tags: ['view'], title: 'open tasks', fields: { query: slice } });
+        const saved = yield* graph.blocks.create({
+          projectId,
+          tags: ['view'],
+          title: 'open tasks',
+          parentId: root,
+          fields: { query: slice },
+        });
         yield* graph.graphStore.db
           .update(block)
           .set({ fields: { query: { tags: ['task'] } } })
@@ -101,15 +97,16 @@ layer(demoGraphLayer(), { excludeTestServices: true })('record blocks', (it) => 
   );
 
   it.effect('a scope that no longer stands empties the page and is named back', () =>
-    withDemo(({ graph, projectId, nameOf }) =>
+    withDemo(({ graph, projectId, nameOf, root }) =>
       Effect.gen(function* () {
-        const area = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'zone' });
+        const area = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'zone', parentId: root });
         yield* graph.blocks.create({ projectId, tags: ['task'], title: 'inside', parentId: area.id });
         const name = yield* nameOf(area.id);
         const saved = yield* graph.blocks.create({
           projectId,
           tags: ['view'],
           title: 'the zone',
+          parentId: root,
           fields: { query: { ...slice, scope: [name] } },
         });
         expect((yield* graph.reading.show(saved.id, 1)).results?.total).toBe(1);
@@ -123,12 +120,13 @@ layer(demoGraphLayer(), { excludeTestServices: true })('record blocks', (it) => 
   );
 
   it.effect('rewriting the query journals the fields it replaced and keeps the layout', () =>
-    withDemo(({ graph, projectId, table, refusal }) =>
+    withDemo(({ graph, projectId, table, refusal, root }) =>
       Effect.gen(function* () {
         const saved = yield* graph.blocks.create({
           projectId,
           tags: ['view'],
           title: 'open tasks',
+          parentId: root,
           fields: { query: slice, layout: { mode: 'board', by: 'status' } },
         });
         yield* graph.blocks.update({ id: saved.id, fields: { query: { tags: ['spec'], sort: { by: 'created', order: 'asc' } } } });
@@ -141,67 +139,76 @@ layer(demoGraphLayer(), { excludeTestServices: true })('record blocks', (it) => 
           tags: [taskId],
         });
         expect((yield* graph.blocks.blockById(saved.id)).fields).toMatchObject({ layout: { mode: 'board', by: 'status' } });
-        const plain = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'plain' });
+        const plain = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'plain', parentId: root });
         expect((yield* refusal(graph.blocks.update({ id: plain.id, fields: { query: slice } }))).code).toBe('field-invalid');
       }),
     ),
   );
 
   it.effect('records persist their facts, and corrections journal what they replaced', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root }) =>
       Effect.gen(function* () {
-        const filed = yield* graph.blocks.create({ projectId, tags: ['reflection'], title: 'friction', fields: facts });
+        const filed = yield* graph.blocks.create({ projectId, tags: ['reflection'], title: 'friction', parentId: root, fields: facts });
         expect((yield* graph.blocks.blockById(filed.id)).fields).toEqual(facts);
         const corrected = { ...facts, actual: 'a delete and a retype, and the name is lost with it' };
         yield* graph.blocks.update({ id: filed.id, fields: corrected });
         expect((yield* graph.blocks.blockById(filed.id)).fields).toEqual(corrected);
         const [entry] = (yield* graph.journal.events({ blockId: filed.id })).filter((row) => row.op === 'update');
         expect((JSON.parse(entry?.payload ?? '{}') as { wasFields?: { actual?: string } }).wasFields).toEqual({ actual: facts.actual });
-        const read = yield* graph.blocks.create({ projectId, tags: ['research'], title: 'how codex resumes', fields: { source } });
+        const read = yield* graph.blocks.create({
+          projectId,
+          tags: ['research'],
+          title: 'how codex resumes',
+          parentId: root,
+          fields: { source },
+        });
         expect((yield* graph.blocks.blockById(read.id)).fields).toEqual({ source });
         yield* graph.blocks.update({ id: read.id, fields: { source: { name: 'codex', ref: '.external/codex@ff00aa1' } } });
         expect((yield* graph.blocks.blockById(read.id)).fields).toEqual({ source: { name: 'codex', ref: '.external/codex@ff00aa1' } });
-        const plain = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'plain' });
+        const plain = yield* graph.blocks.create({ projectId, tags: ['task'], title: 'plain', parentId: root });
         expect((yield* refusal(graph.blocks.update({ id: plain.id, fields: facts }))).code).toBe('field-invalid');
       }),
     ),
   );
 
   it.effect('a create missing its tag’s own half refuses at the gate, naming the field', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root }) =>
       Effect.gen(function* () {
-        const core = { projectId, title: 'x' };
+        const core = { projectId, title: 'x', parentId: root };
         for (const [input, code] of [
           [{ ...core, tags: ['view'] }, 'field-required'],
           [{ ...core, tags: ['reflection'] }, 'field-required'],
           [{ ...core, tags: ['reflection'], fields: { ...facts, actual: '  ' } }, 'field-invalid'],
           [{ ...core, tags: ['research'] }, 'field-required'],
           [{ ...core, tags: ['research'], fields: { source: { name: 'codex' } } }, 'field-invalid'],
-          [{ ...core, tags: ['proposal'] }, 'field-required'],
-          [{ ...core, tags: ['proposal'], fields: { ops: [{ op: 'create', title: 'child' }] } }, 'amends-missing'],
           [{ ...core, tags: ['invoice'] }, 'tag-undeclared'],
         ] as const)
           expect((yield* refusal(graph.blocks.create(input))).code).toBe(code);
-        const born = yield* graph.blocks.create({ ...core, tags: ['idea'] });
-        expect((yield* refusal(graph.blocks.create({ ...core, tags: ['idea'], amendsId: born.id }))).code).toBe('amends-shape');
       }),
     ),
   );
 
   it.effect('research takes no source, at birth and afterwards', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root }) =>
       Effect.gen(function* () {
         const born = yield* refusal(
           graph.blocks.create({
             projectId,
             tags: ['research'],
             title: 'how codex resumes',
+            parentId: root,
             fields: { source },
             sources: [{ kind: 'file', ref: 'apps/tagma/server/src/graph/Graph.ts' }],
           }),
         );
         expect(born.code).toBe('not-measurable');
-        const read = yield* graph.blocks.create({ projectId, tags: ['research'], title: 'how codex streams', fields: { source } });
+        const read = yield* graph.blocks.create({
+          projectId,
+          tags: ['research'],
+          title: 'how codex streams',
+          parentId: root,
+          fields: { source },
+        });
         const later = yield* refusal(graph.sources.attach({ blockId: read.id, kind: 'file', ref: 'apps/tagma/server/src/graph/Graph.ts' }));
         expect(later.code).toBe('not-measurable');
       }),
@@ -209,9 +216,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('record blocks', (it) => 
   );
 
   it.effect('a stored record that no longer fits is refused by the write, not the read', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root }) =>
       Effect.gen(function* () {
-        const filed = yield* graph.blocks.create({ projectId, tags: ['reflection'], title: 'friction', fields: facts });
+        const filed = yield* graph.blocks.create({ projectId, tags: ['reflection'], title: 'friction', parentId: root, fields: facts });
         yield* graph.graphStore.db
           .update(block)
           .set({ fields: { command: 'tagma x', expected: 'one act' } })
@@ -225,49 +232,33 @@ layer(demoGraphLayer(), { excludeTestServices: true })('record blocks', (it) => 
   );
 
   it.effect('a stored document that no longer fits refuses the acts that read it and rolls them back', () =>
-    withDemo(({ graph, projectId, nameOf, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root }) =>
       Effect.gen(function* () {
-        const target = yield* graph.blocks.create({ projectId, tags: ['idea'], title: 'target', body: 'before' });
         const saved = yield* graph.blocks.create({
           projectId,
           tags: ['view'],
           title: 'view',
+          parentId: root,
           fields: { query: { sort: { by: 'updated', order: 'desc' } } },
-        });
-        const filed = yield* graph.review.propose({
-          projectId,
-          amendsId: target.id,
-          title: 'proposal',
-          ops: [{ op: 'edit', id: yield* nameOf(target.id), old: 'before', new: 'after' }],
         });
         yield* graph.graphStore.db
           .update(block)
           .set({ fields: { query: { tags: ['task'] } } })
           .where(eq(block.id, saved.id));
-        yield* graph.graphStore.db
-          .update(block)
-          .set({ fields: { status: 'open', ops: [] } })
-          .where(eq(block.id, filed.id));
         const before = yield* graph.blocks.blockById(saved.id);
         const journal = yield* graph.journal.events({ blockId: saved.id });
         expect((yield* refusal(graph.reading.show(saved.id, 0))).code).toBe('field-invalid');
         expect((yield* refusal(graph.blocks.update({ id: saved.id, fields: { query: { tags: ['task'] } } }))).code).toBe('field-invalid');
         expect(yield* graph.blocks.blockById(saved.id)).toEqual(before);
         expect(yield* graph.journal.events({ blockId: saved.id })).toEqual(journal);
-        const filedBefore = yield* graph.blocks.blockById(filed.id);
-        const filedJournal = yield* graph.journal.events({ blockId: filed.id });
-        expect((yield* refusal(graph.review.accept({ id: filed.id }))).code).toBe('field-invalid');
-        expect((yield* graph.review.obstacles(filed.id)).length).toBeGreaterThan(0);
-        expect(yield* graph.blocks.blockById(filed.id)).toEqual(filedBefore);
-        expect(yield* graph.journal.events({ blockId: filed.id })).toEqual(filedJournal);
       }),
     ),
   );
 
   it.effect('a page above a view whose selection no longer fits still reads, and the view refuses where it is opened', () =>
-    withDemo(({ graph, projectId, refusal }) =>
+    withDemo(({ graph, projectId, refusal, root }) =>
       Effect.gen(function* () {
-        const parent = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'parent', body: 'visible body' });
+        const parent = yield* graph.blocks.create({ projectId, tags: ['zone'], title: 'parent', body: 'visible body', parentId: root });
         const child = yield* graph.blocks.create({
           projectId,
           parentId: parent.id,

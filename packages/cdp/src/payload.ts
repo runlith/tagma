@@ -1,6 +1,6 @@
 import { Data, Effect } from 'effect';
 import { type WorkerUnavailable, workerLink } from '@runlith/utils/worker';
-import { bytesText, type Job, type JobAnswer, type JobAsk, trimmed } from './jobs.js';
+import { bytesText, type Chunk, type Job, type JobAnswer, type JobAsk, trimmed } from './jobs.js';
 
 export const INLINE_CHARS = 1 << 20;
 
@@ -25,6 +25,12 @@ export const parsed = (text: string, trim: number | null = null): Effect.Effect<
   text.length <= INLINE_CHARS
     ? inline(() => (trim === null ? (JSON.parse(text) as unknown) : trimmed(JSON.parse(text), trim)))
     : offLoop({ kind: 'json', text, trim });
+
+export const chunkOf = (text: string): Effect.Effect<Chunk, WorkerUnavailable | PayloadUnreadable> =>
+  Effect.map(offLoop({ kind: 'chunk', text }), (value) => value as Chunk);
+
+export const appendHeapChunk = (text: string, file: string): Effect.Effect<void, WorkerUnavailable | PayloadUnreadable> =>
+  Effect.asVoid(offLoop({ kind: 'heap', text, file }));
 
 export const bytesOf = (text: string): Effect.Effect<Uint8Array, WorkerUnavailable | PayloadUnreadable> =>
   text.length <= INLINE_CHARS

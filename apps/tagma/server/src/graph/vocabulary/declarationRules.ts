@@ -1,6 +1,5 @@
 import { Data, Effect, Result, Schema } from 'effect';
 import { canonicalJson } from '@runlith/utils/object';
-import { type AmendmentOp, amendmentOpSchema } from '../contract/wire/batch.js';
 import { type LawEnforcement, lawEnforcementSchema } from '../contract/wire/enforcement.js';
 import { type ModuleEntries, moduleEntriesSchema, type ModuleOrder, moduleOrderSchema } from '../contract/wire/modules.js';
 import { closedParsing, line, nameRef } from '../contract/wire/fields.js';
@@ -8,7 +7,7 @@ import { type BlockQuery, type ViewLayout, blockQuerySchema, GROUP_FIELDS, viewL
 import { SOURCE_KINDS } from '../contract/wire/sources.js';
 import { type ResearchSource, researchSourceSchema } from '../contract/wire/records.js';
 import { blockName, isBlockName } from '../contract/wire/references.js';
-import { AMENDMENT_VERDICTS, fieldName, statusTargets, statusWords, terminalStatuses } from '../contract/wire/tags/roles.js';
+import { fieldName, statusTargets, statusWords, terminalStatuses } from '../contract/wire/tags/roles.js';
 import {
   type BodyShape,
   bodyShapeSchema,
@@ -73,10 +72,6 @@ const FIELD_SCHEMAS = {
   line: { codec: line, form: 'one non-blank line' },
   blockQuery: { codec: blockQuerySchema, form: 'a query_blocks input with its sort' },
   viewLayout: { codec: viewLayoutSchema, form: `{mode: "list"} | {mode: "sections"|"board", by: ${words(GROUP_FIELDS)}}` },
-  amendmentOps: {
-    codec: Schema.Array(amendmentOpSchema).check(Schema.isMinLength(1)),
-    form: 'a non-empty list of apply_batch ops',
-  },
   researchSource: { codec: researchSourceSchema, form: '{name: the system read, ref: its checkout, URL or version}' },
   tagFields: {
     codec: tagFieldsSchema,
@@ -90,7 +85,7 @@ const FIELD_SCHEMAS = {
   },
   tagRoles: {
     codec: tagRolesSchema,
-    form: '{status?: {field, initial, claimed?, done?, closed?}, amendment?: {field, run, declined, answered}, holder|law|enforcement|delivery?: field, work|spec|container|leaf|observation?: true}',
+    form: '{status?: {field, initial, claimed?, done?, closed?}, holder|law|enforcement|delivery?: field, work|spec|container|leaf|observation?: true}',
   },
   tagBody: { codec: bodyShapeSchema, form: '{shape: "content"|"orientation", cap?: UTF-16 code units}' },
   tagExtends: { codec: tagExtendsSchema, form: 'the parent type id' },
@@ -117,7 +112,6 @@ const FIELD_SCHEMAS = {
 export const fieldForm = (name: FieldSchemaName): string => FIELD_SCHEMAS[name].form;
 
 const CLOSED_FIELDS: ReadonlySet<FieldSchemaName> = new Set([
-  'amendmentOps',
   'tagEdges',
   'tagRoles',
   'tagBody',
@@ -286,7 +280,6 @@ export type FieldSchemaTypes = {
   line: string;
   blockQuery: BlockQuery;
   viewLayout: ViewLayout;
-  amendmentOps: readonly AmendmentOp[];
   researchSource: ResearchSource;
   tagFields: Tag['fields'];
   tagEdges: Tag['edges'];
@@ -469,44 +462,6 @@ export function incoherence(declared: Tag): GateRefusal<'tag-incoherent'> | null
       `the endings this tag declares are ${ends.join(', ') || 'none — a word with no move out of it is one'}`,
       `drop the work role, if a ${named} is not a thing that can be finished or dropped`,
     ]);
-  }
-  const verdicts = declared.roles.amendment;
-  if (verdicts !== undefined) {
-    if (binding === undefined) {
-      return new GateRefusal('tag-incoherent', `${named} binds the amendment role and declares no status`, [
-        `bind ${named}.roles.status: a verdict is an ending, and a tag with no status has nowhere to record one`,
-      ]);
-    }
-    const words = statusWords(declared);
-    for (const verdict of AMENDMENT_VERDICTS) {
-      const word = verdicts[verdict];
-      if (!words.includes(word) || !ends.includes(word)) {
-        return new GateRefusal(
-          'tag-incoherent',
-          `${named}.roles.amendment.${verdict} names "${word}", which is not an ending of ${named}.fields.${binding.field}`,
-          [`name one of ${ends.join(', ') || 'this tag declares none'} — a verdict is where a finding stops`],
-        );
-      }
-    }
-    const ops = declared.fields[verdicts.field];
-    if (typeof ops !== 'object' || ops.type !== 'schema' || ops.name !== 'amendmentOps') {
-      return new GateRefusal(
-        'tag-incoherent',
-        `${named}.roles.amendment.field names "${verdicts.field}", which does not hold the operations a verdict runs`,
-        [`declare ${named}.fields.${verdicts.field} as {type: "schema", name: "amendmentOps"}`],
-      );
-    }
-    const generic = binding.done ?? binding.closed;
-    if (generic !== undefined) {
-      return new GateRefusal(
-        'tag-incoherent',
-        `${named} ends on a verdict and also names "${generic}" for the generic ${binding.done === undefined ? 'close' : 'finish'}`,
-        [
-          `drop ${named}.roles.status.${binding.done === undefined ? 'closed' : 'done'}: an amendment ends on run, declined or answered and on nothing else`,
-          `drop ${named}.roles.amendment, if a ${named} is not a finding somebody judges`,
-        ],
-      );
-    }
   }
   if (fieldName(declared, 'delivery') !== null && fieldName(declared, 'law') === null) {
     return new GateRefusal('tag-incoherent', `${named} binds the delivery role and not the law role`, [

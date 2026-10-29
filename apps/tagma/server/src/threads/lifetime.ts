@@ -46,6 +46,8 @@ import { ActivityRecord } from '@runlith/activity/store/record';
 import { activeNarrowed } from './list/active.js';
 import { letGoDetached } from '@runlith/agent/resources/threadResourceLedger';
 import { ROLLOUT_HOME } from './contract/wire/rolloutHome.js';
+import { OwnWork } from './contract/service/ownWork.js';
+import { makeOwnWork } from './collaboration/ownWork.js';
 
 export const releasedResources = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -68,6 +70,7 @@ export type ThreadsLifetime =
   | HarnessRegistry
   | ThreadReleasing
   | ThreadList
+  | OwnWork
   | RestedRollouts
   | ThreadMandate
   | WorkSpells;
@@ -83,7 +86,8 @@ export const makeThreadsLifetime = Effect.fnUntraced(function* ({ rolloutHome }:
   const activity = yield* ActivityRecord;
   const order = yield* threadJournalLane;
   const registry = harnessRegistry();
-  const reads = yield* makeThreadListReads;
+  const own = yield* makeOwnWork;
+  const reads = yield* makeThreadListReads.pipe(Effect.provideService(OwnWork, own));
   const forms = yield* makeRolloutForms({ journal: journalEntry(order) });
   const rested = yield* makeRestedReads({ forms, home: rolloutHome, lagging: (threadId) => rollouts.formRested(threadId) });
   const mandate = yield* makeMandateRows;
@@ -135,6 +139,7 @@ export const makeThreadsLifetime = Effect.fnUntraced(function* ({ rolloutHome }:
     Effect.provideService(ThreadReleasing, releasing),
   );
   return Context.make(ThreadRollouts, rollouts).pipe(
+    Context.add(OwnWork, own),
     Context.add(HarnessRegistry, registry),
     Context.add(ThreadReleasing, releasing),
     Context.add(ThreadList, list),

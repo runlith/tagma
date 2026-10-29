@@ -22,11 +22,13 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         yield* suiteGit(root, 'commit', '-q', '--allow-empty', '-m', 'base');
         const added = projectOf(yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'stealth' }));
         yield* projectLeaving(world, added.id);
-        const kept = blockOf(yield* world.op('create_block', { tags: ['idea'], title: 'Kept on main' }, `project=${added.id}`));
+        const parentId = ((yield* world.op('list_root_blocks', {}, `project=${added.id}`)).body as { blocks: { name: string }[] })
+          .blocks[0]!.name;
+        const kept = blockOf(yield* world.op('create_block', { tags: ['idea'], title: 'Kept on main', parentId }, `project=${added.id}`));
         const feature = join(dirname(root), `${basename(root)}-feature`);
         yield* suiteGit(root, 'worktree', 'add', '-q', '-b', 'feature', feature);
         const branched = blockOf(
-          yield* world.op('create_block', { tags: ['idea'], title: 'Kept on the branch' }, `project=${added.id}&branch=feature`),
+          yield* world.op('create_block', { tags: ['idea'], title: 'Kept on the branch', parentId }, `project=${added.id}&branch=feature`),
         );
         const bare = yield* world.directory('remote');
         yield* suiteGit(bare, 'init', '-q', '--bare');
@@ -75,7 +77,11 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         const first = yield* world.directory('first');
         yield* suiteGit(first, 'init', '-q', '-b', 'main');
         const removed = projectOf(yield* world.op('add_project', { name, rootPath: first, storage: 'stealth' }));
-        const kept = blockOf(yield* world.op('create_block', { tags: ['idea'], title: 'Kept while removed' }, `project=${removed.id}`));
+        const parentId = ((yield* world.op('list_root_blocks', {}, `project=${removed.id}`)).body as { blocks: { name: string }[] })
+          .blocks[0]!.name;
+        const kept = blockOf(
+          yield* world.op('create_block', { tags: ['idea'], title: 'Kept while removed', parentId }, `project=${removed.id}`),
+        );
         expect((yield* world.op('remove_project', { ref: name })).status).toBe(200);
 
         const second = yield* world.directory('second');

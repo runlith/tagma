@@ -18,7 +18,10 @@ function names(operation: CatalogOperationId, refusal: GateRefusal, code: string
 }
 
 const create = (demo: EffectDemo, tag: 'spec' | 'idea' | 'task', title: string) =>
-  Effect.map(Effect.provide(demo.graph.blocks.create({ projectId: demo.projectId, tags: [tag], title }), demo.context), (row) => row.id);
+  Effect.map(
+    Effect.provide(demo.graph.blocks.create({ projectId: demo.projectId, parentId: demo.root, tags: [tag], title }), demo.context),
+    (row) => row.id,
+  );
 
 const stdio = (name: string, extra: Partial<McpServerDeclaration> = {}): McpServerDeclaration =>
   ({

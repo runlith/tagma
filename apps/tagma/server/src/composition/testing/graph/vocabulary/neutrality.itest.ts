@@ -1,7 +1,9 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { Context, Effect, Layer, Schema } from 'effect';
+import { Blocks } from '../../../../graph/contract/service/blocks.js';
 import { Tags } from '../../../../graph/contract/service/vocabulary.js';
+import { blockName } from '../../../../graph/contract/wire/references.js';
 import { agentPreviewSchema } from '../../../../threads/contract/wire/agentLibrary.js';
 import { doorFixture, DoorFixture } from '../../doorFixture.js';
 
@@ -16,8 +18,13 @@ const success = Effect.fnUntraced(function* (project: number, operation: string,
   expect(result.status).toBe(200);
   return result.body;
 });
-const create = (project: number, input: unknown) =>
-  success(project, 'create_block', input).pipe(
+const rootOf = Effect.fnUntraced(function* (project: number) {
+  const { runtime } = yield* DoorFixture;
+  const root = yield* Context.get(runtime.graph, Blocks).rootBlockOf(project).pipe(Effect.provide(runtime.graph));
+  return blockName(root.uuid);
+});
+const create = (project: number, input: Record<string, unknown>) =>
+  Effect.flatMap(rootOf(project), (parentId) => success(project, 'create_block', { parentId, ...input })).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(blockAnswer)),
     Effect.map((answer) => answer.block),
   );

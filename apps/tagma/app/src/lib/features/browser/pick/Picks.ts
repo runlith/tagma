@@ -6,13 +6,15 @@ const HTML_CHARS = 2_000;
 
 const fenced = (text: string): string => `\`\`\`\n${text.replaceAll('```', '`\u200b``')}\n\`\`\``;
 
-export const pickedText = (picked: Picked): string => {
+const pickedText = (picked: Picked, title: string): string => {
   const rows = (record: Readonly<Record<string, string>>) =>
     Object.entries(record)
       .map(([name, value]) => `  - ${name}: ${value}`)
       .join('\n');
   const rect = picked.rect;
   return [
+    `# ${title}`,
+    '',
     `Element picked on browser page \`${picked.page}\` at ${picked.url}.`,
     `Act on it at once with ref \`${picked.ref}\` on page \`${picked.page}\` (act_on_page); it needs no snapshot first.`,
     '',
@@ -20,6 +22,16 @@ export const pickedText = (picked: Picked): string => {
     `- name: ${picked.name || '—'}`,
     `- tag: ${picked.tag}`,
     `- selector: \`${picked.selector}\``,
+    ...(picked.component === undefined
+      ? []
+      : [
+          `- component: ${picked.component.name ?? 'unnamed'} (${picked.component.framework})`,
+          ...(picked.component.source === null
+            ? []
+            : [
+                `- source: \`${picked.component.source.file}${picked.component.source.line === null ? '' : `:${picked.component.source.line}`}${picked.component.source.column === null ? '' : `:${picked.component.source.column}`}\` (${picked.component.source.resolved ? 'checkout' : 'unresolved'}; ${picked.component.source.basis})`,
+              ]),
+        ]),
     `- box: ${Math.round(rect.x)}, ${Math.round(rect.y)}, ${Math.round(rect.width)}×${Math.round(rect.height)}`,
     ...(Object.keys(picked.attributes).length > 0 ? ['- attributes:', rows(picked.attributes)] : []),
     ...(Object.keys(picked.styles).length > 0 ? ['- styles:', rows(picked.styles)] : []),
@@ -48,8 +60,8 @@ export class Picks extends Service<Picks>()('Picks', { tier: 'app' }) {
   async stage(picked: Picked): Promise<string | null> {
     const host = this.screen.host;
     if (host === null) return 'No thread is open to take the element.';
-    const title = picked.name.trim() || picked.selector;
-    host.stageDocument({ id: crypto.randomUUID(), title: `Element · ${title}`.slice(0, 120), text: pickedText(picked) });
+    const title = `Element · ${(picked.name.trim() || picked.selector).replace(/\s+/g, ' ').trim()}`;
+    host.stageDocument({ id: crypto.randomUUID(), title, text: pickedText(picked, title) });
     const picture = await pictureOf(picked);
     if (picture === null) return null;
     return (await host.attach([picture])).notice ?? null;

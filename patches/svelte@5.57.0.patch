@@ -36,113 +36,56 @@ index 15e92aa..9e62ac8 100644
  export { raf } from './timing.js';
  export { proxy } from './proxy.js';
 diff --git a/src/internal/client/reactivity/batch.js b/src/internal/client/reactivity/batch.js
-index 8251f79..c7e83e2 100644
+index 8251f79..5f870af 100644
 --- a/src/internal/client/reactivity/batch.js
 +++ b/src/internal/client/reactivity/batch.js
-@@ -66,6 +66,13 @@ export let previous_batch = null;
-  */
- export let batch_values = null;
+@@ -321,6 +321,11 @@ export class Batch {
+ 		 */
+ 		var updates = (legacy_updates = []);
  
-+/**
-+ * For every value `apply()` reverted on behalf of another batch, that batch:
-+ * a reaction reading it runs against a world that batch will replace, and reruns when it commits
-+ * @type {Map<Value, Batch> | null}
-+ */
-+export let reverted_by = null;
++		// A teardown while this batch processes writes into the next one: the blocks it marks update before this batch's effects run under them
++		var outer_block_effects = eager_block_effects;
++		// Sync mode tears a branch down during the traversal; async mode defers it to commit, and a collector open here would stop should_defer_append
++		if (!async_mode_flag) eager_block_effects = new Set();
 +
- /** @type {Effect | null} */
- let last_scheduled_effect = null;
+ 		for (const root of roots) {
+ 			try {
+ 				this.#traverse(root, effects, render_effects);
+@@ -332,6 +337,7 @@ export class Batch {
+ 				// for a (non-minimal) reproduction that demonstrates a case where this is necessary
+ 				// to not get follow-up false-positives via "batch has scheduled roots" invariant errors.
+ 				if (!this.#is_deferred()) this.discard();
++				eager_block_effects = outer_block_effects;
+ 				throw e;
+ 			}
+ 		}
+@@ -351,6 +357,7 @@ export class Batch {
  
-@@ -152,6 +159,12 @@ export class Batch {
- 	 */
- 	#blocking_pending = new Map();
+ 		// if the batch has outstanding pending work, stash effects and bail
+ 		if (this.#is_deferred()) {
++			eager_block_effects = outer_block_effects;
+ 			this.#defer_effects(render_effects);
+ 			this.#defer_effects(effects);
  
-+	/**
-+	 * Effects scheduled onto this batch since it last processed: what a rebase keeps for it
-+	 * @type {Effect[]}
-+	 */
-+	#scheduled = [];
-+
- 	/**
- 	 * A deferred that resolves when the batch is committed, used with `settled()`
- 	 * TODO replace with Promise.withResolvers once supported widely enough
-@@ -171,6 +184,17 @@ export class Batch {
- 	 */
- 	#new_effects = [];
- 
-+	/**
-+	 * Reactions that ran against this batch's reverted values while it was held open: they rerun with the world it commits
-+	 * @type {Set<Reaction>}
-+	 */
-+	#stale = new Set();
-+
-+	/** @param {Reaction} reaction */
-+	note_stale(reaction) {
-+		this.#stale.add(reaction);
-+	}
-+
- 	/**
- 	 * Deferred effects (which run after async work has completed) that are DIRTY
- 	 * @type {Set<Effect>}
-@@ -202,6 +226,9 @@ export class Batch {
- 
- 	#decrement_queued = false;
- 
-+	/** True once this batch ran its effects: its values are on screen, and a later batch builds on them rather than undoing them */
-+	#flushed = false;
-+
- 	constructor() {
- 		// link batch
- 		if (last_batch === null) {
-@@ -293,6 +320,20 @@ export class Batch {
- 		// #is_deferred() is true, because traversing the tree could make
- 		// an if block that contains the last blocking pending effect falsy,
- 		// causing the block to no longer be deferred.
-+
-+		// A reaction that read this batch's reverted values elsewhere ran against a world this batch now replaces.
-+		for (const reaction of this.#stale) {
-+			if ((reaction.f & DESTROYED) !== 0) continue;
-+
-+			if ((reaction.f & DERIVED) !== 0) {
-+				reaction.wv = increment_write_version();
-+				set_signal_status(reaction, DIRTY);
-+			} else {
-+				this.#dirty_effects.add(/** @type {Effect} */ (reaction));
-+			}
-+		}
-+		this.#stale.clear();
-+
- 		for (const e of this.#dirty_effects) {
- 			this.#maybe_dirty_effects.delete(e);
- 			set_signal_status(e, DIRTY);
-@@ -306,6 +347,7 @@ export class Batch {
- 
- 		const roots = this.#roots;
- 		this.#roots = [];
-+		this.#scheduled = [];
- 
- 		this.apply();
- 
-@@ -380,6 +422,10 @@ export class Batch {
+@@ -372,6 +379,7 @@ export class Batch {
+ 			// to run after being merged into the earlier batch.
+ 			this.#defer_effects(render_effects);
+ 			this.#defer_effects(effects);
++			eager_block_effects = outer_block_effects;
+ 			earlier_batch.#merge(this);
+ 			return;
+ 		}
+@@ -380,6 +388,9 @@ export class Batch {
  		this.#dirty_effects.clear();
  		this.#maybe_dirty_effects.clear();
  
-+		// A teardown at commit writes into the next batch: the blocks it marks update before this batch's effects run under them
-+		var outer_block_effects = eager_block_effects;
-+		eager_block_effects = new Set();
++		// A teardown at commit is collected the same way
++		if (async_mode_flag) eager_block_effects = new Set();
 +
  		// append/remove branches
  		for (const fn of this.#commit_callbacks) fn(this);
  		this.#commit_callbacks.clear();
-@@ -388,6 +434,7 @@ export class Batch {
- 		flush_queued_effects(render_effects);
- 		flush_queued_effects(effects);
- 		previous_batch = null;
-+		this.#flushed = true;
- 
- 		this.#deferred?.resolve();
- 
-@@ -423,6 +470,8 @@ export class Batch {
+@@ -423,6 +434,8 @@ export class Batch {
  			old_values.clear();
  			next_batch.#process();
  		}
@@ -151,173 +94,17 @@ index 8251f79..c7e83e2 100644
  	}
  
  	/**
-@@ -435,6 +484,7 @@ export class Batch {
- 	#traverse(root, effects, render_effects) {
- 		root.f ^= CLEAN;
- 
-+		var carried = this.#carried();
- 		var effect = root.first;
- 
- 		while (effect !== null) {
-@@ -442,7 +492,11 @@ export class Batch {
- 			var is_branch = (flags & (BRANCH_EFFECT | ROOT_EFFECT)) !== 0;
- 			var is_skippable_branch = is_branch && (flags & CLEAN) !== 0;
- 
--			var skip = is_skippable_branch || (flags & INERT) !== 0 || this.#skipped_branches.has(effect);
-+			var skip =
-+				is_skippable_branch ||
-+				(flags & INERT) !== 0 ||
-+				this.#skipped_branches.has(effect) ||
-+				(is_branch && carried.length > 0 && this.#removed_by(carried, effect));
- 
- 			if (!skip && effect.fn !== null) {
- 				if (is_branch) {
-@@ -477,6 +531,46 @@ export class Batch {
- 		}
- 	}
- 
-+	/**
-+	 * Earlier batches with branch changes still to commit whose values this one sees, the way `apply()` leaves an intersecting batch in place
-+	 * @returns {Batch[]}
-+	 */
-+	#carried() {
-+		/** @type {Batch[]} */
-+		var carried = [];
-+
-+		for (var batch = this.#prev; batch !== null; batch = batch.#prev) {
-+			if (batch.is_fork || batch.#commit_callbacks.size === 0) continue;
-+			if (batch.#skipped_branches.size === 0 && batch.#unskipped_branches.size === 0) continue;
-+
-+			for (const [source, [, is_derived]] of batch.current) {
-+				if (!is_derived && this.current.has(source)) {
-+					carried.push(batch);
-+					break;
-+				}
-+			}
-+		}
-+
-+		return carried;
-+	}
-+
-+	/**
-+	 * A branch is gone in this batch's world when the nearest batch that decided it — this one, then the carried ones from the
-+	 * nearest — removes it: otherwise a later batch runs the block effects of a branch whose condition its own world already broke
-+	 * @param {Batch[]} carried
-+	 * @param {Effect} effect
-+	 */
-+	#removed_by(carried, effect) {
-+		if (this.#unskipped_branches.has(effect)) return false;
-+
-+		for (const batch of carried) {
-+			if (batch.#skipped_branches.has(effect)) return true;
-+			if (batch.#unskipped_branches.has(effect)) return false;
-+		}
-+
-+		return false;
-+	}
-+
- 	#find_earlier_batch() {
- 		var batch = this.#prev;
- 
-@@ -520,6 +614,9 @@ export class Batch {
- 		// Mark is not guaranteed not touch these, so we transfer them
- 		this.transfer_effects(batch.#dirty_effects, batch.#maybe_dirty_effects);
- 
-+		for (const reaction of batch.#stale) this.#stale.add(reaction);
-+		batch.#stale.clear();
-+
- 		/**
- 		 * mark all effects that depend on `batch.current`, except the
- 		 * async effects that we just resolved (TODO unless they depend
-@@ -605,6 +702,7 @@ export class Batch {
- 	deactivate() {
- 		current_batch = null;
- 		batch_values = null;
-+		reverted_by = null;
- 	}
- 
- 	flush() {
-@@ -626,6 +724,7 @@ export class Batch {
- 
- 			current_batch = null;
- 			batch_values = null;
-+			reverted_by = null;
- 
- 			old_values.clear();
- 
-@@ -640,6 +739,8 @@ export class Batch {
- 	discard() {
- 		for (const fn of this.#discard_callbacks) fn(this);
- 		this.#discard_callbacks.clear();
-+		// The world without this batch is the one that stays: nothing that read it needs another run.
-+		this.#stale.clear();
- 
- 		for (const deferred of this.async_deriveds.values()) {
- 			deferred.reject(OBSOLETE);
-@@ -709,11 +810,7 @@ export class Batch {
- 					batch.discard();
- 				}
- 			} else if (sources.length > 0) {
--				// The microtask queue can contain the batch already scheduled to run right
--				// after this one is finished, so throwing the invariant would be wrong here.
--				if (DEV && !batch.#decrement_queued) {
--					invariant(batch.#roots.length === 0, 'Batch has scheduled roots');
--				}
-+				// A write after an await schedules roots here before the batch flushes: the rebase below keeps `#scheduled` for it (https://github.com/sveltejs/svelte/issues/18895).
- 
- 				// A batch was unskipped in a later batch -> tell prior batches to unskip it, too
- 				if (is_earlier) {
-@@ -776,6 +873,14 @@ export class Batch {
- 					}
- 
- 					batch.#roots = [];
-+
-+					// Only this batch's own effects wait for it; another batch's effects reached by the traversal stay that batch's.
-+					batch.#defer_effects(
-+						batch.#scheduled.filter(
-+							(effect) => (effect.f & DESTROYED) === 0 && (effect.f & (EFFECT | RENDER_EFFECT | MANAGED_EFFECT)) !== 0
-+						)
-+					);
-+					batch.#scheduled = [];
- 				}
- 
- 				batch.deactivate();
-@@ -875,6 +980,7 @@ export class Batch {
- 	apply() {
- 		if (!async_mode_flag || (!this.is_fork && this.#prev === null && this.#next === null)) {
- 			batch_values = null;
-+			reverted_by = null;
- 			return;
- 		}
- 
-@@ -887,7 +993,8 @@ export class Batch {
- 
- 		// ...and undo changes belonging to other batches unless they intersect
- 		for (let batch = first_batch; batch !== null; batch = batch.#next) {
--			if (batch === this || batch.is_fork) continue;
-+			// A batch that already ran its effects is on screen: undoing it here would show this batch a world the DOM has left.
-+			if (batch === this || batch.is_fork || batch.#flushed) continue;
- 
- 			// If two batches intersect, the latter batch will be merged into the earlier batch,
- 			// and we should treat them as a single set of changes
-@@ -915,6 +1022,7 @@ export class Batch {
- 				for (const [source, previous] of batch.previous) {
- 					if (!batch_values.has(source)) {
- 						batch_values.set(source, previous);
-+						(reverted_by ??= new Map()).set(source, batch);
- 					}
- 				}
- 			}
-@@ -939,6 +1047,8 @@ export class Batch {
- 			return;
- 		}
- 
-+		this.#scheduled.push(effect);
-+
- 		var e = effect;
- 
- 		while (e.parent !== null) {
-@@ -966,16 +1076,16 @@ export class Batch {
+@@ -451,6 +464,9 @@ export class Batch {
+ 					effects.push(effect);
+ 				} else if (async_mode_flag && (flags & (RENDER_EFFECT | MANAGED_EFFECT)) !== 0) {
+ 					render_effects.push(effect);
++				} else if (!async_mode_flag && eager_block_effects !== null && eager_block_effects.size > 0 && under_marked_block(effect, eager_block_effects)) {
++					// A write in this traversal marked a block above it: it runs after the queue flush updates that block, if it still stands
++					render_effects.push(effect);
+ 				} else if (is_dirty(effect)) {
+ 					if ((flags & BLOCK_EFFECT) !== 0) this.#maybe_dirty_effects.add(effect);
+ 					update_effect(effect);
+@@ -966,16 +982,16 @@ export class Batch {
  			}
  
  			if ((flags & (ROOT_EFFECT | BRANCH_EFFECT)) !== 0) {
@@ -340,7 +127,7 @@ index 8251f79..c7e83e2 100644
  	}
  
  	#unlink() {
-@@ -1086,6 +1196,9 @@ export let eager_block_effects = null;
+@@ -1086,6 +1102,9 @@ export let eager_block_effects = null;
   * @returns {void}
   */
  function flush_queued_effects(effects) {
@@ -350,7 +137,7 @@ index 8251f79..c7e83e2 100644
  	var length = effects.length;
  	if (length === 0) return;
  
-@@ -1117,39 +1230,48 @@ function flush_queued_effects(effects) {
+@@ -1117,39 +1136,62 @@ function flush_queued_effects(effects) {
  
  			// If update_effect() has a flushSync() in it, we may have flushed another flush_queued_effects(),
  			// which already handled this logic and did set eager_block_effects to null.
@@ -385,6 +172,19 @@ index 8251f79..c7e83e2 100644
 -				}
 +	eager_block_effects = null;
 +}
+ 
+-				eager_block_effects.clear();
++/**
++ * Whether a collected block above `effect` is marked and not updated since
++ * @param {Effect} effect
++ * @param {Set<Effect>} blocks
++ */
++function under_marked_block(effect, blocks) {
++	for (var parent = effect.parent; parent !== null; parent = parent.parent) {
++		if ((parent.f & (DIRTY | MAYBE_DIRTY)) !== 0 && blocks.has(parent)) return true;
++	}
++	return false;
++}
 +
 +/**
 + * Runs the block effects a write marked while `eager_block_effects` collected them, ancestors first
@@ -397,10 +197,11 @@ index 8251f79..c7e83e2 100644
 +	old_values.clear();
 +
 +	for (const e of blocks) {
++		// A block a later block's teardown marks again is added anew, so the walk reaches it again
++		blocks.delete(e);
 +		// Skip eager effects that have already been unmounted
 +		if ((e.f & (DESTROYED | INERT)) !== 0) continue;
- 
--				eager_block_effects.clear();
++
 +		// Run effects in order from ancestor to descendant, else we could run into nullpointers
 +		/** @type {Effect[]} */
 +		const ordered_effects = [e];
@@ -415,8 +216,8 @@ index 8251f79..c7e83e2 100644
 +
 +		for (let j = ordered_effects.length - 1; j >= 0; j--) {
 +			const e = ordered_effects[j];
-+			// Skip eager effects that have already been unmounted
-+			if ((e.f & (DESTROYED | INERT)) !== 0) continue;
++			// Skip eager effects that have already been unmounted, and blocks the traversal already updated
++			if ((e.f & (DESTROYED | INERT)) !== 0 || !is_dirty(e)) continue;
 +			update_effect(e);
  		}
  	}
@@ -426,7 +227,7 @@ index 8251f79..c7e83e2 100644
  }
  
  /**
-@@ -1237,7 +1359,9 @@ function depends_on(reaction, sources, checked) {
+@@ -1237,7 +1279,9 @@ function depends_on(reaction, sources, checked) {
   * @returns {void}
   */
  export function schedule_effect(effect) {
@@ -437,34 +238,3 @@ index 8251f79..c7e83e2 100644
  }
  
  /** @type {Source<number>[]} */
-diff --git a/src/internal/client/runtime.js b/src/internal/client/runtime.js
-index a881403..0dfece5 100644
---- a/src/internal/client/runtime.js
-+++ b/src/internal/client/runtime.js
-@@ -52,6 +52,7 @@ import {
- 	current_batch,
- 	flushSync,
- 	previous_batch,
-+	reverted_by,
- 	schedule_effect
- } from './reactivity/batch.js';
- import { handle_error } from './error-handling.js';
-@@ -711,6 +712,18 @@ export function get(signal) {
- 	}
- 
- 	if (batch_values?.has(signal)) {
-+		// Reading a value another batch reverted: this reaction runs again when that batch commits, and a derived computed from it carries the same debt to its readers.
-+		var owner = untracking ? undefined : reverted_by?.get(signal);
-+
-+		if (owner !== undefined) {
-+			if (active_reaction !== null) {
-+				owner.note_stale(active_reaction);
-+				if ((active_reaction.f & DERIVED) !== 0) /** @type {Map<Value, Batch>} */ (reverted_by).set(active_reaction, owner);
-+			}
-+
-+			if (active_effect !== null) owner.note_stale(active_effect);
-+		}
-+
- 		return batch_values.get(signal);
- 	}
- 

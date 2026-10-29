@@ -1,14 +1,12 @@
 import { and, eq } from 'drizzle-orm';
 import { type Context, Effect, FiberSet, Layer } from 'effect';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
-import { ThreadRecords, type StatusPublished } from '../../thread-record/contract/service/records.js';
+import { runEnded, ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { CheckoutRows } from '../../workspace/contract/service/checkouts.js';
 import { RootId } from '../../workspace/contract/wire/ids.js';
 import { held, workspaceChange } from '../store/tables.js';
 
 type StoreShape = Context.Service.Shape<typeof MachineStore>;
-
-export const runEnded = (event: StatusPublished): boolean => event.fromRunId !== null && event.runningRunId !== event.fromRunId;
 
 const checkoutsOfThread = (store: StoreShape, threadId: string): Effect.Effect<readonly string[], StoreFailure> =>
   store.db

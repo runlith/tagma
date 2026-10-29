@@ -210,11 +210,6 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
           'supersede_block naming the retired block and its successor',
         ]);
       }
-      if (kind === 'amends') {
-        return new GateRefusal('operation-only', '"amends" is provenance born with the proposal itself', [
-          'a proposal and its amends edge are written together: the propose op of `apply_batch`',
-        ]);
-      }
       return Effect.void;
     };
 
@@ -485,9 +480,9 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
         kind: EdgeKind;
         toId: number;
       }): Effect.fn.Return<void, StoreFailure | GateRefusal<FloorRefusal | 'not-found' | 'operation-only' | 'no-edge' | 'no-root'>> {
-        if (input.kind === 'supersedes' || input.kind === 'amends') {
+        if (input.kind === 'supersedes') {
           return yield* new GateRefusal('operation-only', `"${input.kind}" is provenance; it is not unlinked`, [
-            'what replaced a block and what a review amended are history: they stay readable',
+            'what replaced a block is history: it stays readable',
             'wrong successor? supersede the successor in turn — the chain IS the decision record',
             'unsupersede_block — the replacement was taken in error, or the replaced record itself must be corrected; the block stands again',
           ]);

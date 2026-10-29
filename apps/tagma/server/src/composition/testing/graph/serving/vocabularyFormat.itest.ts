@@ -27,8 +27,9 @@ const makeFormat = Effect.fnUntraced(function* ({ demo, pool, served: initial, p
   let served = initial;
   const fs = yield* FileSystem.FileSystem;
   const file = join(served.layout.treeRoot, FORMAT_FILE);
+  const root = yield* Effect.provide(Context.get(served.context, Blocks).rootBlockOf(projectId), served.context);
   const create = (title: string) =>
-    signed(Context.get(served.context, Blocks).create({ projectId, tags: ['idea'], title, body: title })).pipe(
+    signed(Context.get(served.context, Blocks).create({ projectId, parentId: root.id, tags: ['idea'], title, body: title })).pipe(
       Effect.provide(served.context),
     );
   const installing = Effect.fnUntraced(
@@ -53,7 +54,7 @@ const makeFormat = Effect.fnUntraced(function* ({ demo, pool, served: initial, p
   const marker = () => fs.readFileString(file).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))));
   const note = yield* create('Standing note');
   const records = () => Context.get(served.context, Selection).records([note.id]);
-  return { demo, fs, file, note, create, installing, reopen, stamp, stored, marker, records, current: () => served, projectId };
+  return { demo, fs, file, note, create, installing, reopen, stamp, stored, marker, records, current: () => served, projectId, root };
 });
 
 layer(servingLayer, { excludeTestServices: true })('vocabulary format', (it) => {
@@ -112,7 +113,7 @@ layer(servingLayer, { excludeTestServices: true })('vocabulary format', (it) => 
   it.effect('an older marker and store open at the current step and allow declarations, and a newer store permits only reads', () =>
     withServing((serving) =>
       Effect.gen(function* () {
-        const { demo, fs, file, create, installing, reopen, stamp, stored, marker, records, current, projectId } =
+        const { demo, fs, file, create, installing, reopen, stamp, stored, marker, records, current, projectId, root } =
           yield* makeFormat(serving);
         yield* fs.writeFileString(file, `${JSON.stringify(OLDER)}\n`);
         yield* stamp('1');
@@ -123,6 +124,7 @@ layer(servingLayer, { excludeTestServices: true })('vocabulary format', (it) => 
         const tag = yield* signed(
           Context.get(current().context, Blocks).create({
             projectId,
+            parentId: root.id,
             tags: ['tag'],
             title: '#subidea',
             body: 'A narrower idea.',

@@ -46,7 +46,12 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
           (workers) => Effect.sync(() => workers.close()),
         );
         const context = withLanes(demo.context, workers);
-        const rule = yield* demo.graph.blocks.create({ projectId: demo.projectId, tags: ['rule'], title: 'Small files' });
+        const rule = yield* demo.graph.blocks.create({
+          projectId: demo.projectId,
+          parentId: demo.root,
+          tags: ['rule'],
+          title: 'Small files',
+        });
         const name = yield* demo.nameOf(rule.id);
         demo.described.set('small', {
           builtin: 'size',

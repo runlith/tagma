@@ -3,6 +3,7 @@ import { Schema } from 'effect';
 import type { ThreadContext } from '../turns/context.js';
 import type { NativeRuleSource } from '../contract/service/rules.js';
 import { capabilityEnabled } from '../agents/capabilitySources.js';
+import { guidanceCapabilities } from '../agents/effectiveAgent.js';
 import { toldState } from '../turns/guidance.js';
 
 const RULE_ID = 'capability-cues';
@@ -18,7 +19,12 @@ export const cueSource: NativeRuleSource = {
       (ctx) => {
         const call = ctx.tool;
         if (call === undefined) return null;
-        const cued = definitions.effective(declaration, ctx.thread.profile?.overlay).held.flatMap((capability) => {
+        const overlay = ctx.thread.profile?.overlay;
+        const cued = guidanceCapabilities(declaration.id, definitions.effective(declaration, overlay), overlay, ctx.offers, {
+          world: ctx.world.facts,
+          comments: ctx.comments(),
+          images: ctx.images,
+        }).flatMap((capability) => {
           const { cue, guide } = capability;
           if (cue === undefined || guide === undefined || cue.tool !== call.name) return [];
           const key = `${RULE_ID}:${capability.id}`;

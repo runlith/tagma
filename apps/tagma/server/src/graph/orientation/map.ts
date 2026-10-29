@@ -22,30 +22,64 @@ export type MapRow = {
   readonly superseded: number;
 };
 
-export function drawsRegion(table: TagTable, row: MapRow): boolean {
+function drawsRegion(table: TagTable, row: MapRow): boolean {
   return row.superseded === 0 && table.supports(row, CONTAINER);
 }
 
-export function containerAbove(table: TagTable, rows: readonly MapRow[], rootId: number, blockId: number | null): number | undefined {
-  return nearestRegion(new Map(rows.map((row) => [row.id, row])), table, rootId, blockId);
+export function regionAbove(
+  rows: readonly MapRow[],
+  nodes: readonly MapNode[],
+  rootId: number,
+  blockId: number | null,
+): number | undefined {
+  return nearestRegion(new Map(rows.map((row) => [row.id, row])), new Set(nodes.map((node) => node.id)), rootId, blockId);
 }
 
-function nearestRegion(byId: ReadonlyMap<number, MapRow>, table: TagTable, rootId: number, blockId: number | null): number | undefined {
+function nearestRegion(
+  byId: ReadonlyMap<number, MapRow>,
+  drawn: ReadonlySet<number>,
+  rootId: number,
+  blockId: number | null,
+): number | undefined {
   const climbed = new Set<number>();
   for (let at = blockId; at !== null && at !== rootId;) {
     if (climbed.has(at)) return undefined;
     climbed.add(at);
+    if (drawn.has(at)) return at;
     const row = byId.get(at);
     if (row === undefined) return undefined;
-    if (drawsRegion(table, row)) return row.id;
     at = row.parentId;
   }
   return undefined;
 }
 
+export function mapRegions(table: TagTable, rows: readonly MapRow[], rootId: number): ReadonlySet<number> {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const drawn = new Set<number>();
+  for (const row of byId.values()) {
+    if (!drawsRegion(table, row)) continue;
+    drawn.add(row.id);
+    const pages: number[] = [];
+    const climbed = new Set<number>([row.id]);
+    for (let at = row.parentId; at !== null && at !== rootId && !drawn.has(at);) {
+      const up = byId.get(at);
+      if (up === undefined || climbed.has(at)) {
+        pages.length = 0;
+        break;
+      }
+      climbed.add(at);
+      if (drawsRegion(table, up)) break;
+      if (up.superseded === 0 && up.tags.length === 0) pages.push(at);
+      at = up.parentId;
+    }
+    for (const page of pages) drawn.add(page);
+  }
+  return drawn;
+}
+
 export function mapNodes(
-  table: TagTable,
   rows: readonly MapRow[],
+  drawn: ReadonlySet<number>,
   rootId: number,
   places: ReadonlyMap<number, readonly string[]>,
   kinds: ReadonlyMap<number, string> = new Map(),
@@ -55,12 +89,12 @@ export function mapNodes(
   const parentOf = (row: MapRow): number | null => {
     const known = above.get(row.id);
     if (known !== undefined) return known;
-    const found = nearestRegion(byId, table, rootId, row.parentId) ?? null;
+    const found = nearestRegion(byId, drawn, rootId, row.parentId) ?? null;
     above.set(row.id, found);
     return found;
   };
   return rows
-    .filter((row) => drawsRegion(table, row))
+    .filter((row) => drawn.has(row.id))
     .map((row) => ({
       id: row.id,
       uuid: row.uuid,
