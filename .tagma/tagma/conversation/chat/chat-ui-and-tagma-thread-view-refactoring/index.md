@@ -5,7 +5,7 @@ ord: 37
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 ---
 **Outcome.** The Tagma chat — the `packages/chat-ui` kit and the app's thread view (`apps/tagma/app/src/lib/features/threads`, `lib/wire`, shell mountings) — is built so:
