@@ -59,7 +59,7 @@ export class McpServers extends Context.Service<
     list(projectId: number): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpListRefusal>>;
     rows(projectId: number): Stream.Stream<readonly McpServerRow[], StoreFailure | GateRefusal<McpListRefusal>>;
     add(
-      input: McpServerScopeInput & { readonly declaration: McpServerDeclaration; readonly connector?: string },
+      input: McpServerScopeInput & { readonly declaration: McpServerDeclaration },
     ): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpServerAddRefusal | OpenRefusal>>;
     remove(
       input: McpServerScopeInput & { readonly name: string },
@@ -108,7 +108,6 @@ export type McpServerResolution = {
   readonly declaration: McpServerDeclaration;
   readonly scope: McpServerScope;
   readonly shadows?: McpServerScope;
-  readonly connector?: string;
   readonly contributor?: string;
   readonly redact?: readonly string[];
 };

@@ -186,8 +186,6 @@ import { localEndpoint } from './http/endpoint.js';
 import { LaneEndpoint } from '../executions/contract/service/views.js';
 import { localSignInDoor } from './http/signInDoor.js';
 import { McpSignInDoor } from '../mcp/contract/service/door.js';
-import { ConnectorCatalog } from '../connectors/contract/service/catalog.js';
-import { shippedCatalog } from '../connectors/shipped.js';
 import { McpServers } from '../mcp/contract/service/servers.js';
 import { mcp } from '../mcp/mcp.js';
 import { tagmaApps } from '../tagma-apps/tagma-apps.js';
@@ -340,7 +338,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     opened?: Effect.Effect<void>;
     hostTakenAfter?: Effect.Effect<void>;
     exposure?: (standing: Exposure['Service']) => Exposure['Service'];
-    connectors?: ConnectorCatalog['Service'];
     marketplaces?: readonly MarketplacePreset[];
     sender?: Sender['Service'];
     tagmaAppServer?: string;
@@ -775,7 +772,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(ViewSites, options.sites ?? (yield* Scope.provide(makeLocalSites(sandboxPort), stackScope))),
     Context.make(LaneEndpoint, localEndpoint),
     Context.make(McpSignInDoor, localSignInDoor(options.localOrigin)),
-    Context.make(ConnectorCatalog, options.connectors ?? shippedCatalog),
   );
   const stack = yield* Scope.provide(
     Layer.build(serving.pipe(Layer.provide(Layer.merge(Layer.succeedContext(servingInputs), BunFileSystem.layer)))),

@@ -52,7 +52,6 @@ export type McpServerRow = {
   readonly needs?: readonly string[];
   readonly signIn?: McpSignInRow;
   readonly shadows?: McpServerScope;
-  readonly connector?: string;
   readonly contributor?: string;
   readonly measuredAt: number;
 };
@@ -87,7 +86,6 @@ export const mcpServerRowSchema = Schema.Struct({
   ),
   signIn: Schema.optional(mcpSignInSchema),
   shadows: Schema.optional(Schema.Literals(MCP_SERVER_SCOPES)),
-  connector: Schema.optional(Schema.String).annotate({ description: 'The connector this server was declared from, by its catalog id.' }),
   contributor: Schema.optional(Schema.String).annotate({
     description: 'For a contributed server: what contributed it to this project, such as the plugin enabled here that brings it.',
   }),

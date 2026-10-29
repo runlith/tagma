@@ -14,7 +14,7 @@ import { ManagedWrite, type ManagedWriter } from '../settings/contract/service/m
 import { setting } from '../settings/store/table.js';
 import type { SettableScope } from '../platform/contract/wire/setting.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
-import { type McpServerSetting, mcpContributionsOff, mcpServers } from './contract/wire/settings.js';
+import { mcpContributionsOff, mcpServers } from './contract/wire/settings.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { McpContributions, type McpContributionsUnreadable } from './contract/service/contributions.js';
 import type { McpServerScope } from './contract/wire/servers.js';
@@ -304,7 +304,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
   });
 
   const add: McpServers['Service']['add'] = Effect.fn('McpServers.add')(function* (input) {
-    const declaration: McpServerSetting = { ...input.declaration, version: 1, connector: input.connector };
+    const declaration: McpServerDeclaration = { ...input.declaration, version: 1 };
     const listing = list(input.projectId);
     const reconciling = reaching(input.scope, input.projectId);
 
@@ -680,7 +680,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     ),
   };
 
-  const decline: ManagedWriter<readonly McpServerSetting[]> = Effect.fn('McpServers.decline')(function* (input) {
+  const decline: ManagedWriter<readonly McpServerDeclaration[]> = Effect.fn('McpServers.decline')(function* (input) {
     if (input.scope !== 'project' || input.projectId === null || input.value !== undefined || input.declinedGiven !== true) {
       return yield* new GateRefusal(
         'setting-managed',

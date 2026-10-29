@@ -41,9 +41,6 @@ import { Settings } from '../../settings/contract/service/values.js';
 import { keepAwake } from '../../power/keys.js';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { Exposure } from '../../remote/contract/service/exposure.js';
-import { ConnectorCatalog } from '../../connectors/contract/service/catalog.js';
-import type { ConnectorEntry } from '../../connectors/contract/wire/entry.js';
-import { SHIPPED_CONNECTORS } from '../../connectors/shipped.js';
 import { tenant } from './tenant.js';
 
 type CallOptions = {
@@ -73,7 +70,6 @@ type Seams = {
   readonly models?: (standing: ModelAccess['Service']) => ModelAccess['Service'];
   readonly decisions?: (standing: DecisionModels['Service']) => DecisionModels['Service'];
   readonly exposure?: Layer.Layer<Exposure>;
-  readonly connectors?: readonly ConnectorEntry[];
 };
 
 type WorldOptions = DoorParams &
@@ -87,10 +83,9 @@ type Lent = {
   readonly models?: ModelAccess['Service'];
   readonly decisions?: DecisionModels['Service'];
   readonly exposure?: Exposure['Service'];
-  readonly connectors?: readonly ConnectorEntry[];
 };
 
-const SEAMS = ['quotaProviders', 'vendorWire', 'models', 'decisions', 'exposure', 'connectors'] as const;
+const SEAMS = ['quotaProviders', 'vendorWire', 'models', 'decisions', 'exposure'] as const;
 
 const lending = () => {
   const lent: Lent[] = [];
@@ -130,7 +125,6 @@ const lending = () => {
           withdraw: (port, pointed) => now().withdraw(port, pointed),
         };
       },
-      connectors: ConnectorCatalog.of({ entries: Effect.sync(() => latest('connectors') ?? SHIPPED_CONNECTORS) }),
     },
     lend: (asked: Seams): Effect.Effect<void, never, Scope.Scope> =>
       Effect.acquireRelease(
@@ -141,7 +135,6 @@ const lending = () => {
             models: yield* over(asked.models, standing.models, 'models'),
             decisions: yield* over(asked.decisions, standing.decisions, 'decisions'),
             exposure: asked.exposure === undefined ? undefined : Context.get(yield* Layer.build(asked.exposure), Exposure),
-            connectors: asked.connectors,
           };
           lent.push(entry);
           settle();

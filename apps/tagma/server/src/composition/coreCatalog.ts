@@ -8,7 +8,6 @@ import { checkoutFiles } from '../checkout-files/contract/wire/module.js';
 import { editors } from '../editors/contract/wire/module.js';
 import { config } from '../config/contract/wire/module.js';
 import { mcp } from '../mcp/contract/wire/module.js';
-import { connectors } from '../connectors/contract/wire/module.js';
 import { tagmaApps } from '../tagma-apps/contract/wire/module.js';
 import { plugins } from '../plugins/contract/wire/module.js';
 import { marketplaces } from '../marketplaces/contract/wire/module.js';
@@ -47,7 +46,6 @@ export const CORE_CATALOG: readonly [
   typeof editors,
   typeof config,
   typeof mcp,
-  typeof connectors,
   typeof tagmaApps,
   typeof plugins,
   typeof marketplaces,
@@ -85,7 +83,6 @@ export const CORE_CATALOG: readonly [
   editors,
   config,
   mcp,
-  connectors,
   tagmaApps,
   plugins,
   marketplaces,

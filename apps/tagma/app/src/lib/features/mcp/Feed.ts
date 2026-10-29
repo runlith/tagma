@@ -27,14 +27,6 @@ export class McpFeed extends Service<McpFeed>()('McpFeed', { tier: 'app' }) {
       (rows) => this.repo.servers.key(projectId).setCache(rows),
       failed,
     );
-    const connectors = this.live.hold(
-      (client) => client.connectors({ projectId }),
-      (rows) => this.repo.connectors.key(projectId).setCache(rows),
-      failed,
-    );
-    return () => {
-      servers.unsubscribe();
-      connectors.unsubscribe();
-    };
+    return () => servers.unsubscribe();
   }
 }

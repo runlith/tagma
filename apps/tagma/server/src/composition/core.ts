@@ -13,7 +13,6 @@ import { editors } from '../editors/editors.js';
 import { commitSteps } from '../commit-steps/commit-steps.js';
 import { config } from '../config/config.js';
 import { mcp } from '../mcp/mcp.js';
-import { connectors } from '../connectors/connectors.js';
 import { tagmaApps } from '../tagma-apps/tagma-apps.js';
 import { plugins } from '../plugins/plugins.js';
 import { marketplaces } from '../marketplaces/marketplaces.js';
@@ -62,7 +61,6 @@ export const CORE_MODULES = [
   commitSteps,
   config,
   mcp,
-  connectors,
   tagmaApps,
   plugins,
   marketplaces,

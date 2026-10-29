@@ -5,7 +5,6 @@ import { mcpRedactor } from '@runlith/mcp/mcpRedactor';
 import type { McpServerReach, McpServerRow, McpSignInRow } from './contract/wire/servers.js';
 import type { Resolved } from '../settings/contract/service/values.js';
 import type { McpServerResolution } from './contract/service/servers.js';
-import type { McpServerSetting } from './contract/wire/settings.js';
 import type { McpContribution } from './contract/service/contributions.js';
 
 export type McpContributed = { readonly entries: readonly McpContribution[]; readonly off: readonly string[] };
@@ -13,7 +12,7 @@ export type McpContributed = { readonly entries: readonly McpContribution[]; rea
 const NOTHING_CONTRIBUTED: McpContributed = { entries: [], off: [] };
 
 export function mcpDeclared(
-  resolved: Resolved<readonly McpServerSetting[]>,
+  resolved: Resolved<readonly McpServerDeclaration[]>,
   contributed: McpContributed = NOTHING_CONTRIBUTED,
 ): readonly McpServerResolution[] {
   const own = resolved.layers.project;
@@ -29,8 +28,8 @@ export function mcpDeclared(
     ['user', user],
     ['project', project],
   ] as const) {
-    for (const { connector, ...declaration } of members) {
-      byName.set(declaration.name, { declaration, scope, shadows: byName.get(declaration.name)?.scope, connector });
+    for (const declaration of members) {
+      byName.set(declaration.name, { declaration, scope, shadows: byName.get(declaration.name)?.scope });
     }
   }
   return [...byName.values()];
@@ -58,12 +57,12 @@ export const readied = (resolved: McpServerResolution, resolve: Resolve): Readie
         values: mcpResolvedValues(resolved.declaration, resolve),
       };
 
-export function mcpDeclinedHere(resolved: Resolved<readonly McpServerSetting[]>): readonly McpServerResolution[] {
+export function mcpDeclinedHere(resolved: Resolved<readonly McpServerDeclaration[]>): readonly McpServerResolution[] {
   const own = resolved.layers.project;
   if (own?.declined !== true) return [];
   const named = new Set((own.value ?? []).map((member) => member.name));
-  return (resolved.layers.user?.value ?? []).flatMap(({ connector, ...declaration }) =>
-    named.has(declaration.name) ? [] : [{ declaration, scope: 'user' as const, connector }],
+  return (resolved.layers.user?.value ?? []).flatMap((declaration) =>
+    named.has(declaration.name) ? [] : [{ declaration, scope: 'user' as const }],
   );
 }
 
@@ -73,7 +72,6 @@ export const declinedRowOf = (resolved: McpServerResolution, at: number): McpSer
   reach: mcpReachOf(resolved.declaration),
   capabilities: resolved.declaration.capabilities,
   enabled: resolved.declaration.enabled,
-  connector: resolved.connector,
   identity: mcpDeclarationFingerprint(resolved.declaration),
   status: 'declined',
   tools: 0,
@@ -110,7 +108,6 @@ export const rowOf = (
     enabled: declaration.enabled,
     signIn,
     shadows: resolved.shadows,
-    connector: resolved.connector,
     contributor: resolved.contributor,
   };
   const identity = mcpDeclarationFingerprint(ready.declaration);

@@ -14,7 +14,6 @@ import { THREAD_CHANGES_FEED } from '@tagma/server/change-record/contract/wire/t
 import { PAGE_FEED, THREAD_PAGES_FEED } from '@tagma/server/artifacts/contract/wire/feed';
 import { CALLS_FEED } from '@tagma/server/native-harness/contract/wire/calls';
 import { MCP_FEEDS } from '@tagma/server/mcp/contract/wire/feeds';
-import { CONNECTORS_FEED } from '@tagma/server/connectors/contract/wire/rows';
 import { VIEW_FEEDS } from '@tagma/server/views/contract/wire/feeds';
 import { THREAD_NATIVE_FEEDS } from '@tagma/server/native-harness/contract/wire/threadFeeds';
 import { ACCOUNTS_FEED } from '@tagma/server/providers/contract/wire/accounts';
@@ -51,7 +50,6 @@ const USED = [
   PAGE_FEED,
   CALLS_FEED,
   ...MCP_FEEDS,
-  CONNECTORS_FEED,
   ...VIEW_FEEDS,
   ...THREAD_NATIVE_FEEDS,
   ACCOUNTS_FEED,

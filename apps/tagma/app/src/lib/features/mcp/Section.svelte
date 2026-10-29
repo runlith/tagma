@@ -11,9 +11,7 @@
   import KeyCard from '$lib/features/settings/KeyCard.svelte';
   import McpDeclarationForm from '$lib/features/mcp/DeclarationForm.svelte';
   import McpServerCard from '$lib/features/mcp/ServerCard.svelte';
-  import Connectors from '$lib/features/mcp/Connectors.svelte';
   import SwitchControl from '$lib/features/settings/controls/SwitchControl.svelte';
-  import type { ConnectorRow } from '@tagma/server/connectors/contract/wire/rows';
   import { SecretsRepo } from '$lib/features/secrets/Repo.js';
   import { rest, type SectionProps } from '$lib/features/settings/section.js';
 
@@ -32,14 +30,9 @@
   const declines = $derived(serversEntry !== undefined && catalog.answerOf(serversEntry, 'project').declined);
   const declineOutcome = $derived(catalog.outcomes['mcp.servers']);
 
-  const connectors = $derived(mcp.connectors.key(project?.id).data ?? []);
-  const connectorOf = (row: McpServerRow) =>
-    row.connector === undefined ? undefined : connectors.find((entry) => entry.id === row.connector);
-
   async function refreshed(): Promise<void> {
     await Promise.all([
       mcp.servers.key(projectId).refresh(),
-      mcp.connectors.key(projectId).refresh(),
       projectId === undefined ? undefined : secrets.sets.key({ projectId, owner: 'mcp' }).refresh(),
     ]);
   }
@@ -51,7 +44,6 @@
   let busy = $state<string | null>(null);
   type Said = { code: string; reason: string; unblock: readonly string[] };
   let refusal = $state<Said | undefined>(undefined);
-  let connectorRefusal = $state<Said | undefined>(undefined);
 
   function said(caught: unknown): Said {
     return caught instanceof Refusal
@@ -133,43 +125,6 @@
     await refreshed();
   }
 
-  async function connecting(row: ConnectorRow, act: () => Promise<string | undefined>): Promise<void> {
-    busy = row.id;
-    connectorRefusal = undefined;
-    try {
-      const url = await act();
-      if (url !== undefined) links.open(url);
-      await refreshed();
-    } catch (caught) {
-      connectorRefusal = said(caught);
-    } finally {
-      busy = null;
-    }
-  }
-
-  const connect = (row: ConnectorRow) =>
-    connecting(row, async () => (await mcp.connect.run({ projectId, scope, id: row.id }, { throwOnError: true }))?.url);
-
-  const disconnect = (row: ConnectorRow) =>
-    connecting(row, async () => {
-      await mcp.disconnect.run({ projectId, scope: row.server?.scope ?? scope, id: row.id }, { throwOnError: true });
-      return undefined;
-    });
-
-  const reconnect = (row: ConnectorRow) =>
-    connecting(row, async () => {
-      const at = row.server?.scope ?? scope;
-      await mcp.disconnect.run({ projectId, scope: at, id: row.id }, { throwOnError: true });
-      return (await mcp.connect.run({ projectId, scope: at, id: row.id }, { throwOnError: true }))?.url;
-    });
-
-  const signInConnector = (row: ConnectorRow) =>
-    connecting(row, async () =>
-      row.server === undefined
-        ? undefined
-        : await mcp.signIn.run({ projectId, scope: row.server.scope, name: row.server.name }, { throwOnError: true }),
-    );
-
   $effect(() => {
     if (projectId !== undefined) return feed.hold(projectId);
   });
@@ -185,28 +140,6 @@
 {/snippet}
 
 <div class="grid">
-  {#if connectors.length > 0}
-    <Group title="Connectors">
-      {#snippet fact()}
-        <span>Connect lands on {scopeName(scope, project)}</span>
-      {/snippet}
-      <div class="grid gap-3 pt-1">
-        <Connectors
-          rows={connectors}
-          {scope}
-          {project}
-          {busy}
-          onconnect={(row) => void connect(row)}
-          ondisconnect={(row) => void disconnect(row)}
-          onreconnect={(row) => void reconnect(row)}
-          onsignin={(row) => void signInConnector(row)}
-          onobtain={(address) => links.open(address)}
-        />
-        {#if connectorRefusal}{@render refused(connectorRefusal)}{/if}
-      </div>
-    </Group>
-  {/if}
-
   <Group title="Servers">
     {#snippet fact()}
       {#if rows.length > 0}<span class="tabular">{rows.length} declared</span>{/if}
@@ -265,7 +198,6 @@
       {#each rows as row (row.scope + row.name)}
         <McpServerCard
           {row}
-          connector={connectorOf(row)}
           {scope}
           {project}
           busy={busy === row.name}

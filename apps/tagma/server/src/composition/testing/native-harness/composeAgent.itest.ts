@@ -78,7 +78,6 @@ import { COMMAND_RULE_OPERATION_IDS } from '../../../executions/contract/wire/op
 import { SWEEP_OPERATION } from '../../../change-record/contract/wire/writes.js';
 import { HARNESS_OPERATION_IDS } from '../../../external-harnesses/contract/wire/operations.js';
 import { MCP_OPERATION_IDS } from '../../../mcp/contract/wire/operations.js';
-import { CONNECTOR_OPERATIONS } from '../../../connectors/contract/wire/operations.js';
 import { THREAD_OPERATION_IDS } from '../../../threads/testing/doubles.js';
 import { FOLDER_OPERATIONS } from '../../../threads/contract/wire/operations/folders.js';
 import { ATTENTION_OPERATIONS } from '../../../threads/contract/wire/operations/attention.js';
@@ -1001,14 +1000,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
               .filter((id) => nativeIds.has(id)),
           );
           expect([...native].sort()).toEqual([...JOURNALED_OPERATION_IDS].filter((id) => !UNMOUNTED.has(id as CatalogOperationId)).sort());
-          expect(new Set(offeredIds('mcp', CHECKOUT, 'allowed'))).toEqual(
-            new Set<string>([
-              ...MCP_OPERATION_IDS,
-              ...Object.values(CONNECTOR_OPERATIONS).flatMap((operation) =>
-                operation.callers !== 'operator' && operation.tool?.capability === 'mcp' ? [operation.id] : [],
-              ),
-            ]),
-          );
+          expect(new Set(offeredIds('mcp', CHECKOUT, 'allowed'))).toEqual(new Set<string>(MCP_OPERATION_IDS));
           expect(offeredIds('shell', CHECKOUT, 'allowed')).toContain(SUBMIT_OPERATION);
           const session = new Set(offeredIds('threads', CHECKOUT, 'allowed'));
           expect([...session].sort()).toEqual(
