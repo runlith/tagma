@@ -24,10 +24,11 @@ import { forwardFramed } from './framedKeys.js';
 import { Driven } from './driven.js';
 import { readKey } from './keychain.js';
 import { showPageMenu } from './menu.js';
-import { allowedUrl, type GateFailure, HeldPage, type NavigationGate, type PageEvents, type Settled, viewPreferences } from './page.js';
+import { allowedUrl, HeldPage, type PageEvents, type Settled, viewPreferences } from './page.js';
 import { Placement } from './placement.js';
 import { showPopup } from './popups.js';
 import type { Profiles } from './profiles.js';
+import type { GateFailure, NavigationGate } from './restrictions.js';
 import { RendererStrain } from './strain.js';
 
 const GESTURE_MS = 1_000;
@@ -105,7 +106,7 @@ export class BrowserHost implements Executor {
       event: (_page, event) => this.reporter?.event(event),
       closed: (page) => this.closed(page),
       window: (page) => this.popups.get(page) ?? page.placed.shown?.window ?? null,
-      navigation: (page, active) => this.profiles.navigation(page.contents, active ? (url) => page.block(url) !== null : null),
+      navigation: (page, active) => this.profiles.navigation(page.contents, active ? (url) => page.restrictions.block(url) !== null : null),
       blocked: (watch, block) => {
         const watched = this.watches.get(watch);
         if (watched !== undefined) watched.failure = watched.gate.failure;
@@ -198,12 +199,16 @@ export class BrowserHost implements Executor {
             unblock: ['open an http or https address'],
           });
         const standing = this.byId.get(call.page);
-        if (standing !== undefined) return answer(standing.restriction);
+        if (standing !== undefined) return answer(standing.restrictions.state);
         this.profiles.session(call.profile);
         const page = this.track(HeldPage.create(this.local(), call.page, call.profile, null, this.identity, this.strains, this.events));
-        page.navigation(call.policy, null);
+        page.restrictions.admit(call.policy, null);
+        const committed = page.committed();
         const block = page.load(call.url, call.history);
-        if (block === null) return answer(page.restriction);
+        if (block === null) {
+          void committed.then(() => answer(page.restrictions.state));
+          return;
+        }
         void page
           .close(false)
           .then(() => fail({ kind: 'blocked', block, message: `navigation to ${block.domain} is blocked by ${block.setting}` }));
@@ -214,7 +219,7 @@ export class BrowserHost implements Executor {
         if (page === undefined || page.id !== null) return missing(call.local);
         page.id = call.page;
         this.byId.set(call.page, page);
-        answer(page.restriction);
+        answer(page.restrictions.state);
         return reporter.event({ kind: 'changed', page: call.page, change: page.state() });
       }
       case 'close': {
@@ -243,7 +248,7 @@ export class BrowserHost implements Executor {
             url: page.contents.getURL() || 'about:blank',
             title: page.contents.getTitle(),
             opener: page.opener,
-            restriction: page.restriction,
+            restriction: page.restrictions.state,
           })),
         );
         for (const page of live) page.restate();
@@ -258,7 +263,7 @@ export class BrowserHost implements Executor {
       case 'navigation': {
         const page = this.byId.get(call.page);
         if (page === undefined) return missing(call.page);
-        const { gate, changes } = page.navigation(call.policy, call.watch);
+        const { gate, changes } = page.restrictions.admit(call.policy, call.watch);
         if (gate !== null) this.watches.set(call.watch, { gate, failure: gate.failure });
         return answer({ blocked: gate?.failure?.block ?? null, changes });
       }
@@ -527,7 +532,7 @@ export class BrowserHost implements Executor {
 
   private closed(page: HeldPage): void {
     this.profiles.navigation(page.contents, null);
-    for (const [watch, watched] of this.watches) if (watched.gate.source === page) this.watches.delete(watch);
+    for (const [watch, watched] of this.watches) if (watched.gate.source === page.restrictions) this.watches.delete(watch);
     this.pages.delete(page.local);
     if (page.id !== null && this.byId.get(page.id) === page) this.byId.delete(page.id);
     this.byContents.delete(page.contents);
@@ -549,14 +554,14 @@ export class BrowserHost implements Executor {
       profile: page.profile,
       opener: opener.id,
       url,
-      restriction: page.restriction,
+      restriction: page.restrictions.state,
     });
   }
 
   private openTab(opener: HeldPage, url: string, human = false): void {
-    if (!human && opener.block(url) !== null) return;
+    if (!human && opener.restrictions.block(url) !== null) return;
     const page = HeldPage.create(this.local(), null, opener.profile, opener.id, this.identity, this.strains, this.events);
-    page.inherit(opener);
+    page.restrictions.inherit(opener.restrictions);
     if (human) this.operated(page);
     this.track(page);
     page.load(url, null);
@@ -585,7 +590,7 @@ export class BrowserHost implements Executor {
     };
     contents.setWindowOpenHandler(({ url, frameName, disposition, referrer, postBody }) => {
       const click = clicked();
-      if (!allowedUrl(url) || page.block(url) !== null || !(click || budget())) return { action: 'deny' };
+      if (!allowedUrl(url) || page.restrictions.block(url) !== null || !(click || budget())) return { action: 'deny' };
       if (frameName === '' && (disposition === 'foreground-tab' || disposition === 'background-tab')) {
         this.openTab(page, url);
         return { action: 'deny' };
@@ -596,7 +601,7 @@ export class BrowserHost implements Executor {
         createWindow: (options) => {
           const adopted = (options as { readonly webContents?: WebContents }).webContents;
           const popup = HeldPage.create(this.local(), null, page.profile, page.id, this.identity, this.strains, this.events, adopted);
-          popup.inherit(page);
+          popup.restrictions.inherit(page.restrictions);
           this.popups.set(
             popup,
             showPopup(popup, { width: options.width, height: options.height }, () => this.placement.settle(popup.placed)),
@@ -628,7 +633,7 @@ export class BrowserHost implements Executor {
   }
 
   private operated(page: HeldPage): void {
-    const changes = this.profiles.restricted(page.profile) ? page.operated() : [];
+    const changes = this.profiles.restricted(page.profile) ? page.restrictions.operated() : [];
     if (page.id === null) {
       if (changes.length > 0) this.reporter?.event({ kind: 'restrictions', changes });
       return;

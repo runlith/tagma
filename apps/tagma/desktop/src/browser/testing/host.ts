@@ -20,6 +20,7 @@ if (server === undefined || data === undefined) throw new Error(`${SERVER_ENV} a
 app.setPath('userData', data);
 app.userAgentFallback = cleanedAgent(app.userAgentFallback);
 app.commandLine.appendSwitch(UNOCCLUDED);
+app.commandLine.appendSwitch('use-mock-keychain');
 if (process.platform === 'darwin') app.setActivationPolicy('accessory');
 app.on('window-all-closed', () => undefined);
 

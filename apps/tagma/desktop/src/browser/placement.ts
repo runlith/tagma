@@ -1,4 +1,4 @@
-import { type BaseWindow, BrowserWindow, type Rectangle, type WebContentsView } from 'electron';
+import { type BaseWindow, BrowserWindow, type Rectangle, type WebContents, type WebContentsView } from 'electron';
 
 export const VIEWPORT = { width: 1280, height: 800 } as const;
 
@@ -10,6 +10,7 @@ export type Home = { readonly window: BaseWindow; readonly bounds: () => Rectang
 
 export type Placed = {
   readonly view: WebContentsView;
+  readonly contents: WebContents;
   home: Home | null;
   parking: BaseWindow | null;
   shown: { readonly window: BrowserWindow; readonly panel: string; rect: Rectangle; frozen: boolean } | null;
@@ -68,11 +69,11 @@ export class Placement {
 
   hold(placed: Placed, hold: number, ready: () => void, stale: () => boolean): void {
     placed.holds.add(hold);
-    placed.view.webContents.setBackgroundThrottling(false);
+    placed.contents.setBackgroundThrottling(false);
     this.settle(placed);
     const ask = () => {
-      if (stale() || !placed.holds.has(hold) || placed.view.webContents.isDestroyed()) return;
-      placed.view.webContents.capturePage().then(
+      if (stale() || !placed.holds.has(hold) || placed.contents.isDestroyed()) return;
+      placed.contents.capturePage().then(
         (image) => (image.isEmpty() ? setTimeout(ask, FRAME_ASK_MS) : ready()),
         () => setTimeout(ask, FRAME_ASK_MS),
       );
@@ -82,12 +83,12 @@ export class Placement {
 
   release(placed: Placed, hold: number): void {
     if (!placed.holds.delete(hold) || placed.holds.size > 0) return;
-    if (!placed.view.webContents.isDestroyed()) placed.view.webContents.setBackgroundThrottling(true);
+    if (!placed.contents.isDestroyed()) placed.contents.setBackgroundThrottling(true);
     this.settle(placed);
   }
 
   settle(placed: Placed): void {
-    if (placed.view.webContents.isDestroyed()) return;
+    if (placed.contents.isDestroyed()) return;
     const shown = placed.shown;
     if (shown !== null && shown.window.isDestroyed()) placed.shown = null;
     const window =
@@ -96,7 +97,7 @@ export class Placement {
       this.park(placed);
       return;
     }
-    this.move(placed.view, window);
+    this.move(placed, window);
     const zoom = window.webContents.getZoomFactor();
     const rect = placed.shown!.rect;
     placed.view.setBounds({
@@ -110,7 +111,7 @@ export class Placement {
   private park(placed: Placed): void {
     const home = placed.home;
     if (home !== null && !home.window.isDestroyed()) {
-      this.move(placed.view, home.window);
+      this.move(placed, home.window);
       placed.view.setBounds(home.bounds());
       return;
     }
@@ -126,14 +127,14 @@ export class Placement {
     } else {
       placed.parking.setContentSize(placed.size.width, placed.size.height);
     }
-    this.move(placed.view, placed.parking);
+    this.move(placed, placed.parking);
     placed.view.setBounds({ x: 0, y: 0, width: placed.size.width, height: placed.size.height });
   }
 
-  private move(view: WebContentsView, window: BaseWindow | BrowserWindow): void {
+  private move({ view, contents }: Placed, window: BaseWindow | BrowserWindow): void {
     const held = this.where.get(view);
     if (held === window) return;
-    const focused = !view.webContents.isDestroyed() && view.webContents.isFocused();
+    const focused = !contents.isDestroyed() && contents.isFocused();
     this.detach(view);
     window.contentView.addChildView(view);
     this.where.set(view, window);
