@@ -201,27 +201,29 @@ export const screencastScenarios = (input: CastHost): void => {
         const screencast = yield* Screencast;
         const viewing = yield* watching(page, { width: 400, height: 300, scale: 1, layout: true });
         yield* frameWhere(viewing, (frame) => frame.width === 400);
-        yield* screencast.input(page, viewing.viewer, 0, click(380 / 400, 280 / 300));
-        const hover = { action: 'hover', x: 200, y: 150 } as const;
-        const held = yield* refusalOf(calling(PAGE.act_on_page.body.execute({ page, steps: [hover] }, undefined, agent)));
-        expect(held.code).toBe('operator-input');
-        yield* TestClock.adjust('5 seconds');
-        yield* calling(PAGE.act_on_page.body.execute({ page, steps: [hover] }, undefined, agent));
         const seen = Effect.fnUntraced(function* (wanted: boolean) {
           for (;;) {
             const frame = yield* viewing.frame;
             if (amber(yield* pixelOf(page, 'image/jpeg', frame.data, 204, 161)) === wanted) return;
           }
         });
-        yield* seen(true);
-        const captured = yield* (yield* Automation).capture(page, 'viewport', undefined, 'agent');
-        const scale = (captured.width ?? 400) / 400;
-        const png = Buffer.from(captured.bytes).toString('base64');
-        expect(neutral(yield* pixelOf(page, 'image/png', png, Math.round(204 * scale), Math.round(161 * scale)))).toBe(true);
-        yield* seen(true);
-        yield* TestClock.adjust('2 seconds');
-        yield* seen(false);
-      }).pipe(Effect.provide(TestClock.layer())),
+        yield* Effect.gen(function* () {
+          yield* screencast.input(page, viewing.viewer, 0, click(380 / 400, 280 / 300));
+          const hover = { action: 'hover', x: 200, y: 150 } as const;
+          const held = yield* refusalOf(calling(PAGE.act_on_page.body.execute({ page, steps: [hover] }, undefined, agent)));
+          expect(held.code).toBe('operator-input');
+          yield* TestClock.adjust('5 seconds');
+          yield* calling(PAGE.act_on_page.body.execute({ page, steps: [hover] }, undefined, agent));
+          yield* seen(true);
+          const captured = yield* (yield* Automation).capture(page, 'viewport', undefined, 'agent');
+          const scale = (captured.width ?? 400) / 400;
+          const png = Buffer.from(captured.bytes).toString('base64');
+          expect(neutral(yield* pixelOf(page, 'image/png', png, Math.round(204 * scale), Math.round(161 * scale)))).toBe(true);
+          yield* seen(true);
+          yield* TestClock.adjust('2 seconds');
+          yield* seen(false);
+        }).pipe(Effect.provide(TestClock.layer()));
+      }),
     );
 
     const record = (page: PageId, action: 'start' | 'stop') =>
