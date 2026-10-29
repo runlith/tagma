@@ -50,7 +50,10 @@ export const CONNECTOR_PAIRS = {
           );
         }
         yield* servers.add({ projectId: project, scope, declaration: declarationOf(entry), connector: entry.id });
-        const declared = (yield* servers.raise(project, entry.id)).find((row) => row.name === entry.id && row.scope === scope);
+        const declared = declaredFrom(
+          entry,
+          (yield* servers.raise(project, entry.id)).filter((row) => row.name === entry.id && row.scope === scope),
+        );
         if (signIn.kind !== 'oauth' || redirect === null || declared?.status === 'connected' || declared?.status === 'declined') {
           return { status: 'ok' as const, connector: connectorRow(entry, declared) };
         }
@@ -67,8 +70,9 @@ export const CONNECTOR_PAIRS = {
         const entry = yield* entryOf(input.id);
         const project = yield* projectId;
         const servers = yield* McpServers;
-        const declared = (yield* servers.list(project)).find(
-          (row) => row.connector === entry.id && (input.scope === undefined || row.scope === input.scope),
+        const declared = declaredFrom(
+          entry,
+          (yield* servers.list(project)).filter((row) => input.scope === undefined || row.scope === input.scope),
         );
         if (declared === undefined) {
           return yield* new GateRefusal(

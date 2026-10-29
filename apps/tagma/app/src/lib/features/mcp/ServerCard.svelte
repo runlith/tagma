@@ -80,16 +80,16 @@
       : ['http', row.reach.url, row.reach.headers.length > 0 ? `headers: ${row.reach.headers.join(', ')}` : null],
   );
 
-  const mine = $derived(row.scope === scope);
+  const contributed = $derived(row.scope === 'contributed');
+  const mine = $derived(row.scope === scope || contributed);
+  const origin = $derived(row.scope === 'contributed' ? `from ${row.contributor ?? 'a plugin'}` : scopeName(row.scope, project));
 </script>
 
 <section class="overflow-hidden rounded-lg border bg-raised" aria-label={row.name}>
   <div class="flex min-h-9 flex-wrap items-center gap-2 px-3 py-1">
     {#if connector}<ConnectorMark icon={connector.icon} />{/if}
     <h4 class="text-ui font-semibold">{connector?.title ?? row.name}</h4>
-    <span class="eyebrow rounded-md bg-selected px-1.5 py-0.5 text-muted-foreground">
-      {scopeName(row.scope, project)}
-    </span>
+    <span class="eyebrow rounded-md bg-selected px-1.5 py-0.5 text-muted-foreground">{origin}</span>
     <StatusMark status={row.status} />
     <span class="text-ui text-muted-foreground tabular">{standing}</span>
     {#if row.shadows}
@@ -97,9 +97,11 @@
     {/if}
     <span class="flex-1"></span>
     <SwitchControl label="{row.name} enabled" value={row.enabled} disabled={busy || !mine} onwrite={(enabled) => onenabled(enabled)} />
-    <Button variant="outline" size="sm" disabled={busy || !mine} onclick={onremove}>
-      {mine ? 'Remove' : `Declared for ${scopeName(row.scope, project)}`}
-    </Button>
+    {#if !contributed}
+      <Button variant="outline" size="sm" disabled={busy || !mine} onclick={onremove}>
+        {mine ? 'Remove' : `Declared for ${origin}`}
+      </Button>
+    {/if}
   </div>
 
   <div class="grid gap-1.5 border-t border-border bg-sunken/40 px-3 py-2">

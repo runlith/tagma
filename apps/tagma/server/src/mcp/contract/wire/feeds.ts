@@ -9,6 +9,7 @@ export const MCP_APP_REFUSALS = [
   'mcp-tool-unoffered',
   'mcp-call-failed',
   'mcp-reconcile-stalled',
+  'mcp-contributions-unreadable',
   'secret-store-failed',
   'unknown-project',
 ] as const;
@@ -46,7 +47,7 @@ export const MCP_RESOURCE_FEED = feed('mcp.resource.subscribe', {
 export const MCP_SERVERS_FEED = feed('mcp.servers', {
   input: Schema.Struct({ projectId: Schema.Int.check(Schema.isGreaterThan(0)) }),
   event: Schema.Array(mcpServerRowSchema),
-  refusals: ['secret-store-failed', 'unknown-project'],
+  refusals: ['secret-store-failed', 'mcp-contributions-unreadable', 'unknown-project'],
   callers: 'operator',
   admission: 'project',
   graph: 'none',

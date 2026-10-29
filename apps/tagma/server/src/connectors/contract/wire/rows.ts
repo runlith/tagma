@@ -27,7 +27,7 @@ export type ConnectorRow = typeof connectorRowSchema.Type;
 export const CONNECTORS_FEED = feed('connectors', {
   input: Schema.Struct({ projectId: Schema.Int.check(Schema.isGreaterThan(0)) }),
   event: Schema.Array(connectorRowSchema),
-  refusals: ['secret-store-failed', 'unknown-project'],
+  refusals: ['secret-store-failed', 'mcp-contributions-unreadable', 'unknown-project'],
   callers: 'operator',
   admission: 'project',
   graph: 'none',

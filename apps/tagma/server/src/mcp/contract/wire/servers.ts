@@ -2,7 +2,10 @@ import { Schema } from 'effect';
 import type { McpServerStatus } from '@runlith/mcp/McpPool';
 import { MCP_OAUTH_CLIENT_KINDS } from '@runlith/mcp/grant';
 import { McpStdioServerDeclaration, type McpServerDeclaration } from '@runlith/mcp/declaration';
-import { SETTABLE_SCOPES, type SettableScope } from '../../../platform/contract/wire/setting.js';
+import { SETTABLE_SCOPES } from '../../../platform/contract/wire/setting.js';
+
+export const MCP_SERVER_SCOPES = [...SETTABLE_SCOPES, 'contributed'] as const;
+export type McpServerScope = (typeof MCP_SERVER_SCOPES)[number];
 
 export const mcpSignInSchema = Schema.Struct({
   signedIn: Schema.Boolean,
@@ -38,7 +41,7 @@ export type McpServerReach = typeof mcpReachSchema.Type;
 
 export type McpServerRow = {
   readonly name: string;
-  readonly scope: SettableScope;
+  readonly scope: McpServerScope;
   readonly reach: McpServerReach;
   readonly capabilities: McpServerDeclaration['capabilities'];
   readonly enabled: boolean;
@@ -48,8 +51,9 @@ export type McpServerRow = {
   readonly failure?: string;
   readonly needs?: readonly string[];
   readonly signIn?: McpSignInRow;
-  readonly shadows?: SettableScope;
+  readonly shadows?: McpServerScope;
   readonly connector?: string;
+  readonly contributor?: string;
   readonly measuredAt: number;
 };
 
@@ -70,7 +74,7 @@ export const MCP_SERVER_STATUSES = Object.keys(STATUS_WORDS) as unknown as reado
 
 export const mcpServerRowSchema = Schema.Struct({
   name: Schema.String,
-  scope: Schema.Literals(SETTABLE_SCOPES),
+  scope: Schema.Literals(MCP_SERVER_SCOPES),
   reach: mcpReachSchema,
   capabilities: McpStdioServerDeclaration.fields.capabilities,
   enabled: Schema.Boolean,
@@ -82,7 +86,10 @@ export const mcpServerRowSchema = Schema.Struct({
     Schema.Array(Schema.String).annotate({ description: 'The `${NAME}` references no secret value and no environment variable holds.' }),
   ),
   signIn: Schema.optional(mcpSignInSchema),
-  shadows: Schema.optional(Schema.Literals(SETTABLE_SCOPES)),
+  shadows: Schema.optional(Schema.Literals(MCP_SERVER_SCOPES)),
   connector: Schema.optional(Schema.String).annotate({ description: 'The connector this server was declared from, by its catalog id.' }),
+  contributor: Schema.optional(Schema.String).annotate({
+    description: 'For a contributed server: what contributed it to this project, such as the plugin enabled here that brings it.',
+  }),
   measuredAt: Schema.Number,
 });

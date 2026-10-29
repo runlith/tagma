@@ -7,7 +7,7 @@ import { SETTABLE_SCOPES } from '../../../platform/contract/wire/setting.js';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { McpAppCallResult, McpAppView } from '@runlith/mcp/apps';
 import { MCP_APP_REFUSALS, mcpMeta, mcpServerName, mcpViewResource } from './feeds.js';
-import { mcpServerRowSchema } from './servers.js';
+import { MCP_SERVER_SCOPES, type McpServerScope, mcpServerRowSchema } from './servers.js';
 import { ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
 import { MCP_ENV_RESOLVING } from '../../../platform/contract/wire/conditions.js';
 import { ASKS_IN_REVIEW } from '../../../platform/contract/wire/conditions.js';
@@ -17,7 +17,12 @@ const mcpScope = Schema.optional(Schema.Literals(SETTABLE_SCOPES)).annotate({
   description: 'project (default): this project only. user: all projects for this operator.',
 });
 
-export const mcpScopeOf = (input: { readonly scope?: 'project' | 'user' }) => input.scope ?? 'project';
+const mcpSeenScope = Schema.optional(Schema.Literals(MCP_SERVER_SCOPES)).annotate({
+  description:
+    'project (default): declared for this project. user: in the operator’s own set. contributed: brought into this project by what is enabled here, such as a plugin.',
+});
+
+export const mcpScopeOf = <Scope extends McpServerScope>(input: { readonly scope?: Scope }): Scope | 'project' => input.scope ?? 'project';
 
 const mcpEnabled = Schema.optional(Schema.Boolean).annotate({
   description: 'Whether the server may be connected at all; true when omitted.',
@@ -97,7 +102,15 @@ export const MCP_OPERATIONS = {
     grammar: `Requires the connection details and capability classification. \`\${NAME}\` anywhere in the declaration is stored literally and resolved on connection: first from the value the operator set for this server with set_secret, then from Tagma’s environment. A server whose names resolve from neither is declared and shows needs-value naming them.
 Answers once the new server's first handshake ends in every open pool that runs it, so its row reads connected, needs-sign-in or failed there; a project whose pool is not open yet reads pending.`,
     input: mcpAddParams,
-    refusals: ['mcp-server-exists', 'mcp-reconcile-stalled', 'secret-store-failed', 'setting-scope', 'setting-value', 'unknown-project'],
+    refusals: [
+      'mcp-server-exists',
+      'mcp-reconcile-stalled',
+      'mcp-contributions-unreadable',
+      'secret-store-failed',
+      'setting-scope',
+      'setting-value',
+      'unknown-project',
+    ],
     confirmation: (input, project: ProjectRef) => ({
       summary:
         mcpScopeOf(input) === 'user'
@@ -134,7 +147,8 @@ Answers once the new server's first handshake ends in every open pool that runs 
     ...acted,
     answer,
     meaning: 'Remove an MCP declaration from its owning scope, withdraw its tools, stop its process and drop the secret values set for it.',
-    grammar: 'A server absent from the selected scope refuses; if another scope owns it, the refusal names that scope.',
+    grammar:
+      'A server absent from the selected scope refuses; if another scope owns it, the refusal names that scope. A contributed server is no declaration and refuses mcp-server-contributed: enable_mcp_server keeps it out of the project.',
     input: Schema.Struct({
       project: projectField,
       name: Schema.String.check(Schema.isMinLength(1)).annotate({
@@ -142,7 +156,16 @@ Answers once the new server's first handshake ends in every open pool that runs 
       }),
       scope: mcpScope,
     }),
-    refusals: ['mcp-server-unknown', 'mcp-reconcile-stalled', 'secret-store-failed', 'setting-scope', 'setting-value', 'unknown-project'],
+    refusals: [
+      'mcp-server-unknown',
+      'mcp-server-contributed',
+      'mcp-reconcile-stalled',
+      'mcp-contributions-unreadable',
+      'secret-store-failed',
+      'setting-scope',
+      'setting-value',
+      'unknown-project',
+    ],
     confirmation: (input, project: ProjectRef) => ({
       summary:
         mcpScopeOf(input) === 'user'
@@ -158,20 +181,28 @@ Answers once the new server's first handshake ends in every open pool that runs 
     approval: ASKS_IN_REVIEW,
     ...acted,
     answer,
-    meaning: 'Switch a declared MCP server on or off where it stands, keeping the declaration exactly as it was written.',
+    meaning: 'Switch an MCP server this project sees on or off where it stands, keeping the declaration exactly as it was written.',
     grammar: `\`enabled: false\` withdraws its tools and ends the process it was running; enabling hands it back to the pool, which connects without this act waiting for it — read the state with read_mcp_servers.
-Every other field is preserved, so switching back restores the same server rather than declaring a second one. A server absent from the selected scope refuses; if another scope owns it, the refusal names that scope.`,
+Every other field is preserved, so switching back restores the same server rather than declaring a second one. A contributed server is switched for this project alone, by its name, and stays off while it is contributed again. A server absent from the selected scope refuses; if another scope holds it, the refusal names that scope.`,
     input: Schema.Struct({
       project: projectField,
       name: Schema.String.check(Schema.isMinLength(1)).annotate({
-        description: 'The server, as it was declared.',
+        description: 'The server, as read_mcp_servers names it.',
       }),
       enabled: Schema.optional(Schema.Boolean).annotate({
         description: 'true — connect it and offer its tools (the default); false — switch it off in place.',
       }),
-      scope: mcpScope,
+      scope: mcpSeenScope,
     }),
-    refusals: ['mcp-server-unknown', 'mcp-reconcile-stalled', 'secret-store-failed', 'setting-scope', 'setting-value', 'unknown-project'],
+    refusals: [
+      'mcp-server-unknown',
+      'mcp-reconcile-stalled',
+      'mcp-contributions-unreadable',
+      'secret-store-failed',
+      'setting-scope',
+      'setting-value',
+      'unknown-project',
+    ],
     confirmation: (input, project: ProjectRef) => {
       const off = input.enabled === false;
       const set = mcpScopeOf(input) === 'user' ? "the operator's own set, for every project" : `project “${project.name}”`;
@@ -195,9 +226,9 @@ Every other field is preserved, so switching back restores the same server rathe
     meaning:
       'Read effective MCP declarations and current state: connected with tool counts, connecting, disabled, needs-value naming the values it still lacks, needs-sign-in for an HTTP server the operator signs in to from its card, or failed with its reason.',
     grammar:
-      'Resolves user declarations then project overrides. Secrets remain `${NAME}` references, never resolved values; a needed value is the operator’s to give on the server’s card (set_secret, owner mcp, id `<scope>/<server>`). Does not connect servers.',
+      'Resolves contributed servers, then user declarations, then project overrides, each shadowing the one before by name. Secrets remain `${NAME}` references, never resolved values; a needed value is the operator’s to give on the server’s card (set_secret, owner mcp, id `<scope>/<server>`). A contributed server names its contributor and is taken as written: no `${NAME}` in it resolves. Does not connect servers.',
     input: Schema.Struct({ project: projectField }),
-    refusals: ['secret-store-failed', 'unknown-project'],
+    refusals: ['secret-store-failed', 'mcp-contributions-unreadable', 'unknown-project'],
     confirmation: () => ({ summary: 'Read the MCP server declarations and their current state?' }),
     confirmLabel: 'Read',
     presentation: {
@@ -321,7 +352,7 @@ The client Tagma signs in as is, in order: the one given here or registered befo
     input: Schema.Struct({
       project: projectField,
       name: signedName,
-      scope: mcpScope,
+      scope: mcpSeenScope,
       client: Schema.optional(
         Schema.Struct({
           id: Schema.String.check(Schema.isMinLength(1)),
@@ -337,6 +368,7 @@ The client Tagma signs in as is, in order: the one given here or registered befo
       'mcp-sign-in-failed',
       'mcp-sign-in-unserved',
       'mcp-reconcile-stalled',
+      'mcp-contributions-unreadable',
       'secret-store-failed',
       'unknown-project',
     ],
@@ -351,8 +383,8 @@ The client Tagma signs in as is, in order: the one given here or registered befo
     identity: { key: 'call' },
     answer,
     meaning: 'Drop the tokens of an HTTP MCP server, keeping the client it signs in as; the server reads needs-sign-in again.',
-    input: Schema.Struct({ project: projectField, name: signedName, scope: mcpScope }),
-    refusals: ['mcp-server-unknown', 'mcp-reconcile-stalled', 'secret-store-failed', 'unknown-project'],
+    input: Schema.Struct({ project: projectField, name: signedName, scope: mcpSeenScope }),
+    refusals: ['mcp-server-unknown', 'mcp-reconcile-stalled', 'mcp-contributions-unreadable', 'secret-store-failed', 'unknown-project'],
     confirmation: (input) => ({ summary: `Sign out of the MCP server ${input.name}?` }),
     confirmLabel: 'Sign out',
     presentation: { running: 'Signing out of an MCP server', done: 'Signed out of an MCP server' },

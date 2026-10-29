@@ -90,7 +90,10 @@
     busy = row.name;
     refusal = undefined;
     try {
-      await mcp.setEnabled.run({ projectId: project?.id, scope, name: row.name, enabled }, { throwOnError: true });
+      await mcp.setEnabled.run(
+        { projectId: project?.id, scope: row.scope === 'contributed' ? row.scope : scope, name: row.name, enabled },
+        { throwOnError: true },
+      );
       await mcp.servers.key(project?.id).refresh();
     } catch (caught) {
       refusal = said(caught);

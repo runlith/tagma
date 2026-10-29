@@ -1,4 +1,5 @@
 import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
+import type { McpServerScope } from '@tagma/server/mcp/contract/wire/servers';
 import type { McpHttpServerDeclaration, McpStdioServerDeclaration } from '@runlith/mcp/declaration';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
@@ -10,7 +11,7 @@ export type McpDeclarationInput =
 
 export type McpSignIn = {
   readonly projectId?: number;
-  readonly scope: SettableScope;
+  readonly scope: McpServerScope;
   readonly name: string;
   readonly client?: { readonly id: string; readonly secret?: string };
 };
@@ -31,7 +32,7 @@ export const McpRepo = Repo.define(
     }),
 
     setEnabled: mutation({
-      mutator: async (input: { projectId?: number; scope: SettableScope; name: string; enabled: boolean }, { signal }, door) =>
+      mutator: async (input: { projectId?: number; scope: McpServerScope; name: string; enabled: boolean }, { signal }, door) =>
         (
           await door.perform('enable_mcp_server', { name: input.name, enabled: input.enabled, scope: input.scope }, lens(input.projectId), {
             signal,
@@ -54,7 +55,7 @@ export const McpRepo = Repo.define(
     }),
 
     signOut: mutation({
-      mutator: async (input: { projectId?: number; scope: SettableScope; name: string }, { signal }, door) =>
+      mutator: async (input: { projectId?: number; scope: McpServerScope; name: string }, { signal }, door) =>
         (await door.perform('sign_out_mcp_server', { name: input.name, scope: input.scope }, lens(input.projectId), { signal })).mcp,
     }),
 

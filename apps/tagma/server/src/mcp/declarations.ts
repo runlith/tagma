@@ -1,27 +1,62 @@
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import type { McpServerState } from '@runlith/mcp/McpPool';
 import { mcpDeclarationFingerprint } from '@runlith/mcp/mcpDeclarationFingerprint';
+import { mcpRedactor } from '@runlith/mcp/mcpRedactor';
 import type { McpServerReach, McpServerRow, McpSignInRow } from './contract/wire/servers.js';
 import type { Resolved } from '../settings/contract/service/values.js';
 import type { McpServerResolution } from './contract/service/servers.js';
 import type { McpServerSetting } from './contract/wire/settings.js';
+import type { McpContribution } from './contract/service/contributions.js';
 
-export function mcpDeclared(resolved: Resolved<readonly McpServerSetting[]>): readonly McpServerResolution[] {
+export type McpContributed = { readonly entries: readonly McpContribution[]; readonly off: readonly string[] };
+
+const NOTHING_CONTRIBUTED: McpContributed = { entries: [], off: [] };
+
+export function mcpDeclared(
+  resolved: Resolved<readonly McpServerSetting[]>,
+  contributed: McpContributed = NOTHING_CONTRIBUTED,
+): readonly McpServerResolution[] {
   const own = resolved.layers.project;
   const user = own?.declined === true ? [] : (resolved.layers.user?.value ?? []);
   const project = own?.value ?? [];
+  const off = new Set(contributed.off);
   const byName = new Map<string, McpServerResolution>();
+  for (const { declaration, contributor, redact } of contributed.entries) {
+    const enabled = declaration.enabled && !off.has(declaration.name);
+    byName.set(declaration.name, { declaration: { ...declaration, enabled }, scope: 'contributed', contributor, redact });
+  }
   for (const [scope, members] of [
     ['user', user],
     ['project', project],
   ] as const) {
     for (const { connector, ...declaration } of members) {
-      const shadows = byName.has(declaration.name) ? ('user' as const) : undefined;
-      byName.set(declaration.name, { declaration, scope, shadows, connector });
+      byName.set(declaration.name, { declaration, scope, shadows: byName.get(declaration.name)?.scope, connector });
     }
   }
   return [...byName.values()];
 }
+
+export type Readied = {
+  readonly declaration: McpServerDeclaration;
+  readonly shown: McpServerDeclaration;
+  readonly needs: readonly string[];
+  readonly values: readonly string[];
+};
+
+export const readied = (resolved: McpServerResolution, resolve: Resolve): Readied =>
+  resolved.scope === 'contributed'
+    ? {
+        declaration: resolved.declaration,
+        shown: walkStrings(resolved.declaration, mcpRedactor(resolved.redact ?? [])),
+        needs: [],
+        values: resolved.redact ?? [],
+      }
+    : {
+        declaration: expandEnvReferences(resolved.declaration, resolve),
+        shown: resolved.declaration,
+        needs: mcpMissingReferences(resolved.declaration, resolve),
+        values: mcpResolvedValues(resolved.declaration, resolve),
+      };
 
 export function mcpDeclinedHere(resolved: Resolved<readonly McpServerSetting[]>): readonly McpServerResolution[] {
   const own = resolved.layers.project;
@@ -63,22 +98,23 @@ export const rowOf = (
   resolved: McpServerResolution,
   state: McpServerState | undefined,
   at: number,
-  resolve: Resolve,
+  ready: Readied,
   signIn?: McpSignInRow,
 ): McpServerRow => {
   const { declaration } = resolved;
   const declared = {
     name: declaration.name,
     scope: resolved.scope,
-    reach: mcpReachOf(declaration),
+    reach: mcpReachOf(ready.shown),
     capabilities: declaration.capabilities,
     enabled: declaration.enabled,
     signIn,
     shadows: resolved.shadows,
     connector: resolved.connector,
+    contributor: resolved.contributor,
   };
-  const identity = mcpDeclarationFingerprint(expandEnvReferences(declaration, resolve));
-  const needs = declaration.enabled ? mcpMissingReferences(declaration, resolve) : [];
+  const identity = mcpDeclarationFingerprint(ready.declaration);
+  const needs = declaration.enabled ? ready.needs : [];
   if (needs.length > 0) return { ...declared, identity, status: 'needs-value', needs, tools: 0, measuredAt: at };
   const own = state !== undefined && state.identity === identity ? state : undefined;
   return own === undefined

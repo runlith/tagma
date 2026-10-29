@@ -2,6 +2,7 @@ import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import { type McpAppFailure, mcpAppResult, viewCsp } from '@runlith/mcp/apps';
 import { McpPool } from '@runlith/mcp/McpPool';
 import { mcpRedactor } from '@runlith/mcp/mcpRedactor';
+import { mcpDeclarationFingerprint } from '@runlith/mcp/mcpDeclarationFingerprint';
 import type { McpResourceEvent } from './contract/wire/feeds.js';
 import { Clock, Effect, Exit, FiberSet, Layer, PubSub, Scope, Semaphore, Stream } from 'effect';
 import { flight } from '@runlith/held/Flight';
@@ -13,14 +14,16 @@ import { ManagedWrite, type ManagedWriter } from '../settings/contract/service/m
 import { setting } from '../settings/store/table.js';
 import type { SettableScope } from '../platform/contract/wire/setting.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
-import { type McpServerSetting, mcpServers } from './contract/wire/settings.js';
+import { type McpServerSetting, mcpContributionsOff, mcpServers } from './contract/wire/settings.js';
 import { Settings } from '../settings/contract/service/values.js';
+import { McpContributions, type McpContributionsUnreadable } from './contract/service/contributions.js';
+import type { McpServerScope } from './contract/wire/servers.js';
 import { ProjectChanges } from '../projects/contract/service/changes.js';
 import {
   type McpMount,
   McpServers,
   type McpServerResolution,
-  type McpServerScopeInput,
+  type McpServerSeenInput,
   type McpViewFailure,
   type McpViewRefusal,
   type McpReconcileRefusal,
@@ -43,15 +46,14 @@ import {
   rowOf,
   mcpMissingReferences,
   mcpReferences,
-  mcpResolvedValues,
-  expandEnvReferences,
-  type Resolve,
+  readied,
+  type Readied,
 } from './declarations.js';
 
 const KIND = 'mcp';
 
-const keyOf = (scope: SettableScope, projectId: number, name: string): string =>
-  scope === 'user' ? `user/${name}` : `${projectId}/${name}`;
+const keyOf = (scope: McpServerScope, projectId: number, name: string): string =>
+  scope === 'user' ? `user/${name}` : scope === 'contributed' ? `${projectId}/contributed/${name}` : `${projectId}/${name}`;
 
 const projectOfKey = (key: string): number | null => (key.startsWith('user/') ? null : Number(key.slice(0, key.indexOf('/'))));
 
@@ -107,6 +109,12 @@ const reentrantOpen = (reentrant: ReentrantCall) =>
 
 const READ_SERVERS = 'read_mcp_servers names the server and its connection state';
 
+const unreadableContributions = (failure: McpContributionsUnreadable) =>
+  new GateRefusal('mcp-contributions-unreadable', `The servers contributed to this project could not be read: ${failure.reason}`, [
+    'read_plugins names what is enabled in this project and why it does not read',
+    'repeat once it reads',
+  ]);
+
 const servingRefusal = (failure: McpAppFailure): GateRefusal<McpViewRefusal> => {
   switch (failure._tag) {
     case 'McpToolUnoffered':
@@ -131,6 +139,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
   readonly environment: Readonly<Record<string, string | undefined>>;
 }) {
   const settings = yield* Settings;
+  const contributions = yield* McpContributions;
   const places = yield* McpPlaces;
   const owners = yield* SecretOwners;
   const store = yield* GraphStore;
@@ -153,7 +162,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
 
   const pulses = yield* Effect.acquireRelease(PubSub.unbounded<number | null>(), PubSub.shutdown);
   const moved = (projectId: number | null) => PubSub.publish(pulses, projectId).pipe(Effect.asVoid);
-  const movedFor = (scope: SettableScope, projectId: number) => moved(scope === 'user' ? null : projectId);
+  const movedFor = (scope: McpServerScope, projectId: number) => moved(scope === 'user' ? null : projectId);
 
   const readers = (key: string): ReadonlyArray<readonly [McpPool, string]> =>
     [...pools.values()].flatMap((pooled) =>
@@ -182,10 +191,20 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     return made;
   };
 
-  const resolver = (given: Handouts, projectId: number, entry: McpServerResolution): Resolve => {
+  const resolver = (given: Handouts, projectId: number, entry: McpServerResolution) => {
     const { values } = given(keyOf(entry.scope, projectId, entry.declaration.name));
-    return (name) => values[name] ?? environment[name];
+    return (name: string) => values[name] ?? environment[name];
   };
+
+  const readyOf = (given: Handouts, projectId: number, entry: McpServerResolution): Readied =>
+    readied(entry, resolver(given, projectId, entry));
+
+  const declaredOf = Effect.fnUntraced(function* (projectId: number) {
+    const read = yield* settings.read(mcpServers, projectId);
+    const entries = yield* contributions.of(projectId).pipe(Effect.mapError(unreadableContributions));
+    const off = yield* settings.value(mcpContributionsOff, projectId);
+    return { read, declared: mcpDeclared(read, { entries, off }) };
+  });
 
   const signInRow = Effect.fnUntraced(function* (given: Handouts, key: string, now: number) {
     const record = yield* recordOf(key, given(key).signIn).pipe(Effect.mapError(storeRefusal));
@@ -199,8 +218,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
   });
 
   const list: McpServers['Service']['list'] = Effect.fn('McpServers.list')(function* (projectId) {
-    const read = yield* settings.read(mcpServers, projectId);
-    const resolved = mcpDeclared(read);
+    const { read, declared: resolved } = yield* declaredOf(projectId);
     const given = yield* handouts;
     const measured = new Map((pools.get(projectId)?.pool.states() ?? []).map((state) => [state.name, state]));
     const now = yield* Clock.currentTimeMillis;
@@ -209,7 +227,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
         entry.declaration.transport === 'http'
           ? signInRow(given, keyOf(entry.scope, projectId, entry.declaration.name), now)
           : Effect.succeed(undefined),
-        (signIn) => rowOf(entry, measured.get(entry.declaration.name), now, resolver(given, projectId, entry), signIn),
+        (signIn) => rowOf(entry, measured.get(entry.declaration.name), now, readyOf(given, projectId, entry), signIn),
       ),
     );
     return [...effective, ...mcpDeclinedHere(read).map((entry) => declinedRowOf(entry, now))];
@@ -228,17 +246,17 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       ),
     );
 
-  const declaredIn = Effect.fnUntraced(function* (input: McpServerScopeInput & { readonly name: string }) {
-    const effective = mcpDeclared(yield* settings.read(mcpServers, input.projectId));
+  const declaredIn = Effect.fnUntraced(function* (input: McpServerSeenInput & { readonly name: string }) {
+    const effective = (yield* declaredOf(input.projectId)).declared;
     const entry = effective.find((candidate) => candidate.declaration.name === input.name && candidate.scope === input.scope);
     if (entry !== undefined) return entry;
-    const elsewhere = effective.some((candidate) => candidate.declaration.name === input.name);
+    const elsewhere = effective.find((candidate) => candidate.declaration.name === input.name);
     return yield* new GateRefusal(
       'mcp-server-unknown',
-      `${input.scope} scope declares no server called ${input.name} that this project resolves to.`,
-      elsewhere
-        ? [`${input.name} is declared in the other scope; name that scope`]
-        : ['read_mcp_servers names every server this project resolves to'],
+      `${input.scope} scope holds no server called ${input.name} that this project resolves to.`,
+      elsewhere === undefined
+        ? ['read_mcp_servers names every server this project resolves to']
+        : [`${input.name} stands in ${elsewhere.scope} scope; name that scope`],
     );
   });
 
@@ -252,8 +270,11 @@ const makeMcpServers = Effect.fnUntraced(function* ({
         ['give a stdio server its keys as ${NAME} values on its card'],
       );
     }
-    const resolve = resolver(yield* handouts, input.projectId, entry);
-    const missing = mcpMissingReferences({ ...declaration, headers: undefined }, resolve);
+    const given = yield* handouts;
+    const missing =
+      entry.scope === 'contributed'
+        ? []
+        : mcpMissingReferences({ ...declaration, headers: undefined }, resolver(given, input.projectId, entry));
     if (missing.length > 0) {
       return yield* new GateRefusal('mcp-sign-in-unsupported', `The URL of ${input.name} still needs ${missing.join(', ')}.`, [
         `set ${missing.join(', ')} on the server's card, then sign in`,
@@ -263,7 +284,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       .get(input.projectId)
       ?.pool.states()
       .find((state) => state.name === input.name)?.failure;
-    const expanded = expandEnvReferences(declaration, resolve);
+    const expanded = readyOf(given, input.projectId, entry).declaration;
     return yield* signIns.begin({
       key: keyOf(input.scope, input.projectId, input.name),
       name: input.name,
@@ -310,9 +331,21 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     const listing = list(input.projectId);
     const reconciling = reaching(input.scope, input.projectId);
 
-    const resolved = yield* settings.read(mcpServers, input.projectId);
-    const elsewhere = mcpDeclared(resolved).some((entry) => entry.declaration.name === input.name);
-    if ((resolved.layers[input.scope]?.value ?? []).some((entry) => entry.name === input.name)) {
+    const { read: resolved, declared } = yield* declaredOf(input.projectId);
+    const named = (resolved.layers[input.scope]?.value ?? []).some((entry) => entry.name === input.name);
+    const contributed = declared.find((entry) => entry.declaration.name === input.name && entry.scope === 'contributed');
+    if (!named && contributed !== undefined) {
+      return yield* new GateRefusal(
+        'mcp-server-contributed',
+        `${input.name} is contributed to this project by ${contributed.contributor ?? 'what is enabled here'}, and no scope declares it, so there is nothing to drop.`,
+        [
+          `enable_mcp_server with scope contributed and enabled false keeps ${input.name} out of this project`,
+          `turn off ${contributed.contributor ?? 'what contributes it'} in this project to withdraw everything it contributes`,
+        ],
+      );
+    }
+    const elsewhere = declared.find((entry) => entry.declaration.name === input.name);
+    if (named) {
       const key = keyOf(input.scope, input.projectId, input.name);
       yield* signIns.forget(key);
       yield* owners.drop(KIND, key).pipe(Effect.mapError(storeRefusal));
@@ -325,9 +358,9 @@ const makeMcpServers = Effect.fnUntraced(function* ({
         new GateRefusal(
           'mcp-server-unknown',
           `${input.scope} scope declares no server called ${input.name}.`,
-          elsewhere
-            ? [`${input.name} is declared in the other scope; name that scope to drop it there`]
-            : ['read_mcp_servers names every server this project resolves to'],
+          elsewhere === undefined
+            ? ['read_mcp_servers names every server this project resolves to']
+            : [`${input.name} stands in ${elsewhere.scope} scope; name that scope to drop it there`],
         ),
       );
     });
@@ -340,21 +373,31 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     const listing = list(input.projectId);
     const reconciling = reaching(input.scope, input.projectId);
 
-    const elsewhere = mcpDeclared(yield* settings.read(mcpServers, input.projectId)).some((entry) => entry.declaration.name === input.name);
-    yield* settings.amend(mcpServers, input.scope, input.projectId, (current) => {
-      if (!current.some((entry) => entry.name === input.name)) {
-        return Effect.fail(
-          new GateRefusal(
-            'mcp-server-unknown',
-            `${input.scope} scope declares no server called ${input.name}.`,
-            elsewhere
-              ? [`${input.name} is declared in the other scope; name that scope to switch it there`]
-              : ['read_mcp_servers names every server this project resolves to'],
-          ),
-        );
-      }
-      return Effect.succeed(current.map((entry) => (entry.name === input.name ? { ...entry, enabled: input.enabled } : entry)));
-    });
+    const entries = (yield* declaredOf(input.projectId)).declared;
+    const elsewhere = entries.find((entry) => entry.declaration.name === input.name);
+    const unknown = () =>
+      new GateRefusal(
+        'mcp-server-unknown',
+        `${input.scope} scope holds no server called ${input.name}.`,
+        elsewhere === undefined
+          ? ['read_mcp_servers names every server this project resolves to']
+          : [`${input.name} stands in ${elsewhere.scope} scope; name that scope to switch it there`],
+      );
+    const scope = input.scope;
+    if (scope === 'contributed') {
+      const offered = (yield* contributions.of(input.projectId).pipe(Effect.mapError(unreadableContributions))).some(
+        (entry) => entry.declaration.name === input.name,
+      );
+      if (!offered) return yield* unknown();
+      yield* settings.amend<readonly string[], never>(mcpContributionsOff, 'project', input.projectId, (current) =>
+        Effect.succeed(input.enabled ? current.filter((name) => name !== input.name) : [...new Set([...current, input.name])]),
+      );
+    } else {
+      yield* settings.amend(mcpServers, scope, input.projectId, (current) => {
+        if (!current.some((entry) => entry.name === input.name)) return Effect.fail(unknown());
+        return Effect.succeed(current.map((entry) => (entry.name === input.name ? { ...entry, enabled: input.enabled } : entry)));
+      });
+    }
     yield* reconciling;
     yield* movedFor(input.scope, input.projectId);
     return yield* listing;
@@ -375,19 +418,17 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       const pool = poolOf(projectId);
 
       const given = yield* handouts;
-      const standing = mcpDeclared(yield* settings.read(mcpServers, projectId)).flatMap((entry) => {
-        const resolve = resolver(given, projectId, entry);
-        return mcpMissingReferences(entry.declaration, resolve).length === 0 ? [{ entry, resolve }] : [];
+      const standing = (yield* declaredOf(projectId)).declared.flatMap((entry) => {
+        const ready = readyOf(given, projectId, entry);
+        return ready.needs.length === 0 ? [{ entry, ready }] : [];
       });
       const opened = yield* pool.pipe(Effect.catchTags({ HoldStalled: stalledOpen, ReentrantCall: reentrantOpen }));
       keep(
         projectId,
-        standing.flatMap(({ entry, resolve }) => [
-          ...mcpResolvedValues(entry.declaration, resolve),
-          ...given(keyOf(entry.scope, projectId, entry.declaration.name)).redact,
-        ]),
+        standing.flatMap(({ entry, ready }) => [...ready.values, ...given(keyOf(entry.scope, projectId, entry.declaration.name)).redact]),
       );
       const pooled = pools.get(projectId);
+      const owners = new Map(pooled?.keys ?? []);
       if (pooled !== undefined) {
         widen(pooled);
         pooled.keys.clear();
@@ -396,7 +437,15 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       const narrowed = pooled?.narrowed ?? null;
       const wanted = narrowed === null ? null : [...narrowed];
       const started = narrowed === null ? standing : standing.filter(({ entry }) => narrowed.has(entry.declaration.name));
-      yield* opened.reconcile(started.map(({ entry, resolve }) => expandEnvReferences(entry.declaration, resolve))).pipe(
+      const running = new Map(opened.states().map((state) => [state.name, state.identity]));
+      const reowned = started.flatMap(({ entry, ready }) => {
+        const name = entry.declaration.name;
+        const before = owners.get(name);
+        const kept = running.get(name) === mcpDeclarationFingerprint(ready.declaration);
+        return before !== undefined && kept && before !== keyOf(entry.scope, projectId, name) ? [name] : [];
+      });
+      yield* opened.reconcile(started.map(({ ready }) => ready.declaration)).pipe(
+        Effect.andThen(Effect.forEach(reowned, (name) => opened.reconnect(name), { discard: true })),
         Effect.catchTags({
           HoldStalled: (stalled) =>
             Effect.fail(
@@ -441,7 +490,29 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     Effect.suspend(() => Effect.forEach([...pools.keys()], (projectId) => settle(projectId, kept))),
   );
 
-  const reaching = (scope: SettableScope, projectId: number): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>> => {
+  const contributionsMoved = Effect.fn('McpServers.contributionsMoved')(function* (projectId: number | null) {
+    const touched = projectId === null ? [...settling.keys()] : [projectId];
+    yield* Effect.forEach(touched, (id) => settle(id, kept, true), { discard: true });
+    yield* moved(projectId);
+  });
+
+  yield* Effect.forkScoped(
+    Stream.runForEach(contributions.changes, (projectId) =>
+      contributionsMoved(projectId).pipe(
+        Effect.catch((failure) =>
+          Effect.andThen(
+            Effect.logWarning('the MCP pool kept its servers: the contributions that moved could not be reconciled', {
+              projectId,
+              failure: failure.message,
+            }),
+            moved(projectId),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  const reaching = (scope: McpServerScope, projectId: number): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>> => {
     if (scope === 'user') return reconcileAll();
     return Effect.suspend(() => settle(projectId, pools.has(projectId) ? kept : whole));
   };
@@ -666,7 +737,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
 
 export const mcpServersLayer = (
   environment: Readonly<Record<string, string | undefined>> = process.env,
-): Layer.Layer<McpServers, never, Settings | ProjectChanges | McpPlaces | SecretOwners | GraphStore | ManagedWrite> =>
+): Layer.Layer<McpServers, never, Settings | ProjectChanges | McpPlaces | McpContributions | SecretOwners | GraphStore | ManagedWrite> =>
   Layer.effect(
     McpServers,
     Effect.gen(function* () {

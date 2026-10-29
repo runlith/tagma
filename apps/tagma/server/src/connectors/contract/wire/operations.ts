@@ -19,7 +19,14 @@ const located = {
 
 const operatorActs = { ...located, callers: 'operator', identity: { key: 'call' } } as const;
 
-const STORE_REFUSALS = ['mcp-reconcile-stalled', 'secret-store-failed', 'setting-scope', 'setting-value', 'unknown-project'] as const;
+const STORE_REFUSALS = [
+  'mcp-reconcile-stalled',
+  'mcp-contributions-unreadable',
+  'secret-store-failed',
+  'setting-scope',
+  'setting-value',
+  'unknown-project',
+] as const;
 
 export const CONNECTOR_OPERATIONS = {
   read_connectors: operation('read_connectors', {
@@ -33,7 +40,7 @@ export const CONNECTOR_OPERATIONS = {
     grammar:
       'A connected service is an MCP server declared from its entry, and its state is that server’s. Connecting and disconnecting are the operator’s: an agent that needs a service still available asks the operator to connect it.',
     input: Schema.Struct({ project: projectField }),
-    refusals: ['secret-store-failed', 'unknown-project'],
+    refusals: ['secret-store-failed', 'mcp-contributions-unreadable', 'unknown-project'],
     confirmation: () => ({ summary: 'Read the connectors and their state?' }),
     confirmLabel: 'Read',
     presentation: { running: 'Reading the connectors', done: 'Read the connectors' },
@@ -80,7 +87,7 @@ A server of that name already declared in the scope refuses mcp-server-exists.`,
         description: 'The scope whose declaration goes; the one this project resolves to when omitted.',
       }),
     }),
-    refusals: ['connector-unknown', 'connector-unconnected', 'mcp-server-unknown', ...STORE_REFUSALS],
+    refusals: ['connector-unknown', 'connector-unconnected', 'mcp-server-unknown', 'mcp-server-contributed', ...STORE_REFUSALS],
     confirmation: (input) => ({ summary: `Disconnect ${input.id}?` }),
     confirmLabel: 'Disconnect',
     presentation: { running: 'Disconnecting a service', done: 'Disconnected a service' },

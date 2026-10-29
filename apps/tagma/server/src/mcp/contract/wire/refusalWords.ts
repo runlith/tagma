@@ -2,8 +2,10 @@ import type { RefusalWords } from '../../../platform/contract/wire/manifest.js';
 
 export const REFUSAL_WORDS = {
   'mcp-call-failed': 'MCP call failed',
+  'mcp-contributions-unreadable': 'Contributed MCP servers unreadable',
   'mcp-reconcile-stalled': 'MCP servers did not settle',
   'mcp-resource-failed': 'MCP resource failed',
+  'mcp-server-contributed': 'MCP server is contributed',
   'mcp-server-exists': 'MCP server already declared',
   'mcp-server-replaced': 'MCP server changed meanwhile',
   'mcp-server-unavailable': 'MCP server unavailable',

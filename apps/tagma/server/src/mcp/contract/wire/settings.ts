@@ -27,6 +27,19 @@ export const mcpServers = settingListKey({
   merge: 'concat',
 });
 
+export const mcpContributionsOff = settingListKey({
+  id: 'mcp.contributionsOff',
+  order: 755,
+  title: 'Contributed servers switched off',
+  description:
+    'The names of the servers something enabled in this project contributes, such as a plugin, that this project keeps out of its pool; enable_mcp_server switches one on or off.',
+  control: { kind: 'managed', by: 'enable_mcp_server' },
+  member: McpStdioServerDeclaration.fields.name,
+  fallback: [] as readonly string[],
+  scopes: ['project'],
+  merge: 'replace',
+});
+
 export const mcpClientDocument = settingKey({
   id: 'mcp.clientDocument',
   order: 760,

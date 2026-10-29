@@ -83,6 +83,7 @@ import { HarnessOwner } from '../threads/contract/service/engine.js';
 import { ThreadFilesPlace } from '../threads/contract/service/parts.js';
 import { ScratchAreas } from '../threads/contract/service/scratch.js';
 import { McpPlaces } from '../mcp/contract/service/places.js';
+import { pluginServersLayer } from '../plugins/servers.js';
 import { plugins } from '../plugins/plugins.js';
 import { PluginPlaces } from '../plugins/contract/service/plugins.js';
 import { PluginFormats } from '../plugins/contract/service/format.js';
@@ -546,7 +547,13 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             closing('sandbox', sandboxInstallation),
             closing('working owners', workingLayerWithUnits),
             closing('terminals floor', agentPaceLayer.pipe(Layer.provideMerge(executionsLayerWithDeps))),
-            closing('mcp servers', mcp.lifetimes.installation.pipe(Layer.provide(Layer.succeed(McpPlaces, mcpPlacesPort.port)))),
+            closing(
+              'mcp servers',
+              mcp.lifetimes.installation.pipe(
+                Layer.provide(Layer.succeed(McpPlaces, mcpPlacesPort.port)),
+                Layer.provide(pluginServersLayer),
+              ),
+            ),
             closing(
               'artifacts',
               artifacts.lifetimes.installation.pipe(
