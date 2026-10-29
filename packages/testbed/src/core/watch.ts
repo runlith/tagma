@@ -21,10 +21,12 @@ export type Hold = { readonly group?: boolean };
 
 export type Residue = { readonly count: number; readonly message: string };
 
+export type Origin = { readonly file: string; readonly world: boolean };
+
 export type WatchOptions = {
   readonly processes: () => Processes | undefined;
   readonly file: () => string;
-  readonly author: () => string;
+  readonly author: () => Origin;
   readonly site: (stack: string | undefined) => string | undefined;
   readonly cwd: string;
 };
@@ -156,7 +158,7 @@ export const makeWatch = (options: WatchOptions) => {
     const kind: ChildKind = kindOfCommand(commandOf(via, args));
     const pid = typeof (result as { pid?: unknown } | null)?.pid === 'number' ? (result as { pid: number }).pid : undefined;
     const done = sync || pid === undefined;
-    const file = options.author();
+    const { file, world } = options.author();
     const child: Child = {
       pid: done ? undefined : pid,
       kind,
@@ -169,7 +171,7 @@ export const makeWatch = (options: WatchOptions) => {
     spawned.push(child);
     children.add(child);
     if (done) return;
-    if (holding > 0 || file !== options.file()) holdProcess(result as Exiting);
+    if (holding > 0 || world) holdProcess(result as Exiting);
     const exiting = result as Exiting & { resourceUsage?: () => { cpuTime?: { total?: bigint } } | undefined };
     if (exiting.exited instanceof Promise) {
       const done = () => children.finish(child, ms(exiting.resourceUsage?.()?.cpuTime?.total));
@@ -189,7 +191,7 @@ export const makeWatch = (options: WatchOptions) => {
     const child: Child = {
       pid: undefined,
       kind: 'other',
-      file: options.author(),
+      file: options.author().file,
       site: options.site(new Error().stack),
       cpu: 0,
       final: false,

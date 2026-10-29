@@ -27,6 +27,8 @@ export const hold = (child: Parameters<Bed['hold']>[0], options?: Hold): void =>
 
 export const holding = (): (() => void) => bed()?.holding() ?? nothing;
 
+export const building = <T>(work: () => T): T => bed()?.building(work) ?? work();
+
 export const claim = (home: string): (() => void) => bed()?.claim(home) ?? nothing;
 
 export const release = (pid: number): void => bed()?.release(pid);

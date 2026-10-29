@@ -7,7 +7,7 @@ import { HANG_MS } from './core/files.ts';
 import type { Cost, Meter } from './core/ledger.ts';
 import { quietly } from './core/pristine.ts';
 import { worldHome } from './core/run.ts';
-import { claim, holding, meter, runRoot, span, worldTaken } from './fixture.ts';
+import { building, claim, holding, meter, runRoot, span, worldTaken } from './fixture.ts';
 
 export type Params = null | boolean | number | string | readonly Params[] | { readonly [key: string]: Params | undefined };
 
@@ -73,22 +73,24 @@ const taken = <I, S, P extends Params, E>(kind: Kind<I, S, P, E>, params: P, not
     }
     const settled = Deferred.makeUnsafe<S, E>();
     registry.set(key, settled as Deferred.Deferred<unknown, unknown>);
-    Effect.runFork(
-      Effect.gen(function* () {
-        const scope = yield* Scope.make();
-        const home = worldHome();
-        const unclaim = claim(home);
-        const { exit, cost } = yield* built(kind.build(params, home), scope);
-        let answer = exit;
-        if (Exit.isFailure(exit)) {
-          registry.delete(key);
-          const closed = yield* Effect.exit(Scope.close(scope, exit));
-          unclaim();
-          if (Exit.isFailure(closed)) answer = Exit.failCause(Cause.combine(exit.cause, closed.cause));
-        }
-        worldTaken({ kind: kind.tag.key, key, built: true, own: null, cost });
-        yield* Deferred.done(settled, answer);
-      }),
+    building(() =>
+      Effect.runFork(
+        Effect.gen(function* () {
+          const scope = yield* Scope.make();
+          const home = worldHome();
+          const unclaim = claim(home);
+          const { exit, cost } = yield* built(kind.build(params, home), scope);
+          let answer = exit;
+          if (Exit.isFailure(exit)) {
+            registry.delete(key);
+            const closed = yield* Effect.exit(Scope.close(scope, exit));
+            unclaim();
+            if (Exit.isFailure(closed)) answer = Exit.failCause(Cause.combine(exit.cause, closed.cause));
+          }
+          worldTaken({ kind: kind.tag.key, key, built: true, own: null, cost });
+          yield* Deferred.done(settled, answer);
+        }),
+      ),
     );
     return Deferred.await(settled);
   });

@@ -185,7 +185,7 @@ test('takes the world', async () => { await open(fresh, null); });
   expect(code, stdout + stderr).toBe(0);
 });
 
-test("a shared world's background process under a following unit file is the world's, while the unit file's own call is still refused", async () => {
+test("a shared world's background process under a following unit file is the world's, a file's own late spawn stays its leftover, and the unit file's own call is refused", async () => {
   const root = join(process.env['TMPDIR']!, `mixed-${crypto.randomUUID()}`);
   mkdirSync(root, { recursive: true });
   writeFileSync(join(root, 'bunfig.toml'), `[test]\npreload = [${JSON.stringify(PRELOAD)}]\n`);
@@ -222,6 +222,13 @@ export const background = kind(Background, (_: null) =>
 import { open } from ${JSON.stringify(WORLDS)};
 import { background } from './kinds.ts';
 test('takes the world', async () => { await open(background, null); });
+test('leaves work of its own behind', () => {
+  void (async () => {
+    while ((globalThis as { go?: true }).go === undefined) await Bun.sleep(5);
+    Bun.spawn(['sleep', '322'], { stdout: 'ignore', stderr: 'ignore' }).unref();
+    (globalThis as { late?: true }).late = true;
+  })();
+});
 `,
   );
   writeFileSync(
@@ -229,7 +236,7 @@ test('takes the world', async () => { await open(background, null); });
     `import { expect, test } from 'bun:test';
 test("the world's background spawn is not this file's call", async () => {
   (globalThis as { go?: true }).go = true;
-  while ((globalThis as { spawned?: string }).spawned === undefined) await Bun.sleep(5);
+  while ((globalThis as { spawned?: string }).spawned === undefined || (globalThis as { late?: true }).late === undefined) await Bun.sleep(5);
   expect((globalThis as { spawned?: string }).spawned).toBe('spawned');
 });
 test('its own spawn is refused', () => {
@@ -245,7 +252,9 @@ test('its own spawn is refused', () => {
     stderr: 'pipe',
   });
   const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-  expect(code, stdout + stderr).toBe(0);
+  const output = stdout + stderr;
+  expect(code, output).toBe(1);
+  expect(output).toMatch(/1 process\(es\) outlived[^\n]*\n[^\n]*sleep 322[^\n]* from [^\n]*a\.itest\.ts/);
   const rows = readFileSync(report, 'utf8')
     .split('\n')
     .filter(Boolean)
@@ -255,7 +264,7 @@ test('its own spawn is refused', () => {
   ]);
   expect(rows.flatMap((row) => (row.type === 'file' ? [[row.file.split('/').at(-1), row.residue]] : []))).toEqual([
     ['a.itest.ts', 0],
-    ['b.test.ts', 0],
+    ['b.test.ts', 1],
   ]);
 });
 

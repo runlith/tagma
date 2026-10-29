@@ -7,7 +7,7 @@ import { pristine } from './pristine.ts';
 import type { Processes } from './processes.ts';
 import { NetworkReached, Refused, siteOf } from './refusal.ts';
 import { confine, fs, type Confined, type Run } from './run.ts';
-import { makeWatch, type Hold } from './watch.ts';
+import { makeWatch, type Hold, type Origin } from './watch.ts';
 
 const KEY = Symbol.for('runlith.testbed');
 const SKIP = ['/packages/testbed/src/'];
@@ -41,8 +41,8 @@ export const makeBed = (options: BedOptions) => {
   let last: Meter | undefined;
   const lingering: string[] = [];
   const seen = new Set<string>();
-  const origin = new AsyncLocalStorage<string>();
-  const author = (): string => origin.getStore() ?? options.file();
+  const origin = new AsyncLocalStorage<Origin>();
+  const author = (): Origin => origin.getStore() ?? { file: options.file(), world: false };
   const watch = makeWatch({
     processes: () => processes,
     file: options.file,
@@ -58,7 +58,7 @@ export const makeBed = (options: BedOptions) => {
   });
 
   const reach: GuardHooks['reach'] = (found: Reach, via) => {
-    const file = author();
+    const { file } = author();
     if (kindOf(file) === 'unit' && !(options.exempt?.(new Error().stack) ?? false)) {
       const name = relative(options.repo, file);
       const refusal = new Refused(name, found.resource, via);
@@ -98,7 +98,8 @@ export const makeBed = (options: BedOptions) => {
     install(): void {
       installGuards({ reach, process: watch.process, expose: options.expose });
     },
-    within: <T>(file: string, work: () => T): T => origin.run(file, work),
+    within: <T>(file: string, work: () => T): T => origin.run({ file, world: false }, work),
+    building: <T>(work: () => T): T => origin.run({ file: author().file, world: true }, work),
     pend(from: Meter, to: Meter): void {
       pending = { from, to };
     },
