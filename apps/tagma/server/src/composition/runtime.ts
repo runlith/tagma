@@ -170,6 +170,8 @@ import { ARTIFACT_PREFIX } from '../http/contract/wire/served.js';
 import { type LocalSites, makeLocalSites } from './http/sites.js';
 import { localEndpoint } from './http/endpoint.js';
 import { LaneEndpoint } from '../executions/contract/service/views.js';
+import { localSignInDoor } from './http/signInDoor.js';
+import { McpSignInDoor } from '../mcp/contract/service/door.js';
 import { McpServers } from '../mcp/contract/service/servers.js';
 import { mcp } from '../mcp/mcp.js';
 import { plugins } from '../plugins/plugins.js';
@@ -324,6 +326,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     exposure?: (standing: Exposure['Service']) => Exposure['Service'];
     sender?: Sender['Service'];
     pluginServer?: string;
+    localOrigin?: string;
     adapters?: readonly AdapterSource[];
     userEnvironment?: UserEnvironment['Service'];
     accountCli?: AccountCli['Service'];
@@ -732,6 +735,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(HarnessOwner, { id: owner, build: options.installation?.manifest.identity.digest ?? owner }),
     Context.make(ViewSites, options.sites ?? (yield* Scope.provide(makeLocalSites(sandboxPort), stackScope))),
     Context.make(LaneEndpoint, localEndpoint),
+    Context.make(McpSignInDoor, localSignInDoor(options.localOrigin)),
   );
   const stack = yield* Scope.provide(
     Layer.build(serving.pipe(Layer.provide(Layer.merge(Layer.succeedContext(servingInputs), BunFileSystem.layer)))),

@@ -2,8 +2,15 @@ import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import { Effect } from 'effect';
 import { body, pair } from '../platform/contract/service/body.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
+import { McpSignInDoor } from './contract/service/door.js';
 import { McpServers } from './contract/service/servers.js';
-import { MCP_APP_OPERATIONS as APPS, MCP_OPERATIONS as OPS, mcpScopeOf } from './contract/wire/operations.js';
+import { MCP_CALLBACK_PATH } from './contract/wire/callback.js';
+import {
+  MCP_APP_OPERATIONS as APPS,
+  MCP_OPERATIONS as OPS,
+  MCP_SIGN_IN_OPERATIONS as SIGN_IN,
+  mcpScopeOf,
+} from './contract/wire/operations.js';
 import type { McpServerRow } from './contract/wire/servers.js';
 
 const answer = (mcp: readonly McpServerRow[]) => ({ status: 'ok' as const, mcp });
@@ -83,6 +90,30 @@ export const MCP_PAIRS = {
           threadId: input.threadId,
         });
         return { status: 'ok' as const, result };
+      }),
+    }),
+  ),
+  sign_in_mcp_server: pair(
+    SIGN_IN.sign_in_mcp_server,
+    body(SIGN_IN.sign_in_mcp_server, {
+      execute: Effect.fnUntraced(function* (input) {
+        const origin = yield* (yield* McpSignInDoor).origin;
+        const started = yield* (yield* McpServers).signIn({
+          projectId: yield* projectId,
+          scope: mcpScopeOf(input),
+          name: input.name,
+          client: input.client,
+          redirect: `${origin}${MCP_CALLBACK_PATH}`,
+        });
+        return { status: 'ok' as const, url: started.url };
+      }),
+    }),
+  ),
+  sign_out_mcp_server: pair(
+    SIGN_IN.sign_out_mcp_server,
+    body(SIGN_IN.sign_out_mcp_server, {
+      execute: Effect.fnUntraced(function* (input) {
+        return answer(yield* (yield* McpServers).signOut({ projectId: yield* projectId, scope: mcpScopeOf(input), name: input.name }));
       }),
     }),
   ),

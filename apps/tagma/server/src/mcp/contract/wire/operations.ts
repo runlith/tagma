@@ -193,7 +193,7 @@ Every other field is preserved, so switching back restores the same server rathe
     effect: 'read',
     identity: 'none',
     meaning:
-      'Read effective MCP declarations and current state: connected with tool counts, connecting, disabled, needs-value naming the values it still lacks, or failed with its reason.',
+      'Read effective MCP declarations and current state: connected with tool counts, connecting, disabled, needs-value naming the values it still lacks, needs-sign-in for an HTTP server the operator signs in to from its card, or failed with its reason.',
     grammar:
       'Resolves user declarations then project overrides. Secrets remain `${NAME}` references, never resolved values; a needed value is the operator’s to give on the server’s card (set_secret, owner mcp, id `<scope>/<server>`). Does not connect servers.',
     input: Schema.Struct({ project: projectField }),
@@ -285,6 +285,69 @@ The identity is the declaration the tool call ran against, as the call's display
     confirmation: (input) => ({ summary: `Call ${input.tool} on the MCP server ${input.server} from its view?` }),
     confirmLabel: 'Call',
     presentation: { running: 'Calling an MCP App tool', done: 'Called an MCP App tool' },
+    subjects: () => [],
+  }),
+};
+
+const operatorActs = {
+  doors: { http: true },
+  callers: 'operator',
+  subject: 'none',
+  place: 'project',
+  waits: [],
+  lifetimes: [],
+  approval: ASKS_NEVER,
+} as const;
+
+const signedName = Schema.String.check(Schema.isMinLength(1)).annotate({ description: 'The HTTP server, as it was declared.' });
+
+export const MCP_SIGN_IN_OPERATIONS = {
+  sign_in_mcp_server: operation('sign_in_mcp_server', {
+    ...operatorActs,
+    effect: 'external',
+    identity: { key: 'call' },
+    answer: arms({ ok: { url: Schema.String } }),
+    meaning: 'Start signing an HTTP MCP server in by OAuth and answer the address of its sign-in page, for the operator to open.',
+    grammar: `The service's answer returns to this door's /mcp/oauth/callback, which keeps the tokens and connects the server; a sign-in left unanswered expires in ten minutes, and a newer one for the same server replaces it.
+The client Tagma signs in as is, in order: the one given here or registered before, a client metadata document where the service accepts one, then dynamic registration. A service offering none refuses mcp-sign-in-unsupported.`,
+    input: Schema.Struct({
+      project: projectField,
+      name: signedName,
+      scope: mcpScope,
+      client: Schema.optional(
+        Schema.Struct({
+          id: Schema.String.check(Schema.isMinLength(1)),
+          secret: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        }),
+      ).annotate({
+        description: 'A client the operator registered with the service for this door’s callback, kept for the next sign-ins.',
+      }),
+    }),
+    refusals: [
+      'mcp-server-unknown',
+      'mcp-sign-in-unsupported',
+      'mcp-sign-in-failed',
+      'mcp-sign-in-unserved',
+      'mcp-reconcile-stalled',
+      'secret-store-failed',
+      'unknown-project',
+    ],
+    confirmation: (input) => ({ summary: `Sign in to the MCP server ${input.name}?` }),
+    confirmLabel: 'Sign in',
+    presentation: { running: 'Signing in to an MCP server', done: 'Opened the sign-in of an MCP server' },
+    subjects: () => [],
+  }),
+  sign_out_mcp_server: operation('sign_out_mcp_server', {
+    ...operatorActs,
+    effect: 'write',
+    identity: { key: 'call' },
+    answer,
+    meaning: 'Drop the tokens of an HTTP MCP server, keeping the client it signs in as; the server reads needs-sign-in again.',
+    input: Schema.Struct({ project: projectField, name: signedName, scope: mcpScope }),
+    refusals: ['mcp-server-unknown', 'mcp-reconcile-stalled', 'secret-store-failed', 'unknown-project'],
+    confirmation: (input) => ({ summary: `Sign out of the MCP server ${input.name}?` }),
+    confirmLabel: 'Sign out',
+    presentation: { running: 'Signing out of an MCP server', done: 'Signed out of an MCP server' },
     subjects: () => [],
   }),
 };

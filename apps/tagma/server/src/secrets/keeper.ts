@@ -1,5 +1,6 @@
 import type { CredentialFile } from '@runlith/credential-file/CredentialFile';
-import { Effect } from 'effect';
+import { makeRefreshFlight, type RefreshFlightFault, type RefreshRequest } from '@runlith/credential-file/RefreshFlight';
+import { Data, Effect } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import {
   type SecretEntry,
@@ -10,11 +11,20 @@ import {
   Secrets,
   SecretStoreFailed,
   type SecretTarget,
+  type SignInRefresh,
 } from './contract/service/secrets.js';
 import { SECRET_VALUE_MAX, type SecretRow, type SecretSet } from './contract/wire/rows.js';
-import { adopted, dropped, EMPTY, type Held, put, valuesOf, without } from './store.js';
+import { adopted, dropped, EMPTY, type Held, put, signInOf, valuesOf, withSignIn, without } from './store.js';
 
 const storeFailed = () => new SecretStoreFailed({ message: 'the secret store could not be read or written' });
+
+class Carried<E> extends Data.TaggedError('Carried')<{ readonly failure: E }> {}
+
+const carried = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, Carried<E>, R> =>
+  Effect.mapError(effect, (failure) => new Carried({ failure }));
+
+const uncarried = <E>(error: Carried<E> | RefreshFlightFault): E | SecretStoreFailed =>
+  error._tag === 'Carried' ? error.failure : storeFailed();
 const unreadable = () =>
   new GateRefusal('secret-store-failed', 'The secret store could not be read or written.', [
     'make the file secrets.json in the server’s data directory readable and writable to the server, then repeat',
@@ -37,6 +47,44 @@ const rowOf = (entry: SecretEntry, set: boolean): SecretRow => ({ name: entry.na
 export const makeKeeper = (input: { readonly file: CredentialFile<Held> | null }) => {
   const { file } = input;
   const kinds = new Map<string, SecretOwner>();
+  const refreshes =
+    file === null
+      ? null
+      : makeRefreshFlight({ file, name: 'secret-sign-in-refresh', owner: 'secrets', span: 'SecretOwners.refreshSignIn' });
+
+  const keepSignIn = <E>(
+    kind: string,
+    key: string,
+    change: (signIn: unknown) => Effect.Effect<unknown, E>,
+  ): Effect.Effect<void, E | SecretStoreFailed> =>
+    file === null
+      ? Effect.fail(storeFailed())
+      : file
+          .update((current) =>
+            carried(change(signInOf(current, kind, key))).pipe(
+              Effect.map((next) =>
+                JSON.stringify(next) === JSON.stringify(signInOf(current, kind, key)) ? current : withSignIn(current, kind, key, next),
+              ),
+            ),
+          )
+          .pipe(Effect.mapError(uncarried<E>), Effect.withSpan('SecretOwners.keepSignIn'));
+
+  const refreshSignIn = <Grant, E, R>(
+    kind: string,
+    key: string,
+    request: SignInRefresh<Grant, E, R>,
+  ): Effect.Effect<void, E | SecretStoreFailed, R> => {
+    if (refreshes === null) return Effect.fail(storeFailed());
+    const prepared: RefreshRequest<Held, Grant, Carried<E>, R> = {
+      grant: (document, stage) => carried(request.grant(signInOf(document, kind, key), stage)),
+      identity: request.identity,
+      needed: (grant) => carried(request.needed(grant)),
+      refresh: (grant) => carried(request.refresh(grant)),
+      replace: (document, grant) =>
+        Effect.map(carried(request.replace(signInOf(document, kind, key), grant)), (next) => withSignIn(document, kind, key, next)),
+    };
+    return refreshes.run(`${kind}/${key}`, Effect.succeed(prepared)).pipe(Effect.mapError(uncarried<E>));
+  };
 
   const held = (): Effect.Effect<Held, SecretStoreFailed> =>
     file === null ? Effect.succeed(EMPTY) : file.read().pipe(Effect.mapError(storeFailed));
@@ -145,9 +193,11 @@ export const makeKeeper = (input: { readonly file: CredentialFile<Held> | null }
       const kept = yield* held();
       return (key) => {
         const values = valuesOf(kept, kind, key);
-        return { values, redact: Object.values(values).flatMap(maskedForms) };
+        return { values, redact: Object.values(values).flatMap(maskedForms), signIn: signInOf(kept, kind, key) };
       };
     }),
+    keepSignIn,
+    refreshSignIn,
     drop: Effect.fn('SecretOwners.drop')(function* (kind, key) {
       yield* change((current) => dropped(current, kind, key));
     }),

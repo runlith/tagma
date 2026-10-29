@@ -1,5 +1,6 @@
 import { McpServerDeclaration } from '@runlith/mcp/declaration';
-import { SETTABLE_SCOPES, settingListKey } from '../../../platform/contract/wire/setting.js';
+import { Schema } from 'effect';
+import { SETTABLE_SCOPES, settingKey, settingListKey } from '../../../platform/contract/wire/setting.js';
 
 export const mcpServers = settingListKey({
   id: 'mcp.servers',
@@ -12,6 +13,18 @@ export const mcpServers = settingListKey({
   fallback: [] as readonly McpServerDeclaration[],
   scopes: SETTABLE_SCOPES,
   merge: 'concat',
+});
+
+export const mcpClientDocument = settingKey({
+  id: 'mcp.clientDocument',
+  order: 760,
+  title: 'Client metadata document',
+  description:
+    'The HTTPS address of the OAuth client metadata document Tagma signs into MCP servers with, where a server accepts one; unset, a sign-in uses a client the operator registered, then dynamic registration.',
+  schema: Schema.NullOr(Schema.String.check(Schema.isStartingWith('https://'))),
+  fallback: null,
+  scopes: ['user'],
+  merge: 'replace',
 });
 
 export const MCP_SETTING_SECTIONS = [

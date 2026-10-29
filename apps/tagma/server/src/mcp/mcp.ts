@@ -3,7 +3,7 @@ import { Context } from 'effect';
 import { lazyLayer, type LiveDeclaration, liveOf, manifest } from '../platform/contract/service/manifest.js';
 import { mcpCapability } from './contract/wire/capability.js';
 import { McpServers } from './contract/service/servers.js';
-import { MCP_SETTING_SECTIONS, mcpServers } from './contract/wire/settings.js';
+import { MCP_SETTING_SECTIONS, mcpClientDocument, mcpServers } from './contract/wire/settings.js';
 import { MCP_FEEDS } from './contract/wire/feeds.js';
 import { mcpServers as mcpServersSection } from './doctrine/mcpServers.js';
 
@@ -17,7 +17,7 @@ export const mcp = manifest({
   bodies: async () => Object.values((await import('./operations.js')).MCP_PAIRS),
   presentation: async () => (await import('./presentation.js')).MCP_PRESENTATION,
   live,
-  settings: [mcpServers],
+  settings: [mcpServers, mcpClientDocument],
   settingSections: MCP_SETTING_SECTIONS,
   sections: [
     { id: 'mcp-servers', place: { prompt: 200 }, owner: 'mcp', render: mcpServersSection, path: 'src/mcp/doctrine/mcpServers.ts' },

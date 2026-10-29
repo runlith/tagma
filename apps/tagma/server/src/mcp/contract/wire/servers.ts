@@ -1,7 +1,19 @@
 import { Schema } from 'effect';
 import type { McpServerStatus } from '@runlith/mcp/McpPool';
+import { MCP_OAUTH_CLIENT_KINDS } from '@runlith/mcp/grant';
 import { McpStdioServerDeclaration, type McpServerDeclaration } from '@runlith/mcp/declaration';
 import { SETTABLE_SCOPES, type SettableScope } from '../../../platform/contract/wire/setting.js';
+
+export const mcpSignInSchema = Schema.Struct({
+  signedIn: Schema.Boolean,
+  pending: Schema.Boolean,
+  client: Schema.NullOr(Schema.Literals(MCP_OAUTH_CLIENT_KINDS)),
+}).annotate({
+  description:
+    'For an HTTP server: whether Tagma holds its tokens, whether a sign-in waits on its callback, and the kind of OAuth client it signs in with.',
+});
+
+export type McpSignInRow = typeof mcpSignInSchema.Type;
 
 export const mcpReachSchema = Schema.Union([
   Schema.Struct({
@@ -31,6 +43,7 @@ export type McpServerRow = {
   readonly tools: number;
   readonly failure?: string;
   readonly needs?: readonly string[];
+  readonly signIn?: McpSignInRow;
   readonly shadows?: SettableScope;
   readonly measuredAt: number;
 };
@@ -62,6 +75,7 @@ export const mcpServerRowSchema = Schema.Struct({
   needs: Schema.optional(
     Schema.Array(Schema.String).annotate({ description: 'The `${NAME}` references no secret value and no environment variable holds.' }),
   ),
+  signIn: Schema.optional(mcpSignInSchema),
   shadows: Schema.optional(Schema.Literals(SETTABLE_SCOPES)),
   measuredAt: Schema.Number,
 });

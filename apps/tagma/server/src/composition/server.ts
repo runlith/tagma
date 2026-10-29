@@ -435,6 +435,7 @@ const tagma: ServerRuntime = await Effect.runPromise(
           opened: attempt.opened,
           hostTakenAfter: attempt.trial === null ? undefined : attempt.opened,
           pluginServer: `http://${LOOPBACK_HOST}:${port}`,
+          localOrigin: `http://${LOOPBACK_HOST}:${port}`,
           commitGate:
             installation === undefined
               ? {

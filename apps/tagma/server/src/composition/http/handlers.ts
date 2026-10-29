@@ -36,6 +36,7 @@ import type { SessionResolution } from '../../external-harnesses/contract/servic
 import type { GrantSigner } from '../../platform/contract/service/grantSigner.js';
 import { healthHandler } from './health.js';
 import type { McpServers } from '../../mcp/contract/service/servers.js';
+import type { McpSignInDoor } from '../../mcp/contract/service/door.js';
 import { operationsHandler } from './operations.js';
 import type { OwnerContext } from '../../invocation/contract/service/performer.js';
 import type { SocketDoor, RuntimeSocketDoor } from '../socketBinding.js';
@@ -109,6 +110,7 @@ export type RuntimeDoor =
   | DowngradeSteps
   | ServedGraphs
   | McpServers
+  | McpSignInDoor
   | AccountQuota
   | SignIns
   | ArtifactStore

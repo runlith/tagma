@@ -7,12 +7,18 @@ import { SECRET_VALUE_MAX } from './contract/wire/rows.js';
 export const SECRETS_FILE = 'secrets.json';
 
 type Values = Readonly<Record<string, string>>;
-type Kept = { readonly values: Values };
+type Kept = { readonly values: Values; readonly signIn?: unknown };
 export type Held = { readonly owners: Readonly<Record<string, Readonly<Record<string, Kept>>>> };
 
 const heldValue = Schema.String.check(Schema.isMaxLength(SECRET_VALUE_MAX), Schema.isPattern(/^[^\0]*$/u));
 const heldSchema = Schema.Struct({
-  owners: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Struct({ values: Schema.Record(Schema.String, heldValue) }))),
+  owners: Schema.Record(
+    Schema.String,
+    Schema.Record(
+      Schema.String,
+      Schema.Struct({ values: Schema.Record(Schema.String, heldValue), signIn: Schema.optional(Schema.Unknown) }),
+    ),
+  ),
 });
 
 const decodeHeld = (path: string, parsed: unknown) =>
@@ -23,14 +29,25 @@ const decodeHeld = (path: string, parsed: unknown) =>
 
 export const EMPTY: Held = { owners: {} };
 
-export const valuesOf = (held: Held, kind: string, key: string): Values => held.owners[kind]?.[key]?.values ?? {};
+const keptOf = (held: Held, kind: string, key: string): Kept => held.owners[kind]?.[key] ?? { values: {} };
 
-const withValues = (held: Held, kind: string, key: string, values: Values): Held => {
+export const valuesOf = (held: Held, kind: string, key: string): Values => keptOf(held, kind, key).values;
+
+export const signInOf = (held: Held, kind: string, key: string): unknown => keptOf(held, kind, key).signIn;
+
+const withKept = (held: Held, kind: string, key: string, kept: Kept): Held => {
   const { [key]: _key, ...keys } = held.owners[kind] ?? {};
   const { [kind]: _kind, ...kinds } = held.owners;
-  const kept = Object.keys(values).length === 0 ? keys : { ...keys, [key]: { values } };
-  return { owners: Object.keys(kept).length === 0 ? kinds : { ...kinds, [kind]: kept } };
+  const empty = Object.keys(kept.values).length === 0 && kept.signIn === undefined;
+  const standing = empty ? keys : { ...keys, [key]: kept.signIn === undefined ? { values: kept.values } : kept };
+  return { owners: Object.keys(standing).length === 0 ? kinds : { ...kinds, [kind]: standing } };
 };
+
+const withValues = (held: Held, kind: string, key: string, values: Values): Held =>
+  withKept(held, kind, key, { ...keptOf(held, kind, key), values });
+
+export const withSignIn = (held: Held, kind: string, key: string, signIn: unknown): Held =>
+  withKept(held, kind, key, { ...keptOf(held, kind, key), signIn });
 
 export const put = (held: Held, kind: string, key: string, name: string, value: string): Held =>
   valuesOf(held, kind, key)[name] === value ? held : withValues(held, kind, key, { ...valuesOf(held, kind, key), [name]: value });
@@ -41,7 +58,7 @@ export const without = (held: Held, kind: string, key: string, name: string): He
 };
 
 export const dropped = (held: Held, kind: string, key: string): Held =>
-  held.owners[kind]?.[key] === undefined ? held : withValues(held, kind, key, {});
+  held.owners[kind]?.[key] === undefined ? held : withKept(held, kind, key, { values: {} });
 
 export const adopted = (held: Held, kind: string, given: Readonly<Record<string, Values>>): Held =>
   Object.entries(given).reduce(

@@ -22,6 +22,8 @@ import { Access } from '../../remote/contract/service/access.js';
 import { PlacedSites, TerminalSite } from '../../remote/contract/service/sites.js';
 import { LaneEndpoint, type ViewLanes } from '../../executions/contract/service/views.js';
 import { remoteEndpoint } from './endpoint.js';
+import { remoteSignInDoor } from './signInDoor.js';
+import { McpSignInDoor } from '../../mcp/contract/service/door.js';
 import type { Devices } from '../../remote/contract/service/devices.js';
 import {
   DEVICE_COOKIE,
@@ -205,6 +207,7 @@ export const remoteServing = (remote: RemoteDoor) =>
           Layer.succeedContext(
             Context.add(remote.door, ViewSites, remoteSites(Context.get(remote.door, PlacedSites))).pipe(
               Context.add(LaneEndpoint, remoteEndpoint(Context.get(remote.door, TerminalSite))),
+              Context.add(McpSignInDoor, remoteSignInDoor(access)),
             ),
           ),
         ),

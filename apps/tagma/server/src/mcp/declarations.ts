@@ -1,7 +1,7 @@
 import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import type { McpServerState } from '@runlith/mcp/McpPool';
 import { mcpDeclarationFingerprint } from '@runlith/mcp/mcpDeclarationFingerprint';
-import type { McpServerReach, McpServerRow } from './contract/wire/servers.js';
+import type { McpServerReach, McpServerRow, McpSignInRow } from './contract/wire/servers.js';
 import type { Resolved } from '../settings/contract/service/values.js';
 import type { McpServerResolution } from './contract/service/servers.js';
 
@@ -35,7 +35,13 @@ export function mcpReachOf(declaration: McpServerDeclaration): McpServerReach {
 
 export type Resolve = (name: string) => string | undefined;
 
-export const rowOf = (resolved: McpServerResolution, state: McpServerState | undefined, at: number, resolve: Resolve): McpServerRow => {
+export const rowOf = (
+  resolved: McpServerResolution,
+  state: McpServerState | undefined,
+  at: number,
+  resolve: Resolve,
+  signIn?: McpSignInRow,
+): McpServerRow => {
   const { declaration } = resolved;
   const declared = {
     name: declaration.name,
@@ -43,6 +49,7 @@ export const rowOf = (resolved: McpServerResolution, state: McpServerState | und
     reach: mcpReachOf(declaration),
     capabilities: declaration.capabilities,
     enabled: declaration.enabled,
+    signIn,
     shadows: resolved.shadows,
   };
   const identity = mcpDeclarationFingerprint(expandEnvReferences(declaration, resolve));

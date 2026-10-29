@@ -5,7 +5,7 @@ import type { McpAppCallResult, McpAppTarget, McpAppView } from '@runlith/mcp/ap
 import type { McpCaller } from '@runlith/mcp/caller';
 import type { McpResourceResult } from '@runlith/mcp/resources';
 import type { McpResourceEvent } from '../wire/feeds.js';
-import { Context, type Effect, type Stream } from 'effect';
+import { Context, Data, type Effect, type Stream } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { SettableScope } from '../../../platform/contract/wire/setting.js';
 import type { GateRefusal, OpenRefusal } from '../../../platform/contract/wire/refusal.js';
@@ -20,6 +20,30 @@ export type McpListRefusal = 'secret-store-failed';
 export type McpReconcileRefusal = 'mcp-reconcile-stalled' | McpListRefusal;
 export type McpServerAddRefusal = 'mcp-server-exists' | McpReconcileRefusal | 'setting-scope' | 'setting-value' | 'unknown-project';
 export type McpServerChangeRefusal = 'mcp-server-unknown' | McpReconcileRefusal | 'setting-scope' | 'setting-value' | 'unknown-project';
+export type McpSignInRefusal = 'mcp-server-unknown' | 'mcp-sign-in-unsupported' | 'mcp-sign-in-failed' | McpReconcileRefusal;
+export type McpSignOutRefusal = 'mcp-server-unknown' | McpReconcileRefusal;
+
+export type McpOwnClient = { readonly id: string; readonly secret?: string };
+
+export type McpSignInAnswer = {
+  readonly state: string | null;
+  readonly code: string | null;
+  readonly iss: string | null;
+  readonly error: string | null;
+  readonly description: string | null;
+};
+
+export type McpSignInRejection = 'unknown' | 'forged' | 'refused' | 'failed';
+
+export class McpSignInRejected extends Data.TaggedError('McpSignInRejected')<{
+  readonly rejection: McpSignInRejection;
+  readonly reason: string;
+  readonly server?: string;
+}> {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
 export class McpServers extends Context.Service<
   McpServers,
@@ -34,6 +58,13 @@ export class McpServers extends Context.Service<
     setEnabled(
       input: McpServerScopeInput & { readonly name: string; readonly enabled: boolean },
     ): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpServerChangeRefusal | OpenRefusal>>;
+    signIn(
+      input: McpServerScopeInput & { readonly name: string; readonly client?: McpOwnClient; readonly redirect: string },
+    ): Effect.Effect<{ readonly url: string }, StoreFailure | GateRefusal<McpSignInRefusal>>;
+    signOut(
+      input: McpServerScopeInput & { readonly name: string },
+    ): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpSignOutRefusal>>;
+    finishSignIn(answer: McpSignInAnswer): Effect.Effect<{ readonly server: string }, McpSignInRejected>;
     reconcile(projectId: number): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>>;
     reconcileAll(): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>>;
     palette(projectId: number): McpPalette;

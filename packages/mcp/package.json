@@ -25,6 +25,12 @@
       "types": "./src/mcpOAuth.ts",
       "default": "./src/mcpOAuth.ts"
     },
+    "./grant": {
+      "types": "./src/mcpGrant.ts",
+      "browser": "./src/mcpGrant.ts",
+      "node": "./src/mcpGrant.ts",
+      "default": "./src/mcpGrant.ts"
+    },
     "./McpPool": {
       "types": "./src/McpPool.ts",
       "default": "./src/McpPool.ts"

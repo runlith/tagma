@@ -3,7 +3,7 @@ import { type McpAppFailure, mcpAppResult, viewCsp } from '@runlith/mcp/apps';
 import { McpPool } from '@runlith/mcp/McpPool';
 import { mcpRedactor } from '@runlith/mcp/mcpRedactor';
 import type { McpResourceEvent } from './contract/wire/feeds.js';
-import { Clock, Effect, Exit, FiberSet, Layer, Scope, Semaphore, Stream } from 'effect';
+import { Clock, Effect, Exit, FiberSet, Layer, PubSub, Scope, Semaphore, Stream } from 'effect';
 import { flight } from '@runlith/held/Flight';
 import type { HoldStalled, ReentrantCall } from '@runlith/held/failures';
 import type { StoreFailure } from '../platform/contract/service/store.js';
@@ -16,10 +16,14 @@ import {
   type McpMount,
   McpServers,
   type McpServerResolution,
+  type McpServerScopeInput,
   type McpViewFailure,
   type McpViewRefusal,
   type McpReconcileRefusal,
 } from './contract/service/servers.js';
+import type { McpSignInRow } from './contract/wire/servers.js';
+import { makeSignIns } from './signIns.js';
+import { recordOf } from './record.js';
 import { McpPlaces } from './contract/service/places.js';
 import {
   type Handouts,
@@ -65,10 +69,14 @@ type Pooled = {
   readonly pool: McpPool;
   readonly scope: Scope.Closeable;
   readonly secrets: Set<string>;
+  readonly tokens: Map<string, string>;
+  readonly keys: Map<string, string>;
   readonly redaction: { of: (text: string) => string };
   narrowed: Set<string> | null;
   reached: Set<string> | null;
 };
+
+const redactorOf = (pooled: Pooled): ((text: string) => string) => mcpRedactor([...pooled.secrets, ...pooled.tokens.values()]);
 
 const whole = (pooled: Pooled): void => {
   pooled.narrowed = null;
@@ -138,6 +146,25 @@ const makeMcpServers = Effect.fnUntraced(function* ({
 
   const handouts = owners.handout(KIND).pipe(Effect.mapError(storeRefusal));
 
+  const pulses = yield* Effect.acquireRelease(PubSub.sliding<void>(1), PubSub.shutdown);
+  const moved = PubSub.publish(pulses, undefined).pipe(Effect.asVoid);
+
+  const readers = (key: string): ReadonlyArray<readonly [McpPool, string]> =>
+    [...pools.values()].flatMap((pooled) =>
+      [...pooled.keys].flatMap(([name, held]) => (held === key ? [[pooled.pool, name] as const] : [])),
+    );
+
+  const reconnected = (key: string) =>
+    Effect.forEach(readers(key), ([pool, name]) => pool.reconnect(name), { concurrency: 'unbounded', discard: true });
+
+  const signIns = yield* makeSignIns({ reconnect: reconnected, moved });
+
+  const masked = (pooled: Pooled, name: string, token: string): void => {
+    if (pooled.tokens.get(name) === token) return;
+    pooled.tokens.set(name, token);
+    pooled.redaction.of = redactorOf(pooled);
+  };
+
   const settling = new Map<number, Semaphore.Semaphore>();
   const serialOf = (projectId: number): Semaphore.Semaphore => {
     const standing = settling.get(projectId);
@@ -152,12 +179,78 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     return (name) => values[name] ?? environment[name];
   };
 
+  const signInRow = Effect.fnUntraced(function* (given: Handouts, key: string) {
+    const record = yield* recordOf(key, given(key).signIn).pipe(Effect.mapError(storeRefusal));
+    const row: McpSignInRow = { signedIn: record.tokens !== undefined, pending: signIns.pending(key), client: record.client?.kind ?? null };
+    return row;
+  });
+
   const list: McpServers['Service']['list'] = Effect.fn('McpServers.list')(function* (projectId) {
     const resolved = mcpDeclared(yield* settings.read(mcpServers, projectId));
     const given = yield* handouts;
     const measured = new Map((pools.get(projectId)?.pool.states() ?? []).map((state) => [state.name, state]));
     const now = yield* Clock.currentTimeMillis;
-    return resolved.map((entry) => rowOf(entry, measured.get(entry.declaration.name), now, resolver(given, projectId, entry)));
+    return yield* Effect.forEach(resolved, (entry) =>
+      Effect.map(
+        entry.declaration.transport === 'http'
+          ? signInRow(given, keyOf(entry.scope, projectId, entry.declaration.name))
+          : Effect.succeed(undefined),
+        (signIn) => rowOf(entry, measured.get(entry.declaration.name), now, resolver(given, projectId, entry), signIn),
+      ),
+    );
+  });
+
+  const declaredIn = Effect.fnUntraced(function* (input: McpServerScopeInput & { readonly name: string }) {
+    const effective = mcpDeclared(yield* settings.read(mcpServers, input.projectId));
+    const entry = effective.find((candidate) => candidate.declaration.name === input.name && candidate.scope === input.scope);
+    if (entry !== undefined) return entry;
+    const elsewhere = effective.some((candidate) => candidate.declaration.name === input.name);
+    return yield* new GateRefusal(
+      'mcp-server-unknown',
+      `${input.scope} scope declares no server called ${input.name} that this project resolves to.`,
+      elsewhere
+        ? [`${input.name} is declared in the other scope; name that scope`]
+        : ['read_mcp_servers names every server this project resolves to'],
+    );
+  });
+
+  const signIn: McpServers['Service']['signIn'] = Effect.fn('McpServers.signIn')(function* (input) {
+    const entry = yield* declaredIn(input);
+    const { declaration } = entry;
+    if (declaration.transport !== 'http') {
+      return yield* new GateRefusal(
+        'mcp-sign-in-unsupported',
+        `${input.name} runs as a program on this machine; only an HTTP server signs in.`,
+        ['give a stdio server its keys as ${NAME} values on its card'],
+      );
+    }
+    const resolve = resolver(yield* handouts, input.projectId, entry);
+    const missing = mcpMissingReferences({ ...declaration, headers: undefined }, resolve);
+    if (missing.length > 0) {
+      return yield* new GateRefusal('mcp-sign-in-unsupported', `The URL of ${input.name} still needs ${missing.join(', ')}.`, [
+        `set ${missing.join(', ')} on the server's card, then sign in`,
+      ]);
+    }
+    const asked = pools
+      .get(input.projectId)
+      ?.pool.states()
+      .find((state) => state.name === input.name)?.failure;
+    const expanded = expandEnvReferences(declaration, resolve);
+    return yield* signIns.begin({
+      key: keyOf(input.scope, input.projectId, input.name),
+      name: input.name,
+      projectId: input.projectId,
+      url: expanded.transport === 'http' ? expanded.url : declaration.url,
+      redirect: input.redirect,
+      challenge: asked?._tag === 'McpNeedsSignIn' ? { scope: asked.scope, resourceMetadata: asked.resourceMetadata } : {},
+      client: input.client,
+    });
+  });
+
+  const signOut: McpServers['Service']['signOut'] = Effect.fn('McpServers.signOut')(function* (input) {
+    yield* declaredIn(input);
+    yield* signIns.signOut(keyOf(input.scope, input.projectId, input.name));
+    return yield* list(input.projectId);
   });
 
   const add: McpServers['Service']['add'] = Effect.fn('McpServers.add')(function* (input) {
@@ -185,8 +278,11 @@ const makeMcpServers = Effect.fnUntraced(function* ({
 
     const resolved = yield* settings.read(mcpServers, input.projectId);
     const elsewhere = mcpDeclared(resolved).some((entry) => entry.declaration.name === input.name);
-    if ((resolved.layers[input.scope]?.value ?? []).some((entry) => entry.name === input.name))
-      yield* owners.drop(KIND, keyOf(input.scope, input.projectId, input.name)).pipe(Effect.mapError(storeRefusal));
+    if ((resolved.layers[input.scope]?.value ?? []).some((entry) => entry.name === input.name)) {
+      const key = keyOf(input.scope, input.projectId, input.name);
+      yield* owners.drop(KIND, key).pipe(Effect.mapError(storeRefusal));
+      yield* signIns.forget(key);
+    }
     yield* settings.amend(mcpServers, input.scope, input.projectId, (current) => {
       if (current.some((entry) => entry.name === input.name)) {
         return Effect.succeed(current.filter((entry) => entry.name !== input.name));
@@ -254,7 +350,11 @@ const makeMcpServers = Effect.fnUntraced(function* ({
         ]),
       );
       const pooled = pools.get(projectId);
-      if (pooled !== undefined) widen(pooled);
+      if (pooled !== undefined) {
+        widen(pooled);
+        pooled.keys.clear();
+        for (const { entry } of standing) pooled.keys.set(entry.declaration.name, keyOf(entry.scope, projectId, entry.declaration.name));
+      }
       const narrowed = pooled?.narrowed ?? null;
       const wanted = narrowed === null ? null : [...narrowed];
       const started = narrowed === null ? standing : standing.filter(({ entry }) => narrowed.has(entry.declaration.name));
@@ -296,7 +396,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     if (entry === undefined) return;
     const before = entry.secrets.size;
     for (const value of values) entry.secrets.add(value);
-    if (entry.secrets.size !== before) entry.redaction.of = mcpRedactor([...entry.secrets]);
+    if (entry.secrets.size !== before) entry.redaction.of = redactorOf(entry);
   };
 
   const reconcileAll: McpServers['Service']['reconcileAll'] = Effect.fn('McpServers.reconcileAll')(() =>
@@ -390,11 +490,31 @@ const makeMcpServers = Effect.fnUntraced(function* ({
           if (held !== undefined) return Effect.succeed(held.pool);
           return Effect.gen(function* () {
             const own = yield* Scope.fork(scope);
-            const secrets = new Set<string>();
+            const keys = new Map<string, string>();
+            const tokens = new Map<string, string>();
             const redaction = { of: (text: string) => text };
-            const pool = yield* Scope.provide(McpPool.make({ redact: (text) => redaction.of(text) }), own);
+            let pooled: Pooled | undefined;
+            const pool = yield* Scope.provide(
+              McpPool.make({
+                redact: (text) => redaction.of(text),
+                auth: (name) => {
+                  const key = keys.get(name);
+                  return key === undefined
+                    ? undefined
+                    : signIns.auth(key, (token) => {
+                        if (pooled !== undefined) masked(pooled, name, token);
+                      });
+                },
+              }),
+              own,
+            );
             yield* pool.place(yield* places.of(projectId));
-            pools.set(projectId, { pool, scope: own, secrets, redaction, narrowed: new Set(), reached: new Set() });
+            yield* Effect.forkIn(
+              Stream.runForEach(pool.changes, () => moved),
+              own,
+            );
+            pooled = { pool, scope: own, secrets: new Set(), tokens, keys, redaction, narrowed: new Set(), reached: new Set() };
+            pools.set(projectId, pooled);
             return pool;
           });
         }),
@@ -452,6 +572,9 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       add,
       remove,
       setEnabled,
+      signIn,
+      signOut,
+      finishSignIn: signIns.finish,
       reconcile,
       reconcileAll,
       palette,
