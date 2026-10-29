@@ -19,12 +19,21 @@ export const bootFile = (argv: ReadonlyArray<string>): Effect.Effect<string, Boo
 const causeOf = (failure: { readonly _tag: string; readonly message: string }): string =>
   failure.message.length > 0 ? `${failure._tag}: ${failure.message}` : failure._tag;
 
-const fell = (files: FileSystem.FileSystem, boot: string, cause: string): Effect.Effect<void> =>
-  Effect.flatMap(Effect.result(files.writeFileString(loadRefusalOf(boot), `${cause}\n`, { mode: 0o600 })), (written) =>
+const fell = (files: FileSystem.FileSystem, boot: string, cause: string): Effect.Effect<void> => {
+  const refusal = loadRefusalOf(boot);
+  const draft = `${refusal}.${process.pid}`;
+  const published = files.writeFileString(draft, `${cause}\n`, { mode: 0o600 }).pipe(Effect.andThen(files.rename(draft, refusal)));
+  return Effect.flatMap(Effect.result(published), (written) =>
     written._tag === 'Failure'
-      ? Effect.logError(`the refusal of this logic's load could not be published: ${cause}`, written.failure)
+      ? Effect.andThen(
+          Effect.logError(`the refusal of this logic's load could not be published: ${cause}`, written.failure),
+          Effect.flatMap(Effect.result(files.remove(draft, { force: true })), (removed) =>
+            removed._tag === 'Failure' ? Effect.logError(`the draft ${draft} could not be removed`, removed.failure) : Effect.void,
+          ),
+        )
       : Effect.void,
   );
+};
 
 const loaded = Effect.fnUntraced(function* (files: FileSystem.FileSystem, path: string) {
   const text = yield* files
@@ -43,6 +52,11 @@ const loaded = Effect.fnUntraced(function* (files: FileSystem.FileSystem, path: 
 export const main = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
   const path = yield* bootFile(process.argv);
+  yield* Effect.flatMap(Effect.result(files.remove(loadRefusalOf(path), { force: true })), (removed) =>
+    removed._tag === 'Failure'
+      ? Effect.logError('the load refusal of the logic before this one could not be removed', removed.failure)
+      : Effect.void,
+  );
   return yield* loaded(files, path).pipe(Effect.tapError((failure) => fell(files, path, causeOf(failure))));
 }).pipe(
   Effect.scoped,

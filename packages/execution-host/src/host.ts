@@ -7,7 +7,7 @@ import { Registration } from '@runlith/executions/protocol/registration';
 import { WireLimits } from '@runlith/executions/protocol/wire';
 import { boundTo, identityOf, stampOf, verifyArtifact } from '@runlith/executions/hostArtifacts';
 import { pipeCapability } from './nativeLaunch';
-import { HostRegistration } from '@runlith/executions/HostRegistration';
+import { HostRegistration, type RegistrationReadFailure } from '@runlith/executions/HostRegistration';
 import { answer } from './answers';
 import { Bindings } from './Bindings';
 import { YieldRequests } from './YieldRequests';
@@ -149,6 +149,7 @@ export const host = Effect.fnUntraced(function* (input: HostInput) {
   });
   const registration = publication.registration;
 
+  let witness: Effect.Effect<void, RegistrationReadFailure> = Effect.void;
   if (verified !== undefined) {
     const logic = (yield* Processes).identity(process.pid);
     if (logic._tag !== 'Read') {
@@ -156,7 +157,7 @@ export const host = Effect.fnUntraced(function* (input: HostInput) {
         detail: `this logic cannot read its own process birth: ${logic._tag === 'Gone' ? 'gone' : logic.detail}`,
       });
     }
-    yield* registrations.record(registration.state, stampOf(verified), { pid: logic.pid, birth: logic.birth });
+    witness = Effect.asVoid(registrations.record(registration.state, stampOf(verified), { pid: logic.pid, birth: logic.birth }));
   }
 
   yield* upgradeRecords({ records: path.join(registration.state, RECORDS_DIRECTORY) });
@@ -173,6 +174,7 @@ export const host = Effect.fnUntraced(function* (input: HostInput) {
 
   return {
     registration,
+    witness,
     profile,
     incarnation: entered.incarnation,
     owners: Layer.succeedContext(state).pipe(Layer.merge(Layer.succeedContext(account))),
@@ -202,6 +204,7 @@ const serving = Effect.fnUntraced(function* (input: HostInput, options?: { reado
   const serving = Layer.mergeAll(registry, connections, built.owners, hostSpawner);
   const answering = loop(
     built.registration,
+    built.witness,
     native,
     Math.min(built.profile.execution.read.chunkBytes, built.profile.execution.read.readerCredits),
     built.incarnation,
@@ -318,6 +321,7 @@ const vacated = Effect.fnUntraced(function* (registration: Registration): Effect
 
 const loop = Effect.fnUntraced(function* (
   registration: Registration,
+  witness: Effect.Effect<void, RegistrationReadFailure>,
   native: UsageReader | undefined,
   chunk: number,
   incarnation: number,
@@ -358,6 +362,7 @@ const loop = Effect.fnUntraced(function* (
   const budgetBytes = Math.max(ENVELOPE_BYTES, limits.headerBytes - ENVELOPE_BYTES);
   const measured = yield* measuring(profile, limits, native);
   for (const capability of servedBy(profile, measured, [...(yield* Holder).capabilities])) served.add(capability);
+  yield* witness;
   yield* connections.open;
   yield* Effect.forkScoped(Effect.andThen(lifecycle.leaving, connections.close));
   yield* Effect.forkScoped(

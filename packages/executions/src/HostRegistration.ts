@@ -5,26 +5,42 @@ import { REGISTRATION_FILE, Registration, RegistrationIdentity, sameIdentity } f
 
 export class RegistrationMissing extends Data.TaggedError('RegistrationMissing')<{
   readonly state: string;
-}> {}
+}> {
+  override get message(): string {
+    return `no host registration stands at ${this.state}`;
+  }
+}
 
 export class RegistrationInvalid extends Data.TaggedError('RegistrationInvalid')<{
   readonly state: string;
   readonly reason: 'schema' | 'mismatch';
   readonly detail: string;
   readonly named?: string;
-}> {}
+}> {
+  override get message(): string {
+    return `the host registration at ${this.state} is invalid (${this.reason}): ${this.detail}`;
+  }
+}
 
 export class RegistrationConflict extends Data.TaggedError('RegistrationConflict')<{
   readonly state: string;
   readonly standing: Registration;
   readonly offered: RegistrationIdentity;
-}> {}
+}> {
+  override get message(): string {
+    return `the host registration at ${this.state} names another host (installation ${this.standing.installation}, protocol ${this.standing.protocol})`;
+  }
+}
 
 export class RegistrationFailed extends Data.TaggedError('RegistrationFailed')<{
   readonly state: string;
   readonly act: string;
   readonly detail: string;
-}> {}
+}> {
+  override get message(): string {
+    return `the host registration at ${this.state}: ${this.act} failed: ${this.detail}`;
+  }
+}
 
 export type Publication =
   | { readonly _tag: 'Published'; readonly registration: Registration }

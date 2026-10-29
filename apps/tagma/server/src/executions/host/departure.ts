@@ -228,9 +228,9 @@ const departed = Effect.fnUntraced(function* (
     return undefined;
   });
   for (;;) {
-    const cause = yield* fell;
-    if (cause !== undefined) return { _tag: 'Fallen', detail: cause };
     if (yield* replaced) return { _tag: 'Replaced' };
+    const cause = yield* fell;
+    if (cause !== undefined) return (yield* replaced) ? { _tag: 'Replaced' } : { _tag: 'Fallen', detail: cause };
     const verdict = yield* reasked();
     if (verdict?._tag === 'Stays' && (yield* replaced)) return { _tag: 'Replaced' };
     if (verdict !== undefined) return verdict;

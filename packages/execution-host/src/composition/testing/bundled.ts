@@ -21,10 +21,8 @@ const LIBRARY_PART = 'native/libexecution_platform.dylib';
 export type Offer = {
   readonly build: string;
   readonly holder?: 'standing' | 'distinct' | 'refusing';
-  readonly logic?: 'working' | 'boot-exit' | 'store-ahead' | 'store-repair' | 'unbundled';
+  readonly logic?: 'working' | 'boot-exit' | 'store-ahead' | 'store-repair' | 'over-store-ahead';
 };
-
-export const NOWHERE = 'nowhere';
 
 const storeStep = (sql: string) =>
   [
@@ -37,10 +35,10 @@ const storeStep = (sql: string) =>
     '}',
     '',
   ].join('\n');
-const STORE_AHEAD =
-  storeStep(
-    "insert into __drizzle_migrations (hash, created_at, name) select 'ahead', 9999999999999, 'ahead' where not exists (select 1 from __drizzle_migrations where hash = 'ahead')",
-  ) + 'process.exit(3);\n';
+const AHEAD_ROW = storeStep(
+  "insert into __drizzle_migrations (hash, created_at, name) select 'ahead', 9999999999999, 'ahead' where not exists (select 1 from __drizzle_migrations where hash = 'ahead')",
+);
+const STORE_AHEAD = AHEAD_ROW + 'process.exit(3);\n';
 const STORE_REPAIR = storeStep("delete from __drizzle_migrations where hash = 'ahead'");
 
 export type Stand = {
@@ -106,11 +104,11 @@ export const bundledStand = async (directory: string, executions: number): Promi
     let manifest = answer.manifest;
     if (offer.holder === 'distinct') manifest = rewritten(root, manifest, HOLDER_PART, readFileSync(holder));
     if (offer.holder === 'refusing') manifest = rewritten(root, manifest, HOLDER_PART, new TextEncoder().encode('#!/bin/sh\nexit 3\n'));
-    if (offer.logic === 'boot-exit' || offer.logic === 'store-ahead' || offer.logic === 'store-repair') {
+    if (offer.logic !== undefined && offer.logic !== 'working') {
       const host = manifest.parts.find((part) => part.role === 'host')!.path;
       const script =
-        offer.logic === 'store-repair'
-          ? STORE_REPAIR + readFileSync(join(root, host), 'utf8')
+        offer.logic === 'store-repair' || offer.logic === 'over-store-ahead'
+          ? (offer.logic === 'store-repair' ? STORE_REPAIR : AHEAD_ROW) + readFileSync(join(root, host), 'utf8')
           : offer.logic === 'boot-exit'
             ? `require('node:fs').writeFileSync(${JSON.stringify(join(directory, `${offer.build}.exited`))}, ''); process.exit(3);\n`
             : STORE_AHEAD;
@@ -137,7 +135,7 @@ export const bundledStand = async (directory: string, executions: number): Promi
         share: hostShare(funded, executions),
         limits,
         lifetime: 'with-parent',
-        artifact: offer.logic === 'unbundled' ? join(directory, NOWHERE) : bundle,
+        artifact: bundle,
       }),
       { mode: 0o600 },
     );
