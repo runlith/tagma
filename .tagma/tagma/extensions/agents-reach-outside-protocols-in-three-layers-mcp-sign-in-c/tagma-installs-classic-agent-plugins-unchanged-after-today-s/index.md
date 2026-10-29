@@ -74,7 +74,12 @@ Each format is an adapter module (`claude-code-format`, `agent-plugins-format`) 
   - `Stop` at `beforeClose`;
   - `SessionStart` at a thread's first run and `SessionEnd` at its end.
 
-  Input and output follow the Claude Code hook contract: JSON on stdin, exit code 2 blocks, `permissionDecision`, `additionalContext`. Whether `beforeTool` can carry a deny and an input rewrite is verified first; where it cannot, that point gains it, not a wrapper around it. Other events and the `http`, `mcp_tool`, `prompt` and `agent` handler types are listed as ignored. Install and enable raise the `execute` subject for a plugin with hooks, as for a stdio server.
+  Input and output follow the Claude Code hook contract: JSON on stdin, exit code 2 blocks, `permissionDecision`, `updatedInput`, `additionalContext`, `decision: block`. `beforeTool` carries a deny and an input rewrite of its own (rule directives `deny` and `rewrite`): a denied call answers the model a refusal with the hook's reason, and a rewritten input is decoded by the tool before permission and review judge it.
+  - A `UserPromptSubmit` block reaches the model as guidance beside the message: the message is already the operator's, and Tagma never withdraws it.
+  - A `Stop` block keeps the run going with the reason, within its step limit; `stop_hook_active` tells the hook it already continued this run.
+  - `SessionEnd` runs when a thread is archived or deleted, for a thread that ran natively since the server started: its hooks need the place that run stood in.
+
+  Other events and the `http`, `mcp_tool`, `prompt` and `agent` handler types are listed as ignored. Install and enable raise the `execute` subject for a plugin with hooks, as for a stdio server.
 - **Everything else.** LSP, output styles, themes, monitors, `bin/`, `settings.json` and workflows are listed as ignored.
 
 **Installation.**
