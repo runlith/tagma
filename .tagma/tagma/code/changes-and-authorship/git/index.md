@@ -213,6 +213,13 @@ fields:
       {
         "at": "src/testing/fixture.ts",
         "role": "testing"
+      },
+      {
+        "at": "src/clone.ts",
+        "for": [
+          "e9aa47fc",
+          "d6fd5286"
+        ]
       }
     ],
     "id": "@runlith/git",

@@ -10,7 +10,7 @@ fields:
       "debt": [],
       "escaped": [
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/AcceptedRecovery.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 10,
@@ -18,7 +18,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/CommandDeadline.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 14,
@@ -26,7 +26,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/CommandInventory.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 14,
@@ -34,7 +34,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/CommandLifetime.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 12,
@@ -42,7 +42,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/CompilerQualification.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 10,
@@ -50,7 +50,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/EvictedRangeRead.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 10,
@@ -58,7 +58,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/ExecutionRetention.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 8,
@@ -66,7 +66,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/ExecutionRuntime.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 21,
@@ -74,7 +74,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/ExecutionStoreLoss.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 8,
@@ -82,7 +82,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/ExecutionTerminal.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 10,
@@ -90,7 +90,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/InventoryChanges.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 9,
@@ -98,7 +98,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/PipelineDeath.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 15,
@@ -106,7 +106,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/ReleasedRecords.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 11,
@@ -114,7 +114,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/UnwatchableExit.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 16,
@@ -122,7 +122,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/composition/testing/lateCapacity.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 11,
@@ -130,7 +130,7 @@ fields:
           "said": "imports `../../Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/composition/testing/launchUncertain.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 17,
@@ -138,7 +138,7 @@ fields:
           "said": "imports `../../Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/composition/testing/receiptCapacity.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 15,
@@ -146,7 +146,7 @@ fields:
           "said": "imports `../../Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/inventoryReading.bench.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 10,
@@ -154,7 +154,7 @@ fields:
           "said": "imports `./Bindings` of module `@runlith/execution-host`, which no entry of `@runlith/execution-host` opens to `host-composition`"
         },
         {
-          "commit": "241b973015f88ea5e77492eb5ed0fc9556613779",
+          "commit": "5ce88e1b0810b54e4c15f2aa02319e684d843d07",
           "fingerprint": "host-composition -> @runlith/execution-host private @ packages/execution-host/src/terminalRelease.itest.ts",
           "fix": "Import through an entry `@runlith/execution-host` opens to `host-composition` (`packages/execution-host/`, `packages/execution-host/src/host.ts`, `packages/execution-host/src/hostSpawner.ts`, `packages/execution-host/src/hostTelemetry.ts`, `packages/execution-host/src/PlatformFacts.ts`, `packages/execution-host/src/ProcessTempo.ts`, `packages/execution-host/src/Endpoint.ts`, `packages/execution-host/src/Credentials.ts`, `packages/execution-host/src/ProcessReader.ts`, `packages/execution-host/src/EvidenceScans.ts`, `packages/execution-host/src/UsageReader.ts`, `packages/execution-host/src/processTree.ts`, `packages/execution-host/src/Residuals.ts`, `packages/execution-host/src/ProcessControl.ts`, `packages/execution-host/src/TerminalInputs.ts`), or open one covering `packages/execution-host/src/Bindings.ts` with `set_module`.",
           "line": 26,
