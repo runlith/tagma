@@ -11,9 +11,9 @@ export const MarketplaceAdded = Schema.Struct({
 export type MarketplaceAdded = typeof MarketplaceAdded.Type;
 
 export const marketplacesAdded = settingListKey({
-  id: 'marketplaces.added',
+  id: 'plugins.marketplaces',
   order: 775,
-  title: 'Added',
+  title: 'Marketplaces',
   description: 'The plugin marketplaces this machine reads: where each is fetched from and Tagma’s trust label for it.',
   control: { kind: 'managed', by: 'add_marketplace' },
   member: MarketplaceAdded,
@@ -23,9 +23,9 @@ export const marketplacesAdded = settingListKey({
 });
 
 export const marketplacesPresets = settingListKey({
-  id: 'marketplaces.presets',
+  id: 'plugins.marketplacePresets',
   order: 776,
-  title: 'Presets registered',
+  title: 'Preset marketplaces registered',
   description: 'The preset marketplaces already registered once; one removed afterwards is not registered again.',
   control: { kind: 'managed', by: 'remove_marketplace' },
   member: MarketplaceId,
@@ -33,12 +33,3 @@ export const marketplacesPresets = settingListKey({
   scopes: ['user'],
   merge: 'replace',
 });
-
-export const MARKETPLACE_SETTING_SECTIONS = [
-  {
-    id: 'marketplaces',
-    order: 64,
-    title: 'Marketplaces',
-    description: 'The plugin marketplaces this machine reads, and the presets it registered once.',
-  },
-] as const;
