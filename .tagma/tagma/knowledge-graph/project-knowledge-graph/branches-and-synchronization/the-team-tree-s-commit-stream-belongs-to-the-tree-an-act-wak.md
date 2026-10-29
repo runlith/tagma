@@ -15,7 +15,7 @@ sources:
     ref: apps/tagma/server/src/worktrees/retirement/delete.ts
     symbol: WorktreeDeletion
 ---
-Under `graph.commit = auto` the team tree commits the graph itself: everything changed under `.tagma` leaves as one graph commit after a pause in writes, worded by the one graph commit assembler and signed `Tagma <agent@tagma.dev>`. The loop doing it belongs to the tree, not to whoever woke it. If the branch has no commits yet, the automatic write and `sync_graph` create the root commit from the graph only; someone else's staged code stays in the index.
+Under `graph.commit = auto` the team tree commits the graph itself: everything changed under `.tagma` leaves as one graph commit after a pause in writes, worded by the one graph commit assembler and signed `Tagma <agent@tagma.dev>`. Its subject identifies a uniquely leading block, and its body keeps the complete act titles; attribution remains in the graph journal and sync result. The loop doing it belongs to the tree, not to whoever woke it. If the branch has no commits yet, the automatic write and `sync_graph` create the root commit from the graph only; someone else's staged code stays in the index.
 
 - **The loop starts from a runtime obtained at the tree's opening** (`FiberSet.makeRuntime` in its scope). Started from the waking act's context, it inherits the `UnitLife` of an already closed unit, and its first statement to the graph store dies with `LateStatementRefused`: every batch is lost.
 - **An act wakes the loop after its own commit**, like a landing (`writeThrough`), not from inside a unit: a rolled-back act wakes nothing.
