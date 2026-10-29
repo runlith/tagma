@@ -33,4 +33,4 @@ sources:
 - A failed commit repeats with a growing pause; the tree files stay in place.
 - `sync_graph` neither merges, resolves conflicts, nor pushes.
 
-**Limits.** Team storage only: in stealth, Tagma's git commits acts itself, and `sync_graph` refuses there.
+**Limits.** `sync_graph` serves team storage only. In stealth, Tagma's own git commits graph acts; the checkout's automatic policy still carries the team-file deletions left by a storage move. Moving storage neither commits unrelated checkout files nor bypasses an unfinished git operation.
