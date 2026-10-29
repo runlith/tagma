@@ -65,7 +65,7 @@ These are two mechanisms for one fact: a secret Tagma hands to a process.
 - `bearer()`: the current access token, or none;
 - `rejected(token)`: a fresh token, or `needs-sign-in`.
 
-The kit builds the SDK's provider from these internally and hands the SDK an access token only, never a refresh token or client data. On a 401 it calls `rejected` once and retries once.
+The kit carries the bearer in its own fetch and hands the SDK no auth provider, so the SDK never refreshes, re-authorizes or drops a client. On a 401 with a Bearer challenge it calls `rejected` once and retries once; a Bearer challenge it cannot answer, or a 403 `insufficient_scope`, is a typed `needs-sign-in` carrying the challenge's scope and `resource_metadata`. A 401 without a Bearer challenge stays an ordinary failure, as for a server keyed by a header value.
 
 A typed kit failure carries `needs-sign-in` into `McpServerStatus` (`packages/mcp/src/McpPool.ts`); it is never parsed from a message. The rule "pass declarations with already-resolved values" holds: tokens are not values of the declaration.
 
@@ -79,23 +79,23 @@ The reasons for this shape:
 **Sign-in record.**
 - One record per owner `(user, server)` or `(project id, server)` holds:
   - the client identity and its registered redirect URIs;
-  - the authorization server's `issuer`;
+  - the discovered authorization server — its `issuer`, metadata, resource and scope — so a refresh needs no discovery;
   - the tokens.
 - **Refresh.** Tagma refreshes a record with a single flight per record, and stores the result only if the grant it refreshed is still the stored one. That flight is the mechanism `FileTokenStore.getAccessToken` and `recoverAccessToken` already implement (`packages/llm/src/oauth/FileTokenStore.ts`). It moves into `@runlith/credential-file` as one primitive, with the cross-process lock as its option. `FileTokenStore` and the MCP record both use it, so no second implementation stands.
 - **Pre-registered clients.** A refused client registration never drops a client the person pre-registered; the card shows the failure.
 
 **Client identity, in this order.**
 1. **Pre-registered.** The person enters a client id, and a secret if the service gives one; the card shows the redirect URIs to register. A catalog entry may carry such a public client id.
-2. **Client metadata document (CIMD).** Used where the authorization server supports it. Tagma publishes the document as part of this layer. The document is one static public HTTPS file with no account data. It can list only loopback redirect URIs, so a remote-door sign-in falls back to step 3.
+2. **Client metadata document (CIMD).** Used where the authorization server supports it. Its address is the `mcp.clientDocument` setting, unset until the document is published; unset, a sign-in goes from step 1 to step 3. The document is one static public HTTPS file with no account data. It can list only loopback redirect URIs, so a remote-door sign-in falls back to step 3.
 3. **Dynamic registration.** Used where the server offers it, and repeated when the registered redirect URIs no longer cover the door in use.
 
 A server offering none of these refuses `sign_in_mcp_server` with that reason.
 
 **Redirect.**
 - **The route.** The callback is a route of Tagma's own HTTP door, `/mcp/oauth/callback`, on the door the sign-in started from.
-- **Which URI.** `sign_in_mcp_server` takes the redirect URI from the calling door through the invocation's call services, never from input:
-  - the local door's loopback origin, whose port is the channel's port;
-  - or the paired device's own remote origin.
+- **Which URI.** `sign_in_mcp_server` takes the redirect URI from the calling door through a door service the composition fills per listener, as it fills the terminal lane's endpoint, never from input:
+  - the local door's loopback origin, `http://127.0.0.1:<port>`;
+  - or the remote door's stored origin, which paired devices reach.
 - **Why a route.** A random-port loopback listener (`packages/llm/src/oauth/callback-server.ts`) could not be pre-registered with a server that matches redirects exactly, and a paste fallback is poor on a phone.
 - **The local door changes nothing.** `localGate` (`composition/http/local.ts`) checks a loopback Host, and a top-level navigation carries no `Origin`.
 - **The remote door gets one exception.** Its gate answers this path before `admission.remote`, the way it answers the pairing endpoint (`composition/http/remote.ts`):
@@ -104,21 +104,21 @@ A server offering none of these refuses `sign_in_mcp_server` with that reason.
   - admitted only by a pending, single-use state bound to one sign-in and expiring with it.
 
   Without this exception the gate serves this GET the app shell, and the device keeper refuses a cross-site request (`remote/keeper.ts`).
-- **Pending sign-in.** The pending sign-in, keyed by its state, holds the code verifier and the expected issuer. Only `sign_in_mcp_server` creates one. The pool's provider has a redirect URL (without one the SDK falls back to a client-credentials grant), but its verifier and redirect calls only report `needs-sign-in`. A reconnect can therefore never replace a pending sign-in.
+- **Pending sign-in.** The pending sign-in, keyed by its state, holds the code verifier and the expected issuer. Only `sign_in_mcp_server` creates one; it lives in the server's memory, single-use, for ten minutes, and a newer one for the same server replaces it. The pool never reaches the SDK's `auth()`, so a reconnect can never replace a pending sign-in.
 - **Issuer check (RFC 9207),** done by Tagma because SDK 1.30.0 does not:
   - with `iss` present, compare it to the expected issuer byte for byte, with no normalization;
   - with `iss` absent while the server's metadata sets `authorization_response_iss_parameter_supported` to true, reject;
   - on a mismatch, never show the response's `error` or `error_description`.
-- **Exchange.** The code is exchanged through a kit entry (`@runlith/mcp/auth`) over the SDK's `auth`, so server code never imports the SDK and no transport is needed.
+- **Exchange.** The code is exchanged through a kit entry (`@runlith/mcp/auth`) over the SDK's discovery, registration, authorization, exchange and refresh functions, never its `auth()` orchestrator, so server code never imports the SDK and no transport is needed.
 
 **Flow.**
-1. `add_mcp_server` for an HTTP server whose first answer is a 401 carrying `resource_metadata` declares it, and the row shows `needs-sign-in`.
+1. `add_mcp_server` for an HTTP server whose first answer is a 401 carrying a Bearer challenge declares it and answers after that first handshake, so the row shows `needs-sign-in`.
 2. `sign_in_mcp_server` (operator-only) discovers and resolves the client identity, and answers the authorization URL.
 3. The app opens it (`links.open`, as provider sign-in does).
 4. The callback completes the exchange, and the pool connects.
 5. A rows feed in `mcp` brings the new state to `app-mcp`, whose repo today is a `read_mcp_servers` query with no feed, so the card moves to connected without a reload.
 6. `sign_out_mcp_server` drops the tokens and keeps the client identity.
-7. A refresh the authorization server refuses moves the row back to `needs-sign-in`.
+7. A refresh the authorization server refuses drops the tokens and moves the row back to `needs-sign-in`; a transient failure leaves them and fails only that connection.
 
 ## Owners touched
 
