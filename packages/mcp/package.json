@@ -17,6 +17,14 @@
       "types": "./src/McpFailure.ts",
       "default": "./src/McpFailure.ts"
     },
+    "./McpAuth": {
+      "types": "./src/McpAuth.ts",
+      "default": "./src/McpAuth.ts"
+    },
+    "./auth": {
+      "types": "./src/mcpOAuth.ts",
+      "default": "./src/mcpOAuth.ts"
+    },
     "./McpPool": {
       "types": "./src/McpPool.ts",
       "default": "./src/McpPool.ts"

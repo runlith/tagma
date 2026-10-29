@@ -1,7 +1,8 @@
 import type { McpCaller } from './mcpCallerMeta';
 import { TOOL_OUTPUT_MAX_BYTES } from '@runlith/agent/ToolOutputSpool';
 import { Clock, Deferred, Duration, Effect, PubSub, type Scope, Semaphore, Stream } from 'effect';
-import { type McpCallFailed, McpConnectFailed, McpResourceFailed, McpTimedOut } from './McpFailure';
+import type { McpAuth } from './McpAuth';
+import { type McpCallFailed, McpConnectFailed, type McpNeedsSignIn, McpResourceFailed, McpTimedOut } from './McpFailure';
 import type { McpServerDeclaration } from './McpServerDeclaration';
 import { redactValue } from './mcpRedactor';
 import type { McpResourcePage, McpResourceResult, McpResourceUpdated } from './mcpResources';
@@ -53,7 +54,7 @@ export type McpCallOptions = {
   readonly roots?: readonly string[];
 };
 
-export type McpSessionFailure = McpConnectFailed | McpTimedOut;
+export type McpSessionFailure = McpConnectFailed | McpTimedOut | McpNeedsSignIn;
 
 class StderrTail {
   private chunks: Uint8Array[] = [];
@@ -310,10 +311,10 @@ const makeMcpSession = (input: SessionInput) => {
     yield* release.pipe(Effect.ensuring(PubSub.shutdown(entry.updates)));
   }, subscriptions.withPermits(1));
 
-  const ping = (options: McpCallOptions = {}): Effect.Effect<void, McpCallFailed | McpTimedOut> =>
+  const ping = (options: McpCallOptions = {}): Effect.Effect<void, McpCallFailed | McpTimedOut | McpNeedsSignIn> =>
     heard(mcpPing(connection, under(options)));
 
-  const syncRoots = (): Effect.Effect<void, McpCallFailed | McpTimedOut> => heard(mcpSyncRoots(connection, under({})));
+  const syncRoots = (): Effect.Effect<void, McpCallFailed | McpTimedOut | McpNeedsSignIn> => heard(mcpSyncRoots(connection, under({})));
 
   const refresh = Effect.fn('McpSession.refresh')((options: McpCallOptions = {}) =>
     heard(listAll(connection, under(options), maxCatalogBytes)).pipe(
@@ -371,6 +372,7 @@ export type McpSessionOptions = {
   readonly fetch?: (url: string | URL, init?: RequestInit) => Promise<Response>;
   readonly redact?: (text: string) => string;
   readonly roots?: McpRoots;
+  readonly auth?: (server: string) => McpAuth | undefined;
 };
 
 const transportInput = (
@@ -393,6 +395,7 @@ const transportInput = (
         url: declaration.url,
         headers: declaration.headers,
         fetch: options.fetch,
+        auth: options.auth?.(declaration.name),
       };
 
 const withStderr = (failure: McpSessionFailure, stderr: StderrTail): McpSessionFailure =>

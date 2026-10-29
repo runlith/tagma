@@ -38,6 +38,7 @@ export type McpServerRow = {
 const STATUS_WORDS: Record<McpServerStatus | 'pending' | 'needs-value', null> = {
   pending: null,
   'needs-value': null,
+  'needs-sign-in': null,
   connecting: null,
   connected: null,
   failed: null,

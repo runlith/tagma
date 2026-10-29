@@ -175,6 +175,7 @@ export const makeShelf = Effect.gen(function* () {
                 return refusal('plugin-call-failed', failure.message);
               case 'McpConnectFailed':
               case 'McpNotConnected':
+              case 'McpNeedsSignIn':
                 return refusal('plugin-unavailable', failure.message);
               default:
                 return failure;

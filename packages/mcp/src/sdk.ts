@@ -5,24 +5,27 @@ import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/cl
 import type { ReadBuffer } from '@modelcontextprotocol/sdk/shared/stdio.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
-import { Duration, Effect } from 'effect';
+import { Duration, Effect, Result } from 'effect';
 import { type McpCaller, mcpCallerMeta } from './mcpCallerMeta';
-import { McpCallFailed, McpConnectFailed, McpResourceFailed, McpTimedOut, type McpTransportKind } from './McpFailure';
+import { MCP_NEEDS_SIGN_IN, type McpAuth, type McpAuthUnavailable } from './McpAuth';
+import { McpCallFailed, McpConnectFailed, McpNeedsSignIn, McpResourceFailed, McpTimedOut, type McpTransportKind } from './McpFailure';
 import { redactValue } from './mcpRedactor';
 import type { McpResourcePage, McpResourceResult, McpResourceUpdated } from './mcpResources';
 import { McpRoots, McpRootsPeer } from './McpRoots';
 
 const loadSdk = async () => {
-  const [client, stdio, framing, http, protocol, types] = await Promise.all([
+  const [client, stdio, framing, http, protocol, types, auth] = await Promise.all([
     import('@modelcontextprotocol/sdk/client/index.js'),
     import('@modelcontextprotocol/sdk/client/stdio.js'),
     import('@modelcontextprotocol/sdk/shared/stdio.js'),
     import('@modelcontextprotocol/sdk/client/streamableHttp.js'),
     import('@modelcontextprotocol/sdk/shared/protocol.js'),
     import('@modelcontextprotocol/sdk/types.js'),
+    import('@modelcontextprotocol/sdk/client/auth.js'),
   ]);
   return {
     Client: client.Client,
+    challengeOf: auth.extractWWWAuthenticateParams,
     framing: { ReadBuffer: framing.ReadBuffer, serializeMessage: framing.serializeMessage, environment: stdio.getDefaultEnvironment },
     StreamableHTTPClientTransport: http.StreamableHTTPClientTransport,
     DEFAULT_REQUEST_TIMEOUT_MSEC: protocol.DEFAULT_REQUEST_TIMEOUT_MSEC,
@@ -131,11 +134,14 @@ export type McpStdioTransportInput = {
   readonly onStderr: (chunk: Uint8Array) => void;
 };
 
+type Fetch = (url: string | URL, init?: RequestInit) => Promise<Response>;
+
 export type McpHttpTransportInput = {
   readonly transport: 'http';
   readonly url: string;
   readonly headers?: Readonly<Record<string, string>>;
-  readonly fetch?: (url: string | URL, init?: RequestInit) => Promise<Response>;
+  readonly fetch?: Fetch;
+  readonly auth?: McpAuth;
 };
 
 export type McpTransportInput = McpStdioTransportInput | McpHttpTransportInput;
@@ -164,11 +170,57 @@ const isRequestTimeout = (loaded: Sdk, error: unknown): boolean =>
 const requestOptions = (signal: AbortSignal, options: McpRequestOptions) => ({ signal, timeout: options.timeout });
 
 const connectFailed = (connection: McpSdkConnection, options: McpRequestOptions | undefined, error: unknown) =>
-  new McpConnectFailed({
-    server: connection.server,
-    transport: connection.transportKind,
-    reason: options === undefined ? reasonOf(error) : said(options, reasonOf(error)),
-  });
+  error instanceof SignInRequired
+    ? signInOf(connection, error)
+    : new McpConnectFailed({
+        server: connection.server,
+        transport: connection.transportKind,
+        reason: options === undefined ? reasonOf(error) : said(options, reasonOf(error)),
+      });
+
+type Challenge = { readonly scope?: string; readonly resourceMetadata?: string };
+
+class SignInRequired extends Error {
+  constructor(readonly challenge: Challenge) {
+    super('the server asks for a sign-in');
+  }
+}
+
+const signInOf = (connection: McpSdkConnection, required: SignInRequired) =>
+  new McpNeedsSignIn({ server: connection.server, ...required.challenge });
+
+const bearerChallenge = (response: Response): boolean => /^\s*bearer\b/iu.test(response.headers.get('www-authenticate') ?? '');
+
+const settled = async <A>(effect: Effect.Effect<A, McpAuthUnavailable>, signal: AbortSignal | null | undefined): Promise<A> => {
+  const result = await Effect.runPromise(Effect.result(effect), { signal: signal ?? undefined });
+  if (Result.isFailure(result)) throw new Error(result.failure.reason);
+  return result.success;
+};
+
+const authorized =
+  (loaded: Sdk, auth: McpAuth, base: Fetch): Fetch =>
+  async (url, init) => {
+    const send = (token: string | undefined) => {
+      const headers = new Headers(init?.headers);
+      if (token !== undefined) headers.set('authorization', `Bearer ${token}`);
+      return base(url, { ...init, headers });
+    };
+    const token = await settled(auth.bearer(), init?.signal);
+    let response = await send(token);
+    if (response.status === 401 && token !== undefined && bearerChallenge(response)) {
+      const fresh = await settled(auth.rejected(token), init?.signal);
+      if (fresh !== MCP_NEEDS_SIGN_IN) {
+        await response.body?.cancel();
+        response = await send(fresh);
+      }
+    }
+    const asked = response.status === 401 || response.status === 403 ? loaded.challengeOf(response) : {};
+    if ((response.status === 401 && bearerChallenge(response)) || (response.status === 403 && asked.error === 'insufficient_scope')) {
+      await response.body?.cancel();
+      throw new SignInRequired({ scope: asked.scope, resourceMetadata: asked.resourceMetadataUrl?.href });
+    }
+    return response;
+  };
 
 type StdioFraming = {
   readonly ReadBuffer: new () => ReadBuffer;
@@ -323,76 +375,76 @@ export const openMcpTransport = Effect.fn('mcp.openTransport')(
     hooks: McpTransportHooks,
     workspace: McpRoots = new McpRoots(),
   ): Effect.Effect<McpSdkConnection, McpConnectFailed> =>
-    Effect.flatMap(
-      sdkFor(server, input.transport),
-      ({
+    Effect.flatMap(sdkFor(server, input.transport), (loaded) => {
+      const {
         Client,
         framing,
         StreamableHTTPClientTransport,
         ResourceUpdatedNotificationSchema,
         ResourceListChangedNotificationSchema,
         ListRootsRequestSchema,
-      }) =>
-        Effect.try({
-          try: () => {
-            const client = new Client(
-              { name: '@runlith/mcp', version: '0.1.0' },
-              {
-                capabilities: {
-                  roots: { listChanged: true },
-                  extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } },
-                },
-                listChanged: { tools: { autoRefresh: false, debounceMs: 0, onChanged: () => hooks.onToolsChanged() } },
+      } = loaded;
+      return Effect.try({
+        try: () => {
+          const client = new Client(
+            { name: '@runlith/mcp', version: '0.1.0' },
+            {
+              capabilities: {
+                roots: { listChanged: true },
+                extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } },
               },
-            );
-            const roots = new McpRootsPeer(workspace);
-            client.setRequestHandler(ListRootsRequestSchema, (_request, extra) => roots.answer(extra.requestId));
-            client.onclose = () => {
-              roots.close();
-              hooks.onClosed();
-            };
-            client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification) =>
-              hooks.onResourceUpdated?.(notification.params),
-            );
-            client.setNotificationHandler(ResourceListChangedNotificationSchema, () => hooks.onResourcesChanged?.());
-            if (input.transport === 'stdio') {
-              const transport = observed(
-                new GroupedStdioTransport(
-                  {
-                    command: input.command,
-                    args: input.args,
-                    cwd: input.cwd,
-                    env: input.env,
-                  },
-                  framing,
-                ),
-                roots,
-              );
-              transport.stderr.on('data', (chunk: Uint8Array) => input.onStderr(chunk));
-              return { server, transportKind: 'stdio' as const, client, transport, childExit: childExitOf(transport), roots };
-            }
+              listChanged: { tools: { autoRefresh: false, debounceMs: 0, onChanged: () => hooks.onToolsChanged() } },
+            },
+          );
+          const roots = new McpRootsPeer(workspace);
+          client.setRequestHandler(ListRootsRequestSchema, (_request, extra) => roots.answer(extra.requestId));
+          client.onclose = () => {
+            roots.close();
+            hooks.onClosed();
+          };
+          client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification) =>
+            hooks.onResourceUpdated?.(notification.params),
+          );
+          client.setNotificationHandler(ResourceListChangedNotificationSchema, () => hooks.onResourcesChanged?.());
+          if (input.transport === 'stdio') {
             const transport = observed(
-              new StreamableHTTPClientTransport(new URL(input.url), {
-                requestInit: input.headers === undefined ? undefined : { headers: { ...input.headers } },
-                fetch: input.fetch,
-                reconnectionOptions: {
-                  maxReconnectionDelay: 30_000,
-                  initialReconnectionDelay: 1_000,
-                  reconnectionDelayGrowFactor: 1.5,
-                  maxRetries: 0,
+              new GroupedStdioTransport(
+                {
+                  command: input.command,
+                  args: input.args,
+                  cwd: input.cwd,
+                  env: input.env,
                 },
-              }),
+                framing,
+              ),
               roots,
             );
-            return { server, transportKind: 'http' as const, client, transport, childExit: Effect.void, roots };
-          },
-          catch: (error) => new McpConnectFailed({ server, transport: input.transport, reason: reasonOf(error) }),
-        }),
-    ),
+            transport.stderr.on('data', (chunk: Uint8Array) => input.onStderr(chunk));
+            return { server, transportKind: 'stdio' as const, client, transport, childExit: childExitOf(transport), roots };
+          }
+          const base = input.fetch ?? fetch;
+          const transport = observed(
+            new StreamableHTTPClientTransport(new URL(input.url), {
+              requestInit: input.headers === undefined ? undefined : { headers: { ...input.headers } },
+              fetch: input.auth === undefined ? input.fetch : authorized(loaded, input.auth, base),
+              reconnectionOptions: {
+                maxReconnectionDelay: 30_000,
+                initialReconnectionDelay: 1_000,
+                reconnectionDelayGrowFactor: 1.5,
+                maxRetries: 0,
+              },
+            }),
+            roots,
+          );
+          return { server, transportKind: 'http' as const, client, transport, childExit: Effect.void, roots };
+        },
+        catch: (error) => new McpConnectFailed({ server, transport: input.transport, reason: reasonOf(error) }),
+      });
+    }),
 );
 
 export const mcpConnect = Effect.fn('mcp.connect')(
-  (connection: McpSdkConnection, options: McpRequestOptions): Effect.Effect<void, McpConnectFailed | McpTimedOut> =>
+  (connection: McpSdkConnection, options: McpRequestOptions): Effect.Effect<void, McpConnectFailed | McpTimedOut | McpNeedsSignIn> =>
     Effect.flatMap(connected(connection), (loaded) =>
       Effect.tryPromise({
         try: (signal) => connection.client.connect(connection.transport, requestOptions(signal, options)),
@@ -415,7 +467,7 @@ export const mcpListTools = Effect.fn('mcp.listTools')(
     connection: McpSdkConnection,
     options: McpRequestOptions,
     cursor?: string,
-  ): Effect.Effect<McpSdkToolPage, McpConnectFailed | McpTimedOut> =>
+  ): Effect.Effect<McpSdkToolPage, McpConnectFailed | McpTimedOut | McpNeedsSignIn> =>
     Effect.flatMap(connected(connection), (loaded) =>
       Effect.tryPromise({
         try: (signal) => connection.client.listTools(cursor === undefined ? undefined : { cursor }, requestOptions(signal, options)),
@@ -443,7 +495,7 @@ export const mcpSyncRoots = Effect.fn('mcp.syncRoots')(
         catch: (error) =>
           isRequestTimeout(loaded, error)
             ? new McpTimedOut({ server, tool: 'roots/list', ms: options.timeout })
-            : new McpCallFailed({ server, tool: 'roots/list', reason: said(options, reasonOf(error)) }),
+            : callFailed(connection, 'roots/list', options, error),
       });
     const ping = asking((signal) => client.ping(requestOptions(signal, options)));
     while (roots.synced < roots.revision) {
@@ -480,7 +532,7 @@ export const mcpCallTool = Effect.fn('mcp.callTool')(
     tool: string,
     args: Readonly<Record<string, unknown>>,
     options: McpRequestOptions,
-  ): Effect.Effect<McpSdkCallResult, McpCallFailed | McpTimedOut> =>
+  ): Effect.Effect<McpSdkCallResult, McpCallFailed | McpTimedOut | McpNeedsSignIn> =>
     Effect.suspend(() =>
       connection.roots.synced >= connection.roots.revision
         ? connected(connection)
@@ -497,7 +549,7 @@ export const mcpCallTool = Effect.fn('mcp.callTool')(
           catch: (error) =>
             isRequestTimeout(loaded, error)
               ? new McpTimedOut({ server: connection.server, tool, ms: options.timeout })
-              : new McpCallFailed({ server: connection.server, tool, reason: said(options, reasonOf(error)) }),
+              : callFailed(connection, tool, options, error),
         }),
       ),
       Effect.map((result): McpSdkCallResult =>
@@ -534,6 +586,11 @@ export const mcpCallTool = Effect.fn('mcp.callTool')(
 );
 
 const callerOf = (options: McpRequestOptions) => (options.caller === undefined ? {} : { _meta: mcpCallerMeta(options.caller) });
+
+const callFailed = (connection: McpSdkConnection, tool: string, options: McpRequestOptions, error: unknown) =>
+  error instanceof SignInRequired
+    ? signInOf(connection, error)
+    : new McpCallFailed({ server: connection.server, tool, reason: said(options, reasonOf(error)) });
 
 const resourceFailure = (
   connection: McpSdkConnection,
@@ -592,14 +649,14 @@ export const mcpUnsubscribeResource = Effect.fn('mcp.unsubscribeResource')(
 );
 
 export const mcpPing = Effect.fn('mcp.ping')(
-  (connection: McpSdkConnection, options: McpRequestOptions): Effect.Effect<void, McpCallFailed | McpTimedOut> =>
+  (connection: McpSdkConnection, options: McpRequestOptions): Effect.Effect<void, McpCallFailed | McpTimedOut | McpNeedsSignIn> =>
     Effect.flatMap(connected(connection), (loaded) =>
       Effect.tryPromise({
         try: (signal) => connection.client.ping(requestOptions(signal, options)),
         catch: (error) =>
           isRequestTimeout(loaded, error)
             ? new McpTimedOut({ server: connection.server, ms: options.timeout })
-            : new McpCallFailed({ server: connection.server, tool: 'ping', reason: said(options, reasonOf(error)) }),
+            : callFailed(connection, 'ping', options, error),
       }),
     ).pipe(Effect.asVoid),
 );

@@ -73,7 +73,19 @@ export class McpServerReplaced extends Data.TaggedError('McpServerReplaced')<{
   }
 }
 
-export type McpFailure = McpConnectFailed | McpCallFailed | McpTimedOut | McpNotConnected;
+export class McpNeedsSignIn extends Data.TaggedError('McpNeedsSignIn')<{
+  readonly server: string;
+  readonly scope?: string;
+  readonly resourceMetadata?: string;
+}> {
+  override get message(): string {
+    return this.scope === undefined
+      ? `MCP server ${this.server} needs a sign-in.`
+      : `MCP server ${this.server} needs a sign-in granting ${this.scope}.`;
+  }
+}
+
+export type McpFailure = McpConnectFailed | McpCallFailed | McpTimedOut | McpNotConnected | McpNeedsSignIn;
 
 export class McpServeFailed extends Data.TaggedError('McpServeFailed')<{
   readonly transport: McpTransportKind;
