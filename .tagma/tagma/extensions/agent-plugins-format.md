@@ -8,6 +8,12 @@ fields:
     "entries": [
       {
         "at": "format.ts"
+      },
+      {
+        "at": "portable.ts",
+        "for": [
+          "4210622f"
+        ]
       }
     ],
     "id": "agent-plugins-format"
