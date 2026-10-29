@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a1889a-6037-78a2-8d09-8777b74bd780",
-    "status": "in_work"
+    "status": "done"
   }
 edges:
   - kind: discovered-from
@@ -18,6 +18,8 @@ sources:
 The rested fold worker (`native-harness/transcript/rested.worker.ts`) loads the thread entry reader it decodes with by `import(source)`, `source` being the module the main thread's reader names (`ThreadEntryReader.source`: `composition/entryKinds.ts` for the composed reader, the agent kit itself for a core-only reader). The platforms inspection of rule 50520d64 cannot resolve that non-literal load, and its `loaders` declaration admits only code installed outside the tree, so the load stands as debt.
 
 What was seen: the load target is in the tree and the server start already reaches it literally (`composition/manifest.ts` imports `composition/entryKinds.ts`), so the code it loads is judged on the server's platform; what is unproven is only the edge from the worker start.
+
+Resolved on the operator's word (2026-10-29) without changing the inspection: a reader carries the start of its own worker entry, composition owns the composed one (`composition/rested.worker.ts`), and the worker imports nothing by a runtime string (f9799a03d8, review fixes da4966399b). The view below is the one the gate first met.
 
 View of the one who met the gate: two ways remove it.
 
