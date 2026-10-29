@@ -1,13 +1,14 @@
 import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { measureControls } from '@runlith/chat-ui/testing/stand/controls';
+import { measureControls, measureHeld } from '@runlith/chat-ui/testing/stand/controls';
 import { displacement, type ControlEnvelope } from '@runlith/chat-ui/testing/stand/displacement';
 import { evidence } from '@runlith/chat-ui/testing/stand/evidence';
 import type { StandGlobal } from '@runlith/chat-ui/testing/stand/port';
 import type { Recording } from '@runlith/chat-ui/testing/stand/recording';
 import { chromiumOnly, scenarioNames, type ScenarioName } from '@runlith/chat-ui/testing/stand/scenario';
-import { controlSource, runScenario, ScenarioFailure } from '@runlith/chat-ui/testing/stand/scenarios';
+import { controlSource, runScenario, ScenarioFailure, type ScenarioOptions } from '@runlith/chat-ui/testing/stand/scenarios';
 import { e2e } from '@runlith/e2e/browser';
+import type { Touch } from '@runlith/e2e/touch';
 import { Effect, FileSystem } from 'effect';
 import type { CDPSession, Page } from 'playwright-core';
 import { join } from 'node:path';
@@ -22,9 +23,15 @@ const port = (page: Page) => ({
   state: () => Effect.promise(() => page.evaluate(() => (globalThis as StandGlobal).feedStand!.state())),
 });
 
-const scenario = Effect.fnUntraced(function* (page: Page, cdp: CDPSession | undefined, name: ScenarioName, artifacts: string) {
+const scenario = Effect.fnUntraced(function* (
+  page: Page,
+  cdp: CDPSession | undefined,
+  name: ScenarioName,
+  artifacts: string,
+  options: ScenarioOptions,
+) {
   const outcome = yield* Effect.promise(() =>
-    runScenario(page, cdp, name, { jump: JUMP }).then(
+    runScenario(page, cdp, name, options).then(
       (recording) => ({ recording }),
       (failure: unknown) => ({ failure }),
     ),
@@ -56,6 +63,13 @@ const calibrated = Effect.fnUntraced(function* (
   yield* (yield* FileSystem.FileSystem).writeFileString(join(artifacts, 'controls.json'), JSON.stringify({ measured, envelope }));
   console.log(JSON.stringify({ lane, source, controls: envelope.controls, discarded: envelope.discarded }));
   return envelope;
+}, Effect.provide(BunFileSystem.layer));
+
+const heldControl = Effect.fnUntraced(function* (page: Page, touch: Touch | undefined, artifacts: string) {
+  const held = yield* Effect.promise(() => measureHeld(page, touch));
+  yield* (yield* FileSystem.FileSystem).writeFileString(join(artifacts, 'held-control.json'), JSON.stringify(held.calibration));
+  console.log(JSON.stringify({ lane: 'app', held: { path: held.calibration.path, slop: held.calibration.slop } }));
+  return held;
 }, Effect.provide(BunFileSystem.layer));
 
 const judge = Effect.fnUntraced(function* (artifacts: string, recording: Recording, envelope: ControlEnvelope | undefined) {
@@ -112,12 +126,13 @@ for (const lane of ['chromium', 'webkit'] as const) {
   for (const name of scenarioNames.filter((name: ScenarioName) => lane === 'chromium' || !chromiumOnly.includes(name))) {
     e2e.effect(
       `real app feed: ${name}`,
-      ({ page, cdp, artifacts }) =>
+      ({ page, cdp, touch, artifacts }) =>
         Effect.gen(function* () {
           yield* visit(page, cdp, feed(), { opening: false });
           const envelope = yield* calibrated(lane, name, page, cdp, artifacts);
-          if (envelope !== undefined) yield* reopen(page, feed());
-          const recording = yield* scenario(page, cdp, name, artifacts);
+          const held = name === 'drag-page-landing' ? yield* heldControl(page, touch, artifacts) : undefined;
+          if (envelope !== undefined || held !== undefined) yield* reopen(page, feed());
+          const recording = yield* scenario(page, cdp, name, artifacts, { jump: JUMP, held });
           yield* judge(artifacts, recording, envelope);
           if (name !== 'open-tail' && name !== 'latest') return;
           const state = yield* port(page).state();
