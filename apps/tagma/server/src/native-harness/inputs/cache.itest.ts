@@ -109,14 +109,20 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         Effect.gen(function* () {
           const files = yield* FileSystem.FileSystem;
           const pluginRoot = yield* tempRootEffect(demo.fixture, 'plugin-skills-');
-          const skillFolder = Effect.fnUntraced(function* (directory: string, description: string) {
+          const skillFolder = Effect.fnUntraced(function* (directory: string, description: string, body = 'Body.') {
             yield* files.makeDirectory(directory, { recursive: true });
-            yield* files.writeFileString(join(directory, 'SKILL.md'), `---\ndescription: ${description}\n---\nBody.\n`);
+            yield* files.writeFileString(join(directory, 'SKILL.md'), `---\ndescription: ${description}\n---\n${body}\n`);
             return directory;
           });
-          const review = yield* skillFolder(join(pluginRoot, 'skills/review'), 'Reviews.');
+          const review = yield* skillFolder(join(pluginRoot, 'skills/review'), 'Reviews.', 'Run ${PLUGIN_ROOT}/check.');
           const clash = yield* skillFolder(join(pluginRoot, 'skills/clash'), 'Plugin clash.');
+          const leaky = yield* skillFolder(join(pluginRoot, 'skills/leaky'), 'Leaks.');
+          const secret = join(demo.demoRoot, 'secret.md');
+          yield* files.writeFileString(secret, 'Secret.\n');
+          yield* files.makeDirectory(join(leaky, 'references'));
+          yield* files.symlink(secret, join(leaky, 'references/secret.md'));
           yield* skillFolder(join(demo.demoRoot, '.agents/skills/demo-clash'), 'Project clash.');
+          const render = (text: string) => text.replaceAll('${PLUGIN_ROOT}', '/plugin');
           const loaded: PluginLoaded = {
             id: 'demo',
             revision: 'first',
@@ -124,8 +130,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             place: { root: pluginRoot, data: pluginRoot, options: {}, project: demo.demoRoot },
             redact: [],
             skills: [
-              { name: 'demo-review', directory: review, file: join(review, 'SKILL.md'), root: pluginRoot, render: (text) => text },
-              { name: 'demo-clash', directory: clash, file: join(clash, 'SKILL.md'), root: pluginRoot, render: (text) => text },
+              { name: 'demo-review', directory: review, file: join(review, 'SKILL.md'), root: pluginRoot, render },
+              { name: 'demo-clash', directory: clash, file: join(clash, 'SKILL.md'), root: pluginRoot, render },
+              { name: 'demo-leaky', directory: leaky, file: join(leaky, 'SKILL.md'), root: pluginRoot, render },
             ],
             commands: [{ name: 'demo-fix', description: 'Fixes.', body: Effect.succeed('Fix $ARGUMENTS.') }],
             agents: [],
@@ -147,6 +154,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             ['demo-fix', 'plugin', 'demo', true, null],
             ['demo-clash', 'project', null, true, null],
           ]);
+          expect(walked.rejected.map((entry) => entry.path.endsWith('skills/leaky/references/secret.md'))).toEqual([true]);
+          const skillBody = walked.skills.find((skill) => skill.id === 'demo-review')!.instructions({});
+          expect(typeof skillBody === 'string' ? skillBody : yield* skillBody).toBe('Run /plugin/check.');
           const command = walked.skills.find((skill) => skill.id === 'demo-fix')!;
           expect(command.arguments).toBe(true);
           const body = command.instructions({});

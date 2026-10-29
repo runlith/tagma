@@ -18,7 +18,12 @@ export const readPluginSkills = Effect.fn('workspaceInputs.plugins')(function* (
   const rejected: { path: string; reason: string }[] = [];
   for (const plugin of plugins) {
     const read = yield* readSkillFolders(
-      plugin.skills.map((skill) => ({ name: skill.name, location: skill.directory, directory: dirname(skill.directory) })),
+      plugin.skills.map((skill) => ({
+        name: skill.name,
+        location: skill.directory,
+        directory: dirname(skill.directory),
+        bound: { root: skill.root, render: skill.render },
+      })),
     ).pipe(Effect.provide(BunFileSystem.layer));
     rejected.push(...read.rejected);
     skills.push(...asAgentSkills<unknown>(read.skills));

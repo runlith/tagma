@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 import { type AgentSkill, AgentSkillUnreadable } from '@runlith/agent/AgentSkill';
 import { Effect, FileSystem } from 'effect';
@@ -26,6 +26,12 @@ export type DiscoveredSkill = {
   readonly directory: string;
   readonly location: string;
   readonly references: readonly DiscoveredReference[];
+  readonly bound?: SkillBound;
+};
+
+export type SkillBound = {
+  readonly root: string;
+  readonly render: (text: string) => string;
 };
 
 export type SkillDiscovery = {
@@ -65,6 +71,7 @@ export type NamedSkillFolder = {
   readonly name: string;
   readonly location: string;
   readonly directory: string;
+  readonly bound?: SkillBound;
 };
 
 export const readSkillFolders = Effect.fn('SkillDirectories.readFolders')(function* (folders: readonly NamedSkillFolder[]) {
@@ -85,6 +92,7 @@ const readSkillFolder = Effect.fnUntraced(function* ({
   name,
   location,
   directory,
+  bound: asked,
 }: NamedSkillFolder): Effect.fn.Return<DiscoveredSkill | SkillRejection | null, never, FileSystem.FileSystem> {
   const fs = yield* FileSystem.FileSystem;
   const info = yield* fs.stat(location).pipe(Effect.result);
@@ -92,22 +100,54 @@ const readSkillFolder = Effect.fnUntraced(function* ({
     return info.failure.reason._tag === 'NotFound' ? null : { path: location, reason: info.failure.message };
   }
   if (info.success.type !== 'Directory') return null;
+  let bound: SkillBound | undefined;
+  if (asked !== undefined) {
+    const root = yield* fs.realPath(asked.root).pipe(Effect.option);
+    if (root._tag === 'None') return { path: asked.root, reason: 'unreadable' };
+    bound = { ...asked, root: root.value };
+  }
   const file = path.join(location, SKILL_FILE);
   const readable = yield* fs.exists(file).pipe(Effect.option);
   if (readable._tag === 'None') return { path: file, reason: 'unreadable' };
   if (!readable.value) return null;
+  const escaped = yield* outside(bound, file);
+  if (escaped !== null) return escaped;
   const raw = yield* fs.readFileString(file).pipe(Effect.option);
   if (raw._tag === 'None') return { path: file, reason: 'unreadable' };
   const parsed = parseSkill(raw.value);
   if ('reason' in parsed) return { path: file, reason: parsed.reason };
   const resolved = yield* fs.realPath(location).pipe(Effect.option);
   if (resolved._tag === 'None') return { path: location, reason: 'unreadable' };
-  const references = yield* referencesIn(path.join(resolved.value, REFERENCES_DIRECTORY));
+  const references = yield* referencesIn(path.join(resolved.value, REFERENCES_DIRECTORY), bound);
   if (references === 'unreadable') return { path: path.join(location, REFERENCES_DIRECTORY), reason: 'unreadable' };
-  return { ...parsed, name, path: file, directory, location: resolved.value, references } satisfies DiscoveredSkill;
+  if (!Array.isArray(references)) return references;
+  const body = bound === undefined ? parsed.body : bound.render(parsed.body);
+  return {
+    ...parsed,
+    body,
+    name,
+    path: file,
+    directory,
+    location: resolved.value,
+    references,
+    ...(bound === undefined ? {} : { bound }),
+  } satisfies DiscoveredSkill;
 });
 
-const referencesIn = Effect.fnUntraced(function* (directory: string) {
+const outside = Effect.fnUntraced(function* (bound: SkillBound | undefined, file: string) {
+  if (bound === undefined) return null;
+  const fs = yield* FileSystem.FileSystem;
+  const real = yield* fs.realPath(file).pipe(Effect.option);
+  if (real._tag === 'None') return { path: file, reason: 'unreadable' } satisfies SkillRejection;
+  return within(bound.root, real.value) ? null : ({ path: file, reason: `resolves outside ${bound.root}` } satisfies SkillRejection);
+});
+
+const within = (root: string, file: string): boolean => {
+  const step = path.relative(root, file);
+  return step === '' || (!step.startsWith('..') && !path.isAbsolute(step));
+};
+
+const referencesIn = Effect.fnUntraced(function* (directory: string, bound: SkillBound | undefined) {
   const fs = yield* FileSystem.FileSystem;
   const kind = yield* fs.stat(directory).pipe(
     Effect.map((info) => (info.type === 'Directory' ? ('directory' as const) : ('other' as const))),
@@ -121,6 +161,8 @@ const referencesIn = Effect.fnUntraced(function* (directory: string) {
   const references: DiscoveredReference[] = [];
   for (const entry of listed.value.filter((name) => name.endsWith('.md')).sort()) {
     const file = path.join(directory, entry);
+    const escaped = yield* outside(bound, file);
+    if (escaped !== null) return escaped;
     const text = yield* fs.readFileString(file).pipe(Effect.option);
     if (text._tag === 'None') return 'unreadable' as const;
     const first = text.value
@@ -141,28 +183,28 @@ export function asAgentSkills<TCtx>(discovered: readonly DiscoveredSkill[]): Age
     references: skill.references.map((reference) => ({
       name: reference.name,
       description: reference.description,
-      text: () => currentText(reference.path),
+      text: () => currentText(reference.path, skill.bound),
     })),
-    instructions: () => currentBody(skill.path),
+    instructions: () => currentBody(skill.path, skill.bound),
   }));
 }
 
-const currentText = (file: string) =>
+const currentText = (file: string, bound: SkillBound | undefined) =>
   Effect.tryPromise({
-    try: () => readFile(file, 'utf8'),
+    try: async () => {
+      const real = bound === undefined ? file : await realpath(file);
+      if (bound !== undefined && !within(bound.root, real)) throw new Error(`it resolves outside ${bound.root}`);
+      return readFile(real, 'utf8');
+    },
     catch: (cause) =>
       new AgentSkillUnreadable({ reason: `${file} cannot be read: ${cause instanceof Error ? cause.message : String(cause)}` }),
   });
 
-const currentBody = Effect.fn('SkillDirectories.currentBody')(function* (file: string) {
-  const raw = yield* Effect.tryPromise({
-    try: () => readFile(file, 'utf8'),
-    catch: (cause) =>
-      new AgentSkillUnreadable({ reason: `${file} cannot be read: ${cause instanceof Error ? cause.message : String(cause)}` }),
-  });
+const currentBody = Effect.fn('SkillDirectories.currentBody')(function* (file: string, bound: SkillBound | undefined) {
+  const raw = yield* currentText(file, bound);
   const parsed = parseSkill(raw);
   if ('reason' in parsed) return yield* new AgentSkillUnreadable({ reason: `${file} cannot be loaded: ${parsed.reason}.` });
-  return parsed.body;
+  return bound === undefined ? parsed.body : bound.render(parsed.body);
 });
 
 type ParsedSkill = { description: string; whenToUse?: string; body: string } | { reason: string };
