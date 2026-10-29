@@ -67,6 +67,16 @@ class RefreshRefused extends Data.TaggedError('RefreshRefused')<{ readonly ident
 
 const identityOf = (tokens: McpOAuthTokens): string => tokens.refresh ?? tokens.access;
 
+const joined = (held: string | undefined, asked: string | undefined): string | undefined => {
+  const scopes = new Set(`${held ?? ''} ${asked ?? ''}`.split(' ').filter((scope) => scope !== ''));
+  return scopes.size === 0 ? undefined : [...scopes].join(' ');
+};
+
+const widened = (record: SignInRecord, server: McpOAuthServer): McpOAuthServer =>
+  record.server?.url === server.url && record.server.resource === server.resource
+    ? { ...server, scope: joined(record.server.scope, server.scope) }
+    : server;
+
 const expiring = (tokens: McpOAuthTokens, now: number): boolean =>
   tokens.expiresAt !== undefined && tokens.expiresAt - now <= EXPIRY_MARGIN_MS;
 
@@ -156,7 +166,7 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
         .pipe(Effect.mapError(storeRefusal));
     }
     const record = yield* stored(start.key).pipe(Effect.mapError(storeRefusal));
-    const server = yield* mcpOAuthDiscover(start.url, start.challenge).pipe(Effect.mapError(failedRefusal));
+    const server = widened(record, yield* mcpOAuthDiscover(start.url, start.challenge).pipe(Effect.mapError(failedRefusal)));
     const { client, skipped } = own === undefined ? yield* identity(record, server, start) : { client: own, skipped: undefined };
     const state = Base64Url.encode(crypto.getRandomValues(new Uint8Array(32)));
     const opened = yield* mcpOAuthAuthorization(server, client, { redirect: start.redirect, state }).pipe(Effect.mapError(failedRefusal));
@@ -219,7 +229,12 @@ export const makeSignIns = Effect.fnUntraced(function* (input: {
     yield* owners
       .keepSignIn<SignInEnded | SignInUnreadable>(KIND, pending.key, (signIn) =>
         lifetimeOf(pending.key) === pending.lifetime
-          ? Effect.map(recordOf(pending.key, signIn), (record) => ({ ...record, client: pending.client, server: pending.server, tokens }))
+          ? Effect.map(recordOf(pending.key, signIn), (record) => ({
+              ...record,
+              client: pending.client,
+              server: widened(record, pending.server),
+              tokens,
+            }))
           : Effect.fail(new SignInEnded()),
       )
       .pipe(

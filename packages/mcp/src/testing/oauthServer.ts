@@ -5,7 +5,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { Effect } from 'effect';
 
 type Client = { readonly redirects: readonly string[] };
-type Code = { readonly client: string; readonly challenge: string; readonly redirect: string };
+type Code = { readonly client: string; readonly challenge: string; readonly redirect: string; readonly scope: string };
+type Granted = { readonly client: string; readonly scope: string };
 
 export type OAuthServer = {
   readonly url: string;
@@ -29,12 +30,13 @@ const refused = (error: string, status = 400) => json({ error }, status);
 
 const challengeOf = (verifier: string) => createHash('sha256').update(verifier).digest('base64url');
 
-const answering = async (request: Request, authorization: string) => {
+const answering = async (request: Request, authorization: string, scoped: readonly string[]) => {
   const server = new Server({ name: 'guarded', version: '0.0.0' }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       { name: 'whoami', description: 'Answers the authorization the call carried.', inputSchema: { type: 'object' as const } },
       { name: 'escalate', description: 'Asks for a scope the sign-in did not grant.', inputSchema: { type: 'object' as const } },
+      ...scoped.map((name) => ({ name, description: 'Needs a scope of its own.', inputSchema: { type: 'object' as const } })),
     ],
   }));
   server.setRequestHandler(CallToolRequestSchema, async () => ({ content: [{ type: 'text' as const, text: authorization }] }));
@@ -43,13 +45,17 @@ const answering = async (request: Request, authorization: string) => {
   return transport.handleRequest(request);
 };
 
-export const oauthServer = (discovery: OAuthDiscovery = 'oauth', options: { readonly documents?: boolean } = {}) =>
+export const oauthServer = (
+  discovery: OAuthDiscovery = 'oauth',
+  options: { readonly documents?: boolean; readonly scopes?: Readonly<Record<string, string>> } = {},
+) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const clients = new Map<string, Client>();
       const codes = new Map<string, Code>();
-      const access = new Set<string>();
-      const refreshing = new Map<string, string>();
+      const access = new Map<string, string>();
+      const refreshing = new Map<string, Granted>();
+      const scoped = Object.entries(options.scopes ?? {});
       const expired = new Set<string>();
       const parked: Array<() => void> = [];
       let held = 0;
@@ -76,15 +82,21 @@ export const oauthServer = (discovery: OAuthDiscovery = 'oauth', options: { read
           : {}),
       });
 
-      const grant = (client: string) => {
+      const grant = ({ client, scope }: Granted) => {
         issued += 1;
         const token = `access-${issued}`;
         const refresh = `refresh-${issued}`;
-        access.add(token);
-        refreshing.set(refresh, client);
+        access.set(token, scope);
+        refreshing.set(refresh, { client, scope });
         const lifetime = short > 0 ? 30 : 3600;
         short = Math.max(0, short - 1);
-        return json({ access_token: token, token_type: 'Bearer', expires_in: lifetime, refresh_token: refresh, scope: 'tools' });
+        const told = scoped.length === 0 ? { scope: 'tools' } : {};
+        return json({ access_token: token, token_type: 'Bearer', expires_in: lifetime, refresh_token: refresh, ...told });
+      };
+
+      const lacking = (body: string, token: string) => {
+        const held = (access.get(token) ?? '').split(' ');
+        return scoped.find(([tool, scope]) => body.includes(`"name":"${tool}"`) && !held.includes(scope))?.[1];
       };
 
       const resource = async (request: Request) => {
@@ -111,18 +123,29 @@ export const oauthServer = (discovery: OAuthDiscovery = 'oauth', options: { read
         if (body.includes('"method":"tools/call"') && body.includes('"name":"escalate"')) {
           return new Response('', { status: 403, headers: { 'www-authenticate': STEP_UP } });
         }
-        return answering(request, authorization);
+        const missing = body.includes('"method":"tools/call"') ? lacking(body, token) : undefined;
+        if (missing !== undefined) {
+          return new Response('', {
+            status: 403,
+            headers: { 'www-authenticate': `Bearer error="insufficient_scope", scope="${missing}"` },
+          });
+        }
+        return answering(
+          request,
+          authorization,
+          scoped.map(([tool]) => tool),
+        );
       };
 
       const token = async (request: Request) => {
         const form = new URLSearchParams(await request.text());
         if (form.get('grant_type') === 'refresh_token') {
           const presented = form.get('refresh_token') ?? '';
-          const client = refreshing.get(presented);
-          if (client === undefined || client !== form.get('client_id')) return refused('invalid_grant');
+          const granted = refreshing.get(presented);
+          if (granted === undefined || granted.client !== form.get('client_id')) return refused('invalid_grant');
           refreshing.delete(presented);
           refreshes += 1;
-          return grant(client);
+          return grant(granted);
         }
         const code = codes.get(form.get('code') ?? '');
         codes.delete(form.get('code') ?? '');
@@ -130,7 +153,7 @@ export const oauthServer = (discovery: OAuthDiscovery = 'oauth', options: { read
           return refused('invalid_grant');
         }
         if (challengeOf(form.get('code_verifier') ?? '') !== code.challenge) return refused('invalid_grant');
-        return grant(code.client);
+        return grant(code);
       };
 
       const authorize = (url: URL) => {
@@ -138,7 +161,12 @@ export const oauthServer = (discovery: OAuthDiscovery = 'oauth', options: { read
         const redirect = url.searchParams.get('redirect_uri') ?? '';
         if (!(clients.get(client)?.redirects.includes(redirect) ?? false)) return refused('invalid_request');
         const code = `code-${codes.size + issued + 1}-${crypto.randomUUID()}`;
-        codes.set(code, { client, challenge: url.searchParams.get('code_challenge') ?? '', redirect });
+        codes.set(code, {
+          client,
+          challenge: url.searchParams.get('code_challenge') ?? '',
+          redirect,
+          scope: url.searchParams.get('scope') ?? '',
+        });
         const back = new URL(redirect);
         back.searchParams.set('code', code);
         back.searchParams.set('state', url.searchParams.get('state') ?? '');
@@ -191,7 +219,7 @@ export const oauthServer = (discovery: OAuthDiscovery = 'oauth', options: { read
             return new URL(answered.headers.get('location') ?? `${origin}/no-redirect?status=${answered.status}`);
           }),
         expire: (holding) => {
-          for (const token of access) expired.add(token);
+          for (const token of access.keys()) expired.add(token);
           held = holding;
         },
         shortLived: (grants) => {

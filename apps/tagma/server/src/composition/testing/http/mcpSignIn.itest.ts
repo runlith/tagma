@@ -137,6 +137,30 @@ layer(doorFixture(), { excludeTestServices: true })('mcp sign-in', (it) => {
       }),
   );
 
+  it.effect('a scope step-up asks for every scope the server was signed in with before, so writing keeps reading working', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const servers = Context.get(world.runtime.owners, McpServers);
+      const oauth = yield* oauthServer('oauth', { scopes: { read: 'files:read', write: 'files:write' } });
+      const project = yield* world.plainProject();
+      yield* projectLeaving(world, project);
+      const call = (tool: string) => servers.caller(project).call('scoped', tool, {}, {});
+      const signedIn = Effect.fnUntraced(function* () {
+        expect(yield* callback(yield* oauth.follow(yield* signIn(project, { name: 'scoped' })))).toBe(200);
+      });
+
+      yield* answered('add_mcp_server', declared('scoped', oauth.url), project);
+      yield* signedIn();
+      expect(yield* Effect.flip(call('read'))).toMatchObject({ _tag: 'McpNeedsSignIn', scope: 'files:read' });
+      yield* signedIn();
+      expect(JSON.stringify(yield* call('read'))).toContain('Bearer [redacted]');
+      expect(yield* Effect.flip(call('write'))).toMatchObject({ _tag: 'McpNeedsSignIn', scope: 'files:write' });
+      yield* signedIn();
+      expect(JSON.stringify(yield* call('write'))).toContain('Bearer [redacted]');
+      expect(JSON.stringify(yield* call('read'))).toContain('Bearer [redacted]');
+    }),
+  );
+
   it.effect(
     'a client metadata document signs in only where it lists the calling door’s callback; one that does not list it falls to dynamic registration',
     () =>
