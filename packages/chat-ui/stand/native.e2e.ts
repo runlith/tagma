@@ -15,6 +15,7 @@ import { act, call } from './standPage';
 
 const served = stand(fileURLToPath(new URL('./vite.config.ts', import.meta.url)));
 const scroller = '[data-scrollable][role="group"]';
+const PointSchema = Schema.Struct({ x: Schema.Number, y: Schema.Number });
 const paging = Schema.Struct({ requested: Schema.Number, landed: Schema.Number, latency: Schema.Number });
 const Landing = Schema.Struct({ requested: Schema.Number, landed: Schema.Number, loaded: Schema.Boolean });
 const unavailable = {
@@ -247,9 +248,10 @@ async function disclosures(phone: IOSTest, envelope: ControlEnvelope): Promise<v
     await act(phone, (port, side) => port.positionDisclosure(side), side);
     await start(phone, `disclosure-${side}`);
     await frames(phone);
-    await tap(phone, (await targets(phone)).disclosure);
+    const point = () => call(phone, (port) => port.disclosurePoint(), PointSchema, undefined);
+    await phone.tap(await phone.pagePoint(await point()));
     await frames(phone, 20);
-    await tap(phone, (await targets(phone)).disclosure);
+    await phone.tap(await phone.pagePoint(await point()));
     await frames(phone, 20);
     const recording = await stop(phone);
     await save(phone, recording.name, { recording, evidence: evidence(recording), movement: displacement(recording, envelope) });
@@ -353,10 +355,13 @@ async function pageFling(phone: IOSTest, controls: Controls, name: string, appro
   expect(at).toBeGreaterThan(1);
   expect(at).toBeLessThan(paged.scroll.frames.length - 1);
   if (swipe === control) {
-    expect(landing!.requested).toBeGreaterThan(release.t);
+    expect(landing!.landed).toBeGreaterThan(release.t);
     expect(pace(paged.scroll.frames, at, Math.sign(release.velocity!)).speed).toBeGreaterThan(controls.calibration.endSpeed);
   } else expect(landing!.landed).toBeLessThan(runway.at(-1)!.t);
-  if (top <= 0) throw new Error(`${name}: momentum stopped at the top of the old content with the older page already arrived; evidence: ${name}.json, ${name}-landing.json`);
+  if (top <= 0)
+    throw new Error(
+      `${name}: momentum stopped at the top of the old content with the older page already arrived; evidence: ${name}.json, ${name}-landing.json`,
+    );
   return paged;
 }
 
@@ -430,7 +435,8 @@ ios(
   'native feed: a page under the finger, rail, latest, disclosures and the keyboard',
   async (phone) => {
     const measured = calibrated.get(phone.runtime);
-    if (measured === undefined) throw new Error('The measured controls of this runtime did not complete; the second native group has no envelope');
+    if (measured === undefined)
+      throw new Error('The measured controls of this runtime did not complete; the second native group has no envelope');
     const away = () =>
       act(phone, async (port) => {
         const state = port.state();

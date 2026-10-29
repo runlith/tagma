@@ -71,7 +71,7 @@ export class PageActions {
         .join(',')}`;
     const settled = async () => {
       let last = layout();
-      for (let still = 0; still < SETTLED_FRAMES; ) {
+      for (let still = 0; still < SETTLED_FRAMES;) {
         await this.recorder().frames(1);
         const now = layout();
         still = now === last ? still + 1 : 0;
@@ -88,7 +88,8 @@ export class PageActions {
         this.approachedHead = before;
         return;
       }
-      if (offset < distance / 4) throw new Error(`Positioning passed the paging margin before input: ${describe()}; steps ${steps.join(' ')}`);
+      if (offset < distance / 4)
+        throw new Error(`Positioning passed the paging margin before input: ${describe()}; steps ${steps.join(' ')}`);
       const above = root.getBoundingClientRect().top - Math.min(...rows().map((row) => row.getBoundingClientRect().top));
       if (!(above > 0)) throw new Error(`No measured rows are rendered above the reader to step through: ${describe()}`);
       const step = Math.min(above, (offset - distance / 2) / 2);
@@ -99,7 +100,9 @@ export class PageActions {
       const moved = rows().find((one) => one.firstElementChild?.getAttribute('data-timeline-key') === anchor.key);
       const travelled = moved === undefined ? null : moved.getBoundingClientRect().top - root.getBoundingClientRect().top - anchor.top;
       if (travelled === null || travelled < 0.5)
-        throw new Error(`Positioning moved no content past the reading edge (${anchor.key} travelled ${travelled}): ${describe()}; steps ${steps.join(' ')}`);
+        throw new Error(
+          `Positioning moved no content past the reading edge (${anchor.key} travelled ${travelled}): ${describe()}; steps ${steps.join(' ')}`,
+        );
     }
   }
 
@@ -203,9 +206,14 @@ export class PageActions {
     button.dataset.standDisclosure = 'target';
     const top = side === 'above' ? 20 : side === 'below' ? 360 : 100;
     root.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, bubbles: true }));
-    root.scrollBy(0, button.getBoundingClientRect().top - root.getBoundingClientRect().top - top);
-    await this.recorder().frames(6);
-    this.control();
+    let error = button.getBoundingClientRect().top - root.getBoundingClientRect().top - top;
+    while (Math.abs(error) > 1) {
+      root.scrollTop += error;
+      await this.recorder().frames(6);
+      const next = this.control().getBoundingClientRect().top - root.getBoundingClientRect().top - top;
+      if (Math.abs(next) >= Math.abs(error)) throw new Error(`The disclosure could not reach its ${side} position: ${next} px off`);
+      error = next;
+    }
   }
 
   disclosurePoint(): Point {
