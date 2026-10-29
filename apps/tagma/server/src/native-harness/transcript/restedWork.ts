@@ -2,7 +2,7 @@ import { Effect } from 'effect';
 import { WorkerUnavailable, eventReason, workerGone } from '@runlith/utils/worker';
 import type { ThreadCompactionCheckpointRow, ThreadHistory } from '@runlith/agent/thread/rows';
 import type { ThreadPrunedVolume } from '@runlith/agent/thread/storage/compaction';
-import type { ThreadEntryReader } from '@runlith/agent/transcript/kinds';
+import type { ThreadEntryReader, ThreadReaderWorker } from '@runlith/agent/transcript/kinds';
 import { RolloutUnreadable } from '../../threads/journal/rolloutFile.js';
 import type { RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
 import { RolloutReads, type RolloutRead, type ReadRollout } from '../../threads/contract/service/rolloutReads.js';
@@ -21,8 +21,8 @@ export type RestedCompaction = {
 };
 
 export type RestedAsk = { readonly id: number; readonly rollout: RolloutFiles } & (
-  | { readonly kind: 'transcribe'; readonly key: TranscriptKey; readonly reader: string }
-  | { readonly kind: 'history'; readonly reader: string }
+  | { readonly kind: 'transcribe'; readonly key: TranscriptKey }
+  | { readonly kind: 'history' }
   | { readonly kind: 'compaction' }
 );
 
@@ -36,26 +36,29 @@ export type RestedAnswer = { readonly id: number } & (
 export type RestedRead = { readonly id: number; readonly kind: 'read'; readonly reads: readonly RolloutRead[] };
 type Waiting = { readonly answer: (answer: RestedAnswer | WorkerUnavailable) => void; readonly read: ReadRollout };
 
-let worker: Worker | undefined;
+type Served = { readonly thread: Worker; readonly waiting: Map<number, Waiting> };
+
+const served = new Map<ThreadReaderWorker, Served>();
 let asked = 0;
-const waiting = new Map<number, Waiting>();
 
 const WORKER = 'rested fold worker';
 
-const failed = (thread: Worker, reason: string): void => {
-  if (worker !== thread) return;
-  worker = undefined;
-  thread.terminate();
+const failed = (start: ThreadReaderWorker, standing: Served, reason: string): void => {
+  if (served.get(start) !== standing) return;
+  served.delete(start);
+  standing.thread.terminate();
   const gone = workerGone(WORKER, reason);
-  const standing = [...waiting.values()];
-  waiting.clear();
-  for (const answered of standing) answered.answer(gone);
+  const asks = [...standing.waiting.values()];
+  standing.waiting.clear();
+  for (const answered of asks) answered.answer(gone);
 };
 
-const started = (): Worker => {
-  if (worker !== undefined) return worker;
-  const thread = new Worker(new URL('./rested.worker.ts', import.meta.url), { type: 'module' });
-  worker = thread;
+const started = (start: ThreadReaderWorker): Served => {
+  const held = served.get(start);
+  if (held !== undefined) return held;
+  const standing: Served = { thread: start(), waiting: new Map() };
+  const { thread, waiting } = standing;
+  served.set(start, standing);
   thread.addEventListener('message', (event: MessageEvent<RestedAnswer | RestedRead>) => {
     const answered = waiting.get(event.data.id);
     if (event.data.kind === 'read') {
@@ -66,29 +69,34 @@ const started = (): Worker => {
     if (waiting.size === 0) thread.unref();
     answered?.answer(event.data);
   });
-  thread.addEventListener('error', (event: ErrorEvent) => failed(thread, eventReason(event, 'the rested fold worker failed')));
-  thread.addEventListener('messageerror', () => failed(thread, 'a rested fold answer could not be read'));
-  thread.addEventListener('close', () => failed(thread, 'the rested fold worker closed'));
+  thread.addEventListener('error', (event: ErrorEvent) => failed(start, standing, eventReason(event, 'the rested fold worker failed')));
+  thread.addEventListener('messageerror', () => failed(start, standing, 'a rested fold answer could not be read'));
+  thread.addEventListener('close', () => failed(start, standing, 'the rested fold worker closed'));
   thread.unref();
-  return thread;
+  return standing;
 };
 
-const loadable = (kinds: ThreadEntryReader): Effect.Effect<string, WorkerUnavailable> =>
-  kinds.source === null
-    ? Effect.fail(workerGone(WORKER, 'its entry reader names no module the worker can load it from'))
-    : Effect.succeed(kinds.source);
-
-const ask = (rollout: RolloutFiles, asking: (id: number) => RestedAsk): Effect.Effect<RestedAnswer, WorkerUnavailable> =>
+const ask = (
+  kinds: ThreadEntryReader,
+  rollout: RolloutFiles,
+  asking: (id: number) => RestedAsk,
+): Effect.Effect<RestedAnswer, WorkerUnavailable> =>
   Effect.flatMap(RolloutReads, (read) =>
     Effect.callback<RestedAnswer, WorkerUnavailable>((resume) => {
+      const start = kinds.worker;
+      if (start === null) {
+        resume(Effect.fail(workerGone(WORKER, 'its entry reader names no worker that folds with it')));
+        return;
+      }
       const id = ++asked;
-      let thread: Worker;
+      let standing: Served;
       try {
-        thread = started();
+        standing = started(start);
       } catch (cause) {
         resume(Effect.fail(workerGone(WORKER, `it could not start: ${String(cause)}`)));
         return;
       }
+      const { thread, waiting } = standing;
       waiting.set(id, {
         read,
         answer: (answer) => resume(answer instanceof WorkerUnavailable ? Effect.fail(answer) : Effect.succeed(answer)),
@@ -97,7 +105,7 @@ const ask = (rollout: RolloutFiles, asking: (id: number) => RestedAsk): Effect.E
       try {
         thread.postMessage(asking(id));
       } catch (cause) {
-        failed(thread, `it took no ask: ${String(cause)}`);
+        failed(start, standing, `it took no ask: ${String(cause)}`);
       }
       return Effect.sync(() => {
         waiting.delete(id);
@@ -119,13 +127,16 @@ export const transcribeRollout = (
   key: TranscriptKey,
 ): Effect.Effect<number, RolloutUnreadable | WorkerUnavailable> =>
   Effect.flatMap(
-    Effect.flatMap(loadable(kinds), (reader) => ask(rollout, (id) => ({ id, rollout, reader, kind: 'transcribe', key }))),
+    ask(kinds, rollout, (id) => ({ id, rollout, kind: 'transcribe', key })),
     (answer) => (answer.kind === 'transcribed' ? Effect.succeed(answer.entries) : Effect.fail(unreadable(rollout, answer))),
   );
 
-export const readRolloutCompaction = (rollout: RolloutFiles): Effect.Effect<RestedCompaction, RolloutUnreadable | WorkerUnavailable> =>
+export const readRolloutCompaction = (
+  kinds: ThreadEntryReader,
+  rollout: RolloutFiles,
+): Effect.Effect<RestedCompaction, RolloutUnreadable | WorkerUnavailable> =>
   Effect.flatMap(
-    ask(rollout, (id) => ({ id, rollout, kind: 'compaction' })),
+    ask(kinds, rollout, (id) => ({ id, rollout, kind: 'compaction' })),
     (answer) => (answer.kind === 'compaction' ? Effect.succeed(answer.summary) : Effect.fail(unreadable(rollout, answer))),
   );
 
@@ -134,7 +145,7 @@ export const foldRolloutHistory = (
   rollout: RolloutFiles,
 ): Effect.Effect<{ readonly history: ThreadHistory; readonly bytes: number }, RolloutUnreadable | WorkerUnavailable> =>
   Effect.flatMap(
-    Effect.flatMap(loadable(kinds), (reader) => ask(rollout, (id) => ({ id, rollout, reader, kind: 'history' }))),
+    ask(kinds, rollout, (id) => ({ id, rollout, kind: 'history' })),
     (answer) =>
       answer.kind === 'history'
         ? Effect.succeed({ history: answer.history, bytes: answer.bytes })

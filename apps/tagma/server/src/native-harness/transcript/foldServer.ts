@@ -9,7 +9,7 @@ import type { ThreadCompactionCheckpointRow } from '@runlith/agent/thread/rows';
 import { revived } from '../../threads/journal/rolloutMeta.js';
 import { HistoryFold } from '@runlith/agent/thread/HistoryFold';
 import { TranscriptFold } from '@runlith/agent/transcript/TranscriptFold';
-import { entryOf, type ThreadEntryReader, type ThreadReaderModule } from '@runlith/agent/transcript/kinds';
+import { entryOf, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { RolloutLineUnreadable, factOf } from '../../threads/journal/restedReads.js';
 import type { RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
 import { wireWeight } from './rows.js';
@@ -46,17 +46,6 @@ async function source(rollout: RolloutFiles, read: ReadRollout, retried = false)
     if (!missing(cause) || retried) throw cause;
   }
   return source(rollout, read, true);
-}
-
-const readers = new Map<string, Promise<ThreadEntryReader>>();
-
-function readerOf(source: string): Promise<ThreadEntryReader> {
-  const held = readers.get(source);
-  if (held !== undefined) return held;
-  const loading = import(source).then((loaded: ThreadReaderModule) => loaded.entryKinds());
-  readers.set(source, loading);
-  loading.catch(() => readers.delete(source));
-  return loading;
 }
 
 async function* facts(
@@ -223,12 +212,11 @@ function transcribed(rollout: RolloutFiles, key: TranscriptKey, kinds: ThreadEnt
   return turn;
 }
 
-async function answered(ask: RestedAsk): Promise<RestedAnswer> {
+async function answered(ask: RestedAsk, kinds: ThreadEntryReader): Promise<RestedAnswer> {
   const totals = totalledReads();
   const read = totals.observe;
   try {
     if (ask.kind === 'compaction') return { id: ask.id, kind: 'compaction', summary: await compaction(ask.rollout, read) };
-    const kinds = await readerOf(ask.reader);
     if (ask.kind === 'transcribe')
       return { id: ask.id, kind: 'transcribed', entries: await transcribed(ask.rollout, ask.key, kinds, read) };
     return { id: ask.id, kind: 'history', ...(await history(ask.rollout, kinds, read)) };
@@ -238,14 +226,16 @@ async function answered(ask: RestedAsk): Promise<RestedAnswer> {
   }
 }
 
-self.addEventListener('message', (event: MessageEvent<RestedAsk>) => {
-  answered(event.data).then(
-    (answer) => self.postMessage(answer),
-    (cause) =>
-      self.postMessage({
-        id: event.data.id,
-        kind: 'failed',
-        reason: cause instanceof Error ? cause.message : String(cause),
-      } satisfies RestedAnswer),
-  );
-});
+export function serveRestedFolds(kinds: ThreadEntryReader): void {
+  self.addEventListener('message', (event: MessageEvent<RestedAsk>) => {
+    answered(event.data, kinds).then(
+      (answer) => self.postMessage(answer),
+      (cause) =>
+        self.postMessage({
+          id: event.data.id,
+          kind: 'failed',
+          reason: cause instanceof Error ? cause.message : String(cause),
+        } satisfies RestedAnswer),
+    );
+  });
+}

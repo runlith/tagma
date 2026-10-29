@@ -151,17 +151,15 @@ export type ThreadReaderInput = {
   readonly products: readonly ThreadEntryKind[];
   readonly steps?: readonly ThreadFormStep[];
   readonly base?: ThreadFormBase | null;
-  readonly source?: string;
+  readonly worker?: ThreadReaderWorker;
 };
+
+export type ThreadReaderWorker = () => Worker;
 
 export type ThreadEntryReader = ReturnType<typeof makeThreadEntryReader>;
 
-export type ThreadReaderModule = { readonly entryKinds: () => ThreadEntryReader };
-
-export const entryKinds: ThreadReaderModule['entryKinds'] = () => makeThreadEntryReader({ products: [] });
-
-export const makeThreadEntryReader = ({ products, steps = [], base = null, source }: ThreadReaderInput) => {
-  const loadable = source ?? (products.length === 0 && steps.length === 0 && base === null ? import.meta.url : null);
+export const makeThreadEntryReader = ({ products, steps = [], base = null, worker: start }: ThreadReaderInput) => {
+  const worker: ThreadReaderWorker | null = start ?? null;
   const readers = new Map<string, Reader>();
   const schemas = new Map<string, ThreadEntryKind['schema']>();
   for (const kind of [...CORE_KINDS, ...products]) {
@@ -240,7 +238,7 @@ export const makeThreadEntryReader = ({ products, steps = [], base = null, sourc
   return {
     steps,
     base,
-    source: loadable,
+    worker,
     last,
     after,
     lags,

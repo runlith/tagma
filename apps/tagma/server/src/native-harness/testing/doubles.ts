@@ -4,7 +4,8 @@ import { MachineWorld } from '../../executions/contract/service/worlds.js';
 import { Effect, Layer } from 'effect';
 import { resolveCatalog, type ToolGrant } from '@runlith/agent/catalog/resolveCatalog';
 import { catalogProfileOf } from '@runlith/agent/thread/agents/AgentProfile';
-import { ThreadEntryKinds, makeThreadEntryReader, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
+import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
+import { coreKinds } from './readers.js';
 import { testRegistry } from '../../providers/testing/registry.js';
 import { ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
@@ -277,4 +278,4 @@ export const asAgentDeclaration = (value: AgentDeclaration): AgentDeclaration =>
 
 export const asMcpToolsContext = (value: unknown): McpToolsContext => value as McpToolsContext;
 
-export const CORE_KINDS = makeThreadEntryReader({ products: [] });
+export const CORE_KINDS = coreKinds();

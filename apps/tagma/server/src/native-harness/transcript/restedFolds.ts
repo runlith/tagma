@@ -109,7 +109,7 @@ export const makeRestedFolds = Effect.gen(function* () {
           const done = yield* Deferred.make<RestedCompaction, StoredFailure>();
           compactions.set(key, done);
           const exit = yield* Effect.exit(
-            readRolloutCompaction(rollout).pipe(
+            readRolloutCompaction(kinds, rollout).pipe(
               Effect.mapError((cause) => new ThreadStorageFailed({ call: 'restedCompaction.read', cause })),
             ),
           );

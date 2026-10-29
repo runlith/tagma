@@ -8,9 +8,9 @@ import { Effect } from 'effect';
 import { RolloutReads, type RolloutRead } from '../../threads/contract/service/rolloutReads.js';
 import { makeThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { foldRolloutHistory, transcribeRollout } from './restedWork.js';
-import { entryKinds } from '../testing/formedKinds.js';
+import { coreKinds, formedKinds } from '../testing/readers.js';
 
-const core = makeThreadEntryReader({ products: [] });
+const core = coreKinds();
 
 const scratch = (prefix: string) =>
   Effect.acquireRelease(
@@ -43,26 +43,19 @@ it.live('a rested history folds a message stored before a form step in its curre
     const path = join(root, 'formed.jsonl');
     const event = { position: 1, id: 'told', kind: 'message', payload: { messages: [{ role: 'user', content: 'law' }] } };
     writeFileSync(path, `${JSON.stringify({ thread: { id: 'formed' } })}\n${JSON.stringify({ kind: 'event', row: event })}\n`);
-    const folded = yield* foldRolloutHistory(entryKinds(), { path, packed: `${path}.zst`, transcript: `${path}.entries` });
+    const folded = yield* foldRolloutHistory(formedKinds(), { path, packed: `${path}.zst`, transcript: `${path}.entries` });
     expect(folded.history).toEqual([{ role: 'user', content: [{ type: 'text', text: 'law' }] }]);
   }),
 );
 
-it.live('a missing rested worker is a worker failure for both readers, and the next read reaches a recovered worker', () =>
+it.live('a reader whose worker entry is missing fails as a worker failure, and the next read reaches the entry once it stands', () =>
   Effect.gen(function* () {
     const root = yield* scratch('rested-worker-');
-    const built = yield* Effect.promise(() => Bun.build({ entrypoints: [join(import.meta.dir, 'restedWork.ts')], target: 'bun' }));
-    const worker = yield* Effect.promise(() => Bun.build({ entrypoints: [join(import.meta.dir, 'rested.worker.ts')], target: 'bun' }));
-    expect([...built.logs, ...worker.logs].filter(() => !built.success || !worker.success)).toEqual([]);
-    const entry = join(root, 'restedWork.js');
-    writeFileSync(entry, yield* Effect.promise(() => built.outputs[0]!.text()));
-    const owner: typeof import('./restedWork') = yield* Effect.promise(() => import(pathToFileURL(entry).href));
+    const entry = join(root, 'core.worker.js');
+    const missing = makeThreadEntryReader({ products: [], worker: () => new Worker(pathToFileURL(entry).href, { type: 'module' }) });
     const rollout = { path: join(root, 'absent.jsonl'), packed: join(root, 'absent.zst'), transcript: join(root, 'transcript') };
     const failed = yield* Effect.all(
-      [
-        Effect.result(owner.foldRolloutHistory(core, rollout)),
-        Effect.result(owner.transcribeRollout(core, rollout, { bytes: 0, position: 0 })),
-      ],
+      [Effect.result(foldRolloutHistory(missing, rollout)), Effect.result(transcribeRollout(missing, rollout, { bytes: 0, position: 0 }))],
       { concurrency: 'unbounded' },
     );
     for (const answer of failed) {
@@ -71,8 +64,12 @@ it.live('a missing rested worker is a worker failure for both readers, and the n
         worker: 'rested fold worker',
       });
     }
-    writeFileSync(join(root, 'rested.worker.ts'), yield* Effect.promise(() => worker.outputs[0]!.text()));
-    const read = yield* Effect.result(owner.foldRolloutHistory(core, rollout));
+    const built = yield* Effect.promise(() =>
+      Bun.build({ entrypoints: [join(import.meta.dir, '../testing/core.worker.ts')], target: 'bun' }),
+    );
+    expect(built.success ? [] : built.logs).toEqual([]);
+    writeFileSync(entry, yield* Effect.promise(() => built.outputs[0]!.text()));
+    const read = yield* Effect.result(foldRolloutHistory(missing, rollout));
     expect(read._tag === 'Failure' ? read.failure : read.success).toMatchObject({ _tag: 'RolloutUnreadable', path: rollout.path });
   }),
 );
