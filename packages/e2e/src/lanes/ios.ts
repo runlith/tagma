@@ -456,9 +456,9 @@ const preparedSession = Effect.fn('e2e.iosSession')(function* (
       fixture.screenshot(join(directory, 'screenshot.png')),
       Bun.write(join(directory, 'ios-driver.log'), held.diagnostics()),
       Bun.write(join(directory, 'console.log'), console.join('\n')),
-      selected === undefined
+      current === undefined
         ? Promise.resolve()
-        : evaluatePage(selected, 'window.__runlithIOSRecording').then((value) =>
+        : evaluateChannel('window.__runlithIOSRecording').then((value) =>
             Bun.write(join(directory, 'ios-recording.json'), JSON.stringify(value ?? null)),
           ),
     ]);
