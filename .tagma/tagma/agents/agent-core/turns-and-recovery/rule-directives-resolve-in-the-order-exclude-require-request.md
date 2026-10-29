@@ -17,4 +17,6 @@ This is the rule pipeline's published contract; changing it is the operator's de
 - A required or requested tool joins the set narrowed by `restrict`.
 - `guide` conflicts with nothing and only adds text.
 
-Rules evaluate by `priority` (lower first), ties in the order given; a rule with a `hook` fires only on it. A non-critical failure and a slow rule leave a typed `rule-failed` / `rule-slow` note with the rule owner on the run; a critical failure refuses the evaluation.
+At `beforeTool`, `deny` and `rewrite` judge the one call instead of the step's tool set: `deny` beats every `rewrite`, and among rewrites the first wins, since each replaces the whole input and two cannot merge. A denied call answers the refusal a `deny` permission verdict gives, unprepared and unasked. A rewritten input is decoded by the tool's own arguments before preparation, so subjects, permission and review judge it; an input the tool does not take fails the call naming the rule. Elsewhere both are ignored.
+
+A rule answers one directive, several, or none. Rules evaluate by `priority` (lower first), ties in the order given; a rule with a `hook` fires only on it. A non-critical failure and a slow rule leave a typed `rule-failed` / `rule-slow` note with the rule owner on the run; a critical failure refuses the evaluation.
