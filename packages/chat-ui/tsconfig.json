@@ -2,7 +2,7 @@
   "extends": "@runlith/tsconfig/bun.json",
   "compilerOptions": {
     "rootDir": ".",
-    "paths": { "@feed/*": ["./src/*"], "@paint": ["./stand/Markdown.svelte"], "@code": ["./stand/Code.svelte"] },
+    "paths": { "@feed/*": ["./src/*"], "@paint": ["./stand/Markdown.svelte"], "@code": ["./stand/Code.svelte"], "@reach": ["./stand/reach.ts"] },
     "composite": true,
     "incremental": true,
     "tsBuildInfoFile": "dist/.tsbuildinfo",

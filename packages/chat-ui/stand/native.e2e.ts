@@ -7,10 +7,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { controlEnvelope, displacement, type ControlEnvelope } from './displacement';
 import { evidence } from './evidence';
-import { calibrate, momentum, motion, type Calibration } from './momentum.fixture';
+import { calibrate, momentum, motion, pace, type Calibration } from './momentum.fixture';
 import type { StandPort } from './port';
-import type { MeasuredControl, Recording, Rect, Targets } from './recording';
+import type { MeasuredControl, Recording, Rect, ScrollWrite, Targets } from './recording';
 import { MeasuredControl as MeasuredControlSchema, Recording as RecordingSchema, Targets as TargetsSchema } from './recording.fixture';
+import { act, call } from './standPage';
 
 const served = stand(fileURLToPath(new URL('./vite.config.ts', import.meta.url)));
 const scroller = '[data-scrollable][role="group"]';
@@ -24,21 +25,12 @@ const unavailable = {
 
 type Capture = { recording: Recording; scroll: ScrollRecording };
 type Controls = { envelope: ControlEnvelope; calibration: Calibration };
-type Fling = { concurrent?: () => Promise<void>; navigation?: boolean; momentum?: boolean; duration?: number };
+type Swipe = { start: number; end: number; duration: number };
+type Fling = { concurrent?: () => Promise<void>; navigation?: boolean; swipe?: Swipe };
+const control: Swipe = { start: 0.25, end: 0.75, duration: 0.2 };
+const calibrated = new Map<string, Controls>();
+const long: Swipe = { start: 0.1, end: 0.9, duration: 0.1 };
 
-function call<A, Input>(
-  phone: IOSSession,
-  work: (port: StandPort, input: Input) => A | Promise<A>,
-  schema: Schema.Decoder<A>,
-  input: Input,
-): Promise<A> {
-  return phone.evaluate(`(${work.toString()})(window.feedStand, ${JSON.stringify(input)})`, schema);
-}
-const act = <Input = undefined>(
-  phone: IOSSession,
-  work: (port: StandPort, input: Input) => void | Promise<void>,
-  input?: Input,
-): Promise<void> => phone.evaluate(`(${work.toString()})(window.feedStand, ${JSON.stringify(input)})`, Schema.Void);
 const frames = (phone: IOSSession, count = 2): Promise<void> => act(phone, (port, count) => port.frames(count), count);
 const start = (phone: IOSSession, name: string): Promise<void> => act(phone, (port, name) => port.start(name), name);
 const stop = (phone: IOSSession): Promise<Recording> => call(phone, (port) => port.stop(), RecordingSchema, undefined);
@@ -100,15 +92,19 @@ function assertGeometry(recording: Recording, envelope?: ControlEnvelope): void 
 
 async function fling(phone: IOSTest, name: string, options: Fling = {}): Promise<Capture> {
   const { viewport } = await targets(phone);
+  const swipe = options.swipe ?? control;
   const x = viewport.left + viewport.width * 0.6;
-  const from = await phone.pagePoint({ x, y: viewport.top + viewport.height * 0.25 });
-  const to = await phone.pagePoint({ x, y: viewport.top + viewport.height * 0.75 });
+  const from = await phone.pagePoint({ x, y: viewport.top + viewport.height * swipe.start });
+  const to = await phone.pagePoint({ x, y: viewport.top + viewport.height * swipe.end });
   await start(phone, name);
   await frames(phone);
   const capture = await phone.recording(scroller);
+  const distance = viewport.height * (swipe.end - swipe.start);
+  await act(phone, (port, { distance, speed }) => port.beginDrag(distance, speed, false), { distance, speed: distance / swipe.duration });
   const concurrent = options.concurrent?.();
-  await Promise.all([phone.swipe({ from, to, duration: options.duration ?? 0.2, delta: 5 }), concurrent]);
+  await Promise.all([phone.swipe({ from, to, duration: swipe.duration, delta: 5 }), concurrent]);
   const scroll = await capture.result;
+  await act(phone, (port) => port.endDrag());
   await frames(phone);
   const recording = await stop(phone);
   const result = { recording, scroll };
@@ -116,9 +112,9 @@ async function fling(phone: IOSTest, name: string, options: Fling = {}): Promise
   expect(scroll.touches.some((touch) => touch.type === 'touchstart' && touch.trusted)).toBe(true);
   expect(scroll.touches.some((touch) => touch.type === 'touchend' && touch.trusted)).toBe(true);
   expect(scroll.release).not.toBeNull();
-  if (!options.navigation && options.momentum !== false) {
+  if (!options.navigation) {
     expect(scroll.release!.velocity).toBeLessThan(0);
-    expect(motion(scroll).distance).toBeGreaterThan(0);
+    expect(motion(scroll, momentumWrites(result)[0]?.time).distance).toBeGreaterThan(0);
   }
   return result;
 }
@@ -161,7 +157,8 @@ async function controls(phone: IOSTest): Promise<Controls> {
   expect(envelope.controls).toBeGreaterThanOrEqual(5);
   expect(envelope.discarded).toEqual([]);
   for (const capture of captures) {
-    const verdict = momentum(capture.scroll, calibration);
+    const verdict = momentum(capture.scroll, calibration, capture.recording.writes);
+    expect(momentumWrites(capture)).toEqual([]);
     expect(verdict.reversals).toBe(0);
     expect(verdict.interruptions).toBe(0);
     assertGeometry(capture.recording, envelope);
@@ -184,40 +181,6 @@ async function quiet<Input = undefined>(
   await save(phone, name, { recording, evidence: evidence(recording), movement: displacement(recording, envelope) });
   assertGeometry(recording, envelope);
   return recording;
-}
-
-async function pageUnderFinger(phone: IOSTest, envelope: ControlEnvelope): Promise<void> {
-  await open(phone, 120);
-  await act(phone, (port) => port.pageLatency(20));
-  let landing: typeof Landing.Type | undefined;
-  const capture = await fling(phone, 'drag-page-landing', {
-    duration: 2,
-    momentum: false,
-    concurrent: async () => {
-      landing = await call(
-        phone,
-        async (port) => {
-          await port.pressed();
-          await port.frames(6);
-          const requested = performance.now();
-          const loaded = await port.loadOlder();
-          return { requested, landed: performance.now(), loaded };
-        },
-        Landing,
-        undefined,
-      );
-    },
-  });
-  const pageState = await call(phone, (port) => port.paging(), paging, undefined);
-  await save(phone, 'drag-page-landing-timing', { landing, paging: pageState });
-  expect(landing?.loaded).toBe(true);
-  expect(pageState.requested).toBe(1);
-  expect(pageState.landed).toBe(1);
-  const pressed = capture.scroll.touches.find((touch) => touch.type === 'touchstart' && touch.trusted)!;
-  expect(landing!.requested).toBeGreaterThan(pressed.t);
-  expect(landing!.landed).toBeLessThan(capture.scroll.release!.t);
-  expect(capture.recording.frames.some((frame) => frame.touching && frame.time >= landing!.landed)).toBe(true);
-  assertGeometry(capture.recording, envelope);
 }
 
 async function releasedMotion(phone: IOSSession): Promise<void> {
@@ -271,10 +234,9 @@ async function rail(phone: IOSTest, controls: Controls): Promise<void> {
   const command = capture.recording.commands?.find((one) => one.kind === 'rail');
   if (command === undefined) throw new Error('The native rail tap did not reach a message tile');
   expect(command.target).toBe(chosen.target);
-  const before = capture.scroll.frames.findLast((frame) => frame.t < selected);
-  const previous = capture.scroll.frames.findLast((frame) => before !== undefined && frame.t < before.t);
-  if (before === undefined || previous === undefined) throw new Error('No native momentum frames preceded the rail tap');
-  expect(Math.abs((before.offset - previous.offset) / (before.t - previous.t))).toBeGreaterThan(controls.calibration.endSpeed);
+  const before = capture.scroll.frames.findLastIndex((frame) => frame.t < selected);
+  if (before < 2) throw new Error('No native momentum frames preceded the rail tap');
+  expect(Math.abs(pace(capture.scroll.frames, before, 1).speed)).toBeGreaterThan(controls.calibration.endSpeed);
   expect(evidence(capture.recording).railFrames).toBeGreaterThan(0);
   assertCommand(capture.recording, 'rail');
   assertGeometry(capture.recording, controls.envelope);
@@ -330,12 +292,82 @@ async function keyboard(phone: IOSTest, envelope: ControlEnvelope): Promise<void
   assertGeometry(recording, envelope);
 }
 
+function momentumWrites(capture: Capture): ScrollWrite[] {
+  const release = capture.scroll.release;
+  const last = capture.scroll.frames.at(-1);
+  if (release === null || last === undefined) throw new Error('A fling has no release or momentum frames');
+  return (capture.recording.writes ?? []).filter((write) => write.time > release.t && write.time <= last.t && write.to !== write.from);
+}
+
+function scenarios(phone: IOSTest) {
+  const reds: { scenario: string; error: string }[] = [];
+  return {
+    async attempt(scenario: string, run: () => Promise<void>): Promise<void> {
+      try {
+        await run();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        reds.push({ scenario, error: message });
+        await save(phone, `${scenario}-red`, { scenario, error: message });
+        await open(phone);
+      }
+    },
+    verdict(): void {
+      console.log(JSON.stringify({ reds }));
+      expect(reds).toEqual([]);
+    },
+  };
+}
+
+async function pageFling(phone: IOSTest, controls: Controls, name: string, approach: number, swipe: Swipe): Promise<Capture> {
+  await open(phone, 120);
+  await act(phone, (port) => port.pageLatency(20));
+  await act(phone, (port, distance) => port.approach(distance), approach);
+  let landing: typeof Landing.Type | undefined;
+  const paged = await fling(phone, name, {
+    swipe,
+    concurrent: async () => {
+      await releasedMotion(phone);
+      landing = await call(
+        phone,
+        async (port) => {
+          const loaded = await port.loadOlder();
+          const { requestedAt, landedAt } = port.paging();
+          const origin = performance.timeOrigin;
+          return { requested: (requestedAt ?? Number.NaN) - origin, landed: (landedAt ?? Number.NaN) - origin, loaded };
+        },
+        Landing,
+        undefined,
+      );
+    },
+  });
+  const pageState = await call(phone, (port) => port.paging(), paging, undefined);
+  const release = paged.scroll.release!;
+  const runway = paged.scroll.frames.filter((frame) => frame.t > release.t && frame.t < (momentumWrites(paged)[0]?.time ?? Infinity));
+  const top = Math.min(...runway.map((frame) => frame.offset));
+  await save(phone, `${name}-landing`, { landing, paging: pageState, top, swipe });
+  expect(landing?.loaded).toBe(true);
+  expect(pageState.requested).toBe(1);
+  expect(pageState.landed).toBe(1);
+  const at = paged.scroll.frames.findIndex((frame) => frame.t >= landing!.landed);
+  expect(at).toBeGreaterThan(1);
+  expect(at).toBeLessThan(paged.scroll.frames.length - 1);
+  if (swipe === control) {
+    expect(landing!.requested).toBeGreaterThan(release.t);
+    expect(pace(paged.scroll.frames, at, Math.sign(release.velocity!)).speed).toBeGreaterThan(controls.calibration.endSpeed);
+  } else expect(landing!.landed).toBeLessThan(runway.at(-1)!.t);
+  if (top <= 0) throw new Error(`${name}: momentum stopped at the top of the old content with the older page already arrived; evidence: ${name}.json, ${name}-landing.json`);
+  return paged;
+}
+
 function assertMomentum(capture: Capture, controls: Controls): void {
-  const verdict = momentum(capture.scroll, controls.calibration);
-  console.log(JSON.stringify({ scenario: capture.recording.name, momentum: verdict }));
+  const writes = momentumWrites(capture);
+  const verdict = momentum(capture.scroll, controls.calibration, writes);
+  console.log(JSON.stringify({ scenario: capture.recording.name, momentum: verdict, writes }));
+  expect(verdict.stoppingWrites).toBe(0);
   expect(verdict.reversals).toBe(0);
   expect(verdict.interruptions).toBe(0);
-  expect(verdict.withinSpread).toBe(true);
+  expect(verdict.aboveFloor).toBe(true);
   assertGeometry(capture.recording, controls.envelope);
 }
 
@@ -344,73 +376,80 @@ ios(
   async (phone) => {
     await save(phone, 'coverage', { runtime: phone.runtime, udid: phone.udid, timing: phone.timing, unavailable });
     const measured = await controls(phone);
+    calibrated.set(phone.runtime, measured);
+    const red = scenarios(phone);
     await open(phone);
-    const tail = await quiet(phone, 'open-tail', (port) => port.remount(), measured.envelope);
-    expect(tail.frames.at(-1)?.anchor?.kind).toBe('following');
-    const history = await fling(phone, 'unmeasured-history');
-    const began = history.scroll.touches.find((touch) => touch.type === 'touchstart' && touch.trusted)!.t;
-    expect(history.recording.frames.some((frame) => frame.time > began && frame.unmeasured > 0)).toBe(true);
-    const unpaged = await call(phone, (port) => port.paging(), paging, undefined);
-    expect(unpaged.requested).toBe(0);
-    expect(unpaged.landed).toBe(0);
-    assertMomentum(history, measured);
-    const paused = await quiet(phone, 'streaming-paused', (port) => port.stream(24), measured.envelope);
-    expect(paused.frames.every((frame) => frame.anchor?.kind === 'paused')).toBe(true);
-    const original = await targets(phone);
-    await quiet(
-      phone,
-      'width',
-      async (port, host) => {
-        await port.resize(host.width * 0.8, host.height);
-        await port.frames(20);
-        await port.resize(host.width, host.height);
-        await port.frames(20);
-      },
-      measured.envelope,
-      original.host,
-    );
+    await red.attempt('open-tail', async () => {
+      const tail = await quiet(phone, 'open-tail', (port) => port.remount(), measured.envelope);
+      expect(tail.frames.at(-1)?.anchor?.kind).toBe('following');
+    });
+    let history: Capture | undefined;
+    await red.attempt('unmeasured-history', async () => {
+      history = await fling(phone, 'unmeasured-history');
+      const began = history.scroll.touches.find((touch) => touch.type === 'touchstart' && touch.trusted)!.t;
+      expect(history.recording.frames.some((frame) => frame.time > began && frame.unmeasured > 0)).toBe(true);
+      const unpaged = await call(phone, (port) => port.paging(), paging, undefined);
+      expect(unpaged.requested).toBe(0);
+      expect(unpaged.landed).toBe(0);
+      assertMomentum(history, measured);
+    });
+    await red.attempt('streaming-paused', async () => {
+      const paused = await quiet(phone, 'streaming-paused', (port) => port.stream(24), measured.envelope);
+      expect(paused.frames.every((frame) => frame.anchor?.kind === 'paused')).toBe(true);
+    });
+    await red.attempt('width', async () => {
+      const original = await targets(phone);
+      await quiet(
+        phone,
+        'width',
+        async (port, host) => {
+          await port.resize(host.width * 0.8, host.height);
+          await port.frames(20);
+          await port.resize(host.width, host.height);
+          await port.frames(20);
+        },
+        measured.envelope,
+        original.host,
+      );
+    });
+    const approach = history === undefined ? undefined : motion(history.scroll, momentumWrites(history)[0]?.time).distance / 2;
+    await red.attempt('page-mid-fling', async () => {
+      if (approach === undefined) throw new Error('No unmeasured-history fling measured the approach distance');
+      assertMomentum(await pageFling(phone, measured, 'page-mid-fling', approach, control), measured);
+    });
+    await red.attempt('page-long-fling', async () => {
+      if (approach === undefined) throw new Error('No unmeasured-history fling measured the approach distance');
+      await pageFling(phone, measured, 'page-long-fling', approach, long);
+    });
+    red.verdict();
+  },
+  { runtimes: ['26', '27'] },
+);
 
-    await open(phone, 120);
-    await act(phone, (port) => port.pageLatency(20));
-    let landing: typeof Landing.Type | undefined;
-    const paged = await fling(phone, 'page-mid-fling', {
-      concurrent: async () => {
-        await releasedMotion(phone);
-        landing = await call(
-          phone,
-          async (port) => {
-            const requested = performance.now();
-            const loaded = await port.loadOlder();
-            return { requested, landed: performance.now(), loaded };
-          },
-          Landing,
-          undefined,
-        );
-      },
+ios(
+  'native feed: a page under the finger, rail, latest, disclosures and the keyboard',
+  async (phone) => {
+    const measured = calibrated.get(phone.runtime);
+    if (measured === undefined) throw new Error('The measured controls of this runtime did not complete; the second native group has no envelope');
+    const away = () =>
+      act(phone, async (port) => {
+        const state = port.state();
+        await port.position(Math.max(0, state.height - state.viewport * 4));
+      });
+    const red = scenarios(phone);
+    await open(phone);
+    await away();
+    await red.attempt('rail', () => rail(phone, measured));
+    await red.attempt('latest', async () => {
+      await away();
+      await latest(phone, measured.envelope);
     });
-    const pageState = await call(phone, (port) => port.paging(), paging, undefined);
-    await save(phone, 'page-landing', { landing, paging: pageState });
-    expect(landing?.loaded).toBe(true);
-    expect(pageState.requested).toBe(1);
-    expect(pageState.landed).toBe(1);
-    expect(landing!.requested).toBeGreaterThan(paged.scroll.release!.t);
-    const at = paged.scroll.frames.findIndex((frame) => frame.t >= landing!.landed);
-    expect(at).toBeGreaterThan(0);
-    expect(at).toBeLessThan(paged.scroll.frames.length - 1);
-    const before = paged.scroll.frames[at - 1]!;
-    const after = paged.scroll.frames[at]!;
-    const direction = Math.sign(paged.scroll.release!.velocity!);
-    expect((direction * (after.offset - before.offset)) / (after.t - before.t)).toBeGreaterThan(measured.calibration.endSpeed);
-    assertMomentum(paged, measured);
-    await pageUnderFinger(phone, measured.envelope);
-    await rail(phone, measured);
-    await latest(phone, measured.envelope);
-    await act(phone, async (port) => {
-      const state = port.state();
-      await port.position(Math.max(0, state.height - state.viewport * 4));
+    await red.attempt('disclosures', async () => {
+      await away();
+      await disclosures(phone, measured.envelope);
     });
-    await disclosures(phone, measured.envelope);
-    await keyboard(phone, measured.envelope);
+    await red.attempt('keyboard', () => keyboard(phone, measured.envelope));
+    red.verdict();
   },
   { runtimes: ['26', '27'] },
 );

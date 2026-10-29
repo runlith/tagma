@@ -7,13 +7,14 @@
   import { premeasure } from './premeasure';
   import { observations } from './corpus';
   import { PageActions } from './PageActions';
+  import { pagingMargin } from '@reach';
 
   let { rig, touch }: { rig: Rig; touch: boolean } = $props();
   let epoch = $state(0);
   onMount(() => {
     let timing = false;
     let recorder = new Recorder(observations, { timing });
-    const actions = new PageActions(() => recorder, observations);
+    const actions = new PageActions(() => recorder, observations, pagingMargin);
     const port: StandPort = {
       ready: false,
       timing: () => {
@@ -24,12 +25,12 @@
       targets: () => recorder.targets(),
       scrollbar: () => actions.scrollbar(),
       position: (top) => actions.position(top),
-      approach: (distance) => actions.approach(distance),
+      approach: (distance) => actions.approach(distance, async () => rig.paging.requested),
       positionDisclosure: (side) => actions.positionDisclosure(side),
       disclosurePoint: () => actions.disclosurePoint(),
-      beginDrag: (distance, speed, preventFling) => {
+      beginDrag: (distance, speed, preventFling, quantum) => {
         actions.input();
-        recorder.beginDrag(distance, speed, preventFling);
+        recorder.beginDrag(distance, speed, preventFling, quantum);
       },
       endDrag: () => recorder.endDrag(),
       beginWheel: () => {
@@ -64,6 +65,8 @@
       loadOlder: () => actions.loadOlder(async () => rig.paging.requested),
       reachOlder: () => actions.reachOlder(),
       pageLatency: (ms) => rig.pageLatency(ms),
+      holdPages: () => rig.holdPages(),
+      releasePages: () => rig.releasePages(),
       paging: () => ({ ...rig.paging }),
       resize: async (width, height) => {
         recorder.changed();

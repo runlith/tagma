@@ -33,6 +33,7 @@ export default defineConfig({
       '@feed': source,
       '@paint': resolve(root, process.env.FEED_STAND_SOURCE === undefined ? 'Markdown.svelte' : 'historical/Markdown.svelte'),
       '@code': resolve(root, process.env.FEED_STAND_SOURCE === undefined ? 'Code.svelte' : 'historical/Code.svelte'),
+      '@reach': resolve(root, process.env.FEED_STAND_SOURCE === undefined ? 'reach.ts' : 'historical/reach.ts'),
       '@runlith/markdown/render': resolve(source, '../../../packages/markdown/src/render.ts'),
     },
     dedupe: ['svelte', 'effect'],

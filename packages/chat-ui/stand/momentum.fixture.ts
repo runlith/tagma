@@ -1,46 +1,65 @@
 import type { ScrollRecording } from '@runlith/e2e/ios';
 
+export type Pace = { speed: number; span: number; frame: number };
 export type Motion = {
   distance: number;
   velocity: number;
   ratio: number;
-  speeds: number[];
+  steps: number[];
+  paces: Pace[];
   endSpeed: number;
 };
 export type Calibration = { count: number; minRatio: number; maxRatio: number; endSpeed: number };
 export type MomentumVerdict = {
   ratio: number;
-  minRatio: number;
-  maxRatio: number;
+  floor: number;
   reversals: number;
   interruptions: number;
-  withinSpread: boolean;
+  stoppingWrites: number;
+  aboveFloor: boolean;
 };
+export type MomentumWrite = { time: number; from: number; to: number };
+type Sample = { t: number; offset: number };
 
-export function motion(recording: ScrollRecording): Motion {
+const missedPixels = 2;
+const floorShare = 0.5;
+
+export function pace(frames: readonly Sample[], index: number, direction: number): Pace {
+  const before = frames[index - 2];
+  const middle = frames[index - 1];
+  const after = frames[index];
+  if (before === undefined || middle === undefined || after === undefined) throw new Error('A two-frame pace needs two earlier frames');
+  const span = after.t - before.t;
+  return { speed: (direction * (after.offset - before.offset)) / span, span, frame: Math.min(after.t - middle.t, middle.t - before.t) };
+}
+
+export function motion(recording: ScrollRecording, until = Infinity): Motion {
   const release = recording.release;
   if (release === null || release.velocity === null || release.velocity === 0) throw new Error('A fling has no measured release velocity');
   const ended = recording.touches.find((touch) => touch.type === 'touchend' && touch.trusted);
   if (ended === undefined || ended.t !== release.t) throw new Error('A fling has no matching first trusted touchend');
   const direction = Math.sign(release.velocity);
-  const frames = recording.frames.filter((frame) => frame.t > release.t);
+  const frames = recording.frames.filter((frame) => frame.t > release.t && frame.t < until);
   const first = frames.findIndex((frame) => frame.offset !== release.offset);
   if (first < 0) throw new Error('A fling never moved after release');
-  const speeds: number[] = [];
+  const steps: number[] = [];
+  const paces: Pace[] = [];
   for (let index = first + 1; index < frames.length; index += 1) {
     const before = frames[index - 1]!;
     const after = frames[index]!;
     if (after.t <= before.t) throw new Error('Fling frame times did not increase');
-    speeds.push((direction * (after.offset - before.offset)) / (after.t - before.t));
+    steps.push((direction * (after.offset - before.offset)) / (after.t - before.t));
+    if (index >= first + 2) paces.push(pace(frames, index, direction));
   }
   const distance = direction * (frames.at(-1)!.offset - release.offset);
   const velocity = Math.abs(release.velocity);
-  return { distance, velocity, ratio: distance / velocity, speeds, endSpeed: speeds.findLast((speed) => speed > 0) ?? 0 };
+  const endSpeed = paces.findLast((one) => one.speed > 0)?.speed ?? 0;
+  return { distance, velocity, ratio: distance / velocity, steps, paces, endSpeed };
 }
 
 export function calibrate(controls: readonly ScrollRecording[]): Calibration {
   if (controls.length < 5) throw new Error('A fling calibration needs at least five fully measured controls');
-  const measured = controls.map(motion);
+  const measured = controls.map((control) => motion(control));
   return {
     count: measured.length,
     minRatio: Math.min(...measured.map((one) => one.ratio)),
@@ -49,21 +68,30 @@ export function calibrate(controls: readonly ScrollRecording[]): Calibration {
   };
 }
 
-export function momentum(recording: ScrollRecording, control: Calibration): MomentumVerdict {
-  const measured = motion(recording);
+function moving(frames: readonly Sample[], time: number, direction: number): boolean {
+  const index = frames.findLastIndex((frame) => frame.t <= time);
+  if (index < 2) return true;
+  const before = pace(frames, index, direction);
+  return before.speed * (before.span - before.frame) >= missedPixels;
+}
+
+export function momentum(recording: ScrollRecording, control: Calibration, writes: readonly MomentumWrite[] = []): MomentumVerdict {
+  const release = recording.release;
+  if (release === null || release.velocity === null) throw new Error('A fling has no measured release velocity');
+  const after = recording.frames.filter((frame) => frame.t > release.t);
+  const last = after.at(-1)?.t ?? release.t;
+  const during = writes.filter((write) => write.time > release.t && write.time <= last && write.to !== write.from);
+  const measured = motion(recording, during[0]?.time);
+  const direction = Math.sign(release.velocity);
   let interruptions = 0;
   let reversals = 0;
-  for (let index = 0; index < measured.speeds.length; index += 1) {
-    const speed = measured.speeds[index]!;
-    if (speed < 0) reversals += 1;
-    if (speed <= 0 && (measured.speeds[index - 1] ?? 0) > control.endSpeed) interruptions += 1;
+  for (const step of measured.steps) if (step < 0) reversals += 1;
+  for (let index = 1; index < measured.paces.length; index += 1) {
+    const current = measured.paces[index]!;
+    const previous = measured.paces[index - 1]!;
+    if (current.speed <= 0 && previous.speed * (current.span - current.frame) >= missedPixels) interruptions += 1;
   }
-  return {
-    ratio: measured.ratio,
-    minRatio: control.minRatio,
-    maxRatio: control.maxRatio,
-    reversals,
-    interruptions,
-    withinSpread: measured.ratio >= control.minRatio && measured.ratio <= control.maxRatio,
-  };
+  const stoppingWrites = during.filter((write) => moving(after, write.time, direction)).length;
+  const floor = floorShare * control.minRatio;
+  return { ratio: measured.ratio, floor, reversals, interruptions, stoppingWrites, aboveFloor: measured.ratio >= floor };
 }

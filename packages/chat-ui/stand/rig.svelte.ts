@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Clock, Deferred, Effect } from 'effect';
 import { makeChat, openEvent, snapshotEvent } from '@feed/testing/chatHarness.svelte';
 import type { TestSession } from '@feed/testing/chatHarness.svelte';
 import type { TurnCommands } from '@feed/session/TurnCommands.svelte';
@@ -9,22 +9,28 @@ import { corpus, PAGE_SIZE, STREAM_ID, STREAM_RUN, streamChunk } from './corpus'
 export type Rig = {
   readonly turns: TurnCommands<TestDraft, TestThread>;
   readonly session: TestSession['session'];
-  readonly paging: { requested: number; landed: number; latency: number };
+  readonly paging: { requested: number; landed: number; latency: number; requestedAt: number | null; landedAt: number | null };
   stream(chunks?: number): Promise<void>;
   loadOlder(): Promise<boolean>;
   pageLatency(ms: number): void;
+  holdPages(): void;
+  releasePages(): void;
 };
 
 export const makeRig = Effect.fnUntraced(function* (loaded = PAGE_SIZE): Effect.fn.Return<Rig, never, import('effect').Scope.Scope> {
   const entries = corpus();
   const chat = yield* makeChat();
-  const paging = $state({ requested: 0, landed: 0, latency: 350 });
+  const paging = $state<Rig['paging']>({ requested: 0, landed: 0, latency: 350, requestedAt: null, landedAt: null });
+  let gate: Deferred.Deferred<void> | null = null;
   chat.connection.stub('entriesBefore', ({ before }) =>
     Effect.gen(function* () {
       paging.requested += 1;
+      paging.requestedAt = yield* Clock.currentTimeMillis;
+      if (gate !== null) yield* Deferred.await(gate);
       yield* Effect.sleep(paging.latency);
       const start = Math.max(0, before - PAGE_SIZE);
       paging.landed += 1;
+      paging.landedAt = yield* Clock.currentTimeMillis;
       return { entries: entries.slice(start, before), before: start === 0 ? null : start };
     }),
   );
@@ -57,6 +63,13 @@ export const makeRig = Effect.fnUntraced(function* (loaded = PAGE_SIZE): Effect.
     loadOlder: () => turns.run(turns.loadOlder(), false),
     pageLatency: (ms) => {
       paging.latency = ms;
+    },
+    holdPages: () => {
+      gate ??= Deferred.makeUnsafe<void>();
+    },
+    releasePages: () => {
+      if (gate !== null) Deferred.doneUnsafe(gate, Effect.void);
+      gate = null;
     },
   };
 });

@@ -13,7 +13,7 @@ import { scenarioNames } from './scenario';
 import { account, capture, distribution, Distribution, FrameWork, WorkSummary } from './trace';
 import { prepareThumb } from './thumb';
 import { checkHistorical } from './historical.fixture';
-import { prepareControls, recordControl, type ControlRegion } from './controls';
+import { heldControls, prepareControls, recordControl, type ControlRegion } from './controls';
 import type { ScenarioName } from './scenario';
 
 type MeasuringCase = { kind: 'scenario'; name: ScenarioName } | { kind: 'control'; name: string };
@@ -27,6 +27,7 @@ const METHOD = [
   'Frames are consecutive timing-only recorder rAF timestamp intervals. The first and last partial intervals are excluded.',
   'Open-tail remounts fresh surface state over the page’s warm shared markdown cache; cold page/network startup is outside capture.',
   'Native-thumb reference preparation runs per fresh thumb scenario before timing mode and tracing, outside the measured intervals.',
+  'Held-touch calibration for drag-page-landing (pan prelude and known-distance control on a warmed 10000-entry page) runs before its scenario navigation, outside the measured intervals.',
   'A unique performance.mark aligns the page clock with its renderer main-thread trace clock.',
   'Synchronous trace spans are partitioned into disjoint intervals: the innermost classified span wins; unclassified task time is other.',
   'Script includes JavaScript execution, callbacks, microtasks and V8 GC; layout includes style recalculation; paint includes main-thread compositing preparation.',
@@ -231,6 +232,7 @@ const { values } = parseArgs({
     baseline: { type: 'string' },
     output: { type: 'string' },
     controls: { type: 'boolean' },
+    scenario: { type: 'string', multiple: true },
     count: { type: 'string' },
     traces: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
@@ -249,7 +251,7 @@ const program = Effect.gen(function* () {
           .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Report))));
   yield* checkHistorical(process.env.FEED_STAND_SOURCE);
   const served = yield* serveStand(fileURLToPath(new URL('./vite.config.ts', import.meta.url)), { own: 'quiet-window measuring command' });
-  const { page, browser, cdp } = yield* session(
+  const { page, browser, cdp, touch } = yield* session(
     'chromium',
     { viewport: VIEWPORT, hasTouch: true },
     { own: 'quiet-window measuring command' },
@@ -272,14 +274,22 @@ const program = Effect.gen(function* () {
   const scenarios: ScenarioResult[] = [];
   const count = Number(values.count ?? 5);
   if (!Number.isInteger(count) || count < 1) return yield* new MeasurementFailed({ message: '--count must be a positive integer' });
+  const unknown = (values.scenario ?? []).filter((name) => !scenarioNames.includes(name as ScenarioName));
+  if (unknown.length > 0) return yield* new MeasurementFailed({ message: `Unknown --scenario ${unknown.join(', ')}` });
   const selected: MeasuringCase[] =
     values.controls === true
       ? Array.from({ length: count }, (_, index) => ({ kind: 'control', name: `control-${index + 1}` }))
-      : scenarioNames.map((name) => ({ kind: 'scenario', name }));
+      : scenarioNames
+          .filter((name) => values.scenario === undefined || values.scenario.includes(name))
+          .map((name) => ({ kind: 'scenario', name }));
   let region: ControlRegion | undefined;
   if (values.traces !== undefined) yield* files.makeDirectory(resolve(values.traces), { recursive: true });
   for (const item of selected) {
     const name = item.name;
+    const held =
+      item.kind === 'scenario' && name === 'drag-page-landing'
+        ? yield* attempted(`${name}: held touch calibration failed`, () => heldControls(page, served.url(), touch))
+        : undefined;
     if (item.kind === 'scenario' || region === undefined) {
       yield* attempted(`${name}: the stand did not become ready`, async () => {
         await page.goto(item.kind === 'control' ? new URL('?loaded=10000', served.url()).href : served.url());
@@ -306,7 +316,7 @@ const program = Effect.gen(function* () {
       capture(cdp, page, () =>
         item.kind === 'control'
           ? recordControl(page, cdp, prepared!, name)
-          : runScenario(page, cdp, item.name, { jump: 'jumpToLatest', thumb }),
+          : runScenario(page, cdp, item.name, { jump: 'jumpToLatest', thumb, held }),
       ),
     );
     if (values.traces !== undefined)
@@ -377,7 +387,7 @@ const program = Effect.gen(function* () {
 
 if (values.help === true) {
   console.log(
-    'testbed e2e --program stand/frames.bench.ts [--baseline <recorded.json>] [--output <measurement.json>] [--controls] [--traces <directory>]',
+    'testbed e2e --program stand/frames.bench.ts [--baseline <recorded.json>] [--output <measurement.json>] [--controls] [--scenario <name>]... [--traces <directory>]',
   );
   console.log(
     'Run alone after other tests finish. --output keeps per-frame work for a later --baseline comparison; budgets do not set the exit code.',

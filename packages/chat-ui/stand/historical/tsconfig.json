@@ -9,7 +9,7 @@
     },
     "tsBuildInfoFile": "../../dist/.historical.tsbuildinfo"
   },
-  "files": ["./Code.svelte", "./Markdown.svelte"],
+  "files": ["./Code.svelte", "./Markdown.svelte", "./reach.ts"],
   "include": [],
   "exclude": []
 }

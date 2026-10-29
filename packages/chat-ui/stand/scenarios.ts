@@ -1,7 +1,9 @@
 import type { CDPSession, Page } from 'playwright-core';
+import { dragPage, type HeldTouch } from './held';
 import type { Recording, ThumbReference } from './recording';
 import type { StandGlobal } from './port';
 import type { DisclosurePosition, ScenarioName } from './scenario';
+import { browserStand } from './standPage';
 import { dragThumb, prepareThumb } from './thumb';
 
 export type MotionSource = 'touch' | 'wheel';
@@ -10,8 +12,7 @@ export const motionSource = (name: ScenarioName, cdp: CDPSession | undefined): M
 export const controlSource = (name: ScenarioName, cdp: CDPSession | undefined): MotionSource | undefined =>
   cdp !== undefined && name.includes('fling') ? motionSource(name, cdp) : undefined;
 
-export type ScenarioOptions = { readonly jump: string; readonly thumb?: ThumbReference };
-type PageLanding = { loaded: boolean; time: number; height: number };
+export type ScenarioOptions = { readonly jump: string; readonly thumb?: ThumbReference; readonly held?: HeldTouch };
 
 export class ScenarioFailure extends Error {
   constructor(
@@ -29,7 +30,6 @@ async function refuse(page: Page, message: string): Promise<never> {
 
 const approach = (page: Page, distance: number): Promise<void> =>
   page.evaluate((distance) => (globalThis as StandGlobal).feedStand!.approach(distance), distance);
-const DRAG_DISTANCE = 480;
 const FLING_DISTANCE = 1400;
 const frames = (page: Page, count = 1): Promise<void> =>
   page.evaluate((count) => (globalThis as StandGlobal).feedStand!.frames(count), count);
@@ -46,7 +46,6 @@ export async function fling(
   cdp: CDPSession | undefined,
   source: 'touch' | 'wheel',
   distance = 5000,
-  preventFling = false,
   speed = 2200,
   afterRelease?: () => Promise<void>,
 ): Promise<void> {
@@ -54,8 +53,8 @@ export async function fling(
   if (cdp !== undefined) {
     await frames(page, 2);
     await page.evaluate(
-      ({ distance, speed, preventFling }) => (globalThis as StandGlobal).feedStand!.beginDrag(distance, speed, preventFling),
-      { distance, speed, preventFling },
+      ({ distance, speed }) => (globalThis as StandGlobal).feedStand!.beginDrag(distance, speed, false),
+      { distance, speed },
     );
     const released =
       afterRelease === undefined
@@ -70,7 +69,7 @@ export async function fling(
         yDistance: distance,
         speed,
         gestureSourceType: source === 'wheel' ? 'mouse' : 'touch',
-        preventFling,
+        preventFling: false,
       }),
       released,
     ]);
@@ -129,11 +128,15 @@ export async function runScenario(
       throw new ScenarioFailure('The native thumb trial crossed no unmeasured history', recording);
     return recording;
   }
-  if ((name === 'fling-touch' || name === 'drag-page-landing') && cdp === undefined)
-    throw new Error('A known touch gesture requires the Chromium CDP lane');
-  if (['streaming-paused', 'latest', 'width', 'keyboard', 'drag-page-landing'].includes(name) || name.startsWith('disclosure-'))
+  if (name === 'fling-touch' && cdp === undefined) throw new Error('A known touch gesture requires the Chromium CDP lane');
+  if (name === 'drag-page-landing') {
+    if (options.held === undefined) throw new Error('The held drag-page trial requires a calibrated trusted touch');
     await pause(page);
-  if (name === 'drag-page-landing') await approach(page, DRAG_DISTANCE);
+    const trial = await dragPage(browserStand(page), options.held, name);
+    if (trial.refusal !== null) throw new ScenarioFailure(trial.refusal, trial.recording);
+    return trial.recording;
+  }
+  if (['streaming-paused', 'latest', 'width', 'keyboard'].includes(name) || name.startsWith('disclosure-')) await pause(page);
   if (name === 'page-mid-fling') await approach(page, FLING_DISTANCE);
   if (!name.startsWith('disclosure-')) await start(page, name);
   if (name === 'open-tail') {
@@ -144,29 +147,10 @@ export async function runScenario(
     await fling(page, cdp, motionSource(name, cdp));
     await frames(page, 45);
   }
-  let pageLanding: PageLanding | undefined;
-  if (name === 'drag-page-landing') {
-    await page.evaluate(() => (globalThis as StandGlobal).feedStand!.pageLatency(220));
-    const landing = page.evaluate(async (): Promise<PageLanding> => {
-      const port = (globalThis as StandGlobal).feedStand!;
-      await port.pressed();
-      const before = port.state().height;
-      const loaded = await port.loadOlder();
-      return { loaded, time: performance.now(), height: before };
-    });
-    const [landed] = await Promise.all([landing, fling(page, cdp, 'touch', DRAG_DISTANCE, true, 240)]);
-    pageLanding = landed;
-    if (!landed.loaded) return refuse(page, 'The older page did not land inside the drag');
-    await page.evaluate(async (height) => {
-      const port = (globalThis as StandGlobal).feedStand!;
-      while (port.state().height <= height) await port.frames();
-    }, landed.height);
-    await frames(page, 12);
-  }
   if (name === 'page-mid-fling') {
     await page.evaluate(() => (globalThis as StandGlobal).feedStand!.pageLatency(20));
     let loaded = true;
-    await fling(page, cdp, motionSource(name, cdp), FLING_DISTANCE, false, 2200, async () => {
+    await fling(page, cdp, motionSource(name, cdp), FLING_DISTANCE, 2200, async () => {
       loaded = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.loadOlder());
     });
     if (!loaded) return refuse(page, 'The scripted older page did not land after touch release');
@@ -178,7 +162,7 @@ export async function runScenario(
     await frames(page, 12);
   }
   if (name === 'rail-during-fling') {
-    await fling(page, cdp, motionSource(name, cdp), 1400, false, 2200, async () => {
+    await fling(page, cdp, motionSource(name, cdp), 1400, 2200, async () => {
       await page.locator('[role="navigation"] button').nth(4).click();
     });
     await page.evaluate(() => (globalThis as StandGlobal).feedStand!.landed());
@@ -202,21 +186,5 @@ export async function runScenario(
     await page.evaluate(() => (globalThis as StandGlobal).feedStand!.resize(1280, 900));
     await frames(page, 20);
   }
-  const recording = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.stop());
-  const initial = recording.frames[0];
-  if (pageLanding !== undefined) {
-    const release = recording.touches.find((touch) => touch.type === 'touchend');
-    const sampled =
-      recording.timings !== undefined
-        ? recording.timings.length > 0
-        : initial !== undefined &&
-          recording.frames.some(
-            (frame) => frame.touching && frame.tiles > initial.tiles && release !== undefined && frame.sampled < release.timeStamp,
-          );
-    if (release === undefined || pageLanding.time >= release.timeStamp || !sampled)
-      throw new ScenarioFailure('The older page did not enter the DOM while the finger was held', recording);
-    const reachable = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.reachOlder());
-    if (!reachable) throw new ScenarioFailure('The older page first message was not reachable after release', recording);
-  }
-  return recording;
+  return page.evaluate(() => (globalThis as StandGlobal).feedStand!.stop());
 }

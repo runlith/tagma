@@ -1,5 +1,6 @@
 import type { AppBindings, AppFeed, AppGlobal } from './appFeed';
 import { PageActions } from './PageActions';
+import { pagingMargin } from './reach';
 import type { StandGlobal, StandPort } from './port';
 import { premeasure } from './premeasure';
 import { Recorder, scroller } from './recorder';
@@ -67,7 +68,7 @@ function install(): void {
     if (recorder === null) throw new Error('The recorder is detached while the thread is away');
     return recorder;
   };
-  const actions = new PageActions(held, entries);
+  const actions = new PageActions(held, entries, pagingMargin);
   const attach = () => {
     recorder?.dispose();
     recorder = new Recorder(entries);
@@ -96,7 +97,7 @@ function install(): void {
     position: (top) => actions.position(top),
     async approach(distance) {
       if (actions.head() === feed().head) throw new Error('No older app page remains before positioning');
-      await actions.approach(distance);
+      await actions.approach(distance, async () => (await bound('feedAppPaging')()).requested);
     },
     positionDisclosure: (side) => actions.positionDisclosure(side),
     disclosurePoint: () => actions.disclosurePoint(),
@@ -112,9 +113,9 @@ function install(): void {
       recording = name;
       held().start(name);
     },
-    beginDrag: (distance, speed, preventFling) => {
+    beginDrag: (distance, speed, preventFling, quantum) => {
       actions.input();
-      held().beginDrag(distance, speed, preventFling);
+      held().beginDrag(distance, speed, preventFling, quantum);
     },
     endDrag: () => held().endDrag(),
     beginWheel: () => {
@@ -151,6 +152,12 @@ function install(): void {
     },
     reachOlder: () => actions.reachOlder(),
     pageLatency() {},
+    holdPages() {
+      throw new Error('The app lane serves real pages and exposes no page gate for a held drag');
+    },
+    releasePages() {
+      throw new Error('The app lane serves real pages and exposes no page gate for a held drag');
+    },
     paging: () => ({ requested, landed, latency: 0 }),
     async resize(width, height) {
       await bound('feedAppResize')(width, height);

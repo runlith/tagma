@@ -9,20 +9,22 @@ const fling = (offsets: readonly number[], velocity = 1): ScrollRecording => ({
   release: { t: 0, offset: 0, velocity, touchVelocity: null, velocitySource: 'first-momentum-frames' },
 });
 
-test('a normalized fling accepts control decay and rejects pull-back or an early stop', () => {
+test('a fling passes decay, out-of-phase samples and a fold at rest, and fails pull-back, a stop, a moving write and a short distance', () => {
   const control = calibrate(Array.from({ length: 5 }, (_, index) => fling([10, 20, 25, 27, 28, 28], 1 + index / 100)));
   expect(momentum(fling([10, 20, 25, 27, 28, 28], 1.02), control)).toEqual({
     ratio: 28 / 1.02,
-    minRatio: 28 / 1.04,
-    maxRatio: 28,
+    floor: 14 / 1.04,
     reversals: 0,
     interruptions: 0,
-    withinSpread: true,
+    stoppingWrites: 0,
+    aboveFloor: true,
   });
-  const pulled = momentum(fling([10, 20, 18, 25, 26, 26]), control);
-  expect(pulled.reversals).toBe(1);
-  expect(pulled.interruptions).toBe(1);
-  const stopped = momentum(fling([10, 20, 20, 20, 20]), control);
-  expect(stopped.interruptions).toBe(1);
-  expect(stopped.withinSpread).toBe(false);
+  expect(momentum(fling([10, 30, 30, 37, 39, 40, 40, 41, 41, 41]), control).interruptions).toBe(0);
+  expect(momentum(fling([10, 20, 18, 25, 26, 26]), control).reversals).toBe(1);
+  expect(momentum(fling([10, 20, 20, 20, 20]), control).interruptions).toBe(1);
+  const folded = momentum(fling([10, 20, 25, 27, 28, 28, 28, 60]), control, [{ time: 75, from: 28, to: 60 }]);
+  expect([folded.stoppingWrites, folded.reversals, folded.aboveFloor]).toEqual([0, 0, true]);
+  expect(momentum(fling([10, 20, 25, 25, 25]), control, [{ time: 25, from: 25, to: 24 }]).stoppingWrites).toBe(1);
+  expect(momentum(fling([10, 20, 25, 27, 28, 28]), control, [{ time: 25, from: 25, to: 25 }]).stoppingWrites).toBe(0);
+  expect(momentum(fling([5, 8, 8, 8]), control).aboveFloor).toBe(false);
 });

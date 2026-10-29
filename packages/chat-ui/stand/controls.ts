@@ -1,8 +1,11 @@
+import type { Touch } from '@runlith/e2e/touch';
 import type { CDPSession, Page } from 'playwright-core';
 import type { MeasuredControl, Recording } from './recording';
 import type { StandGlobal } from './port';
 import { fling, ready } from './scenarios';
 import { controlEnvelope, type ControlEnvelope } from './displacement';
+import { calibrateHeld, type HeldTouch } from './held';
+import { browserStand } from './standPage';
 
 export type Controls = { recordings: Recording[]; discarded: { name: string; reason: string }[]; reach: number; envelope: ControlEnvelope };
 export type ControlRegion = { measured: MeasuredControl; reach: number };
@@ -25,6 +28,18 @@ export async function prepareControls(page: Page): Promise<ControlRegion> {
   const reach = 12000;
   const measured = await page.evaluate((reach) => (globalThis as StandGlobal).feedStand!.warm(reach), reach);
   return { measured, reach };
+}
+
+export async function heldControls(page: Page, url: string, touch: Touch | undefined): Promise<HeldTouch> {
+  await page.goto(new URL('?loaded=10000', url).href);
+  await ready(page);
+  return measureHeld(page, touch);
+}
+
+export async function measureHeld(page: Page, touch: Touch | undefined): Promise<HeldTouch> {
+  if (touch === undefined) throw new Error('A held touch calibration requires a Chromium context with touch');
+  const region = await prepareControls(page);
+  return { touch, calibration: await calibrateHeld(browserStand(page), touch, region.measured) };
 }
 
 export async function recordControl(

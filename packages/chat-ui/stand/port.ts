@@ -16,7 +16,7 @@ export type StandPort = {
   disclosurePoint(): Point;
   warm(reach?: number): Promise<MeasuredControl>;
   start(name: string): void;
-  beginDrag(distance: number, speed: number, preventFling: boolean): void;
+  beginDrag(distance: number, speed: number, preventFling: boolean, quantum?: number): void;
   endDrag(): void;
   beginWheel(): void;
   endWheel(): void;
@@ -30,7 +30,9 @@ export type StandPort = {
   loadOlder(): Promise<boolean>;
   reachOlder(): Promise<boolean>;
   pageLatency(ms: number): void;
-  paging(): { requested: number; landed: number; latency: number };
+  holdPages(): void;
+  releasePages(): void;
+  paging(): { requested: number; landed: number; latency: number; requestedAt?: number | null; landedAt?: number | null };
   resize(width: number, height: number): Promise<void>;
   changed(): void;
   state(): { top: number; height: number; viewport: number };

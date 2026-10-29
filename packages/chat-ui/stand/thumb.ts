@@ -3,8 +3,10 @@ import type { StandGlobal } from './port';
 import type { Frame, Recording, Sentinel, ThumbControl, ThumbReference, ThumbSample } from './recording';
 
 const CONTROL_STEPS = 64;
-const TRIAL_PORTIONS = 128;
+const TRIAL_PORTIONS = 64;
 const MOVE_STEPS = 3;
+const ESTABLISH_STEPS = 4;
+const SETTLED_FRAMES = 2;
 
 const frames = (page: Page, count = 1): Promise<void> =>
   page.evaluate((count) => (globalThis as StandGlobal).feedStand!.frames(count), count);
@@ -65,8 +67,9 @@ function scaleOf(control: ThumbControl): number {
   const scale = covariance / variance;
   const extent = Math.max(...samples.map((sample) => sample.top)) - Math.min(...samples.map((sample) => sample.top));
   if (!Number.isFinite(scale) || scale <= 0 || extent < scrollbar.viewport * 2) reject(control, 'vacuous native movement');
+  const quantum = scale + tolerance;
   for (const sample of samples) {
-    if (Math.abs(sample.top - meanTop - scale * (sample.y - meanY)) > tolerance) reject(control, 'nonlinear or quantized native mapping');
+    if (Math.abs(sample.top - meanTop - scale * (sample.y - meanY)) > quantum) reject(control, 'nonlinear native mapping beyond one thumb pixel');
     if (sample.top <= 0 || sample.top >= scrollbar.range) reject(control, 'the control reached a range clamp');
   }
   for (let index = 0; index < frames.length; index += 1) {
@@ -126,15 +129,17 @@ function scaleOf(control: ThumbControl): number {
     backward ||= delta < 0;
     if (delta === 0) pauses += 1;
     if (delta === 0 && Math.abs(after.top - before.top) > tolerance) reject(control, 'a held thumb moved without pointer movement');
-    if (delta !== 0 && (after.top === before.top || Math.sign(after.top - before.top) !== Math.sign(delta)))
-      reject(control, 'a native step stopped or reversed');
-    if (Math.abs(after.top - before.top - scale * delta) > tolerance)
-      reject(control, 'a native step disagrees with its calibrated distance');
+    if (delta !== 0 && after.top !== before.top && Math.sign(after.top - before.top) !== Math.sign(delta))
+      reject(control, 'a native step reversed');
+    if (Math.abs(after.top - before.top - scale * delta) > quantum)
+      reject(control, 'a native step disagrees with its calibrated distance beyond one thumb pixel');
     for (let frame = from + 1; frame <= to; frame += 1) {
       const movement = frames[frame]!.scrollTop - frames[frame - 1]!.scrollTop;
       if (
         !Number.isFinite(movement) ||
-        (delta === 0 ? Math.abs(movement) > tolerance : movement * delta < 0 || Math.abs(movement) > Math.abs(scale * delta) + tolerance)
+        (delta === 0
+          ? Math.abs(movement) > tolerance
+          : (movement * delta < 0 && Math.abs(movement) > tolerance) || Math.abs(movement) > Math.abs(scale * delta) + quantum)
       )
         reject(control, 'a native step contains uncontrolled motion');
     }
@@ -159,12 +164,25 @@ function scaleOf(control: ThumbControl): number {
   return scale;
 }
 
+const snap = (value: number, dpr: number): number => Math.round(value * dpr) / dpr;
+const pixelRatio = (page: Page): Promise<number> =>
+  page.evaluate(() => (globalThis as typeof globalThis & { devicePixelRatio: number }).devicePixelRatio);
+
 async function sample(page: Page, y: number): Promise<ThumbSample> {
-  return page.evaluate(async (y) => {
-    const port = (globalThis as StandGlobal).feedStand!;
-    await port.frames();
-    return { y, time: port.frameTime(), top: port.scrollbar().top };
-  }, y);
+  return page.evaluate(
+    async ({ y, settled }) => {
+      const port = (globalThis as StandGlobal).feedStand!;
+      let top = port.scrollbar().top;
+      for (let still = 0; still < settled; ) {
+        await port.frames();
+        const next = port.scrollbar().top;
+        still = next === top ? still + 1 : 0;
+        top = next;
+      }
+      return { y, time: port.frameTime(), top };
+    },
+    { y, settled: SETTLED_FRAMES },
+  );
 }
 
 export async function prepareThumb(page: Page): Promise<ThumbReference> {
@@ -181,14 +199,20 @@ export async function prepareThumb(page: Page): Promise<ThumbReference> {
     await port.frames(3);
   }, warmed.start);
   const scrollbar = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.scrollbar());
+  const dpr = await pixelRatio(page);
   const proportional = (scrollbar.track.height * scrollbar.viewport) / (scrollbar.range + scrollbar.viewport);
-  let y = scrollbar.track.top + ((scrollbar.track.height - proportional) * scrollbar.top) / scrollbar.range + proportional / 2;
-  const step = (scrollbar.viewport * scrollbar.track.height) / scrollbar.range / 16;
+  let y = snap(scrollbar.track.top + ((scrollbar.track.height - proportional) * scrollbar.top) / scrollbar.range + proportional / 2, dpr);
+  const step = 1 / dpr;
   const samples: ThumbSample[] = [];
   await page.mouse.move(scrollbar.x, y);
-  samples.push(await sample(page, y));
   await page.mouse.down();
   try {
+    for (let index = 0; index < ESTABLISH_STEPS; index += 1) {
+      y -= step;
+      await page.mouse.move(scrollbar.x, y);
+      await sample(page, y);
+    }
+    samples.push(await sample(page, y));
     samples.push(await sample(page, y));
     for (const direction of [-1, 1]) {
       for (let index = 0; index < CONTROL_STEPS; index += 1) {
@@ -207,7 +231,7 @@ export async function prepareThumb(page: Page): Promise<ThumbReference> {
   let interval = Infinity;
   for (let index = 1; index < recording.frames.length; index += 1)
     interval = Math.min(interval, recording.frames[index]!.time - recording.frames[index - 1]!.time);
-  await page.evaluate((top) => (globalThis as StandGlobal).feedStand!.position(top), warmed.start);
+  await page.evaluate((top) => (globalThis as StandGlobal).feedStand!.position(top), warmed.from + scrollbar.viewport * 2);
   const trial = await page.evaluate(() => (globalThis as StandGlobal).feedStand!.scrollbar());
   if (
     JSON.stringify(trial.track) !== JSON.stringify(scrollbar.track) ||
@@ -229,33 +253,50 @@ const portion = (page: Page, distance: number, speed: number): Promise<void> =>
     { distance, speed },
   );
 
+const travel = (page: Page, pointer: number, speed: number, travel: number): Promise<void> =>
+  page.evaluate(
+    ({ pointer, speed, travel }) => {
+      const port = (globalThis as StandGlobal).feedStand!;
+      const scale = port.scrollbar().range / travel;
+      port.endDrag();
+      port.beginDrag(pointer * scale, speed, true, scale);
+    },
+    { pointer, speed, travel },
+  );
+
 export async function dragThumb(page: Page, reference: ThumbReference): Promise<Recording> {
   const { trial, scale, interval } = reference;
-  const distance = trial.viewport / 8;
-  const pointerStep = distance / scale / MOVE_STEPS;
   if (!Number.isFinite(scale) || scale <= 0 || !Number.isFinite(interval) || interval <= 0 || reference.control.length === 0)
     throw new Error('The native thumb reference has no usable scale or frame cadence');
+  const dpr = await pixelRatio(page);
+  const pointerStep = Math.max(1, Math.round((trial.viewport / 8 / scale / MOVE_STEPS) * dpr)) / dpr;
+  const distance = pointerStep * MOVE_STEPS * scale;
   const speed = ((distance / MOVE_STEPS) * 1000) / interval;
   const thumb = trial.track.height - trial.range / scale;
-  let y = trial.track.top + ((trial.track.height - thumb) * trial.top) / trial.range + thumb / 2;
+  let y = snap(trial.track.top + ((trial.track.height - thumb) * trial.top) / trial.range + thumb / 2, dpr);
   await page.mouse.move(trial.x, y);
-  await page.evaluate(async () => {
-    const port = (globalThis as StandGlobal).feedStand!;
-    port.start('thumb-history');
-    await port.frames(2);
-    port.beginDrag(0, 0, true);
-  });
   await page.mouse.down();
   try {
+    for (let index = 0; index < ESTABLISH_STEPS; index += 1) {
+      y -= 1 / dpr;
+      await page.mouse.move(trial.x, y);
+      await frames(page, 2);
+    }
+    await page.evaluate(async () => {
+      const port = (globalThis as StandGlobal).feedStand!;
+      port.start('thumb-history');
+      await port.frames(2);
+      port.beginDrag(0, 0, true);
+    });
     await frames(page, 3);
     for (let index = 0; index < TRIAL_PORTIONS; index += 1) {
-      await portion(page, distance, speed);
+      await travel(page, pointerStep * MOVE_STEPS, speed, trial.range / scale);
       for (let step = 0; step < MOVE_STEPS; step += 1) {
         y -= pointerStep;
         await page.mouse.move(trial.x, y);
         await frames(page);
       }
-      await frames(page);
+      await sample(page, y);
       if ((index + 1) % 8 === 0) {
         await portion(page, 0, 0);
         await frames(page, 3);

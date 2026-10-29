@@ -3,8 +3,10 @@ import type { Point } from './port';
 import type { ObservedEntries, Scrollbar } from './recording';
 import type { DisclosurePosition } from './scenario';
 
-const HEAD_REACH_VIEWPORTS = 3;
 const RESTING_FRAMES = 30;
+const SETTLED_FRAMES = 3;
+
+export type PagingMargin = (root: HTMLElement, head: number) => number;
 
 export class PageActions {
   private target: string | null = null;
@@ -15,6 +17,7 @@ export class PageActions {
   constructor(
     private readonly recorder: () => Recorder,
     private readonly entries: ObservedEntries,
+    private readonly margin: PagingMargin,
   ) {}
 
   head(): string | null {
@@ -42,30 +45,61 @@ export class PageActions {
     this.approachedHead = null;
   }
 
-  async approach(distance: number): Promise<void> {
+  async approach(distance: number, requested: () => Promise<number>): Promise<void> {
     const root = scroller();
     const before = this.head();
     if (before === null) throw new Error('The rail shows no first message before positioning');
+    const asked = await requested();
+    const rows = () => [...root.querySelectorAll<HTMLElement>('[data-timeline-key]')].map((row) => row.parentElement!);
     const head = () => {
       const list = root.querySelector<HTMLElement>('[data-timeline-key]')?.parentElement?.parentElement;
       if (list === null || list === undefined) throw new Error('The thread mounted no timeline before positioning');
       const start = list.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
       return root.scrollTop - start;
     };
-    const trigger = () => HEAD_REACH_VIEWPORTS * root.clientHeight;
     const describe = () =>
-      `head ${head()} against trigger ${trigger()} for a ${distance} px gesture, scrollTop ${root.scrollTop} of ${root.scrollHeight}, first tile ${this.head()}`;
-    let previous = Number.NaN;
+      `head ${head()} at paging margin ${this.margin(root, head())} for a ${distance} px gesture, scrollTop ${root.scrollTop} of ${root.scrollHeight}, first tile ${this.head()}`;
+    const reading = () => {
+      const top = root.getBoundingClientRect().top;
+      const row = rows().find((one) => one.getBoundingClientRect().bottom > top);
+      if (row === undefined) throw new Error(`No row is rendered at the reading edge: ${describe()}`);
+      return { key: row.firstElementChild!.getAttribute('data-timeline-key')!, top: row.getBoundingClientRect().top - top };
+    };
+    const layout = () =>
+      `${root.scrollTop}:${root.scrollHeight}:${rows()
+        .map((row) => `${row.firstElementChild?.getAttribute('data-timeline-key')}=${row.getBoundingClientRect().height}`)
+        .join(',')}`;
+    const settled = async () => {
+      let last = layout();
+      for (let still = 0; still < SETTLED_FRAMES; ) {
+        await this.recorder().frames(1);
+        const now = layout();
+        still = now === last ? still + 1 : 0;
+        last = now;
+      }
+    };
+    await settled();
+    const steps: string[] = [];
     for (;;) {
-      if (this.head() !== before) throw new Error(`The older page landed before the gesture could cross the paging trigger: ${describe()}`);
-      const offset = head() - trigger();
+      const offset = this.margin(root, head());
+      if (this.head() !== before || (await requested()) !== asked)
+        throw new Error(`Positioning requested an older page before input: ${describe()}; steps ${steps.join(' ')}`);
       if (offset >= distance / 4 && offset <= (distance * 3) / 4) {
         this.approachedHead = before;
         return;
       }
-      if (Math.abs(head() - previous) < 0.5) throw new Error(`Positioning made no progress toward the paging trigger: ${describe()}`);
-      previous = head();
-      await this.position(root.scrollTop - offset + distance / 2);
+      if (offset < distance / 4) throw new Error(`Positioning passed the paging margin before input: ${describe()}; steps ${steps.join(' ')}`);
+      const above = root.getBoundingClientRect().top - Math.min(...rows().map((row) => row.getBoundingClientRect().top));
+      if (!(above > 0)) throw new Error(`No measured rows are rendered above the reader to step through: ${describe()}`);
+      const step = Math.min(above, (offset - distance / 2) / 2);
+      const anchor = reading();
+      steps.push(`${Math.round(offset)}-${Math.round(step)}`);
+      await this.position(root.scrollTop - step);
+      await settled();
+      const moved = rows().find((one) => one.firstElementChild?.getAttribute('data-timeline-key') === anchor.key);
+      const travelled = moved === undefined ? null : moved.getBoundingClientRect().top - root.getBoundingClientRect().top - anchor.top;
+      if (travelled === null || travelled < 0.5)
+        throw new Error(`Positioning moved no content past the reading edge (${anchor.key} travelled ${travelled}): ${describe()}; steps ${steps.join(' ')}`);
     }
   }
 
