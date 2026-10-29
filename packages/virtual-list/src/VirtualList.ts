@@ -33,6 +33,7 @@ export interface ListOptions {
   initialRect?: { width: number; height: number };
   initialMeasurementsCache?: VirtualItem[];
   reuseOnMount?: boolean;
+  isScrollWriteBlocked?(): boolean;
   onChange?(instance: Core, sync: boolean): void;
   onScroll?(offset: number, scrolling: boolean): void;
   onResize?(): void;

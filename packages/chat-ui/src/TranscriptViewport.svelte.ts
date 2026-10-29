@@ -251,6 +251,7 @@ export class TranscriptViewport {
     this.followingViewport.hold('press');
     if (this.pressing) return;
     this.pressing = true;
+    this.window.holdWrites(true);
     window.addEventListener('pointerup', this.onRelease, true);
     window.addEventListener('pointercancel', this.onRelease, true);
     window.addEventListener('blur', this.onRelease);
@@ -264,6 +265,7 @@ export class TranscriptViewport {
   private unwatchPress(): void {
     if (!this.pressing) return;
     this.pressing = false;
+    this.window.holdWrites(false);
     window.removeEventListener('pointerup', this.onRelease, true);
     window.removeEventListener('pointercancel', this.onRelease, true);
     window.removeEventListener('blur', this.onRelease);

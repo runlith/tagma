@@ -129,12 +129,31 @@ describe('where the mounted window opens', () => {
     virtualizer.dispose();
   });
 
-  test('a far select mounts the rows where it lands before the scroll is read back', () => {
+  test('a far select mounts the rows it glides through and lands on before the scroll is read back, and none behind them', () => {
     const { virtualizer } = opened(rows(numbered(0, 200)), { tail: false });
 
     virtualizer.scrollToRow('row-150', 'smooth');
 
-    expect(mounted(virtualizer)).toEqual(expect.arrayContaining(['row-130', 'row-140', 'row-150']));
+    expect(mounted(virtualizer)).toEqual(expect.arrayContaining(['row-140', 'row-150', 'row-159']));
+    expect(mounted(virtualizer)).not.toContain('row-130');
+    virtualizer.dispose();
+  });
+
+  test('in motion every row in view mounts at once and the margin beyond it fills one row a frame, nearest first', () => {
+    const { virtualizer, root } = opened(rows(numbered(0, 200)), { tail: false });
+
+    scrollTo(root, 50 * ROW_ESTIMATE_PX);
+
+    const inView = numbered(50, 60);
+    const margin = () => mounted(virtualizer).filter((key) => !inView.includes(key) && !numbered(0, 20).includes(key));
+    expect(mounted(virtualizer)).toEqual(expect.arrayContaining(inView));
+    expect(margin()).toEqual(['row-49']);
+    virtualizer.measureRow(measured(root, 'row-49', 6));
+    expect(margin()).toEqual(['row-49']);
+    vi.advanceTimersToNextFrame();
+    expect(margin()).toEqual(['row-49', 'row-60']);
+    vi.advanceTimersToNextFrame();
+    expect(margin()).toEqual(['row-48', 'row-49', 'row-60']);
     virtualizer.dispose();
   });
 

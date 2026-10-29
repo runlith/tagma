@@ -1,8 +1,24 @@
 diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
-index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..2014edb2c2e3115f776212c93d61ad42a9e8192e 100644
+index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..8d2bfdb0d1cc679090ba673a9d36f3392e126b5f 100644
 --- a/dist/cjs/index.cjs
 +++ b/dist/cjs/index.cjs
-@@ -371,8 +371,8 @@ class Virtualizer {
+@@ -244,6 +244,7 @@ class Virtualizer {
+       }
+     });
+     this._lastElementOffset = null;
++    this._onScroll = null;
+     this.pendingWrite = null;
+     this._clampedAdjustment = null;
+     this.elementsCache = /* @__PURE__ */ new Map();
+@@ -362,6 +363,7 @@ class Virtualizer {
+       let followOnAppend = null;
+       let edgeKeysChanged = false;
+       if (prevOptions !== void 0 && prevOptions.enabled && merged.enabled && merged.anchorTo === "end" && this.scrollElement !== null) {
++        this._syncScrollOffset();
+         const prevCount = prevOptions.count;
+         const nextCount = merged.count;
+         const measurements = this.getMeasurements();
+@@ -371,8 +373,8 @@ class Virtualizer {
          const prevLastKey = prevCount > 0 ? getPreviousKey(prevCount - 1) : null;
          const didCountChange = nextCount !== prevCount;
          const didEdgeKeysChange = didCountChange || prevCount > 0 && nextCount > 0 && (merged.getItemKey(0) !== prevFirstKey || merged.getItemKey(nextCount - 1) !== prevLastKey);
@@ -13,7 +29,69 @@ index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..2014edb2c2e3115f776212c93d61ad42
            const item = prevCount > 0 ? this.getVirtualItemForOffset(this.getScrollOffset()) ?? measurements[0] : null;
            if (item) {
              anchor = [item.key, this.getScrollOffset() - item.start];
-@@ -1012,7 +1012,7 @@ class Virtualizer {
+@@ -470,6 +472,8 @@ class Virtualizer {
+       this._reportedOverscroll = false;
+       this._clampedAdjustment = null;
+       this.pendingWrite = null;
++      this._onScroll = null;
++      this._lastElementOffset = null;
+       this.scrollElement = null;
+       this.targetWindow = null;
+     };
+@@ -503,7 +507,7 @@ class Virtualizer {
+           })
+         );
+         this.unsubs.push(
+-          this.options.observeElementOffset(this, (offset, isScrolling) => {
++          this.options.observeElementOffset(this, this._onScroll = (offset, isScrolling) => {
+             var _a2, _b, _c, _d;
+             const elementMax = isScrolling ? this._elementMaxScrollOffset() : null;
+             const wasOverscrolled = this._reportedOverscroll;
+@@ -583,6 +587,7 @@ class Virtualizer {
+         this._scrollToOffset(this.getScrollOffset());
+       }
+       this._noteClampMax();
++      this._syncScrollOffset();
+       const anchor = this.pendingScrollAnchor;
+       this.pendingScrollAnchor = null;
+       if (anchor && this.scrollElement && this.options.enabled) {
+@@ -644,6 +649,18 @@ class Virtualizer {
+       this._scrollToOffset(offset, { behavior });
+       this.scheduleScrollReconcile();
+     };
++    this._syncScrollOffset = () => {
++      if (this._lastElementOffset === null || this._onScroll === null) return;
++      const offset = this._readElementOffset();
++      if (offset === null || offset === this._lastElementOffset) return;
++      const layout = this._toLayoutOffset(offset);
++      const kind = this._classifyScrollEvent(layout, true, this._elementMaxScrollOffset());
++      if (layout === this.scrollOffset || (kind === "readBack" && this.pendingWrite?.target === this.scrollOffset)) {
++        this._lastElementOffset = offset;
++        return;
++      }
++      this._onScroll(offset, true);
++    };
+     this._readElementOffset = () => {
+       const el = this.scrollElement;
+       if (el == null) return null;
+@@ -656,7 +673,7 @@ class Virtualizer {
+       }
+       return null;
+     };
+-    this._canWriteScroll = () => !(iosGesture.isIOSWebKit() && this._iosGesture.inMotion()) && !this._reportedOverscroll;
++    this._canWriteScroll = () => !(iosGesture.isIOSWebKit() && this._iosGesture.inMotion()) && !this._reportedOverscroll && !this.options.isScrollWriteBlocked?.();
+     this._flushHoldIfReady = (sync) => {
+       var _a;
+       if (this._holdOffset === 0) return;
+@@ -993,6 +1010,7 @@ class Virtualizer {
+     this.resizeItem = (index, size) => {
+       var _a, _b, _c;
+       if (!this.isIndexInRange(index)) return;
++      this._syncScrollOffset();
+       if ((_a = this._resizeBatch) == null ? void 0 : _a.sync) this.getMeasurements();
+       let cachedSize;
+       let itemStart;
+@@ -1012,7 +1030,7 @@ class Virtualizer {
        const itemSize = this.itemSizeCache.get(key) ?? cachedSize;
        const delta = size - itemSize;
        if (delta !== 0) {
@@ -22,11 +100,91 @@ index 57eb3ed183c20df1cdbf48cc0fe3be10304ff1a6..2014edb2c2e3115f776212c93d61ad42
          const prevTotalSize = wasAtEnd ? this._getLayoutTotalSize() : 0;
          const scrollOffset = this.getScrollOffset();
          const isFirstMeasure = !this.itemSizeCache.has(key);
+@@ -1351,6 +1369,7 @@ class Virtualizer {
+         { behavior, adjustments },
+         this
+       );
++      if (this._lastElementOffset !== null) this._lastElementOffset = this._readElementOffset();
+       return write;
+     };
+     this.getCommandWrittenOffset = () => this.scrollState !== null && this.pendingWrite !== null && !this.pendingWrite.smooth ? this.pendingWrite.target : null;
+diff --git a/dist/cjs/index.d.cts b/dist/cjs/index.d.cts
+index a997104ee5f27b4d15b5d4ae1ae4ba1f92bed879..2aab0ce8fff2a43ed88558b9ee8dac16071ebd9a 100644
+--- a/dist/cjs/index.d.cts
++++ b/dist/cjs/index.d.cts
+@@ -92,6 +92,7 @@ export interface VirtualizerOptions<TScrollElement extends Element | Window, TIt
+     useAnimationFrameWithResizeObserver?: boolean;
+     laneAssignmentMode?: LaneAssignmentMode;
+     useCachedMeasurements?: boolean;
++    isScrollWriteBlocked?: () => boolean;
+ }
+ export declare class Virtualizer<TScrollElement extends Element | Window, TItemElement extends Element> {
+     private unsubs;
+@@ -130,6 +131,7 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
+     private _reportedOverscroll;
+     private _iosGesture;
+     private _lastElementOffset;
++    private _onScroll;
+     private pendingWrite;
+     private _clampedAdjustment;
+     shouldAdjustScrollPositionOnItemSizeChange: undefined | ((item: VirtualItem, delta: number, instance: Virtualizer<TScrollElement, TItemElement>) => boolean);
+@@ -152,6 +154,7 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
+     private _classifyScrollEvent;
+     private _retryClampedAdjustment;
+     private _writeAwaitingCommand;
++    private _syncScrollOffset;
+     private _readElementOffset;
+     private _canWriteScroll;
+     private _flushHoldIfReady;
+diff --git a/dist/esm/index.d.ts b/dist/esm/index.d.ts
+index d838733d11c3c649212c5174ec22ae9b0ab4935c..80bdd9b80b1b77cfb6a9213efe5e62b1e8e7eba8 100644
+--- a/dist/esm/index.d.ts
++++ b/dist/esm/index.d.ts
+@@ -92,6 +92,7 @@ export interface VirtualizerOptions<TScrollElement extends Element | Window, TIt
+     useAnimationFrameWithResizeObserver?: boolean;
+     laneAssignmentMode?: LaneAssignmentMode;
+     useCachedMeasurements?: boolean;
++    isScrollWriteBlocked?: () => boolean;
+ }
+ export declare class Virtualizer<TScrollElement extends Element | Window, TItemElement extends Element> {
+     private unsubs;
+@@ -130,6 +131,7 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
+     private _reportedOverscroll;
+     private _iosGesture;
+     private _lastElementOffset;
++    private _onScroll;
+     private pendingWrite;
+     private _clampedAdjustment;
+     shouldAdjustScrollPositionOnItemSizeChange: undefined | ((item: VirtualItem, delta: number, instance: Virtualizer<TScrollElement, TItemElement>) => boolean);
+@@ -152,6 +154,7 @@ export declare class Virtualizer<TScrollElement extends Element | Window, TItemE
+     private _classifyScrollEvent;
+     private _retryClampedAdjustment;
+     private _writeAwaitingCommand;
++    private _syncScrollOffset;
+     private _readElementOffset;
+     private _canWriteScroll;
+     private _flushHoldIfReady;
 diff --git a/dist/esm/index.js b/dist/esm/index.js
-index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..7d90145a43640bc2aaf633a5417d6b0d7479e589 100644
+index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..3cd4a5256083ecd99d59d558e508c02d40bdb003 100644
 --- a/dist/esm/index.js
 +++ b/dist/esm/index.js
-@@ -370,8 +370,8 @@ class Virtualizer {
+@@ -243,6 +243,7 @@ class Virtualizer {
+       }
+     });
+     this._lastElementOffset = null;
++    this._onScroll = null;
+     this.pendingWrite = null;
+     this._clampedAdjustment = null;
+     this.elementsCache = /* @__PURE__ */ new Map();
+@@ -361,6 +362,7 @@ class Virtualizer {
+       let followOnAppend = null;
+       let edgeKeysChanged = false;
+       if (prevOptions !== void 0 && prevOptions.enabled && merged.enabled && merged.anchorTo === "end" && this.scrollElement !== null) {
++        this._syncScrollOffset();
+         const prevCount = prevOptions.count;
+         const nextCount = merged.count;
+         const measurements = this.getMeasurements();
+@@ -370,8 +372,8 @@ class Virtualizer {
          const prevLastKey = prevCount > 0 ? getPreviousKey(prevCount - 1) : null;
          const didCountChange = nextCount !== prevCount;
          const didEdgeKeysChange = didCountChange || prevCount > 0 && nextCount > 0 && (merged.getItemKey(0) !== prevFirstKey || merged.getItemKey(nextCount - 1) !== prevLastKey);
@@ -37,7 +195,69 @@ index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..7d90145a43640bc2aaf633a5417d6b0d
            const item = prevCount > 0 ? this.getVirtualItemForOffset(this.getScrollOffset()) ?? measurements[0] : null;
            if (item) {
              anchor = [item.key, this.getScrollOffset() - item.start];
-@@ -1011,7 +1011,7 @@ class Virtualizer {
+@@ -469,6 +471,8 @@ class Virtualizer {
+       this._reportedOverscroll = false;
+       this._clampedAdjustment = null;
+       this.pendingWrite = null;
++      this._onScroll = null;
++      this._lastElementOffset = null;
+       this.scrollElement = null;
+       this.targetWindow = null;
+     };
+@@ -502,7 +506,7 @@ class Virtualizer {
+           })
+         );
+         this.unsubs.push(
+-          this.options.observeElementOffset(this, (offset, isScrolling) => {
++          this.options.observeElementOffset(this, this._onScroll = (offset, isScrolling) => {
+             var _a2, _b, _c, _d;
+             const elementMax = isScrolling ? this._elementMaxScrollOffset() : null;
+             const wasOverscrolled = this._reportedOverscroll;
+@@ -582,6 +586,7 @@ class Virtualizer {
+         this._scrollToOffset(this.getScrollOffset());
+       }
+       this._noteClampMax();
++      this._syncScrollOffset();
+       const anchor = this.pendingScrollAnchor;
+       this.pendingScrollAnchor = null;
+       if (anchor && this.scrollElement && this.options.enabled) {
+@@ -643,6 +648,18 @@ class Virtualizer {
+       this._scrollToOffset(offset, { behavior });
+       this.scheduleScrollReconcile();
+     };
++    this._syncScrollOffset = () => {
++      if (this._lastElementOffset === null || this._onScroll === null) return;
++      const offset = this._readElementOffset();
++      if (offset === null || offset === this._lastElementOffset) return;
++      const layout = this._toLayoutOffset(offset);
++      const kind = this._classifyScrollEvent(layout, true, this._elementMaxScrollOffset());
++      if (layout === this.scrollOffset || (kind === "readBack" && this.pendingWrite?.target === this.scrollOffset)) {
++        this._lastElementOffset = offset;
++        return;
++      }
++      this._onScroll(offset, true);
++    };
+     this._readElementOffset = () => {
+       const el = this.scrollElement;
+       if (el == null) return null;
+@@ -655,7 +672,7 @@ class Virtualizer {
+       }
+       return null;
+     };
+-    this._canWriteScroll = () => !(isIOSWebKit() && this._iosGesture.inMotion()) && !this._reportedOverscroll;
++    this._canWriteScroll = () => !(isIOSWebKit() && this._iosGesture.inMotion()) && !this._reportedOverscroll && !this.options.isScrollWriteBlocked?.();
+     this._flushHoldIfReady = (sync) => {
+       var _a;
+       if (this._holdOffset === 0) return;
+@@ -992,6 +1009,7 @@ class Virtualizer {
+     this.resizeItem = (index, size) => {
+       var _a, _b, _c;
+       if (!this.isIndexInRange(index)) return;
++      this._syncScrollOffset();
+       if ((_a = this._resizeBatch) == null ? void 0 : _a.sync) this.getMeasurements();
+       let cachedSize;
+       let itemStart;
+@@ -1011,7 +1029,7 @@ class Virtualizer {
        const itemSize = this.itemSizeCache.get(key) ?? cachedSize;
        const delta = size - itemSize;
        if (delta !== 0) {
@@ -46,11 +266,43 @@ index 26a4b93c59cab597bfec2c0a17ea92f0c038efda..7d90145a43640bc2aaf633a5417d6b0d
          const prevTotalSize = wasAtEnd ? this._getLayoutTotalSize() : 0;
          const scrollOffset = this.getScrollOffset();
          const isFirstMeasure = !this.itemSizeCache.has(key);
+@@ -1350,6 +1368,7 @@ class Virtualizer {
+         { behavior, adjustments },
+         this
+       );
++      if (this._lastElementOffset !== null) this._lastElementOffset = this._readElementOffset();
+       return write;
+     };
+     this.getCommandWrittenOffset = () => this.scrollState !== null && this.pendingWrite !== null && !this.pendingWrite.smooth ? this.pendingWrite.target : null;
 diff --git a/src/index.ts b/src/index.ts
-index 83386f31ee894399bc6731128194ebaf2812f6fa..9e474506fa107f1f7ea5461a916e4db799f824b0 100644
+index 83386f31ee894399bc6731128194ebaf2812f6fa..1be5cd63044eacfcf71527431482d812f4b27705 100644
 --- a/src/index.ts
 +++ b/src/index.ts
-@@ -798,8 +798,8 @@ export class Virtualizer<
+@@ -391,6 +391,7 @@ export interface VirtualizerOptions<
+   useAnimationFrameWithResizeObserver?: boolean
+   laneAssignmentMode?: LaneAssignmentMode
+   useCachedMeasurements?: boolean
++  isScrollWriteBlocked?: () => boolean
+ }
+ 
+ type ScrollState = {
+@@ -592,6 +593,7 @@ export class Virtualizer<
+   // coordinates. The tail compares it with the element (`tailStillMoving`
+   // above).
+   private _lastElementOffset: number | null = null
++  private _onScroll: ObserveOffsetCallBack | null = null
+   // Our last write to the element, from `_scrollToOffset` until the next
+   // scroll event reports it (the only place it is cleared). Until then
+   // `scrollOffset` may still hold the old position.
+@@ -782,6 +784,7 @@ export class Virtualizer<
+       merged.anchorTo === 'end' &&
+       this.scrollElement !== null
+     ) {
++      this._syncScrollOffset()
+       const prevCount = prevOptions.count
+       const nextCount = merged.count
+       const measurements = this.getMeasurements()
+@@ -798,8 +801,8 @@ export class Virtualizer<
            (merged.getItemKey(0) !== prevFirstKey ||
              merged.getItemKey(nextCount - 1) !== prevLastKey))
  
@@ -61,7 +313,72 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..9e474506fa107f1f7ea5461a916e4db7
          const item =
            prevCount > 0
              ? (this.getVirtualItemForOffset(this.getScrollOffset()) ??
-@@ -2009,6 +2009,7 @@ export class Virtualizer<
+@@ -1025,6 +1028,8 @@ export class Virtualizer<
+     this._clampedAdjustment = null
+     // A write to the old element will never be read back.
+     this.pendingWrite = null
++    this._onScroll = null
++    this._lastElementOffset = null
+     this.scrollElement = null
+     this.targetWindow = null
+   }
+@@ -1068,7 +1073,7 @@ export class Virtualizer<
+       )
+ 
+       this.unsubs.push(
+-        this.options.observeElementOffset(this, (offset, isScrolling) => {
++        this.options.observeElementOffset(this, this._onScroll = (offset, isScrolling) => {
+           // Past the top is never a resting position. Past the bottom is
+           // judged only while scrolling: at rest the element has clamped,
+           // and a stale sizer makes no bounce.
+@@ -1215,6 +1220,7 @@ export class Virtualizer<
+ 
+     // The consumer has committed the sizer.
+     this._noteClampMax()
++    this._syncScrollOffset()
+ 
+     const anchor = this.pendingScrollAnchor
+     this.pendingScrollAnchor = null
+@@ -1336,6 +1342,19 @@ export class Virtualizer<
+     this.scheduleScrollReconcile()
+   }
+ 
++  private _syncScrollOffset = () => {
++    if (this._lastElementOffset === null || this._onScroll === null) return
++    const offset = this._readElementOffset()
++    if (offset === null || offset === this._lastElementOffset) return
++    const layout = this._toLayoutOffset(offset)
++    const kind = this._classifyScrollEvent(layout, true, this._elementMaxScrollOffset())
++    if (layout === this.scrollOffset || (kind === 'readBack' && this.pendingWrite?.target === this.scrollOffset)) {
++      this._lastElementOffset = offset
++      return
++    }
++    this._onScroll(offset, true)
++  }
++
+   // The element's position as the offset observers report it, or null for a
+   // scroll element that is neither an element nor a window.
+   private _readElementOffset = (): number | null => {
+@@ -1364,7 +1383,9 @@ export class Virtualizer<
+   // A write that is unwanted for another reason (a travelling smooth scroll
+   // owns the position) is a separate check at the call sites.
+   private _canWriteScroll = () =>
+-    !(isIOSWebKit() && this._iosGesture.inMotion()) && !this._reportedOverscroll
++    !(isIOSWebKit() && this._iosGesture.inMotion()) &&
++    !this._reportedOverscroll &&
++    !this.options.isScrollWriteBlocked?.()
+ 
+   // Write a held correction once a write is possible, from the scroll
+   // handler, the touch tail timer, `_willUpdate` and a resize notify. The
+@@ -1975,6 +1996,7 @@ export class Virtualizer<
+ 
+   resizeItem = (index: number, size: number) => {
+     if (!this.isIndexInRange(index)) return
++    this._syncScrollOffset()
+ 
+     // An earlier entry in this ResizeObserver batch moved `scrollOffset`.
+     // Outside a batch its sync notify would have re-rendered and rebuilt the
+@@ -2009,6 +2031,7 @@ export class Virtualizer<
      if (delta !== 0) {
        const wasAtEnd =
          this.options.anchorTo === 'end' &&
@@ -69,3 +386,11 @@ index 83386f31ee894399bc6731128194ebaf2812f6fa..9e474506fa107f1f7ea5461a916e4db7
          !isSmoothScroll(this.scrollState) &&
          this.getVirtualDistanceFromEnd() <= this.options.scrollEndThreshold
        const prevTotalSize = wasAtEnd ? this._getLayoutTotalSize() : 0
+@@ -2625,6 +2648,7 @@ export class Virtualizer<
+       { behavior, adjustments },
+       this,
+     )
++    if (this._lastElementOffset !== null) this._lastElementOffset = this._readElementOffset()
+     return write
+   }
+ 

@@ -321,6 +321,71 @@ describe('a paused reader', () => {
     viewport.dispose();
   });
 
+  test.each(['pointerup', 'pointercancel', 'blur'])('a scroller press folds its correction once on %s and leaves no hold', async (release) => {
+    const { browser, viewport, settle, read } = await opened(numbered(0, 30));
+    await read(900);
+    const top = browser.root.scrollTop;
+    const anchor = browser.topRow();
+    const seen = browser.screenTop(anchor)!;
+    const range = browser.root.scrollHeight;
+    browser.root.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, buttons: 1 }));
+
+    browser.resize('row-10', 160);
+    await settle();
+
+    expect(browser.root.scrollTop).toBe(top);
+    expect(browser.root.scrollHeight).toBe(range);
+    expect(browser.screenTop(anchor)).toBe(seen);
+
+    window.dispatchEvent(new MouseEvent(release));
+    await settle();
+
+    expect(browser.root.scrollTop).toBe(top + 100);
+    expect(browser.root.scrollHeight).toBe(range + 100);
+    expect(browser.screenTop(anchor)).toBe(seen);
+
+    window.dispatchEvent(new MouseEvent(release));
+    browser.resize('row-10', 260);
+    await settle();
+
+    expect(browser.root.scrollTop).toBe(top + 200);
+    expect(browser.screenTop(anchor)).toBe(seen);
+    viewport.dispose();
+  });
+
+  test('a text-selection drag holds following but leaves measured corrections writable', async () => {
+    const { browser, viewport, settle, read } = await opened(numbered(0, 30));
+    await read(900);
+    const top = browser.root.scrollTop;
+    const anchor = browser.topRow();
+    const seen = browser.screenTop(anchor)!;
+    const row = browser.rows.get(anchor)!.inner;
+    const text = document.createTextNode('selected content');
+    row.append(text);
+    row.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, buttons: 1 }));
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    window.getSelection()!.addRange(range);
+    viewport.syncSelection(window.getSelection(), browser.list);
+
+    browser.resize('row-10', 160);
+    await settle();
+
+    expect(browser.root.scrollTop).toBe(top + 100);
+    expect(browser.screenTop(anchor)).toBe(seen);
+    expect(viewport.anchored).toBe(false);
+
+    window.dispatchEvent(new MouseEvent('pointerup'));
+    window.getSelection()!.removeAllRanges();
+    viewport.syncSelection(window.getSelection(), browser.list);
+    browser.resize('row-10', 260);
+    await settle();
+
+    expect(browser.root.scrollTop).toBe(top + 200);
+    expect(browser.screenTop(anchor)).toBe(seen);
+    viewport.dispose();
+  });
+
   test('a control the reader pressed stays where it was when its row opens above or below it', async () => {
     const { browser, viewport, sync, settle, read } = await opened();
     await read(6000);
@@ -334,6 +399,7 @@ describe('a paused reader', () => {
 
     const foot = control(() => browser.heightOf('row-103') - FOOT_PX);
     const footSeen = foot.getBoundingClientRect().top;
+    foot.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, buttons: 1 }));
     viewport.window.press(foot);
     browser.resize('row-103', 400);
     expect(row.outer.style.height).toBe('400px');

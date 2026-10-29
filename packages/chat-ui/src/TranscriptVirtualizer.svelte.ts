@@ -49,6 +49,7 @@ export class TranscriptVirtualizer {
   private readonly stamps = new Map<string, MeasuredStamp>();
   private readonly boxes = new Map<string, Box>();
   private readonly around = new RowWindow();
+  private pacing: number | undefined;
   private width = 0;
   private type: FeedType | undefined;
   private fonts = 0;
@@ -58,6 +59,7 @@ export class TranscriptVirtualizer {
   private pressed: Pressed | undefined;
   private anchor: Anchor | undefined;
   private flushing = false;
+  private writesHeld = false;
   private itemKey = (index: number): string | number => this.rows_.keyAt(index) ?? index;
 
   constructor(
@@ -120,6 +122,12 @@ export class TranscriptVirtualizer {
     if (reshaped) this.reaim(virtualizer);
     if (successor !== undefined) this.relocate(virtualizer, successor);
     this.holdTail();
+  }
+
+  holdWrites(held: boolean): void {
+    if (held === this.writesHeld) return;
+    this.writesHeld = held;
+    if (!held) this.virtualizer?.refresh();
   }
 
   keepEnd(keeps: boolean): void {
@@ -364,8 +372,8 @@ export class TranscriptVirtualizer {
     else virtualizer.scrollToOffset(aim.via);
     if (!far) return;
     const at = aim.via ?? target!;
-    const from = virtualizer.getVirtualItemForOffset(at - this.height)?.index ?? 0;
-    this.around.land(from, virtualizer.getVirtualItemForOffset(at + 2 * this.height)?.index ?? from);
+    const from = virtualizer.getVirtualItemForOffset(Math.min(at, target!))?.index ?? 0;
+    this.around.land(from, virtualizer.getVirtualItemForOffset(Math.max(at, target!) + this.height)?.index ?? from);
     this.rewindow(virtualizer);
     this.publish(now);
   }
@@ -389,6 +397,7 @@ export class TranscriptVirtualizer {
       indexOf: (key) => this.rows_.indexOf(String(key)),
       keyOf: (node) => node.dataset.timelineKey,
       reuseOnMount: true,
+      isScrollWriteBlocked: () => this.writesHeld,
       adjust: (item, delta, instance) => this.shifts(item, delta, instance),
       rangeExtractor: (range: Range) => this.window(range),
       scrollMargin: this.margin,
@@ -420,9 +429,31 @@ export class TranscriptVirtualizer {
   }
 
   private window(range: Range): number[] {
-    const laid = this.virtualizer?.measurementsCache ?? [];
-    return this.kept.extend(this.around.indexes(range, laid, this.height), this.rows_, range.count);
+    const virtualizer = this.virtualizer;
+    const laid = virtualizer?.measurementsCache ?? [];
+    const frames = typeof requestAnimationFrame === 'function';
+    const paced = frames && virtualizer !== undefined && (this.aiming || virtualizer.isScrolling || this.around.pending);
+    const indexes = this.around.indexes(range, laid, this.height, paced, this.aiming);
+    if (frames && this.around.awaitsFrame) this.pacing ??= requestAnimationFrame(this.paceNext);
+    return this.kept.extend(indexes, this.rows_, range.count);
   }
+
+  private get aiming(): boolean {
+    return this.aim !== undefined && !this.aim.landed;
+  }
+
+  private readonly paceNext = (): void => {
+    this.pacing = undefined;
+    this.around.frame();
+    const virtualizer = this.virtualizer;
+    if (!virtualizer || !this.around.pending) return;
+    if (this.aiming) {
+      this.pacing = requestAnimationFrame(this.paceNext);
+      return;
+    }
+    this.rewindow(virtualizer);
+    this.publish();
+  };
 
   private itemAt(key: string): ChatTimelineItem | undefined {
     const index = this.rows_.indexOf(key);
@@ -544,6 +575,8 @@ export class TranscriptVirtualizer {
   }
 
   private dropVirtualizer(): void {
+    if (this.pacing !== undefined) cancelAnimationFrame(this.pacing);
+    this.pacing = undefined;
     this.around.clear();
     this.aim = undefined;
     this.pressed = undefined;
