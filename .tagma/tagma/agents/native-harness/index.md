@@ -105,6 +105,19 @@ fields:
         "for": [
           "96400e93"
         ]
+      },
+      {
+        "at": "transcript/foldServer.ts",
+        "for": [
+          "13182a9f"
+        ]
+      },
+      {
+        "at": "transcript/restedWork.ts",
+        "for": [
+          "13182a9f"
+        ],
+        "role": "testing"
       }
     ],
     "id": "native-harness",
