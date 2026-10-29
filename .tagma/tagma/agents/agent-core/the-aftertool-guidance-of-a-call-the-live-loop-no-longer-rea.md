@@ -16,4 +16,4 @@ An `afterTool` rule's guide reaches the model through the live loop's step guide
 - A call answered after a parked approval runs in a door the answer rebuilds. Its guides are collected there and written as a `runtime-guidance` event in the same transaction as the tool result, so the resumed run reads them in history right after the result.
 - A call running in the background keeps its guides on its outcome (`guidance`), and the native call delivery appends them, as runtime-guidance markup, to the words of the ending notice the thread's next run reads.
 
-Without this, a plugin's `PostToolUse` context, the touch rule's law briefs and capability cues were computed and dropped for those calls.
+Without this, a plugin's `PostToolUse` context, the touch rule's law briefs and capability cues were computed and dropped for those calls. The background road carries text only, so a guide's `state` and `retell` do not survive it, and a bash call handed to a managed command (`completion: 'command'`) still drops its guidance.
