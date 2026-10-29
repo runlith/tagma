@@ -1,5 +1,4 @@
 <script lang="ts">
-  import EyeOff from '@lucide/svelte/icons/eye-off';
   import type { BlockRead } from '@tagma/server/graph/contract/wire/rows';
   import { refusalLines } from '@runlith/agent/tool/refusal';
   import type { Snippet } from 'svelte';
@@ -31,21 +30,6 @@
       {:else}
         When an agent reads or writes the code its sources name
       {/if}
-    </span>
-  </div>
-{/if}
-
-{#if read.stealth === true}
-  <div class="mt-5 flex items-baseline gap-4 text-ui">
-    <span class="eyebrow shrink-0 text-muted-foreground">Storage</span>
-    <span class="flex min-w-0 items-baseline gap-1.5 text-foreground/90">
-      <EyeOff class="size-3 shrink-0 self-center text-muted-foreground" />
-      <span>
-        Stealth — kept in Tagma’s data directory, the repository never carries it.
-        {#if read.displaced === true}
-          Its team parent left the team tree, so it stands under the root until that parent returns.
-        {/if}
-      </span>
     </span>
   </div>
 {/if}

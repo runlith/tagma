@@ -31,6 +31,7 @@
   import BlockFacts from '$lib/features/graph/block/BlockFacts.svelte';
   import BlockLinks, { hasLinks } from '$lib/features/graph/block/BlockLinks.svelte';
   import StatusChip from '$lib/features/graph/StatusChip.svelte';
+  import StealthMark from '$lib/features/graph/StealthMark.svelte';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import ViewResults from '$lib/features/graph/block/ViewResults.svelte';
   import WriterBadge from '$lib/features/graph/WriterBadge.svelte';
@@ -425,6 +426,9 @@
             <TagIcon tag={tags.tagOf(rootBlock)} class="size-3.5" />
             <span class="eyebrow capitalize">{tags.word(tags.tagOf(rootBlock))}</span>
           </span>
+        {/if}
+        {#if rootBlock.stealth === true}
+          <StealthMark word displaced={rootBlock.displaced === true} />
         {/if}
         <StatusChip block={rootBlock} {store} always />
         {#if tags.supports(rootBlock, WORK) || tags.supports(rootBlock, SPEC)}

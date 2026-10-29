@@ -1,6 +1,5 @@
 <script lang="ts">
   import Ban from '@lucide/svelte/icons/ban';
-  import EyeOff from '@lucide/svelte/icons/eye-off';
   import Power from '@lucide/svelte/icons/power';
   import type { Snippet } from 'svelte';
   import type { HTMLAnchorAttributes } from 'svelte/elements';
@@ -8,6 +7,7 @@
   import { LIFECYCLE } from '@tagma/server/graph/contract/wire/tags/lifecycle';
   import TagIcon from '$lib/features/graph/TagIcon.svelte';
   import StatusChip from '$lib/features/graph/StatusChip.svelte';
+  import StealthMark from '$lib/features/graph/StealthMark.svelte';
   import WriterBadge from '$lib/features/graph/WriterBadge.svelte';
   import { ReadState } from '$lib/features/graph/ReadState.svelte.js';
   import { SessionRegistry } from '$lib/features/graph/SessionRegistry.svelte.js';
@@ -115,11 +115,7 @@
         </Tooltip>
       {/if}
       {#if block.stealth === true}
-        <Tooltip text="Stealth: kept in Tagma's data directory, the repository never carries it">
-          <span class="pointer-events-auto relative grid place-items-center">
-            <EyeOff class="size-3 text-muted-foreground/70" />
-          </span>
-        </Tooltip>
+        <StealthMark displaced={'displaced' in block && block.displaced === true} class="pointer-events-auto relative" />
       {/if}
       {#if off}
         <Tooltip text="Switched off: this rule binds nobody until it is switched on">
