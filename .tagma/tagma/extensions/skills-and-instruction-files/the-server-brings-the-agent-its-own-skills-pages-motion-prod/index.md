@@ -14,7 +14,7 @@ edges:
     to: 01a14c08-8335-7c28-8f6b-267b0bb6f81f
 sources:
   - kind: dir
-    ref: apps/tagma/server/src/native-harness/skills/plugins
+    ref: apps/tagma/server/src/native-harness/skills/apps
   - kind: dir
     ref: apps/tagma/server/src/native-harness/skills/rules
   - kind: file

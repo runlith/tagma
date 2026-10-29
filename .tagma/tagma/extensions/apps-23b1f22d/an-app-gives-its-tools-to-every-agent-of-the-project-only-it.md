@@ -20,9 +20,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/native-harness/capabilities/plugins.ts
   - kind: file
-    ref: apps/tagma/server/src/plugins/contract/wire/audience.ts
+    ref: apps/tagma/server/src/tagma-apps/contract/wire/audience.ts
   - kind: file
-    ref: apps/tagma/server/src/plugins/toolPoint.ts
+    ref: apps/tagma/server/src/tagma-apps/toolPoint.ts
 ---
 **Value.** An app hands its actions to agents — "place a trade", "place a bet" — and decides for each who gets it: every agent of the project, only its own agents, or only its views.
 

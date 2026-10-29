@@ -12,21 +12,21 @@ edges:
     to: 01a14bae-6720-7d62-897a-928acad90fdf
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/plugins/SettingsSection.svelte
+    ref: apps/tagma/app/src/lib/features/tagma-apps/SettingsSection.svelte
   - kind: file
-    ref: apps/tagma/server/src/plugins/contract/wire/manifest.ts
+    ref: apps/tagma/server/src/tagma-apps/contract/wire/manifest.ts
   - kind: file
-    ref: apps/tagma/server/src/plugins/contract/wire/operations.ts
+    ref: apps/tagma/server/src/tagma-apps/contract/wire/operations.ts
   - kind: file
-    ref: apps/tagma/server/src/plugins/discovery.ts
+    ref: apps/tagma/server/src/tagma-apps/discovery.ts
   - kind: file
-    ref: apps/tagma/server/src/plugins/doctrine/plugins.ts
+    ref: apps/tagma/server/src/tagma-apps/doctrine/plugins.ts
   - kind: file
-    ref: apps/tagma/server/src/plugins/generation.ts
+    ref: apps/tagma/server/src/tagma-apps/generation.ts
   - kind: file
-    ref: apps/tagma/server/src/plugins/installs.ts
+    ref: apps/tagma/server/src/tagma-apps/installs.ts
   - kind: file
-    ref: apps/tagma/server/src/plugins/supervisor.ts
+    ref: apps/tagma/server/src/tagma-apps/supervisor.ts
 ---
 **Value.** An app inside Tagma — a CRM, a trading desk, a tracker bridge — an agent writes as a directory in the project and launches with no deploy and no Tagma change.
 

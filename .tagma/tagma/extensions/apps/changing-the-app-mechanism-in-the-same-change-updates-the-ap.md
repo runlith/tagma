@@ -9,11 +9,11 @@ fields:
   }
 sources:
   - kind: dir
-    ref: apps/tagma/app/src/lib/features/plugins
+    ref: apps/tagma/app/src/lib/features/tagma-apps
   - kind: dir
     ref: apps/tagma/server/src/secrets
   - kind: dir
-    ref: apps/tagma/server/src/plugins
+    ref: apps/tagma/server/src/tagma-apps
   - kind: dir
     ref: apps/tagma/server/src/views
   - kind: file

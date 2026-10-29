@@ -8,11 +8,11 @@ edges:
     to: 01a12306-efba-7a0e-94d7-05ecc0602266
 sources:
   - kind: file
-    ref: apps/tagma/server/src/plugins/generation.ts
+    ref: apps/tagma/server/src/tagma-apps/generation.ts
   - kind: file
-    ref: apps/tagma/server/src/plugins/revision.ts
+    ref: apps/tagma/server/src/tagma-apps/revision.ts
   - kind: file
-    ref: apps/tagma/server/src/plugins/supervisor.ts
+    ref: apps/tagma/server/src/tagma-apps/supervisor.ts
 ---
 Two live processes of one app are two dealers at one table: both write into their own data and answer different agents. So everything that changes an app's process — start, restart on edit, recovery after a crash, stop — runs under that app's lock, and the restart body is uninterruptible.
 

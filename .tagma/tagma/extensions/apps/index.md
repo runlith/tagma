@@ -48,6 +48,6 @@ edges:
     to: 01a123cc-eedf-7059-b425-43b31ad089ea
 sources:
   - kind: dir
-    ref: apps/tagma/server/src/plugins
+    ref: apps/tagma/server/src/tagma-apps
 ---
 The user gets an application inside Tagma with no deploy: a directory with `tagma-app.json` in the project's `.tagma-apps/` or in the data directory's `apps/`. The module owns the manifest envelope, discovery on both floors, the machine installation record and per-project enabling, one app process per machine under its own supervisor, and the contribution-point protocol, while holding the `tools` point itself with audiences. What every other point means — agents, thread ends, views — is declared and registered by its owner; the module hands over the checked declaration and removes it with its disposer.

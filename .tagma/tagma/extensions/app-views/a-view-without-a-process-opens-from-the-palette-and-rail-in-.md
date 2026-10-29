@@ -8,7 +8,7 @@ edges:
     to: 01a123b1-a094-72bd-b4ab-f7606307a615
 sources:
   - kind: dir
-    ref: apps/tagma/app/src/lib/features/plugins/windows
+    ref: apps/tagma/app/src/lib/features/tagma-apps/windows
   - kind: file
     ref: apps/tagma/desktop/src/viewWindows.ts
   - kind: file

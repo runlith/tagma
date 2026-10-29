@@ -16,7 +16,7 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/secrets
   - kind: file
-    ref: apps/tagma/server/src/plugins/secrets.ts
+    ref: apps/tagma/server/src/tagma-apps/secrets.ts
 ---
 **Value.** An API key or token an app needs is entered once by the operator in settings, and never lands in `tagma-app.json`, the graph, or the feed.
 

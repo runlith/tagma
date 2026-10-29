@@ -8,7 +8,7 @@ edges:
     to: 01a123ad-a26a-771a-b839-5773f1844d71
 sources:
   - kind: file
-    ref: apps/tagma/server/src/plugins/secrets.ts
+    ref: apps/tagma/server/src/tagma-apps/secrets.ts
 ---
 Which secrets an app declares is learned when it launches, not when contributions publish: the launch provider receives the checked manifest before the process starts and remembers the declaration at once. Otherwise an app that crashes without its secret would never show the field it is entered in. For the same reason the `secrets` point's `register` is empty: the schema checks the declaration and the launch gives it meaning. The declaration appears after the first read of an enabled app's manifest; a disabled one shows no fields.
 

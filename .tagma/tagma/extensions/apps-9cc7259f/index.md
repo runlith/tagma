@@ -48,6 +48,6 @@ edges:
     to: 01a0c704-a612-7c4c-9f81-5089acc2829b
 sources:
   - kind: dir
-    ref: apps/tagma/app/src/lib/features/plugins
+    ref: apps/tagma/app/src/lib/features/tagma-apps
 ---
 A Tagma app is an application running inside Tagma, and the module embeds it in the window: app panels and windows, their settings sections, launchers and actions. The app's own interface renders inside the view frame.

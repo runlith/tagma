@@ -18,7 +18,7 @@ edges:
     to: 01a14c08-8336-7b3c-965a-b09753f44cbc
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/plugins/pluginHost.svelte.ts
+    ref: apps/tagma/app/src/lib/features/tagma-apps/pluginHost.svelte.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/views/ViewFrame.svelte
   - kind: file

@@ -8,9 +8,9 @@ edges:
     to: 01a12306-efba-7a0e-94d7-05ecc0602266
 sources:
   - kind: file
-    ref: apps/tagma/server/src/plugins/contract/service/points.ts
+    ref: apps/tagma/server/src/tagma-apps/contract/service/points.ts
   - kind: file
-    ref: apps/tagma/server/src/plugins/registry.ts
+    ref: apps/tagma/server/src/tagma-apps/registry.ts
 ---
 A contribution point belongs to the owner of what the app writes into, not to the `tagma-apps` module: the next capability is added as a new point at its own owner, with no edits to the envelope or the supervisor. The owner declares the point through `TagmaAppPoints.declare` when assembling its layer: the schema, the keys the contribution occupies (`claims` — two apps on one key give a refusal naming the holder), and the `register` returning a disposer. Keys are taken in one synchronous step before the first `register`, so two apps checked at once do not take one key.
 
