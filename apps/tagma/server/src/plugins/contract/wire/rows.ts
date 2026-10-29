@@ -33,9 +33,15 @@ export const PluginOrigin = Schema.Struct({
 });
 export type PluginOrigin = typeof PluginOrigin.Type;
 
-export const PluginDeclared = Schema.Struct({
-  format: Named.annotate({ description: 'The plugin format the declaration is written in.' }),
+export const PluginManifest = Schema.Struct({
+  format: Named.annotate({ description: 'The plugin format the manifest is written in.' }),
   fields: Schema.Record(Schema.String, Schema.Unknown).annotate({ description: 'The manifest fields the marketplace entry declares.' }),
+});
+export type PluginManifest = typeof PluginManifest.Type;
+
+export const PluginDeclared = Schema.Struct({
+  name: Named.annotate({ description: 'The name its marketplace entry installs the plugin under, which names its components.' }),
+  manifest: Schema.optional(PluginManifest),
 });
 export type PluginDeclared = typeof PluginDeclared.Type;
 

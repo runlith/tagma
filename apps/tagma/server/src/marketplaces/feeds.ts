@@ -5,8 +5,6 @@ import type { Marketplaces } from './contract/service/marketplaces.js';
 export const marketplaceChannels = (marketplaces: Marketplaces['Service']) => ({
   'marketplaces.subscribe': () =>
     refusingStream(
-      Stream.mapEffect(Stream.merge(Stream.make(undefined), marketplaces.changes), () =>
-        Effect.all({ marketplaces: marketplaces.rows(), entries: marketplaces.entries() }),
-      ),
+      Stream.mapEffect(marketplaces.changes, () => Effect.all({ marketplaces: marketplaces.rows(), entries: marketplaces.entries(null) })),
     ),
 });

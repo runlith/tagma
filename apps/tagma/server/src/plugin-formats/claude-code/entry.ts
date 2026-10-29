@@ -1,48 +1,39 @@
 import { Effect } from 'effect';
 import { type PluginIgnored, PluginRefused } from '../../plugins/contract/service/format.js';
 import { entryOf, isObject } from '../../plugins/contract/service/reading.js';
-import { type Declared, ENTRY, entryFields, entryManifest, listed, type Manifest } from './manifest.js';
+import { type CommandParts, commandParts, ENTRY, entryFields, entryManifest, listed, type Manifest } from './manifest.js';
 
 const COMPONENTS = ['commands', 'agents', 'skills', 'hooks', 'outputStyles', 'themes'] as const;
 const MANIFEST_ONLY = ['mcpServers', 'userConfig', 'lspServers', 'channels'] as const;
 
 export type Own = { readonly manifest: Manifest; readonly fields: readonly string[] };
 
-export type Combined = Own & {
+export type Combined = {
+  readonly manifest: Manifest | null;
+  readonly fields: readonly string[];
+  readonly commands: CommandParts | undefined;
   readonly hooks: Readonly<Record<string, unknown>> | null;
   readonly ignored: readonly PluginIgnored[];
 };
 
-const standing = Effect.fnUntraced(function* (root: string, value: string | readonly string[] | undefined, fallback: string) {
-  if (value !== undefined) return listed(value);
+export const ownOnly = (own: Own | null): Combined => ({
+  manifest: own?.manifest ?? null,
+  fields: own?.fields ?? [],
+  commands: commandParts(own?.manifest.commands),
+  hooks: null,
+  ignored: [],
+});
+
+const standing = Effect.fnUntraced(function* <A>(root: string, parts: readonly A[] | undefined, fallback: string) {
+  if (parts !== undefined) return parts;
   return (yield* entryOf(root, fallback)).kind === 'directory' ? [`./${fallback}`] : [];
 });
 
-const commandsOf = Effect.fnUntraced(function* (
-  root: string,
-  own: Manifest['commands'],
-  added: Declared['commands'],
-  ignored: PluginIgnored[],
-) {
-  if (added === undefined) return own;
-  if (isObject(own) && isObject(added)) return { ...own, ...added };
-  if (isObject(own) || isObject(added)) {
-    ignored.push({
-      component: 'commands',
-      name: ENTRY,
-      reason: 'one of plugin.json and the entry names commands one by one and the other by path, so the entry’s are not added',
-    });
-    return own;
-  }
-  return [
-    ...(yield* standing(root, own as string | readonly string[] | undefined, 'commands')),
-    ...listed(added as string | readonly string[]),
-  ];
-});
-
 export const combined = Effect.fnUntraced(function* (root: string, own: Own | null, entry: Readonly<Record<string, unknown>>) {
-  if (own === null)
-    return { manifest: yield* entryManifest(entry), fields: Object.keys(entry), hooks: null, ignored: [] } satisfies Combined;
+  if (own === null) {
+    const manifest = yield* entryManifest(entry);
+    return { manifest, fields: Object.keys(entry), commands: commandParts(manifest.commands), hooks: null, ignored: [] } satisfies Combined;
+  }
   const declaring = COMPONENTS.filter((field) => entry[field] !== undefined);
   if (entry['strict'] === false && declaring.length > 0) {
     return yield* new PluginRefused({
@@ -58,6 +49,9 @@ export const combined = Effect.fnUntraced(function* (root: string, own: Own | nu
   if (added.hooks !== undefined && !isObject(added.hooks)) {
     ignored.push({ component: 'hooks', name: ENTRY, reason: 'an entry’s hooks are an inline map of events; a path or a list is not read' });
   }
+  const ownAgents = own.manifest.agents === undefined ? undefined : listed(own.manifest.agents);
+  const ownCommands = commandParts(own.manifest.commands);
+  const addedCommands = commandParts(added.commands);
   const manifest: Manifest = {
     ...own.manifest,
     displayName: added.displayName ?? own.manifest.displayName,
@@ -68,15 +62,12 @@ export const combined = Effect.fnUntraced(function* (root: string, own: Own | nu
     license: added.license ?? own.manifest.license,
     version: own.manifest.version ?? added.version,
     skills: added.skills === undefined ? own.manifest.skills : [...listed(own.manifest.skills), ...listed(added.skills)],
-    agents:
-      added.agents === undefined
-        ? own.manifest.agents
-        : [...(yield* standing(root, own.manifest.agents, 'agents')), ...listed(added.agents)],
-    commands: yield* commandsOf(root, own.manifest.commands, added.commands, ignored),
+    agents: added.agents === undefined ? own.manifest.agents : [...(yield* standing(root, ownAgents, 'agents')), ...listed(added.agents)],
   };
   return {
     manifest,
     fields: [...new Set([...own.fields, ...declaring])],
+    commands: addedCommands === undefined ? ownCommands : [...(yield* standing(root, ownCommands, 'commands')), ...addedCommands],
     hooks: isObject(added.hooks) ? added.hooks : null,
     ignored,
   } satisfies Combined;

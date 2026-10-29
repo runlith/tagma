@@ -1,5 +1,6 @@
 import { Result, Schema } from 'effect';
 import type { EntrySource, ListedEntry, ListedFault, ListFormat, MarketplaceList } from '../../marketplaces/contract/service/lists.js';
+import type { EntryPolicy } from '../../marketplaces/contract/wire/rows.js';
 
 const FILE = '.agents/plugins/marketplace.json';
 const SHA = /^[0-9a-f]{40}$/u;
@@ -26,10 +27,25 @@ const Entry = Schema.Struct({
   source: Source,
   category: Schema.optional(Schema.String),
   interface: Shown,
+  policy: Schema.optional(Schema.Unknown),
+});
+
+const Policy = Schema.Struct({
+  installation: Schema.optional(Schema.String),
+  authentication: Schema.optional(Schema.String),
+  products: Schema.optional(Schema.Array(Schema.String)),
 });
 
 const decodeList = Schema.decodeUnknownResult(List);
 const decodeEntry = Schema.decodeUnknownResult(Entry);
+const decodePolicy = Schema.decodeUnknownOption(Policy);
+
+const policyOf = (raw: unknown): EntryPolicy | null => {
+  const policy = decodePolicy(raw);
+  if (policy._tag === 'None') return null;
+  const { installation, authentication, products } = policy.value;
+  return { installation: installation ?? null, authentication: authentication ?? null, products: products ?? [] };
+};
 
 const local = (path: string): EntrySource | string => {
   if (!path.startsWith('./')) return `its path ${path} does not start with ./`;
@@ -83,7 +99,8 @@ const entryOf = (raw: unknown, at: number): ListedEntry | ListedFault => {
     repository: null,
     category: entry.category ?? null,
     brings: [],
-    declared: null,
+    policy: policyOf(entry.policy),
+    manifest: null,
   };
 };
 

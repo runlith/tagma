@@ -3,11 +3,12 @@ import { join, resolve } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import { Effect, Exit, FileSystem, Layer, Scope } from 'effect';
+import { Context, Effect, Exit, FileSystem, Layer, Option, Scope, Stream } from 'effect';
 import { HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { endHosts } from '../../../executions/testing/doubles.js';
 import { routedContext } from '../../../graph/testing/doubles.js';
 import { frozenBuildsLayer } from '../../../installation/testing/doubles.js';
+import { Marketplaces } from '../../../marketplaces/contract/service/marketplaces.js';
 import type { MarketplacePreset } from '../../../marketplaces/contract/wire/presets.js';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
@@ -18,7 +19,9 @@ import { chosenModel } from '../chosenModel.js';
 import { doorServing } from '../doorServices.js';
 import { hostBundleRoot } from '../hostBundle.js';
 import { requestEffect } from '../httpRequest.js';
-import { committed, repository, skill } from './files.js';
+import { committed, repository, skill, written } from './files.js';
+
+const names = (components: readonly { readonly name: string }[]) => components.map((component) => component.name).sort();
 
 const MCP_SERVER = resolve(import.meta.dir, '../../../../../../../packages/mcp/test/mcpTestServer.ts');
 
@@ -90,6 +93,7 @@ it.live(
     Effect.gen(function* () {
       const files = yield* FileSystem.FileSystem;
       const home = yield* files.makeTempDirectoryScoped({ prefix: 'marketplace-restart-' });
+      yield* Effect.addFinalizer(() => Effect.orDie(endHosts(home)));
       const vendor = join(home, 'vendor-claude');
       const other = join(home, 'vendor-codex');
       const project = join(home, 'project');
@@ -97,7 +101,7 @@ it.live(
       yield* spawnedEffect(['git', 'init', '-q', '-b', 'main'], { cwd: project });
       yield* files.makeDirectory(vendor, { recursive: true });
       yield* files.makeDirectory(other, { recursive: true });
-      yield* repository(vendor, {
+      yield* written(vendor, {
         '.claude-plugin/marketplace.json': JSON.stringify({
           name: 'vendor-claude',
           owner: { name: 'Vendor' },
@@ -105,8 +109,11 @@ it.live(
         }),
         'plugins/echoer/.claude-plugin/plugin.json': JSON.stringify({ name: 'echoer' }),
         'plugins/echoer/skills/greet/SKILL.md': skill('Greets.'),
+        'plugins/echoer/docs/linked/SKILL.md': skill('Linked.'),
         'plugins/echoer/.mcp.json': JSON.stringify({ mcpServers: { echo: { command: process.execPath, args: [MCP_SERVER] } } }),
       });
+      yield* files.symlink('../docs/linked', join(vendor, 'plugins/echoer/skills/linked'));
+      yield* repository(vendor, {});
       yield* repository(other, { '.agents/plugins/marketplace.json': JSON.stringify({ name: 'vendor-codex', plugins: [] }) });
       const presets: readonly MarketplacePreset[] = [
         { id: 'vendor-claude', title: 'Vendor Claude', label: 'vendor', source: { kind: 'git', url: `file://${vendor}` } },
@@ -114,37 +121,47 @@ it.live(
       ];
 
       const first = yield* booted(join(home, 'data'), presets);
-      expect((yield* first.op('read_marketplaces', {})).marketplaces).toEqual([
-        expect.objectContaining({ id: 'vendor-claude', label: 'vendor' }),
-        expect.objectContaining({ id: 'vendor-codex', label: 'vendor' }),
+      yield* Effect.addFinalizer(() => first.close);
+      const marketplaces = Context.get(first.runtime.owners as Context.Context<Marketplaces>, Marketplaces);
+      const fetched = yield* Stream.runHead(
+        Stream.filter(
+          Stream.mapEffect(marketplaces.changes, () => marketplaces.rows()),
+          (rows) => rows.every((row) => row.revision !== null || row.failure !== null),
+        ),
+      );
+      expect(Option.getOrThrow(fetched)).toEqual([
+        expect.objectContaining({ id: 'vendor-claude', label: 'vendor', failure: null }),
+        expect.objectContaining({ id: 'vendor-codex', label: 'vendor', failure: null }),
       ]);
       const projectId = (yield* first.op('add_project', { name: 'restarted', rootPath: project, storage: 'stealth' })).project?.id;
       const scope = `project=${projectId}`;
-      yield* first.op('refresh_marketplace', { id: 'vendor-claude' });
+      const shown = Effect.suspend(() =>
+        Effect.map(first.op('read_plugins', {}, scope), (read) => names(read.plugins?.[0]?.components ?? [])),
+      );
       const { preview } = yield* first.op('preview_plugin', { marketplace: 'vendor-claude', entry: 'echoer' }, scope);
       yield* first.op('install_plugin', { prepared: preview?.prepared }, scope);
       yield* committed(vendor, { 'plugins/echoer/skills/later/SKILL.md': skill('Later.') });
+      yield* first.op('preview_plugin', { marketplace: 'vendor-claude', entry: 'echoer' }, scope);
       yield* first.op('refresh_marketplace', { id: 'vendor-claude' });
+      expect(yield* shown).toEqual(['echoer-echo', 'echoer-greet', 'echoer-linked']);
+      yield* first.op('update_plugin', { id: 'echoer' }, scope);
+      expect(yield* shown).toEqual(['echoer-echo', 'echoer-greet', 'echoer-later', 'echoer-linked']);
       yield* first.op('remove_marketplace', { id: 'vendor-claude' });
       yield* first.close;
 
       const second = yield* booted(join(home, 'data'), presets);
-      yield* Effect.addFinalizer(() => Effect.andThen(second.close, Effect.orDie(endHosts(home))));
+      yield* Effect.addFinalizer(() => second.close);
       expect((yield* second.op('read_marketplaces', {})).marketplaces?.map((marketplace) => marketplace.id)).toEqual(['vendor-codex']);
-      expect((yield* second.op('read_plugins', {}, scope)).plugins).toEqual([
-        expect.objectContaining({
-          id: 'echoer',
-          enabled: true,
-          components: [expect.objectContaining({ name: 'echoer-greet' }), expect.objectContaining({ name: 'echoer-echo' })],
-        }),
-      ]);
+      expect((yield* second.op('read_plugins', {}, scope)).plugins).toEqual([expect.objectContaining({ id: 'echoer', enabled: true })]);
       const thread = (yield* second.op('create_thread', {}, scope)).snapshot?.thread.id;
-      expect((yield* second.op('read_agent_skills', { kind: 'thread', id: thread }, scope)).skills).toContainEqual(
-        expect.objectContaining({ id: 'echoer-greet' }),
-      );
+      expect(
+        ((yield* second.op('read_agent_skills', { kind: 'thread', id: thread }, scope)).skills ?? [])
+          .map((offered) => offered.id)
+          .filter((id) => id.startsWith('echoer-'))
+          .sort(),
+      ).toEqual(['echoer-greet', 'echoer-later', 'echoer-linked']);
       yield* second.runtime.mcp.reconcile(projectId ?? 0);
-      const echo = (yield* second.op('read_mcp_servers', {}, scope)).mcp?.find((row) => row.name === 'echoer-echo');
-      expect(echo?.status).toBe('connected');
-      expect(echo?.tools).toBeGreaterThan(0);
+      const answered = yield* second.runtime.mcp.caller(projectId ?? 0).call('echoer-echo', 'echo', { text: 'restarted' }, {});
+      expect('content' in answered ? answered.content : answered).toEqual([expect.objectContaining({ type: 'text', text: 'restarted' })]);
     }).pipe(Effect.provide(BunFileSystem.layer)),
 );

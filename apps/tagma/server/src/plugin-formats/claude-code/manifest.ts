@@ -148,3 +148,14 @@ export const commandEntryOf = Effect.fnUntraced(function* (name: string, raw: un
 
 export const listed = (value: string | readonly string[] | undefined): readonly string[] =>
   value === undefined ? [] : typeof value === 'string' ? [value] : value;
+
+export type CommandParts = readonly (string | Readonly<Record<string, unknown>>)[];
+
+export const commandParts = (value: Manifest['commands']): CommandParts | undefined =>
+  value === undefined
+    ? undefined
+    : typeof value === 'string'
+      ? [value]
+      : Array.isArray(value)
+        ? (value as readonly string[])
+        : [value as Readonly<Record<string, unknown>>];

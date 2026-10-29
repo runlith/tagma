@@ -6,11 +6,12 @@ const claim: PluginFormat['claim'] = Effect.fnUntraced(function* (root) {
   return (yield* rootManifest(root)) === null ? null : 'manifest';
 });
 
-const read: PluginFormat['read'] = Effect.fn('agentPlugins.read')(function* (root, _claim, declared) {
-  if (declared !== null) {
+const read: PluginFormat['read'] = Effect.fn('agentPlugins.read')(function* (root, _claim, entry) {
+  if (entry?.fields != null) {
     return yield* new PluginRefused({ reason: 'an Agent Plugins package is its own manifest: a marketplace entry declares none for it' });
   }
-  return (yield* readPortable(root, [])).package;
+  const found = (yield* readPortable(root, [])).package;
+  return { ...found, name: entry?.name ?? found.name };
 });
 
 export const agentPluginsFormat: PluginFormat = { id: 'agent-plugins', claim, read };

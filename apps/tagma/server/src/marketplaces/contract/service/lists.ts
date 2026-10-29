@@ -1,5 +1,6 @@
 import { Context } from 'effect';
-import type { PluginComponentKind, PluginDeclared } from '../../../plugins/contract/wire/rows.js';
+import type { PluginComponentKind, PluginManifest } from '../../../plugins/contract/wire/rows.js';
+import type { EntryPolicy } from '../wire/rows.js';
 
 export type EntrySource =
   | { readonly kind: 'path'; readonly path: string }
@@ -17,7 +18,8 @@ export type ListedEntry = {
   readonly repository: string | null;
   readonly category: string | null;
   readonly brings: readonly PluginComponentKind[];
-  readonly declared: PluginDeclared | null;
+  readonly policy: EntryPolicy | null;
+  readonly manifest: PluginManifest | null;
 };
 
 export type ListedFault = { readonly name: string; readonly reason: string };

@@ -1,6 +1,6 @@
 import { Context, Data, type Effect, type FileSystem } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
-import type { PluginDeclared, PluginHookPoint, PluginOptionType } from '../wire/rows.js';
+import type { PluginHookPoint, PluginManifest, PluginOptionType } from '../wire/rows.js';
 
 export type PluginClaim = 'manifest' | 'layout';
 
@@ -123,13 +123,18 @@ export class PluginRefused extends Data.TaggedError('PluginRefused')<{ readonly 
   }
 }
 
+export type PluginEntry = {
+  readonly name: string;
+  readonly fields: PluginManifest['fields'] | null;
+};
+
 export type PluginFormat = {
   readonly id: string;
   readonly claim: (root: string) => Effect.Effect<PluginClaim | null, PluginUnreadable, FileSystem.FileSystem>;
   readonly read: (
     root: string,
     claim: PluginClaim,
-    declared: PluginDeclared['fields'] | null,
+    entry: PluginEntry | null,
   ) => Effect.Effect<PluginPackage, PluginRefused | PluginUnreadable, FileSystem.FileSystem>;
 };
 

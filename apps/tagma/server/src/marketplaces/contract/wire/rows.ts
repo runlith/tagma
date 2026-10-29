@@ -47,10 +47,19 @@ export type MarketplaceRow = typeof marketplaceRowSchema.Type;
 export const ENTRY_STATES = ['available', 'installed', 'taken', 'refused'] as const;
 export type EntryState = (typeof ENTRY_STATES)[number];
 
+export const entryPolicySchema = Schema.Struct({
+  installation: Said,
+  authentication: Said,
+  products: Schema.Array(Schema.String),
+});
+export type EntryPolicy = typeof entryPolicySchema.Type;
+
 export const entryRowSchema = Schema.Struct({
   marketplace: Schema.String,
   name: Schema.String.annotate({ description: 'The entry’s name in its marketplace.' }),
-  plugin: Said.annotate({ description: 'The plugin it installs as, read from its name; null when the name gives none.' }),
+  plugin: Said.annotate({
+    description: 'The plugin it installs as: its name, which names the plugin’s components; null when the name cannot name a plugin.',
+  }),
   title: Said,
   description: Said,
   version: Said,
@@ -62,6 +71,9 @@ export const entryRowSchema = Schema.Struct({
     description: 'The components the entry itself says the plugin brings.',
   }),
   source: Schema.String.annotate({ description: 'Where its files are, as the list says.' }),
+  policy: Schema.NullOr(entryPolicySchema).annotate({
+    description: 'The install policy and products a Codex list states for the entry: shown only, it installs and authenticates nothing.',
+  }),
   state: Schema.Literals(ENTRY_STATES).annotate({
     description:
       'available: installable; installed: installed from this entry; taken: its plugin is installed from another source; refused: Tagma does not install it.',

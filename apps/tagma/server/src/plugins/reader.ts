@@ -8,7 +8,7 @@ import {
   type PluginUnreadable,
 } from './contract/service/format.js';
 import { componentName, PLUGIN_ID_PATTERN, pluginIdOf } from './contract/wire/names.js';
-import type { PluginDeclared } from './contract/wire/rows.js';
+import type { PluginDeclared, PluginManifest } from './contract/wire/rows.js';
 
 export class NamesCollide extends Data.TaggedError('NamesCollide')<{ readonly reason: string }> {
   override get message(): string {
@@ -38,12 +38,12 @@ export const collision = (named: readonly Named[]): string | null => {
   return null;
 };
 
-const claimOf = Effect.fnUntraced(function* (formats: readonly PluginFormat[], root: string, declared: PluginDeclared | null) {
-  if (declared !== null) {
-    const format = formats.find((candidate) => candidate.id === declared.format);
+const claimOf = Effect.fnUntraced(function* (formats: readonly PluginFormat[], root: string, manifest: PluginManifest | undefined) {
+  if (manifest !== undefined) {
+    const format = formats.find((candidate) => candidate.id === manifest.format);
     if (format === undefined) {
       return yield* new PluginRefused({
-        reason: `its marketplace entry declares a ${declared.format} manifest, a format Tagma does not read`,
+        reason: `its marketplace entry declares a ${manifest.format} manifest, a format Tagma does not read`,
       });
     }
     return { format, claim: (yield* format.claim(root)) ?? ('layout' as const) };
@@ -62,11 +62,12 @@ export const readPlugin = Effect.fn('plugins.read')(function* (
   root: string,
   declared: PluginDeclared | null,
 ): Effect.fn.Return<Read, PluginRefused | PluginUnreadable | NamesCollide, FileSystem.FileSystem> {
-  const claimed = yield* claimOf(formats, root, declared);
+  const claimed = yield* claimOf(formats, root, declared?.manifest);
   if (claimed === null) {
     return yield* new PluginRefused({ reason: `${root} holds no plugin manifest and none of the plugin layout's components` });
   }
-  const read = yield* claimed.format.read(root, claimed.claim, declared?.fields ?? null);
+  const entry = declared === null ? null : { name: declared.name, fields: declared.manifest?.fields ?? null };
+  const read = yield* claimed.format.read(root, claimed.claim, entry);
   const id = pluginIdOf(read.name);
   if (!PLUGIN_ID_PATTERN.test(id) || id.length > 64) {
     return yield* new PluginRefused({

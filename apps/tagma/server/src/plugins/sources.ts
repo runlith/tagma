@@ -1,6 +1,6 @@
 import { isAbsolute, join, resolve } from 'node:path';
 import { type CloneFailed, type CommitUnreachable, isGitUrl, shallowClone } from '@runlith/git/clone';
-import { Data, Effect, FileSystem } from 'effect';
+import { Data, Effect, FileSystem, type PlatformError } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import { within } from './contract/service/reading.js';
 import type { PluginSource } from './contract/wire/rows.js';
@@ -55,6 +55,32 @@ const staged = Effect.fnUntraced(function* (home: string) {
   return yield* files.makeTempDirectory({ directory: join(home, CLONES, STAGING), prefix: 'stage-' }).pipe(Effect.mapError(unreadable));
 });
 
+const materialized: (
+  from: string,
+  into: string,
+  root: string,
+  chain: readonly string[],
+) => Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem> = Effect.fnUntraced(function* (from, into, root, chain) {
+  const files = yield* FileSystem.FileSystem;
+  yield* files.makeDirectory(into, { recursive: true });
+  for (const name of yield* files.readDirectory(from)) {
+    const path = join(from, name);
+    if (name === '.git' || !(yield* files.exists(path))) continue;
+    const real = yield* files.realPath(path);
+    if (!within(root, real)) continue;
+    const info = yield* files.stat(real);
+    if (info.type === 'File') yield* files.copyFile(real, join(into, name));
+    else if (info.type === 'Directory' && !chain.some((walked) => within(real, walked))) {
+      yield* materialized(real, join(into, name), root, [...chain, real]);
+    }
+  }
+});
+
+const copiedFrom = Effect.fnUntraced(function* (root: string, into: string) {
+  yield* materialized(root, into, root, [root]).pipe(Effect.mapError(unreadable));
+  return into;
+});
+
 export const fetchSource = Effect.fn('plugins.fetch')(function* (
   source: PluginSource,
   home: string,
@@ -65,19 +91,31 @@ export const fetchSource = Effect.fn('plugins.fetch')(function* (
   FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
 > {
   const files = yield* FileSystem.FileSystem;
-  if (source.kind === 'folder') {
-    const root = yield* directoryIn(source.path, undefined, source.path);
-    if (!snapshot) return { source, root, stage: null };
-    const stage = yield* staged(home);
-    const copy = join(stage, TAKEN);
-    yield* files.copy(root, copy).pipe(Effect.mapError(unreadable));
-    return { source, root: copy, stage };
-  }
+  if (source.kind === 'folder' && !snapshot) return { source, root: yield* directoryIn(source.path, undefined, source.path), stage: null };
   const stage = yield* staged(home);
-  const repository = join(stage, 'repository');
-  const { commit } = yield* shallowClone({ url: source.url, into: repository, ref: source.ref, commit: source.commit });
-  const root = yield* directoryIn(repository, source.path, source.url);
-  return { source: { ...source, commit }, root, stage };
+  const taken = join(stage, TAKEN);
+  const copied: Effect.Effect<
+    Fetched,
+    SourceUnreadable | CloneFailed | CommitUnreachable,
+    FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
+  > =
+    source.kind === 'folder'
+      ? Effect.map(
+          Effect.flatMap(directoryIn(source.path, undefined, source.path), (root) => copiedFrom(root, taken)),
+          (root) => ({
+            source,
+            root,
+            stage,
+          }),
+        )
+      : Effect.gen(function* () {
+          const repository = join(stage, 'repository');
+          const { commit } = yield* shallowClone({ url: source.url, into: repository, ref: source.ref, commit: source.commit });
+          const root = yield* copiedFrom(yield* directoryIn(repository, source.path, source.url), taken);
+          yield* files.remove(repository, { recursive: true, force: true }).pipe(Effect.mapError(unreadable));
+          return { source: { ...source, commit }, root, stage };
+        });
+  return yield* copied.pipe(Effect.tapError(() => Effect.orDie(files.remove(stage, { recursive: true, force: true }))));
 });
 
 export const settle = Effect.fn('plugins.settle')(function* (fetched: { readonly root: string; readonly stage: string }, target: string) {

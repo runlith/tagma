@@ -7,26 +7,27 @@ import { EnabledPlugins, Plugins } from '../plugins/contract/service/plugins.js'
 import type { PluginSource } from '../plugins/contract/wire/rows.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { ListFormats } from './contract/service/lists.js';
-import { MarketplacePlaces, MarketplacePresets, Marketplaces } from './contract/service/marketplaces.js';
+import { MarketplacePlaces, MarketplacePresets, Marketplaces, type Picked } from './contract/service/marketplaces.js';
 import { type EntryRow, MARKETPLACE_ID_PATTERN, type MarketplaceRow, type MarketplaceSource } from './contract/wire/rows.js';
 import { type MarketplaceAdded, marketplacesAdded, marketplacesPresets } from './contract/wire/settings.js';
-import { entryRowOf, entryRows, escapes } from './entries.js';
+import { entryRowOf, entryRows, escapes, installedOf } from './entries.js';
 import {
   clearStaging,
   dropFetched,
   dropRevision,
   type Fetched,
   fetchRevision,
-  listAt,
   type ListUnreachable,
   type ListUnreadable,
-  placeOf,
-  readStamp,
+  removed,
   type Revision,
   storedRevision,
+  storedRevisionOf,
 } from './revisions.js';
 
 type Stored = { readonly revision: Revision | null; readonly failure: { readonly reason: string; readonly at: number } | null };
+
+const WRITERS = 1_000;
 
 const READ = 'read_marketplaces names every marketplace added and its entries';
 
@@ -71,24 +72,29 @@ export const makeMarketplaces = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const scope = yield* Effect.scope;
-  const serial = yield* Semaphore.make(1);
-  const pulses = yield* Effect.acquireRelease(PubSub.unbounded<void>(), PubSub.shutdown);
+  const gate = yield* Semaphore.make(WRITERS);
+  const pulses = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1, replay: 1 }), PubSub.shutdown);
   const stored = new Map<string, Stored>();
 
   const changed = Effect.asVoid(PubSub.publish(pulses, undefined));
   const added = settings.value(marketplacesAdded);
-  const locked = <A, E>(work: Effect.Effect<A, E>): Effect.Effect<A, E> => serial.withPermit(work);
+  const locked = <A, E>(work: Effect.Effect<A, E>): Effect.Effect<A, E> => gate.withPermits(WRITERS)(work);
+  const reading = <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => gate.withPermits(1)(work);
   const provided = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner>) =>
     effect.pipe(
       Effect.provideService(FileSystem.FileSystem, files),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
 
+  yield* changed;
+  yield* Effect.forkIn(
+    Stream.runForEach(enabled.changes, () => changed),
+    scope,
+  );
+
   const loaded = Effect.fnUntraced(function* (registration: MarketplaceAdded) {
-    const stamp = yield* readStamp(home, registration.id);
-    if (stamp === null) return { revision: null, failure: null } satisfies Stored;
-    const root = registration.source.kind === 'git' ? placeOf(home, registration.id) : registration.source.path;
-    return { revision: { root, ...stamp, ...(yield* listAt(formats, root)) }, failure: null } satisfies Stored;
+    const revision = yield* storedRevisionOf({ home, id: registration.id, source: registration.source, formats });
+    return { revision, failure: null } satisfies Stored;
   });
 
   const unloaded = (failure: ListUnreachable | ListUnreadable) =>
@@ -123,8 +129,9 @@ export const makeMarketplaces = Effect.gen(function* () {
   });
 
   const kept = Effect.fnUntraced(function* (id: string, got: Fetched) {
-    const revision = yield* provided(storedRevision(home, id, got)).pipe(Effect.mapError(unstored(id)));
+    const { revision, leftovers } = yield* provided(storedRevision(home, id, got)).pipe(Effect.mapError(unstored(id)));
     stored.set(id, { revision, failure: null });
+    yield* provided(removed(leftovers)).pipe(Effect.mapError(unstored(id)));
   });
 
   const fetched = Effect.fnUntraced(function* (source: MarketplaceSource) {
@@ -186,14 +193,53 @@ export const makeMarketplaces = Effect.gen(function* () {
     }
   }
 
+  const pick = Effect.fnUntraced(function* (marketplace: string, name: string) {
+    yield* registered(marketplace);
+    const revision = stored.get(marketplace)?.revision ?? null;
+    if (revision === null) {
+      return yield* new GateRefusal('marketplace-unfetched', `${marketplace} has no stored list yet.`, [
+        `refresh_marketplace ${marketplace}, then try again`,
+      ]);
+    }
+    const entry = revision.list.entries.find((candidate) => candidate.name === name);
+    if (entry === undefined) {
+      const fault = revision.list.faults.find((candidate) => candidate.name === name);
+      if (fault !== undefined) return yield* entryRefused(marketplace, name, fault.reason);
+      return yield* new GateRefusal('marketplace-entry-unknown', `The stored list of ${marketplace} has no entry ${name}.`, [
+        READ,
+        `refresh_marketplace ${marketplace} if the entry is new`,
+      ]);
+    }
+    const row = entryRowOf(marketplace, revision.root, entry, installedOf(yield* plugins.installs()));
+    const origin = { marketplace, entry: name };
+    const declared = { name, manifest: entry.manifest ?? undefined };
+    const source = entry.source;
+    if (row.state === 'refused' || source.kind === 'refused') {
+      return yield* entryRefused(marketplace, name, row.reason ?? 'Tagma does not install it');
+    }
+    if (source.kind === 'git') {
+      const resolved: PluginSource = { kind: 'git', url: source.url, path: source.path, ref: source.ref, commit: source.commit };
+      return { entry: row, resolved: { source: resolved, origin, declared } } satisfies Picked;
+    }
+    const asked = resolve(revision.root, source.path);
+    const real = yield* Effect.all([files.realPath(revision.root), files.realPath(asked)]).pipe(
+      Effect.mapError(() => entryRefused(marketplace, name, `its path ${source.path} does not exist`)),
+    );
+    if (escapes(revision.root, source.path) || !within(real[0], real[1])) {
+      return yield* entryRefused(marketplace, name, `its path ${source.path} leaves the marketplace`);
+    }
+    return { entry: row, resolved: { source: { kind: 'folder', path: real[1] }, origin, declared } } satisfies Picked;
+  });
+
   return Marketplaces.of({
     rows: () => Effect.map(added, (registrations) => registrations.map(rowOf)),
-    entries: Effect.fn('Marketplaces.entries')(function* () {
-      const installs = yield* plugins.installs();
+    entries: Effect.fn('Marketplaces.entries')(function* (marketplace) {
+      const installed = installedOf(yield* plugins.installs());
       return (yield* added)
+        .filter((registration) => marketplace === null || registration.id === marketplace)
         .flatMap((registration) => {
           const revision = stored.get(registration.id)?.revision ?? null;
-          return revision === null ? [] : entryRows(registration.id, revision, installs);
+          return revision === null ? [] : entryRows(registration.id, revision, installed);
         })
         .sort(byKey);
     }),
@@ -246,45 +292,9 @@ export const makeMarketplaces = Effect.gen(function* () {
       );
     }),
     refresh,
-    pick: Effect.fn('Marketplaces.pick')(function* (marketplace, name) {
-      yield* registered(marketplace);
-      const revision = stored.get(marketplace)?.revision ?? null;
-      if (revision === null) {
-        return yield* new GateRefusal('marketplace-unfetched', `${marketplace} has no stored list yet.`, [
-          `refresh_marketplace ${marketplace}, then try again`,
-        ]);
-      }
-      const entry = revision.list.entries.find((candidate) => candidate.name === name);
-      if (entry === undefined) {
-        const fault = revision.list.faults.find((candidate) => candidate.name === name);
-        if (fault !== undefined) return yield* entryRefused(marketplace, name, fault.reason);
-        return yield* new GateRefusal('marketplace-entry-unknown', `The stored list of ${marketplace} has no entry ${name}.`, [
-          READ,
-          `refresh_marketplace ${marketplace} if the entry is new`,
-        ]);
-      }
-      const row = entryRowOf(marketplace, revision, entry, yield* plugins.installs());
-      const origin = { marketplace, entry: name };
-      const source = entry.source;
-      if (row.state === 'refused' || source.kind === 'refused')
-        return yield* entryRefused(marketplace, name, row.reason ?? 'Tagma does not install it');
-      if (source.kind === 'git') {
-        const resolved: PluginSource = { kind: 'git', url: source.url, path: source.path, ref: source.ref, commit: source.commit };
-        return { entry: row, resolved: { source: resolved, origin, declared: entry.declared } };
-      }
-      const asked = resolve(revision.root, source.path);
-      const real = yield* Effect.all([files.realPath(revision.root), files.realPath(asked)]).pipe(
-        Effect.mapError(() => entryRefused(marketplace, name, `its path ${source.path} does not exist`)),
-      );
-      if (escapes(revision.root, source.path) || !within(real[0], real[1])) {
-        return yield* entryRefused(marketplace, name, `its path ${source.path} leaves the marketplace`);
-      }
-      return { entry: row, resolved: { source: { kind: 'folder', path: real[1] }, origin, declared: entry.declared } };
-    }),
-    changes: Stream.merge(
-      Stream.fromPubSub(pulses),
-      Stream.map(enabled.changes, () => undefined),
-    ),
+    entry: (marketplace, name, use) =>
+      reading(Effect.flatMap(pick(marketplace, name), use)).pipe(Effect.withSpan('Marketplaces.entry', { attributes: { marketplace } })),
+    changes: Stream.fromPubSub(pulses),
   });
 });
 

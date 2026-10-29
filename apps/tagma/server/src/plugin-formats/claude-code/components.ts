@@ -9,7 +9,7 @@ import type {
   PluginUnreadable,
 } from '../../plugins/contract/service/format.js';
 import { declaredPath, entryOf, firstLine, frontmatterOf, namesIn, skillFolders, textOf } from '../../plugins/contract/service/reading.js';
-import { commandEntryOf, listed, type Manifest } from './manifest.js';
+import { type CommandParts, commandEntryOf, listed, type Manifest } from './manifest.js';
 import { tagmaTool, type ToolNaming } from './tools.js';
 import { contentSubstitution, substituted } from './variables.js';
 
@@ -94,14 +94,20 @@ const fileCommand = Effect.fnUntraced(function* (name: string, path: string, opt
 
 export const commandsOf = Effect.fnUntraced(function* (
   root: string,
-  manifest: Manifest | null,
+  parts: CommandParts | undefined,
   options: readonly PluginOption[],
   ignored: PluginIgnored[],
 ) {
   const commands: PluginCommandFile[] = [];
-  const declared = manifest?.commands;
-  if (declared !== undefined && typeof declared === 'object' && !Array.isArray(declared)) {
-    for (const [name, raw] of Object.entries(declared as Readonly<Record<string, unknown>>)) {
+  const places: { readonly path: string; readonly optional: boolean }[] = [];
+  if (parts === undefined) places.push({ path: join(root, 'commands'), optional: true });
+  for (const part of parts ?? []) {
+    if (typeof part === 'string') {
+      const entry = yield* declaredPath(root, 'commands', part, ignored);
+      if (entry !== null) places.push({ path: entry.path, optional: false });
+      continue;
+    }
+    for (const [name, raw] of Object.entries(part)) {
       const entry = yield* commandEntryOf(name, raw);
       if (entry.content !== undefined) {
         const content = entry.content;
@@ -120,13 +126,6 @@ export const commandsOf = Effect.fnUntraced(function* (
       }
       commands.push(yield* fileCommand(name, file.path, options, entry.description));
     }
-    return commands;
-  }
-  const places: { readonly path: string; readonly optional: boolean }[] = [];
-  if (declared === undefined) places.push({ path: join(root, 'commands'), optional: true });
-  for (const path of declared === undefined ? [] : listed(declared as string | readonly string[])) {
-    const entry = yield* declaredPath(root, 'commands', path, ignored);
-    if (entry !== null) places.push({ path: entry.path, optional: false });
   }
   for (const place of places) {
     const entry = yield* entryOf(root, place.path);
@@ -211,8 +210,13 @@ export const agentsOf = Effect.fnUntraced(function* (
     for (const path of listed(manifest.agents)) {
       const entry = yield* declaredPath(root, 'agents', path, ignored);
       if (entry === null) continue;
+      if (entry.kind === 'directory') {
+        for (const file of yield* markdownFiles(root, entry.path, []))
+          agents.push(yield* agentOf(plugin, file.segments, file.path, options, ignored));
+        continue;
+      }
       if (entry.kind !== 'file' || !entry.path.endsWith(MARKDOWN)) {
-        ignored.push({ component: 'agents', name: path, reason: 'an agents entry names a Markdown file' });
+        ignored.push({ component: 'agents', name: path, reason: 'an agents entry names a Markdown file or a directory of them' });
         continue;
       }
       agents.push(yield* agentOf(plugin, [basename(entry.path, MARKDOWN)], entry.path, options, ignored));

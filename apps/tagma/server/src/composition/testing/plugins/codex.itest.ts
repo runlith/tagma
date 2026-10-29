@@ -34,13 +34,12 @@ const PORTABLE: Files = {
       },
     },
   }),
-  '.codex-plugin/plugin.json': JSON.stringify({
-    name: 'cx.portable',
-    interface: { displayName: 'Fallback Title' },
-    hooks: './fallback-hooks.json',
-  }),
-  'fallback-hooks.json': JSON.stringify({
-    hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: 'echo fallback >&2; exit 2' }] }] },
+  '.codex-plugin/plugin.json': '{ "name": "cx.portable", "hooks": ',
+  'mcp.json': JSON.stringify({
+    $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json',
+    mcpServers: {
+      docs: { type: 'streamable-http', url: 'http://127.0.0.1:9/mcp', extensions: { 'com.openai': { auth: { type: 'oauth' } } } },
+    },
   }),
   'skills/plan/SKILL.md': skill('Plans.'),
 };
@@ -97,21 +96,24 @@ layer(Layer.effect(Codex, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
     }),
   );
 
-  it.effect('an inline extensions["com.openai"] overlay replaces the .codex-plugin manifest beside a root Agent Plugins manifest', () =>
-    Effect.gen(function* () {
-      const { install } = yield* Codex;
-      const plugin = yield* install('portable', PORTABLE);
+  it.effect(
+    'an inline extensions["com.openai"] overlay replaces a .codex-plugin manifest it never reads, and its MCP servers keep their OpenAI extensions',
+    () =>
+      Effect.gen(function* () {
+        const { install } = yield* Codex;
+        const plugin = yield* install('portable', PORTABLE);
 
-      expect(plugin.format).toBe('codex');
-      expect(plugin.title).toBe('Inline Title');
-      expect(plugin.components).toEqual(
-        expect.arrayContaining([
-          { kind: 'skill', name: 'cx-portable-plan' },
-          { kind: 'hook', name: 'PreToolUse Edit: echo inline >&2; exit 2' },
-        ]),
-      );
-      expect(plugin.components.filter((component) => component.kind === 'hook')).toHaveLength(1);
-      expect(plugin.ignored).toContainEqual(expect.objectContaining({ component: '.codex-plugin/plugin.json' }));
-    }),
+        expect(plugin.format).toBe('codex');
+        expect(plugin.title).toBe('Inline Title');
+        expect(plugin.components).toEqual(
+          expect.arrayContaining([
+            { kind: 'skill', name: 'cx-portable-plan' },
+            { kind: 'mcp-server', name: 'cx-portable-docs', detail: 'http://127.0.0.1:9/mcp' },
+            { kind: 'hook', name: 'PreToolUse Edit: echo inline >&2; exit 2' },
+          ]),
+        );
+        expect(plugin.components.filter((component) => component.kind === 'hook')).toHaveLength(1);
+        expect(plugin.ignored).toContainEqual(expect.objectContaining({ component: '.codex-plugin/plugin.json' }));
+      }),
   );
 });

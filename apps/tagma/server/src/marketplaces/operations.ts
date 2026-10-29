@@ -36,7 +36,7 @@ export const MARKETPLACE_PAIRS = {
         const question = { operation: 'read_marketplaces', selection: { marketplace: narrowed ?? null }, order: MARKETPLACE_ENTRIES.order };
         const read = input.cursor === undefined ? null : readCursor(input.cursor, question);
         if (read !== null && 'refused' in read) return yield* cursorRefusal(read.refused);
-        const entries = (yield* marketplaces.entries()).filter((entry) => narrowed === undefined || entry.marketplace === narrowed);
+        const entries = yield* marketplaces.entries(narrowed ?? null);
         const after = read === null ? entries : pastKey(entries, keyOf, ['asc', 'asc'], read.at);
         const shown = page({
           rows: after,
@@ -92,9 +92,15 @@ export const MARKETPLACE_PAIRS = {
     OPS.preview_plugin,
     body(OPS.preview_plugin, {
       execute: Effect.fnUntraced(function* (input) {
-        const { entry, resolved } = yield* (yield* Marketplaces).pick(input.marketplace, input.entry);
-        const prepared = yield* (yield* Plugins).prepare({ projectId: yield* projectId, source: resolved });
-        return { status: 'ok' as const, entry, preview: prepared.preview };
+        const plugins = yield* Plugins;
+        const project = yield* projectId;
+        return yield* (yield* Marketplaces).entry(input.marketplace, input.entry, ({ entry, resolved }) =>
+          Effect.map(plugins.prepare({ projectId: project, source: resolved }), (prepared) => ({
+            status: 'ok' as const,
+            entry,
+            preview: prepared.preview,
+          })),
+        );
       }),
     }),
   ),
@@ -125,25 +131,13 @@ export const MARKETPLACE_PAIRS = {
             [`add_marketplace ${origin.marketplace} again, then update`],
           );
         }
-        const { resolved } = yield* marketplaces.pick(origin.marketplace, origin.entry);
-        const prepared = yield* plugins.prepare({ projectId: yield* projectId, source: resolved });
-        if (prepared.id !== input.id) {
-          return yield* new GateRefusal(
-            'plugin-refused',
-            `${origin.entry} in ${origin.marketplace} now installs as ${prepared.id}, not ${input.id}.`,
-            [`uninstall_plugin ${input.id}, then install ${prepared.id} from the entry`],
-          );
-        }
-        return prepared;
+        const project = yield* projectId;
+        return yield* marketplaces.entry(origin.marketplace, origin.entry, ({ resolved }) =>
+          plugins.prepare({ projectId: project, source: resolved }),
+        );
       }),
       execute: Effect.fnUntraced(function* (_input, prepared) {
-        const plugins = yield* Plugins;
-        const project = yield* projectId;
-        const [standing] = yield* plugins.rows(project, [prepared.id]);
-        return {
-          status: 'ok' as const,
-          plugin: yield* plugins.install({ projectId: project, prepared, enabled: standing?.enabled ?? false }),
-        };
+        return { status: 'ok' as const, plugin: yield* (yield* Plugins).update({ projectId: yield* projectId, prepared }) };
       }),
     }),
   ),

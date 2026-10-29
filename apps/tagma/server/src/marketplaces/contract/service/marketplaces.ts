@@ -30,11 +30,15 @@ export class Marketplaces extends Context.Service<
   Marketplaces,
   {
     rows(): Effect.Effect<readonly MarketplaceRow[], StoreFailure>;
-    entries(): Effect.Effect<readonly EntryRow[], StoreFailure>;
+    entries(marketplace: string | null): Effect.Effect<readonly EntryRow[], StoreFailure>;
     add(source: MarketplaceSource): Effect.Effect<MarketplaceRow, MarketplaceFailure<AddRefusal>>;
     remove(id: string): Effect.Effect<MarketplaceRow, MarketplaceFailure<RemoveRefusal>>;
     refresh(id: string): Effect.Effect<MarketplaceRow, MarketplaceFailure<RefreshRefusal>>;
-    pick(marketplace: string, entry: string): Effect.Effect<Picked, MarketplaceFailure<EntryRefusal>>;
+    entry<A, E, R>(
+      marketplace: string,
+      name: string,
+      use: (picked: Picked) => Effect.Effect<A, E, R>,
+    ): Effect.Effect<A, E | MarketplaceFailure<EntryRefusal>, R>;
     readonly changes: Stream.Stream<void>;
   }
 >()('tagma/marketplaces/Marketplaces') {}

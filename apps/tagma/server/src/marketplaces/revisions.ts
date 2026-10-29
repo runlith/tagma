@@ -26,13 +26,13 @@ export type Revision = {
   readonly commit: string | null;
   readonly fetched: number;
   readonly format: string;
+  readonly text: string;
   readonly list: MarketplaceList;
 };
 
 export type Fetched = Revision & { readonly stage: string | null };
 
-const Stamp = Schema.Struct({ commit: Schema.NullOr(Schema.String), fetched: Schema.Finite });
-export type Stamp = typeof Stamp.Type;
+const Stamp = Schema.Struct({ commit: Schema.NullOr(Schema.String), fetched: Schema.Finite, format: Schema.String, text: Schema.String });
 
 const decodeStamp = Schema.decodeUnknownEffect(Schema.fromJsonString(Stamp));
 
@@ -42,16 +42,20 @@ const stampOf = (home: string, id: string): string => join(home, FOLDER, `${id}.
 
 const unreachable = (failure: { readonly message: string }) => new ListUnreachable({ reason: failure.message });
 
-export const listAt = Effect.fnUntraced(function* (formats: readonly ListFormat[], root: string) {
+const parsed = (format: ListFormat, text: string) => {
+  const read = format.read(text);
+  return 'refused' in read ? Effect.fail(new ListUnreadable({ reason: read.refused })) : Effect.succeed(read);
+};
+
+const listAt = Effect.fnUntraced(function* (formats: readonly ListFormat[], root: string) {
   const files = yield* FileSystem.FileSystem;
   for (const format of formats) {
     const path = join(root, format.file);
     if (!(yield* files.exists(path).pipe(Effect.mapError(unreachable)))) continue;
     const size = (yield* files.stat(path).pipe(Effect.mapError(unreachable))).size;
     if (Number(size) > LIST_BYTES) return yield* new ListUnreadable({ reason: `${format.file} is larger than ${LIST_BYTES} bytes` });
-    const read = format.read(yield* files.readFileString(path).pipe(Effect.mapError(unreachable)));
-    if ('refused' in read) return yield* new ListUnreadable({ reason: read.refused });
-    return { format: format.id, list: read };
+    const text = yield* files.readFileString(path).pipe(Effect.mapError(unreachable));
+    return { format: format.id, text, list: yield* parsed(format, text) };
   }
   return yield* new ListUnreadable({
     reason: `it holds no marketplace list: neither ${formats.map((format) => format.file).join(' nor ')}`,
@@ -82,46 +86,62 @@ export const fetchRevision = Effect.fn('marketplaces.fetch')(function* (input: {
     const { commit } = yield* shallowClone({ url: source.url, into: root }).pipe(Effect.mapError(unreachable));
     return { ...(yield* listAt(formats, root)), root, commit, fetched: now, stage };
   });
-  return yield* listed.pipe(Effect.tapError(() => files.remove(stage, { recursive: true, force: true }).pipe(Effect.orDie)));
+  return yield* listed.pipe(Effect.tapError(() => Effect.orDie(files.remove(stage, { recursive: true, force: true }))));
 });
 
 export const storedRevision = Effect.fn('marketplaces.store')(function* (home: string, id: string, fetched: Fetched) {
   const files = yield* FileSystem.FileSystem;
-  const target = placeOf(home, id);
-  let root = fetched.root;
-  if (fetched.stage !== null) {
-    const former = `${fetched.stage}-former`;
-    const standing = yield* files.exists(target);
-    if (standing) yield* files.rename(target, former);
-    yield* files.rename(fetched.root, target).pipe(Effect.tapError(() => (standing ? files.rename(former, target) : Effect.void)));
-    if (standing) yield* files.remove(former, { recursive: true, force: true });
-    yield* files.remove(fetched.stage, { recursive: true, force: true });
-    root = target;
+  const stamp = stampOf(home, id);
+  const next = `${stamp}.next`;
+  const { commit, format, text } = fetched;
+  yield* files.makeDirectory(join(home, FOLDER), { recursive: true });
+  yield* files.writeFileString(next, JSON.stringify({ commit, fetched: fetched.fetched, format, text }));
+  const revision = { root: fetched.root, commit, fetched: fetched.fetched, format, text, list: fetched.list } satisfies Revision;
+  if (fetched.stage === null) {
+    yield* files.rename(next, stamp);
+    return { revision, leftovers: [] as readonly string[] };
   }
-  yield* files.writeFileString(stampOf(home, id), JSON.stringify({ commit: fetched.commit, fetched: fetched.fetched } satisfies Stamp));
-  return { root, commit: fetched.commit, fetched: fetched.fetched, format: fetched.format, list: fetched.list } satisfies Revision;
+  const target = placeOf(home, id);
+  const former = `${fetched.stage}-former`;
+  const standing = yield* files.exists(target);
+  const restored = standing ? files.rename(former, target) : Effect.void;
+  if (standing) yield* files.rename(target, former);
+  yield* files.rename(fetched.root, target).pipe(Effect.tapError(() => restored));
+  yield* files.rename(next, stamp).pipe(Effect.tapError(() => Effect.andThen(files.rename(target, fetched.root), restored)));
+  return { revision: { ...revision, root: target }, leftovers: [former, fetched.stage] };
 });
 
-export const readStamp = Effect.fnUntraced(function* (home: string, id: string) {
+export const storedRevisionOf = Effect.fnUntraced(function* (input: {
+  readonly home: string;
+  readonly id: string;
+  readonly source: MarketplaceSource;
+  readonly formats: readonly ListFormat[];
+}) {
   const files = yield* FileSystem.FileSystem;
-  const path = stampOf(home, id);
+  const path = stampOf(input.home, input.id);
   if (!(yield* files.exists(path).pipe(Effect.mapError(unreachable)))) return null;
   const text = yield* files.readFileString(path).pipe(Effect.mapError(unreachable));
-  return yield* decodeStamp(text).pipe(Effect.mapError((failure) => new ListUnreadable({ reason: `${path}: ${failure.message}` })));
+  const stamp = yield* decodeStamp(text).pipe(Effect.mapError((failure) => new ListUnreadable({ reason: `${path}: ${failure.message}` })));
+  const format = input.formats.find((candidate) => candidate.id === stamp.format);
+  if (format === undefined)
+    return yield* new ListUnreadable({ reason: `its stored list is in ${stamp.format}, a format Tagma does not read` });
+  const root = input.source.kind === 'git' ? placeOf(input.home, input.id) : input.source.path;
+  return { root, ...stamp, list: yield* parsed(format, stamp.text) } satisfies Revision;
+});
+
+export const removed = Effect.fn('marketplaces.removed')(function* (paths: readonly string[]) {
+  const files = yield* FileSystem.FileSystem;
+  for (const path of paths) yield* files.remove(path, { recursive: true, force: true });
 });
 
 export const dropRevision = Effect.fn('marketplaces.drop')(function* (home: string, id: string) {
-  const files = yield* FileSystem.FileSystem;
-  yield* files.remove(placeOf(home, id), { recursive: true, force: true });
-  yield* files.remove(stampOf(home, id), { force: true });
+  yield* removed([placeOf(home, id), stampOf(home, id)]);
 });
 
 export const dropFetched = Effect.fn('marketplaces.dropFetched')(function* (fetched: Fetched) {
-  const files = yield* FileSystem.FileSystem;
-  if (fetched.stage !== null) yield* files.remove(fetched.stage, { recursive: true, force: true });
+  if (fetched.stage !== null) yield* removed([fetched.stage]);
 });
 
 export const clearStaging = Effect.fn('marketplaces.clearStaging')(function* (home: string) {
-  const files = yield* FileSystem.FileSystem;
-  yield* files.remove(join(home, FOLDER, STAGING), { recursive: true, force: true });
+  yield* removed([join(home, FOLDER, STAGING)]);
 });

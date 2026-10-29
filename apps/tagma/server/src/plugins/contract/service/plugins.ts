@@ -67,6 +67,10 @@ export class Plugins extends Context.Service<
       readonly prepared: PluginPrepared;
       readonly enabled: boolean;
     }): Effect.Effect<PluginRow, PluginFailure<PluginInstallRefusal>>;
+    update(input: {
+      readonly projectId: number;
+      readonly prepared: PluginPrepared;
+    }): Effect.Effect<PluginRow, PluginFailure<PluginInstallRefusal>>;
     installed(input: {
       readonly projectId: number;
       readonly id: string;

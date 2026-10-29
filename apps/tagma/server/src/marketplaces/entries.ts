@@ -6,6 +6,17 @@ import type { EntrySource, ListedEntry } from './contract/service/lists.js';
 import type { EntryRow } from './contract/wire/rows.js';
 import type { Revision } from './revisions.js';
 
+export type Installed = { readonly byId: ReadonlyMap<string, PluginInstall>; readonly origins: ReadonlySet<string> };
+
+const originKey = (marketplace: string, entry: string): string => `${marketplace}\u0000${entry}`;
+
+export const installedOf = (installs: readonly PluginInstall[]): Installed => ({
+  byId: new Map(installs.map((install) => [install.id, install])),
+  origins: new Set(
+    installs.flatMap((install) => (install.origin === undefined ? [] : [originKey(install.origin.marketplace, install.origin.entry)])),
+  ),
+});
+
 export const sourceLine = (source: EntrySource): string => {
   switch (source.kind) {
     case 'path':
@@ -19,12 +30,12 @@ export const sourceLine = (source: EntrySource): string => {
 
 export const escapes = (root: string, path: string): boolean => !within(root, resolve(root, path));
 
-const pluginOf = (name: string): string | null => {
+export const pluginOf = (name: string): string | null => {
   const id = pluginIdOf(name);
   return PLUGIN_ID_PATTERN.test(id) && id.length <= 64 ? id : null;
 };
 
-const rowOf = (marketplace: string, root: string, entry: ListedEntry, installs: readonly PluginInstall[]): EntryRow => {
+export const entryRowOf = (marketplace: string, root: string, entry: ListedEntry, installed: Installed): EntryRow => {
   const plugin = pluginOf(entry.name);
   const shown = {
     marketplace,
@@ -39,20 +50,26 @@ const rowOf = (marketplace: string, root: string, entry: ListedEntry, installs: 
     category: entry.category,
     brings: entry.brings,
     source: sourceLine(entry.source),
+    policy: entry.policy,
   };
   if (entry.source.kind === 'refused') return { ...shown, state: 'refused', reason: entry.source.reason };
+  if (plugin === null) {
+    return {
+      ...shown,
+      state: 'refused',
+      reason: `its name ${entry.name} cannot name a plugin: Tagma takes lowercase letters, digits, - and _`,
+    };
+  }
   if (entry.source.kind === 'path' && escapes(root, entry.source.path)) {
     return { ...shown, state: 'refused', reason: `its path ${entry.source.path} leaves the marketplace` };
   }
-  if (installs.some((install) => install.origin?.marketplace === marketplace && install.origin.entry === entry.name)) {
-    return { ...shown, state: 'installed' };
-  }
-  const holder = plugin === null ? undefined : installs.find((install) => install.id === plugin);
+  if (installed.origins.has(originKey(marketplace, entry.name))) return { ...shown, state: 'installed' };
+  const holder = installed.byId.get(plugin);
   return holder === undefined ? { ...shown, state: 'available' } : { ...shown, state: 'taken', taken: installedFrom(holder) };
 };
 
-export const entryRows = (marketplace: string, revision: Revision, installs: readonly PluginInstall[]): readonly EntryRow[] => [
-  ...revision.list.entries.map((entry) => rowOf(marketplace, revision.root, entry, installs)),
+export const entryRows = (marketplace: string, revision: Revision, installed: Installed): readonly EntryRow[] => [
+  ...revision.list.entries.map((entry) => entryRowOf(marketplace, revision.root, entry, installed)),
   ...revision.list.faults.map((fault): EntryRow => ({
     marketplace,
     name: fault.name,
@@ -66,10 +83,8 @@ export const entryRows = (marketplace: string, revision: Revision, installs: rea
     category: null,
     brings: [],
     source: '',
+    policy: null,
     state: 'refused',
     reason: fault.reason,
   })),
 ];
-
-export const entryRowOf = (marketplace: string, revision: Revision, entry: ListedEntry, installs: readonly PluginInstall[]): EntryRow =>
-  rowOf(marketplace, revision.root, entry, installs);

@@ -58,11 +58,6 @@ const sameInstall = (standing: PluginInstall, wanted: Wanted): boolean =>
     ? sameOrigin(standing.origin ?? null, wanted.origin)
     : sameSource(standing.source, wanted.source);
 
-const sameAsked = (held: Held, wanted: Wanted): boolean =>
-  sameOrigin(held.origin, wanted.origin) &&
-  JSON.stringify(held.source) === JSON.stringify(wanted.source) &&
-  JSON.stringify(held.declared) === JSON.stringify(wanted.declared);
-
 const optionRows = (pkg: PluginPackage, values: Readonly<Record<string, string>>) =>
   pkg.options.map((option) => ({
     key: option.key,
@@ -200,28 +195,29 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
     ).pipe(Effect.tapError((failure) => Effect.logWarning(`a dropped plugin preview could not be removed: ${failure.message}`)));
 
   const fetched = Effect.fnUntraced(function* (wanted: Wanted) {
-    const reused = wanted.origin === null ? undefined : [...holding.values()].find((held) => sameAsked(held, wanted));
-    if (reused !== undefined) return reused;
     const got = yield* fetchSource(wanted.source, home, wanted.origin !== null).pipe(
       Effect.provideService(FileSystem.FileSystem, files),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       Effect.mapError(unfetchedOf),
     );
-    const held: Held = {
+    shelf.forget(got.root);
+    return {
       ...wanted,
       token: randomUUID(),
       fetched: got.source,
       root: got.root,
       stage: got.stage,
       expires: (yield* Clock.currentTimeMillis) + Duration.toMillis(KEPT),
-    };
-    shelf.forget(held.root);
-    if (held.stage !== null) {
-      holding.set(held.token, held);
-      yield* Effect.forkIn(Effect.delay(expire(held.token), KEPT), scope);
-    }
-    return held;
+    } satisfies Held;
   });
+
+  const dropped = (taken: Held) =>
+    taken.stage === null
+      ? Effect.void
+      : Effect.andThen(
+          Effect.sync(() => shelf.forget(taken.root)),
+          Effect.orDie(dropStage(taken.stage).pipe(Effect.provideService(FileSystem.FileSystem, files))),
+        );
 
   const rowOf = Effect.fn('Plugins.rowOf')(function* (install: PluginInstall, projectId: number, enabled: ReadonlySet<string>) {
     const project = yield* projectRoot(projectId);
@@ -310,6 +306,70 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
   const recorded = (change: (current: readonly PluginInstall[]) => readonly PluginInstall[]) =>
     settings.amend<readonly PluginInstall[], never>(pluginsInstalled, 'user', undefined, (current) => Effect.succeed(change(current)));
 
+  const put = Effect.fnUntraced(function* (projectId: number, prepared: PluginPrepared, enabled: boolean | 'kept') {
+    const { id } = prepared;
+    const held: Held | undefined =
+      prepared.stage === null
+        ? {
+            token: prepared.token,
+            source: prepared.source,
+            fetched: prepared.source,
+            origin: prepared.origin,
+            declared: prepared.declared,
+            root: prepared.root,
+            stage: null,
+            expires: 0,
+          }
+        : holding.get(prepared.token);
+    if (held === undefined) return yield* expired(prepared.token);
+    if (enabled === 'kept') {
+      const standing = (yield* installedList).find((entry) => entry.id === id);
+      if (standing === undefined || !sameOrigin(standing.origin ?? null, held.origin)) {
+        return yield* new GateRefusal('plugin-not-installed', `${id} was uninstalled while its update waited, so nothing is updated.`, [
+          'install it from its marketplace entry again',
+        ]);
+      }
+    }
+    shelf.forget(held.root);
+    const read = yield* readOf(held.root, held.declared);
+    if (read.id !== id) {
+      return yield* new GateRefusal(
+        'plugin-refused',
+        `The plugin at ${held.root} now names itself ${read.id}, not ${id}, which was approved.`,
+        ['install again'],
+      );
+    }
+    yield* untaken(id, held);
+    const enabledHere = (yield* settings.value(pluginsEnabled, projectId)).includes(id);
+    const runs = enabled === 'kept' ? enabledHere : enabled;
+    const running: number[] = runs ? [projectId] : [];
+    for (const project of yield* projects.list()) {
+      if (project.id !== projectId && (yield* settings.value(pluginsEnabled, project.id)).includes(id)) running.push(project.id);
+    }
+    yield* Effect.forEach(running, (project) => clashes(project, read), { discard: true });
+    const stage = held.stage;
+    const root =
+      stage === null
+        ? held.root
+        : yield* settle({ root: held.root, stage }, cloneRoot(home, id)).pipe(
+            Effect.provideService(FileSystem.FileSystem, files),
+            Effect.mapError(
+              (failure) =>
+                new GateRefusal('plugin-clone-failed', `The plugin could not be put in place: ${failure.message}`, ['install again']),
+            ),
+          );
+    holding.delete(prepared.token);
+    shelf.forget(held.root);
+    shelf.forget(root);
+    yield* recorded((current) => [
+      ...current.filter((entry) => entry.id !== id),
+      { id, source: held.fetched, root, origin: held.origin ?? undefined, declared: held.declared ?? undefined },
+    ]);
+    if (runs !== enabledHere) yield* shown(projectId, id, runs);
+    yield* changed(null);
+    return yield* row(projectId, id);
+  });
+
   return Plugins.of({
     ids: () => Effect.map(installedList, (installs) => installs.map((install) => install.id).sort()),
     installs: () => installedList,
@@ -329,71 +389,30 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
         typeof given === 'string'
           ? { source: sourceOf(given, yield* projectRoot(projectId)), origin: null, declared: null }
           : { source: given.source, origin: given.origin, declared: given.declared };
-      const held = yield* fetched(wanted);
-      return yield* preparedOf(held, yield* readOf(held.root, held.declared), projectId);
+      const taken = yield* fetched(wanted);
+      const prepared = yield* Effect.flatMap(readOf(taken.root, taken.declared), (read) => preparedOf(taken, read, projectId)).pipe(
+        Effect.tapError(() => dropped(taken)),
+      );
+      if (taken.stage !== null) {
+        holding.set(taken.token, taken);
+        yield* Effect.forkIn(Effect.delay(expire(taken.token), KEPT), scope);
+      }
+      return prepared;
     }),
     held: Effect.fn('Plugins.held')(function* ({ projectId, token }) {
-      const held = holding.get(token);
-      if (held === undefined) return yield* expired(token);
-      return yield* preparedOf(held, yield* readOf(held.root, held.declared), projectId);
-    }),
-    install: Effect.fn('Plugins.install')(function* ({ projectId, prepared, enabled }) {
-      const { id } = prepared;
       return yield* locked(
         Effect.gen(function* () {
-          const held: Held | undefined =
-            prepared.stage === null
-              ? {
-                  token: prepared.token,
-                  source: prepared.source,
-                  fetched: prepared.source,
-                  origin: prepared.origin,
-                  declared: prepared.declared,
-                  root: prepared.root,
-                  stage: null,
-                  expires: 0,
-                }
-              : holding.get(prepared.token);
-          if (held === undefined) return yield* expired(prepared.token);
-          shelf.forget(held.root);
-          const read = yield* readOf(held.root, held.declared);
-          if (read.id !== id) {
-            return yield* new GateRefusal(
-              'plugin-refused',
-              `The plugin at ${held.root} now names itself ${read.id}, not ${id}, which was approved.`,
-              ['install again'],
-            );
-          }
-          yield* untaken(id, held);
-          const enabledHere = (yield* settings.value(pluginsEnabled, projectId)).includes(id);
-          const running: number[] = enabled ? [projectId] : [];
-          for (const project of yield* projects.list()) {
-            if (project.id !== projectId && (yield* settings.value(pluginsEnabled, project.id)).includes(id)) running.push(project.id);
-          }
-          yield* Effect.forEach(running, (project) => clashes(project, read), { discard: true });
-          const stage = held.stage;
-          const root =
-            stage === null
-              ? held.root
-              : yield* settle({ root: held.root, stage }, cloneRoot(home, id)).pipe(
-                  Effect.provideService(FileSystem.FileSystem, files),
-                  Effect.mapError(
-                    (failure) =>
-                      new GateRefusal('plugin-clone-failed', `The plugin could not be put in place: ${failure.message}`, ['install again']),
-                  ),
-                );
-          holding.delete(prepared.token);
-          shelf.forget(held.root);
-          shelf.forget(root);
-          yield* recorded((current) => [
-            ...current.filter((entry) => entry.id !== id),
-            { id, source: held.fetched, root, origin: held.origin ?? undefined, declared: held.declared ?? undefined },
-          ]);
-          if (enabled !== enabledHere) yield* shown(projectId, id, enabled);
-          yield* changed(null);
-          return yield* row(projectId, id);
+          const held = holding.get(token);
+          if (held === undefined) return yield* expired(token);
+          return yield* preparedOf(held, yield* readOf(held.root, held.declared), projectId);
         }),
       );
+    }),
+    install: Effect.fn('Plugins.install')(function* ({ projectId, prepared, enabled }) {
+      return yield* locked(put(projectId, prepared, enabled));
+    }),
+    update: Effect.fn('Plugins.update')(function* ({ projectId, prepared }) {
+      return yield* locked(put(projectId, prepared, 'kept'));
     }),
     installed: Effect.fn('Plugins.installed')(function* ({ projectId, id }) {
       const install = yield* installedOf(id);

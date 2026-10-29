@@ -20,18 +20,22 @@ const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
 
 const Strings = Schema.Record(Schema.String, Schema.String);
 
+const Extensions = Schema.optional(Schema.Record(Schema.String, Schema.Unknown));
+
 const Stdio = Schema.Struct({
   type: Schema.Literal('stdio'),
   command: Schema.String.check(Schema.isMinLength(1)),
   args: Schema.optional(Schema.Array(Schema.String)),
   env: Schema.optional(Strings),
   cwd: Schema.optional(Schema.String),
+  extensions: Extensions,
 });
 
 const Remote = Schema.Struct({
   type: Schema.Literals(['streamable-http', 'sse']),
   url: Schema.String.check(Schema.isMinLength(1)),
   headers: Schema.optional(Strings),
+  extensions: Extensions,
 });
 
 const Server = Schema.Union([Stdio, Remote]);
@@ -145,6 +149,13 @@ export const serversOf = Effect.fnUntraced(function* (root: string, ignored: Plu
       continue;
     }
     const server = decoded.server;
+    for (const namespace of Object.keys(server.extensions ?? {})) {
+      ignored.push({
+        component: 'mcp-server extension',
+        name: `${name}: ${namespace}`,
+        reason: 'a client extension Tagma does not implement',
+      });
+    }
     if (server.type === 'sse') {
       ignored.push({ component: 'mcp-server', name, reason: 'it uses the deprecated HTTP+SSE transport; Tagma speaks Streamable HTTP' });
       continue;

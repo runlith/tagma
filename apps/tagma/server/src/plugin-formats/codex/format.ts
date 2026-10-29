@@ -34,13 +34,14 @@ const skillsOf = Effect.fnUntraced(function* (root: string, declared: unknown, i
   return skills;
 });
 
-const readLegacy = Effect.fnUntraced(function* (root: string, raw: Readonly<Record<string, unknown>>) {
+const readLegacy = Effect.fnUntraced(function* (root: string, raw: Readonly<Record<string, unknown>>, named: string | null) {
   const ignored: PluginIgnored[] = [];
   const legacy = yield* legacyOf(raw);
+  const name = named ?? legacy.name;
   const settings = settingsOf(raw, MANIFEST, false, ignored);
   yield* appsIgnored(root, settings.apps, ignored);
   return {
-    name: legacy.name,
+    name,
     title: settings.title,
     version: legacy.version,
     description: legacy.description ?? settings.summary,
@@ -49,43 +50,51 @@ const readLegacy = Effect.fnUntraced(function* (root: string, raw: Readonly<Reco
     commands: [],
     agents: [],
     servers: yield* serversOf(root, legacy.mcpServers, ignored),
-    hooks: yield* hooksOf(root, { name: legacy.name, id: pluginIdOf(legacy.name) }, settings.hooks, ignored),
+    hooks: yield* hooksOf(root, { name, id: pluginIdOf(name) }, settings.hooks, ignored),
     options: [],
     ignored,
   } satisfies PluginPackage;
 });
 
-const readPortableOverlay = Effect.fnUntraced(function* (root: string, fallback: Readonly<Record<string, unknown>> | null) {
+const readPortableOverlay = Effect.fnUntraced(function* (root: string, named: string | null) {
   const ignored: PluginIgnored[] = [];
   const portable = yield* readPortable(root, [NAMESPACE]);
   const inline = portable.extensions?.[NAMESPACE];
   let settings = NO_SETTINGS;
   if (isObject(inline)) {
     settings = settingsOf(inline, INLINE, true, ignored);
-    if (fallback !== null) ignored.push({ component: MANIFEST, name: null, reason: `${INLINE} in the root plugin.json replaces it` });
-  } else if (fallback !== null) settings = settingsOf(fallback, MANIFEST, true, ignored);
+    if ((yield* entryOf(root, MANIFEST)).kind !== 'absent') {
+      ignored.push({ component: MANIFEST, name: null, reason: `${INLINE} in the root plugin.json replaces it` });
+    }
+  } else {
+    const fallback = yield* fallbackOf(root);
+    if (fallback !== null) settings = settingsOf(fallback, MANIFEST, true, ignored);
+  }
   if ((yield* entryOf(root, '.mcp.json')).kind !== 'absent') {
     ignored.push({ component: '.mcp.json', name: null, reason: 'a portable package reads mcp.json' });
   }
   yield* appsIgnored(root, settings.apps, ignored);
   const found = portable.package;
+  const name = named ?? found.name;
   return {
     ...found,
+    name,
     title: settings.title,
     description: found.description ?? settings.summary,
-    hooks: yield* hooksOf(root, { name: found.name, id: pluginIdOf(found.name) }, settings.hooks, ignored),
+    hooks: yield* hooksOf(root, { name, id: pluginIdOf(name) }, settings.hooks, ignored),
     ignored: [...found.ignored, ...ignored],
   } satisfies PluginPackage;
 });
 
-const read: PluginFormat['read'] = Effect.fn('codex.read')(function* (root, _claim, declared) {
-  if (declared !== null) {
+const read: PluginFormat['read'] = Effect.fn('codex.read')(function* (root, _claim, entry) {
+  if (entry?.fields != null) {
     return yield* new PluginRefused({ reason: 'a Codex plugin is its own manifest: a marketplace entry declares none for it' });
   }
+  const named = entry?.name ?? null;
+  if ((yield* rootManifest(root)) !== null) return yield* readPortableOverlay(root, named);
   const fallback = yield* fallbackOf(root);
-  if ((yield* rootManifest(root)) !== null) return yield* readPortableOverlay(root, fallback);
   if (fallback === null) return yield* new PluginRefused({ reason: `${MANIFEST} is not a file inside the plugin` });
-  return yield* readLegacy(root, fallback);
+  return yield* readLegacy(root, fallback, named);
 });
 
 export const codexFormat: PluginFormat = { id: 'codex', claim, read };

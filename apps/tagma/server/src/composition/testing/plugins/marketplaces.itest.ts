@@ -9,7 +9,13 @@ import { committed, type Files, repository, skill } from './files.js';
 const MCP_SERVER = resolve(import.meta.dir, '../../../../../../../packages/mcp/test/mcpTestServer.ts');
 
 type Component = { readonly kind: string; readonly name: string; readonly detail?: string };
-type Entry = { readonly marketplace: string; readonly name: string; readonly state: string; readonly taken?: string };
+type Entry = {
+  readonly marketplace: string;
+  readonly name: string;
+  readonly state: string;
+  readonly taken?: string;
+  readonly policy?: unknown;
+};
 type Marketplace = {
   readonly id: string;
   readonly label: string;
@@ -80,7 +86,7 @@ layer(Layer.effect(Market, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
         const tools = yield* world.directory('tools');
         yield* repository(tools, {
           '.claude-plugin/plugin.json': JSON.stringify({ name: 'tools' }),
-          'sub/.claude-plugin/plugin.json': JSON.stringify({ name: 'nested' }),
+          'sub/.claude-plugin/plugin.json': JSON.stringify({ name: 'deep-tools' }),
           'sub/skills/deep/SKILL.md': skill('Deep.'),
         });
         const pins = yield* world.directory('pins');
@@ -98,10 +104,15 @@ layer(Layer.effect(Market, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
               source: './plugins/manifestless',
               mcpServers: { echo: { command: process.execPath, args: [MCP_SERVER] } },
             },
-            { name: 'appended', source: './plugins/appended', commands: ['./more'] },
+            {
+              name: 'appended',
+              source: './plugins/appended',
+              commands: { shout: { content: 'Shout.' } },
+              agents: ['./extra-agents/helper.md'],
+            },
             { name: 'conflicted', source: './plugins/conflicted', strict: false, skills: ['./extra'] },
             { name: 'nested', source: { source: 'git-subdir', url: `file://${tools}`, path: 'sub' } },
-            { name: 'pinned', source: { source: 'url', url: `file://${pins}`, sha: early } },
+            { name: 'pinned', source: { source: 'url', url: `file://${pins}`, ref: 'main', sha: early } },
             { name: 'unserved', source: { source: 'url', url: `file://${pins}`, sha: 'a'.repeat(40) } },
             { name: 'escaping', source: './../outside' },
             { name: 'packaged', source: { source: 'npm', package: '@acme/packaged' } },
@@ -113,7 +124,8 @@ layer(Layer.effect(Market, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
           'plugins/manifestless/skills/greet/SKILL.md': skill('Greets.'),
           'plugins/appended/.claude-plugin/plugin.json': JSON.stringify({ name: 'appended' }),
           'plugins/appended/commands/hello.md': 'Say hello.\n',
-          'plugins/appended/more/extra.md': 'Say more.\n',
+          'plugins/appended/agents/base.md': 'Do the base work.\n',
+          'plugins/appended/extra-agents/helper.md': 'Help.\n',
           'plugins/conflicted/.claude-plugin/plugin.json': JSON.stringify({ name: 'conflicted' }),
           'plugins/conflicted/extra/x/SKILL.md': skill('Extra.'),
           'plugins/twin/.claude-plugin/plugin.json': JSON.stringify({ name: 'twin' }),
@@ -176,7 +188,12 @@ layer(Layer.effect(Market, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
         expect(manifestless.preview.consent.runs).toEqual([`${process.execPath} ${MCP_SERVER}`]);
         expect(names(manifestless.plugin.components)).toEqual(['manifestless-echo', 'manifestless-greet']);
         expect(manifestless.plugin.origin).toEqual({ marketplace: 'fixture-claude', entry: 'manifestless' });
-        expect(names((yield* installed('fixture-claude', 'appended')).plugin.components)).toEqual(['appended-extra', 'appended-hello']);
+        expect(names((yield* installed('fixture-claude', 'appended')).plugin.components)).toEqual([
+          'appended-base',
+          'appended-hello',
+          'appended-helper',
+          'appended-shout',
+        ]);
         expect((yield* call('preview_plugin', { marketplace: 'fixture-claude', entry: 'conflicted' })).code).toBe('plugin-refused');
         expect(names((yield* installed('fixture-claude', 'nested')).plugin.components)).toEqual(['nested-deep']);
         const pinned = yield* installed('fixture-claude', 'pinned');
@@ -199,6 +216,12 @@ layer(Layer.effect(Market, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
           expect.objectContaining({ marketplace: 'fixture-codex', state: 'taken', taken: 'twin@fixture-claude' }),
         ]);
         expect((yield* call('preview_plugin', { marketplace: 'fixture-codex', entry: 'twin' })).code).toBe('plugin-id-taken');
+        const codexEntries = (yield* call('read_marketplaces', { marketplace: 'fixture-codex', limit: 20 })).entries ?? [];
+        expect(codexEntries.find((entry) => entry.name === 'legacy')?.policy).toEqual({
+          installation: 'AVAILABLE',
+          authentication: null,
+          products: ['CODEX'],
+        });
       }),
   );
 

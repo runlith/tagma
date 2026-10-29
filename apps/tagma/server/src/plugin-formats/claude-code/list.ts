@@ -118,7 +118,8 @@ const entryOf = (raw: unknown, at: number, root: string | undefined): ListedEntr
     repository: named(entry.repository, 'url'),
     category: entry.category ?? null,
     brings: BRINGS.flatMap(([field, kind]) => (fields[field] === undefined ? [] : [kind])),
-    declared: { format: 'claude-code', fields },
+    policy: null,
+    manifest: { format: 'claude-code', fields },
   };
 };
 
