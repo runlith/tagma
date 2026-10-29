@@ -17,8 +17,8 @@ Terminal Claude Code and Codex receive the operator's footnotes as one answer to
 
 ## What stands now
 
-- Only Cursor is allowed a hook prompt-submit answer as model text: `promptSupported` (`external-harnesses/adapter/hookFormat.ts:93`) is deliberately limited to it, because no other CLI's answer shape is measured. For Claude Code and Codex `orientPrompt` (`hooks/dispatch.ts:239–282`) exits at once; they receive session context as the session-start answer (`contextAnswer`, `hooks/dispatch.ts:133`).
-- `guide_harness` knows `orientation` and `touch` shapes (`contract/wire/hooks.ts:97`); there is no shape for footnotes.
+- A CLI is allowed a hook prompt-submit answer as model text only when its own row declares `hooks.promptContext` — measured: Claude Code, Codex and Cursor. Grok and OpenCode share Claude Code's hook file format but are unmeasured for this hook, so they stay silent; `promptSupported` reads the row, not the format.
+- `guide_harness` has the `prompt` shape: one call answers orientation when owed plus footnotes.
 - Hook calls to the server no longer have their own deadline: only the hook timeout the vendor declares limits them.
 
 ## Decision
@@ -29,6 +29,7 @@ Terminal Claude Code and Codex receive the operator's footnotes as one answer to
 - **Budget.** Footnotes come from the `OperatorNotes` memory owner. The hook waits for the server answer within its vendor timeout; a hook cut by the vendor releases the prompt with no footnote.
 - **Codex measured** ([[45dee318]]): a `hookSpecificOutput.additionalContext` answer with `hookEventName: "UserPromptSubmit"` is placed by Codex 0.162.0 as a separate developer message after the operator's words and kept in the rollout. Cursor, whose prompt-submit answer was measured earlier, receives footnotes by the same road.
 - **Answer limit.** The server builds orientation in `prompt`-shape `guide_harness` (the hook names project and cwd when the project is private and orientation unsaid) and fits it under `PROMPT_CONTEXT_CHARS` with footnotes: the resulting document — footnotes, then orientation — fits the limit whole.
+- **Claude Code measured** ([[86226056]]): the same `hookSpecificOutput.additionalContext` answer with `hookEventName: "UserPromptSubmit"` reaches the model of Claude Code 2.1.312, as a system message after the operator's words, kept in history across turns and dropped by compaction (the summary may or may not carry it).
 - **Codex compaction** never keeps hook text ([[45dee318]]) but reports itself with `SessionStart` with `source: compact`, on which Tagma resets the said state; orientation is spoken again, footnotes go on every prompt.
 - **Footnote reading.** A thread's `read_operator_notes` answers `withheld` — why footnotes never reach the model — when its CLI takes no prompt-submit hook answer (the threads module's `NotesReach` port is filled by external-harnesses).
 - **Event repeat.** The call evidence is the hook event's own hash, so the same event's repeat answers with the recorded text and writes no second frame.
