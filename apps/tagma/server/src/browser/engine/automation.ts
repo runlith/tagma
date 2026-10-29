@@ -23,6 +23,7 @@ import { applyEmulation, changeConditions, effectiveOf, nextEmulation } from './
 import { describePick, screenshot, snapshot } from './read.js';
 import { world } from './target.js';
 import { makeHeap } from './heap.js';
+import { makeAudit } from './audit.js';
 import type { Analysis } from './analysis.js';
 
 const PROBE_MS = 100;
@@ -65,6 +66,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
   const servedRoots = yield* ServedRoots;
   const path = yield* Path.Path;
   const heap = yield* makeHeap(input);
+  const audit = yield* makeAudit(input);
 
   const navigatedSince = (attached: Attached, before: number): boolean => attached.navigations > before;
 
@@ -112,6 +114,7 @@ export const makeAutomation = Effect.fnUntraced(function* (input: { readonly dri
 
   return Automation.of({
     heap,
+    audit,
     navigate: Effect.fn('Automation.navigate')(function* (page, to, thread, agent = thread !== null) {
       return yield* drive.run(
         page,

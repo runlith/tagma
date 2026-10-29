@@ -1323,6 +1323,7 @@
     "@runlith/watch": "workspace:*",
     "@sanity/diff-match-patch": "catalog:",
     "@tagma/inspection": "workspace:*",
+    "axe-core": "4.14.0",
     "devtools-protocol": "0.0.1720385",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",

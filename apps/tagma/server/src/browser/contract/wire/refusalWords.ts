@@ -4,6 +4,7 @@ export const REFUSAL_WORDS = {
   'action-failed': 'Page action failed',
   'action-shape': 'Action input not valid',
   'adapter-unknown': 'Unknown browser host',
+  'audit-failed': 'Page audit failed',
   'body-unavailable': 'Response body no longer available',
   'console-off': 'Console capture is off',
   'devtools-open': 'Page is in DevTools',

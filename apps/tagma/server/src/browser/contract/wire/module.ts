@@ -10,6 +10,7 @@ export const browser = {
       { COOKIE_OPERATIONS },
       { TRACE_OPERATIONS },
       { RECORD_OPERATIONS },
+      { AUDIT_OPERATIONS },
       { REFUSAL_WORDS },
     ] = await Promise.all([
       import('./pageOperations.js'),
@@ -17,10 +18,18 @@ export const browser = {
       import('./cookieOperations.js'),
       import('./traceOperations.js'),
       import('./recordOperations.js'),
+      import('./auditOperations.js'),
       import('./refusalWords.js'),
     ]);
     return {
-      declarations: { ...PAGE_OPERATIONS, ...PROFILE_OPERATIONS, ...COOKIE_OPERATIONS, ...TRACE_OPERATIONS, ...RECORD_OPERATIONS },
+      declarations: {
+        ...PAGE_OPERATIONS,
+        ...PROFILE_OPERATIONS,
+        ...COOKIE_OPERATIONS,
+        ...TRACE_OPERATIONS,
+        ...RECORD_OPERATIONS,
+        ...AUDIT_OPERATIONS,
+      },
       refusals: REFUSAL_WORDS,
     };
   },
