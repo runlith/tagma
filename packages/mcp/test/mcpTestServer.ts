@@ -149,6 +149,7 @@ if (flags.includes('--hang')) {
     }
   });
 
+  if (flags.includes('--linger')) setInterval(() => undefined, 60_000);
   const slow = flags.includes('--slow') ? Number(flags[flags.indexOf('--slow') + 1] ?? 0) : 0;
   if (slow > 0) await new Promise<void>((resolve) => setTimeout(resolve, slow));
   await server.connect(new StdioServerTransport());

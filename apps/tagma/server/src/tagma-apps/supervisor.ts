@@ -73,6 +73,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
   const { registry, launches } = input;
   const { home, server } = yield* TagmaAppPlace;
   const scope = yield* Effect.scope;
+  const generations = yield* Scope.fork(scope, 'parallel');
   const pending = yield* FiberMap.make<string>();
   const slots = new Map<string, Slot>();
   const context = yield* Effect.context<never>();
@@ -205,7 +206,7 @@ export const makeSupervisor = Effect.fnUntraced(function* (input: {
           slot.state = 'starting';
           const data = home === null ? null : join(home, APP_DATA, slot.id);
           const opened = yield* Effect.result(
-            openGeneration({ id: slot.id, root: slot.root, data, server, manifest, revision, environment }, scope),
+            openGeneration({ id: slot.id, root: slot.root, data, server, manifest, revision, environment }, generations),
           );
           live?.release();
           if (Result.isFailure(opened)) {

@@ -121,6 +121,7 @@ const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) 
   const entries = new Map<string, Entry>();
   const rebuilds = new Map<string, Rebuild>();
   const pulses = yield* Effect.acquireRelease(PubSub.sliding<void>(1), PubSub.shutdown);
+  const sessions = yield* Scope.fork(scope, 'parallel');
   const moved = PubSub.publish(pulses, undefined);
   const failed = Effect.fnUntraced(function* (entry: Entry, failure: McpFailure) {
     entry.status = failure._tag === 'McpNeedsSignIn' ? 'needs-sign-in' : 'failed';
@@ -403,7 +404,7 @@ const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) 
     declaration: McpServerDeclaration,
     generation: number,
   ): Effect.fn.Return<McpSession | undefined, McpSessionFailure> {
-    const sessionScope = yield* Scope.fork(scope);
+    const sessionScope = yield* Scope.fork(sessions);
     let kept = false;
     const handshake = yield* Effect.forkChild(openMcpSession(declaration, options).pipe(Scope.provide(sessionScope)), {
       startImmediately: true,

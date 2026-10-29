@@ -2,8 +2,8 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { Clock, Context, Effect, Fiber, Layer } from 'effect';
+import { dirname, join, resolve } from 'node:path';
+import { Clock, Context, Effect, Exit, Fiber, Layer, Scope } from 'effect';
 import { TestClock } from 'effect/testing';
 import { graphFixture, tempRootEffect } from '../composition/testing/graphFixture.js';
 import { watchProcessLayer } from '../composition/testing/fileWatcher.js';
@@ -19,8 +19,8 @@ import { codeFilterOf, revisionOf } from './revision.js';
 
 const FIXTURE = resolve(import.meta.dir, 'testing/fixture.ts');
 const fixtureGraph = graphFixture();
-const manifest = (contributes: Record<string, unknown>) =>
-  JSON.stringify({ id: 'fixture', title: 'Fixture', process: { command: process.execPath, args: [FIXTURE] }, contributes });
+const manifest = (contributes: Record<string, unknown>, id = 'fixture', flags: readonly string[] = []) =>
+  JSON.stringify({ id, title: 'Fixture', process: { command: process.execPath, args: [FIXTURE, ...flags] }, contributes });
 const TOOLS = {
   tools: [
     { name: 'look', audience: 'agents' },
@@ -49,8 +49,8 @@ const setup = Effect.gen(function* () {
   );
   const apps = Context.get(built, TagmaApps);
   const tools = Context.get(built, TagmaAppTools);
-  const said = Effect.fnUntraced(function* (tool: string) {
-    const result = yield* apps.call('fixture', tool, {}, {});
+  const said = Effect.fnUntraced(function* (tool: string, app = 'fixture') {
+    const result = yield* apps.call(app, tool, {}, {});
     if (!('content' in result)) return yield* Effect.die('the fixture answered no content');
     const first = result.content[0];
     return first?.type === 'text' ? first.text : '';
@@ -62,6 +62,15 @@ const setup = Effect.gen(function* () {
     Effect.promise(async () => (await readFile(join(home, 'app-data', 'fixture', 'journal'), 'utf8')).trim().split('\n'));
   return { apps, projectId, home, root, said, tools, agentTools, row, revision, journal };
 });
+
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const until = Effect.fnUntraced(function* <E>(holds: () => Effect.Effect<boolean, E>) {
   for (;;) {
@@ -116,6 +125,26 @@ it.live('an installed app routes its audiences, survives a refused edit and a cr
     });
     expect(yield* apps.uninstall({ projectId, id: 'fixture' })).toMatchObject({ installed: null, enabled: false, state: 'stopped' });
     expect(yield* agentTools()).toEqual([]);
+  }),
+);
+
+it.live('closing the apps waits out processes that ignore the end of stdin together, not one after another', () =>
+  Effect.gen(function* () {
+    const owned = yield* Scope.fork(yield* Effect.scope);
+    const { apps, projectId, root, said } = yield* setup.pipe(Scope.provide(owned));
+    const second = join(dirname(root), 'second');
+    yield* Effect.promise(async () => {
+      await writeFile(join(root, 'tagma-app.json'), manifest(TOOLS, 'fixture', ['--linger']));
+      await mkdir(second, { recursive: true });
+      await writeFile(join(second, 'tagma-app.json'), manifest(TOOLS, 'second', ['--linger']));
+    });
+    yield* apps.install({ projectId, id: 'fixture', enabled: true });
+    yield* apps.install({ projectId, id: 'second', enabled: true });
+    const pids = [Number(yield* said('pid')), Number(yield* said('pid', 'second'))];
+    const began = yield* Clock.currentTimeMillis;
+    yield* Scope.close(owned, Exit.void);
+    expect((yield* Clock.currentTimeMillis) - began).toBeLessThan(3_500);
+    expect(pids.filter(alive)).toEqual([]);
   }),
 );
 

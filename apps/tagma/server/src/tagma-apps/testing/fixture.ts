@@ -8,6 +8,7 @@ const journal = (line: string): void => appendFileSync(join(data, 'journal'), `$
 
 journal(`start ${process.pid}`);
 process.on('exit', () => journal(`exit ${process.pid}`));
+if (process.argv.includes('--linger')) setInterval(() => undefined, 60_000);
 
 const object = { type: 'object' as const, properties: {} };
 

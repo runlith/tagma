@@ -29,7 +29,7 @@ An app without `process` still carries views, their placements and agents; `tool
 
 ## The process
 
-- Serve MCP over stdio. Stdout carries the protocol alone; write logs to stderr. In TypeScript `@modelcontextprotocol/sdk` with `StdioServerTransport` serves it; add dependencies in the app directory with its package manager. Exit when the host closes stdin. The `example` reference is a whole app.
+- Serve MCP over stdio. Stdout carries the protocol alone; write logs to stderr. In TypeScript `@modelcontextprotocol/sdk` with `StdioServerTransport` serves it; add dependencies in the app directory with its package manager. Exit when the host closes stdin: `StdioServerTransport` does not watch for it, so its `onclose` never fires then — listen for `end` on `process.stdin` yourself. A process still running after that is stopped with SIGTERM, and every stop of the app waits for it first. The `example` reference is a whole app.
 - Mark a tool that changes nothing with `annotations: {readOnlyHint: true}`; any other asks the operator before each call in review mode, and `destructiveHint: true` makes that question a destructive one.
 - Answer a failure as a result with `isError: true` and the reason as text; a thrown error is a protocol fault.
 - Every `tools/call`, `resources/read` and `resources/subscribe` carries its caller in `params._meta["runlith/caller"]`:
