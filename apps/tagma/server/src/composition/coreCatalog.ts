@@ -25,6 +25,7 @@ import { speech } from '../speech/contract/wire/module.js';
 import { browser } from '../browser/contract/wire/module.js';
 import { threads } from '../threads/contract/wire/module.js';
 import { images } from '../images/contract/wire/module.js';
+import { translations } from '../translations/contract/wire/module.js';
 import { navigation } from '../navigation/contract/wire/module.js';
 import { nativeHarness } from '../native-harness/contract/wire/module.js';
 import { externalHarnesses } from '../external-harnesses/contract/wire/module.js';
@@ -61,6 +62,7 @@ export const CORE_CATALOG: readonly [
   typeof browser,
   typeof threads,
   typeof images,
+  typeof translations,
   typeof navigation,
   typeof nativeHarness,
   typeof externalHarnesses,
@@ -96,6 +98,7 @@ export const CORE_CATALOG: readonly [
   browser,
   threads,
   images,
+  translations,
   navigation,
   nativeHarness,
   externalHarnesses,

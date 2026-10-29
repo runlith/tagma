@@ -42,6 +42,7 @@ import { notify } from '../notify/notify.js';
 import { outcomes } from './outcomes.js';
 import { push } from '../push/push.js';
 import { schedule } from '../schedule/schedule.js';
+import { translations } from '../translations/translations.js';
 import { ticks } from './ticks.js';
 import { ThreadGraphs } from '../native-harness/contract/service/graphs.js';
 import { SetupReadings } from '../native-harness/contract/service/setups.js';
@@ -274,6 +275,8 @@ const pushed = push.lifetimes.serving.pipe(Layer.provideMerge(notified));
 
 const scheduled = schedule.lifetimes.serving.pipe(Layer.provideMerge(ticks), Layer.provideMerge(pushed));
 
+const translated = translations.lifetimes.serving.pipe(Layer.provideMerge(scheduled));
+
 const renames = Layer.effect(
   Renames,
   Effect.map(ChangeRecord, (record) => ({ movedTo: record.movedTo })),
@@ -293,7 +296,7 @@ const scratchFolders = Layer.effect(
 const filed = checkoutFiles.lifetimes.serving.pipe(
   Layer.provide(Layer.mergeAll(Layer.succeed(RipgrepBinary, ripgrepBinary), renames)),
   Layer.provideMerge(scratchFolders),
-  Layer.provideMerge(scheduled),
+  Layer.provideMerge(translated),
 );
 
 const navigated = navigationServing.pipe(Layer.provideMerge(filed));

@@ -32,6 +32,7 @@ import { schedule } from '../schedule/schedule.js';
 import { speech } from '../speech/speech.js';
 import { browser } from '../browser/browser.js';
 import { images } from '../images/images.js';
+import { translations } from '../translations/translations.js';
 import { navigation } from '../navigation/navigation.js';
 import { managedBrowser } from '../managed-browser/managed-browser.js';
 import { desktopBrowser } from '../desktop-browser/desktop-browser.js';
@@ -80,6 +81,7 @@ export const CORE_MODULES = [
   pageRender,
   threads,
   images,
+  translations,
   navigation,
   nativeHarness,
   externalHarnesses,

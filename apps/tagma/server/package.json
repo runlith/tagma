@@ -1079,6 +1079,26 @@
       "browser": "./src/images/contract/wire/settings.ts",
       "default": "./src/images/contract/wire/settings.ts"
     },
+    "./translations/contract/wire/operations": {
+      "types": "./src/translations/contract/wire/operations.ts",
+      "browser": "./src/translations/contract/wire/operations.ts",
+      "default": "./src/translations/contract/wire/operations.ts"
+    },
+    "./translations/contract/wire/feed": {
+      "types": "./src/translations/contract/wire/feed.ts",
+      "browser": "./src/translations/contract/wire/feed.ts",
+      "default": "./src/translations/contract/wire/feed.ts"
+    },
+    "./translations/contract/wire/projection": {
+      "types": "./src/translations/contract/wire/projection.ts",
+      "browser": "./src/translations/contract/wire/projection.ts",
+      "default": "./src/translations/contract/wire/projection.ts"
+    },
+    "./translations/contract/wire/settings": {
+      "types": "./src/translations/contract/wire/settings.ts",
+      "browser": "./src/translations/contract/wire/settings.ts",
+      "default": "./src/translations/contract/wire/settings.ts"
+    },
     "./browser/contract/wire/pageOperations": {
       "types": "./src/browser/contract/wire/pageOperations.ts",
       "browser": "./src/browser/contract/wire/pageOperations.ts",
@@ -1334,6 +1354,7 @@
     "devtools-protocol": "0.0.1720385",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "marked": "catalog:",
     "mediabunny": "1.62.1",
     "sharp": "catalog:",
     "uuidv7": "1.2.1",

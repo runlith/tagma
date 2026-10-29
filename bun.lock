@@ -200,6 +200,7 @@
         "devtools-protocol": "0.0.1720385",
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
+        "marked": "catalog:",
         "mediabunny": "1.62.1",
         "sharp": "catalog:",
         "uuidv7": "1.2.1",
