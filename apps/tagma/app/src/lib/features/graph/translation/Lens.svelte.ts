@@ -82,7 +82,10 @@ export class TranslationLens {
   }
 
   get absent(): boolean {
-    return this.read !== undefined && this.projection === null && this.refusal === undefined;
+    const block = this.block();
+    const language = this.language();
+    if (block === null || language === null || this.translations.isStarting(block, language)) return false;
+    return this.read !== undefined && this.query?.isFetching !== true && this.projection === null && this.refusal === undefined;
   }
 
   get phase(): Phase | null {
@@ -113,11 +116,14 @@ export class TranslationLens {
     return block === null || language === null ? Promise.resolve() : this.translations.stop(block, language);
   }
 
-  async choose(language: string): Promise<void> {
+  choose(language: string): Promise<void> {
     const block = this.block();
-    if (block === null) return;
-    if (!this.languages.some((one) => one.language === language)) await this.translations.translate(block, language);
+    if (block === null) return Promise.resolve();
+    const started = this.languages.some((one) => one.language === language)
+      ? Promise.resolve()
+      : this.translations.translate(block, language);
     this.show(language);
+    return started;
   }
 
   reread(): void {

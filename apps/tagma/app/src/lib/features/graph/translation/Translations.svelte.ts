@@ -2,7 +2,7 @@ import { Failure } from '@runlith/layer/Failure';
 import { Platform } from '@runlith/layer/Platform';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
-import { SvelteMap } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { GraphFeed } from '$lib/features/graph/Feed.js';
 import { GraphRung, type GraphAim } from '$lib/features/workspace/GraphRung.js';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
@@ -32,6 +32,7 @@ export class Translations extends Service<Translations>()('Translations', { tier
   }
 
   private readonly refused = new SvelteMap<string, Refusal>();
+  private readonly starting = new SvelteSet<string>();
 
   constructor(
     private readonly repo: Repo,
@@ -45,7 +46,7 @@ export class Translations extends Service<Translations>()('Translations', { tier
     super();
     const held = live.hold(
       (client) => client['translations.changes']({ projectId: aim.projectId }),
-      (frame) => this.moved(frame.block),
+      (frame) => void this.moved(new Set([frame.block])),
       (reason) => {
         if (reason.kind === 'subscription') failure.report(new Error(reason.message));
       },
@@ -53,7 +54,7 @@ export class Translations extends Service<Translations>()('Translations', { tier
     scope.defer(() => held.unsubscribe());
     scope.defer(
       feed.frames((frame) => {
-        if (frame.type === 'change') for (const row of frame.blocks) this.moved(row.name);
+        if (frame.type === 'change' && frame.blocks.length > 0) void this.moved(new Set(frame.blocks.map((row) => row.name)));
       }),
     );
   }
@@ -73,30 +74,46 @@ export class Translations extends Service<Translations>()('Translations', { tier
     return this.refused.get(idOf(block, language));
   }
 
+  isStarting(block: string, language: string): boolean {
+    return this.starting.has(idOf(block, language));
+  }
+
   async press(block: string): Promise<string> {
     const read = await this.repo.read.key({ block }).loadOrThrow();
     const language = this.languageOf(read?.preferred ?? null);
-    if (read?.languages.some((one) => one.language === language) !== true) await this.translate(block, language);
+    if (read?.languages.some((one) => one.language === language) !== true) void this.translate(block, language);
     return language;
   }
 
   async translate(block: string, language: string, ask: TranslateAsk = {}): Promise<void> {
     const id = idOf(block, language);
-    this.refused.delete(id);
+    this.starting.add(id);
+    let refusal: Refusal | undefined;
     try {
+      if (ask.model !== undefined || ask.again === true) await this.repo.stop.run({ block, language }, { throwOnError: true });
       await this.repo.translate.run({ block, language, model: ask.model, again: ask.again }, { throwOnError: true });
     } catch (error: unknown) {
-      this.refused.set(id, refusalOf(error));
+      refusal = refusalOf(error);
     }
-    this.moved(block);
+    await this.moved(new Set([block]));
+    if (refusal === undefined) this.refused.delete(id);
+    else this.refused.set(id, refusal);
+    this.starting.delete(id);
   }
 
   async stop(block: string, language: string): Promise<void> {
     await this.repo.stop.run({ block, language }, { throwOnError: true });
-    this.moved(block);
+    await this.moved(new Set([block]));
   }
 
-  private moved(block: string): void {
-    void this.repo.read.where((key) => key.block === block).invalidate();
+  private moved(names: ReadonlySet<string>): Promise<void> {
+    return this.repo.read.where((key) => names.has(key.block) || this.names(key, names)).invalidate();
+  }
+
+  private names(key: { readonly block: string; readonly language?: string }, names: ReadonlySet<string>): boolean {
+    const projection = this.repo.read.key(key).watch()?.projection;
+    if (projection == null) return false;
+    for (const name of names) if (projection.parts.some((part) => part.kind === 'text' && part.source.includes(name))) return true;
+    return false;
   }
 }

@@ -1,3 +1,4 @@
+import { languageTag } from '$lib/features/workspace/address.js';
 import type { PaneContent } from '$lib/shared/panes/pane.js';
 
 export const BLOCK_PANE = 'block';
@@ -36,5 +37,5 @@ export function placedBlockOf(id: string | null): PlacedBlock | null {
   const [projectId, branch, name, diff, lang = null] = stored as unknown[];
   if (typeof projectId !== 'number' || !Number.isInteger(projectId) || projectId <= 0) return null;
   if (!named(branch) || !named(diff) || !named(lang) || typeof name !== 'string' || name === '') return null;
-  return { projectId, branch, name, diff, lang };
+  return { projectId, branch, name, diff, lang: languageTag(lang) };
 }

@@ -61,9 +61,17 @@ export function languageLensHref(router: Router, lang: string | null): string {
   return `${url.pathname}${url.search}`;
 }
 
+export function languageTag(raw: string | null): string | null {
+  if (raw === null || raw === '') return null;
+  try {
+    return Intl.getCanonicalLocales(raw)[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function currentLanguage(router: Router): string | null {
-  const raw = router.url.searchParams.get('lang');
-  return raw === null || raw === '' || router.url.searchParams.has('diff') ? null : raw;
+  return router.url.searchParams.has('diff') ? null : languageTag(router.url.searchParams.get('lang'));
 }
 
 export function settingsHref(router: Router, section?: string, scope?: SettableScope, key?: string, project?: string): string {

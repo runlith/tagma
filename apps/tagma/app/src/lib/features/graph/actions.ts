@@ -24,9 +24,11 @@ export const actions: ActionsModule['actions'] = [
     run: async (env) => {
       const block = blockShown(env);
       if (block === null) return;
+      const router = env.resolve(Router);
+      const from = router.url.href;
       try {
         const language = await env.resolve(Translations).press(block);
-        env.goto(languageLensHref(env.resolve(Router), language));
+        if (router.url.href === from) env.goto(languageLensHref(router, language));
       } catch (error: unknown) {
         env.resolve(Notices).refusal(error);
       }

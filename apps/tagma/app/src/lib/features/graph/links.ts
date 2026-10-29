@@ -6,7 +6,7 @@ import type { Resolver } from '@runlith/layer/key';
 import { Router } from '@runlith/layer/Router';
 import { Beside } from '$lib/features/opening/Beside.js';
 import type { Link, LinkItems, LinkKind, LinkFrom } from '$lib/features/opening/Link.js';
-import type { BlockLens } from '$lib/features/workspace/address.js';
+import { type BlockLens, languageTag } from '$lib/features/workspace/address.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import type { GraphAim } from '$lib/features/workspace/GraphRung.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
@@ -71,7 +71,12 @@ const blocks: LinkKind<BlockTarget> = {
     const project = decodeURIComponent(url.pathname.split('/')[1] ?? '');
     const owner = app.resolve(Workspace).projects.find((one) => one.name === project);
     const copy = owner === undefined ? undefined : { projectId: owner.id, branch: url.searchParams.get('branch') };
-    return blockLink({ name, copy, diff: url.searchParams.get('diff') ?? undefined, lang: url.searchParams.get('lang') ?? undefined });
+    return blockLink({
+      name,
+      copy,
+      diff: url.searchParams.get('diff') ?? undefined,
+      lang: languageTag(url.searchParams.get('lang')) ?? undefined,
+    });
   },
   tab: {
     kind: BLOCK_PANE,

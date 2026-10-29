@@ -13,6 +13,8 @@ test('the translation and diff lenses replace each other in the address and keep
   expect(currentLanguage(diffed)).toBeNull();
   expect(languageLensHref(diffed, 'pt-BR')).toBe('/runlith/b/5940aab8?branch=next&lang=pt-BR');
   expect(languageLensHref(translated, null)).toBe('/runlith/b/5940aab8?branch=next');
+
+  expect(currentLanguage(makeRouter({ url: new URL('https://tagma.test/runlith/b/5940aab8?lang=ru_RU') }))).toBeNull();
 });
 
 test('settings and its sections retain the branch without carrying a journal range', () => {
