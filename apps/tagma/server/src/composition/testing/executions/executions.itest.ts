@@ -27,7 +27,7 @@ import { Environments } from '../../../workspace/contract/service/environments.j
 import { Coverage, FileRoots, RootUses } from '../../../workspace/contract/service/roots.js';
 import { executionState, makeMachineWorld } from '../../../executions/testing/doubles.js';
 import { executionsLayer } from '../../../executions/assembly.js';
-import { HostOffering, LogicYield } from '../../../executions/contract/service/host.js';
+import { ClaimHolders, HostOffering, LogicYield } from '../../../executions/contract/service/host.js';
 import { ThreadLineage } from '../../../workspace/contract/service/assignments.js';
 import { CheckoutPaths } from '../../../workspace/contract/service/checkoutPaths.js';
 import { lineageOver } from '../../../workspace/testing/lineage.js';
@@ -152,6 +152,7 @@ it.live('each thread holding a terminal on a host without a holder is owed one n
           Layer.provide(deps),
           Layer.provide(Layer.succeed(HostOffering, { source: undefined, migrations: fixtureMigrations, programVersion: 'fixture' })),
           Layer.provide(Layer.succeed(LogicYield, { ask: () => Effect.succeed({ _tag: 'Unasked', detail: 'no platform here' } as const) })),
+          Layer.provide(Layer.succeed(ClaimHolders, { of: () => Effect.succeed({ _tag: 'Holders', pids: [] } as const) })),
           Layer.provide(Layer.succeed(RipgrepBinary, { path: () => Effect.die('no output search runs here') })),
           Layer.provide(
             Layer.succeed(

@@ -22,6 +22,7 @@ import { RipgrepBinary } from '../../../platform/contract/service/ripgrep.js';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import { fixtureMigrations } from '../migrations.js';
 import { logicYieldLayer } from '../../children.js';
+import { claimHoldersLayer } from '../../hostClaims.js';
 import { principalOf } from '../../../executions/terminals/principals.js';
 import { targetIdentity, targetKeyOf } from '../../../executions/terminals/subjectPolicy.js';
 import { Terminals } from '../../../executions/contract/service/terminals.js';
@@ -85,6 +86,7 @@ const makeFixture = Effect.gen(function* () {
           }),
         ),
         Layer.provide(logicYieldLayer(undefined, join(root, EXECUTIONS))),
+        Layer.provide(claimHoldersLayer),
         Layer.provide(Layer.succeed(ThreadLineage, lineage)),
         Layer.provide(Layer.succeed(RipgrepBinary, { path: () => Effect.die('this fixture does not search output') })),
         Layer.provide(HostRegistration.layer),

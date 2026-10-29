@@ -5,7 +5,7 @@ import type { HostRegistration } from '@runlith/executions/HostRegistration';
 import type { ArtifactManifest, Digest } from '@runlith/executions/protocol/artifact';
 import { bootPath, type HostLifetime } from '@runlith/executions/protocol/boot';
 import { type ArtifactFailure, readArtifact, verifyArtifact } from '@runlith/executions/hostArtifacts';
-import { bootInput, bootText, hostBundle, stateClaim, type StateClaim } from './boot.js';
+import { bootInput, bootText, hostBundle, type StateClaim } from './boot.js';
 import { executionPolicy } from './policy.js';
 
 export const hostBundleNext = (state: string): string => `${state}/bundle.next`;
@@ -333,11 +333,7 @@ const running = Effect.fnUntraced(function* (
     : `no host bundle was produced: the producer answered "${said(complained)}"; build the native library once with: ${REMEDY}`;
 }, Effect.scoped);
 
-export const swapBundle = Effect.fnUntraced(function* (
-  files: FileSystem.FileSystem,
-  state: string,
-  claim: Effect.Effect<StateClaim> = stateClaim(files, state),
-) {
+export const swapBundle = Effect.fnUntraced(function* (files: FileSystem.FileSystem, state: string, claim: Effect.Effect<StateClaim>) {
   const next = hostBundleNext(state);
   if ((yield* declared(files, next)) === undefined) return;
   const held = yield* claim;

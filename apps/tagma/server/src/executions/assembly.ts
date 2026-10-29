@@ -94,7 +94,7 @@ import { makeServingGit } from './commands/servingGit.js';
 import { runRetention } from './terminals/retention.js';
 import { Custody, type TerminalDisplaced } from './contract/service/custody.js';
 import { Discharge } from './contract/service/discharge.js';
-import { ExecutionHost, type HostOffer, HostOffering, type HostPlacement, LogicYield } from './contract/service/host.js';
+import { ClaimHolders, ExecutionHost, type HostOffer, HostOffering, type HostPlacement, LogicYield } from './contract/service/host.js';
 import { ExecutionProcessEvidence, ExecutionRecords, TerminalScreens } from './contract/service/records.js';
 import { ManagedCommands } from './contract/service/commands.js';
 import { TerminalRequests, Terminals } from './contract/service/terminals.js';
@@ -221,6 +221,7 @@ export const executionsLayer: Layer.Layer<
   | SessionIdentity
   | HostOffering
   | LogicYield
+  | ClaimHolders
   | RipgrepBinary
   | ChildProcessSpawner.ChildProcessSpawner
 > = Layer.effectContext(
@@ -241,11 +242,12 @@ export const executionsLayer: Layer.Layer<
     );
     const address = yield* hostAddress(executionState(path, identity.environmentId), identity.environmentId);
     const files = yield* FileSystem.FileSystem;
+    const claim = stateClaim(yield* ClaimHolders, files, address.state);
     const bundle = hostBundle(address.state);
     const registrations = yield* HostRegistration;
     const coldRoad =
       placed === undefined && source !== undefined
-        ? placeOverForeign({ files, registrations, source, state: address.state, claim: stateClaim(files, address.state), lifetime })
+        ? placeOverForeign({ files, registrations, source, state: address.state, claim, lifetime })
         : Effect.succeed(undefined);
     const cold = takenAfter === undefined ? yield* coldRoad : undefined;
     const placementOf = (cold: Effect.Success<typeof coldRoad>): HostPlacement | undefined =>
@@ -273,13 +275,10 @@ export const executionsLayer: Layer.Layer<
     yield* Effect.addFinalizer(() =>
       Effect.flatMap(
         Ref.modify(yielding, (stage): [boolean, YieldStage] => (stage === 'armed' ? [true, 'yielding'] : [false, stage])),
-        (armed) =>
-          armed
-            ? yieldPlace(executions, files, registrations, address.state, address.installation, stateClaim(files, address.state))
-            : Effect.void,
+        (armed) => (armed ? yieldPlace(executions, files, registrations, address.state, address.installation, claim) : Effect.void),
       ),
     );
-    const swap = swapBundle(files, address.state);
+    const swap = swapBundle(files, address.state, claim);
     const offering = Effect.map(hostRaisable(files, hostBundleNext(address.state)), (waiting) =>
       waiting ? hostBundleNext(address.state) : bundle,
     );
@@ -294,7 +293,7 @@ export const executionsLayer: Layer.Layer<
         bundle,
         state: address.state,
         graceMs: shutdownMsOf(policy.shutdownMs),
-        claim: stateClaim(files, address.state),
+        claim,
         signalClaim: signalClaimHolder,
         fence: heldByThreads(units, terminalRows).pipe(Effect.flatMap((held) => Ref.set(heldAtFence, held))),
         record: (ended: number | undefined, detail: string) => hostEnded?.(ended, detail) ?? Effect.void,
@@ -309,7 +308,7 @@ export const executionsLayer: Layer.Layer<
           files,
           registrations,
           status: executions.status(),
-          claim: stateClaim(files, address.state),
+          claim,
           ask: yieldAsk,
           state: address.state,
         },
@@ -328,7 +327,7 @@ export const executionsLayer: Layer.Layer<
       const raised: HostBoot =
         given._tag === 'Unoffered'
           ? { _tag: 'Unraised', reason: given.detail }
-          : yield* raiseHost({ address: host.address, files, registrations, policy, status: executions.status(), swap, lifetime });
+          : yield* raiseHost({ address: host.address, files, registrations, policy, status: executions.status(), claim, swap, lifetime });
       return { stayed, raised };
     });
     const brought = takenAfter === undefined ? yield* broughtUp(cold, offer) : undefined;
@@ -486,16 +485,9 @@ export const executionsLayer: Layer.Layer<
     };
     const succession: SuccessionSteps['Service'] = {
       prepare: (restart, mode) =>
-        prepareChange(
-          executions,
-          custody.ensure({ seen: true }),
-          files,
-          address.state,
-          address.installation,
-          stateClaim(files, address.state),
-          restart,
-          mode,
-        ).pipe(Effect.onExit((exit) => Ref.set(yielding, Exit.isSuccess(exit) && exit.value ? 'armed' : 'idle'))),
+        prepareChange(executions, custody.ensure({ seen: true }), files, address.state, address.installation, claim, restart, mode).pipe(
+          Effect.onExit((exit) => Ref.set(yielding, Exit.isSuccess(exit) && exit.value ? 'armed' : 'idle')),
+        ),
       withdraw: Effect.flatMap(
         Ref.modify(yielding, (stage): [boolean, YieldStage] => (stage === 'yielding' ? [false, stage] : [true, 'idle'])),
         (open) => (open ? withdrawCandidate(files, address.state) : Effect.void),
@@ -508,7 +500,7 @@ export const executionsLayer: Layer.Layer<
           registrations,
           state: address.state,
           installation: address.installation,
-          claim: stateClaim(files, address.state),
+          claim,
           lifetime,
           bundle,
         }),

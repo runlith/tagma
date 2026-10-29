@@ -14,3 +14,4 @@ export const platformLayer = (path: string) => Layer.unwrap(Effect.map(selected,
 export const holderLayer = (path: string) => Layer.unwrap(Effect.map(selected, (system) => system.holderLayer(path)));
 export const processLayer = (path: string) => Layer.unwrap(Effect.map(selected, (system) => system.processLayer(path)));
 export const yieldAsker = (path: string) => Effect.flatMap(selected, (system) => system.yieldAsker(path));
+export const fileHolders = (file: string) => Effect.flatMap(selected, (system) => system.fileHolders(file));

@@ -12,6 +12,7 @@ import { bootPath, HostBoot as HostBootFile, type HostLifetime, OUTPUT_LIMIT_VAR
 import type { Registration } from '@runlith/executions/protocol/registration';
 import type { ExecutionPolicy } from '@runlith/executions/protocol/capacity';
 import { type InstallationId, type HostRequestRef, HostRequestKey } from '@runlith/executions/protocol/execution';
+import type { ClaimHolders } from '../contract/service/host.js';
 import { executionGrant, executionWireLimits } from './policy.js';
 
 export const hostBundle = (state: string): string => `${state}/bundle`;
@@ -78,14 +79,13 @@ export const hostPresence = (probe: Effect.Effect<unknown, ExecutionsFailure>): 
 
 const CLAIM_FILE = 'writer.lock';
 
-const LSOF = '/usr/sbin/lsof';
-
 export type StateClaim =
   | { readonly _tag: 'Held'; readonly holders: ReadonlyArray<number> }
   | { readonly _tag: 'Free' }
   | { readonly _tag: 'Unmeasured'; readonly detail: string };
 
 export const stateClaim = Effect.fn('HostBoot.stateClaim')(function* (
+  holders: ClaimHolders['Service'],
   files: FileSystem.FileSystem,
   state: string,
 ): Effect.fn.Return<StateClaim> {
@@ -95,31 +95,9 @@ export const stateClaim = Effect.fn('HostBoot.stateClaim')(function* (
     return { _tag: 'Unmeasured', detail: `${claim} could not be read: ${stands.failure.reason._tag}` };
   }
   if (!stands.success) return { _tag: 'Free' };
-  const read = yield* Effect.result(
-    Effect.promise(() =>
-      Promise.all(
-        (() => {
-          const child = Bun.spawn([LSOF, '-t', '--', claim], {
-            stdin: 'ignore',
-            stdout: 'pipe',
-            stderr: 'pipe',
-          });
-          return [new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited] as const;
-        })(),
-      ),
-    ),
-  );
-  if (read._tag === 'Failure') return { _tag: 'Unmeasured', detail: `${LSOF} would not run` };
-  const [listed, complained] = read.success;
-  const holders = listed
-    .split('\n')
-    .map((line) => Number(line.trim()))
-    .filter((pid) => Number.isInteger(pid) && pid > 0);
-  if (holders.length > 0) return { _tag: 'Held', holders };
-  if (complained.trim() !== '') {
-    return { _tag: 'Unmeasured', detail: `${LSOF} could not read ${claim}: ${complained.trim().split('\n')[0] ?? ''}` };
-  }
-  return { _tag: 'Free' };
+  const holding = yield* holders.of(claim);
+  if (holding._tag === 'Unread') return { _tag: 'Unmeasured', detail: holding.detail };
+  return holding.pids.length > 0 ? { _tag: 'Held', holders: holding.pids } : { _tag: 'Free' };
 });
 
 const CLAIM_EVERY_MS = 1_000;
@@ -187,6 +165,7 @@ export type RaiseInput = {
   readonly registrations: HostRegistration['Service'];
   readonly policy: ExecutionPolicy;
   readonly status: Effect.Effect<unknown, ExecutionsFailure>;
+  readonly claim: Effect.Effect<StateClaim>;
   readonly swap: Effect.Effect<void>;
   readonly lifetime?: HostLifetime;
 };
@@ -218,9 +197,6 @@ export const raiseHost = Effect.fnUntraced(function* (input: RaiseInput): Effect
     if (standing._tag === 'Answering') return { _tag: 'Adopted' } as const;
     if (standing._tag !== 'Absent') return { _tag: 'Unraised', reason: standing.detail } as const;
   }
-  const claim = yield* stateClaim(input.files, input.address.state);
-  if (claim._tag === 'Held') return { _tag: 'Unraised', reason: 'the host writer claim is held; no holder was started' } as const;
-  if (claim._tag === 'Unmeasured') return { _tag: 'Unraised', reason: `the host writer claim could not be read: ${claim.detail}` } as const;
   if (input.address.digest === null) return { _tag: 'Unraised', reason: 'this installation offered no host bundle' } as const;
   yield* input.swap;
   const bundle = hostBundle(input.address.state);
@@ -238,6 +214,9 @@ export const raiseHost = Effect.fnUntraced(function* (input: RaiseInput): Effect
   if (manifest.platform.os !== platform.os || manifest.platform.arch !== platform.arch) {
     return { _tag: 'UnsupportedPlatform', platform, offered: manifest.platform } as const;
   }
+  const claim = yield* input.claim;
+  if (claim._tag === 'Held') return { _tag: 'Unraised', reason: 'the host writer claim is held; no holder was started' } as const;
+  if (claim._tag === 'Unmeasured') return { _tag: 'Unraised', reason: `the host writer claim could not be read: ${claim.detail}` } as const;
   const holder = pathOf(bundle, manifest, 'holder');
   const runtime = pathOf(bundle, manifest, 'runtime');
   const entry = pathOf(bundle, manifest, 'host');

@@ -37,6 +37,7 @@ import { principalOf } from '../../../executions/terminals/principals.js';
 import { targetIdentity, targetKeyOf } from '../../../executions/terminals/subjectPolicy.js';
 import { Terminals } from '../../../executions/contract/service/terminals.js';
 import { HostManagement, HostOffering, LogicYield } from '../../../executions/contract/service/host.js';
+import { claimHoldersLayer } from '../../hostClaims.js';
 import type { TerminalActor } from '../../../executions/contract/wire/terminals.js';
 import { endHosts } from '../../../executions/testing/doubles.js';
 import { fixtureMigrations } from '../migrations.js';
@@ -83,6 +84,7 @@ const makeFixture = Effect.gen(function* () {
         }),
       ),
       Layer.provide(Layer.succeed(LogicYield, withheld)),
+      Layer.provide(claimHoldersLayer),
       Layer.provide(Layer.succeed(ThreadLineage, lineage)),
       Layer.provide(Layer.succeed(RipgrepBinary, { path: () => Effect.die('this fixture does not search output') })),
       Layer.provide(HostRegistration.layer),

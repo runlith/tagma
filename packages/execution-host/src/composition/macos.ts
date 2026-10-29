@@ -15,6 +15,7 @@ import { MACHINE_PROBE_LIMITS } from '../posix/macos/standing';
 import { tempoLayer } from '../posix/macos/Tempo';
 import { openUsage } from '../posix/Usage';
 import { endpointLayer } from '../posix/endpoint';
+import { fileHolders as holdersOf } from '../posix/macos/holders';
 import { askLogicToYield, yieldRequests } from '../posix/yieldSignal';
 import { YieldRequests } from '../YieldRequests';
 import { hostSpawner } from '../hostSpawner';
@@ -35,6 +36,8 @@ const loaded = (path: string) =>
 export const processLayer = (path: string) => Layer.effect(Processes, Effect.flatMap(loaded(path), processReader));
 
 export const yieldAsker = (path: string) => Effect.map(Effect.flatMap(loaded(path), processReader), askLogicToYield);
+
+export const fileHolders = (file: string) => holdersOf(file);
 
 export const platformLayer = (path: string) =>
   Layer.effectContext(

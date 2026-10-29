@@ -24,6 +24,7 @@ import { targetIdentity, targetKeyOf } from '../../../executions/terminals/subje
 import { Terminals } from '../../../executions/contract/service/terminals.js';
 import { HOST_REPLACED } from '../../../executions/contract/service/custody.js';
 import { HostManagement, HostOffering, LogicYield } from '../../../executions/contract/service/host.js';
+import { claimHoldersLayer } from '../../hostClaims.js';
 import type { TerminalActor } from '../../../executions/contract/wire/terminals.js';
 import { custodyNotice, endHosts, hostsUnder } from '../../../executions/testing/doubles.js';
 import { HostBundle, hostFixtureLayer, makeWorkspaceCase, migrated, HOST_LIBRARY as LIBRARY } from './fixture.js';
@@ -60,6 +61,7 @@ const makeFixture = Effect.gen(function* () {
           }),
         ),
         Layer.provide(Layer.succeed(LogicYield, withheld)),
+        Layer.provide(claimHoldersLayer),
         Layer.provide(Layer.succeed(ThreadLineage, lineage)),
         Layer.provide(Layer.succeed(RipgrepBinary, { path: () => Effect.die('this fixture does not search output') })),
         Layer.provide(HostRegistration.layer),

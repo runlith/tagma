@@ -32,6 +32,17 @@ export class LogicYield extends Context.Service<
   }
 >()('tagma/executions/LogicYield') {}
 
+export type ClaimHolding =
+  | { readonly _tag: 'Holders'; readonly pids: ReadonlyArray<number> }
+  | { readonly _tag: 'Unread'; readonly detail: string };
+
+export class ClaimHolders extends Context.Service<
+  ClaimHolders,
+  {
+    readonly of: (claim: string) => Effect.Effect<ClaimHolding>;
+  }
+>()('tagma/executions/ClaimHolders') {}
+
 export type HostStanding = {
   readonly boot: HostBoot;
   readonly custodian: boolean;

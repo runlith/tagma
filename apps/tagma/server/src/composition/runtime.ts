@@ -1,5 +1,6 @@
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import { childLedgerLayer, logicYieldLayer } from './children.js';
+import { claimHoldersLayer } from './hostClaims.js';
 import type { GrantSigner } from '../platform/contract/service/grantSigner.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
@@ -483,6 +484,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       ),
       Layer.provide(measured),
       Layer.provide(logicYieldLayer(options.hostSourcePath, carriedBundle)),
+      Layer.provide(claimHoldersLayer),
       Layer.provideMerge(HostRegistration.layer),
       Layer.provide(endpointConnection),
       Layer.provideMerge(workingLayerWithUnits),

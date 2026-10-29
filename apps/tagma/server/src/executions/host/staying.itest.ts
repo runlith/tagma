@@ -1,50 +1,44 @@
 import { afterAll, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Deferred, Effect, Fiber, FileSystem } from 'effect';
+import { Deferred, Effect, Fiber, FileSystem, Ref } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import type { ClaimHolding } from '../contract/service/host.js';
 import { hostsStaying } from './staying.js';
 
 const root = mkdtempSync(join(tmpdir(), 'hosts-staying-'));
 const store = join(root, 'tagma.sqlite');
 const state = join(root, 'executions', 'environment');
 mkdirSync(state, { recursive: true });
-const claim = join(state, 'writer.lock');
-writeFileSync(claim, '');
+writeFileSync(join(state, 'writer.lock'), '');
 
-const HOLD = 'use Fcntl ":flock"; open(my $f, ">>", $ARGV[0]) or exit 2; flock($f, LOCK_EX) or exit 3; $| = 1; print "held\\n"; <STDIN>;';
+afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-const holders: Bun.Subprocess[] = [];
-afterAll(() => {
-  for (const holder of holders) holder.kill('SIGKILL');
-  rmSync(root, { recursive: true, force: true });
-});
+const held: ClaimHolding = { _tag: 'Holders', pids: [4242] };
 
-const hold = () =>
-  Effect.promise(async () => {
-    const holder = Bun.spawn(['/usr/bin/perl', '-e', HOLD, claim], { stdin: 'pipe', stdout: 'pipe', stderr: 'ignore' });
-    holders.push(holder);
-    const reader = holder.stdout.getReader();
-    await reader.read();
-    reader.releaseLock();
-    return holder;
-  });
+it.live('a live host claim keeps the wait pending until its holder lets go', () =>
+  Effect.gen(function* () {
+    const holding = yield* Ref.make<ClaimHolding>(held);
+    const settled = yield* Deferred.make<void>();
+    const waiting = yield* Effect.forkChild(
+      Effect.flatMap(FileSystem.FileSystem, (files) => hostsStaying({ of: () => Ref.get(holding) }, files, store)).pipe(
+        Effect.provide(BunFileSystem.layer),
+        Effect.tap(() => Deferred.succeed(settled, undefined)),
+      ),
+    );
+    yield* Effect.sleep('300 millis');
+    expect(yield* Deferred.isDone(settled)).toBe(false);
+    yield* Ref.set(holding, { _tag: 'Holders', pids: [] });
+    expect(yield* Fiber.join(waiting)).toEqual([]);
+  }),
+);
 
-const staying = Effect.flatMap(FileSystem.FileSystem, (files) => hostsStaying(files, store)).pipe(Effect.provide(BunFileSystem.layer));
-
-(existsSync('/usr/sbin/lsof') ? it.live : it.live.skip)(
-  'a live host claim keeps the wait pending until its holder exits and releases it',
-  () =>
-    Effect.gen(function* () {
-      const holder = yield* hold();
-      const settled = yield* Deferred.make<void>();
-      const waiting = yield* Effect.forkChild(staying.pipe(Effect.tap(() => Deferred.succeed(settled, undefined))));
-      yield* Effect.yieldNow;
-      expect(yield* Deferred.isDone(settled)).toBe(false);
-      holder.stdin.end();
-      yield* Effect.promise(() => holder.exited);
-      expect(yield* Fiber.join(waiting)).toEqual([]);
-    }),
+it.live('a claim whose holders cannot be read is reported staying with the reason, not waited on', () =>
+  Effect.gen(function* () {
+    const files = yield* FileSystem.FileSystem;
+    const staying = yield* hostsStaying({ of: () => Effect.succeed({ _tag: 'Unread', detail: 'no reader here' }) }, files, store);
+    expect(staying).toEqual([{ state, claim: { _tag: 'Unmeasured', detail: 'no reader here' } }]);
+  }).pipe(Effect.provide(BunFileSystem.layer)),
 );

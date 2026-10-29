@@ -1,6 +1,8 @@
-import { Effect, FileSystem } from 'effect';
+import { Effect, FileSystem, Layer } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { door } from '../cli/door.js';
+import { claimHoldersLayer } from '../hostClaims.js';
+import { ClaimHolders } from '../../executions/contract/service/host.js';
 import { tryout } from '../../installation/cut/try.js';
 import type { InstanceHosts } from '../../installation/cut/port.js';
 import { hostsStaying } from '../../executions/host/staying.js';
@@ -15,7 +17,7 @@ for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.once(sign
 
 const hosts: InstanceHosts = {
   staying: (database) =>
-    Effect.flatMap(FileSystem.FileSystem, (files) => hostsStaying(files, database)).pipe(
+    Effect.flatMap(Effect.all([ClaimHolders, FileSystem.FileSystem]), ([holders, files]) => hostsStaying(holders, files, database)).pipe(
       Effect.map((staying) =>
         staying.map(({ state, claim }) => ({
           state,
@@ -23,7 +25,7 @@ const hosts: InstanceHosts = {
           detail: claim._tag === 'Unmeasured' ? claim.detail : null,
         })),
       ),
-      Effect.provide(BunFileSystem.layer),
+      Effect.provide(Layer.merge(BunFileSystem.layer, claimHoldersLayer)),
     ),
 };
 

@@ -1,7 +1,7 @@
 import { afterAll, describe, expect } from 'bun:test';
 import { withFileLock } from '@runlith/file-lock/FileLock';
 import { it, layer } from '@runlith/effect-test';
-import { closeSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Clock, Deferred, Effect, Fiber, FileSystem, Layer, Ref, Schedule } from 'effect';
 import { TestClock } from 'effect/testing';
@@ -22,7 +22,7 @@ import { bootPath, HostBoot as HostBootFile } from '@runlith/executions/protocol
 import { existsSync, readFileSync } from 'node:fs';
 import { WireFailed, WireUnreadable, WireUnavailable } from '@runlith/executions/Executions';
 import { fixtureRoot } from '../../platform/testing/roots.js';
-import { hostPresence, raiseHost } from './boot.js';
+import { hostPresence, raiseHost, type StateClaim } from './boot.js';
 import { executionPolicy } from './policy.js';
 
 const unreachable = new WireUnavailable({ kind: 'unreachable', reason: 'the socket could not be opened', sent: false });
@@ -30,6 +30,8 @@ const unreadable = new WireUnreadable({ detail: 'Expected "granted" in profile' 
 const refusedHello = new WireFailed({ fault: { kind: 'malformed', detail: 'v: expected 1' } });
 
 const services = HostRegistration.layer.pipe(Layer.provideMerge(BunServices.layer));
+
+const free: Effect.Effect<StateClaim> = Effect.succeed({ _tag: 'Free' });
 
 describe('hostPresence', () => {
   it.effect('a decoded answer is a host answering', () =>
@@ -138,6 +140,7 @@ layer(services, { excludeTestServices: true })('raiseHost', (it) => {
           registrations: yield* HostRegistration,
           policy: executionPolicy,
           status: Effect.fail(unreachable),
+          claim: Effect.die('the writer claim is not read for a bundle this platform cannot run'),
           swap: Effect.void,
         });
         expect(outcome).toEqual({ _tag: 'UnsupportedPlatform', platform: { os: process.platform, arch: process.arch }, offered: platform });
@@ -170,6 +173,7 @@ layer(services, { excludeTestServices: true })('raiseHost', (it) => {
           registrations: registry,
           policy: executionPolicy,
           status,
+          claim: free,
           swap: Effect.void,
         });
         expect(outcome._tag).toBe('Raised');
@@ -239,6 +243,7 @@ layer(services, { excludeTestServices: true })('raiseHost', (it) => {
         registrations: registry,
         policy: executionPolicy,
         status,
+        claim: free,
         swap: Effect.void,
       });
       expect(outcome._tag).toBe('Raised');
@@ -259,6 +264,7 @@ layer(services, { excludeTestServices: true })('raiseHost', (it) => {
         registrations: yield* HostRegistration,
         policy: executionPolicy,
         status: Effect.fail(unreachable),
+        claim: free,
         swap: Effect.void,
       });
       expect(outcome._tag).toBe('Unraised');
@@ -304,6 +310,7 @@ layer(services, { excludeTestServices: true })('raiseHost', (it) => {
           registrations: yield* HostRegistration,
           policy: executionPolicy,
           status,
+          claim: free,
           swap: Effect.void,
         }),
       ).toEqual({ _tag: 'Raised' });
@@ -327,16 +334,13 @@ layer(services, { excludeTestServices: true })('raiseHost', (it) => {
   it.effect('a held writer claim refuses a second holder even when the offered bundle is readable', () =>
     Effect.gen(function* () {
       const world = launchBundle('held');
-      const claim = join(world.address.state, 'writer.lock');
-      writeFileSync(claim, '');
-      const fd = openSync(claim, 'r');
-      yield* Effect.addFinalizer(() => Effect.sync(() => closeSync(fd)));
       const outcome = yield* raiseHost({
         address: world.address,
         files: yield* FileSystem.FileSystem,
         registrations: yield* HostRegistration,
         policy: executionPolicy,
         status: Effect.fail(unreachable),
+        claim: Effect.succeed({ _tag: 'Held', holders: [1] }),
         swap: Effect.void,
       });
       expect(outcome._tag).toBe('Unraised');
@@ -364,6 +368,7 @@ layer(services)('raiseHost on a slow machine', (it) => {
           registrations: yield* HostRegistration,
           policy: executionPolicy,
           status,
+          claim: free,
           swap: Effect.void,
         }),
       );
