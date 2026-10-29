@@ -51,47 +51,60 @@ export const discoverSkills = Effect.fn('SkillDirectories.discover')(function* (
       continue;
     }
     for (const entry of listed.value.slice().sort()) {
-      const location = path.join(directory, entry);
-      const info = yield* fs.stat(location).pipe(Effect.result);
-      if (info._tag === 'Failure') {
-        if (info.failure.reason._tag !== 'NotFound') {
-          rejected.push({ path: location, reason: info.failure.message });
-        }
-        continue;
-      }
-      if (info.success.type !== 'Directory') continue;
-      const file = path.join(location, SKILL_FILE);
-      const readable = yield* fs.exists(file).pipe(Effect.option);
-      if (readable._tag === 'None') {
-        rejected.push({ path: file, reason: 'unreadable' });
-        continue;
-      }
-      if (!readable.value) continue;
-      const raw = yield* fs.readFileString(file).pipe(Effect.option);
-      if (raw._tag === 'None') {
-        rejected.push({ path: file, reason: 'unreadable' });
-        continue;
-      }
-      const parsed = parseSkill(raw.value);
-      if ('reason' in parsed) {
-        rejected.push({ path: file, reason: parsed.reason });
-        continue;
-      }
-      const resolved = yield* fs.realPath(location).pipe(Effect.option);
-      if (resolved._tag === 'None') {
-        rejected.push({ path: location, reason: 'unreadable' });
-        continue;
-      }
-      const references = yield* referencesIn(path.join(resolved.value, REFERENCES_DIRECTORY));
-      if (references === 'unreadable') {
-        rejected.push({ path: path.join(location, REFERENCES_DIRECTORY), reason: 'unreadable' });
-        continue;
-      }
-      byName.set(entry, { ...parsed, name: entry, path: file, directory, location: resolved.value, references });
+      const read = yield* readSkillFolder({ name: entry, location: path.join(directory, entry), directory });
+      if (read === null) continue;
+      if ('location' in read) byName.set(entry, read);
+      else rejected.push(read);
     }
   }
 
   return { skills: [...byName.values()], rejected } satisfies SkillDiscovery;
+});
+
+export type NamedSkillFolder = {
+  readonly name: string;
+  readonly location: string;
+  readonly directory: string;
+};
+
+export const readSkillFolders = Effect.fn('SkillDirectories.readFolders')(function* (folders: readonly NamedSkillFolder[]) {
+  const skills: DiscoveredSkill[] = [];
+  const rejected: { path: string; reason: string }[] = [];
+  for (const folder of folders) {
+    const read = yield* readSkillFolder(folder);
+    if (read === null) rejected.push({ path: folder.location, reason: `not a folder holding ${SKILL_FILE}` });
+    else if ('location' in read) skills.push(read);
+    else rejected.push(read);
+  }
+  return { skills, rejected } satisfies SkillDiscovery;
+});
+
+type SkillRejection = { readonly path: string; readonly reason: string };
+
+const readSkillFolder = Effect.fnUntraced(function* ({
+  name,
+  location,
+  directory,
+}: NamedSkillFolder): Effect.fn.Return<DiscoveredSkill | SkillRejection | null, never, FileSystem.FileSystem> {
+  const fs = yield* FileSystem.FileSystem;
+  const info = yield* fs.stat(location).pipe(Effect.result);
+  if (info._tag === 'Failure') {
+    return info.failure.reason._tag === 'NotFound' ? null : { path: location, reason: info.failure.message };
+  }
+  if (info.success.type !== 'Directory') return null;
+  const file = path.join(location, SKILL_FILE);
+  const readable = yield* fs.exists(file).pipe(Effect.option);
+  if (readable._tag === 'None') return { path: file, reason: 'unreadable' };
+  if (!readable.value) return null;
+  const raw = yield* fs.readFileString(file).pipe(Effect.option);
+  if (raw._tag === 'None') return { path: file, reason: 'unreadable' };
+  const parsed = parseSkill(raw.value);
+  if ('reason' in parsed) return { path: file, reason: parsed.reason };
+  const resolved = yield* fs.realPath(location).pipe(Effect.option);
+  if (resolved._tag === 'None') return { path: location, reason: 'unreadable' };
+  const references = yield* referencesIn(path.join(resolved.value, REFERENCES_DIRECTORY));
+  if (references === 'unreadable') return { path: path.join(location, REFERENCES_DIRECTORY), reason: 'unreadable' };
+  return { ...parsed, name, path: file, directory, location: resolved.value, references } satisfies DiscoveredSkill;
 });
 
 const referencesIn = Effect.fnUntraced(function* (directory: string) {

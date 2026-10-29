@@ -29,9 +29,10 @@
     description: string;
     path: string | null;
     directory: string | null;
-    scope: 'global' | 'project' | 'built-in';
+    scope: 'plugin' | 'global' | 'project' | 'built-in';
+    plugin: string | null;
     enabled: boolean;
-    replacedBy: 'global' | 'project' | 'built-in' | null;
+    replacedBy: 'plugin' | 'global' | 'project' | 'built-in' | null;
   };
   type Inventory = {
     skills: readonly InventorySkill[];
@@ -57,14 +58,18 @@
   const REPLACER: Readonly<Record<InventorySkill['scope'], string>> = {
     project: "this project's skill",
     global: 'your own skill',
+    plugin: "a plugin's skill",
     'built-in': 'a built-in skill',
   };
 
   const GROUPS = [
     { scope: 'project' as const, title: 'This project' },
     { scope: 'global' as const, title: 'Yours, everywhere' },
+    { scope: 'plugin' as const, title: 'From plugins enabled here' },
     { scope: 'built-in' as const, title: 'Built into this server' },
   ];
+
+  const switchedOff = (entry: InventorySkill): boolean => !entry.enabled && (entry.replacedBy === null || entry.scope === 'built-in');
 
   async function load(projectId: number | undefined): Promise<void> {
     error = null;
@@ -83,7 +88,7 @@
     if (!project || !inventory) return;
     toggling = skill.name;
     try {
-      const disabled = inventory.skills.filter((entry) => !entry.enabled && entry.replacedBy !== 'built-in').map((entry) => entry.name);
+      const disabled = inventory.skills.filter(switchedOff).map((entry) => entry.name);
       const next = skill.enabled ? [...disabled, skill.name] : disabled.filter((name) => name !== skill.name);
       await catalog.write({ scope, key: 'skills.disabled', value: next });
       await load(project.id);
@@ -152,6 +157,9 @@
                       {skill.description}
                     </span>
                   </Tooltip>
+                  {#if skill.plugin !== null}
+                    <span class="stamp text-muted-foreground/70">{skill.plugin}</span>
+                  {/if}
                   {#if skill.path}
                     <Tooltip text={skill.path} class="block min-w-0">
                       <PathText class="stamp text-muted-foreground/70" path={skill.path} />
@@ -160,6 +168,10 @@
                 </div>
                 {#if skill.scope === 'built-in' && skill.replacedBy !== null}
                   <Tooltip text="Switched off in skills.disabled; {REPLACER[skill.replacedBy]} of the same name is offered in its place">
+                    <span class="eyebrow shrink-0 text-muted-foreground"> Replaced </span>
+                  </Tooltip>
+                {:else if skill.scope === 'plugin' && skill.replacedBy !== null}
+                  <Tooltip text="Not offered: {REPLACER[skill.replacedBy]} of the same name stands in its place">
                     <span class="eyebrow shrink-0 text-muted-foreground"> Replaced </span>
                   </Tooltip>
                 {:else if skill.scope === 'built-in'}

@@ -56,7 +56,7 @@ export const makeDeclaredAgents = Effect.fnUntraced(function* ({
   readonly harnesses: Effect.Effect<readonly HarnessInstall[]>;
   readonly storePath: string;
   readonly files: AgentFiles;
-  readonly packages: AgentPackages;
+  readonly packages: readonly AgentPackages[];
 }) {
   const agents = yield* NativeAgents;
   const projects = yield* Projects;
@@ -65,6 +65,18 @@ export const makeDeclaredAgents = Effect.fnUntraced(function* ({
   const { appHome } = storageHomes(storePath);
   const bases = new Set<string>([files.baseId, HARNESS_AGENT_ID]);
   const namable = () => agents.list().filter((agent) => !bases.has(agent.id));
+  const packagedIn = (projectId: number): Effect.Effect<readonly AgentFile[], ThreadBorderFailed> =>
+    Effect.map(
+      Effect.forEach(packages, (floor) => floor.agentsIn(projectId)),
+      (floors) => floors.flat(),
+    );
+  const packagedNamed = Effect.fnUntraced(function* (projectId: number, typeId: string) {
+    for (const floor of packages) {
+      const file = yield* floor.agentIn(projectId, typeId);
+      if (file !== undefined) return file;
+    }
+    return undefined;
+  });
 
   const floorsOf = (projectId: number): Effect.Effect<readonly [string, string], ThreadCallBroke> =>
     projects.byId(projectId).pipe(
@@ -91,8 +103,9 @@ export const makeDeclaredAgents = Effect.fnUntraced(function* ({
         { directory: personal, origin: 'personal' },
       ])
       .pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
-    const packaged = yield* packages.agentsIn(projectId);
-    const shadowing = new Map(packaged.map((file) => [file.id, file.path]));
+    const packaged = yield* packagedIn(projectId);
+    const shadowing = new Map<string, string>();
+    for (const file of packaged) if (!shadowing.has(file.id)) shadowing.set(file.id, file.path);
     const agents: AgentFile[] = [];
     const rejected = [...found.rejected];
     for (const file of [...found.agents, ...packaged]) {
@@ -153,12 +166,11 @@ export const makeDeclaredAgents = Effect.fnUntraced(function* ({
     if (agents.find(typeId) !== undefined && !bases.has(typeId)) {
       return yield* offerTo(caller, projectId, typeId, CODE_TYPE, () => nativeOffer(typeId));
     }
-    const packaged = yield* packages.agentIn(projectId, typeId);
+    const packaged = yield* packagedNamed(projectId, typeId);
     if (packaged !== undefined && validate(packaged) === undefined) {
-      return yield* offerTo(caller, projectId, typeId, APP_AGENT, () => ({
-        ...offerOf(files.profileOf(packaged)),
-        approvalMode: trust.id,
-      }));
+      return yield* offerTo(caller, projectId, typeId, STANDINGS[packaged.origin], () =>
+        packaged.origin === 'app' ? { ...offerOf(files.profileOf(packaged)), approvalMode: trust.id } : offerOf(files.profileOf(packaged)),
+      );
     }
     const file = (yield* filesOf(projectId)).agents.find((held) => held.id === typeId);
     if (!file) return null;
@@ -219,12 +231,11 @@ const OFFERED: Judge = () => null;
 
 const CODE_TYPE: Standing = { to: 'agents', what: 'an agent of this server' };
 const HARNESS_TYPE: Standing = { to: 'agents', what: 'a harness of this server' };
-const APP_AGENT: Standing = { to: 'operator', what: "an app's agent" };
-
 const STANDINGS: Record<AgentFile['origin'], Standing> = {
   personal: { to: 'agents', what: "a file of the operator's personal agents" },
   project: { to: 'operator', what: "a file of this project's agents" },
-  app: APP_AGENT,
+  app: { to: 'operator', what: "an app's agent" },
+  plugin: { to: 'operator', what: "a plugin's agent" },
 };
 
 function withheld(typeId: string, standing: Standing, set: boolean): ThreadTypeWithheld {

@@ -13,6 +13,7 @@ export type SkillInventoryEntry = {
   readonly path: string | null;
   readonly directory: string | null;
   readonly scope: SkillScope;
+  readonly plugin: string | null;
   readonly enabled: boolean;
   readonly own: boolean;
   readonly replacedBy: SkillScope | null;

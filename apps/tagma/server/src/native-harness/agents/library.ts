@@ -83,7 +83,7 @@ function fileDefinition(file: AgentFile): AgentDefinition {
     config: frontmatter(file),
     body: file.body,
     source: file.source,
-    editable: file.origin !== 'app',
+    editable: file.origin === 'project' || file.origin === 'personal',
   };
 }
 

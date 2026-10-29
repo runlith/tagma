@@ -57,7 +57,7 @@ export function agentSignalMessage(signal: AgentSignal, attached?: readonly Agen
     'envelope',
   );
   return isReaderWords(signal)
-    ? withAgentReaderInput(withAgentInputSkills(message, requestedSkills(signal.text)), signal.id, signal.readerPosition)
+    ? withAgentReaderInput(withAgentInputSkills(message, requestedSkills(signal.text), signal.text), signal.id, signal.readerPosition)
     : message;
 }
 
@@ -73,6 +73,9 @@ function contentPart(part: AgentSignalPart): MediaPart | TextPart {
 
 const inputSkills = new WeakMap<Message, ReadonlySet<string> | null>();
 const hasInputSkills = Schema.is(Schema.Struct({ readerSkills: Schema.Array(Schema.String) }));
+const hasInputText = Schema.is(Schema.Struct({ readerText: Schema.String }));
+
+const textOf = (message: Message): string => message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
 
 function requestedSkills(text: string): ReadonlySet<string> {
   return new Set(skillReferences(text).map((reference) => reference.id));
@@ -85,7 +88,7 @@ export function agentInputSkills(message: Message): ReadonlySet<string> | null {
   const origin = agentOriginOf(message);
   const skills =
     origin === undefined
-      ? requestedSkills(message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n'))
+      ? requestedSkills(textOf(message))
       : (origin === 'envelope' || origin === 'summary') && hasInputSkills(message.metadata)
         ? new Set(message.metadata.readerSkills)
         : null;
@@ -93,8 +96,25 @@ export function agentInputSkills(message: Message): ReadonlySet<string> | null {
   return skills;
 }
 
-export function withAgentInputSkills(message: Message, skills: ReadonlySet<string>): Message {
-  return Message.make({ ...message, metadata: { ...message.metadata, readerSkills: [...skills] } });
+export function agentInputText(message: Message): string | null {
+  if (agentInputSkills(message) === null) return null;
+  if (agentOriginOf(message) === undefined) return textOf(message);
+  return hasInputText(message.metadata) ? message.metadata.readerText : null;
+}
+
+export function withAgentInputSkills(message: Message, skills: ReadonlySet<string>, text: string | null): Message {
+  const readerText = skills.size > 0 && text !== null ? { readerText: text } : {};
+  return Message.make({ ...message, metadata: { ...message.metadata, readerSkills: [...skills], ...readerText } });
+}
+
+const hasCarriedArguments = Schema.is(Schema.Struct({ skillArguments: Schema.Record(Schema.String, Schema.String) }));
+
+export function agentCarriedArguments(message: Message): Readonly<Record<string, string>> | null {
+  return agentOriginOf(message) === 'summary' && hasCarriedArguments(message.metadata) ? message.metadata.skillArguments : null;
+}
+
+export function withAgentCarriedArguments(message: Message, carried: Readonly<Record<string, string>>): Message {
+  return Message.make({ ...message, metadata: { ...message.metadata, skillArguments: carried } });
 }
 
 export function agentSignalMarkup(

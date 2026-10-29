@@ -30,7 +30,12 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             join(root, '.agents/skills/reviewer/SKILL.md'),
             '---\ndescription: Reviews a change.\n---\n\nRead the diff first.\n',
           );
-          const sources = yield* readWorkspaceInputs({ projectId, projectRoot: root, own: [join(root, '.agents/skills/tagma')] });
+          const sources = yield* readWorkspaceInputs({
+            projectId,
+            projectRoot: root,
+            own: [join(root, '.agents/skills/tagma')],
+            plugins: [],
+          });
           expect(sources.contextFiles.map((file) => file.name)).toEqual(['AGENTS.md']);
           expect(sources.contextFiles[0]?.body).toBe('the project law');
           expect(sources.skills.map((skill) => skill.id)).toEqual(['reviewer']);
@@ -46,7 +51,12 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             join(root, 'AGENTS.md'),
             `keep this\n${LAW_START}\ngenerated law\n${LAW_END}\nand this`,
           );
-          const sources = yield* readWorkspaceInputs({ projectId, projectRoot: root, own: [join(root, '.agents/skills/tagma')] });
+          const sources = yield* readWorkspaceInputs({
+            projectId,
+            projectRoot: root,
+            own: [join(root, '.agents/skills/tagma')],
+            plugins: [],
+          });
           expect(sources.contextFiles[0]?.body).toContain('keep this');
           expect(sources.contextFiles[0]?.body).toContain('and this');
           expect(sources.contextFiles[0]?.body).not.toContain('generated law');
@@ -62,7 +72,12 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
           yield* files.writeFileString(join(root, 'AGENTS.md'), 'generic');
           yield* files.writeFileString(join(root, 'TAGMA.md'), 'addressed to tagma');
           yield* (yield* Settings).write({ scope: 'project', projectId, key: contextFileNames.id, value: ['AGENTS.md', 'TAGMA.md'] });
-          const sources = yield* readWorkspaceInputs({ projectId, projectRoot: root, own: [join(root, '.agents/skills/tagma')] });
+          const sources = yield* readWorkspaceInputs({
+            projectId,
+            projectRoot: root,
+            own: [join(root, '.agents/skills/tagma')],
+            plugins: [],
+          });
           expect(sources.contextFiles[0]?.body).toBe('generic');
         }),
       ),
@@ -74,7 +89,12 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
           const { root, projectId } = yield* setup(demo);
           yield* (yield* FileSystem.FileSystem).writeFileString(join(root, 'AGENTS.md'), 'the project law');
           yield* (yield* Settings).write({ scope: 'project', projectId, key: contextFilesEnabled.id, value: false });
-          const sources = yield* readWorkspaceInputs({ projectId, projectRoot: root, own: [join(root, '.agents/skills/tagma')] });
+          const sources = yield* readWorkspaceInputs({
+            projectId,
+            projectRoot: root,
+            own: [join(root, '.agents/skills/tagma')],
+            plugins: [],
+          });
           expect(sources.contextFiles).toEqual([]);
         }),
       ),
@@ -88,7 +108,12 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
           yield* files.makeDirectory(join(root, 'ops/skills/deployer'), { recursive: true });
           yield* files.writeFileString(join(root, 'ops/skills/deployer/SKILL.md'), '---\ndescription: Ships.\n---\n\nRun it.\n');
           yield* (yield* Settings).write({ scope: 'project', projectId, key: skillProjectDirectories.id, value: ['ops/skills'] });
-          const sources = yield* readWorkspaceInputs({ projectId, projectRoot: root, own: [join(root, '.agents/skills/tagma')] });
+          const sources = yield* readWorkspaceInputs({
+            projectId,
+            projectRoot: root,
+            own: [join(root, '.agents/skills/tagma')],
+            plugins: [],
+          });
           expect(sources.skills.map((skill) => skill.id)).toEqual(['deployer']);
         }),
       ),
@@ -107,18 +132,33 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
           yield* files.makeDirectory(join(root, 'ops/skills/tagma'), { recursive: true });
           yield* files.writeFileString(join(root, 'ops/skills/tagma/SKILL.md'), '---\ndescription: Unrelated.\n---\n\nNot ours.\n');
           const settings = yield* Settings;
-          const sources = yield* readWorkspaceInputs({ projectId, projectRoot: root, own: [join(root, '.agents/skills/tagma')] });
+          const sources = yield* readWorkspaceInputs({
+            projectId,
+            projectRoot: root,
+            own: [join(root, '.agents/skills/tagma')],
+            plugins: [],
+          });
           expect(sources.skills.map((skill) => skill.id)).toEqual([]);
           expect(sources.inventory.map((entry) => [entry.name, entry.own, entry.enabled])).toEqual([['tagma', true, false]]);
           yield* settings.write({ scope: 'project', projectId, key: skillProjectDirectories.id, value: ['ops/skills'] });
-          const reordered = yield* readWorkspaceInputs({ projectId, projectRoot: root, own: [join(root, '.agents/skills/tagma')] });
+          const reordered = yield* readWorkspaceInputs({
+            projectId,
+            projectRoot: root,
+            own: [join(root, '.agents/skills/tagma')],
+            plugins: [],
+          });
           expect(reordered.inventory.find((entry) => entry.name === 'tagma' && entry.directory?.includes('ops') === true)).toMatchObject({
             own: false,
             enabled: true,
           });
           yield* settings.write({ scope: 'project', projectId, key: skillProjectDirectories.id, value: ['.agents/skills'] });
           yield* settings.write({ scope: 'project', projectId, key: 'skills.own.enabled', value: true });
-          const offered = yield* readWorkspaceInputs({ projectId, projectRoot: root, own: [join(root, '.agents/skills/tagma')] });
+          const offered = yield* readWorkspaceInputs({
+            projectId,
+            projectRoot: root,
+            own: [join(root, '.agents/skills/tagma')],
+            plugins: [],
+          });
           expect(offered.skills.map((skill) => skill.id)).toEqual(['tagma']);
         }),
       ),
@@ -137,7 +177,12 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
           const settings = yield* Settings;
           yield* settings.write({ scope: 'project', projectId, key: skillGlobalDirectories.id, value: [globalRoot] });
           yield* settings.write({ scope: 'project', projectId, key: 'skills.project.enabled', value: false });
-          const sources = yield* readWorkspaceInputs({ projectId, projectRoot: root, own: [join(root, '.agents/skills/tagma')] });
+          const sources = yield* readWorkspaceInputs({
+            projectId,
+            projectRoot: root,
+            own: [join(root, '.agents/skills/tagma')],
+            plugins: [],
+          });
           expect(sources.inventory.map((entry) => [entry.name, entry.scope])).toEqual([['greeter', 'global']]);
         }),
       ),

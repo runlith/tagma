@@ -1,7 +1,15 @@
 import type { CompactionSummary } from '@runlith/llm/schema/compaction';
 import { Message } from '@runlith/llm/schema/messages';
 import { foldedReferences } from '../../agent/AgentDeferredTools';
-import { agentInputSkills, withAgentInputSkills, withAgentOrigin } from '../../agent/AgentSignal';
+import {
+  agentCarriedArguments,
+  agentInputSkills,
+  agentInputText,
+  withAgentCarriedArguments,
+  withAgentInputSkills,
+  withAgentOrigin,
+} from '../../agent/AgentSignal';
+import { skillArguments } from '../../agent/skillReferences';
 import { pinnedOpening, type ThreadOpeningPin } from './prefix';
 
 type ThreadCheckpointProjection = {
@@ -27,14 +35,27 @@ export function threadCheckpointHead(
   for (let index = covered - 1; index >= 0; index -= 1) {
     const skills = agentInputSkills(messages[index]!);
     if (skills === null) continue;
-    if (skills.size > 0) head[0] = withAgentInputSkills(head[0]!, skills);
+    if (skills.size > 0) head[0] = withAgentInputSkills(head[0]!, skills, null);
     break;
   }
+  const carried = carriedArguments(messages.slice(0, covered));
+  if (Object.keys(carried).length > 0) head[0] = withAgentCarriedArguments(head[0]!, carried);
   const inventory = lastInventory(messages, checkpoint.coveredMessageCount);
   if (inventory !== undefined) head[0] = Message.make({ ...head[0]!, content: [...head[0]!.content, inventory] });
   const pinned = checkpoint.context === undefined ? pinnedOpening(messages, checkpoint.coveredMessageCount, pin) : null;
   if (pinned !== null) head.push(pinned);
   return head;
+}
+
+function carriedArguments(messages: readonly Message[]): Record<string, string> {
+  const carried: Record<string, string> = {};
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    const text = agentInputText(message);
+    if (text !== null) for (const id of agentInputSkills(message) ?? []) carried[id] ??= skillArguments(text, id);
+    for (const [id, value] of Object.entries(agentCarriedArguments(message) ?? {})) carried[id] ??= value;
+  }
+  return carried;
 }
 
 function lastInventory(messages: readonly Message[], covered: number) {

@@ -96,7 +96,10 @@ import type { ThreadTransitionStorage } from '@runlith/agent/thread/transition/p
 import { HarnessRegistry } from '../threads/contract/service/harness.js';
 import { TagmaAppPoints } from '../tagma-apps/contract/service/points.js';
 import { makeTagmaAppAgents } from './agents/declared/tagmaApps.js';
+import { makePluginAgents } from './agents/declared/plugins.js';
+import { EnabledPlugins } from '../plugins/contract/service/plugins.js';
 export type NativeKernelRequirements =
+  | EnabledPlugins
   | ApprovalModes
   | MachineStore
   | MachineUnits
@@ -251,7 +254,7 @@ export const assembleNativeKernel: Effect.Effect<NativeKernel['Service'], never,
     harnesses: installed.read,
     storePath: machine.path,
     files: agentFiles,
-    packages: packaged.packages,
+    packages: [packaged.packages, yield* makePluginAgents()],
   }).pipe(Effect.provideService(NativeAgents, agents));
   return {
     asides,

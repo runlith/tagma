@@ -9,13 +9,15 @@ import { WorkspaceGeneration } from '../../workspace/contract/wire/ids.js';
 import type { TargetAt } from '../../workspace/contract/wire/place.js';
 import { WorkspaceInputs } from '../contract/service/inputs.js';
 import { workspaceInputsLayer } from './cache.js';
+import { EnabledPlugins, type PluginLoaded } from '../../plugins/contract/service/plugins.js';
+import { enabledPlugins } from '../../plugins/testing/enabled.js';
 
 const at = (threadId: string, runId: string, generation = 0): TargetAt => ({
   threadId,
   runId,
   generation: WorkspaceGeneration.make(generation),
 });
-const setup = Effect.fnUntraced(function* (demo: EffectDemo) {
+const setup = Effect.fnUntraced(function* (demo: EffectDemo, plugins?: EnabledPlugins['Service']) {
   for (const [key, value] of [
     [skillGlobalDirectories.id, []],
     [skillProjectDirectories.id, ['.agents/skills']],
@@ -23,7 +25,11 @@ const setup = Effect.fnUntraced(function* (demo: EffectDemo) {
     [rescanPolicy.id, 'manual'],
   ] as const)
     yield* demo.graph.settings.write({ scope: 'project', projectId: demo.projectId, key, value });
-  return Context.get(yield* Layer.build(workspaceInputsLayer(() => [])), WorkspaceInputs);
+  const enabled = plugins ?? (yield* enabledPlugins()).service;
+  return Context.get(
+    yield* Layer.build(workspaceInputsLayer(() => [])).pipe(Effect.provideService(EnabledPlugins, enabled)),
+    WorkspaceInputs,
+  );
 });
 
 layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('workspace input lifetimes', (it) => {
@@ -94,6 +100,70 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         expect(walked.inventory.map((entry) => entry.name)).toEqual(['writer']);
       }),
     ),
+  );
+
+  it.effect(
+    "an enabled plugin's skills and commands join the catalog by name, a project skill of the same name wins, and disabling withdraws them",
+    () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const files = yield* FileSystem.FileSystem;
+          const pluginRoot = yield* tempRootEffect(demo.fixture, 'plugin-skills-');
+          const skillFolder = Effect.fnUntraced(function* (directory: string, description: string) {
+            yield* files.makeDirectory(directory, { recursive: true });
+            yield* files.writeFileString(join(directory, 'SKILL.md'), `---\ndescription: ${description}\n---\nBody.\n`);
+            return directory;
+          });
+          const review = yield* skillFolder(join(pluginRoot, 'skills/review'), 'Reviews.');
+          const clash = yield* skillFolder(join(pluginRoot, 'skills/clash'), 'Plugin clash.');
+          yield* skillFolder(join(demo.demoRoot, '.agents/skills/demo-clash'), 'Project clash.');
+          const loaded: PluginLoaded = {
+            id: 'demo',
+            revision: 'first',
+            title: 'Demo',
+            place: { root: pluginRoot, data: pluginRoot, options: {}, project: demo.demoRoot },
+            redact: [],
+            skills: [
+              { name: 'demo-review', directory: review, file: join(review, 'SKILL.md') },
+              { name: 'demo-clash', directory: clash, file: join(clash, 'SKILL.md') },
+            ],
+            commands: [{ name: 'demo-fix', description: 'Fixes.', body: Effect.succeed('Fix $ARGUMENTS.') }],
+            agents: [],
+            servers: [],
+            hooks: [],
+          };
+          const plugins = yield* enabledPlugins([loaded]);
+          const cache = yield* setup(demo, plugins.service);
+          const here = { threadId: 'one', projectId: demo.projectId, root: demo.demoRoot };
+          const walked = yield* cache.preview(here);
+          expect(walked.skills.map((skill) => [skill.id, skill.description])).toEqual([
+            ['demo-review', 'Reviews.'],
+            ['demo-fix', 'Fixes.'],
+            ['demo-clash', 'Project clash.'],
+          ]);
+          expect(walked.inventory.map((entry) => [entry.name, entry.scope, entry.plugin, entry.enabled, entry.replacedBy])).toEqual([
+            ['demo-review', 'plugin', 'demo', true, null],
+            ['demo-clash', 'plugin', 'demo', false, 'project'],
+            ['demo-fix', 'plugin', 'demo', true, null],
+            ['demo-clash', 'project', null, true, null],
+          ]);
+          const command = walked.skills.find((skill) => skill.id === 'demo-fix')!;
+          expect(command.arguments).toBe(true);
+          const body = command.instructions({});
+          expect(typeof body === 'string' ? body : yield* body).toBe('Fix $ARGUMENTS.');
+          const rebound: PluginLoaded = {
+            ...loaded,
+            revision: 'rebound',
+            place: { ...loaded.place, options: { target: 'staging' } },
+            commands: [{ name: 'demo-fix', description: 'Fixes.', body: Effect.succeed('Fix $ARGUMENTS on staging.') }],
+          };
+          yield* plugins.set(demo.projectId, [rebound]);
+          const again = (yield* cache.preview(here)).skills.find((skill) => skill.id === 'demo-fix')!.instructions({});
+          expect(typeof again === 'string' ? again : yield* again).toBe('Fix $ARGUMENTS on staging.');
+          yield* plugins.set(demo.projectId, []);
+          expect((yield* cache.preview(here)).skills.map((skill) => skill.id)).toEqual(['demo-clash']);
+        }),
+      ),
   );
 
   it.effect('threads standing in one tree share one walk, and an invalidation of any shape drops it', () =>

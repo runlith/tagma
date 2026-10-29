@@ -34,6 +34,8 @@ import { threadToolSources } from '@runlith/agent/thread/ThreadPorts';
 import { versionedShelf } from '../../../artifacts/testing/doubles.js';
 import { agentLibraryTag } from '../../../threads/testing/doubles.js';
 import { NativeAgentDefinitions } from '../../../native-harness/contract/service/agents.js';
+import { EnabledPlugins } from '../../../plugins/contract/service/plugins.js';
+import { enabledPlugins } from '../../../plugins/testing/enabled.js';
 import { CallerChangeWork, ChangeRecord } from '../../../change-record/contract/service/record.js';
 import { idleCommands } from '../../../change-record/testing/doubles.js';
 import { changeRecordOf, intakeOf } from '../../../change-record/testing/doubles.js';
@@ -95,14 +97,19 @@ const world = Effect.fnUntraced(function* (demo: EffectDemo) {
     harnesses: Effect.succeed([]),
     storePath: join(demo.demoRoot, 'personal', 'tagma.sqlite'),
     files: agentFilesOf()(capabilities),
-    packages: { agentsIn: () => Effect.succeed([]), agentIn: () => Effect.succeed(undefined) },
+    packages: [],
   }).pipe(
     Effect.provideService(NativeAgents, yield* registeredAgents(agents, 'test')),
     Effect.provideService(ThreadRecords, records),
     Effect.provideService(Projects, demo.graph.projects),
     Effect.provideService(Settings, demo.graph.settings),
   );
-  const sourceCache = Context.get(yield* Layer.build(workspaceInputsLayer((root) => [skillTarget(root)])), WorkspaceInputs);
+  const sourceCache = Context.get(
+    yield* Layer.build(workspaceInputsLayer((root) => [skillTarget(root)])).pipe(
+      Effect.provideService(EnabledPlugins, (yield* enabledPlugins()).service),
+    ),
+    WorkspaceInputs,
+  );
   const shipped = (yield* sourceCache.walk(demo.projectId, demo.demoRoot)).shipped;
   const artifacts = yield* versionedShelf(join(demo.demoRoot, 'artifacts'), 'http://localhost');
   const library = yield* agentLibrary({

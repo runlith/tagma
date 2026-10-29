@@ -21,6 +21,15 @@ export function skillInsertion(id: string, suffix: string): SkillInsertion {
   return { text: `${skillReference(id)}${closed ? '' : ' '}`, skip: suffix.startsWith(' ') ? 1 : 0 };
 }
 
+export function skillArguments(text: string, id: string): string {
+  let rest = text;
+  for (const reference of skillReferences(text).toReversed()) {
+    if (reference.id !== id) continue;
+    rest = rest.slice(0, reference.from) + rest.slice(reference.to + (rest[reference.to] === ' ' ? 1 : 0));
+  }
+  return rest.trim();
+}
+
 export function skillReferences(text: string): readonly SkillReference[] {
   return [...tokens(text)].filter((token) => token.closed && token.id.length > 0).map(({ id, from, to }) => ({ id, from, to }));
 }

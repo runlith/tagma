@@ -9,6 +9,7 @@ An agent definition is a Markdown file \`<name>.md\`; \`<name>\` is the type id 
 - **Personal**: \`agents/\` in the Tagma server's data directory. Offered to agents by default.
 - **Project**: \`.agents/\` at the project root. Offered to the operator alone by default.
 - **App**: \`<app>.<agent>\`, shipped by a Tagma app, read-only, only where the app is enabled. Offered to the operator alone by default.
+- **Plugin**: \`<plugin>-<agent>\`, an agent file of an installed plugin, read-only, only where the plugin is enabled; the tools it names are its whitelist. Offered to the operator alone by default.
 
 \`read_agent_library\` answers both directories as \`floors\`, every definition with its origin, the files it rejected and why, and the capability ids. The setting \`agent.offered\` overrides the default per type: entries \`{"type": "<name>", "to": "operator" | "agents"}\`, the later entry winning; it is the operator's to write. A type withheld from agents refuses \`type-withheld\`. A name cannot reuse a built-in agent or harness id; a personal file shadows a project file of the same name.
 
@@ -50,7 +51,7 @@ export function agentDefinitionsSkill<TContext>(): AgentSkill<TContext> {
   return {
     id: 'agent-definitions',
     description:
-      'Create or change an agent definition: where personal, project and app agents live and who may start each, the Markdown format (extends, capabilities, tools, model, section edits, body), previewing with read_agent, saving with save_agent and starting it by id. Load before writing or editing any agent definition.',
+      'Create or change an agent definition: where personal, project, app and plugin agents live and who may start each, the Markdown format (extends, capabilities, tools, model, section edits, body), previewing with read_agent, saving with save_agent and starting it by id. Load before writing or editing any agent definition.',
     instructions: () => INSTRUCTIONS,
   };
 }

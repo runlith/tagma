@@ -109,8 +109,9 @@ export const nativeInstructions = (
                 withdrawn: changes.withdrawn.map(ref),
               },
               sources: {
-                skills: skillInventory(artifacts, walked).flatMap(({ name, description, path, directory, scope, enabled, replacedBy }) =>
-                  scope === 'built-in' ? [] : [{ name, description, path, directory, scope, enabled, replacedBy }],
+                skills: skillInventory(artifacts, walked).flatMap(
+                  ({ name, description, path, directory, scope, plugin, enabled, replacedBy }) =>
+                    scope === 'built-in' ? [] : [{ name, description, path, directory, scope, plugin, enabled, replacedBy }],
                 ),
                 contextFiles: walked.contextFiles.map((file) => ({ path: file.path, name: file.name })),
                 rejected: walked.rejected,

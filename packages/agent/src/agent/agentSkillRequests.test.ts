@@ -204,6 +204,54 @@ describe('explicit skill requests', () => {
     }),
   );
   it.effect(
+    'a skill taking arguments loads with the requesting message as $ARGUMENTS, and counts as loaded after',
+    Effect.fnUntraced(function* () {
+      const commands: AgentSkillPool<Context> = [
+        { id: 'fix', description: 'Fix.', arguments: true, instructions: () => 'Fix $ARGUMENTS; keep $1.' },
+      ];
+      const execute = toolExecute(agentSkillTools(commands, { revision: 'current' })[LOAD_SKILL_TOOL]!);
+      if (!execute) return yield* Effect.die('The skill loader must be executable.');
+      const asked = [
+        Message.user('Earlier: $fix the footer'),
+        agentSignalMessage({
+          id: 'steer',
+          type: USER_MESSAGE_SIGNAL_TYPE,
+          text: 'please $fix the login page',
+          addressee: 'reader',
+          occurredAt: '2026-09-06T04:00:01Z',
+        }),
+      ];
+      const result = yield* execute({ skill: 'fix' }, { toolCallId: 'fix', caller: unthreadedCaller, messages: asked });
+      const value = (result instanceof ToolAnswer ? result.value : result) as { instructions: string };
+      expect(value.instructions).toBe('Fix please the login page; keep $1.');
+      const loaded = [
+        ...asked,
+        Message.assistant([{ type: 'tool-call', name: LOAD_SKILL_TOOL, id: 'fix', input: { skill: 'fix' } }]),
+        Message.tool({ name: LOAD_SKILL_TOOL, id: 'fix', result: value }),
+      ];
+      const directives = yield* new AgentRuntimePolicy([agentSkillRequestRule(commands)]).evaluate({
+        revision: 'current',
+        modelMessages: loaded,
+        hook: 'beforeStep',
+        run: new AgentRunState(),
+        runId: 'run',
+        invocationKey: 'step:0',
+        ordinal: 1,
+      });
+      expect(agentStepToolPolicy(directives, [LOAD_SKILL_TOOL]).toolChoice).toBeNull();
+      const folded = projectThreadHistory(
+        [...asked, Message.user('Now $reader too.')],
+        { coveredMessageCount: 3, summary: 'Earlier work.' },
+        'Earlier history was compacted.',
+        { maxOpeningTokens: 0, imageTokens: 0 },
+      );
+      const after = yield* execute({ skill: 'fix' }, { toolCallId: 'again', caller: unthreadedCaller, messages: folded });
+      expect(((after instanceof ToolAnswer ? after.value : after) as { instructions: string }).instructions).toBe(
+        'Fix please the login page; keep $1.',
+      );
+    }),
+  );
+  it.effect(
     'only named skills in the latest reader input become requests',
     Effect.fnUntraced(function* () {
       expect((yield* policy([Message.user('The resolver reads $ref and $state(0).')])).toolChoice).toBeNull();

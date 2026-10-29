@@ -1,4 +1,6 @@
 import { Context, Effect, Layer } from 'effect';
+import { EnabledPlugins, type PluginLoaded } from '../../plugins/contract/service/plugins.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { SourceForgetting } from '../../threads/contract/service/engine.js';
 import type { TargetAt } from '../../workspace/contract/wire/place.js';
 import { rescanPolicy } from '../contract/wire/sourceSettings.js';
@@ -18,16 +20,21 @@ const keyOf = (at: TargetAt): string => `${at.threadId}\u0000${at.runId}\u0000${
 
 const walkOf = (projectId: number, root: string): string => `${projectId}\u0000${root}`;
 
+type Walked = { readonly plugins: string; readonly sources: WorkspaceInputSet };
+
+const signatureOf = (enabled: readonly PluginLoaded[]): string => JSON.stringify(enabled.map((plugin) => [plugin.id, plugin.revision]));
+
 export const workspaceInputsLayer = (
   own: (projectRoot: string) => readonly string[],
-): Layer.Layer<WorkspaceInputs | SourceForgetting, never, Settings> =>
+): Layer.Layer<WorkspaceInputs | SourceForgetting, never, Settings | EnabledPlugins> =>
   Layer.effectContext(
     Effect.map(
       Effect.gen(function* () {
         const settings = yield* Settings;
+        const plugins = yield* EnabledPlugins;
         const closed = <A, E>(work: Effect.Effect<A, E, Settings>): Effect.Effect<A, E> => Effect.provideService(work, Settings, settings);
         const remembered = new Map<string, Remembered>();
-        const walks = new Map<string, WorkspaceInputSet>();
+        const walks = new Map<string, Walked>();
         let invalidations = 0;
         const entry = (input: WorkspaceInputAim): Remembered => {
           let held = remembered.get(input.threadId);
@@ -37,15 +44,31 @@ export const workspaceInputsLayer = (
           }
           return held;
         };
-        const walk = (projectId: number, root: string) => readWorkspaceInputs({ projectId, projectRoot: root, own: own(root) });
+        const enabledIn = (projectId: number) =>
+          plugins
+            .of(projectId)
+            .pipe(
+              Effect.mapError(
+                (failure) =>
+                  new GateRefusal('source-unreadable', `the plugins enabled here: ${failure.reason}`, [
+                    'Read the plugins with read_plugins, fix or disable the one named, then read the skill catalog again.',
+                  ]),
+              ),
+            );
+        const walkWith = (projectId: number, root: string, enabled: readonly PluginLoaded[]) =>
+          readWorkspaceInputs({ projectId, projectRoot: root, own: own(root), plugins: enabled });
+        const walk = (projectId: number, root: string) =>
+          Effect.flatMap(enabledIn(projectId), (enabled) => walkWith(projectId, root, enabled));
         const read = Effect.fn('WorkspaceInputs.read')(function* (input: WorkspaceInputAim) {
           const policy = yield* settings.value(rescanPolicy, input.projectId);
+          const enabled = yield* enabledIn(input.projectId);
           const key = walkOf(input.projectId, input.root);
+          const signature = signatureOf(enabled);
           const standing = policy === 'per-turn' ? undefined : walks.get(key);
-          if (standing !== undefined) return standing;
+          if (standing !== undefined && standing.plugins === signature) return standing.sources;
           const taken = invalidations;
-          const sources = yield* walk(input.projectId, input.root);
-          if (policy !== 'per-turn' && invalidations === taken) walks.set(key, sources);
+          const sources = yield* walkWith(input.projectId, input.root, enabled);
+          if (policy !== 'per-turn' && invalidations === taken) walks.set(key, { plugins: signature, sources });
           return sources;
         });
         const newestOf = (held: Remembered | undefined, threadId: string, runId: string): Bound | undefined => {

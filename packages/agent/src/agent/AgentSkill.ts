@@ -4,6 +4,8 @@ import { type AgentRule, agentRule } from './policy/AgentRuntimePolicy';
 import { type ToolCatalog, mergeToolCatalogs } from './ToolCatalog';
 import { ToolAnswer, ToolFailed, Tool } from './tool';
 import { LOAD_SKILL_TOOL } from './skillWords';
+import { agentCarriedArguments, agentInputSkills, agentInputText } from './AgentSignal';
+import { skillArguments } from './skillReferences';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../permissions/vocabulary';
 
 export const SKILL_REQUEST_INSTRUCTIONS =
@@ -20,9 +22,23 @@ export type AgentSkill<TCtx, TId extends string = string> = {
   readonly description: string;
   readonly location?: string;
   readonly references?: readonly AgentSkillReference[];
+  readonly arguments?: true;
   instructions(ctx: TCtx): string | Effect.Effect<string, AgentSkillUnreadable>;
   tools?(ctx: TCtx): ToolCatalog;
 };
+
+export const SKILL_ARGUMENTS = '$ARGUMENTS';
+
+function invokingArguments(id: string, messages: readonly Message[]): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    const text = agentInputSkills(message)?.has(id) ? agentInputText(message) : null;
+    if (text !== null) return skillArguments(text, id);
+    const carried = agentCarriedArguments(message)?.[id];
+    if (carried !== undefined) return carried;
+  }
+  return '';
+}
 
 export class AgentSkillUnreadable extends Data.TaggedError('AgentSkillUnreadable')<{ readonly reason: string }> {}
 
@@ -91,7 +107,7 @@ export function agentSkillTools<TCtx, TId extends string>(skills: AgentSkillPool
         const selected = byId.get(skill);
         if (!selected) return yield* Effect.fail(new ToolFailed({ reason: `Unknown agent skill: ${skill}.` }));
         const unread = (unreadable: AgentSkillUnreadable) => new ToolFailed({ reason: unreadable.reason });
-        const instructions = yield* resolvedInstructions(selected, ctx).pipe(Effect.mapError(unread));
+        const instructions = yield* resolvedInstructions(selected, ctx, call.messages).pipe(Effect.mapError(unread));
         const asked = yield* referenceTexts(selected, references ?? []).pipe(Effect.mapError(unread));
         const delivered = deliveredPayloads(skills, call.messages).get(skill);
         const armed = selected.tools ? Object.keys(selected.tools(ctx)).length : 0;
@@ -167,7 +183,9 @@ export const loadedAgentSkillIds = Effect.fn('loadedAgentSkillIds')(function* <T
   for (const skill of skills) {
     const delivered = payloads.get(skill.id);
     if (!delivered) continue;
-    const current = yield* resolvedInstructions(skill, ctx).pipe(Effect.catchTag('AgentSkillUnreadable', () => Effect.succeed(null)));
+    const current = yield* resolvedInstructions(skill, ctx, messages).pipe(
+      Effect.catchTag('AgentSkillUnreadable', () => Effect.succeed(null)),
+    );
     if (current !== null && delivered.has(current)) loaded.add(skill.id);
   }
   return loaded;
@@ -206,14 +224,17 @@ function indexSkills<TCtx, TId extends string>(skills: readonly AgentSkill<TCtx,
 const resolvedInstructions = Effect.fn('resolvedInstructions')(function* <TCtx>(
   skill: AgentSkill<TCtx>,
   ctx: TCtx,
+  messages: readonly Message[],
 ): Effect.fn.Return<string, AgentSkillUnreadable> {
   const unreadable = (cause: unknown) => new AgentSkillUnreadable({ reason: cause instanceof Error ? cause.message : String(cause) });
   const read = yield* Effect.try({ try: () => skill.instructions(ctx), catch: unreadable });
-  const instructions = typeof read === 'string' ? read : yield* read;
-  if (instructions.trim().length === 0) {
+  const text = typeof read === 'string' ? read : yield* read;
+  if (text.trim().length === 0) {
     return yield* new AgentSkillUnreadable({ reason: `Agent skill ${skill.id} has empty instructions.` });
   }
-  return instructions;
+  if (!skill.arguments) return text;
+  const given = invokingArguments(skill.id, messages);
+  return text.replaceAll(SKILL_ARGUMENTS, () => given);
 });
 
 const referenceTexts = Effect.fnUntraced(function* <TCtx>(

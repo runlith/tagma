@@ -42,6 +42,7 @@ import { CapabilityOffers } from '../contract/service/execution.js';
 import { assemblePrompt as assemblePromptOver, promptDocument as promptDocumentOver } from '../agents/prompt.js';
 import { tagma as tagmaOver } from '../agents/tagma/agent.js';
 import { agentFilesOf as agentFilesOfOver } from '../agents/declared/agentFiles.js';
+import { makePluginAgents as makePluginAgentsOver } from '../agents/declared/plugins.js';
 import { DECLARED_BASE_ID as DECLARED_BASE_ID_OVER } from '../agents/declared/base.js';
 import { conversationSources as conversationSourcesOver } from '../agents/conversationSources.js';
 import { DECLARATIONS as DECLARATIONS_OVER } from '../agents/declarations.js';
@@ -271,6 +272,8 @@ export const conversationSources = () => conversationSourcesOver;
 export const tagma = () => tagmaOver;
 
 export const agentFilesOf = () => agentFilesOfOver;
+
+export const makePluginAgents = (): ReturnType<typeof makePluginAgentsOver> => makePluginAgentsOver();
 
 export const asThreadContext = (value: unknown): ThreadContext => value as ThreadContext;
 

@@ -34,6 +34,8 @@ import { EffectDrizzleQueryError } from 'drizzle-orm/effect-core/errors';
 import { renderWorldState } from '@runlith/agent/WorldState';
 import { versionedShelf } from '../../../artifacts/testing/doubles.js';
 import { WorkspaceInputs } from '../../../native-harness/contract/service/inputs.js';
+import { EnabledPlugins } from '../../../plugins/contract/service/plugins.js';
+import { enabledPlugins } from '../../../plugins/testing/enabled.js';
 import {
   workspaceInputsLayer,
   assemblePrompt,
@@ -817,14 +819,19 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             harnesses: Effect.succeed([]),
             storePath: demo.graph.store.path,
             files: agentFilesOf()(DEFINITIONS),
-            packages: { agentsIn: () => Effect.succeed([]), agentIn: () => Effect.succeed(undefined) },
+            packages: [],
           }).pipe(
             Effect.provideService(NativeAgents, yield* registeredAgents([composed], 'test')),
             Effect.provideService(ThreadRecords, records),
             Effect.provideService(Projects, demo.graph.projects),
             Effect.provideService(Settings, demo.graph.settings),
           );
-          const sourceCache = Context.get(yield* Layer.build(workspaceInputsLayer(() => [])), WorkspaceInputs);
+          const sourceCache = Context.get(
+            yield* Layer.build(workspaceInputsLayer(() => [])).pipe(
+              Effect.provideService(EnabledPlugins, (yield* enabledPlugins()).service),
+            ),
+            WorkspaceInputs,
+          );
           const artifacts = yield* versionedShelf(join(demo.demoRoot, 'artifacts'), 'http://localhost');
           const library = yield* agentLibrary({
             types,

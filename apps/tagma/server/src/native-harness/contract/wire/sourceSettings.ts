@@ -116,7 +116,7 @@ export const skillsDisabled = nativeKey({
   merge: 'union',
 });
 
-export const SKILL_SCOPES = ['global', 'project', 'built-in'] as const;
+export const SKILL_SCOPES = ['plugin', 'global', 'project', 'built-in'] as const;
 export type SkillScope = (typeof SKILL_SCOPES)[number];
 
 export const skillInventoryEntrySchema = Schema.Struct({
@@ -125,6 +125,9 @@ export const skillInventoryEntrySchema = Schema.Struct({
   path: Schema.NullOr(Schema.String),
   directory: Schema.NullOr(Schema.String),
   scope: Schema.Literals(SKILL_SCOPES),
+  plugin: Schema.NullOr(Schema.String).annotate({
+    description: 'The plugin that brings it, for a skill or command of the `plugin` scope.',
+  }),
   enabled: Schema.Boolean,
   replacedBy: Schema.NullOr(Schema.Literals(SKILL_SCOPES)).annotate({
     description: 'The scope of the skill of the same name the catalog offers in its place; null when none stands in for it.',

@@ -20,14 +20,18 @@ import {
 } from '../contract/wire/sourceSettings.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { SHIPPED_SKILLS } from '../skills/shipped.js';
+import type { PluginLoaded } from '../../plugins/contract/service/plugins.js';
+import { readPluginSkills } from './plugins.js';
 
 export const readWorkspaceInputs = Effect.fn('workspaceInputs.read')(function* (input: {
   projectId: number;
   projectRoot: string;
   own: readonly string[];
+  plugins: readonly PluginLoaded[];
   cwd?: string;
 }): Effect.fn.Return<WorkspaceInputSet, StoreFailure | GateRefusal<'source-unreadable'>, Settings> {
   const settings = yield* Settings;
+  const plugins = yield* readPluginSkills(input.plugins);
   const configured = yield* settings.chain(input.projectId);
   const readFiles = configured(contextFilesEnabled);
   const names = configured(contextFileNames);
@@ -85,21 +89,33 @@ export const readWorkspaceInputs = Effect.fn('workspaceInputs.read')(function* (
   const ownPaths = new Set(identities.filter((identity) => identity.own).map((identity) => identity.path));
   const isOwn = (skillPath: string): boolean => ownPaths.has(skillPath);
   const offered = (skillPath: string): boolean => offerOwn || !isOwn(skillPath);
-  const inventory = discovered.skills.map((skill): SkillInventoryEntry => ({
+  const found = discovered.skills.map((skill): SkillInventoryEntry => ({
     name: skill.name,
     description: skill.description,
     path: skill.path,
     directory: skill.directory,
     scope: globalSet.has(skill.directory) ? 'global' : 'project',
+    plugin: null,
     enabled: offered(skill.path),
     own: isOwn(skill.path),
     replacedBy: null,
   }));
+  const standing = new Map(found.filter((entry) => entry.enabled).map((entry) => [entry.name, entry.scope]));
+  const inventory = [
+    ...plugins.inventory.map((entry) => {
+      const replacedBy = standing.get(entry.name) ?? null;
+      return replacedBy === null ? entry : { ...entry, enabled: false, replacedBy };
+    }),
+    ...found,
+  ];
 
   return {
     contextFiles,
     shipped: asAgentSkills<unknown>(shipped.skills),
-    skills: asAgentSkills<unknown>(discovered.skills.filter((skill) => offered(skill.path))),
+    skills: [
+      ...plugins.skills.filter((skill) => !standing.has(skill.id)),
+      ...asAgentSkills<unknown>(discovered.skills.filter((skill) => offered(skill.path))),
+    ],
     get disabledSkills() {
       const current = disabled();
       if (current !== hidden) {
@@ -109,7 +125,7 @@ export const readWorkspaceInputs = Effect.fn('workspaceInputs.read')(function* (
       return mask;
     },
     inventory,
-    rejected,
+    rejected: [...rejected, ...plugins.rejected],
   };
 });
 

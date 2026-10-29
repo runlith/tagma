@@ -28,6 +28,7 @@ const own: SkillInventoryEntry = {
   path: `${LOCATION}/SKILL.md`,
   directory: '/repo/.agents/skills',
   scope: 'project',
+  plugin: null,
   enabled: true,
   own: false,
   replacedBy: null,

@@ -17,13 +17,20 @@ import { graphFixture } from '../graphFixture.js';
 import { asHarnessInstall } from '../../../threads/testing/doubles.js';
 import { agentsOffered } from '../../../threads/testing/doubles.js';
 import { HARNESS_AGENT_ID } from '../../../threads/testing/doubles.js';
-import { DECLARED_BASE_ID, agentFilesOf, threadStore } from '../../../native-harness/testing/doubles.js';
+import { DECLARED_BASE_ID, agentFilesOf, makePluginAgents, threadStore } from '../../../native-harness/testing/doubles.js';
+import type { AgentPackages } from '../../../threads/contract/service/library.js';
+import type { AgentFile } from '../../../threads/contract/wire/agentLibrary.js';
+import { EnabledPlugins, type LoadedAgent, type PluginLoaded } from '../../../plugins/contract/service/plugins.js';
+import { enabledPlugins } from '../../../plugins/testing/enabled.js';
 import { servedCapabilities } from '../native-harness/capabilities.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 
 import { declaredAgents, PERSONAL_AGENTS_DIRECTORY, PROJECT_AGENTS_DIRECTORY } from '../../../threads/testing/doubles.js';
 
-const world = Effect.fnUntraced(function* (harnesses: readonly ReturnType<typeof asHarnessInstall>[] = []) {
+const world = Effect.fnUntraced(function* (
+  harnesses: readonly ReturnType<typeof asHarnessInstall>[] = [],
+  packages: readonly AgentPackages[] = [],
+) {
   const held = graphFixture();
   const demo = yield* Effect.map(
     Effect.acquireRelease(held.openEffect(), () => Effect.orDie(held.releaseEffect)),
@@ -66,7 +73,7 @@ const world = Effect.fnUntraced(function* (harnesses: readonly ReturnType<typeof
     harnesses: Effect.succeed(harnesses),
     storePath: join(home, 'tagma.sqlite'),
     files,
-    packages: { agentsIn: () => Effect.succeed([]), agentIn: () => Effect.succeed(undefined) },
+    packages,
   }).pipe(Effect.provideService(NativeAgents, agents), Effect.provideService(ThreadRecords, records), Effect.provide(demo.context));
   const write = (floor: string, name: string, frontmatter: string, body = 'Do the thing.') =>
     fs.writeFileString(join(floor, `${name}.md`), `---\n${frontmatter}\n---\n${body}\n`);
@@ -231,6 +238,81 @@ it.live(
     expect(reasons['noprompt.md']).toContain('empty body');
     expect(yield* stand.resolve('ghost', 'operator')).toBeNull();
     expect((yield* stand.offered('operator')).map((type) => type.id)).toEqual(['tagma', 'code']);
+  }),
+);
+
+it.live(
+  "an enabled plugin's agent stands in the library with its tool list, is offered to the operator alone, and leaves once the plugin is disabled",
+  Effect.fnUntraced(function* () {
+    const reviewer: LoadedAgent = {
+      name: 'demo-reviewer',
+      file: '/plugins/demo/agents/reviewer.md',
+      description: 'Reviews a change.',
+      prompt: Effect.succeed('Review the diff.'),
+      tools: ['read', 'grep'],
+    };
+    const plugin: PluginLoaded = {
+      id: 'demo',
+      revision: 'first',
+      title: 'Demo',
+      place: { root: '/plugins/demo', data: '/plugins/demo', options: {}, project: '/project' },
+      redact: [],
+      skills: [],
+      commands: [],
+      agents: [reviewer],
+      servers: [],
+      hooks: [],
+    };
+    const plugins = yield* enabledPlugins([plugin]);
+    const stand = yield* world([], [yield* makePluginAgents().pipe(Effect.provideService(EnabledPlugins, plugins.service))]);
+    expect((yield* stand.files()).agents.map((file) => [file.id, file.origin])).toEqual([['demo-reviewer', 'plugin']]);
+    expect(yield* stand.resolve('demo-reviewer', 'operator')).toEqual({
+      baseAgentId: DECLARED_BASE_ID(),
+      profile: {
+        id: 'demo-reviewer',
+        baseAgentId: DECLARED_BASE_ID(),
+        description: 'Reviews a change.',
+        prompt: 'Review the diff.',
+        tools: ['read', 'grep'],
+      },
+      harness: NATIVE_HARNESS,
+      capabilities: NATIVE_CAPABILITIES(),
+    });
+    expect(yield* stand.resolve('demo-reviewer')).toHaveProperty('withheld');
+    expect((yield* stand.offered('operator')).map((type) => type.id)).toEqual(['tagma', 'code', 'demo-reviewer']);
+    yield* plugins.set(stand.demo.projectId, []);
+    expect(yield* stand.resolve('demo-reviewer', 'operator')).toBeNull();
+    expect((yield* stand.offered('operator')).map((type) => type.id)).toEqual(['tagma', 'code']);
+  }),
+);
+
+it.live(
+  'two package floors naming one id: the earlier floor wins in the library and at birth alike, and the later file is rejected naming it',
+  Effect.fnUntraced(function* () {
+    const fileOf = (origin: 'app' | 'plugin', path: string): AgentFile => ({
+      id: 'demo-tools.reviewer',
+      description: origin,
+      extends: undefined,
+      capabilities: [],
+      tools: undefined,
+      model: undefined,
+      sections: undefined,
+      body: 'Review.',
+      path,
+      directory: '/floors',
+      origin,
+      revision: origin,
+      source: 'Review.',
+    });
+    const floor = (file: AgentFile): AgentPackages => ({
+      agentsIn: () => Effect.succeed([file]),
+      agentIn: (_, typeId) => Effect.succeed(typeId === file.id ? file : undefined),
+    });
+    const stand = yield* world([], [floor(fileOf('app', '/floors/app.md')), floor(fileOf('plugin', '/floors/plugin.md'))]);
+    const found = yield* stand.files();
+    expect(found.agents.map((file) => file.origin)).toEqual(['app']);
+    expect(found.rejected).toEqual([{ path: '/floors/plugin.md', reason: 'shadowed by /floors/app.md' }]);
+    expect(yield* stand.resolve('demo-tools.reviewer', 'operator')).toMatchObject({ profile: { description: 'app' } });
   }),
 );
 

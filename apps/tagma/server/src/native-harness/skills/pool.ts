@@ -58,7 +58,7 @@ export function skillInventory(artifacts: ArtifactStore['Service'], sources: Wor
   const discovered = sources.inventory.map((entry): SkillInventoryEntry => ({
     ...entry,
     enabled: entry.enabled && names.offered(entry.name),
-    replacedBy: names.held(entry.name) ? 'built-in' : null,
+    replacedBy: names.held(entry.name) ? 'built-in' : entry.replacedBy,
   }));
   const own = builtIn.map(({ skill, enabled }): SkillInventoryEntry => ({
     name: skill.id,
@@ -66,6 +66,7 @@ export function skillInventory(artifacts: ArtifactStore['Service'], sources: Wor
     path: null,
     directory: null,
     scope: 'built-in',
+    plugin: null,
     enabled,
     own: true,
     replacedBy: enabled ? null : (discovered.find((entry) => entry.enabled && entry.name === skill.id)?.scope ?? null),
