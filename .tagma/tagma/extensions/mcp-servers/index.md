@@ -60,8 +60,10 @@ edges:
     to: 01a0fd8b-bf10-7a02-a086-916b457e7a6c
   - kind: imports
     to: 01a0fd8b-bf12-7d39-abd6-b5ffc43d3272
+  - kind: imports
+    to: 01a1239f-2e01-7962-8ca3-25a8af373f07
 sources:
   - kind: dir
     ref: apps/tagma/server/src/mcp
 ---
-Agents get the tools of external MCP servers, and the module owns their declarations — for the project and for the operator's personal set, with environment-variable references instead of secrets — enabling and disabling, and the pool of connected processes. How the server's tools reach the model turn is decided by the harness.
+Agents get the tools of external MCP servers, and the module owns their declarations — for the project and for the operator's personal set, with `${NAME}` references instead of secrets — enabling and disabling, and the pool of connected processes. It registers the `mcp` owner kind with the secret store, so a reference resolves from the value set for that server, then from the environment, and a server lacking one reads `needs-value`. How the server's tools reach the model turn is decided by the harness.
