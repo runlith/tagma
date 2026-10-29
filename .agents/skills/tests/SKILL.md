@@ -1,6 +1,6 @@
 ---
 name: tests
-description: Write, change, review, delete or run tests in runlith — which tests to run after a change and when a wide run (`check:change`, `test:all`) is allowed, whether a test should exist, `*.test.ts` vs `*.itest.ts`, fixtures and worlds under `testing/`, `@runlith/testbed`, Vitest configs, a slow, flaky, order-dependent or red test. Carries the gate a test passes, junk shapes and how to review them, the port a test goes through, what makes a test expensive, worlds and tenants, shared-world traps under `--no-isolate`.
+description: Write, change, review, delete or run tests in runlith — which tests to run after a change and when a wide run (`check:change`, `test:all`) is allowed, whether a test should exist, `*.test.ts`, `*.itest.ts` and `*.e2e.ts`, fixtures and worlds under `testing/`, `@runlith/testbed`, Vitest configs, a slow, flaky, order-dependent or red test; e2e and Playwright in real engines — the Chromium, WebKit and Electron lanes, the iOS Simulator with MobileSafari, touch, fling and momentum input, component stands, headed runs and measuring programs. Carries the gate a test passes, junk shapes and how to review them, the port a test goes through, what makes a test expensive, worlds and tenants, shared-world traps under `--no-isolate`, and how a real-engine test is written, run and debugged.
 ---
 
 # Tests in runlith
@@ -18,11 +18,12 @@ A junk test is worse than none: it stays green while the product breaks, freezes
 
 A weak answer means no test. Assert state, output or a typed failure through the owner's public operation (rule 4f387de2); a defect test goes through the real caller's door and fails first (rule 571311f8). The cheaper real signal where no test earns its place: typecheck and removing the impossible state for a shape change; nothing for copy, layout or prompt wording; the boundary owner's real request building for an external payload; the real parser, store or migration with representative data for persistence; for UI, only a non-trivial projection or intent forwarding.
 
-## Kind: unit or itest
+## Kind: unit, integration or e2e
 
 The suffix is the kind; testbed (`packages/testbed`) enforces it at the call site.
 - `*.test.ts` — unit. Guards refuse a process, a disk write, a socket (loopback too) and SQLite at the test process's builtins; external network is refused there for every file. Outside the guards: what a child process does, and, under Vitest on Bun, an external dependency importing a builtin as ESM ([[37f542a9]]). Over 1 s it is slow.
-- `*.itest.ts` — real git, SQLite, processes and disk; over 10 s it is slow. It has two possible subjects: an adapter's conformance on its real resource, or one end-to-end path through the real door (a defect test per rule 571311f8). Every test file is one of the two.
+- `*.itest.ts` — real git, SQLite, processes and disk; over 10 s it is slow. It has two possible subjects: an adapter's conformance on its real resource, or one end-to-end path through the real door (a defect test per rule 571311f8). An integration test does not launch a browser.
+- `*.e2e.ts` — a real engine driving a product outcome through its real door. It may use sockets, processes and disk; over 10 s is slow. `testbed e2e [files/options]` discovers only e2e files, and `test:e2e` calls it; ordinary `test`, `test:integration` and `check:change` do not select them. Screenshots are failure evidence, never assertions about copy or layout.
 - A test fails only on its own fact, never on time or machine load. testbed's one deadline is a 3-minute hang guard on every test and hook, set in every file; a slow test passes, and the run report names it `slow` with its CPU and its children's, the wall that measured CPU does not cover, its world and tenant time and its file's processes — the cue to cheapen it at its owner.
 - Logic reached only through a real resource is a missing port, not an itest. It becomes a unit test through the owner's public operation over fast adapters:
   - disk: `@runlith/testbed/memory` — `Effect.provide(program, Memory.layer)`; one layer build is one volume; host permissions and watcher ordering stay itest ([[e9f3c3e0]]);
@@ -32,6 +33,29 @@ The suffix is the kind; testbed (`packages/testbed`) enforces it at the call sit
 - SQLite stays real SQL. A test that needs SQL is an itest and opens its store on `sharedPool` or `heldPool` (`@runlith/sqlite-process/testing/pool`: in process, no child); a store opened without a pool spawns child processes. A test whose subject is a child-process property — reader-lane removal, store isolation, handover, process loss — takes `childHosting` ([[a6950a0e]]).
 - Every fast adapter has one conformance suite, run on the real adapter in an itest and on the fast one in a unit file: `packages/testbed/src/conformance/fileSystem.ts` (`fileSystem.itest.ts`, `memory.test.ts`), `worktrees/testing/refContract.ts` (`refs.itest.ts`, `refs.test.ts`). Green on fast and red on real is a divergence: fix the adapter and add the case to the suite.
 - Count before building a port (git-site preload, reference `measuring`); where a port turns no file into a unit test, cut births, opens and acts, merge scenarios and delete covered paths instead.
+
+## Real-engine fixtures
+
+The package is `packages/e2e` (`@runlith/e2e`). The native iOS lane end to end is reference `ios`; how a component stand records and judges is reference `stands`.
+
+**Lanes.** `e2e(name, async ({ page, context, browser, lane, cdp, touch, electron, artifacts }) => …, { lanes, context, electron, headed })` from `@runlith/e2e/browser` registers `name [<lane>]` per lane; `e2e.effect` takes a scoped Effect body. Lanes are `chromium` (the default), `webkit` and `electron`; a file names every lane it proves. `ios(...)` from `@runlith/e2e/ios` registers `name [ios-<runtime>]` per runtime. `E2E_LANES` (`chromium,webkit,electron,ios`) narrows a run; the iOS lane runs when it is unset or names `ios`.
+- Chromium runs the managed browser's pinned Chrome for Testing cache (`bun apps/tagma/server/scripts/fetch-browser.ts`) with the mock keychain and gives `cdp`. WebKit needs `playwright-core install webkit` and has no `cdp`. `touch` exists only in a Chromium context with `hasTouch: true`: a held finger whose `press`, `move` and `release` take CSS points and are driven through CDP touch events.
+- A worker holds one engine, and taking another lane closes it: order a file's tests by lane. Each engine has its own temporary profile; each test gets a fresh context with service workers blocked.
+- Electron launches per test from the `electron` options or a lazy factory of them, its executable defaulting to `E2E_ELECTRON_EXECUTABLE`, and exposes the Playwright application as `electron`. The app keeps every window hidden; a scenario that needs a visible desktop declares `headed: true`.
+
+**Waits.** Every Playwright timeout is 0: wait on a page fact — `waitForFunction`, a locator's `waitFor`, a promise the page resolves on its own event — never a deadline or a sleep. Page code waits by frames (`requestAnimationFrame`) or on its own events. The hang guard stays the run's only deadline.
+
+**Failures.** A page `Error` or unhandled `Error` rejection fails the test as `PageFailed`; a console error or a non-Error rejection is only diagnostic. A failed test writes its screenshot, console log and Playwright trace, and every writer registered with `onFailure` from `@runlith/e2e/artifacts`, into one directory beside the run report, named in the failure as `Artifacts: <dir>`. Write a scenario's own evidence — recordings, calibrations, the values an assertion read — as JSON into `artifacts`, so a red is judged from evidence, not by a rerun.
+
+**Product e2e** goes through `makeE2eWorld({ models })` (server `composition/testing/e2eWorld.ts`): one world per worker serves the built app, the door runtime and real HTTP and WebSocket on one loopback origin, `served.origin`, and lends a scripted model by default. Take `served.tenant` — a fresh project with `perform(operation, input)`, `thread`, `turn` (which returns once the run settles) and `upload` — seed it through product operations, and open `${origin}/<projectName>/chat/<threadId>`. Script a reply with `models: scriptedModel(stream)`; a `Deferred` inside the stream holds the reply where the page is to be observed mid-run. A failure adds the activity record to the artifacts.
+
+**Stands.** `stand(configFile)` from `@runlith/e2e/stand` builds a Vite stand once per run in a file-level hook and serves it on loopback; `served.url(path)` addresses it.
+
+**Running.**
+- `testbed e2e [files] [bun test flags]` runs only `*.e2e.ts`. Without files it discovers the tracked ones outside dot, `node_modules`, `build`, `dist`, `coverage`, `out` and `target` directories. Package `test:e2e` scripts call it; `test`, `test:integration` and `check:change` never select an e2e file. A process an e2e file leaves running fails the file.
+- An e2e worker takes two machine-budget units (one on a one-unit machine), and browser files run in parallel workers. Files sharing one external resource — a visible desktop, a fixed port — run with `--parallel=1`; the Simulator is one run per machine (reference `ios`); a measuring program runs alone.
+- `testbed e2e --headed` also runs `headed: true` scenarios; without it they are reported `headed, not run`. A headed run and the iOS lane are live checks: run them only where the task allows (rule c6569513). A headless `*.e2e.ts` is a test: run the ones you wrote or affected.
+- `testbed e2e --program <file> [args]` runs a measuring program — a stand's bench or baseline — with one e2e worker's budget and a run root, but no test hooks and no hang guard. It opens `serveStand(config, { own })` and `session(lane, context, { own })` from `@runlith/e2e/engines` in an Effect scope, so servers and browsers close normally.
 
 ## What makes a test expensive
 

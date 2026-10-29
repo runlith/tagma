@@ -73,7 +73,7 @@ const prepare = async (): Promise<Bed> => {
     refusing: process.env['RUNLITH_TEST_LAYERS'] !== 'report',
     expose,
   });
-  const resource = kindOf(main) === 'resource';
+  const resource = kindOf(main) !== 'unit';
   const given = process.env[ROOT_ENV];
   const processes = resource || given === undefined || given === '' ? await openProcesses() : undefined;
   if (processes !== undefined) bed.useProcesses(processes);
@@ -95,10 +95,10 @@ const bed = carried() ?? (await prepare());
 setDefaultTimeout(HANG_MS);
 bed.pend(STARTED, meter());
 
-let engineSelected = kindOf(main) === 'resource';
+let engineSelected = kindOf(main) !== 'unit';
 
 const enter = async (file: string, start?: Meter, skip?: { readonly cpu: number; readonly wall: number }): Promise<void> => {
-  if (kindOf(file) === 'resource') {
+  if (kindOf(file) !== 'unit') {
     if (bed.processes === undefined) bed.useProcesses(await openProcesses());
     if (!engineSelected) {
       await engine();

@@ -15,6 +15,7 @@
 
   const SHOWN_FROM = 2;
   const REACH_PX = 46;
+  const LARGEST_TILE = 2.5;
 
   const messages = $derived(
     users.map((entry) => ({
@@ -103,9 +104,13 @@
             onclick={() => onSelect(message.id)}
           >
             <span
-              class={['block transition-all duration-150 ease-out', current ? 'bg-chat-here' : 'bg-foreground']}
-              style:width={`calc(var(--spacing) * ${(current ? 2 : 1.5) + lift * 0.5})`}
-              style:height={`calc(var(--spacing) * ${(current ? 2 : 1.5) + lift * 0.5})`}
+              class={[
+                'block transition-[scale,opacity,background-color] duration-150 ease-out',
+                current ? 'bg-chat-here' : 'bg-foreground',
+              ]}
+              style:width={`calc(var(--spacing) * ${LARGEST_TILE})`}
+              style:height={`calc(var(--spacing) * ${LARGEST_TILE})`}
+              style:scale={((current ? 2 : 1.5) + lift * 0.5) / LARGEST_TILE}
               style:opacity={current ? 1 : 0.3 + lift * 0.6}
             ></span>
           </button>

@@ -120,6 +120,30 @@ index e9b5a33a750127e8e3c454d3a21ca82e55ea6001..a928bed3b150c8e19ae79ed73f973f19
              }
          };
          function addFileEntry(fullPath, realFiles, resultFiles) {
+@@ -134729,14 +134743,18 @@ class SvelteCheckTSGoDiagnosticsProvider {
+         const filesConfig = commandLine.raw.files;
+         const rebasedFiles = [];
++        const parsed = typescript_1$1.default.parseJsonSourceFileConfigFileContent(
++            typescript_1$1.default.parseJsonText(tsconfigPath, typescript_1$1.default.sys.readFile(tsconfigPath) || ''),
++            typescript_1$1.default.sys, path_1$1.default.dirname(tsconfigPath), undefined, tsconfigPath, undefined,
++            [{ extension: '.svelte', isMixedContent: true, scriptKind: typescript_1$1.default.ScriptKind.Deferred }]
++        );
+         if (filesConfig) {
+             for (const file of filesConfig) {
+-                if (file.endsWith('.svelte')) {
+-                    const virtualBaseName = this.addVirtualSvelteFile(path_1$1.default.join(path_1$1.default.dirname(tsconfigPath), file));
+-                    rebasedFiles.push(virtualBaseName);
+-                }
+-                else {
++                if (!file.endsWith('.svelte')) {
+                     rebasedFiles.push(file);
+                 }
+             }
+         }
++        for (const file of parsed.fileNames.filter((file) => file.endsWith('.svelte'))) {
++            rebasedFiles.push(path_1$1.default.join(path_1$1.default.dirname(file), this.addVirtualSvelteFile(file)));
++        }
+         const virtualTsConfigContent = JSON.stringify({
 @@ -135302,11 +135316,11 @@ class SvelteCheck {
          if (shouldRegister('js') || options.tsconfig) {
              const workspaceUris = [(0, utils_3.pathToUrl)(workspacePath)];

@@ -8,7 +8,18 @@ type PlatformsParams = (typeof BUILTINS)['platforms']['params']['Encoded'];
 const JS_EXTENSIONS = ['.ts', '.mts', '.cts', '.tsx', '.js', '.mjs', '.cjs', '.jsx', '.svelte'];
 
 const SOURCES = {
-  exclude: ['**/*.test.*', '**/*.itest.*', '**/*.stest.*', '**/*.spec.*', '**/*.bench.*', '**/*.d.ts', '**/*.d.mts', '**/*.d.cts'],
+  exclude: [
+    '**/*.test.*',
+    '**/*.itest.*',
+    '**/*.e2e.*',
+    '**/*.stest.*',
+    '**/*.spec.*',
+    '**/*.bench.*',
+    '**/*.fixture.*',
+    '**/*.d.ts',
+    '**/*.d.mts',
+    '**/*.d.cts',
+  ],
   extensions: JS_EXTENSIONS,
 };
 
@@ -47,6 +58,11 @@ export const names: Builtin<'names', NamesParams> = {
             path: 'apps/tagma/server/src/external-harnesses/testing/acpAgent.ts',
             why: 'One subject: the scripted ACP agent the protocol system tests run as a process; its configuration, keywords and control files drive that one agent over the same prompt, steer and cancel state.',
           },
+          {
+            lines: 847,
+            path: 'packages/chat-ui/stand/recorder.ts',
+            why: 'One subject: a DOM recording lifecycle — trusted input, wheel and scroll timing and command evidence, own scroller writes and the movement they leave running, row measurements, anchor history and final ResizeObserver samples share the same pending capture and frame boundary.',
+          },
         ],
         lines: 700,
       },
@@ -57,9 +73,11 @@ export const names: Builtin<'names', NamesParams> = {
         '**/*.d.ts',
         '**/*.test.*',
         '**/*.itest.*',
+        '**/*.e2e.*',
         '**/*.stest.*',
         '**/*.spec.*',
         '**/*.bench.*',
+        '**/*.fixture.*',
         '**/*.generated.*',
         '**/node_modules/**',
         '**/dist/**',

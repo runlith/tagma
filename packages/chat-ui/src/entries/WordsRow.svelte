@@ -52,7 +52,7 @@
 </article>
 
 {#snippet authored(text: string)}
-  {@render rendering.markdown({ cacheKey: entry.id, text, onRendered: () => context.contentRendered(entry.id) })}
+  {@render rendering.markdown({ cacheKey: entry.id, text })}
 {/snippet}
 
 {#snippet actions()}

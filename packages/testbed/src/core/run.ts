@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, parse, sep } from 'node:path';
 import { pristine } from './pristine.ts';
 import { MARK, type Processes } from './processes.ts';
-import { sweep } from './watch.ts';
+import { runLiveness as ownerLiveness, sweep, type RunLiveness } from './watch.ts';
 
 export const BASE = join(process.platform === 'darwin' ? '/tmp' : tmpdir(), 'runlith-test');
 export const REPORTS = join(BASE, 'reports');
@@ -107,6 +107,8 @@ export const openRun = (owner: { readonly pid: number; readonly start: number } 
   return { root: remember(root), report: process.env[REPORT_ENV] || join(REPORTS, `${name}.jsonl`), fresh };
 };
 
+export const runLiveness = (processes: Processes, root: string): RunLiveness => ownerLiveness(processes, basename(root));
+
 export const sweepRuns = (processes: Processes): { readonly stranded: number; readonly roots: number } => {
   const files = fs();
   const entries = files.readdirSync(BASE).filter((entry) => /^(?:run\.)?\d+\./.test(entry));
@@ -124,13 +126,23 @@ export const sweepRuns = (processes: Processes): { readonly stranded: number; re
   const ended = new Set(swept.roots.map((root) => basename(root)));
   const reports = files
     .readdirSync(REPORTS)
+    .filter((entry) => entry.endsWith('.jsonl'))
     .filter((entry) => ended.has(entry.replace(/\.jsonl$/, '')) || !files.existsSync(join(BASE, entry.replace(/\.jsonl$/, ''))))
     .flatMap((entry) => {
       const found = files.statSync(join(REPORTS, entry), { throwIfNoEntry: false });
       return found === undefined || !found.isFile() ? [] : [{ path: join(REPORTS, entry), at: found.mtimeMs }];
     })
     .sort((left, right) => right.at - left.at);
-  for (const old of reports.slice(KEPT_REPORTS)) pristine(files.rmSync)(old.path, { force: true });
+  for (const old of reports.slice(KEPT_REPORTS)) {
+    const claimed = join(BASE, `${process.pid}.swept.${randomUUID().slice(0, 8)}`);
+    try {
+      pristine(files.renameSync)(old.path.replace(/\.jsonl$/, ''), claimed);
+      pristine(files.rmSync)(claimed, { recursive: true, force: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    pristine(files.rmSync)(old.path, { force: true });
+  }
   return { stranded: swept.stranded, roots: swept.roots.length };
 };
 

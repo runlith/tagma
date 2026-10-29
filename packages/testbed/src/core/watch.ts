@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { relative } from 'node:path';
 import { commandOf, kindOfCommand, makeChildren, type ByKind, type Child, type ChildKind } from './children.ts';
 import { pristine } from './pristine.ts';
-import type { Processes, Row } from './processes.ts';
+import type { Facts, Processes, Row } from './processes.ts';
 
 const GRACE_MS = 8_000;
 const POLL_MS = 50;
@@ -382,23 +382,40 @@ const databases = (pids: readonly number[]): Map<number, string[]> => {
   return found;
 };
 
+const living = (pid: number, row: Facts | undefined): boolean => (row === undefined ? alive(pid) : !row.zombie);
+
+const liveness = (table: readonly Row[]): ((pid: number) => boolean) => {
+  const listed = new Map(table.map((row) => [row.pid, row]));
+  return (pid) => living(pid, listed.get(pid));
+};
+
+const rootOwner = (entry: string): number | undefined => {
+  const owner = Number(/^(?:run\.)?(\d+)\./.exec(entry)?.[1]);
+  return Number.isInteger(owner) && owner > 0 ? owner : undefined;
+};
+
+const endedRoots = (base: string, entries: readonly string[], living: (pid: number) => boolean): string[] =>
+  entries
+    .filter((entry) => {
+      const owner = rootOwner(entry);
+      return owner !== undefined && !living(owner);
+    })
+    .map((entry) => `${base}/${entry}`);
+
+export type RunLiveness = 'alive' | 'dead' | 'unknown';
+export const runLiveness = (processes: Processes, entry: string): RunLiveness => {
+  const owner = rootOwner(entry);
+  return owner === undefined ? 'unknown' : living(owner, processes.facts(owner)) ? 'alive' : 'dead';
+};
+
 export const sweep = (
   processes: Processes,
   base: string,
   entries: readonly string[],
 ): { readonly stranded: number; readonly roots: string[] } => {
   const table = processes.rows('all');
-  const listed = new Map(table.map((row) => [row.pid, row]));
-  const living = (pid: number): boolean => {
-    const row = listed.get(pid);
-    return row === undefined ? alive(pid) : !row.zombie;
-  };
-  const deadRoots = entries
-    .filter((entry) => {
-      const owner = Number(/^(?:run\.)?(\d+)\./.exec(entry)?.[1]);
-      return Number.isInteger(owner) && owner > 0 && !living(owner);
-    })
-    .map((entry) => `${base}/${entry}`);
+  const living = liveness(table);
+  const deadRoots = endedRoots(base, entries, living);
   const stranded = new Set(
     table.filter((row) => row.pid !== process.pid && !row.zombie && row.marks.some((mark) => !living(ownerOf(mark)))).map((row) => row.pid),
   );

@@ -2,23 +2,119 @@
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { constants, getPriority, setPriority } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import type { FileRow, Row, TestRow, WorldRow } from './core/ledger.ts';
+import { kindOf } from './core/files.ts';
+import type { FileRow, NotRunRow, Row, TestRow, WorldRow } from './core/ledger.ts';
 import { openProcesses } from './core/processes.ts';
 import { openRun, REPORT_ENV, ROOT_ENV, sweepRuns } from './core/run.ts';
 import { acquireUnits, ADMITTED_ENV, budgetOf, budgetRoot, coresOf, memoryOf, NICE, SLOT_ENV } from './slots.ts';
 import { junitOf, outcomesOf, runOf, slowOf, summary, verdictsOf, workersOf, worldsOf } from './report.ts';
+import { HEADED_ENV } from './fixture.ts';
 
 const REPO = resolve(import.meta.dir, '../../..');
 const TIMINGS = '.bun-test-timings.json';
 const TAIL_MS = 250;
 
 const command = process.argv.slice(2);
+const program = command[0] === 'e2e' && command[1] === '--program';
+let headed = false;
+if (program) {
+  const file = command[2];
+  if (file === undefined) throw new Error('e2e --program needs a program file');
+  if (!existsSync(resolve(file))) throw new Error(`e2e program does not exist: ${file}`);
+  command.splice(0, 3, 'bun', resolve(file));
+} else if (command[0] === 'e2e') {
+  const flags: string[] = [];
+  const files: string[] = [];
+  const values = new Set([
+    '-t',
+    '--test-name-pattern',
+    '--timeout',
+    '--rerun-each',
+    '--retry',
+    '--seed',
+    '--coverage-reporter',
+    '--coverage-dir',
+    '--reporter',
+    '--reporter-outfile',
+    '--max-concurrency',
+    '--path-ignore-patterns',
+    '--parallel-delay',
+    '--shard',
+    '--timings',
+    '--preload',
+    '--require',
+    '-r',
+    '--env-file',
+    '--define',
+    '--loader',
+    '--conditions',
+  ]);
+  let positional = false;
+  for (let at = 1; at < command.length; at++) {
+    const part = command[at]!;
+    if (!positional && part === '--headed') {
+      headed = true;
+      continue;
+    }
+    if (part === '--') {
+      positional = true;
+      continue;
+    }
+    if (!positional && part.startsWith('-')) {
+      flags.push(part);
+      if (values.has(part)) {
+        const value = command[++at];
+        if (value === undefined) throw new Error(`${part} needs a value`);
+        flags.push(value);
+      } else if ((part === '--bail' || part === '--parallel') && /^\d+$/.test(command[at + 1] ?? '')) flags.push(command[++at]!);
+      else if (
+        part === '--changed' &&
+        command[at + 1] !== undefined &&
+        !command[at + 1]!.startsWith('-') &&
+        kindOf(command[at + 1]!) !== 'e2e'
+      )
+        flags.push(command[++at]!);
+      continue;
+    }
+    if (kindOf(part) !== 'e2e') throw new Error(`e2e expects .e2e.ts files, received ${part}`);
+    const file = resolve(part);
+    if (!existsSync(file)) throw new Error(`e2e file does not exist: ${part}`);
+    files.push(file);
+  }
+  if (files.length === 0) {
+    const tracked = Bun.spawnSync(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', '*.e2e.ts'], {
+      cwd: process.cwd(),
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    let discovered: string[];
+    if (tracked.exitCode === 0) discovered = tracked.stdout.toString().split('\0').filter(Boolean);
+    else if (tracked.stderr.toString().includes('not a git repository'))
+      discovered = await Array.fromAsync(new Bun.Glob('**/*.e2e.ts').scan({ cwd: process.cwd(), onlyFiles: true, followSymlinks: false }));
+    else throw new Error(`e2e discovery failed: ${tracked.stderr.toString()}`);
+    for (const file of discovered) {
+      if (
+        file
+          .split('/')
+          .some((part) => part.startsWith('.') || ['node_modules', 'build', 'dist', 'coverage', 'out', 'target'].includes(part))
+      )
+        continue;
+      const absolute = resolve(file);
+      if (existsSync(absolute)) files.push(absolute);
+    }
+  }
+  if (files.length === 0) {
+    console.error('testbed: no .e2e.ts files found');
+    process.exit(1);
+  }
+  command.splice(0, command.length, 'bun', 'test', ...flags, ...new Set(files.sort()));
+}
 if (command.length === 0) {
   console.error('usage: testbed <command> [args...]   runs a test runner on its share of the machine and writes the run report');
   process.exit(2);
 }
-const vitest = command.some((part) => ['vitest', 'vitest.mjs'].includes(basename(part)));
-const bunTest = basename(command[0]!) === 'bun' && command.find((part, index) => index > 0 && !part.startsWith('-')) === 'test';
+const vitest = !program && command.some((part) => ['vitest', 'vitest.mjs'].includes(basename(part)));
+const bunTest = !program && basename(command[0]!) === 'bun' && command.find((part, index) => index > 0 && !part.startsWith('-')) === 'test';
 const runner = bunTest ? 'bun' : vitest ? 'vitest' : 'other';
 const budget = budgetOf(coresOf(process.env['TESTBED_CORES']), memoryOf());
 const options = (): number => (command.includes('--') ? command.indexOf('--') : command.length);
@@ -41,36 +137,53 @@ const take = (flag: RegExp): number | undefined => {
   }
   return found;
 };
-const named = command.filter((part, index) => index < options() && !part.startsWith('-') && /\.[cm]?[jt]sx?$/.test(part)).length;
+const named = command.filter((part) => !part.startsWith('-') && /\.[cm]?[jt]sx?$/.test(part));
+const quantum = program || (bunTest && named.some((file) => kindOf(file) === 'e2e')) ? Math.min(2, budget) : 1;
 const asked = bunTest ? take(/^--parallel$/) : vitest ? take(/^--max(?:Workers|-workers)$/) : undefined;
 const concurrency = bunTest ? take(/^--max-concurrency$/) : undefined;
 const jobs = process.env['TESTBED_JOBS'] === undefined ? undefined : Number(process.env['TESTBED_JOBS']);
 if (jobs !== undefined && (!Number.isSafeInteger(jobs) || jobs < 1)) throw new Error('TESTBED_JOBS must be a positive integer');
-const wanted = Math.min(asked ?? budget, jobs ?? budget, bunTest && named > 0 ? named : budget);
+const wanted = program
+  ? 1
+  : Math.min(
+      asked ?? budget,
+      jobs ?? budget,
+      bunTest && named.length > 0 ? named.length : budget,
+      Math.max(1, Math.floor(budget / quantum)),
+    );
 
 const processes = await openProcesses();
 const [holderPid, holderStart, holderUnits] = (process.env[SLOT_ENV] ?? '').split(':').map(Number);
 const inherited = holderPid !== undefined && holderPid > 0 && processes.facts(holderPid)?.start === holderStart;
 const queueBefore = process.cpuUsage();
 const units =
-  inherited || runner === 'other'
+  inherited || (runner === 'other' && !program)
     ? undefined
-    : await acquireUnits(budgetRoot(), budget, wanted, process.env[ADMITTED_ENV] === '1', (commands) =>
-        console.error(`testbed: all ${budget} processes are held by ${commands} other commands; waiting`),
+    : await acquireUnits(
+        budgetRoot(),
+        budget,
+        wanted * quantum,
+        process.env[ADMITTED_ENV] === '1',
+        (commands) =>
+          console.error(`testbed: fewer than ${quantum} of ${budget} processes are free beside ${commands} other commands; waiting`),
+        quantum,
       );
 const queueCpu = process.cpuUsage(queueBefore);
 process.once('exit', () => units?.release());
 const granted = holderUnits !== undefined && Number.isSafeInteger(holderUnits) && holderUnits > 0 ? holderUnits : 1;
-const held = units?.held ?? Math.max(1, Math.min(wanted, granted));
-if (bunTest) command.splice(options(), 0, `--parallel=${held}`, `--max-concurrency=${Math.min(held, concurrency ?? held)}`);
-if (vitest) command.splice(options(), 0, `--maxWorkers=${held}`);
+const held = units?.held ?? Math.max(1, Math.min(wanted * quantum, granted));
+const workers = Math.max(1, Math.floor(held / quantum));
+if (bunTest) command.splice(options(), 0, `--parallel=${workers}`, `--max-concurrency=${Math.min(workers, concurrency ?? workers)}`);
+if (vitest) command.splice(options(), 0, `--maxWorkers=${workers}`);
 console.error(
-  runner === 'other' && !inherited
+  runner === 'other' && !program && !inherited
     ? `testbed: a ${budget}-process budget; the test runners this command starts take their own shares`
     : `testbed: ${held} of ${inherited ? `${granted} inherited` : budget} processes; queued ${((units?.queued ?? 0) / 1000).toFixed(3)} s`,
 );
 const holder = inherited
-  ? process.env[SLOT_ENV]
+  ? program
+    ? `${holderPid}:${holderStart}:${held}`
+    : process.env[SLOT_ENV]
   : units === undefined
     ? undefined
     : `${process.pid}:${processes.facts(process.pid)?.start ?? 0}:${held}`;
@@ -83,8 +196,11 @@ const option = (prefix: string): string | undefined => command.find((part) => pa
 const randomize = command.indexOf('--randomize');
 let seed: number | undefined;
 if (runner === 'bun') {
-  const given = option('--seed=');
-  seed = given === undefined ? undefined : Number(given);
+  for (let at = 0; at < options(); at++) {
+    const part = command[at]!;
+    if (part === '--seed') seed = Number(command[++at]);
+    else if (part.startsWith('--seed=')) seed = Number(part.slice('--seed='.length));
+  }
   if (seed === undefined && randomize !== -1) {
     seed = Math.floor(Math.random() * 2 ** 31);
     command.push(`--seed=${seed}`);
@@ -108,6 +224,7 @@ const environment: Record<string, string | undefined> = {
   [ROOT_ENV]: run.root,
   [REPORT_ENV]: run.report,
   [SLOT_ENV]: holder,
+  [HEADED_ENV]: headed ? '1' : undefined,
 };
 delete environment[ADMITTED_ENV];
 const child = Bun.spawn(command, {
@@ -118,13 +235,14 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => ch
 let kept = held;
 const seen = new Set<number>();
 const tail =
-  bunTest && units !== undefined && held > 1
+  bunTest && units !== undefined && workers > 1
     ? setInterval(() => {
-        const workers = processes.children(child.pid).filter((pid) => / --test-worker(?: |$)/.test(processes.command(pid) ?? ''));
-        for (const pid of workers) seen.add(pid);
-        if (seen.size < held || Math.max(1, workers.length) >= kept) return;
-        kept = units.keep(workers.length);
-        console.error(`testbed: ${workers.length} workers left; ${kept} of ${held} processes kept`);
+        const living = processes.children(child.pid).filter((pid) => / --test-worker(?: |$)/.test(processes.command(pid) ?? ''));
+        for (const pid of living) seen.add(pid);
+        const needed = Math.max(1, living.length) * quantum;
+        if (seen.size < workers || needed >= kept) return;
+        kept = units.keep(needed);
+        console.error(`testbed: ${living.length} workers left; ${kept} of ${held} processes kept`);
       }, TAIL_MS)
     : undefined;
 const exit = await child.exited;
@@ -145,6 +263,7 @@ const rows: Row[] = existsSync(run.report)
 const mine = (row: Row): boolean => (row as { run?: unknown }).run === run.root;
 const files = rows.filter((row): row is FileRow => row.type === 'file' && mine(row));
 const tests = rows.filter((row): row is TestRow => row.type === 'test' && mine(row));
+const notRun = rows.filter((row): row is NotRunRow => row.type === 'not-run' && mine(row));
 const worlds = worldsOf(rows.filter((row): row is WorldRow => row.type === 'world' && mine(row)));
 const reported = runner === 'bun' && existsSync(junit) ? junitOf(readFileSync(junit, 'utf8'), process.cwd(), REPO) : undefined;
 const outcomes = reported === undefined ? { rows: [], unmatched: 0 } : outcomesOf(tests, reported.cases);
@@ -160,6 +279,6 @@ appendFileSync(
   run.report,
   `${[...outcomes.rows, ...verdicts, ...slow, ...workersOf(files).map((worker) => ({ ...worker, run: run.root })), runRow].map((row) => JSON.stringify(row)).join('\n')}\n`,
 );
-console.error(summary(runRow, files, slow, outcomes.unmatched, run.report));
+console.error(summary(runRow, files, slow, outcomes.unmatched, run.report, notRun));
 if (seed !== undefined) console.error(`  seed: ${seed}`);
 process.exit(code ?? 1);

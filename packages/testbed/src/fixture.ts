@@ -1,9 +1,10 @@
 import { createRequire } from 'node:module';
 import type { Bed } from './core/bed.ts';
-import type { Item, Meter, WorldTaken } from './core/ledger.ts';
-import type { Hold } from './core/watch.ts';
+import type { Item, Meter, NotRunReason, WorldTaken } from './core/ledger.ts';
+import type { Hold, RunLiveness } from './core/watch.ts';
 import { pristine } from './core/pristine.ts';
-import { locate as locationOf, type PathLocation } from './core/run.ts';
+import { runLiveness as ownerLiveness, locate as locationOf, type PathLocation, REPORT_ENV, ROOT_ENV } from './core/run.ts';
+import { openProcesses } from './core/processes.ts';
 
 const files = createRequire(import.meta.url)('node:fs') as typeof import('node:fs');
 
@@ -34,7 +35,15 @@ export const meter = (): Meter | undefined => bed()?.ledger.meter();
 
 export const worldTaken = (taken: WorldTaken): void => bed()?.world(taken);
 
-export const runRoot = (): string | undefined => bed()?.run?.root || undefined;
+export const HEADED_ENV = 'RUNLITH_TEST_HEADED';
+export const headed = (): boolean => process.env[HEADED_ENV] === '1';
+export const notRun = (name: string, reason: NotRunReason): void => bed()?.notRun(name, reason);
+
+export const runRoot = (): string | undefined => bed()?.run?.root || process.env[ROOT_ENV] || undefined;
+
+export const reportPath = (): string | undefined => bed()?.run?.report || process.env[REPORT_ENV] || undefined;
+
+export const runLiveness = async (root: string): Promise<RunLiveness> => ownerLiveness(await openProcesses(), root);
 
 export const locate = (path: string): PathLocation => locationOf(path);
 

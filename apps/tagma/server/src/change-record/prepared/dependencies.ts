@@ -70,6 +70,7 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
   const edges = new Map<string, Set<string>>();
   const enqueue = (uses: readonly ImportedUse[]): void => {
     for (const use of uses) {
+      if (!foreign.has(use.path)) continue;
       const key = `${use.path}\0${use.name}\0${use.meaning}`;
       if (visited.has(key)) continue;
       visited.add(key);

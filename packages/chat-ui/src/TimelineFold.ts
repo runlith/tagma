@@ -14,6 +14,7 @@ import type { EntryKinds } from './EntryKinds.svelte';
 import type { FeedChange } from './feedChanges';
 import {
   type ChatRowView,
+  DESKTOP_METRICS,
   FEED_GAP_PX,
   liveStatusEstimate,
   rewindEstimate,
@@ -47,6 +48,7 @@ const DAY_BOUNDARY_PX = 34;
 const LIVE_STATUS_KEY = 'live:status';
 
 const UNTOUCHED: ChatRowView = {
+  metrics: DESKTOP_METRICS,
   expanded: (_key, fallback) => fallback,
   stretchDefault: (_key, newest) => newest,
   toolOpen: () => undefined,
@@ -208,8 +210,24 @@ export class TimelineFold implements RowModel {
   }
 
   private take(rows: readonly FeedChange<ChatEntry>[], live: readonly FeedChange<ActivityEntry>[]): void {
-    for (const change of rows) this.local(change);
     for (const change of live) this.takeLive(change);
+    const entering = new Set<string>();
+    for (const change of rows) if (change.kind === 'splice') for (const entry of change.inserted) entering.add(entry.id);
+    if (this.liveStructural || entering.size > 0) this.dropLeft(entering);
+    for (const change of rows) this.local(change);
+  }
+
+  private dropLeft(entering: ReadonlySet<string>): void {
+    let end = this.bases.length;
+    for (let at = end - 1; at >= this.bodyCount - 1; at -= 1) {
+      const item = at < this.bodyCount ? undefined : this.bases.at(at);
+      if (item?.kind === 'step' && (entering.has(item.key) || !this.liveInput.has(item.key))) continue;
+      if (end > at + 1) {
+        this.replaceItems(at + 1, end - at - 1, []);
+        this.liveStructural = true;
+      }
+      end = at;
+    }
   }
 
   private takeLive(change: FeedChange<ActivityEntry>): void {

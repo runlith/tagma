@@ -1,0 +1,25 @@
+{
+  "package": "@tanstack/virtual-core@3.19.8",
+  "hunks": {
+    "keyed-reshape-anchor": {
+      "markers": ["merged.getItemKey !== prevOptions.getItemKey"],
+      "tests": [{ "package": "apps/tagma/app", "file": "./src/lib/features/threads/ColumnWindow.svelte.test.ts", "names": "an interior reorder" }]
+    },
+    "disabled-end-threshold": {
+      "markers": ["this.options.scrollEndThreshold >= 0"],
+      "tests": [{ "package": "packages/virtual-list", "file": "./src/correction.test.ts", "names": "rebuilds measurements only once" }]
+    },
+    "consumer-scroll-hold": {
+      "markers": ["isScrollWriteBlocked"],
+      "tests": [{ "package": "packages/virtual-list", "file": "./src/correction.test.ts", "names": "scrollbar press" }]
+    },
+    "live-correction-basis": {
+      "markers": ["_syncScrollOffset", "_onScroll", "this._lastElementOffset = this._readElementOffset()"],
+      "tests": [{ "package": "packages/virtual-list", "file": "./src/liveOffset.test.ts" }]
+    },
+    "resized-positions": {
+      "markers": ["_resizedIndexes", "_measuredWith"],
+      "tests": [{ "package": "packages/virtual-list", "file": "./src/positions.test.ts" }]
+    }
+  }
+}

@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import { AGENT_CHILD_UPDATE_SIGNAL_TYPE } from '@runlith/agent/contracts';
 import { ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
 import { NATIVE_HARNESS, type SessionRef } from '../../platform/contract/wire/session.js';
-import { ServedGraphs, type CopyAim, type HeldTask, type ServedGraph } from '../../graph/contract/service/serving.js';
+import { ServedGraphs, type CopyAim, type FiledTask, type HeldTask, type ServedGraph } from '../../graph/contract/service/serving.js';
 import { Tasks } from '../../graph/contract/service/work.js';
 import { HeldTasks } from '../contract/service/heldTasks.js';
 import type { ThreadLookup } from '../contract/service/reads.js';
@@ -30,6 +30,8 @@ type Thread = { readonly id: string; readonly projectId: number };
 const sessionOf = (thread: ThreadSummary): SessionRef => ({ harness: NATIVE_HARNESS, key: thread.id });
 
 const named = (tasks: readonly HeldTask[]) => tasks.map((task) => `- ${task.name} ${task.title}`).join('\n');
+
+const distinct = <Task extends HeldTask>(tasks: readonly Task[]) => [...new Map(tasks.map((task) => [task.name, task])).values()];
 
 export const handedLine = (child: ThreadSummary, held: readonly HeldTask[], filed: readonly HeldTask[]): string =>
   [
@@ -80,25 +82,37 @@ export const makeHeldTasks = Effect.fnUntraced(function* ({ threads, places, pla
     return copies;
   });
 
-  const tell = (parent: ThreadSummary, child: ThreadSummary, key: string, held: readonly HeldTask[], filed: readonly HeldTask[]) =>
-    held.length === 0 && filed.length === 0
-      ? Effect.void
-      : lines({
-          subscriberId: parent.id,
-          about: child.id,
-          type: AGENT_CHILD_UPDATE_SIGNAL_TYPE,
-          key: `tasks:${parent.id}:${key}`,
-          text: handedLine(child, held, filed),
-          notice: {
-            kind: 'child-update',
-            child: { threadId: child.id, projectId: child.projectId, name: child.name },
-            event: 'tasks',
-            forOperator: false,
-            cost: { kind: 'unknown', tokens: null },
-          },
-          wakes: false,
-          replaces: [],
-        });
+  const line = (parent: ThreadSummary, child: ThreadSummary, key: string, text: string) =>
+    lines({
+      subscriberId: parent.id,
+      about: child.id,
+      type: AGENT_CHILD_UPDATE_SIGNAL_TYPE,
+      key,
+      text,
+      notice: {
+        kind: 'child-update',
+        child: { threadId: child.id, projectId: child.projectId, name: child.name },
+        event: 'tasks',
+        forOperator: false,
+        cost: { kind: 'unknown', tokens: null },
+      },
+      wakes: false,
+      replaces: [],
+    });
+
+  const tell = Effect.fnUntraced(function* (
+    parent: ThreadSummary,
+    child: ThreadSummary,
+    key: string,
+    held: readonly HeldTask[],
+    filed: readonly FiledTask[],
+  ) {
+    if (held.length > 0) yield* line(parent, child, `tasks:${parent.id}:${key}`, handedLine(child, held, []));
+    if (filed.length > 0) {
+      const versions = filed.map((task) => `${task.name}@${task.changedAt}`).sort();
+      yield* line(parent, child, `filed:${parent.id}:${versions.join(',')}`, handedLine(child, [], filed));
+    }
+  });
 
   const living = Effect.fnUntraced(function* (thread: ThreadSummary, leaving: ReadonlySet<string>) {
     const parentId = thread.parentThreadId;
@@ -113,7 +127,7 @@ export const makeHeldTasks = Effect.fnUntraced(function* ({ threads, places, pla
     const copies = yield* copiesOf(yield* aimsOf(child, pending.copies));
     if (parent !== null) {
       const held: HeldTask[] = [];
-      const filed: HeldTask[] = [];
+      const filed: FiledTask[] = [];
       for (const copy of copies) {
         const standing = yield* Effect.provide(
           Effect.flatMap(Tasks, (tasks) => tasks.holdings({ projectId: copy.projectId, from: sessionOf(child) })),
@@ -122,7 +136,7 @@ export const makeHeldTasks = Effect.fnUntraced(function* ({ threads, places, pla
         held.push(...standing.held);
         filed.push(...standing.filed);
       }
-      yield* tell(parent, child, key, held, filed);
+      yield* tell(parent, child, key, distinct(held), distinct(filed));
     }
     for (const copy of copies) {
       yield* Effect.provide(

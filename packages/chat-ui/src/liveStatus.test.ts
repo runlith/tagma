@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { DESKTOP_METRICS } from './rowEstimate';
 import { createRawSnippet } from 'svelte';
 import type { ToolView } from './EntryKinds.svelte';
 import { chatTimeline } from './TimelineFold';
@@ -22,7 +23,12 @@ const liveEntries = (entries: readonly ChatEntry[], run: string, phase: ChatLive
 
 const now = 1_700_000_000_000;
 const runId = 'run-1';
-const view = { expanded: () => false, stretchDefault: (_key: string, newest: boolean) => newest, toolOpen: () => undefined };
+const view = {
+  metrics: DESKTOP_METRICS,
+  expanded: () => false,
+  stretchDefault: (_key: string, newest: boolean) => newest,
+  toolOpen: () => undefined,
+};
 type Reading = {
   activeRunId: string | null;
   phase: AgentPhase | null;

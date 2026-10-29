@@ -1,22 +1,19 @@
 <script lang="ts">
   import ErrorBoundary from '@runlith/error-boundary/ErrorBoundary.svelte';
-  import { type Snippet, untrack } from 'svelte';
+  import type { Snippet } from 'svelte';
 
   type Props = {
     rowKey: string;
     place: string;
-    top: number;
-    size: number;
-    ready: boolean;
     spaced: boolean;
     dim?: boolean;
     inert?: boolean;
+    box(key: string, node: HTMLElement): () => void;
     measure(node: HTMLElement): void;
     children: Snippet;
   };
 
-  let { rowKey, place, top, size, ready, spaced, dim = false, inert = false, measure, children }: Props = $props();
-  const floor = untrack(() => size);
+  let { rowKey, place, spaced, dim = false, inert = false, box, measure, children }: Props = $props();
 
   let node: HTMLDivElement | undefined = $state();
 
@@ -25,13 +22,12 @@
   });
 </script>
 
-<div class="absolute left-0 w-full overflow-clip" style={`top:${top}px;height:${size}px;overflow-clip-margin:0.5px`}>
+<div class="absolute top-0 left-0 w-full overflow-clip" style="overflow-clip-margin:0.5px" {@attach (outer) => box(rowKey, outer)}>
   <div
     bind:this={node}
     data-timeline-key={rowKey}
     {@attach (row) => row.toggleAttribute('inert', inert)}
     class={['w-full', spaced && 'pb-3 @min-[34rem]:pb-4', dim && 'opacity-45']}
-    style={ready ? undefined : `min-height:${floor}px`}
   >
     <ErrorBoundary id={place}>
       {@render children()}

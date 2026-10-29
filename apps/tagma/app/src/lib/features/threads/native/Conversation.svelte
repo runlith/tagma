@@ -244,12 +244,11 @@
     threadOf={(id) => names.of(id)}
     {paths}
     {from}
-    onRendered={body.onRendered}
   />
 {/snippet}
 
 {#snippet code(body: ChatCodeBody)}
-  <CodeBody text={body.text} language={body.language} firstLine={body.firstLine} onRendered={body.onRendered} />
+  <CodeBody text={body.text} language={body.language} firstLine={body.firstLine} />
 {/snippet}
 
 {#snippet userText(text: string)}

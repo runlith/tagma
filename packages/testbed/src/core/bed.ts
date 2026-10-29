@@ -1,7 +1,7 @@
 import { join, relative } from 'node:path';
 import { kindOf, type Kind } from './files.ts';
 import { installGuards, type GuardHooks, type Reach } from './guards.ts';
-import { makeLedger, type Item, type Meter, type WorldTaken } from './ledger.ts';
+import { makeLedger, type Item, type Meter, type NotRunReason, type WorldTaken } from './ledger.ts';
 import { pristine } from './pristine.ts';
 import type { Processes } from './processes.ts';
 import { NetworkReached, Refused, siteOf } from './refusal.ts';
@@ -144,6 +144,10 @@ export const makeBed = (options: BedOptions) => {
     claim: (home: string): (() => void) => watch.claim(home),
     release: (pid: number): void => watch.release(pid),
     world: (taken: WorldTaken): void => ledger.world(taken),
+    notRun(name: string, reason: NotRunReason): void {
+      ledger.notRun(options.file(), name, reason);
+      ledger.flush();
+    },
   };
 };
 

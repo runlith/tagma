@@ -3,7 +3,7 @@ import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { SessionRow, WriterRef } from '../../../platform/contract/service/writers.js';
 import type { HolderStanding } from '../wire/holders.js';
 import type { SessionRef } from '../../../platform/contract/wire/session.js';
-import type { HeldTask } from './serving.js';
+import type { FiledTask, HeldTask } from './serving.js';
 import type { FloorRefusal, GateRefusal, GitRefusal, OpenRefusal, ReferenceRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { BlockRecord, BlockRow, BlockWrite, SourceRow } from './acts.js';
 import type { BlockCreateRefusal, BlockEditRefusal, EdgeRefusal, RetagRefusal, LinkTarget, BlockLink } from './blocks.js';
@@ -30,7 +30,7 @@ export type BlockEnd = BlockRecord;
 
 export type IdleWork = { readonly id: number; readonly holder: SessionRow; readonly standing: HolderStanding };
 
-export type Holdings = { readonly held: readonly HeldTask[]; readonly filed: readonly HeldTask[] };
+export type Holdings = { readonly held: readonly HeldTask[]; readonly filed: readonly FiledTask[] };
 
 export type WorkBlock = { readonly name: string; readonly title: string; readonly tags: readonly string[]; readonly status: string | null };
 

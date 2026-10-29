@@ -92,11 +92,9 @@ export const preparedFnsOver = (holdings: Holdings['Service'], walks: Walks, gra
                 view.paths
                   .filter(
                     (one) =>
-                      holdersOf(one).some((holder) => !carriers.has(holder)) ||
-                      (one.git !== 'ignored' &&
-                        one.verdict.verdict === 'proven' &&
-                        one.verdict.nobody.some((part) => part.added > 0) &&
-                        unborne(one.path)),
+                      one.git !== 'ignored' &&
+                      (holdersOf(one).some((holder) => !carriers.has(holder)) ||
+                        (one.verdict.verdict === 'proven' && one.verdict.nobody.some((part) => part.added > 0) && unborne(one.path))),
                   )
                   .map((one) => one.path),
               ),

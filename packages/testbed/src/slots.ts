@@ -1,7 +1,7 @@
 import { closeSync, mkdirSync, openSync, readdirSync, renameSync, unlinkSync } from 'node:fs';
 import { availableParallelism, totalmem } from 'node:os';
 import { join } from 'node:path';
-import { closeOnExec, lockExclusive } from '@runlith/file-lock/flock';
+import { closeOnExec, lockExclusive, unlock } from '@runlith/file-lock/flock';
 import { BASE } from './core/run.ts';
 
 export const SLOT_ENV = 'RUNLITH_TEST_SLOT';
@@ -87,6 +87,7 @@ export const acquireUnits = async (
   wanted: number,
   admitted: boolean,
   waiting: (commands: number) => void = () => undefined,
+  quantum = 1,
 ): Promise<Units> => {
   const started = performance.now();
   const units = join(root, 'units');
@@ -105,11 +106,14 @@ export const acquireUnits = async (
     }
     for (;;) {
       const peers = others(commands, entry.name);
-      const asked = Math.max(1, Math.min(wanted, budget, admitted ? budget : Math.ceil(budget / (peers + 1))));
+      const share = Math.min(wanted, budget, admitted ? budget : Math.ceil(budget / (peers + 1)));
+      const asked = Math.max(quantum, Math.floor(share / quantum) * quantum);
       for (const handle of handles) {
         if (held.length === asked) break;
         if (lockExclusive(handle) === 'locked') held.push(handle);
       }
+      const complete = Math.floor(held.length / quantum) * quantum;
+      while (held.length > complete) unlock(held.pop()!);
       if (held.length > 0) {
         let released = false;
         const kept = [...held];

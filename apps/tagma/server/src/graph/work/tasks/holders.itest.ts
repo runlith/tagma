@@ -80,7 +80,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('task holders', (it) => {
         const named = { name: yield* nameOf(held.id), title: 'held by the child' };
         expect(yield* graph.tasks.holdings({ projectId, from: child })).toEqual({
           held: [named],
-          filed: [{ name: yield* nameOf(filed.id), title: 'filed by the child' }],
+          filed: [{ name: yield* nameOf(filed.id), title: 'filed by the child', changedAt: expect.any(Number) }],
         });
         expect(yield* graph.tasks.handOver({ projectId, from: child, to: parent })).toEqual([named]);
         expect(yield* graph.tasks.handOver({ projectId, from: child, to: parent })).toEqual([]);

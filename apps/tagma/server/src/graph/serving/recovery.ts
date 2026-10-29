@@ -1,6 +1,6 @@
 import { mkdir, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { Effect, Queue, Stream, type Semaphore } from 'effect';
+import { Effect, Queue, Schedule, Stream, type Semaphore } from 'effect';
 import { Git } from '@runlith/git/Git';
 import { GateRefusal, refusalBody } from '../../platform/contract/wire/refusal.js';
 import { GraphRecoveries } from '../contract/service/recovery.js';
@@ -10,10 +10,12 @@ import { resolveStorageLayout, storageHomes } from '../storage/layout.js';
 import { ShadowGit } from '../tree/shadow.js';
 import { TreeMerges } from '../tree/merges.js';
 import { resolveCheckout } from '../tree/conflicts.js';
-import { type WatchEvent, watchAll } from '../../platform/watch/tree.js';
+import { type TreeWatch, type WatchEvent, watchAll } from '../../platform/watch/tree.js';
 import { refused } from './refusal.js';
 import { overRepositoryAndTree } from './permits.js';
 import { writableAt } from './writing.js';
+
+const REOPEN = '1 second';
 
 export const makeRecoveries = Effect.fnUntraced(function* ({
   gates,
@@ -59,32 +61,59 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
         const unreadable = new Map<string, GateRefusal>();
         const changed = new Set<string>();
         let rescan = true;
-        let failure: GateRefusal<'graph-pool'> | null = null;
+        let lost = false;
+        let watching: TreeWatch | null = null;
         const io = <A>(work: () => Promise<A>) =>
           Effect.tryPromise({
             try: work,
             catch: (cause) => new GateRefusal('graph-pool', `graph recovery watch failed: ${String(cause)}`, ['reopen the project']),
           });
-        yield* io(() => mkdir(directory, { recursive: true }));
+        const placed = io(() =>
+          mkdir(directory).then(
+            () => true,
+            (cause: NodeJS.ErrnoException) => (cause.code === 'EEXIST' ? true : cause.code === 'ENOENT' ? false : Promise.reject(cause)),
+          ),
+        );
         const listen = (event: WatchEvent): void => {
           const named = event.paths?.length === 1 && (!('rescan' in event) || event.rescan === 'rename') ? event.paths[0]! : null;
-          if ('rescan' in event && (event.rescan === 'error' || event.rescan === 'lost' || event.rescan === 'polling')) {
-            failure = new GateRefusal('graph-pool', `graph recovery watch ended: ${event.rescan}`, ['reopen the project']);
-          } else if (named === null) rescan = true;
+          if ('rescan' in event && (event.rescan === 'error' || event.rescan === 'lost' || event.rescan === 'polling')) lost = true;
+          else if (named === null) rescan = true;
           else if (named.endsWith('.json')) changed.add(named);
           else return;
           Queue.offerUnsafe(wake, undefined);
         };
-        yield* Effect.acquireRelease(watchAll([{ at: directory, recursive: false, required: true, listen }]), (watching) =>
-          Effect.sync(() => watching.close()),
-        );
+        const gone = () => lost;
+        const stop = (): void => {
+          watching?.close();
+          watching = null;
+        };
+        const watch = Effect.gen(function* () {
+          yield* Effect.repeat(placed, { schedule: Schedule.spaced(REOPEN), until: (there) => there });
+          lost = false;
+          rescan = true;
+          watching = yield* watchAll([{ at: directory, recursive: false, required: true, listen }]);
+        });
+        yield* Effect.addFinalizer(() => Effect.sync(stop));
+        yield* watch;
         return Stream.concat(Stream.make(undefined), Stream.fromQueue(wake)).pipe(
           Stream.mapEffect(() =>
             Effect.gen(function* () {
-              if (failure !== null) return yield* failure;
+              while (gone()) {
+                stop();
+                yield* Effect.sleep(REOPEN);
+                yield* watch;
+              }
               if (rescan) {
+                const listed = yield* io(() =>
+                  readdir(directory).catch((cause: NodeJS.ErrnoException) => (cause.code === 'ENOENT' ? null : Promise.reject(cause))),
+                );
+                if (listed === null) {
+                  lost = true;
+                  Queue.offerUnsafe(wake, undefined);
+                  return null;
+                }
                 rescan = false;
-                for (const name of yield* io(() => readdir(directory))) if (name.endsWith('.json')) changed.add(name);
+                for (const name of listed) if (name.endsWith('.json')) changed.add(name);
                 for (const name of held.keys()) changed.add(name);
                 for (const name of unreadable.keys()) changed.add(name);
               }
@@ -102,7 +131,7 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
                 if (record.success === null) held.delete(name);
                 else held.set(name, record.success);
               }
-              return {
+              const notice: RecoveryNotice = {
                 recovery: held.values().next().value ?? null,
                 total: held.size,
                 unreadable: [...unreadable].map(([name, error]) => ({
@@ -110,8 +139,10 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
                   error: refusalBody(error),
                 })),
               };
+              return notice;
             }),
           ),
+          Stream.filter((notice: RecoveryNotice | null): notice is RecoveryNotice => notice !== null),
         );
       }),
     );

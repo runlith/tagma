@@ -1,5 +1,5 @@
 import { Effect, Exit, FiberSet, Scope } from 'effect';
-import { TestClock } from 'effect/testing';
+import * as TestClock from 'effect/testing/TestClock';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import type { SerializedThreadRun } from '@runlith/agent/protocol/http';
 import type { ThreadEventDelta } from '@runlith/agent/transcript/eventFold';

@@ -19,6 +19,8 @@ ${when(ctx)}
 
 Land the lines you wrote with ${ctx.op('submit_work')}, which runs the project's commit steps a bare \`git commit\` skips. An act on existing commits — undo, pick, merge, restore a version — uses git under the authority rule. ${what(ctx)}
 
+A ${ctx.op('submit_work')} refusal caused by a defect in Tagma itself never stops the work: keep working and land later, or with a plain \`git commit\` of your own paths; never hold finished work for it or wait on a restart, a fix or the operator.
+
 - Before delivery, read the diff for correctness, unintended changes and secrets, and run the checks the project requires. Reuse applicable evidence; a broader or repeated check, build, e2e or independent review needs a new change, a failure or a concrete unresolved risk. Fix failures your change caused, report unrelated ones without expanding the task, and report a necessary check that cannot run within the limits as the unproved part.
 - A subject is concise, in the repository's style; \`body\` says in one to three sentences what changed in behaviour and why, and a micro-edit may omit it. Rewriting another's commits, push, force-push, Git configuration and skipped hooks need the operator's word.
 `;

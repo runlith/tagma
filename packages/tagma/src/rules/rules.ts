@@ -82,7 +82,7 @@ export const Files = {
     builtin: 'size',
     params: { ...selection, thresholds: [{ glob: '**', lines }, ...by] },
   }),
-  tests: ['**/*.test.*', '**/*.itest.*', '**/*.stest.*', '**/*.spec.*', '**/*.bench.*'] as const,
+  tests: ['**/*.test.*', '**/*.itest.*', '**/*.e2e.*', '**/*.stest.*', '**/*.spec.*', '**/*.bench.*', '**/*.fixture.*'] as const,
 };
 
 export type Linter = { readonly rule: (id: string, reach?: Reach) => LinterInspection };

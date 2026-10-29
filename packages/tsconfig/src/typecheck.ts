@@ -70,8 +70,9 @@ type Scope =
   | { readonly kind: 'package'; readonly pkg: WorkspacePackage }
   | { readonly kind: 'group'; readonly roots: readonly WorkspacePackage[] };
 
-export const run = Effect.fn('typecheck.run')(function* (target: string): Effect.fn.Return<void, CheckFailure, Host> {
-  const root = yield* findRoot(target);
+export const run = Effect.fn('typecheck.run')(function* (target: string, project = false): Effect.fn.Return<void, CheckFailure, Host> {
+  const root = yield* findRoot(project ? process.cwd() : target);
+  if (project) return yield* checkProject(root, target);
   const scanned = yield* read(root);
   const scope = yield* select(scanned, resolve(target));
   const roots = scope.kind === 'package' ? [scope.pkg] : scope.roots;
@@ -106,6 +107,20 @@ export const run = Effect.fn('typecheck.run')(function* (target: string): Effect
   if (failed.length > 0) return yield* new ChecksFailed({ units: failed });
 });
 
+const checkProject = Effect.fn('typecheck.project')(function* (root: string, target: string): Effect.fn.Return<void, CheckFailure, Host> {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const workspace = yield* fileSystem.realPath(root);
+  const config = yield* fileSystem.realPath(target);
+  if (!config.startsWith(`${workspace}${sep}`) || (yield* fileSystem.stat(config)).type !== 'File') return yield* new ScopeUnknown({ target });
+  const packages = yield* read(workspace);
+  const pkg = packages.filter((entry) => config.startsWith(`${entry.dir}${sep}`)).sort((a, b) => b.dir.length - a.dir.length)[0];
+  if (pkg === undefined || pkg.kind === null) return yield* new ScopeUnknown({ target });
+  const failed: string[] = [];
+  if (pkg.kind === 'svelte') yield* svelteCheck(workspace, pkg, failed, config);
+  else yield* check(workspace, pkg, failed, config);
+  if (failed.length > 0) return yield* new ChecksFailed({ units: failed });
+});
+
 const preparations = Effect.fn('typecheck.preparations')(function* (
   reached: readonly WorkspacePackage[],
 ): Effect.fn.Return<boolean, PreparationFailed | PlatformError, Host> {
@@ -134,10 +149,11 @@ const check = Effect.fn('typecheck.check')(function* (
   root: string,
   pkg: WorkspacePackage,
   failed: string[],
+  config = pkg.dir,
 ): Effect.fn.Return<void, PlatformError, ChildProcessSpawner.ChildProcessSpawner> {
-  const unit = `tsrs ${relative(root, pkg.dir)}`;
+  const unit = `tsrs ${relative(root, config)}`;
   yield* Console.log(unit);
-  if ((yield* spawn('node', [TSRS, '-p', pkg.dir, '--noEmit', '--checkers', CHECKERS], root)) !== 0) failed.push(unit);
+  if ((yield* spawn('node', [TSRS, '-p', config, '--noEmit', '--checkers', CHECKERS], root)) !== 0) failed.push(unit);
 });
 
 const TSRS = join(dirname(fileURLToPath(import.meta.resolve('tsrs/package.json'))), 'bin', 'tsrs');
@@ -159,6 +175,7 @@ const svelteCheck = Effect.fn('typecheck.svelteCheck')(function* (
   root: string,
   pkg: WorkspacePackage,
   failed: string[],
+  config?: string,
 ): Effect.fn.Return<void, ToolMissing | OutputUnreadable | PlatformError, Host> {
   if (pkg.config.kind === 'ok' && pkg.config.config.extendsKit) {
     const kit = yield* binary(pkg.dir, 'svelte-kit', pkg.name);
@@ -173,7 +190,7 @@ const svelteCheck = Effect.fn('typecheck.svelteCheck')(function* (
     import.meta.resolve('tsx'),
     check,
     '--tsconfig',
-    './tsconfig.json',
+    config ?? './tsconfig.json',
     '--output',
     'machine-verbose',
     '--tsgo-experimental-api',
@@ -224,7 +241,7 @@ const svelteCheck = Effect.fn('typecheck.svelteCheck')(function* (
     }),
   );
   if (errors > 0 || warnings > 0) yield* Console.log(`svelte-check ${pkg.name}: ${errors} errors, ${warnings} warnings`);
-  if (status !== 0 || errors > 0) failed.push(`svelte-check ${pkg.name}`);
+  if (status !== 0 || errors > 0 || (config !== undefined && warnings > 0)) failed.push(`svelte-check ${pkg.name}`);
   else if (!complete) return yield* new OutputUnreadable({ owner: pkg.name, reason: 'process ended without a COMPLETED record' });
 });
 

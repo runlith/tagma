@@ -46,7 +46,9 @@
     }),
   );
 
-  $effect(() => viewport.watch());
+  let shell: HTMLDivElement | undefined = $state();
+
+  $effect(() => (shell === undefined ? undefined : viewport.watch(shell)));
 
   const push = Push.use();
   const attention = Attention.use();
@@ -92,11 +94,8 @@
 </script>
 
 <div
-  class="fixed inset-x-0 top-0 flex flex-col overflow-hidden bg-chrome contain-layout safe-top safe-x"
-  class:safe-bottom={!viewport.keyboard}
-  style:height={viewport.height > 0 ? `${viewport.height}px` : '100dvh'}
-  style:transform={viewport.top > 0 ? `translateY(${viewport.top}px)` : undefined}
-  data-keyboard={viewport.keyboard ? '' : undefined}
+  bind:this={shell}
+  class="fixed inset-x-0 top-0 flex h-dvh flex-col overflow-hidden bg-chrome contain-layout safe-top safe-x safe-bottom"
 >
   {#if cold}
     <div class="grid flex-1 place-items-center bg-background px-8">

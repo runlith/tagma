@@ -5,12 +5,12 @@ import { createMarkdownParser, type MarkdownHtml, MarkdownRenderer } from './ren
 const BRACKET = /\[\[[0-9a-f]{8}(?:\|[^\]\n]+)?\]\]/g;
 
 function cells(source: string, atoms: readonly RegExp[]): string[][] {
-  const table = createMarkdownParser(false, [], atoms).lexer(source)[0] as Tokens.Table;
+  const table = createMarkdownParser([], atoms).lexer(source)[0] as Tokens.Table;
   return table.rows.map((row) => row.map((cell) => cell.text));
 }
 
 function blocks(source: string, atoms: readonly RegExp[]): { type: string; raw: string }[] {
-  return createMarkdownParser(false, [], atoms)
+  return createMarkdownParser([], atoms)
     .lexer(source)
     .map(({ type, raw }) => ({ type, raw }));
 }
@@ -22,8 +22,8 @@ function table(...rows: string[]): string {
 describe('a body rendered while it streams', () => {
   test('keeps every settled block as the same value, keyed by where it starts', async () => {
     const renderer = new MarkdownRenderer();
-    const first = await renderer.render({ text: 'One.\n\nTwo.\n\nThr', key: 'k', streaming: true });
-    const later = await renderer.render({ text: 'One.\n\nTwo.\n\nThree.\n\nFo', key: 'k', streaming: true });
+    const first = renderer.render({ text: 'One.\n\nTwo.\n\nThr', key: 'k', streaming: true });
+    const later = renderer.render({ text: 'One.\n\nTwo.\n\nThree.\n\nFo', key: 'k', streaming: true });
 
     expect(later.map((block) => block.key)).toEqual(['0', '6', '12', '20']);
     expect(later[0]).toBe(first[0] as MarkdownHtml);
@@ -32,8 +32,8 @@ describe('a body rendered while it streams', () => {
 
   test('finishes as the same blocks, with only the tail painted again and no block left live', async () => {
     const renderer = new MarkdownRenderer();
-    const streamed = await renderer.render({ text: 'One.\n\nTw', key: 'k', streaming: true });
-    const finished = await renderer.render({ text: 'One.\n\nTwo.', key: 'k', streaming: false });
+    const streamed = renderer.render({ text: 'One.\n\nTw', key: 'k', streaming: true });
+    const finished = renderer.render({ text: 'One.\n\nTwo.', key: 'k', streaming: false });
 
     expect(streamed.map((block) => block.live)).toEqual([false, true]);
     expect(finished.map((block) => [block.key, block.live])).toEqual([
@@ -45,8 +45,8 @@ describe('a body rendered while it streams', () => {
 
   test('keeps a paragraph that may still take the next line live until it settles', async () => {
     const renderer = new MarkdownRenderer();
-    const held = await renderer.render({ text: 'Use `` then `a`\n#', key: 'k', streaming: true });
-    const settled = await renderer.render({ text: 'Use `` then `a`\n# Head\n\nNext', key: 'k', streaming: true });
+    const held = renderer.render({ text: 'Use `` then `a`\n#', key: 'k', streaming: true });
+    const settled = renderer.render({ text: 'Use `` then `a`\n# Head\n\nNext', key: 'k', streaming: true });
 
     expect(held.map((block) => block.live)).toEqual([true, true]);
     expect(settled.map((block) => block.live)).toEqual([false, false, true]);
@@ -54,7 +54,7 @@ describe('a body rendered while it streams', () => {
 });
 
 test('a link text is inline markdown, escaped like any other text', async () => {
-  const html = await createMarkdownParser(false).parse('[**жирный** и a < b](https://example.com)');
+  const html = await createMarkdownParser().parse('[**жирный** и a < b](https://example.com)');
   expect(html).toContain('rel="noopener noreferrer"><strong>жирный</strong> и a &lt; b</a>');
 });
 

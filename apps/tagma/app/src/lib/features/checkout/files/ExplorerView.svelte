@@ -7,7 +7,8 @@
   import Folder from '@lucide/svelte/icons/folder';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import FolderPlus from '@lucide/svelte/icons/folder-plus';
-  import { elementScroll, observeElementOffset, observeElementRect, Virtualizer, type VirtualItem } from '@tanstack/virtual-core';
+  import type { VirtualItem } from '@tanstack/virtual-core';
+  import { VirtualList } from '@runlith/virtual-list/VirtualList';
   import { tick, untrack } from 'svelte';
   import { ENTRY_INK, ENTRY_LETTER } from '$lib/features/checkout/entryLetter.js';
   import { handHues } from '$lib/features/checkout/handHues.js';
@@ -16,6 +17,7 @@
   import { Holdings } from '$lib/features/checkout/Holdings.svelte.js';
   import { Outside } from './Outside.svelte.js';
   import FileIcon from '$lib/shared/FileIcon.svelte';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
   import { cn } from '$lib/shared/utils.js';
@@ -48,42 +50,38 @@
 
   const rows = $derived(explorer.rows);
 
-  let virtualizer = $state.raw<Virtualizer<HTMLElement, HTMLElement> | undefined>();
+  let virtualizer = $state.raw<VirtualList | undefined>();
   let mounted = $state.raw<readonly VirtualItem[]>([]);
-  let total = $state(0);
+  let list = $state<HTMLElement | null>(null);
 
   function options(element: HTMLElement) {
+    const order = rows;
     return {
-      count: rows.length,
+      count: order.length,
       getScrollElement: () => element,
       estimateSize: () => ROW,
-      getItemKey: (index: number) => rows[index]?.key ?? index,
+      getItemKey: (index: number) => order[index]?.key ?? index,
       overscan: 8,
-      observeElementRect,
-      observeElementOffset,
-      scrollToFn: elementScroll,
-      onChange: () => publish(),
+      onChange: () => (mounted = virtualizer?.getVirtualItems() ?? []),
     };
   }
 
-  function publish(): void {
-    const made = virtualizer;
-    if (made === undefined) return;
-    mounted = made.getVirtualItems();
-    total = made.getTotalSize();
+  function place(node: HTMLElement, key: string) {
+    return { destroy: virtualizer?.box(key, node) };
   }
 
   $effect(() => {
     const element = host;
-    if (element === null) return;
-    const made = new Virtualizer(untrack(() => options(element)));
-    const release = made._didMount();
+    const span = list;
+    if (element === null || span === null) return;
+    const made = new VirtualList(untrack(() => options(element)));
     virtualizer = made;
+    made.span(span);
+    made.connect();
     return () => {
-      release();
+      made.dispose();
       virtualizer = undefined;
       mounted = [];
-      total = 0;
     };
   });
 
@@ -92,9 +90,8 @@
     const element = host;
     void rows;
     if (made === undefined || element === null) return;
-    made.setOptions(options(element));
-    made._willUpdate();
-    publish();
+    made.configure(options(element));
+    made.refresh();
   });
 
   let host = $state<HTMLElement | null>(null);
@@ -416,7 +413,7 @@
         {/each}
       </div>
     {/if}
-    <div class="relative w-full" style={`height:${total}px`}>
+    <div bind:this={list} class="relative w-full">
       {#each mounted as item (item.key)}
         {@const row = rows[item.index]}
         {#if row === undefined}
@@ -429,7 +426,7 @@
             <div
               class="absolute inset-x-0 flex h-6 w-full min-w-0 items-center gap-1.5 bg-selected pr-2 text-ui"
               style:padding-left="calc(var(--spacing) * {row.depth * 3 + 2})"
-              style:top="{item.start}px"
+              use:place={row.key}
               data-tree-renaming={row.path}
             >
               {@render lead(row)}
@@ -461,7 +458,7 @@
                 row.type === 'link' && (row.target === 'broken' || row.target === 'outside' || row.target === 'unreadable') && 'opacity-60',
               )}
               style:padding-left="calc(var(--spacing) * {row.depth * 3 + 2})"
-              style:top="{item.start}px"
+              use:place={row.key}
               title={titleOf(held)}
               data-tree-path={row.path}
               data-tree-kind={opens(row) ? 'directory' : 'file'}
@@ -477,13 +474,10 @@
               }}
             >
               {@render lead(row)}
-              <span
-                class={cn(
-                  'min-w-0 flex-1 truncate',
-                  status !== undefined && !row.ignored && ENTRY_INK[status],
-                  status === 'deleted' && 'line-through',
-                )}>{row.name}</span
-              >
+              <FadeText
+                class={cn('flex-1', status !== undefined && !row.ignored && ENTRY_INK[status], status === 'deleted' && 'line-through')}
+                text={row.name}
+              />
               {#if row.loading}
                 <Waiting class="size-3 text-muted-foreground" label="Loading" />
               {/if}
@@ -505,7 +499,7 @@
           <div
             class="absolute inset-x-0 flex h-6 w-full min-w-0 items-center gap-1.5 pr-2 text-ui"
             style:padding-left="calc(var(--spacing) * {row.depth * 3 + 2})"
-            style:top="{item.start}px"
+            use:place={row.key}
             data-tree-draft={row.mode}
           >
             <span class="size-3 shrink-0"></span>
@@ -524,7 +518,7 @@
             type="button"
             class="absolute inset-x-0 flex h-6 w-full items-center text-left text-small text-muted-foreground/70 transition-colors hover:bg-hover hover:text-foreground disabled:pointer-events-none"
             style:padding-left="calc(var(--spacing) * {row.depth * 3 + 8})"
-            style:top="{item.start}px"
+            use:place={row.key}
             disabled={row.loading}
             onclick={() => explorer.more(row.dir)}
             data-tree-more={row.dir}
@@ -535,7 +529,7 @@
           <p
             class="absolute inset-x-0 flex h-6 items-center text-small text-muted-foreground/70"
             style:padding-left="calc(var(--spacing) * {row.depth * 3 + 8})"
-            style:top="{item.start}px"
+            use:place={row.key}
             data-tree-note
           >
             {row.text}

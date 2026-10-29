@@ -5,10 +5,9 @@
   type Props = {
     pins: readonly ChatPin[];
     context: ChatEntryContext;
-    onHeight(height: number): void;
   };
 
-  let { pins, context, onHeight }: Props = $props();
+  let { pins, context }: Props = $props();
 
   const SHARE = 1 / 3;
 
@@ -29,16 +28,9 @@
       if (parent !== null) limit = Math.floor(parent.clientHeight * SHARE);
     };
     measure();
-    onHeight(element.offsetHeight);
-    const observer = new ResizeObserver(() => onHeight(element.offsetHeight));
     const outer = new ResizeObserver(measure);
-    observer.observe(element);
     if (parent !== null) outer.observe(parent);
-    return () => {
-      observer.disconnect();
-      outer.disconnect();
-      onHeight(0);
-    };
+    return () => outer.disconnect();
   });
 </script>
 

@@ -1,27 +1,17 @@
-import {
-  defaultRangeExtractor,
-  elementScroll,
-  observeElementOffset,
-  observeElementRect,
-  type Range,
-  type Rect,
-  Virtualizer,
-  type VirtualItem,
-} from '@tanstack/virtual-core';
+import type { Range, Virtualizer, VirtualItem } from '@tanstack/virtual-core';
+import { type ListOptions, VirtualList } from '@runlith/virtual-list/VirtualList';
 import { flushSync } from 'svelte';
-import type { FeedMemory } from './FeedMemory';
+import type { FeedMemory, MeasuredStamp } from './FeedMemory';
+import { KeptRows } from './keptRows';
+import { RowWindow } from './rowWindow';
+import { DESKTOP_METRICS, type FeedMetrics, type FeedType, feedMetrics, feedType, sameMetrics } from './rowEstimate';
 import type { ChatTimelineItem, RowModel } from './timeline';
 
 const ESTIMATED_ROW_PX = 60;
-const OVERSCAN_ROWS = 20;
-const OPENING_OVERSCAN_ROWS = 6;
 export const TRANSCRIPT_END_THRESHOLD_PX = 80;
 const ROW_LANDING_GAP_PX = 12;
-const PREPEND_SETTLE_PX = 0.5;
-const PREPEND_STABLE_FRAMES = 30;
-const PREPEND_MAX_FRAMES = 180;
-export const KEEP_ALIVE_ROWS = 4;
-const NO_KEYS: readonly string[] = [];
+const MOVED_PX = 1.5;
+const UNPLACED_PX = 1e12;
 const EMPTY_ROWS: RowModel = {
   revision: 0,
   shape: 0,
@@ -32,54 +22,50 @@ const EMPTY_ROWS: RowModel = {
   indexOf: () => -1,
 };
 
-type Stamp = { readonly width: number; readonly open: boolean };
-type LiveRow = { key: string; seen: number; index: number };
+type Feed = VirtualList;
+type Anchor = { readonly key: string; readonly index: number; readonly offset: number };
+type Pressed = { readonly key: string; readonly node: HTMLElement; readonly row: HTMLElement; inRow: number };
+type Aim = { key: string; index: number; behavior: ScrollBehavior; landed: boolean; via?: number | undefined };
+type Box = { node: HTMLElement; release: (() => void) | undefined };
 
 export class TranscriptVirtualizer {
   rows = $state.raw<readonly VirtualItem[]>([]);
-  totalSize = $state(0);
   visibleKeys = $state.raw<readonly string[]>([]);
   heldKeys = $state.raw<ReadonlySet<string>>(new Set());
-  margin = $state(0);
+  metrics = $state.raw<FeedMetrics>(DESKTOP_METRICS);
 
-  private virtualizer: Virtualizer<HTMLElement, HTMLElement> | undefined;
-  private anchoredBottom: () => boolean = () => true;
+  private virtualizer: Feed | undefined;
+  private keepsEnd = true;
+  private building = false;
   private clearance = 0;
-  private readonly gesturing: () => boolean;
-  private overscan = OPENING_OVERSCAN_ROWS;
-  private widening: number | undefined;
-  private pinned: readonly number[] = [];
-  private pinning: number | undefined;
+  private margin = 0;
   private release: (() => void) | undefined;
   private root: HTMLElement | undefined;
   private list: HTMLElement | undefined;
   private threadKey: string | null = null;
   private rows_: RowModel = EMPTY_ROWS;
   private shape: number | null = null;
-  private readonly alive = new Map<string, { seen: number; index: number }>();
-  private seenTick = 0;
-  private held: readonly string[] = NO_KEYS;
-  private readonly stamps = new Map<string, Stamp>();
+  private readonly kept = new KeptRows();
+  private readonly stamps = new Map<string, MeasuredStamp>();
+  private readonly boxes = new Map<string, Box>();
+  private readonly around = new RowWindow();
+  private pacing: number | undefined;
   private width = 0;
-  private stampedWidth = 0;
-  private stampedDisclosure = -1;
-  private itemKey = (index: number): string | number => this.rows_.keyAt(index) ?? index;
-
-  private aim: { key: string; index: number; behavior: ScrollBehavior } | undefined;
-  private prependAnchor: { key: string; offset: number } | undefined;
-  private prependFrame: number | undefined;
-  private prependLoading = false;
-  private readonly remeasuring = new Map<string, number>();
-  private measuring = false;
+  private type: FeedType | undefined;
+  private fonts = 0;
+  private epoch = '';
+  private stamped = { width: 0, epoch: '', disclosure: -1 };
+  private aim: Aim | undefined;
+  private pressed: Pressed | undefined;
+  private anchor: Anchor | undefined;
   private flushing = false;
-  private chasing = false;
+  private writesHeld = false;
+  private itemKey = (index: number): string | number => this.rows_.keyAt(index) ?? index;
 
   constructor(
     private readonly memory: FeedMemory,
-    options: { gesturing?: () => boolean } = {},
-  ) {
-    this.gesturing = options.gesturing ?? (() => false);
-  }
+    private readonly scrolled: (reader: boolean) => void = () => undefined,
+  ) {}
 
   openThread(key: string | null): void {
     if (key === this.threadKey) return;
@@ -93,17 +79,20 @@ export class TranscriptVirtualizer {
     list: HTMLElement | undefined;
     model: RowModel;
     shape: number;
-    atBottom: () => boolean;
     clearance: number;
     disclosure: number;
   }): void {
+    const held = this.virtualizer !== undefined && input.root === this.root && !this.keepsEnd ? this.anchorAt(this.virtualizer) : undefined;
     this.rows_ = input.model;
     const reshaped = input.shape !== this.shape;
+    const successor =
+      reshaped && held !== undefined && this.aim === undefined && this.rows_.indexOf(held.key) < 0
+        ? this.survivor(this.virtualizer!, held)
+        : undefined;
     if (reshaped) {
       this.shape = input.shape;
       this.itemKey = (index) => this.rows_.keyAt(index) ?? index;
     }
-    this.anchoredBottom = input.atBottom;
     this.clearance = input.clearance;
     const rebuilt = input.root !== this.root;
     if (rebuilt) {
@@ -112,76 +101,81 @@ export class TranscriptVirtualizer {
     }
     const bound = input.list !== this.list;
     this.list = input.list;
-    if (rebuilt || bound) this.measureMargin();
+    if (bound) this.virtualizer?.span(input.list);
+    if (rebuilt || bound) this.measureFeed();
     if (!input.root) {
       this.dropVirtualizer();
       return;
     }
     let virtualizer = this.virtualizer;
-    let remeasure: boolean;
+    const built = rebuilt || !virtualizer;
     if (rebuilt || !virtualizer) {
       virtualizer = this.build(input.root, input.disclosure);
-      remeasure = true;
     } else {
-      remeasure = this.reconcile(virtualizer, input.disclosure);
-      virtualizer.setOptions(this.options());
+      const widened = this.width !== this.stamped.width || this.epoch !== this.stamped.epoch;
+      this.reconcile(virtualizer, input.disclosure);
+      if (widened && held !== undefined && this.aim === undefined) this.freeze(virtualizer, held);
+      virtualizer.configure(this.options());
     }
-    virtualizer._willUpdate();
-    this.publish();
-    if (remeasure) this.measureMounted();
+    virtualizer.refresh();
+    if (built) this.measureMounted();
     if (reshaped) this.reaim(virtualizer);
-    if (reshaped && this.chasing && this.anchoredBottom() && !this.gesturing()) this.anchorEnd();
+    if (successor !== undefined) this.relocate(virtualizer, successor);
+    this.holdTail();
   }
 
-  private build(root: HTMLElement, disclosure: number): Virtualizer<HTMLElement, HTMLElement> {
-    this.dropVirtualizer();
-    this.overscan = OPENING_OVERSCAN_ROWS;
-    this.width = root.clientWidth;
-    const virtualizer = new Virtualizer({ ...this.options(), initialMeasurementsCache: this.rememberedRows() });
-    this.virtualizer = virtualizer;
-    this.stampedDisclosure = disclosure;
-    virtualizer.indexFromElement = (node) => this.rows_.indexOf(node.dataset.timelineKey ?? '');
-    virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
-      if (this.anchoredBottom()) return false;
-      const first = virtualizer.range?.startIndex;
-      return first !== undefined && item.index < first;
-    };
-    this.pinResizedRows(virtualizer);
-    this.release = virtualizer._didMount();
-    this.widen();
-    return virtualizer;
+  holdWrites(held: boolean): void {
+    if (held === this.writesHeld) return;
+    this.writesHeld = held;
+    if (!held) this.virtualizer?.refresh();
+  }
+
+  keepEnd(keeps: boolean): void {
+    if (keeps === this.keepsEnd) return;
+    this.keepsEnd = keeps;
+    const virtualizer = this.virtualizer;
+    if (!virtualizer) return;
+    if (!keeps && this.aim === undefined) virtualizer.cancelScroll();
+    virtualizer.configure(this.options());
+    if (keeps) this.toEnd();
   }
 
   remeasure(): void {
-    const previous = this.margin;
-    this.measureMargin();
-    if (this.margin === previous || !this.virtualizer) return;
-    this.virtualizer.setOptions(this.options());
-    this.virtualizer._willUpdate();
-    this.publish();
+    const virtualizer = this.virtualizer;
+    const margin = this.margin;
+    this.measureFeed();
+    if (!virtualizer || this.margin === margin) return;
+    virtualizer.configure(this.options());
+    virtualizer.refresh();
+    this.holdTail();
   }
 
   measureRow(node: HTMLElement): void {
-    this.measuring = true;
-    try {
-      this.virtualizer?.measureElement(node);
-    } finally {
-      this.measuring = false;
-    }
+    this.virtualizer?.measureRow(node);
   }
 
-  measureRowLater(key: string): void {
-    if (typeof requestAnimationFrame !== 'function') return;
-    const pending = this.remeasuring.get(key);
-    if (pending !== undefined) cancelAnimationFrame(pending);
-    this.remeasuring.set(
-      key,
-      requestAnimationFrame(() => {
-        this.remeasuring.delete(key);
-        const row = this.rowNode(key);
-        if (row?.isConnected) this.measureRow(row);
-      }),
-    );
+  mountRow(node: HTMLElement): void {
+    this.virtualizer?.mountRow(node);
+  }
+
+  readonly box = (key: string, node: HTMLElement): (() => void) => {
+    const held = { node, release: this.virtualizer?.box(key, node, true) };
+    this.boxes.set(key, held);
+    return () => {
+      if (this.boxes.get(key) !== held) return;
+      held.release?.();
+      this.boxes.delete(key);
+    };
+  };
+
+  keep(keys: readonly string[]): void {
+    this.kept.keep(keys);
+  }
+
+  press(control: HTMLElement): void {
+    const row = control.closest<HTMLElement>('[data-timeline-key]');
+    const key = row?.dataset.timelineKey;
+    this.pressed = row === null || key === undefined ? undefined : { key, node: control, row, inRow: offsetIn(control, row) };
   }
 
   holds(key: string): boolean {
@@ -191,27 +185,50 @@ export class TranscriptVirtualizer {
   scrollToRow(key: string, behavior: ScrollBehavior): void {
     const index = this.rows_.indexOf(key);
     if (index < 0) return;
-    this.dropPrepend();
-    this.chasing = false;
-    this.aim = { key, index, behavior };
-    this.virtualizer?.scrollToIndex(index, { align: 'start', behavior });
+    this.pressed = undefined;
+    this.aim = { key, index, behavior, landed: false };
+    if (this.virtualizer) this.travel(this.virtualizer, this.aim, true);
+  }
+
+  toEnd(): void {
+    const virtualizer = this.virtualizer;
+    this.aim = undefined;
+    if (!virtualizer || this.rows_.count === 0 || this.building) return;
+    if (virtualizer.getDistanceFromEnd() < 1) return;
+    virtualizer.scrollToEnd();
+  }
+
+  scrollBy(delta: number): void {
+    if (this.aim !== undefined) this.virtualizer?.cancelScroll();
+    this.aim = undefined;
+    this.pressed = undefined;
+    this.virtualizer?.scrollBy(delta);
   }
 
   letGo(): void {
     this.aim = undefined;
+    this.pressed = undefined;
+    this.virtualizer?.cancelScroll();
   }
 
-  private reaim(virtualizer: Virtualizer<HTMLElement, HTMLElement>): void {
-    const aim = this.aim;
-    if (aim === undefined) return;
-    const index = this.rows_.indexOf(aim.key);
-    if (index < 0) {
-      this.aim = undefined;
-      return;
-    }
-    if (index === aim.index) return;
-    aim.index = index;
-    virtualizer.scrollToIndex(index, { align: 'start', behavior: aim.behavior });
+  get offset(): number {
+    const top = this.virtualizer?.scrollOffset ?? 0;
+    return top > UNPLACED_PX ? this.end : top;
+  }
+
+  get end(): number {
+    const virtualizer = this.virtualizer;
+    if (!virtualizer) return 0;
+    const top = virtualizer.scrollOffset ?? 0;
+    return (top > UNPLACED_PX ? 0 : top) + virtualizer.getDistanceFromEnd();
+  }
+
+  get height(): number {
+    return this.virtualizer?.scrollRect?.height || (this.root?.clientHeight ?? 0);
+  }
+
+  get head(): number {
+    return this.offset - (this.virtualizer?.measurementsCache[0]?.start ?? 0);
   }
 
   rowAt(offset: number): number | undefined {
@@ -228,285 +245,263 @@ export class TranscriptVirtualizer {
     return item === undefined ? undefined : { start: item.start, end: item.end, landing: item.start - ROW_LANDING_GAP_PX };
   }
 
-  holdPrepend(): void {
-    this.prependLoading = true;
-    this.capturePrepend();
-  }
-
-  trackPrepend(): void {
-    if (!this.prependLoading) return;
-    this.capturePrepend();
-  }
-
-  releasePrepend(): void {
-    this.prependLoading = false;
-    this.applyPrepend();
-  }
-
-  clearPrepend(): void {
-    if (this.prependLoading) return;
-    this.dropPrepend();
-  }
-
-  anchorEnd(): void {
-    const virtualizer = this.virtualizer;
-    if (!virtualizer || this.rows_.count === 0) return;
-    if (this.pinning !== undefined) cancelAnimationFrame(this.pinning);
-    this.pinning = undefined;
-    this.pinned = [];
-    this.aim = undefined;
-    this.dropPrepend();
-    if (this.list) this.list.style.height = `${virtualizer.getTotalSize()}px`;
-    virtualizer.scrollToEnd();
-    this.chasing = true;
-  }
-
-  private dropPrepend(): void {
-    this.prependLoading = false;
-    this.prependAnchor = undefined;
-    if (this.prependFrame === undefined) return;
-    cancelAnimationFrame(this.prependFrame);
-    this.prependFrame = undefined;
-  }
-
   dispose(): void {
     this.remember();
     this.dropVirtualizer();
   }
 
-  private capturePrepend(): void {
-    const root = this.root;
-    if (!root || this.aim !== undefined) return;
-    const view = root.getBoundingClientRect();
-    const rows = this.rowNodes()
-      .map((element) => ({ key: element.dataset.timelineKey, rect: element.getBoundingClientRect() }))
-      .filter((row) => row.key && row.rect.bottom > view.top && row.rect.top < view.bottom)
-      .sort((left, right) => left.rect.top - right.rect.top);
-    const anchor = rows[0];
-    if (!anchor?.key) return;
-    this.prependAnchor = { key: anchor.key, offset: anchor.rect.top - view.top };
+  private build(root: HTMLElement, disclosure: number): Feed {
+    this.dropVirtualizer();
+    this.building = true;
+    try {
+      const virtualizer = new VirtualList({ ...this.options(), initialMeasurementsCache: this.rememberedRows() });
+      this.virtualizer = virtualizer;
+      this.stamped = { width: this.width, epoch: this.epoch, disclosure };
+      virtualizer.span(this.list);
+      for (const [key, held] of this.boxes) held.release = virtualizer.box(key, held.node, true);
+      const fonts = root.ownerDocument.fonts as FontFaceSet | undefined;
+      fonts?.addEventListener?.('loadingdone', this.fontsLoaded);
+      this.release = () => {
+        fonts?.removeEventListener?.('loadingdone', this.fontsLoaded);
+        virtualizer.dispose();
+      };
+      virtualizer.connect();
+    } finally {
+      this.building = false;
+    }
+    return this.virtualizer!;
   }
 
-  private applyPrepend(): void {
-    const root = this.root;
-    if (!root || !this.prependAnchor) return;
-    if (this.prependFrame !== undefined) cancelAnimationFrame(this.prependFrame);
-    let frames = 0;
-    let stable = 0;
-    const apply = () => {
-      this.prependFrame = undefined;
-      const anchor = this.prependAnchor;
-      if (!anchor) return;
-      const element = this.rowNode(anchor.key);
-      const delta = element ? element.getBoundingClientRect().top - root.getBoundingClientRect().top - anchor.offset : undefined;
-      if (delta !== undefined && Math.abs(delta) > PREPEND_SETTLE_PX) {
-        root.scrollTop += delta;
-        stable = 0;
-      } else {
-        stable += 1;
+  private readonly fontsLoaded = (): void => {
+    this.fonts += 1;
+    this.measureFeed();
+  };
+
+  private shifts(item: VirtualItem, delta: number, instance: Virtualizer<HTMLElement, HTMLElement>): boolean {
+    const pressed = this.pressed;
+    if (pressed !== undefined && pressed.key === String(item.key) && pressed.node.isConnected) {
+      const inRow = offsetIn(pressed.node, pressed.row);
+      const moved = inRow - pressed.inRow;
+      pressed.inRow = inRow;
+      return Math.abs(moved - delta) < Math.abs(moved);
+    }
+    return item.end <= (instance.scrollOffset ?? 0);
+  }
+
+  private moved(): void {
+    const virtualizer = this.virtualizer;
+    if (!virtualizer) return;
+    this.around.unland();
+    const held = this.anchor;
+    const now = this.anchorAt(virtualizer);
+    this.anchor = now;
+    let travel = 0;
+    if (held !== undefined && now !== undefined) {
+      const index = this.rows_.indexOf(held.key);
+      const item = index < 0 ? undefined : virtualizer.measurementsCache[index];
+      if (item !== undefined) travel = (virtualizer.scrollOffset ?? 0) - item.start - held.offset;
+    }
+    let reader = Math.abs(travel) >= MOVED_PX;
+    const aim = this.aim;
+    if (aim !== undefined && !aim.landed) {
+      if (aim.via !== undefined && Math.abs((virtualizer.scrollOffset ?? 0) - aim.via) < this.height) {
+        aim.via = undefined;
+        virtualizer.scrollToIndex(aim.index, { align: 'start', behavior: aim.behavior });
       }
-      frames += 1;
-      if (stable >= PREPEND_STABLE_FRAMES || frames >= PREPEND_MAX_FRAMES) {
-        if (!this.prependLoading) this.prependAnchor = undefined;
-        return;
-      }
-      this.prependFrame = requestAnimationFrame(apply);
+      const target = virtualizer.getOffsetForIndex(aim.index, 'start')?.[0];
+      aim.landed = target !== undefined && Math.abs((virtualizer.scrollOffset ?? 0) - target) < MOVED_PX;
+      reader = false;
+    } else if (aim !== undefined && reader) {
+      this.aim = undefined;
+    }
+    this.scrolled(reader);
+  }
+
+  private anchorAt(virtualizer: Feed): Anchor | undefined {
+    const top = virtualizer.scrollOffset;
+    if (top === null || top > UNPLACED_PX) return undefined;
+    const item = virtualizer.getVirtualItemForOffset(top);
+    return item === undefined ? undefined : { key: String(item.key), index: item.index, offset: top - item.start };
+  }
+
+  private survivor(virtualizer: Feed, lost: Anchor): string | undefined {
+    const laid = virtualizer.measurementsCache;
+    const survives = (index: number): string | undefined => {
+      const key = laid[index] === undefined ? undefined : String(laid[index]!.key);
+      return key !== undefined && this.rows_.indexOf(key) >= 0 ? key : undefined;
     };
-    this.prependFrame = requestAnimationFrame(apply);
+    for (let index = lost.index + 1; index < laid.length; index += 1) {
+      const key = survives(index);
+      if (key !== undefined) return key;
+    }
+    for (let index = lost.index - 1; index >= 0; index -= 1) {
+      const key = survives(index);
+      if (key !== undefined) return key;
+    }
+    return undefined;
   }
 
-  private pinResizedRows(virtualizer: Virtualizer<HTMLElement, HTMLElement>): void {
-    const resize = virtualizer.resizeItem;
-    virtualizer.resizeItem = (index: number, size: number) => {
-      const root = this.root;
-      const item = virtualizer.measurementsCache[index];
-      const held = item ? (virtualizer.itemSizeCache.get(item.key) ?? item.size) : undefined;
-      if (root && held !== undefined && Math.abs(size - held) > root.clientHeight) {
-        this.pinned = this.rows.map((row) => row.index);
-        if (this.pinning !== undefined) cancelAnimationFrame(this.pinning);
-        this.pinning = requestAnimationFrame(() => {
-          this.pinning = requestAnimationFrame(() => {
-            this.pinning = undefined;
-            this.pinned = [];
-          });
-        });
-      }
-      virtualizer.options.scrollEndThreshold = this.anchoredBottom() ? TRANSCRIPT_END_THRESHOLD_PX : Number.NEGATIVE_INFINITY;
-      const row = this.rows_.itemAt(index);
-      if (row !== undefined) this.stamps.set(row.key, { width: this.width, open: row.open ?? false });
-      resize(index, size);
-      if (this.anchoredBottom()) this.reanchorEnd();
-    };
+  private relocate(virtualizer: Feed, key: string): void {
+    const index = this.rows_.indexOf(key);
+    const start = virtualizer.measurementsCache[index]?.start;
+    if (start === undefined) return;
+    this.anchor = { key, index, offset: 0 };
+    if (Math.abs(start - (virtualizer.scrollOffset ?? 0)) >= 1) virtualizer.scrollToOffset(start);
   }
 
-  private reanchoring = false;
-
-  private reanchorEnd(): void {
-    if (this.reanchoring || this.gesturing()) return;
-    this.reanchoring = true;
-    queueMicrotask(() => {
-      this.reanchoring = false;
-      if (!this.anchoredBottom() || this.gesturing()) return;
-      this.anchorEnd();
-    });
-  }
-
-  private widen(): void {
-    if (typeof requestAnimationFrame !== 'function') {
-      this.overscan = OVERSCAN_ROWS;
+  private reaim(virtualizer: Feed): void {
+    const aim = this.aim;
+    if (aim === undefined) return;
+    const index = this.rows_.indexOf(aim.key);
+    if (index < 0) {
+      this.aim = undefined;
       return;
     }
-    if (this.widening !== undefined) cancelAnimationFrame(this.widening);
-    this.widening = requestAnimationFrame(() => {
-      this.widening = undefined;
-      if (!this.virtualizer || this.overscan === OVERSCAN_ROWS) return;
-      this.overscan = OVERSCAN_ROWS;
-      this.virtualizer.setOptions(this.options());
-      if (this.anchoredBottom() && !this.gesturing()) this.anchorEnd();
-      this.virtualizer._willUpdate();
-      this.publish();
-    });
+    if (index === aim.index) return;
+    aim.index = index;
+    aim.landed = false;
+    this.travel(virtualizer, aim);
   }
 
-  private options() {
+  private travel(virtualizer: Feed, aim: Aim, now = false): void {
+    const target = virtualizer.getOffsetForIndex(aim.index, 'start')?.[0];
+    const top = virtualizer.scrollOffset ?? 0;
+    const far = target !== undefined && Math.abs(target - top) > this.height;
+    aim.via = far && aim.behavior === 'smooth' ? target! - Math.sign(target! - top) * this.height : undefined;
+    if (aim.via === undefined) virtualizer.scrollToIndex(aim.index, { align: 'start', behavior: aim.behavior });
+    else virtualizer.scrollToOffset(aim.via);
+    if (!far) return;
+    const at = aim.via ?? target!;
+    const from = virtualizer.getVirtualItemForOffset(Math.min(at, target!))?.index ?? 0;
+    this.around.land(from, virtualizer.getVirtualItemForOffset(Math.max(at, target!) + this.height)?.index ?? from);
+    this.rewindow(virtualizer);
+    this.publish(now);
+  }
+
+  private rewindow(virtualizer: Feed): void {
+    virtualizer.configure(this.options());
+  }
+
+  private holdTail(): void {
+    if (this.keepsEnd) this.toEnd();
+  }
+
+  private options(): ListOptions {
     const model = this.rows_;
+    const keeps = this.keepsEnd;
     return {
       count: model.count,
       getScrollElement: () => this.root ?? null,
       estimateSize: (index: number) => model.itemAt(index)?.estimate ?? ESTIMATED_ROW_PX,
       getItemKey: this.itemKey,
-      overscan: this.overscan,
-      rangeExtractor: (range: Range) => {
-        const window = defaultRangeExtractor({ ...range, overscan: this.overscan });
-        const mounted =
-          this.pinned.length === 0
-            ? window
-            : [...new Set([...this.pinned, ...window])]
-                .filter((index) => index >= 0 && index < range.count)
-                .sort((left, right) => left - right);
-        return this.withLiveRows(mounted);
-      },
+      indexOf: (key) => this.rows_.indexOf(String(key)),
+      keyOf: (node) => node.dataset.timelineKey,
+      reuseOnMount: true,
+      isScrollWriteBlocked: () => this.writesHeld,
+      adjust: (item, delta, instance) => this.shifts(item, delta, instance),
+      rangeExtractor: (range: Range) => this.window(range),
       scrollMargin: this.margin,
       scrollPaddingStart: ROW_LANDING_GAP_PX,
       paddingEnd: this.clearance,
       anchorTo: 'end' as const,
-      followOnAppend: this.anchoredBottom(),
-      scrollEndThreshold: this.anchoredBottom() ? TRANSCRIPT_END_THRESHOLD_PX : Number.NEGATIVE_INFINITY,
-      initialOffset: () => (this.anchoredBottom() ? Number.MAX_SAFE_INTEGER : 0),
-      scrollToFn: (
-        offset: number,
-        options: { adjustments?: number; behavior?: ScrollBehavior },
-        instance: Virtualizer<HTMLElement, HTMLElement>,
-      ) => {
-        if (this.list) this.list.style.height = `${instance.getTotalSize()}px`;
-        if (this.chasing && options.behavior !== undefined && (!this.anchoredBottom() || this.gesturing())) return;
-        elementScroll(offset, options, instance);
+      followOnAppend: keeps,
+      scrollEndThreshold: keeps ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY,
+      initialOffset: () => (this.keepsEnd ? Number.MAX_SAFE_INTEGER : 0),
+      onMeasure: (node) => this.measured(node),
+      onResize: () => this.resized(),
+      onScroll: (_offset, scrolling) => {
+        if (scrolling) this.moved();
       },
-      observeElementRect: (instance: Virtualizer<HTMLElement, HTMLElement>, changed: (rect: Rect) => void) =>
-        observeElementRect(instance, (rect) => {
-          this.width = this.root?.clientWidth ?? 0;
-          changed(rect);
-        }),
-      observeElementOffset,
-      onChange: (_instance: Virtualizer<HTMLElement, HTMLElement>, sync: boolean) => this.publish(sync),
+      onChange: () => this.publish(),
     };
   }
 
-  private withLiveRows(mounted: number[]): number[] {
-    this.seenTick += 1;
-    for (const index of mounted) {
-      const item = this.rows_.itemAt(index);
-      if (item?.keepAlive !== true) continue;
-      const known = this.alive.get(item.key);
-      if (known === undefined) this.alive.set(item.key, { seen: this.seenTick, index });
-      else {
-        known.seen = this.seenTick;
-        known.index = index;
-      }
-    }
-    if (this.alive.size === 0) {
-      this.held = NO_KEYS;
-      return mounted;
-    }
-    let outside: LiveRow[] | undefined;
-    for (const [key, known] of this.alive) {
-      const index = this.liveRowAt(key, known.index);
-      if (index === undefined) {
-        this.alive.delete(key);
-        continue;
-      }
-      known.index = index;
-      if (!includes(mounted, index)) (outside ??= []).push({ key, seen: known.seen, index });
-    }
-    if (outside === undefined) {
-      this.held = NO_KEYS;
-      return mounted;
-    }
-    if (outside.length > KEEP_ALIVE_ROWS) {
-      outside.sort((left, right) => right.seen - left.seen);
-      for (const gone of outside.splice(KEEP_ALIVE_ROWS)) this.alive.delete(gone.key);
-    }
-    this.held = outside.map((row) => row.key);
-    return merged(
-      mounted,
-      outside.map((row) => row.index).sort((left, right) => left - right),
-    );
+  private resized(): void {
+    if (this.building) return;
+    this.measureFeed();
+    this.holdTail();
   }
 
-  private liveRowAt(key: string, hint: number): number | undefined {
-    const hinted = this.rows_.itemAt(hint);
-    if (hinted?.key === key) return hinted.keepAlive === true ? hint : undefined;
-    const found = this.rows_.indexOf(key);
-    return found >= 0 && this.rows_.itemAt(found)!.keepAlive === true ? found : undefined;
+  private measured(node: HTMLElement): void {
+    const key = node.dataset.timelineKey;
+    const item = key === undefined ? undefined : this.rows_.item(key);
+    if (key !== undefined && item !== undefined) this.stamps.set(key, { width: this.width, estimate: item.estimate, epoch: this.epoch });
   }
+
+  private window(range: Range): number[] {
+    const virtualizer = this.virtualizer;
+    const laid = virtualizer?.measurementsCache ?? [];
+    const frames = typeof requestAnimationFrame === 'function';
+    const paced = frames && virtualizer !== undefined && (this.aiming || virtualizer.isScrolling || this.around.pending);
+    const indexes = this.around.indexes(range, laid, this.height, paced, this.aiming);
+    if (frames && this.around.awaitsFrame) this.pacing ??= requestAnimationFrame(this.paceNext);
+    return this.kept.extend(indexes, this.rows_, range.count);
+  }
+
+  private get aiming(): boolean {
+    return this.aim !== undefined && !this.aim.landed;
+  }
+
+  private readonly paceNext = (): void => {
+    this.pacing = undefined;
+    this.around.frame();
+    const virtualizer = this.virtualizer;
+    if (!virtualizer || !this.around.pending) return;
+    if (this.aiming) {
+      this.pacing = requestAnimationFrame(this.paceNext);
+      return;
+    }
+    this.rewindow(virtualizer);
+    this.publish();
+  };
 
   private itemAt(key: string): ChatTimelineItem | undefined {
     const index = this.rows_.indexOf(key);
     return index < 0 ? undefined : this.rows_.itemAt(index);
   }
 
-  private reconcile(virtualizer: Virtualizer<HTMLElement, HTMLElement>, disclosure: number): boolean {
-    const width = this.width;
-    if (width === this.stampedWidth && disclosure === this.stampedDisclosure) return false;
-    this.stampedWidth = width;
-    this.stampedDisclosure = disclosure;
+  private fits(key: string, stamp: MeasuredStamp): boolean {
+    return stamp.width === this.width && stamp.epoch === this.epoch && this.itemAt(key)?.estimate === stamp.estimate;
+  }
+
+  private reconcile(virtualizer: Feed, disclosure: number): void {
+    const stamped = this.stamped;
+    if (this.width === stamped.width && this.epoch === stamped.epoch && disclosure === stamped.disclosure) return;
+    this.stamped = { width: this.width, epoch: this.epoch, disclosure };
     const mountedKeys = new Set(this.rows.map((row) => String(row.key)));
     let dropped = false;
     for (const [key, stamp] of this.stamps) {
-      const item = this.itemAt(key);
-      if (item !== undefined && stamp.width === width && (item.open ?? false) === stamp.open) continue;
-      if (item !== undefined && mountedKeys.has(key)) {
-        this.stamps.set(key, { width, open: item.open ?? false });
-        continue;
-      }
+      if (mountedKeys.has(key) || this.fits(key, stamp)) continue;
       this.stamps.delete(key);
       virtualizer.itemSizeCache.delete(key);
       dropped = true;
     }
     if (dropped) this.itemKey = (index) => this.rows_.keyAt(index) ?? index;
-    return mountedKeys.size > 0;
+  }
+
+  private freeze(virtualizer: Feed, anchor: Anchor): void {
+    const laid = virtualizer.measurementsCache;
+    const mountedKeys = new Set(this.rows.map((row) => row.key));
+    for (let index = 0; index < anchor.index && index < laid.length; index += 1) {
+      const item = laid[index];
+      if (item !== undefined && !mountedKeys.has(item.key)) virtualizer.itemSizeCache.set(item.key, item.size);
+    }
+    this.itemKey = (index) => this.rows_.keyAt(index) ?? index;
   }
 
   private measureMounted(): void {
-    for (const node of this.rowNodes()) this.measureRow(node);
+    this.virtualizer?.measureRows(this.rowNodes());
   }
 
   private rowNodes(): HTMLElement[] {
     return [...(this.root?.querySelectorAll<HTMLElement>('[data-timeline-key]') ?? [])];
   }
 
-  private rowNode(key: string): HTMLElement | undefined {
-    return this.rowNodes().find((node) => node.dataset.timelineKey === key);
-  }
-
   private rememberedRows(): VirtualItem[] {
     const thread = this.threadKey;
-    const root = this.root;
-    if (thread === null || !root) return [];
-    const width = this.width;
-    this.stampedWidth = width;
+    if (thread === null || !this.root || this.width === 0) return [];
     return this.memory
-      .measurements(thread, (key, stamp) => stamp.width === width && (this.itemAt(key)?.open ?? false) === stamp.open)
+      .measurements(thread, (key, stamp) => this.fits(key, stamp))
       .map((measured) => {
         this.stamps.set(String(measured.row.key), measured.stamp);
         return measured.row;
@@ -517,12 +512,16 @@ export class TranscriptVirtualizer {
     const virtualizer = this.virtualizer;
     if (!virtualizer) return;
     const commit = () => {
-      this.rows = virtualizer.getVirtualItems();
-      this.totalSize = virtualizer.getTotalSize();
+      let rows = virtualizer.getVirtualItems();
+      if (this.around.short(virtualizer.measurementsCache, this.height)) {
+        this.rewindow(virtualizer);
+        rows = virtualizer.getVirtualItems();
+      }
+      this.rows = rows;
       this.publishHeld();
       this.publishVisible(virtualizer.range);
     };
-    if (!now || this.measuring || this.flushing) {
+    if (!now || this.flushing) {
       commit();
       return;
     }
@@ -536,8 +535,9 @@ export class TranscriptVirtualizer {
 
   private publishHeld(): void {
     const held = this.heldKeys;
-    if (this.held.length === held.size && this.held.every((key) => held.has(key))) return;
-    this.heldKeys = new Set(this.held);
+    const now = this.kept.held;
+    if (now.length === held.size && now.every((key) => held.has(key))) return;
+    this.heldKeys = new Set(now);
   }
 
   private publishVisible(range: { startIndex: number; endIndex: number } | null): void {
@@ -548,11 +548,19 @@ export class TranscriptVirtualizer {
     this.visibleKeys = keys;
   }
 
-  private measureMargin(): void {
+  private measureFeed(): void {
     const root = this.root;
     const list = this.list;
     if (!root || !list) return;
     this.margin = list.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
+    const width = list.clientWidth;
+    const epoch = `${typeof devicePixelRatio === 'number' ? devicePixelRatio : 1}:${this.fonts}`;
+    if (width === this.width && epoch === this.epoch && this.type !== undefined) return;
+    this.width = width;
+    this.epoch = epoch;
+    this.type = feedType(root);
+    const metrics = feedMetrics(width, this.type);
+    if (!sameMetrics(metrics, this.metrics)) this.metrics = metrics;
   }
 
   private remember(): void {
@@ -567,54 +575,24 @@ export class TranscriptVirtualizer {
   }
 
   private dropVirtualizer(): void {
-    for (const frame of this.remeasuring.values()) cancelAnimationFrame(frame);
-    this.remeasuring.clear();
-    if (this.widening !== undefined) cancelAnimationFrame(this.widening);
-    this.widening = undefined;
-    if (this.prependFrame !== undefined) cancelAnimationFrame(this.prependFrame);
-    this.prependFrame = undefined;
-    this.prependAnchor = undefined;
-    this.prependLoading = false;
-    if (this.pinning !== undefined) cancelAnimationFrame(this.pinning);
-    this.pinning = undefined;
-    this.pinned = [];
-    this.chasing = false;
+    if (this.pacing !== undefined) cancelAnimationFrame(this.pacing);
+    this.pacing = undefined;
+    this.around.clear();
     this.aim = undefined;
-    this.alive.clear();
+    this.pressed = undefined;
+    this.anchor = undefined;
+    this.kept.clear();
     this.stamps.clear();
-    this.stampedWidth = 0;
-    this.stampedDisclosure = -1;
-    this.held = NO_KEYS;
+    this.stamped = { width: 0, epoch: '', disclosure: -1 };
     this.heldKeys = new Set();
     this.release?.();
     this.release = undefined;
     this.virtualizer = undefined;
     this.rows = [];
-    this.totalSize = 0;
     this.visibleKeys = [];
   }
 }
 
-function includes(sorted: readonly number[], value: number): boolean {
-  let low = 0;
-  let high = sorted.length - 1;
-  while (low <= high) {
-    const middle = (low + high) >> 1;
-    const at = sorted[middle]!;
-    if (at === value) return true;
-    if (at < value) low = middle + 1;
-    else high = middle - 1;
-  }
-  return false;
-}
-
-function merged(sorted: readonly number[], extra: readonly number[]): number[] {
-  const out: number[] = [];
-  let next = 0;
-  for (const value of sorted) {
-    while (next < extra.length && extra[next]! < value) out.push(extra[next++]!);
-    out.push(value);
-  }
-  while (next < extra.length) out.push(extra[next++]!);
-  return out;
+function offsetIn(node: HTMLElement, row: HTMLElement): number {
+  return node.getBoundingClientRect().top - row.getBoundingClientRect().top;
 }

@@ -80,9 +80,18 @@ export type WorldRow = {
   readonly cost: Cost;
 };
 
+export type NotRunReason = 'headed';
+export type NotRunRow = {
+  readonly type: 'not-run';
+  readonly run: string;
+  readonly file: string;
+  readonly name: string;
+  readonly reason: NotRunReason;
+};
+
 export type WorldTaken = Pick<WorldRow, 'kind' | 'key' | 'built' | 'own' | 'cost'>;
 
-export type Row = FileRow | TestRow | RefusalRow | WorldRow | Readonly<Record<string, unknown> & { type: string }>;
+export type Row = FileRow | TestRow | RefusalRow | WorldRow | NotRunRow | Readonly<Record<string, unknown> & { type: string }>;
 
 type Span = { readonly item: Item; readonly start: Meter; inner: Cost };
 
@@ -215,6 +224,9 @@ export const makeLedger = (options: LedgerOptions) => {
     },
     refusal(row: Omit<RefusalRow, 'type' | 'run'>): void {
       push({ type: 'refusal', run: options.run().root, ...row, file: relative(options.repo, row.file) });
+    },
+    notRun(file: string, name: string, reason: NotRunReason): void {
+      push({ type: 'not-run', run: options.run().root, file: relative(options.repo, file), name, reason });
     },
     world(taken: WorldTaken): void {
       push({

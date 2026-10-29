@@ -58,6 +58,8 @@ type DoorParams = {
   readonly hostSourcePath?: string;
   readonly everySpan?: boolean;
   readonly drivers?: readonly DriverId[];
+  readonly artifactOrigin?: string;
+  readonly sandboxPort?: number;
 };
 
 type Seams = {
@@ -197,6 +199,8 @@ const built = Effect.fnUntraced(
         databasePath: join(data, 'tagma.sqlite'),
         tokensPath: join(data, 'tokens.json'),
         attachmentsPath: join(data, 'attachments'),
+        artifactOrigin: options.artifactOrigin,
+        sandboxPort: options.sandboxPort,
         sourcePath: serverPath,
         hostSourcePath: options.hostSourcePath,
         hostBundlePath,
@@ -319,6 +323,8 @@ const paramsOf = (options: WorldOptions): DoorParams => ({
   hostSourcePath: options.hostSourcePath,
   everySpan: options.everySpan,
   drivers: options.drivers,
+  artifactOrigin: options.artifactOrigin,
+  sandboxPort: options.sandboxPort,
 });
 
 const lends = (options: WorldOptions) => SEAMS.some((name) => options[name] !== undefined);

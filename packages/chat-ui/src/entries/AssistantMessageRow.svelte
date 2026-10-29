@@ -20,7 +20,6 @@
       cacheKey: entry.id,
       streaming: entry.assistantState === 'streaming',
       text: entry.text,
-      onRendered: () => context.contentRendered(entry.id),
     })}
   {/if}
   <MessageMeta

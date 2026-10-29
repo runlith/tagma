@@ -51,7 +51,10 @@ type Side = 'tree' | 'base';
 type Analysis = { readonly history: readonly string[]; readonly forms: readonly (typeof Form.Type)[] };
 
 const candidate = (source: string, path: string): boolean =>
-  path.startsWith(`${source}/`) && path.endsWith('.ts') && !/\.(test|itest|stest|bench)\.ts$/.test(path) && !path.includes('/testing/');
+  path.startsWith(`${source}/`) &&
+  path.endsWith('.ts') &&
+  !/\.(test|itest|e2e|stest|spec|bench|fixture)\.ts$/.test(path) &&
+  !path.includes('/testing/');
 
 const declares = (text: string): boolean =>
   text.includes('\\') ||

@@ -1,33 +1,34 @@
-import { canScroll, type ScrollState, wheelCrossesOut, wheelDistance } from '@runlith/scroll-follow/scrollFollow';
-import { FollowingViewport, type Hold, type ScrollOutcome } from '@runlith/scroll-follow/FollowingViewport.svelte';
+import { canScroll, type ScrollState, wheelCrossesOut, wheelDistance } from '@runlith/virtual-list/scrollFollow';
+import { FollowingViewport, type Hold, type ScrollOutcome } from '@runlith/virtual-list/FollowingViewport.svelte';
 import { tick } from 'svelte';
 import type { FeedMemory } from './FeedMemory';
 import { inView, type ReadingView, readingLine, transcriptCursorMessageId } from './transcriptCursor';
 import { TRANSCRIPT_END_THRESHOLD_PX, TranscriptVirtualizer } from './TranscriptVirtualizer.svelte';
 import { messageOffsetTarget } from './transcriptMessageNavigation';
 
-const HEAD_REACH_PX = 200;
-const GESTURE_WINDOW_MS = 250;
+const HEAD_REACH_VIEWPORTS = 3;
+const WHEEL_PAUSE_MS = 300;
 const SCROLL_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
+
+type Page = () => Promise<boolean> | null;
 
 export class TranscriptViewport {
   private cursorId = $state<string | undefined>();
   private pinnedId = $state<string | undefined>();
   private shortId = $state<string | undefined>();
   private endGap = 0;
-  private messages: () => readonly { readonly id: string }[] = () => [];
-  private head: (() => boolean) | undefined;
-  private fill: (() => boolean) | undefined;
-  private scrolled: (() => void) | undefined;
-  private gestured: (() => void) | undefined;
-  private landed: ((entryId: string) => void) | undefined;
+  private messages = $state<() => readonly { readonly id: string }[]>(() => []);
+  private head: Page | undefined;
+  private fill: Page | undefined;
   private clearance = 0;
-  private gestureAt = Number.NEGATIVE_INFINITY;
-  private inputAt = Number.NEGATIVE_INFINITY;
-  private historyRequested = false;
-  private historyDirection = 0;
-  private gestureRoot: HTMLElement | undefined;
+  private paging = false;
+  private refused = false;
+  private request = 0;
+  private wheelAt = Number.NEGATIVE_INFINITY;
+  private readerMoved = false;
+  private inputRoot: HTMLElement | undefined;
   private pressing = false;
+  private touchY: number | undefined;
   private previousEntryCount = 0;
   private previousActiveRunId: string | null | undefined;
   private previousWorking = false;
@@ -35,19 +36,21 @@ export class TranscriptViewport {
   readonly window: TranscriptVirtualizer;
   private readonly followingViewport = new FollowingViewport({
     autoFollows: () => true,
+    toTail: () => this.window.toEnd(),
     bottomThreshold: TRANSCRIPT_END_THRESHOLD_PX,
     overflowAnchor: 'none',
-    movedByReader: () => this.gesturing,
+    listens: false,
+    movedByReader: () => this.readerMoved,
     onScroll: (outcome) => this.readScroll(outcome),
     onMeasure: (root) => {
-      this.readPosition(root);
-      this.scrolled?.();
+      this.readPosition();
       this.askForOlder(root);
     },
+    onAnchor: (anchored) => this.window.keepEnd(anchored),
   });
 
   constructor(memory: FeedMemory) {
-    this.window = new TranscriptVirtualizer(memory, { gesturing: () => this.gesturing });
+    this.window = new TranscriptVirtualizer(memory, (reader) => this.scrolled(reader));
   }
 
   openThread(key: string | null): void {
@@ -58,10 +61,9 @@ export class TranscriptViewport {
     this.pinnedId = undefined;
     this.shortId = undefined;
     this.endGap = 0;
-    this.gestureAt = Number.NEGATIVE_INFINITY;
-    this.inputAt = Number.NEGATIVE_INFINITY;
-    this.historyRequested = false;
-    this.historyDirection = 0;
+    this.paging = false;
+    this.refused = false;
+    this.request += 1;
     this.touchY = undefined;
     this.previousEntryCount = 0;
     this.previousActiveRunId = undefined;
@@ -78,22 +80,18 @@ export class TranscriptViewport {
   }
 
   get anchored(): boolean {
-    return this.followingViewport.following && !this.followingViewport.held;
+    return this.followingViewport.anchored;
   }
 
   get state(): ScrollState {
     return this.followingViewport.state;
   }
 
-  get gesturing(): boolean {
-    return Date.now() - this.gestureAt < GESTURE_WINDOW_MS;
-  }
-
   attach(root: HTMLElement | undefined): void {
     this.followingViewport.attach(root);
-    if (root === this.gestureRoot) return;
-    this.releaseGestures();
-    this.gestureRoot = root;
+    if (root === this.inputRoot) return;
+    this.releaseInput();
+    this.inputRoot = root;
     if (!root) return;
     root.addEventListener('wheel', this.onWheel, { passive: true });
     root.addEventListener('touchstart', this.onTouchStart, { passive: true });
@@ -101,7 +99,6 @@ export class TranscriptViewport {
     root.addEventListener('touchend', this.onTouchEnd, { passive: true });
     root.addEventListener('touchcancel', this.onTouchEnd, { passive: true });
     root.addEventListener('pointerdown', this.onPointer, { passive: true });
-    root.addEventListener('pointermove', this.onPointer, { passive: true });
     root.addEventListener('keydown', this.onKeyDown, { passive: true });
   }
 
@@ -117,27 +114,25 @@ export class TranscriptViewport {
 
   scrollToBottom(force: boolean): void {
     this.followingViewport.scrollToBottom(force);
-    if (this.anchored) this.window.anchorEnd();
   }
 
   resume(): void {
     this.clearPinned();
     this.shortId = undefined;
     this.endGap = 0;
-    this.cursorId = undefined;
     this.followingViewport.resume();
-    this.window.anchorEnd();
+    this.window.toEnd();
+    this.readPosition();
   }
 
   pause(): void {
     this.followingViewport.pause();
   }
 
-  scrollBy(delta: number, starts?: boolean): void {
-    const root = this.viewport;
-    if (!root || delta === 0) return;
-    this.markGesture(root, delta, starts);
-    root.scrollTop += delta;
+  scrollBy(delta: number): void {
+    if (!this.inputRoot || delta === 0) return;
+    this.heard(delta, false);
+    this.window.scrollBy(delta);
   }
 
   resized(): void {
@@ -145,53 +140,24 @@ export class TranscriptViewport {
   }
 
   syncSelection(selection: Selection | null, content: HTMLElement): void {
-    const held = this.followingViewport.held;
     this.followingViewport.syncSelection(selection, content);
-    if (held && !this.followingViewport.held) this.scrollToBottom(false);
   }
 
   useMessages(read: () => readonly { readonly id: string }[]): void {
     this.messages = read;
   }
 
-  useHead(reach: () => boolean): void {
-    this.head = reach;
+  useHead(page: Page): void {
+    this.head = page;
   }
 
-  useFill(fill: () => boolean): void {
-    this.fill = fill;
-  }
-
-  private askForOlder(root: HTMLElement): void {
-    if (this.historyRequested || this.historyDirection > 0) return;
-    const metrics = { clientHeight: root.clientHeight, scrollHeight: root.scrollHeight, scrollTop: root.scrollTop };
-    if (this.following) {
-      if (!canScroll(metrics)) this.historyRequested = this.fill?.() ?? false;
-      return;
-    }
-    if (this.gesturing && metrics.scrollTop < HEAD_REACH_PX) this.historyRequested = this.head?.() ?? false;
-  }
-
-  useScrolled(read: () => void): void {
-    this.scrolled = read;
-  }
-
-  useGesture(moved: () => void): void {
-    this.gestured = moved;
-  }
-
-  useContent(landed: (entryId: string) => void): void {
-    this.landed = landed;
-  }
-
-  contentRendered(entryId: string): void {
-    this.landed?.(entryId);
+  useFill(page: Page): void {
+    this.fill = page;
   }
 
   select(id: string, behavior: ScrollBehavior = 'smooth'): void {
     const root = this.followingViewport.viewport;
     if (!root || !this.window.holds(id)) return;
-    this.gestureAt = Number.NEGATIVE_INFINITY;
     this.shortId = undefined;
     this.pin(id);
     this.followingViewport.pause();
@@ -210,7 +176,7 @@ export class TranscriptViewport {
   }
 
   get currentMessageId(): string | undefined {
-    return this.pinnedId ?? this.shortId ?? this.cursorId;
+    return this.pinnedId ?? this.shortId ?? (this.following ? this.messages().at(-1)?.id : this.cursorId);
   }
 
   syncClearance(clearance: number): void {
@@ -227,36 +193,38 @@ export class TranscriptViewport {
     const runChanged = activeRunId && activeRunId !== this.previousActiveRunId;
     this.previousEntryCount = entryCount;
     this.previousActiveRunId = activeRunId;
-    if ((runChanged || entriesChanged) && this.following) {
-      this.clearPinned();
-      this.scrollToBottom(true);
-      return;
-    }
-    if (this.following) this.followingViewport.scrollToBottom(false);
+    if ((runChanged || entriesChanged) && this.following) this.clearPinned();
   }
 
   dispose(): void {
-    this.releaseGestures();
+    this.releaseInput();
     this.unwatchPress();
-    this.gestureRoot = undefined;
+    this.inputRoot = undefined;
     this.window.dispose();
     this.followingViewport.dispose();
   }
 
+  private scrolled(reader: boolean): void {
+    this.readerMoved = reader;
+    this.followingViewport.scrolled();
+    this.readPosition();
+  }
+
   private readonly onWheel = (event: WheelEvent): void => {
     if (event.ctrlKey || event.defaultPrevented) return;
-    const root = this.gestureRoot;
+    const root = this.inputRoot;
     if (!root) return;
     const delta = wheelDistance({ deltaY: event.deltaY, deltaMode: event.deltaMode, rootHeight: root.clientHeight });
     if (delta === 0) return;
-    this.markGesture(event.target, delta);
+    const starts = event.timeStamp - this.wheelAt >= WHEEL_PAUSE_MS;
+    this.wheelAt = event.timeStamp;
+    this.input(event.target, delta, starts);
   };
-
-  private touchY: number | undefined;
 
   private readonly onTouchStart = (event: TouchEvent): void => {
     this.touchY = event.touches.length === 1 ? event.touches[0]?.clientY : undefined;
-    if (this.touchY !== undefined) this.inputAt = Number.NEGATIVE_INFINITY;
+    this.refused = false;
+    this.window.letGo();
   };
 
   private readonly onTouchMove = (event: TouchEvent): void => {
@@ -266,7 +234,7 @@ export class TranscriptViewport {
     if (y === undefined || previous === undefined) return;
     const delta = previous - y;
     if (delta === 0) return;
-    this.markGesture(event.target, delta, this.inputAt === Number.NEGATIVE_INFINITY);
+    this.input(event.target, delta, false);
   };
 
   private readonly onTouchEnd = (): void => {
@@ -274,15 +242,16 @@ export class TranscriptViewport {
   };
 
   private readonly onPointer = (event: PointerEvent): void => {
-    if (event.target !== this.gestureRoot || event.buttons !== 1) return;
-    if (event.type === 'pointerdown') this.press();
-    this.markGesture(event.target, 0, event.type === 'pointerdown');
+    if (event.target !== this.inputRoot || event.buttons !== 1) return;
+    this.press();
+    this.input(event.target, 0, true);
   };
 
   private press(): void {
     this.followingViewport.hold('press');
     if (this.pressing) return;
     this.pressing = true;
+    this.window.holdWrites(true);
     window.addEventListener('pointerup', this.onRelease, true);
     window.addEventListener('pointercancel', this.onRelease, true);
     window.addEventListener('blur', this.onRelease);
@@ -296,6 +265,7 @@ export class TranscriptViewport {
   private unwatchPress(): void {
     if (!this.pressing) return;
     this.pressing = false;
+    this.window.holdWrites(false);
     window.removeEventListener('pointerup', this.onRelease, true);
     window.removeEventListener('pointercancel', this.onRelease, true);
     window.removeEventListener('blur', this.onRelease);
@@ -303,7 +273,6 @@ export class TranscriptViewport {
 
   private release(hold: Hold): void {
     this.followingViewport.release(hold);
-    if (!this.followingViewport.held) this.scrollToBottom(false);
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
@@ -312,20 +281,16 @@ export class TranscriptViewport {
     const target = event.target;
     if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, button'))) return;
     const upward = event.key === 'ArrowUp' || event.key === 'PageUp' || event.key === 'Home' || (event.key === ' ' && event.shiftKey);
-    this.markGesture(target, upward ? -1 : 1, !event.repeat);
+    this.input(target, upward ? -1 : 1, !event.repeat);
   };
 
   private readScroll(outcome: ScrollOutcome): void {
-    const root = this.viewport;
-    if (root && (outcome === 'reader-moved' || outcome === 'at-bottom')) {
-      this.endGap = Math.max(0, root.scrollHeight - root.clientHeight - root.scrollTop);
-    }
-    if (outcome === 'reader-moved' && this.gesturing) this.gestureAt = Date.now();
-    if (outcome === 'reader-moved' || (outcome === 'at-bottom' && this.gesturing)) this.clearPinned();
+    if (outcome === 'reader-moved' || outcome === 'at-bottom') this.endGap = this.window.end - this.window.offset;
+    if (outcome === 'reader-moved' || (outcome === 'at-bottom' && this.readerMoved)) this.clearPinned();
   }
 
-  private markGesture(target: EventTarget | null, delta: number, starts?: boolean): void {
-    const root = this.gestureRoot;
+  private input(target: EventTarget | null, delta: number, starts: boolean): void {
+    const root = this.inputRoot;
     if (!root) return;
     const nested = target instanceof Element ? target.closest('[data-scrollable]') : null;
     if (nested instanceof HTMLElement && nested !== root) {
@@ -337,20 +302,50 @@ export class TranscriptViewport {
       });
       if (!crosses) return;
     }
-    const now = Date.now();
-    if (starts ?? now - this.inputAt >= GESTURE_WINDOW_MS) this.historyRequested = false;
-    this.inputAt = now;
-    this.gestureAt = now;
-    this.historyDirection = Math.sign(delta);
     this.window.letGo();
-    this.followingViewport.gesture(delta);
-    if (delta > 0 && this.following) this.clearPinned();
-    this.gestured?.();
-    this.followingViewport.scheduleState(root);
+    this.heard(delta, starts);
   }
 
-  private releaseGestures(): void {
-    const root = this.gestureRoot;
+  private heard(delta: number, starts: boolean): void {
+    if (starts) this.refused = false;
+    this.followingViewport.gesture(delta);
+    if (delta > 0 && this.following) this.clearPinned();
+    if (this.inputRoot) this.followingViewport.scheduleState(this.inputRoot);
+  }
+
+  private askForOlder(root: HTMLElement): void {
+    if (this.paging || this.refused) return;
+    if (this.following) {
+      if (!canScroll({ clientHeight: root.clientHeight, scrollHeight: root.scrollHeight, scrollTop: root.scrollTop }))
+        this.page(this.fill, true);
+      return;
+    }
+    if (this.window.head < HEAD_REACH_VIEWPORTS * root.clientHeight) this.page(this.head, false);
+  }
+
+  private page(request: Page | undefined, once: boolean): void {
+    const asked = request?.();
+    if (!asked) return;
+    const token = ++this.request;
+    this.paging = true;
+    void asked.then(
+      (loaded) => {
+        if (token !== this.request) return;
+        this.paging = false;
+        if (!loaded || once) this.refused = true;
+        const root = this.viewport;
+        if (loaded && root) this.followingViewport.scheduleState(root);
+      },
+      () => {
+        if (token !== this.request) return;
+        this.paging = false;
+        this.refused = true;
+      },
+    );
+  }
+
+  private releaseInput(): void {
+    const root = this.inputRoot;
     if (!root) return;
     root.removeEventListener('wheel', this.onWheel);
     root.removeEventListener('touchstart', this.onTouchStart);
@@ -358,7 +353,6 @@ export class TranscriptViewport {
     root.removeEventListener('touchend', this.onTouchEnd);
     root.removeEventListener('touchcancel', this.onTouchEnd);
     root.removeEventListener('pointerdown', this.onPointer);
-    root.removeEventListener('pointermove', this.onPointer);
     root.removeEventListener('keydown', this.onKeyDown);
   }
 
@@ -371,25 +365,26 @@ export class TranscriptViewport {
     this.pinnedId = undefined;
   }
 
-  private readPosition(root: HTMLElement): void {
-    if (this.following) this.endGap = 0;
+  private readPosition(): void {
     const view: ReadingView = {
-      scrollTop: root.scrollTop,
-      clientHeight: root.clientHeight,
+      scrollTop: this.window.offset,
+      clientHeight: this.window.height,
       clearance: this.clearance,
-      endGap: this.endGap,
+      endGap: this.following ? 0 : this.endGap,
     };
-    this.readShort(root, view);
+    if (this.following) this.endGap = 0;
+    this.readShort(view);
+    if (this.following) return;
     const row = this.window.rowAt(readingLine(view));
     this.cursorId =
       row === undefined ? undefined : transcriptCursorMessageId({ messages: this.messages(), rowOf: (id) => this.window.rowOf(id), row });
   }
 
-  private readShort(root: HTMLElement, view: ReadingView): void {
+  private readShort(view: ReadingView): void {
     const pinned = this.pinnedId;
     if (pinned !== undefined) {
       const span = this.window.rowSpan(pinned);
-      this.shortId = span !== undefined && span.landing > root.scrollHeight - root.clientHeight + 1 ? pinned : undefined;
+      this.shortId = span !== undefined && span.landing > this.window.end + 1 ? pinned : undefined;
       return;
     }
     const short = this.shortId;

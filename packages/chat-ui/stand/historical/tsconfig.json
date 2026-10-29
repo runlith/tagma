@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "rootDir": "../../../../..",
+    "paths": {
+      "@feed/*": ["../../../../../feed-stand-base-c76a2289/packages/chat-ui/src/*"],
+      "@runlith/markdown/render": ["../../../../../feed-stand-base-c76a2289/packages/markdown/src/render.ts"]
+    },
+    "tsBuildInfoFile": "../../dist/.historical.tsbuildinfo"
+  },
+  "files": ["./Code.svelte", "./Markdown.svelte", "./reach.ts"],
+  "include": [],
+  "exclude": []
+}

@@ -33,6 +33,8 @@ let app: TestApp | undefined;
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(720);
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(240);
+  vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(720);
+  vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(240);
 });
 
 afterEach(() => {

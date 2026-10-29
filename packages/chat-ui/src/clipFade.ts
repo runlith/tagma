@@ -24,13 +24,23 @@ export function clampFade(report: (clipped: boolean) => void): (element: HTMLEle
 }
 
 export function clipFade(element: HTMLElement): () => void {
-  measure(element);
-  if (typeof ResizeObserver === 'undefined') return () => undefined;
+  if (typeof ResizeObserver === 'undefined') {
+    measure(element);
+    return () => undefined;
+  }
   observer ??= new ResizeObserver((entries) => {
-    for (const entry of entries) measure(entry.target);
+    const clipped = entries.map((entry) => entry.target.scrollWidth > entry.target.clientWidth);
+    entries.forEach((entry, index) => entry.target.toggleAttribute('data-clipped', clipped[index]));
   });
-  observer.observe(element);
-  const changes = typeof MutationObserver === 'undefined' ? null : new MutationObserver(() => measure(element));
+  const sized = observer;
+  sized.observe(element);
+  const changes =
+    typeof MutationObserver === 'undefined'
+      ? null
+      : new MutationObserver(() => {
+          sized.unobserve(element);
+          sized.observe(element);
+        });
   changes?.observe(element, { childList: true, characterData: true, subtree: true });
   return () => {
     observer?.unobserve(element);

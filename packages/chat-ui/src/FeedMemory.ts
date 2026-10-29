@@ -6,7 +6,8 @@ export type Disclosure = Readonly<Record<string, Readonly<Record<string, boolean
 
 export type MeasuredStamp = {
   readonly width: number;
-  readonly open: boolean;
+  readonly estimate: number;
+  readonly epoch: string;
 };
 
 export type Measured = {

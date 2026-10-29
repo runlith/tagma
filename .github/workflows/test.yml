@@ -68,3 +68,68 @@ jobs:
             echo "TAGMA_${name}_SHA256=$(shasum -a 256 "$binary" | cut -d' ' -f1)" >> "$GITHUB_ENV"
           done
       - run: ${{ matrix.run }}
+
+  e2e:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      E2E_LANES: chromium,webkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          native: 'true'
+      - run: bun apps/tagma/server/scripts/fetch-browser.ts
+      - run: bun --cwd packages/e2e x playwright-core install webkit
+      - run: bun run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          path: /tmp/runlith-test/reports
+
+  e2e-electron:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      E2E_LANES: electron
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          native: 'true'
+      - name: hidden Electron fixture
+        run: bun run --cwd packages/e2e test:e2e
+      - name: headed window-behavior examples
+        run: |
+          bun run --cwd packages/window-behavior build
+          bun node_modules/.bin/testbed e2e --headed --parallel=1 packages/window-behavior/e2e/window-behavior.e2e.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-electron-report
+          path: /tmp/runlith-test/reports
+
+  e2e-ios:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      E2E_LANES: ios
+      E2E_IOS_RUNTIMES: '26'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          native: 'true'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.12'
+      - name: pinned native Simulator tools and Safari template
+        run: bun packages/e2e/scripts/fetch-ios.ts
+      - run: xcrun simctl list runtimes
+      - run: bun run test:e2e --parallel=1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-ios-report
+          path: /tmp/runlith-test/reports

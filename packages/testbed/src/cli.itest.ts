@@ -57,6 +57,31 @@ export default class {
   }
 });
 
+test('e2e preserves an explicit split randomization seed', async () => {
+  const dir = join(process.env['TMPDIR']!, `seed-${crypto.randomUUID()}`);
+  mkdirSync(dir);
+  writeFileSync(join(dir, 'sample.e2e.ts'), "import { test } from 'bun:test'; test('page-mid-fling', () => {});");
+  const report = join(dir, 'report.jsonl');
+  const run = Bun.spawn(
+    [process.execPath, CLI, 'e2e', './sample.e2e.ts', '--test-name-pattern', 'page-mid-fling', '--randomize', '--seed', '1'],
+    {
+      cwd: dir,
+      env: { ...process.env, RUNLITH_TEST_REPORT: report },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  );
+  const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
+  expect(code, stdout + stderr).toBe(0);
+  const row = readFileSync(report, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { type: string; seed?: number; command?: string })
+    .find((entry) => entry.type === 'run');
+  expect(row?.seed).toBe(1);
+  expect(row?.command?.match(/--seed(?:=|\s+)/g)).toHaveLength(1);
+});
+
 test('the run report names a nested test as the runner prints it, outer describe first', async () => {
   const dir = join(process.env['TMPDIR']!, `plant-${crypto.randomUUID()}`);
   mkdirSync(dir);

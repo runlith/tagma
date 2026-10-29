@@ -9,6 +9,8 @@ export class ChunkedList<T> {
   private tree: number[] = [0];
   private base = 0;
   private top = 0;
+  private seen: Chunk<T> | undefined;
+  private seenStart = 0;
 
   constructor(private readonly keyOf: (item: T) => string) {}
 
@@ -18,7 +20,12 @@ export class ChunkedList<T> {
 
   at(index: number): T | undefined {
     if (index < 0 || index >= this.total) return undefined;
+    const seen = this.seen;
+    if (seen !== undefined && index >= this.seenStart && index < this.seenStart + seen.items.length)
+      return seen.items[index - this.seenStart];
     const chunk = this.locate(index);
+    this.seen = chunk;
+    this.seenStart = this.base;
     return chunk.items[index - this.base];
   }
 
@@ -54,6 +61,7 @@ export class ChunkedList<T> {
   }
 
   splice(from: number, removed: number, inserted: readonly T[]): T[] {
+    this.seen = undefined;
     const at = Math.min(Math.max(from, 0), this.total);
     const count = Math.min(removed, this.total - at);
     if (this.chunks.length === 0) this.open(0);
@@ -100,6 +108,7 @@ export class ChunkedList<T> {
   }
 
   clear(): void {
+    this.seen = undefined;
     this.chunks = [];
     this.owners.clear();
     this.total = 0;

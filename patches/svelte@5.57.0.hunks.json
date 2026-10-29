@@ -42,6 +42,10 @@
         { "package": "packages/layer", "file": "src/svelte/passed-guard.svelte.test.ts" },
         { "package": "apps/tagma/app", "file": "src/lib/features/threads/Column.svelte.test.ts", "names": "leaves when the page" }
       ]
+    },
+    "11-template-document": {
+      "markers": ["(document.importNode(node, true))"],
+      "tests": [{ "package": "packages/layer", "file": "src/svelte/template-document.test.ts" }]
     }
   }
 }

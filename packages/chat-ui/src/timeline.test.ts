@@ -1,5 +1,6 @@
 import type { ToolDisplay } from '@runlith/agent/tool/display';
 import { describe, expect, test } from 'vitest';
+import { DESKTOP_METRICS } from './rowEstimate';
 import type { ActivityEntry } from './activity';
 import type { ChatEntry } from './entries';
 import { CHAT_TAIL_ITEMS, type ChatTimelineItem, stretchOnScreen, timelineBodyArrivesLate } from './timeline';
@@ -92,6 +93,7 @@ const guidance = (id: string, runId = 'run-1'): ChatEntry => ({
 
 function reader(expanded: (key: string) => boolean, stretches: 'newest' | 'all' = 'newest') {
   return {
+    metrics: DESKTOP_METRICS,
     expanded: (key: string) => expanded(key),
     stretchDefault: (_key: string, newest: boolean) => stretches === 'all' || newest,
     toolOpen: () => undefined,
@@ -100,6 +102,7 @@ function reader(expanded: (key: string) => boolean, stretches: 'newest' | 'all' 
 
 function untouched(stretches: 'newest' | 'all' = 'newest') {
   return {
+    metrics: DESKTOP_METRICS,
     expanded: (_key: string, fallback: boolean) => fallback,
     stretchDefault: (_key: string, newest: boolean) => stretches === 'all' || newest,
     toolOpen: () => undefined,
@@ -728,6 +731,44 @@ describe('rewound turns in the timeline', () => {
       const shown = chain();
       for (const entries of steps) expect(shown.show(entries, view)).toEqual(chain().show(entries, view));
     }
+  });
+});
+
+describe('a long feed whose running call settles', () => {
+  test('every row stays found by its key after the call moves from the live tail into the body in one sync', () => {
+    const shown = chain({ id: 'run-1', phase: 'working' });
+    const before = [user('u', 'run-1'), ...Array.from({ length: 10 }, (_, at) => assistant(`a${at}`))];
+    const after = Array.from({ length: 200 }, (_, at) => assistant(`b${at}`));
+    const more = Array.from({ length: 50 }, (_, at) => assistant(`c${at}`));
+    shown.show([...before, tool('x', { toolState: 'input-available' }), ...after]);
+
+    const items = shown.show([...before, tool('x'), ...after, ...more]);
+
+    expect(items.map((item) => shown.rows.indexOf(item.key))).toEqual(items.map((_, at) => at));
+  });
+
+  test('every row stays found by its key after the call settles and runs again within one feed sync', () => {
+    const store = new ChatFold();
+    const feed = new VisibleFeed(kinds);
+    const rows = new TimelineFold(kinds);
+    const run: FeedRun = { id: 'run-1', phase: 'working' };
+    const view = untouched();
+    const after = Array.from({ length: 210 }, (_, at) => assistant(`b${at}`));
+    const more = Array.from({ length: 50 }, (_, at) => assistant(`c${at}`));
+    const running = tool('x', { toolState: 'input-available' });
+    const sync = () => {
+      feed.sync(store, true, run);
+      rows.sync(feed, view, { runId: run.id, status: true }, []);
+      return rows.slice();
+    };
+    store.entries = [running, ...after];
+    sync();
+    store.entries = [tool('x'), ...after, ...more];
+    store.entries = [running, ...after, ...more];
+
+    const items = sync();
+
+    expect(items.map((item) => rows.indexOf(item.key))).toEqual(items.map((_, at) => at));
   });
 });
 

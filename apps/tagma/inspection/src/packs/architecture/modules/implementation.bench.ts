@@ -115,7 +115,7 @@ const held: ParseMemo = new Map();
 inspect(inspection, treeOf(repository, held), selected);
 const memoised = median(Array.from({ length: RUNS }, () => timed(() => inspect(inspection, treeOf(repository, held), selected))));
 
-const edited = selected.filter((path) => /\.ts$/.test(path) && !/\.(test|itest|stest|spec|bench)\./.test(path)).slice(0, 4);
+const edited = selected.filter((path) => /\.ts$/.test(path) && !/\.(test|itest|e2e|stest|spec|bench|fixture)\./.test(path)).slice(0, 4);
 const importedBy = new Map<string, number>();
 const probe = treeOf(repository, held);
 for (const path of selected.slice(0, 400)) {

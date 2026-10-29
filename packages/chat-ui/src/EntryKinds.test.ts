@@ -2,14 +2,15 @@ import { describe, expect, test } from 'vitest';
 import { builtinEntryKinds } from './builtinKinds';
 import { createEntryKinds, type EntryRenderer, productKind } from './EntryKinds.svelte';
 import { type ChatEntry, productEntry, productId } from './entries';
-import { markdownHeight } from './rowEstimate';
+import { DESKTOP_METRICS, markdownHeight, type Prose } from './rowEstimate';
 import { VisibleFeed } from './VisibleFeed';
 
 const view = {
+  metrics: DESKTOP_METRICS,
   expanded: (_key: string, fallback: boolean) => fallback,
   stretchDefault: () => false,
   toolOpen: () => undefined,
-  markdown: (_key: string, text: string, columns: number) => markdownHeight(text, columns),
+  markdown: (_key: string, text: string, prose: Prose) => markdownHeight(text, prose),
 };
 
 function shownIds(feed: VisibleFeed, entries: readonly ChatEntry[], verbose: boolean): string[] {

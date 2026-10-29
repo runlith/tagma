@@ -117,30 +117,31 @@
       onclickcapture={(event) => shelving.select(event)}
       {@attach win.column}
     >
-      {#if list.refused !== null}
-        <ListRefused reason={list.refused} onRetry={() => list.retry()} />
-      {/if}
-      {#if list.roots === null}
-        {#if list.refused === null}<ListReading />{/if}
-      {:else if list.tree.length === 0 && places.creations.length === 0 && list.folders.length === 0}
-        <p class="px-2 py-1 text-ui text-muted-foreground">Nothing yet. Ask the agent about this project.</p>
-      {:else if col.filtering && col.shown.length === 0}
-        <p class="px-2 py-1 text-small text-muted-foreground">Nothing in the loaded rows.</p>
-      {/if}
-      {#if col.grouping === null}
-        {#each places.creations as creation (creation.id)}
-          <WorktreeCreating {places} {creation} />
-        {/each}
-      {/if}
-      <div class="relative" style:height="{win.height}px" {@attach win.span}>
-        {#each col.placed as { line, index } (line.key)}
+      <div class="flow-root">
+        {#if list.refused !== null}
+          <ListRefused reason={list.refused} onRetry={() => list.retry()} />
+        {/if}
+        {#if list.roots === null}
+          {#if list.refused === null}<ListReading />{/if}
+        {:else if list.tree.length === 0 && places.creations.length === 0 && list.folders.length === 0}
+          <p class="px-2 py-1 text-ui text-muted-foreground">Nothing yet. Ask the agent about this project.</p>
+        {:else if col.filtering && col.shown.length === 0}
+          <p class="px-2 py-1 text-small text-muted-foreground">Nothing in the loaded rows.</p>
+        {/if}
+        {#if col.grouping === null}
+          {#each places.creations as creation (creation.id)}
+            <WorktreeCreating {places} {creation} />
+          {/each}
+        {/if}
+      </div>
+      <div class="relative" {@attach win.span}>
+        {#each col.placed as { line } (line.key)}
           <div
             class={[
               'absolute inset-x-0 flow-root rounded-md',
               col.lineTint(line) && 'bg-status-open/5',
               col.lineLifted(line) && 'opacity-40',
             ]}
-            style:top="{win.offset(index)}px"
             data-line={line.key}
             data-drop={col.lineDrop(line)}
             data-team={col.lineTeam(line)}

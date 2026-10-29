@@ -95,10 +95,11 @@
   },
   "scripts": {
     "postinstall": "bun run build",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "runlith-typecheck",
     "test": "testbed bun test --no-isolate --path-ignore-patterns='e2e/**'",
-    "test:e2e": "bun run build && bunx playwright test e2e/window-behavior.spec.mjs -c playwright.config.mjs",
-    "test:smoke:macos-native": "bun run native:install && bun run build && bunx playwright test e2e/macos-native-smoke.spec.mjs -c playwright.config.mjs",
+    "test:e2e": "bun run build && testbed e2e --headed --parallel=1 e2e/window-behavior.e2e.ts",
+    "test:smoke:macos-native": "bun run native:install && bun run build && testbed e2e --headed --parallel=1 e2e/macos-native-smoke.e2e.ts",
     "native:build": "bun ./scripts/native-install.mjs",
     "native:install": "bun ./scripts/native-install.mjs",
     "native:clean": "bun ./scripts/native-clean.mjs",
@@ -111,8 +112,13 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@playwright/test": "catalog:",
+    "@runlith/e2e": "workspace:*",
+    "@runlith/testbed": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "effect": "catalog:",
     "electron": "catalog:",
+    "playwright-core": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {

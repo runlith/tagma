@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { wheelCrossesOut, wheelDistance } from '@runlith/scroll-follow/scrollFollow';
+  import { wheelCrossesOut, wheelDistance } from '@runlith/virtual-list/scrollFollow';
   import type { Snippet } from 'svelte';
   import JumpToLatest from './JumpToLatest.svelte';
   import type { ChatLiveTail } from './liveStatus';
@@ -26,6 +26,7 @@
     const element = host;
     if (!element || typeof ResizeObserver === 'undefined') return;
 
+    onClearance(element.offsetHeight);
     const observer = new ResizeObserver(() => onClearance(element.offsetHeight));
     observer.observe(element);
     return () => observer.disconnect();
@@ -35,7 +36,6 @@
     const element = host;
     if (!element) return;
     let touchY: number | null = null;
-    let touchMoved = false;
 
     const onWheel = (event: WheelEvent) => {
       if (event.ctrlKey || event.defaultPrevented) return;
@@ -49,23 +49,18 @@
     };
     const onTouchStart = (event: TouchEvent) => {
       touchY = event.touches.length === 1 ? (event.touches[0]?.clientY ?? null) : null;
-      touchMoved = false;
     };
     const onTouchMove = (event: TouchEvent) => {
-      const root = viewport.viewport;
       const touch = event.touches[0];
-      if (touchY === null || event.touches.length !== 1 || !root || touch === undefined) return;
-      const y = touch.clientY;
-      const delta = touchY - y;
+      if (touchY === null || event.touches.length !== 1 || touch === undefined) return;
+      const delta = touchY - touch.clientY;
       if (delta === 0) return;
       if (insidePopup(event.target) || innerScrollableFor(event.target, element, delta)) {
         touchY = null;
         return;
       }
       event.preventDefault();
-      viewport.scrollBy(delta, !touchMoved);
-      touchMoved = true;
-      touchY = y;
+      touchY = touch.clientY;
     };
     const onTouchEnd = () => {
       touchY = null;

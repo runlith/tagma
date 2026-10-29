@@ -1,19 +1,12 @@
 <script lang="ts">
-  import { onDestroy, tick, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import ActivityStep from './ActivityStep.svelte';
   import ActivityStretch from './ActivityStretch.svelte';
   import type { ChatRowView } from './rowEstimate';
   import type { VisibleFeed } from './VisibleFeed';
   import { TimelineFold } from './TimelineFold';
-  import {
-    type ChatTailSlot,
-    type ChatTimelineItem,
-    stretchOnScreen,
-    timelineBodyArrivesLate,
-    timelineItemPlace,
-    timelineItemRewound,
-  } from './timeline';
+  import { type ChatTailSlot, type ChatTimelineItem, stretchOnScreen, timelineItemPlace, timelineItemRewound } from './timeline';
   import RewindRow from './RewindRow.svelte';
   import { type ChatThreadPhase, chatHeroVisible, chatThreadId } from './chatThreadPhase';
   import { dayLabel, messageTime } from './chatTime';
@@ -53,7 +46,6 @@
     emptyStateDetail?: string;
     starters?: readonly string[];
     clearance: number;
-    pinnedHeight: number;
     hasOlder?: boolean;
     loadOlder?: () => Promise<boolean>;
     viewport: TranscriptViewport;
@@ -80,7 +72,6 @@
     emptyStateDetail,
     starters = [],
     clearance,
-    pinnedHeight,
     hasOlder = false,
     loadOlder,
     viewport,
@@ -116,6 +107,7 @@
   const rowView: ChatRowView = $derived.by(() => {
     rendering.context.revision;
     return {
+      metrics: virtualizer.metrics,
       expanded: (key, fallback) => rendering.context.expanded(key, fallback),
       stretchDefault: (key, newest) => rendering.context.stretchDefault(key, newest || (newestSeen && key === newestBefore)),
       toolOpen: (name) => rendering.kinds.toolOpen(name),
@@ -163,16 +155,10 @@
     timeline;
     const gone = rendering.context.held.filter((key) => !stretchOnScreen((shown) => rows.item(shown), key, visible));
     if (gone.length === 0) return;
-    untrack(() => releaseStretches(gone));
+    untrack(() => {
+      for (const key of gone) rendering.context.release(key);
+    });
   });
-
-  function releaseStretches(keys: readonly string[]): void {
-    const paused = !viewport.anchored;
-    if (paused) virtualizer.holdPrepend();
-    for (const key of keys) rendering.context.release(key);
-    if (!paused) return;
-    void tick().then(() => virtualizer.releasePrepend());
-  }
   const interludesAfter = $derived.by(() => {
     const at = new Map<string, ChatInterlude[]>();
     for (const interlude of rendering.regions.interludes) {
@@ -194,25 +180,6 @@
       awaitingConfirmation,
     }),
   );
-  const bodiesRendered = new WeakSet<ChatTimelineItem>();
-  let bodiesVersion = $state(0);
-
-  function rowReady(item: ChatTimelineItem): boolean {
-    bodiesVersion;
-    return !timelineBodyArrivesLate(item) || bodiesRendered.has(item);
-  }
-
-  $effect(() => {
-    viewport.useContent((entryId) => {
-      const key = timeline === 0 ? undefined : rows.rowOf(entryId);
-      const item = key === undefined ? undefined : rows.item(key);
-      if (key === undefined || !item || bodiesRendered.has(item)) return;
-      bodiesRendered.add(item);
-      bodiesVersion += 1;
-      virtualizer.measureRowLater(key);
-    });
-  });
-
   $effect(() => {
     viewport.openThread(chatThreadId(thread));
   });
@@ -223,15 +190,15 @@
 
   $effect(() => {
     timeline;
-    virtualizer.sync({
+    const input = {
       root,
       list,
       model: rows,
       shape: rows.shape,
-      atBottom: () => viewport.anchored,
       clearance: clearance + FEED_BOTTOM_GAP_PX,
       disclosure: rendering.context.revision,
-    });
+    };
+    untrack(() => virtualizer.sync(input));
   });
 
   let loadingOlder = false;
@@ -245,34 +212,8 @@
   }
 
   $effect(() => {
-    viewport.useHead(() => {
-      const walking = askForOlder();
-      if (!walking) return false;
-      virtualizer.holdPrepend();
-      void walking
-        .then(() => tick())
-        .finally(() => {
-          virtualizer.releasePrepend();
-        });
-      return true;
-    });
-  });
-
-  $effect(() => {
-    viewport.useFill(() => {
-      const filling = askForOlder();
-      if (!filling) return false;
-      void filling.then(() => tick()).finally(() => viewport.scrollToBottom(false));
-      return true;
-    });
-  });
-
-  $effect(() => {
-    viewport.useScrolled(() => virtualizer.trackPrepend());
-  });
-
-  $effect(() => {
-    viewport.useGesture(() => virtualizer.clearPrepend());
+    viewport.useHead(askForOlder);
+    viewport.useFill(askForOlder);
   });
 
   $effect(() => {
@@ -295,11 +236,7 @@
 
   $effect(() => {
     const height = clearance;
-    pinnedHeight;
-    untrack(() => {
-      viewport.syncClearance(height);
-      viewport.scrollToBottom(viewport.following);
-    });
+    untrack(() => viewport.syncClearance(height));
   });
 
   $effect(() => {
@@ -320,13 +257,53 @@
     const element = content;
     if (!element || typeof document === 'undefined') return;
 
-    const syncSelection = () => viewport.syncSelection(window.getSelection(), element);
+    let focused: string | undefined;
+    let touched: string | undefined;
+    let ends: readonly string[] = [];
+    const keyOf = (node: Node | null | undefined): string | undefined =>
+      (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>('[data-timeline-key]')?.dataset.timelineKey;
+    const keep = () => virtualizer.keep([focused, touched, ...ends].filter((key): key is string => key !== undefined));
+    const touch = (event: TouchEvent) => {
+      touched = event.touches.length === 0 ? undefined : (touched ?? keyOf(event.target as Node | null));
+      keep();
+    };
+    const syncSelection = () => {
+      const selection = window.getSelection();
+      viewport.syncSelection(selection, element);
+      const inside = selection !== null && !selection.isCollapsed;
+      ends = inside ? [keyOf(selection.anchorNode), keyOf(selection.focusNode)].filter((key) => key !== undefined) : [];
+      keep();
+    };
+    const focusIn = (event: FocusEvent) => {
+      focused = keyOf(event.target as Node | null);
+      keep();
+    };
+    const focusOut = (event: FocusEvent) => {
+      if (element.contains(event.relatedTarget as Node | null)) return;
+      focused = undefined;
+      keep();
+    };
+    const pressed = (event: MouseEvent) => {
+      const control = (event.target as Element | null)?.closest<HTMLElement>('[aria-expanded], summary');
+      if (control && element.contains(control)) virtualizer.press(control);
+    };
     document.addEventListener('selectionchange', syncSelection);
-    return () => document.removeEventListener('selectionchange', syncSelection);
+    element.addEventListener('focusin', focusIn);
+    element.addEventListener('focusout', focusOut);
+    element.addEventListener('click', pressed, true);
+    for (const name of ['touchstart', 'touchend', 'touchcancel'] as const)
+      element.addEventListener(name, touch, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener('selectionchange', syncSelection);
+      element.removeEventListener('focusin', focusIn);
+      element.removeEventListener('focusout', focusOut);
+      element.removeEventListener('click', pressed, true);
+      for (const name of ['touchstart', 'touchend', 'touchcancel'] as const) element.removeEventListener(name, touch, { capture: true });
+    };
   });
 
-  function measureRow(node: HTMLElement): void {
-    virtualizer.measureRow(node);
+  function mountRow(node: HTMLElement): void {
+    virtualizer.mountRow(node);
   }
 
   function navigationTargetEditable(target: EventTarget | null): boolean {
@@ -418,7 +395,7 @@
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     bind:this={root}
-    class="@container h-full min-h-0 overflow-x-hidden overflow-y-auto px-4 pt-4 mask-b-from-[calc(100%_-_var(--chat-composer-clearance))] mask-b-to-100%"
+    class="@container h-full min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-4 mask-b-from-[calc(100%_-_var(--chat-composer-clearance))] mask-b-to-100%"
     data-scrollable=""
     role="group"
     tabindex="-1"
@@ -494,20 +471,18 @@
       {/if}
 
       {#if timelineCount > 0}
-        <div bind:this={list} class="relative w-full" style={`height:${virtualizer.totalSize}px`}>
+        <div bind:this={list} class="relative w-full">
           {#each virtualizer.rows as row (row.key)}
             {@const item = timelineItem(String(row.key))}
             {#if item}
               <TranscriptRow
                 rowKey={String(row.key)}
                 place={timelineItemPlace(item)}
-                top={row.start - virtualizer.margin}
-                size={row.size}
-                ready={rowReady(item)}
+                box={virtualizer.box}
                 spaced={item.spaced}
                 dim={timelineItemRewound(item)}
                 inert={virtualizer.heldKeys.has(String(row.key))}
-                measure={measureRow}
+                measure={mountRow}
               >
                 {#if item.kind === 'tail'}
                   {@render tailRow(item.slot)}

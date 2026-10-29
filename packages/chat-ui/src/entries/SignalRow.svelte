@@ -47,7 +47,6 @@
       size: 'ui',
       class: 'text-muted-foreground',
       text: entry.text,
-      onRendered: () => context.contentRendered(entry.id),
     })}
   </div>
 {/if}

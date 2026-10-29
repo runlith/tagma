@@ -1,13 +1,20 @@
 import createDOMPurify from 'dompurify';
-import { Lexer, type Links, Marked, type MarkedExtension, type MarkedOptions, Tokenizer, type Tokens } from 'marked';
-import { plainCodeHtml } from '@runlith/highlight/colours';
-import { highlightCodeOffThread } from '@runlith/highlight/offThread';
+import { Lexer, type Links, Marked, type MarkedExtension, type MarkedOptions, type Token, Tokenizer, type Tokens } from 'marked';
+import { type CodeColours, normalizeCodeLanguage, plainCodeHtml, visibleCode } from '@runlith/highlight/colours';
+import { highlightLinesOffThread } from '@runlith/highlight/offThread';
 import { finishMarkdown, type MarkdownBlock, settledBlock, splitMarkdown } from './stream';
 import { escapeAttribute, escapeHtml } from '@runlith/utils/text';
 
 const domPurify = typeof window === 'undefined' ? undefined : createDOMPurify(window);
 
 if (domPurify && createDOMPurify.isSupported) {
+  domPurify.setConfig({
+    ADD_ATTR: ['tabindex', 'target'],
+    FORBID_CONTENTS: ['script', 'style'],
+    FORBID_TAGS: ['style'],
+    SANITIZE_NAMED_PROPS: true,
+    USE_PROFILES: { html: true, mathMl: true },
+  });
   domPurify.addHook('afterSanitizeAttributes', (node: Element) => {
     if (!(node instanceof HTMLAnchorElement) || node.target !== '_blank') return;
 
@@ -26,13 +33,7 @@ export function fallbackMarkdown(value: string): string {
 export function sanitizeHtml(rawHtml: string, markdown: string): string {
   if (!domPurify || !createDOMPurify.isSupported) return fallbackMarkdown(markdown);
 
-  return domPurify.sanitize(rawHtml, {
-    ADD_ATTR: ['tabindex', 'target'],
-    FORBID_CONTENTS: ['script', 'style'],
-    FORBID_TAGS: ['style'],
-    SANITIZE_NAMED_PROPS: true,
-    USE_PROFILES: { html: true, mathMl: true },
-  });
+  return domPurify.sanitize(rawHtml);
 }
 
 export type MarkdownHtml = { key: string; html: string; live: boolean };
@@ -41,72 +42,160 @@ export type MarkdownRender = { text: string; key?: string | undefined; streaming
 
 export type MarkdownRendererOptions = { extensions?: MarkedExtension[]; atoms?: readonly RegExp[] };
 
-type Painter = (block: MarkdownBlock, links: Links, live: boolean) => Promise<MarkdownHtml>;
+type Painter = (block: MarkdownBlock, links: Links, live: boolean) => MarkdownHtml;
 
-type Painted = { block: MarkdownBlock; links: number; html: Promise<MarkdownHtml> };
+type Painted = { block: MarkdownBlock; links: number; html: MarkdownHtml };
 
-type Settled = { start: number; end: number; links: number; html: Promise<MarkdownHtml> };
+type Settled = { start: number; end: number; links: number; html: MarkdownHtml };
+
+type Code = { text: string; language: string | undefined };
+
+type Lines = readonly (CodeColours | undefined)[];
+
+type Colouring = { lines: Lines | null; ready: Promise<Lines> };
 
 const BODY_LIMIT = 400;
+
+const codeOf = new WeakMap<MarkdownHtml, readonly Code[]>();
+
+const colourings = new WeakMap<readonly Code[], Colouring>();
+
+let askers = 0;
 
 export function fallbackBlock(text: string): MarkdownHtml {
   return { key: '0', html: fallbackMarkdown(text), live: false };
 }
 
 export class MarkdownRenderer {
-  readonly #extensions: MarkedExtension[];
-  readonly #atoms: readonly RegExp[];
-  readonly #parsers = new Map<boolean, Marked>();
-  readonly #bodies = new Map<string, Body>();
+  private readonly extensions: MarkedExtension[];
+  private readonly atoms: readonly RegExp[];
+  private parser: Marked | undefined;
+  private readonly bodies = new Map<string, Body>();
 
   constructor(options: MarkdownRendererOptions = {}) {
-    this.#extensions = options.extensions ?? [];
-    this.#atoms = options.atoms ?? [];
+    this.extensions = options.extensions ?? [];
+    this.atoms = options.atoms ?? [];
   }
 
-  async render(input: MarkdownRender): Promise<MarkdownHtml[]> {
+  render(input: MarkdownRender): MarkdownHtml[] {
     const key = input.key ?? digest(input.text);
     let body: Body | undefined;
     try {
-      body = this.#body(key, input);
-      return await Promise.all(body.read(input.text, input.streaming));
+      body = this.body(key, input);
+      return body.read(input.text, input.streaming);
     } catch {
-      if (body !== undefined && this.#bodies.get(key) === body) this.#bodies.delete(key);
+      if (body !== undefined && this.bodies.get(key) === body) this.bodies.delete(key);
       return [fallbackBlock(input.text)];
     }
   }
 
-  #body(key: string, input: MarkdownRender): Body {
-    const held = this.#bodies.get(key);
+  private body(key: string, input: MarkdownRender): Body {
+    const held = this.bodies.get(key);
     const body = held?.continues(input.text, input.streaming)
       ? held
-      : new Body(this.#parser(true).defaults, (block, links, live) => this.#paint(block, links, live));
-    this.#bodies.delete(key);
-    this.#bodies.set(key, body);
-    if (this.#bodies.size > BODY_LIMIT) {
-      const oldest = this.#bodies.keys().next().value;
-      if (oldest !== undefined) this.#bodies.delete(oldest);
+      : new Body(this.markdown().defaults, (block, links, live) => this.paint(block, links, live));
+    this.bodies.delete(key);
+    this.bodies.set(key, body);
+    if (this.bodies.size > BODY_LIMIT) {
+      const oldest = this.bodies.keys().next().value;
+      if (oldest !== undefined) this.bodies.delete(oldest);
     }
     return body;
   }
 
-  async #paint(block: MarkdownBlock, links: Links, live: boolean): Promise<MarkdownHtml> {
-    const parser = this.#parser(block.mode !== 'open-code');
+  private paint(block: MarkdownBlock, links: Links, live: boolean): MarkdownHtml {
+    const parser = this.markdown();
     const lexer = new Lexer(parser.defaults);
     Object.assign(lexer.tokens.links, links);
     const tokens = lexer.lex(block.src);
-    const walk = parser.defaults.walkTokens;
-    if (walk) await Promise.all(parser.walkTokens(tokens, walk));
-    return { key: String(block.start), html: sanitizeHtml(parser.parser(tokens), block.src), live };
+    const html = { key: String(block.start), html: sanitizeHtml(parser.parser(tokens), block.src), live };
+    const code = block.mode === 'open-code' ? [] : codeIn(parser, tokens);
+    if (code.some((one) => normalizeCodeLanguage(one.language) !== 'text')) codeOf.set(html, code);
+    return html;
   }
 
-  #parser(highlight: boolean): Marked {
-    const held = this.#parsers.get(highlight);
-    if (held) return held;
-    const parser = createMarkdownParser(highlight, this.#extensions, this.#atoms);
-    this.#parsers.set(highlight, parser);
-    return parser;
+  private markdown(): Marked {
+    this.parser ??= createMarkdownParser(this.extensions, this.atoms);
+    return this.parser;
   }
+}
+
+export function codeColours(block: MarkdownHtml): (root: HTMLElement) => (() => void) | undefined {
+  return (root) => {
+    const code = codeOf.get(block);
+    if (code === undefined) return undefined;
+    const colouring = colourings.get(code) ?? coloured(code);
+    if (colouring.lines !== null) {
+      paintCode(root, code, colouring.lines);
+      return undefined;
+    }
+    let active = true;
+    void colouring.ready.then((lines) => {
+      if (active) paintCode(root, code, lines);
+    });
+    return () => {
+      active = false;
+    };
+  };
+}
+
+function coloured(code: readonly Code[]): Colouring {
+  const colouring: Colouring = {
+    lines: null,
+    ready: Promise.all(
+      code.map((one) =>
+        normalizeCodeLanguage(one.language) === 'text'
+          ? undefined
+          : highlightLinesOffThread(one.text, one.language, `markdown:${++askers}`),
+      ),
+    ).then((lines) => (colouring.lines = lines)),
+  };
+  colourings.set(code, colouring);
+  return colouring;
+}
+
+function paintCode(root: HTMLElement, code: readonly Code[], lines: Lines): void {
+  let at = 0;
+  for (const element of root.querySelectorAll('pre > code')) {
+    const one = code[at];
+    if (one === undefined) return;
+    const shown = visibleCode(one.text, one.language);
+    if (element.textContent !== shown) continue;
+    const colours = lines[at];
+    at += 1;
+    if (colours !== undefined && colours.size > 0) element.replaceChildren(...colouredLines(element.ownerDocument, shown, colours));
+  }
+}
+
+function colouredLines(page: Document, shown: string, colours: CodeColours): Node[] {
+  const nodes: Node[] = [];
+  shown.split('\n').forEach((line, at) => {
+    if (at > 0) nodes.push(page.createTextNode('\n'));
+    const tokens = colours.get(at);
+    if (tokens === undefined || tokens.map((token) => token.text).join('') !== line) {
+      if (line !== '') nodes.push(page.createTextNode(line));
+      return;
+    }
+    for (const token of tokens) {
+      if (token.color === undefined) {
+        nodes.push(page.createTextNode(token.text));
+        continue;
+      }
+      const span = page.createElement('span');
+      span.setAttribute('style', `color:${token.color}`);
+      span.textContent = token.text;
+      nodes.push(span);
+    }
+  });
+  return nodes;
+}
+
+function codeIn(parser: Marked, tokens: Token[]): Code[] {
+  const code: Code[] = [];
+  parser.walkTokens(tokens, (token) => {
+    if (token.type === 'code') code.push({ text: (token as Tokens.Code).text, language: (token as Tokens.Code).lang });
+  });
+  return code;
 }
 
 class Body {
@@ -129,7 +218,7 @@ class Body {
     return text.startsWith(this.#prefix);
   }
 
-  read(text: string, streaming: boolean): Promise<MarkdownHtml>[] {
+  read(text: string, streaming: boolean): MarkdownHtml[] {
     if (!streaming && this.#whole === null && this.#settled.length === 0 && this.#open.length === 0) {
       this.#whole = this.#painted({ mode: 'full', start: 0, end: text.length, raw: text, src: text }, false);
     }
@@ -144,7 +233,7 @@ class Body {
     for (const block of split.settled) {
       const reused = this.#reused(block);
       const { links, html } = reused ?? this.#painted(block, false);
-      this.#settled.push({ start: block.start, end: block.end, links, html: reused ? html.then(settledHtml) : html });
+      this.#settled.push({ start: block.start, end: block.end, links, html: reused ? settledHtml(html) : html });
     }
     this.#open = split.open.map((block) => this.#reused(block) ?? this.#painted(block, true));
     this.#prefix = text.slice(0, split.end);
@@ -195,7 +284,10 @@ class Body {
 }
 
 function settledHtml(painted: MarkdownHtml): MarkdownHtml {
-  return { ...painted, live: false };
+  const settled = { ...painted, live: false };
+  const code = codeOf.get(painted);
+  if (code !== undefined) codeOf.set(settled, code);
+  return settled;
 }
 
 function digest(text: string): string {
@@ -207,10 +299,8 @@ function digest(text: string): string {
   return `${text.length}:${(hash >>> 0).toString(36)}`;
 }
 
-export function createMarkdownParser(highlight: boolean, extensions: MarkedExtension[] = [], atoms: readonly RegExp[] = []): Marked {
-  const codeHighlights = new WeakMap<Tokens.Code, string>();
+export function createMarkdownParser(extensions: MarkedExtension[] = [], atoms: readonly RegExp[] = []): Marked {
   const parser = new Marked({
-    async: true,
     breaks: true,
     gfm: true,
   });
@@ -218,7 +308,7 @@ export function createMarkdownParser(highlight: boolean, extensions: MarkedExten
   parser.use({
     renderer: {
       code(token: Tokens.Code): string {
-        return codeHighlights.get(token) ?? plainCodeHtml(token.text, token.lang);
+        return plainCodeHtml(token.text, token.lang);
       },
       link(token: Tokens.Link): string {
         const href = escapeAttribute(token.href ?? '#');
@@ -227,13 +317,6 @@ export function createMarkdownParser(highlight: boolean, extensions: MarkedExten
         return `<a href="${href}"${title} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`;
       },
     },
-    walkTokens: highlight
-      ? async (token) => {
-          if (token.type !== 'code') return;
-          const code = token as Tokens.Code;
-          codeHighlights.set(code, await highlightCodeOffThread(code.text, code.lang));
-        }
-      : undefined,
   });
 
   if (atoms.length > 0) parser.use(atomicTable(atoms));

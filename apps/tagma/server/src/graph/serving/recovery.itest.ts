@@ -2,7 +2,7 @@ import { dirname, join } from 'node:path';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Queue, Semaphore, Stream } from 'effect';
+import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Queue, Schedule, Semaphore, Stream } from 'effect';
 import { Git } from '@runlith/git/Git';
 import { makeRecoveries } from './recovery.js';
 import { watchProcessLayer } from '../../composition/testing/fileWatcher.js';
@@ -14,6 +14,7 @@ import type { ProjectPolicyRow } from '../contract/wire/serving.js';
 import type { RecoveryNotice } from '../contract/wire/recovery.js';
 import { liveGitLayer } from '../../composition/testing/liveGit.js';
 import { gitAnswer, runGit } from '../../platform/git/ownGit.js';
+import { watchReading } from '../../platform/watch/tree.js';
 
 const registered: ProjectPolicyRow = {
   id: 7,
@@ -226,6 +227,47 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
       expect(yield* next((notice) => notice.unreadable.length === 0)).toEqual({ recovery: null, total: 0, unreadable: [] });
       yield* policy.service.setStorage({ id: row.id, mode: 'team' });
       expect(yield* Queue.take(notices)).toEqual({ recovery: null, total: 0, unreadable: [] });
+    }).pipe(Effect.provide(watchProcessLayer)),
+  );
+
+  it.effect('a stealth feed whose graph git moves away keeps following and its reopened watch hears later records', () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: 'recovery-lost-' });
+      const storePath = join(root, 'home', 'machine.sqlite');
+      const row: ProjectPolicyRow = { ...registered, rootPath: join(root, 'code') };
+      const layout = yield* resolveStorageLayout({
+        mode: 'stealth',
+        projectId: row.id,
+        ...storageHomes(storePath),
+        worktree: row.rootPath,
+      });
+      if (layout.mode !== 'stealth') return yield* Effect.die('wrong fixture storage');
+      const switching = ServingSwitch.of({
+        servedBy: () => Effect.succeed({ row, checkout: row.rootPath }),
+        branches: () => Effect.die('recovery does not read branches'),
+        move: () => Effect.die('storage does not move in this world'),
+      });
+      const serving = yield* recoveries(switching, policyFor(row).service, () => Semaphore.makeUnsafe(1), storePath);
+      const notices = yield* Queue.make<RecoveryNotice>();
+      const feed = yield* serving.follow(row.id).pipe(
+        Stream.runForEach((notice) => Queue.offer(notices, notice)),
+        Effect.forkScoped,
+      );
+      const next = Effect.raceFirst(Queue.take(notices), Effect.andThen(Fiber.join(feed), Effect.die('the feed ended')));
+      expect(yield* next).toEqual({ recovery: null, total: 0, unreadable: [] });
+      const directory = join(layout.gitDir, 'tagma-merges');
+      const watched = () => watchReading(1000).places.some((place) => place.at === directory);
+      expect(watched()).toBe(true);
+      const away = `${layout.gitDir}.away`;
+      yield* fs.rename(layout.gitDir, away);
+      yield* Effect.repeat(Effect.sync(watched), { schedule: Schedule.spaced('20 millis'), until: (still) => !still });
+      yield* fs.rename(away, layout.gitDir);
+      expect(yield* next).toEqual({ recovery: null, total: 0, unreadable: [] });
+      expect(watched()).toBe(true);
+      const broken = join(directory, 'broken.json');
+      yield* fs.writeFileString(broken, '{ not a record');
+      expect(yield* next).toMatchObject({ recovery: null, total: 0, unreadable: [{ file: broken }] });
     }).pipe(Effect.provide(watchProcessLayer)),
   );
 });

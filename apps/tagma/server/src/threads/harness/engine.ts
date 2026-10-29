@@ -296,7 +296,11 @@ export const threadEngineLayer = Layer.effectContext(
                   .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'OwedCalls.owe', cause }))),
         },
         ownWork: {
-          owed: (threadId) => Effect.map(ownWork.owing([threadId]), (owing) => owing.length > 0),
+          owed: (threadId) =>
+            ownWork.owing([threadId]).pipe(
+              Effect.map((owing) => owing.length > 0),
+              Effect.mapError((cause) => new ThreadStorageFailed({ call: 'OwnWork.owing', cause })),
+            ),
           endings: ownWork.endings,
         },
         readiness: {

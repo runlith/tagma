@@ -135,6 +135,7 @@ import {
 } from '../collaboration/signals.js';
 import type { IdleDelivery } from '../collaboration/signals.js';
 import { makeOwnWork } from '../collaboration/ownWork.js';
+import { makeEventReads } from '../events/reads.js';
 import { OwnWork } from '../contract/service/ownWork.js';
 import { standingOf } from '../events/standing.js';
 import { makeThreadsLifetime } from '../lifetime.js';
@@ -570,6 +571,8 @@ export const asCommandSignalSend = (value: CommandSignalSend): CommandSignalSend
 export const asIdleDelivery = (value: IdleDelivery): IdleDelivery => value;
 
 export const ownWork = () => makeOwnWork;
+
+export const eventReads = () => makeEventReads;
 
 export const asThreadTargetOperationNew = (value: ThreadTargetOperationNew): ThreadTargetOperationNew => value;
 
