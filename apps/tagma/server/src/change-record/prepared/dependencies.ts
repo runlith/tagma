@@ -217,6 +217,13 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
     const carried = planned.get(path);
     return carried?.land === 'own' ? carried.text : undefined;
   };
+  const handed = new Map<string, string | null>();
+  for (const path of new Set([...snapshots.keys(), ...planned.keys()])) {
+    const text = landed(path);
+    if (text !== undefined) handed.set(path, text);
+  }
+  const unlanded = asked.size === 0 ? new Set<string>() : yield* fns.foreignPaths(landing, new Set(), () => true);
+  const closed = [...unlanded].filter((path) => !handed.has(path) && planned.get(path)?.land !== 'whole');
   const placed = new Map<string, ReadonlySet<string>>();
   for (const [path, names] of asked) {
     const input = snapshots.get(path);
@@ -230,10 +237,8 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
         lines: input.lines,
         names: [...names],
         files,
-        texts: files.flatMap((file) => {
-          const text = landed(file);
-          return text === undefined ? [] : [[file, text] as const];
-        }),
+        texts: [...handed].map(([file, text]) => [file, text] as const),
+        closed,
         capture,
       })
       .pipe(Effect.mapError((failure) => walkCut(path, failure, `include ${path} in paths and whole to carry its complete text`)));

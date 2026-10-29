@@ -83,6 +83,7 @@ export type SymbolPlacing = {
   readonly names: readonly string[];
   readonly files: readonly string[];
   readonly tree: Tree;
+  readonly capture?: number;
 };
 export type SymbolReader = {
   readonly read: (text: string, path: string, lines?: readonly number[]) => Symbols;

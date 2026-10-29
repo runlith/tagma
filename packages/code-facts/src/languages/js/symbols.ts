@@ -467,6 +467,9 @@ const receiversOf = (name: ts.Identifier): readonly ts.Node[] => {
 
 type Unit = { readonly path: string; readonly file: ts.SourceFile };
 
+const libraryFiles = new Map<string, ts.SourceFile>();
+let libraryProgram: ts.Program | undefined;
+
 const placing =
   (scripts: Scripts) =>
   (input: SymbolPlacing): readonly string[] => {
@@ -476,6 +479,8 @@ const placing =
     const add = (name: string, owner: string, text: string): Unit => {
       const kind = kindOf(owner);
       const fileName = `/${name}.${kind === ts.ScriptKind.TSX ? 'tsx' : 'ts'}`;
+      const kept = units.get(fileName);
+      if (kept !== undefined) return kept;
       const unit = { path: owner, file: ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, kind) };
       files.set(fileName, unit.file);
       units.set(fileName, unit);
@@ -487,13 +492,34 @@ const placing =
       offset: script.at,
     }));
     const byPath = new Map<string, string>();
-    for (const other of input.files) {
-      if (other === path || byPath.has(other)) continue;
+    const refused = new Set<string>();
+    let spent = 0;
+    const budget = input.capture ?? 0;
+    const admit = (other: string, counted: boolean): boolean => {
+      if (other === path || byPath.has(other) || refused.has(other) || !tree.has(other)) return false;
+      let charge = counted ? tree.size?.(other) : undefined;
+      if (charge !== undefined && spent + charge > budget) {
+        refused.add(other);
+        return false;
+      }
       const fragments = scripts(tree.read(other), other);
       const only = fragments[0];
-      if (fragments.length !== 1 || only === undefined || only.at !== 0 || !only.module) continue;
+      if (fragments.length !== 1 || only === undefined || only.at !== 0 || !only.module) {
+        refused.add(other);
+        return false;
+      }
+      if (counted) {
+        charge ??= only.text.length;
+        if (spent + charge > budget) {
+          refused.add(other);
+          return false;
+        }
+        spent += charge;
+      }
       byPath.set(other, add(other, other, only.text).file.fileName);
-    }
+      return true;
+    };
+    for (const other of input.files) admit(other, false);
     const resolved = new Map<string, string | undefined>();
     const targetOf = (specifier: string, from: string): string | undefined => {
       const key = `${from}\0${specifier}`;
@@ -503,88 +529,158 @@ const placing =
       resolved.set(key, name);
       return name;
     };
-    const program = ts.createProgram(
-      [...files.keys()],
-      { noLib: true, types: [], noEmit: true, allowJs: true },
-      {
-        ...hostOver(files),
-        resolveModuleNameLiterals: (literals, containing) =>
-          literals.map((literal) => {
-            const from = units.get(containing)?.path;
-            const name = from === undefined ? undefined : targetOf(literal.text, from);
-            return {
-              resolvedModule:
-                name === undefined
-                  ? undefined
-                  : {
-                      resolvedFileName: name,
-                      extension: name.endsWith('.tsx') ? ts.Extension.Tsx : ts.Extension.Ts,
-                      isExternalLibraryImport: false,
-                    },
-            };
-          }),
-      },
-    );
-    const checker = program.getTypeChecker();
-    const aliased = (symbol: ts.Symbol | undefined): ts.Symbol | undefined =>
-      symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(symbol) : symbol;
-    const guessed = (node: ts.CallLikeExpression): boolean => {
-      if (ts.isTaggedTemplateExpression(node)) return checker.getTypeAtLocation(node.tag).getCallSignatures().length > 1;
-      if (!ts.isCallExpression(node) && !ts.isNewExpression(node)) return false;
-      const callee = checker.getTypeAtLocation(node.expression);
-      const signatures = ts.isNewExpression(node) ? callee.getConstructSignatures() : callee.getCallSignatures();
-      return (
-        signatures.length > 1 &&
-        (node.arguments ?? []).some((argument) => (checker.getTypeAtLocation(argument).flags & ts.TypeFlags.Any) !== 0)
-      );
+    const options: ts.CompilerOptions = {
+      types: [],
+      noEmit: true,
+      allowJs: true,
+      target: ts.ScriptTarget.ESNext,
+      lib: ['lib.esnext.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
     };
-    const clean = new Set<ts.Node>();
-    const settled = (receivers: readonly ts.Node[]): boolean => {
-      const seen = new Set<ts.Node>();
-      const pending = [...receivers];
-      while (pending.length > 0) {
-        const node = pending.pop()!;
-        if (clean.has(node) || seen.has(node)) continue;
-        seen.add(node);
-        if (declared(node)) {
-          pending.push(...derivations(node));
-          continue;
-        }
-        if (ts.isIdentifier(node)) {
-          pending.push(...(aliased(identifierSymbol(node, checker))?.declarations ?? []));
-          continue;
-        }
-        if (ts.isCallLikeExpression(node)) {
-          if (guessed(node)) return false;
-          const declaration = checker.getResolvedSignature(node)?.declaration;
-          if (declaration !== undefined && !ts.isJSDocSignature(declaration)) pending.push(declaration);
-        }
-        ts.forEachChild(node, (child) => {
-          pending.push(child);
-        });
-      }
-      for (const node of seen) clean.add(node);
-      return true;
+    const base = ts.createCompilerHost(options);
+    const libPath = ts.getDefaultLibFilePath(options);
+    const libDir = libPath.replace(/[^/]*$/, '');
+    const host: ts.CompilerHost = {
+      ...hostOver(files),
+      getSourceFile: (name, languageVersion, onError, shouldCreateNew) => {
+        const held = files.get(name) ?? libraryFiles.get(name);
+        if (held !== undefined) return held;
+        if (!name.startsWith(libDir)) return undefined;
+        const read = base.getSourceFile(name, languageVersion, onError, shouldCreateNew);
+        if (read !== undefined) libraryFiles.set(name, read);
+        return read;
+      },
+      getDefaultLibFileName: () => libPath,
+      fileExists: (name) => files.has(name) || (name.startsWith(libDir) && base.fileExists(name)),
+      readFile: (name) => (name.startsWith(libDir) ? base.readFile(name) : undefined),
+      resolveModuleNameLiterals: (literals, containing) =>
+        literals.map((literal) => {
+          const from = units.get(containing)?.path;
+          const name = from === undefined ? undefined : targetOf(literal.text, from);
+          return {
+            resolvedModule:
+              name === undefined
+                ? undefined
+                : {
+                    resolvedFileName: name,
+                    extension: name.endsWith('.tsx') ? ts.Extension.Tsx : ts.Extension.Ts,
+                    isExternalLibraryImport: false,
+                  },
+          };
+        }),
     };
     const wanted = new Set(input.names);
     const lines = input.lines === undefined ? undefined : new Set(input.lines);
-    const placed = new Map<string, boolean>();
-    for (const unit of roots) {
-      const visit = (node: ts.Node): void => {
-        const spelled =
-          ts.isIdentifier(node) && !isName(node)
-            ? [{ name: node, symbol: identifierSymbol(node, checker) }]
-            : memberSpellings(node, checker);
-        for (const one of spelled) {
-          const name = one.name.text;
-          if (!wanted.has(name) || placed.get(name) === false) continue;
-          if (lines !== undefined && !lines.has(located(starts, unit.offset + one.name.getStart(unit.file)).line)) continue;
-          placed.set(name, (aliased(one.symbol)?.declarations ?? []).length > 0 && settled(receiversOf(one.name)));
-        }
-        ts.forEachChild(node, visit);
+    let program: ts.Program | undefined = libraryProgram;
+    let placed = new Map<string, boolean>();
+    for (let round = 0; ; round += 1) {
+      resolved.clear();
+      program = ts.createProgram([...files.keys()], options, host, program);
+      const checker = program.getTypeChecker();
+      const aliased = (symbol: ts.Symbol | undefined): ts.Symbol | undefined =>
+        symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(symbol) : symbol;
+      const guessed = (node: ts.CallLikeExpression): boolean => {
+        if (ts.isTaggedTemplateExpression(node)) return checker.getTypeAtLocation(node.tag).getCallSignatures().length > 1;
+        if (!ts.isCallExpression(node) && !ts.isNewExpression(node)) return false;
+        const callee = checker.getTypeAtLocation(node.expression);
+        const signatures = ts.isNewExpression(node) ? callee.getConstructSignatures() : callee.getCallSignatures();
+        return (
+          signatures.length > 1 &&
+          (node.arguments ?? []).some((argument) => (checker.getTypeAtLocation(argument).flags & ts.TypeFlags.Any) !== 0)
+        );
       };
-      visit(unit.file);
+      const clean = new Set<ts.Node>();
+      const settled = (receivers: readonly ts.Node[]): boolean => {
+        const seen = new Set<ts.Node>();
+        const pending = [...receivers];
+        while (pending.length > 0) {
+          const node = pending.pop()!;
+          if (clean.has(node) || seen.has(node)) continue;
+          seen.add(node);
+          if (declared(node)) {
+            pending.push(...derivations(node));
+            continue;
+          }
+          if (ts.isIdentifier(node)) {
+            pending.push(...(aliased(identifierSymbol(node, checker))?.declarations ?? []));
+            continue;
+          }
+          if (ts.isCallLikeExpression(node)) {
+            if (guessed(node)) return false;
+            const declaration = checker.getResolvedSignature(node)?.declaration;
+            if (declaration !== undefined && !ts.isJSDocSignature(declaration)) pending.push(declaration);
+          }
+          ts.forEachChild(node, (child) => {
+            pending.push(child);
+          });
+        }
+        for (const node of seen) clean.add(node);
+        return true;
+      };
+      placed = new Map<string, boolean>();
+      const missing: ts.Identifier[] = [];
+      for (const unit of roots) {
+        const visit = (node: ts.Node): void => {
+          const spelled =
+            ts.isIdentifier(node) && !isName(node)
+              ? [{ name: node, symbol: identifierSymbol(node, checker) }]
+              : memberSpellings(node, checker);
+          for (const one of spelled) {
+            const name = one.name.text;
+            if (!wanted.has(name)) continue;
+            if (lines !== undefined && !lines.has(located(starts, unit.offset + one.name.getStart(unit.file)).line)) continue;
+            if (placed.get(name) === false) {
+              missing.push(one.name);
+              continue;
+            }
+            const lands = (aliased(one.symbol)?.declarations ?? []).length > 0 && settled(receiversOf(one.name));
+            placed.set(name, lands);
+            if (!lands) missing.push(one.name);
+          }
+          ts.forEachChild(node, visit);
+        };
+        visit(unit.file);
+      }
+      if (missing.length === 0 || round === 6) break;
+      const beyond = new Set<string>();
+      for (const name of missing) {
+        const seen = new Set<ts.Node>();
+        const pending: ts.Node[] = [...receiversOf(name)];
+        while (pending.length > 0) {
+          const node = pending.pop()!;
+          if (seen.has(node)) continue;
+          seen.add(node);
+          if (ts.isIdentifier(node)) {
+            const symbol = identifierSymbol(node, checker);
+            for (const declaration of symbol?.declarations ?? []) {
+              const from = moduleAt(declaration);
+              const owner = units.get(declaration.getSourceFile().fileName)?.path;
+              if (from === undefined || owner === undefined) continue;
+              const found = resolution(from, owner, tree);
+              if (found !== null && 'to' in found) beyond.add(tree.realpath?.(found.to) ?? found.to);
+            }
+            pending.push(...(aliased(symbol)?.declarations ?? []));
+            continue;
+          }
+          if (declared(node)) {
+            pending.push(...derivations(node));
+            const type = (node as { readonly type?: ts.Node }).type;
+            if (type !== undefined) pending.push(type);
+            continue;
+          }
+          if (ts.isCallLikeExpression(node)) {
+            const declaration = checker.getResolvedSignature(node)?.declaration;
+            if (declaration !== undefined && !ts.isJSDocSignature(declaration)) pending.push(declaration);
+          }
+          ts.forEachChild(node, (child) => {
+            pending.push(child);
+          });
+        }
+      }
+      let added = false;
+      for (const other of beyond) if (admit(other, true)) added = true;
+      if (!added) break;
     }
+    libraryProgram = program;
     return [...placed].flatMap(([name, all]) => (all ? [name] : []));
   };
 

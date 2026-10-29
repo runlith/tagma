@@ -38,6 +38,7 @@ export type PlacementInput = {
   readonly names: readonly string[];
   readonly files: readonly string[];
   readonly texts: readonly (readonly [string, string | null])[];
+  readonly closed: readonly string[];
   readonly capture: number;
 };
 export type DependencyAnswer = {
@@ -130,9 +131,12 @@ export const placementsOf = async (input: PlacementInput): Promise<readonly stri
   const reader = await adapter.symbols();
   const disk = treeAt(input.root);
   const texts = new Map(input.texts);
+  const closed = new Set(input.closed);
   const tree: Tree = {
-    has: (path) => (texts.has(path) ? texts.get(path) !== null : disk.has(path)),
+    has: (path) => (texts.has(path) ? texts.get(path) !== null : !closed.has(path) && disk.has(path)),
     read: (path) => texts.get(path) ?? disk.read(path),
+    size: (path) =>
+      texts.has(path) ? texts.get(path)?.length : closed.has(path) || !disk.has(path) ? undefined : statSync(join(input.root, path)).size,
     realpath: disk.realpath,
   };
   let left = input.capture - input.text.length;
@@ -144,7 +148,7 @@ export const placementsOf = async (input: PlacementInput): Promise<readonly stri
     left -= size;
     files.push(path);
   }
-  return reader.place({ text: input.text, path: input.path, lines: input.lines, names: input.names, files, tree });
+  return reader.place({ text: input.text, path: input.path, lines: input.lines, names: input.names, files, tree, capture: left });
 };
 
 export const dependenciesOf = async (input: DependencyInput): Promise<DependencyAnswer> => {

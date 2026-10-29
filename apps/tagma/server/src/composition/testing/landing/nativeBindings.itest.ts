@@ -275,3 +275,92 @@ it.live('native submit_work keeps command formatting attributed and refuses a re
     expect(yield* read(outside)).toBe(formed);
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );
+
+const BATCH = 'export interface Batch {\n  flush(): void;\n}\n';
+const LIST = 'import type { Batch } from "./batch.js";\nexport const drain = (batch: Batch) => batch.flush();\n';
+const ASK = 'export const choose = () => 1;\n';
+const HOLDER = 'export interface Holder {\n  projectId: number;\n}\n';
+const SERVICE = 'import type { Holder } from "./holder.js";\nexport const holder = (): Holder => ({ projectId: 1 });\n';
+const CONSUMER =
+  'import { choose } from "./ask.js";\nimport { holder } from "./service.js";\nexport const base = () => choose() + holder().projectId;\n';
+const ROWS = 'export interface NativeRows {\n  size: number;\n}\n';
+const WORLD = 'export interface WorldRequest {\n  thread: string;\n  at: number;\n  root: string;\n}\n';
+const OF =
+  'import type { WorldRequest } from "./world.js";\nexport const request = (): WorldRequest => ({ thread: "t", at: 1, root: "/" });\n';
+const CONTEXT =
+  'import type { NativeRows } from "./rows.js";\nimport { request } from "./of.js";\nexport const read = (rows: NativeRows) => rows.size + request().root.length;\n';
+const GATE = 'export const gate = () => 1;\n';
+const DEEP = 'export interface Deep {\n  name: string;\n}\n';
+const MID = 'import type { Deep } from "./deep.js";\nexport const deep = (): Deep => ({ name: "d" });\n';
+const READER =
+  'import { gate } from "./gate.js";\nimport { deep } from "./mid.js";\nexport const base = () => gate() + deep().name.length;\n';
+
+it.live('native landing places member spellings on library and indirectly imported types, and still refuses a peer member', () =>
+  Effect.gen(function* () {
+    const { born, doors, write, read } = yield* nativeLanding({
+      'batch.ts': BATCH,
+      'list.ts': LIST,
+      'ask.ts': ASK,
+      'holder.ts': HOLDER,
+      'service.ts': SERVICE,
+      'consumer.ts': CONSUMER,
+      'rows.ts': ROWS,
+      'world.ts': WORLD,
+      'of.ts': OF,
+      'context.ts': CONTEXT,
+      'gate.ts': GATE,
+      'deep.ts': DEEP,
+      'mid.ts': MID,
+      'reader.ts': READER,
+    });
+    const peer = yield* born();
+    const caller = yield* born();
+    yield* write(peer.threadId, 'batch.ts', BATCH.replace('  flush(): void;', '  flush(): void;\n  map: Map<string, unknown> | null;'));
+    yield* write(peer.threadId, 'ask.ts', ASK + 'export interface RoadAsk {\n  projectId: number;\n}\n');
+    yield* write(peer.threadId, 'rows.ts', ROWS + 'export interface ForkOrigin {\n  thread: string;\n  at: number;\n}\n');
+
+    const list = LIST + 'export const keys = (rows: readonly { key: string }[]) => rows.map((row) => row.key);\n';
+    yield* write(caller.threadId, 'list.ts', list);
+    expect(yield* doors.atNative('submit_work', { subject: 'map over a local array', paths: ['list.ts'] }, caller)).toMatchObject({
+      class: 'answer',
+      value: { submitted: { status: 'landed', committed: ['list.ts'] } },
+    });
+    expect(yield* read('list.ts')).toBe(list);
+    expect(yield* read('batch.ts')).toBe(BATCH);
+
+    const consumer = CONSUMER + 'export const again = () => holder().projectId * 2;\n';
+    yield* write(caller.threadId, 'consumer.ts', consumer);
+    expect(
+      yield* doors.atNative('submit_work', { subject: 'read a project id off a holder', paths: ['consumer.ts'] }, caller),
+    ).toMatchObject({
+      class: 'answer',
+      value: { submitted: { status: 'landed', committed: ['consumer.ts'] } },
+    });
+    expect(yield* read('consumer.ts')).toBe(consumer);
+    expect(yield* read('ask.ts')).toBe(ASK);
+
+    const context = CONTEXT + 'export const origin = () => {\n  const { thread, at } = request();\n  return thread + at;\n};\n';
+    yield* write(caller.threadId, 'context.ts', context);
+    expect(yield* doors.atNative('submit_work', { subject: 'destructure a world request', paths: ['context.ts'] }, caller)).toMatchObject({
+      class: 'answer',
+      value: { submitted: { status: 'landed', committed: ['context.ts'] } },
+    });
+    expect(yield* read('context.ts')).toBe(context);
+    expect(yield* read('rows.ts')).toBe(ROWS);
+
+    yield* write(caller.threadId, 'list.ts', list + 'export const peek = (batch: Batch) => batch.map;\n');
+    const refused = yield* doors.atNative('submit_work', { subject: 'read a peer member', paths: ['list.ts'] }, caller);
+    expect(refused).toMatchObject({ class: 'refusal', code: 'lines-held' });
+    if (refused.class === 'refusal') expect(refused.reason).toContain(`map in batch.ts:3, held by ${peer.threadId}`);
+    expect(yield* read('list.ts')).toBe(list);
+
+    yield* write(peer.threadId, 'gate.ts', GATE + 'export interface GateAsk {\n  level: number;\n}\n');
+    yield* write(peer.threadId, 'deep.ts', DEEP.replace('  name: string;', '  name: string;\n  level: number;'));
+    yield* write(caller.threadId, 'reader.ts', READER + 'export const level = () => deep().level;\n');
+    const deepRefused = yield* doors.atNative('submit_work', { subject: 'read a deep peer member', paths: ['reader.ts'] }, caller);
+    expect(deepRefused).toMatchObject({ class: 'refusal', code: 'lines-held' });
+    if (deepRefused.class === 'refusal') expect(deepRefused.reason).toContain(`level in gate.ts:3, held by ${peer.threadId}`);
+    expect(yield* read('reader.ts')).toBe(READER);
+    expect(yield* read('deep.ts')).toBe(DEEP);
+  }).pipe(Effect.provide(BunFileSystem.layer)),
+);
