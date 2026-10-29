@@ -10,7 +10,7 @@ import { ThreadHistoryReads } from '../contract/service/birth.js';
 import { HarnessAsides } from '../contract/service/engine.js';
 import { ThreadLookup } from '../contract/service/reads.js';
 import type { AskingRoad, ExcerptAsks } from '../naming/excerpt.js';
-import { RECAP_ROLE, type Roads } from '../roads.js';
+import { askerOf, RECAP_ROLE, type Roads } from '../roads.js';
 import { journalTranscript } from './prompt.js';
 
 export type RecapSelection = {
@@ -96,7 +96,7 @@ export const makeRecapQuestions = Effect.fnUntraced(function* ({
   const journalRoad = Effect.fnUntraced(function* (threadId: string, projectId: number) {
     const found = yield* threads.find(threadId, OPERATOR_PRINCIPAL);
     if (found === undefined) return null;
-    const chosen = yield* roads.choose(RECAP_ROLE, found, projectId, [{ road: 'warm', reason: 'no-copy' }]);
+    const chosen = yield* roads.choose(RECAP_ROLE, { asker: askerOf(found), projectId, rejected: [{ road: 'warm', reason: 'no-copy' }] });
     const road = chosen.road;
     const asking = road._tag === 'Model' || road._tag === 'Cli' ? road : null;
     yield* note({

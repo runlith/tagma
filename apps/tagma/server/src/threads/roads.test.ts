@@ -10,7 +10,7 @@ import { providerCatalogOf, staticRegistry, testRegistry } from '../providers/te
 import { Settings } from '../settings/contract/service/values.js';
 import { HarnessRegistry } from './contract/service/harness.js';
 import type { ThreadMetadata } from './list/store.js';
-import { makeRoads, TITLE_ROLE } from './roads.js';
+import { askerOf, makeRoads, TITLE_ROLE, type RejectedRoad, type RoadAsker } from './roads.js';
 
 const provider = testRegistry.current().models.named('test-provider');
 const models = {
@@ -70,13 +70,15 @@ const setup = Effect.gen(function* () {
       ),
     ),
   );
-  return { thread, values, connected, roads };
+  return { asker: askerOf(thread), values, connected, roads };
 });
+
+const asked = (asker: RoadAsker | null, rejected: readonly RejectedRoad[] = []) => ({ asker, projectId: 1, rejected });
 
 it.effect('title selection uses the configured model, then a connected light model, then the native thread model', () =>
   Effect.gen(function* () {
-    const { thread, values, connected, roads } = yield* setup;
-    expect(yield* roads.choose(TITLE_ROLE, thread, 1, [{ road: 'warm', reason: 'no-prefix' }])).toMatchObject({
+    const { asker, values, connected, roads } = yield* setup;
+    expect(yield* roads.choose(TITLE_ROLE, asked(asker, [{ road: 'warm', reason: 'no-prefix' }]))).toMatchObject({
       name: 'thread-model',
       road: { _tag: 'Model', option: { provider: 'first', id: 'large' }, reasoning: 'low', account: null },
       rejected: [
@@ -87,13 +89,13 @@ it.effect('title selection uses the configured model, then a connected light mod
       ],
     });
     connected.add('first');
-    expect(yield* roads.choose(TITLE_ROLE, thread, 1, [])).toMatchObject({
+    expect(yield* roads.choose(TITLE_ROLE, asked(asker))).toMatchObject({
       name: 'provider-light',
       road: { _tag: 'Model', option: { provider: 'first', id: 'light' }, reasoning: 'low', account: 'account-first' },
     });
     values.set('threads.titleModel', 'second:large');
     values.set('threads.titleReasoning', 'medium');
-    expect(yield* roads.choose(TITLE_ROLE, thread, 1, [])).toMatchObject({
+    expect(yield* roads.choose(TITLE_ROLE, asked(asker))).toMatchObject({
       name: 'title-model',
       road: { _tag: 'Model', option: { provider: 'second', id: 'large' }, reasoning: 'medium', account: null },
       rejected: [],
@@ -103,7 +105,7 @@ it.effect('title selection uses the configured model, then a connected light mod
 
 it.effect('an unavailable configured model or reasoning refuses that selection instead of silently taking another road', () =>
   Effect.gen(function* () {
-    const { thread, values, connected, roads } = yield* setup;
+    const { asker, values, connected, roads } = yield* setup;
     connected.add('first');
     for (const [model, reasoning] of [
       ['missing:model', ''],
@@ -111,11 +113,43 @@ it.effect('an unavailable configured model or reasoning refuses that selection i
     ]) {
       values.set('threads.titleModel', model);
       values.set('threads.titleReasoning', reasoning);
-      expect(yield* roads.choose(TITLE_ROLE, thread, 1, [])).toEqual({
+      expect(yield* roads.choose(TITLE_ROLE, asked(asker))).toEqual({
         name: 'title-model',
         road: { _tag: 'Invalid' },
         rejected: [{ road: 'title-model', reason: 'invalid-selection' }],
       });
     }
+  }),
+);
+
+it.effect('with no thread, a named model wins, then the light model of the first connected provider in catalog order', () =>
+  Effect.gen(function* () {
+    const { values, connected, roads } = yield* setup;
+    expect(yield* roads.choose(TITLE_ROLE, asked(null))).toEqual({
+      name: 'none',
+      road: { _tag: 'None' },
+      rejected: [
+        { road: 'title-model', reason: 'not-configured' },
+        { road: 'provider-light', reason: 'account-unavailable' },
+        { road: 'cli', reason: 'no-thread' },
+        { road: 'thread-model', reason: 'no-thread' },
+      ],
+    });
+    connected.add('second');
+    expect(yield* roads.choose(TITLE_ROLE, asked(null))).toMatchObject({
+      name: 'provider-light',
+      road: { option: { provider: 'second' } },
+    });
+    connected.add('first');
+    expect(yield* roads.choose(TITLE_ROLE, asked(null))).toMatchObject({ name: 'provider-light', road: { option: { provider: 'first' } } });
+    values.set('threads.titleModel', 'first:large');
+    expect(yield* roads.choose(TITLE_ROLE, { ...asked(null), named: { model: 'second:large', reasoning: 'low' } })).toMatchObject({
+      name: 'named',
+      road: { _tag: 'Model', option: { provider: 'second', id: 'large' }, reasoning: 'low' },
+    });
+    expect(yield* roads.choose(TITLE_ROLE, { ...asked(null), named: { model: 'second:missing', reasoning: null } })).toMatchObject({
+      name: 'named',
+      road: { _tag: 'Invalid' },
+    });
   }),
 );

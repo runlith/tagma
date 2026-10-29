@@ -34,6 +34,29 @@ export type RoadRole = {
   readonly answers: 'text' | 'schema';
 };
 
+export type RoadAsker = {
+  readonly provider: string;
+  readonly model: string | null;
+  readonly account: string | null;
+  readonly harness: HarnessName | null;
+};
+
+export type NamedModel = { readonly model: string; readonly reasoning: string | null };
+
+export type RoadAsk = {
+  readonly asker: RoadAsker | null;
+  readonly projectId: number;
+  readonly rejected: readonly RejectedRoad[];
+  readonly named?: NamedModel;
+};
+
+export const askerOf = (thread: ThreadMetadata): RoadAsker => ({
+  provider: thread.provider,
+  model: thread.model,
+  account: thread.account,
+  harness: thread.harness?.name ?? null,
+});
+
 export const TITLE_ROLE: RoadRole = { configured: 'title-model', model: titleModel, reasoning: titleReasoning, answers: 'text' };
 
 export const RECAP_ROLE: RoadRole = TITLE_ROLE;
@@ -56,23 +79,30 @@ export const makeRoads = Effect.gen(function* () {
   const faceOf = (name: HarnessName) =>
     registry.resolve(name as HarnessId).pipe(Effect.catchTag('HarnessMissing', () => Effect.succeed<Harness['Service'] | null>(null)));
 
-  const choose = Effect.fnUntraced(function* (role: RoadRole, thread: ThreadMetadata, projectId: number, before: readonly RejectedRoad[]) {
-    const rejected: RejectedRoad[] = [...before];
+  const choose = Effect.fnUntraced(function* (role: RoadRole, ask: RoadAsk) {
+    const { asker, projectId } = ask;
+    const rejected: RejectedRoad[] = [...ask.rejected];
     const chosen = (name: string, road: Road): RoadChoice => ({ name, road, rejected });
-    const named = yield* settings.value(role.model, projectId);
+    const configured = yield* settings.value(role.model, projectId);
     const effort = yield* settings.value(role.reasoning, projectId);
     const { models: catalog } = yield* providers.catalog;
     const decides = role.answers === 'schema';
-    if (named !== '') {
+    const selection =
+      ask.named !== undefined
+        ? { road: 'named', model: ask.named.model, effort: ask.named.reasoning ?? '' }
+        : configured !== ''
+          ? { road: role.configured, model: configured, effort }
+          : null;
+    if (selection !== null) {
       const option = catalog.options.find(
-        (row) => row.key === named && (row.capabilities.includes('text') || (decides && row.capabilities.includes('decision'))),
+        (row) => row.key === selection.model && (row.capabilities.includes('text') || (decides && row.capabilities.includes('decision'))),
       );
-      const reasoning = effort || option?.defaultReasoning || null;
+      const reasoning = selection.effort || option?.defaultReasoning || null;
       if (!option || (reasoning !== null && !option.reasoningOptions.some((row) => row.id === reasoning))) {
-        rejected.push({ road: role.configured, reason: 'invalid-selection' });
-        return chosen(role.configured, { _tag: 'Invalid' });
+        rejected.push({ road: selection.road, reason: 'invalid-selection' });
+        return chosen(selection.road, { _tag: 'Invalid' });
       }
-      return chosen(role.configured, { _tag: 'Model', option, reasoning, account: null });
+      return chosen(selection.road, { _tag: 'Model', option, reasoning, account: null });
     }
     rejected.push({ road: role.configured, reason: 'not-configured' });
     const rung = (option: ModelOption, own: string | null) =>
@@ -91,31 +121,45 @@ export const makeRoads = Effect.gen(function* () {
       }
       rejected.push({ road: 'decision-capable', reason: built.length === 0 ? 'not-declared' : 'account-unavailable' });
     }
-    const cli = thread.harness === null ? null : yield* faceOf(thread.harness.name);
-    const served = cli === null ? thread.provider : cli.provider;
-    const provider = served !== undefined && catalog.registered(served) ? (catalog.named(served).family ?? served) : served;
-    const light = provider !== undefined && catalog.registered(provider) ? catalog.named(provider).lightTextModel : undefined;
-    if (provider !== undefined && light !== undefined) {
-      const account = cli === null ? thread.account : null;
+    const lightOf = Effect.fnUntraced(function* (provider: string, account: string | null) {
+      const light = catalog.registered(provider) ? catalog.named(provider).lightTextModel : undefined;
+      if (light === undefined) return 'not-declared' as const;
       const connected = yield* Effect.exit(credentials.account(provider, account ?? undefined));
       const option = catalog.modelsFor(provider, 'text').find((row) => row.id === light.model);
-      if (connected._tag === 'Success' && option !== undefined)
-        return chosen('provider-light', { _tag: 'Model', option, reasoning: rung(option, light.rung), account: connected.value });
-      rejected.push({ road: 'provider-light', reason: connected._tag === 'Failure' ? 'account-unavailable' : 'model-unavailable' });
-    } else rejected.push({ road: 'provider-light', reason: 'not-declared' });
+      if (connected._tag === 'Failure') return 'account-unavailable' as const;
+      if (option === undefined) return 'model-unavailable' as const;
+      return { _tag: 'Model', option, reasoning: rung(option, light.rung), account: connected.value } satisfies ModelRoad;
+    });
+    if (asker === null) {
+      const reasons = new Set<string>();
+      for (const provider of catalog.providers) {
+        const light = yield* lightOf(provider.id, null);
+        if (typeof light !== 'string') return chosen('provider-light', light);
+        reasons.add(light);
+      }
+      rejected.push({ road: 'provider-light', reason: reasons.has('account-unavailable') ? 'account-unavailable' : 'not-declared' });
+      rejected.push({ road: 'cli', reason: 'no-thread' }, { road: 'thread-model', reason: 'no-thread' });
+      return chosen('none', { _tag: 'None' });
+    }
+    const cli = asker.harness === null ? null : yield* faceOf(asker.harness);
+    const served = cli === null ? asker.provider : cli.provider;
+    const provider = served !== undefined && catalog.registered(served) ? (catalog.named(served).family ?? served) : served;
+    const light = provider === undefined ? 'not-declared' : yield* lightOf(provider, cli === null ? asker.account : null);
+    if (typeof light !== 'string') return chosen('provider-light', light);
+    rejected.push({ road: 'provider-light', reason: light });
     if (decides) rejected.push({ road: 'cli', reason: 'no-schema' });
     else if (cli?.oneShot !== undefined) return chosen('cli', { _tag: 'Cli', cli: cli.oneShot });
     else rejected.push({ road: 'cli', reason: 'not-declared' });
     if (cli === null) {
-      const option = catalog.registered(thread.provider)
-        ? catalog.modelsFor(thread.provider, 'text').find((row) => row.id === (thread.model ?? catalog.defaultTextModelId(thread.provider)))
+      const option = catalog.registered(asker.provider)
+        ? catalog.modelsFor(asker.provider, 'text').find((row) => row.id === (asker.model ?? catalog.defaultTextModelId(asker.provider)))
         : undefined;
       if (option !== undefined)
         return chosen('thread-model', {
           _tag: 'Model',
           option,
           reasoning: rung(option, option.reasoningOptions[0]?.id ?? null),
-          account: thread.account,
+          account: asker.account,
         });
       rejected.push({ road: 'thread-model', reason: 'model-unavailable' });
     } else rejected.push({ road: 'thread-model', reason: 'external-thread' });

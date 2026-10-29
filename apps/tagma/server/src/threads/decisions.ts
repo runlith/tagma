@@ -15,7 +15,7 @@ import { ModelAccess } from '../providers/contract/service/access.js';
 import { DecisionModels } from '../providers/contract/service/decisions.js';
 import { ThreadDecisions, type ThreadDecision } from './contract/service/decisions.js';
 import { ThreadLookup } from './contract/service/reads.js';
-import { DECISION_ROLE, type ModelRoad, type Roads } from './roads.js';
+import { askerOf, DECISION_ROLE, type ModelRoad, type Roads } from './roads.js';
 
 export const DECISION = activityKind<
   { readonly questions: readonly string[] },
@@ -93,7 +93,7 @@ export const makeThreadDecisions = Effect.fnUntraced(function* ({ idleMs, roads 
     const thread = yield* threads.find(threadId, OPERATOR_PRINCIPAL);
     if (thread === undefined) return yield* new ThreadNotFoundError(threadId);
     const work = Effect.gen(function* () {
-      const chosen = yield* roads.choose(DECISION_ROLE, thread, thread.projectId, []);
+      const chosen = yield* roads.choose(DECISION_ROLE, { asker: askerOf(thread), projectId: thread.projectId, rejected: [] });
       const road = chosen.road;
       yield* note({
         type: 'model-chosen',

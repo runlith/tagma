@@ -45,7 +45,7 @@ import { BranchTitling, INSTRUCTION, readThreadTitle } from './titles.js';
 import { ThreadTitles } from '../contract/service/titles.js';
 import { titleContext } from './context.js';
 import { CliUnsuccessful, type ExcerptAsks } from './excerpt.js';
-import { TITLE_ROLE, type RejectedRoad, type Roads } from '../roads.js';
+import { askerOf, TITLE_ROLE, type RejectedRoad, type Roads } from '../roads.js';
 
 type NamingRequest = {
   readonly source: 'captured' | 'fresh';
@@ -292,7 +292,11 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
       Effect.gen(function* () {
         const write = (title: string) =>
           units.write(writes('ThreadNaming.name', [threadRecord]), (unit) => records.nameTitle(unit, thread.id, title, revision));
-        const chosen = yield* roads.choose(TITLE_ROLE, thread, projectId, [{ road: 'warm', reason: freshReason }]);
+        const chosen = yield* roads.choose(TITLE_ROLE, {
+          asker: askerOf(thread),
+          projectId,
+          rejected: [{ road: 'warm', reason: freshReason }],
+        });
         const road = chosen.road;
         const choice: Choice = {
           type: 'model-chosen',
