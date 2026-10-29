@@ -120,6 +120,10 @@ fields:
         "for": [
           "f3b6b585"
         ]
+      },
+      {
+        "at": "src/testing/oauthServer.ts",
+        "role": "testing"
       }
     ],
     "id": "@runlith/mcp",
