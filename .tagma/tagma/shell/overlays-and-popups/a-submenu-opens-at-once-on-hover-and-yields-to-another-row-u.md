@@ -6,6 +6,8 @@ tags: ["explanation"]
 sources:
   - kind: file
     ref: packages/primitives/src/menu.svelte.ts
+  - kind: file
+    ref: apps/tagma/app/src/lib/shared/ui/dropdown-menu/dropdown-menu-sub-content.svelte
 ---
 Hovering a submenu trigger opens its submenu at once, and the submenu appears without an enter or exit animation, so moving between two triggers swaps their submenus in the same frame.
 
