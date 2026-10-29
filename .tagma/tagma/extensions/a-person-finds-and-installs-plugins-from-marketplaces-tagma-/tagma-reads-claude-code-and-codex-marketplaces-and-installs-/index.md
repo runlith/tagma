@@ -35,7 +35,7 @@ The person or an agent adds a marketplace by its git URL or a folder, and reads 
 
 ## An entry becomes a source
 
-- **Kinds.** A resolved source is a git URL with a subdirectory, a ref and a commit, or a folder. Beside it rides the manifest the entry declares, if any. Both are recorded on the install together with the marketplace entry identity.
+- **Kinds.** A resolved source is a git URL with a subdirectory, a ref and a commit, or a folder. Beside it ride the entry's name and the manifest the entry declares, if any. Both are recorded on the install together with the marketplace entry identity.
 - **Kinds Tagma installs:** relative path, `github`, `url` and `git-subdir` for Claude Code; `local`, `url` and `git-subdir` for Codex.
 - **Kinds listed with a reason and not installable:** `npm`, `archive` and `command`. A `command` source runs a program at install, outside Tagma's consent model.
 - **Pinning.** A pinned `sha` installs that commit or nothing. A relative or `local` path that escapes the marketplace root is refused, and one invalid entry never hides the valid ones.
@@ -48,7 +48,7 @@ The person or an agent adds a marketplace by its git URL or a folder, and reads 
 
 **The installed package is a snapshot.** Installing copies the prepared package into the plugin's own directory and records on the install the manifest the entry declared, which the format adapter combines with the package on every read. An installed plugin never reads from a marketplace clone. Refreshing or removing a marketplace leaves every installed plugin working. A plugin whose marketplace is gone no longer updates, and an update asks answers a typed refusal saying why.
 
-**Identity.** The plugin id stays global, as installs are today. An entry whose plugin id is already installed from another source reads `taken by <source>` in the list and refuses to install. This holds for same-named plugins in two marketplaces too.
+**Identity.** The plugin id stays global, as installs are today. A plugin installed from an entry takes the entry's name as its id and the prefix of its components, as Claude Code installs it under the entry's name, so the list knows each entry's id before anything is fetched. An entry whose plugin id is already installed from another source reads `taken by <source>` in the list and refuses to install. This holds for same-named plugins in two marketplaces too.
 
 **The Codex plugin format is a third plugin adapter.**
 - **What it reads.** It reads a legacy `.codex-plugin/plugin.json` directory: skills, the remote servers of its `.mcp.json` (signed in through the MCP layer), and `interface` as display data.
