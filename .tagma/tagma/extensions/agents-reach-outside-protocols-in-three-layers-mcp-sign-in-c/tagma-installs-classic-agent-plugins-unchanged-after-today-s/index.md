@@ -93,7 +93,7 @@ Each format is an adapter module (`claude-code-format`, `agent-plugins-format`) 
 - Its persistent data directory is `plugin-data/<id>/`, the `PLUGIN_DATA` and `CLAUDE_PLUGIN_DATA` of its processes.
 - The operations reuse the ids step 1 frees: `install_plugin`, `enable_plugin`, `uninstall_plugin`, `read_plugins`. Their new inputs are a break the commit marks.
 - `uninstall_plugin` keeps the plugin's data, as apps do today, drops its secret options and removes the clone of a git URL.
-- A plugin's reading is cached by the modification times of its manifest and component locations, so a folder edited in place is read again on its next use.
+- A plugin's reading is cached by the modification times of every file and directory its adapter read, so a folder edited in place is read again on its next use.
 - Plugin marketplaces are not part of this spec.
 
 ## Owners touched
