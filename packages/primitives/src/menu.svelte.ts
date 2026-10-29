@@ -27,13 +27,13 @@ type Entry = 'first' | 'content' | 'none';
 
 interface Aim {
   readonly sub: Menu;
-  from: Point;
+  readonly apex: Point;
+  gap: number;
   over: EventTarget | null;
 }
 
 const CONTEXT = Symbol.for('@runlith/primitives/menu');
 const REST_MS = 50;
-const STEP_PX = 4;
 const OPENING_KEYS = new Set(['Enter', ' ', 'ArrowDown']);
 
 const within = (box: DOMRect, point: Point): boolean =>
@@ -48,9 +48,11 @@ function inTriangle(p: Point, a: Point, b: Point, c: Point): boolean {
   return (ab >= 0 && bc >= 0 && ca >= 0) || (ab <= 0 && bc <= 0 && ca <= 0);
 }
 
-function heading(from: Point, to: Point, box: DOMRect): boolean {
-  const edge = box.left >= from.x ? box.left : box.right;
-  return inTriangle(to, from, { x: edge, y: box.top }, { x: edge, y: box.bottom });
+const nearEdge = (box: DOMRect, from: Point): number => (box.left >= from.x ? box.left : box.right);
+
+function onPath(point: Point, apex: Point, box: DOMRect): boolean {
+  const edge = nearEdge(box, apex);
+  return inTriangle(point, apex, { x: edge, y: box.top }, { x: edge, y: box.bottom });
 }
 
 export class Menu {
@@ -61,6 +63,7 @@ export class Menu {
   private entry: Entry = 'content';
   private dragging = false;
   private aim: Aim | null = null;
+  private pointer: Point | null = null;
   private restTimer: ReturnType<typeof setTimeout> | undefined;
   private contentElement = $state.raw<HTMLElement | null>(null);
   private openings = $state(0);
@@ -267,11 +270,16 @@ export class Menu {
       event.stopImmediatePropagation();
       focusSafely(field);
     };
+    const track = (event: PointerEvent): void => {
+      this.pointer = { x: event.clientX, y: event.clientY };
+    };
     element.addEventListener('keydown', filter, true);
     element.addEventListener('keydown', key);
+    element.addEventListener('pointermove', track);
     return () => {
       element.removeEventListener('keydown', filter, true);
       element.removeEventListener('keydown', key);
+      element.removeEventListener('pointermove', track);
       if (typeof unfield === 'function') unfield();
       if (typeof unfloat === 'function') unfloat();
       if (typeof leave === 'function') leave();
@@ -357,9 +365,15 @@ export class Menu {
   }
 
   private aimAt(sub: Menu, event: PointerEvent): void {
-    if (sub.contentElement === null) return;
     this.endAim();
-    this.aim = { sub, from: { x: event.clientX, y: event.clientY }, over: event.relatedTarget };
+    const box = sub.contentElement?.getBoundingClientRect();
+    const last = this.pointer;
+    if (box === undefined || last === null) return;
+    const apex = { x: event.clientX, y: event.clientY };
+    const edge = nearEdge(box, apex);
+    const gap = Math.abs(edge - apex.x);
+    if (gap >= Math.abs(edge - last.x)) return;
+    this.aim = { sub, apex, gap, over: event.relatedTarget };
     this.rest();
     document.addEventListener('pointermove', this.follow, true);
   }
@@ -369,12 +383,11 @@ export class Menu {
     if (aim === null) return;
     const to = { x: event.clientX, y: event.clientY };
     const box = aim.sub.contentElement?.getBoundingClientRect();
-    if (event.pointerType === 'touch' || box === undefined || within(box, to)) return this.endAim();
-    if (Math.hypot(to.x - aim.from.x, to.y - aim.from.y) >= STEP_PX) {
-      if (!heading(aim.from, to, box)) return this.endAim();
-      aim.from = to;
-    }
+    if (event.pointerType === 'touch' || box === undefined || within(box, to) || !onPath(to, aim.apex, box)) return this.endAim();
     aim.over = event.target;
+    const gap = Math.abs(nearEdge(box, aim.apex) - to.x);
+    if (gap >= aim.gap) return;
+    aim.gap = gap;
     this.rest();
   };
 

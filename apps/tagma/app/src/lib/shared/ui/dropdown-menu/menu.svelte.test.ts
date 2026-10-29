@@ -139,7 +139,7 @@ test('a pointer leaving a submenu trigger for the row above, not heading into it
   expect(sub().getAttribute('aria-expanded')).toBe('false');
 });
 
-test('a pointer heading into a submenu keeps it over other rows, and one resting on a row hands that row the pointer', () => {
+test('a pointer approaching a submenu keeps it over other rows, and one that stops approaching hands the row the pointer through jitter', () => {
   menu();
   open();
   pointer('pointermove', sub(), { clientX: 100, clientY: 50 });
@@ -150,12 +150,20 @@ test('a pointer heading into a submenu keeps it over other rows, and one resting
     pointer('pointermove', item('Spacing'), { clientX: 160, clientY: 40 });
     vi.advanceTimersByTime(40);
     pointer('pointermove', item('Spacing'), { clientX: 170, clientY: 30 });
-    vi.advanceTimersByTime(40);
+    for (const [x, y] of [
+      [169, 31],
+      [170, 30],
+      [169, 31],
+      [170, 30],
+    ]) {
+      vi.advanceTimersByTime(10);
+      pointer('pointermove', item('Spacing'), { clientX: x, clientY: y });
+    }
     flushSync();
     expect(sub().getAttribute('aria-expanded')).toBe('true');
     expect(item('Spacing').hasAttribute('data-highlighted')).toBe(false);
 
-    vi.advanceTimersByTime(20);
+    vi.advanceTimersByTime(10);
     flushSync();
     expect(item('Spacing').hasAttribute('data-highlighted')).toBe(true);
     expect(item('Spacing').getAttribute('aria-expanded')).toBe('true');
