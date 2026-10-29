@@ -10,7 +10,8 @@ fields:
         "at": "."
       }
     ],
-    "id": "app-plugins"
+    "id": "app-plugins",
+    "kind": "product"
   }
 edges:
   - kind: imports
