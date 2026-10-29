@@ -1,6 +1,6 @@
 ---
 id: 01a146c4-b3fa-70f5-8ced-fd1a25dba577
-title: The operator's personal agent is offered to agents with no agent.offered record; project file and app agent — to the operator only; a type hidden from an agent refuses type-withheld with a way out
+title: The operator's personal agent is offered to agents with no agent.offered record; project file, app and plugin agents — to the operator only; a type hidden from an agent refuses type-withheld with a way out
 ord: 5
 tags: ["explanation"]
 edges:
