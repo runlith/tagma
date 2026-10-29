@@ -9,6 +9,7 @@ export const REFUSAL_WORDS = {
   'devtools-open': 'Page is in DevTools',
   'dialog-open': 'Dialog is open on the page',
   'document-invalid': 'Profile settings not accepted',
+  'domain-blocked': 'Domain is blocked',
   'element-obscured': 'Element is covered',
   'heap-failed': 'Page heap not captured',
   'host-away': 'Browser host not connected',
