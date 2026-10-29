@@ -71,6 +71,7 @@ export type ThreadListRow = {
   readonly title: string;
   readonly titleOrigin: (typeof TITLE_PROVENANCES)[number];
   readonly life: RunLife;
+  readonly owes?: true;
   readonly halt?: RunHalt;
   readonly activeRunId: string | null;
   readonly activeRunStartedAt: string | null;
@@ -118,6 +119,7 @@ const threadListRowFields = {
   title: Schema.String,
   titleOrigin: Schema.Literals(TITLE_PROVENANCES),
   life: runLifeSchema,
+  owes: Schema.optional(Schema.Literal(true)),
   halt: Schema.optional(runHaltSchema),
   activeRunId: Schema.NullOr(Schema.String),
   activeRunStartedAt: Schema.NullOr(Schema.String),

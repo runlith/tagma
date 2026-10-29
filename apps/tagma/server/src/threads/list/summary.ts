@@ -46,6 +46,7 @@ export type RunEnding = {
 
 export type ThreadSummary = ThreadMetadataRow & {
   readonly life: RunLife;
+  readonly owes: boolean;
   readonly title: string;
   readonly titleOrigin: TitleProvenance;
   readonly projectId: number;
@@ -198,6 +199,7 @@ export function summaryOf(kinds: ThreadEntryReader, row: SummaryRow, recapShown:
   return {
     ...thread,
     life: signals?.life ?? 'idle',
+    owes: false,
     bornOf: parseThreadBornOf(thread.bornOf),
     contextReading: parseThreadContextReading(kinds, thread.contextReading),
     title: row.title ?? DEFAULT_TITLE,

@@ -5,7 +5,14 @@ import { THREAD_RUN_AWAITING_QUESTION_STAGE } from '@runlith/agent/thread/storag
 import { THREAD_TOOL_CONFIRM_KIND } from '@runlith/agent/transcript/parts';
 import type { ThreadQuestionEntry } from '@runlith/agent/transcript/entries';
 import { eq, sql } from 'drizzle-orm';
-import { Clock, Effect } from 'effect';
+import { Clock, Effect, Queue } from 'effect';
+import { ExecutionId, InstallationId, type ExecutionRef } from '@runlith/executions/protocol/execution';
+import { commandSignalId } from '../../../executions/contract/wire/commands.js';
+import { CommandWaiters } from '../../../executions/contract/service/commands.js';
+import { commandNoticeQueue } from '../../../executions/testing/doubles.js';
+import { storesOver } from '../../../executions/testing/stores.js';
+import { ThreadId } from '../../../platform/contract/wire/thread.js';
+import { ownWork, standingOfSummary, threadListReads } from '../../../threads/testing/doubles.js';
 import { externalSession, thread, threadRun, unmeasuredObservation } from '../../../threads/testing/doubles.js';
 import { transcript } from './transcript.js';
 import { saidOfRuns } from '../../../threads/list/said.js';
@@ -845,5 +852,53 @@ it.live(
     }
     expect(yield* shape(ids[0] as string)).toMatchObject({ active: true, assignment: 'running', runLife: 'working', state: 'working' });
     expect(yield* shape(ids[3] as string)).toMatchObject({ asking: true, runLife: 'awaiting', state: 'waiting' });
+  }),
+);
+
+it.live(
+  'a root whose turn ended while its own background command runs owes that end and stands as finished only once the end is taken',
+  Effect.fnUntraced(function* () {
+    const demo = yield* threadStoreFixture;
+    const { store, records, ids } = yield* project(demo, 1);
+    const tester = ids[0] as string;
+    yield* demo.db
+      .insert(threadRun())
+      .values({
+        id: 'run-owing',
+        threadId: tester,
+        ownerId: 'operator',
+        status: 'completed',
+        finishedAt: new Date(yield* Clock.currentTimeMillis),
+      })
+      .pipe(Effect.orDie);
+    const deliveries = storesOver(demo.db, InstallationId.make('list-owes')).deliveries;
+    const waiters = yield* commandNoticeQueue({
+      deliveries,
+      ended: yield* Queue.unbounded<ExecutionRef>(),
+      takeBack: Effect.die(new Error('the list takes back no notice')),
+    }).pipe(Effect.provide(demo.context));
+    const own = yield* ownWork().pipe(Effect.provideService(CommandWaiters, waiters), Effect.provide(demo.context));
+    const reads = yield* Effect.provide(threadListReads(store, records, ENTRY_KINDS, own), demo.context);
+    const suite = { installation: InstallationId.make('list-owes'), execution: ExecutionId.make('exec-list-owes'), incarnation: 1 };
+    const openedAt = yield* Clock.currentTimeMillis;
+    yield* demo.units
+      .write('listStore.owedCommand', (unit) =>
+        deliveries.openDelivery(unit, {
+          execution: suite,
+          thread: ThreadId.make(tester),
+          signalId: commandSignalId(suite, 'call-e2e'),
+          openedAt,
+        }),
+      )
+      .pipe(Effect.orDie);
+
+    const owing = yield* reads.summary(tester).pipe(Effect.orDie);
+    expect(owing?.owes).toBe(true);
+    expect(owing === undefined ? undefined : standingOfSummary(owing)).toBeNull();
+
+    yield* demo.units.write('listStore.takenCommand', (unit) => deliveries.acceptDelivery(unit, suite)).pipe(Effect.orDie);
+    const ended = yield* reads.summary(tester).pipe(Effect.orDie);
+    expect(ended?.owes).toBe(false);
+    expect(ended === undefined ? undefined : standingOfSummary(ended)?.kind).toBe('finished');
   }),
 );

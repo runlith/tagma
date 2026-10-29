@@ -33,7 +33,7 @@ export function standingOf(thread: ThreadSummary): ThreadStanding | null {
   if (run !== null || ending === null || ending.isSeen) return null;
   const placed = { runId: ending.runId, at: ending.finishedAt.toISOString() };
   if (failing(ending)) return { ...placed, kind: 'failed', eventId: `${ending.runId}:failed`, ending };
-  if (ending.status !== 'completed' || thread.parentThreadId !== null) return null;
+  if (ending.status !== 'completed' || thread.parentThreadId !== null || thread.owes) return null;
   return { ...placed, kind: 'finished', eventId: `${ending.runId}:finished`, ending };
 }
 

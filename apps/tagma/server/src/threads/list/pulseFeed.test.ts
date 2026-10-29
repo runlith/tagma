@@ -11,6 +11,7 @@ const row = (id: string, projectId: number, life: ThreadSummary['life'] = 'worki
   id,
   projectId,
   life,
+  owes: false,
   ownerId: 'operator',
   agentId: 'agent',
   parentThreadId: null,

@@ -96,6 +96,7 @@ export class RowReading {
           const said = firstLine(row.saidLine);
           return said === null ? null : { text: said, tone: 'text-foreground/70', elapsed: null };
         }
+        case 'owes':
         case 'quiet':
           return null;
       }

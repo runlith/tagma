@@ -225,6 +225,7 @@ export function wireThread(row: ThreadListProjection, basis: ThreadBasis): Threa
     title: row.title,
     titleOrigin: row.titleOrigin,
     life: row.life,
+    owes: row.owes ? (true as const) : undefined,
     halt: row.activeRun?.halt ?? undefined,
     activeRunId: row.activeRun?.id ?? null,
     ...runFacts(row),

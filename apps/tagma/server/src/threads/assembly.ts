@@ -70,8 +70,6 @@ import { makeCallEndings } from './collaboration/callEndings.js';
 import { CALL_RESULT_SIGNAL } from './contract/wire/calls.js';
 import { makeOwedCallRows } from './store/owedCalls.js';
 import { OwedCalls } from './contract/service/owedCalls.js';
-import { OwnWork } from './contract/service/ownWork.js';
-import { makeOwnWork } from './collaboration/ownWork.js';
 import type { CallAddress } from '@runlith/agent/callProgress';
 import { CUSTODY_NOTICE_PASS_MS, makeCustodyNotices, TERMINAL_CUSTODY_SIGNAL } from './collaboration/custodyNotices.js';
 import { commandNoticeTakeBack, commandSignalSend, stayIdle, wakeUnlessStopped } from './collaboration/signals.js';
@@ -128,7 +126,6 @@ export const threadStoresLayer = Layer.effectContext(
       Context.add(ThreadSubscriptions, yield* makeThreadSubscriptions),
       Context.add(OperatorNotes, notes),
       Context.add(AgentRules, { rules: [notesRule(notes)] }),
-      Context.add(OwnWork, yield* makeOwnWork),
       Context.add(ThreadHomes, yield* makeThreadHomes),
     );
   }),

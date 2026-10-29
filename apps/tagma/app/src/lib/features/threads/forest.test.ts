@@ -196,6 +196,21 @@ test('active descendants keep idle ancestors live until the last one settles, mo
   expect(forest.node('quiet')?.lifeBelow).toBe('idle');
 });
 
+test('a grandchild between turns that is owed its own command end counts as working for every ancestor until the end arrives', () => {
+  const forest = new ThreadForest();
+  for (const held of [row('root', 'idle', null), row('middle', 'idle', 'root')]) forest.put(held);
+
+  forest.put({ ...row('tester', 'idle', 'middle', { finishedAt: stamp(1) }), owes: true });
+  for (const id of ['middle', 'root']) {
+    expect(forest.node(id)?.team).toMatchObject({ working: 1, unseen: 0, workers: ['tester'] });
+    expect(forest.node(id)?.lifeBelow).toBe('working');
+  }
+
+  forest.put(row('tester', 'idle', 'middle', { finishedAt: stamp(1) }));
+  expect(forest.node('root')?.team).toMatchObject({ working: 0, unseen: 1, workers: [] });
+  expect(forest.node('root')?.lifeBelow).toBe('idle');
+});
+
 test('a thread naming its own descendant as parent stands as a root instead of vanishing', () => {
   const forest = new ThreadForest();
   forest.put(row('a', 'idle', null));
