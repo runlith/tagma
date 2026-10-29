@@ -104,6 +104,7 @@ import { ScratchAreas } from '../threads/contract/service/scratch.js';
 import { ThreadMandate } from '../threads/contract/service/mandate.js';
 import { ThreadTeams } from '../threads/contract/service/team.js';
 import { AgentRules } from '../threads/contract/service/rules.js';
+import { makePluginHooks } from './turns/pluginHooks.js';
 import { atOf } from '../threads/contract/wire/target.js';
 import { WebSearch } from './contract/service/webSearch.js';
 import { SetupReadings } from './contract/service/setups.js';
@@ -407,7 +408,7 @@ export const nativeAgentsLayer = Layer.effectDiscard(
       completed: (call, exit) => delivery.completed(call, exit),
     });
     yield* capabilitySources(kernel.toolSources, kernel.capabilities);
-    const contributedRules = (yield* AgentRules).rules;
+    const contributedRules = [...(yield* AgentRules).rules, yield* makePluginHooks];
     const rules = new AgentRuleRegistry<ThreadContext, RuleSetup>(yield* DeclaredNativeRules);
     for (const declaration of kernel.declarations) {
       const agent = composeAgent(

@@ -29,6 +29,8 @@ const Handler = Schema.Struct({
   args: Schema.optional(Schema.Array(Schema.String)),
   timeout: Schema.optional(Schema.Finite),
   if: Schema.optional(Schema.String),
+  async: Schema.optional(Schema.Boolean),
+  onFailure: Schema.optional(Schema.String),
 });
 
 const Group = Schema.Struct({ matcher: Schema.optional(Schema.String), hooks: Schema.Array(Schema.Unknown) });
@@ -37,6 +39,8 @@ const decodeHandler = Schema.decodeUnknownEffect(Handler);
 const decodeGroup = Schema.decodeUnknownEffect(Group);
 
 const Output = Schema.Struct({
+  continue: Schema.optional(Schema.Boolean),
+  stopReason: Schema.optional(Schema.String),
   decision: Schema.optional(Schema.String),
   reason: Schema.optional(Schema.String),
   hookSpecificOutput: Schema.optional(
@@ -75,6 +79,10 @@ export const matcherOf = (matcher: string | undefined): ((subject: string) => bo
   }
 };
 
+const ENDINGS: ReadonlySet<string> = new Set(['clear', 'resume', 'logout', 'prompt_input_exit', 'other']);
+
+const endingOf = (reason: string): string => (ENDINGS.has(reason) ? reason : 'other');
+
 const subjectOf = (plugin: ToolNaming, call: PluginHookCall): string | null => {
   switch (call.point) {
     case 'beforeTool':
@@ -83,7 +91,7 @@ const subjectOf = (plugin: ToolNaming, call: PluginHookCall): string | null => {
     case 'threadStarted':
       return call.resumed ? 'resume' : 'startup';
     case 'threadEnded':
-      return call.reason;
+      return endingOf(call.reason);
     default:
       return null;
   }
@@ -114,13 +122,13 @@ const inputOf = (plugin: ToolNaming, event: string, call: PluginHookCall, sessio
     case 'threadStarted':
       return { ...common, source: call.resumed ? 'resume' : 'startup' };
     case 'threadEnded':
-      return { ...common, reason: call.reason };
+      return { ...common, reason: endingOf(call.reason) };
   }
 };
 
 const timeoutOf = (event: string, declared: number | undefined): Duration.Duration =>
   declared !== undefined && declared > 0
-    ? Duration.seconds(declared)
+    ? Duration.seconds(event === 'SessionEnd' ? Math.min(declared, 60) : declared)
     : event === 'UserPromptSubmit'
       ? Duration.seconds(30)
       : event === 'SessionEnd'
@@ -155,23 +163,52 @@ const answerOf = (plugin: ToolNaming, call: PluginHookCall, ran: Ran): PluginHoo
   }
   const { decision, reason, hookSpecificOutput: specific } = output.value;
   const context = specific?.additionalContext;
+  const halted = output.value.continue === false;
+  const stopped = output.value.stopReason || 'a hook asked to stop';
   switch (call.point) {
     case 'beforeTool':
+      if (halted) return { deny: stopped };
       return {
-        deny: specific?.permissionDecision === 'deny' ? specific.permissionDecisionReason || 'a hook denied this call' : undefined,
+        deny:
+          specific?.permissionDecision === 'deny'
+            ? specific.permissionDecisionReason || 'a hook denied this call'
+            : specific?.permissionDecision === undefined && decision === 'block'
+              ? reason || 'a hook denied this call'
+              : undefined,
         input: specific?.updatedInput === undefined ? undefined : tagmaInput(call.tool, specific.updatedInput),
         context,
       };
     case 'afterTool':
-      return { context: [decision === 'block' ? reason : undefined, context].filter((part) => part !== undefined).join('\n') || undefined };
+      return {
+        context:
+          [halted ? stopped : undefined, decision === 'block' ? reason : undefined, context]
+            .filter((part) => part !== undefined)
+            .join('\n') || undefined,
+      };
     case 'beforeStep':
+      if (halted) return { block: stopped, context };
       return { block: decision === 'block' ? reason || 'a hook blocked this message' : undefined, context };
     case 'beforeClose':
+      if (halted) return {};
       return { block: decision === 'block' ? reason || 'a hook asked to continue' : context };
     case 'threadStarted':
       return { context };
     case 'threadEnded':
       return {};
+  }
+};
+
+const failedBlocking = (call: PluginHookCall, answer: PluginHookAnswer): PluginHookAnswer => {
+  if (answer.failure === undefined) return answer;
+  const reason = `a hook that blocks on failure failed: ${answer.failure}`;
+  switch (call.point) {
+    case 'beforeTool':
+      return { deny: reason };
+    case 'beforeStep':
+    case 'beforeClose':
+      return { block: reason };
+    default:
+      return answer;
   }
 };
 
@@ -221,6 +258,7 @@ const runner =
       }),
       Effect.map((ran) => answerOf(plugin, call, ran)),
       Effect.catchTag('PlatformError', (failure) => Effect.succeed<PluginHookAnswer>({ failure: `could not start: ${failure.message}` })),
+      Effect.map((answer) => (handler.onFailure === 'block' ? failedBlocking(call, answer) : answer)),
       Effect.withSpan('claudeCode.hook', { attributes: { event } }),
     );
   };
@@ -262,6 +300,18 @@ const eventMap = Effect.fnUntraced(function* (
         }
         if (command === undefined || command.length === 0) {
           ignored.push({ component: 'hook', name: event, reason: 'a command handler without a command' });
+          continue;
+        }
+        if (handler.value.args === undefined && command.includes('${user_config.')) {
+          ignored.push({
+            component: 'hook',
+            name: `${event} ${command}`,
+            reason: 'a shell command takes option values from CLAUDE_PLUGIN_OPTION_<KEY>, never ${user_config.KEY}',
+          });
+          continue;
+        }
+        if (handler.value.async === true) {
+          ignored.push({ component: 'hook', name: `${event} ${command}`, reason: 'Tagma does not run hooks in the background' });
           continue;
         }
         if (handler.value.if !== undefined) {
