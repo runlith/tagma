@@ -124,8 +124,8 @@
   const destinations = $derived(
     !archived && home === host.projectId
       ? [
-          ...workspace.projects.filter((one) => one.id !== home && !one.global),
-          ...workspace.projects.filter((one) => one.id !== home && one.global),
+          ...workspace.projects.filter((one) => one.id !== home && one.kind === 'folder'),
+          ...workspace.projects.filter((one) => one.id !== home && one.kind === 'global'),
         ]
       : [],
   );
