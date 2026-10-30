@@ -22,16 +22,21 @@
   const project = $derived(router.params.project ?? '');
   const sessionId = $derived(typeof router.params.id === 'string' ? router.params.id : null);
   const drafting = $derived(sessionId === null && router.url.searchParams.has(DRAFT));
-  const draftHref = $derived.by(() => {
-    const threads = addresses.thread(null);
+  const draftAt = (project?: string): string => {
+    const threads = addresses.thread(null, project);
     return `${threads}${threads.includes('?') ? '&' : '?'}${DRAFT}`;
-  });
+  };
+  const draftHref = $derived(draftAt());
 
   const host = ThreadSlot.start(App.section('chat', 'project'), {
     app: App.current(),
     writer: {
       navigate: (id) => void router.goto(id === null ? draftHref : addresses.thread(id), { replaceState: drafting, keepFocus: true }),
       open: (id) => void router.goto(addresses.thread(id), { replaceState: drafting }),
+      rehome: (projectId) => {
+        const home = workspace.find(projectId);
+        if (home !== null) void router.goto(draftAt(home.name), { replaceState: drafting });
+      },
     },
   });
   const unseat = screen.seat(host);

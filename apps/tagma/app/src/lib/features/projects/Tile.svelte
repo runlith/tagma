@@ -13,7 +13,7 @@
   )}
   data-tone
   aria-hidden="true"
-  ><span class="absolute top-1 left-1 flex gap-0.5"
-    >{#each marks as id (id)}<span class="size-1" style:background-color={hueOf(id)}></span>{/each}</span
+  ><span class="absolute top-1 right-1 left-1 flex items-start gap-0.5 overflow-hidden"
+    >{#each marks as id (id)}<span class="aspect-square max-w-1 min-w-0 flex-1" style:background-color={hueOf(id)}></span>{/each}</span
   >{initialsOf(labelOf(project))}</span
 >

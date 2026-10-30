@@ -34,6 +34,10 @@
       open: (sessionId) => {
         if (!seats.reveal(sessionId)) void shell.openThread({ projectId: host.projectId, threadId: sessionId }, 'main');
       },
+      rehome: (projectId) => {
+        const project = workspace.find(projectId);
+        if (project !== null) void router.goto(addresses.thread(null, project.name), { keepFocus: true });
+      },
     },
     context: { scopeName: () => addresses.scope },
   });

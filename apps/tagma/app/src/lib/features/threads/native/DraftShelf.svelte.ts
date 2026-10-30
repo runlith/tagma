@@ -109,10 +109,25 @@ export class DraftShelf extends Service<DraftShelf>()('DraftShelf', { tier: 'app
     void this.staged.move(from, to).catch(warn);
   }
 
-  carry(from: string, to: string): void {
-    if (from === to || storedDraft(this.slots.at(to)) !== null) return;
-    this.forget(to);
-    this.rename(from, to);
+  async carry(from: string, to: string): Promise<void> {
+    if (from === to) return;
+    const carried = this.slots.at(from);
+    const parked = this.slots.at(to);
+    if (storedDraft(parked) === null) {
+      this.forget(to);
+      this.rename(from, to);
+      this.place(to, MAIN_CHECKOUT);
+      return;
+    }
+    await Promise.all([carried.restored, parked.restored]);
+    parked.type = carried.type;
+    parked.account = carried.account;
+    parked.switches = carried.switches;
+    parked.approvalMode = carried.approvalMode;
+    parked.delegation = carried.delegation;
+    parked.team = carried.team;
+    this.give(to, carried);
+    this.forget(from);
   }
 
   forget(key: string): void {

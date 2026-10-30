@@ -24,6 +24,7 @@ export interface SlotNavigation {
   open(id: string): void;
   startDraft(): void;
   startDraftAs(type: string): void;
+  rehome(projectId: number): void;
 }
 
 export class ThreadWrites {
@@ -198,5 +199,9 @@ export class ThreadWrites {
 
   startDraftAs(type: string): void {
     this.navigation.startDraftAs(type);
+  }
+
+  rehome(projectId: number): void {
+    this.navigation.rehome(projectId);
   }
 }

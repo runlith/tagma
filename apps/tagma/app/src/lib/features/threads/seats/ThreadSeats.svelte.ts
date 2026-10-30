@@ -70,7 +70,11 @@ export class ThreadSeats extends Service<ThreadSeats>()('ThreadSeats', { tier: '
   }
 
   writerOf(key: string): SlotWriter {
-    return { navigate: (thread) => this.settle(key, thread), open: (thread) => this.openFrom(key, thread) };
+    return {
+      navigate: (thread) => this.settle(key, thread),
+      open: (thread) => this.openFrom(key, thread),
+      rehome: (projectId) => this.retarget(key, { home: projectId, threadId: null }),
+    };
   }
 
   open(thread: PaneThread): ThreadOpening {

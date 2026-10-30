@@ -8,7 +8,7 @@ import { stubFamily } from '@runlith/query/testing';
 import { flush, waitFor, waitUntil } from '@runlith/testing/flush';
 import { afterEach, expect, test } from 'vitest';
 
-import { mountShell, testTagCatalog, type TestApp } from '$lib/app/testing.js';
+import { mountShell, soloWorkspace, testTagCatalog, type TestApp } from '$lib/app/testing.js';
 import { feedSnapshot, slotWorld, testThreadChat } from '$lib/app/slotWorld.js';
 import { testShelf } from '$lib/features/threads/native/testing.js';
 import { SelectionRepo } from '$lib/features/graph/SelectionRepo.js';
@@ -16,6 +16,8 @@ import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
 import { AgentLibraryRepo } from '$lib/features/threads/library/AgentLibraryRepo.js';
 import { DraftShelf } from '$lib/features/threads/native/DraftShelf.svelte.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import { TileRung } from '$lib/features/workspace/TileRung.js';
 import Fixture from './ThreadSlot.fixture.svelte';
 import type { ThreadPaneSlot } from './threadSlot.svelte.js';
 import { testArea, testKind, type TestArea } from '$lib/app/panes/testing.js';
@@ -30,6 +32,13 @@ function areaOn(storage = makeStorage()): TestArea & { readonly seats: ThreadSea
 
 let app: TestApp | undefined;
 const scope = Scope.make();
+
+function standsAtHome(opened: TestApp, projectId: number): boolean {
+  const visit = opened.app.hold(TileRung, { tileId: projectId });
+  const stands = opened.app.hasScope(ProjectRung, { projectId }, visit.scope);
+  visit.release();
+  return stands;
+}
 
 afterEach(async () => {
   await app?.unmount();
@@ -55,6 +64,7 @@ test('a thread of another project opened beside is fed and answered through its 
       Layer.of(SelectionRepo, { search: stubFamily() } as never),
       Layer.of(TagCatalog, testTagCatalog()),
       Layer.of(AgentLibraryRepo, { skills: stubFamily() } as never),
+      Layer.of(Workspace, soloWorkspace()),
     ),
     Layer.mergeAll(),
     { at: { projectId: 1, branch: null } },
@@ -66,7 +76,7 @@ test('a thread of another project opened beside is fed and answered through its 
   if (host === undefined) throw new Error('The pane started no slot.');
 
   expect([slot?.home, host.projectId, host.activeId]).toEqual([2, 2, 't9']);
-  expect(app.app.hasScope(ProjectRung, { projectId: 2 })).toBe(true);
+  expect(standsAtHome(app, 2)).toBe(true);
   await waitFor(() => expect(home.feeds.map((feed) => feed.threadId)).toEqual(['t9']));
   expect(here.feeds).toEqual([]);
 
@@ -96,6 +106,7 @@ test('a pane of another project lets its thread go when it moves to another one,
       Layer.of(SelectionRepo, { search: stubFamily() } as never),
       Layer.of(TagCatalog, testTagCatalog()),
       Layer.of(AgentLibraryRepo, { skills: stubFamily() } as never),
+      Layer.of(Workspace, soloWorkspace()),
     ),
     Layer.mergeAll(),
     { at: { projectId: 1, branch: null } },
@@ -107,9 +118,45 @@ test('a pane of another project lets its thread go when it moves to another one,
   seats.writerOf(key).navigate('t10');
   await waitFor(() => expect(fed()).toEqual(['t10']));
   expect(panes.panes.map((pane) => pane.id)).toEqual(['2:t10']);
-  expect(app.app.hasScope(ProjectRung, { projectId: 2 })).toBe(true);
+  expect(standsAtHome(app, 2)).toBe(true);
 
   panes.close(key);
   await waitFor(() => expect(fed()).toEqual([]));
-  await waitUntil(() => app?.app.hasScope(ProjectRung, { projectId: 2 }) === false);
+  await waitUntil(() => app?.app.hasScope(TileRung, { tileId: 2 }) === false);
+});
+
+test('a draft beside moved to another project goes there with its words, and the page draft stays where it was', async () => {
+  const shelf = testShelf();
+  const area = areaOn();
+  const opened = area.panes.open({ kind: THREAD_PANE, id: null });
+  if (opened.kind === 'refused') throw new Error('No pane opened.');
+
+  const { layer } = slotWorld({ chats: { of: () => testThreadChat() } }, scope);
+  app = mountShell(
+    Layer.mergeAll(
+      layer,
+      Layer.of(DraftShelf, shelf),
+      Layer.of(SelectionRepo, { search: stubFamily() } as never),
+      Layer.of(TagCatalog, testTagCatalog()),
+      Layer.of(AgentLibraryRepo, { skills: stubFamily() } as never),
+      Layer.of(Workspace, soloWorkspace()),
+    ),
+    Layer.mergeAll(),
+    { at: { projectId: 1, branch: null } },
+  );
+  const slots: ThreadPaneSlot[] = [];
+  app.draw(Fixture as never, { ...area, onSlot: (slot: ThreadPaneSlot) => void slots.push(slot) });
+  await flush();
+  shelf.at('new:1').text = 'the page draft';
+  const beside = slots[0]?.host;
+  if (beside === undefined) throw new Error('The pane started no slot.');
+  beside.draft.setText('words beside');
+
+  beside.writes.rehome(2);
+  await waitFor(() => expect(slots.map((slot) => slot.projectId)).toEqual([1, 2]));
+
+  expect(area.panes.panes.map((pane) => pane.id)).toEqual(['2:']);
+  expect(slots[1]?.host.draft.text).toBe('words beside');
+  expect(shelf.at(`new:1:${opened.key}`).text).toBe('');
+  expect(shelf.at('new:1').text).toBe('the page draft');
 });

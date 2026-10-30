@@ -1,6 +1,7 @@
 export interface SlotWriter {
   navigate(threadId: string | null): void;
   open(threadId: string): void;
+  rehome(projectId: number): void;
 }
 
 export interface SlotContext {
@@ -15,10 +16,18 @@ export class SlotSelection {
   private chosen = $state<string | null>(null);
   private generations = 0;
 
+  private readonly newKey: string;
+
   constructor(
-    private readonly projectId: number,
-    private readonly newKey: string = unbornKey(projectId),
-  ) {}
+    projectId: number,
+    private readonly pane: string | null = null,
+  ) {
+    this.newKey = unbornKey(projectId, pane);
+  }
+
+  draftKeyIn(projectId: number): string {
+    return unbornKey(projectId, this.pane);
+  }
 
   get activeId(): string | null {
     return this.chosen;

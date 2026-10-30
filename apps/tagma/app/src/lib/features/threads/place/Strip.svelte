@@ -13,17 +13,16 @@
   import { MAIN_CHECKOUT } from '../Draft.svelte.js';
   import type { ShownThread } from '../ShownThread.js';
   import { ThreadPlace } from '../thread/ThreadPlace.svelte.js';
+  import type { ThreadWrites } from '../ThreadWrites.js';
   import { draftPlaceOf } from '../worktrees/acts.js';
-  import { PageDraft } from '../PageDraft.js';
   import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import Swatch from '$lib/features/workspace/Swatch.svelte';
   import { labelOf } from '$lib/features/workspace/mark.js';
 
-  let { shown, place, places }: { shown: ShownThread; place: BirthPlace; places: Worktrees } = $props();
+  let { shown, place, places, writes }: { shown: ShownThread; place: BirthPlace; places: Worktrees; writes: ThreadWrites } = $props();
 
   const workspace = Workspace.use();
-  const drafts = PageDraft.use();
   const projectId = ProjectRung.Current.use().projectId;
   const project = $derived(workspace.find(projectId));
   const members = $derived(workspace.groupOf(projectId)?.members ?? null);
@@ -76,29 +75,29 @@
   data-place-strip={unversioned ? 'folder' : standing === null ? undefined : standing.kind === 'row' ? standing.row.kind : standing.kind}
   {@attach main === null ? undefined : reading.observe(main.rootId)}
 >
+  {#if drafting && members !== null && project !== null}
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger class={PICKER} aria-label="The project this thread runs in">
+        <Swatch projectId={project.id} />
+        <FadeText text={labelOf(project)} />
+        <ChevronsUpDown class="size-3 shrink-0 opacity-60" />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start" class="max-h-80 min-w-48 overflow-y-auto">
+        {#each members as member (member.id)}
+          <DropdownMenu.Item here={member.id === project.id} onSelect={() => writes.rehome(member.id)}>
+            {#snippet lead()}<Swatch projectId={member.id} />{/snippet}
+            {labelOf(member)}
+          </DropdownMenu.Item>
+        {/each}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  {/if}
   {#if unversioned && main !== null}
     <span class="flex min-w-0 items-center gap-1.5 px-1.5 text-muted-foreground" title={main.folder}>
       <Folder class="size-3.5 shrink-0" />
       <FadeText text={main.folder.split('/').findLast((part) => part !== '') ?? main.folder} />
     </span>
   {:else if standing !== null}
-    {#if drafting && members !== null && project !== null}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger class={PICKER} aria-label="The project this thread runs in">
-          <Swatch projectId={project.id} />
-          <FadeText text={labelOf(project)} />
-          <ChevronsUpDown class="size-3 shrink-0 opacity-60" />
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start" class="max-h-80 min-w-48 overflow-y-auto">
-          {#each members as member (member.id)}
-            <DropdownMenu.Item here={member.id === project.id} onSelect={() => member.id !== project.id && drafts.move(project, member)}>
-              {#snippet lead()}<Swatch projectId={member.id} />{/snippet}
-              {labelOf(member)}
-            </DropdownMenu.Item>
-          {/each}
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-    {/if}
     {#if drafting}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger class={PICKER} aria-label="Where this thread runs">

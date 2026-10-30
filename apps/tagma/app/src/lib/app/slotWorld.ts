@@ -136,7 +136,7 @@ export function testThreadSlots(over: Partial<SlotParts>, options: readonly Test
       one.runner ?? new Runner(),
       writer,
       one.context ?? { scopeName: () => null },
-      one.draft === undefined ? {} : { draft: one.draft },
+      one.pane === undefined ? {} : { pane: one.pane },
     );
     if (writer instanceof TestRoute) {
       writer.follow(slot);
@@ -237,6 +237,8 @@ export class TestRoute implements SlotWriter {
   open(threadId: string): void {
     this.held.push(threadId);
   }
+
+  rehome(): void {}
 
   commit(): void {
     const last = this.held.at(-1);

@@ -64,7 +64,7 @@ import { ThreadSettings } from './thread/ThreadSettings.svelte.js';
 
 const NO_CONTEXT: SlotContext = { scopeName: () => null };
 
-export type SlotOptions = { readonly draft?: string };
+export type SlotOptions = { readonly pane?: string };
 
 export type SlotArgs = SlotOptions & {
   readonly app: MountedApp;
@@ -157,7 +157,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
     options: SlotOptions = {},
   ) {
     super();
-    this.selection = new SlotSelection(projectId, options.draft);
+    this.selection = new SlotSelection(projectId, options.pane);
     this.writer = writer;
     this.opens = new ThreadOpenWatch(runner, (threadId) => this.showing(threadId));
     this.draft = new ThreadDraft(shelf, new ThreadUploads(threads, door, projectId), new CallPieces(threads, projectId), () =>
@@ -273,6 +273,12 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
   showDraft(): void {
     if (this.selection.activeId === null) this.resetDraft();
     this.writer.navigate(null);
+  }
+
+  rehome(projectId: number): void {
+    if (projectId === this.projectId || this.selection.activeId !== null) return;
+    void this.shelf.carry(this.selection.draftKey(null), this.selection.draftKeyIn(projectId));
+    this.writer.rehome(projectId);
   }
 
   private restart(): void {

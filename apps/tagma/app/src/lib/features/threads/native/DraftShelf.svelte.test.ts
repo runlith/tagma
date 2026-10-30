@@ -71,6 +71,50 @@ test('the record follows the draft to the address its thread got, and a forgotte
   expect(new DraftShelf(storage, kept).at('thread:t9').text).toBe('');
 });
 
+test('a draft carried to another project moves whole into its main checkout, or joins the draft parked there ahead of it with its own model', async () => {
+  const storage = makeStorage();
+  const kept = pictures();
+  const shelf = new DraftShelf(storage, kept);
+  const moving = shelf.at('new:1');
+  moving.text = 'the words being written';
+  moving.type = 'code';
+  moving.switches = { speed: 'fast' };
+  moving.place = { kind: 'new', base: 'feature' };
+  moving.images = [await picture('i1', 'a.png', [1])];
+  shelf.keep('new:1');
+
+  await shelf.carry('new:1', 'new:2');
+  const moved = new DraftShelf(storage, kept).at('new:2');
+  await moved.restored;
+  expect([moved.text, moved.type, moved.switches, moved.place]).toEqual([
+    'the words being written',
+    'code',
+    { speed: 'fast' },
+    { kind: 'main' },
+  ]);
+  expect(moved.images.map((image) => image.id)).toEqual(['i1']);
+
+  const parked = shelf.at('new:3');
+  parked.text = 'parked earlier';
+  parked.type = 'research';
+  parked.place = { kind: 'new', base: 'parked' };
+  parked.images = [await picture('i2', 'b.png', [2])];
+  shelf.keep('new:3');
+  await shelf.carry('new:2', 'new:3');
+
+  const joined = new DraftShelf(storage, kept);
+  const both = joined.at('new:3');
+  await both.restored;
+  expect([both.text, both.type, both.switches, both.place]).toEqual([
+    'the words being written\n\nparked earlier',
+    'code',
+    { speed: 'fast' },
+    { kind: 'new', base: 'parked' },
+  ]);
+  expect(both.images.map((image) => image.id)).toEqual(['i1', 'i2']);
+  expect(joined.at('new:2').text).toBe('');
+});
+
 test('two tabs parking drafts at different addresses both find theirs after a reload', () => {
   const storage = makeStorage();
   const kept = pictures();

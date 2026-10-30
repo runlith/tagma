@@ -374,7 +374,7 @@ test('a write hanging on another thread does not hold Enter', async () => {
   life = Scope.make();
   const [column, pane] = testThreadSlots(
     { projectId: 47, chat: testThreadChat(port), live, threads: { setDefaults: stubMutation(async (selection: unknown) => selection) } },
-    [{}, { draft: 'new:47:side' }],
+    [{}, { pane: 'side' }],
     life,
   );
   if (!column || !pane) throw new Error('two slots were not made');
@@ -900,7 +900,7 @@ test('a late birth never takes the words of the draft a later opening stands on'
 
 test('two fresh slots of one project stand on their own drafts', async () => {
   life = Scope.make();
-  const [column, pane] = testThreadSlots({ projectId: 47, chat: testThreadChat(port) }, [{}, { draft: 'new:47:side' }], life);
+  const [column, pane] = testThreadSlots({ projectId: 47, chat: testThreadChat(port) }, [{}, { pane: 'side' }], life);
   if (!column || !pane) throw new Error('two slots were not made');
   expect(column.draft.key).toBe('new:47');
   expect(pane.draft.key).toBe('new:47:side');
