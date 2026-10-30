@@ -210,6 +210,8 @@ if (runner === 'bun') {
   seed = given === undefined ? Math.floor(Math.random() * 2 ** 31) : Number(given);
   command.splice(randomize, 1, '--sequence.shuffle', ...(given === undefined ? [`--sequence.seed=${seed}`] : []));
 }
+const inheritedSeed = Number(process.env['RUNLITH_TEST_SEED']);
+const variantSeed = seed ?? (Number.isSafeInteger(inheritedSeed) ? inheritedSeed : Math.floor(Math.random() * 2 ** 31));
 const junit = join(run.root, 'junit.xml');
 if (bunTest && option('--reporter') === undefined) command.push('--reporter=junit', `--reporter-outfile=${junit}`);
 if (bunTest && option('--timings') === undefined) {
@@ -225,6 +227,7 @@ const environment: Record<string, string | undefined> = {
   [REPORT_ENV]: run.report,
   [SLOT_ENV]: holder,
   [HEADED_ENV]: headed ? '1' : undefined,
+  RUNLITH_TEST_SEED: String(variantSeed),
 };
 delete environment[ADMITTED_ENV];
 const child = Bun.spawn(command, {
@@ -280,5 +283,5 @@ appendFileSync(
   `${[...outcomes.rows, ...verdicts, ...slow, ...workersOf(files).map((worker) => ({ ...worker, run: run.root })), runRow].map((row) => JSON.stringify(row)).join('\n')}\n`,
 );
 console.error(summary(runRow, files, slow, outcomes.unmatched, run.report, notRun));
-if (seed !== undefined) console.error(`  seed: ${seed}`);
+console.error(seed === undefined ? `  variant seed: ${variantSeed} (RUNLITH_TEST_SEED replays it)` : `  seed: ${seed}`);
 process.exit(code ?? 1);

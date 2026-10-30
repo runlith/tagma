@@ -181,6 +181,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot lifecycle', 
         '  yield* snapshots.opened({ path, db });',
         '  yield* snapshots.ready;',
         '})));',
+        'process.exit(0);',
       ].join('\n');
       const child = Bun.spawn([process.execPath, '-e', code], {
         cwd: server,

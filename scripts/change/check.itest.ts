@@ -139,6 +139,11 @@ test('a nonliteral import selects its tests until their run traces what it loade
       ['app/declared.test.ts', 'import closure reaches a changed input'],
       ['app/stray.test.ts', 'import closure reaches a changed input'],
     ]);
+    const adapterOf = async (...changed: string[]): Promise<string> =>
+      (JSON.parse(await answer(checking(checkout, '--plan', '--paths-from', paths('changed', ...changed)))) as { adapter: string }).adapter;
+    expect(await adapterOf('lib/other.ts')).toBe('default');
+    expect(await adapterOf('packages/sqlite-process/src/inline.ts')).toBe('child');
+    expect(await adapterOf('packages/sqlite-process/src/inline.itest.ts')).toBe('default');
     expect(await run()).toMatchObject({ ran: 0, cached: 2 });
     const stray = await ended(checking(checkout, '--paths-from', paths('ran', 'app/stray.test.ts')));
     expect(stray.code, stray.stdout + stray.stderr).toBe(1);

@@ -125,7 +125,11 @@ if (session !== undefined && changed.length === 0)
   );
 const variant: Variant = {
   seed: Number(value('--seed') ?? 0),
-  adapter: value('--adapter') ?? 'default',
+  adapter:
+    value('--adapter') ??
+    (changed.some((path) => /^packages\/sqlite-process\/src\/(?!testing\/).*\.ts$/.test(path) && !/\.(?:test|itest|bench)\.ts$/.test(path))
+      ? 'child'
+      : 'default'),
   isolated: args.includes('--isolated'),
 };
 if (!Number.isInteger(variant.seed) || variant.seed < 0 || variant.seed > 2 ** 32 - 1) throw new Error('--seed must be a uint32');
@@ -262,7 +266,13 @@ const jobs = suites.map((suite, at) => {
     cwd: join(root, pkg.dir),
     stages: [[process.execPath, join(testbed, 'packages/testbed/src/cli.ts'), ...runner]],
     need: suite.length,
-    env: { ...process.env, RUNLITH_TEST_REPORT: report, RUNLITH_CHANGE_AUDIT: manifest, RUNLITH_CHANGE_CONFIG: config },
+    env: {
+      ...process.env,
+      RUNLITH_TEST_REPORT: report,
+      RUNLITH_CHANGE_AUDIT: manifest,
+      RUNLITH_CHANGE_CONFIG: config,
+      ...(variant.adapter === 'child' ? { RUNLITH_SQLITE_HOSTING: 'child' } : {}),
+    },
   };
 });
 const lines = (path: string): string[] => (existsSync(path) ? readFileSync(path, 'utf8').split('\n').filter(Boolean) : []);
