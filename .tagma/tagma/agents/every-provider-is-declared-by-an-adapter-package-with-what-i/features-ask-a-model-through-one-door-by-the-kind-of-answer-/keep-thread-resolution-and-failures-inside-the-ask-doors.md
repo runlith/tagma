@@ -12,4 +12,4 @@ edges:
   - kind: implements
     to: 01a18cbf-9775-75eb-a4a1-6542bcec10b7
 ---
-Move warm-copy model resolution into providers, normalize transport model failures at ThreadAsks, and preserve the shared refusal through title and recap callers. ThreadAsks currently constructs a request to inspect its binding, and recap replaces provider refusals with a feature-specific failure.
+Move warm-copy model resolution into providers, normalize transport model failures at ThreadAsks, and preserve the shared refusal through title and recap callers. Titles must fall back to a fresh ask when the captured copy expires during model or account reconciliation; recap remains warm-only.
