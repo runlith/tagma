@@ -35,6 +35,7 @@ export class ThreadCompaction extends Service<ThreadCompaction>()('ThreadCompact
   }
 
   choices = $state.raw<CompactionChoicesRead | null>(null);
+  unread = $state<string | null>(null);
   refusal = $state<string | null>(null);
   private asked: string | null = null;
   private readings = 0;
@@ -131,6 +132,7 @@ export class ThreadCompaction extends Service<ThreadCompaction>()('ThreadCompact
 
   private read(): Effect.Effect<void> {
     const sequence = ++this.readings;
+    this.unread = null;
     return Effect.tryPromise({
       try: () => this.threads.compactionChoices.run({ id: this.feed.threadId, projectId: this.projectId }, { throwOnError: true }),
       catch: refusedBy,
@@ -144,7 +146,9 @@ export class ThreadCompaction extends Service<ThreadCompaction>()('ThreadCompact
           Effect.logWarning(refusal.message).pipe(
             Effect.andThen(
               Effect.sync(() => {
-                if (sequence === this.readings) this.asked = null;
+                if (sequence !== this.readings) return;
+                this.asked = null;
+                this.unread = refusal.message;
               }),
             ),
           ),

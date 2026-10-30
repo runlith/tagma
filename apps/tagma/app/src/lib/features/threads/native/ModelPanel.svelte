@@ -8,7 +8,7 @@
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
   import { billedLabel } from '$lib/features/providers/served.js';
   import ModelCatalogList from '$lib/features/providers/models/CatalogList.svelte';
-  import { choiceKey, type ModelChoice, type ModelGesture } from '$lib/shared/models/choice.js';
+  import { choiceKey, type ModelChoice, type ModelFlag, type ModelGesture } from '$lib/shared/models/choice.js';
   import { compactionDetail, compactionList } from './compactionWords.js';
   import PickerHeading from './PickerHeading.svelte';
   import type { ChatHold } from '../ChatHold.svelte.js';
@@ -49,11 +49,15 @@
   const current = $derived(panel.current);
   const settings = $derived(views.model.settings);
   const models = $derived(views.model.modelList);
-  const read = $derived(shown.lease?.find(ThreadCompaction)?.choices ?? null);
+  const choosing = $derived(shown.lease?.find(ThreadCompaction) ?? null);
+  const read = $derived(choosing?.choices ?? null);
+  const unread = $derived(choosing?.unread ?? null);
   const compaction = $derived(read === null ? null : compactionList(catalog.models, read, favorites.list, clock.now));
   const pending = $derived.by<readonly ModelChoice[]>(() => {
     const own = models?.choices.find((choice) => choiceKey(choice.provider, choice.model) === models.current);
-    return own === undefined ? [] : [{ ...own, meta: undefined, flags: [{ text: 'reading the choices…', tone: 'muted' }] }];
+    const flag: ModelFlag =
+      unread === null ? { text: 'reading the choices…', tone: 'muted' } : { text: 'the choices were not read', tone: 'bad' };
+    return own === undefined ? [] : [{ ...own, meta: undefined, flags: [flag] }];
   });
 
   function close(): void {
@@ -128,6 +132,8 @@
   {@const row = compaction?.rows.get(choiceKey(choice.provider, choice.model))}
   {#if read !== null && row !== undefined}
     {compactionDetail(catalog.models, read, row, accounts.rows, clock.now)}
+  {:else if read === null && unread !== null}
+    {unread}
   {:else}
     The summarizer is decided when the request is taken
   {/if}

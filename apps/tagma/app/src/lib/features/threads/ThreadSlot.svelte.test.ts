@@ -601,6 +601,39 @@ test('a compaction pick names no summarizer for the standing default, names any 
   expect(host.chat.commands.notice).toBeNull();
 });
 
+test('a compaction choices reading that fails says so instead of reading on, and the next opening of the picker reads again', async () => {
+  const own = choice('subscription', 'opus', { own: true });
+  const read: CompactionChoicesRead = {
+    threadId: 'thread-1',
+    rule: 'when-cold',
+    warmth: { state: 'cold', invalidatedBy: 'account' },
+    resolved: { kind: 'chain', reason: 'cold', choice: own, skipped: [] },
+    own,
+    chain: [],
+    others: { rows: [], shown: 0, total: 0, next: null },
+  };
+  const answers = [
+    async () => {
+      throw new Error('the server did not answer');
+    },
+    async () => read,
+  ];
+  const host = open({ threads: { compactionChoices: stubMutation(() => answers.shift()!()) } });
+  await shows('thread-1');
+  const compaction = host.thread!.get(ThreadCompaction);
+  host.draft.setText('/');
+  compaction.watch(host.draft.slashOpen);
+  await waitFor(() => expect(compaction.unread).toBe('the server did not answer'));
+  expect(compaction.choices).toBeNull();
+
+  host.draft.setText('');
+  compaction.watch(host.draft.slashOpen);
+  host.draft.setText('/');
+  compaction.watch(host.draft.slashOpen);
+  await waitFor(() => expect(compaction.choices).toEqual(read));
+  expect(compaction.unread).toBeNull();
+});
+
 const harnessPage: ThreadTypesPage = {
   types: [
     { id: 'tagma', name: 'Tagma', description: 'The Tagma agent', baseAgentId: 'tagma' },
