@@ -18,10 +18,10 @@ edges:
   - kind: discovered-from
     to: 01a18619-0f3e-74ff-b563-2b8c8e3aead2
   - kind: discovered-from
-    to: 01a18679-d5f7-7d63-a817-4658b089d651
-  - kind: discovered-from
     to: 01a187c1-de8f-748b-a82d-531f974b383b
   - kind: discovered-from
     to: 01a18923-2cd4-71ca-abf6-1cc7ca37273b
+  - kind: relates
+    to: 01a18679-d5f7-7d63-a817-4658b089d651
 ---
 Fix submit_work dependency analysis so independent local variables and array members are not mistaken for omitted peer declarations, while real imported member dependencies still refuse. Check adjacent ignored dependency files, whole-carried samples and the reported Svelte parser failure through minimal public-door regressions.
