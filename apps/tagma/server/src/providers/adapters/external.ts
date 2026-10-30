@@ -36,6 +36,7 @@ export const machineSources = (
           origin: 'machine' as const,
           version: install.version,
           load: () => importAdapter(join(machine, install.directory), host, argv),
+          directory: join(machine, install.directory),
           source: install.source,
           disabled: install.enabled ? undefined : (true as const),
         })),

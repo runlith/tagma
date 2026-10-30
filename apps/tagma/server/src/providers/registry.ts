@@ -39,6 +39,7 @@ const askOffers = (
   providers: readonly Provider[],
   borrowers: ReadonlyMap<string, string>,
   failures: ReadonlyMap<string, string>,
+  packages: ReadonlyMap<string, string>,
 ): AskOffers => {
   const byId = new Map(providers.map((provider) => [provider.id, provider] as const));
   const route = (provider: string, model: string): AskRoute | null => {
@@ -49,7 +50,7 @@ const askOffers = (
     if (borrower !== undefined && !failures.has(borrower) && byId.get(borrower)?.models[model] !== undefined)
       return { path: 'request', provider: borrower };
     const program = registration.asks?.program;
-    return program === undefined ? null : { path: 'program', provider, program };
+    return program === undefined ? null : { path: 'program', provider, program, package: packages.get(provider) ?? null };
   };
   const kinds = (provider: string, model: string): readonly AskKind[] => {
     const routed = route(provider, model);
@@ -144,7 +145,12 @@ export const catalogOf = (
       state.state === 'failed' ? providers.map((provider) => [provider.id, state.reason] as const) : [],
     ),
   );
-  const asks = askOffers(providers, borrowers, failures);
+  const packages = new Map(
+    loaded.flatMap(({ state, providers: declared, directory }) =>
+      state.state === 'disabled' || directory === undefined ? [] : declared.map((provider) => [provider.id, directory] as const),
+    ),
+  );
+  const asks = askOffers(providers, borrowers, failures, packages);
   const first = wires.providers.find(
     (provider) => !failures.has(provider.id) && provider.models[provider.defaultTextModel]?.capabilities.includes('text'),
   );
@@ -174,6 +180,7 @@ export const catalogOf = (
     borrower: (provider) => borrowers.get(provider),
     wires,
     harnesses: providers.filter((provider): provider is HarnessProvider => provider.kind === 'harness'),
+    packages,
     adapters,
     settings: new Map(loaded.flatMap((adapter) => (adapter.settings === undefined ? [] : [[adapter.state.id, adapter.settings] as const]))),
     failures,
@@ -221,7 +228,8 @@ const loadAll = Effect.fn('providers.loadAll')(function* (
       if (taken.get(provider.id) === source.id) taken.delete(provider.id);
     }
     const read = yield* load(source, hostOf(source.id), taken, sections);
-    const adapter = read.state.state !== 'loaded' && prior !== undefined ? { ...read, providers: prior.providers } : read;
+    const adapter =
+      read.state.state !== 'loaded' && prior !== undefined ? { ...read, providers: prior.providers, directory: prior.directory } : read;
     if (adapter.state.state !== 'disabled') {
       for (const provider of adapter.providers) taken.set(provider.id, source.id);
       sections = claimSections(sections, adapter.providers, `adapter ${source.id}`);
@@ -326,6 +334,7 @@ export const registryLayer = Layer.effect(
       },
       forRun: (runId) => runs.get(runId) ?? current,
       releaseRun: (runId) => Effect.sync(() => void runs.delete(runId)),
+      pinned: () => new Set([...new Set(runs.values())].flatMap((catalog) => [...catalog.packages.values()])),
       reload,
       selectMode: (section, mode) =>
         lock.withPermits(1)(

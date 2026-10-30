@@ -12,6 +12,7 @@ export type HarnessAdapter = {
   readonly label: string;
   readonly iconProvider?: string;
   readonly mark?: string;
+  readonly package?: string;
 } & Omit<TerminalSurface, 'launch'> &
   ({ readonly launch: HarnessLaunch; readonly acp?: AcpProfile } | { readonly launch: null; readonly acp: AcpProfile });
 

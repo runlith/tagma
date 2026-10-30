@@ -24,6 +24,7 @@ export type HarnessStorage = typeof harnessStorageSchema.Type;
 export const harnessSessionSchema = Schema.Struct({
   account: Schema.optional(Schema.Struct({ provider: Schema.String, key: Schema.String })),
   storage: Schema.optional(harnessStorageSchema),
+  package: Schema.optional(Schema.String),
   exportPath: Schema.optional(Schema.String),
   prepared: Schema.optional(Schema.Struct({ id: Schema.String, artifact: Schema.String })),
   transcriptPath: Schema.optional(Schema.String),

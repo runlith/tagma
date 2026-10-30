@@ -11,23 +11,30 @@ const same = (left: ReadonlyMap<string, HarnessAdapter>, right: ReadonlyMap<stri
 
 export const makeHarnessAdapters = Effect.gen(function* () {
   const made = new WeakMap<HarnessProvider, HarnessAdapter | null>();
-  const rowsOf = (providers: readonly HarnessProvider[]): ReadonlyMap<string, HarnessAdapter> => {
+  const versions = new Map<string, HarnessAdapter>();
+  const rowsOf = (providers: readonly HarnessProvider[], packages: ReadonlyMap<string, string>): ReadonlyMap<string, HarnessAdapter> => {
     const next = new Map(BUILTIN_HARNESSES.map((row) => [row.harness, row]));
     for (const provider of providers) {
       if (next.has(provider.id)) continue;
-      if (!made.has(provider)) made.set(provider, declaredHarness(provider));
+      if (!made.has(provider)) {
+        const declared = declaredHarness(provider);
+        const directory = packages.get(provider.id);
+        const row = declared === null || directory === undefined ? declared : { ...declared, package: directory };
+        made.set(provider, row);
+        if (row !== null && directory !== undefined) versions.set(directory, row);
+      }
       const row = made.get(provider) ?? null;
       if (row !== null) next.set(row.harness, row);
     }
     return next;
   };
-  let rows = rowsOf([]);
+  let rows = rowsOf([], new Map());
   const held = new Map(rows);
   const moves = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1 }), PubSub.shutdown);
   return HarnessAdapters.of({
-    declared: (providers) =>
+    declared: (providers, packages = new Map()) =>
       Effect.suspend(() => {
-        const next = rowsOf(providers);
+        const next = rowsOf(providers, packages);
         if (same(rows, next)) return Effect.void;
         rows = next;
         for (const [id, row] of next) held.set(id, row);
@@ -35,6 +42,7 @@ export const makeHarnessAdapters = Effect.gen(function* () {
       }),
     find: (id) => rows.get(id) ?? null,
     last: (id) => rows.get(id) ?? held.get(id) ?? null,
+    at: (directory) => versions.get(directory) ?? null,
     row: (id, install) =>
       Effect.suspend(() => {
         const row = rows.get(id);

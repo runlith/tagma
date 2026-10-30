@@ -2,10 +2,13 @@ import { expect } from 'bun:test';
 import { delimiter, join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Context, Effect, FileSystem, Layer, Predicate, Schedule } from 'effect';
+import { Context, Effect, Fiber, FileSystem, Layer, Predicate, Schedule } from 'effect';
+import { ModelAsks } from '../../../providers/contract/service/asks.js';
+import { AdapterInstalls } from '../../../providers/contract/service/adapters.js';
+import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { SessionRead } from '../../../threads/contract/service/harness.js';
 import { makeDoorWorld } from '../doorFixture.js';
-import { QUILL, quillPackage } from './quill.js';
+import { QUILL, quillPackage, quillRelease } from './quill.js';
 
 type Answer = { readonly status: number; readonly body: unknown };
 
@@ -39,11 +42,20 @@ class World extends Context.Service<
     readonly op: (id: string, input: unknown, query?: string) => Effect.Effect<Answer>;
     readonly source: string;
     readonly bin: string;
+    readonly root: string;
     readonly launched: string;
     readonly projectId: number;
     readonly sessions: SessionRead['Service'];
+    readonly asks: ModelAsks['Service'];
+    readonly registry: ProviderRegistry['Service'];
+    readonly installs: AdapterInstalls['Service'];
   }
 >()('testing/InstalledHarnessWorld') {}
+
+const appeared = (path: string) =>
+  Effect.flatMap(FileSystem.FileSystem, (files) =>
+    Effect.repeat(files.exists(path), { until: (standing) => standing, schedule: Schedule.spaced('20 millis'), times: 500 }),
+  );
 
 const world = Layer.effect(
   World,
@@ -62,9 +74,13 @@ const world = Layer.effect(
       op: (id: string, input: unknown, query = '') => door.op(id, input, query),
       source: quill.directory,
       bin: quill.bin,
+      root,
       launched,
       projectId: yield* door.stealthProject(),
       sessions: Context.get(door.runtime.owners, SessionRead),
+      asks: Context.get(door.runtime.owners, ModelAsks),
+      registry: Context.get(door.runtime.owners, ProviderRegistry),
+      installs: Context.get(door.runtime.owners, AdapterInstalls),
     };
   }),
 );
@@ -141,6 +157,55 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
             body: { code: 'harness-not-installed' },
           });
         }),
+    );
+
+    it.effect('an ask running across an update finishes on its version, and the next ask runs the new one', () =>
+      Effect.gen(function* () {
+        const { op, source, root, asks, registry } = yield* World;
+        const files = yield* FileSystem.FileSystem;
+        expect(yield* op('install_adapter', { source })).toMatchObject({ status: 200, body: { status: 'installed' } });
+        const first = registry.current().packages.get(QUILL.harness);
+        expect(first).toBeDefined();
+        const selection = { provider: QUILL.harness, model: QUILL.model, reasoning: null, account: null };
+        const gate = join(root, 'ask-gate');
+        const asking = yield* Effect.forkScoped(asks.text(selection, { system: 'Answer.', input: `wait:${gate}` }));
+        expect(yield* appeared(`${gate}.asked`)).toBe(true);
+
+        yield* quillRelease(source, '2.0.0');
+        expect(yield* op('update_adapter', { id: QUILL.name })).toMatchObject({ status: 200 });
+        const second = registry.current().packages.get(QUILL.harness);
+        expect(second).not.toBe(first);
+        expect(yield* files.exists(first!)).toBe(true);
+
+        yield* files.writeFileString(gate, '');
+        expect((yield* Fiber.join(asking)).value).toBe(`quill ${QUILL.version}`);
+        expect(yield* files.exists(first!)).toBe(false);
+        expect((yield* asks.text(selection, { system: 'Answer.', input: 'now' })).value).toBe('quill 2.0.0');
+
+        expect(yield* op('remove_adapter', { id: QUILL.name })).toMatchObject({ status: 200, body: { status: 'removed' } });
+        expect(yield* files.exists(second!)).toBe(false);
+      }),
+    );
+
+    it.effect('a run pinned before an update asks its version afterwards, and a retired version takes no new hold', () =>
+      Effect.gen(function* () {
+        const { op, source, asks, registry, installs } = yield* World;
+        const files = yield* FileSystem.FileSystem;
+        yield* quillRelease(source, QUILL.version);
+        expect(yield* op('install_adapter', { source })).toMatchObject({ status: 200, body: { status: 'installed' } });
+        const first = registry.current().packages.get(QUILL.harness)!;
+        const run = crypto.randomUUID();
+        registry.pinRun(run);
+        yield* quillRelease(source, '2.0.0');
+        expect(yield* op('update_adapter', { id: QUILL.name })).toMatchObject({ status: 200 });
+
+        const selection = { provider: QUILL.harness, model: QUILL.model, reasoning: null, account: null };
+        expect((yield* asks.text(selection, { system: 'Answer.', input: 'pinned', runId: run })).value).toBe(`quill ${QUILL.version}`);
+        yield* registry.releaseRun(run);
+        expect(yield* op('remove_adapter', { id: QUILL.name })).toMatchObject({ status: 200, body: { status: 'removed' } });
+        expect(yield* files.exists(first)).toBe(false);
+        expect(yield* Effect.scoped(installs.hold(first))).toBe(false);
+      }),
     );
   },
 );

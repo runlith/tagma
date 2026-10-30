@@ -28,6 +28,7 @@ import { HarnessAccounts } from '../contract/service/harness.js';
 import { AccountQuota } from '../contract/service/quota.js';
 import { BuiltinAdapters } from '../contract/service/registry.js';
 import { providersLayer } from '../layer.js';
+import { sessionlessLayer } from '../testing/holders.js';
 
 const home = await mkdtemp(join(tmpdir(), 'borrowed-quota-'));
 afterAll(() => rm(home, { recursive: true, force: true }));
@@ -126,6 +127,7 @@ const layer = providersLayer.pipe(
       }),
       Layer.succeed(CredentialFiles, { tokensPath: join(home, 'tokens.json') }),
       Layer.succeed(AccountCli, cli),
+      sessionlessLayer,
     ),
   ),
   Layer.provideMerge(unitsLayer(MachineUnits, MachineStore)),

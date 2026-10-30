@@ -19,6 +19,7 @@ import { CredentialFiles, ProviderCredentials, QuotaProviders } from './contract
 import { AccountCli } from './contract/service/cli.js';
 import { BuiltinAdapters, ProviderRegistry, type AdapterSource } from './contract/service/registry.js';
 import { providersLayer } from './layer.js';
+import { sessionlessLayer } from './testing/holders.js';
 
 const home = mkdtempSync(join(tmpdir(), 'provider-run-'));
 const key = AccountKey.make('held-account');
@@ -66,6 +67,7 @@ const providers = providersLayer.pipe(
       Layer.succeed(BuiltinAdapters, { sources }),
       Layer.succeed(CredentialFiles, { tokensPath: join(home, 'tokens.json') }),
       Layer.succeed(QuotaProviders, { providers: [] }),
+      sessionlessLayer,
       Layer.succeed(AccountCli, {
         installed: () => Effect.succeed({ _tag: 'Missing', reason: 'absent' } as const),
         changes: Stream.empty,

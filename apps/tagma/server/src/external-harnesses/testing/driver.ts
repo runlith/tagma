@@ -2,6 +2,7 @@ import { Context, Deferred, Effect, FiberMap, Layer } from 'effect';
 import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import { ExecutionId } from '@runlith/executions/protocol/execution';
 import { providerCatalogOf, staticRegistry } from '../../providers/testing/registry.js';
+import { noInstalls } from '../../providers/testing/holders.js';
 import { transcriptFiles } from './files.js';
 import { Principal } from '@runlith/executions/protocol/custody';
 import type { RunOwnership } from '@runlith/agent/thread/run/ThreadRunLedger';
@@ -243,6 +244,7 @@ export const keyboardSession = Effect.fnUntraced(function* ({
     Context.get(ports, ExecutionEndings),
     log ?? unrecorded,
     base.adapters,
+    noInstalls,
   );
   const interrupts = new TerminalInterrupts(
     base.store,

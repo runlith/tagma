@@ -12,6 +12,8 @@ import { makeModelAsks } from '../../providers/asks.js';
 import { ProviderAccounts } from '../../providers/contract/service/accounts.js';
 import { ModelAccess } from '../../providers/contract/service/access.js';
 import { AskPrograms, DefaultSelection } from '../../providers/contract/service/asks.js';
+import { AdapterInstalls } from '../../providers/contract/service/adapters.js';
+import { noInstalls } from '../../providers/testing/holders.js';
 import { HarnessAccounts } from '../../providers/contract/service/harness.js';
 import { ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { providerCatalogOf, staticRegistry } from '../../providers/testing/registry.js';
@@ -97,6 +99,7 @@ layer(filler, { excludeTestServices: true })('ask programs', (it) => {
         Effect.provideContext(
           Context.make(ProviderRegistry, staticRegistry(catalog)).pipe(
             Context.add(AskPrograms, yield* AskPrograms),
+            Context.add(AdapterInstalls, noInstalls),
             Context.add(ActivityLog, recording.log),
             Context.add(DefaultSelection, DefaultSelection.of({ saved: Effect.succeed(null) })),
             Context.add(ProviderAccounts, {

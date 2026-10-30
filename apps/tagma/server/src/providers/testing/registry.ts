@@ -28,6 +28,7 @@ export const staticRegistry = (catalog: ProviderCatalog): ProviderRegistry['Serv
   pinRun: () => {},
   forRun: () => catalog,
   releaseRun: () => Effect.void,
+  pinned: () => new Set(),
   reload: Effect.succeed(catalog),
   selectMode: () => Effect.die('the static catalog does not change account modes'),
   recheck: Effect.succeed(catalog),

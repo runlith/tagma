@@ -9,9 +9,11 @@ export const QUILL = {
   binary: 'quill',
   install: 'npm install --global quill-cli',
   hooks: '.quill/hooks.json',
+  model: 'quill-1',
+  close: 'quill.close',
 } as const;
 
-const adapterText = `
+const adapterText = (close: string) => `
 import { defineAdapter } from '@runlith/tagma/adapter/provider';
 import { emptyValues, fileSource } from '@runlith/tagma/adapter/metadata';
 
@@ -62,6 +64,16 @@ const launch = {
   },
 };
 
+const program = {
+  command: '/bin/sh',
+  schemas: false,
+  argv: (ask) => [import.meta.dir + '/ask.sh', ask.model],
+  answer: ({ stdout, stderr, exit }) =>
+    exit === 0 && stdout.trim() !== ''
+      ? { _tag: 'Text', text: stdout.trim() }
+      : { _tag: 'Refused', refusal: 'ask-provider-failed', message: (stderr || stdout).trim() || 'quill answered nothing' },
+};
+
 export const adapter = defineAdapter(() => [
   {
     id: '${QUILL.harness}',
@@ -69,8 +81,11 @@ export const adapter = defineAdapter(() => [
     kind: 'harness',
     auth: 'cli',
     environment: () => [],
-    models: {},
-    defaultTextModel: '',
+    models: {
+      '${QUILL.model}': { label: 'Quill', capabilities: ['text'], capacity: { context: 32000 }, reasoning: [], defaultReasoning: null },
+    },
+    defaultTextModel: '${QUILL.model}',
+    asks: { program },
     cacheLifetime: { promisedSeconds: null, prior: null },
     terminal: {
       prefix: 'quill',
@@ -85,7 +100,7 @@ export const adapter = defineAdapter(() => [
           preWrite: 'quill.before',
           postWrite: 'quill.after',
           postRead: 'quill.after',
-          stop: 'quill.close',
+          stop: '${close}',
           permission: 'quill.ask',
           prompt: 'quill.said',
         },
@@ -96,7 +111,7 @@ export const adapter = defineAdapter(() => [
       mcpTools: 'catalog',
       mcp: null,
       occasionOf: ({ name }) =>
-        name === 'quill.open' ? 'session-start' : name === 'quill.said' ? 'turn-start' : name === 'quill.close' ? 'turn-end' : 'activity',
+        name === 'quill.open' ? 'session-start' : name === 'quill.said' ? 'turn-start' : name === '${close}' ? 'turn-end' : 'activity',
       sessionKeyOf: (event) => named(event, 'quill_session'),
       modelOf: () => null,
       reportsModel: false,
@@ -126,6 +141,19 @@ export const adapter = defineAdapter(() => [
 ]);
 `;
 
+const askText = `#!/bin/sh
+here=$(dirname "$0")
+input=$(cat)
+case "$input" in
+  wait:*)
+    gate=\${input#wait:}
+    : > "$gate.asked"
+    while [ ! -e "$gate" ]; do sleep 0.05; done
+    ;;
+esac
+cat "$here/answer.txt"
+`;
+
 const cliText = `#!/bin/sh
 echo "quill ready"
 while IFS= read -r line; do echo "quill heard: $line"; done
@@ -133,15 +161,22 @@ while IFS= read -r line; do echo "quill heard: $line"; done
 
 export type QuillPackage = { readonly directory: string; readonly bin: string };
 
+export const quillRelease = Effect.fn('quill.release')(function* (directory: string, version: string, close: string = QUILL.close) {
+  const files = yield* FileSystem.FileSystem;
+  const manifest = { name: QUILL.name, version, type: 'module', exports: { '.': './adapter.ts' } };
+  yield* files.writeFileString(join(directory, 'package.json'), JSON.stringify(manifest));
+  yield* files.writeFileString(join(directory, 'answer.txt'), `quill ${version}\n`);
+  yield* files.writeFileString(join(directory, 'adapter.ts'), adapterText(close));
+});
+
 export const quillPackage = Effect.fn('quill.package')(function* (root: string) {
   const files = yield* FileSystem.FileSystem;
   const directory = join(root, QUILL.name);
   const bin = join(root, 'quill-bin');
   yield* files.makeDirectory(directory, { recursive: true });
   yield* files.makeDirectory(bin, { recursive: true });
-  const manifest = { name: QUILL.name, version: QUILL.version, type: 'module', exports: { '.': './adapter.ts' } };
-  yield* files.writeFileString(join(directory, 'package.json'), JSON.stringify(manifest));
-  yield* files.writeFileString(join(directory, 'adapter.ts'), adapterText);
+  yield* quillRelease(directory, QUILL.version);
+  yield* files.writeFileString(join(directory, 'ask.sh'), askText);
   yield* files.writeFileString(join(bin, QUILL.binary), cliText, { mode: 0o755 });
   return { directory, bin } satisfies QuillPackage;
 });

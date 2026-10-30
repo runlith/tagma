@@ -1,15 +1,17 @@
+import { existsSync, renameSync } from 'node:fs';
 import { readdir, readFile, rename, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { type Context, Effect, Schema, Semaphore } from 'effect';
+import { isAbsolute, join, relative, sep } from 'node:path';
+import { type Context, Effect, Result, Schema, Semaphore } from 'effect';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { AdapterState } from '../contract/wire/catalog.js';
 import type { ProviderRegistry } from '../contract/service/registry.js';
-import type { AdapterInstallRefusal, AdapterInstalls } from '../contract/service/adapters.js';
+import type { AdapterInstallRefusal, AdapterInstalls, PackageHolders } from '../contract/service/adapters.js';
 import { fetchInto, installDependencies, sourceOf } from './fetch.js';
 import { type AdapterInstall, RECORD_FILE, readInstalls, RecordUnreadable, writeInstalls } from './record.js';
 import { HARNESS_INDEX_FILE } from './harnessIndex.js';
 
 const STAGING = '.staging-';
+const RETIRED = '.retired-';
 
 type Placed = { readonly id: string; readonly source: string; readonly version: string; readonly directory: string };
 
@@ -45,11 +47,83 @@ export const homeless: Context.Service.Shape<typeof AdapterInstalls> = {
   remove: () => Effect.fail(homelessRefusal),
   disable: () => Effect.fail(homelessRefusal),
   enable: () => Effect.fail(homelessRefusal),
+  hold: () => Effect.succeed(true),
 };
 
-export const makeMachineAdapters = (input: { readonly machine: string; readonly registry: ProviderRegistry['Service'] }) => {
-  const { machine, registry } = input;
+export const makeMachineAdapters = (input: {
+  readonly machine: string;
+  readonly registry: ProviderRegistry['Service'];
+  readonly holders: PackageHolders['Service'];
+}) => {
+  const { machine, registry, holders } = input;
   const lock = Semaphore.makeUnsafe(1);
+  const leases = new Map<string, number>();
+  const handed = new Map<string, number>();
+  const placing = new Set<string>();
+  let moment = 0;
+
+  const folderOfDirectory = (directory: string): string | null => {
+    const folder = relative(machine, directory);
+    return folder === '' || folder.startsWith('..') || folder.includes(sep) || isAbsolute(folder) ? null : folder;
+  };
+
+  const folders = (directories: Iterable<string>): readonly string[] =>
+    [...directories].flatMap((directory) => folderOfDirectory(directory) ?? []);
+
+  const unreadable = (error: unknown) => new RecordUnreadable({ path: machine, reason: reasonOf(error) });
+
+  const sessions = holders.recorded.pipe(Effect.map(folders), Effect.mapError(unreadable));
+
+  const live = (): ReadonlySet<string> =>
+    new Set([
+      ...leases.keys(),
+      ...handed.keys(),
+      ...placing,
+      ...folders(holders.standing()),
+      ...folders(registry.pinned()),
+      ...folders(registry.current().packages.values()),
+    ]);
+
+  const collect = Effect.fn('MachineAdapters.sweep')(function* (boot: boolean) {
+    const mark = ++moment;
+    const installs = yield* readInstalls(machine);
+    const kept = new Set([RECORD_FILE, HARNESS_INDEX_FILE, ...installs.map((install) => install.directory), ...(yield* sessions)]);
+    yield* Effect.tryPromise({
+      try: async () => {
+        const listed = await names();
+        const standing = live();
+        const retired: string[] = [];
+        for (const name of listed) {
+          if (kept.has(name) || standing.has(name) || (!boot && name.startsWith('.')) || !existsSync(join(machine, name))) continue;
+          const away = join(machine, `${RETIRED}${++moment}-${name}`);
+          renameSync(join(machine, name), away);
+          retired.push(away);
+        }
+        for (const away of retired) await rm(away, { recursive: true, force: true });
+      },
+      catch: unreadable,
+    });
+    for (const [folder, at] of handed) if (at < mark) handed.delete(folder);
+  });
+
+  const collected = (boot: boolean) =>
+    Effect.flatMap(Effect.result(collect(boot)), (done) =>
+      Result.isFailure(done)
+        ? Effect.logWarning('earlier adapter versions stay until the next collection', { reason: done.failure.reason })
+        : Effect.void,
+    );
+
+  const released = (folder: string, recorded: boolean) =>
+    Effect.suspend(() => {
+      const left = (leases.get(folder) ?? 1) - 1;
+      if (left > 0) leases.set(folder, left);
+      else leases.delete(folder);
+      if (recorded) {
+        handed.set(folder, ++moment);
+        return Effect.void;
+      }
+      return left > 0 || live().has(folder) ? Effect.void : collected(false);
+    });
 
   const names = async (): Promise<readonly string[]> => {
     try {
@@ -72,17 +146,11 @@ export const makeMachineAdapters = (input: { readonly machine: string; readonly 
       const taken = new Set(await names());
       const base = `${folderOf(manifest.name)}@${version}`;
       const directory = taken.has(base) ? `${base}+${Date.now()}` : base;
+      placing.add(directory);
       await rename(unpacked, join(machine, directory));
       return { id: manifest.name, source, version, directory };
     } finally {
       await rm(staging, { recursive: true, force: true });
-    }
-  };
-
-  const sweepVersions = async (id: string, kept: string | null): Promise<void> => {
-    const prefix = `${folderOf(id)}@`;
-    for (const name of await names()) {
-      if (name.startsWith(prefix) && name !== kept) await rm(join(machine, name), { recursive: true, force: true });
     }
   };
 
@@ -102,11 +170,16 @@ export const makeMachineAdapters = (input: { readonly machine: string; readonly 
     const standing = yield* readInstalls(machine).pipe(Effect.mapError(refused(source)));
     const placed = yield* Effect.uninterruptible(Effect.tryPromise({ try: () => place(source), catch: refused(source) }));
     const kept = standing.find((install) => install.id === placed.id);
-    yield* writeInstalls(machine, [
+    const state = yield* writeInstalls(machine, [
       ...standing.filter((install) => install.id !== placed.id),
       { ...placed, enabled: kept?.enabled ?? true },
-    ]).pipe(Effect.mapError(refused(source)));
-    return yield* stateAfterReload(placed.id);
+    ]).pipe(
+      Effect.mapError(refused(source)),
+      Effect.andThen(stateAfterReload(placed.id)),
+      Effect.ensuring(Effect.sync(() => void placing.delete(placed.directory))),
+    );
+    yield* collected(false);
+    return state;
   });
 
   const switched = (id: string, enabled: boolean) =>
@@ -141,7 +214,7 @@ export const makeMachineAdapters = (input: { readonly machine: string; readonly 
             standing.filter((install) => install.id !== id),
           ).pipe(Effect.mapError(refused(id)));
           yield* registry.reload;
-          yield* Effect.tryPromise({ try: () => sweepVersions(id, null), catch: refused(id) });
+          yield* collected(false);
         }),
       );
     }),
@@ -151,18 +224,19 @@ export const makeMachineAdapters = (input: { readonly machine: string; readonly 
     enable: Effect.fn('AdapterInstalls.enable')(function* (id) {
       return yield* switched(id, true);
     }),
-    sweep: Effect.fn('MachineAdapters.sweep')(function* () {
-      const installs = yield* readInstalls(machine);
-      const kept = new Set([RECORD_FILE, HARNESS_INDEX_FILE, ...installs.map((install) => install.directory)]);
-      yield* Effect.tryPromise({
-        try: async () => {
-          for (const name of await names()) {
-            if (!kept.has(name)) await rm(join(machine, name), { recursive: true, force: true });
-          }
-        },
-        catch: (error) => new RecordUnreadable({ path: machine, reason: reasonOf(error) }),
-      });
-    }),
+    hold: (directory: string | null, recorded = false) => {
+      const folder = directory === null ? null : folderOfDirectory(directory);
+      if (folder === null) return Effect.succeed(true);
+      return Effect.acquireRelease(
+        Effect.sync(() => {
+          if (!existsSync(join(machine, folder))) return false;
+          leases.set(folder, (leases.get(folder) ?? 0) + 1);
+          return true;
+        }),
+        (held) => (held ? released(folder, recorded) : Effect.void),
+      );
+    },
+    sweep: () => collect(true),
   };
 };
 

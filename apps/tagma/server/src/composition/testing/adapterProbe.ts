@@ -15,6 +15,7 @@ import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { makeMachineAdapters } from '../../providers/adapters/installs.js';
 import { AdapterPlaces, BuiltinAdapters, ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { registryLayer } from '../../providers/registry.js';
+import { sessionless } from '../../providers/testing/holders.js';
 
 const [machine, ...sources] = Bun.argv.slice(2);
 if (machine === undefined) throw new Error('usage: adapterProbe.ts <machine directory> <adapter source>...');
@@ -109,7 +110,7 @@ const modelProbe = Effect.fnUntraced(function* (provider: WireProvider) {
 
 const program = Effect.gen(function* () {
   const registry = yield* ProviderRegistry;
-  const installs = makeMachineAdapters({ machine: machine, registry: registry });
+  const installs = makeMachineAdapters({ machine: machine, registry: registry, holders: sessionless });
   yield* installs.sweep();
   const probed: Probed[] = [];
   for (const source of sources) {

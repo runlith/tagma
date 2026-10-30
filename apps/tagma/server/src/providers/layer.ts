@@ -5,7 +5,7 @@ import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { Context, Effect, Layer, Option, Result } from 'effect';
 import { homeless, makeMachineAdapters } from './adapters/installs.js';
 import { makeAdapterInstanceRows } from './adapters/instanceRows.js';
-import { AdapterInstalls } from './contract/service/adapters.js';
+import { AdapterInstalls, PackageHolders } from './contract/service/adapters.js';
 import { AdapterInstances } from './contract/service/instances.js';
 import { OPERATOR_PRINCIPAL } from '../platform/contract/wire/actor.js';
 import { MachineStore } from '../platform/contract/service/store.js';
@@ -202,8 +202,9 @@ const adapters = Layer.effect(
   Effect.gen(function* () {
     const places = yield* Effect.serviceOption(AdapterPlaces);
     const machine = Option.match(places, { onNone: () => null, onSome: (place) => place.machine });
+    const holders = yield* PackageHolders;
     if (machine === null) return homeless;
-    const installs = makeMachineAdapters({ machine, registry: yield* ProviderRegistry });
+    const installs = makeMachineAdapters({ machine, registry: yield* ProviderRegistry, holders });
     const swept = yield* Effect.result(installs.sweep());
     if (Result.isFailure(swept)) yield* Effect.logError('earlier adapter versions were not swept', { reason: swept.failure.reason });
     return installs;

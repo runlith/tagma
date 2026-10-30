@@ -8,6 +8,7 @@ import type { GrantSigner } from '../../platform/contract/service/grantSigner.js
 import { transportOf } from '../contract/service/table.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
+import type { AdapterInstalls } from '../../providers/contract/service/adapters.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { launchChoice } from '../birth/modelChoice.js';
 import type { HarnessProcessOutcome, HarnessSession } from '../../threads/contract/wire/harness/session.js';
@@ -63,6 +64,7 @@ export class SessionLauncher {
     private readonly files: FileSystem.FileSystem,
     private readonly declaring: ProjectDeclaring,
     private readonly adapters: HarnessAdapters['Service'],
+    private readonly installs: AdapterInstalls['Service'],
   ) {}
 
   readonly launch = Effect.fnUntraced(function* (
@@ -73,7 +75,7 @@ export class SessionLauncher {
     launching: boolean,
     declaresExport: boolean,
   ) {
-    const readied = yield* Effect.exit(this.prepare(threadId, facet, session, launching, declaresExport));
+    const readied = yield* Effect.exit(Effect.scoped(this.prepare(threadId, facet, session, launching, declaresExport)));
     if (Exit.isFailure(readied)) {
       if (Cause.hasInterruptsOnly(readied.cause)) return yield* Effect.failCause(readied.cause);
       yield* this.unsent(threadId, session.id, readied.cause);
@@ -91,7 +93,9 @@ export class SessionLauncher {
     declaresExport: boolean,
   ) {
     const { store, terminals, host, settings, grants, accounts, providers, scratch, roots, ownerId, cli, finish, files, declaring } = this;
-    const adapter = yield* this.adapters.row(facet.name, facet.presentation.install);
+    let adapter = yield* this.adapters.row(facet.name, facet.presentation.install);
+    while (!(yield* this.installs.hold(adapter.package ?? null, true)))
+      adapter = yield* this.adapters.row(facet.name, facet.presentation.install);
     const offer = yield* transportOf(adapter, 'terminal');
     const { launch } = offer;
     const place = yield* this.place(threadId);
@@ -160,7 +164,11 @@ export class SessionLauncher {
     ).pipe(Effect.mapError((cause) => threadCallFailed(cause)));
     const bound = yield* store.owned(threadId, session.id, ownerId, (current, held) => ({
       ...current,
-      session: { ...held, account: account === null ? undefined : { provider: account.provider, key: account.account } },
+      session: {
+        ...held,
+        account: account === null ? undefined : { provider: account.provider, key: account.account },
+        package: adapter.package,
+      },
     }));
     if (bound === null) return null;
     const answered = launching

@@ -19,6 +19,7 @@ import { AccountCli } from '../../../providers/contract/service/cli.js';
 import { BuiltinAdapters } from '../../../providers/contract/service/registry.js';
 import { SignIns } from '../../../providers/contract/service/signIns.js';
 import { providers } from '../../../providers/providers.js';
+import { sessionlessLayer } from '../../../providers/testing/holders.js';
 import { credentialsLayer } from '../../../speech/credentials.js';
 
 const home = mkdtempSync(join(tmpdir(), 'tagma-speech-keys-'));
@@ -31,6 +32,7 @@ const world = credentialsLayer.pipe(
       Layer.succeed(KeyedProviders, { ids: ['soniox', 'elevenlabs'] }),
       Layer.succeed(QuotaProviders, { providers: [] }),
       Layer.succeed(BuiltinAdapters, { sources: [] }),
+      sessionlessLayer,
       Layer.succeed(AccountCli, {
         installed: () => Effect.succeed({ _tag: 'Missing', reason: 'absent' } as const),
         changes: Stream.empty,

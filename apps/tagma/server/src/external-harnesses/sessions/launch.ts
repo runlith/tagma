@@ -8,6 +8,7 @@ import type { HarnessModelChoice } from '@runlith/tagma/adapter/harness';
 import { harnessArgv, servingProvider, type HarnessTransportOffer } from '../contract/service/table.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { HarnessAdapters } from '../contract/service/adapters.js';
+import { PACKAGE_VARIABLE } from '../contract/wire/sessionVariables.js';
 import type { SessionIdentity } from '../../platform/contract/wire/session.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessName, HarnessTransport } from '../../threads/contract/wire/harness/names.js';
@@ -109,6 +110,7 @@ export const harnessPlace = Effect.fnUntraced(function* (
           value === undefined ? { _tag: 'Unset' as const, name: variable } : { _tag: 'Set' as const, name: variable, value },
         ),
         ...Object.entries(adapter.env ?? {}).map(([variable, value]) => ({ _tag: 'Set' as const, name: variable, value })),
+        ...(adapter.package === undefined ? [] : [{ _tag: 'Set' as const, name: PACKAGE_VARIABLE, value: adapter.package }]),
         ...(profile.home === undefined || homeEnv === null ? [] : [{ _tag: 'Set' as const, name: homeEnv, value: profile.home }]),
         ...(account?.entries ?? []),
       ],

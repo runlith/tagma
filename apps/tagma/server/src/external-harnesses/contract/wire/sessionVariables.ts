@@ -1,5 +1,7 @@
 export type SessionSigner = { readonly harness: string; readonly variable?: string | undefined };
 
+export const PACKAGE_VARIABLE = 'TAGMA_ADAPTER_PACKAGE';
+
 export const SESSION_VARIABLES = {
   codex: 'CODEX_THREAD_ID',
   opencode: 'OPENCODE_SESSION_ID',

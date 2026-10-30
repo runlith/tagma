@@ -33,6 +33,7 @@ import {
   type FreshAsk,
 } from './contract/service/asks.js';
 import { HarnessAccounts } from './contract/service/harness.js';
+import { AdapterInstalls } from './contract/service/adapters.js';
 import type { AskPath, AskRefusal } from './contract/wire/asks.js';
 import { ProviderRegistry, type AskRoute, type ProviderCatalog } from './contract/service/registry.js';
 
@@ -105,6 +106,7 @@ export const makeModelAsks = Effect.gen(function* () {
   const accounts = yield* ProviderAccounts;
   const harnessAccounts = yield* HarnessAccounts;
   const programs = yield* AskPrograms;
+  const installs = yield* AdapterInstalls;
   const defaults = yield* DefaultSelection;
   const log = yield* ActivityLog;
   const lanes = new Map<string, Semaphore.Semaphore>();
@@ -196,13 +198,26 @@ export const makeModelAsks = Effect.gen(function* () {
     return { entries: registration.auth === 'cli' ? registration.environment(null) : [], account: undefined };
   });
 
+  const heldRoute = Effect.fnUntraced(function* (catalog: ProviderCatalog, route: ProgramRoute, selection: AskSelection) {
+    let held = { catalog, route };
+    while (!(yield* installs.hold(held.route.package))) {
+      const current = registry.current();
+      const next = yield* routeOf(current, selection);
+      if (next.path !== 'program')
+        return yield* refused('ask-unanswerable', `${selection.provider}:${selection.model} no longer answers by a program`);
+      held = { catalog: current, route: next };
+    }
+    return held;
+  });
+
   const programAnswer = Effect.fnUntraced(function* (
-    catalog: ProviderCatalog,
-    route: ProgramRoute,
+    given: ProviderCatalog,
+    routed: ProgramRoute,
     selection: AskSelection,
     ask: FreshAsk,
     schema?: JsonSchema,
   ) {
+    const { catalog, route } = yield* heldRoute(given, routed, selection);
     const native = schema !== undefined && !('runner' in route.program) && route.program.schemas;
     const system = schema === undefined || native ? ask.system : objectInstruction(ask.system, schema);
     const budget = yield* programBudget(catalog, route, selection, system);
@@ -223,7 +238,7 @@ export const makeModelAsks = Effect.gen(function* () {
     const answer: ProgramAnswer = route.program.answer(ran);
     if (answer._tag === 'Refused') return yield* refused(answer.refusal, answer.message, undefined, answer.usage);
     return { answer, usage: answer.usage, account: environment.account };
-  });
+  }, Effect.scoped);
 
   const spokenText = Effect.fnUntraced(function* (catalog: ProviderCatalog, route: AskRoute, selection: AskSelection, ask: FreshAsk) {
     if (route.path === 'program') {

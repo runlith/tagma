@@ -8,9 +8,10 @@ export class HarnessAdapters extends Context.Service<
   {
     find(id: string): HarnessAdapter | null;
     last(id: string): HarnessAdapter | null;
+    at(directory: string): HarnessAdapter | null;
     row(id: string, install?: string | null): Effect.Effect<HarnessAdapter, HarnessNotInstalled>;
     all(): readonly HarnessAdapter[];
     readonly changes: Stream.Stream<void>;
-    declared(providers: readonly HarnessProvider[]): Effect.Effect<void>;
+    declared(providers: readonly HarnessProvider[], packages?: ReadonlyMap<string, string>): Effect.Effect<void>;
   }
 >()('tagma/external-harnesses/HarnessAdapters') {}

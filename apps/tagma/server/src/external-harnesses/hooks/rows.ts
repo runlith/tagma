@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { Data, Effect } from 'effect';
 import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
-import type { SessionSigner } from '../contract/wire/sessionVariables.js';
+import { PACKAGE_VARIABLE, type SessionSigner } from '../contract/wire/sessionVariables.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { declaredHarness } from '../adapter/declared.js';
 import { BUILTIN_LOADERS } from '../vendors/catalog.js';
@@ -9,7 +9,11 @@ import { ADAPTERS, dataDirectory } from '../../installation/contract/wire/layout
 import type { Channel } from '../../installation/contract/wire/channel.js';
 import type { Invocation } from '../../platform/cli/verb.js';
 
-export type HarnessDeclarations = (machine: string | null, harness: string | null) => Promise<readonly HarnessProvider[]>;
+export type HarnessDeclarations = (
+  machine: string | null,
+  harness: string | null,
+  pinned: string | null,
+) => Promise<readonly HarnessProvider[]>;
 
 export type HarnessCatalog = { readonly declarations: HarnessDeclarations; readonly signers: readonly SessionSigner[] };
 
@@ -39,7 +43,7 @@ export const harnessRows = Effect.fnUntraced(function* (
   }
   const data = dataDirectory(channel, at.env);
   const providers = yield* Effect.tryPromise({
-    try: () => declarations(data === null ? null : join(data, ADAPTERS), harness),
+    try: () => declarations(data === null ? null : join(data, ADAPTERS), harness, at.env[PACKAGE_VARIABLE] ?? null),
     catch: (cause) =>
       new HarnessUnreadable({ harness: harness ?? 'unnamed hook', reason: cause instanceof Error ? cause.message : String(cause) }),
   }).pipe(Effect.withSpan('hook.installedHarness'));

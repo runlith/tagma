@@ -14,7 +14,7 @@ export const installerAdapters = Layer.effect(
     const adapters = yield* makeHarnessAdapters;
     const data = dataDirectory(CHANNEL, (yield* CurrentInvocation).env);
     const providers = yield* Effect.tryPromise({
-      try: () => harnessDeclarations(data === null ? null : join(data, ADAPTERS), null),
+      try: () => harnessDeclarations(data === null ? null : join(data, ADAPTERS), null, null),
       catch: installFailure,
     });
     yield* adapters.declared(providers);

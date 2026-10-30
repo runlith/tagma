@@ -20,7 +20,7 @@ export type SignedProviders = Effect.Effect<readonly string[], TokenStoreFault>;
 
 export type AskRoute =
   | { readonly path: 'request'; readonly provider: string }
-  | { readonly path: 'program'; readonly provider: string; readonly program: AskProgram };
+  | { readonly path: 'program'; readonly provider: string; readonly program: AskProgram; readonly package: string | null };
 
 export type AskOffers = {
   route(provider: string, model: string): AskRoute | null;
@@ -33,6 +33,7 @@ export type ProviderCatalog = {
   readonly menu: ModelCatalog<Provider>;
   readonly wires: ModelCatalog<WireProvider>;
   readonly harnesses: readonly HarnessProvider[];
+  readonly packages: ReadonlyMap<string, string>;
   readonly adapters: readonly AdapterState[];
   readonly settings: ReadonlyMap<string, AdapterSettings>;
   readonly failures: ReadonlyMap<string, string>;
@@ -83,6 +84,7 @@ export class ProviderRegistry extends Context.Service<
     pinRun(runId: string): void;
     forRun(runId: string): ProviderCatalog;
     releaseRun(runId: string): Effect.Effect<void>;
+    pinned(): ReadonlySet<string>;
     reload: Effect.Effect<ProviderCatalog>;
     selectMode(section: string, mode: string): Effect.Effect<ProviderCatalog, GateRefusal | CredentialFileFault>;
     readonly recheck: Effect.Effect<ProviderCatalog>;
@@ -98,7 +100,11 @@ export type AdapterIdentity = {
   readonly source?: string;
 };
 
-export type AdapterSource = AdapterIdentity & { readonly load: () => Promise<AdapterEntry>; readonly disabled?: true };
+export type AdapterSource = AdapterIdentity & {
+  readonly load: () => Promise<AdapterEntry>;
+  readonly disabled?: true;
+  readonly directory?: string;
+};
 
 export class BuiltinAdapters extends Context.Service<BuiltinAdapters, { readonly sources: readonly AdapterSource[] }>()(
   'tagma/providers/BuiltinAdapters',

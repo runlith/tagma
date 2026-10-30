@@ -8,6 +8,7 @@ export type Loaded = {
   readonly state: AdapterState;
   readonly providers: readonly Provider[];
   readonly settings: AdapterSettings | undefined;
+  readonly directory?: string;
 };
 
 export const failed = (source: AdapterIdentity, reason: string): Loaded => ({
@@ -47,6 +48,7 @@ export const load = Effect.fn('providers.load')(function* (
           providers: declared.success.providers.map((provider) => provider.id),
         },
         ...declared.success,
+        directory: source.directory,
       }
     : failed(source, declared.failure);
   if (loaded.state.state === 'failed')

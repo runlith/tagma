@@ -107,6 +107,7 @@ import { installationAnchor } from '../installation/paths.js';
 import { harnessIdentity } from '../external-harnesses/sessionPrefix.js';
 import { accountCliLayer } from '../external-harnesses/accounts/cli.js';
 import { askProgramsLayer } from '../external-harnesses/programs/asks.js';
+import { packageHoldersLayer } from '../external-harnesses/store/packages.js';
 import { AccountCli } from '../providers/contract/service/cli.js';
 import { installedHarnessesLayer } from '../external-harnesses/birth/installed.js';
 import { makeHarnessAdapters } from '../external-harnesses/adapters.js';
@@ -436,6 +437,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Layer.provide(Layer.succeed(KeyedProviders, { ids: KEYED_SPEECH })),
     Layer.provide(Layer.succeed(BuiltinAdapters, { sources: options.adapters ?? BUILTIN_ADAPTERS })),
     Layer.provide(Layer.succeed(AdapterPlaces, adapterPlaces(dataPath))),
+    Layer.provide(packageHoldersLayer.pipe(Layer.provide(Layer.succeed(HarnessAdapters, adapters)))),
     Layer.provide(
       options.quotaProviders === undefined ? Layer.empty : Layer.succeed(QuotaProviders, { providers: options.quotaProviders }),
     ),
