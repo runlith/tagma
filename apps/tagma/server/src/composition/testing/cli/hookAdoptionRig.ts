@@ -7,7 +7,7 @@ import { GRANT_HEADER, GRANT_VARIABLE, TERMINAL_VARIABLE } from '../../../platfo
 import { grantFor } from '../../../platform/testing/grants.js';
 import type { HarnessAdoptInput } from '../../../external-harnesses/contract/wire/adoption.js';
 import { unmeasuredObservation, type HarnessReportInput } from '../../../threads/contract/wire/harness/observation.js';
-import { HARNESSES } from '../../../external-harnesses/contract/service/table.js';
+import { HARNESSES, harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import type { ExternalSession } from '../../../threads/contract/wire/harness/externalSession.js';
 import { makeTerminalWorld } from '../fixture.js';
 
@@ -32,6 +32,7 @@ export const adoptionWorld = Effect.fnUntraced(function* () {
   const adoptedThread = Effect.fnUntraced(function* (id: string, projectId: number, key: string) {
     const facet: ExternalSession = {
       name: 'claude-code',
+      presentation: harnessPresentation('claude-code'),
       sessionKey: key,
       execution: null,
       observation: unmeasuredObservation(),

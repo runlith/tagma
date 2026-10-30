@@ -9,7 +9,7 @@ import { sessionFor } from '../../../external-harnesses/testing/sessions.js';
 import { GRANT_HEADER, GRANT_VARIABLE, SESSION_TOKEN_VARIABLE } from '../../../platform/contract/service/credentials.js';
 import { grantFor, sessionTokenEnvironment } from '../../../platform/testing/grants.js';
 import { unmeasuredObservation } from '../../../threads/contract/wire/harness/observation.js';
-import { HARNESSES, harnessArgv } from '../../../external-harnesses/contract/service/table.js';
+import { HARNESSES, harnessArgv, harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
 import type { ExternalSession } from '../../../threads/contract/wire/harness/externalSession.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
@@ -66,6 +66,7 @@ const program = Effect.gen(function* () {
   const threadId = '01a09400-0000-7000-8000-0000000000f2';
   const facet: ExternalSession = {
     name: 'cursor',
+    presentation: harnessPresentation('cursor'),
     sessionKey: ROOT,
     execution: null,
     observation: unmeasuredObservation(),

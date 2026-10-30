@@ -7,7 +7,7 @@ import { bornThread } from '../../../native-harness/testing/born.js';
 import { sessionFor, sessionOfThread } from '../../../external-harnesses/testing/sessions.js';
 import { grantEnvironment } from '../../../platform/testing/grants.js';
 import { unmeasuredObservation } from '../../../threads/contract/wire/harness/observation.js';
-import { HARNESSES } from '../../../external-harnesses/contract/service/table.js';
+import { HARNESSES, harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
 import { makeTerminalWorld } from '../fixture.js';
 
@@ -35,7 +35,13 @@ it.live('a call trust does not ask about prints nothing at all', () =>
       },
       { projectId: project.id, title: threadId },
     );
-    yield* sessionFor(store.db, threadId, { name: 'devin', sessionKey: null, execution: null, observation: unmeasuredObservation() });
+    yield* sessionFor(store.db, threadId, {
+      name: 'devin',
+      presentation: harnessPresentation('devin'),
+      sessionKey: null,
+      execution: null,
+      observation: unmeasuredObservation(),
+    });
     const bare: Record<string, string | undefined> = {};
     for (const { variable } of HARNESSES) if (variable !== undefined) bare[variable] = undefined;
     const answered = yield* world.tagma(['hook', 'permission-request'], {
