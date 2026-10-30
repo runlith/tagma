@@ -5,13 +5,12 @@
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import SecretFields from '$lib/features/secrets/SecretFields.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
-  import { Input } from '$lib/shared/ui/input/index.js';
-  import Disclosure from '$lib/shared/ui/Disclosure.svelte';
   import SwitchControl from '$lib/features/settings/controls/SwitchControl.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import { scopeName } from '$lib/features/settings/scope.js';
   import type { Project } from '@tagma/server/graph/contract/wire/rows';
   import type { McpSignIn } from '$lib/features/mcp/Repo.js';
+  import OwnClient from '$lib/features/mcp/OwnClient.svelte';
   import StatusMark from '$lib/features/mcp/StatusMark.svelte';
 
   let {
@@ -58,8 +57,6 @@
     registered: 'with a client Tagma registered',
   };
 
-  let clientId = $state('');
-  let clientSecret = $state('');
   let own = $state(false);
 
   const signIn = $derived(row.signIn);
@@ -141,34 +138,7 @@
         {/if}
       </div>
       {#if asks && signIn.redirect !== null}
-        <Disclosure bind:open={own} summaryClass="text-small">
-          {#snippet summary()}Sign in with a client you registered{/snippet}
-          <form
-            class="grid gap-2 pt-2"
-            onsubmit={(event) => {
-              event.preventDefault();
-              if (clientId.trim() === '') return;
-              onsignin({ id: clientId.trim(), secret: clientSecret === '' ? undefined : clientSecret });
-            }}
-          >
-            <p class="text-small text-muted-foreground">
-              Register <code class="stamp break-all text-foreground">{signIn.redirect}</code> as its redirect address with the service.
-            </p>
-            <div class="grid gap-2 sm:grid-cols-2">
-              <label class="grid gap-1 text-small text-muted-foreground">
-                Client id
-                <Input class="font-mono" bind:value={clientId} disabled={busy} />
-              </label>
-              <label class="grid gap-1 text-small text-muted-foreground">
-                Client secret, if the service gave one
-                <Input type="password" class="font-mono" autocomplete="new-password" bind:value={clientSecret} disabled={busy} />
-              </label>
-            </div>
-            <div class="flex justify-end">
-              <Button size="sm" type="submit" disabled={busy || clientId.trim() === ''}>Sign in with this client</Button>
-            </div>
-          </form>
-        </Disclosure>
+        <OwnClient redirect={signIn.redirect} {busy} bind:open={own} {onsignin} />
       {/if}
     </div>
   {/if}
