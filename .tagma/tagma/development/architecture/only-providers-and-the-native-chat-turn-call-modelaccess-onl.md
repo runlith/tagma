@@ -5,7 +5,23 @@ ord: 26
 tags: ["rule"]
 fields:
   {
-    "delivery": "code"
+    "delivery": "code",
+    "enforcement": {
+      "debt": [],
+      "escaped": [],
+      "inspection": "ask-calls",
+      "on": [
+        {
+          "op": "submit_work",
+          "phase": "before"
+        },
+        {
+          "op": "merge_worktree",
+          "phase": "before"
+        }
+      ],
+      "strictness": "gate"
+    }
   }
 edges:
   - kind: relates

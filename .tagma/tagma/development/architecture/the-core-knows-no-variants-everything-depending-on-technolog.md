@@ -5,7 +5,23 @@ ord: 9
 tags: ["rule"]
 fields:
   {
-    "delivery": "code"
+    "delivery": "code",
+    "enforcement": {
+      "debt": [],
+      "escaped": [],
+      "inspection": "vendor-ids",
+      "on": [
+        {
+          "op": "submit_work",
+          "phase": "before"
+        },
+        {
+          "op": "merge_worktree",
+          "phase": "before"
+        }
+      ],
+      "strictness": "gate"
+    }
   }
 sources:
   - kind: dir
