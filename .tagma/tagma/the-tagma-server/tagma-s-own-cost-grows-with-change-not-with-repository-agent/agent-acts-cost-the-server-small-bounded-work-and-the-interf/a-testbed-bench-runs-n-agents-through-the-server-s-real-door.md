@@ -25,4 +25,4 @@ Each run reports: server CPU and allocation per act, statements and write units 
 
 A memory census of the idle and the loaded bench server: heap after full collection by retainer (heap snapshot), native and allocator memory.
 
-Run length stays inside this project's 15-minute command life; the 30-minute steady-state runs wait for the operator's command-life decision. Done when the bench runs at N = 0, 10, 50 and its baseline figures and the census are written into [[2afe6fec]].
+Short runs come first; the steady-state run at N = 50 fits the project's 30-minute command life whole, as the spec's Proof says. Done when the bench runs at N = 0, 10, 50 and its baseline figures and the census are written into [[2afe6fec]].
