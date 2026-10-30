@@ -31,11 +31,11 @@ sources:
 **How.** The strip under the composer; "+" on a worktree's header in the By worktree view and New agent here in its menu, on the switcher's worktree card and on the worktree board; the header switcher while a draft is open.
 
 **Behaviour.**
-- Each new-draft act starts in the project's main checkout, whatever thread was open before: the column's "+", New agent, New thread as, and the palette. The unsent draft keeps its text and model choices.
+- Each new-draft act starts in the project's main checkout, whatever thread was open before: the column's "+", New agent, New thread as, the palette, and "+" on the phone. The unsent draft keeps its text and model choices.
 - A place picked for a draft (the main checkout, a worktree, or a new worktree from a base branch) stays through thread switches and page reloads until the draft is sent. The next draft starts in main.
 - The strip shows Main checkout, or Worktree with its name in the worktree's own tone, with the branch on the right. A new worktree shows "from <base>" with a picker of the branches the project's checkouts stand on, and is made with the draft's first message.
 - On a running thread the strip shows where the thread works, with no pickers. That includes a worktree still being made, a deleted one, and none at all. Moving a thread stays in the thread menu.
 - The window frame follows an open draft the way it follows an open thread, so the header switcher and the strip name the same place. Picking a place in the switcher while a draft is open sets the draft's place.
 - A project folder that holds no Git repository shows only its folder name, with no branch and no menu.
 
-**Limits.** A CLI agent launched from the column's "+" menu is born in the place of the slot's draft. When a worktree chosen for a draft is deleted before the send, the strip shows it as deleted until another place is picked. The strip gives a new worktree no name: it takes a provisional branch that follows the thread's title.
+**Limits.** A CLI agent launched from the column's "+" menu is born in the open draft's place, and in the main checkout while a thread is open. When a worktree chosen for a draft is deleted before the send, the strip shows it as deleted until another place is picked. The strip gives a new worktree no name: it takes a provisional branch that follows the thread's title.
