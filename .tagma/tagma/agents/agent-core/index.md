@@ -1730,7 +1730,7 @@ edges:
     to: 01a0fd8b-bf10-7a02-a086-916b457e7a6c
   - kind: imports
     to: 01a0fd8b-bf12-7d39-abd6-b5ffc43d3272
-  - kind: imports
+  - kind: imports-tests
     to: 01a12ce3-7d6d-71b9-8c1e-d661ac293dd5
 sources:
   - kind: dir

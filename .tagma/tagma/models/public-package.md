@@ -33,6 +33,9 @@ fields:
           "8fda30d8",
           "e0801f50"
         ]
+      },
+      {
+        "at": "src/adapter/harness.ts"
       }
     ],
     "id": "@runlith/tagma"
@@ -40,6 +43,8 @@ fields:
 edges:
   - kind: imports
     to: 01a0c83b-81fb-7929-bac8-0429249ce587
+  - kind: imports
+    to: 01a0c944-8aa1-7e16-b225-ddc5d1caad35
   - kind: imports
     to: 01a0d584-d0b8-7967-9796-a8e3bbddbda9
 sources:
