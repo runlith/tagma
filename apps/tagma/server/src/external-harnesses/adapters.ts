@@ -39,7 +39,7 @@ export const makeHarnessAdapters = Effect.gen(function* () {
   const last = (id: string) => rows.get(id) ?? held.get(id) ?? null;
   const running = (facet: ExternalSession) => {
     const pinned = facet.session?.package;
-    return (pinned === undefined ? undefined : versions.get(pinned)?.get(facet.name)) ?? last(facet.name);
+    return pinned === undefined ? last(facet.name) : (versions.get(pinned)?.get(facet.name) ?? null);
   };
   const moves = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1 }), PubSub.shutdown);
   return HarnessAdapters.of({

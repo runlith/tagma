@@ -511,7 +511,7 @@ export class SessionDriver implements Driving {
       yield* lifecycle.gone(threadId, session, facet.retiring);
       return;
     }
-    const declaresExport = this.adapters.find(facet.name)?.launch?.export !== undefined;
+    const declaresExport = (record === null ? this.adapters.find(facet.name) : this.adapters.running(facet))?.launch?.export !== undefined;
     const launching = session.state !== 'stopping';
     if (record === null) {
       const launched = yield* launcher.launch(threadId, facet, session, launching, declaresExport);
