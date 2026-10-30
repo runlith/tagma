@@ -53,4 +53,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/translations
 ---
-A reader reads a block in his own language without anyone rewriting it: the module translates a block's title and body by parts into a projection kept in its own machine table beside the graph, marks the parts changed since, and sends only those to the model again. It owns the subject-agnostic translator core (parts, placeholders, batches, the answer frame check), the projection store, the `translate_block`, `read_block_translation` and `stop_block_translation` operations with their live frames, and the `translation.*` settings; the block's text comes from the graph, model choice from the threads' cheap-question chain, and the model call and accounts from providers.
+A reader sees a block in their language without rewriting its source. The module owns translation projections, changed-part detection and batching; the graph supplies the text, and providers chooses and asks a text-capable model through ModelAsks.

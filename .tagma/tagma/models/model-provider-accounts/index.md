@@ -84,4 +84,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/providers
 ---
-Models run on the operator's subscriptions and keys, and the module owns them: signing into a provider account and refreshing tokens, storing credentials and console keys, the default account, quota readings and measured prompt-cache lifetime. Which model and from which account a given call goes out is decided by runs and the harness; the provider gives them the token and the remainder.
+Models run on the operator’s subscriptions, keys and installed programs. The module owns provider declarations, accounts, credentials, quotas and fresh model asks: features name an answer kind and a selection, while the provider’s declared request, borrowing or program path decides how the answer is served.
