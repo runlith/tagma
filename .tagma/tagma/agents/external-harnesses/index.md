@@ -87,6 +87,12 @@ fields:
         "for": [
           "13182a9f"
         ]
+      },
+      {
+        "at": "programs/asks.ts",
+        "for": [
+          "13182a9f"
+        ]
       }
     ],
     "id": "external-harnesses",

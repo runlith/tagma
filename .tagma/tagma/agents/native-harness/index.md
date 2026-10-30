@@ -118,6 +118,12 @@ fields:
           "13182a9f"
         ],
         "role": "testing"
+      },
+      {
+        "at": "models/defaultSelection.ts",
+        "for": [
+          "13182a9f"
+        ]
       }
     ],
     "id": "native-harness",
