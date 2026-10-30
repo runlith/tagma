@@ -1,13 +1,14 @@
 import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
-import { Context, Effect, FileSystem } from 'effect';
+import { Context, Effect, FileSystem, Schema } from 'effect';
 import { join } from 'node:path';
 import { createTools } from '@runlith/agent-tools';
 import { machineWorld } from '@runlith/agent-tools/world/machine';
 import { unruledTimes } from '@runlith/agent-tools/CommandWork';
 import { ToolAnswer, toolExecute, toolPrepare, type Tool } from '@runlith/agent/tool';
 import { ChangeRecord } from '../../../change-record/contract/service/record.js';
+import { SubmitReceipt } from '../../../landing/contract/wire/receipt.js';
 import { MCP_SESSION_HEADER } from '../../../platform/contract/wire/session.js';
 import { callerInThread } from '../callers.js';
 import { git } from '../threadDoors.js';
@@ -57,12 +58,25 @@ it.live(
         commandTimes: unruledTimes,
         searchMs: 1000,
       });
+      const transient = join(root, 'transient.txt');
+      yield* call(tools.write!, actor.threadId, { path: transient, content: 'temporary\n' });
+      yield* call(tools.delete!, actor.threadId, { args: [transient] });
+      const vanished = yield* world.op('read_changes', { agent: actor.threadId, limit: 10 }, `project=${projectId}`);
+      expect(vanished.body).toMatchObject({
+        held: { paths: 0 },
+        turns: expect.arrayContaining([expect.objectContaining({ path: 'transient.txt', state: 'cleared' })]),
+      });
       const path = join(root, 'created.txt');
       yield* call(tools.write!, actor.threadId, { path, content: 'created\n' });
-      expect(yield* doors.atNative('submit_work', { subject: 'create the file' }, actor)).toMatchObject({
+      const created = yield* doors.atNative('submit_work', { subject: 'create the file' }, actor);
+      expect(created).toMatchObject({
         class: 'answer',
         value: { submitted: { status: 'landed', committed: ['created.txt'] } },
       });
+      if (created.class !== 'answer') return yield* Effect.die('The native landing did not answer.');
+      const receipt = yield* Schema.decodeUnknownEffect(Schema.Struct({ submitted: SubmitReceipt }))(created.value);
+      if (receipt.submitted.status !== 'landed') return yield* Effect.die('The native landing did not carry the file.');
+      expect(receipt.submitted.left ?? []).toEqual([]);
       yield* staleMonitor(root);
       expect(yield* call(tools.delete!, actor.threadId, { args: [path] })).toMatchObject({ counts: { removed: 1 } });
       expect(yield* doors.atNative('submit_work', { subject: 'remove the file' }, actor)).toMatchObject({

@@ -39,7 +39,7 @@ const setup = nativeLanding(
 class Landing extends Context.Service<Landing, Effect.Success<typeof setup>>()('testing/SubmissionRecord') {}
 
 layer(Layer.effect(Landing, setup).pipe(Layer.provide(doorFixture())), { excludeTestServices: true })('submission record', (it) => {
-  it.effect('a formatted native landing is known while the session’s command runs and remains known after it ends', () =>
+  it.effect('native history keeps a formatted landing during a command and binds reintroduced bytes to their latest landing', () =>
     Effect.gen(function* () {
       const { world, files, root, projectId, born, doors, read } = yield* Landing;
       const actor = yield* born();
@@ -142,6 +142,26 @@ layer(Layer.effect(Landing, setup).pipe(Layer.provide(doorFixture())), { exclude
             expect.objectContaining({ path: 'value.ts', state: 'committed', commit }),
             expect.objectContaining({ path: 'side.ts', state: 'committed', commit: sideCommit }),
           ]),
+        },
+      });
+      const landings = [commit];
+      for (const value of [1, 2]) {
+        yield* call(tools.edit!, actor.threadId, {
+          path: join(root, 'value.ts'),
+          oldString: `value = ${value === 1 ? 2 : 1}`,
+          newString: `value = ${value}`,
+        });
+        const submitted = yield* doors.atNative('submit_work', { subject: `land value ${value}` }, actor);
+        expect(submitted).toMatchObject({ class: 'answer', value: { submitted: { status: 'landed', committed: ['value.ts'] } } });
+        if (submitted.class !== 'answer') return yield* Effect.die('The repeated native landing failed.');
+        landings.push((submitted.value as { submitted: { commit: string } }).submitted.commit);
+      }
+      expect(yield* doors.atNative('read_changes', { limit: 10 }, actor)).toMatchObject({
+        class: 'answer',
+        value: {
+          held: { paths: 0 },
+          commits: expect.arrayContaining(landings.map((sha) => expect.objectContaining({ sha }))),
+          turns: expect.arrayContaining([expect.objectContaining({ path: 'value.ts', state: 'committed', commit: landings[2] })]),
         },
       });
     }),
