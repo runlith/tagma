@@ -49,6 +49,13 @@ fields:
         "for": [
           "48c1dabd"
         ]
+      },
+      {
+        "at": "src/sampling.ts",
+        "for": [
+          "96b75e80",
+          "48c1dabd"
+        ]
       }
     ],
     "id": "@runlith/testbed",
