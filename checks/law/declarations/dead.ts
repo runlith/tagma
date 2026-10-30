@@ -83,7 +83,7 @@ export const findDead = (corpus: Corpus, params: DeadParams, judged?: ReadonlySe
         path,
         line: exported.line,
         message: reached
-          ? `exported function \`${exported.name}\` has no production caller; production code only reaches it in type positions`
+          ? `exported function \`${exported.name}\` has no production caller; production code only reaches it in type positions or reads its metadata`
           : `exported ${label(exported.kind, exported.name)} is imported by no production file`,
         fix: 'Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.',
       });

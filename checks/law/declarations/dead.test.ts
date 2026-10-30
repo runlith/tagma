@@ -84,21 +84,58 @@ test('an exported function needs a runtime caller: type-only imports, typeof pos
   expect(found).toEqual([
     [
       'dead src/functions.ts#typedOnly',
-      'exported function `typedOnly` has no production caller; production code only reaches it in type positions',
+      'exported function `typedOnly` has no production caller; production code only reaches it in type positions or reads its metadata',
     ],
     [
       'dead src/functions.ts#typeofOnly',
-      'exported function `typeofOnly` has no production caller; production code only reaches it in type positions',
+      'exported function `typeofOnly` has no production caller; production code only reaches it in type positions or reads its metadata',
     ],
     [
       'dead src/functions.ts#unusedImport',
-      'exported function `unusedImport` has no production caller; production code only reaches it in type positions',
+      'exported function `unusedImport` has no production caller; production code only reaches it in type positions or reads its metadata',
     ],
     [
       'dead src/functions.ts#namespaceTypeofOnly',
-      'exported function `namespaceTypeofOnly` has no production caller; production code only reaches it in type positions',
+      'exported function `namespaceTypeofOnly` has no production caller; production code only reaches it in type positions or reads its metadata',
     ],
     ['dead src/functions.ts#neverImported', 'exported function `neverImported` is imported by no production file'],
+  ]);
+});
+
+test('reading only the metadata of an exported function is not calling it, but passing, binding, calling or applying it is', () => {
+  const found = judge({
+    'src/functions.ts': [
+      'export function never() {}',
+      'export function lengthOnly() {}',
+      'export function elementOnly() {}',
+      'export function typeofRuntime() {}',
+      'export function spaceName() {}',
+      'export function spaceLength() {}',
+      'export function spaceCalled() {}',
+      'export function passed() {}',
+      'export function bound() {}',
+      'export function applied() {}',
+      'export function namedAndCalled() {}',
+      'export function returned() {}',
+      'export function sameNameMember() {}',
+    ].join('\n'),
+    'src/user.ts': [
+      "import { never, lengthOnly, elementOnly, typeofRuntime, passed, bound, applied, namedAndCalled, returned } from './functions';",
+      "import * as space from './functions';",
+      'export const facts = [never.name, lengthOnly.length, elementOnly["name"], typeof typeofRuntime, namedAndCalled.name];',
+      'export const names = [space.spaceName.name, space.spaceLength?.length, typeof space.spaceName];',
+      'export const calls = [[1].map(passed), bound.bind(null), applied.call(null), namedAndCalled(), space.spaceCalled(), returned.toString, (() => returned)()];',
+      'export const members = { sameNameMember: space.sameNameMember };',
+    ].join('\n'),
+    'src/entry.ts': "import { facts, names, calls, members } from './user';\nexport const all = [facts, names, calls, members];\n",
+  });
+  expect(found).toEqual([
+    'dead src/functions.ts#never',
+    'dead src/functions.ts#lengthOnly',
+    'dead src/functions.ts#elementOnly',
+    'dead src/functions.ts#typeofRuntime',
+    'dead src/functions.ts#spaceName',
+    'dead src/functions.ts#spaceLength',
   ]);
 });
 

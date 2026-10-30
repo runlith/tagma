@@ -203,6 +203,18 @@ const templatePattern = (node: ts.Expression): string | undefined => {
 
 type Context = { readonly within: string; readonly top: string };
 
+const FUNCTION_METADATA: ReadonlySet<string> = new Set([
+  'name',
+  'length',
+  'toString',
+  'toLocaleString',
+  'valueOf',
+  'constructor',
+  'hasOwnProperty',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
+]);
+
 const nameAt = (parent: ts.Node, node: ts.Identifier): boolean => {
   if (ts.isShorthandPropertyAssignment(parent)) return false;
   if (ts.isPropertyAccessExpression(parent)) return parent.name === node;
@@ -341,6 +353,24 @@ const read = (path: string, text: string): Facts => {
       if (locals.has(local)) uses.add(`${local}\0${member}\0${kind}`);
     }
 
+    function metadataUse(node: ts.Node): string | undefined {
+      let target: ts.Expression | undefined;
+      if (ts.isPropertyAccessExpression(node) && FUNCTION_METADATA.has(node.name.text)) target = node.expression;
+      else if (
+        ts.isElementAccessExpression(node) &&
+        ts.isStringLiteralLike(node.argumentExpression) &&
+        FUNCTION_METADATA.has(node.argumentExpression.text)
+      )
+        target = node.expression;
+      else if (ts.isTypeOfExpression(node)) target = node.expression;
+      while (target !== undefined && (ts.isParenthesizedExpression(target) || ts.isNonNullExpression(target))) target = target.expression;
+      if (target === undefined) return undefined;
+      if (ts.isIdentifier(target) && locals.has(target.text) && !namespaces.has(target.text)) return `${target.text}\0*`;
+      if (ts.isPropertyAccessExpression(target) && ts.isIdentifier(target.expression) && namespaces.has(target.expression.text))
+        return `${target.expression.text}\0${target.name.text}`;
+      return undefined;
+    }
+
     function shape(statement: ts.InterfaceDeclaration | ts.TypeAliasDeclaration): void {
       const name = statement.name.text;
       const exported = exportedModifier(statement);
@@ -393,6 +423,13 @@ const read = (path: string, text: string): Facts => {
     }
 
     function visit(node: ts.Node, parent: ts.Node, context: Context, typed = false): void {
+      if (!typed && !ts.isTypeNode(node)) {
+        const metadata = metadataUse(node);
+        if (metadata !== undefined) {
+          uses.add(`${metadata}\0m`);
+          return;
+        }
+      }
       if (ts.isIdentifier(node)) {
         if (!locals.has(node.text) || nameAt(parent, node)) return;
         const member =
@@ -462,7 +499,7 @@ const read = (path: string, text: string): Facts => {
     loads,
     uses: [...uses].map((one): Use => {
       const [local, member, kind] = one.split('\0');
-      return [local!, member!, kind === 't' ? 't' : 'v'];
+      return [local!, member!, kind === 't' || kind === 'm' ? kind : 'v'];
     }),
     shapes,
   };
