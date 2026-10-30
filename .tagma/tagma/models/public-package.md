@@ -39,6 +39,9 @@ fields:
       },
       {
         "at": "src/adapter/metadata.ts"
+      },
+      {
+        "at": "src/adapter/hook.ts"
       }
     ],
     "id": "@runlith/tagma"
