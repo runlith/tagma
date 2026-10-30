@@ -46,7 +46,7 @@ const blocks = (measured: number, law: string): TreeBlock[] => [
 layer(demoGraphLayer({ repos: ['levelling'] }).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
   'incoming graph levelling',
   (it) => {
-    it.effect('an unstepped branch merges without format conflicts and its knowledge lands in the current graph', () =>
+    it.effect('successive unstepped merges retain resolved format conflicts and incoming knowledge', () =>
       withDemo(({ graph, context, project, demoRoot }) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -94,6 +94,47 @@ layer(demoGraphLayer({ repos: ['levelling'] }).pipe(Layer.provideMerge(BunFileSy
             expect(law?.frontmatter.fields?.enforcement).toEqual({ checks: ['tsc'] });
             expect(yield* fs.readDirectory(join(dirname(graph.store.path), 'levelling'))).toEqual([]);
             expect(yield* readMarker(join(current.treeRoot, FORMAT_FILE))).toEqual({ kind: 'read', step: shippedSteps.last });
+            yield* pool.releaseProject(row.id);
+            const currentBlocks = yield* readBlockTree(current.treeRoot);
+            yield* writeBlockTree(
+              current.treeRoot,
+              currentBlocks.map((block) => (block.frontmatter.id === LAW ? { ...block, body: 'main amendment' } : block)),
+            );
+            yield* shadow.commitAct(current.treeRoot, 'main amends the law');
+            yield* writeBlockTree(feature.treeRoot, blocks(3, 'feature amendment'));
+            yield* shadow.commitAct(feature.treeRoot, 'feature amends the law');
+            yield* pool.resolve({ projectId: row.id, cwd: checkout });
+            const recovery = TreeMerges.at(shadow, current.treeRoot);
+            const pending = yield* recovery.read();
+            expect(pending?.conflicts).toContain('levelling/law.md');
+            if (pending === null) return yield* Effect.die('the competing amendments must conflict');
+            yield* writeBlockTree(
+              pending.path,
+              currentBlocks.map((block) =>
+                block.frontmatter.id === LAW
+                  ? {
+                      ...block,
+                      frontmatter: { ...block.frontmatter, fields: { enforcement: { checks: ['resolved'] } } },
+                      body: 'resolved law',
+                    }
+                  : block,
+              ),
+            );
+            yield* recovery.finish();
+            yield* pool.releaseProject(row.id);
+            yield* writeBlockTree(
+              feature.treeRoot,
+              blocks(3, 'feature amendment').map((block) =>
+                block.frontmatter.id === FINDING ? { ...block, body: 'a new finding' } : block,
+              ),
+            );
+            yield* shadow.commitAct(feature.treeRoot, 'feature records another finding');
+            yield* pool.resolve({ projectId: row.id, cwd: checkout });
+            expect(yield* recovery.read()).toBeNull();
+            const merged = yield* readBlockTree(current.treeRoot);
+            expect(merged.find((block) => block.frontmatter.id === LAW)?.body).toBe('resolved law');
+            expect(merged.find((block) => block.frontmatter.id === LAW)?.frontmatter.fields?.enforcement).toEqual({ checks: ['resolved'] });
+            expect(merged.find((block) => block.frontmatter.id === FINDING)?.body).toBe('a new finding');
           }),
         ),
       ),

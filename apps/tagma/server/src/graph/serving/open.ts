@@ -536,6 +536,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
 
   const prepare = Effect.fn('MirrorBuilder.prepare')(function* (
     input: GraphLevelInput,
+    previous?: string,
   ): Effect.fn.Return<PreparedGraph, GateRefusal<OpenRefusal>> {
     const home = join(dirname(Context.get(machine, MachineStore).path), 'levelling', crypto.randomUUID());
     const checkout = join(home, 'tree');
@@ -623,13 +624,23 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
           const tree = yield* refused(runGit(git, 'level-tree', ['-C', checkout, 'write-tree']));
           const original = yield* refused(runGit(git, 'level-base', ['-C', checkout, 'rev-parse', `${input.commit}^{tree}`]));
           const head =
-            tree === original
+            tree === original && previous === undefined
               ? input.commit
               : yield* refused(
                   runGit(
                     git,
                     'level-commit',
-                    ['-C', checkout, 'commit-tree', tree, '-p', input.commit, '-m', `graph brought to the format of ${input.checkout}`],
+                    [
+                      '-C',
+                      checkout,
+                      'commit-tree',
+                      tree,
+                      '-p',
+                      input.commit,
+                      ...(previous === undefined ? [] : ['-p', previous]),
+                      '-m',
+                      `graph brought to the format of ${input.checkout}`,
+                    ],
                     { env: identityOf(AGENT_PERSON) },
                   ),
                 );
@@ -639,19 +650,43 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
     );
   });
 
-  const level = (input: TwinLevelInput): Effect.Effect<string, GateRefusal<OpenRefusal>> =>
-    Effect.acquireUseRelease(
-      prepare({
-        row: input.row,
-        checkout: input.checkout,
-        repository: input.shadow.gitDir,
-        commit: input.twin,
-        graphPath: '',
-        target: input.target,
-      }),
+  const level = Effect.fn('MirrorBuilder.level')(function* (input: TwinLevelInput): Effect.fn.Return<string, GateRefusal<OpenRefusal>> {
+    const { shadow, target } = input;
+    const base = yield* refused(shadow.quiet('level-base', ['-C', target, 'merge-base', 'HEAD', input.twin]));
+    let previous: string | undefined;
+    if (base !== null) {
+      const adopted = yield* refused(
+        shadow.run('level-ancestry', [
+          '-C',
+          target,
+          'log',
+          '--ancestry-path',
+          '--format=%H %P',
+          '--grep=^graph brought to the format of ',
+          `${base}..HEAD`,
+        ]),
+      );
+      previous = adopted
+        .split('\n')
+        .map((line) => line.split(' '))
+        .find(([, parent]) => parent === base)?.[0];
+    }
+    return yield* Effect.acquireUseRelease(
+      prepare(
+        {
+          row: input.row,
+          checkout: input.checkout,
+          repository: shadow.gitDir,
+          commit: input.twin,
+          graphPath: '',
+          target,
+        },
+        previous,
+      ),
       (prepared) => Effect.succeed(prepared.head),
       (prepared) => prepared.release,
     );
+  });
 
   return MirrorBuilder.of({
     build,
