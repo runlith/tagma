@@ -39,13 +39,13 @@ sources:
 **How.** `tagma install` inside a git repository; `tagma upgrade` — across all registered projects; a server start on a new build and a CLI launch from Tagma.
 
 **Behaviour.**
-- Install lays the managed law section into AGENTS.md: creates the file, replaces the section between markers, or appends it at the end. Into CLAUDE.md — only if the file exists and doesn't import AGENTS.md.
-- The skill lands in `.agents/skills/tagma` with a link from `.claude`, beside it the hooks of every supported CLI and MCP server declarations.
+- Install lays the managed law section into AGENTS.md: creates the file, replaces the section between markers, or appends it at the end. Additional instruction files come from installed harness declarations; only existing files that do not import the canonical instructions receive the section.
+- The skill lands in `.agents/skills/tagma`, in the repository or the account's home for a user installation. Harness declarations supply their skill aliases; hooks and MCP declarations come from the same packages.
 - A broken law section (one marker without the other) refuses installation.
 - A private project receives skill and hooks at user level; the repository is untouched.
 - Upgrade refreshes every place in its own form; a place where Tagma never stood is named and skipped. One place's failure doesn't stop the rest and yields a nonzero exit code.
 - A server started on a build it hasn't yet refreshed installations for does what upgrade does, for checkouts itself (the server rewrites user level at every start anyway): in the background, without delaying startup, once per build (the installation digest, for a server from a checkout — its HEAD). On the same build, startup reads and writes nothing.
 - A CLI launch from Tagma whose MCP declaration lies in the project (for Claude Code — `.mcp.json`) brings it to the current form before the process starts, keeping the signature key — where Tagma stands by upgrade's decision. This repairs a project registered or cloned after an update.
-- A server whose HOME isn't the account's home directory (a trial `tagma:try`) doesn't write into checkouts itself: its entry point isn't the one this account's CLIs call.
+- A beside installation, such as `tagma:try`, declares that mode and does not refresh checkout integrations: its entry point is not the one the account's CLIs call.
 
 **Limits.** Install and upgrade exist only in the CLI — neither in the window nor among operations. Upgrade creates nothing anew. A settings change the law section depends on doesn't rewrite AGENTS.md on its own.
