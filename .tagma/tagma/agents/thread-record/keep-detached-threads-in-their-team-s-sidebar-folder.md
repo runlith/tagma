@@ -12,4 +12,4 @@ edges:
   - kind: relates
     to: 01a14bae-6720-7d62-897a-928951e208b5
 ---
-Detach must give a newly independent thread the folder of its former tree in the same project, so an old quiet child stays visible beside that tree instead of falling outside the sidebar window. Preserve subtree lineage, pinning and Return under semantics; prove the reported folder scenario through the app's HTTP operation and thread-window read.
+Detach must give a newly independent thread the folder of its former tree in the same project, so an old quiet child stays visible beside that tree instead of falling outside the sidebar window. Keep the folder when a child was pinned inside a filed unpinned tree, releasing that pin as filing does; preserve other pinning, subtree lineage and Return under semantics. Prove the reported folder scenario through the app's HTTP operation and thread-window read.
