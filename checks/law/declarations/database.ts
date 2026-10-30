@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { git } from '../git';
 
-const INDEX = ['facts', 'places', 'links', 'shapes', 'manifests', 'indexed'] as const;
+const INDEX = ['facts', 'places', 'links', 'shapes', 'manifests', 'indexed', 'results'] as const;
 
 const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS facts (blob TEXT NOT NULL, class TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (blob, class)) WITHOUT ROWID',
@@ -13,13 +13,27 @@ const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS shapes (key TEXT NOT NULL, blob TEXT NOT NULL, PRIMARY KEY (key, blob)) WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS manifests (blob TEXT PRIMARY KEY, data TEXT NOT NULL) WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS indexed (tree TEXT PRIMARY KEY, at INTEGER NOT NULL) WITHOUT ROWID',
+  'CREATE TABLE IF NOT EXISTS results (family TEXT NOT NULL, key TEXT PRIMARY KEY, value TEXT NOT NULL, at INTEGER NOT NULL) WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS memo (key TEXT PRIMARY KEY, value TEXT NOT NULL, at INTEGER NOT NULL) WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, version TEXT NOT NULL) WITHOUT ROWID',
 ] as const;
 
 const version = (): string => {
   const hash = createHash('sha256').update(readFileSync(Bun.resolveSync('typescript/package.json', import.meta.dir)));
-  for (const name of ['facts.ts', 'read.ts', 'compact.ts', 'index.ts', 'database.ts'])
+  for (const name of [
+    'facts.ts',
+    'read.ts',
+    'compact.ts',
+    'index.ts',
+    'database.ts',
+    'results.ts',
+    'gate.ts',
+    'dead.ts',
+    'repeated.ts',
+    'resolve.ts',
+    'corpus.ts',
+    'glob.ts',
+  ])
     hash.update(readFileSync(join(import.meta.dir, name)));
   return hash.digest('hex');
 };

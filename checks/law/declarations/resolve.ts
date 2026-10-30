@@ -17,7 +17,9 @@ const COMPILED = /\.[cm]?js$/;
 
 const joined = (dir: string, relative: string): string => posix.normalize(dir === '' ? relative : `${dir}/${relative}`);
 
-export const resolverOf = (paths: ReadonlySet<string>, packages: readonly Package[], aliases: readonly Alias[]): Resolver => {
+export type Paths = { readonly has: (path: string) => boolean } & Iterable<string>;
+
+export const resolverOf = (paths: Paths, packages: readonly Package[], aliases: readonly Alias[]): Resolver => {
   const named = new Map(packages.map((one) => [one.name, one]));
   const probe = (base: string): string | undefined => {
     if (paths.has(base)) return base;

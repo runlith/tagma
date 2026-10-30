@@ -11,6 +11,7 @@ const params: RepeatedParams = {
   minUnion: 3,
   minLiterals: 3,
   ignoreNames: [],
+  aliases: [{ prefix: '$lib/', dir: 'src/lib' }],
 };
 
 const judge = (sources: Record<string, string>, over: Partial<RepeatedParams> = {}) => {
@@ -129,6 +130,31 @@ test('Svelte script blocks count with their own line numbers, and ignored names 
     ['src/b.svelte', 3, 'object'],
   ]);
   expect(judge(sources, { ignoreNames: ['Props'] })).toEqual([]);
+});
+
+test('a referenced type counts by the declaration it names, not by its spelling', () => {
+  const page = (row: string, name = 'Row') =>
+    `${row}\nexport type Page = { readonly items: number; readonly value: ${name}; readonly next: string };\n`;
+  expect(
+    judge({
+      'src/a.ts': page("import type { Row } from './rows-a';"),
+      'src/b.ts': page("import type { Row } from './rows-b';"),
+      'src/c.ts': page('type Row = { readonly own: string };'),
+      'src/d.ts': page('type Row = { readonly own: string };'),
+    }),
+  ).toEqual([]);
+  expect(
+    judge({
+      'src/c.ts': page("import type { Row } from './lib/shared/row.js';"),
+      'src/deep/d.ts': page("import type { Row as Entry } from '../lib/shared/row';", 'Entry'),
+      'src/e.ts': page("import type { Row } from '$lib/shared/row';"),
+      'src/f.ts': page("import type { Row } from './lib/other/row';"),
+    }),
+  ).toEqual([
+    ['src/c.ts', 2, 'object'],
+    ['src/deep/d.ts', 2, 'object'],
+    ['src/e.ts', 2, 'object'],
+  ]);
 });
 
 test('a fingerprint names the shape and the file, not the line, so an edit above a declaration keeps its debt', () => {

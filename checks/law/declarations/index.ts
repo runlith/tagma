@@ -181,7 +181,7 @@ const GOOD_ENOUGH = 50;
 
 const FAR = 5000;
 
-const ensure = (root: string, tree: string, hint: string | null): void => {
+const ensure = (root: string, tree: string, hint: string | null, populate: boolean): void => {
   if (isIndexed(root, tree)) return;
   const recent = databaseAt(root)
     .query<{ tree: string }, [number]>('SELECT tree FROM indexed ORDER BY at DESC LIMIT ?')
@@ -194,6 +194,10 @@ const ensure = (root: string, tree: string, hint: string | null): void => {
     if (changes.length < GOOD_ENOUGH) break;
   }
   if (best === undefined || best.changes.length > FAR) {
+    if (!populate)
+      throw new Error(
+        `the declaration index holds no revision within ${FAR} changed files of ${tree}; build it with check_rules over "all" for a rule of the declaration inspections, then judge the change again`,
+      );
     populated(root, tree);
     mark(root, tree);
     return;
@@ -207,8 +211,12 @@ const ensure = (root: string, tree: string, hint: string | null): void => {
 };
 
 export const prepare = (root: string, tree: string, base: string | null): void => {
-  if (base !== null) ensure(root, base, null);
-  ensure(root, tree, base);
+  if (base === null) {
+    ensure(root, tree, null, true);
+    return;
+  }
+  ensure(root, base, null, false);
+  ensure(root, tree, base, false);
 };
 
 export type Blobbed = { readonly path: string; readonly blob: string };
@@ -269,6 +277,36 @@ const byLookup = (root: string, commit: string, rows: readonly Blobbed[]): Blobb
   return rows.filter((one, at) => checked[at] === one.blob);
 };
 
+export const blobsAt = (root: string, commit: string, paths: readonly string[]): Map<string, string> => {
+  const found = new Map<string, string>();
+  const looked = (wanted: readonly string[]): void => {
+    if (wanted.length === 0) return;
+    const checked = git(
+      root,
+      ['cat-file', '--batch-check=%(objectname) %(objecttype)'],
+      `${wanted.map((one) => `${commit}:${one}`).join('\n')}\n`,
+    )
+      .toString()
+      .split('\n');
+    wanted.forEach((path, at) => {
+      const match = /^([0-9a-f]{40,64}) blob$/.exec(checked[at] ?? '');
+      if (match !== null) found.set(path, match[1]!);
+    });
+  };
+  if (paths.length <= DIRECTORY_LISTING) {
+    looked(paths);
+    return found;
+  }
+  const nested = paths.filter((one) => posix.dirname(one) !== '.');
+  const listed = entriesAt(root, commit, [...new Set(nested.map((one) => `${posix.dirname(one)}/`))], false);
+  for (const path of nested) {
+    const entry = listed.get(path);
+    if (entry !== undefined && regular(entry)) found.set(path, entry.object);
+  }
+  looked(paths.filter((one) => posix.dirname(one) === '.'));
+  return found;
+};
+
 const standing = (root: string, commit: string, rows: readonly Blobbed[]): Blobbed[] => {
   if (rows.length <= DIRECTORY_LISTING) return byLookup(root, commit, rows);
   const nested = rows.filter((one) => posix.dirname(one.path) !== '.');
@@ -312,8 +350,12 @@ export const importersOf = (
         `SELECT l.spec AS spec, p.path AS path, p.blob AS blob FROM links l JOIN places p ON p.blob = l.blob WHERE l.stem IN (${marks(part.length)})`,
       )
       .all(...part))
-      if (accepts(row.path) && !rows.has(row.path) && (row.spec === '' || resolver.resolve(row.spec, row.path).length > 0))
-        rows.set(row.path, { path: row.path, blob: row.blob });
+      if (
+        accepts(row.path) &&
+        !rows.has(`${row.path}\0${row.blob}`) &&
+        (row.spec === '' || resolver.resolve(row.spec, row.path).length > 0)
+      )
+        rows.set(`${row.path}\0${row.blob}`, { path: row.path, blob: row.blob });
   return standing(root, commit, [...rows.values()]);
 };
 

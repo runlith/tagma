@@ -53,6 +53,13 @@ const nameText = (name: ts.PropertyName | ts.BindingName, file: ts.SourceFile): 
 
 const hashOf = (text: string): string => createHash('sha1').update(text).digest('hex').slice(0, 16);
 
+const scopes = new WeakMap<ts.SourceFile, (head: string) => string | undefined>();
+
+const SHAPE_KEY = /\u0001[^\u0002]*\u0002/g;
+
+const shapeKeyed = (text: string): { readonly key: string; readonly text?: string } =>
+  text.includes('\u0001') ? { key: hashOf(text.replace(SHAPE_KEY, '?')), text } : { key: hashOf(text) };
+
 const wrapped = (canonical: string): string => (/ [|&] /.test(canonical) ? `(${canonical})` : canonical);
 
 const canonical = (node: ts.TypeNode, file: ts.SourceFile): string => {
@@ -68,7 +75,11 @@ const canonical = (node: ts.TypeNode, file: ts.SourceFile): string => {
   }
   if (ts.isTypeReferenceNode(node)) {
     const args = node.typeArguments?.map((one) => canonical(one, file)).join(', ');
-    return `${node.typeName.getText(file)}${args === undefined ? '' : `<${args}>`}`;
+    const written = node.typeName.getText(file);
+    const head = written.split('.')[0]!;
+    const identity = scopes.get(file)?.(head);
+    const name = identity === undefined ? written : `\u0001${identity}${written.slice(head.length)}\u0002`;
+    return `${name}${args === undefined ? '' : `<${args}>`}`;
   }
   if (ts.isTupleTypeNode(node)) return `[${node.elements.map((one) => canonical(one, file)).join(', ')}]`;
   return textOf(node, file);
@@ -271,6 +282,13 @@ const read = (path: string, text: string): Facts => {
             });
       }
     }
+    scopes.set(file, (head) => {
+      for (const one of imports) {
+        const binding = one.bindings.find((entry) => entry.local === head);
+        if (binding !== undefined) return `i:${one.specifier}\u0003${binding.imported}`;
+      }
+      return declared.has(head) ? `l:${head}` : undefined;
+    });
     for (const statement of file.statements) {
       const exported = exportedModifier(statement);
       const own = (name: string, kind: ExportKind): void => {
@@ -313,14 +331,14 @@ const read = (path: string, text: string): Facts => {
         visit(statement.expression, statement, { within: 'default', top: 'default' });
       } else if (ts.isExportDeclaration(statement)) {
         if (statement.moduleSpecifier === undefined && statement.exportClause !== undefined && ts.isNamedExports(statement.exportClause))
-          for (const element of statement.exportClause.elements) use((element.propertyName ?? element.name).text, '*', '');
+          for (const element of statement.exportClause.elements) use((element.propertyName ?? element.name).text, '*', 'v');
       } else if (!ts.isImportDeclaration(statement) && !ts.isImportEqualsDeclaration(statement)) {
         visit(statement, file, { within: '', top: '' });
       }
     }
 
-    function use(local: string, member: string, within: string): void {
-      if (locals.has(local)) uses.add(`${local}\0${member}\0${within}`);
+    function use(local: string, member: string, kind: 'v' | 't'): void {
+      if (locals.has(local)) uses.add(`${local}\0${member}\0${kind}`);
     }
 
     function shape(statement: ts.InterfaceDeclaration | ts.TypeAliasDeclaration): void {
@@ -339,7 +357,7 @@ const read = (path: string, text: string): Facts => {
           line,
           size: statement.members.length,
           exported,
-          key: hashOf(text),
+          ...shapeKeyed(text),
           label: labelOf(statement.members.map((member) => (member.name === undefined ? '()' : nameText(member.name, file)))),
         });
         return;
@@ -353,7 +371,7 @@ const read = (path: string, text: string): Facts => {
           line,
           size: type.members.length,
           exported,
-          key: hashOf(`${generics(statement.typeParameters, file)} ${objectOf(type.members, file)}`),
+          ...shapeKeyed(`${generics(statement.typeParameters, file)} ${objectOf(type.members, file)}`),
           label: labelOf(type.members.map((member) => (member.name === undefined ? '()' : nameText(member.name, file)))),
         });
       } else if (ts.isUnionTypeNode(type)) {
@@ -367,14 +385,14 @@ const read = (path: string, text: string): Facts => {
             line,
             size: members.length,
             exported,
-            key: hashOf(`${generics(statement.typeParameters, file)} ${members.join(' | ')}`),
+            ...shapeKeyed(`${generics(statement.typeParameters, file)} ${members.join(' | ')}`),
             label: labelOf(members),
           });
         }
       }
     }
 
-    function visit(node: ts.Node, parent: ts.Node, context: Context): void {
+    function visit(node: ts.Node, parent: ts.Node, context: Context, typed = false): void {
       if (ts.isIdentifier(node)) {
         if (!locals.has(node.text) || nameAt(parent, node)) return;
         const member =
@@ -383,7 +401,7 @@ const read = (path: string, text: string): Facts => {
             : namespaces.has(node.text) && ts.isQualifiedName(parent) && parent.left === node
               ? parent.right.text
               : '*';
-        uses.add(`${node.text}\0${member}\0${context.within}`);
+        uses.add(`${node.text}\0${member}\0${typed ? 't' : 'v'}`);
         return;
       }
       if (ts.isImportTypeNode(node)) {
@@ -418,21 +436,33 @@ const read = (path: string, text: string): Facts => {
         if (specifier !== undefined && second !== undefined && second.getText(file) === 'import.meta.url')
           loads.push({ specifier: specifier.startsWith('.') ? specifier : `./${specifier}`, pattern: false });
       }
-      ts.forEachChild(node, (child) => visit(child, node, context));
+      if (ts.isClassLike(node)) {
+        ts.forEachChild(node, (child) => {
+          if (ts.isHeritageClause(child) && child.token === ts.SyntaxKind.ExtendsKeyword)
+            for (const type of child.types) {
+              visit(type.expression, type, context, typed);
+              for (const argument of type.typeArguments ?? []) visit(argument, type, context, true);
+            }
+          else visit(child, node, context, typed);
+        });
+        return;
+      }
+      const inside = typed || ts.isTypeNode(node);
+      ts.forEachChild(node, (child) => visit(child, node, context, inside));
     }
     if (!block.exports) exports.length = before;
   }
   if (template !== '')
     for (const local of locals)
-      if (new RegExp(`(?<![\\w$]|[^.]\\.)${local.replace(/\$/g, '\\$')}(?![\\w$])`).test(template)) uses.add(`${local}\0*\0`);
+      if (new RegExp(`(?<![\\w$]|[^.]\\.)${local.replace(/\$/g, '\\$')}(?![\\w$])`).test(template)) uses.add(`${local}\0*\0v`);
   return {
     exports,
     imports,
     forwards,
     loads,
     uses: [...uses].map((one): Use => {
-      const [local, member, within] = one.split('\0');
-      return [local!, member!, within!];
+      const [local, member, kind] = one.split('\0');
+      return [local!, member!, kind === 't' ? 't' : 'v'];
     }),
     shapes,
   };

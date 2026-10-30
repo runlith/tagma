@@ -6,7 +6,7 @@ export type Packed = readonly [
   forwards: readonly (readonly string[])[],
   loads: readonly (readonly [string, 0 | 1])[],
   uses: readonly Use[],
-  shapes: readonly (readonly [ShapeKind, string, number, number, 0 | 1, string, string])[],
+  shapes: readonly (readonly [ShapeKind, string, number, number, 0 | 1, string, string, string?])[],
 ];
 
 const bound = (imported: string, local: string): string => (imported === local ? imported : `${imported}>${local}`);
@@ -25,7 +25,11 @@ export const pack = (facts: Facts): Packed => [
   ]),
   facts.loads.map((one) => [one.specifier, one.pattern ? 1 : 0]),
   facts.uses,
-  facts.shapes.map((one) => [one.kind, one.name, one.line, one.size, one.exported ? 1 : 0, one.key, one.label]),
+  facts.shapes.map((one) =>
+    one.text === undefined
+      ? [one.kind, one.name, one.line, one.size, one.exported ? 1 : 0, one.key, one.label]
+      : [one.kind, one.name, one.line, one.size, one.exported ? 1 : 0, one.key, one.label, one.text],
+  ),
 ];
 
 export const unpack = (packed: Packed): Facts => ({
@@ -49,7 +53,7 @@ export const unpack = (packed: Packed): Facts => ({
   })),
   loads: packed[3].map(([specifier, pattern]) => ({ specifier, pattern: pattern === 1 })),
   uses: packed[4],
-  shapes: packed[5].map(([kind, name, line, size, exported, key, label]) => ({
+  shapes: packed[5].map(([kind, name, line, size, exported, key, label, text]) => ({
     kind,
     name,
     line,
@@ -57,5 +61,6 @@ export const unpack = (packed: Packed): Facts => ({
     exported: exported === 1,
     key,
     label,
+    ...(text === undefined ? {} : { text }),
   })),
 });

@@ -19,6 +19,7 @@ export type RepeatedParams = {
   readonly minUnion: number;
   readonly minLiterals: number;
   readonly ignoreNames: readonly string[];
+  readonly aliases: readonly Alias[];
 };
 
 const program = 'checks/law/declarations/program.ts';

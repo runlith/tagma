@@ -25,22 +25,19 @@ const repeated: RepeatedParams = {
   minUnion: 3,
   minLiterals: 3,
   ignoreNames: [],
+  aliases: [],
 };
 
 let root = '';
 
 const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 
-const put = (path: string, text: string) => {
-  mkdirSync(dirname(join(root, path)), { recursive: true });
-  writeFileSync(join(root, path), text);
-};
-
 const treeWith = (files: Record<string, string | null>): string => {
   for (const [path, text] of Object.entries(files)) {
     if (text === null) git('rm', '-q', '--cached', '--ignore-unmatch', path);
     else {
-      put(path, text);
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
       git('add', path);
     }
   }
@@ -51,17 +48,34 @@ const side = (commit: string, paths: readonly string[] | null): Side => ({
   commit,
   whole: paths === null,
   paths: paths ?? [],
-  read: async (path) => {
-    try {
-      return git('show', `${commit}:${path}`);
-    } catch {
-      return null;
-    }
-  },
+  read: async () => null,
   facts: null,
 });
 
-const wide = 'export type Wide = { readonly a: string; readonly b: string; readonly c: number };\n';
+const fingerprints = (answer: { readonly findings: readonly { readonly fingerprint: string }[] } | undefined) =>
+  answer?.findings.map((one) => one.fingerprint).sort();
+
+const judged = async (key: 'dead-code' | 'repeated-declarations', base: string, tree: string, paths: readonly string[]) => {
+  const run = programs(root)[key] as unknown as (
+    input: unknown,
+  ) => Promise<{ tree: { findings: { fingerprint: string }[]; covered?: string }; base?: { findings: { fingerprint: string }[] } }>;
+  const params = key === 'dead-code' ? dead : repeated;
+  const commit = await run({ params, tree: side(tree, paths), base: side(base, paths) });
+  const whole = await run({ params, tree: side(tree, null), base: side(base, null) });
+  return { commit, whole };
+};
+
+const initial = {
+  'src/entry.ts': "import { used } from './lib';\nimport { viaUser } from './user';\nexport const run = () => [used(), viaUser()];\n",
+  'src/lib.ts': 'export const used = () => 1;\nexport const helper = () => 2;\n',
+  'src/user.ts': "import { helper } from './lib';\nexport const viaUser = () => helper();\n",
+  'src/lib.test.ts': "import { helper } from './lib';\nhelper();\n",
+};
+
+const index = async (tree: string) => {
+  await programs(root)['dead-code']({ params: dead, tree: side(tree, null), base: null });
+  await programs(root)['repeated-declarations']({ params: repeated, tree: side(tree, null), base: null });
+};
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'law-declarations-'));
@@ -72,86 +86,88 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-test('a commit is judged on its changed files over the revision index, and a remeasure over the whole tree finds the same standing violations', async () => {
-  const base = treeWith({
-    'src/entry.ts': "import { used } from './lib';\nexport const run = () => used();\n",
-    'src/lib.ts': 'export const used = () => 1;\nexport const helper = () => 2;\n',
-    'src/shapes.ts': wide,
-    'src/user.ts': "import { helper } from './lib';\nexport const viaUser = () => helper();\n",
-  });
+test('a commit that removes the last production importer of an export in another file reports the unchanged exporter, as the remeasure does', async () => {
+  const base = treeWith(initial);
+  await index(base);
+  const tree = treeWith({ 'src/user.ts': 'export const viaUser = () => 0;\n' });
+  const { commit, whole } = await judged('dead-code', base, tree, ['src/user.ts']);
+  expect(commit.tree.covered).toBe('reach');
+  expect(fingerprints(commit.tree)).toEqual(['dead src/lib.ts#helper']);
+  expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+  expect(fingerprints(commit.base)).toEqual([]);
+  expect(fingerprints(commit.base)).toEqual(fingerprints(whole.base));
+});
+
+test('an importer rewritten without dropping its import keeps the export live although the index still holds its older text', async () => {
+  const base = treeWith(initial);
+  await index(base);
+  const rewritten = treeWith({ 'src/user.ts': "import { helper } from './lib';\nexport const viaUser = () => [helper(), 1];\n" });
+  const next = treeWith({ 'src/user.ts': "import { helper } from './lib';\nexport const viaUser = () => [helper(), 2];\n" });
+  for (const [before, after] of [
+    [base, rewritten],
+    [rewritten, next],
+  ] as const) {
+    const { commit, whole } = await judged('dead-code', before, after, ['src/user.ts']);
+    expect(fingerprints(commit.tree)).toEqual([]);
+    expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+  }
+});
+
+test('a commit that adds an unused export, an unused function and a type-only function import reports exactly what the remeasure reports', async () => {
+  const base = treeWith(initial);
+  await index(base);
   const tree = treeWith({
-    'src/extra.ts': `export const unused = 1;\n${wide.replace('Wide', 'Copy')}`,
-    'src/lib.ts': 'export const used = () => 1;\nexport const helper = () => 2;\nexport const added = () => 3;\n',
+    'src/lib.ts':
+      'export const used = () => 1;\nexport const helper = () => 2;\nexport const added = () => 3;\nexport const typed = () => 4;\n',
+    'src/user.ts': "import { helper, type typed } from './lib';\nexport const viaUser = (value?: typed) => helper();\n",
   });
-  const changed = ['src/extra.ts', 'src/lib.ts'];
-  const run = programs(root);
-
-  const gatedDead = await run['dead-code']({ params: dead, tree: side(tree, changed), base: side(base, ['src/lib.ts']) });
-  expect(gatedDead.tree.covered).toBe('paths');
-  expect(gatedDead.tree.findings.map((one) => one.fingerprint)).toEqual(['dead-file src/extra.ts', 'dead src/lib.ts#added']);
-  expect(gatedDead.base?.findings.map((one) => one.fingerprint)).toEqual([]);
-
-  const gatedRepeated = await run['repeated-declarations']({
-    params: repeated,
-    tree: side(tree, changed),
-    base: side(base, ['src/lib.ts']),
-  });
-  expect(gatedRepeated.tree.findings.map((one) => one.path)).toEqual(['src/extra.ts']);
-  expect(gatedRepeated.tree.findings[0]?.message).toBe('object type `Copy` {a, b, c} is also declared in src/shapes.ts:1 (`Wide`)');
-
-  const whole = await run['dead-code']({ params: dead, tree: side(tree, null), base: side(base, null) });
-  expect(whole.tree.covered).toBe('reach');
-  expect(whole.tree.findings.map((one) => one.fingerprint)).toEqual([
-    'dead-file src/extra.ts',
-    'dead src/lib.ts#added',
-    'dead-file src/shapes.ts',
-    'dead-file src/user.ts',
-  ]);
-  expect(whole.base?.findings.map((one) => one.fingerprint)).toEqual(['dead-file src/shapes.ts', 'dead-file src/user.ts']);
+  const { commit, whole } = await judged('dead-code', base, tree, ['src/lib.ts', 'src/user.ts']);
+  expect(fingerprints(commit.tree)).toEqual(['dead src/lib.ts#added', 'dead src/lib.ts#typed']);
+  expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+  expect(fingerprints(commit.base)).toEqual(fingerprints(whole.base));
 });
 
-test('a commit that removes the last import of an export leaves the exporter to the remeasure, which reports it', async () => {
-  const before = treeWith({
-    'src/entry.ts': "import { helper } from './lib';\nimport { viaUser } from './user';\nexport const run = () => [helper(), viaUser()];\n",
-    'src/lib.ts': 'export const helper = () => 2;\n',
-    'src/user.ts': "import { helper } from './lib';\nexport const viaUser = () => helper();\n",
-  });
-  const after = treeWith({
-    'src/entry.ts': "import { viaUser } from './user';\nexport const run = () => [viaUser()];\n",
-    'src/user.ts': 'export const viaUser = () => 0;\n',
-  });
-  const run = programs(root);
-  const gated = await run['dead-code']({
-    params: dead,
-    tree: side(after, ['src/entry.ts', 'src/user.ts']),
-    base: side(before, ['src/entry.ts', 'src/user.ts']),
-  });
-  expect(gated.tree.findings).toEqual([]);
-  const whole = await run['dead-code']({ params: dead, tree: side(after, null), base: null });
-  expect(whole.tree.findings.map((one) => one.fingerprint)).toEqual(['dead-file src/lib.ts']);
+test('a surviving test importer does not keep an export alive after its last production importer goes', async () => {
+  const base = treeWith(initial);
+  await index(base);
+  const tree = treeWith({ 'src/user.ts': null, 'src/entry.ts': "import { used } from './lib';\nexport const run = () => used();\n" });
+  const { commit, whole } = await judged('dead-code', base, tree, ['src/user.ts', 'src/entry.ts']);
+  expect(fingerprints(commit.tree)).toEqual(['dead src/lib.ts#helper']);
+  expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
 });
 
-test('a base tree nobody judged before is derived from the nearest indexed tree', async () => {
-  treeWith({
-    'src/entry.ts': "import { fresh } from './wanted';\nexport const run = () => fresh;\n",
-    'src/wanted.ts': 'export const fresh = 1;\n',
-  });
+test('a commit that adds a second copy of a declaration reports the older copy in an untouched file too', async () => {
+  const wide = 'export type Wide = { readonly a: string; readonly b: string; readonly c: number };\n';
+  const base = treeWith({ ...initial, 'src/shapes.ts': wide });
+  await index(base);
+  const tree = treeWith({ 'src/copy.ts': wide.replace('Wide', 'Copy') });
+  const { commit, whole } = await judged('repeated-declarations', base, tree, ['src/copy.ts']);
+  expect(commit.tree.findings.map((one) => one.fingerprint.split(' ')[2])).toEqual(['src/copy.ts', 'src/shapes.ts']);
+  expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+  expect(fingerprints(commit.base)).toEqual([]);
+});
+
+test('a base nobody judged before is derived from the nearest indexed tree; with no indexed tree the judgment asks for the whole setup', async () => {
+  const first = treeWith(initial);
   const skipped = treeWith({ 'src/other.ts': 'export const other = 1;\n' });
-  const tree = treeWith({ 'src/wanted.ts': 'export const fresh = 1;\nexport const more = 2;\n' });
+  const tree = treeWith({ 'src/lib.ts': 'export const used = () => 1;\nexport const helper = () => 2;\nexport const more = () => 3;\n' });
+  await expect(
+    programs(root)['dead-code']({ params: dead, tree: side(tree, ['src/lib.ts']), base: side(skipped, ['src/lib.ts']) }),
+  ).rejects.toThrow('the declaration index holds no revision');
+  await index(first);
+  const { commit, whole } = await judged('dead-code', skipped, tree, ['src/lib.ts']);
+  expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+  expect(fingerprints(commit.tree)).toContain('dead src/lib.ts#more');
+});
+
+test('a change outside every production file costs nothing and finds nothing', async () => {
+  const before = treeWith(initial);
+  const after = treeWith({ 'docs/readme.md': 'text\n', 'src/lib.test.ts': 'export {};\n' });
   const answer = await programs(root)['dead-code']({
     params: dead,
-    tree: side(tree, ['src/wanted.ts']),
-    base: side(skipped, ['src/wanted.ts']),
+    tree: side(after, ['docs/readme.md', 'src/lib.test.ts']),
+    base: side(before, []),
   });
-  expect(answer.tree.findings.map((one) => one.fingerprint)).toEqual(['dead src/wanted.ts#more']);
-  expect(answer.base?.findings).toEqual([]);
-});
-
-test('a change outside every judged file costs nothing and finds nothing', async () => {
-  const before = treeWith({});
-  const after = treeWith({ 'docs/readme.md': 'text\n' });
-  const run = programs(root);
-  const answer = await run['dead-code']({ params: dead, tree: side(after, ['docs/readme.md']), base: side(before, []) });
   expect(answer.tree.findings).toEqual([]);
 });
 

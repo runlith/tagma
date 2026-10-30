@@ -13,7 +13,7 @@ export type Forward = {
 
 export type Load = { readonly specifier: string; readonly pattern: boolean };
 
-export type Use = readonly [local: string, member: string, within: string];
+export type Use = readonly [local: string, member: string, kind: 'v' | 't'];
 
 export type ShapeKind = 'object' | 'union' | 'literals';
 
@@ -25,6 +25,7 @@ export type Shape = {
   readonly exported: boolean;
   readonly key: string;
   readonly label: string;
+  readonly text?: string;
 };
 
 export type Facts = {

@@ -1,9 +1,35 @@
+import { createHash } from 'node:crypto';
+import { posix } from 'node:path';
 import type { Finding } from '@runlith/tagma/rules';
 import type { Corpus } from './corpus';
 import type { RepeatedParams } from './declaration';
 import type { Shape, ShapeKind } from './facts';
+import type { Alias } from './resolve';
 
-type Site = { readonly path: string; readonly shape: Shape };
+type Site = { readonly path: string; readonly shape: Shape; readonly group: string };
+
+const REFERENCE = /\u0001([^\u0002]*)\u0002/g;
+
+const normal = (path: string): string => path.replace(/\.[cm]?[jt]sx?$|\.svelte$/, '').replace(/\/index$/, '');
+
+const specifierAt = (specifier: string, path: string, aliases: readonly Alias[]): string => {
+  if (specifier.startsWith('.')) return normal(posix.normalize(posix.join(posix.dirname(path), specifier)));
+  const alias = aliases.find((one) => specifier.startsWith(one.prefix));
+  return alias === undefined ? specifier : normal(posix.normalize(posix.join(alias.dir, specifier.slice(alias.prefix.length))));
+};
+
+const identityOf = (token: string, path: string, aliases: readonly Alias[]): string => {
+  if (token.startsWith('l:')) return `${path}#${token.slice(2)}`;
+  const [specifier, tail] = token.slice(2).split('\u0003');
+  return `${specifierAt(specifier!, path, aliases)}#${tail}`;
+};
+
+const groupOf = (shape: Shape, path: string, aliases: readonly Alias[]): string => {
+  const coarse = `${shape.kind}:${shape.key}`;
+  if (shape.text === undefined) return `${coarse}:`;
+  const fine = shape.text.replace(REFERENCE, (_, token: string) => `<${identityOf(token, path, aliases)}>`);
+  return `${coarse}:${createHash('sha1').update(fine).digest('hex').slice(0, 12)}`;
+};
 
 const MINIMUM = {
   object: (params: RepeatedParams) => params.minMembers,
@@ -39,10 +65,10 @@ export const findRepeated = (corpus: Corpus, params: RepeatedParams): readonly F
     if (!inRegion(path, params)) continue;
     for (const shape of file.shapes) {
       if (!judges(shape, params)) continue;
-      const key = keyOf(shape);
-      const held = groups.get(key);
-      if (held === undefined) groups.set(key, [{ path, shape }]);
-      else held.push({ path, shape });
+      const group = groupOf(shape, path, params.aliases);
+      const held = groups.get(group);
+      if (held === undefined) groups.set(group, [{ path, shape, group }]);
+      else held.push({ path, shape, group });
     }
   }
   const findings: Finding[] = [];
