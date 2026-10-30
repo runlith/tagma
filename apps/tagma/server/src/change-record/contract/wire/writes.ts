@@ -8,7 +8,7 @@ import { placeRole } from '../../../platform/contract/wire/place.js';
 const place = trimmed(Schema.String.check(Schema.isMinLength(1)));
 
 const FILES_GRAMMAR = `Takes a file or a directory inside the checkout and answers per file how many prose lines went, plus the files that did not lex and the files marked exempt. Never read: what git ignores, \`node_modules\`, and the graph's own directory.
-A comment opening with \`!\` and a pragma a tool reads are never rewritten, a file whose first comment marks it exempt stands whole, a text that does not lex is named and left, and nothing is reformatted.
+A comment opening with \`!\` and a pragma a tool reads are never rewritten. A file stands whole when its first comment is exactly \`//! comments\` or \`/*! comments */\` (use the language’s comment delimiters, such as \`#! comments\` or \`<!--! comments -->\`). A text that does not lex is named and left, and nothing is reformatted.
 Each file that held prose is written back through the door a typed write goes through and recorded as this session's own change, carried by submit_work like any other; nothing in the graph moves and no gauge re-pins.
 A path another session holds uncommitted lines of is left alone under \`linesHeld\` with the sessions to ask, and the rest lands.`;
 
