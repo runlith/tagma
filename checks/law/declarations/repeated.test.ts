@@ -35,14 +35,25 @@ test('an alias that only renames an imported type reports the alias, while a pro
   expect(judge(files).map((one) => [one.path, one.line, one.fingerprint])).toEqual([['src/use.ts', 2, 'repeated alias:Copy src/use.ts']]);
 });
 
-test('same-name equal types repeat across modules, even below the copy threshold, but not inside one module or in test code', () => {
+test('same-name equal types at the structural threshold repeat across modules, but not inside one module or in test code', () => {
   const files = {
-    'src/a.ts': 'export type Position = { readonly line: number };\n',
-    'src/b.ts': 'export interface Position { readonly line: number }\n',
-    'src/c.test.ts': 'export type Position = { readonly line: number };\n',
+    'src/a.ts': 'export type Position = { readonly line: number; readonly column: number; readonly length: number };\n',
+    'src/b.ts': 'export interface Position { readonly line: number; readonly column: number; readonly length: number }\n',
+    'src/c.test.ts': 'export type Position = { readonly line: number; readonly column: number; readonly length: number };\n',
   };
   expect(paths(files)).toEqual(['src/a.ts', 'src/b.ts']);
   expect(paths(files, boundaries([], { 'src/a.ts': 'one', 'src/b.ts': 'one' }))).toEqual([]);
+});
+
+test('same-name short spans in different units and concepts do not prove a shared type', () => {
+  expect(
+    paths({
+      'src/lives.ts':
+        'export type Span = { readonly from: number; readonly to: number };\nexport const during = (span: Span, now: number) => now >= span.from && now <= span.to;\n',
+      'src/json.ts':
+        'type Span = { readonly from: number; readonly to: number };\nexport const textAt = (text: string, span: Span) => text.slice(span.from,span.to);\n',
+    }),
+  ).toEqual([]);
 });
 
 test('a copy of an exported dependency type needs at least three members or alternatives and is reported only at its redeclaration', () => {

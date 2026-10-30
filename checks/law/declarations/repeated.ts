@@ -98,8 +98,9 @@ export const findRepeated = (corpus: Corpus, params: RepeatedParams, boundaries:
       const qualifies = (local: Site, other: Site): boolean => {
         const target = boundaries.owner(other.path);
         if (local === other || owner === undefined || target === undefined || owner === target) return false;
+        if (local.shape.size < MINIMUM[kind](params)) return false;
         if (local.shape.name === other.shape.name) return true;
-        return local.shape.size >= MINIMUM[kind](params) && other.shape.exported && boundaries.imports(owner, target);
+        return other.shape.exported && boundaries.imports(owner, target);
       };
       const matched = here.filter((local) => sites.some((other) => qualifies(local, other)));
       if (matched.length === 0) continue;
