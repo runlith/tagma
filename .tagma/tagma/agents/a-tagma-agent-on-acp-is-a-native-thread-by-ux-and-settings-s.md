@@ -17,5 +17,11 @@ sources:
     ref: apps/tagma/server/src/threads/contract/wire/harness
   - kind: dir
     ref: apps/tagma/app/src/lib/features/threads/native
+  - kind: file
+    ref: apps/tagma/server/src/external-harnesses/birth/selection.ts
+  - kind: file
+    ref: apps/tagma/server/src/external-harnesses/sessions/model.ts
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/threads/thread/modelSettings.ts
 ---
 ACP for a Tagma agent is only a transport. A thread on it is born with a model and reasoning like a native one, through whichever door opened it, and its models stand in the regular model picker under their provider, not under the item where terminal CLIs live. Every model setting a native thread has exists and acts the same on ACP, with the same values and default; where the vendor does not accept one, it is a declared transport capability the thread's row names.

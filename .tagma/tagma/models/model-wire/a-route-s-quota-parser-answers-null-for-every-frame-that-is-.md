@@ -4,10 +4,6 @@ title: A route's quota parser answers null for every frame that is not a quota f
 ord: 23
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/llm/src/llm/route
-  - kind: file
-    ref: packages/llm/src/llm/origin-policy.ts
   - kind: symbol
     ref: packages/llm/src/llm/route/definition.ts
     symbol: FrameQuotaParser
