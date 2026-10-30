@@ -4,8 +4,6 @@ title: Declare `lensQuery` on every route whose handler resolves scope
 ord: 2
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: apps/tagma/server/src/http
   - kind: symbol
     ref: apps/tagma/server/src/http/contract/wire/Caller.ts
     symbol: lensQuery

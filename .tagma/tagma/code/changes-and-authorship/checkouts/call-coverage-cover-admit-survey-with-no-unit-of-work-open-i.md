@@ -4,8 +4,6 @@ title: Call `Coverage` (`cover`, `admit`, `survey`) with no unit of work open; i
 ord: 1
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: apps/tagma/server/src/graph/projects
   - kind: symbol
     ref: apps/tagma/server/src/workspace/roots/coverage.ts
     symbol: makeCoverageLedger

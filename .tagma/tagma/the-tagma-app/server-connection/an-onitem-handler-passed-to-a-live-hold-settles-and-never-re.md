@@ -4,8 +4,6 @@ title: An `onItem` handler passed to a live `hold` settles and never rejects
 ord: 1
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: apps/tagma/app/src/lib/wire/Live.ts
   - kind: symbol
     ref: apps/tagma/app/src/lib/wire/Live.ts
     symbol: hold
