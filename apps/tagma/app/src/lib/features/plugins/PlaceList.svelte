@@ -1,37 +1,31 @@
 <script lang="ts">
-  import type { MarketplaceRow } from '@tagma/server/marketplaces/contract/wire/rows';
   import LayoutGrid from '@lucide/svelte/icons/layout-grid';
   import Plus from '@lucide/svelte/icons/plus';
   import Store from '@lucide/svelte/icons/store';
   import Tag from '@lucide/svelte/icons/tag';
+  import SectionColumn from '$lib/app/panes/SectionColumn.svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
   import { HeldOrder } from '$lib/shared/HeldOrder.svelte.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
-  import type { Category } from '$lib/features/plugins/catalog.js';
   import type { Here } from '$lib/features/plugins/here.js';
   import { idOf, type Place, samePlace } from '$lib/features/plugins/place.js';
+  import { PluginsColumn } from '$lib/features/plugins/PluginsColumn.svelte.js';
+  import { PluginsPlace } from '$lib/features/plugins/PluginsPlace.svelte.js';
+  import { PLUGINS_SEAM } from '$lib/features/plugins/seams.js';
   import StateMark from '$lib/features/plugins/StateMark.svelte';
   import Tile from '$lib/features/plugins/Tile.svelte';
 
-  let {
-    here,
-    categories,
-    marketplaces,
-    listed,
-    place,
-    hrefOf,
-    failure,
-    onadd,
-  }: {
-    here: readonly Here[];
-    categories: readonly Category[];
-    marketplaces: readonly MarketplaceRow[];
-    listed: number;
-    place: Place;
-    hrefOf: (id: string | null) => string;
-    failure: string | null;
-    onadd: () => void;
-  } = $props();
+  const plugins = PluginsPlace.use();
+  const column = PluginsColumn.use();
+  $effect(() => plugins.hold());
+
+  const here = $derived(plugins.here);
+  const categories = $derived(plugins.categories);
+  const marketplaces = $derived(plugins.feed.marketplaces);
+  const listed = $derived(plugins.listings.length);
+  const failure = $derived(plugins.failure);
+  const place = $derived(plugins.place);
+  const hrefOf = (id: string | null): string => plugins.hrefOf(id);
 
   const placeOfHere = (item: Here): Place =>
     item.kind === 'plugin' ? { kind: 'plugin', id: item.row.id } : { kind: 'server', scope: item.row.scope, name: item.row.name };
@@ -56,7 +50,13 @@
   {#if current}<span class="absolute inset-y-1.5 -left-2 w-0.5 bg-brand" aria-hidden="true"></span>{/if}
 {/snippet}
 
-<aside class="flex h-full min-h-0 w-64 shrink-0 flex-col border-r bg-chrome" aria-label="Plugins">
+<SectionColumn
+  geometry={PLUGINS_SEAM}
+  label="Plugins"
+  resize="Resize the plugins column"
+  onCollapse={() => column.toggle()}
+  class="min-h-0 overflow-hidden"
+>
   <div class="flex h-12 shrink-0 items-center justify-between border-b pr-2 pl-4">
     <h1 class="eyebrow text-muted-foreground">Plugins</h1>
     <Tooltip text="Add by address">
@@ -64,7 +64,7 @@
         type="button"
         class="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
         aria-label="Add by address"
-        onclick={onadd}
+        onclick={() => (plugins.adding = true)}
       >
         <Plus class="size-4" />
       </button>
@@ -132,4 +132,4 @@
       {/each}
     {/if}
   </nav>
-</aside>
+</SectionColumn>

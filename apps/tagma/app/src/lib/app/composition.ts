@@ -39,8 +39,7 @@ import { PaletteRepo } from '$lib/features/palette/Repo.js';
 import { ProjectPrefetch } from '$lib/features/projects/Prefetch.js';
 import { ProjectsLayer } from '$lib/features/projects/layer.js';
 import { RulesRepo } from '$lib/features/rules/Repo.js';
-import { PluginsRepo } from '$lib/features/plugins/Repo.js';
-import { MarketplacesFeed } from '$lib/features/plugins/Feed.svelte.js';
+import { PluginsLayer } from '$lib/features/plugins/layer.js';
 import { SecretsRepo } from '$lib/features/secrets/Repo.js';
 import { SettingsColumn } from '$lib/features/settings/SettingsColumn.svelte.js';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
@@ -174,8 +173,7 @@ export function appLayers(desktop: DesktopApi | undefined) {
     McpRepo,
     McpFeed,
     SecretsRepo,
-    PluginsRepo,
-    MarketplacesFeed,
+    PluginsLayer,
     ViewSets,
     Sections,
     TagmaAppActions,

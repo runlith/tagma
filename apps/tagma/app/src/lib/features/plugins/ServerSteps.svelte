@@ -1,10 +1,12 @@
 <script lang="ts">
   import type { McpServerRow } from '@tagma/server/mcp/contract/wire/servers';
+  import Callout from '@runlith/chat-ui/Callout.svelte';
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
   import FadeText from '$lib/shared/FadeText.svelte';
   import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
-  import { Notices } from '$lib/features/notices/Service.svelte.js';
+  import { toldOf } from '$lib/wire/refusal.js';
+  import type { Told } from '$lib/wire/told.js';
   import { McpRepo } from '$lib/features/mcp/Repo.js';
   import { serverState, waitsOnSignIn } from '$lib/features/plugins/here.js';
 
@@ -12,20 +14,21 @@
 
   const mcp = McpRepo.use();
   const links = ExternalLinks.use();
-  const notices = Notices.use();
 
   let busy = $state<string | null>(null);
+  let failed = $state<{ readonly name: string; readonly told: Told } | null>(null);
 
   const hostOf = (row: McpServerRow): string =>
     row.reach.transport === 'http' && URL.canParse(row.reach.url) ? new URL(row.reach.url).host : row.name;
 
   async function signIn(row: McpServerRow): Promise<void> {
     busy = row.name;
+    failed = null;
     try {
       const url = await mcp.signIn.run({ projectId, scope: row.scope, name: row.name }, { throwOnError: true });
       if (url !== undefined) links.open(url);
     } catch (error: unknown) {
-      notices.refusal(error);
+      failed = { name: row.name, told: toldOf(error) };
     } finally {
       busy = null;
     }
@@ -79,4 +82,5 @@
       </Button>
     {/if}
   </div>
+  {#if failed?.name === row.name}<Callout tone="error" title={failed.told.text} note={failed.told.note} />{/if}
 {/each}

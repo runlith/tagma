@@ -42,7 +42,7 @@ export function matching(listings: readonly Listing[], query: string): readonly 
   });
 }
 
-export type Category = { readonly name: string; readonly count: number };
+type Category = { readonly name: string; readonly count: number };
 
 const OTHER: CatalogCategory = 'Other';
 

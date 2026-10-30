@@ -12,6 +12,7 @@ export const surfaces: SurfacesModule['surfaces'] = [
     mark: WaitsMark,
     rail: 45,
     stands: 'project',
+    column: 'plugins',
     remembers: true,
   },
 ];

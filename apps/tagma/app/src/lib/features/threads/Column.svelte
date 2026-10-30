@@ -5,11 +5,8 @@
   import { Overlay } from '@runlith/primitives/Overlay.svelte';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
-  import { AreaFrame } from '$lib/app/panes/AreaFrame.svelte.js';
   import { Palette } from '$lib/app/panes/palette.js';
-  import { Seam } from '@runlith/seam/Seam.svelte';
-  import SeamHandle from '@runlith/seam/SeamHandle.svelte';
-  import { Seams } from '$lib/shared/seams/Seams.svelte.js';
+  import SectionColumn from '$lib/app/panes/SectionColumn.svelte';
   import { THREADS_SEAM } from './seams.js';
   import type { ThreadSlot } from './ThreadSlot.svelte.js';
   import { ThreadList } from './List.svelte.js';
@@ -53,7 +50,6 @@
   type ThreadDraw = Extract<ColumnLine, { kind: 'thread' }>;
 
   const overlay = Overlay.use();
-  const seams = Seams.use();
   const marks = ReaderMarks.use();
   const list = ThreadList.use();
   const workspace = Workspace.use();
@@ -78,24 +74,21 @@
     overlay.open(Palette, text === '' ? {} : { query: text });
   }
 
-  const seam = new Seam(seams.seam(THREADS_SEAM), { onCommit: (size) => seams.set(THREADS_SEAM, size), onCollapse: () => onCollapse?.() });
-  const frame = AreaFrame.use();
-  $effect(() => frame.show('column', seam));
-
   const ROW_MENU =
     'absolute right-2 top-1 grid h-[18px] w-5 translate-y-0.5 place-items-center rounded-md text-muted-foreground opacity-0 transition-[opacity,transform,color,background-color] duration-150 ease-instrument hover:bg-hover hover:text-foreground group-hover:translate-y-0 group-hover:opacity-100 group-has-[:focus-visible]:translate-y-0 group-has-[:focus-visible]:opacity-100 group-has-[[data-state=open]]:translate-y-0 group-has-[[data-state=open]]:opacity-100';
 </script>
 
 <svelte:window onkeydown={(event) => col.windowKeys(event)} />
 
-<aside
-  bind:this={col.asideEl}
-  class="@container flex min-h-0 shrink-0 flex-col overflow-hidden border-r bg-chrome"
-  style:width="{seam.size}px"
-  aria-label="Agents"
-  {@attach squeeze.column}
+<SectionColumn
+  bind:element={col.asideEl}
+  geometry={THREADS_SEAM}
+  label="Agents"
+  resize="Resize the thread column"
+  onCollapse={() => onCollapse?.()}
+  class="@container min-h-0 overflow-hidden"
 >
-  <div class="flex min-h-0 flex-1 flex-col gap-1 py-1.5">
+  <div class="flex min-h-0 flex-1 flex-col gap-1 py-1.5" {@attach squeeze.column}>
     <ColumnHead
       {host}
       bind:filter={col.filter}
@@ -186,9 +179,7 @@
   {#each col.tile.others as projectId (projectId)}
     <PlacesHold {projectId} tile={col.tile} />
   {/each}
-</aside>
-
-<SeamHandle {seam} label="Resize the thread column" />
+</SectionColumn>
 
 <ShelfLayer {shelving} part="floating" />
 

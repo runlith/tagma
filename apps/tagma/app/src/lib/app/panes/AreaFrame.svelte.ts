@@ -1,6 +1,6 @@
 import { Service } from '@runlith/layer/key';
-import type { Seam } from '@runlith/seam/Seam.svelte';
-import { Seams } from '$lib/shared/seams/Seams.svelte.js';
+import { Seam } from '@runlith/seam/Seam.svelte';
+import { type SeamGeometry, Seams } from '$lib/shared/seams/Seams.svelte.js';
 import { AREA_SEAM } from './seams.js';
 
 const AREA = AREA_SEAM.pane;
@@ -49,6 +49,10 @@ export class AreaFrame extends Service<AreaFrame>()('AreaFrame', { tier: 'app' }
 
   measure(stage: number): void {
     this.measured = stage;
+  }
+
+  columnSeam(geometry: SeamGeometry, collapse: () => void): Seam {
+    return new Seam(this.seams.seam(geometry), { onCommit: (size) => this.seams.set(geometry, size), onCollapse: collapse });
   }
 
   show(place: FramePlace, seam: Seam): () => void {

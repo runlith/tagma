@@ -3,10 +3,8 @@
   import { WORK } from '@tagma/server/graph/contract/wire/tags/work';
   import type { TreeBlock } from '@tagma/server/graph/contract/wire/rows';
   import Search from '@lucide/svelte/icons/search';
-  import { Seam } from '@runlith/seam/Seam.svelte';
-  import SeamHandle from '@runlith/seam/SeamHandle.svelte';
   import { Router } from '@runlith/layer/Router';
-  import { AreaFrame } from '$lib/app/panes/AreaFrame.svelte.js';
+  import SectionColumn from '$lib/app/panes/SectionColumn.svelte';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
   import { SIDEBAR_SEAM } from '$lib/features/graph/sidebar/seams.js';
@@ -14,7 +12,6 @@
   import SidebarShelf from '$lib/features/graph/sidebar/SidebarShelf.svelte';
   import SidebarTree from '$lib/features/graph/sidebar/SidebarTree.svelte';
   import WriterBadge from '$lib/features/graph/WriterBadge.svelte';
-  import { Seams } from '$lib/shared/seams/Seams.svelte.js';
   import { ProjectTree } from '$lib/features/graph/ProjectTree.svelte.js';
   import { ReadState } from '$lib/features/graph/ReadState.svelte.js';
   import { SelectionRepo } from '$lib/features/graph/SelectionRepo.js';
@@ -26,7 +23,6 @@
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { cn } from '$lib/shared/utils.js';
 
-  const seams = Seams.use();
   const projectTree = ProjectTree.use();
   const readState = ReadState.use();
   const selection = SelectionRepo.use();
@@ -38,13 +34,6 @@
   const router = Router.use();
   const addresses = Addresses.use();
   const surfaces = SurfaceRegistry.use();
-
-  const seam = new Seam(seams.seam(SIDEBAR_SEAM), {
-    onCommit: (size) => seams.set(SIDEBAR_SEAM, size),
-    onCollapse: () => sidebar.toggle(),
-  });
-  const frame = AreaFrame.use();
-  $effect(() => frame.show('column', seam));
 
   const project = $derived(workspace.contextProject);
   const rows = $derived([...projectTree.blocks.values()]);
@@ -95,10 +84,12 @@
   }
 </script>
 
-<aside
-  class="flex shrink-0 flex-col overflow-y-auto border-r bg-chrome pb-10 [scrollbar-gutter:stable]"
-  style:width="{seam.size}px"
-  aria-label="Knowledge"
+<SectionColumn
+  geometry={SIDEBAR_SEAM}
+  label="Knowledge"
+  resize="Resize the knowledge column"
+  onCollapse={() => sidebar.toggle()}
+  class="overflow-y-auto pb-10 [scrollbar-gutter:stable]"
 >
   {#if project}
     <div class="sticky top-0 z-10 grid gap-2 bg-chrome px-3 pt-3 pb-1">
@@ -162,6 +153,4 @@
       <SidebarShelf heading="Views" blocks={views} project={project.name} />
     {/if}
   {/if}
-</aside>
-
-<SeamHandle {seam} label="Resize the knowledge column" />
+</SectionColumn>
