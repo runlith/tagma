@@ -10,7 +10,8 @@ import { MachineUnits, type Unit } from '../platform/contract/service/units.js';
 import { writes } from '../platform/contract/service/writes.js';
 import { gitRefusal } from '../platform/git/readings.js';
 import { unitsLayer } from '../platform/store/units.js';
-import { Projects } from './contract/service/registry.js';
+import { ProjectGroups, Projects } from './contract/service/registry.js';
+import { makeGroups } from './groups.js';
 import { keyHolds, markIn, marked, physical } from './identity.js';
 import { ReservedNames } from './contract/service/names.js';
 import { ProjectChanges, type GroupChange, type ProjectRemoved } from './contract/service/changes.js';
@@ -285,6 +286,15 @@ export const projectsLayer = Layer.effectContext(
           Effect.tap((root) => Effect.sync(() => spellings.set(rootPath, root))),
         );
       });
+    const { groups, depart, discard } = yield* makeGroups({
+      version,
+      named: (unit, name) => nameChecked(store, unit, reserved, name),
+      announce: (change) =>
+        Effect.andThen(
+          publish(regroupings, (subscriber) => subscriber(change)),
+          events.changed.publish(),
+        ),
+    });
     let removed: { readonly version: number; readonly ids: readonly number[] } | null = null;
     const projects = Projects.of({
       list: () => units.read((unit) => list(store, unit)),
@@ -384,6 +394,7 @@ export const projectsLayer = Layer.effectContext(
       remove: Effect.fn('Projects.remove')(function* (unit, current) {
         yield* refuseUnmaking(current, 'removed');
         yield* refuseGroupGraph(current, 'removed');
+        yield* depart(unit, current);
         yield* unit.run(
           db
             .update(project)
@@ -393,10 +404,11 @@ export const projectsLayer = Layer.effectContext(
         yield* unit.afterCommit(events.changed.publish());
       }),
       forget: Effect.fn('Projects.forget')(function* (unit, current) {
+        if (current.kind === 'group') yield* discard(unit, current);
         yield* unit.run(db.delete(project).where(eq(project.id, current.id)));
         yield* unit.afterCommit(events.changed.publish());
       }),
     });
-    return Context.make(Projects, projects).pipe(Context.add(ProjectChanges, events));
+    return Context.make(Projects, projects).pipe(Context.add(ProjectChanges, events), Context.add(ProjectGroups, groups));
   }),
 ).pipe(Layer.provide(Layer.merge(unitsLayer(MachineUnits, MachineStore), BunFileSystem.layer)));

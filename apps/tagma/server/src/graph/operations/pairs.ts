@@ -6,6 +6,7 @@ import { OWNER_PAIRS, TREE_PAIRS } from './projects.js';
 import { OUTLINE_PAIRS } from './outline.js';
 import { HISTORY_PAIRS } from './history.js';
 import { REGISTRY_PAIRS } from './registry.js';
+import { GROUP_PAIRS } from './groups.js';
 import { REFLECTION_PAIRS, WORK_PAIRS, WORK_READ_PAIRS } from './work.js';
 
 import { Effect } from 'effect';
@@ -32,6 +33,7 @@ export const GRAPH_PAIRS: Readonly<Record<string, OperationPair>> = {
   ...ORIENTATION_PAIRS,
   ...SESSION_ORIENTATION_PAIRS,
   ...REGISTRY_PAIRS,
+  ...GROUP_PAIRS,
   ...writtenPairs({
     ...BLOCK_READ_PAIRS,
     ...WORK_READ_PAIRS,

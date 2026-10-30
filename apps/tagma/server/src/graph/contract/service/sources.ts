@@ -14,6 +14,7 @@ export type SourceRelocation = { blockId: number; from: string; to: string };
 
 export type PlacementRefusal =
   | FloorRefusal
+  | 'group-source'
   | 'not-measurable'
   | 'symbol-shape'
   | 'symbol-missing'

@@ -21,13 +21,20 @@ const BINDINGS: VerbBindings = {
   ],
   projects: [
     async () => {
-      const [{ here }, { policy, renderProjects }, { perform }, { projectRegistry }] = await Promise.all([
+      const [{ here }, { policy, renderGroups, renderProjects }, { perform }, { groupRegistry, projectRegistry }] = await Promise.all([
         door(),
         import('../../graph/cli/policy.js'),
         import('./perform.js'),
         import('./registry.js'),
       ]);
-      return { registry: projectRegistry, here, render: renderProjects, policy: policy({ perform, here, render: renderProjects }) };
+      return {
+        registry: projectRegistry,
+        groups: groupRegistry,
+        here,
+        render: renderProjects,
+        renderGroups,
+        policy: policy({ perform, here, render: renderProjects }),
+      };
     },
   ],
   enforcement: [async () => (await import('./enforcement.js')).enforcementCli],

@@ -1,0 +1,108 @@
+import { Effect, FileSystem } from 'effect';
+import { GraphStore, MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
+import { writes } from '../../platform/contract/service/writes.js';
+import type { GateRefusal, OpenRefusal } from '../../platform/contract/wire/refusal.js';
+import { ActState } from '../contract/service/transaction.js';
+import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
+import type { ProjectRow } from '../../projects/contract/wire/project.js';
+import { groupMember, project } from '../../projects/store/table.js';
+import { Act } from '../contract/service/acts.js';
+import { GroupLifecycle } from '../contract/service/serving.js';
+import type { ProjectPolicyRow } from '../contract/wire/serving.js';
+import { projectPolicy } from '../store/policy.js';
+import { block, meta } from '../store/tables.js';
+import { projecting, referencing } from '../store/actWrites.js';
+
+const forming = writes('GroupLifecycle.make', [block, projectPolicy, meta], projecting, referencing);
+const regrouping = writes('GroupLifecycle.regroup', []);
+
+export const makeGroupLifecycle = Effect.fnUntraced(function* (input: {
+  readonly bear: (row: ProjectRow) => Effect.Effect<ProjectPolicyRow, StoreFailure | GateRefusal<OpenRefusal>, ActState>;
+  readonly takeBack: (row: ProjectRow) => Effect.Effect<void, StoreFailure | GateRefusal>;
+}) {
+  const machine = yield* MachineStore;
+  const { path: storePath } = yield* GraphStore;
+  const files = yield* FileSystem.FileSystem;
+  const act = yield* Act;
+  const projects = yield* Projects;
+  const groups = yield* ProjectGroups;
+
+  const moved = (row: ProjectRow, from: number | null, to: number | null) =>
+    act.record('project_set', null, { projectId: row.id, field: 'group', from, to });
+
+  return GroupLifecycle.of({
+    make: Effect.fn('GroupLifecycle.make')(function* ({ name, members }, birth) {
+      const { formed, born } = yield* machine.transaction(writes('group.form', [project, groupMember, projectPolicy]), (unit) =>
+        act.unit(
+          forming,
+          Effect.gen(function* () {
+            const formed = yield* groups.form(unit, { name, members });
+            const { graph } = formed.group;
+            for (const member of members) yield* moved(member, null, graph.id);
+            if (formed.returned) {
+              yield* act.record('project_return', null, { projectId: graph.id, repoKey: graph.repoKey, rootPath: graph.rootPath });
+              return { formed, born: null };
+            }
+            return { formed, born: yield* input.bear(graph) };
+          }),
+        ),
+      );
+      if (storePath !== ':memory:') yield* Effect.orDie(files.makeDirectory(formed.group.graph.rootPath, { recursive: true }));
+      if (born === null || birth === undefined) return formed;
+      yield* birth(born).pipe(Effect.onError(() => Effect.orDie(input.takeBack(born))));
+      return formed;
+    }),
+
+    rename: Effect.fn('GroupLifecycle.rename')(function* (group, name) {
+      const graph = yield* machine.transaction(writes('group.rename', [project]), (unit) =>
+        act.unit(
+          regrouping,
+          Effect.gen(function* () {
+            const renamed = yield* projects.rename(unit, group.graph, name);
+            if (renamed.name !== group.graph.name)
+              yield* act.record('project_set', null, { projectId: renamed.id, field: 'name', from: group.graph.name, to: renamed.name });
+            return renamed;
+          }),
+        ),
+      );
+      return { graph, members: group.members };
+    }),
+
+    join: Effect.fn('GroupLifecycle.join')(function* (group, row) {
+      return yield* machine.transaction(writes('group.join', [groupMember]), (unit) =>
+        act.unit(
+          regrouping,
+          Effect.gen(function* () {
+            const joined = yield* groups.join(unit, group, row);
+            yield* moved(row, null, joined.graph.id);
+            return joined;
+          }),
+        ),
+      );
+    }),
+
+    leave: Effect.fn('GroupLifecycle.leave')(function* (row) {
+      const before = yield* groups.of(row.id);
+      return yield* machine.transaction(writes('group.leave', [groupMember, project]), (unit) =>
+        act.unit(
+          regrouping,
+          Effect.gen(function* () {
+            const after = yield* groups.leave(unit, row);
+            if (before !== undefined) {
+              const left = after === null ? before.members : [row];
+              for (const member of left) yield* moved(member, before.graph.id, null);
+              if (after === null)
+                yield* act.record('project_remove', null, {
+                  projectId: before.graph.id,
+                  name: before.graph.name,
+                  repoKey: before.graph.repoKey,
+                  rootPath: before.graph.rootPath,
+                });
+            }
+            return { project: row, group: after };
+          }),
+        ),
+      );
+    }),
+  });
+});

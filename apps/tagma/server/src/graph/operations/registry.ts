@@ -24,7 +24,7 @@ type In<K extends keyof typeof OPS> = (typeof OPS)[K]['input']['Type'];
 
 const dependencies = Effect.map(Behaviours, (behaviours) => behaviours.edges.filter((edge) => edge.meaning === 'dependency'));
 
-const wired = Effect.fn('registry.wired')(function* (rows: readonly ProjectPolicyRow[]) {
+export const wired = Effect.fn('registry.wired')(function* (rows: readonly ProjectPolicyRow[]) {
   const serving = yield* (yield* ProjectPolicy).servesFrom(rows.map((row) => row.id));
   return rows.map((row) => wireProject(row, serving.get(row.id) ?? 'rows'));
 });
@@ -35,7 +35,7 @@ const wiredOne = Effect.fn('registry.wiredOne')(function* (row: ProjectPolicyRow
   return only;
 });
 
-const policies = Effect.fn('registry.policies')(function* (rows: readonly ProjectRow[]) {
+export const policies = Effect.fn('registry.policies')(function* (rows: readonly ProjectRow[]) {
   const found = yield* (yield* ProjectPolicy).read(rows.map((row) => row.id));
   return yield* Effect.forEach(rows, (row) => {
     const policy = found.get(row.id);

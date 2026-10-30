@@ -100,6 +100,17 @@ export const sourcesLayer: Layer.Layer<
       input: SourceInput,
     ): Effect.fn.Return<SourceRow, StoreFailure | GateRefusal<PlacementRefusal>, ActState> {
       yield* ActState;
+      const graph = yield* projects.byId(owner.projectId);
+      if (graph.kind === 'group') {
+        return yield* new GateRefusal(
+          'group-source',
+          `${blockName(owner.uuid)} stands in the graph of the group "${graph.name}", whose blocks name no code: a path's owner stays in the member whose checkout holds it`,
+          [
+            'link this block to the member block that owns the code — an edge crosses projects',
+            'anchor the source on a block in the graph of the member whose checkout holds the path',
+          ],
+        );
+      }
       const table = yield* tableOf(owner);
       const declared = sourceKinds(table, owner);
       if (!declared.includes(input.kind)) {

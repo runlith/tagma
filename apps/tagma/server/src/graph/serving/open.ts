@@ -30,7 +30,7 @@ const retiring = writes('Projects.open.retireRows', [meta]);
 import { ensureVocabulary } from './birth.js';
 import { advanceTree } from './advance.js';
 import { syncTopology, type TopologySync } from '../tree/topology.js';
-import { Projects } from '../../projects/contract/service/registry.js';
+import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
 import { ProjectChanges } from '../../projects/contract/service/changes.js';
 import { GateRefusal, type OpenRefusal } from '../../platform/contract/wire/refusal.js';
 import { Settings } from '../../settings/contract/service/values.js';
@@ -260,6 +260,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                       Context.pick(
                         MachineStore,
                         Projects,
+                        ProjectGroups,
                         ProjectChanges,
                         Doctrine,
                         Catalogs,

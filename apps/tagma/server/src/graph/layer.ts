@@ -28,7 +28,7 @@ import { projectsLayer } from './serving/birth.js';
 import { sessionNames } from '../thread-record/names.js';
 import { SessionNames } from './contract/service/orientation.js';
 import { checkoutIdentificationLayer } from '../workspace/checkouts/git.js';
-import { Projects } from '../projects/contract/service/registry.js';
+import { ProjectGroups, Projects } from '../projects/contract/service/registry.js';
 import { ProjectChanges } from '../projects/contract/service/changes.js';
 import type { GraphServices } from './contract/service/services.js';
 import { rankingLayer } from './search/ranking.js';
@@ -72,6 +72,7 @@ type GraphNeeds =
   | MachineStore
   | SessionIdentity
   | Projects
+  | ProjectGroups
   | ProjectChanges
   | Catalogs
   | Behaviours
@@ -97,7 +98,13 @@ const assembled = <R>(source: Layer.Layer<SettingsServices, never, R>, role: Gra
   const settings = catalogInstallLayer(role === 'machine').pipe(Layer.provideMerge(Layer.mergeAll(source, shipped)));
   const configured = Layer.mergeAll(settings, installedCatalogsLayer).pipe(Layer.provideMerge(acting));
   const reading = Layer.mergeAll(projectsLayer(role), checkoutIdentificationLayer, selectionLayer, edgesLayer, trashLayer).pipe(
-    Layer.provideMerge(Layer.mergeAll(Layer.effect(Projects, Projects), Layer.effect(ProjectChanges, ProjectChanges))),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Layer.effect(Projects, Projects),
+        Layer.effect(ProjectGroups, ProjectGroups),
+        Layer.effect(ProjectChanges, ProjectChanges),
+      ),
+    ),
     Layer.provideMerge(configured),
     Layer.provideMerge(git),
     Layer.provide(BunFileSystem.layer),

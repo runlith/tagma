@@ -31,8 +31,8 @@ export const projects = manifest({
   verbs: projectsVerbs,
   live,
   tables: async () => {
-    const [{ project }] = await Promise.all([import('./store/table.js')]);
-    return { entities: [project], history: [] };
+    const [{ project, groupMember }] = await Promise.all([import('./store/table.js')]);
+    return { entities: [project, groupMember], history: [] };
   },
   lifetimes: {
     installation: lazyLayer(

@@ -6,7 +6,7 @@ import { STORAGE_MODES } from '../../projects/contract/wire/project.js';
 import type { DoorLens, Perform } from '../../platform/contract/service/perform.js';
 import { CurrentInvocation, print, type Invocation } from '../../platform/cli/verb.js';
 import { REGISTRY_OPERATIONS } from '../contract/wire/operations/registry.js';
-import type { Project } from '../contract/wire/rows.js';
+import type { Group, Project } from '../contract/wire/rows.js';
 
 export type PolicyCli = {
   readonly perform: Perform;
@@ -21,6 +21,16 @@ export const renderProjects = (rows: readonly Project[]): string =>
         `${row.name} (${row.id}) ${row.rootPath} ${row.kind === 'global' ? '[cross-project]' : row.kind === 'group' ? '[group]' : `[${row.repoKey}]`} [${row.storage}] [${row.servesFrom}]${row.strictProvenance ? ' [strict-provenance]' : ''}${row.private ? ' [private]' : ''}${row.graphRemote === null ? '' : ` [remote ${row.graphRemote}]`}`,
     )
     .join('\n');
+
+export const renderGroups = (groups: readonly Group[]): string =>
+  groups.length === 0
+    ? 'no groups'
+    : groups
+        .map(
+          (group) =>
+            `${group.graph.name} (${group.graph.id}): ${group.members.map((member) => `${member.name} (${member.id})`).join(', ')}`,
+        )
+        .join('\n');
 
 const json = Flag.Boolean('json').pipe(Flag.withDescription('machine-readable output'), Flag.withDefault(false));
 

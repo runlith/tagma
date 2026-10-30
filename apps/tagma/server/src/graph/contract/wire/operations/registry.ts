@@ -163,6 +163,7 @@ export const REGISTRY_OPERATIONS = {
       'not-found',
       'no-pool',
       'storage-unchanged',
+      'group-graph',
       'checkout-holds-tree',
       'detached-checkout',
       'tree-missing',

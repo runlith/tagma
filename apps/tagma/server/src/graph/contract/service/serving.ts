@@ -13,7 +13,15 @@ import type {
 import type { ProjectCall } from '../wire/call.js';
 import type { ProjectIdentification } from '../../../projects/contract/service/registry.js';
 import type { ProjectRefusal, ProjectRootFailure } from '../../../projects/contract/wire/project.js';
-import type { ProjectRow, StorageMode } from '../../../projects/contract/wire/project.js';
+import type {
+  FormedGroup,
+  FormRefusal,
+  JoinRefusal,
+  NameRefusal,
+  ProjectGroup,
+  ProjectRow,
+  StorageMode,
+} from '../../../projects/contract/wire/project.js';
 import type { ProjectSetting, ProjectSettings } from '../wire/storage.js';
 import type { ServesFrom } from '../wire/storage.js';
 import type { BlockRow, TreeGuard, TreeProjection } from './acts.js';
@@ -176,6 +184,24 @@ export class ProjectLifecycle extends Context.Service<
     remove(input: { ref: string }): Effect.Effect<ProjectPolicyRow, StoreFailure | GateRefusal>;
   }
 >()('tagma/graph/ProjectLifecycle') {}
+
+export type GroupLeft = { readonly project: ProjectRow; readonly group: ProjectGroup | null };
+
+export class GroupLifecycle extends Context.Service<
+  GroupLifecycle,
+  {
+    make(
+      input: { readonly name: string; readonly members: readonly ProjectRow[] },
+      birth?: (row: ProjectPolicyRow) => Effect.Effect<void, GateRefusal<OpenRefusal>>,
+    ): Effect.Effect<FormedGroup, StoreFailure | GateRefusal<FormRefusal | NameRefusal | OpenRefusal>>;
+    rename(
+      group: ProjectGroup,
+      name: string,
+    ): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<'global-permanent' | NameRefusal | FloorRefusal>>;
+    join(group: ProjectGroup, project: ProjectRow): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<JoinRefusal | FloorRefusal>>;
+    leave(project: ProjectRow): Effect.Effect<GroupLeft, StoreFailure | GateRefusal<'ungrouped' | FloorRefusal>>;
+  }
+>()('tagma/graph/GroupLifecycle') {}
 
 export type ProjectUpdate = { readonly ref: string; readonly name?: string; readonly settings: ProjectSettings };
 
@@ -377,6 +403,7 @@ export type StorageMoveRefusal =
   | KeptRefusal
   | 'not-found'
   | 'storage-unchanged'
+  | 'group-graph'
   | 'checkout-holds-tree'
   | 'detached-checkout'
   | 'tree-missing'

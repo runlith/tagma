@@ -13,10 +13,11 @@ import { project } from '../../projects/store/table.js';
 import { projectPolicy, writePolicy } from '../store/policy.js';
 import { GLOBAL_PROJECT, type ProjectRow, type StorageMode } from '../../projects/contract/wire/project.js';
 import { rootChecked } from '../../projects/registration.js';
-import type { AdmittedProject, ProjectPolicyRow } from '../contract/wire/serving.js';
-import { ProjectIdentification, Projects } from '../../projects/contract/service/registry.js';
+import type { AdmittedProject, GraphPolicy, ProjectPolicyRow } from '../contract/wire/serving.js';
+import { ProjectGroups, ProjectIdentification, Projects } from '../../projects/contract/service/registry.js';
 import { ProjectChanges } from '../../projects/contract/service/changes.js';
-import { GraphScopes, ProjectLifecycle, ProjectPolicy, type ProjectUpdate } from '../contract/service/serving.js';
+import { GraphScopes, GroupLifecycle, ProjectLifecycle, ProjectPolicy, type ProjectUpdate } from '../contract/service/serving.js';
+import { makeGroupLifecycle } from './grouping.js';
 import { Act, BlockNames, BlockProjection, BlockReferences } from '../contract/service/acts.js';
 import { BlockRows } from '../acts/rows.js';
 import { Tags } from '../contract/service/vocabulary.js';
@@ -56,6 +57,8 @@ const chosenCatalogs = Effect.fn('Projects.chosenCatalogs')(function* (shipped: 
   }
   return [...new Set([...(shipped.byId(CORE_LIBRARY) === null ? [] : [CORE_LIBRARY]), ...asked])];
 });
+const GROUP_POLICY: GraphPolicy = { strictProvenance: false, private: false, storage: 'stealth', graphRemote: null };
+
 const moving = writes('ProjectLifecycle.move', []);
 const updating = writes('ProjectLifecycle.update', []);
 
@@ -119,12 +122,13 @@ const servesFromOf = (db: StoreDb<'graph'>, role: GraphRole) =>
 export const projectsLayer = (
   role: GraphRole,
 ): Layer.Layer<
-  GraphScopes | ProjectPolicy | ProjectLifecycle,
+  GraphScopes | ProjectPolicy | ProjectLifecycle | GroupLifecycle,
   never,
   | GraphStore
   | GraphUnits
   | MachineStore
   | Projects
+  | ProjectGroups
   | ProjectChanges
   | Act
   | BlockRows
@@ -210,6 +214,15 @@ export const projectsLayer = (
         return root;
       });
 
+      const established = Effect.fnUntraced(function* (row: ProjectRow, policy: GraphPolicy, title: string, now: Date) {
+        yield* writePolicy(db, row.id, policy);
+        const born: ProjectPolicyRow = { ...row, ...policy };
+        const root = yield* rootBlock(born.id, title, now);
+        yield* db.insert(meta).values({ key: rowsStepKey(born.id), value: lastStep });
+        yield* act.record('project_add', root?.id ?? null, { projectId: born.id, repoKey: born.repoKey, rootPath: born.rootPath });
+        return born;
+      });
+
       const { takeBack, remove } = projectRemoval({ db, machine, act, vocabulary, projects, projectChanges, rows });
       if (role === 'machine') yield* ensureGlobal.pipe(Effect.orDie);
       const policy = servedPolicy({ db, reads, act, servesFrom, resolveRef: rows.resolveRef, changed, policyChanged, subscribe });
@@ -233,17 +246,13 @@ export const projectsLayer = (
           const now = new Date(yield* Clock.currentTimeMillis);
           let announce: Effect.Effect<void> = Effect.void;
           const bear = Effect.fnUntraced(function* (row: ProjectRow) {
-            const policy = {
+            const policy: GraphPolicy = {
               strictProvenance: input.strictProvenance ?? false,
               private: input.private ?? false,
               storage: input.storage ?? 'stealth',
               graphRemote: input.graphRemote ?? null,
             };
-            yield* writePolicy(db, row.id, policy);
-            const born: ProjectPolicyRow = { ...row, ...policy };
-            const root = yield* rootBlock(born.id, input.name, now);
-            yield* db.insert(meta).values({ key: rowsStepKey(born.id), value: lastStep });
-            yield* act.record('project_add', root?.id ?? null, { projectId: born.id, repoKey: born.repoKey, rootPath: born.rootPath });
+            const born = yield* established(row, policy, input.name, now);
             if (road.shipped.key === null) return born;
             if (chosen === undefined) {
               yield* installCatalogs(road, born.id, yield* settings.value(road.shipped.key));
@@ -327,7 +336,17 @@ export const projectsLayer = (
         remove,
       });
 
+      const groupLifecycle = yield* makeGroupLifecycle({
+        takeBack,
+        bear: Effect.fnUntraced(function* (row: ProjectRow) {
+          const born = yield* established(row, GROUP_POLICY, row.name, new Date(yield* Clock.currentTimeMillis));
+          if (road.shipped.key !== null) yield* installCatalogs(road, born.id, yield* settings.value(road.shipped.key));
+          return born;
+        }),
+      });
+
       return Context.make(ProjectLifecycle, lifecycle).pipe(
+        Context.add(GroupLifecycle, groupLifecycle),
         Context.add(GraphScopes, graphScopes({ db, reads, git, projects, blockRows, blockNames, byId })),
         Context.add(ProjectPolicy, policy),
       );

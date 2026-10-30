@@ -2,25 +2,27 @@ import { Console, Effect, Option } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
 import { resolve } from 'node:path';
 import { CurrentInvocation, print, type Invocation } from '../../platform/cli/verb.js';
-import type { ProjectLens as Lens, ProjectRegistry } from '../contract/service/registration.js';
+import type { GroupRegistry, ProjectLens as Lens, ProjectRegistry } from '../contract/service/registration.js';
 import { STORAGE_MODES } from '../contract/wire/project.js';
 
-export type ProjectsCli<Row, Removed, Policy extends ReadonlyArray<Command.Command.Any>> = {
+export type ProjectsCli<Row, Removed, Policy extends ReadonlyArray<Command.Command.Any>, Group, Left> = {
   readonly registry: ProjectRegistry<Row, Removed>;
+  readonly groups: GroupRegistry<Group, Left>;
   readonly here: (at: Invocation) => Lens;
   readonly render: (rows: readonly Row[]) => string;
+  readonly renderGroups: (groups: readonly Group[]) => string;
   readonly policy: Policy;
 };
 
 const json = Flag.Boolean('json').pipe(Flag.withDescription('machine-readable output'), Flag.withDefault(false));
 const optional = <A>(value: Option.Option<A>): A | undefined => Option.getOrUndefined(value);
 
-export const projects = <Row, Removed, const Policy extends ReadonlyArray<Command.Command.Any>>({
+export const projects = <Row, Removed, const Policy extends ReadonlyArray<Command.Command.Any>, Group, Left>({
   registry,
   here,
   render,
   policy,
-}: ProjectsCli<Row, Removed, Policy>) => {
+}: ProjectsCli<Row, Removed, Policy, Group, Left>) => {
   const add = Command.make(
     'add',
     {
@@ -114,5 +116,73 @@ export const projects = <Row, Removed, const Policy extends ReadonlyArray<Comman
   return Command.make('project').pipe(
     Command.withDescription('the project registry: which checkouts are graphs'),
     Command.withSubcommands([add, setRoot, remove, list, show, ...policy]),
+  );
+};
+
+export const grouping = <Row, Removed, const Policy extends ReadonlyArray<Command.Command.Any>, Group, Left>({
+  groups,
+  here,
+  renderGroups,
+}: ProjectsCli<Row, Removed, Policy, Group, Left>) => {
+  const shown = (one: Group | null, json: boolean) =>
+    json ? print(one, true) : Console.log(one === null ? 'in no group' : renderGroups([one]));
+
+  const make = Command.make(
+    'make',
+    { json, name: Argument.String('name'), projects: Argument.String('name|id').pipe(Argument.atLeast(2)) },
+    ({ json, name, projects }) =>
+      Effect.gen(function* () {
+        yield* shown(yield* groups.make({ name, projects }, here(yield* CurrentInvocation)), json);
+      }),
+  ).pipe(
+    Command.withDescription(
+      'make a group of two or more registered projects, in that order: one system with a graph of its own, each project keeping its repository, graph and law; a group dissolved under this name comes back with its graph',
+    ),
+  );
+
+  const rename = Command.make('rename', { json, group: Argument.String('group'), name: Argument.String('name') }, ({ json, group, name }) =>
+    Effect.gen(function* () {
+      yield* shown(yield* groups.rename(group, name, here(yield* CurrentInvocation)), json);
+    }),
+  ).pipe(Command.withDescription('rename a group'));
+
+  const join = Command.make(
+    'join',
+    { json, group: Argument.String('group'), project: Argument.String('name|id') },
+    ({ json, group, project }) =>
+      Effect.gen(function* () {
+        yield* shown(yield* groups.join(group, project, here(yield* CurrentInvocation)), json);
+      }),
+  ).pipe(Command.withDescription('add a registered project to a group, after its members'));
+
+  const leave = Command.make('leave', { json, project: Argument.String('name|id') }, ({ json, project }) =>
+    Effect.gen(function* () {
+      yield* print(yield* groups.leave(project, here(yield* CurrentInvocation)), json);
+    }),
+  ).pipe(Command.withDescription('take a project out of its group; a group left with one member dissolves'));
+
+  const list = Command.make('list', { json }, ({ json }) =>
+    Effect.gen(function* () {
+      const all = yield* groups.list(here(yield* CurrentInvocation));
+      if (json) return yield* print(all, true);
+      yield* Console.log(renderGroups(all));
+    }),
+  ).pipe(Command.withDescription('the groups of projects and their members'));
+
+  const show = Command.make(
+    'show',
+    {
+      json,
+      ref: Argument.String('name|id').pipe(Argument.optional, Argument.withDescription('a project or a group; omitted, the project here')),
+    },
+    ({ json, ref }) =>
+      Effect.gen(function* () {
+        yield* shown(yield* groups.read(optional(ref), here(yield* CurrentInvocation)), json);
+      }),
+  ).pipe(Command.withDescription('the group a project belongs to, or a group by its name'));
+
+  return Command.make('group').pipe(
+    Command.withDescription('groups of projects: several repositories Tagma treats as one system'),
+    Command.withSubcommands([make, rename, join, leave, list, show]),
   );
 };

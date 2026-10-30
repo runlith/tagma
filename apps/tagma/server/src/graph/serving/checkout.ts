@@ -133,6 +133,13 @@ export const makeServingSwitch = Effect.gen(function* () {
             'tagma project list — what each project is configured to be',
           ]);
         }
+        if (row.kind === 'group') {
+          return yield* new GateRefusal(
+            'group-graph',
+            `"${row.name}" is the graph of a group of projects, which has no repository to carry it`,
+            ['set_graph_remote — a group’s graph leaves this machine through its own private remote'],
+          );
+        }
         const homes = storageHomes(machineStore.path);
         const layoutOf = (mode: StorageMode, worktree: string) =>
           refused(resolveStorageLayout({ mode, projectId: row.id, ...homes, worktree }));

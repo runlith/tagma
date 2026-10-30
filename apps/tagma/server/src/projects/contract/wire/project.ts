@@ -46,6 +46,10 @@ export type ProjectGroup = {
   readonly members: readonly ProjectRow[];
 };
 
-export type GroupRefusal = 'grouped' | 'ungrouped' | 'ungroupable' | 'group-size' | 'not-a-group';
+export type FormedGroup = { readonly group: ProjectGroup; readonly returned: boolean };
+
+export type FormRefusal = 'grouped' | 'ungroupable' | 'group-size';
+
+export type JoinRefusal = 'grouped' | 'ungroupable' | 'not-a-group';
 
 export type NameRefusal = 'reserved-project' | 'project-name' | 'duplicate-name';

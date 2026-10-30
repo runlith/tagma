@@ -36,6 +36,7 @@ export const SOURCE_OPERATIONS = {
       'illegal-kind',
       'source-outside',
       'not-measurable',
+      'group-source',
       'symbol-shape',
       'symbol-missing',
       'duplicate-source',

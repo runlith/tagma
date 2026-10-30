@@ -1,6 +1,6 @@
 import type { Git } from '@runlith/git/Git';
 import type { WriterRegister } from '../../../platform/contract/service/writers.js';
-import type { ProjectIdentification, Projects } from '../../../projects/contract/service/registry.js';
+import type { ProjectGroups, ProjectIdentification, Projects } from '../../../projects/contract/service/registry.js';
 import type { ProjectChanges } from '../../../projects/contract/service/changes.js';
 import type { Settings } from '../../../settings/contract/service/values.js';
 import type { ManagedWrite } from '../../../settings/contract/service/managed.js';
@@ -18,7 +18,7 @@ import type { BlockReads, History, Ranking, Selection } from './reads.js';
 import type { InstalledCatalogs, Tags } from './vocabulary.js';
 import type { Catalogs } from '../wire/catalogs.js';
 import type { Behaviours } from './behaviours.js';
-import type { GraphScopes, ProjectLifecycle, ProjectPolicy } from './serving.js';
+import type { GraphScopes, GroupLifecycle, ProjectLifecycle, ProjectPolicy } from './serving.js';
 import type { GraphSource, SourceProject } from './source.js';
 
 export type GraphServices =
@@ -40,11 +40,13 @@ export type GraphServices =
   | BlockReferences
   | BlockRows
   | Projects
+  | ProjectGroups
   | ProjectIdentification
   | ProjectChanges
   | GraphScopes
   | ProjectPolicy
   | ProjectLifecycle
+  | GroupLifecycle
   | Selection
   | Edges
   | Trash

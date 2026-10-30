@@ -5,7 +5,7 @@ import { source, block, blockField, blockTag, edge, event, farEdge, ref, searchI
 import { purgeProject } from '../../settings/store/rows.js';
 import { threadRecord } from '../../thread-record/store/table.js';
 import { projectRoot, projectRootCover } from '../../workspace/store/tables.js';
-import { project } from '../../projects/store/table.js';
+import { groupMember, project } from '../../projects/store/table.js';
 import type { ProjectRow } from '../../projects/contract/wire/project.js';
 import type { Projects } from '../../projects/contract/service/registry.js';
 import type { ProjectChanges } from '../../projects/contract/service/changes.js';
@@ -20,7 +20,7 @@ import type { policyRows } from './policy.js';
 
 const purging = writes('Projects.purgeGraph', [block, source, edge, farEdge, setting], projecting, referencing);
 
-const leaving = writes('project.remove', [project]);
+const leaving = writes('project.remove', [project, groupMember]);
 
 const recording = writes('ProjectLifecycle.remove', []);
 
@@ -54,7 +54,7 @@ export const projectRemoval = (input: {
   });
 
   const takeBack = (row: ProjectRow): Effect.Effect<void, StoreFailure | GateRefusal> =>
-    machine.transaction(writes('project.rollback', [threadRecord, project, projectRoot, projectRootCover]), (unit) =>
+    machine.transaction(writes('project.rollback', [threadRecord, project, groupMember, projectRoot, projectRootCover]), (unit) =>
       act.unit(
         purging,
         Effect.gen(function* () {

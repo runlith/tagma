@@ -4,7 +4,9 @@ import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { WriteUnit } from '../../../platform/contract/service/units.js';
 import type { GateRefusal, GitRefusal } from '../../../platform/contract/wire/refusal.js';
 import type {
-  GroupRefusal,
+  FormedGroup,
+  FormRefusal,
+  JoinRefusal,
   NameRefusal,
   ProjectGroup,
   ProjectIdentity,
@@ -70,12 +72,12 @@ export class ProjectGroups extends Context.Service<
     form(
       unit: WriteUnit<'machine'>,
       input: { readonly name: string; readonly members: readonly ProjectRow[] },
-    ): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<GroupRefusal | NameRefusal>>;
+    ): Effect.Effect<FormedGroup, StoreFailure | GateRefusal<FormRefusal | NameRefusal>>;
     join(
       unit: WriteUnit<'machine'>,
       group: ProjectGroup,
       project: ProjectRow,
-    ): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<GroupRefusal>>;
-    leave(unit: WriteUnit<'machine'>, project: ProjectRow): Effect.Effect<ProjectGroup | null, StoreFailure | GateRefusal<GroupRefusal>>;
+    ): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<JoinRefusal>>;
+    leave(unit: WriteUnit<'machine'>, project: ProjectRow): Effect.Effect<ProjectGroup | null, StoreFailure | GateRefusal<'ungrouped'>>;
   }
 >()('tagma/projects/ProjectGroups') {}

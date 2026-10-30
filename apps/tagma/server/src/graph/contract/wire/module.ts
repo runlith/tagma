@@ -17,6 +17,7 @@ export const graph = {
       { ORIENTATION_OPERATIONS },
       { HISTORY_OPERATIONS },
       { REGISTRY_OPERATIONS },
+      { GROUP_OPERATIONS },
       { REFUSAL_WORDS },
     ] = await Promise.all([
       import('./operations/reads.js'),
@@ -29,6 +30,7 @@ export const graph = {
       import('./operations/orientation.js'),
       import('./operations/history.js'),
       import('./operations/registry.js'),
+      import('./operations/groups.js'),
       import('./refusalWords.js'),
     ]);
     const declarations = mergeOperations(
@@ -42,6 +44,7 @@ export const graph = {
       ORIENTATION_OPERATIONS,
       HISTORY_OPERATIONS,
       REGISTRY_OPERATIONS,
+      GROUP_OPERATIONS,
     );
     return { declarations, journaled: Object.keys(declarations).filter((id) => !UNJOURNALED.has(id)), refusals: REFUSAL_WORDS } as const;
   },
