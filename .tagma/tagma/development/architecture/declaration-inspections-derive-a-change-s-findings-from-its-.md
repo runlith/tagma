@@ -7,7 +7,7 @@ sources:
   - kind: dir
     ref: checks/law/declarations
 ---
-The facts of a source file — its exports, imports, uses by value or type position, and type shapes — are a function of its git blob alone, so `database.ts` keeps them per blob in `<git-common-dir>/runlith-law/declarations.sqlite`, with the places a blob stands at, the import links and shape keys that find importers and copies, and the findings of each judged revision. The index resets whenever a file that defines it changes.
+The facts of a source file — its exports, imports, uses by value or type position, and type shapes — are a function of its git blob alone, so `store.ts` keeps them per blob in `<git-common-dir>/runlith-law/declarations.sqlite`, with the places a blob stands at, the import links and shape keys that find importers and copies, and the findings of each judged revision. The index resets whenever a file that defines it changes.
 
 Only a whole reading (`check_rules` over "all", a remeasure) builds the index: it lists the tree and parses every blob it lacks. A judgment of a change never scans and never computes a whole result: it derives the revision's index from the nearest of the last indexed ones by `git diff-tree`, and its findings from the nearest cached result of the same parameters (the base's, or the newest of the last 6 within 5000 changed files), and when none exists it fails with the setup action (`check_rules` over "all") instead. The whole reading caches its findings by revision; the judgment of a change re-judges only the owners the change can move — the changed files and the exporters whose consumption edges (import, re-export, load) it added or removed — and answers the complete set with `covered: 'reach'`, so it agrees with the remeasure exactly.
 
