@@ -6,10 +6,11 @@ import type { Usage } from '@runlith/llm/schema/events';
 import { Cause, Option, type Effect } from 'effect';
 import { AskRefused } from './contract/service/asks.js';
 import type { AskPath } from './contract/wire/asks.js';
+import { GateRefusal } from '../platform/contract/wire/refusal.js';
 
 export type AskActivity = {
   readonly kind: AskKind;
-  readonly path: AskPath | 'thread';
+  readonly path: AskPath | 'thread' | 'unresolved';
   readonly provider: string | undefined;
   readonly model: string | undefined;
   readonly rung: string | null;
@@ -19,7 +20,7 @@ type AskSpend = { readonly account?: string; readonly usage?: Usage };
 
 const ASK = activityKind<AskActivity, { readonly account?: string; readonly usage?: ModelCallUsage }>('ask');
 
-export const askActivity = <A extends AskSpend, E extends AskSpend, R>(
+export const askActivity = <A extends AskSpend, E extends AskSpend | GateRefusal, R>(
   attrs: AskActivity,
   work: Effect.Effect<A, E, R>,
   placement: ActivityPlacement = {},
@@ -29,6 +30,7 @@ export const askActivity = <A extends AskSpend, E extends AskSpend, R>(
     ended: (exit) => {
       if (exit._tag === 'Success') return { result: { account: exit.value.account, usage: exit.value.usage } };
       const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+      if (failure instanceof GateRefusal) return { outcome: 'refused', reason: failure.code, message: failure.reason };
       if (!(failure instanceof AskRefused)) return { result: failure?.usage === undefined ? undefined : { usage: failure.usage } };
       const before =
         failure.refusal === 'ask-not-connected' ||

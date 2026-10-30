@@ -31,7 +31,7 @@ import {
 } from './contract/service/asks.js';
 import { HarnessAccounts } from './contract/service/harness.js';
 import { AdapterInstalls } from './contract/service/adapters.js';
-import type { AskPath, AskRefusal } from './contract/wire/asks.js';
+import type { AskRefusal } from './contract/wire/asks.js';
 import { ProviderRegistry, type AskRoute, type ProviderCatalog } from './contract/service/registry.js';
 
 const PROGRAM_OUTPUT_TOKENS = 8_192;
@@ -98,29 +98,40 @@ export const makeModelAsks = Effect.gen(function* () {
 
   const catalogOf = (ask?: { readonly runId?: string }) => (ask?.runId === undefined ? registry.current() : registry.forRun(ask.runId));
 
+  const noRoute = (selection: AskSelection) =>
+    refused('ask-unanswerable', `${selection.provider}:${selection.model} answers no asks: its provider declares no ask path`);
+
   const routeOf = (catalog: ProviderCatalog, selection: AskSelection) => {
     const route = catalog.asks.route(selection.provider, selection.model);
-    return route === null
-      ? Effect.fail(
-          refused('ask-unanswerable', `${selection.provider}:${selection.model} answers no asks: its provider declares no ask path`),
-        )
-      : Effect.succeed(route);
+    return route === null ? Effect.fail(noRoute(selection)) : Effect.succeed(route);
   };
 
   const observed = <A>(
     kind: AskKind,
-    path: AskPath,
+    catalog: ProviderCatalog,
     selection: AskSelection,
-    work: Effect.Effect<Spoken<A>, AskRefused>,
-  ): Effect.Effect<Answered<A>, AskRefused> =>
-    Effect.provideService(
+    work: (route: AskRoute) => Effect.Effect<Spoken<A>, AskRefused>,
+  ): Effect.Effect<Answered<A>, AskRefused> => {
+    const route = catalog.asks.route(selection.provider, selection.model);
+    return Effect.provideService(
       askActivity(
-        { kind, path, provider: selection.provider, model: selection.model, rung: selection.reasoning },
-        Effect.map(work, (spoken) => ({ value: spoken.value, path, selection, usage: spoken.usage, account: spoken.account })),
+        { kind, path: route?.path ?? 'unresolved', provider: selection.provider, model: selection.model, rung: selection.reasoning },
+        Effect.suspend(() =>
+          route === null
+            ? Effect.fail(noRoute(selection))
+            : Effect.map(work(route), (spoken) => ({
+                value: spoken.value,
+                path: route.path,
+                selection,
+                usage: spoken.usage,
+                account: spoken.account,
+              })),
+        ),
       ),
       ActivityLog,
       log,
     );
+  };
 
   const requestOf = (route: AskRoute, selection: AskSelection, system: string, ask?: FreshAsk): Effect.Effect<ModelRequest, AskRefused> => {
     const request = models.request({
@@ -367,19 +378,17 @@ export const makeModelAsks = Effect.gen(function* () {
 
     text: Effect.fn('ModelAsks.text')(function* (selection, ask) {
       const catalog = catalogOf(ask);
-      const route = yield* routeOf(catalog, selection);
-      return yield* observed('text', route.path, selection, spokenText(catalog, route, selection, ask));
+      return yield* observed('text', catalog, selection, (route) => spokenText(catalog, route, selection, ask));
     }),
 
     decide: Effect.fn('ModelAsks.decide')(function* (selection, request) {
       const catalog = registry.current();
-      const route = yield* routeOf(catalog, selection);
-      const option = optionOf(catalog, route.provider, selection.model);
-      const work =
-        route.path === 'request' && option !== undefined && option.capabilities.includes('decision')
+      return yield* observed('decision', catalog, selection, (route) => {
+        const option = optionOf(catalog, route.provider, selection.model);
+        return route.path === 'request' && option !== undefined && option.capabilities.includes('decision')
           ? profileDecision(option, route, selection, request)
           : objectDecision(catalog, route, selection, request);
-      return yield* observed('decision', route.path, selection, work);
+      });
     }),
   });
 });

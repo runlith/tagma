@@ -46,16 +46,24 @@ export const makeThreadAsks = Effect.gen(function* () {
     }),
     over: Effect.fn('ThreadAsks.over')(function* (threadId, instruction, copy) {
       const held = copy ?? asides.of(threadId);
-      if (held === undefined) return yield* notWarm('This thread holds no warm copy of its conversation to ask over.');
-      if (held.expiresAt !== null && held.expiresAt <= (yield* Clock.currentTimeMillis))
-        return yield* notWarm("This copy of the thread's conversation is past its cache deadline.");
       return yield* askActivity(
-        { kind: 'text', path: 'thread', provider: held.binding.origin?.provider, model: held.binding.origin?.model, rung: held.reasoning },
-        asides.ask(threadId, held, { instruction }).pipe(
-          Effect.catchTag('LLM.Error', (failure) => Effect.fail(askFailure(failure))),
-          Effect.map((answer) => ({ ...answer, account: held.binding.account })),
-        ),
-        { thread: threadId, run: held.runId },
+        {
+          kind: 'text',
+          path: 'thread',
+          provider: held?.binding.origin?.provider,
+          model: held?.binding.origin?.model,
+          rung: held?.reasoning ?? null,
+        },
+        Effect.gen(function* () {
+          if (held === undefined) return yield* notWarm('This thread holds no warm copy of its conversation to ask over.');
+          if (held.expiresAt !== null && held.expiresAt <= (yield* Clock.currentTimeMillis))
+            return yield* notWarm("This copy of the thread's conversation is past its cache deadline.");
+          return yield* asides.ask(threadId, held, { instruction }).pipe(
+            Effect.catchTag('LLM.Error', (failure) => Effect.fail(askFailure(failure))),
+            Effect.map((answer) => ({ ...answer, account: held.binding.account })),
+          );
+        }),
+        { thread: threadId, run: held?.runId },
       ).pipe(Effect.provideService(ActivityLog, log));
     }),
   });

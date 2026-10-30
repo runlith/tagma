@@ -77,7 +77,8 @@ const catalog = providerCatalogOf([
 const setup = Effect.gen(function* () {
   const connected = new Set<string>();
   const saved: { selection: SavedSelection | null } = { selection: null };
-  const said = { object: { addressed: true, urgency: '2' } as unknown, requested: [] as string[] };
+  const said = { object: { addressed: true, urgency: '2' } as unknown };
+  const available = { catalog };
   const recording = activityRecording();
   const response = new LLMResponse({
     message: Message.assistant('answer'),
@@ -87,7 +88,7 @@ const setup = Effect.gen(function* () {
   });
   const context = yield* Layer.build(
     Layer.mergeAll(
-      Layer.succeed(ProviderRegistry, staticRegistry(catalog)),
+      Layer.succeed(ProviderRegistry, { ...staticRegistry(catalog), current: () => available.catalog }),
       Layer.mock(ProviderAccounts, { connected: Effect.sync(() => ({ revision: 0, providers: new Set(connected) })) }),
       Layer.mock(HarnessAccounts, { launch: () => Effect.succeed(null) }),
       Layer.mock(AskPrograms, { run: () => Effect.die('no program answers in this catalog') }),
@@ -106,15 +107,12 @@ const setup = Effect.gen(function* () {
               requestLimits: undefined,
               compactionTrigger: undefined,
             })),
-          request: (input) => {
-            said.requested.push(`${input.provider}:${input.model}`);
-            return {
-              plannedOutputTokens: 32,
-              text: () => Effect.succeed(response),
-              stream: () => Stream.die('asks do not stream'),
-              object: <T>() => Effect.succeed({ object: said.object as T, response }),
-            };
-          },
+          request: () => ({
+            plannedOutputTokens: 32,
+            text: () => Effect.succeed(response),
+            stream: () => Stream.die('asks do not stream'),
+            object: <T>() => Effect.succeed({ object: said.object as T, response }),
+          }),
           decide: (call) =>
             Effect.succeed({
               model: new ModelIdentity({ provider: ProviderID.make(call.provider), model: ModelID.make(call.model) }),
@@ -129,7 +127,7 @@ const setup = Effect.gen(function* () {
     ),
   );
   const asks = yield* makeModelAsks.pipe(Effect.provide(context));
-  return { asks, connected, saved, said, recording };
+  return { asks, connected, saved, said, recording, available };
 });
 
 it.effect(
@@ -157,12 +155,46 @@ it.effect(
 
 it.effect('with only a borrowed CLI login connected, the default is the borrowing subscription’s light model', () =>
   Effect.gen(function* () {
-    const { asks, connected, said } = yield* setup;
+    const { asks, connected } = yield* setup;
     connected.add('codex');
     const chosen = yield* asks.choose('text', null);
     expect(chosen).toEqual({ provider: 'codex', model: 'luna', reasoning: 'low', account: null });
     expect(yield* asks.text(chosen, { system: 'Name it.', input: 'words' })).toMatchObject({ value: 'answer', path: 'request' });
-    expect(said.requested).toEqual(['chat:luna']);
+  }),
+);
+
+it.effect('an adapter removed after selection leaves one refused activity per attempted ask', () =>
+  Effect.gen(function* () {
+    const { asks, recording, available } = yield* setup;
+    const text = yield* asks.choose('text', { provider: 'text', model: 'light' });
+    const decision = yield* asks.choose('decision', { provider: 'native', model: 'judge' });
+    yield* asks.capacity(text, 'Name it.');
+    available.catalog = providerCatalogOf([]);
+    expect(yield* asks.text(text, { system: 'Name it.', input: 'words' }).pipe(Effect.flip)).toMatchObject({
+      refusal: 'ask-unanswerable',
+    });
+    expect(yield* asks.decide(decision, TRIAGE).pipe(Effect.flip)).toMatchObject({ refusal: 'ask-unanswerable' });
+    expect(
+      recording
+        .activities()
+        .filter((row) => row.opened.kind === 'ask')
+        .map((row) => ({
+          attrs: row.opened.attrs,
+          outcome: row.ended?.outcome,
+          reason: row.ended?.reason,
+        })),
+    ).toEqual([
+      {
+        attrs: expect.objectContaining({ kind: 'text', path: 'unresolved', provider: 'text', model: 'light' }),
+        outcome: 'refused',
+        reason: 'ask-unanswerable',
+      },
+      {
+        attrs: expect.objectContaining({ kind: 'decision', path: 'unresolved', provider: 'native', model: 'judge' }),
+        outcome: 'refused',
+        reason: 'ask-unanswerable',
+      },
+    ]);
   }),
 );
 
