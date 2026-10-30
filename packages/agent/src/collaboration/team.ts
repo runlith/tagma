@@ -192,13 +192,13 @@ export function reviewWords(team: Team): string {
   const named = pool.map(teamModelWords).join(', ');
   const who =
     count === 1
-      ? `one reviewer, the first available in this order: ${named}`
-      : `up to ${count} reviewers, as many as the work needs, in this order: ${named}`;
+      ? `at most one reviewer, the first available in this order: ${named}`
+      : `up to ${count} reviewers, as many as the change needs, in this order: ${named}`;
   const how =
     split === 'same' || count === 1 || lenses.length === 0
       ? 'each reads the same brief in isolation'
       : `the first reads the whole work, each next one a lens: ${lenses.join(', ')}`;
-  return `Review: ${who}; skip one whose account is exhausted; ${how}.`;
+  return `Review of a delivered change: ${who}; skip one whose account is exhausted; ${how}.`;
 }
 
 export function teamModelsWords(team: Team): string {

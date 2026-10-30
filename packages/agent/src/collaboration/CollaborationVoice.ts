@@ -139,7 +139,7 @@ function handoffGuidance(models: ModelCatalog, startable: readonly ThreadSpawnTy
     '2. Warm, or small: `send_task`; add `compact` for a large task or near its compaction point, `keep` naming what it needs — a warm child near its compaction point is compacted, not replaced.',
     `3. Cold and large (refused \`cold-wake\`): spawn fresh with its last report;${summarizerChoice ? ' `compact` if another model summarizes;' : ''} \`wake: true\` if its history is worth the full price.`,
     ...(summarizerChoice ? ['Who summarizes is the operator’s choice, never yours.'] : []),
-    'A review is an independent reading of finished work: reviewers report findings and change nothing; the author confirms each against the code and fixes it, in one round. Start reviewers on your own only as the review policy you were told sets; the operator’s word asks for one anyway.',
+    'A review is an independent reading of a change you delivered that the project keeps — committed code, a spec, a rule, a document — never of an answer, a reading, research or a report, which whoever asked judges. Reviewers report findings and change nothing; the author confirms each against the work and fixes it, in one round. The review policy you were told names who reviews such a change and how many at most; start none without it, unless the operator’s word asks for one.',
   ];
 }
 
