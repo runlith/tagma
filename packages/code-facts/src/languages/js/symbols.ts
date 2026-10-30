@@ -127,13 +127,21 @@ const identifierSymbol = (node: ts.Identifier, checker: ts.TypeChecker): ts.Symb
       ? checker.getExportSpecifierLocalTargetSymbol(node.parent)
       : checker.getSymbolAtLocation(node);
 
+const arrayRest = (pattern: ts.Node): boolean => {
+  for (let parent = pattern.parent; parent !== undefined; parent = parent.parent) {
+    if (ts.isSpreadElement(parent)) return true;
+    if (!ts.isPropertyAssignment(parent) && !ts.isObjectLiteralExpression(parent) && !ts.isArrayLiteralExpression(parent)) return false;
+  }
+  return false;
+};
+
 const memberSpellings = (node: ts.Node, checker: ts.TypeChecker): readonly Spelled[] => {
   if (ts.isBindingElement(node) && node.propertyName === undefined && ts.isObjectBindingPattern(node.parent) && ts.isIdentifier(node.name))
     return [{ name: node.name, symbol: checker.getPropertyOfType(checker.getTypeAtLocation(node.parent), node.name.text) }];
   if (!ts.isObjectLiteralExpression(node) || !assigned(node)) return [];
   return node.properties.flatMap((property) =>
     (ts.isShorthandPropertyAssignment(property) || ts.isPropertyAssignment(property)) && ts.isIdentifier(property.name)
-      ? [{ name: property.name, symbol: checker.getPropertySymbolOfDestructuringAssignment(property.name) }]
+      ? [{ name: property.name, symbol: arrayRest(node) ? undefined : checker.getPropertySymbolOfDestructuringAssignment(property.name) }]
       : [],
   );
 };

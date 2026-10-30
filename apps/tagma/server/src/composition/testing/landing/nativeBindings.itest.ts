@@ -4,6 +4,8 @@ import { it } from '@runlith/effect-test';
 import { Context, Effect, Stream } from 'effect';
 import { join } from 'node:path';
 import { createTools } from '@runlith/agent-tools';
+import { ToolAnswer, toolExecute, toolPrepare, type Tool } from '@runlith/agent/tool';
+import { callerInThread } from '../callers.js';
 import { unruledTimes } from '@runlith/agent-tools/CommandWork';
 import { LONGEST_ACT_MS } from '@runlith/agent/callProgress';
 import { Usage } from '@runlith/llm/schema/events';
@@ -40,12 +42,27 @@ const EXISTING = 'export type Existing = string;\nexport type Other = number;\n'
 const IMPORTER =
   'import type {\n  Existing as Imported\n} from "./clean.js";\nimport type * as API\n  from "./clean.js";\nexport type Shape = Imported | API.Other;\n';
 const PEER = 'export const marker = 0;\n';
+const MEMBERS = 'export interface Input { readonly value: number }\nexport class Batch {}\nexport const resumed = 1;\n';
+const LOCAL = 'import { resumed, type Input } from "./declarations.js";\n\nexport const marker = 0;\n';
+const SVELTE =
+  '<script>\nlet x = 0, y = 0, z = 0;\nconst marker = 0;\nconst update = async () => {};\n</script>\n<button onclick={update}>Update</button>\n';
+
+const callAs = Effect.fnUntraced(function* (tool: Tool, thread: string, input: unknown) {
+  const invocation = { toolCallId: crypto.randomUUID(), caller: callerInThread(thread, 'run'), messages: [] };
+  const prepared = yield* toolPrepare(tool)!(input, invocation);
+  const answer = yield* toolExecute(tool)!(input, { ...invocation, prepared: prepared.prepared });
+  tool.settled?.(invocation);
+  return answer instanceof ToolAnswer ? answer.value : answer;
+});
 
 it.live('native landing carries dependency patches, excludes ignored declarations, and still checks selected peer source references', () =>
   Effect.gen(function* () {
-    const { born, doors, write, read, files, root } = yield* nativeLanding(
+    const { born, doors, write, read, files, root, world, projectId } = yield* nativeLanding(
       {
         '.gitignore': 'node_modules/\n',
+        'Component.svelte': SVELTE,
+        'declarations.ts': MEMBERS,
+        'local.ts': LOCAL,
         'host.ts': HOST,
         'succession.ts': SUCCESSION,
         'server.ts': SERVER,
@@ -99,6 +116,59 @@ it.live('native landing carries dependency patches, excludes ignored declaration
         expect(refused.reason).toContain(`Other in peer.ts:3, held by ${peer.threadId}`);
       }
     }
+
+    const record = Context.get(world.runtime.owners, ChangeRecord);
+    const tools = createTools({
+      cwd: root,
+      world: makeMachineWorld(() => null),
+      commandTimes: unruledTimes,
+      searchMs: LONGEST_ACT_MS,
+      unowned: ['.tagma'],
+      changesOf: (actor) => record.changes({ work: { projectId, threadId: actor.thread!.threadId } }),
+    });
+    const members = MEMBERS.replace(
+      'readonly value',
+      'readonly scope: string; readonly address: string; readonly host: string; readonly value',
+    ).replace('class Batch {}', 'class Batch { private map = new Map(); }');
+    yield* callAs(tools.edit, peer.threadId, { path: join(root, 'declarations.ts'), oldString: MEMBERS, newString: members });
+    const peerRead = 'export const peerRead = (input: Input) => input.scope;\n';
+    yield* callAs(tools.edit, peer.threadId, { path: join(root, 'local.ts'), oldString: LOCAL, newString: LOCAL + peerRead });
+    const localUse =
+      'export function read(thunks: readonly (() => unknown)[]) {\n  const scope = { address: 1 };\n  const host = { connection: scope };\n  const address = host.connection.address;\n  return [resumed, scope, host, address, thunks.map((thunk) => thunk())];\n}\n';
+    yield* callAs(tools.edit, caller.threadId, { path: join(root, 'local.ts'), oldString: LOCAL, newString: LOCAL + localUse });
+    expect(
+      yield* doors.atNative('submit_work', { subject: 'land independently bound local names', paths: ['local.ts'] }, caller),
+    ).toMatchObject({
+      class: 'answer',
+      value: { submitted: { status: 'landed', committed: ['local.ts'], carried: [] } },
+    });
+    expect(yield* read('local.ts')).toBe(LOCAL + localUse);
+    expect(yield* read('declarations.ts')).toBe(MEMBERS);
+    expect(yield* files.readFileString(join(root, 'local.ts'))).toBe(LOCAL + localUse + peerRead);
+    expect(yield* files.readFileString(join(root, 'declarations.ts'))).toBe(members);
+
+    yield* callAs(tools.edit, peer.threadId, {
+      path: join(root, 'Component.svelte'),
+      oldString: 'const marker = 0;',
+      newString: 'const marker = 1;',
+    });
+    const update =
+      'const update = async () => {\n  [x, y, ...{ z = 26 }] = await Promise.resolve([24, 25]);\n  [...{ 0: { z = 26 } }] = await Promise.resolve([{ z: 1 }]);\n};';
+    yield* callAs(tools.edit, caller.threadId, {
+      path: join(root, 'Component.svelte'),
+      oldString: 'const update = async () => {};',
+      newString: update,
+    });
+    expect(
+      yield* doors.atNative('submit_work', { subject: 'land Svelte array rest assignments', paths: ['Component.svelte'] }, caller),
+    ).toMatchObject({
+      class: 'answer',
+      value: { submitted: { status: 'landed', committed: ['Component.svelte'], carried: [] } },
+    });
+    expect(yield* read('Component.svelte')).toBe(SVELTE.replace('const update = async () => {};', update));
+    expect(yield* files.readFileString(join(root, 'Component.svelte'))).toBe(
+      SVELTE.replace('const marker = 0;', 'const marker = 1;').replace('const update = async () => {};', update),
+    );
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );
 
