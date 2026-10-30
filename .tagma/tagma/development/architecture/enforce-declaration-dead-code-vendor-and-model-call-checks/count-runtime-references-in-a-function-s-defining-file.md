@@ -5,7 +5,8 @@ ord: 11
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "holder": "tagma:01a188ae-2d0b-74f2-91fc-f0e9ba085af5",
+    "status": "in_work"
   }
 ---
 A function imported only in type positions is reported uncalled even when production code in its defining file calls it. Record local runtime references without treating declaration names, metadata reads or shadowed bindings as callers.

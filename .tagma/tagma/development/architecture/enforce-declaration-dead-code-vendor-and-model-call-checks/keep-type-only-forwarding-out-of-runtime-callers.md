@@ -5,7 +5,8 @@ ord: 10
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "holder": "tagma:01a188ae-2d0b-74f2-91fc-f0e9ba085af5",
+    "status": "in_work"
   }
 ---
 Declaration forwarding loses type-only modifiers, so a type re-export makes an exported function appear called. Preserve the type/value distinction for statement, specifier and local forwarding and prove it through the dead-code inspection.
