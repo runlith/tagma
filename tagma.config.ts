@@ -1,6 +1,6 @@
 import { Code, defineConfig, Files, Format, Imports, Loading } from '@runlith/tagma/rules';
 import { Effect } from '@runlith/tagma/rules/effect';
-import { names, platforms } from './checks/builtins';
+import { names, platforms, serverNames } from './checks/builtins';
 import { ALLOWED } from './checks/failures';
 import { effectStyle, environment, migrations, stepPlaces, uiTokens } from './checks/law/inspections';
 import type { EffectStyleParams } from './checks/law/effect-style/declaration';
@@ -408,6 +408,7 @@ export default defineConfig({
       tests: ['.test', '.itest', '.e2e', '.stest', '.spec', '.bench', '.fixture'],
     }),
     names,
+    'server-names': serverNames,
     platforms,
     reexports: Code.noReexports({
       allows: ['**/ui/*/index.ts', 'packages/primitives/src/dialog/index.ts'],

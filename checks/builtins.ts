@@ -124,6 +124,50 @@ export const names: Builtin<'names', NamesParams> = {
   },
 };
 
+const CATALOG_TAGS: [string, ...string[]] = [
+  'task',
+  'spec',
+  'rule',
+  'idea',
+  'module',
+  'explanation',
+  'feature',
+  'reflection',
+  'research',
+  'view',
+  'experiment',
+];
+
+export const serverNames: Builtin<'names', NamesParams> = {
+  builtin: 'names',
+  params: {
+    base: 'apps/tagma/server/src',
+    checks: {
+      F1: { exempt: [] },
+      F2: { exempt: [] },
+      S4: { within: 'module', exempt: [] },
+      S5: {
+        heads: ['Data', 'Info', 'Helper', 'Manager', 'Service'],
+        allows: [
+          { head: 'Data', in: ['installation/contract/wire/layout.ts', 'plugins/sources.ts', 'tagma-apps/discovery.ts'] },
+          { head: 'Helper', in: ['installation/contract/wire/layout.ts'] },
+        ],
+        exempt: [],
+      },
+      literals: [{ region: ['graph/'], words: CATALOG_TAGS, positions: ['compare', 'argument', 'property', 'lookup'], allowIn: [] }],
+    },
+    errors: ['Data.TaggedError'],
+    files: {
+      exclude: [...SOURCES.exclude, '**/testing/**', '**/testing.ts', '**/conformance/**'],
+      extensions: ['.ts'],
+    },
+    glossary: [],
+    modules: [],
+    services: ['Context.Service'],
+    uncovered: [],
+  },
+};
+
 export const platforms: Builtin<'platforms', PlatformsParams> = {
   builtin: 'platforms',
   params: {
