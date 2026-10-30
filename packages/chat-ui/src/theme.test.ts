@@ -80,6 +80,7 @@ const NON_COLOUR_TAILS = [
   'e',
   'width',
   'linecap',
+  'linejoin',
   'dasharray',
 ];
 
