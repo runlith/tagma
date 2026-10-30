@@ -24,6 +24,7 @@ const waiting =
     Effect.flatMap(ProtocolRig, (rig) => readUntil(read, what, report, rig.changes(threadId)));
 
 const CLAUDE = { name: 'claude-code', hosts: 'tagma' } as const;
+const own = (said: readonly Said[], threadId: string) => said.filter((one) => one.threadId === threadId);
 const SPENT = { inputTokens: 2, outputTokens: 1, totalTokens: 3 };
 const asked = (report: string, method: string) => Effect.map(heard(report), (lines) => lines.filter((line) => line.method === method));
 const methods = (report: string) =>
@@ -190,11 +191,11 @@ describe('ACP adapter boundaries over one execution host', () => {
                 'delivered',
               );
               yield* until(
-                Effect.sync(() => (said.length > 0 ? said : null)),
+                Effect.sync(() => (own(said, threadId).length > 0 ? true : null)),
                 'reported the turn',
                 report,
               );
-              expect(said[0]?.text).toBe('chose allow');
+              expect(own(said, threadId)[0]?.text).toBe('chose allow');
               expect((yield* heard(report)).filter((line) => line.id === 'p1' && line.method === undefined)).toHaveLength(1);
               expect(yield* asked(report, 'initialize')).toHaveLength(1);
               expect(yield* after.stop(threadId)).toBe('stopped');
@@ -233,7 +234,7 @@ describe('ACP adapter boundaries over one execution host', () => {
               yield* files.remove(left, { recursive: true });
               yield* Deferred.succeed(refusing, undefined);
               yield* until(
-                Effect.sync(() => (reported.some((one) => one.text === 'echo: heard') ? true : null)),
+                Effect.sync(() => (own(reported, threadId).some((one) => one.text === 'echo: heard') ? true : null)),
                 'answered the words on the relaunched process',
                 report,
               );
@@ -273,14 +274,14 @@ describe('ACP adapter boundaries over one execution host', () => {
               yield* raised.recover();
               yield* files.writeFileString(`${report}.release`, 'release');
               yield* until(
-                Effect.sync(() => (reported.length > 0 ? true : null)),
+                Effect.sync(() => (own(reported, threadId).length > 0 ? true : null)),
                 'ended the held turn',
                 report,
               );
               expect((yield* runEnd(rig.world.context, threadId))?.status).toBe('completed');
               yield* after.send(threadId, 'once more');
               yield* until(
-                Effect.sync(() => (reported.length > 1 ? true : null)),
+                Effect.sync(() => (own(reported, threadId).length > 1 ? true : null)),
                 'reported the turn after the held one',
                 report,
               );
@@ -406,10 +407,10 @@ describe('ACP adapter boundaries over one execution host', () => {
                 send: (text: string) => Effect.Effect<unknown, unknown>,
                 text: string,
               ) {
-                const count = said.length + 1;
+                const count = own(said, threadId).length + 1;
                 yield* send(text);
                 yield* until(
-                  Effect.sync(() => (said.length === count ? true : null)),
+                  Effect.sync(() => (own(said, threadId).length === count ? true : null)),
                   `answered ${text}`,
                   report,
                 );
@@ -420,7 +421,7 @@ describe('ACP adapter boundaries over one execution host', () => {
               expect(yield* before.current(threadId)).toBe(held);
               yield* files.writeFileString(`${report}.release`, 'release');
               yield* until(
-                Effect.sync(() => (said.length === 1 ? true : null)),
+                Effect.sync(() => (own(said, threadId).length === 1 ? true : null)),
                 'ended the held turn',
                 report,
               );
@@ -602,14 +603,17 @@ describe('ACP adapter boundaries over one execution host', () => {
                 send: (text: string) => Effect.Effect<unknown, unknown>,
                 text: string,
               ) {
-                const count = said.length + 1;
+                const count = own(said, threadId).length + 1;
                 yield* send(text);
                 yield* until(
-                  Effect.sync(() => (said.length >= count && said.at(-1)?.text === 'echo: heard' ? true : null)),
+                  Effect.sync(() => {
+                    const mine = own(said, threadId);
+                    return mine.length >= count && mine.at(-1)?.text === 'echo: heard' ? true : null;
+                  }),
                   `answered ${text}`,
                   report,
                 );
-                return said.at(-1)!.run;
+                return own(said, threadId).at(-1)!.run;
               });
               const first = yield* Scope.fork(yield* Effect.scope);
               const before = yield* raised.driver('owner-cut-before').pipe(Scope.provide(first));
@@ -664,14 +668,17 @@ describe('ACP adapter boundaries over one execution host', () => {
               const raised = yield* floor(said);
               const driver = yield* raised.driver('owner-cut-restored');
               const answered = Effect.fn('testing.answeredRestoredWords')(function* (text: string) {
-                const count = said.length + 1;
+                const count = own(said, threadId).length + 1;
                 yield* driver.send(threadId, text);
                 yield* until(
-                  Effect.sync(() => (said.length >= count && said.at(-1)?.text === 'echo: heard' ? true : null)),
+                  Effect.sync(() => {
+                    const mine = own(said, threadId);
+                    return mine.length >= count && mine.at(-1)?.text === 'echo: heard' ? true : null;
+                  }),
                   `answered ${text}`,
                   report,
                 );
-                return said.at(-1)!.run;
+                return own(said, threadId).at(-1)!.run;
               });
               yield* answered('remember this');
               const second = yield* answered('and this');
