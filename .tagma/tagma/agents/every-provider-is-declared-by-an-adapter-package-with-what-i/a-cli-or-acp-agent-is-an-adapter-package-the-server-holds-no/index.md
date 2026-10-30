@@ -52,12 +52,18 @@ A provider must declare at least one of the two surfaces to be offered as a chat
 
 - **Hook process.** `tagma hook` runs on every CLI tool call and parses the event in its own process. It loads only the named harness — its builtin row, or the one machine-installed adapter package that declares the id, through the loader and the server's host modules — and answers through that harness's hook codec. `--harness` (and `tagma mcp serve --harness`) takes any id; an id nothing declares refuses `harness-not-installed`. Builtin ids keep their spelling, so hook files already written into users' repositories and CLI homes keep working. A command written without `--harness` reads with every builtin row and answers in the codec of the thread the server's receipt names, else of the CLI whose published session variable carries the event's session, else not at all.
 
-  Both designs were measured with `composition/testing/cli/hookIngress.bench.ts`: three alternating runs per design on one shared, loaded machine; 60 door posts, 20 in-process `observe` and `post-tool-use` hooks, 12 `observe` hooks in a launched source-run CLI process. Per-run p50 (p95) in ms:
-  - HEAD baseline: launched 179 (579), 172 (256), 198 (343); observe 8.3, 6.2, 7.4; write 39, 36, 109.
-  - (b) named package only: launched 193 (275), 179 (292), 263 (472); observe 9.7, 6.7, 11.0; write 45, 44, 92.
-  - (a) thin relay — the hook posted the event bytes to a server ingress that ran the dispatch: launched 113 (157), 385 (529), 213 (370); observe 6.9, 7.8, 15.8; write 43, 200, 125.
+  `composition/testing/cli/hookIngress.bench.ts` measured HEAD `db387702` before the change, the thin-relay prototype, and the final named-row process. Each road used 60 door posts and 20 in-process `observe` and `post-tool-use` hooks; the first comparison used 12 launched source-run CLI processes. One reading per arm, p50 / p95 in milliseconds:
 
-  Neither design leaves HEAD's run-to-run spread, so both keep the budget. (b) landed: the hook keeps capturing write bases and queuing pending writes on the CLI's own disk while the server is unreachable. A relay that does not parse cannot know which files to capture before the write, so every edit made during a server restart would land ownerless (note [[8ed5962b]]). The relay prototype was deleted.
+  | Road | HEAD baseline | Thin relay prototype | Final named-row process |
+  | --- | ---: | ---: | ---: |
+  | Door | 8.32 / 50.28 | 6.20 / 12.99 | 6.71 / 12.55 |
+  | In-process observe | 8.29 / 103.63 | 6.86 / 29.73 | 8.93 / 19.76 |
+  | Post-tool-use | 39.31 / 789.93 | 43.11 / 804.40 | 51.35 / 858.11 |
+  | Launched observe | 179.19 / 579.26 | 113.50 / 157.26 | 206.04 / 348.86 |
+
+  Machine contention made separate-run comparisons inconclusive: two further HEAD readings ranged from 172 to 198 ms launched p50 and 256 to 343 ms p95, while the relay ranged from 213 to 385 ms p50 and 370 to 529 ms p95; a later loaded sample made even HEAD's launched p50 647 ms. The final comparison alternated 24 HEAD and 24 final hook processes against the same server: HEAD 217.71 / 351.65 ms, final 206.04 / 348.86 ms. The named process therefore keeps the measured HEAD budget. The instrument retains `--baseline-entry` for this paired comparison, closes its own world, and no longer invokes the missing admission-benchmark file. The fixture is nongit, so its post-tool road measures captured writes and refused accounting, not successful git accounting; these source-run samples do not measure release bundles or other machines.
+
+  The named process was chosen because it also keeps capturing write bases and queuing pending writes on the CLI's own disk while the server is unreachable. A relay that does not parse cannot know which files to capture before the write, so those edits would lose their before-text witness during a server restart (note [[8ed5962b]]). The relay prototype was deleted.
 - **`external-harnesses` becomes vendor-neutral.** It keeps the drivers: ACP, terminal, hooks ingress, installs, births and seats, and the `AskPrograms` filler. Every vendor fact it reads comes from the registry's harness providers.
 - **Registry lifetime.**
   - `HarnessRegistry` gains withdraw and replace. Today it has neither, and it dies on a second registration (`threads/harness/registry.ts:11-16`).
