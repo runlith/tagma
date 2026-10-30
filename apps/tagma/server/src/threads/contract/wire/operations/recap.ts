@@ -8,7 +8,7 @@ import { ASKS_IN_REVIEW } from '../../../../platform/contract/wire/conditions.js
 export const RECAP_REFUSALS = [
   'not-found',
   'foreign-project',
-  'recap-unavailable',
+  'not-warm',
   'recap-running',
   'recap-index-behind',
   'recap-moved',
@@ -39,7 +39,7 @@ export const RECAP_OPERATIONS = {
     answer: arms({ written: { threadId: ThreadId, recap: recapReadingSchema } }),
     meaning: 'Write a recap of this thread now, independently of automatic recap recording.',
     grammar:
-      'The recap is saved and published to the usual thread state and reads. It asks the copy of the last model request the thread holds, warm or cold, and without a copy recaps the journal on the model that writes excerpt titles. A running thread, an incomplete conversation index, a changed model or account, rewritten context, or no model able to recap refuses with its reason and a next step. The conversation stays unchanged.',
+      'The recap is saved and published to the usual thread state and reads. It asks over the warm copy of the last model request the thread holds; a thread without one refuses `not-warm`. A running thread, an incomplete conversation index, a changed model or account, or rewritten context refuses with its reason and a next step. The conversation stays unchanged.',
     input: Schema.Struct({ threadId: ThreadId }),
     refusals: RECAP_REFUSALS,
     confirmation: (input) => ({ summary: `Write a recap of thread ${input.threadId}?` }),

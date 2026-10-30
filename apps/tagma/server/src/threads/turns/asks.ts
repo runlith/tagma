@@ -12,8 +12,8 @@ import { ReaderMarking } from './reader.js';
 
 type Answered = Effect.Effect<{ runId: string }, HarnessFailure>;
 
-export class ThreadAsks extends Context.Service<
-  ThreadAsks,
+export class QuestionAnswers extends Context.Service<
+  QuestionAnswers,
   {
     answer(
       threadId: string,
@@ -21,13 +21,13 @@ export class ThreadAsks extends Context.Service<
       input: { questionId: string; answers: readonly ThreadInteractionAnswer[]; key?: string | undefined },
     ): Answered;
   }
->()('tagma/threads/ThreadAsks') {}
+>()('tagma/threads/QuestionAnswers') {}
 
-export const makeThreadAsks = Effect.gen(function* () {
+export const makeQuestionAnswers = Effect.gen(function* () {
   const records = yield* ThreadRecords;
   const reader = yield* ReaderMarking;
   const questions = (yield* ThreadHarness).runs.questions();
-  return ThreadAsks.of({
+  return QuestionAnswers.of({
     answer: (threadId, projectId, input) =>
       gated(records, threadId, projectId, () =>
         Effect.tap(

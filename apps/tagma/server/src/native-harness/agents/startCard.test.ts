@@ -37,6 +37,7 @@ const models = ModelAccess.of({
       requestLimits: undefined,
       compactionTrigger: undefined,
     }),
+  decide: unread,
 });
 type Given = {
   readonly facts?: Partial<ThreadRecordFacts>;

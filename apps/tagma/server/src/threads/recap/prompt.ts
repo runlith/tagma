@@ -1,5 +1,4 @@
 import { BLOCK_REF } from '../../graph/contract/wire/references.js';
-import type { Message } from '@runlith/llm/schema/messages';
 import type { RecapReading } from '../contract/wire/recap.js';
 
 export const RECAP_FAILURES = ['empty-summary', 'missing-frame', 'too-long'] as const;
@@ -26,27 +25,6 @@ export function recapInstruction(prior: RecapReading | undefined): string {
     );
   }
   return lines.join('\n');
-}
-
-export function journalTranscript(history: readonly Message[], budget: number): string {
-  const gap = '…\n';
-  const said: string[] = [];
-  let room = budget;
-  for (let index = history.length - 1; index >= 0 && room > 0; index -= 1) {
-    const message = history[index]!;
-    if (message.role !== 'user' && message.role !== 'assistant') continue;
-    const text = message.content.flatMap((part) => (part.type === 'text' && /\S/u.test(part.text) ? [part.text.trim()] : [])).join('\n');
-    if (text === '') continue;
-    const turn = `${message.role === 'user' ? 'User' : 'Assistant'}: ${text}${said.length === 0 ? '' : '\n\n'}`;
-    if (turn.length <= room) {
-      said.push(turn);
-      room -= turn.length;
-      continue;
-    }
-    if (room > gap.length) said.push(gap + turn.slice(turn.length - (room - gap.length)));
-    break;
-  }
-  return said.reverse().join('');
 }
 
 export type RecapRead =

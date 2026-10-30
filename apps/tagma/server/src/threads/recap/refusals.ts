@@ -7,16 +7,10 @@ export function recapRefusal(reason: string): GateRefusal<RecapRefusal> {
   switch (reason) {
     case 'gone':
       return new GateRefusal('not-found', 'This thread no longer exists.', ['open a thread from the project list']);
-    case 'unavailable':
-      return new GateRefusal('recap-unavailable', 'This thread has no conversation to recap yet.', [
-        'send a message in this thread, then use /recap after the reply',
+    case 'not-warm':
+      return new GateRefusal('not-warm', 'This thread holds no warm copy of its conversation; a recap asks over the warm cache alone.', [
+        'send a message in this thread, then use /recap while its prompt cache is warm',
       ]);
-    case 'no-model':
-      return new GateRefusal(
-        'recap-unavailable',
-        'This thread holds no copy of its conversation, and no model can recap its journal: no Title model is chosen, its provider declares no light model or is not connected, and its CLI answers no one-shot question.',
-        ['choose a Title model in settings, then use /recap'],
-      );
     case 'running':
       return new GateRefusal('recap-running', 'This thread or its recap is still running.', ['wait for it to finish, then use /recap']);
     case 'index-behind':

@@ -17,7 +17,6 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { FetchHttpClient, HttpEffect, HttpMiddleware, HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import type { AccountQuotaProvider } from '../../providers/quota/ledger.js';
 import type { ModelAccess } from '../../providers/contract/service/access.js';
-import type { DecisionModels } from '../../providers/contract/service/decisions.js';
 import type { ProcessProvenance } from '../../platform/contract/wire/provenance.js';
 import { storageHomes } from '../../graph/testing/doubles.js';
 import { doorLayer } from '../http/door.js';
@@ -70,7 +69,6 @@ type Seams = {
   readonly quotaProviders?: readonly AccountQuotaProvider[];
   readonly vendorWire?: VendorWire;
   readonly models?: (standing: ModelAccess['Service']) => ModelAccess['Service'];
-  readonly decisions?: (standing: DecisionModels['Service']) => DecisionModels['Service'];
   readonly exposure?: Layer.Layer<Exposure>;
 };
 
@@ -83,16 +81,15 @@ type Lent = {
   readonly quotaProviders?: readonly AccountQuotaProvider[];
   readonly vendorWire?: VendorWire;
   readonly models?: ModelAccess['Service'];
-  readonly decisions?: DecisionModels['Service'];
   readonly exposure?: Exposure['Service'];
 };
 
-const SEAMS = ['quotaProviders', 'vendorWire', 'models', 'decisions', 'exposure'] as const;
+const SEAMS = ['quotaProviders', 'vendorWire', 'models', 'exposure'] as const;
 
 const lending = () => {
   const lent: Lent[] = [];
   const quota: AccountQuotaProvider[] = [];
-  const standing: { models?: ModelAccess['Service']; decisions?: DecisionModels['Service'] } = {};
+  const standing: { models?: ModelAccess['Service'] } = {};
   const latest = <K extends keyof Lent>(key: K): Lent[K] => lent.findLast((entry) => entry[key] !== undefined)?.[key];
   const settle = () => quota.splice(0, quota.length, ...(latest('quotaProviders') ?? []));
   const over = <A>(asked: ((held: A) => A) | undefined, held: A | undefined, name: string) =>
@@ -112,11 +109,8 @@ const lending = () => {
           request: (input) => now().request(input),
           served: (provider, model, runId) => now().served(provider, model, runId),
           defaultModel: (provider, runId) => now().defaultModel(provider, runId),
+          decide: (call, request) => now().decide(call, request),
         };
-      },
-      decisions: (held: DecisionModels['Service']): DecisionModels['Service'] => {
-        standing.decisions = held;
-        return { decide: (call, request) => (latest('decisions') ?? held).decide(call, request) };
       },
       exposure: (held: Exposure['Service']): Exposure['Service'] => {
         const now = () => latest('exposure') ?? held;
@@ -135,7 +129,6 @@ const lending = () => {
             quotaProviders: asked.quotaProviders,
             vendorWire: asked.vendorWire,
             models: yield* over(asked.models, standing.models, 'models'),
-            decisions: yield* over(asked.decisions, standing.decisions, 'decisions'),
             exposure: asked.exposure === undefined ? undefined : Context.get(yield* Layer.build(asked.exposure), Exposure),
           };
           lent.push(entry);

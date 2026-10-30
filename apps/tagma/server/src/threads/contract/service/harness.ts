@@ -4,9 +4,6 @@ import type { ThreadCreateInput } from '@runlith/agent/thread/ThreadAggregate';
 import type { ThreadRow } from '@runlith/agent/thread/rows';
 import type { BirthConflict, BirthInput, BirthRefused } from '@runlith/agent/collaboration/threads';
 import { Context, Data, type Effect, type Stream } from 'effect';
-import type { NativeExit } from '@runlith/executions/protocol/execution';
-import type { ModelCapacity } from '@runlith/llm/models/description';
-import type { Usage } from '@runlith/llm/schema/events';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import type { MachineStore, StoreFailure } from '../../../platform/contract/service/store.js';
 import type { WriteSet } from '../../../platform/contract/service/writes.js';
@@ -40,15 +37,6 @@ export type HarnessSeated = { readonly name: HarnessId; readonly seat: SeatedHar
 export type HarnessMoveTo = ThreadModelSelection & { readonly account?: string | null; readonly switches?: ModelSwitches };
 export type HarnessMoved = { readonly from: ThreadModelSelection | null; readonly to: ThreadModelSelection };
 export type HarnessFollowed = HarnessMoved & { readonly left: string | null };
-export type HarnessQuestion = { readonly system: string; readonly text: string };
-export type HarnessAnswer = (
-  | { readonly outcome: 'answered'; readonly text: string }
-  | { readonly outcome: 'failed'; readonly text: string | null; readonly reason: string }
-) & { readonly usage?: Usage; readonly exit?: NativeExit };
-export type HarnessOneShot = {
-  readonly capacity: ModelCapacity;
-  ask(threadId: string, question: HarnessQuestion): Effect.Effect<HarnessAnswer | null, HarnessFailure>;
-};
 
 export class Harness extends Context.Service<
   Harness,
@@ -81,7 +69,6 @@ export class Harness extends Context.Service<
     ) => Effect.Effect<{ readonly threadId: string; readonly acted: boolean }, HarnessFailure | BirthConflict | BirthRefused>;
     readonly readerWords?: (threadId: string) => Effect.Effect<readonly string[], StoreFailure | GateRefusal>;
     readonly provider?: string;
-    readonly oneShot?: HarnessOneShot;
   }
 >()('tagma/threads/Harness') {}
 

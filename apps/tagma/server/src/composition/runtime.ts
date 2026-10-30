@@ -38,7 +38,6 @@ import { ArtifactStore, ShelfPlace } from '../artifacts/contract/service/shelf.j
 import type { AccountQuotaProvider } from '../providers/quota/ledger.js';
 import { AccountQuota } from '../providers/contract/service/quota.js';
 import { AccountCredentials, ModelAccess } from '../providers/contract/service/access.js';
-import { DecisionModels } from '../providers/contract/service/decisions.js';
 import { DefaultAccounts } from '../providers/contract/service/accounts.js';
 import { CredentialFiles, KeyedProviders, ProviderCredentials, QuotaProviders } from '../providers/contract/service/credentials.js';
 import { credentialsLayer } from '../speech/credentials.js';
@@ -107,6 +106,7 @@ import { WORKTREE_HOME, WorktreeHome } from '../worktrees/contract/service/home.
 import { installationAnchor } from '../installation/paths.js';
 import { sessionIdentity } from '../external-harnesses/sessionPrefix.js';
 import { accountCliLayer } from '../external-harnesses/accounts/cli.js';
+import { askProgramsLayer } from '../external-harnesses/programs/asks.js';
 import { AccountCli } from '../providers/contract/service/cli.js';
 import { installedHarnessesLayer } from '../external-harnesses/birth/installed.js';
 import { UserEnvironment } from '../installation/contract/service/userEnvironment.js';
@@ -331,7 +331,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     hostEnded?: (executions: number | undefined, detail: string) => Effect.Effect<void>;
     installation?: Installation;
     models?: (standing: ModelAccess['Service']) => ModelAccess['Service'];
-    decisions?: (standing: DecisionModels['Service']) => DecisionModels['Service'];
     memoryCeiling?: ProcessVitals.MemoryCeiling;
     commitGate?: HookCli;
     vendorWire?: VendorWire;
@@ -566,6 +565,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             threadRecords,
             closing('providers', readyProviders),
             installedHarnesses,
+            askProgramsLayer.pipe(Layer.provide(Layer.merge(installedHarnesses, BunFileSystem.layer))),
             closing('sandbox', sandboxInstallation),
             closing('working owners', workingLayerWithUnits),
             closing('terminals floor', agentPaceLayer.pipe(Layer.provideMerge(executionsLayerWithDeps))),
@@ -752,8 +752,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   const standingModels = Context.get(built, ModelAccess);
   const credentials = Context.get(built, AccountCredentials);
   const models = options.models === undefined ? standingModels : options.models(standingModels);
-  const standingDecisions = Context.get(built, DecisionModels);
-  const decisions = options.decisions === undefined ? standingDecisions : options.decisions(standingDecisions);
   const accountQuota = Context.get(built, AccountQuota);
   const { tokens, keys: consoleKeys } = Context.get(built, ProviderCredentials);
   const awake = Context.get(built, AwakePolicy);
@@ -774,7 +772,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       scratch: options.scratchPath,
     }),
     Context.make(ModelAccess, models),
-    Context.make(DecisionModels, decisions),
     Context.make(MachineWorld, { world: machine }),
     Context.make(WorktreeHome, { path: join(installationAnchor(store.path), WORKTREE_HOME) }),
     Context.make(HarnessOwner, { id: owner, build: options.installation?.manifest.identity.digest ?? owner }),

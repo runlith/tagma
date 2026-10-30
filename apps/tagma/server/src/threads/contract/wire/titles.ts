@@ -15,7 +15,6 @@ export const TITLE_FAILURES = {
   timeout: 'The title request timed out.',
   cancelled: 'The title request was cancelled.',
   'account-unavailable': 'The account for the held request could not be resolved.',
-  'invalid-selection': 'The fresh naming model or reasoning setting is not supported.',
   'thread-unavailable': 'The thread is unavailable for naming.',
   'input-too-large': 'The naming instruction exceeds the selected model window.',
   internal: 'The title request failed inside the server.',

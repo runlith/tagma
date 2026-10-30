@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
-import { DecisionRefused } from '@runlith/llm/decision';
+import { AskRefused } from '../../providers/contract/service/asks.js';
 import type { ThreadRunSettled } from '@runlith/agent/thread/run/ThreadRunLedger';
 import type { AttentionEvent, ThreadList } from '../contract/service/list.js';
 import type { ThreadDecisions } from '../contract/service/decisions.js';
@@ -72,7 +72,7 @@ function world(following: readonly string[], verdict: Verdict = 'yes') {
   const decisions = {
     decide: () =>
       verdict === 'refused'
-        ? Effect.fail(new DecisionRefused({ reason: 'no-model', message: 'none' }))
+        ? Effect.fail(new AskRefused({ refusal: 'ask-unanswerable', message: 'none' }))
         : Effect.succeed({ answers: { addresses: { type: 'noul', noul: verdict === 'yes', probability: null } } }),
   } as unknown as ThreadDecisions['Service'];
   const make = Effect.tap(

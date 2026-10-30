@@ -100,7 +100,6 @@ import { HarnessLanes } from './sessions/lanes.js';
 import { harnessSpeech, screenTexts } from './sessions/speech.js';
 import { harnessTitle } from './settings.js';
 import { autoTitle } from '../threads/contract/wire/settings.js';
-import { harnessOneShot } from './sessions/oneShot.js';
 import { HarnessSessionStore } from './store/sessions.js';
 import { makeSessionRows } from './store/rows.js';
 import { entryCommand } from '../installation/contract/wire/junction.js';
@@ -495,7 +494,6 @@ export const externalHarnessesLayer = Layer.effectContext(
           store,
           retract,
           metadata,
-          harnessOneShot(terminals, executionRecords, discharge, place, name, accounts),
           providers,
         ),
       ),

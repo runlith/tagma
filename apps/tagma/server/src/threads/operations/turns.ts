@@ -7,7 +7,7 @@ import { ceilingOf } from '../../platform/contract/wire/pageFamily.js';
 import { CurrentProject } from '../../projects/contract/service/caller.js';
 import { TURN_OPERATIONS as OPS, type TurnOperationId } from '../contract/wire/operations/turns.js';
 import { declaredRefusals } from '../refusalAnswers.js';
-import { ThreadAsks } from '../turns/asks.js';
+import { QuestionAnswers } from '../turns/asks.js';
 import { ThreadAdjustments } from '../turns/adjustments.js';
 import { ThreadEvidence } from '../contract/service/evidence.js';
 import { STATUSES } from '../contract/wire/statuses.js';
@@ -123,7 +123,7 @@ export const TURN_PAIRS: { readonly [K in TurnOperationId]: OperationPair<(typeo
         declaredRefusals(OPS.answer_question)(
           Effect.gen(function* () {
             const call = yield* yield* CurrentProject;
-            const asks = yield* ThreadAsks;
+            const asks = yield* QuestionAnswers;
             return yield* startingRun(
               Effect.map(asks.answer(threadId, call.project.id, answer), (run) => ({ status: 'started' as const, runId: run.runId })),
             );

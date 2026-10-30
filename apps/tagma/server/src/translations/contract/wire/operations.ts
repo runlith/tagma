@@ -4,6 +4,7 @@ import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { blockRef } from '../../../graph/contract/wire/fields.js';
 import { LANGUAGE_TAG } from './language.js';
 import { languageStandingSchema, projectionSchema } from './projection.js';
+import { ASK_REFUSALS } from '../../../providers/contract/wire/asks.js';
 
 const block = blockRef.annotate({ description: 'The block to translate.' });
 
@@ -46,7 +47,7 @@ export const TRANSLATION_OPERATIONS = {
         sending: Schema.Int,
       },
     }),
-    refusals: ['translation-model-missing', 'invalid-selection'],
+    refusals: ASK_REFUSALS,
     subjects: () => [],
     confirmation: (input) => ({ summary: `Translate ${input.block} into ${input.language}?` }),
     confirmLabel: 'Translate',

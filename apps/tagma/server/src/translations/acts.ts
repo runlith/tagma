@@ -2,16 +2,13 @@ import { activity, body, note } from '@runlith/activity/Activity';
 import { activityKind, type ActivityBody } from '@runlith/activity/fact';
 import { ActivityLog } from '@runlith/activity/log';
 import type { ModelCallUsage } from '@runlith/activity/modelCall';
-import type { LLMError } from '@runlith/llm/schema/errors';
-import { sumUsage, type LLMResponse, type Usage } from '@runlith/llm/schema/events';
+import { sumUsage, type Usage } from '@runlith/llm/schema/events';
 import { Cause, Clock, Deferred, Effect, FiberMap, Option, PubSub, Semaphore, Stream } from 'effect';
-import { OPERATOR_PRINCIPAL } from '../platform/contract/wire/actor.js';
 import type { StoreFailure } from '../platform/contract/service/store.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { ProjectChanges } from '../projects/contract/service/changes.js';
-import { ModelAccess } from '../providers/contract/service/access.js';
+import { ModelAsks, type Answered, type AskRefused } from '../providers/contract/service/asks.js';
 import { Settings } from '../settings/contract/service/values.js';
-import { makeRoads, type RoadRole } from '../threads/roads.js';
 import {
   Translations,
   type ReferencedTitle,
@@ -28,15 +25,14 @@ import { segment } from './translator/segment.js';
 
 export const TRANSLATION = activityKind<
   { readonly block: string; readonly language: string; readonly sending: number; readonly again: boolean },
-  { readonly model?: string; readonly landed?: number; readonly failed?: number; readonly usage?: ModelCallUsage }
+  {
+    readonly model?: string;
+    readonly path?: string;
+    readonly landed?: number;
+    readonly failed?: number;
+    readonly usage?: ModelCallUsage;
+  }
 >('translation');
-
-const TRANSLATION_ROLE: RoadRole = {
-  configured: 'translation-model',
-  model: translationModel,
-  reasoning: translationReasoning,
-  answers: 'text',
-};
 
 const IN_FLIGHT = 3;
 
@@ -72,13 +68,8 @@ const document = (kind: string, value: object): ActivityBody => ({
   encoded: utf8.encode(JSON.stringify(value)),
 });
 
-const missing = () =>
-  new GateRefusal('translation-model-missing', 'no model can translate: none is named, and no connected provider declares a light model', [
-    'choose a model in the lens or set `translation.model`',
-  ]);
-
-const invalid = (reason: string) =>
-  new GateRefusal('invalid-selection', reason, ['choose another model in the lens or in `translation.model`']);
+const askRefusal = (refused: AskRefused): StartRefusal =>
+  new GateRefusal(refused.refusal, refused.message, ['choose a model that answers text in the lens or in `translation.model`']);
 
 const keyOf = (block: Translated, language: string): ProjectionKey => ({ projectId: block.projectId, block: block.uuid, language });
 
@@ -89,9 +80,8 @@ const sendable = (parts: readonly Part[]) => parts.filter((part) => part.kind !=
 export const makeTranslations = Effect.gen(function* () {
   const store = yield* Projections;
   const settings = yield* Settings;
-  const models = yield* ModelAccess;
+  const asks = yield* ModelAsks;
   const log = yield* ActivityLog;
-  const roads = yield* makeRoads;
   const frames = yield* Effect.acquireRelease(PubSub.unbounded<Published>(), PubSub.shutdown);
   const acts = yield* FiberMap.make<string>();
   const admission = yield* Semaphore.make(1);
@@ -124,18 +114,18 @@ export const makeTranslations = Effect.gen(function* () {
     live: Running,
     batch: Batch,
     prompt: string,
-    call: (prompt: string) => Effect.Effect<LLMResponse, LLMError>,
+    call: (prompt: string) => Effect.Effect<Answered<string>, AskRefused>,
   ) {
     yield* body(document('input', { prompt }));
     return yield* call(prompt).pipe(
       Effect.matchEffect({
         onFailure: (failure) =>
-          Effect.as(body(document('response', { failure: failure.message })), {
+          Effect.as(body(document('response', { refusal: failure.refusal, failure: failure.message })), {
             landed: 0,
             failed: batch.parts.length,
-            reason: `the model failed: ${failure.message}`,
+            reason: `the model refused (${failure.refusal}): ${failure.message}`,
           } satisfies Sent),
-        onSuccess: (response) => landed(key, live, batch, response.text),
+        onSuccess: (answered) => landed(key, live, batch, answered.value),
       }),
     );
   });
@@ -150,52 +140,34 @@ export const makeTranslations = Effect.gen(function* () {
   ) => {
     let spent: Usage | undefined;
     let model: string | undefined;
+    let path: string | undefined;
     const refuse = (refusal: StartRefusal) => Effect.andThen(Deferred.fail(started, refusal), Effect.fail(refusal));
     const work = Effect.gen(function* () {
-      const chosen = yield* roads.choose(TRANSLATION_ROLE, {
-        asker: null,
-        projectId: key.projectId,
-        rejected: [],
-        named: ask.model === undefined ? undefined : { model: ask.model, reasoning: ask.reasoning ?? null },
-      });
-      const road = chosen.road;
-      yield* note({
-        type: 'model-chosen',
-        road: chosen.name,
-        rejected: chosen.rejected,
-        provider: road._tag === 'Model' ? road.option.provider : undefined,
-        model: road._tag === 'Model' ? road.option.id : undefined,
-        rung: road._tag === 'Model' ? road.reasoning : undefined,
-        account: road._tag === 'Model' ? road.account : undefined,
-      });
-      if (road._tag === 'None') return yield* refuse(missing());
-      if (road._tag !== 'Model')
-        return yield* refuse(
-          invalid(`${ask.model ?? 'the model `translation.model` names'} is not a text model of the catalog on the rung asked`),
-        );
+      const role =
+        ask.model === undefined
+          ? {
+              model: yield* settings.value(translationModel, key.projectId),
+              reasoning: yield* settings.value(translationReasoning, key.projectId),
+            }
+          : { model: ask.model, reasoning: ask.reasoning ?? '' };
       const brief: Brief = {
         language: key.language,
         title: block.title,
         instructions: yield* settings.value(translationInstructions, key.projectId),
       };
-      const request = models.request({
-        ownerId: OPERATOR_PRINCIPAL,
-        provider: road.option.provider,
-        model: road.option.id,
-        reasoning: road.reasoning,
-        account: road.account ?? undefined,
-        instructions: systemOf(brief),
-        cache: 'none',
-        reasoningOutput: false,
-      });
-      if (request.refusal !== undefined) return yield* refuse(invalid(`${road.option.key} cannot be called: ${request.refusal.message}`));
-      model = road.option.key;
-      const { batches, oversized } = batchesOf(sending, request.plannedOutputTokens);
+      const system = systemOf(brief);
+      const { selection, capacity } = yield* asks.choose('text', role).pipe(
+        Effect.flatMap((selection) => Effect.map(asks.capacity(selection, system), (capacity) => ({ selection, capacity }))),
+        Effect.catchTag('AskRefused', (refused) => refuse(askRefusal(refused))),
+      );
+      yield* note({ type: 'model-chosen', road: ask.model === undefined ? 'setting' : 'named', ...selection, rung: selection.reasoning });
+      model = `${selection.provider}:${selection.model}`;
+      const { batches, oversized } = batchesOf(sending, capacity.output);
       const live: Running = {
         projectId: key.projectId,
         name: block.name,
-        model: road.option.key,
-        rung: road.reasoning,
+        model,
+        rung: selection.reasoning,
         sending: sending.length,
         pending: new Set(sending.map((part) => part.hash)),
         landed: 0,
@@ -206,10 +178,11 @@ export const makeTranslations = Effect.gen(function* () {
       yield* Deferred.succeed(started, begun);
       yield* told(key, 'translating', live);
       const call = (prompt: string) =>
-        request.text({ prompt }).pipe(
-          Effect.tap((response) =>
+        asks.text(selection, { system, input: prompt }).pipe(
+          Effect.tap((answered) =>
             Effect.sync(() => {
-              spent = sumUsage(spent, response.usage);
+              path = answered.path;
+              spent = sumUsage(spent, answered.usage);
             }),
           ),
         );
@@ -224,7 +197,7 @@ export const makeTranslations = Effect.gen(function* () {
               {
                 landed: 0,
                 failed: oversized.length,
-                reason: `${oversized.length} ${oversized.length === 1 ? 'part is' : 'parts are'} longer than ${road.option.key} answers in one reply; choose a model with a larger output`,
+                reason: `${oversized.length} ${oversized.length === 1 ? 'part is' : 'parts are'} longer than ${model} answers in one reply; choose a model with a larger output`,
               },
             ];
       const failed = outcomes.reduce((sum, one) => sum + one.failed, 0);
@@ -272,12 +245,12 @@ export const makeTranslations = Effect.gen(function* () {
                 outcome: exit.value.failed === 0 ? undefined : ('failed' as const),
                 reason: exit.value.failed === 0 ? undefined : 'batch-failed',
                 message: exit.value.reason ?? undefined,
-                result: { ...usage, model, landed: exit.value.landed, failed: exit.value.failed },
+                result: { ...usage, model, path, landed: exit.value.landed, failed: exit.value.failed },
               };
             const refused = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
             return refused instanceof GateRefusal
               ? { outcome: 'refused' as const, reason: refused.code, message: refused.reason, result: usage }
-              : { result: { ...usage, model } };
+              : { result: { ...usage, model, path } };
           },
         },
       ),

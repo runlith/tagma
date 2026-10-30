@@ -3,18 +3,10 @@ import type { EnvironmentEntry } from '@runlith/executions/protocol/execution';
 import type { DecisionAnswer, DecisionRequest } from '@runlith/llm/decision';
 import type { Usage } from '@runlith/llm/schema/events';
 import type { JsonSchema } from '@runlith/llm/schema/ids';
-import type { AskCommand, AskKind, AskPath, ProgramOutput } from '@runlith/tagma/adapter/provider';
+import type { AskKind, AskPath } from '@runlith/llm/models/description';
+import type { AskCommand, ProgramOutput } from '@runlith/tagma/adapter/provider';
 import { Context, Data, type Effect } from 'effect';
-
-export const ASK_REFUSALS = [
-  'ask-not-connected',
-  'ask-quota',
-  'ask-input-too-large',
-  'ask-unreadable-answer',
-  'ask-provider-failed',
-  'ask-unanswerable',
-] as const;
-export type AskRefusal = (typeof ASK_REFUSALS)[number];
+import type { AskRefusal } from '../wire/asks.js';
 
 export class AskRefused extends Data.TaggedError('AskRefused')<{
   readonly refusal: AskRefusal;

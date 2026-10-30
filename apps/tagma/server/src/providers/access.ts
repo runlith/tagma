@@ -4,6 +4,7 @@ import { AdapterFailedReason, LLMError } from '@runlith/llm/schema/errors';
 import { ProviderID } from '@runlith/llm/schema/ids';
 import type { TokenStore } from '@runlith/llm/oauth/FileTokenStore';
 import { ThreadModelNotServed } from '@runlith/agent/thread/compaction/CompactionModels';
+import { DecisionRefused } from '@runlith/llm/decision';
 import { Effect, Layer } from 'effect';
 import type { DefaultAccounts } from './contract/service/accounts.js';
 import { AccountCredentials, ModelAccess } from './contract/service/access.js';
@@ -56,6 +57,19 @@ export const modelAccess = (
     const { models } = runId === undefined ? registry.current() : registry.forRun(runId);
     return models.registered(provider) ? models.defaultTextModelId(provider) : null;
   },
+  decide: Effect.fn('ModelAccess.decide')(function* (call, request) {
+    const catalog = registry.current();
+    const provider = yield* registry
+      .callable(call.provider)
+      .pipe(Effect.mapError((refused) => new DecisionRefused({ reason: 'no-model', message: refused.reason })));
+    const served = catalog.models.modelsFor(call.provider, 'decision').some((row) => row.id === call.model);
+    if (provider.kind !== 'wire' || provider.decisions === undefined || !served)
+      return yield* new DecisionRefused({ reason: 'no-model', message: `${call.provider} answers no decisions on ${call.model}` });
+    const credentials = makeOperatorCredentials({ tokens: tokens(catalog), defaultAccount, keys });
+    return yield* provider.decisions
+      .decide({ ownerId: call.ownerId, model: call.model, account: call.account ?? undefined, credentials }, request)
+      .pipe(Effect.provideContext(client));
+  }),
 });
 
 export const modelAccessLayer = (

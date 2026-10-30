@@ -13,13 +13,11 @@ import { Settings } from '../../settings/contract/service/values.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import type { ThreadRecap } from '../../thread-record/contract/wire/recap.js';
 import { threadRecord } from '../../thread-record/store/table.js';
-import { HarnessAsides, ThreadJournal } from '../contract/service/engine.js';
+import { ThreadJournal } from '../contract/service/engine.js';
 import { CacheWarmth } from '../contract/service/evidence.js';
 import { ThreadRecaps } from '../contract/service/recaps.js';
 import { ThreadLookup } from '../contract/service/reads.js';
 import { cacheWarmthOf } from '../list/wire.js';
-import type { AskingRoad, ExcerptAsks } from '../naming/excerpt.js';
-import type { Roads } from '../roads.js';
 import { threadQuietRun } from '../store/conversation.js';
 import { thread, threadRun } from '../store/kernel.js';
 import { recap as recapKey } from '../contract/wire/settings.js';
@@ -44,7 +42,7 @@ type CaptureBasis = {
   manualRequested: boolean;
 };
 
-type Capture = { readonly basis: CaptureBasis; readonly copy: AgentAside | null; readonly deadline?: number };
+type Capture = { readonly basis: CaptureBasis; readonly copy: AgentAside; readonly deadline?: number };
 
 type Pending = {
   readonly capture: Capture;
@@ -64,31 +62,26 @@ type RecapResult = { readonly effect: 'published' | 'skipped' | 'superseded'; re
 
 export const RECAP = activityKind<Record<never, never>, RecapResult>('recap');
 
-export type RecapSkip = 'disabled' | 'gone' | 'running' | 'index-behind' | 'moved' | 'rewritten' | 'selection' | 'cold' | 'no-model';
+export type RecapSkip = 'disabled' | 'gone' | 'running' | 'index-behind' | 'moved' | 'rewritten' | 'selection' | 'cold';
 
 export const makeRecapSchedule = Effect.fnUntraced(function* ({
-  roads,
-  excerpts,
   published,
   progressed,
   timing,
 }: {
-  readonly roads: Roads;
-  readonly excerpts: ExcerptAsks;
   readonly published: (threadId: string) => Effect.Effect<void, unknown>;
   readonly progressed: (threadId: string) => Effect.Effect<void, unknown>;
   readonly timing: RecapTiming;
 }) {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
-  const asides = yield* HarnessAsides;
   const records = yield* ThreadRecords;
   const settings = yield* Settings;
   const journal = yield* ThreadJournal;
   const recaps = yield* ThreadRecaps;
   const threads = yield* ThreadLookup;
   const warmth = yield* CacheWarmth;
-  const questions = yield* makeRecapQuestions({ roads, excerpts });
+  const questions = yield* makeRecapQuestions;
   const log = yield* ActivityLog;
   const scope = yield* Effect.scope;
   const pending = new Map<string, Pending>();
@@ -126,19 +119,6 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
     const entryId = basis?.covered.entryId ?? (yield* units.read((unit) => latestSaid(db, unit, threadId)))?.entryId;
     if (entryId !== undefined && recaps.attempt(threadId)?.state !== 'writing') yield* shown(threadId, refusedAt(entryId, refusal));
     return yield* refusal;
-  });
-
-  const journalBasis = Effect.fnUntraced(function* (threadId: string, projectId: number) {
-    const head = yield* journal.headPosition(threadId);
-    const read = yield* units.read((unit) =>
-      Effect.all({ whole: indexedThrough(db, unit, threadId, head), covered: latestSaid(db, unit, threadId) }),
-    );
-    if (!read.whole) return yield* refused(threadId, undefined, 'index-behind');
-    if (read.covered === undefined) return yield* refused(threadId, undefined, 'unavailable');
-    if (pending.get(threadId)?.phase === 'writing') return yield* refused(threadId, undefined, 'running');
-    const basis: CaptureBasis = { projectId, covered: read.covered, head, runId: read.covered.runId, manualRequested: false };
-    captures.set(threadId, basis);
-    return basis;
   });
 
   const cancelOwned = Effect.fnUntraced(function* (threadId: string, slot: Pending) {
@@ -230,7 +210,6 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
     if (!manual && !(yield* automaticRecaps(settings, held.basis.projectId))) return 'disabled' satisfies RecapSkip;
     const standingNow = yield* standing(threadId, held);
     if (standingNow !== null) return standingNow;
-    if (held.copy === null) return null;
     const chosen = yield* questions.selection(threadId, held.copy);
     if (typeof chosen === 'string') return chosen;
     return manual || (yield* promised(threadId)) ? null : ('cold' satisfies RecapSkip);
@@ -244,7 +223,7 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
         const facts = yield* records.facts(threadId, unit);
         if (facts === undefined || facts.projectId !== held.basis.projectId || facts.status === 'running' || facts.runningRunId !== null)
           return 'superseded' as const;
-        if (held.copy?.source === 'capture') {
+        if (held.copy.source === 'capture') {
           const current = yield* unit.run(
             db
               .select({ provider: thread.provider, model: thread.model, reasoning: thread.reasoning, account: thread.account })
@@ -269,20 +248,14 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
     );
   });
 
-  const asked = Effect.fnUntraced(function* (
-    threadId: string,
-    slot: Pending,
-    prior: Parameters<typeof recapInstruction>[0],
-    road: AskingRoad | null,
-  ) {
+  const asked = Effect.fnUntraced(function* (threadId: string, slot: Pending, prior: Parameters<typeof recapInstruction>[0]) {
     const held = slot.capture;
-    const posed = yield* questions.posed(threadId, held.copy, road, recapInstruction(prior), {
+    const posed = yield* questions.posed(threadId, held.copy, recapInstruction(prior), {
       journalHead: held.basis.head,
       position: held.basis.covered.appeared,
       entryId: held.basis.covered.entryId,
       run: held.basis.runId,
     });
-    if (typeof posed === 'string') return posed;
     const answer = yield* Effect.exit(posed.ask.pipe(Effect.timeout(timing.idleMs)));
     if (answer._tag === 'Failure') {
       if (Cause.hasInterruptsOnly(answer.cause)) return yield* Effect.interrupt;
@@ -308,7 +281,7 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
       yield* recorded(threadId, chosen, answer.value);
       return chosen;
     }
-    const origin = held.copy?.binding.origin;
+    const origin = held.copy.binding.origin;
     const stopped = yield* publish(threadId, slot, chosen, {
       summary: read.summary,
       next: read.next,
@@ -316,7 +289,7 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
       basis: {
         position: held.basis.covered.appeared,
         entryId: held.basis.covered.entryId,
-        runId: held.basis.covered.runId ?? held.copy?.runId ?? held.basis.runId ?? '',
+        runId: held.basis.covered.runId ?? held.copy.runId ?? held.basis.runId ?? '',
         journalHead: held.basis.head,
         generatedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         provider: origin?.provider ?? chosen.provider,
@@ -336,22 +309,18 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
       if (manual) yield* show(threadId, slot);
       const skip = yield* unfit(threadId, held, manual);
       const copy = held.copy;
-      if (copy !== null) {
-        yield* note({
-          type: 'model-chosen',
-          road: skip === null ? 'warm' : 'none',
-          rejected: skip === null ? [] : [{ road: 'warm', reason: skip }],
-          ...copy.binding.origin,
-          rung: copy.reasoning,
-          account: copy.binding.account ?? null,
-        });
-        if (skip !== null) return skip;
-      } else if (skip !== null) return skip;
-      const road = copy === null ? yield* questions.journalRoad(threadId, held.basis.projectId) : null;
-      if (copy === null && road === null) return 'no-model';
+      yield* note({
+        type: 'model-chosen',
+        road: skip === null ? 'warm' : 'none',
+        rejected: skip === null ? [] : [{ road: 'warm', reason: skip }],
+        ...copy.binding.origin,
+        rung: copy.reasoning,
+        account: copy.binding.account ?? null,
+      });
+      if (skip !== null) return skip;
       if (!manual) yield* show(threadId, slot);
       const prior = (yield* recaps.readings([{ id: threadId, projectId: held.basis.projectId }])).get(threadId);
-      const failed = yield* asked(threadId, slot, prior, road);
+      const failed = yield* asked(threadId, slot, prior);
       if (failed !== null) return failed;
       if (recaps.attempt(threadId) === slot.shown) recaps.track(threadId, null);
       yield* published(threadId);
@@ -523,11 +492,10 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
           Effect.gen(function* () {
             const facts = yield* records.facts(threadId);
             if (facts?.status === 'running' || facts?.runningRunId != null) return yield* refused(threadId, standingBasis, 'running');
-            const copy = standingBasis === undefined ? undefined : (pending.get(threadId)?.capture.copy ?? asides.of(threadId));
-            const capture: Capture =
-              standingBasis !== undefined && copy != null && copy.runId === standingBasis.runId
-                ? { basis: standingBasis, copy }
-                : { basis: yield* journalBasis(threadId, projectId), copy: null };
+            const copy = standingBasis === undefined ? undefined : (pending.get(threadId)?.capture.copy ?? questions.held(threadId));
+            if (standingBasis === undefined || copy === undefined || copy.runId !== standingBasis.runId)
+              return yield* refused(threadId, standingBasis, 'not-warm');
+            const capture: Capture = { basis: standingBasis, copy };
             const basis = capture.basis;
             yield* Effect.acquireUseRelease(
               Effect.flatMap(launch(threadId, capture, true), (slot) =>

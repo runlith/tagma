@@ -1,7 +1,8 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { Clock, Context, Deferred, Effect, Stream } from 'effect';
-import type { LLMEvent } from '@runlith/llm/schema/events';
+import { LLMResponse, type LLMEvent } from '@runlith/llm/schema/events';
+import { Message } from '@runlith/llm/schema/messages';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { ThreadRecords } from '../../../thread-record/contract/service/records.js';
 import { HarnessReports } from '../../../external-harnesses/contract/service/reports.js';
@@ -14,8 +15,15 @@ const fixture = doorFixture({
     ...standing,
     request: () => ({
       plannedOutputTokens: 32,
-      text: () => Effect.die(new Error('the title fixture streams only')),
-      object: () => Effect.die(new Error('the title fixture streams only')),
+      text: () =>
+        Effect.succeed(
+          new LLMResponse({
+            message: Message.assistant('TITLE: Model title'),
+            events: [{ type: 'text-delta', id: 'text', text: 'TITLE: Model title' }],
+            finishReason: 'stop',
+          }),
+        ),
+      object: () => Effect.die(new Error('the title fixture answers text')),
       stream: () =>
         Stream.fromIterable<LLMEvent>([
           { type: 'text-start', id: 'text' },
@@ -43,14 +51,14 @@ const external = Effect.fnUntraced(function* (projectId: number, harness: string
 });
 
 layer(fixture, { excludeTestServices: true })('external thread naming', (it) => {
-  it.effect('a CLI without a title model refuses, while a connected provider names a thread from its reader words during the turn', () =>
+  it.effect('a CLI with no ask path refuses, while a connected provider names a thread from its reader words during the turn', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;
       const projectId = yield* world.plainProject();
       yield* projectLeaving(world, projectId);
       yield* Context.get(world.runtime.graph, Settings).write({ key: 'threads.harnessTitle', value: false, scope: 'project', projectId });
       const silent = yield* external(projectId, 'devin');
-      expect(yield* Effect.flip(titlesOf(world.runtime.owners).generate(silent, projectId))).toMatchObject({ code: 'title-model-missing' });
+      expect(yield* Effect.flip(titlesOf(world.runtime.owners).generate(silent, projectId))).toMatchObject({ code: 'ask-unanswerable' });
       yield* subscriptionLogin(world);
       const threadId = yield* external(projectId, 'claude-code');
       const named = yield* Deferred.make<void>();

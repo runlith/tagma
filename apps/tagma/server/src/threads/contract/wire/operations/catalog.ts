@@ -41,6 +41,7 @@ import { limitOf } from '../../../../platform/contract/wire/pageFamily.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../../platform/contract/wire/conditions.js';
 import { OUTSIDE_SUBTREE, OWN_LINEAGE, THREAD_RUNNING } from '../../../../platform/contract/wire/conditions.js';
 import { Duration } from 'effect';
+import { ASK_REFUSALS } from '../../../../providers/contract/wire/asks.js';
 
 export const THREADS = family('threads', 1, 'text', { text: 240, json: 865 }, 20, () => ({
   threadId: '01a0cab9-6847-7602-bed6-3503d2788ccf',
@@ -588,11 +589,11 @@ The same \`operationKey\` with the same move answers what that move reached; the
     identity: { key: 'call' },
     answer: arms({ named: titled, 'no-topic': titled, superseded: titled, failed: titled }),
     meaning:
-      "One thread named by a model, whatever the project's naming setting says. It asks over the prompt the thread's last answer was sent over while that prompt is still cached, and otherwise sends a bounded excerpt of the reader's words to the first that can answer: the Title model setting, the light model of the thread's provider, one sessionless call of the thread's own CLI, the thread's own model at its lowest rung.",
+      "One thread named by a model, whatever the project's naming setting says. It asks over the prompt the thread's last answer was sent over while that prompt is still cached, and otherwise sends a bounded excerpt of the reader's words to the model `threads.titleModel` names, or with that empty to the default text model: the light model of the thread's provider, the thread's own model at its lowest rung, the operator's default model, then the first connected provider's light model.",
     grammar:
-      "A name is written only when the model answers with one — a short name, never a sentence, in the language of the reader's own messages. It answers `named` with that name, `no-topic` when the conversation carries no subject yet, `superseded` when a rename landed while the name was being written, and `failed` when the model did not answer usably. A rename after it always wins. Roots only: a spawned thread refuses `not-a-root`, because its list row prints the address its team writes to. The result names its source, fresh reason and failure reason. A rejected completed captured answer permits one compact fresh call; transport failures do not trigger that extra call. A thread none of them can name refuses `title-model-missing`.",
+      "A name is written only when the model answers with one — a short name, never a sentence, in the language of the reader's own messages. It answers `named` with that name, `no-topic` when the conversation carries no subject yet, `superseded` when a rename landed while the name was being written, and `failed` when the model did not answer usably. A rename after it always wins. Roots only: a spawned thread refuses `not-a-root`, because its list row prints the address its team writes to. The result names its source, fresh reason and failure reason. A rejected completed captured answer permits one compact fresh call; transport failures do not trigger that extra call. A model that cannot be asked refuses with the ask refusal: `ask-unanswerable`, `ask-not-connected`, `ask-quota`, `ask-input-too-large`, `ask-unreadable-answer` or `ask-provider-failed`.",
     input: Schema.Struct({ threadId: ThreadId }),
-    refusals: ['not-found', 'foreign-project', 'title-model-missing'],
+    refusals: ['not-found', 'foreign-project', ...ASK_REFUSALS],
     subjects: (input, _prepared, actor) => subject('write', input.threadId, actor),
     confirmation: (input) => ({
       summary: `Name thread ${input.threadId} from its own conversation?`,

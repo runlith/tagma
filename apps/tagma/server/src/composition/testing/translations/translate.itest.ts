@@ -7,6 +7,8 @@ import { Settings } from '../../../settings/contract/service/values.js';
 import { Translations } from '../../../translations/contract/service/translations.js';
 import type { TranslationFrame } from '../../../translations/contract/wire/projection.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
+import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
+import { ASK_PROGRAM_KEY, ASK_PROGRAM_MODEL, ASK_PROGRAM_PROVIDER } from '../askProgram.js';
 
 const fixture = doorFixture();
 
@@ -98,9 +100,10 @@ it.live('a block translates by parts into a stored projection that marks and upd
     const until = (name: string, holds: (frame: TranslationFrame) => boolean) =>
       Effect.repeat(Queue.take(frames), { until: (frame) => frame.block === name && holds(frame) });
 
-    const missing = yield* translate();
-    expect(missing.body).toMatchObject({ code: 'translation-model-missing', unblock: [expect.stringContaining('translation.model')] });
-    expect((yield* translate({ model: 'missing:model' })).body).toMatchObject({ code: 'invalid-selection' });
+    expect((yield* translate({ model: 'missing:model' })).body).toMatchObject({
+      code: 'ask-unanswerable',
+      unblock: [expect.stringContaining('translation.model')],
+    });
     expect((yield* translate({ language: 'en-12' })).status).not.toBe(200);
     yield* Context.get(world.runtime.graph, Settings).write({
       key: 'translation.model',
@@ -183,5 +186,22 @@ it.live('a block translates by parts into a stored projection that marks and upd
       parts: [{ state: 'translated' }, { state: 'translated' }, { state: 'changed', text: null }],
     });
     expect(prompts.slice(before).some((prompt) => prompt.includes('Long reading'))).toBe(false);
+
+    const served = Context.get(world.runtime.owners as Context.Context<ProviderRegistry>, ProviderRegistry).current().served.providers;
+    const kindsOf = (provider: string, model: string) => served.find((row) => row.id === provider)?.asks[model] ?? [];
+    expect(kindsOf('openai-oauth', 'gpt-5.5')).toContain('text');
+    expect(kindsOf(ASK_PROGRAM_PROVIDER, ASK_PROGRAM_MODEL)).toContain('text');
+    expect(served.find((row) => row.id === 'devin')?.asks).toEqual({});
+    const scripted = yield* created('Scripted note', 'Read by a program.');
+    const wired = prompts.length;
+    expect((yield* world.op('translate_block', { block: scripted, language: 'ru', model: ASK_PROGRAM_KEY }, at)).body).toMatchObject({
+      status: 'translating',
+      model: ASK_PROGRAM_KEY,
+      sending: 2,
+    });
+    yield* until(scripted, (frame) => frame.state === 'done');
+    const programmed = (yield* world.op('read_block_translation', { block: scripted, language: 'ru' }, at)).body as Read;
+    expect(programmed.projection?.parts.map((part) => part.text)).toEqual(['«ru» SCRIPTED NOTE', '«ru» READ BY A PROGRAM.']);
+    expect(prompts.length).toBe(wired);
   }).pipe(Effect.provide(fixture)),
 );

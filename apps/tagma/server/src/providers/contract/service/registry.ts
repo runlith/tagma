@@ -1,5 +1,6 @@
 import type { ModelCatalog, ModelOption } from '@runlith/llm/models/catalog';
-import type { AdapterSettings, HarnessProvider, Provider, WireProvider } from '@runlith/tagma/adapter/provider';
+import type { AskKind } from '@runlith/llm/models/description';
+import type { AdapterSettings, AskProgram, HarnessProvider, Provider, WireProvider } from '@runlith/tagma/adapter/provider';
 import type { AdapterEntry, HostModules } from '@runlith/tagma/adapter/loader';
 import { Context, Effect, type Stream } from 'effect';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
@@ -17,6 +18,16 @@ export const defaultModelOf = (provider: Provider): DefaultModel => ({
 
 export type SignedProviders = Effect.Effect<readonly string[], TokenStoreFault>;
 
+export type AskRoute =
+  | { readonly path: 'request'; readonly provider: string }
+  | { readonly path: 'program'; readonly provider: string; readonly program: AskProgram };
+
+export type AskOffers = {
+  route(provider: string, model: string): AskRoute | null;
+  kinds(provider: string, model: string): readonly AskKind[];
+  borrower(provider: string): string | undefined;
+};
+
 export type ProviderCatalog = {
   readonly models: ModelCatalog<Provider>;
   readonly menu: ModelCatalog<Provider>;
@@ -28,6 +39,7 @@ export type ProviderCatalog = {
   readonly defaultModel: DefaultModel | null;
   readonly served: ServedCatalog;
   readonly sections: readonly AccountSection[];
+  readonly asks: AskOffers;
   selectable(provider: string): boolean;
   inMode(provider: string): boolean;
   accountSource(provider: string): string;

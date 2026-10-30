@@ -7,9 +7,36 @@ export function textModelOf(models: ModelCatalog, provider: string, model: strin
   return models.registered(provider) ? models.modelsFor(provider, 'text').find((candidate) => candidate.id === model) : undefined;
 }
 
-export function callable(models: ModelCatalog, provider: string): boolean {
-  return models.registered(provider) && models.named(provider).auth !== 'cli';
+export type TurnSpendability = Spendability | { readonly spendable: true; readonly account: null };
+
+function signedSpend(
+  catalog: ProviderCatalog,
+  option: ModelOption,
+  provider: string,
+  table: QuotaTable,
+  now: number,
+  account: string | null,
+) {
+  const rows = signingRows(catalog, provider, table);
+  if (rows.length === 0) return { spendable: false, reason: 'not-connected' } satisfies Spendability;
+  const row = account === null ? signingRow(rows) : rows.find((candidate) => String(candidate.account) === account);
+  if (row === undefined) return { spendable: false, reason: 'no-account' } satisfies Spendability;
+  const retryAt = rateLimitedUntil(row);
+  if (retryAt !== null && retryAt > now) return { spendable: false, reason: 'rate-limited', until: retryAt } satisfies Spendability;
+  const until = quotaUntil(option, row, now);
+  if (until !== null) return { spendable: false, reason: 'quota', until } satisfies Spendability;
+  return { spendable: true, account: String(row.account) } satisfies Spendability;
 }
+
+function cliSpend(catalog: ProviderCatalog, option: ModelOption, provider: string, table: QuotaTable, now: number, account: string | null) {
+  const rows = signingRows(catalog, provider, table);
+  const row = account === null ? signingRow(rows) : rows.find((candidate) => String(candidate.account) === account);
+  const until = row === undefined ? null : quotaUntil(option, row, now);
+  if (until !== null) return { spendable: false, reason: 'quota', until } satisfies TurnSpendability;
+  return { spendable: true, account: row === undefined ? account : String(row.account) } satisfies TurnSpendability;
+}
+
+const signedByCli = (models: ModelCatalog, provider: string) => models.registered(provider) && models.named(provider).auth === 'cli';
 
 export function spendability(
   catalog: ProviderCatalog,
@@ -18,22 +45,14 @@ export function spendability(
   table: QuotaTable,
   now: number,
   account: string | null = null,
-): Spendability {
+): TurnSpendability {
   const option = textModelOf(catalog.models, provider, model);
   if (option === undefined) return { spendable: false, reason: 'unknown-model' };
-  if (!callable(catalog.models, provider)) return { spendable: false, reason: 'not-callable' };
-  const rows = signingRows(catalog, provider, table);
-  if (rows.length === 0) return { spendable: false, reason: 'not-connected' };
-  const row = account === null ? signingRow(rows) : rows.find((candidate) => String(candidate.account) === account);
-  if (row === undefined) return { spendable: false, reason: 'no-account' };
-  const retryAt = rateLimitedUntil(row);
-  if (retryAt !== null && retryAt > now) return { spendable: false, reason: 'rate-limited', until: retryAt };
-  const until = quotaUntil(option, row, now);
-  if (until !== null) return { spendable: false, reason: 'quota', until };
-  return { spendable: true, account: String(row.account) };
+  if (!catalog.asks.kinds(provider, model).includes('text')) return { spendable: false, reason: 'not-callable' };
+  return signedByCli(catalog.models, provider)
+    ? cliSpend(catalog, option, provider, table, now, account)
+    : signedSpend(catalog, option, provider, table, now, account);
 }
-
-export type TurnSpendability = Spendability | { readonly spendable: true; readonly account: null };
 
 export function turnSpendability(
   catalog: ProviderCatalog,
@@ -43,17 +62,11 @@ export function turnSpendability(
   now: number,
   account: string | null = null,
 ): TurnSpendability {
-  const { models } = catalog;
-  if (!models.registered(provider) || models.named(provider).auth !== 'cli') {
-    return spendability(catalog, provider, model, table, now, account);
-  }
-  const option = textModelOf(models, provider, model);
+  const option = textModelOf(catalog.models, provider, model);
   if (option === undefined) return { spendable: false, reason: 'unknown-model' };
-  const rows = signingRows(catalog, provider, table);
-  const row = account === null ? signingRow(rows) : rows.find((candidate) => String(candidate.account) === account);
-  const until = row === undefined ? null : quotaUntil(option, row, now);
-  if (until !== null) return { spendable: false, reason: 'quota', until };
-  return { spendable: true, account: row === undefined ? account : String(row.account) };
+  return signedByCli(catalog.models, provider)
+    ? cliSpend(catalog, option, provider, table, now, account)
+    : signedSpend(catalog, option, provider, table, now, account);
 }
 
 function quotaUntil(option: ModelOption, row: AccountQuotaRow, now: number): number | null {

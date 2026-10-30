@@ -13,8 +13,6 @@ import { accountCredentialsLayer, modelAccess } from './access.js';
 import { ModelAccess } from './contract/service/access.js';
 import { ImageModels } from './contract/service/images.js';
 import { makeImageModels } from './images.js';
-import { DecisionModels } from './contract/service/decisions.js';
-import { makeDecisionModels } from './decisions.js';
 import { signIns } from './accounts/signIns.js';
 import { SignIns, VendorWires } from './contract/service/signIns.js';
 import { defaultAccountsLayer } from './accounts/defaults.js';
@@ -136,7 +134,6 @@ const access = Layer.unwrap(
           const client = yield* openModelClient();
           return Context.make(ModelAccess, modelAccess(registry, forCatalog, defaultAccount, client, keys)).pipe(
             Context.add(ImageModels, yield* makeImageModels(client)),
-            Context.add(DecisionModels, yield* makeDecisionModels(client)),
           );
         }),
       ),

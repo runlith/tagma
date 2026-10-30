@@ -38,9 +38,8 @@ import { makeRecapSchedule } from './schedule.js';
 import { AccountCredentials, ModelAccess } from '../../providers/contract/service/access.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { HarnessAsides, ThreadJournal } from '../contract/service/engine.js';
-import { ThreadHistoryReads } from '../contract/service/birth.js';
-import type { ExcerptAsks } from '../naming/excerpt.js';
-import type { Roads } from '../roads.js';
+import { ThreadAsks } from '../contract/service/asks.js';
+import { makeThreadAsks } from '../asks.js';
 import { CacheWarmth } from '../contract/service/evidence.js';
 import { ThreadLookup } from '../contract/service/reads.js';
 import { RECAP_PAIRS } from '../operations/recap.js';
@@ -137,36 +136,7 @@ const answering = (text: string): readonly LLMEvent[] => [
   { type: 'finish', reason: 'stop' },
 ];
 
-const JOURNAL: readonly Message[] = [Message.user('Publish the quarterly report.'), Message.assistant('Published it.')];
-
-const journalRoad: Roads = {
-  choose: () => Effect.succeed({ name: 'title-model', road: { _tag: 'Cli', cli: {} as never }, rejected: [] }),
-};
-
-const retold = (transcripts: string[], asked: Effect.Effect<void>): ExcerptAsks => ({
-  asking: (_threadId, _road, question) =>
-    Effect.sync(() => {
-      const text = question.excerpt(10_000);
-      transcripts.push(text);
-      return {
-        _tag: 'Asking' as const,
-        text,
-        ask: Effect.as(asked, {
-          text: 'SUMMARY: The quarterly report was published.\nNEXT: none',
-          finishReason: 'stop' as const,
-          usage: undefined,
-        }),
-        usage: () => undefined,
-      };
-    }),
-});
-
-const world = Effect.fnUntraced(function* (
-  answer: (input: ModelStreamInput) => Stream.Stream<LLMEvent>,
-  cacheTtl: number | null = 3600,
-  transcripts: string[] = [],
-  retelling: Effect.Effect<void> = Effect.void,
-) {
+const world = Effect.fnUntraced(function* (answer: (input: ModelStreamInput) => Stream.Stream<LLMEvent>, cacheTtl: number | null = 3600) {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
   const records = yield* ThreadRecords;
@@ -206,15 +176,27 @@ const world = Effect.fnUntraced(function* (
           .get(),
       ),
     );
+  const threadAsks = yield* makeThreadAsks.pipe(
+    Effect.provideContext(
+      Context.make(HarnessAsides, asides).pipe(
+        Context.add(ModelAccess, { request: () => ({ origin: ORIGIN, rung: 'high' }) } as never),
+        Context.add(AccountCredentials, {
+          account: () =>
+            Effect.andThen(
+              account.beforeRead,
+              Effect.sync(() => account.value),
+            ),
+        } as never),
+      ),
+    ),
+  );
   const schedule = yield* makeRecapSchedule({
-    roads: journalRoad,
-    excerpts: retold(transcripts, retelling),
     published: () => Effect.void,
     progressed: () => Effect.void,
     timing: { waitMs: WAIT, marginMs: 60_000, idleMs: 60_000 },
   }).pipe(
     Effect.provideContext(
-      Context.make(HarnessAsides, asides).pipe(
+      Context.make(ThreadAsks, threadAsks).pipe(
         Context.add(ThreadRecords, records),
         Context.add(Settings, settingsDouble),
         Context.add(ThreadJournal, {
@@ -243,15 +225,6 @@ const world = Effect.fnUntraced(function* (
               };
               return { ...row, contextReading: reading };
             }),
-        } as never),
-        Context.add(ThreadHistoryReads, { of: () => Effect.succeed(JOURNAL) } as never),
-        Context.add(ModelAccess, { request: () => ({ origin: ORIGIN, rung: 'high' }) } as never),
-        Context.add(AccountCredentials, {
-          account: () =>
-            Effect.andThen(
-              account.beforeRead,
-              Effect.sync(() => account.value),
-            ),
         } as never),
         Context.add(CacheWarmth, { warmthBasis: () => Effect.succeed({ curves: new Map(), accounts: new Map(), models }) } as never),
         Context.add(ActivityLog, log),
@@ -489,37 +462,33 @@ layer(fixture)('recap schedule', (it) => {
     }),
   );
 
-  it.effect('a capture without a cache promise gets no automatic recap, and the manual one retells the journal', () =>
+  it.effect('a capture without a cache promise gets no automatic recap, and a manual one refuses not-warm', () =>
     Effect.gen(function* () {
       const projectId = yield* RecapProject;
       const threadId = yield* born(['run-0', 'run-1'], conversation('run-1'));
-      const transcripts: string[] = [];
-      const w = yield* world(() => Stream.fromIterable(RECAPPED), null, transcripts);
+      const w = yield* world(() => Stream.fromIterable(RECAPPED), null);
       yield* w.settle(threadId, 'run-1');
       yield* TestClock.adjust('5 minutes');
       expect(yield* readingOf(w.recaps, threadId)).toBeUndefined();
-      expect(yield* w.schedule.generateNow(threadId, projectId)).toMatchObject({
-        summary: 'The quarterly report was published.',
-        status: 'current',
-        basis: { position: 4, entryId: `${threadId}:entry-4` },
-      });
+      expect(yield* Effect.flip(w.schedule.generateNow(threadId, projectId))).toMatchObject({ code: 'not-warm' });
+      expect(w.recaps.attempt(threadId)).toMatchObject({ state: 'refused', code: 'not-warm' });
       expect(w.asked).toHaveLength(0);
-      expect(transcripts).toEqual(['User: Publish the quarterly report.\n\nAssistant: Published it.']);
     }),
   );
 
-  it.effect('a second manual recap while the journal is retold is refused and leaves the first one to publish', () =>
+  it.effect('a second manual recap while the first asks the warm copy is refused and leaves the first one to publish', () =>
     Effect.gen(function* () {
       const projectId = yield* RecapProject;
       const threadId = yield* born(['run-0', 'run-1'], conversation('run-1'));
       const opened = yield* Deferred.make<void>();
       const ready = yield* Deferred.make<void>();
-      const w = yield* world(
-        () => Stream.fromIterable(RECAPPED),
-        null,
-        [],
-        Effect.andThen(Deferred.succeed(opened, undefined), Deferred.await(ready)),
+      const w = yield* world(() =>
+        Stream.fromEffect(Effect.andThen(Deferred.succeed(opened, undefined), Deferred.await(ready))).pipe(
+          Stream.flatMap(() => Stream.fromIterable(RECAPPED)),
+        ),
       );
+      w.settings.enabled = false;
+      yield* w.settle(threadId, 'run-1');
       const first = yield* Effect.forkScoped(w.schedule.generateNow(threadId, projectId));
       yield* Deferred.await(opened);
       expect(yield* Effect.result(w.schedule.generateNow(threadId, projectId))).toMatchObject({
@@ -527,7 +496,7 @@ layer(fixture)('recap schedule', (it) => {
         failure: { code: 'recap-running' },
       });
       yield* Deferred.succeed(ready, undefined);
-      expect(yield* Fiber.join(first)).toMatchObject({ summary: 'The quarterly report was published.', status: 'current' });
+      expect(yield* Fiber.join(first)).toMatchObject({ summary: 'The report was drafted, reviewed and published.', status: 'current' });
     }),
   );
 

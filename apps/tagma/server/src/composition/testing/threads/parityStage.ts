@@ -11,7 +11,7 @@ import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import type { HarnessFailure } from '../../../threads/contract/service/failure.js';
-import { asksOf, evidenceOf, threadInbox, threadRun, turnsOf } from '../../../threads/testing/doubles.js';
+import { answersOf, evidenceOf, threadInbox, threadRun, turnsOf } from '../../../threads/testing/doubles.js';
 import { harnessRefusal } from '../../../threads/refusals.js';
 import { LIBRARY, parityWorld, type ParityWorld, type Seat, type SeatName } from './parityWorld.js';
 import { lingered, WRITTEN } from './parityModel.js';
@@ -182,7 +182,7 @@ const setup = Effect.fnUntraced(function* (own: string | undefined) {
     return rows.find((row) => row.status === 'running')?.progress.phase ?? null;
   });
   const answering = Effect.fn('testing.answerParitySeat')(function* (seat: Seat, threadId: string, questionId: string) {
-    const code = yield* coded(asksOf(owners()).answer(threadId, parity.projectId, { questionId, answers: seat.answers(questionId) }));
+    const code = yield* coded(answersOf(owners()).answer(threadId, parity.projectId, { questionId, answers: seat.answers(questionId) }));
     yield* answered(seat, threadId);
     return yield* read(threadId, 'answered', code);
   });

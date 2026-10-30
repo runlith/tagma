@@ -1,6 +1,5 @@
 import { homedir } from 'node:os';
 import { Effect, Layer } from 'effect';
-import { resolveEnvironment } from '@runlith/executions/CommandEnvironment';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { AccountCli, type AccountCommand, type ProgramState } from '../../providers/contract/service/cli.js';
 import { harnessAdapter } from '../contract/service/table.js';
@@ -13,92 +12,28 @@ import { TerminalEndings } from '../../executions/contract/service/endings.js';
 import { principalOf } from '../../executions/terminals/principals.js';
 import { targetIdentity, targetKeyOf } from '../../executions/terminals/subjectPolicy.js';
 import { type HarnessProgram, InstalledHarnesses } from '../../threads/contract/service/harness.js';
-import { harnessTerminals, programEnvironment } from '../sessions/programs.js';
+import { harnessTerminals } from '../sessions/programs.js';
+import { runProgram } from '../programs/run.js';
 
-const OUTPUT_BYTES = 1024 * 1024;
 const COMMAND_MS = 60_000;
 
 const cliFailed = (reason: string): GateRefusal =>
   new GateRefusal('account-cli-failed', reason, ['check the installed CLI and retry on this account']);
 
-const outputText = async (stream: ReadableStream<Uint8Array>, onLine?: (line: string) => void): Promise<string> => {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let bytes = 0;
-  let text = '';
-  let scanned = 0;
-  let searchFrom = 0;
-  try {
-    for (;;) {
-      const read = await reader.read();
-      if (read.done) return text + decoder.decode();
-      bytes += read.value.byteLength;
-      if (bytes > OUTPUT_BYTES) throw cliFailed('The account CLI output exceeds its one-megabyte response envelope.');
-      text += decoder.decode(read.value, { stream: true });
-      if (onLine !== undefined) {
-        for (let end = text.indexOf('\n', searchFrom); end !== -1; end = text.indexOf('\n', scanned)) {
-          onLine(text.slice(scanned, end));
-          scanned = end + 1;
-        }
-        searchFrom = text.length;
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-};
-
 const run = Effect.fn('AccountCli.run')(function* (command: AccountCommand, program: HarnessProgram | null) {
-  const bound = new Map(Object.entries(process.env).flatMap(([name, value]) => (value === undefined ? [] : [[name, value] as const])));
-  const request = { inherit: true, entries: command.entries };
-  const environment = Object.fromEntries(
-    resolveEnvironment(bound, program === null ? request : programEnvironment(program, request)).map(({ name, value }) => [name, value]),
-  );
-  const child = yield* Effect.acquireRelease(
-    Effect.try({
-      try: () =>
-        Bun.spawn([program?.path ?? command.program, ...command.args], {
-          cwd: command.cwd ?? homedir(),
-          env: environment,
-          stdin: 'pipe',
-          stdout: 'pipe',
-          stderr: 'pipe',
-        }),
-      catch: (cause) => cliFailed(`The account CLI could not start: ${String(cause)}`),
-    }),
-    (child) =>
-      Effect.promise(async () => {
-        if (child.exitCode === null) child.kill('SIGKILL');
-        await child.exited;
-      }),
-  );
-  return yield* Effect.tryPromise({
-    try: async () => {
-      let completed = command.exchange === undefined;
-      const onLine = (line: string) => {
-        if (!completed && command.exchange!.complete(line)) {
-          completed = true;
-          child.stdin.end();
-        }
-      };
-      if (command.exchange === undefined) child.stdin.end();
-      else child.stdin.write(command.exchange.input);
-      const [stdout, stderr, code] = await Promise.all([
-        outputText(child.stdout, command.exchange === undefined ? undefined : onLine),
-        outputText(child.stderr),
-        child.exited,
-      ]);
-      if (!completed) throw cliFailed('The account CLI ended before completing its exchange.');
-      return { stdout, stderr, code };
+  const ran = yield* runProgram(
+    {
+      program: command.program,
+      args: command.args,
+      entries: command.entries,
+      cwd: command.cwd ?? homedir(),
+      timeoutMs: command.timeoutMs ?? COMMAND_MS,
+      exchange: command.exchange,
     },
-    catch: (cause) => (cause instanceof GateRefusal ? cause : cliFailed(`The account CLI response could not be read: ${String(cause)}`)),
-  }).pipe(
-    Effect.timeoutOrElse({
-      duration: command.timeoutMs ?? COMMAND_MS,
-      orElse: () => Effect.fail(cliFailed('The account CLI did not answer before its deadline.')),
-    }),
-  );
-}, Effect.scoped);
+    program,
+  ).pipe(Effect.mapError((failure) => cliFailed(`The account CLI failed: ${failure.message}`)));
+  return { stdout: ran.stdout, stderr: ran.stderr, code: ran.exit ?? -1 };
+});
 
 const makeAccountCli = Effect.gen(function* () {
   const installs = yield* InstalledHarnesses;

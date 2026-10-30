@@ -1,10 +1,8 @@
-import { claudeUsage } from './usage.js';
 import { HOOK_CONTEXT_CHARS } from '../../contract/service/adapter.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
-import type { HarnessAnswer } from '../../../threads/contract/service/harness.js';
 import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 
-import { ANTHROPIC_LIGHT_MODEL, CLAUDE_CODE_PROVIDER, claudeCodeDescription } from '@runlith/adapter-anthropic/models/anthropic';
+import { CLAUDE_CODE_PROVIDER } from '@runlith/adapter-anthropic/models/anthropic';
 import { claudeCodeIcon } from '@runlith/adapter-anthropic/icon';
 import {
   adoptedPermissionArgv,
@@ -12,7 +10,6 @@ import {
   INTERRUPT_KEY,
   type TerminalHarnessAdapter,
   type HarnessModelArgv,
-  type HarnessOneShot,
   type HarnessPermissionArgv,
   type HarnessPermissionModes,
   type HarnessWidgetKey,
@@ -35,54 +32,6 @@ const permissionModes: HarnessPermissionModes = {
 };
 
 const prompted = (prompt: string | undefined): string[] => (prompt === undefined ? [] : ['--', prompt]);
-
-const claudeResult = (stdout: string): HarnessAnswer | null => {
-  const parsed: unknown = JSON.parse(stdout);
-  const messages: readonly unknown[] = Array.isArray(parsed) ? parsed : [parsed];
-  const result = messages.findLast(
-    (message): message is Record<string, unknown> =>
-      typeof message === 'object' && message !== null && (message as Record<string, unknown>).type === 'result',
-  );
-  if (result === undefined) return null;
-  const text = typeof result.result === 'string' ? result.result : null;
-  const answer: HarnessAnswer =
-    result.subtype === 'success' && result.is_error !== true && text !== null
-      ? { outcome: 'answered', text }
-      : { outcome: 'failed', text, reason: typeof result.subtype === 'string' ? result.subtype : 'invalid-result' };
-  const usage = claudeUsage(result.usage);
-  return usage === null ? answer : { ...answer, usage };
-};
-
-const oneShot: HarnessOneShot = {
-  model: ANTHROPIC_LIGHT_MODEL.model,
-  capacity: claudeCodeDescription.models[ANTHROPIC_LIGHT_MODEL.model]!.capacity!,
-  argv: (system, text) => [
-    'claude',
-    '-p',
-    '--model',
-    ANTHROPIC_LIGHT_MODEL.model,
-    '--no-session-persistence',
-    '--tools',
-    '',
-    '--setting-sources',
-    '',
-    '--strict-mcp-config',
-    '--system-prompt',
-    system,
-    '--output-format',
-    'json',
-    '--',
-    text,
-  ],
-  answer: (stdout) => {
-    try {
-      return claudeResult(stdout);
-    } catch (failure) {
-      if (failure instanceof SyntaxError) return null;
-      throw failure;
-    }
-  },
-};
 
 const model: HarnessModelArgv = {
   provider: CLAUDE_CODE_PROVIDER,
@@ -196,7 +145,6 @@ export const claudeCode: TerminalHarnessAdapter = {
       ...prompted(prompt),
     ],
     root: rootOfArgv('--resume', true),
-    oneShot,
     cut: claudeCut,
     carry: claudeCarry,
     address: claudeAddress,

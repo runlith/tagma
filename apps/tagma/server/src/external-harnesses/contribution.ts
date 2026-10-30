@@ -41,7 +41,6 @@ export function externalHarness(
   store: HarnessSessionStore,
   retract: Harness['Service']['retract'],
   metadata: SessionMetadata['Service'],
-  oneShot: Harness['Service']['oneShot'],
   providers: ProviderRegistry['Service'],
 ): Harness['Service'] {
   const provider = servingProvider(name, 'acp') ?? undefined;
@@ -70,6 +69,5 @@ export function externalHarness(
     ...servedBy(name, asked),
     readerWords: (threadId) => metadata.readerWords(threadId),
     provider,
-    oneShot,
   });
 }

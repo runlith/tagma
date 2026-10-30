@@ -1,8 +1,6 @@
 import type { Effect, FileSystem, PlatformError } from 'effect';
-import type { ModelCapacity } from '@runlith/llm/models/description';
 import type { Approval, PermissionKind } from '@runlith/agent/permissions';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
-import type { HarnessAnswer } from '../../../threads/contract/service/harness.js';
 import type { HarnessModelReport } from '../../../threads/contract/wire/harness/observation.js';
 import type { HarnessQuestionKind, HarnessQuestionOption } from '../../../threads/contract/wire/harness/session.js';
 import type { HarnessCall } from '../wire/call.js';
@@ -188,19 +186,11 @@ export function chosenModelArgv(declaration: HarnessModelArgv, choice: HarnessMo
   return declaration.argv(choice);
 }
 
-export type HarnessOneShot = {
-  readonly model: string;
-  readonly capacity: ModelCapacity;
-  readonly argv: (system: string, text: string) => readonly [string, ...string[]];
-  readonly answer: (stdout: string) => HarnessAnswer | null;
-};
-
 export type HarnessLaunch = {
   readonly permission: HarnessPermissionArgv;
   readonly permissionModes?: HarnessPermissionModes;
   readonly model: HarnessModelArgv;
   readonly interactive: (prompt?: string, choice?: HarnessModelChoice, permission?: readonly string[]) => string[];
-  readonly oneShot?: HarnessOneShot;
   readonly resume: (key: string, prompt?: string, choice?: HarnessModelChoice, permission?: readonly string[]) => string[];
   readonly assign?: (key: string, prompt?: string, choice?: HarnessModelChoice, permission?: readonly string[]) => string[];
   readonly root: (argv: readonly string[]) => string | null;

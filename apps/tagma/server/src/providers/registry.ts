@@ -2,6 +2,7 @@ import { modelCatalog } from '@runlith/llm/models/catalog';
 import { pickerOrder } from '@runlith/llm/models/description';
 import type { ProductIdentity } from '@runlith/llm/profiles/contract';
 import type { AdapterHost, HarnessProvider, Provider, SettingInstance, WireProvider } from '@runlith/tagma/adapter/provider';
+import { askKindsOf } from '@runlith/llm/models/description';
 import { claimSections, type SectionClaim } from '@runlith/tagma/adapter/declaration';
 import { Effect, Layer, Result, Semaphore, Stream, SubscriptionRef } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
@@ -11,6 +12,8 @@ import { AdapterInstances } from './contract/service/instances.js';
 import {
   AdapterPlaces,
   type AdapterSource,
+  type AskOffers,
+  type AskRoute,
   BuiltinAdapters,
   defaultModelOf,
   notInstalled,
@@ -29,8 +32,43 @@ import { AccountCli } from './contract/service/cli.js';
 
 const product: ProductIdentity = { mcpServer: 'tagma', client: { name: 'tagma', version: PROGRAM_RELEASE } };
 
+const askOffers = (
+  providers: readonly Provider[],
+  borrowers: ReadonlyMap<string, string>,
+  failures: ReadonlyMap<string, string>,
+): AskOffers => {
+  const byId = new Map(providers.map((provider) => [provider.id, provider] as const));
+  const route = (provider: string, model: string): AskRoute | null => {
+    const registration = byId.get(provider);
+    if (registration === undefined || failures.has(provider)) return null;
+    if (registration.kind === 'wire') return { path: 'request', provider };
+    const borrower = borrowers.get(provider);
+    if (borrower !== undefined && !failures.has(borrower) && byId.get(borrower)?.models[model] !== undefined)
+      return { path: 'request', provider: borrower };
+    const program = registration.asks?.program;
+    return program === undefined ? null : { path: 'program', provider, program };
+  };
+  return {
+    route,
+    kinds: (provider, model) => {
+      const routed = route(provider, model);
+      const spec = routed === null ? undefined : byId.get(routed.provider)?.models[model];
+      return routed === null || spec === undefined ? [] : askKindsOf(routed.path, spec.capabilities);
+    },
+    borrower: (provider) => borrowers.get(provider),
+  };
+};
+
+const askedModels = (provider: Provider, asks: AskOffers): ServedProvider['asks'] =>
+  Object.fromEntries(
+    Object.keys(provider.models).flatMap((model) => {
+      const kinds = asks.kinds(provider.id, model);
+      return kinds.length === 0 ? [] : [[model, kinds] as const];
+    }),
+  );
+
 const servedOf =
-  (instanced: ReadonlySet<string>, failures: ReadonlyMap<string, string>, sourceOf: (provider: string) => string) =>
+  (instanced: ReadonlySet<string>, failures: ReadonlyMap<string, string>, sourceOf: (provider: string) => string, asks: AskOffers) =>
   (provider: Provider): ServedProvider => ({
     id: provider.id,
     instance: instanced.has(provider.id) ? true : undefined,
@@ -60,7 +98,7 @@ const servedOf =
     defaultTextModel: provider.defaultTextModel,
     spawnTextModel: provider.spawnTextModel,
     lightTextModel: provider.lightTextModel,
-    family: provider.family,
+    asks: askedModels(provider, asks),
     accountSource: sourceOf(provider.id),
   });
 
@@ -91,17 +129,14 @@ export const catalogOf = (
   sections: readonly AccountSection[] = [],
   snapshots: ReadonlyMap<string, CatalogSnapshot> = new Map(),
 ): ProviderCatalog => {
-  const offered = pickerOrder(loaded.map((adapter) => (adapter.state.state === 'disabled' ? [] : adapter.providers))).map((provider) => {
+  const providers = pickerOrder(loaded.map((adapter) => (adapter.state.state === 'disabled' ? [] : adapter.providers))).map((provider) => {
     const snapshot = provider.catalog === undefined ? undefined : snapshots.get(provider.id);
     return snapshot === undefined ? provider : { ...provider, models: snapshot.models, defaultTextModel: snapshot.defaultTextModel };
   });
   const borrowers = new Map(
-    offered.flatMap((provider) =>
-      provider.kind === 'wire' && provider.borrows !== undefined ? [[provider.borrows.provider, provider.id]] : [],
+    providers.flatMap((provider) =>
+      provider.kind === 'wire' && provider.borrows !== undefined ? [[provider.borrows.provider, provider.id] as const] : [],
     ),
-  );
-  const providers = offered.map((provider) =>
-    provider.kind === 'harness' && borrowers.has(provider.id) ? { ...provider, family: borrowers.get(provider.id) } : provider,
   );
   const wires = modelCatalog(providers.filter((provider): provider is WireProvider => provider.kind === 'wire'));
   const failures = new Map(
@@ -109,13 +144,14 @@ export const catalogOf = (
       state.state === 'failed' ? providers.map((provider) => [provider.id, state.reason] as const) : [],
     ),
   );
+  const asks = askOffers(providers, borrowers, failures);
   const first = wires.providers.find(
     (provider) => !failures.has(provider.id) && provider.models[provider.defaultTextModel]?.capabilities.includes('text'),
   );
   const adapters = loaded.map((adapter) => adapter.state);
   const instanced = new Set([...instances.values()].flatMap((held) => held.map((instance) => instance.id)));
   const sourceOf = (id: string) => accountSource(providers, sections, id);
-  const serve = servedOf(instanced, failures, sourceOf);
+  const serve = servedOf(instanced, failures, sourceOf, asks);
   const harnessesWhere = (judged: (section: AccountSection, mode: string) => boolean) =>
     new Set(
       providers
@@ -131,6 +167,7 @@ export const catalogOf = (
     models: modelCatalog(providers),
     menu: modelCatalog(providers.filter(({ id }) => !hidden.has(id))),
     sections,
+    asks,
     selectable: (id) => !hidden.has(id),
     inMode: (id) => !outOfMode.has(id),
     accountSource: sourceOf,

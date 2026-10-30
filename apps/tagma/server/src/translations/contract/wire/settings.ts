@@ -7,7 +7,7 @@ export const translationModel = settingKey({
   order: 10,
   title: 'Translation model',
   description:
-    'Provider and model that translates a block. Empty: the light model of the first connected provider that declares one. A model chosen in the translation lens wins for that act; a named model that cannot be resolved refuses.',
+    'Provider and model that translates a block; it must answer text asks. Empty: the light model of your default model’s provider, then your default model at its lowest rung, then the light model of the first connected provider. A model chosen in the translation lens wins for that act; a named model that cannot answer refuses.',
   schema: Schema.String,
   control: { kind: 'catalog', of: 'model' },
   fallback: '',
@@ -19,7 +19,7 @@ export const translationReasoning = settingKey({
   id: 'translation.reasoning',
   order: 20,
   title: 'Translation reasoning',
-  description: 'Reasoning rung for translation: the named model must offer it; a model the chain chose takes it where offered.',
+  description: 'Reasoning rung for the named translation model, which must offer it.',
   schema: Schema.String,
   control: { kind: 'catalog', of: 'reasoning' },
   fallback: '',

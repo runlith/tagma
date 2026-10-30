@@ -2,6 +2,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Cause, Context, Effect, FileSystem, Layer, type Scope, Stream } from 'effect';
 import { CalibrationProfiles } from './contract/service/calibration.js';
+import { askSetting } from '../providers/askSettings.js';
+import { compactionSummarizers } from './contract/wire/compactionSettings.js';
 import { NativeResourceKinds, NativeRolloutPart, ThreadMetadataSource } from '../threads/contract/service/parts.js';
 import { calibrationProfiles } from './compaction/calibration.js';
 import { evidenceReads } from './evidence/retained.js';
@@ -436,5 +438,11 @@ export const nativeAgentsLayer = Layer.effectDiscard(
 export const nativeHarnessLayer = Layer.effectContext(
   Effect.map(assembleNativeHarness, ({ owners, parts, workflows }) =>
     Context.add(owners, NativeHarnessParts, parts).pipe(Context.add(Workflows, workflows)),
+  ),
+).pipe(
+  Layer.merge(
+    Layer.effectDiscard(
+      askSetting(compactionSummarizers, 'text', (members) => members.map(({ provider, model }) => ({ provider, model }))),
+    ),
   ),
 );

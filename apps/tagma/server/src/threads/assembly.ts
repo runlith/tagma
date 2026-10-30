@@ -48,8 +48,11 @@ import { ThreadBirths, makeThreadBirths } from './birth/acts.js';
 import { AttachmentFiles } from './resources/attachments.js';
 import { makeThreadNaming } from './naming/generate.js';
 import { makeExcerptAsks } from './naming/excerpt.js';
-import { makeRoads } from './roads.js';
 import { makeThreadDecisions } from './decisions.js';
+import { makeThreadAsks } from './asks.js';
+import { ThreadAsks } from './contract/service/asks.js';
+import { askSetting, keyedModel } from '../providers/askSettings.js';
+import { decisionModel, titleModel } from './contract/wire/settings.js';
 import { ThreadTitles } from './contract/service/titles.js';
 import { ThreadDecisions } from './contract/service/decisions.js';
 import { ThreadMoves, makeThreadMover } from './targets/moves.js';
@@ -61,7 +64,7 @@ import { attachments } from './turns/attachments.js';
 import { Attachments } from './contract/service/attachments.js';
 import { ThreadAdjustments, makeThreadAdjustments } from './turns/adjustments.js';
 import { ThreadDetachment, makeThreadDetachment } from './collaboration/detachment.js';
-import { ThreadAsks, makeThreadAsks } from './turns/asks.js';
+import { QuestionAnswers, makeQuestionAnswers } from './turns/asks.js';
 import { ThreadTurns, makeThreadTurns } from './turns/acts.js';
 import { ThreadRewinds, makeThreadRewinds } from './turns/rewinds.js';
 import { ReaderMarking, makeReaderMarks } from './turns/reader.js';
@@ -227,10 +230,12 @@ export const threadsLayer = Layer.effectContext(
     const registry = yield* HarnessRegistry;
     const placement = yield* Placing;
     const custody = yield* Custody;
-    const roads = yield* makeRoads;
+    yield* askSetting(titleModel, 'text', keyedModel);
+    yield* askSetting(decisionModel, 'decision', keyedModel);
+    const threadAsks = yield* makeThreadAsks;
     const excerpts = yield* makeExcerptAsks({ idleMs: AGENT_IDLE_MS });
-    const naming = yield* makeThreadNaming({ idleMs: AGENT_IDLE_MS, roads, excerpts });
-    const decisions = yield* makeThreadDecisions({ idleMs: AGENT_IDLE_MS, roads });
+    const naming = yield* makeThreadNaming({ idleMs: AGENT_IDLE_MS, excerpts }).pipe(Effect.provideService(ThreadAsks, threadAsks));
+    const decisions = yield* makeThreadDecisions;
     const events = yield* ThreadEvents;
     yield* Effect.acquireRelease(
       Effect.sync(() => events.serveDecisions(decisions)),
@@ -270,8 +275,6 @@ export const threadsLayer = Layer.effectContext(
     );
     const asides = yield* HarnessAsides;
     const recaps = yield* makeRecapSchedule({
-      roads,
-      excerpts,
       published: Effect.fnUntraced(function* (threadId: string) {
         yield* harness.threads.publish(threadId);
         const row = yield* threads.summary(threadId);
@@ -280,7 +283,7 @@ export const threadsLayer = Layer.effectContext(
       }),
       progressed: (threadId) => harness.threads.publish(threadId),
       timing: { waitMs: RECAP_WAIT_MS, marginMs: RECAP_MARGIN_MS, idleMs: AGENT_IDLE_MS },
-    });
+    }).pipe(Effect.provideService(ThreadAsks, threadAsks));
     yield* Effect.acquireRelease(
       Effect.sync(() => asides.watch(recaps)),
       (release) => Effect.sync(release),
@@ -305,7 +308,7 @@ export const threadsLayer = Layer.effectContext(
     const turns = yield* makeThreadTurns.pipe(Effect.provideService(ThreadEnding, ending), Effect.provideService(ReaderMarking, reader));
     const attachmentFiles = yield* AttachmentFiles;
     const rewinds = yield* makeThreadRewinds.pipe(Effect.provideService(ReaderMarking, reader));
-    const asks = yield* makeThreadAsks.pipe(Effect.provideService(ReaderMarking, reader));
+    const answers = yield* makeQuestionAnswers.pipe(Effect.provideService(ReaderMarking, reader));
     const attachmentOwner = attachments(records, attachmentFiles);
     const intents = yield* WorktreeIntents;
     const targets = yield* makeThreadTargets({
@@ -370,7 +373,7 @@ export const threadsLayer = Layer.effectContext(
         Context.add(NoticeTakeBack, commandNoticeTakeBack(harness, owedRows)),
         Context.add(ThreadTurns, turns),
         Context.add(ThreadRewinds, rewinds),
-        Context.add(ThreadAsks, asks),
+        Context.add(QuestionAnswers, answers),
         Context.add(Attachments, attachmentOwner),
         Context.add(HarnessRegistry, registry),
         Context.add(ThreadRollouts, rollouts),
@@ -407,6 +410,7 @@ export const threadsLayer = Layer.effectContext(
       .pipe(
         Context.add(ThreadRecapWriting, { generate: (threadId, projectId) => recaps.generateNow(threadId, projectId) }),
         Context.add(ThreadDecisions, decisions),
+        Context.add(ThreadAsks, threadAsks),
       );
   }),
 );

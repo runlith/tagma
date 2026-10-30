@@ -10,6 +10,17 @@ export type ModelCapacity = {
 export const MODEL_CAPABILITIES = ['text', 'vision', 'decision'] as const;
 export type ModelCapability = (typeof MODEL_CAPABILITIES)[number];
 
+export const ASK_KINDS = ['text', 'object', 'decision'] as const;
+export type AskKind = (typeof ASK_KINDS)[number];
+
+export type AskPath = 'request' | 'program';
+
+export const askKindsOf = (path: AskPath | null, capabilities: readonly ModelCapability[]): readonly AskKind[] => {
+  if (path === null) return [];
+  if (capabilities.includes('text')) return ASK_KINDS;
+  return path === 'request' && capabilities.includes('decision') ? ['decision'] : [];
+};
+
 export type ModelSwitch = {
   readonly id: string;
   readonly label: string;
@@ -113,7 +124,6 @@ export type ProviderDescription = {
   readonly textless?: true;
   readonly spawnTextModel?: string;
   readonly lightTextModel?: ModelSelection;
-  readonly family?: string;
   readonly spell?: (selection: ModelSelection) => string;
   readonly team?: readonly TeamRating[];
 };

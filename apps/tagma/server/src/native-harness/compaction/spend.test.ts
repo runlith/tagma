@@ -9,7 +9,19 @@ import { admitSummarizer, foldOf, summarizerSpend, type SummarizedThread } from 
 
 const MODELS = modelCatalog(DEFAULT_PROVIDER_DESCRIPTIONS);
 
-const CATALOG = { models: MODELS, accountSource: (provider: string) => provider } as unknown as ProviderCatalog;
+const catalogOf = (programs: ReadonlySet<string>) =>
+  ({
+    models: MODELS,
+    accountSource: (provider: string) => provider,
+    asks: {
+      kinds: (provider: string) =>
+        MODELS.registered(provider) && (MODELS.named(provider).auth !== 'cli' || programs.has(provider))
+          ? ['text', 'object', 'decision']
+          : [],
+    },
+  }) as unknown as ProviderCatalog;
+
+const CATALOG = catalogOf(new Set());
 
 const NOW = Date.parse('2026-09-25T16:00:00.000Z');
 
@@ -45,7 +57,7 @@ describe('what a summarizer costs the thread it summarizes', () => {
     const own = { provider: 'claude-code', model: 'claude-opus-5-5' };
     expect(foldOf(claudeCode, own)).toBe('session');
     expect(summarizerSpend(CATALOG, claudeCode, own, [], NOW)).toEqual({ spendable: true, account: null });
-    expect(admitSummarizer(MODELS, claudeCode, { ...own, reasoning: 'high' })).toEqual({
+    expect(admitSummarizer(CATALOG, claudeCode, { ...own, reasoning: 'high' })).toEqual({
       provider: 'claude-code',
       model: 'claude-opus-5-5',
       reasoning: 'high',
@@ -56,8 +68,8 @@ describe('what a summarizer costs the thread it summarizes', () => {
     const stale: SummarizedThread = { ...claudeCode, model: 'claude-opus-4-5' };
     const own = { provider: 'claude-code', model: 'claude-opus-4-5', reasoning: 'high' };
     expect(summarizerSpend(CATALOG, stale, own, [], NOW)).toEqual({ spendable: true, account: null });
-    expect(admitSummarizer(MODELS, stale, own)).toEqual({ provider: 'claude-code', model: 'claude-opus-4-5', reasoning: 'high' });
-    expect(admitSummarizer(MODELS, { ...stale, compaction: 'core' }, own)).toBeNull();
+    expect(admitSummarizer(CATALOG, stale, own)).toEqual({ provider: 'claude-code', model: 'claude-opus-4-5', reasoning: 'high' });
+    expect(admitSummarizer(CATALOG, { ...stale, compaction: 'core' }, own)).toBeNull();
   });
 
   test('another model summarizing that same thread is called by the server, so the allowance table judges it', () => {
@@ -80,13 +92,23 @@ describe('what a summarizer costs the thread it summarizes', () => {
     expect(summarizerSpend(CATALOG, { ...native, account: null }, own, table, NOW)).toMatchObject({ spendable: false, reason: 'quota' });
   });
 
-  test('a model only a CLI calls is refused for a thread the server folds itself, its own model included', () => {
+  test('a model that answers no text ask is refused for a thread the server folds itself, its own model included', () => {
     const cli: SummarizedThread = { ...native, provider: 'claude-code' };
     const own = { provider: 'claude-code', model: 'claude-opus-5-5' };
     expect(foldOf(cli, own)).toBe('core');
     expect(summarizerSpend(CATALOG, cli, own, [anthropic], NOW)).toEqual({ spendable: false, reason: 'not-callable' });
-    expect(admitSummarizer(MODELS, cli, own)).toBeNull();
-    expect(admitSummarizer(MODELS, native, { provider: 'claude-code', model: 'claude-opus-5-5' })).toBeNull();
-    expect(admitSummarizer(MODELS, native, { provider: 'subscription', model: 'no-such-model' })).toBeNull();
+    expect(admitSummarizer(CATALOG, cli, own)).toBeNull();
+    expect(admitSummarizer(CATALOG, native, { provider: 'claude-code', model: 'claude-opus-5-5' })).toBeNull();
+    expect(admitSummarizer(CATALOG, native, { provider: 'subscription', model: 'no-such-model' })).toBeNull();
+  });
+
+  test('a CLI that answers text asks summarizes any thread, its own rebuilt one included', () => {
+    const programmed = catalogOf(new Set(['claude-code']));
+    const foreign: SummarizedThread = { ...native, provider: 'claude-code', compaction: 'foreign' };
+    const own = { provider: 'claude-code', model: 'claude-opus-5-5' };
+    expect(summarizerSpend(programmed, foreign, own, [], NOW)).toEqual({ spendable: true, account: 'key-1' });
+    expect(summarizerSpend(programmed, native, own, [], NOW)).toEqual({ spendable: true, account: null });
+    expect(admitSummarizer(programmed, foreign, own)).toMatchObject({ provider: 'claude-code', model: 'claude-opus-5-5' });
+    expect(summarizerSpend(CATALOG, foreign, own, [], NOW)).toEqual({ spendable: false, reason: 'not-callable' });
   });
 });

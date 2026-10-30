@@ -153,7 +153,7 @@ export const makeThreadEvents = Effect.fnUntraced(function* ({
     if (words === null || words.trim() === '') return null;
     const verdict = yield* decisions.decide(thread.id, addressing(words), { run: run.runId }).pipe(
       Effect.map((decision) => decision.answers[ADDRESSES] ?? null),
-      Effect.catchTag('DecisionRefused', () => Effect.succeed(null)),
+      Effect.catchTag('AskRefused', () => Effect.succeed(null)),
       Effect.mapError(broke),
     );
     if (verdict?.type !== 'noul' || !verdict.noul) return null;

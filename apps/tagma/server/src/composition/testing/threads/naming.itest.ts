@@ -1,7 +1,8 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Clock, Context, Deferred, Effect, Fiber, Schema, Stream } from 'effect';
-import { Usage, type LLMEvent } from '@runlith/llm/schema/events';
+import { LLMResponse, Usage, type LLMEvent } from '@runlith/llm/schema/events';
+import { Message } from '@runlith/llm/schema/messages';
 import { ModelIdentity } from '@runlith/llm/schema/options';
 import { ModelID, ProviderID } from '@runlith/llm/schema/ids';
 import { activity, CurrentActivity } from '@runlith/activity/Activity';
@@ -31,6 +32,7 @@ it.live(
       const opened = yield* Deferred.make<void>();
       const interruption = yield* Deferred.make<void>();
       const sent: Sent[] = [];
+      const excerpted: ModelRequestInput[] = [];
       let account: string | undefined;
       let answer = 'NO-TOPIC';
       let first = true;
@@ -49,8 +51,17 @@ it.live(
                 : new ModelIdentity({ provider: ProviderID.make(input.provider), model: ModelID.make(input.model) }),
             cache: { ttlSeconds: 3_600 },
             signedAccount: () => account,
-            text: () => Effect.die(new Error('the naming fixture streams only')),
-            object: () => Effect.die(new Error('the naming fixture streams only')),
+            text: () =>
+              Effect.sync(() => {
+                excerpted.push(input);
+                return new LLMResponse({
+                  message: Message.assistant('TITLE: Compact result'),
+                  events: [{ type: 'text-delta', id: 'text', text: 'TITLE: Compact result' }],
+                  usage: new Usage({ inputTokens: 20, outputTokens: 4 }),
+                  finishReason: 'stop',
+                });
+              }),
+            object: () => Effect.die(new Error('the naming fixture answers no objects')),
             stream: (call) =>
               Stream.unwrap(
                 Effect.gen(function* () {
@@ -69,13 +80,7 @@ it.live(
                       { type: 'tool-call', id: 'call', name: 'read', input: {} },
                       { type: 'finish', reason: 'tool-calls' },
                     ]);
-                  const text = recapping
-                    ? 'SUMMARY: Prefix reuse was explained and verified.\nNEXT: none'
-                    : !naming
-                      ? 'Ready.'
-                      : Object.keys(call.tools).length === 0
-                        ? 'TITLE: Compact result'
-                        : answer;
+                  const text = recapping ? 'SUMMARY: Prefix reuse was explained and verified.\nNEXT: none' : !naming ? 'Ready.' : answer;
                   return Stream.fromIterable<LLMEvent>([
                     { type: 'text-start', id: 'text' },
                     { type: 'text-delta', id: 'text', text },
@@ -171,9 +176,7 @@ it.live(
         source: 'fresh',
         freshReason: 'captured-rejected',
       });
-      const compact = sent.at(-1)!;
-      expect(compact.request).toMatchObject({ provider: 'openai-oauth', model: 'gpt-5.5', reasoning: 'low', cache: 'none' });
-      expect(compact.call.tools).toEqual({});
+      expect(excerpted.at(-1)).toMatchObject({ provider: 'openai-oauth', model: 'gpt-5.5', reasoning: 'low', cache: 'none' });
       const activities = yield* Effect.provide(ActivityStore, yield* world.runtime.runtime.contextEffect);
       yield* activities.settled;
       const evidence = yield* world.op(
@@ -227,9 +230,10 @@ it.live(
             notes: expect.arrayContaining([
               expect.objectContaining({
                 type: 'model-chosen',
-                road: 'title-model',
+                road: 'fresh',
                 freshReason: 'captured-rejected',
-                rejected: [{ road: 'warm', reason: 'captured-rejected' }],
+                provider: 'openai-oauth',
+                model: 'gpt-5.5',
               }),
             ]),
           }),

@@ -18,8 +18,8 @@ import { AccountQuota } from '../../providers/contract/service/quota.js';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
 import { ceilingOf } from '../../platform/contract/wire/pageFamily.js';
 import type { SettableScope } from '../../platform/contract/wire/setting.js';
-import { callable, signingAccount, spendability, textModelOf } from '../models/spendability.js';
-import { admitSummarizer, foldOf, summarizerSpend, type SummarizedThread, type SummarizerSpend } from './spend.js';
+import { signingAccount, spendability, textModelOf } from '../models/spendability.js';
+import { admitSummarizer, answersText, foldOf, summarizerSpend, type SummarizedThread, type SummarizerSpend } from './spend.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import type { QuotaTable } from '../../providers/contract/wire/accounts.js';
 import { type ProviderCatalog, ProviderRegistry } from '../../providers/contract/service/registry.js';
@@ -233,11 +233,11 @@ export const makeChoiceReader = Effect.fnUntraced(function* ({ rows }: { readonl
       const subject = summarized(models, thread);
       const ownModel = subject.model;
       const foreign = thread.capabilities.compaction === 'foreign';
-      const offered = state.chain.filter((member) => !foreign || member.provider !== thread.provider);
+      const offered = state.chain.filter((member) => !foreign || member.provider !== thread.provider || answersText(catalog, member));
       const chained = new Set(offered.map((member) => `${member.provider}:${member.model}`));
       const callables = models
         .modelsByCapability('text')
-        .filter((option) => callable(models, option.provider) && (!foreign || option.provider !== thread.provider));
+        .filter((option) => answersText(catalog, { provider: option.provider, model: option.id }));
       const others = callables.flatMap((option, ordinal) =>
         option.key === `${thread.provider}:${ownModel}` || chained.has(option.key) ? [] : [{ option, ordinal }],
       );
@@ -339,8 +339,8 @@ export const makeChoiceReader = Effect.fnUntraced(function* ({ rows }: { readonl
       named: ThreadSummarizerSelection,
     ): Effect.fn.Return<ResolvedSummarizer, HarnessFailure> {
       const { thread } = yield* settled(threadId);
-      const { models } = yield* registry.catalog;
-      const resolved = admitSummarizer(models, summarized(models, thread), named);
+      const catalog = yield* registry.catalog;
+      const resolved = admitSummarizer(catalog, summarized(catalog.models, thread), named);
       if (resolved === null) {
         return yield* new GateRefusal(
           'unknown-summarizer',

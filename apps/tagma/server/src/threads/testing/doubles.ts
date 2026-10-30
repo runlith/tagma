@@ -85,7 +85,7 @@ import { NO_REVIEW } from '@runlith/agent/collaboration/team';
 import { ThreadTurns as ThreadTurnsTag } from '../turns/acts.js';
 import { ThreadRewinds as ThreadRewindsTag } from '../turns/rewinds.js';
 import { ThreadAdjustments as ThreadAdjustmentsTag } from '../turns/adjustments.js';
-import { ThreadAsks as ThreadAsksTag, makeThreadAsks } from '../turns/asks.js';
+import { QuestionAnswers, makeQuestionAnswers } from '../turns/asks.js';
 import { makeReaderMarks } from '../turns/reader.js';
 import { ThreadList as ThreadListTag } from '../contract/service/list.js';
 import { makeThreadListReads } from '../list/store.js';
@@ -429,12 +429,12 @@ export const threadRolloutReport = (projection: ThreadProjection) => makeThreadR
 
 export const mandateRows = () => makeMandateRows;
 
-export const threadAsks = () => makeThreadAsks;
+export const questionAnswers = () => makeQuestionAnswers;
 
-export const addThreadAsks =
-  (service: ThreadAsksTag['Service']) =>
-  (context: Context.Context<never>): Context.Context<ThreadAsksTag> =>
-    Context.add(context, ThreadAsksTag, service);
+export const addQuestionAnswers =
+  (service: QuestionAnswers['Service']) =>
+  (context: Context.Context<never>): Context.Context<QuestionAnswers> =>
+    Context.add(context, QuestionAnswers, service);
 
 export const commandTimes = (...input: Parameters<typeof commandTimesOver>): ReturnType<typeof commandTimesOver> =>
   commandTimesOver(...input);
@@ -587,7 +587,7 @@ export const inboxOf = (owners: Context.Context<ThreadInboxTag>): ThreadInboxTag
 
 export const titlesOf = (owners: Context.Context<ThreadTitlesTag>): ThreadTitlesTag['Service'] => Context.get(owners, ThreadTitlesTag);
 
-export const asksOf = (owners: Context.Context<ThreadAsksTag>): ThreadAsksTag['Service'] => Context.get(owners, ThreadAsksTag);
+export const answersOf = (owners: Context.Context<QuestionAnswers>): QuestionAnswers['Service'] => Context.get(owners, QuestionAnswers);
 
 export const movesOf = (owners: Context.Context<ThreadMovesTag>): ThreadMovesTag['Service'] => Context.get(owners, ThreadMovesTag);
 

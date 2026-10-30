@@ -1,7 +1,7 @@
 import { Data, Effect } from 'effect';
 import { resolveEnvironment } from '@runlith/executions/CommandEnvironment';
 import type { EnvironmentEntry } from '@runlith/executions/protocol/execution';
-import type { CommandExchange } from '@runlith/tagma/adapter/provider';
+import type { AccountCommand } from '../../providers/contract/service/cli.js';
 import type { HarnessProgram } from '../../threads/contract/service/harness.js';
 import { programEnvironment } from '../sessions/programs.js';
 
@@ -15,7 +15,7 @@ export type ProgramCommand = {
   readonly entries: readonly EnvironmentEntry[];
   readonly cwd: string;
   readonly timeoutMs: number;
-  readonly exchange?: CommandExchange;
+  readonly exchange?: AccountCommand['exchange'];
   readonly input?: string;
 };
 

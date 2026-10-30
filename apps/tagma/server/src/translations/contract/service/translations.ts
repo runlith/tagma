@@ -1,6 +1,7 @@
 import { Context, type Effect, type Stream } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
+import type { AskRefusal } from '../../../providers/contract/wire/asks.js';
 import type { LanguageStanding, Projection, TranslationFrame } from '../wire/projection.js';
 
 export type Translated = {
@@ -36,7 +37,7 @@ export type TranslationReading = {
   readonly projection: Projection | null;
 };
 
-export type StartRefusal = GateRefusal<'translation-model-missing' | 'invalid-selection' | 'project-retired'>;
+export type StartRefusal = GateRefusal<AskRefusal | 'project-retired'>;
 
 export class Translations extends Context.Service<
   Translations,

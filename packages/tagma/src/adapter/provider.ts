@@ -5,14 +5,9 @@ import type { ProviderDescription } from '@runlith/llm/models/description';
 import type { StoredCredential } from '@runlith/llm/oauth/credential';
 import type { SubscriptionAccounts } from '@runlith/llm/oauth/vendor';
 import type { ModelCredentials, ProductIdentity, ProviderQuota, ProviderRegistration } from '@runlith/llm/profiles/contract';
-import type { ModelCapability, ModelSpecs } from '@runlith/llm/models/description';
+import type { ModelSpecs } from '@runlith/llm/models/description';
 import type { Usage } from '@runlith/llm/schema/events';
 import type { JsonSchema } from '@runlith/llm/schema/ids';
-
-export const ASK_KINDS = ['text', 'object', 'decision'] as const;
-export type AskKind = (typeof ASK_KINDS)[number];
-
-export type AskPath = 'request' | 'program';
 
 export const PROGRAM_REFUSALS = [
   'ask-not-connected',
@@ -48,12 +43,6 @@ export type AskProgram = {
 };
 
 export type ProviderAsks = { readonly program?: AskProgram };
-
-export const askKindsOf = (path: AskPath | null, capabilities: readonly ModelCapability[]): readonly AskKind[] => {
-  if (path === null) return [];
-  if (capabilities.includes('text')) return ASK_KINDS;
-  return path === 'request' && capabilities.includes('decision') ? ['decision'] : [];
-};
 
 export type CatalogModels = {
   readonly models: ModelSpecs;

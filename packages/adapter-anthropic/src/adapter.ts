@@ -3,6 +3,7 @@ import { anthropicConsoleRegistrations } from '@runlith/adapter-anthropic/profil
 import { type AccountEnvironment, defineAdapter } from '@runlith/tagma/adapter/provider';
 import { claudeAccounts } from './accounts';
 import { icon } from './icon';
+import { claudeCodeProgram } from './program';
 
 const SIGNED_ELSEWHERE = [
   'ANTHROPIC_API_KEY',
@@ -26,6 +27,7 @@ export const adapter = defineAdapter(({ product }) => [
     icon,
     accounts: claudeAccounts,
     environment: claudeEnvironment,
+    asks: { program: claudeCodeProgram },
     accountMode: {
       section: 'claude',
       title: 'Claude',

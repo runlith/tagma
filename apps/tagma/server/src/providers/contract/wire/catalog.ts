@@ -1,6 +1,6 @@
 import { ToolChoiceMode } from '@runlith/llm/schema/options';
 import { CACHE_GAP_BUCKETS } from '@runlith/llm/models/cacheLifetime';
-import { MODEL_CAPABILITIES } from '@runlith/llm/models/description';
+import { ASK_KINDS, MODEL_CAPABILITIES } from '@runlith/llm/models/description';
 import { Schema } from 'effect';
 import { settingFieldSchema } from '@runlith/tagma/adapter/settings';
 import { feed } from '../../../platform/contract/wire/operation.js';
@@ -107,7 +107,7 @@ export const servedProviderSchema = Schema.Struct({
       switches: Schema.optional(Schema.Record(Schema.String, Schema.String)),
     }),
   ),
-  family: Schema.optional(Schema.String),
+  asks: Schema.Record(Schema.String, Schema.Array(Schema.Literals(ASK_KINDS))),
   accountSource: Schema.String,
   instance: Schema.optional(Schema.Literal(true)),
   failure: Schema.optional(Schema.String),

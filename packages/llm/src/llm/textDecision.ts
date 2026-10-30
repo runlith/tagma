@@ -109,14 +109,19 @@ const verdict = (question: DecisionQuestion, value: unknown): Effect.Effect<Deci
 
 const Fields = Schema.Record(Schema.String, Schema.Unknown);
 
-export const decideByText = Effect.fn('LLM.decideByText')(function* (request: DecisionRequest, answer: TextDecisionAnswering) {
-  const answered = yield* answer(textDecisionAsk(request)).pipe(
-    Effect.catchTag('LLM.Error', (failure) => Effect.fail(providerRefusal(failure))),
-  );
-  const fields = yield* Schema.decodeUnknownEffect(Fields)(answered.object).pipe(Effect.mapError((issue) => malformed(issue.message)));
+export const decisionVerdicts = Effect.fnUntraced(function* (request: DecisionRequest, object: unknown) {
+  const fields = yield* Schema.decodeUnknownEffect(Fields)(object).pipe(Effect.mapError((issue) => malformed(issue.message)));
   const answers: Record<string, DecisionVerdict> = {};
   for (const [name, question] of Object.entries(request.questions)) {
     answers[name] = yield* verdict(question, fields[name]).pipe(Effect.mapError((issue) => malformed(`${name}: ${issue.message}`)));
   }
+  return answers satisfies DecisionAnswer['answers'];
+});
+
+export const decideByText = Effect.fn('LLM.decideByText')(function* (request: DecisionRequest, answer: TextDecisionAnswering) {
+  const answered = yield* answer(textDecisionAsk(request)).pipe(
+    Effect.catchTag('LLM.Error', (failure) => Effect.fail(providerRefusal(failure))),
+  );
+  const answers = yield* decisionVerdicts(request, answered.object);
   return { model: answered.model, answers, usage: LLMResponse.usage(answered.response) } satisfies DecisionAnswer;
 });

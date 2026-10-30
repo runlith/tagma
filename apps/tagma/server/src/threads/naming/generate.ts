@@ -10,19 +10,18 @@ import { ActivityCause } from '@runlith/activity/cause';
 import { latestReaderMark } from '@runlith/agent/AgentSignal';
 import { ActivityLog } from '@runlith/activity/log';
 import { Message } from '@runlith/llm/schema/messages';
-import { ModelIdentity } from '@runlith/llm/schema/options';
 import { isReaderWordsItem } from '@runlith/agent/thread/inboxItems';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { AccountCredentials, ModelAccess } from '../../providers/contract/service/access.js';
+import { AskRefused, ModelAsks } from '../../providers/contract/service/asks.js';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import type { HarnessId } from '../../platform/contract/wire/session.js';
 import type { HarnessName } from '../contract/wire/harness/names.js';
-import { HarnessRegistry, type Harness, type HarnessAnswer } from '../contract/service/harness.js';
+import { HarnessRegistry, type Harness } from '../contract/service/harness.js';
 import { threadRecord } from '../../thread-record/store/table.js';
 import { Settings } from '../../settings/contract/service/values.js';
-import { autoTitle, titleCharacters, TITLE_CHARACTERS_MAX } from '../contract/wire/settings.js';
+import { autoTitle, titleCharacters, TITLE_CHARACTERS_MAX, titleModel, titleReasoning } from '../contract/wire/settings.js';
 import {
   TITLE_FAILURES,
   type TitleStatus,
@@ -38,14 +37,14 @@ import { ThreadHistoryReads } from '../contract/service/birth.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import type { ThreadInboxItem } from '@runlith/agent/thread/storage/inbox';
 import { ThreadInbox } from '../store/inbox.js';
-import { HarnessAsides, ThreadHarness } from '../contract/service/engine.js';
+import { ThreadHarness } from '../contract/service/engine.js';
+import { ThreadAsks } from '../contract/service/asks.js';
 import { ThreadList } from '../contract/service/list.js';
 import { ThreadRollouts } from '../contract/service/rollouts.js';
 import { BranchTitling, INSTRUCTION, readThreadTitle } from './titles.js';
 import { ThreadTitles } from '../contract/service/titles.js';
 import { titleContext } from './context.js';
-import { CliUnsuccessful, type ExcerptAsks } from './excerpt.js';
-import { askerOf, TITLE_ROLE, type RejectedRoad, type Roads } from '../roads.js';
+import type { ExcerptAsks } from './excerpt.js';
 
 type NamingRequest = {
   readonly source: 'captured' | 'fresh';
@@ -53,16 +52,9 @@ type NamingRequest = {
 };
 
 type NamingAnswer = ThreadTitleAnswer & { readonly effect?: TitleNaming };
-type Choice = {
-  readonly type: 'model-chosen';
-  readonly road: string;
-  readonly rejected: readonly RejectedRoad[];
-  readonly freshReason?: TitleFreshReason;
-  readonly provider?: string;
-  readonly model?: string;
-  readonly rung?: string | null;
-  readonly account?: string | null;
-};
+
+const askRefusal = (refused: AskRefused) =>
+  new GateRefusal(refused.refusal, refused.message, ['choose a model that answers text in `threads.titleModel`, or connect a provider']);
 
 export const TITLE = activityKind<
   NamingRequest,
@@ -80,11 +72,9 @@ const unnamed = (outcome: TitleStatus, reason?: TitleFailure): ThreadTitleAnswer
 
 export const makeThreadNaming = Effect.fnUntraced(function* ({
   idleMs,
-  roads,
   excerpts: excerptAsks,
 }: {
   readonly idleMs: number;
-  readonly roads: Roads;
   readonly excerpts: ExcerptAsks;
 }) {
   const harness = yield* ThreadHarness;
@@ -95,10 +85,9 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
   const records = yield* ThreadRecords;
   const list = yield* ThreadList;
   const settings = yield* Settings;
-  const models = yield* ModelAccess;
-  const credentials = yield* AccountCredentials;
+  const asks = yield* ModelAsks;
+  const threadAsks = yield* ThreadAsks;
   const rollouts = yield* ThreadRollouts;
-  const asides = yield* HarnessAsides;
   const log = yield* ActivityLog;
   const inbox = yield* ThreadInbox;
   const titled = yield* BranchTitling;
@@ -156,7 +145,7 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
       ),
   );
 
-  const attempt = <A extends NamingAnswer | null>(
+  const attempt = <A extends NamingAnswer>(
     threadId: string,
     request: NamingRequest,
     work: Effect.Effect<A, HarnessFailure>,
@@ -170,8 +159,12 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
         ended: (exit) => {
           const spent = usage?.();
           const bill = spent === undefined ? {} : { usage: spent };
-          if (exit._tag === 'Failure') return { result: bill };
-          if (exit.value === null) return { outcome: 'refused', reason: 'title-model-missing', result: bill };
+          if (exit._tag === 'Failure') {
+            const refused = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+            return refused instanceof GateRefusal
+              ? { outcome: 'refused', reason: refused.code, message: refused.reason, result: bill }
+              : { result: bill };
+          }
           return {
             outcome: exit.value.outcome === 'failed' ? ('failed' as const) : undefined,
             reason: exit.value.outcome === 'failed' ? (exit.value.reason ?? 'internal') : undefined,
@@ -200,8 +193,11 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
     if (asked._tag === 'Failure') {
       if (Cause.hasInterruptsOnly(asked.cause)) return yield* Effect.interrupt;
       const failure = Option.getOrUndefined(Cause.findErrorOption(asked.cause)) as { readonly _tag?: string } | undefined;
+      if (failure instanceof AskRefused) {
+        yield* recorded(threadId, { ...unnamed('failed', 'model-failed'), ...metadata }, undefined, { failure: failure.message });
+        return yield* askRefusal(failure);
+      }
       const called = failure instanceof AgentAsideCalledTool ? failure : undefined;
-      const cli = failure instanceof CliUnsuccessful ? failure.answer : undefined;
       const reason: TitleFailure = called
         ? called.finishReason === 'tool-calls' || called.finishReason === 'stop'
           ? 'tool-call'
@@ -210,13 +206,12 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
           ? 'cancelled'
           : failure?._tag === 'TimeoutError'
             ? 'timeout'
-            : failure?._tag === 'LLM.Error' || failure?._tag === 'CliSilent' || cli !== undefined
+            : failure?._tag === 'LLM.Error'
               ? 'model-failed'
               : 'internal';
       const result = { ...unnamed('failed', reason), ...metadata };
       yield* recorded(threadId, result, called, {
         tools: called ? called.tools : undefined,
-        cli: cli ? cli : undefined,
         failure: String(Cause.squash(asked.cause)),
       });
       return result;
@@ -267,7 +262,12 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
           }),
         );
       }
-      return yield* judged(threadId, request, asides.ask(threadId, prompt, { instruction: INSTRUCTION }), write);
+      return yield* judged(
+        threadId,
+        request,
+        Effect.map(threadAsks.over(threadId, INSTRUCTION, prompt), (over) => over.answer),
+        write,
+      );
     });
     return request.source === 'captured'
       ? attempt(threadId, request, work, { run: prompt.runId, parent: { run: prompt.runId }, ...placement })
@@ -281,52 +281,50 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
     freshReason: TitleFreshReason,
     excerpts: readonly Message[],
     placement: ActivityPlacement = {},
-  ): Effect.Effect<NamingAnswer | null, HarnessFailure> => {
+  ): Effect.Effect<NamingAnswer, HarnessFailure> => {
     const metadata = { source: 'fresh' as const, freshReason };
     const reader = latestReaderMark(excerpts);
     const covered = { readerInput: reader?.input ?? null, position: reader?.position ?? null };
-    let spent: () => Usage | undefined = () => undefined;
+    let spent: Usage | undefined;
     return attempt(
       thread.id,
       metadata,
       Effect.gen(function* () {
         const write = (title: string) =>
           units.write(writes('ThreadNaming.name', [threadRecord]), (unit) => records.nameTitle(unit, thread.id, title, revision));
-        const chosen = yield* roads.choose(TITLE_ROLE, {
-          asker: askerOf(thread),
-          projectId,
-          rejected: [{ road: 'warm', reason: freshReason }],
-        });
-        const road = chosen.road;
-        const choice: Choice = {
-          type: 'model-chosen',
-          road: chosen.name,
-          rejected: chosen.rejected,
-          freshReason,
-          provider: road._tag === 'Model' ? road.option.provider : undefined,
-          model: road._tag === 'Model' ? road.option.id : undefined,
-          rung: road._tag === 'Model' ? road.reasoning : undefined,
-          account: road._tag === 'Model' ? road.account : undefined,
-        };
-        yield* note(choice);
-        if (road._tag === 'None') return null;
-        if (road._tag === 'Invalid') return { ...unnamed('failed', 'invalid-selection'), ...metadata };
+        const selection = yield* asks
+          .choose(
+            'text',
+            { model: yield* settings.value(titleModel, projectId), reasoning: yield* settings.value(titleReasoning, projectId) },
+            { provider: thread.provider, model: thread.model, account: thread.account },
+          )
+          .pipe(Effect.mapError(askRefusal));
+        yield* note({ type: 'model-chosen', road: 'fresh', freshReason, ...selection, rung: selection.reasoning });
         const budget = yield* settings.value(titleCharacters, projectId);
-        const asked = yield* excerptAsks.asking(thread.id, road, {
-          system: SYSTEM,
-          instruction: INSTRUCTION,
-          excerpt: (chars) => titleContext(excerpts, Math.min(budget, TITLE_CHARACTERS_MAX, chars)),
-        });
+        const asked = yield* excerptAsks
+          .asking(selection, {
+            system: SYSTEM,
+            instruction: INSTRUCTION,
+            excerpt: (chars) => titleContext(excerpts, Math.min(budget, TITLE_CHARACTERS_MAX, chars)),
+          })
+          .pipe(Effect.mapError(askRefusal));
         if (asked._tag === 'Unfit')
           return asked.reason === 'no-topic'
             ? { ...unnamed('no-topic'), ...metadata }
             : { ...unnamed('failed', asked.reason), ...metadata };
-        spent = asked.usage;
         yield* body(document('input', { system: SYSTEM, excerpt: asked.text, instruction: INSTRUCTION, covered }));
-        return yield* judged(thread.id, metadata, asked.ask, write);
+        const answer = asked.ask.pipe(
+          Effect.tap((answered) =>
+            Effect.sync(() => {
+              spent = answered.usage;
+            }),
+          ),
+          Effect.map((answered): AgentAsideAnswer => ({ text: answered.value, finishReason: 'stop', usage: answered.usage })),
+        );
+        return yield* judged(thread.id, metadata, answer, write);
       }),
       placement,
-      () => spent(),
+      () => spent,
     );
   };
 
@@ -390,44 +388,43 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
           'name the root of the tree instead',
         ]);
       }
-      let held = asides.of(threadId);
+      let held = threadAsks.held(threadId);
       let freshReason: TitleFreshReason = 'no-prefix';
-      if (held && held.source === 'capture') {
-        const request = models.request({ ownerId: OPERATOR_PRINCIPAL, provider: thread.provider, model: thread.model });
-        if (!ModelIdentity.same(held.binding.origin, request.origin)) {
-          freshReason = 'model-changed';
+      if (held !== undefined) {
+        const offered = held;
+        const standing = yield* Effect.exit(
+          threadAsks.standing(offered, {
+            provider: thread.provider,
+            model: thread.model,
+            reasoning: thread.reasoning,
+            account: thread.account,
+          }),
+        );
+        if (standing._tag === 'Failure') {
+          if (Cause.hasInterruptsOnly(standing.cause)) return yield* Effect.interrupt;
+          const captured = { source: 'captured' as const };
+          return yield* attempt(
+            threadId,
+            captured,
+            Effect.gen(function* () {
+              yield* note({
+                type: 'model-chosen',
+                road: 'none',
+                rejected: [{ road: 'warm', reason: 'account-unavailable' }],
+                ...offered.binding.origin,
+                rung: offered.reasoning,
+                account: offered.binding.account ?? null,
+              });
+              const result = { ...unnamed('failed', 'account-unavailable'), ...captured };
+              yield* recorded(threadId, result, undefined, { failure: String(Cause.squash(standing.cause)) });
+              return result;
+            }),
+            { run: offered.runId, parent: { run: offered.runId }, ...placement },
+          );
+        }
+        if (standing.value._tag === 'Moved' && standing.value.reason !== 'rung-changed') {
+          freshReason = standing.value.reason;
           held = undefined;
-        } else {
-          const resolved = yield* Effect.exit(credentials.account(thread.provider, thread.account ?? undefined));
-          if (resolved._tag === 'Failure') {
-            if (Cause.hasInterruptsOnly(resolved.cause)) return yield* Effect.interrupt;
-            const offered = held;
-            const captured = { source: 'captured' as const };
-            return yield* attempt(
-              threadId,
-              captured,
-              Effect.gen(function* () {
-                yield* note({
-                  type: 'model-chosen',
-                  road: 'none',
-                  rejected: [{ road: 'warm', reason: 'account-unavailable' }],
-                  ...offered.binding.origin,
-                  rung: offered.reasoning,
-                  account: offered.binding.account ?? null,
-                });
-                const result = { ...unnamed('failed', 'account-unavailable'), ...captured };
-                yield* recorded(threadId, result, undefined, { failure: String(Cause.squash(resolved.cause)) });
-                return result;
-              }),
-              { run: offered.runId, parent: { run: offered.runId }, ...placement },
-            );
-          }
-          if (held.binding.account !== resolved.value) {
-            freshReason = 'account-changed';
-            held = undefined;
-          } else {
-            held = asides.of(threadId, { origin: request.origin, account: resolved.value, cache: undefined });
-          }
         }
       }
       let result: NamingAnswer | null = null;
@@ -446,16 +443,7 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
         if (captured.outcome === 'failed' && rejected) freshReason = 'captured-rejected';
         else result = captured;
       }
-      if (result === null) {
-        result = yield* fresh(thread, projectId, identity.revision, freshReason, yield* material(thread), placement);
-        if (result === null) {
-          return yield* new GateRefusal(
-            'title-model-missing',
-            'no model can name this thread: its cache is cold, its provider declares no light model or is not connected, and its CLI answers no one-shot question',
-            ['choose a Title model in settings'],
-          );
-        }
-      }
+      if (result === null) result = yield* fresh(thread, projectId, identity.revision, freshReason, yield* material(thread), placement);
       if (result.effect?.outcome === 'written') yield* published(threadId);
       return result;
     }),
@@ -489,7 +477,7 @@ const recorded = (
   threadId: string,
   result: ThreadTitleAnswer,
   answer?: AgentAsideAnswer,
-  detail?: { readonly tools?: readonly string[]; readonly failure?: string; readonly cli?: HarnessAnswer },
+  detail?: { readonly tools?: readonly string[]; readonly failure?: string },
 ) => Effect.asVoid(body(document('response', { threadId, ...result, ...answer, ...detail })));
 
 const utf8 = new TextEncoder();

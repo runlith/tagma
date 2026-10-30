@@ -17,7 +17,7 @@ export type ManagedWriteInput<A> = {
   readonly resolved: A;
 };
 
-export type ManagedWriteRefusal = SettingLandRefusal | 'setting-conflict' | 'setting-managed' | 'setting-unapplied';
+export type ManagedWriteRefusal = SettingLandRefusal | 'setting-conflict' | 'setting-managed' | 'setting-unapplied' | 'setting-value';
 
 export type ManagedWriter<A> = (input: ManagedWriteInput<A>) => Effect.Effect<void, StoreFailure | GateRefusal<ManagedWriteRefusal>>;
 

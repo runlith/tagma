@@ -24,6 +24,7 @@ export function servedProvider(provider: ServedFixture): ServedProvider {
     quotaFromReplies: false,
     cacheLifetime: { promisedSeconds: null, prior: null },
     accountSource: provider.id,
+    asks: {},
     ...provider,
   };
 }
