@@ -5,7 +5,8 @@ ord: 17
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "holder": "tagma:01a18e91-0057-7f4b-85b6-a35adafffddb",
+    "status": "in_work"
   }
 ---
 The operator removed the coupling rule: card-relation enforcement already controls module dependencies, and external-import share rejects correct work. Remove its inspection, baseline, programme wiring, exclusive fixtures and cost-harness arm, retaining shared module boundaries.
