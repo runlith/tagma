@@ -43,7 +43,7 @@ edges:
   - `ask-unanswerable` (nothing here answers this kind);
   - `not-warm` for an ask over a thread.
 
-  A setting write naming a model that cannot answer its role's kind refuses. The call-time refusal stays the guarantee, because a later adapter removal or disconnect is not caught by the write.
+  A setting write naming a model that cannot answer its role's kind refuses `setting-value`, the write door's code for a value the key does not take. The call-time refusal stays the guarantee, because a later adapter removal or disconnect is not caught by the write.
 
 ## Contract (`@runlith/tagma/adapter`)
 
@@ -52,10 +52,10 @@ edges:
   - **`program` path:** text; objects natively when the declaration takes a schema (`claude -p --json-schema` and `codex exec --output-schema` per their documentation, unverified here), otherwise as JSON in text, validated once — an invalid answer is `ask-unreadable-answer`, with no repair step; decisions through an object answer.
   - A provider with neither path, and no wire provider borrowing its login, answers nothing.
 - **Program declaration** on a harness provider:
-  `asks: { program: { argv(selection, schema?) , answer(stdout, stderr, exit) → text | object | refusal, usage? } }`.
+  `asks: { program: { command, schemas, argv({ model, rung, system, schema? }), answer({ stdout, stderr, exit }) → text | object | refusal, usage? } }` in `@runlith/tagma/adapter`. `command` is a program name or `{ runner }`, a builtin runner reached through `harness-run`; `schemas` says whether `argv` takes the JSON schema. The kinds themselves (`ASK_KINDS`, `askKindsOf`) live in `@runlith/llm/models/description`, which the browser loads.
   - The input always goes on stdin and never in argv, so a translation batch or a compaction segment is never bounded by an OS argument limit.
   - `answer` maps the vendor's output, error stream and exit status to an answer or one of the refusal set. Spend is reported only when the vendor reports it; unknown spend stays unknown.
-- **Borrowing.** `ModelAsks` resolves a harness provider whose account a wire provider borrows to that wire provider. This is the registry's `family` today (`providers/registry.ts:98-105`); its only reader, `roads.ts:146`, is removed, and the field leaves the served wire.
+- **Borrowing.** `ModelAsks` resolves a harness provider whose account a wire provider borrows to that wire provider. This replaced the registry's `family`, whose readers were `roads.ts:146` (removed) and the session-thread context limit in `native-harness/compaction/limits.ts`, which now reads `ProviderCatalog.asks.borrower`; the field left the served wire.
 
 ## Owners
 
@@ -76,7 +76,7 @@ edges:
   - the process stopped when the ask is interrupted;
   - concurrent programs per provider bounded by a figure derived from the machine.
 
-  `AskPrograms` is its own port rather than another member of `AccountCli`: an ask is a different subject from an account's sign-in commands. Its filler runs on the same execution runner that `AccountCli.run` uses.
+  `AskPrograms` is its own port rather than another member of `AccountCli`: an ask is a different subject from an account's sign-in commands. Its filler runs on the same runner as `AccountCli.run` (`external-harnesses/programs/run.ts`): a direct child of the server, not a recorded execution.
 - **`defaultFor(kind, asker?)`.** One rule for every role with an empty setting, each step checking that the account is connected and that the model answers the kind:
   1. a decision role first tries a decision-capable model of a connected provider;
   2. with an asker (a thread's provider, model and account): that provider's declared light model, then the thread's own model on its lowest rung;
@@ -84,7 +84,7 @@ edges:
   4. the first connected provider in picker order whose light model answers;
   5. `ask-unanswerable`.
 
-  The saved selection and connected-provider order arrive through a `DefaultSelection` port declared in `providers` and filled by `native-harness`, which owns the operator preference (`native-harness/models/preference.ts:48-81`). An explicit role setting that cannot answer is a refusal and never switches to another model. "Lowest rung" is the ladder's declared lowest, not `reasoningOptions[0]`.
+  The saved selection arrives through a `DefaultSelection` port declared in `providers` and filled by `native-harness`, which owns the operator preference (`native-harness/models/defaultSelection.ts`). Connection is the cached set `ProviderAccounts.connected` keeps, which starts no CLI the operator has not selected, and the order is the catalog's picker order. An explicit role setting that cannot answer is a refusal and never switches to another model. "Lowest rung" is the ladder's declared lowest, not `reasoningOptions[0]`.
 - **`ThreadAsks`** — `threads` module. `over(threadId, ask)` answers from the thread's warm context through its transport's `aside` capability: the native capture (`ThreadAsides`) or the vendor side question (`_tagma/aside`). The answer carries its **basis** — run, step, reader position, model, account and expiry, as `AgentAside` holds them today (`packages/agent/src/agent/AgentAside.ts:69-106`). A caller publishes only after checking that basis against the thread's current one. A pending ask is cancelled by its context owner when the conversation moves or the copy expires. A thread with no aside, or a cold or unknown cache, refuses `not-warm`.
 - **Compaction summaries.** Two acts stay distinct:
   - **Folding a live vendor session.** The vendor compacts its own session, and a provider's own compaction profile stays on `ModelAccess` (`SummarizerRouter.profile`). This act is unchanged.
@@ -108,7 +108,7 @@ edges:
 ## Removed
 
 - `threads/roads.ts`, with its roles, roads and activity note.
-- `providers/contract/service/decisions.ts` and `providers/decisions.ts` (`DecisionModels`). Their profile call moves into `ModelAsks.decide`.
+- `providers/contract/service/decisions.ts` and `providers/decisions.ts` (`DecisionModels`). Their profile call moves to the request path (`ModelAccess.decide`), which `ModelAsks.decide` reaches for a decision-capable model.
 - `HarnessLaunch.oneShot`, `Harness.oneShot`, `sessions/oneShot.ts`, and `ANTHROPIC_LIGHT_MODEL` as the program's fixed model.
 - `ServedProvider.family`.
 - `native-harness/models/spendability.ts#callable` as summarizer eligibility.
