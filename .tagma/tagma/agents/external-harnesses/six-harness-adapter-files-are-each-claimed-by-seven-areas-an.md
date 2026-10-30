@@ -14,7 +14,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/vendors/claude-code/row.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/gemini/row.ts
+    ref: packages/adapter-google/src/harness/row.ts
   - kind: symbol
     ref: apps/tagma/server/src/graph/contract/wire/sources.ts
     symbol: FILE_KINDS
