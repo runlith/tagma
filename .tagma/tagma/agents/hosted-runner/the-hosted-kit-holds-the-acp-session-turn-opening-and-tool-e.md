@@ -1,7 +1,7 @@
 ---
 id: 01a16458-c462-7849-98a0-7c6114227879
 title: The hosted kit holds the ACP session, turn opening, and tool execution; the vendor cycle plugs in through a neutral port
-ord: 11
+ord: 1
 tags: ["explanation"]
 edges:
   - kind: relates
