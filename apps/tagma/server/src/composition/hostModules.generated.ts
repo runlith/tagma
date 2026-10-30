@@ -8,6 +8,7 @@ export const HOST_MODULES: HostModules = {
   '@runlith/adapter-deepseek/profiles/deepseek': () => import('@runlith/adapter-deepseek/profiles/deepseek'),
   '@runlith/adapter-devin/icon': () => import('@runlith/adapter-devin/icon'),
   '@runlith/adapter-devin/models/devin': () => import('@runlith/adapter-devin/models/devin'),
+  '@runlith/adapter-google/icon': () => import('@runlith/adapter-google/icon'),
   '@runlith/adapter-muse/icon': () => import('@runlith/adapter-muse/icon'),
   '@runlith/adapter-muse/models/muse': () => import('@runlith/adapter-muse/models/muse'),
   '@runlith/adapter-muse/profiles/muse': () => import('@runlith/adapter-muse/profiles/muse'),

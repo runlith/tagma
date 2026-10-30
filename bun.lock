@@ -147,6 +147,7 @@
         "@runlith/adapter-cursor": "workspace:*",
         "@runlith/adapter-deepseek": "workspace:*",
         "@runlith/adapter-devin": "workspace:*",
+        "@runlith/adapter-google": "workspace:*",
         "@runlith/adapter-muse": "workspace:*",
         "@runlith/adapter-openai": "workspace:*",
         "@runlith/adapter-openai-compatible": "workspace:*",
@@ -325,6 +326,17 @@
         "@runlith/llm": "workspace:*",
         "@runlith/tagma": "workspace:*",
         "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@runlith/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+      },
+    },
+    "packages/adapter-google": {
+      "name": "@runlith/adapter-google",
+      "version": "0.1.0",
+      "dependencies": {
+        "@runlith/tagma": "workspace:*",
       },
       "devDependencies": {
         "@runlith/tsconfig": "workspace:*",
@@ -2238,6 +2250,8 @@
     "@runlith/adapter-deepseek": ["@runlith/adapter-deepseek@workspace:packages/adapter-deepseek"],
 
     "@runlith/adapter-devin": ["@runlith/adapter-devin@workspace:packages/adapter-devin"],
+
+    "@runlith/adapter-google": ["@runlith/adapter-google@workspace:packages/adapter-google"],
 
     "@runlith/adapter-muse": ["@runlith/adapter-muse@workspace:packages/adapter-muse"],
 
