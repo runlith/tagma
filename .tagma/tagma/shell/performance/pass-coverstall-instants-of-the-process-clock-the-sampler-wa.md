@@ -1,6 +1,6 @@
 ---
 id: 01a0c84e-184c-70f8-a597-40d56e6841ec
-title: Name stalls to the sampler in instants of the process clock it was built with
+title: Pass `coverStall` instants of the process clock the sampler was built with
 ord: 20
 tags: ["rule"]
 fields:
@@ -18,3 +18,4 @@ sources:
     ref: packages/performance/src/TraceSampler.ts
     symbol: coverStall
 ---
+A stall given in another clock's instants cannot be matched to the spans the sampler holds.

@@ -1,6 +1,6 @@
 ---
 id: 01a0c714-c5dd-7e8e-b691-4a3649257250
-title: The host reads the hello secret once and never writes it into the log, the record or the child's environment
+title: Read the host's hello secret once; never write it to a log, a record or a child's environment
 ord: 6
 tags: ["rule"]
 sources:
@@ -10,3 +10,4 @@ sources:
     ref: packages/executions/src/protocol/wire.ts
     symbol: ClientMessage
 ---
+The secret only authenticates a connection's role in its hello message.

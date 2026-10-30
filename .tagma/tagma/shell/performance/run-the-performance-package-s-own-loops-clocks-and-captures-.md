@@ -1,6 +1,6 @@
 ---
 id: 01a0c83d-bec1-7b36-962d-378f94977ffb
-title: A loop, clock, or capture the performance package runs for itself works with the tracer disabled
+title: Run the performance package's own loops, clocks and captures with the tracer disabled
 ord: 7
 tags: ["rule"]
 sources:
@@ -23,4 +23,4 @@ sources:
   - kind: file
     ref: packages/performance/src/StoreWorker.ts
 ---
-The sampler loop, flush, profile cut, and capture go through Effect.withTracerEnabled(false). Exceptions: the tracer itself, a worker without a tracer, and a report door traced as the product's own work.
+The sampler loop, flush, profile cut and capture go through `Effect.withTracerEnabled(false)`. Exceptions: the tracer itself, a worker without a tracer, and a report door traced as the product's own work.

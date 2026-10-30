@@ -1,6 +1,6 @@
 ---
 id: 01a0c71b-ea22-7858-9a19-1e20ca533666
-title: A figure a profile carries must be measured on the platform and native build that profile names
+title: A figure in a capability profile must be measured on the platform and native build that profile names
 ord: 1
 tags: ["rule"]
 sources:
@@ -13,3 +13,4 @@ sources:
     ref: packages/executions/src/protocol/capacity.ts
     symbol: HostPlatform
 ---
+A figure measured elsewhere promises the client a capacity this host may not have.

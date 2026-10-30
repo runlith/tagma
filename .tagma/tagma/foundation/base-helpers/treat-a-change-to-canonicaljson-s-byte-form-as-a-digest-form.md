@@ -1,6 +1,6 @@
 ---
 id: 01a0c702-be20-70fe-a959-587c7c80eb1e
-title: Changing the canonical byte form is a digest format change for every owner that stores it
+title: Treat a change to canonicalJson's byte form as a digest format change for every owner that stores a digest of it
 ord: 15
 tags: ["rule"]
 sources:
