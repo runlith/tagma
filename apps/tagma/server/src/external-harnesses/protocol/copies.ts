@@ -4,7 +4,7 @@ import { threadCacheWarmth } from '@runlith/agent/thread/cache/ThreadCacheWarmth
 import type { ModelCacheLifetime } from '@runlith/llm/models/cacheLifetime';
 import { ModelID, ProviderID } from '@runlith/llm/schema/ids';
 import { ModelIdentity } from '@runlith/llm/schema/options';
-import { HarnessAsides } from '../../threads/contract/service/engine.js';
+import { HarnessAsides } from '../../threads/contract/service/asides.js';
 import { SessionCopies, type SessionCapture } from '../contract/service/copies.js';
 
 const UNPROMISED: ModelCacheLifetime = { promisedSeconds: null, prior: null };

@@ -5,7 +5,7 @@ import { TestClock } from 'effect/testing';
 import { makeThreadAsides } from '@runlith/agent/thread/ThreadAsides';
 import type { AgentAside } from '@runlith/agent/AgentAside';
 import { Usage } from '@runlith/llm/schema/events';
-import { HarnessAsides } from '../../threads/contract/service/engine.js';
+import { HarnessAsides } from '../../threads/contract/service/asides.js';
 import type { SessionCapture } from '../contract/service/copies.js';
 import { makeSessionCopies } from './copies.js';
 

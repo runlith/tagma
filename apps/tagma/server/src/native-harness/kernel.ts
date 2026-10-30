@@ -18,7 +18,6 @@ import { capabilityDefinitions, type CapabilityDefinitions } from './capabilitie
 import { DeclaredCapabilities } from './contract/service/capabilities.js';
 import {
   BornFacets,
-  HarnessAsides,
   HarnessCalls,
   McpForgetting,
   NativeAgents,
@@ -29,6 +28,7 @@ import {
   NativeWorkflow,
   SettledRelease,
 } from '../threads/contract/service/engine.js';
+import { HarnessAsides } from '../threads/contract/service/asides.js';
 import { kernelStorageWrites } from './rows/storageWrites.js';
 import { writes } from '../platform/contract/service/writes.js';
 import { ThreadHomes } from '../threads/contract/service/homes.js';

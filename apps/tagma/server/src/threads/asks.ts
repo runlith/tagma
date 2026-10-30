@@ -4,7 +4,7 @@ import { Clock, Effect } from 'effect';
 import { OPERATOR_PRINCIPAL } from '../platform/contract/wire/actor.js';
 import { AccountCredentials, ModelAccess } from '../providers/contract/service/access.js';
 import { notWarm, ThreadAsks, type ThreadAskBasis, type ThreadSelection } from './contract/service/asks.js';
-import { HarnessAsides } from './contract/service/engine.js';
+import { HarnessAsides } from './contract/service/asides.js';
 
 const basisOf = (copy: AgentAside, selection: ThreadSelection): ThreadAskBasis => ({
   ...selection,

@@ -13,7 +13,7 @@ import { ThreadRecapWriting } from '../../../threads/contract/service/recapWriti
 import { DefaultAccounts } from '../../../providers/contract/service/accounts.js';
 import type { ModelRequestInput, ModelStreamInput } from '@runlith/agent/modelPort';
 import { Settings } from '../../../settings/contract/service/values.js';
-import { HarnessAsides } from '../../../threads/contract/service/engine.js';
+import { HarnessAsides } from '../../../threads/contract/service/asides.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
 import { modelDefaults } from '../claudeLogin.js';
 import { birthsOf, turnsOf, titlesOf } from '../../../threads/testing/doubles.js';

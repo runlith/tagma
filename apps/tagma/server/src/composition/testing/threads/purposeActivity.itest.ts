@@ -4,7 +4,7 @@ import { Context, Deferred, Effect, Layer, Schema, Stream } from 'effect';
 import { Usage, type LLMEvent } from '@runlith/llm/schema/events';
 import { ActivityStore } from '@runlith/activity/store';
 import { Settings } from '../../../settings/contract/service/values.js';
-import { HarnessAsides } from '../../../threads/contract/service/engine.js';
+import { HarnessAsides } from '../../../threads/contract/service/asides.js';
 import { birthsOf, turnsOf } from '../../../threads/testing/doubles.js';
 import { THREAD_OPERATIONS } from '../../../threads/contract/wire/operations/catalog.js';
 import { knownAnswer } from '../../../platform/contract/wire/operation.js';

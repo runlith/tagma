@@ -8,7 +8,6 @@ import type { ThreadLiveFeed } from '@runlith/agent/thread/run/ThreadLiveFeed';
 import type { ThreadBorderFailed } from '@runlith/agent/thread/ThreadBorder';
 import type { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { AgentCalls } from '@runlith/agent/AgentCalls';
-import type { ThreadAsides } from '@runlith/agent/thread/ThreadAsides';
 import type { HostRequestKey } from '@runlith/executions/protocol/execution';
 import type { CancellationCause } from '@runlith/executions/protocol/call';
 import type { HarnessFailure } from './failure.js';
@@ -106,8 +105,6 @@ export class ExternalThreads extends Context.Service<ExternalThreads, NonNullabl
 export class SettledRelease extends Context.Service<SettledRelease, NonNullable<AgentHarnessOptions<NativeThreadState>['settled']>>()(
   'tagma/threads/SettledRelease',
 ) {}
-
-export class HarnessAsides extends Context.Service<HarnessAsides, ThreadAsides>()('tagma/threads/HarnessAsides') {}
 
 export class HarnessCalls extends Context.Service<HarnessCalls, AgentCalls>()('tagma/threads/HarnessCalls') {}
 
