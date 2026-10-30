@@ -29,4 +29,4 @@ What stands when done:
 
 Cost of the accounting itself stays negligible: no per-statement allocation beyond a counter increment on the cause's record. No behaviour change: no write, publication or read is added, moved or removed.
 
-Done when an itest drives a hosted `read` through the real door and the ledger answers its statements, units and writer hold split into the call's own work and each reactive producer, and the sum matches the total `sql.execute` count over the same interval.
+Verified by `composition/testing/threads/hostedCosts.itest.ts` on seeds 1, 2 and 3: one hosted `read` accounts for 255 statements, exactly the interval's 255 `sql.execute` completions. The split is 170 own, 50 snapshot publication, 16 list projection, 5 HEAD coverage, 5 enforcement coverage and 9 deferred activity statements; warm event/feed projections read no SQL. The sample opens four Store units and 583 spans. One seed held the writer for 9.47 ms: 8.33 ms own and 1.14 ms activity. Byte counters measure logical SQLite payloads, excluding IPC framing. Accounting overhead under sustained load and the broader workload remain unmeasured.
