@@ -49,7 +49,13 @@ type Answer = {
   readonly plugins?: readonly Plugin[];
   readonly mcp?: readonly { readonly name: string; readonly status: string }[];
   readonly found?:
-    | { readonly kind: 'marketplace'; readonly name: string; readonly entries: number }
+    | {
+        readonly kind: 'marketplace';
+        readonly name: string;
+        readonly title: string | null;
+        readonly description: string | null;
+        readonly entries: number;
+      }
     | { readonly kind: 'plugin'; readonly preview: Preview };
 };
 
