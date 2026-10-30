@@ -3,14 +3,13 @@ import { expect } from 'bun:test';
 import { Effect, Exit, Fiber, Queue, Scope, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import { Git, GitUnavailable, type GitAnswer } from '@runlith/git/Git';
-import type { HeadMoved } from '../contract/service/checkouts.js';
+import type { HeadMoved, HeadObservation } from '../contract/service/checkouts.js';
 import { makeHeadWatches } from './heads.js';
 
 const answered = (stdout: string, status = 0): GitAnswer => ({ status, stdout, stderr: '', overflow: false, messageOverflow: false });
 
-const fixture = Effect.fnUntraced(function* (initial: string | null = 'a'.repeat(40)) {
+const fixture = Effect.fnUntraced(function* (initial: string | null = 'a'.repeat(40), unreadable = false) {
   let head = initial;
-  let unreadable = false;
   const git = Git.of({
     run: (args) =>
       Effect.suspend(() => {
@@ -61,6 +60,42 @@ it.effect('an unreadable HEAD preserves the last observation until a later read 
     pending(state.events);
     yield* TestClock.adjust(1);
     expect(yield* next(state.events)).toBeNull();
+    yield* Scope.close(state.scope, Exit.void);
+  }),
+);
+
+it.effect('failed reads notify observation subscribers on each recovery pass without inventing a HEAD movement', () =>
+  Effect.gen(function* () {
+    const state = yield* fixture();
+    expect(yield* next(state.events)).toBe('a'.repeat(40));
+    const events = yield* Queue.unbounded<HeadObservation>();
+    yield* Stream.runForEach(state.watches.observed('/checkout'), (event) => Queue.offer(events, event)).pipe(Effect.forkScoped);
+    expect(yield* Queue.take(events)).toEqual({ kind: 'read', checkout: '/checkout', head: 'a'.repeat(40) });
+    state.readable(false);
+    yield* TestClock.adjust(2000);
+    expect((yield* Queue.take(events)).kind).toBe('unread');
+    pending(state.events);
+    yield* TestClock.adjust(4000);
+    expect((yield* Queue.take(events)).kind).toBe('unread');
+    pending(state.events);
+    state.readable(true);
+    state.move('b'.repeat(40));
+    yield* TestClock.adjust(8000);
+    expect(yield* next(state.events)).toBe('b'.repeat(40));
+    expect(yield* Queue.take(events)).toEqual({ kind: 'read', checkout: '/checkout', head: 'b'.repeat(40) });
+    yield* Scope.close(state.scope, Exit.void);
+  }),
+);
+
+it.effect('an initially unreadable checkout reports failure and recovers without announcing an absent HEAD', () =>
+  Effect.gen(function* () {
+    const state = yield* fixture('a'.repeat(40), true);
+    const first = yield* Stream.runHead(state.watches.observed('/checkout'));
+    expect(first._tag === 'Some' && first.value.kind).toBe('unread');
+    pending(state.events);
+    state.readable(true);
+    yield* TestClock.adjust(2000);
+    expect(yield* next(state.events)).toBe('a'.repeat(40));
     yield* Scope.close(state.scope, Exit.void);
   }),
 );

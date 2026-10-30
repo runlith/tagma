@@ -29,6 +29,7 @@ it.effect('two first readings of one checkout at once follow its HEAD once', () 
                 follows += 1;
                 return Stream.never;
               },
+              headObserved: () => Stream.never,
               checkoutsMoved: () => Stream.never,
             }),
           ),

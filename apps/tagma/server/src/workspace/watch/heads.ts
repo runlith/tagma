@@ -2,13 +2,13 @@ import { Effect, Exit, Fiber, Queue, Scope, Stream } from 'effect';
 import { Git } from '@runlith/git/Git';
 import { commitOf } from '@runlith/git/repository';
 import { actingGit } from '../../platform/git/ownGit.js';
-import type { HeadMoved } from '../contract/service/checkouts.js';
+import type { HeadMoved, HeadObservation } from '../contract/service/checkouts.js';
 import { watchingHead } from './tree.js';
 
 const REOPEN_MS = 2_000;
 const REOPEN_CEILING_MS = 60_000;
 
-type Listener = (moved: HeadMoved) => void;
+type Listener = (observation: HeadObservation) => void;
 
 type Watched = {
   readonly listeners: Set<Listener>;
@@ -26,11 +26,14 @@ export const makeHeadWatches = Effect.gen(function* () {
 
   const watched = new Map<string, Watched>();
 
-  const moved = (checkout: string): Stream.Stream<HeadMoved> =>
-    Stream.callback<HeadMoved>(
+  const following = <A>(checkout: string, select: (event: HeadObservation) => A | undefined): Stream.Stream<A> =>
+    Stream.callback<A>(
       (queue) =>
         Effect.acquireRelease(
-          join(checkout, (event) => void Queue.offerUnsafe(queue, event)),
+          join(checkout, (event) => {
+            const selected = select(event);
+            if (selected !== undefined) Queue.offerUnsafe(queue, selected);
+          }),
           (listener) => leave(checkout, listener),
         ),
       { bufferSize: 1, strategy: 'sliding' },
@@ -113,15 +116,20 @@ export const makeHeadWatches = Effect.gen(function* () {
     const answer = yield* Effect.result(commitOf(git, checkout, 'HEAD'));
     if (answer._tag === 'Failure') {
       yield* Effect.logWarning('HEAD could not be read; observation will recover', { checkout, failure: answer.failure });
+      for (const listener of entry.listeners) listener({ kind: 'unread', checkout, reason: answer.failure.message });
       return false;
     }
     const head = answer.success;
     const changed = head !== entry.head;
     entry.head = head;
-    for (const listener of entry.listeners) if (changed || entry.owed.has(listener)) listener({ checkout, head });
+    for (const listener of entry.listeners) if (changed || entry.owed.has(listener)) listener({ kind: 'read', checkout, head });
     entry.owed.clear();
     return true;
   });
 
-  return { moved };
+  return {
+    moved: (checkout: string): Stream.Stream<HeadMoved> =>
+      following(checkout, (event) => (event.kind === 'read' ? { checkout: event.checkout, head: event.head } : undefined)),
+    observed: (checkout: string): Stream.Stream<HeadObservation> => following(checkout, (event) => event),
+  };
 });

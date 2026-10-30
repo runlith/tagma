@@ -171,6 +171,7 @@ export const unwatchedCheckouts: CheckoutRows['Service'] = CheckoutRows.of({
   mark: () => Effect.void,
   onMark: () => () => undefined,
   headMoved: () => Stream.never,
+  headObserved: () => Stream.never,
   checkoutsMoved: () => Stream.never,
 });
 

@@ -19,7 +19,10 @@ import { TAGMA_SOCKET_PATH } from '../../../socket/rpc.js';
 import { birthsOf } from '../../../threads/testing/doubles.js';
 import { LiveRpc } from '../../rpc.js';
 import type { ServerRuntime } from '../../runtime.js';
-import { makeDoorWorld } from '../doorFixture.js';
+import { makeDoorWorld, type DoorFixture } from '../doorFixture.js';
+import { join } from 'node:path';
+import { suiteGit } from '../suiteGit.js';
+import type { ThreadChangesFrame } from '../../../change-record/contract/wire/threadChanges.js';
 import { liveDoorLayer } from '../socketDoor.js';
 import { McpServers } from '../../../mcp/contract/service/servers.js';
 import { oauthServer } from '@runlith/mcp/testing/oauth';
@@ -32,6 +35,7 @@ class World extends Context.Service<
   World,
   {
     readonly runtime: ServerRuntime;
+    readonly door: DoorFixture['Service'];
     readonly client: LiveClient;
     readonly spans: Tracer.NativeSpan[];
     readonly changed: Queue.Queue<void>;
@@ -78,6 +82,7 @@ const makeWorld = Effect.gen(function* () {
   const server = Context.get(built, HttpServer.HttpServer);
   return Context.add(yield* runtime.runtime.contextEffect, World, {
     runtime,
+    door: world,
     client: Context.get(built, Live),
     spans,
     changed,
@@ -126,6 +131,64 @@ const signed = Effect.fnUntraced(function* <A, E>(threadId: string, work: (calle
 });
 
 layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('live socket', (it) => {
+  it.effect('an external worktree removed while Changes is open leaves the feed and releases its records', () =>
+    Effect.gen(function* () {
+      const { client, door } = yield* World;
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.realPath(yield* door.directory('changes-main'));
+      const projectId = yield* door.stealthProject(root);
+      yield* files.writeFileString(join(root, 'base.txt'), 'base\n');
+      yield* suiteGit(root, 'add', 'base.txt');
+      yield* suiteGit(root, 'commit', '-qm', 'base');
+      const born = yield* door.op('create_thread', { title: 'changes', approvalMode: 'trust' }, `project=${projectId}`);
+      expect(born.status).toBe(200);
+      const threadId = (born.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
+      const headers = { [GRANT_HEADER]: grantEnvironment(threadId, testSessionIdentity)[GRANT_VARIABLE] as string };
+      const write = Effect.fnUntraced(function* (cwd: string, path: string) {
+        yield* files.writeFileString(join(cwd, path), 'draft\n');
+        const answer = yield* door.op(
+          'record_write',
+          { cwd, path, before: null, after: 'draft\n' },
+          `cwd=${encodeURIComponent(cwd)}`,
+          headers,
+        );
+        expect(answer.status).toBe(200);
+      });
+      const tree = yield* files.realPath(yield* door.directory('changes-side'));
+      yield* suiteGit(root, 'worktree', 'add', '--detach', tree);
+      yield* write(root, 'main.txt');
+      yield* write(tree, 'side.txt');
+      const frames = yield* Queue.unbounded<ThreadChangesFrame>();
+      yield* Effect.forkScoped(Stream.runForEach(client['thread.changes']({ projectId, threadId }), (frame) => Queue.offer(frames, frame)));
+      const opened = yield* Queue.take(frames);
+      expect(opened.kind).toBe('whole');
+      if (opened.kind !== 'whole') return yield* Effect.die('Changes opened without a whole frame');
+      const visible = yield* Stream.runHead(
+        Stream.filter(Stream.concat(Stream.make(opened), Stream.fromQueue(frames)), (frame) =>
+          frame.checkouts.some(
+            (checkout) =>
+              checkout.root === tree &&
+              ('entries' in checkout ? checkout.entries : checkout.changed).some((entry) => entry.path === 'side.txt'),
+          ),
+        ),
+      );
+      if (visible._tag !== 'Some') return yield* Effect.die('Changes omitted the worktree');
+      const side = visible.value.checkouts.find((checkout) => checkout.root === tree);
+      if (side === undefined) return yield* Effect.die('Changes omitted the worktree');
+      yield* suiteGit(root, 'worktree', 'remove', '--force', tree);
+      const removed = yield* Stream.runHead(
+        Stream.filter(Stream.fromQueue(frames), (frame) => frame.kind === 'change' && frame.gone.includes(side.checkout)),
+      );
+      expect(removed._tag).toBe('Some');
+      const cold = yield* Stream.runHead(client['thread.changes']({ projectId, threadId }));
+      expect(cold._tag).toBe('Some');
+      if (cold._tag !== 'Some' || cold.value.kind !== 'whole') return yield* Effect.die('Changes reopened without a whole frame');
+      expect(cold.value.checkouts.map((checkout) => checkout.root)).toEqual([root]);
+      expect(cold.value.checkouts[0]?.entries.map((entry) => entry.path)).toEqual(['main.txt']);
+      expect(cold.value.ends).toEqual([{ reason: 'checkout-gone', paths: 1 }]);
+    }),
+  );
+
   it.effect('a feed of a project this installation does not hold is refused before its channel opens', () =>
     Effect.gen(function* () {
       const { client } = yield* World;

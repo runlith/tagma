@@ -271,6 +271,7 @@ export const listingWorld = Effect.fnUntraced(function* (count: number) {
     mark: () => Effect.void,
     onMark: () => () => undefined,
     headMoved: () => Stream.never,
+    headObserved: () => Stream.never,
   });
   const context = Context.make(Git, git).pipe(
     Context.add(FileSystem.FileSystem, files),

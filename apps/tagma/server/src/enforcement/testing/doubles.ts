@@ -35,6 +35,7 @@ export const QUIET_CHECKOUTS = CheckoutRows.of({
   mark: () => Effect.void,
   onMark: () => () => undefined,
   headMoved: () => Stream.never,
+  headObserved: () => Stream.never,
   checkoutsMoved: () => Stream.never,
 });
 

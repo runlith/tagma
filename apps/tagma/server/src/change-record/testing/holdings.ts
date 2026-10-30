@@ -73,6 +73,7 @@ const stillRows: CheckoutRows['Service'] = {
   mark: () => Effect.void,
   onMark: () => () => undefined,
   headMoved: () => Stream.never,
+  headObserved: () => Stream.never,
   checkoutsMoved: () => Stream.never,
 };
 

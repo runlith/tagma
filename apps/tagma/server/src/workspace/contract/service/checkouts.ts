@@ -74,6 +74,10 @@ export class PathUnreadable extends Data.TaggedError('PathUnreadable')<{
 
 export type HeadMoved = { readonly checkout: string; readonly head: string | null };
 
+export type HeadObservation =
+  | ({ readonly kind: 'read' } & HeadMoved)
+  | { readonly kind: 'unread'; readonly checkout: string; readonly reason: string };
+
 export type CheckoutsMoved = { readonly root: string; readonly watching: boolean };
 
 export class CheckoutRows extends Context.Service<
@@ -89,6 +93,7 @@ export class CheckoutRows extends Context.Service<
     mark(rootId: RootId, why?: string, paths?: readonly string[]): Effect.Effect<void>;
     onMark(listener: (rootId: RootId, paths: readonly string[] | undefined) => Effect.Effect<void>): () => void;
     headMoved(checkout: string): Stream.Stream<HeadMoved>;
+    headObserved(checkout: string): Stream.Stream<HeadObservation>;
     checkoutsMoved(root: string): Stream.Stream<CheckoutsMoved>;
   }
 >()('tagma/workspace/CheckoutRows') {}

@@ -80,6 +80,7 @@ export const mergeFixture = Effect.fnUntraced(function* (options: { readonly rul
     mark: (root) => Effect.asVoid(PubSub.publish(changes(root), state(root))),
     onMark: () => () => {},
     headMoved: () => Stream.never,
+    headObserved: () => Stream.never,
     checkoutsMoved: () => Stream.never,
   });
   yield* PubSub.publish(baseChanges, state(BASE_ROOT));

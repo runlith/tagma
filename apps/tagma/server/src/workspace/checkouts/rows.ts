@@ -428,5 +428,15 @@ export const makeGitCheckoutRows = Effect.gen(function* () {
     treeChanged: (rootId) => Effect.forEach(listeners, (listener) => listener(rootId, undefined), { discard: true }),
   };
 
-  return CheckoutRows.of({ read, refresh, subscribe, follow, headMoved: heads.moved, checkoutsMoved: topology.moved, onMark, mark });
+  return CheckoutRows.of({
+    read,
+    refresh,
+    subscribe,
+    follow,
+    headMoved: heads.moved,
+    headObserved: heads.observed,
+    checkoutsMoved: topology.moved,
+    onMark,
+    mark,
+  });
 });

@@ -440,21 +440,23 @@ export const makeRetirer = Effect.fnUntraced(function* ({
     Effect.suspend(() => {
       if (followed.has(checkout)) return Effect.void;
       return Effect.gen(function* () {
-        const place = yield* Effect.result(placed(checkout));
-        if (place._tag === 'Failure')
+        const place = yield* Effect.result(roots.checked(checkout));
+        if (place._tag === 'Failure') {
+          const removed = yield* Effect.result(roots.removed(checkout));
+          if (removed._tag === 'Success' && removed.success) return yield* logged(passes.hold(checkout, vacate(checkout)), checkout);
           return yield* Effect.logWarning('the retirement driver cannot place a checkout, so it does not follow its HEAD', {
             checkout,
-            reason: place.failure.message,
+            reason: removed._tag === 'Failure' ? removed.failure.message : place.failure.message,
           });
-        if (place.success.removed) return yield* logged(passes.hold(RootId.make(checkout), vacate(checkout)), checkout);
-        const root = place.success.root.path;
+        }
+        const root = place.success.path;
         yield* claiming.withPermit(
           Effect.gen(function* () {
             if (followed.has(checkout)) return;
             const watching = yield* Scope.fork(scope);
             followed.set(checkout, watching);
             yield* Effect.forkIn(
-              Stream.runForEach(checkouts.headMoved(root), () => request(checkout)),
+              Stream.runForEach(checkouts.headObserved(root), () => request(checkout)),
               watching,
             );
           }),
