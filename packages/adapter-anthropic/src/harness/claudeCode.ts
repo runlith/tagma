@@ -203,6 +203,7 @@ export const claudeCode: HarnessProvider = {
   kind: 'harness',
   auth: 'cli',
   icon,
+  harnessLabel: 'Claude Code',
   mark: claudeCodeIcon,
   accounts: claudeAccounts,
   environment: claudeEnvironment,

@@ -412,6 +412,7 @@ export type AcpProfile = {
 };
 
 export type HarnessSurfaces = {
+  readonly harnessLabel?: string;
   readonly mark?: string;
   readonly terminal?: TerminalSurface;
   readonly acp?: AcpProfile;
