@@ -229,6 +229,8 @@ edges:
     to: 01a12c56-911f-76ad-b665-0ff9a95d3d64
   - kind: imports-tests
     to: 01a12ce3-7d6d-71b9-8c1e-d661ac293dd5
+  - kind: imports-tests
+    to: 01a18e1d-2841-72f0-b3c5-26c3d4a5b244
 sources:
   - kind: dir
     ref: apps/tagma/server/src/external-harnesses
