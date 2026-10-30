@@ -169,5 +169,27 @@
     "@runlith/testbed": "workspace:*",
     "@types/bun": "catalog:",
     "@types/turndown": "catalog:"
+  },
+  "tagma": {
+    "carried": [
+      {
+        "package": "@embedpdf/pdfium",
+        "load": [
+          "@embedpdf/pdfium"
+        ]
+      },
+      {
+        "package": "sharp",
+        "bundled": true,
+        "platform": [
+          "@img/sharp-{platform}",
+          "@img/sharp-libvips-{platform}"
+        ],
+        "load": [
+          "@img/sharp-{platform}/sharp.node",
+          "@img/sharp-libvips-{platform}/package"
+        ]
+      }
+    ]
   }
 }

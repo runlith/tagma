@@ -52,5 +52,16 @@
     "@runlith/testbed": "workspace:*",
     "@runlith/tsconfig": "workspace:*",
     "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "carried": [
+      {
+        "package": "@cursor/sdk",
+        "bundled": true,
+        "platform": [
+          "@cursor/sdk-{platform}"
+        ]
+      }
+    ]
   }
 }

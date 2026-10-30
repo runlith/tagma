@@ -70,5 +70,17 @@
     "@runlith/testbed": "workspace:*",
     "@runlith/tsconfig": "workspace:*",
     "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "carried": [
+      {
+        "package": "@opencode/cli",
+        "binary": {
+          "platform": "@opencode/cli-{platform}",
+          "from": "bin/opencode",
+          "to": "bin/opencode.exe"
+        }
+      }
+    ]
   }
 }

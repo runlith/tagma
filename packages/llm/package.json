@@ -436,6 +436,20 @@
       "./utils/headers",
       "./utils/record",
       "./vendorCall"
+    ],
+    "carried": [
+      {
+        "package": "sharp",
+        "bundled": true,
+        "platform": [
+          "@img/sharp-{platform}",
+          "@img/sharp-libvips-{platform}"
+        ],
+        "load": [
+          "@img/sharp-{platform}/sharp.node",
+          "@img/sharp-libvips-{platform}/package"
+        ]
+      }
     ]
   }
 }

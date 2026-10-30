@@ -46,7 +46,7 @@ import { type SigningIdentity, signingIdentity, signingNotice } from '../setup/s
 import { HOST_REFUSAL_ENV, HostRefusal } from '../contract/wire/hostRefusal.js';
 import { type CommandUnavailable, output } from './command.js';
 import { carriedEngine, engineLayout } from './engine.js';
-import { carryNative, nativeCarried, nativeLoaded, writeInstallationPackage } from './packages.js';
+import { carryNative, nativeCarried, writeInstallationPackage } from './packages.js';
 import { currentVersion, nextVersion, openVersion, releasesNewestFirst, swapCurrent } from '../closure/versions.js';
 import { pruneReleases } from '../closure/leases.js';
 import { carrySkills, skillInputs } from './skills.js';
@@ -137,6 +137,7 @@ const bundled = Effect.fnUntraced(function* (
   checkout: string,
   external: { readonly from: RegExp; readonly to: string } | null,
   conditions: readonly string[],
+  carried: readonly string[],
   release: { readonly cut: ReleaseCut; readonly root: string } | null,
 ): Effect.fn.Return<Written, string, FileSystem.FileSystem> {
   const files = yield* FileSystem.FileSystem;
@@ -147,7 +148,7 @@ const bundled = Effect.fnUntraced(function* (
     minify: release !== null,
     define: release === null ? {} : { [PROGRAM_RELEASE_DEFINE]: JSON.stringify(release.cut.number) },
     conditions,
-    external: CARRIED_PACKAGES,
+    external: carried,
     plugins:
       external === null
         ? []
@@ -189,8 +190,6 @@ const bundled = Effect.fnUntraced(function* (
   }
   return { written, inputs: closure.flatMap((one) => one.inputs) };
 });
-
-const CARRIED_PACKAGES = ['oxc-parser', 'typescript', '@embedpdf/pdfium', '@opencode/cli'] as const;
 
 const WATCH_ENGINE = 'watch.native';
 
@@ -305,7 +304,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
     release === null
       ? installedPackages
       : yield* lockedPackages(checkout, release.packages).pipe(Effect.catch((detail) => refuseEarly('checkout', detail)));
-  const nativeModules = yield* nativeCarried(sourcePath, `${packages}/llm`, platformName, platformPackages).pipe(
+  const nativeModules = yield* nativeCarried(sourcePath, platformName, platformPackages).pipe(
     Effect.catch((detail) => refuseEarly('checkout', detail)),
   );
   const targeted = release === null ? null : release.target.arch;
@@ -454,9 +453,18 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
             to: relativePath(dirname(`/${CLI_ENTRY}`), `/${SERVER_ENTRY}`),
           },
           conditions,
+          nativeModules.external,
           mapped,
         );
-        const server = yield* bundled(`${sourcePath}/src/composition/server.ts`, at(SERVER_ENTRY), checkout, null, conditions, mapped);
+        const server = yield* bundled(
+          `${sourcePath}/src/composition/server.ts`,
+          at(SERVER_ENTRY),
+          checkout,
+          null,
+          conditions,
+          nativeModules.external,
+          mapped,
+        );
         if (release !== null) {
           yield* files.makeDirectory(release.inputs, { recursive: true });
           const skills = yield* skillInputs(sourcePath);
@@ -482,7 +490,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
       yield* files.copy(`${packages}/performance/${MIGRATIONS}`, at(EVIDENCE_MIGRATIONS));
       yield* files.copy(`${packages}/activity/${MIGRATIONS}`, at(ACTIVITY_MIGRATIONS));
       yield* carryNative(nativeModules, root);
-      const asked = nativeLoaded(platformName);
+      const asked = nativeModules.loaded;
       const probed = yield* output(runtime, ['-e', `for (const name of ${JSON.stringify(asked)}) require(name);`], at('bin/server'), {});
       yield* note(`${asked.join('\n')}\n${probed.text}`);
       if (probed.status !== 0) {

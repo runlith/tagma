@@ -45,10 +45,8 @@ const checkout = (
   const root = join(tree, name);
   const source = join(root, 'apps/tagma/server');
   mkdirSync(root, { recursive: true });
-  wrote(join(root, 'packages/llm/package.json'), '{"name":"@runlith/llm"}\n');
   const repository = join(import.meta.dir, '../../../../../..');
   mkdirSync(source, { recursive: true });
-  symlinkSync(join(repository, 'packages/llm/node_modules'), join(root, 'packages/llm/node_modules'));
   symlinkSync(join(repository, 'apps/tagma/server/node_modules'), join(source, 'node_modules'));
   if (options.ripgrep) {
     wrote(join(root, 'packages/ripgrep/package.json'), '{"name":"@runlith/ripgrep"}\n');

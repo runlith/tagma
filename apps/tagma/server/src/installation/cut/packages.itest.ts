@@ -1,15 +1,33 @@
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  accessSync,
+  constants,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { afterAll, expect } from 'bun:test';
+import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import * as BunPath from '@effect/platform-bun/BunPath';
 import { it } from '@runlith/effect-test';
-import { Effect, FileSystem } from 'effect';
-import { carryPackages, writeInstallationPackage } from './packages.js';
+import { Effect, FileSystem, Layer } from 'effect';
+import { installedPackages } from './locked.js';
+import { carryNative, carryPackages, nativeCarried, writeInstallationPackage } from './packages.js';
 
 const tree = realpathSync(mkdtempSync('/tmp/cut-packages-'));
 afterAll(() => rmSync(tree, { recursive: true, force: true }));
 
 const run = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem>) => work.pipe(Effect.provide(BunFileSystem.layer));
+const spawning = Layer.mergeAll(
+  BunFileSystem.layer,
+  BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer))),
+);
 const wrote = (path: string, text: string): void => {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
@@ -53,6 +71,39 @@ it.live('a package link to an uncarried dependency refuses at the copy boundary'
     symlinkSync('../two/value.js', join(source, 'one/dependency.js'));
     const refused = yield* run(Effect.flip(carryPackages([{ name: 'one', from: join(source, 'one') }], join(tree, 'refused'))));
     expect(refused).toContain(join(source, 'two/value.js'));
+  }),
+);
+
+it.live("a cut carries what the server's workspace packages declare, and nothing of a package it does not depend on", () =>
+  Effect.gen(function* () {
+    const checkout = join(tree, 'declared');
+    const modules = join(checkout, 'node_modules');
+    const server = join(checkout, 'server');
+    const manifest = (name: string, fields: object = {}) => wrote(join(modules, name, 'package.json'), JSON.stringify({ name, ...fields }));
+    wrote(join(server, 'package.json'), JSON.stringify({ name: 'server', dependencies: { vendor: 'workspace:*', effect: '4.0.1' } }));
+    manifest('vendor', {
+      tagma: {
+        carried: [
+          { package: 'cli', binary: { platform: 'cli-{platform}', from: 'bin/cli', to: 'bin/cli.exe' } },
+          { package: 'sdk', bundled: true, platform: ['sdk-{platform}'] },
+        ],
+      },
+    });
+    manifest('cli', { dependencies: { helper: '1.0.0' } });
+    manifest('helper');
+    manifest('cli-os-cpu');
+    wrote(join(modules, 'cli-os-cpu/bin/cli'), 'the target binary');
+    manifest('sdk');
+    manifest('sdk-os-cpu');
+    manifest('dropped', { tagma: { carried: [{ package: 'other' }] } });
+    manifest('other');
+    const native = yield* nativeCarried(server, 'os-cpu', installedPackages).pipe(Effect.provide(spawning));
+    expect(native.packages.map((one) => one.name).sort()).toEqual(['cli', 'helper', 'sdk-os-cpu']);
+    expect(native.external).toEqual(['cli']);
+    const cut = join(tree, 'declared-cut');
+    yield* run(carryNative(native, cut));
+    expect(readFileSync(join(cut, 'node_modules/cli/bin/cli.exe'), 'utf8')).toBe('the target binary');
+    accessSync(join(cut, 'node_modules/cli/bin/cli.exe'), constants.X_OK);
   }),
 );
 

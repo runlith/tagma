@@ -78,5 +78,24 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "carried": [
+      {
+        "package": "oxc-parser",
+        "platform": [
+          "@oxc-parser/binding-{platform}"
+        ],
+        "load": [
+          "oxc-parser"
+        ]
+      },
+      {
+        "package": "typescript",
+        "load": [
+          "typescript"
+        ]
+      }
+    ]
   }
 }

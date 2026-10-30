@@ -7,18 +7,51 @@ import type { PlatformPackages } from './locked.js';
 
 export type CarriedPackage = { readonly name: string; readonly from: string };
 
-export type Native = { readonly packages: readonly CarriedPackage[]; readonly opencode: string };
+export type CarriedBinary = { readonly from: string; readonly to: string };
 
-const OPENCODE = '@opencode/cli';
-const OPENCODE_BINARY = 'bin/opencode.exe';
+export type Native = {
+  readonly packages: readonly CarriedPackage[];
+  readonly binaries: readonly CarriedBinary[];
+  readonly external: readonly string[];
+  readonly loaded: readonly string[];
+};
 
-export const nativeLoaded = (platform: string): ReadonlyArray<string> => [
-  'oxc-parser',
-  'typescript',
-  '@embedpdf/pdfium',
-  `@img/sharp-${platform}/sharp.node`,
-  `@img/sharp-libvips-${platform}/package`,
-];
+const Carried = Schema.Struct({
+  package: Schema.String,
+  bundled: Schema.optional(Schema.Literal(true)),
+  platform: Schema.optional(Schema.Array(Schema.String)),
+  binary: Schema.optional(Schema.Struct({ platform: Schema.String, from: Schema.String, to: Schema.String })),
+  load: Schema.optional(Schema.Array(Schema.String)),
+});
+type Carried = typeof Carried.Type;
+
+const Declaring = Schema.Struct({
+  name: Schema.String,
+  dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  tagma: Schema.optional(Schema.Struct({ carried: Schema.optional(Schema.Array(Carried)) })),
+});
+const decodeDeclaring = Schema.decodeUnknownSync(Schema.fromJsonString(Declaring));
+
+const WORKSPACE = 'workspace:';
+const PLATFORM = '{platform}';
+
+type Declared = { readonly from: string; readonly declarer: string; readonly carried: Carried };
+
+const declaredFrom = (server: string): readonly Declared[] => {
+  const seen = new Set<string>();
+  const declared: Declared[] = [];
+  const walk = (directory: string): void => {
+    if (seen.has(directory)) return;
+    seen.add(directory);
+    const manifest = decodeDeclaring(readFileSync(`${directory}/package.json`, 'utf8'));
+    for (const carried of manifest.tagma?.carried ?? []) declared.push({ from: directory, declarer: manifest.name, carried });
+    for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
+      if (version.startsWith(WORKSPACE)) walk(dirname(Bun.resolveSync(`${name}/package.json`, directory)));
+    }
+  };
+  walk(server);
+  return declared;
+};
 
 const carrying = (name: string, base: string, held: Map<string, string>): void => {
   if (held.has(name)) return;
@@ -30,31 +63,36 @@ const carrying = (name: string, base: string, held: Map<string, string>): void =
   for (const dependency of Object.keys(declared.dependencies ?? {})) carrying(dependency, from, held);
 };
 
-export const nativeCarried = Effect.fnUntraced(function* (server: string, llm: string, platform: string, carried: PlatformPackages) {
-  const neutral = yield* Effect.try({
-    try: () => {
-      const at = (name: string, base: string) => dirname(Bun.resolveSync(`${name}/package.json`, base));
-      const facts = at('@runlith/code-facts', server);
-      const held = new Map<string, string>();
-      carrying('oxc-parser', at('oxc-parser', facts), held);
-      carrying('typescript', facts, held);
-      carrying('@embedpdf/pdfium', at('@runlith/agent-tools', server), held);
-      carrying(OPENCODE, at('@runlith/adapter-opencode', server), held);
-      return { held, sharp: at('sharp', llm), cursor: at('@cursor/sdk', at('@runlith/adapter-cursor', server)) };
-    },
-    catch: (error) => `a compiled module could not be resolved: ${String(error)}`,
+export const nativeCarried = Effect.fnUntraced(function* (server: string, platform: string, carried: PlatformPackages) {
+  const named = (template: string): string => template.replaceAll(PLATFORM, platform);
+  const held = new Map<string, string>();
+  const parts = yield* Effect.try({
+    try: () =>
+      declaredFrom(server).map(({ from, declarer, carried: one }) => {
+        if (one.bundled === true && one.binary !== undefined) {
+          throw new Error(`${declarer} lays a binary into ${one.package}, which it bundles`);
+        }
+        if (one.bundled !== true) carrying(one.package, from, held);
+        return { one, at: held.get(one.package) ?? dirname(Bun.resolveSync(`${one.package}/package.json`, from)) };
+      }),
+    catch: (error) => `a carried package could not be resolved: ${String(error)}`,
   });
-  const { held } = neutral;
-  for (const [name, parent] of [
-    [`@img/sharp-${platform}`, neutral.sharp],
-    [`@img/sharp-libvips-${platform}`, neutral.sharp],
-    [`@oxc-parser/binding-${platform}`, held.get('oxc-parser')!],
-    [`@cursor/sdk-${platform}`, neutral.cursor],
-  ] as const) {
-    held.set(name, yield* carried(parent, name));
+  const binaries: CarriedBinary[] = [];
+  for (const { one, at } of parts) {
+    for (const name of (one.platform ?? []).map(named)) {
+      if (!held.has(name)) held.set(name, yield* carried(at, name));
+    }
+    if (one.binary !== undefined) {
+      const part = yield* carried(at, named(one.binary.platform));
+      binaries.push({ from: `${part}/${one.binary.from}`, to: `${one.package}/${one.binary.to}` });
+    }
   }
-  const opencode = `${yield* carried(held.get(OPENCODE)!, `${OPENCODE}-${platform}`)}/bin/opencode`;
-  return { packages: [...held].map(([name, from]) => ({ name, from })), opencode } satisfies Native;
+  return {
+    packages: [...held].map(([name, from]) => ({ name, from })),
+    binaries,
+    external: [...new Set(parts.filter(({ one }) => one.bundled !== true).map(({ one }) => one.package))],
+    loaded: [...new Set(parts.flatMap(({ one }) => (one.load ?? []).map(named)))],
+  } satisfies Native;
 });
 
 const SOURCE_MAP = /\.map$/;
@@ -126,10 +164,13 @@ export const carryNative = Effect.fn('Packages.carryNative')(
   function* (native: Native, root: string) {
     const files = yield* FileSystem.FileSystem;
     yield* carryPackages(native.packages, root);
-    const opencode = resolve(root, NATIVE_MODULES, OPENCODE, OPENCODE_BINARY);
-    yield* files.remove(opencode, { force: true });
-    yield* files.copyFile(native.opencode, opencode);
-    yield* files.chmod(opencode, 0o755);
+    for (const binary of native.binaries) {
+      const to = resolve(root, NATIVE_MODULES, binary.to);
+      yield* files.remove(to, { force: true });
+      yield* files.makeDirectory(dirname(to), { recursive: true });
+      yield* files.copyFile(binary.from, to);
+      yield* files.chmod(to, 0o755);
+    }
   },
   (effect) => Effect.mapError(effect, (error) => String(error)),
 );
