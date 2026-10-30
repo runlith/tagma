@@ -107,13 +107,6 @@ fields:
         ]
       },
       {
-        "at": "vendors/builtin.ts",
-        "for": [
-          "13182a9f"
-        ],
-        "role": "testing"
-      },
-      {
         "at": "adapter/declared.ts",
         "for": [
           "13182a9f"
