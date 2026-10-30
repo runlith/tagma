@@ -9,7 +9,8 @@ import { Projects } from '../../projects/contract/service/registry.js';
 import type { ProjectRow } from '../../projects/contract/wire/project.js';
 import { CheckoutPaths } from '../../workspace/contract/service/checkoutPaths.js';
 import { WorkingOrigins } from '../../workspace/contract/service/places.js';
-import { GraphScopes, ProjectPolicy, ProjectLifecycle, RoutedGraphs } from '../../graph/contract/service/serving.js';
+import { GraphScopes, RoutedGraphs } from '../../graph/contract/service/serving.js';
+import { withoutRegistry } from '../../graph/serving/machine.js';
 import { OtherGraphs } from '../../graph/serving/policy.js';
 import { resolveProject } from '../../graph/serving/selector.js';
 import { Tags } from '../../graph/contract/service/vocabulary.js';
@@ -144,7 +145,7 @@ export const factsAt = Effect.fn('invocation.factsAt')(function* (
       ...facts,
       target: place,
       request: { ...facts.request, cwd: undefined, branch: place.branch ?? undefined },
-      graphContext: there === null ? undefined : Context.omit(ProjectPolicy, ProjectLifecycle)(there),
+      graphContext: there === null ? undefined : withoutRegistry(there),
       place: null,
       served: null,
       refused: null,

@@ -10,7 +10,7 @@ import type { GraphServices } from '../contract/service/services.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { blocksOf } from '../journal/eventLog.js';
 import { blocksRetiredKey } from '../contract/wire/storage.js';
-import { CurrentGraph, ProjectLifecycle, ProjectPolicy } from '../contract/service/serving.js';
+import { CurrentGraph, GroupLifecycle, ProjectLifecycle, ProjectPolicy } from '../contract/service/serving.js';
 import { writes } from '../../platform/contract/service/writes.js';
 
 const retiring = writes('TreeGuard.retirement', []);
@@ -68,11 +68,14 @@ export function machineRetirementGate(
   return { guard, prepare: Effect.succeed({ write, undo: Effect.void }), writes: retiring };
 }
 
+export const withoutRegistry = Context.omit(ProjectPolicy, ProjectLifecycle, GroupLifecycle);
+
 export const machineGraphOf = <R>(
-  context: Context.Context<R | MachineStore | ProjectLifecycle | ProjectPolicy>,
-): Context.Context<R | MachineStore | ProjectLifecycle | ProjectPolicy> => {
+  context: Context.Context<R | MachineStore | ProjectLifecycle | ProjectPolicy | GroupLifecycle>,
+): Context.Context<R | MachineStore | ProjectLifecycle | ProjectPolicy | GroupLifecycle> => {
   const lifecycle = Context.get(context, ProjectLifecycle);
   const policy = Context.get(context, ProjectPolicy);
+  const groups = Context.get(context, GroupLifecycle);
   const within = <A, E, X>(effect: Effect.Effect<A, E, X>): Effect.Effect<A, E, X> => Effect.provide(effect, bound);
   const graph = Context.add(context, TreeGuard, machineRetirementGate(Context.get(context, MachineStore))).pipe(
     Context.add(
@@ -93,6 +96,15 @@ export const machineGraphOf = <R>(
         setRemote: (input) => within(policy.setRemote(input)),
         servesFrom: (ids) => within(policy.servesFrom(ids)),
         subscribe: policy.subscribe,
+      }),
+    ),
+    Context.add(
+      GroupLifecycle,
+      GroupLifecycle.of({
+        make: (input, birth) => within(groups.make(input, birth)),
+        rename: (group, name) => within(groups.rename(group, name)),
+        join: (group, project) => within(groups.join(group, project)),
+        leave: (project) => within(groups.leave(project)),
       }),
     ),
   );

@@ -14,11 +14,11 @@ import { BlockReads, History, Ranking, Selection, type BlockTitle } from '../con
 import { GraphJournal } from '../contract/service/journal.js';
 import { Orientation } from '../contract/service/orientation.js';
 import { Projects } from '../../projects/contract/service/registry.js';
-import { GraphScopes, ProjectLifecycle, ProjectPolicy } from '../contract/service/serving.js';
+import { GraphScopes } from '../contract/service/serving.js';
 import { Tags } from '../contract/service/vocabulary.js';
 import { SourceProject } from '../contract/service/source.js';
 import { Touches } from '../contract/service/orientation.js';
-import type { MachineContext } from './machine.js';
+import { type MachineContext, withoutRegistry } from './machine.js';
 import { CallerAim } from '../../platform/contract/service/place.js';
 import { CurrentGraph, RefusedGraph, RoutedGraphs, type ServedGraphs, type ServedGraph } from '../contract/service/serving.js';
 import type { GraphServices } from '../contract/service/services.js';
@@ -239,7 +239,7 @@ const places = new WeakMap<ServedGraph, Context.Context<never>>();
 export const placeContext = (served: ServedGraph, pool: ServedGraphs['Service'] | null): Context.Context<never> => {
   const known = places.get(served);
   if (known !== undefined) return known;
-  const own: Context.Context<never> = Context.omit(ProjectPolicy, ProjectLifecycle)(served.context);
+  const own: Context.Context<never> = withoutRegistry(served.context);
   const place: Context.Context<never> = Context.merge(own, routedSeams(served.context, pool ?? undefined));
   places.set(served, place);
   return place;
