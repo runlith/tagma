@@ -12,19 +12,10 @@ import { makeHarnessAdapters } from '../adapters.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
 import { sessionIdentityOf } from '../sessionPrefix.js';
-import { BUILTIN_HARNESSES } from '../vendors/builtin.js';
 
 export const SHIPPED_PROVIDERS: readonly HarnessProvider[] = [claudeCode, codex, gemini, opencode, devin, cursor];
 
-export const SHIPPED_HARNESSES: readonly HarnessAdapter[] = [
-  declaredHarness(claudeCode)!,
-  declaredHarness(codex)!,
-  ...BUILTIN_HARNESSES,
-  declaredHarness(gemini)!,
-  declaredHarness(opencode)!,
-  declaredHarness(devin)!,
-  declaredHarness(cursor)!,
-];
+export const SHIPPED_HARNESSES: readonly HarnessAdapter[] = SHIPPED_PROVIDERS.map((provider) => declaredHarness(provider)!);
 
 export const builtinHarness = (id: string): HarnessAdapter => {
   const row = SHIPPED_HARNESSES.find((one) => one.harness === id);

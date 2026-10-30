@@ -5,7 +5,6 @@ import type { HarnessAdapter } from './contract/service/adapter.js';
 import { HarnessAdapters } from './contract/service/adapters.js';
 import { harnessNotInstalled } from '../threads/contract/service/harness.js';
 import type { ExternalSession } from '../threads/contract/wire/harness/externalSession.js';
-import { BUILTIN_HARNESSES } from './vendors/builtin.js';
 
 const same = (left: ReadonlyMap<string, HarnessAdapter>, right: ReadonlyMap<string, HarnessAdapter>): boolean =>
   left.size === right.size && [...left].every(([id, row]) => right.get(id) === row);
@@ -19,7 +18,7 @@ export const makeHarnessAdapters = Effect.gen(function* () {
     versions.set(directory, rows);
   };
   const rowsOf = (providers: readonly HarnessProvider[], packages: ReadonlyMap<string, string>): ReadonlyMap<string, HarnessAdapter> => {
-    const next = new Map(BUILTIN_HARNESSES.map((row) => [row.harness, row]));
+    const next = new Map<string, HarnessAdapter>();
     for (const provider of providers) {
       if (next.has(provider.id)) continue;
       if (!made.has(provider)) {

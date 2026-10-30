@@ -4,7 +4,6 @@ import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import { PACKAGE_VARIABLE, type SessionSigner } from '../contract/wire/sessionVariables.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { declaredHarness } from '../adapter/declared.js';
-import { BUILTIN_LOADERS } from '../vendors/catalog.js';
 import { ADAPTERS, dataDirectory } from '../../installation/contract/wire/layout.js';
 import type { Channel } from '../../installation/contract/wire/channel.js';
 import type { Invocation } from '../../platform/cli/verb.js';
@@ -36,11 +35,6 @@ export const harnessRows = Effect.fnUntraced(function* (
   harness: string | null,
 ) {
   const { declarations, signers } = yield* Effect.promise(catalog);
-  const load = harness === null ? undefined : BUILTIN_LOADERS.get(harness);
-  if (load !== undefined) {
-    const row = yield* Effect.promise(load);
-    return { named: row, rows: [row], signers } satisfies HookRows;
-  }
   const data = dataDirectory(channel, at.env);
   const providers = yield* Effect.tryPromise({
     try: () => declarations(data === null ? null : join(data, ADAPTERS), harness, at.env[PACKAGE_VARIABLE] ?? null),
