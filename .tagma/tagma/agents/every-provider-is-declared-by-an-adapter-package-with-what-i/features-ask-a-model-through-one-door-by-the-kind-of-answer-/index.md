@@ -118,7 +118,16 @@ edges:
 
 ## Acceptance
 
-1. `translations`, `threads/naming`, `threads/recap`, `threads/decisions` and `native-harness/compaction` import neither `ModelAccess`, `DecisionModels`, `HarnessAsides` nor a harness row. An enforced import rule proves it. The kernel's summary wiring is proven by test 4.
+1. Only the doors themselves call a model directly; every other server file asks through them. An enforced allowlist proves it, and covers any later feature without a change.
+   - `ModelAccess` is imported only by:
+     - `providers`, which is the fresh-ask door;
+     - the native chat turn (`native-harness/kernel.ts`, `native-harness/assembly.ts`);
+     - `threads/asks.ts`, the door for asking over a thread;
+     - `composition`.
+   - `HarnessAsides` is imported only by `threads/asks.ts` and `composition`.
+   - Harness rows are imported only by `external-harnesses` and `threads/harness`.
+
+   Where a module boundary carries the allowlist, the module rule enforces it through the entry's importers. That is why titles, recap and decisions get module cards of their own. A file-level allowlist inspection covers only what no module boundary can. The kernel's summary wiring is proven by test 4.
 2. `translate_block` translates with a scripted wire provider, and with a test adapter whose program is a local script. With both connected, the lens picker lists both, and lists no harness that declares no path.
 3. On a native thread over a scripted wire provider, with `threads.titleModel` and `threads.decisionModel` set to the test program model:
    - `generate_thread_title` answers through the program;
@@ -135,6 +144,6 @@ edges:
 9. `choose` with an empty role and only Codex connected, and the ChatGPT subscription in `codex` mode, resolves to the subscription's light model.
 10. Every ask is one activity naming its path, its model, and its spend when reported.
 
-**Remaining.** Acceptance 1 alone: rule [[93f04f23]] records the import boundary but is not enforced yet; the session building the architecture checks is enforcing it. Everything else is built (server f1fc96ce, app e0faa87f).
+**Remaining.** Acceptance 1 alone. Rule [[93f04f23]] records it as an allowlist of who may call a model directly, but does not enforce it yet. The session building the architecture checks is enforcing it. Everything else is built (server f1fc96ce, app e0faa87f).
 
 **Proof.** Integration tests through `translate_block`, `generate_thread_title`, the decision door, `compact_thread` and the settings write door, with a scripted wire provider and a test adapter package whose program is a local script. The program conformance suite (7), the recorded-output contract test (8), a unit test of `choose` with an empty role (9), and the import rule (1).

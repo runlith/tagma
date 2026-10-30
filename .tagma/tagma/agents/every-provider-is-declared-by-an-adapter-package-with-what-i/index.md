@@ -108,7 +108,7 @@ A feature names only the user's choice (a model row from the one picker), the ki
    - `editors/` (Cursor the editor);
    - test fixtures.
 
-   An enforced import rule keeps the feature directories off `ModelAccess` and harness rows.
+   An enforced allowlist of the model doors ([[93f04f23]]) keeps every other server file, including any later feature, off `ModelAccess`, `HarnessAsides` and harness rows.
 2. Every model row an ask picker offers answers that picker's kind, and nothing that cannot answer it is offered.
 3. A machine with one way in gets translation, titles and decisions through the path its package declares:
    - an API key;
