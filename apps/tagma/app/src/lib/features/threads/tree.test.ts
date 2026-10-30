@@ -679,6 +679,17 @@ const harnessRow = (
   liveSpellStartedAt: clocks.spellStartedAt ?? '2026-01-01T10:00:00.000Z',
   harness: {
     name: 'cursor',
+    presentation: {
+      label: 'Cursor',
+      iconProvider: null,
+      mark: null,
+      install: null,
+      modelProvider: null,
+      terminal: true,
+      acp: true,
+      hosted: true,
+      sharedSessions: false,
+    },
     provider: 'external',
     transport: 'terminal',
     agent: null,

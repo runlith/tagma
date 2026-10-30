@@ -190,7 +190,7 @@
                 title={launchTitle(row)}
                 onSelect={() => pick(row)}
               >
-                {#snippet lead()}<HarnessMark harness={row.name} class="size-3.5" />{/snippet}
+                {#snippet lead()}<HarnessMark presentation={row.presentation} class="size-3.5" />{/snippet}
                 <span class={[row.unavailable !== null && 'text-muted-foreground']}>{row.label}</span>
               </DropdownMenu.Item>
             {/each}

@@ -1,12 +1,11 @@
 import type { ThreadTypeRow } from '@tagma/server/threads/contract/wire/birth';
-import type { HarnessName } from '@tagma/server/threads/contract/wire/harness/names';
 import type { HarnessPresentation } from '@tagma/server/threads/contract/wire/harness/externalSession';
 
 const ABSENT = 'not installed';
 
 export type LaunchRow = {
   readonly type: string;
-  readonly name: HarnessName;
+  readonly name: string;
   readonly presentation: HarnessPresentation;
   readonly label: string;
   readonly description: string;

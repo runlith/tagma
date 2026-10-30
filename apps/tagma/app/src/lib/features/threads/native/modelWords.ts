@@ -1,5 +1,4 @@
 import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
-import { HARNESS_LABELS } from '@tagma/server/threads/contract/wire/harness/names';
 import type { HarnessRowDetail } from '@tagma/server/threads/contract/wire/harness/externalSession';
 import type { ServedModels } from '$lib/features/providers/served.js';
 import { proofWords } from '../external/proofs.js';
@@ -66,7 +65,7 @@ export function harnessWords(models: ServedModels, harness: HarnessRowDetail): H
         : model;
   const option = shown.value === null ? undefined : models.modelsFor(harness.provider, 'text').find((entry) => entry.id === shown.value);
   return {
-    label: HARNESS_LABELS[harness.name],
+    label: harness.presentation.label,
     model: shown,
     effort: rung === null ? effort : askedWords(rung, effort),
     short: shown.value === null ? null : (option?.short ?? shown.value),

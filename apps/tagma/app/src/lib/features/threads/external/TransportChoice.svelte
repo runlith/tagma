@@ -6,16 +6,13 @@
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { ThreadsRepo } from '../Repo.js';
-  import { AgentTypes } from '../AgentTypes.svelte.js';
   import { moveTransport, transportOffer } from './transport.js';
 
   let { row, projectId, part }: { row: ThreadListRow; projectId: number; part: 'act' | 'note' } = $props();
   const threads = ThreadsRepo.use();
   const notices = Notices.use();
 
-  const agents = AgentTypes.use();
-  const harness = $derived(row.cli ?? row.harness?.name);
-  const offer = $derived(transportOffer(row, harness === undefined ? undefined : agents.harness(harness)));
+  const offer = $derived(transportOffer(row));
   let moving = $state(false);
 
   async function move(): Promise<void> {

@@ -21,7 +21,11 @@
   const harness = $derived(
     row.harness === null
       ? null
-      : { name: row.harness.name, terminal: row.harness.transport === 'terminal', ...harnessWords(catalog.models, row.harness) },
+      : {
+          presentation: row.harness.presentation,
+          terminal: row.harness.transport === 'terminal',
+          ...harnessWords(catalog.models, row.harness),
+        },
   );
   const words = $derived(modelWords(catalog.models, row));
   const absent = $derived(harness === null && catalog.installed(words.provider) === false);
@@ -38,7 +42,7 @@
 
 {#if harness !== null}
   <span class={plate} aria-label={identity} data-plate data-plate-same={same || undefined} data-squeeze-piece={Stow.plate}>
-    <HarnessMark harness={harness.name} class="size-3 shrink-0" />
+    <HarnessMark presentation={harness.presentation} class="size-3 shrink-0" />
     <span
       class={[name, harness.model.value !== null && !harness.model.current && 'opacity-60']}
       data-plate-name

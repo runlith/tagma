@@ -1,7 +1,5 @@
 import type { ApprovalModeView } from '@runlith/agent/modes/ApprovalMode';
 import type { ThreadTypeRow } from '@tagma/server/threads/contract/wire/birth';
-import type { HarnessName } from '@tagma/server/threads/contract/wire/harness/names';
-import type { HarnessPresentation } from '@tagma/server/threads/contract/wire/harness/externalSession';
 import { DEFAULT_THREAD_TYPE } from '@tagma/server/threads/contract/wire/settings';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
@@ -37,10 +35,6 @@ export class AgentTypes extends Service<AgentTypes>()('AgentTypes', { tier: 'pro
     private readonly scope: Scope,
   ) {
     super();
-  }
-
-  harness(name: HarnessName): HarnessPresentation | undefined {
-    return this.rows?.find((row) => row.harness?.harness === name)?.harness?.presentation;
   }
 
   read(refresh = false, rescan = false): Promise<void> {

@@ -1,5 +1,5 @@
 import type { HarnessRowDetail } from '@tagma/server/threads/contract/wire/harness/externalSession';
-import { HARNESS_LABELS, type HarnessTransport } from '@tagma/server/threads/contract/wire/harness/names';
+import type { HarnessTransport } from '@tagma/server/threads/contract/wire/harness/names';
 import type { TransportCopy } from '@runlith/agent/thread/record';
 
 export type ProofWords = { readonly label: string; readonly hint: string };
@@ -77,6 +77,6 @@ export function proofWords(harness: HarnessRowDetail): ProofWords | null {
   if (first === undefined) return null;
   return {
     label: `${roadName(harness.transport)} · ${first[0]}`,
-    hint: `${HARNESS_LABELS[harness.name]} ${RUNS[harness.transport]}: ${gaps.map(([, said]) => said).join('; ')}.`,
+    hint: `${harness.presentation.label} ${RUNS[harness.transport]}: ${gaps.map(([, said]) => said).join('; ')}.`,
   };
 }

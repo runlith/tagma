@@ -132,6 +132,17 @@ const asked = (ask: ThreadListRow['ask']): ThreadListRow =>
     ask,
     harness: {
       name: 'devin',
+      presentation: {
+        label: 'Devin',
+        iconProvider: null,
+        mark: null,
+        install: null,
+        modelProvider: null,
+        terminal: true,
+        acp: true,
+        hosted: false,
+        sharedSessions: true,
+      },
       provider: 'acme-oauth',
       transport: 'terminal',
       agent: null,

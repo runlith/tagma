@@ -40,6 +40,17 @@ const value = (value: string, over: Record<string, unknown> = {}) => ({
 const harness = (over: Partial<HarnessRowDetail> & { model?: string | null; effort?: string | null } = {}): HarnessRowDetail =>
   ({
     name: 'cursor',
+    presentation: {
+      label: 'Cursor',
+      iconProvider: null,
+      mark: null,
+      install: null,
+      modelProvider: null,
+      terminal: true,
+      acp: true,
+      hosted: true,
+      sharedSessions: false,
+    },
     provider: 'external',
     transport: 'acp',
     capabilities: { law: 'every-call', touch: 'reads-and-writes', authorship: 'recorded' },

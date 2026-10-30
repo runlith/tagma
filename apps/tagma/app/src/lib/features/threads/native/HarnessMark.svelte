@@ -1,19 +1,14 @@
 <script lang="ts">
-  import type { HarnessName } from '@tagma/server/threads/contract/wire/harness/names';
-  import { AgentTypes } from '../AgentTypes.svelte.js';
+  import type { HarnessPresentation } from '@tagma/server/threads/contract/wire/harness/externalSession';
   import ProviderMark from '$lib/features/providers/Mark.svelte';
 
-  let { harness, class: className = '' }: { harness: HarnessName; class?: string } = $props();
-
-  const agents = AgentTypes.use();
-  const adapter = $derived(agents.harness(harness));
-  const provider = $derived(adapter?.iconProvider ?? null);
+  let { presentation, class: className = '' }: { presentation: HarnessPresentation; class?: string } = $props();
 </script>
 
-{#if adapter?.mark != null}
-  <span class="mark inline-flex shrink-0 {className}" role="img" aria-label={adapter.label}>{@html adapter.mark}</span>
-{:else if provider !== null}
-  <ProviderMark {provider} class={className} titled={false} />
+{#if presentation.mark != null}
+  <span class="mark inline-flex shrink-0 {className}" role="img" aria-label={presentation.label}>{@html presentation.mark}</span>
+{:else if presentation.iconProvider !== null}
+  <ProviderMark provider={presentation.iconProvider} class={className} titled={false} />
 {/if}
 
 <style>

@@ -1,5 +1,3 @@
-import { HARNESS_LABELS } from '@tagma/server/threads/contract/wire/harness/names';
-import type { HarnessPresentation } from '@tagma/server/threads/contract/wire/harness/externalSession';
 import type { HarnessTransport as Transport } from '@tagma/server/threads/contract/wire/harness/names';
 import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
 import { refusalOf } from '$lib/wire/refusal.js';
@@ -19,14 +17,15 @@ export type TransportOffer = {
 export const transportName = (transport: Transport | 'native'): string =>
   transport === 'acp' ? 'chat' : transport === 'native' ? 'Tagma' : 'the terminal';
 
-export function transportOffer(row: ThreadListRow, presentation: HarnessPresentation | undefined): TransportOffer | null {
+export function transportOffer(row: ThreadListRow): TransportOffer | null {
+  const presentation = row.cli?.presentation ?? row.harness?.presentation;
   if (presentation === undefined) return null;
   const movable = presentation.sharedSessions && presentation.terminal;
   const state = threadMark(row).state;
   const turning = state === 'working' || state === 'waiting';
   if (row.cli !== null) {
     if (!movable) return null;
-    const label = HARNESS_LABELS[row.cli];
+    const { label } = presentation;
     const move = `Open in ${label}`;
     return {
       label: move,
@@ -39,7 +38,7 @@ export function transportOffer(row: ThreadListRow, presentation: HarnessPresenta
   }
   const harness = row.harness;
   if (harness === null) return null;
-  const label = HARNESS_LABELS[harness.name];
+  const { label } = presentation;
   const proofs = proofWords(harness);
   if (!movable && proofs === null) return null;
   const to = !movable ? null : harness.transport === 'acp' ? 'terminal' : !presentation.acp ? null : 'acp';

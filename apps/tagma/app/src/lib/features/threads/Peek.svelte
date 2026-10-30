@@ -447,7 +447,7 @@
           {#if harness === null}
             <ProviderMark provider={words.provider} class="size-3 shrink-0" titled={false} />
           {:else if row.harness !== null}
-            <HarnessMark harness={row.harness.name} class="size-3 shrink-0" />
+            <HarnessMark presentation={row.harness.presentation} class="size-3 shrink-0" />
           {/if}
           <span class="min-w-0 truncate" title={account === null ? model : `${model} · ${account}`}>{model}</span>
         </dd>

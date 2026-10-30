@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { HarnessRowDetail } from '@tagma/server/threads/contract/wire/harness/externalSession';
-  import { HARNESS_LABELS } from '@tagma/server/threads/contract/wire/harness/names';
   import { Host } from '@runlith/layer/Host';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import { onDestroy, untrack } from 'svelte';
@@ -75,7 +74,7 @@
   onDestroy(() => terminal.drop());
   const pane = $derived(terminal.pane);
   const drawn = $derived(terminal.state);
-  const cli = $derived(harness === null ? 'the CLI' : HARNESS_LABELS[harness.name]);
+  const cli = $derived(harness === null ? 'the CLI' : harness.presentation.label);
 
   const following = $derived(execution === null ? null : `${execution.execution}:${execution.incarnation}`);
   $effect(() => {
