@@ -2,7 +2,6 @@ import { Clock, Duration, Effect, FiberMap, FiberSet, FileSystem, Schedule, Scop
 import { ActivityLog } from '@runlith/activity/log';
 import type { RequestLanded } from '@runlith/agent/thread/run/requests';
 import type { RunOwnership } from '@runlith/agent/thread/run/ThreadRunLedger';
-import type { ThreadAsides } from '@runlith/agent/thread/ThreadAsides';
 import type {
   GuidanceSources,
   JournalRuns,
@@ -22,6 +21,7 @@ import type { CompactionPlanning } from '../../threads/contract/service/compacti
 import { failedAs, threadCallFailed, type HarnessFailure } from '../../threads/contract/service/failure.js';
 import { LEASE_RHYTHM } from '../../threads/contract/wire/rhythm.js';
 import type { NativeStorage } from '../../threads/contract/service/engine.js';
+import type { ThreadAsides } from '@runlith/agent/thread/ThreadAsides';
 import { HarnessAsides } from '../../threads/contract/service/asides.js';
 import type { ThreadInbox } from '../../threads/store/inbox.js';
 import type { TerminalEndings } from '../../executions/contract/service/endings.js';
