@@ -206,6 +206,7 @@ import { activity } from '../activity/activity.js';
 import { ActivityPlace } from '../activity/contract/service/place.js';
 import { AGENT_SPAN_NAMES } from '@runlith/agent/spans';
 import { EXECUTIONS, type Installation } from '../installation/contract/wire/manifest.js';
+import { labelRevision } from '../installation/contract/wire/layout.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { declaredSettings, SETTING_DECLARATIONS, SHIPPED_CATALOGS } from './settings.js';
 import { threadRecord } from '../thread-record/thread-record.js';
@@ -354,6 +355,14 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   const baseScope = yield* Scope.fork(yield* Effect.scope);
   const poolScope = yield* Scope.fork(yield* Effect.scope);
   const originPath = options.installation?.manifest.origin?.checkout;
+  const reader =
+    options.source ??
+    (options.installation === undefined || originPath === undefined
+      ? undefined
+      : {
+          startedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+          revision: labelRevision(options.installation.manifest.identity.build),
+        });
   const ports = portBlock(CHANNEL.port);
   const artifactOrigin = options.artifactOrigin ?? `http://localhost:${ports.artifact}`;
   const sandboxPort = options.sandboxPort ?? ports.sandbox;
@@ -372,7 +381,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
         Layer.succeed(GraphSource, {
           sourcePath: options.sourcePath,
           originPath,
-          source: options.source,
+          source: reader,
         }),
       ),
     ),
@@ -756,7 +765,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(GraphSource, {
       sourcePath: options.sourcePath,
       originPath,
-      source: options.source,
+      source: reader,
     }),
     Context.make(GraphMigrations, graphMigrations),
     options.commitGate === undefined ? Context.empty() : Context.make(CommitGateCli, options.commitGate),

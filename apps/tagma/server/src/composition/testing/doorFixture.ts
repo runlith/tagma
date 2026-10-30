@@ -23,6 +23,7 @@ import { storageHomes } from '../../graph/testing/doubles.js';
 import { doorLayer } from '../http/door.js';
 import type { VendorWire } from '../../providers/accounts/signIns.js';
 import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
+import { EXECUTIONS, type InstallationManifest } from '../../installation/contract/wire/manifest.js';
 import { routedContext } from '../../graph/testing/doubles.js';
 import { makeRuntime } from '../runtime.js';
 import { chosenModel } from './chosenModel.js';
@@ -57,6 +58,7 @@ export const WORLD_SOURCE = {
 } as const satisfies ProcessProvenance;
 
 type DoorParams = {
+  readonly installation?: InstallationManifest;
   readonly hostSourcePath?: string;
   readonly everySpan?: boolean;
   readonly drivers?: readonly DriverId[];
@@ -191,6 +193,16 @@ const built = Effect.fnUntraced(
     const sourceCheckout = yield* fixture.directory('source');
     const serverPath = yield* fixture.directory('source/server');
     const hostBundlePath = options.hostSourcePath === undefined ? yield* Effect.orDie(hostBundleRoot) : undefined;
+    const installed =
+      options.installation === undefined
+        ? undefined
+        : {
+            root: yield* fixture.directory('installation'),
+            manifest: options.installation,
+          };
+    if (installed !== undefined && hostBundlePath !== undefined) {
+      yield* Effect.orDie((yield* FileSystem.FileSystem).symlink(hostBundlePath, join(installed.root, EXECUTIONS)));
+    }
     const runtime = yield* makeRuntime(
       {
         adapters: TESTING_ADAPTERS,
@@ -208,7 +220,8 @@ const built = Effect.fnUntraced(
         hostSourcePath: options.hostSourcePath,
         hostBundlePath,
         ...seams,
-        source: WORLD_SOURCE,
+        source: options.installation === undefined ? WORLD_SOURCE : undefined,
+        installation: installed,
         drivers: options.drivers ?? [],
       },
       Layer.empty,
@@ -323,6 +336,7 @@ export const doorWorld = kind(DoorFixture, (params: DoorParams, home: string) =>
 );
 
 const paramsOf = (options: WorldOptions): DoorParams => ({
+  installation: options.installation,
   hostSourcePath: options.hostSourcePath,
   everySpan: options.everySpan,
   drivers: options.drivers,
