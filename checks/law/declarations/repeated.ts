@@ -90,15 +90,14 @@ export const findRepeated = (corpus: Corpus, params: RepeatedParams, boundaries:
   }
   for (const [key, sites] of groups) {
     const files = [...new Set(sites.map((one) => one.path))].sort();
-    if (sites.length < 2) continue;
+    if (files.length < 2) continue;
     const kind = sites[0]!.shape.kind;
     for (const path of files) {
       const here = sites.filter((one) => one.path === path).sort((left, right) => left.shape.line - right.shape.line);
       const owner = boundaries.owner(path);
       const qualifies = (local: Site, other: Site): boolean => {
         const target = boundaries.owner(other.path);
-        if (local === other || owner === undefined || target === undefined) return false;
-        if (owner === target) return kind === 'object' && local.shape.size >= 3;
+        if (local === other || owner === undefined || target === undefined || owner === target) return false;
         if (local.shape.name === other.shape.name) return true;
         return local.shape.size >= MINIMUM[kind](params) && other.shape.exported && boundaries.imports(owner, target);
       };
@@ -114,7 +113,7 @@ export const findRepeated = (corpus: Corpus, params: RepeatedParams, boundaries:
         fingerprint: `repeated ${key} ${path}`,
         path,
         line: first.shape.line,
-        message: `${elsewhere.some((one) => boundaries.owner(one.path) === owner) ? 'same-module ' : ''}${WHAT[kind]} ${first.shape.name === '' ? '' : `\`${first.shape.name}\` `}{${first.shape.label}} is also declared in ${others.join(', ')}${more}`,
+        message: `${WHAT[kind]} ${first.shape.name === '' ? '' : `\`${first.shape.name}\` `}{${first.shape.label}} is also declared in ${others.join(', ')}${more}`,
         fix: FIX[kind],
         ...(matched.length > 1 ? { sites: matched.map((one) => ({ line: one.shape.line })) } : {}),
       });

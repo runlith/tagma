@@ -77,7 +77,7 @@ test('ProgramRan repeats an exported ProgramOutput already reached by the harnes
   ).toEqual(['src/run.ts']);
 });
 
-test('one module declares equal object concepts once, including same-file declarations, while literal settings stay independent', () => {
+test('same-module shapes stay outside the shared-type inspection, including selection copies and literal settings', () => {
   const selection =
     '{ readonly provider: string; readonly model: string | null; readonly reasoning: string | null; readonly account: string | null };\n';
   const files = {
@@ -85,8 +85,8 @@ test('one module declares equal object concepts once, including same-file declar
     'src/recap.ts': `export type RecapSelection = ${selection}`,
   };
   const map = boundaries([], { 'src/asks.ts': 'threads', 'src/recap.ts': 'threads' });
-  expect(paths(files, map)).toEqual(['src/asks.ts', 'src/recap.ts']);
-  expect(paths({ 'src/asks.ts': `${files['src/asks.ts']}${files['src/recap.ts']}` }, map)).toEqual(['src/asks.ts']);
+  expect(paths(files, map)).toEqual([]);
+  expect(paths({ 'src/asks.ts': `${files['src/asks.ts']}${files['src/recap.ts']}` }, map)).toEqual([]);
   expect(
     paths({ 'src/asks.ts': "type RenderMode = 'auto'|'on'|'off';", 'src/recap.ts': "type LigatureMode = 'auto'|'on'|'off';" }, map),
   ).toEqual([]);
@@ -102,6 +102,21 @@ test('independent ranges, focus policies and settings with equal shapes stay sep
       'src/render.ts': "export type RenderMode = 'auto' | 'on' | 'off';\n",
       'src/ligatures.ts': "export type LigatureMode = 'auto' | 'on' | 'off';\n",
     }),
+  ).toEqual([]);
+});
+
+test('field-key maps and error maps, and selection positions and replacement edits, remain independent within their modules', () => {
+  const map = boundaries([], { 'src/slots.ts': 'graph', 'src/errors.ts': 'graph', 'src/selection.ts': 'chat', 'src/edit.ts': 'chat' });
+  expect(
+    paths(
+      {
+        'src/slots.ts': 'type Slots = { readonly id?: string; readonly entries?: string; readonly order?: string };',
+        'src/errors.ts': 'type Unreadable = { readonly id?: string; readonly entries?: string; readonly order?: string };',
+        'src/selection.ts': 'type PromptSelection = { readonly text: string; readonly from: number; readonly to: number };',
+        'src/edit.ts': 'type PromptEdit = { readonly from: number; readonly to: number; readonly text: string };',
+      },
+      map,
+    ),
   ).toEqual([]);
 });
 
