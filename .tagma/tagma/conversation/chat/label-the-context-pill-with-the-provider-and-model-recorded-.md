@@ -4,8 +4,6 @@ title: Label the context pill with the provider and model recorded in its readin
 ord: 31
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/chat-ui/src/contextUsage.ts
   - kind: symbol
     ref: packages/chat-ui/src/contextUsage.ts
     symbol: ChatContextSource

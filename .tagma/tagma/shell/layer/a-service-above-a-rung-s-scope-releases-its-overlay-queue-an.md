@@ -4,14 +4,6 @@ title: A service above a rung's scope releases its overlay, queue and scope-keye
 ord: 30
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/layer/src/App.ts
-  - kind: file
-    ref: packages/layer/src/Failure.ts
-  - kind: file
-    ref: packages/layer/src/Handoff.ts
-  - kind: file
-    ref: packages/layer/src/Prepare.ts
   - kind: symbol
     ref: packages/layer/src/App.ts
     symbol: leaving

@@ -4,10 +4,6 @@ title: Show a step group's duration only after the group stopped growing
 ord: 22
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/chat-ui/src/chatTime.ts
-  - kind: file
-    ref: packages/chat-ui/src/timeline.ts
   - kind: symbol
     ref: packages/chat-ui/src/activity.ts
     symbol: groupDurationSeconds

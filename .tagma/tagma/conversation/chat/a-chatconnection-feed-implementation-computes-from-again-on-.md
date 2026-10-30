@@ -4,8 +4,6 @@ title: A `ChatConnection.feed` implementation computes `from` again on every att
 ord: 30
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/chat-ui
   - kind: symbol
     ref: apps/tagma/app/src/lib/features/threads/ThreadPort.ts
     symbol: ThreadPort

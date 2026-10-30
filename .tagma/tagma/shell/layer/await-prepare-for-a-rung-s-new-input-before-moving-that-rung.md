@@ -4,14 +4,6 @@ title: Await `Prepare` for a rung's new input before moving that rung's source
 ord: 31
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/layer/src/App.ts
-  - kind: file
-    ref: packages/layer/src/Failure.ts
-  - kind: file
-    ref: packages/layer/src/Handoff.ts
-  - kind: file
-    ref: packages/layer/src/Prepare.ts
   - kind: symbol
     ref: packages/layer/src/App.ts
     symbol: prepare
