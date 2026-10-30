@@ -20,7 +20,7 @@ const D = '0198ffff-0000-7000-8000-00000000d004';
 const E = '0198ffff-0000-7000-8000-00000000e005';
 const F = '0198ffff-0000-7000-8000-00000000f006';
 const initial: TreeBlock[] = [
-  { parentId: null, frontmatter: { id: A, tags: ['zone'], title: 'Root Hall', ord: 1 }, body: 'the hall' },
+  { parentId: null, frontmatter: { id: A, title: 'Root Hall', ord: 1 }, body: 'the hall' },
   { parentId: A, frontmatter: { id: B, tags: ['idea'], title: 'Ledger', ord: 1 }, body: 'the ledger' },
   {
     parentId: A,
@@ -286,7 +286,7 @@ layer(mirrors, { excludeTestServices: true })('mirror repair contracts', (it) =>
           { kind: 'file', ref: 'src/a.ts' },
         ]);
         yield* fs.remove(join(tree, 'root-hall'), { recursive: true });
-        yield* file('new-root.md', D, 'New Root', 'the live root');
+        yield* file('new-root.md', D, 'New Root', 'the live root', { tags: [] });
         yield* rebuild;
         const root = yield* byUuid(D);
         expect(yield* byUuid(A)).toMatchObject({ id: hall.id, uuid: A, body: 'the hall', parentId: root.id, deletedAt: expect.any(Date) });
