@@ -98,7 +98,7 @@ export default defineConfig({
 ## How a violation reads
 
 Every surface shows a violation the same way — submit_work's `watched`, `carriedViolations` and `rechecked`, a gate refusal, merge_worktree, commit_checkout, check_rules, read_enforcement's escapes and refusals, the Rules screen and the `git commit` hook:
-- the norm: the rule, its title and strictness, once over its violations;
+- the norm: the rule, its title and strictness, then its body, once over its violations — the body rides an answer once per rule in `bodies`, never on each crossing;
 - the place and what the check says there, `packages/domain/src/summary.ts:1 loads @example/ui`, with `via a → b` when the chain has more than one link;
 - `fix`: the check's own way to remove this violation, from its data — the door `allows` names, the allowance to declare. A violation whose check names none carries no `fix`; the general way out of its function (`generalFix` on a crossing, the engine's `generalFix` in read_enforcement) is said once under the norm — `fix:` when no violation has its own, `fix where a place names none:` when some do, each own fix then under its place.
 

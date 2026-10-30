@@ -4,7 +4,7 @@ import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { PLACE_REFUSALS } from '../../../workspace/contract/wire/refusals.js';
 import { SHAPE_REFUSALS } from '../../../change-record/contract/wire/shape.js';
 import { FORMAT_SKIPPED, HOOK_FIELDS } from './receipt.js';
-import { CarriedViolation, LandingUnjudged, Watched } from '../../../enforcement/contract/wire/enforcement.js';
+import { CarriedViolation, LandingUnjudged, RuleBodies, Watched } from '../../../enforcement/contract/wire/enforcement.js';
 import {
   ACT,
   checkoutLabel,
@@ -30,6 +30,7 @@ export const CheckoutCommitted = Schema.Struct({
   formatSkipped: FORMAT_SKIPPED,
   watched: Schema.optional(Schema.Array(Watched)),
   carriedViolations: Schema.optional(Schema.Array(CarriedViolation)),
+  bodies: Schema.optional(RuleBodies),
   unjudged: Schema.optional(Schema.Array(LandingUnjudged)),
   ...HOOK_FIELDS,
 });

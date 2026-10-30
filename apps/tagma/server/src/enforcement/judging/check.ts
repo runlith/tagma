@@ -4,11 +4,13 @@ import type { BlockRecord, BlockRow } from '../../graph/contract/service/acts.js
 import { measuredRoot } from '../../graph/contract/service/serving.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import {
+  bodiesOf,
   type CheckedViolation,
   crossingOf,
   inspectionBase,
   inspectionRelevant,
   type LandingUnjudged,
+  type RuleBodies,
   type RuleRun,
 } from '../contract/wire/enforcement.js';
 import type { Norm } from '../contract/wire/findings.js';
@@ -37,6 +39,7 @@ type Said = Pick<RuleRun, 'rule' | 'strictness' | 'on'>;
 type Target = {
   readonly name: string;
   readonly title: string;
+  readonly body: string;
   readonly said: Said;
   readonly gatesLanding: boolean;
   readonly key?: string;
@@ -64,6 +67,7 @@ export type Checking = {
   readonly fingerprints: readonly string[];
   readonly unjudged: readonly LandingUnjudged[];
   readonly rules: readonly RuleRun[];
+  readonly bodies: RuleBodies;
   readonly refuses?: boolean;
 };
 
@@ -83,10 +87,11 @@ export const checkTargets = Effect.fn('enforcement.checkTargets')(function* (ask
     const name = ask.row === undefined ? '' : blockName(ask.row.uuid);
     if (places.length === 0) return yield* reachRefusal(name === '' ? 'the project' : name, base);
     const title = `inspection ${ask.inspection}`;
+    const body = ask.row?.body ?? '';
     const targets: readonly Target[] = [
       isUnrun(inspection)
-        ? { name, title, said: { rule: name }, gatesLanding: false, places, inspection: null, failed: inspection.unrun }
-        : { name, title, said: { rule: name }, gatesLanding: false, places, inspection, debt: [] },
+        ? { name, title, body, said: { rule: name }, gatesLanding: false, places, inspection: null, failed: inspection.unrun }
+        : { name, title, body, said: { rule: name }, gatesLanding: false, places, inspection, debt: [] },
     ];
     return { targets } satisfies Targets;
   }
@@ -103,10 +108,12 @@ export const checkTargets = Effect.fn('enforcement.checkTargets')(function* (ask
     if (!asking(entry.rule)) continue;
     const name = blockName(entry.rule.uuid);
     const title = entry.rule.title;
+    const body = entry.rule.body;
     if (entry.document === null) {
       targets.push({
         name,
         title,
+        body,
         said: { rule: name },
         gatesLanding: true,
         places: yield* entry.reach(''),
@@ -124,6 +131,7 @@ export const checkTargets = Effect.fn('enforcement.checkTargets')(function* (ask
         ? {
             name,
             title,
+            body,
             said,
             gatesLanding,
             key: entry.document.inspection,
@@ -132,7 +140,7 @@ export const checkTargets = Effect.fn('enforcement.checkTargets')(function* (ask
             failed: unrunReason(entry.document.inspection, inspection),
             anyPath: inspection.undeclared,
           }
-        : { name, title, said, gatesLanding, key: entry.document.inspection, places, inspection, debt },
+        : { name, title, body, said, gatesLanding, key: entry.document.inspection, places, inspection, debt },
     );
   }
   const unknown = (asked ?? []).filter((one) => !known.has(one));
@@ -153,13 +161,17 @@ type Collected = {
 
 const collecting = (): Collected => ({ counts: new Map(), violations: [], unjudged: [], rules: [] });
 
-const settled = (head: string, collected: Collected, refuses?: boolean): Checking => ({
+const settled = (head: string, collected: Collected, targets: readonly Target[], refuses?: boolean): Checking => ({
   head,
   counts: collected.counts,
   violations: collected.violations,
   fingerprints: [...new Set(collected.violations.map((one) => one.fingerprint))].sort(),
   unjudged: collected.unjudged,
   rules: collected.rules,
+  bodies: bodiesOf(
+    targets,
+    collected.violations.map((one) => one.rule),
+  ),
   refuses,
 });
 
@@ -203,7 +215,7 @@ export const checkHead = Effect.fn('enforcement.checkHead')(function* (
     collected.violations.push(...answer.success.violations);
     collected.counts.set(target.name, answer.success.counts);
   }
-  return settled(head, collected);
+  return settled(head, collected, targets);
 });
 
 export const checkChange = Effect.fn('enforcement.checkChange')(function* (ask: RuleCheckInput, { targets }: Targets, change: TreeSubject) {
@@ -358,5 +370,5 @@ export const checkChange = Effect.fn('enforcement.checkChange')(function* (ask: 
     }
   });
   yield* running;
-  return settled(change.base, collected, refuses);
+  return settled(change.base, collected, targets, refuses);
 });

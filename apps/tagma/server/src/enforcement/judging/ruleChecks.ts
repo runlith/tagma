@@ -149,6 +149,8 @@ const watchedNotice = (op: string, subject: HeadSubject, judged: Judgement) => {
     ...findingLines(
       judged.watched.flatMap((one) => ('fingerprint' in one ? [one] : [])),
       '  ',
+      undefined,
+      judged.bodies,
     ),
     ...judged.watched.flatMap((one) => ('failed' in one ? [`  ${one.rule} could not run: ${one.failed}`] : [])),
   ];

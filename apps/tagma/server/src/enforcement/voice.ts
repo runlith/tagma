@@ -183,7 +183,7 @@ export const checkedText = (answer: Answered<CheckAnswer>): string => {
         ? []
         : ['no violation']
       : [
-          ...findingLines(answer.violations, '', checkedNote),
+          ...findingLines(answer.violations, '', checkedNote, answer.bodies),
           toolPageFooter({
             rows: answer.violations.map(() => ({ label: '' })),
             total: answer.total,

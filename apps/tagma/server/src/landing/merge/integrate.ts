@@ -473,6 +473,7 @@ export const integrate = (
             after,
             waited,
             watched: watched.length === 0 ? undefined : watched,
+            bodies: watched.length === 0 ? undefined : landed.judged?.bodies,
             unjudged: unjudged.length === 0 ? undefined : unjudged,
             unsynced: landed.settled.reason === null ? undefined : { paths: [...landed.settled.unsynced], reason: landed.settled.reason },
             unrecorded: unrecorded.length === 0 ? undefined : unrecorded.join('; '),

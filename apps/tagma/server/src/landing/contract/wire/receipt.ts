@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { CarriedViolation, LandingUnjudged, RuleCrossing, Watched } from '../../../enforcement/contract/wire/enforcement.js';
+import { CarriedViolation, LandingUnjudged, RuleBodies, RuleCrossing, Watched } from '../../../enforcement/contract/wire/enforcement.js';
 import { type HolderStanding, holderStandingSchema } from '../../../graph/contract/wire/holders.js';
 
 export type SubmitCarry = { readonly path: string; readonly holders: readonly string[] };
@@ -80,6 +80,7 @@ export type SubmitReceipt =
       readonly watched?: readonly Watched[];
       readonly carriedViolations?: readonly CarriedViolation[];
       readonly rechecked?: readonly RuleCrossing[];
+      readonly bodies?: RuleBodies;
       readonly unjudged?: readonly LandingUnjudged[];
       readonly unrecorded?: readonly Unrecorded[];
       readonly edited?: readonly string[];
@@ -153,6 +154,7 @@ export const SubmitReceipt: Schema.Codec<SubmitReceipt> = Schema.Union([
       description:
         'Violations outside debt across the whole reach of an enforced inspection whose description this commit changes; the description change does not itself block the commit.',
     }),
+    bodies: Schema.optional(RuleBodies),
     unjudged: Schema.optional(Schema.Array(LandingUnjudged)),
     unrecorded: Schema.optional(Schema.Array(Unrecorded)),
     formatSkipped: FORMAT_SKIPPED,

@@ -2,7 +2,7 @@ import { toolPageFooter } from '@runlith/agent/tool/page';
 import { triggersSaid } from '../graph/contract/wire/enforcement.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import type { AnsweredFigure, Checker, EnforcementReading, EngineRow, OwnerRow, RefusalPlace } from './contract/wire/engines.js';
-import { findingLine, generalLines, normSaid } from './contract/wire/findings.js';
+import { bodyLines, findingLine, generalLines, normSaid } from './contract/wire/findings.js';
 import { reachSaid } from './contract/wire/enforcement.js';
 
 type Refused = { readonly status: 'refused'; readonly code: string; readonly reason: string; readonly unblock: readonly string[] };
@@ -107,7 +107,11 @@ export const enforcementText = (answer: Answered): string => {
   if (answer.rules !== undefined) lines.push(...listLines('rules', undefined, answer.rules, (row) => rowLines(row).join('\n  ')));
   if (answer.engine !== undefined) {
     const { engine } = answer;
-    lines.push(...rowLines(engine.row), `base: ${engine.base === '' ? 'the repository root' : engine.base}`);
+    lines.push(
+      ...rowLines(engine.row),
+      ...bodyLines(engine.body, '  '),
+      `base: ${engine.base === '' ? 'the repository root' : engine.base}`,
+    );
     for (const figure of engine.figures) lines.push(...figureLines(figure));
     lines.push(...ownerLines(engine.owners));
     if (engine.history.length > 0)
@@ -117,7 +121,7 @@ export const enforcementText = (answer: Answered): string => {
       `revision ${engine.revision ?? 'none'}${engine.changed === null ? '' : ` · last ${engine.changed.act} at ${engine.changed.at}${engine.changed.session === null ? '' : ` by session ${engine.changed.session}`}`}`,
     );
   }
-  if (answer.engine === undefined && answer.norm !== undefined) lines.push(normSaid(answer.norm));
+  if (answer.engine === undefined && answer.norm !== undefined) lines.push(normSaid(answer.norm), ...bodyLines(answer.norm.body, '  '));
   const { refusals, escaped } = answer;
   const fixes = [...(refusals?.rows ?? []).map((row) => row.fix), ...(escaped?.rows ?? []).map((row) => row.fix)];
   const owed = answer.debt?.rows.length ?? 0;

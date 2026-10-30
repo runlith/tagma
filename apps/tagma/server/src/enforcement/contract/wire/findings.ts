@@ -10,6 +10,14 @@ export type Finding = Norm & Said & Placed & { readonly fix?: string | undefined
 
 export type Noted<F> = (finding: F) => string;
 
+export type Bodies = Readonly<Record<string, string>>;
+
+export const bodyLines = (body: string | undefined, at: string): string[] =>
+  (body ?? '')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => `${at}${line}`);
+
 export const normSaid = ({ rule, title, strictness }: Norm): string =>
   [rule, title === '' ? '' : `“${title}”`, strictness ?? ''].filter((part) => part !== '').join(' · ');
 
@@ -44,7 +52,7 @@ export const generalLines = (general: string | null | undefined, at: string, eve
     ? []
     : [`${at}${everywhere ? 'fix' : 'fix where a place names none'}: ${general}`];
 
-export const findingLines = <F extends Finding>(findings: readonly F[], indent = '', noted?: Noted<F>): string[] =>
+export const findingLines = <F extends Finding>(findings: readonly F[], indent = '', noted?: Noted<F>, bodies?: Bodies): string[] =>
   grouped(findings).flatMap((group) => {
     const [first] = group;
     if (first === undefined) return [];
@@ -62,6 +70,7 @@ export const findingLines = <F extends Finding>(findings: readonly F[], indent =
     const head = alike ? [`${at}fix: ${shared}`] : bare === 0 ? [] : generalLines(general, at, bare === group.length);
     return [
       `${indent}${normSaid(first)}`,
+      ...bodyLines(bodies?.[first.rule], at),
       ...head,
       ...group.flatMap((one, n) => [placed(one), ...(nested && own[n] !== '' ? [`${at}  fix: ${own[n]}`] : [])]),
     ];

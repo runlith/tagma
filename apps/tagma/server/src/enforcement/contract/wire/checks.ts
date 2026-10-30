@@ -1,6 +1,6 @@
 import { Effect } from 'effect';
 import type { PreparedHolds, PreparedRemoval } from '../../../change-record/contract/service/prepared.js';
-import type { CarriedViolation, JudgeRefusalReport, LandingUnjudged, RuleCrossing, RuleRun, Watched } from './enforcement.js';
+import type { CarriedViolation, JudgeRefusalReport, LandingUnjudged, RuleBodies, RuleCrossing, RuleRun, Watched } from './enforcement.js';
 import { type Trigger, type TriggerPhase, triggersSaid } from '../../../graph/contract/wire/enforcement.js';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { CheckSubjectKind } from '../../../platform/contract/wire/operation.js';
@@ -140,6 +140,7 @@ export type Checked = {
   readonly rechecked?: readonly RuleCrossing[];
   readonly unjudged: readonly LandingUnjudged[];
   readonly crossed?: readonly RuleCrossing[];
+  readonly bodies?: RuleBodies;
   readonly runs?: readonly RuleRun[];
   readonly tree?: JudgedTree;
 };

@@ -160,8 +160,11 @@ const generalFix = Schema.NullOr(Schema.String).annotate({
     'The general way out of the function describing the rule, for each listed violation without a `fix` of its own; null where its check cannot be read.',
 });
 
+const body = Schema.String.annotate({ description: "The rule's body: the conditions and exceptions of the norm its violations break." });
+
 export const Engine = Schema.Struct({
   row: EngineRow,
+  body,
   generalFix,
   base: Schema.String,
   figures: Schema.Array(AnsweredFigure),
@@ -190,6 +193,7 @@ export type EngineList = (typeof ENGINE_LISTS)[number];
 export const RuleNorm = Schema.Struct({
   rule: named,
   title: Schema.String,
+  body,
   strictness: Schema.optional(Schema.Literals(STRICTNESS)),
   generalFix,
 }).annotate({ description: 'The norm the listed violations break, on a page that continues one rule’s list without its engine.' });

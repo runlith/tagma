@@ -246,7 +246,7 @@ type Told = { readonly carried: Carried; readonly finding: RuleCrossing };
 
 const withheldNote = ({ carried }: Told): string => (carried.withheld === undefined ? '' : `standing only on ${carried.withheld}`);
 
-const noticeText = (rule: string, commit: string, lines: readonly Told[]) => {
+const noticeText = (rule: string, body: string, commit: string, lines: readonly Told[]) => {
   const written = lines.filter((one) => one.carried.withheld === undefined);
   const standing = lines.filter((one) => one.carried.withheld !== undefined);
   const one = standing.length === 1;
@@ -255,6 +255,7 @@ const noticeText = (rule: string, commit: string, lines: readonly Told[]) => {
       told.map((line) => ({ ...line.finding, told: line })),
       '  ',
       (line) => withheldNote(line.told),
+      { [rule]: body },
     );
   return [
     ...(written.length === 0
@@ -274,7 +275,12 @@ const noticeText = (rule: string, commit: string, lines: readonly Told[]) => {
   ].join('\n');
 };
 
-const noticesOf = Effect.fn('enforcement.escapeNotices')(function* (projectId: number, rule: string, standing: readonly Told[]) {
+const noticesOf = Effect.fn('enforcement.escapeNotices')(function* (
+  projectId: number,
+  rule: string,
+  body: string,
+  standing: readonly Told[],
+) {
   const owed = new Map<string, Told[]>();
   for (const one of standing) {
     if (one.carried.told === true) continue;
@@ -298,7 +304,7 @@ const noticesOf = Effect.fn('enforcement.escapeNotices')(function* (projectId: n
             projectId: home,
             threadId,
             id: `${RULE_ESCAPED_SIGNAL}:${projectId}:${rule}:${commit}`,
-            text: noticeText(rule, commit, lines),
+            text: noticeText(rule, body, commit, lines),
           },
         ];
   });
@@ -485,6 +491,7 @@ export const remeasureRule = Effect.fn('enforcement.remeasureRule')(function* (
   const notices = yield* noticesOf(
     projectId,
     rule,
+    ruled.entry.rule.body,
     standingLines.map((carried): Told => {
       const norm = { rule, title: ruled.title, strictness: document.strictness };
       return { carried, finding: crossingOf(norm, inspection, lineOf(violations, carried) ?? carried, carried.withheld) };
@@ -594,7 +601,7 @@ export const fileCheck = Effect.fn('enforcement.fileCheck')(function* (op: strin
       ? []
       : [
           `After ${op} of ${subject.paths.join(', ')}, ${crossed.length === 1 ? 'a crossing' : `${crossed.length} crossings`} of rules triggered after ${op} stand in the file's new text against HEAD:`,
-          ...findingLines(crossed, '  '),
+          ...findingLines(crossed, '  ', undefined, judged.bodies),
         ]),
     ...failed.map((one) => `  ${one.rule} could not run: ${one.failed}`),
     'Nothing was recorded: this tells you, and refuses nothing.',

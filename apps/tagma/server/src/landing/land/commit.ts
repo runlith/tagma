@@ -387,6 +387,7 @@ export const commitOwn = Effect.fn('submitWork.commit')(function* (
           watched: judged.watched.length === 0 ? undefined : judged.watched,
           carriedViolations: judged.carriedViolations.length === 0 ? undefined : judged.carriedViolations,
           rechecked: judged.rechecked === undefined || judged.rechecked.length === 0 ? undefined : judged.rechecked,
+          bodies: judged.bodies === undefined || Object.keys(judged.bodies).length === 0 ? undefined : judged.bodies,
           unjudged: judged.unjudged.length === 0 ? undefined : judged.unjudged,
           formatSkipped: built.formatSkipped ? true : undefined,
           unrecorded: [

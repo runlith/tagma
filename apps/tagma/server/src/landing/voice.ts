@@ -1,5 +1,5 @@
 import type { SubmitReceipt, Unrecorded } from './contract/wire/receipt.js';
-import type { CarriedViolation, LandingUnjudged, RuleCrossing, Watched } from '../enforcement/contract/wire/enforcement.js';
+import type { CarriedViolation, LandingUnjudged, RuleBodies, RuleCrossing, Watched } from '../enforcement/contract/wire/enforcement.js';
 import { findingLines } from '../enforcement/contract/wire/findings.js';
 
 const NAMED_MEASURED = 6;
@@ -87,17 +87,21 @@ function judgedLines(judged: {
   readonly watched?: readonly Watched[];
   readonly carriedViolations?: readonly CarriedViolation[];
   readonly rechecked?: readonly RuleCrossing[];
+  readonly bodies?: RuleBodies;
   readonly unjudged?: readonly LandingUnjudged[];
 }): string[] {
   const watched = judged.watched ?? [];
   const carried = judged.carriedViolations ?? [];
   const rechecked = judged.rechecked ?? [];
   const unjudged = judged.unjudged ?? [];
+  const { bodies } = judged;
   return [
     ...(watched.length === 0 ? [] : [`watched (${watched.length}):`]),
     ...findingLines(
       watched.flatMap((one) => ('failed' in one ? [] : [one])),
       '  ',
+      undefined,
+      bodies,
     ),
     ...watched.flatMap((one) => ('failed' in one ? [`  ${one.rule} could not run: ${one.failed}`] : [])),
     ...(carried.length === 0 ? [] : [`carried violations (${carried.length}) — new crossings on what live peers hold uncommitted:`]),
@@ -106,13 +110,14 @@ function judgedLines(judged: {
       '  ',
       (one) =>
         `held by ${few(one.holders)}${one.withheld === undefined ? '' : `, standing only on ${one.withheld}, which this commit lacks`}`,
+      bodies,
     ),
     ...(rechecked.length === 0
       ? []
       : [
           `changed inspection descriptions (${rechecked.length}) — violations outside debt across their whole reach; remeasurement records standing findings as escapes, with this commit as origin where its description introduced them:`,
         ]),
-    ...findingLines(rechecked, '  '),
+    ...findingLines(rechecked, '  ', undefined, bodies),
     ...(unjudged.length === 0 ? [] : [`unjudged (${unjudged.length}):`]),
     ...unjudged.map((one) =>
       'gate' in one ? `  the gate did not judge: ${one.cause}` : `  ${one.rule} ${one.file}:${one.line}  ${one.specifier}`,

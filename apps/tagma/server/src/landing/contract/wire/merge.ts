@@ -1,5 +1,5 @@
 import * as Schema from 'effect/Schema';
-import { LandingUnjudged, Watched } from '../../../enforcement/contract/wire/enforcement.js';
+import { LandingUnjudged, RuleBodies, Watched } from '../../../enforcement/contract/wire/enforcement.js';
 import { FinishRefusalRow } from '../../../worktrees/contract/wire/failures.js';
 import { MergeAfter, MergeMode, PendingMerge } from '../../../worktrees/contract/wire/mergeTypes.js';
 import { MergeCheck } from '../../../worktrees/contract/wire/rows.js';
@@ -83,6 +83,7 @@ export const WorktreeMerged = Schema.Struct({
   after: AfterMerged,
   waited: Schema.NullOr(Schema.Struct({ queuedAt: Schema.String, attempts: Schema.Int })),
   watched: Schema.optional(Schema.Array(Watched)),
+  bodies: Schema.optional(RuleBodies),
   unjudged: Schema.optional(Schema.Array(LandingUnjudged)),
   unsynced: Schema.optional(Schema.Struct({ paths: Schema.Array(Schema.String), reason: Schema.String })),
   unrecorded: Schema.optional(Schema.String),

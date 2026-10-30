@@ -23,6 +23,7 @@ it.effect('a rule reports its checker run, shared in full by its keys, including
         ].map(([name, program]) => ({
           name: name!,
           title: name!,
+          body: '',
           said: { rule: name! },
           gatesLanding: false,
           places: [''],

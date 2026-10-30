@@ -260,7 +260,7 @@ export const engineReading = Effect.fn('enforcement.engineReading')(function* (i
     const { list } = carried;
     const continued = readCursor(input.cursor, listQuestion(projectId, ruled, list));
     if ('refused' in continued) return yield* cursorRefusal(continued.refused);
-    const norm = { rule: name, title: ruled.title, strictness: ruled.document?.strictness, generalFix: generalOf(ruled) };
+    const norm = { rule: name, title: ruled.title, body: ruled.body, strictness: ruled.document?.strictness, generalFix: generalOf(ruled) };
     if (list === 'refusals') return { rule: name, norm, refusals: yield* refusalPage(projectId, ruled, input.asked, continued.at) };
     if (list === 'debt') {
       const debt = cutOf(debtRows(ruled), debtKey, listQuestion(projectId, ruled, 'debt'), DEBT, input.asked, continued.at);
@@ -291,6 +291,7 @@ export const engineReading = Effect.fn('enforcement.engineReading')(function* (i
   const focus = input.focus ?? (modules === undefined || newest === undefined ? null : moduleAt(modules, base, newest.file));
   const engine: Engine = {
     row: rowOf(ruled, newest, story),
+    body: ruled.body,
     generalFix: generalOf(ruled),
     base,
     figures: answered(figures, focus),

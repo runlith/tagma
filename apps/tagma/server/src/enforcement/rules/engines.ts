@@ -41,6 +41,7 @@ export type Ruled = {
   readonly name: string;
   readonly uuid: string;
   readonly title: string;
+  readonly body: string;
   readonly blockId: number | null;
   readonly document: Law | null;
   readonly unreadable: string | null;
@@ -166,6 +167,7 @@ export const ruledIn = Effect.fn('enforcement.ruledIn')(function* (projectId: nu
       name: blockName(entry.rule.uuid),
       uuid: entry.rule.uuid,
       title: entry.rule.title,
+      body: entry.rule.body,
       blockId: entry.rule.id,
       document: entry.document,
       unreadable: entry.document === null ? entry.unreadable.reason : null,

@@ -3,18 +3,16 @@ import { Context, Effect, Layer, Result, Semaphore } from 'effect';
 import { RuleJudgement } from '../contract/service/judge.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import {
+  bodiesOf,
   type CarriedViolation,
   crossingOf,
-  type InspectionFailure,
   inspectionBase,
   inspectionRelevant,
-  type JudgeRefusalReport,
   type LandingUnjudged,
   type RuleCrossing,
   type RuleRun,
   type Watched,
 } from '../contract/wire/enforcement.js';
-import { findingLines } from '../contract/wire/findings.js';
 import type { LawEnforcement, TriggerPhase } from '../../graph/contract/wire/enforcement.js';
 import {
   type Descriptions,
@@ -30,15 +28,8 @@ import type { ConfigVersion } from '../../config/contract/service/configs.js';
 import { descriptionsAt } from '../rules/descriptions.js';
 import { changedKeys, measureRules } from './descriptionChanges.js';
 import { blockName } from '../../graph/contract/wire/references.js';
-import { GateRefusal, type Words } from '../../platform/contract/wire/refusal.js';
-import {
-  COMMIT_OPERATIONS,
-  type Checked,
-  type HeadSubject,
-  type JudgedTree,
-  type TreeSubject,
-  UNCHECKED,
-} from '../contract/wire/checks.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { type Checked, type HeadSubject, type JudgedTree, type TreeSubject, UNCHECKED } from '../contract/wire/checks.js';
 import type { TerminalActor } from '../../executions/contract/wire/terminals.js';
 import { Git } from '@runlith/git/Git';
 import { type BuiltTree, pathsOf } from './trees.js';
@@ -52,14 +43,16 @@ import { measuredRoot } from '../../graph/contract/service/serving.js';
 import { judgeBindings, type BoundRule } from '../programs/bindings.js';
 import { covers, enforcedRules, enforcedStatutes, moduleMapOf, runsBefore, afterTriggered, runsOn } from '../rules/reach.js';
 import { attributed, evidenceOf, wireOf } from './excess.js';
+import { type Failed, failedRefusal, MERGE_OP, type Rule, violatedRefusal } from './refusals.js';
 
-type Rule = { readonly name: string; readonly title: string };
+type Ruled = Rule & { readonly body: string };
 
 type InPlay =
-  | (Rule & { readonly document: Law; readonly paths: readonly string[]; readonly places: readonly string[]; readonly changed: boolean })
-  | (Rule & { readonly document: null; readonly reason: string; readonly ways: readonly string[] });
+  | (Ruled & { readonly document: Law; readonly paths: readonly string[]; readonly places: readonly string[]; readonly changed: boolean })
+  | (Ruled & { readonly document: null; readonly reason: string; readonly ways: readonly string[] });
 
-type Failed = Rule & { readonly why: string; readonly cause: InspectionFailure | 'undecodable'; readonly ways?: readonly string[] };
+const findingRules = (...lists: readonly (readonly { readonly rule: string }[])[]): string[] =>
+  lists.flatMap((list) => list.map((one) => one.rule));
 
 export const WAYS_OUT: ReadonlySet<string> = new Set([
   'read_block',
@@ -99,8 +92,6 @@ export type Judgement = Checked & {
   readonly readyMs?: number;
 };
 
-const MERGE_OP = 'merge_worktree';
-
 export type JudgedPhase = TriggerPhase | 'landed';
 
 const laneOf = (op: string): JudgeLane => (op === MERGE_OP ? 'merge' : 'landing');
@@ -125,7 +116,7 @@ const inPlay = Effect.fn('enforcement.inPlay')(function* (op: string, phase: Jud
   );
   let described: { readonly descriptions: Descriptions; readonly reading: MapReading } | undefined;
   for (const entry of statutes) {
-    const rule = { name: blockName(entry.rule.uuid), title: entry.rule.title };
+    const rule = { name: blockName(entry.rule.uuid), title: entry.rule.title, body: entry.rule.body };
     if (entry.document === null) {
       if (paths.some(covers(yield* entry.reach(''))))
         found.push({ ...rule, document: null, reason: entry.unreadable.reason, ways: entry.unreadable.unblock });
@@ -144,143 +135,6 @@ const inPlay = Effect.fn('enforcement.inPlay')(function* (op: string, phase: Jud
   }
   return { found, gated: gatedIn(statutes) };
 });
-
-const withheldNote = (one: RuleCrossing): string =>
-  one.withheld === undefined ? '' : `standing only on ${one.withheld}, which this session holds and this change leaves out`;
-
-const failedLine = (one: Failed): string => `${one.name} "${one.title}": ${one.why}`;
-
-const quoted = (title: string): string => `“${title}”`;
-
-const crossedWords = (kind: 'tree' | 'head', crossed: readonly RuleCrossing[]): Words => {
-  const blocked = kind === 'head' ? 'HEAD breaks' : 'Blocked by';
-  const titles = [...new Map(crossed.map((one) => [one.rule, one.title])).values()];
-  const [first, second] = titles;
-  if (first === undefined) return { text: `${blocked} a rule` };
-  if (second === undefined) return { text: `${blocked} rule ${quoted(first)}` };
-  const more = titles.length > 2 ? ` and ${titles.length - 2} more` : '';
-  return { text: `${blocked} ${titles.length} rules: ${quoted(first)}, ${quoted(second)}${more}` };
-};
-
-const failedWords = (failed: readonly Failed[]): Words => {
-  const [first] = failed;
-  return {
-    text:
-      first === undefined || failed.length > 1
-        ? `${failed.length} rules could not check this change`
-        : `Rule ${quoted(first.title)} could not check this change`,
-  };
-};
-
-const committing = (op: string): boolean => COMMIT_OPERATIONS.includes(op);
-
-const actSaid = (op: string, kind: 'tree' | 'head'): string =>
-  kind === 'head' ? `${op} at HEAD` : op === MERGE_OP ? 'this merge' : committing(op) ? 'this commit' : `this ${op}`;
-
-const firstWay = (op: string, kind: 'tree' | 'head'): string =>
-  kind === 'head'
-    ? 'fix each violation where it stands at HEAD as its fix says, and land the fix'
-    : op === MERGE_OP
-      ? "fix each crossing as its fix says on the worktree's branch, commit it there, then merge again"
-      : committing(op)
-        ? 'fix each crossing as its fix says, or take its path out of the index with `git restore --staged <path>`, then commit again'
-        : 'fix each crossing as its fix says, or land the paths that carry none first: submit_work with `paths` naming them';
-
-const absorbWay = (crossed: readonly RuleCrossing[], checkout: string): string => {
-  const ruled = new Map<string, Set<string>>();
-  for (const one of crossed) ruled.set(one.rule, (ruled.get(one.rule) ?? new Set()).add(one.fingerprint));
-  const named = [...ruled].map(
-    ([rule, fingerprints]) =>
-      `enforce_rule ${rule} with \`checkout\` ${JSON.stringify(checkout)} and \`absorb\` [${[...fingerprints].map((one) => `"${one}"`).join(', ')}]`,
-  );
-  return `where the code belongs here and the place itself is shaped wrong, do not bend the code to the rule: absorb the crossing as debt — ${named.join('; ')} — owned by a new task that names the area and what you saw, your view that the rule misfits this code included, and name that debt in your answer; the design is that task's`;
-};
-
-const violatedRefusal = (
-  op: string,
-  kind: 'tree' | 'head',
-  crossed: readonly RuleCrossing[],
-  failed: readonly Failed[],
-  checkout: string,
-): JudgeRefusalReport => {
-  const unblock: [string, ...string[]] = [firstWay(op, kind), absorbWay(crossed, checkout)];
-  for (const way of new Set(failed.flatMap((one) => one.ways ?? []))) unblock.push(way);
-  const withheld = [...new Set(crossed.flatMap((one) => (one.withheld === undefined ? [] : [one.withheld])))];
-  if (withheld.length > 0) {
-    const one = withheld.length === 1;
-    unblock.unshift(
-      `${op} with \`paths\` that also names ${withheld.join(', ')}: this session holds ${one ? 'it' : 'them'}, and each crossing standing on ${one ? 'it' : 'them'} ends once ${one ? 'it lands' : 'they land'} in the same commit`,
-    );
-  }
-  const own =
-    kind === 'head'
-      ? 'HEAD'
-      : op === MERGE_OP
-        ? "this merge's lines"
-        : committing(op)
-          ? 'what the index holds'
-          : "this session's own lines";
-  const act = committing(op) ? 'the commit' : op;
-  return {
-    code: 'rule-violated',
-    reason: [
-      `${crossed.length} ${kind === 'head' ? '' : 'new '}crossing${crossed.length === 1 ? '' : 's'} of a gated rule in ${own}, so ${act} did not run:`,
-      ...findingLines(crossed, '  ', withheldNote),
-      ...(failed.length === 0 ? [] : [`and a gated inspection could not run: ${failed.map(failedLine).join('; ')}`]),
-    ].join('\n'),
-    unblock,
-    words: crossedWords(kind, crossed),
-  };
-};
-
-const failedRefusal = (op: string, kind: 'tree' | 'head', failed: readonly Failed[]): JudgeRefusalReport => {
-  if (failed.every((one) => one.cause === 'module-map')) {
-    return {
-      code: 'module-map-invalid',
-      reason: `the module map does not hold together, so ${actSaid(op, kind)} was refused: ${failed.map(failedLine).join('; ')}`,
-      unblock: MAP_RECOVERY,
-      words: { text: 'The module map does not hold together' },
-    };
-  }
-  const causes = new Set(failed.map((one) => one.cause));
-  const unblock: [string, ...string[]] = [
-    'check_rules with `rules` naming the rule shows what it reads, what it could not read and how long it takes',
-  ];
-  if (causes.has('deadline')) {
-    unblock.push(
-      'a program stopped when its life ran out is given more by the life rule that bound it, in whichever list stands it (read_command_rules, write_command_rule)',
-    );
-  }
-  if (causes.has('worker')) unblock.push('a worker that died twice is started afresh by the next judgement: run the act again');
-  if (causes.has('git')) unblock.push("read_checkout says whether git can read this checkout's objects; the gate judges again once it can");
-  if (causes.has('envelope')) {
-    unblock.push(
-      "a subject past the builtin's envelope is never judged: land it in smaller changes, or the rule's owner narrows its reach, or moves it to watch, through enforce_rule",
-    );
-  }
-  if (causes.has('program')) {
-    unblock.push("the program's own stderr in the reason says why it failed; its run stands in read_commands under the caller");
-  }
-  if (causes.has('host'))
-    unblock.push('read_commands says whether the execution host stands and takes commands; the gate judges again once it does');
-  if (causes.has('caller')) {
-    unblock.push(
-      op === MERGE_OP
-        ? 'a merge queued before its caller was stored has no caller to run a program as: merge_worktree again, which runs it as you'
-        : `this ${op} names no caller to run a program as; run it from a thread`,
-    );
-  }
-  if (causes.has('setup')) {
-    unblock.push('the worktree setup of the inspected tree failed: worktrees.setupCopy and worktrees.setupRun ready it');
-  }
-  for (const way of new Set(failed.flatMap((one) => one.ways ?? []))) unblock.push(way);
-  return {
-    code: 'inspection-failed',
-    reason: `a gated rule could not judge ${actSaid(op, kind)}, and a gate that cannot judge refuses: ${failed.map(failedLine).join('; ')}`,
-    unblock,
-    words: failedWords(failed),
-  };
-};
 
 type Unread = { readonly message: string };
 
@@ -523,9 +377,10 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
     }
   });
   yield* judging;
+  const bodies = bodiesOf(rules, findingRules(crossed, watched, carried, rechecked));
   const refusal =
     crossed.length > 0
-      ? violatedRefusal(op, 'tree', crossed, failed, subject.checkout ?? subject.root)
+      ? violatedRefusal(op, 'tree', crossed, failed, subject.checkout ?? subject.root, bodies)
       : failed.length > 0
         ? failedRefusal(op, 'tree', failed)
         : null;
@@ -544,6 +399,7 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
     rechecked,
     unjudged,
     crossed,
+    bodies,
     runs,
     rules: rules.map((rule) => rule.name),
     inspections: inspected,
@@ -578,8 +434,10 @@ export const headJudgement = Effect.fn('enforcement.headJudgement')(function* (o
     { projectId: subject.projectId, root, built: head.success, base: null, paths: null, caller: subject.caller ?? null, lane: laneOf(op) },
     boundRules,
   );
+  const ruled: Ruled[] = [];
   for (const entry of settled.success) {
     const rule = { name: blockName(entry.rule.uuid), title: entry.rule.title };
+    ruled.push({ ...rule, body: entry.rule.body });
     if (entry.document === null) {
       if (WAYS_OUT.has(op)) continue;
       names.push(rule.name);
@@ -633,16 +491,18 @@ export const headJudgement = Effect.fn('enforcement.headJudgement')(function* (o
       else watched.push(crossing);
     }
   }
+  const bodies = bodiesOf(ruled, findingRules(crossed, watched));
   return {
     refused:
       crossed.length > 0
-        ? violatedRefusal(op, 'head', crossed, failed, root)
+        ? violatedRefusal(op, 'head', crossed, failed, root, bodies)
         : failed.length > 0
           ? failedRefusal(op, 'head', failed)
           : null,
     watched,
     carriedViolations: [],
     unjudged,
+    bodies,
     rules: names,
     inspections: names.length,
     ms: Math.round(performance.now() - started),

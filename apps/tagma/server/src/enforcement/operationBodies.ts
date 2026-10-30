@@ -33,7 +33,7 @@ import { handoverOf, landingPlace } from '../change-record/prepared/place.js';
 import { selectCheckout } from '../change-record/prepared/selection.js';
 import type { SubmitHandover } from '../change-record/contract/wire/handover.js';
 import { ServingGit } from '../executions/contract/service/git.js';
-import type { CheckAnswer, CheckedViolation, InspectionsReading } from './contract/wire/enforcement.js';
+import { type CheckAnswer, type CheckedViolation, type InspectionsReading, shownBodies } from './contract/wire/enforcement.js';
 import { VIOLATIONS } from './contract/wire/pages.js';
 import { cursorRefusal } from '../platform/contract/wire/refusal.js';
 import { type InputOf, type Refused, type TaggedBody, body, pair } from '../platform/contract/service/body.js';
@@ -498,6 +498,7 @@ export const ENFORCEMENT_PAIRS = {
                     fingerprints: [],
                     unjudged: [],
                     rules: [],
+                    bodies: {},
                     refuses: false,
                   };
                   return { head, built: head, paths: [] as readonly string[], formed, checking: nothing };
@@ -536,6 +537,7 @@ export const ENFORCEMENT_PAIRS = {
               total: rows.length,
               next: cut.next,
               fingerprints: ran.checking.fingerprints,
+              bodies: shownBodies(ran.checking.bodies, cut.rows),
               unjudged: ran.checking.unjudged,
               rules: ran.checking.rules,
               refuses: ran.checking.refuses,
@@ -667,6 +669,7 @@ const stagedAnswer = Effect.fnUntraced(function* (
     total: rows.length,
     next: cut.next,
     fingerprints: [...new Set(rows.map((one) => one.fingerprint))].sort(),
+    bodies: shownBodies(judged.bodies, cut.rows),
     unjudged: judged.unjudged,
     rules: judged.runs ?? [],
     refuses: judged.refused !== null,

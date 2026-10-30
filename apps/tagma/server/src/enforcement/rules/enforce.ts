@@ -326,6 +326,7 @@ export const planEnforcement = Effect.fn('enforcement.plan')(function* (row: Blo
       .change({
         name,
         title: row.title,
+        body: row.body,
         said: { rule: name, strictness: ask.strictness, on },
         gatesLanding: false,
         key,

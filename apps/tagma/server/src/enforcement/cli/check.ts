@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { Console, Effect, Option, Result, Schema } from 'effect';
 import { Command, Flag } from 'effect/cli';
 import { HttpClientError } from 'effect/http';
-import type { CheckAnswer, CheckedViolation } from '../contract/wire/enforcement.js';
+import type { CheckAnswer, CheckedViolation, RuleBodies } from '../contract/wire/enforcement.js';
 import { findingLines } from '../contract/wire/findings.js';
 import { ENFORCEMENT_OPERATIONS } from '../contract/wire/operationCatalog.js';
 import type { Performable } from '../../platform/contract/service/perform.js';
@@ -54,8 +54,8 @@ const missed = (road: EnforcementCli, at: Invocation, answer: Missed): string =>
     ? `nothing answers at ${road.baseUrl(at)} (${answer.detail})`
     : `${answer.id} answered outside its declared answer (${answer.detail})`;
 
-const crossingLines = (violations: readonly CheckedViolation[], prefix: string): string[] =>
-  findingLines(violations, '  ', (one) => (one.owed === true ? 'debt' : '')).map((line) => `${prefix}${line}`);
+const crossingLines = (violations: readonly CheckedViolation[], prefix: string, bodies: RuleBodies | undefined): string[] =>
+  findingLines(violations, '  ', (one) => (one.owed === true ? 'debt' : ''), bodies).map((line) => `${prefix}${line}`);
 
 const told = (refusal: RefusalBody): string[] => refusalLines(refusal).flatMap((line) => line.split('\n').map((part) => `tagma: ${part}`));
 
@@ -99,7 +99,7 @@ const staged = Effect.fnUntraced(
     const watched = checked.violations.filter((one) => !gated.has(one.rule));
     const notes = [
       ...unjudgedLines(checked),
-      ...(watched.length === 0 ? [] : ['tagma: rules at watch found:', ...crossingLines(watched, 'tagma: ')]),
+      ...(watched.length === 0 ? [] : ['tagma: rules at watch found:', ...crossingLines(watched, 'tagma: ', checked.bodies)]),
     ];
     const unread = checked.unjudged.some((one) => 'gate' in one);
     if (checked.refusal === undefined && unread) {
@@ -169,14 +169,15 @@ const everything = Effect.fnUntraced(function* (road: EnforcementCli, at: Invoca
   const [first] = pages;
   if (first === undefined) return CHECK_EXIT.unjudged;
   const violations = pages.flatMap((page) => page.violations);
-  yield* printed(json, { ...first, violations, shown: violations.length, next: null });
+  const bodies = Object.assign({}, ...pages.map((page) => page.bodies ?? {})) as RuleBodies;
+  yield* printed(json, { ...first, violations, bodies, shown: violations.length, next: null });
   const gated = new Set(first.rules.flatMap((one) => (one.strictness === 'gate' ? [one.rule] : [])));
   const failed = first.rules.filter((one) => one.failed !== undefined);
   if (!json) {
     yield* Console.log(
       [
         `checked at ${first.head}`,
-        ...crossingLines(violations, ''),
+        ...crossingLines(violations, '', bodies),
         ...failed.map((one) => `  ${one.rule} could not run: ${one.failed}`),
         ...unjudgedLines(first),
       ].join('\n'),

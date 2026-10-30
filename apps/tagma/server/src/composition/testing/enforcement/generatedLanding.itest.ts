@@ -103,7 +103,14 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         const parentId = ((yield* world.op('list_root_blocks', {}, `project=${project}`)).body as { blocks: { name: string }[] }).blocks[0]!
           .name;
         const rule = (
-          answered(yield* call('create_block', { tags: ['rule'], parentId, title: 'Load only bun-compatible code' })).block as {
+          answered(
+            yield* call('create_block', {
+              tags: ['rule'],
+              parentId,
+              title: 'Load only bun-compatible code',
+              body: 'A build script may load node built-ins.',
+            }),
+          ).block as {
             name: string;
           }
         ).name;
@@ -118,6 +125,11 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
             }),
           ),
         ).toMatchObject({ debt: { after: 0 } });
+        const delivered = (yield* world.op('set_rule_delivery', { blockId: rule, delivery: 'finding' }, `project=${project}`)).body as {
+          readonly status: string;
+          readonly warning?: string;
+        };
+        expect([delivered.status, delivered.warning]).toEqual(['ok', undefined]);
         yield* wrote(peer.id, 'app/svelte.config.js', generator, "export default { exclude: ['peer'] };\n");
         yield* files.makeDirectory(join(root, 'app/.gen'), { recursive: true });
         yield* files.writeFileString(
@@ -182,6 +194,7 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         expect(yield* call('submit_work', { paths: ['app/lib/shared.ts'], tasks: [], subject: 'add a forbidden load' })).toMatchObject({
           class: 'refusal',
           code: 'rule-violated',
+          reason: expect.stringContaining('A build script may load node built-ins.'),
         });
       }),
     );

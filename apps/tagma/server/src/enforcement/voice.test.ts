@@ -48,6 +48,7 @@ test('the check report carries an index refusal even when no tree or violation c
     total: 3,
     next: 'next-page-cursor',
     fingerprints: [watch.fingerprint, bare.fingerprint],
+    bodies: { 'watch-rule': 'A test of the domain may load the UI.' },
     unjudged: [{ rule: 'watch-rule', file: 'src/unjudged.ts', line: 1, specifier: 'unresolved-import' }],
     rules: [{ rule: 'watch-rule', strictness: 'watch', ms: 1, reached: true }],
     refusal: { code: 'rule-violated', reason: 'gated-crossing', unblock: ['repair src/gate.ts'] },
@@ -58,6 +59,7 @@ test('the check report carries an index refusal even when no tree or violation c
   expect(judged).toContain(
     [
       `watch-rule · “${watch.title}” · watch`,
+      '  A test of the domain may load the UI.',
       `  fix where a place names none: ${watch.generalFix}`,
       '  src/watch.ts:2 loads @law-lab/ui',
       `    fix: ${watch.fix}`,

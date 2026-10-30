@@ -208,6 +208,22 @@ export const RuleCrossing = Schema.Struct({
 });
 export type RuleCrossing = typeof RuleCrossing.Type;
 
+export const RuleBodies = Schema.Record(Schema.String, Schema.String).annotate({
+  description: "Each rule's body by its name, once for every finding of that rule in this answer; a rule with an empty body is absent.",
+});
+export type RuleBodies = typeof RuleBodies.Type;
+
+export const bodiesOf = (rules: readonly { readonly name: string; readonly body: string }[], named: Iterable<string>): RuleBodies => {
+  const wanted = new Set(named);
+  return Object.fromEntries(rules.filter((rule) => wanted.has(rule.name) && rule.body.trim() !== '').map((rule) => [rule.name, rule.body]));
+};
+
+export const shownBodies = (bodies: RuleBodies | undefined, rows: readonly { readonly rule: string }[]): RuleBodies | undefined => {
+  const shown = new Set(rows.map((one) => one.rule));
+  const kept = Object.entries(bodies ?? {}).filter(([rule]) => shown.has(rule));
+  return kept.length === 0 ? undefined : Object.fromEntries(kept);
+};
+
 const messageOf = (violation: RuleViolation): string =>
   violation.message === undefined || violation.message === '' ? (violation.specifier ?? '') : violation.message;
 
@@ -303,6 +319,7 @@ export const CheckAnswer = Schema.Struct({
   total: Schema.Int,
   next: Schema.NullOr(Schema.String),
   fingerprints: Schema.Array(Schema.String),
+  bodies: Schema.optional(RuleBodies),
   unjudged: Schema.Array(LandingUnjudged),
   rules: Schema.Array(RuleRun),
   refuses: Schema.optional(Schema.Boolean),
