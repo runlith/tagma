@@ -27,10 +27,17 @@ export type FolderReleased = {
   readonly released: readonly ReleasedTree[];
 };
 
+export type FoldersRegrouped = {
+  readonly groupId: number;
+  readonly projects: readonly number[];
+  readonly refiled: readonly ThreadId[];
+};
+
 export class ThreadFolders extends Context.Service<
   ThreadFolders,
   {
     list(projectId: number): Effect.Effect<readonly ThreadFolder[], StoreFailure>;
+    regrouped(subscriber: (event: FoldersRegrouped) => Effect.Effect<void>): () => void;
     create(
       projectId: number,
       name: string,

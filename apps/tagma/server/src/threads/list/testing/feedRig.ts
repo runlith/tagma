@@ -167,7 +167,7 @@ export const feedRig = Effect.fnUntraced(function* () {
       setPinned: unused,
       see: unused,
     },
-    folders: { list: unused, create: unused, rename: unused, move: unused, remove: unused, file: unused },
+    folders: { list: unused, regrouped: unused, create: unused, rename: unused, move: unused, remove: unused, file: unused },
     evidence: {
       statuses: unused,
       presence: unused,

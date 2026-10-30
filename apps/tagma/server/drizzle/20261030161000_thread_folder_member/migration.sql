@@ -1,0 +1,1 @@
+ALTER TABLE `thread_folder` ADD `member_id` integer REFERENCES project(id) ON DELETE SET NULL;

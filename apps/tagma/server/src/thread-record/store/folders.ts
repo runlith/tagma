@@ -12,6 +12,7 @@ export const threadFolder = sqliteTable(
       .notNull()
       .references(() => project.id, { onDelete: 'cascade' }),
     parentId: text('parent_id').references((): AnySQLiteColumn => threadFolder.id, { onDelete: 'cascade' }),
+    memberId: integer('member_id').references(() => project.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     position: integer('position').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
