@@ -187,7 +187,7 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
 - subscribers as at the incident's longest stall: `thread.changes` ×8, `artifacts.thread` ×8, `worktrees` ×6, and `commands`, `threads`, `calls`, `views`, `graph`, `holdings`, `checkout`, `tree` ×4 each;
 - also zero subscribers, and subscribe, unsubscribe, reconnect, rewind, compaction and external file changes during commits;
 - N = 0, 10 and 50 at the incident rates, and a 5× rate stress run;
-- sizes at a few distinct points: tool results of 2 KB, 64 KB and 1 MB; assistant messages of 1 KB and 200 KB; 1 and 8 calls per assistant boundary; histories of 100 and 10,000 entries; the parent's repository, project and subscriber axes;
+- sizes at a few distinct points: tool results of 2 KB, at the hosted response cap, and 1 MB produced over it — the path the door takes for output beyond the cap; assistant messages of 1 KB and 200 KB; 1 and 8 calls per assistant boundary; histories of 100 and 10,000 entries; the parent's repository, project and subscriber axes;
 - steady-state runs at N = 50 for the loop and memory gates, fitting the project's 30-minute command life whole: a ~25-minute load window, the first ~8 minutes warm-up. Each is one uninterrupted program in the measuring lane of the tests skill, never split or resumed;
 - performance runs without the shadow mode; shadow equality is its own correctness run;
 - the parent's constrained 4-core / 8 GB profile as the reference profile.
