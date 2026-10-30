@@ -83,6 +83,8 @@ fields:
   }
 edges:
   - kind: imports
+    to: 01a0c83d-be5e-7beb-99fc-b3492a74de70
+  - kind: imports
     to: 01a0fd8b-bf12-7d39-abd6-b5ffc43d3272
   - kind: imports-tests
     to: 01a13b4d-7a3d-7729-955f-a344b43ff1ba
