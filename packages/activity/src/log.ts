@@ -1,6 +1,10 @@
 import { Context, Effect } from 'effect';
 import type { ActivityFact } from './fact';
 
+export interface ActivityCost {
+  <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
+}
+
 export interface ActivityLog {
   record(fact: ActivityFact): void;
   readonly settled: Effect.Effect<void>;

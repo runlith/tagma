@@ -114,7 +114,7 @@ export type PerformanceRecordFailure = PerformanceRecordRefused | PerformanceRec
 export type PerformanceStoreFailure = PerformanceStoreUnavailable | PerformanceStoreQueryFailed | PerformanceReportUnavailable;
 
 export type WorkerLossesPage = Omit<Extract<PerformanceReport, { readonly type: 'losses' }>, 'pressure' | 'unrecorded' | 'evidence'>;
-export type WorkerReport = Exclude<PerformanceReport, { readonly type: 'losses' }> | WorkerLossesPage;
+export type WorkerReport = Exclude<PerformanceReport, { readonly type: 'losses' | 'ledger' }> | WorkerLossesPage;
 
 export type StoreReportRead =
   | { readonly _tag: 'Found'; readonly report: PerformanceReport }

@@ -1,6 +1,6 @@
 import * as Effect from 'effect/Effect';
 import type { InitializeStore } from '../store/wire.js';
-import type { PerformanceQuery } from '../protocol/queries.js';
+import type { PerformanceStoreQuery } from '../protocol/queries.js';
 import type { PerformanceReportMeta, RetainedRange } from '../protocol/reports.js';
 import type { SegmentFailure } from '../SegmentCatalog.js';
 import type { SegmentRing } from '../SegmentRing.js';
@@ -39,7 +39,7 @@ export const reportMeta = (ring: SegmentRing): PerformanceReportMeta => {
 export const readReport = Effect.fn('PerformanceWorker.readReport')(function* (
   ring: SegmentRing,
   options: InitializeStore,
-  query: PerformanceQuery,
+  query: PerformanceStoreQuery,
   meta: PerformanceReportMeta,
 ): Effect.fn.Return<ReportAnswer, PerformanceRecordUnreadable | SegmentFailure> {
   switch (query.type) {

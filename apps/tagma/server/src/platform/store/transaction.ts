@@ -1,4 +1,5 @@
 import type { StatementTiming } from '@runlith/sqlite-process/connection';
+import { carryCost, CurrentCost, rootCost } from '@runlith/performance/CostLedger';
 import { Cause, Clock, Context, Effect, Exit, Fiber, Tracer } from 'effect';
 import type { EffectSQLiteBunDatabase } from 'drizzle-orm/effect-sqlite-bun';
 import {
@@ -103,116 +104,121 @@ export const storeTransaction =
     const operation = typeof declared === 'string' ? declared : declared.operation;
     const set = typeof declared === 'string' ? null : declared;
     const durability = set?.durability ?? 'durable';
-    return Effect.uninterruptibleMask((restore) =>
-      Effect.useSpan('Store.transaction', { attributes: { opKind: operation } }, (parent) =>
-        Effect.gen(function* () {
-          const attributes = { opKind: operation };
-          const enclosing = yield* UnitWrites;
-          const durabilities = yield* UnitDurability;
-          const physical = durabilities.get(identity);
-          const nested = physical !== undefined;
-          const writing = new Map(enclosing).set(identity, set);
-          const lasting = nested ? durabilities : new Map(durabilities).set(identity, durability);
-          if (nested && durability === 'durable' && physical === 'relaxed') {
-            yield* breach(identity, new UnitWriteRefused({ store: identity.path, operation, table: null, reason: 'durable-in-relaxed' }));
-          }
-          const wait = yield* Effect.makeSpan('Store.permit.wait', { parent, attributes });
-          let settlementSpan: Tracer.Span | undefined;
-          let heldFrom = 0;
-          let bodyWindow: TimingWindow | undefined;
-          let settleWindow: TimingWindow | undefined;
-          let settling: TimingFrame | undefined;
-          const outer = yield* CommitQueue;
-          const commits: CommitQueue = { store: identity, queued: [], moved: [], body: Context.empty() };
-          const life: UnitLife = { identity, operation, open: true };
-          const value = yield* db
-            .transaction(() =>
-              Effect.gen(function* () {
-                yield* endSpan(wait, Exit.void);
-                heldFrom = performance.now();
-                const running = timings.begin();
-                return yield* restore(
-                  Effect.flatMap(Effect.context<never>(), (held) => {
-                    commits.body = held;
-                    return body(heldUnit<Brand>(held, identity, commits, writing, lasting, life)).pipe(
-                      Effect.provideService(UnitOpen, true),
-                      Effect.provideService(CommitQueue, commits),
-                      Effect.provideService(UnitWrites, writing),
-                      Effect.provideService(UnitDurability, lasting),
-                      Effect.provideService(UnitLife, life),
-                      Effect.forkChild({ startImmediately: true }),
-                      Effect.flatMap((running) => Effect.onInterrupt(Fiber.join(running), () => Fiber.interrupt(running))),
-                    );
-                  }),
-                ).pipe(
-                  Effect.ensuring(Effect.sync(() => void (life.open = false))),
-                  Effect.onExit(() =>
-                    Effect.flatMap(
-                      Effect.sync(() => {
-                        bodyWindow = timings.end(running);
-                        settling = timings.begin();
-                        return bodyWindow;
-                      }),
-                      (body) => Effect.annotateCurrentSpan(writerVerdict(body)),
+    return rootCost(
+      operation,
+      Effect.uninterruptibleMask((restore) =>
+        Effect.useSpan('Store.transaction', { attributes: { opKind: operation } }, (parent) =>
+          Effect.gen(function* () {
+            const cost = yield* CurrentCost;
+            if (cost !== null) cost.counts.units++;
+            const attributes = { opKind: operation };
+            const enclosing = yield* UnitWrites;
+            const durabilities = yield* UnitDurability;
+            const physical = durabilities.get(identity);
+            const nested = physical !== undefined;
+            const writing = new Map(enclosing).set(identity, set);
+            const lasting = nested ? durabilities : new Map(durabilities).set(identity, durability);
+            if (nested && durability === 'durable' && physical === 'relaxed') {
+              yield* breach(identity, new UnitWriteRefused({ store: identity.path, operation, table: null, reason: 'durable-in-relaxed' }));
+            }
+            const wait = yield* Effect.makeSpan('Store.permit.wait', { parent, attributes });
+            let settlementSpan: Tracer.Span | undefined;
+            let heldFrom = 0;
+            let bodyWindow: TimingWindow | undefined;
+            let settleWindow: TimingWindow | undefined;
+            let settling: TimingFrame | undefined;
+            const outer = yield* CommitQueue;
+            const commits: CommitQueue = { store: identity, queued: [], moved: [], body: Context.empty() };
+            const life: UnitLife = { identity, operation, open: true };
+            const value = yield* db
+              .transaction(() =>
+                Effect.gen(function* () {
+                  yield* endSpan(wait, Exit.void);
+                  heldFrom = performance.now();
+                  const running = timings.begin();
+                  return yield* restore(
+                    Effect.flatMap(Effect.context<never>(), (held) => {
+                      commits.body = held;
+                      return body(heldUnit<Brand>(held, identity, commits, writing, lasting, life)).pipe(
+                        Effect.provideService(UnitOpen, true),
+                        Effect.provideService(CommitQueue, commits),
+                        Effect.provideService(UnitWrites, writing),
+                        Effect.provideService(UnitDurability, lasting),
+                        Effect.provideService(UnitLife, life),
+                        Effect.forkChild({ startImmediately: true }),
+                        Effect.flatMap((running) => Effect.onInterrupt(Fiber.join(running), () => Fiber.interrupt(running))),
+                      );
+                    }),
+                  ).pipe(
+                    Effect.ensuring(Effect.sync(() => void (life.open = false))),
+                    Effect.onExit(() =>
+                      Effect.flatMap(
+                        Effect.sync(() => {
+                          bodyWindow = timings.end(running);
+                          settling = timings.begin();
+                          return bodyWindow;
+                        }),
+                        (body) => Effect.annotateCurrentSpan(writerVerdict(body)),
+                      ),
                     ),
+                    Effect.withSpan('Store.execute', { parent, attributes }),
+                    Effect.onExit((exit) =>
+                      Effect.map(
+                        Effect.makeSpan(Exit.isSuccess(exit) ? `Store.${options.settlement ?? 'commit'}` : 'Store.rollback', {
+                          parent,
+                          attributes,
+                        }),
+                        (span) => {
+                          settlementSpan = span;
+                        },
+                      ),
+                    ),
+                  );
+                }),
+              )
+              .pipe(
+                Effect.onExit((exit) =>
+                  Effect.flatMap(
+                    Effect.sync(() => {
+                      if (settling !== undefined) settleWindow = timings.end(settling);
+                      return settleWindow;
+                    }),
+                    (window) =>
+                      Effect.all(
+                        [
+                          wait.status._tag === 'Started' ? endSpan(wait, exit) : Effect.void,
+                          settlementSpan === undefined || window === undefined ? Effect.void : endSettlement(settlementSpan, window, exit),
+                        ],
+                        { discard: true },
+                      ),
                   ),
-                  Effect.withSpan('Store.execute', { parent, attributes }),
-                  Effect.onExit((exit) =>
-                    Effect.map(
-                      Effect.makeSpan(Exit.isSuccess(exit) ? `Store.${options.settlement ?? 'commit'}` : 'Store.rollback', {
-                        parent,
-                        attributes,
-                      }),
-                      (span) => {
-                        settlementSpan = span;
-                      },
-                    ),
-                  ),
-                );
-              }),
-            )
-            .pipe(
-              Effect.onExit((exit) =>
-                Effect.flatMap(
-                  Effect.sync(() => {
-                    if (settling !== undefined) settleWindow = timings.end(settling);
-                    return settleWindow;
-                  }),
-                  (window) =>
-                    Effect.all(
-                      [
-                        wait.status._tag === 'Started' ? endSpan(wait, exit) : Effect.void,
-                        settlementSpan === undefined || window === undefined ? Effect.void : endSettlement(settlementSpan, window, exit),
-                      ],
-                      { discard: true },
-                    ),
                 ),
-              ),
-              Effect.onExit(() => reportIfOverBudget(operation, identity.path, heldFrom, bodyWindow, settleWindow)),
-              (settled) => (classed ? synchronously(durability === 'relaxed' ? 'normal' : 'full')(settled) : settled),
-              Effect.provideService(HeldFor, operation),
-            );
-          const onCommit = options.onCommit;
-          const publication = onCommit === undefined ? undefined : Effect.suspend(() => onCommit(value));
-          const moved = [movedTables(identity, set), ...commits.moved];
-          if (outer !== null && outer.store.path === identity.path && outer.store.generation === identity.generation) {
-            const own = callerOwn(yield* Effect.context<RCommit>(), outer.body);
-            outer.moved.push(...moved);
-            outer.queued.push(...commits.queued.map((queued) => Effect.provideContext(queued, own)));
-            if (publication !== undefined) outer.queued.push(Effect.provideContext(publication, own));
+                Effect.onExit(() => reportIfOverBudget(operation, identity.path, heldFrom, bodyWindow, settleWindow)),
+                (settled) => (classed ? synchronously(durability === 'relaxed' ? 'normal' : 'full')(settled) : settled),
+                Effect.provideService(HeldFor, operation),
+              );
+            const onCommit = options.onCommit;
+            const publication = onCommit === undefined ? undefined : Effect.suspend(() => onCommit(value));
+            const moved = [movedTables(identity, set), ...commits.moved];
+            if (outer !== null && outer.store.path === identity.path && outer.store.generation === identity.generation) {
+              const own = callerOwn(yield* Effect.context<RCommit>(), outer.body);
+              outer.moved.push(...moved);
+              outer.queued.push(...commits.queued.map((queued) => Effect.provideContext(queued, own)));
+              if (publication !== undefined) outer.queued.push(Effect.provideContext(publication, own));
+              return value;
+            }
+            for (const tables of moved) moves.committed(tables);
+            const tails: Effect.Effect<void, never, RCommit>[] =
+              publication === undefined ? commits.queued : [...commits.queued, publication];
+            let lost = Cause.empty as Cause.Cause<never>;
+            for (const tail of tails) {
+              const ended = yield* Effect.exit(tail);
+              if (Exit.isFailure(ended)) lost = Cause.combine(lost, ended.cause);
+            }
+            if (lost.reasons.length > 0) return yield* Effect.failCause(lost);
             return value;
-          }
-          for (const tables of moved) moves.committed(tables);
-          const tails: Effect.Effect<void, never, RCommit>[] =
-            publication === undefined ? commits.queued : [...commits.queued, publication];
-          let lost = Cause.empty as Cause.Cause<never>;
-          for (const tail of tails) {
-            const ended = yield* Effect.exit(tail);
-            if (Exit.isFailure(ended)) lost = Cause.combine(lost, ended.cause);
-          }
-          if (lost.reasons.length > 0) return yield* Effect.failCause(lost);
-          return value;
-        }).pipe(Effect.withParentSpan(parent)),
+          }).pipe(Effect.withParentSpan(parent)),
+        ),
       ),
     );
   };
@@ -234,13 +240,14 @@ const heldUnit = <Brand extends StoreBrand>(
     UnitLife,
     life,
   );
+  const services = Context.omit(CurrentCost)(context);
   return writeUnitOf<Brand>({
     store: identity,
-    run: <A>(query: Effect.Effect<A, StoreFailure>) => Effect.provide(query, context),
+    run: <A>(query: Effect.Effect<A, StoreFailure>) => Effect.provide(query, services),
     afterCommit: (effect: Effect.Effect<void>) =>
       Effect.suspend(() =>
         life.open
-          ? Effect.sync(() => void commits.queued.push(effect))
+          ? Effect.sync(() => void commits.queued.push(carryCost(effect)))
           : Effect.die(new LateStatementRefused({ store: identity.path, operation: life.operation })),
       ),
   });

@@ -1,5 +1,5 @@
 import type { LossKindCounts, ThreadMemory } from '../protocol/records.js';
-import type { PerformancePointQuery, PerformanceQuery } from '../protocol/queries.js';
+import type { PerformancePointQuery, PerformanceStoreQuery } from '../protocol/queries.js';
 import type { PerformanceReportMeta } from '../protocol/reports.js';
 import type { WorkerReport } from './records.js';
 
@@ -38,7 +38,7 @@ export type MaintainStore = {
 export type ReadReport = {
   readonly _tag: 'ReadReport';
   readonly requestId: string;
-  readonly query: PerformanceQuery;
+  readonly query: PerformanceStoreQuery;
 };
 
 export type WorkerMemoryReading = {

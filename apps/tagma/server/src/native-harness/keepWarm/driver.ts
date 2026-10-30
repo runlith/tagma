@@ -1,7 +1,8 @@
 import { threadRunInterrupted } from '@runlith/agent/thread/rows';
 import type { ThreadCacheWarmth } from '@runlith/agent/thread/cache/ThreadCacheWarmth';
 import { type KeepWarmPing, keepWarmSignalId } from '@runlith/agent/transcript/keepWarm';
-import { Cause, Clock, type Context, Duration, Effect, FiberMap, Queue, type Scope, Stream } from 'effect';
+import { Cause, Clock, Context, Duration, Effect, Fiber, FiberMap, Queue, type Scope, Stream } from 'effect';
+import { CurrentCost, producerCost, type CostCause } from '@runlith/performance/CostLedger';
 import type { AccountQuota } from '../../providers/contract/service/quota.js';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
 import { turnSpendability } from '../models/spendability.js';
@@ -114,7 +115,7 @@ export const keepWarmSpending = (quota: AccountQuota['Service'], providers: Prov
     return verdict.spendable ? now : (verdict.until ?? null);
   });
 
-type Look = { readonly threadId: string; readonly busy: boolean; readonly climb: boolean };
+type Look = { readonly threadId: string; readonly busy: boolean; readonly climb: boolean; readonly cause: CostCause | null };
 
 export type KeepWarmInput = {
   readonly settings: KeepWarmSettings;
@@ -135,11 +136,13 @@ export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spe
     const threadId = state.thread.id;
     const busy = state.status.life !== 'idle';
     const was = working.has(threadId);
+    const context = Fiber.getCurrent()?.context;
+    const cause = context === undefined ? null : Context.get(context, CurrentCost);
     if (busy) working.add(threadId);
     else working.delete(threadId);
-    Queue.offerUnsafe(looks, { threadId, busy, climb: false });
+    Queue.offerUnsafe(looks, { threadId, busy, climb: false, cause });
     if (busy !== was && state.thread.parentThreadId !== null) {
-      Queue.offerUnsafe(looks, { threadId: state.thread.parentThreadId, busy: false, climb: true });
+      Queue.offerUnsafe(looks, { threadId: state.thread.parentThreadId, busy: false, climb: true, cause });
     }
   };
 
@@ -170,7 +173,7 @@ export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spe
       const standing = yield* reads.standing(look.threadId);
       if (standing === null) return;
       if (look.climb && standing.parentThreadId !== null) {
-        yield* Queue.offer(looks, { threadId: standing.parentThreadId, busy: false, climb: true });
+        yield* Queue.offer(looks, { threadId: standing.parentThreadId, busy: false, climb: true, cause: look.cause });
       }
       if (!standing.waits && (yield* own.owing([look.threadId, ...standing.below])).length === 0) return;
       const now = yield* Clock.currentTimeMillis;
@@ -182,7 +185,7 @@ export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spe
           timers,
           look.threadId,
           Effect.sleep(Duration.millis(plan.at - now)).pipe(
-            Effect.andThen(Queue.offer(looks, { threadId: look.threadId, busy: false, climb: false })),
+            Effect.andThen(Queue.offer(looks, { threadId: look.threadId, busy: false, climb: false, cause: look.cause })),
             Effect.asVoid,
           ),
         );
@@ -211,16 +214,23 @@ export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spe
       Effect.sync(() => live.subscribeStates((state) => framed(state, looks))),
       (detach) => Effect.sync(detach),
     );
-    const everyWaiting = own.owing().pipe(
-      Effect.flatMap((owing) => reads.waiting(owing)),
-      Effect.flatMap((ids) =>
-        Effect.forEach(ids, (threadId) => Queue.offer(looks, { threadId, busy: false, climb: false }), { discard: true }),
+    const everyWaiting = producerCost(
+      'KeepWarm.scan',
+      own.owing().pipe(
+        Effect.flatMap((owing) => reads.waiting(owing)),
+        Effect.flatMap((ids) =>
+          Effect.forEach(ids, (threadId) => Queue.offer(looks, { threadId, busy: false, climb: false, cause: null }), { discard: true }),
+        ),
+        Effect.catchCause((cause) => Effect.logWarning('keep-warm could not read the waiting threads', { reason: Cause.pretty(cause) })),
       ),
-      Effect.catchCause((cause) => Effect.logWarning('keep-warm could not read the waiting threads', { reason: Cause.pretty(cause) })),
     );
     yield* Effect.forkScoped(Stream.runForEach(changes, () => everyWaiting));
     yield* everyWaiting;
-    return yield* Effect.forever(Queue.take(looks).pipe(Effect.flatMap((next) => look(next, looks, timers))));
+    return yield* Effect.forever(
+      Queue.take(looks).pipe(
+        Effect.flatMap((next) => Effect.provideService(producerCost('KeepWarm.look', look(next, looks, timers)), CurrentCost, next.cause)),
+      ),
+    );
   });
 
   return { drive };

@@ -1,6 +1,7 @@
 import * as Schema from 'effect/Schema';
 import { ExecutionRef } from '@runlith/executions/protocol/execution';
 import { loadSubjectKindSchema } from './records.js';
+import { costReadSchema } from '../CostLedger.js';
 
 const nonEmptyString = Schema.String.check(Schema.isMinLength(1));
 const positiveLimit = Schema.Int.check(Schema.isGreaterThan(0));
@@ -10,6 +11,7 @@ const reportLimit = (rowBytes: number, rowLines: number) =>
   positiveLimit.check(Schema.isLessThanOrEqualTo(Math.min(Math.floor((50 * 1024 - 2048) / rowBytes), Math.floor((2000 - 64) / rowLines))));
 
 export const PERFORMANCE_QUERY_TYPES = [
+  'ledger',
   'memory',
   'captures',
   'growth',
@@ -191,7 +193,11 @@ export const performancePointQuerySchema = Schema.Union([
 ]).pipe(Schema.toTaggedUnion('type'));
 export type PerformancePointQuery = typeof performancePointQuerySchema.Type;
 
+const ledgerQuerySchema = Schema.Struct({ type: Schema.tag('ledger'), ...costReadSchema.fields });
+type LedgerQuery = typeof ledgerQuerySchema.Type;
+
 export const performanceQuerySchema = Schema.Union([
+  ledgerQuerySchema,
   memoryQuerySchema,
   capturesQuerySchema,
   growthQuerySchema,
@@ -211,3 +217,4 @@ export const performanceQuerySchema = Schema.Union([
   loadQuerySchema,
 ]).pipe(Schema.toTaggedUnion('type'));
 export type PerformanceQuery = typeof performanceQuerySchema.Type;
+export type PerformanceStoreQuery = Exclude<PerformanceQuery, LedgerQuery>;

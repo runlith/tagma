@@ -20,7 +20,7 @@ import { PendingBuffer, PendingQueue, pendingClass } from '../PendingQueue.js';
 import { RetentionGroups } from '../RetentionGroups.js';
 import { makeStoreWorker } from '../StoreWorker.js';
 import type { LossKindCounts, LossPayload, PerformanceRecordKind, StorePressure } from '../protocol/records.js';
-import type { PerformanceQuery } from '../protocol/queries.js';
+import type { PerformanceStoreQuery } from '../protocol/queries.js';
 import {
   PerformanceRecordRefused,
   PerformanceRecordUnavailable,
@@ -60,7 +60,7 @@ export const performancePreparationLayer = Layer.effect(
 export class PerformanceStoreReader extends Context.Service<
   PerformanceStoreReader,
   {
-    readonly read: (query: PerformanceQuery) => Effect.Effect<StoreReportRead, PerformanceStoreFailure>;
+    readonly read: (query: PerformanceStoreQuery) => Effect.Effect<StoreReportRead, PerformanceStoreFailure>;
   }
 >()('@runlith/performance/PerformanceStoreReader') {}
 
@@ -183,7 +183,7 @@ const watch = Effect.fn('PerformanceStore.watch')(function* (options: Performanc
     external: { named: 'performance worker', callsBack: false },
   });
 
-  const read = (query: PerformanceQuery): Effect.Effect<StoreReportRead, PerformanceStoreFailure> => {
+  const read = (query: PerformanceStoreQuery): Effect.Effect<StoreReportRead, PerformanceStoreFailure> => {
     if (query.type === 'memory' || query.type === 'losses') {
       return Effect.fail(
         new PerformanceStoreUnavailable({
@@ -249,7 +249,7 @@ const watch = Effect.fn('PerformanceStore.watch')(function* (options: Performanc
 const unavailableReader = (
   message: string,
 ): {
-  readonly read: (query: PerformanceQuery) => Effect.Effect<StoreReportRead, PerformanceStoreFailure>;
+  readonly read: (query: PerformanceStoreQuery) => Effect.Effect<StoreReportRead, PerformanceStoreFailure>;
 } =>
   PerformanceStoreReader.of({
     read: () => Effect.fail(new PerformanceStoreUnavailable({ message })),
@@ -834,7 +834,7 @@ const make = Effect.fn('PerformanceStore.make')(function* (options: PerformanceS
     },
   });
 
-  const read = (query: PerformanceQuery): Effect.Effect<StoreReportRead, PerformanceStoreFailure> =>
+  const read = (query: PerformanceStoreQuery): Effect.Effect<StoreReportRead, PerformanceStoreFailure> =>
     query.type === 'losses' && query.source === 'live'
       ? Effect.sync(() =>
           livePressureOnly(

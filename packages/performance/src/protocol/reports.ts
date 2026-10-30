@@ -1,6 +1,7 @@
 import * as Schema from 'effect/Schema';
 import { CommandClass } from '@runlith/executions/protocol/command';
 import { cpuProfileFrameSchema, stallSamplingSchema } from '../CpuProfile.js';
+import { costPageSchema, type CostPage } from '../CostLedger.js';
 import {
   breakdownCursorSchema,
   metricCursorSchema,
@@ -366,7 +367,16 @@ export const profileReportSchema = Schema.Struct({
   frames: Schema.Array(cpuProfileFrameSchema),
 });
 
+const ledgerReportSchema = Schema.Struct({
+  type: Schema.tag('ledger'),
+  ...costPageSchema.fields,
+});
+export interface LedgerReport extends CostPage {
+  readonly type: 'ledger';
+}
+
 export const PERFORMANCE_REPORT_SCHEMAS = [
+  ledgerReportSchema,
   memoryReportSchema,
   capturesReportSchema,
   growthReportSchema,

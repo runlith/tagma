@@ -1,4 +1,5 @@
 import { Clock, Effect, FiberMap, Semaphore } from 'effect';
+import { producerCost } from '@runlith/performance/CostLedger';
 import { act, answer as answerAsk, checkpoint, kept as unsealed, receive } from '@runlith/acp/client';
 import type { Answer, ClientEvent, Intent, Observation, Outbound, Receipt, Step } from '@runlith/acp/events';
 import type { Inbound } from '@runlith/ndjson-rpc/exchange';
@@ -397,56 +398,53 @@ export class ProtocolSteps {
     yield* journal.publish(threadId);
   });
 
-  private readonly run = Effect.fnUntraced(function* (
-    this: ProtocolSteps,
-    link: Link,
-    input: Step,
-    plan: StepPlan,
-    request: string | null,
-  ) {
-    const { journal, links } = this;
-    const epoch = link.writer.generation();
-    const step = {
-      ...input,
-      state: boundedClient(input, (ask) => link.row.asked.includes(ask.id)),
-    };
-    for (const event of step.events) noisy(link, event);
-    const read = liveOf(link.row.turns, link.threadId, step.events);
-    for (const event of read.unread) heard(link, event.method, event);
-    for (const one of read.live) yield* journal.live(one.run, one.delta);
-    if (read.live.length > 0) yield* this.tailing(link.threadId);
-    let persisted: Persisted = { events: step.events, begun: [], ended: [], endings: [] };
-    if (
-      step.durable ||
-      plan.row !== undefined ||
-      plan.within !== undefined ||
-      plan.boundaries !== undefined ||
-      plan.begun !== undefined ||
-      plan.interrupted !== undefined ||
-      plan.tail === true ||
-      step.events.some((event) => measures(event) || moved(link.row.client, event)) ||
-      journal.tailDue(link.threadId, step.state.turn?.id ?? null)
-    ) {
-      persisted = yield* this.saved(link, step, plan, request);
-    } else {
-      const projected = project(
-        step.events,
-        link.row.turns,
-        new Date(yield* Clock.currentTimeMillis).toISOString(),
-        link.profile.hosts !== null,
-        undefined,
-        link.facet.session?.cwd || null,
-      );
-      links.landed(link, {
-        ...link.row,
-        turns: projected.turns,
-        client: step.state,
-        rejections: step.state.turn === null ? link.row.rejections : 0,
-      });
-    }
-    yield* link.writer.enqueue(step.frames, epoch);
-    return persisted;
-  });
+  private readonly run = Effect.fnUntraced(
+    function* (this: ProtocolSteps, link: Link, input: Step, plan: StepPlan, request: string | null) {
+      const { journal, links } = this;
+      const epoch = link.writer.generation();
+      const step = {
+        ...input,
+        state: boundedClient(input, (ask) => link.row.asked.includes(ask.id)),
+      };
+      for (const event of step.events) noisy(link, event);
+      const read = liveOf(link.row.turns, link.threadId, step.events);
+      for (const event of read.unread) heard(link, event.method, event);
+      for (const one of read.live) yield* journal.live(one.run, one.delta);
+      if (read.live.length > 0) yield* this.tailing(link.threadId);
+      let persisted: Persisted = { events: step.events, begun: [], ended: [], endings: [] };
+      if (
+        step.durable ||
+        plan.row !== undefined ||
+        plan.within !== undefined ||
+        plan.boundaries !== undefined ||
+        plan.begun !== undefined ||
+        plan.interrupted !== undefined ||
+        plan.tail === true ||
+        step.events.some((event) => measures(event) || moved(link.row.client, event)) ||
+        journal.tailDue(link.threadId, step.state.turn?.id ?? null)
+      ) {
+        persisted = yield* this.saved(link, step, plan, request);
+      } else {
+        const projected = project(
+          step.events,
+          link.row.turns,
+          new Date(yield* Clock.currentTimeMillis).toISOString(),
+          link.profile.hosts !== null,
+          undefined,
+          link.facet.session?.cwd || null,
+        );
+        links.landed(link, {
+          ...link.row,
+          turns: projected.turns,
+          client: step.state,
+          rejections: step.state.turn === null ? link.row.rejections : 0,
+        });
+      }
+      yield* link.writer.enqueue(step.frames, epoch);
+      return persisted;
+    },
+    (effect) => producerCost('ProtocolSteps.run', effect),
+  );
 
   private readonly settle = Effect.fnUntraced(function* (this: ProtocolSteps, link: Link, receipt: Receipt | null, written: Written) {
     const delivered = receipt?._tag === 'Answer' ? this.deliveredAsk(link, receipt.id, written) : undefined;
@@ -499,198 +497,196 @@ export class ProtocolSteps {
     return prompt === undefined ? this.run(link, after, {}, null) : this.saved(link, after, {}, null);
   }
 
-  private readonly saved = Effect.fnUntraced(function* (
-    this: ProtocolSteps,
-    link: Link,
-    input: Step,
-    plan: StepPlan,
-    request: string | null,
-  ) {
-    const { journal, store, links, rows, turns, inbox, activities, answers, withdrawals: asideWithdrawals, display, joined } = this;
-    const at = new Date(yield* Clock.currentTimeMillis).toISOString();
-    let base = plan.row === undefined ? link.row : plan.row(link.row, request);
-    const events: ClientEvent[] = [];
-    const projecting: (ClientEvent | Sealed | Interrupted)[] = [];
-    const answered: ThreadEntry[] = [];
-    const trims: string[] = [];
-    const fates: Fate[] = [];
-    const asides: Answered<AsideOutcome>[] = [];
-    const withdrawals: Answered<WithdrawOutcome>[] = [];
-    const measurements: Measurement[] = [];
-    const retries: HarnessRetry[] = [];
-    for (const event of input.events) {
-      const measuring = measurementOf(event);
-      if (measuring !== null) {
-        if (measuring.context !== null) base = { ...base, context: measuring.context };
-        measurements.push({ ...measuring, order: measurements.length + retries.length });
-        if (measuring.unreadable) heard(link, MEASURED, event);
-      }
-      const declared = read(base, event, at);
-      if (declared === null) {
-        if (event._tag === 'Uncertain') {
-          for (const doubt of doubted(base, event)) {
-            base = doubt.row;
-            fates.push(...doubt.fates);
-          }
+  private readonly saved = Effect.fnUntraced(
+    function* (this: ProtocolSteps, link: Link, input: Step, plan: StepPlan, request: string | null) {
+      const { journal, store, links, rows, turns, inbox, activities, answers, withdrawals: asideWithdrawals, display, joined } = this;
+      const at = new Date(yield* Clock.currentTimeMillis).toISOString();
+      let base = plan.row === undefined ? link.row : plan.row(link.row, request);
+      const events: ClientEvent[] = [];
+      const projecting: (ClientEvent | Sealed | Interrupted)[] = [];
+      const answered: ThreadEntry[] = [];
+      const trims: string[] = [];
+      const fates: Fate[] = [];
+      const asides: Answered<AsideOutcome>[] = [];
+      const withdrawals: Answered<WithdrawOutcome>[] = [];
+      const measurements: Measurement[] = [];
+      const retries: HarnessRetry[] = [];
+      for (const event of input.events) {
+        const measuring = measurementOf(event);
+        if (measuring !== null) {
+          if (measuring.context !== null) base = { ...base, context: measuring.context };
+          measurements.push({ ...measuring, order: measurements.length + retries.length });
+          if (measuring.unreadable) heard(link, MEASURED, event);
         }
-        events.push(event);
-        projecting.push(event);
-        continue;
-      }
-      if (declared._tag === 'Undeclared') {
-        heard(link, declared.method, event);
-        continue;
-      }
-      const handled = declared.handled;
-      base = handled.row;
-      events.push(...handled.events);
-      const sealed = handled.sealed === null || (base.turns.length === 0 && cancelledTurn(link.row) !== null) ? [] : [handled.sealed];
-      projecting.push(...handled.events, ...sealed);
-      answered.push(...handled.boundaries);
-      if (handled.trim !== null) trims.push(handled.trim);
-      fates.push(...handled.fates);
-      asides.push(...handled.asides);
-      withdrawals.push(...handled.withdrawals);
-      retries.push(...handled.retries.map((retry) => ({ ...retry, order: measurements.length + retries.length })));
-    }
-    const by = plan.interrupted?.by ?? null;
-    for (const turn of plan.interrupted?.turns ?? []) projecting.push({ _tag: 'Interrupted', turn, by });
-    const step: Step = { ...input, events };
-    let rejections = step.state.turn !== null || link.row.client.turn !== null ? 0 : base.rejections;
-    let failure = base.failure;
-    for (const event of events) {
-      if (event._tag !== 'TurnEnded') continue;
-      if (event.delivery === 'accepted') rejections = 0;
-      if (event.delivery !== 'refused' || event.outcome._tag !== 'Failed') continue;
-      const cause = event.outcome.cause;
-      if (cause._tag !== 'Agent' && cause._tag !== 'Unwritten') continue;
-      rejections += 1;
-      if (rejections >= 2)
-        failure = cause._tag === 'Agent' ? cause.error.message : 'The execution host refused to write to the agent twice.';
-    }
-    base = { ...base, rejections, failure };
-    const admitted = new Set((plan.begun ?? []).map((turn) => turn.turn));
-    for (const event of events) {
-      if (event._tag === 'TurnEnded' && event.delivery === 'accepted') admitted.add(event.turn);
-      else if ((event._tag === 'Message' || event._tag === 'ToolCallStarted') && event.turn !== null) admitted.add(event.turn);
-      else if (event._tag === 'Asked' && event.ask.turn !== null) admitted.add(event.ask.turn);
-    }
-    const inputs = new Map(
-      link.row.client.requests.flatMap((request) => (request.meaning === 'prompt' ? [[request.turn, request.envelopes] as const] : [])),
-    );
-    const begun = base.turns
-      .filter((turn) => !turn.recorded && admitted.has(turn.id))
-      .map((turn) => begunOf(turn, inputs.get(turn.id) ?? []));
-    base = { ...base, turns: base.turns.map((turn) => (admitted.has(turn.id) ? { ...turn, recorded: true } : turn)) };
-    const hosted = link.profile.hosts !== null;
-    const standing = new Map<string, ThreadToolEntry>();
-    for (const id of standingIds(events, hosted)) {
-      const entry = yield* journal.tool(link.threadId, id);
-      if (entry !== null) standing.set(id, entry);
-    }
-    const projected = project(projecting, base.turns, at, hosted, standing, link.facet.session?.cwd || null, (name, input) =>
-      display(link.threadId, name, completeJsonState(input)),
-    );
-    const ended = [...projected.ended, ...(plan.ended ?? [])];
-    const resolved = resolutionsOf(events, link.row.client.asks).map((each) =>
-      journal.resolved({ id: each.turn, threadId: link.threadId }, questionId(each.ask), `resolved:${each.ask}`),
-    );
-    const compacted = link.row.compact !== null && base.compact === null;
-    const last = ended.at(-1)?.turn ?? null;
-    const measuredIn = base.turns.at(-1)?.id ?? last ?? cancelledTurn(link.row);
-    const served = harnessServed(link.adapter, link.facet, link.asked);
-    const contexts = contextsOf(measurements, {
-      compacted: compacted ? (last ?? measuredIn) : null,
-      measuredIn,
-      at,
-      served,
-      base: base.context,
-    });
-    const settled = [
-      ...fates.map(fateOf),
-      ...fatesOf(events).map((fate) => ({ ...fateOf(unsaidNotes(base.turns, fate)), recorded: true as const })),
-    ];
-    const written = yield* journal.prepare(link.threadId, {
-      name: link.name,
-      evidence: `${step.state.incarnation}:${step.state.cursor.offset}:${step.state.counter}`,
-      started: plan.started ?? [],
-      begun,
-      messages: projected.messages,
-      boundaries: [...(plan.boundaries ?? []), ...answered, ...projected.boundaries],
-      fates: settled,
-      ended,
-      contexts,
-      retries,
-      subject: base.turns.at(-1)?.id ?? last,
-      tail: plan.tail === true,
-    });
-    const row: ProtocolRow = {
-      ...base,
-      client: step.state,
-      failure: base.failure ?? projected.failure,
-      turns: projected.turns,
-      sent: stamped(base.sent, link.row.client.requests, step.state.requests, at),
-    };
-    const settledStep = yield* journal.cut(
-      link.threadId,
-      store.settle(
-        link.threadId,
-        (current, unit) =>
-          Effect.gen(function* () {
-            const within = plan.within === undefined ? { facet: current, row } : yield* plan.within(current, unit, row);
-            const seated = settledFacet(within.facet, events, within, link.profile.reportedModel, at);
-            yield* rows.write(unit, link.threadId, seated.row);
-            for (const at of trims) yield* turns.cut(unit, link.threadId, current.sessionKey, at);
-            yield* turns.record(unit, link.threadId, projected.vendor);
-            if (projected.heard) yield* turns.heard(unit, link.threadId);
-            yield* unit.afterCommit(
-              Effect.sync(() => {
-                links.landed(link, seated.row);
-                link.facet = seated.facet;
-              }),
-            );
-            const journaled = written ?? UNWRITTEN;
-            yield* journaled.opened(unit, [...(plan.reports ?? []), ...resolved]);
-            const held = step.state.requests.flatMap((sent) => (sent.meaning === 'extension' ? sent.envelopes : []));
-            for (const turn of ended) {
-              const released = yield* inbox.releaseInput(link.threadId, turn.turn, held, unit);
-              if (released.length > 0)
-                yield* UNWRITTEN.opened(unit, [journal.fated({ id: turn.turn, threadId: link.threadId }, 'returned', released)]);
+        const declared = read(base, event, at);
+        if (declared === null) {
+          if (event._tag === 'Uncertain') {
+            for (const doubt of doubted(base, event)) {
+              base = doubt.row;
+              fates.push(...doubt.fates);
             }
-            const closed = yield* journaled.closed(unit);
-            return { facet: seated.facet, value: { seated, closed } };
-          }),
-        joined,
-      ),
-    );
-    yield* store.announce(link.threadId, settledStep);
-    const landed = settledStep.value;
-    for (const answer of asides) answers.settle(answer);
-    for (const answer of withdrawals) asideWithdrawals.settle(answer);
-    for (const started of plan.started ?? []) {
-      yield* activities.open(link.threadId, link.name, { turn: started.turn, model: started.model, reasoning: null });
-      yield* journal.began(link.threadId, started.turn);
-      this.introductions.opening(link.threadId, started.turn, false);
-    }
-    for (const ending of ended) yield* activities.end(ending);
-    this.introductions.recorded(link.threadId, projected.messages ?? [], projected.closed.length > 0 && projected.turns.length === 0);
-    if (written !== null || settled.length > 0 || (plan.reports?.length ?? 0) + resolved.length > 0) yield* journal.publish(link.threadId);
-    return {
-      begun: (plan.started ?? []).filter((started) => started.kind === 'turn').map((started) => started.turn),
-      ended: [
-        ...projected.closed,
-        ...(plan.ended ?? []).map((turn) => ({
-          id: turn.turn,
-          startedAt: turn.at,
-          parts: { text: 0, reasoning: 0 },
-          assistant: [],
-          said: turn.failure ?? '',
-          words: '',
-          recorded: true,
-        })),
-      ],
-      endings: ended.map((ending) => ({ ending, status: landed.closed.get(ending.turn) ?? ('settled' as const) })),
-      events,
-    };
-  });
+          }
+          events.push(event);
+          projecting.push(event);
+          continue;
+        }
+        if (declared._tag === 'Undeclared') {
+          heard(link, declared.method, event);
+          continue;
+        }
+        const handled = declared.handled;
+        base = handled.row;
+        events.push(...handled.events);
+        const sealed = handled.sealed === null || (base.turns.length === 0 && cancelledTurn(link.row) !== null) ? [] : [handled.sealed];
+        projecting.push(...handled.events, ...sealed);
+        answered.push(...handled.boundaries);
+        if (handled.trim !== null) trims.push(handled.trim);
+        fates.push(...handled.fates);
+        asides.push(...handled.asides);
+        withdrawals.push(...handled.withdrawals);
+        retries.push(...handled.retries.map((retry) => ({ ...retry, order: measurements.length + retries.length })));
+      }
+      const by = plan.interrupted?.by ?? null;
+      for (const turn of plan.interrupted?.turns ?? []) projecting.push({ _tag: 'Interrupted', turn, by });
+      const step: Step = { ...input, events };
+      let rejections = step.state.turn !== null || link.row.client.turn !== null ? 0 : base.rejections;
+      let failure = base.failure;
+      for (const event of events) {
+        if (event._tag !== 'TurnEnded') continue;
+        if (event.delivery === 'accepted') rejections = 0;
+        if (event.delivery !== 'refused' || event.outcome._tag !== 'Failed') continue;
+        const cause = event.outcome.cause;
+        if (cause._tag !== 'Agent' && cause._tag !== 'Unwritten') continue;
+        rejections += 1;
+        if (rejections >= 2)
+          failure = cause._tag === 'Agent' ? cause.error.message : 'The execution host refused to write to the agent twice.';
+      }
+      base = { ...base, rejections, failure };
+      const admitted = new Set((plan.begun ?? []).map((turn) => turn.turn));
+      for (const event of events) {
+        if (event._tag === 'TurnEnded' && event.delivery === 'accepted') admitted.add(event.turn);
+        else if ((event._tag === 'Message' || event._tag === 'ToolCallStarted') && event.turn !== null) admitted.add(event.turn);
+        else if (event._tag === 'Asked' && event.ask.turn !== null) admitted.add(event.ask.turn);
+      }
+      const inputs = new Map(
+        link.row.client.requests.flatMap((request) => (request.meaning === 'prompt' ? [[request.turn, request.envelopes] as const] : [])),
+      );
+      const begun = base.turns
+        .filter((turn) => !turn.recorded && admitted.has(turn.id))
+        .map((turn) => begunOf(turn, inputs.get(turn.id) ?? []));
+      base = { ...base, turns: base.turns.map((turn) => (admitted.has(turn.id) ? { ...turn, recorded: true } : turn)) };
+      const hosted = link.profile.hosts !== null;
+      const standing = new Map<string, ThreadToolEntry>();
+      for (const id of standingIds(events, hosted)) {
+        const entry = yield* journal.tool(link.threadId, id);
+        if (entry !== null) standing.set(id, entry);
+      }
+      const projected = project(projecting, base.turns, at, hosted, standing, link.facet.session?.cwd || null, (name, input) =>
+        display(link.threadId, name, completeJsonState(input)),
+      );
+      const ended = [...projected.ended, ...(plan.ended ?? [])];
+      const resolved = resolutionsOf(events, link.row.client.asks).map((each) =>
+        journal.resolved({ id: each.turn, threadId: link.threadId }, questionId(each.ask), `resolved:${each.ask}`),
+      );
+      const compacted = link.row.compact !== null && base.compact === null;
+      const last = ended.at(-1)?.turn ?? null;
+      const measuredIn = base.turns.at(-1)?.id ?? last ?? cancelledTurn(link.row);
+      const served = harnessServed(link.adapter, link.facet, link.asked);
+      const contexts = contextsOf(measurements, {
+        compacted: compacted ? (last ?? measuredIn) : null,
+        measuredIn,
+        at,
+        served,
+        base: base.context,
+      });
+      const settled = [
+        ...fates.map(fateOf),
+        ...fatesOf(events).map((fate) => ({ ...fateOf(unsaidNotes(base.turns, fate)), recorded: true as const })),
+      ];
+      const written = yield* journal.prepare(link.threadId, {
+        name: link.name,
+        evidence: `${step.state.incarnation}:${step.state.cursor.offset}:${step.state.counter}`,
+        started: plan.started ?? [],
+        begun,
+        messages: projected.messages,
+        boundaries: [...(plan.boundaries ?? []), ...answered, ...projected.boundaries],
+        fates: settled,
+        ended,
+        contexts,
+        retries,
+        subject: base.turns.at(-1)?.id ?? last,
+        tail: plan.tail === true,
+      });
+      const row: ProtocolRow = {
+        ...base,
+        client: step.state,
+        failure: base.failure ?? projected.failure,
+        turns: projected.turns,
+        sent: stamped(base.sent, link.row.client.requests, step.state.requests, at),
+      };
+      const settledStep = yield* journal.cut(
+        link.threadId,
+        store.settle(
+          link.threadId,
+          (current, unit) =>
+            Effect.gen(function* () {
+              const within = plan.within === undefined ? { facet: current, row } : yield* plan.within(current, unit, row);
+              const seated = settledFacet(within.facet, events, within, link.profile.reportedModel, at);
+              yield* rows.write(unit, link.threadId, seated.row);
+              for (const at of trims) yield* turns.cut(unit, link.threadId, current.sessionKey, at);
+              yield* turns.record(unit, link.threadId, projected.vendor);
+              if (projected.heard) yield* turns.heard(unit, link.threadId);
+              yield* unit.afterCommit(
+                Effect.sync(() => {
+                  links.landed(link, seated.row);
+                  link.facet = seated.facet;
+                }),
+              );
+              const journaled = written ?? UNWRITTEN;
+              yield* journaled.opened(unit, [...(plan.reports ?? []), ...resolved]);
+              const held = step.state.requests.flatMap((sent) => (sent.meaning === 'extension' ? sent.envelopes : []));
+              for (const turn of ended) {
+                const released = yield* inbox.releaseInput(link.threadId, turn.turn, held, unit);
+                if (released.length > 0)
+                  yield* UNWRITTEN.opened(unit, [journal.fated({ id: turn.turn, threadId: link.threadId }, 'returned', released)]);
+              }
+              const closed = yield* journaled.closed(unit);
+              return { facet: seated.facet, value: { seated, closed } };
+            }),
+          joined,
+        ),
+      );
+      yield* store.announce(link.threadId, settledStep);
+      const landed = settledStep.value;
+      for (const answer of asides) answers.settle(answer);
+      for (const answer of withdrawals) asideWithdrawals.settle(answer);
+      for (const started of plan.started ?? []) {
+        yield* activities.open(link.threadId, link.name, { turn: started.turn, model: started.model, reasoning: null });
+        yield* journal.began(link.threadId, started.turn);
+        this.introductions.opening(link.threadId, started.turn, false);
+      }
+      for (const ending of ended) yield* activities.end(ending);
+      this.introductions.recorded(link.threadId, projected.messages ?? [], projected.closed.length > 0 && projected.turns.length === 0);
+      if (written !== null || settled.length > 0 || (plan.reports?.length ?? 0) + resolved.length > 0)
+        yield* journal.publish(link.threadId);
+      return {
+        begun: (plan.started ?? []).filter((started) => started.kind === 'turn').map((started) => started.turn),
+        ended: [
+          ...projected.closed,
+          ...(plan.ended ?? []).map((turn) => ({
+            id: turn.turn,
+            startedAt: turn.at,
+            parts: { text: 0, reasoning: 0 },
+            assistant: [],
+            said: turn.failure ?? '',
+            words: '',
+            recorded: true,
+          })),
+        ],
+        endings: ended.map((ending) => ({ ending, status: landed.closed.get(ending.turn) ?? ('settled' as const) })),
+        events,
+      };
+    },
+    (effect) => producerCost('ProtocolSteps.saved', effect),
+  );
 }

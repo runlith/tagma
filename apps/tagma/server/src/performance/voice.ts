@@ -1,3 +1,4 @@
+import type { CostCounts, CostRow } from '@runlith/performance/CostLedger';
 import type { HandedArtifact, PerformanceAnswer, PerformanceValue } from './contract/wire/performance.js';
 
 export const measured = (answer: unknown): PerformanceAnswer | null =>
@@ -27,6 +28,8 @@ export function performanceText(value: PerformanceValue, artifact?: HandedArtifa
       return `performance read gave up: ${value.message}\nthe store is still answering; ask for a narrower interval`;
     case 'capture-failed':
       return `performance capture failed during ${value.operation}: ${value.message}`;
+    case 'ledger':
+      return ledgerText(value);
     case 'stall':
       return stallText(value);
     case 'stalls':
@@ -46,6 +49,36 @@ export function performanceText(value: PerformanceValue, artifact?: HandedArtifa
     default:
       return JSON.stringify(value, null, 2);
   }
+}
+
+const ledgerCounts = (kind: string, values: CostCounts): string =>
+  [
+    kind,
+    values.statements,
+    values.units,
+    values.programs,
+    values.writerHoldMs,
+    values.writerWaitMs,
+    values.requestBytes,
+    values.responseBytes,
+    values.spans,
+  ].join('\t');
+
+const ledgerRow = (row: CostRow): string[] => [
+  `${row.sequence}\t${row.id}\t${row.name}\t${row.startedAt}..${row.endedAt ?? 'running'}`,
+  ledgerCounts('total', row.total),
+  ledgerCounts('own', row.own),
+  ...row.producers.map((producer) => ledgerCounts(producer.name, producer.counts)),
+];
+
+function ledgerText(value: Extract<PerformanceValue, { readonly type: 'ledger' }>): string {
+  return [
+    'cost ledger: process-lifetime retained suffix; late work can update ended roots',
+    'totals are own + disjoint producers; request/response bytes measure logical SQLite payload, not IPC framing',
+    'bucket\tstatements\tunits\tprograms\twriterHoldMs\twriterWaitMs\trequestBytes\tresponseBytes\tspans',
+    ...value.rows.flatMap(ledgerRow),
+    `total ${value.total}; evicted ${value.evicted}; next ${value.next ?? 'none'}`,
+  ].join('\n');
 }
 
 const LARGEST_TYPES = 8;

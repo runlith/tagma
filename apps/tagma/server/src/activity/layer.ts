@@ -2,7 +2,8 @@ import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { ActivityLog } from '@runlith/activity/log';
 import { ActivityStore, activityStoreLayer } from '@runlith/activity/store';
-import { Cause, Effect, FileSystem, Layer } from 'effect';
+import { Cause, Effect, Fiber, FileSystem, Layer } from 'effect';
+import { CurrentCost, producerCost } from '@runlith/performance/CostLedger';
 import { Settings } from '../settings/contract/service/values.js';
 import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import { MachineStore } from '../platform/contract/service/store.js';
@@ -38,6 +39,10 @@ const stored = Layer.unwrap(
       upkeepAfter: place.opened,
       projectsOf: (threads) => records.projectsOf(threads),
       processes: (yield* MachineStore).processes,
+      captureCost: () => {
+        const cause = Fiber.getCurrent()?.getRef(CurrentCost) ?? null;
+        return (work) => Effect.provideService(producerCost('ActivityStore.flush', work), CurrentCost, cause);
+      },
     });
   }),
 ).pipe(Layer.provide(BunFileSystem.layer));

@@ -1,4 +1,5 @@
 import { Effect, Layer } from 'effect';
+import { rootCost } from '@runlith/performance/CostLedger';
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from 'effect/http';
 import { CallRequest, type Admission, type DoorFacts } from '../../invocation/contract/service/admission.js';
 import { CALL_HEADER, APPROVAL_WAIT_HEADER } from '../../invocation/contract/wire/headers.js';
@@ -43,17 +44,21 @@ const admitting = (admission: Admission['Service'], operation: Effect.Effect<str
   Effect.fnUntraced(function* <E, R>(endpoint: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const query = new URL(request.url, 'http://localhost').searchParams;
-    const call = yield* admission.admit(
-      request.headers,
-      {
-        project: query.get('project') ?? undefined,
-        cwd: query.get('cwd') ?? undefined,
-        branch: query.get('branch') ?? undefined,
-        scope: query.get('scope') ?? undefined,
-      },
-      yield* operation,
-    );
-    return yield* admission.carry(call, yield* doorFacts(request.headers), endpoint);
+    const name = yield* operation;
+    const admitted = Effect.gen(function* () {
+      const call = yield* admission.admit(
+        request.headers,
+        {
+          project: query.get('project') ?? undefined,
+          cwd: query.get('cwd') ?? undefined,
+          branch: query.get('branch') ?? undefined,
+          scope: query.get('scope') ?? undefined,
+        },
+        name,
+      );
+      return yield* admission.carry(call, yield* doorFacts(request.headers), endpoint);
+    });
+    return yield* name === null ? admitted : rootCost(name, admitted);
   });
 
 export const callerMiddlewareLayer = (admission: Admission['Service']) =>

@@ -1,4 +1,5 @@
 import { Context, Effect, Option, Schema } from 'effect';
+import { rootCost } from '@runlith/performance/CostLedger';
 import type { Caller } from '../platform/contract/wire/caller.js';
 import type { ToolDisplay } from '@runlith/agent/tool/display';
 import { knownAnswer, type Operation } from '../platform/contract/wire/operation.js';
@@ -251,8 +252,11 @@ export const performIn =
     input: NoInfer<Input>,
     site: CallSite<World>,
   ): Effect.Effect<Answer, E | GateRefusal | StoreFailure, Exclude<R, Owners | InvocationLifetime | CallerWorkspace>> =>
-    Effect.flatMap(contextAt(owners, bound, input, site), (context) =>
-      Effect.provide(onPlace(perform(bound, input, site.caller)), context),
+    rootCost(
+      bound.id,
+      Effect.flatMap(contextAt(owners, bound, input, site), (context) =>
+        Effect.provide(onPlace(perform(bound, input, site.caller)), context),
+      ),
     );
 
 export const performOperatorIn = <Owners, World, Input, Prepared, Answer, E>(
@@ -262,17 +266,20 @@ export const performOperatorIn = <Owners, World, Input, Prepared, Answer, E>(
   world: World,
 ): Effect.Effect<Answer, E | GateRefusal | StoreFailure> => {
   const caller: Caller = { actor: { kind: 'operator' }, files: null };
-  return Effect.flatMap(contextAt(owners, bound, input, { caller, place: null, world }), (context) =>
-    Effect.provide(
-      onPlace(
-        Effect.andThen(
-          admitOperation(bound.id, caller, input),
-          Effect.flatMap(bodyInputOf(input), (body) =>
-            Effect.flatMap(prepare(bound, body, caller), (prepared) => caused(bound.id, caller, execute(bound, body, prepared, caller))),
+  return rootCost(
+    bound.id,
+    Effect.flatMap(contextAt(owners, bound, input, { caller, place: null, world }), (context) =>
+      Effect.provide(
+        onPlace(
+          Effect.andThen(
+            admitOperation(bound.id, caller, input),
+            Effect.flatMap(bodyInputOf(input), (body) =>
+              Effect.flatMap(prepare(bound, body, caller), (prepared) => caused(bound.id, caller, execute(bound, body, prepared, caller))),
+            ),
           ),
         ),
+        context,
       ),
-      context,
     ),
   );
 };
@@ -329,22 +336,25 @@ const placedById = <Owners, World>(owners: OwnerContext<Owners, World>) =>
   });
 
 export const performByIdIn = <Owners, World>(owners: OwnerContext<Owners, World>) =>
-  Effect.fnUntraced(function* (
-    id: OperationId,
-    input: unknown,
-    site: CallSite<World>,
-    needs: CallNeeds,
-  ): Effect.fn.Return<Performed, DynamicOperationFailure | StoreFailure> {
-    const { bound, context, stand } = yield* placedById(owners)(id, input, site).pipe(
-      Effect.flatMap((at) => Effect.map(standAt(id, input, site.caller, at.context), (stand) => ({ ...at, stand }))),
-      refusedOrBroken,
-      Effect.tapCause((cause) => Effect.flatMap(standOf(site.caller, null), (stand) => callDefected(id, site.caller, stand, cause))),
-    );
-    return yield* answeredIn(bound, context, id, input, site.caller, needs).pipe(
-      refusedOrBroken,
-      Effect.tapCause((cause) => callDefected(id, site.caller, stand, cause)),
-    );
-  });
+  Effect.fnUntraced(
+    function* (
+      id: OperationId,
+      input: unknown,
+      site: CallSite<World>,
+      needs: CallNeeds,
+    ): Effect.fn.Return<Performed, DynamicOperationFailure | StoreFailure> {
+      const { bound, context, stand } = yield* placedById(owners)(id, input, site).pipe(
+        Effect.flatMap((at) => Effect.map(standAt(id, input, site.caller, at.context), (stand) => ({ ...at, stand }))),
+        refusedOrBroken,
+        Effect.tapCause((cause) => Effect.flatMap(standOf(site.caller, null), (stand) => callDefected(id, site.caller, stand, cause))),
+      );
+      return yield* answeredIn(bound, context, id, input, site.caller, needs).pipe(
+        refusedOrBroken,
+        Effect.tapCause((cause) => callDefected(id, site.caller, stand, cause)),
+      );
+    },
+    (effect, id) => rootCost(id, effect),
+  );
 
 const refusedOrBroken = <A, R>(work: Effect.Effect<A, DynamicOperationFailure | StoreFailure, R>): Effect.Effect<A, GateRefusal, R> =>
   Effect.catch(work, (failure) => (failure instanceof GateRefusal ? Effect.fail(failure) : Effect.die(failure)));

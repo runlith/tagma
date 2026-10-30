@@ -2,9 +2,10 @@ import * as Context from 'effect/Context';
 import * as Data from 'effect/Data';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
+import { CostLedger } from './CostLedger.js';
 import type { LossKindCounts } from './protocol/records.js';
 import type { PerformancePointQuery, PerformanceQuery } from './protocol/queries.js';
-import type { PerformanceReport, RetainedRange } from './protocol/reports.js';
+import type { LedgerReport, PerformanceReport, RetainedRange } from './protocol/reports.js';
 import { PerformanceStoreReader } from './store/store.js';
 import { PerformanceReportUnavailable, PerformanceStoreQueryFailed, PerformanceStoreUnavailable } from './store/records.js';
 
@@ -38,9 +39,17 @@ export const performanceReportsLayer = Layer.effect(
   PerformanceReports,
   Effect.gen(function* () {
     const reader = yield* PerformanceStoreReader;
+    const ledger = yield* Effect.serviceOption(CostLedger);
     return PerformanceReports.of({
-      read: (query) =>
-        reader.read(query).pipe(
+      read: (query) => {
+        if (query.type === 'ledger') {
+          return ledger._tag === 'None'
+            ? Effect.fail(
+                new PerformanceStoreUnavailable({ message: 'the process cost ledger is unavailable; it retains no durable history' }),
+              )
+            : Effect.sync((): LedgerReport => ({ type: 'ledger', ...ledger.value.read(query) }));
+        }
+        return reader.read(query).pipe(
           Effect.flatMap((result) =>
             result._tag === 'Found'
               ? Effect.succeed(result.report)
@@ -55,7 +64,8 @@ export const performanceReportsLayer = Layer.effect(
                   }),
                 ),
           ),
-        ),
+        );
+      },
     });
   }),
 );

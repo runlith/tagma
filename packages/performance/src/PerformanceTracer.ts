@@ -4,6 +4,8 @@ import * as Duration from 'effect/Duration';
 import * as Effect from 'effect/Effect';
 import * as Hex from 'effect/encoding/Hex';
 import * as Exit from 'effect/Exit';
+import * as Fiber from 'effect/Fiber';
+import { CurrentCost } from './CostLedger.js';
 import * as Layer from 'effect/Layer';
 import * as Metric from 'effect/Metric';
 import * as Option from 'effect/Option';
@@ -284,6 +286,9 @@ export const make = Effect.fnUntraced(function* (options: Options) {
 
   return Tracer.make({
     span(spanOptions) {
+      const context = Fiber.getCurrent()?.context;
+      const cost = context === undefined ? null : Context.get(context, CurrentCost);
+      if (cost !== null) cost.counts.spans++;
       const wallTime = Date.now();
       const monotonicStart = performance.now();
       const span = new PerformanceSpan(spanOptions, units, (ended, endTime, exit) => {

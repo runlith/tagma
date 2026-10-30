@@ -1,4 +1,5 @@
 import { Effect, Exit, FiberSet, Option, Scope, Semaphore, Stream } from 'effect';
+import { carryCost } from '@runlith/performance/CostLedger';
 import { Git } from '@runlith/git/Git';
 import { commitOf } from '@runlith/git/repository';
 import { configuredGit } from '../../platform/git/ownGit.js';
@@ -37,7 +38,9 @@ export const makeHeads = Effect.gen(function* () {
   if (Option.isSome(coverage)) {
     const runFork = yield* FiberSet.makeRuntime<never, void, never>();
     yield* Effect.acquireRelease(
-      Effect.sync(() => coverage.value.onCovered((projectId) => void runFork(recheck(coverage.value, projectId)))),
+      Effect.sync(() =>
+        coverage.value.onCovered((projectId) => void runFork(carryCost(recheck(coverage.value, projectId), 'Heads.coverage'))),
+      ),
       (release) => Effect.sync(release),
     );
   }

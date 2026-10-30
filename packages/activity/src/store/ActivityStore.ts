@@ -13,7 +13,7 @@ import { Cause, Clock, Context, Duration, Effect, Exit, Fiber, FileSystem, Latch
 import * as EffectWorker from 'effect/workers/Worker';
 import type { WorkerError } from 'effect/workers/WorkerError';
 import type { ActivityFact, ActivityLoss, ActivityOpened } from '../fact';
-import type { ActivityLog } from '../log';
+import type { ActivityCost, ActivityLog } from '../log';
 import { Bodies, type BodyReply, type BodyRequest } from './bodies';
 import { prepareWorker } from '@runlith/held/PreparedWorker';
 import { activityFaults, faultsAging } from './faulting';
@@ -46,6 +46,7 @@ export type ActivityStoreConfig = {
   readonly processes: ProcessPool;
   readonly readingsMax?: number;
   readonly pendingMax?: number;
+  readonly captureCost?: () => ActivityCost;
 };
 
 export type ActivitySettlement = { readonly unwritten: number };
@@ -154,7 +155,7 @@ const opened = Effect.fnUntraced(function* (config: ActivityStoreConfig) {
   const fileSystem = yield* FileSystem.FileSystem;
   const platform = yield* EffectWorker.WorkerPlatform;
   const wake = yield* Latch.make(false);
-  const writer = new Writer(wake, config.pendingMax ?? PENDING_CEILING);
+  const writer = new Writer(wake, config.pendingMax ?? PENDING_CEILING, config.captureCost);
   const lane = yield* Semaphore.make(1);
   const moved = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1 }), PubSub.shutdown);
   const bodies = new Bodies(
@@ -224,6 +225,7 @@ const faultNote = (fact: ActivityFact): boolean => fact._tag === 'Noted' && (fac
 
 class Flushing {
   private carried: readonly Lost[] = [];
+  private carriedCost: ActivityCost | undefined;
   private resting = 0;
   private backoff = 0;
   private reason: string | null = null;
@@ -368,12 +370,16 @@ class Flushing {
       this.faulted = false;
       const batch = this.writer.take();
       this.flying = batch.facts + batch.lost.reduce((sum, row) => sum + row.facts + row.bodies, 0);
-      const projects = yield* this.resolve(batch.opened);
-      const losses = merged([...batch.lost, ...this.carried, ...projects.lost]);
-      const exit = yield* Effect.exit(written(this.db, { ...batch, lost: losses }, projects.held));
+      const cost = batch.cost ?? this.carriedCost;
+      const writing = Effect.flatMap(this.resolve(batch.opened), (projects) => {
+        const losses = merged([...batch.lost, ...this.carried, ...projects.lost]);
+        return Effect.map(Effect.exit(written(this.db, { ...batch, lost: losses }, projects.held)), (exit) => ({ losses, exit }));
+      });
+      const { losses, exit } = yield* cost === undefined ? writing : cost(writing);
       this.flying = 0;
       if (Exit.isSuccess(exit)) {
         this.carried = [];
+        this.carriedCost = undefined;
         this.backoff = 0;
         this.resting = 0;
         this.reason = null;
@@ -410,6 +416,7 @@ class Flushing {
             ];
       if (discarded._tag === 'Failure') this.reason += `\nBody cleanup: ${discarded.failure.reason}`;
       this.carried = merged([...losses, unwritten, ...unindexed]);
+      this.carriedCost = cost;
       this.backoff = Math.min(Math.max(this.backoff * 2, 1_000), BACKOFF_CEILING_MS);
       this.resting = now + this.backoff;
       return;

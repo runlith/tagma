@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { carryCost } from '@runlith/performance/CostLedger';
 import { Cause, Context, Deferred, Effect, Exit, type Fiber, FiberSet, FileSystem, type Result, type Scope, Stream } from 'effect';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { enforcingAt } from './memory.js';
@@ -632,7 +633,7 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       coverage.onCovered((projectId) => {
-        fork(reconcile(projectId));
+        fork(carryCost(reconcile(projectId), 'Remeasure.coverage'));
       }),
     ),
     (release) => Effect.sync(release),

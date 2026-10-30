@@ -1,4 +1,5 @@
 import { Clock, Cause, Context, Effect, Exit, FiberSet, Scope } from 'effect';
+import { carryCost } from '@runlith/performance/CostLedger';
 import { ThreadNotFoundError } from '@runlith/agent/thread/storage/aggregate';
 import type { ThreadLiveFeed } from '@runlith/agent/thread/run/ThreadLiveFeed';
 import { ThreadLaunchGate, ThreadLive } from '../contract/service/engine.js';
@@ -90,7 +91,8 @@ export const makeThreadList = Effect.gen(function* () {
           ]),
         )
       : archiving(ids, work);
-  const runFork = yield* FiberSet.makeRuntime<never, void, never>();
+  const fork = yield* FiberSet.makeRuntime<never, void, never>();
+  const runFork = (work: Effect.Effect<void>) => fork(carryCost(work, 'ThreadList.project'));
   const listeners = new Map<number, Set<(event: ThreadsEvent) => void>>();
   const audience = new ThreadAudience();
   const resyncing = new Map<number, { readonly behind: { readonly event: ThreadsEvent; readonly attention: boolean }[]; again: boolean }>();

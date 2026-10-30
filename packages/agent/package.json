@@ -1089,6 +1089,7 @@
     "@runlith/held": "workspace:*",
     "@runlith/llm": "workspace:*",
     "@runlith/paging": "workspace:*",
+    "@runlith/performance": "workspace:*",
     "@runlith/utils": "workspace:*",
     "effect": "catalog:",
     "uuidv7": "1.2.1"

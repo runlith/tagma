@@ -10,6 +10,7 @@ import { ripgrepBinary } from './ripgrepBinary.js';
 import { Clock, Context, Deferred, Effect, Exit, Layer, ManagedRuntime, Scope, Tracer } from 'effect';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import type { HostLifetime } from '@runlith/executions/protocol/boot';
+import type { CostLedger } from '@runlith/performance/CostLedger';
 import { CpuProfiles } from '@runlith/performance/CpuProfiles';
 import { HeapSnapshots } from '@runlith/performance/HeapSnapshots';
 import { MemoryCaptures } from '@runlith/performance/MemoryCaptures';
@@ -230,6 +231,7 @@ export type ServerRuntime = {
     | GraphUnits
     | MachineUnits
     | ActivityStore
+    | CostLedger
     | PerformanceStore
     | PerformanceReports
     | CpuProfiles
@@ -261,6 +263,8 @@ export type ServerRuntime = {
   accountQuota: AccountQuota['Service'];
   signIns: SignIns['Service'];
   owners: Context.Context<
+    | ActivityStore
+    | CostLedger
     | Layer.Success<typeof serving>
     | Layer.Services<typeof serving>
     | Layer.Success<typeof providers.lifetimes.installation>
@@ -674,6 +678,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
               closing(
                 'activity',
                 activity.lifetimes.installation.pipe(
+                  Layer.provide(instrumentedTraces),
                   Layer.provide(threadRecords),
                   Layer.provide(
                     Layer.succeed(ActivityPlace, {

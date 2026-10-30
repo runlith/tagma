@@ -1,4 +1,5 @@
 import { Cause, Clock, Duration, Effect, Exit, FiberMap, FiberSet } from 'effect';
+import { carryCost, producerCost } from '@runlith/performance/CostLedger';
 import type { DecisionRequest } from '@runlith/llm/decision';
 import type { ThreadCacheWarmth } from '@runlith/agent/thread/cache/ThreadCacheWarmth';
 import type { ThreadRunSettled } from '@runlith/agent/thread/run/ThreadRunLedger';
@@ -89,7 +90,8 @@ export const makeThreadEvents = Effect.fnUntraced(function* ({
   recipients,
 }: ThreadEventsInput) {
   const timers = yield* FiberMap.make<string>();
-  const runFork = yield* FiberSet.makeRuntime<never, void, never>();
+  const fork = yield* FiberSet.makeRuntime<never, void, never>();
+  const runFork = (work: Effect.Effect<void>) => fork(carryCost(work, 'ThreadEvents.project'));
   const taking = (kind: ThreadEvent['kind']) => recipients.filter((recipient) => recipient.takes.includes(kind));
   const cooling = taking('cooled');
   let decisions: ThreadDecisions['Service'] | null = null;
@@ -273,11 +275,14 @@ export const makeThreadEvents = Effect.fnUntraced(function* ({
     }
   });
 
-  const told = Effect.fn('ThreadEvents.told')(function* (threadId: string, fact: ThreadFact) {
-    const thread = yield* threads.summary(threadId).pipe(Effect.mapError(broke));
-    if (thread === undefined) return;
-    yield* fan({ ...fact, thread });
-  });
+  const told = Effect.fn('ThreadEvents.told')(
+    function* (threadId: string, fact: ThreadFact) {
+      const thread = yield* threads.summary(threadId).pipe(Effect.mapError(broke));
+      if (thread === undefined) return;
+      yield* fan({ ...fact, thread });
+    },
+    (effect) => producerCost('ThreadEvents.told', effect),
+  );
 
   const serveDecisions = (served: ThreadDecisions['Service']) => {
     decisions = served;

@@ -1,4 +1,5 @@
 import { Cause, Clock, Context, Duration, Effect, FiberMap, Layer, References, Tracer } from 'effect';
+import { producerCost } from '@runlith/performance/CostLedger';
 import { declare, type Held } from '@runlith/held/Held';
 import type { ThreadPendingInput, ThreadQueuedTurn, ThreadResumeOf, ThreadWaitingTurn, WordsWait } from '../../transcript/live';
 import type { ThreadSnapshot, ThreadState } from '../state';
@@ -296,7 +297,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       { discard: true },
     );
   const publish = (threadId: string): Effect.Effect<void, ThreadBorderFailed> =>
-    residence === null ? framed(threadId) : residence.reading(threadId, framed(threadId));
+    producerCost(PUBLISHING, residence === null ? framed(threadId) : residence.reading(threadId, framed(threadId)));
   const framed = (threadId: string): Effect.Effect<void, ThreadBorderFailed> =>
     inLane(
       threadId,

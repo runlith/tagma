@@ -5,11 +5,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { it } from '@runlith/effect-test';
 import { heldPool } from '@runlith/sqlite-process/testing/pool';
-import { Deferred, Duration, Effect, Layer } from 'effect';
+import { Context, Deferred, Duration, Effect, Fiber, Layer, Tracer } from 'effect';
 import { TestClock } from 'effect/testing';
 import { activity, note } from '../Activity';
 import { activityKind } from '../fact';
-import { ActivityLog } from '../log';
+import { ActivityLog, type ActivityCost } from '../log';
 import { MODEL_CALL } from '../modelCall';
 import { ActivityStore, activityPreparationLayer, activityStoreLayer } from './ActivityStore';
 import { ActivityRecord, type ActivityRowsQuery } from './record';
@@ -28,6 +28,7 @@ const storeAt = (
   keeping: Keeping = { hours: 24, bodiesMaxBytes: 24 * 1024 },
   pendingMax?: number,
   upkeepAfter?: Effect.Effect<void>,
+  captureCost?: () => ActivityCost,
 ) =>
   Layer.unwrap(
     Effect.map(heldPool, (processes) =>
@@ -38,6 +39,7 @@ const storeAt = (
           migrations: MIGRATIONS,
           pendingMax,
           upkeepAfter,
+          captureCost,
           keeping: () => keeping,
           processes,
           projectsOf: (threads) => Effect.succeed(new Map(threads.map((thread) => [thread, thread === 'thread-a' ? 7 : null]))),
@@ -46,8 +48,8 @@ const storeAt = (
     ),
   );
 
-const store = (keeping?: Keeping, pendingMax?: number, upkeepAfter?: Effect.Effect<void>) =>
-  Layer.unwrap(Effect.map(place, (root) => storeAt(root, keeping, pendingMax, upkeepAfter)));
+const store = (keeping?: Keeping, pendingMax?: number, upkeepAfter?: Effect.Effect<void>, captureCost?: () => ActivityCost) =>
+  Layer.unwrap(Effect.map(place, (root) => storeAt(root, keeping, pendingMax, upkeepAfter, captureCost)));
 
 const pause = (ms: number) => TestClock.withLive(Effect.sleep(ms));
 
@@ -75,6 +77,68 @@ const asked = (messages: readonly string[], response: unknown) =>
       }),
     }),
   );
+
+const CostProbe = Context.Reference<symbol | null>('activity/testing/CostProbe', { defaultValue: () => null });
+
+it.live('a deferred batch keeps its first accepted cause and a body keeps its reserved cause through acknowledgement', () => {
+  const captureCost = (): ActivityCost => {
+    const cause = Fiber.getCurrent()?.getRef(CostProbe) ?? null;
+    return (work) => Effect.provideService(work, CostProbe, cause);
+  };
+  return Effect.gen(function* () {
+    const held = yield* ActivityStore;
+    const seen: Array<symbol | null> = [];
+    const tracer = Tracer.make({
+      span: (options) => {
+        if (options.name === 'sql.execute') seen.push(Fiber.getCurrent()?.getRef(CostProbe) ?? null);
+        return new Tracer.NativeSpan(options);
+      },
+    });
+    const first = Symbol('first');
+    const second = Symbol('second');
+    for (const [id, cause] of [
+      ['first', first],
+      ['second', second],
+    ] as const) {
+      yield* Effect.sync(() =>
+        held.log.record({
+          _tag: 'Opened',
+          id,
+          at: 0,
+          parent: null,
+          thread: 'thread-a',
+          run: null,
+          project: null,
+          kind: 'work',
+          actor: { kind: 'operator' },
+          trigger: null,
+          attrs: {},
+        }),
+      ).pipe(Effect.provideService(CostProbe, cause));
+    }
+    yield* held.log.settled.pipe(Effect.provideService(CostProbe, Symbol('settler')), Effect.withTracer(tracer));
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((cause) => cause === first)).toBe(true);
+    expect((yield* rows({ paths: ['id'] })).rows.map((row) => row.values.id).sort()).toEqual(['first', 'second']);
+    seen.length = 0;
+    const body = Symbol('body');
+    yield* Effect.sync(() =>
+      held.log.record({
+        _tag: 'Bodied',
+        activity: 'first',
+        n: 1,
+        at: 0,
+        thread: 'thread-a',
+        body: encoded({ value: 'kept' }),
+      }),
+    ).pipe(Effect.provideService(CostProbe, body));
+    yield* held.log.settled.pipe(Effect.provideService(CostProbe, Symbol('other-settler')), Effect.withTracer(tracer));
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((cause) => cause === body)).toBe(true);
+    const read = yield* Effect.flatMap(ActivityRecord, (record) => record.body('first', 1, 1024));
+    expect(JSON.parse(read.text)).toEqual({ value: 'kept' });
+  }).pipe(Effect.provide(store(undefined, undefined, Effect.never, captureCost)));
+});
 
 it.live(
   'a model call reads back with its usage, notes and bodies, and the next request of its thread is kept as a delta that reads whole',

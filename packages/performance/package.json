@@ -5,6 +5,12 @@
   "description": "The local performance backend: bounded worker persistence and typed process reports shared by server products.",
   "type": "module",
   "exports": {
+    "./CostLedger": {
+      "types": "./src/CostLedger.ts",
+      "browser": "./src/CostLedger.ts",
+      "node": "./src/CostLedger.ts",
+      "default": "./src/CostLedger.ts"
+    },
     "./CpuProfile": {
       "types": "./src/CpuProfile.ts",
       "browser": "./src/CpuProfile.ts",

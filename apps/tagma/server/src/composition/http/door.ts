@@ -1,4 +1,5 @@
 import { Context, Effect, Layer } from 'effect';
+import { rootCost } from '@runlith/performance/CostLedger';
 import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse, HttpStaticServer } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
 import type { RuntimeStatus } from './status.js';
@@ -100,22 +101,25 @@ export const socketOperationsLayer = Layer.effect(
       admitFeed: (declaration, projectId) => refusing(admission.admitFeed(declaration, projectId)),
       perform: (id, projectId, input, declaration) => {
         const step = doorStep(`live ${declaration.id}`);
-        return refusing(
-          Effect.gen(function* () {
-            const call = yield* step(
-              Effect.gen(function* () {
-                const admitted = yield* admission.admit(
-                  yield* ConnectionHeaders,
-                  { project: String(projectId), cwd: undefined, branch: undefined, scope: undefined },
-                  id,
-                );
-                yield* admission.admitProtocol(admitted, declaration, catalog.registry.entry(id).meaning);
-                return admitted;
-              }),
-            );
-            const performed = yield* admission.carry(call, { key: null }, performById(OperationId.make(id), input, ANSWER_ONLY));
-            return performed.value;
-          }),
+        return rootCost(
+          id,
+          refusing(
+            Effect.gen(function* () {
+              const call = yield* step(
+                Effect.gen(function* () {
+                  const admitted = yield* admission.admit(
+                    yield* ConnectionHeaders,
+                    { project: String(projectId), cwd: undefined, branch: undefined, scope: undefined },
+                    id,
+                  );
+                  yield* admission.admitProtocol(admitted, declaration, catalog.registry.entry(id).meaning);
+                  return admitted;
+                }),
+              );
+              const performed = yield* admission.carry(call, { key: null }, performById(OperationId.make(id), input, ANSWER_ONLY));
+              return performed.value;
+            }),
+          ),
         );
       },
     });

@@ -1,4 +1,5 @@
 import type { Held } from '@runlith/held/Held';
+import { CurrentCost } from '@runlith/performance/CostLedger';
 import * as Clock from 'effect/Clock';
 import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
@@ -21,12 +22,43 @@ export const writerPermit = <C, L>(
   marked: Effect.Effect<L | null>,
   checkConnection: Effect.Effect<void, SqlError>,
 ): WriterPermit<C> => {
-  const take = held.lease(key).pipe(
+  const physical = Context.get(Context.empty(), Clock.Clock);
+  const now = () => Number(physical.monotonicTimeNanosUnsafe()) / 1_000_000;
+  const lease = held.lease(key).pipe(
     Effect.mapError(
       (failure) => new SqlError({ reason: classifySqliteError(failure, { message: failure.message, operation: 'execute' }) }),
     ),
-    Effect.provideService(Clock.Clock, Context.get(Context.empty(), Clock.Clock)),
+    Effect.provideService(Clock.Clock, physical),
   );
+  const take = Effect.withFiber<() => void, SqlError, Scope.Scope>((fiber) => {
+    const cost = Context.get(fiber.context, CurrentCost);
+    if (cost === null) return lease;
+    const askedAt = now();
+    let acquiredAt: number | undefined;
+    let ended = false;
+    const finish = () => {
+      if (acquiredAt === undefined || ended) return;
+      ended = true;
+      cost.counts.writerHoldMs += now() - acquiredAt;
+    };
+    return Effect.andThen(
+      Effect.addFinalizer(() => Effect.sync(finish)),
+      lease.pipe(
+        Effect.map((release) => {
+          acquiredAt = now();
+          return () => {
+            release();
+            finish();
+          };
+        }),
+        Effect.ensuring(
+          Effect.sync(() => {
+            cost.counts.writerWaitMs += (acquiredAt ?? now()) - askedAt;
+          }),
+        ),
+      ),
+    );
+  });
   return {
     drain: Effect.scoped(Effect.asVoid(take)),
     statement: Effect.as(

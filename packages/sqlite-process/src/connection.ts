@@ -1,4 +1,5 @@
 import type { ProcessPool } from './ProcessPool.js';
+import { CurrentCost, type CostCause } from '@runlith/performance/CostLedger';
 import * as Clock from 'effect/Clock';
 import * as Context from 'effect/Context';
 import * as Deferred from 'effect/Deferred';
@@ -87,6 +88,56 @@ const queryOf = (sql: string): Query => {
   return query;
 };
 
+const scalarBytes = (value: unknown): number => {
+  if (value === null) return 1;
+  switch (typeof value) {
+    case 'string':
+      return Buffer.byteLength(value, 'utf8');
+    case 'number':
+    case 'bigint':
+      return 8;
+    case 'boolean':
+      return 1;
+    case 'object':
+      return ArrayBuffer.isView(value) || value instanceof ArrayBuffer ? value.byteLength : 0;
+    default:
+      return 0;
+  }
+};
+
+const recordBytes = (record: object): number => {
+  let bytes = 0;
+  for (const key in record) {
+    if (Object.hasOwn(record, key)) bytes += Buffer.byteLength(key, 'utf8') + scalarBytes((record as Record<string, unknown>)[key]);
+  }
+  return bytes;
+};
+
+const parameterBytes = (params: ReadonlyArray<unknown>): number => {
+  let bytes = 0;
+  for (let index = 0; index < params.length; index++) {
+    const value = params[index];
+    bytes +=
+      value !== null && typeof value === 'object' && !ArrayBuffer.isView(value) && !(value instanceof ArrayBuffer)
+        ? recordBytes(value)
+        : scalarBytes(value);
+  }
+  return bytes;
+};
+
+const rowBytes = (rows: ReadonlyArray<unknown>): number => {
+  let bytes = 0;
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index];
+    if (Array.isArray(row)) {
+      for (let column = 0; column < row.length; column++) bytes += scalarBytes(row[column]);
+    } else {
+      bytes += recordBytes(row as object);
+    }
+  }
+  return bytes;
+};
+
 const brokenChannel = (message: string, operation: string) =>
   new SqlError({ reason: classifySqliteError(new Error(message), { message, operation }) });
 
@@ -98,6 +149,7 @@ type Outstanding = {
   readonly operation: string;
   readonly ask: SqliteAsk;
   readonly sentAt: number;
+  readonly cost: CostCause | null;
   due: number;
 };
 
@@ -194,6 +246,18 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
     const waiting = pending.get(said.id);
     if (waiting === undefined) return;
     answered(said.id);
+    if (waiting.cost !== null && waiting.ask._tag === 'Run') {
+      if (said._tag === 'Rows') waiting.cost.counts.responseBytes += rowBytes(said.rows);
+      else if (said._tag === 'Failed') {
+        const thrown = said.thrown;
+        waiting.cost.counts.responseBytes +=
+          scalarBytes(thrown.name) +
+          scalarBytes(thrown.message) +
+          scalarBytes(thrown.code) +
+          scalarBytes(thrown.errno) +
+          scalarBytes(thrown.constraint);
+      }
+    }
     if ((said._tag === 'Rows' || said._tag === 'Failed') && waiting.ask._tag === 'Run' && options.onStatement !== undefined) {
       try {
         options.onStatement({
@@ -256,18 +320,22 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
       );
     });
 
-  const call = (ask: SqliteAsk, operation: string): Effect.Effect<SqliteSaid, SqlError> =>
+  const call = (ask: SqliteAsk, operation: string, cost: CostCause | null = null): Effect.Effect<SqliteSaid, SqlError> =>
     Effect.suspend(() => {
       if (gone !== null) return Effect.fail(gone);
       const cell = Deferred.makeUnsafe<SqliteSaid, SqlError>();
       const sentAt = nowMs();
-      pending.set(ask.id, { cell, operation, ask, sentAt, due: sentAt + SLOW_STATEMENT_MS });
+      pending.set(ask.id, { cell, operation, ask, sentAt, cost, due: sentAt + SLOW_STATEMENT_MS });
       quietSince = null;
       try {
         connected.send(ask);
       } catch (cause) {
         answered(ask.id);
         return Effect.fail(brokenChannel(`the sqlite process would not take a statement: ${String(cause)}`, operation));
+      }
+      if (cost !== null && ask._tag === 'Run') {
+        cost.counts.statements += 1;
+        cost.counts.requestBytes += Buffer.byteLength(ask.sql, 'utf8') + parameterBytes(ask.params);
       }
       outstanding.openUnsafe();
       const answer = Deferred.await(cell).pipe(Effect.ensuring(Effect.sync(() => answered(ask.id))));
@@ -292,6 +360,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
       Effect.andThen(
         options.checkStatement?.(sql) ?? Effect.void,
         Effect.withFiber<Array<any>, SqlError>((fiber) => {
+          const cost = Context.get(fiber.context, CurrentCost);
           const measured = (span: Tracer.Span): Effect.Effect<Array<any>, SqlError> => {
             if (span.sampled) {
               const query = queryOf(sql);
@@ -309,6 +378,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
                 sentAt: Date.now(),
               },
               operation,
+              cost,
             ).pipe(
               Effect.flatMap((said) => {
                 if (span.sampled && (said._tag === 'Rows' || said._tag === 'Failed')) {

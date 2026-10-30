@@ -1,4 +1,5 @@
 import { Effect, Exit, FiberSet, Layer, Scope } from 'effect';
+import { carryCost } from '@runlith/performance/CostLedger';
 import { type CopyPlace, ServedGraphs } from '../graph/contract/service/serving.js';
 import { Projects } from '../projects/contract/service/registry.js';
 import { ThreadLive } from '../threads/contract/service/engine.js';
@@ -21,7 +22,8 @@ export const threadCopiesLayer = Layer.effectDiscard(
     const graphs = yield* ServedGraphs;
     const placement = yield* ThreadPlacement;
     const projects = yield* Projects;
-    const fork = yield* FiberSet.makeRuntime<never, void, never>();
+    const runFork = yield* FiberSet.makeRuntime<never, void, never>();
+    const fork = (work: Effect.Effect<void>) => runFork(carryCost(work, 'ThreadCopies.hold'));
     const running = new Map<string, Running>();
 
     const drop = (standing: Running, key: string): void => {

@@ -4,6 +4,7 @@ import { Effect, type Latch } from 'effect';
 import type { ActivityEnded, ActivityFact, ActivityNoted, ActivityOpened, RunTarget } from '../fact';
 import { MODEL_CALL, type ModelCallAttrs, type ModelCallUsage } from '../modelCall';
 import type { ActivityBodyState } from './record';
+import type { ActivityCost } from '../log';
 import { canonical, folded, metadata, METADATA_BYTES } from './document';
 
 export type BodyForm = 'value' | 'full' | 'delta';
@@ -42,6 +43,7 @@ export type Lost = {
 export type Pending = Exclude<ActivityFact, { readonly _tag: 'Bodied' }> | BodyStored | Lost;
 
 export type Batch = {
+  readonly cost: ActivityCost | undefined;
   readonly opened: readonly ActivityOpened[];
   readonly noted: readonly ActivityNoted[];
   readonly ended: readonly ActivityEnded[];
@@ -57,6 +59,7 @@ const DOCUMENTS_PER_STATEMENT = 512 * 1024;
 
 export class Writer {
   private pending: Pending[] = [];
+  private pendingCost: ActivityCost | undefined;
   private reserved = 0;
   private accepting = true;
   private losses = new Map<string, Lost>();
@@ -67,6 +70,7 @@ export class Writer {
   constructor(
     private readonly wake: Latch.Latch,
     private readonly ceiling: number,
+    private readonly captureCost?: () => ActivityCost,
   ) {}
 
   close(): void {
@@ -77,9 +81,11 @@ export class Writer {
     if (!this.accepting) return null;
     if (this.pending.length + this.reserved >= this.ceiling) return null;
     this.reserved += 1;
+    const cost = this.captureCost?.();
     return {
       commit: (body) => {
         this.reserved -= 1;
+        this.pendingCost ??= cost;
         this.pending.push(body);
         this.wake.openUnsafe();
       },
@@ -91,6 +97,7 @@ export class Writer {
 
   push(item: Pending): void {
     if (item._tag === 'Lost') {
+      this.pendingCost ??= this.captureCost?.();
       const held = this.losses.get(item.cause);
       this.losses.set(
         item.cause,
@@ -119,6 +126,7 @@ export class Writer {
       this.droppedUntil = Math.max(this.droppedUntil, item.at);
       return;
     }
+    this.pendingCost ??= this.captureCost?.();
     this.pending.push(item);
     this.wake.openUnsafe();
   }
@@ -141,6 +149,8 @@ export class Writer {
   take(): Batch {
     const items = this.pending;
     this.pending = [];
+    const cost = this.pendingCost;
+    this.pendingCost = undefined;
     const opened: ActivityOpened[] = [];
     const noted: ActivityNoted[] = [];
     const ended: ActivityEnded[] = [];
@@ -186,6 +196,7 @@ export class Writer {
     }
     const facts = opened.length + noted.length + ended.length + stored.length;
     return {
+      cost,
       opened,
       noted,
       ended,
