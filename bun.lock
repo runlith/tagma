@@ -1347,6 +1347,7 @@
         "@runlith/adapter-opencode-go": "workspace:*",
         "@runlith/adapter-stepfun": "workspace:*",
         "@runlith/adapter-xai": "workspace:*",
+        "@runlith/agent": "workspace:*",
         "@runlith/held": "workspace:*",
         "@runlith/llm": "workspace:*",
         "@runlith/utils": "workspace:*",
