@@ -4,8 +4,6 @@ title: Compare a pid or port with another only when both come from the same evid
 ord: 2
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/protocol/evidence.ts
   - kind: symbol
     ref: packages/executions/src/protocol/evidence.ts
     symbol: EvidenceScope

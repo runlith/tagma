@@ -4,8 +4,6 @@ title: Never act on a pid as the process an execution started unless its identit
 ord: 4
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/protocol/evidence.ts
   - kind: symbol
     ref: packages/executions/src/protocol/evidence.ts
     symbol: identityMatch

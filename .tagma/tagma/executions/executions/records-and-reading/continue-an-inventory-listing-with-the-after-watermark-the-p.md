@@ -4,8 +4,6 @@ title: Continue an inventory listing with the `after` watermark the previous pag
 ord: 7
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/protocol/inventory.ts
   - kind: symbol
     ref: packages/executions/src/protocol/inventory.ts
     symbol: CommandWatermark

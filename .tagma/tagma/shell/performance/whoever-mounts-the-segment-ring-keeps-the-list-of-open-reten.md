@@ -4,19 +4,6 @@ title: Whoever mounts the segment ring keeps the list of open retention groups i
 ord: 19
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/performance/drizzle
-  - kind: file
-    ref: packages/performance/drizzle.config.ts
-  - kind: file
-    ref: packages/performance/src/schema.ts
-  - kind: file
-    ref: packages/performance/src/SegmentCatalog.ts
-  - kind: file
-    ref: packages/performance/src/SegmentRing.ts
-  - kind: symbol
-    ref: packages/performance/src/SegmentRing.ts
-    symbol: groupFloor
   - kind: symbol
     ref: packages/performance/src/SegmentRing.ts
     symbol: maintain

@@ -4,8 +4,6 @@ title: Mount at most one profiler layer per isolate
 ord: 17
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/performance
   - kind: symbol
     ref: packages/performance/src/CpuProfiler.ts
     symbol: CpuProfiler

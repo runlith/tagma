@@ -4,8 +4,6 @@ title: A host conformance run raises the host on the profile it was given and pr
 ord: 1
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/executions/src/conformance
   - kind: symbol
     ref: packages/executions/src/conformance/hostConformance.ts
     symbol: describeHostConformance

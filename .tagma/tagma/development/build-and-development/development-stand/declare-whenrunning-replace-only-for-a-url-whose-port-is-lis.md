@@ -6,11 +6,5 @@ tags: ["rule"]
 sources:
   - kind: file
     ref: packages/dev-runner/src/index.ts
-  - kind: symbol
-    ref: packages/dev-runner/src/index.ts
-    symbol: listenerPids
-  - kind: symbol
-    ref: packages/dev-runner/src/index.ts
-    symbol: replaceRunning
 ---
 Replacing stops every process listening on the URL's port.

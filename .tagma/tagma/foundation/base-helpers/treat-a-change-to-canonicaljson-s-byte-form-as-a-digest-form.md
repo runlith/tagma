@@ -4,13 +4,6 @@ title: Treat a change to canonicalJson's byte form as a digest format change for
 ord: 15
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/utils/src/number.ts
-  - kind: file
-    ref: packages/utils/src/object.ts
-  - kind: symbol
-    ref: apps/tagma/server/src/change-record/threadFiles/patch.ts
-    symbol: digestOf
   - kind: symbol
     ref: packages/utils/src/object.ts
     symbol: canonicalJson

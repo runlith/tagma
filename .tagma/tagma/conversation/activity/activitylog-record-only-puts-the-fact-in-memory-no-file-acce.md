@@ -4,8 +4,6 @@ title: "ActivityLog.record only puts the fact in memory: no file access, no wait
 ord: 15
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/activity
   - kind: symbol
     ref: packages/activity/src/log.ts
     symbol: ActivityLog

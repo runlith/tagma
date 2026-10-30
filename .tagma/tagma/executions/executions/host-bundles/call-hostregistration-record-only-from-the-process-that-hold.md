@@ -6,8 +6,5 @@ tags: ["rule"]
 sources:
   - kind: file
     ref: packages/executions/src/HostRegistration.ts
-  - kind: symbol
-    ref: packages/executions/src/HostRegistration.ts
-    symbol: record
 ---
 `record` reads the standing registration and rewrites it with no lock of its own.

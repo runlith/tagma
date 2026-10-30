@@ -4,10 +4,6 @@ title: Read how a screen subscription ended from its `ending`, never from the wo
 ord: 2
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/protocol/appearance.ts
-  - kind: file
-    ref: packages/executions/src/protocol/presentation.ts
   - kind: symbol
     ref: packages/executions/src/protocol/presentation.ts
     symbol: ScreenSubscriptionEnding

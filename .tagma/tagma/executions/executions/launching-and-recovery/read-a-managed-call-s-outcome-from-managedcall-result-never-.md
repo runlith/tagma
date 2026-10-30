@@ -4,13 +4,6 @@ title: Read a managed call's outcome from `ManagedCall.result`, never from the c
 ord: 7
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/executionSpawner.ts
-  - kind: file
-    ref: packages/executions/src/ManagedCall.ts
-  - kind: symbol
-    ref: packages/executions/src/ManagedCall.ts
-    symbol: managedCall
   - kind: symbol
     ref: packages/executions/src/ManagedCall.ts
     symbol: ManagedCall

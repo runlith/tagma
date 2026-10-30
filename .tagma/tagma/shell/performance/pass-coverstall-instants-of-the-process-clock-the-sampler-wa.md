@@ -8,12 +8,6 @@ fields:
     "enabled": true
   }
 sources:
-  - kind: file
-    ref: packages/performance/src/MetricSnapshots.ts
-  - kind: file
-    ref: packages/performance/src/PerformanceTracer.ts
-  - kind: file
-    ref: packages/performance/src/TraceSampler.ts
   - kind: symbol
     ref: packages/performance/src/TraceSampler.ts
     symbol: coverStall

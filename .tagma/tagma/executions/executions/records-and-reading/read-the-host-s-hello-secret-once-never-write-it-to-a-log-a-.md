@@ -4,10 +4,10 @@ title: Read the host's hello secret once; never write it to a log, a record or a
 ord: 6
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/protocol/wire.ts
   - kind: symbol
     ref: packages/executions/src/protocol/wire.ts
     symbol: ClientMessage
+  - kind: file
+    ref: packages/execution-host/src/Credentials.ts
 ---
 The secret only authenticates a connection's role in its hello message.

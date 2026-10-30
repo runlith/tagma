@@ -4,10 +4,6 @@ title: Recover a lost answer to an input by resending under the same sequence, n
 ord: 2
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/protocol/input.ts
-  - kind: file
-    ref: packages/executions/src/protocol/inputProfile.ts
   - kind: symbol
     ref: packages/executions/src/protocol/input.ts
     symbol: InputAnswer

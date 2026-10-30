@@ -1,0 +1,12 @@
+---
+id: 01a18ee1-7023-76ec-a2df-8391e7cf56dd
+title: Remove the coupling inspection and its ratchets
+ord: 17
+tags: ["task"]
+fields:
+  {
+    "holder": "tagma:01a18e91-0057-7f4b-85b6-a35adafffddb",
+    "status": "in_work"
+  }
+---
+The operator removed the coupling rule: card-relation enforcement already controls module dependencies, and external-import share rejects correct work. Remove its inspection, baseline, programme wiring, exclusive fixtures and cost-harness arm, retaining shared module boundaries.

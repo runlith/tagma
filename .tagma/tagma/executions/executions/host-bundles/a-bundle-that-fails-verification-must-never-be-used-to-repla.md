@@ -8,8 +8,6 @@ fields:
     "enabled": true
   }
 sources:
-  - kind: dir
-    ref: packages/executions
   - kind: symbol
     ref: packages/executions/src/hostArtifacts.ts
     symbol: ArtifactInvalid

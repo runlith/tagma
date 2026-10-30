@@ -4,11 +4,6 @@ title: A read port given to the ndjson-rpc exchange returns the same bytes for t
 ord: 4
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/ndjson-rpc
-  - kind: symbol
-    ref: packages/ndjson-rpc/src/exchange.ts
-    symbol: consume
   - kind: symbol
     ref: packages/ndjson-rpc/src/exchange.ts
     symbol: ExchangePorts

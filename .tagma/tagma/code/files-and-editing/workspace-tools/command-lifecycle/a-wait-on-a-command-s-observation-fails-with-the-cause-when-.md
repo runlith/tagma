@@ -4,14 +4,6 @@ title: A wait on a command's observation fails with the cause when the observati
 ord: 1
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/agent-tools/src/bash
-  - kind: file
-    ref: packages/agent-tools/src/commandClass.ts
-  - kind: file
-    ref: packages/agent-tools/src/CommandWork.ts
-  - kind: file
-    ref: packages/executions/src/bunSpawner.ts
   - kind: symbol
     ref: packages/agent-tools/src/CommandWork.ts
     symbol: CommandAcceptance

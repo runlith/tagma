@@ -4,14 +4,6 @@ title: Resolve every command environment request through `resolveEnvironment`
 ord: 6
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/CommandEnvironment.ts
-  - kind: symbol
-    ref: apps/tagma/server/src/executions/worlds/managed.ts
-    symbol: processEnvironment
-  - kind: symbol
-    ref: apps/tagma/server/src/workspaces/HostEnvironment.ts
-    symbol: BoundEnvironment
   - kind: symbol
     ref: packages/executions/src/CommandEnvironment.ts
     symbol: resolveEnvironment

@@ -4,8 +4,6 @@ title: Name only an existing working directory in a launch
 ord: 2
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/protocol/launch.ts
   - kind: symbol
     ref: packages/executions/src/protocol/launch.ts
     symbol: LaunchCommand

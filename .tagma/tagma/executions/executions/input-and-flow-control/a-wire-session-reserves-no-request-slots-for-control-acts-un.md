@@ -4,10 +4,6 @@ title: A wire session reserves no request slots for control acts unless its budg
 ord: 4
 tags: ["explanation"]
 sources:
-  - kind: file
-    ref: packages/executions/src/WireReaders.ts
-  - kind: file
-    ref: packages/executions/src/WireRequests.ts
   - kind: symbol
     ref: packages/executions/src/WireRequests.ts
     symbol: wireRequests

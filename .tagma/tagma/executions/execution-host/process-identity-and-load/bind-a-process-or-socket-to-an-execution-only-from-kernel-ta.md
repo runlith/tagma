@@ -11,11 +11,5 @@ sources:
   - kind: symbol
     ref: packages/executions/src/protocol/evidence.ts
     symbol: ListenerHint
-  - kind: symbol
-    ref: packages/executions/src/protocol/evidence.ts
-    symbol: ProcessAssociation
-  - kind: symbol
-    ref: packages/executions/src/protocol/evidence.ts
-    symbol: ProcessSnapshot
 ---
 Associations derive from the process tables and a socket's owner from the sockets table. A printed URL (`ListenerHint`) is a hint for the reader only.

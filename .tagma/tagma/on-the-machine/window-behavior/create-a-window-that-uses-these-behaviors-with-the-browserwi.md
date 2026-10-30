@@ -4,8 +4,6 @@ title: Create a window that uses these behaviors with the BrowserWindow options 
 ord: 9
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/window-behavior/src/host-electron/ElectronWindowBehaviorHost.ts
   - kind: symbol
     ref: packages/window-behavior/src/host-electron/bootstrap.ts
     symbol: behaviorWindowOptions

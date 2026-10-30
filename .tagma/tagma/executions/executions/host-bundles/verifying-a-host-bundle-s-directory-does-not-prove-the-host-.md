@@ -4,8 +4,6 @@ title: "Verifying a host bundle's directory does not prove the host runs it: the
 ord: 2
 tags: ["explanation"]
 sources:
-  - kind: dir
-    ref: packages/executions
   - kind: symbol
     ref: packages/executions/src/hostArtifacts.ts
     symbol: boundTo

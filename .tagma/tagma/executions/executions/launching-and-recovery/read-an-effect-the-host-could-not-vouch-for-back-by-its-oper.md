@@ -4,8 +4,6 @@ title: Read an effect the host could not vouch for back by its operation key; ne
 ord: 4
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/protocol/host.ts
   - kind: symbol
     ref: packages/executions/src/protocol/execution.ts
     symbol: HostRequestRef

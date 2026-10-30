@@ -4,8 +4,6 @@ title: An empty list of processes or listeners means "none" only when its comple
 ord: 3
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/protocol/evidence.ts
   - kind: symbol
     ref: packages/executions/src/protocol/evidence.ts
     symbol: EvidenceCompleteness

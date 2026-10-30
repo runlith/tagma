@@ -4,8 +4,6 @@ title: Apply a screen patch only to the base revision it names; with no such rev
 ord: 3
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/protocol/presentationPaint.ts
   - kind: symbol
     ref: packages/executions/src/protocol/presentationPaint.ts
     symbol: PatchBase

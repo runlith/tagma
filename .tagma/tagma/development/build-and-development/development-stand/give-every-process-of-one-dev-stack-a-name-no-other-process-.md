@@ -6,11 +6,5 @@ tags: ["rule"]
 sources:
   - kind: file
     ref: packages/dev-runner/src/index.ts
-  - kind: symbol
-    ref: packages/dev-runner/src/index.ts
-    symbol: restart
-  - kind: symbol
-    ref: packages/dev-runner/src/index.ts
-    symbol: standing
 ---
 The runner keys its standing processes by name; a duplicate overwrites the earlier entry and a restart then stops the wrong process.

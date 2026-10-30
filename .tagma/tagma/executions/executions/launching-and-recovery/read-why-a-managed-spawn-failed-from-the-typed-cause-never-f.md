@@ -4,13 +4,6 @@ title: Read why a managed spawn failed from the typed cause, never from the mess
 ord: 8
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/executionSpawner.ts
-  - kind: file
-    ref: packages/executions/src/ManagedCall.ts
-  - kind: symbol
-    ref: packages/executions/src/executionSpawner.ts
-    symbol: failed
   - kind: symbol
     ref: packages/executions/src/ManagedCall.ts
     symbol: ManagedCallFailed

@@ -4,8 +4,6 @@ title: A figure in a capability profile must be measured on the platform and nat
 ord: 1
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/executions/src/protocol/capacity.ts
   - kind: symbol
     ref: packages/executions/src/protocol/capacity.ts
     symbol: CapabilityProfile
