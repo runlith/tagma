@@ -2,20 +2,10 @@ import { spawnSync } from 'node:child_process';
 import { writeSync } from 'node:fs';
 import { isAbsolute, join, matchesGlob } from 'node:path';
 import { plugin } from 'bun';
-import type { FactSide, ProgramAnswer, ProgramInvocation, ProgramKey, ProgramResult, ProgramSide } from '@tagma/inspection/program';
+import type { ProgramAnswer, ProgramInvocation, ProgramKey, ProgramResult, ProgramSide } from '@tagma/inspection/program';
+import type { Answer, Program, Reading, Side } from '@runlith/tagma/rules';
 import * as rules from '@runlith/tagma/rules';
 import * as effect from '@runlith/tagma/rules/effect';
-
-type Reading = { readonly findings: ProgramResult['findings']; readonly covered?: 'paths' | 'reach' };
-type Answer = { readonly tree: Reading; readonly base?: Reading };
-type Side = {
-  readonly commit: string;
-  readonly paths: readonly string[];
-  readonly whole: boolean;
-  readonly read: (path: string) => Promise<string | null>;
-  readonly facts: FactSide | null;
-};
-type Program = (input: { readonly params: unknown; readonly tree: Side; readonly base: Side | null }) => Answer | Promise<Answer>;
 
 const input: ProgramInvocation = JSON.parse(await Bun.stdin.text());
 const module = process.argv[2];
@@ -44,11 +34,16 @@ const git = (args: readonly string[]): Buffer | null => {
   return ran.status === 0 ? ran.stdout : null;
 };
 
-const isReading = (value: unknown): value is Reading =>
-  typeof value === 'object' &&
-  value !== null &&
-  Array.isArray((value as Reading).findings) &&
-  [undefined, 'paths', 'reach'].includes((value as Reading).covered);
+const isReading = (value: unknown): value is Reading => {
+  if (typeof value !== 'object' || value === null || !Array.isArray((value as Reading).findings)) return false;
+  const covered = (value as Reading).covered;
+  return (
+    covered === undefined ||
+    covered === 'paths' ||
+    covered === 'reach' ||
+    (Array.isArray(covered) && covered.every((path) => typeof path === 'string'))
+  );
+};
 
 const answered = (value: unknown): value is Answer =>
   typeof value === 'object' &&
@@ -116,7 +111,7 @@ for (const key of input.keys) {
   const sides = new Map(input.sides.map((side) => [side.side, side]));
   const tree = sideOf(sides.get('tree')!, key);
   const base = sides.has('base') ? sideOf(sides.get('base')!, key) : null;
-  const answer: unknown = await (program as Program)({ params: key.params, tree, base });
+  const answer: unknown = await (program as Program<object>)({ params: key.params, tree, base });
   if (!answered(answer)) failed(`${key.id} of ${module} answered no { tree: { findings }, base? } reading`);
   for (const side of input.sides) {
     const reading = side.side === 'tree' ? answer.tree : answer.base;
@@ -124,7 +119,12 @@ for (const key of input.keys) {
     readings.push({
       key: key.key,
       side: side.side,
-      covered: reading?.covered === 'reach' || judged.whole ? { scope: 'reach' } : judged.paths,
+      covered:
+        reading?.covered === 'reach' || judged.whole
+          ? { scope: 'reach' }
+          : Array.isArray(reading?.covered)
+            ? reading.covered
+            : judged.paths,
       findings: reading?.findings ?? [],
       unjudged: [],
     });

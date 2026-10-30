@@ -135,7 +135,7 @@ export type Side = {
 
 export type InspectionInput<Params extends object> = { readonly params: Params; readonly tree: Side; readonly base: Side | null };
 
-export type Reading = { readonly findings: readonly Finding[]; readonly covered?: 'paths' | 'reach' };
+export type Reading = { readonly findings: readonly Finding[]; readonly covered?: 'paths' | 'reach' | readonly string[] };
 
 export type Answer = { readonly tree: Reading; readonly base?: Reading };
 

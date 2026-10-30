@@ -51,6 +51,55 @@ const subject = (root: string): GroupSubject => ({
 });
 
 layer(BunFileSystem.layer, { excludeTestServices: true })('program groups', (it) => {
+  it.effect('an explicit frontier covers an unchanged file on both sides and defeats stale debt only for its confirmed base', () =>
+    Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.makeTempDirectoryScoped({ prefix: 'checker-frontier-' });
+      yield* files.makeDirectory(join(root, 'src'));
+      yield* files.writeFileString(
+        join(root, 'check.ts'),
+        `import { defineProgram } from '@runlith/tagma/rules';
+const read = async side => ({
+  covered: [...side.paths, 'src/b.ts'],
+  findings: Number(await side.read('src/a.ts')) === 0 ? [] : [
+    { fingerprint: 'marker', path: 'src/b.ts', message: await side.read('src/b.ts') }
+  ]
+});
+export default defineProgram({ audit: async ({ tree, base }) => ({ tree: await read(tree), base: await read(base) }) });`,
+      );
+      yield* files.writeFileString(join(root, 'src/a.ts'), '0');
+      yield* files.writeFileString(join(root, 'src/b.ts'), 'affected');
+      const base = committed(root);
+      yield* files.writeFileString(join(root, 'src/a.ts'), '1');
+      const tree = committed(root, ['src/a.ts']);
+      const check = { key: 'audit', program: { program: 'check.ts', name: 'audit', concern: 'code' as const, needs: [], params: {} } };
+      const checker = checkerFor(root, check);
+      const binding: ProgramBinding = {
+        rule: 'audit',
+        check,
+        places: ['src'],
+        checker,
+        debt: [{ fingerprint: 'audit marker', owner: 'task', count: 1 }],
+      };
+      const result = (yield* judgePrograms(
+        {
+          ...subject(root),
+          tree,
+          base,
+          sides: [
+            { side: 'tree', paths: ['src/a.ts'], files: [{ path: 'src/a.ts', text: '1' }] },
+            { side: 'base', paths: ['src/a.ts'], files: [{ path: 'src/a.ts', text: '0' }] },
+          ],
+        },
+        [binding],
+      ).pipe(Effect.provideService(ProgramRoad, localRoad([])))).get(checker.id)!.answer;
+      if (Result.isFailure(result)) return yield* Effect.die(new Error(result.failure.reason));
+      const answer = result.success;
+      expect(answer[0]!.verdict.violations.map((one) => one.file)).toEqual(['src/b.ts']);
+      expect(answer[0]!.coverage.paths).toEqual(['src/a.ts', 'src/b.ts']);
+    }),
+  );
+
   it.effect('a missing checkout dependency names its environment, and preparing that checkout makes the same inspection judge', () =>
     Effect.gen(function* () {
       const files = yield* FileSystem.FileSystem;

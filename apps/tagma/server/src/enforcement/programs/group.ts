@@ -212,9 +212,9 @@ const execute = Effect.fn('enforcement.program.group')(function* (
       if (side.side === 'base') {
         const explicit = Array.isArray(reading.covered) ? new Set(reading.covered) : undefined;
         covered = new Set(
-          (sides.get('base')?.files ?? [])
-            .filter((file) => inProgramReach(key.reach, file.path) && (explicit === undefined || explicit.has(file.path)))
-            .map((file) => file.path),
+          (explicit === undefined ? (sides.get('base')?.files ?? []).map((file) => file.path) : [...explicit]).filter((path) =>
+            inProgramReach(key.reach, path),
+          ),
         );
       }
     }
