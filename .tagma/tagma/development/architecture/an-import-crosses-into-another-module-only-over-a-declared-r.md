@@ -8,16 +8,7 @@ fields:
     "delivery": "code",
     "enforcement": {
       "debt": [],
-      "escaped": [
-        {
-          "commit": "f3fca1d2d007df34d5e8444b919fc2c7a76eaafb",
-          "fingerprint": "external-harnesses -> @runlith/adapter-opencode private @ apps/tagma/server/src/external-harnesses/testing/opencodePlugin.itest.ts",
-          "fix": "Import through an entry `@runlith/adapter-opencode` opens to `external-harnesses` (`packages/adapter-opencode/src/adapter.ts`, `packages/adapter-opencode/src/harness/opencode.ts`, `packages/adapter-opencode/src/harness/session.ts`, `packages/adapter-opencode/src/runner/run.ts`), or open one covering `packages/adapter-opencode/src/environment.ts` with `set_module`.",
-          "line": 6,
-          "path": "apps/tagma/server/src/external-harnesses/testing/opencodePlugin.itest.ts",
-          "said": "imports `@runlith/adapter-opencode/environment` of module `@runlith/adapter-opencode`, which no entry of `@runlith/adapter-opencode` opens to `external-harnesses`"
-        }
-      ],
+      "escaped": [],
       "inspection": "modules",
       "on": [
         {
