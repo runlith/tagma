@@ -35,11 +35,15 @@ edges:
   - kind: imports
     to: 01a174f2-3d51-75fa-8183-c8b41c9696ea
   - kind: imports
+    to: 01a174f2-3d52-7cb0-8660-a40d39910e41
+  - kind: imports
     to: 01a174f2-3d53-77eb-b835-34ca4f0a6d9b
   - kind: imports
     to: 01a174f2-3d65-7e23-bb0f-9d871e061782
   - kind: imports
     to: 01a174f2-3d67-75cf-b329-5f82212858cf
+  - kind: imports
+    to: 01a174f2-3d8d-7fa1-bc61-069b96400e93
   - kind: imports
     to: 01a18921-8504-7058-9d53-62c5e9aa47fc
   - kind: imports
@@ -48,4 +52,4 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/plugins
 ---
-The operator finds, installs and runs agent plugins in the Plugins settings section: a catalog of every added marketplace with search and a marketplace filter, each entry opening into its preview — who made it, what Tagma takes and ignores, the consent installing asks — and installing into the layer the page is set for, this project or every project; the installed plugins with their switch, card, options and the sign-in their remote servers ask; and the marketplaces themselves, added by git URL or folder, refreshed and removed. It reads marketplaces through the live `marketplaces.subscribe` feed and an entry through `preview_plugin`, never a package itself, and acts only through the plugins and marketplaces operations; plain options go into `plugins.options`, secret ones into the key store through the secrets module, and consent for what a plugin runs is the operations' own review.
+The operator finds, adds and manages what agents can use in a project in the Plugins place on the rail: a list of what runs here — installed plugins and the MCP servers declared for the person or the project, ordered by what waits on the person — beside the catalog of every added marketplace, by category and by source; a plugin's page that previews an entry and adds it to this project or to all projects, then walks the sign-in each of its remote servers asks; an installed plugin's page with its state, services, options and acts; a server's page; and one field that adds a source, a plugin, a service or a program by its address. It reads marketplaces through the live `marketplaces.subscribe` feed, plugins through `read_plugins`, servers through `read_mcp_servers` kept live by the `mcp.servers` feed and an entry through `preview_plugin`, never a package itself; plain options go into `plugins.options`, secret ones into the key store, and consent for what a plugin runs is the operations' own review. Settings keep only a pointer to the place.

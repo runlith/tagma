@@ -50,6 +50,8 @@ edges:
     to: 01a174f2-3d7f-7ca2-9e04-eb039cc7259f
   - kind: imports
     to: 01a174f2-3d97-7315-8204-34ae9103ad03
+  - kind: imports
+    to: 01a1892f-19c3-73c9-ae5e-7d7993106e20
 sources:
   - kind: dir
     ref: apps/tagma/app/src/routes
