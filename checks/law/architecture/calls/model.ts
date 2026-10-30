@@ -18,7 +18,7 @@ export type Value =
   | { readonly k: 'module'; readonly path: string }
   | { readonly k: 'wrap' };
 
-export type Method = { readonly act: Act | null; readonly returns: Value | null };
+export type Method = { readonly act: Act | null; readonly returns: Value | null; readonly property?: true };
 
 const cap = (name: Capability): Value => ({ k: 'cap', cap: name });
 
@@ -33,7 +33,9 @@ export const METHODS: Readonly<Record<Capability, Readonly<Record<string, Method
     stream: { act: 'request', returns: null },
     text: { act: 'request', returns: null },
     object: { act: 'request', returns: null },
+    compaction: { act: null, returns: cap('compaction'), property: true },
   },
+  compaction: { summarize: { act: 'request', returns: null } },
   asides: { ask: ASK, of: ASIDE },
   aside: { ask: ASK },
   asks: { held: ASIDE },
@@ -49,6 +51,7 @@ const OWNER: Readonly<Record<Capability, string>> = {
   access: 'ModelAccess',
   requester: 'ModelRequester',
   request: 'ModelRequest',
+  compaction: 'ModelCompaction',
   asides: 'ThreadAsides',
   aside: 'AgentAside',
   asks: 'ThreadAsks',
@@ -81,7 +84,7 @@ export const capable = (value: Value | undefined, depth = 0): boolean => {
 };
 
 export const describe = (value: Value | undefined, depth = 0): string => {
-  if (value === undefined || depth > 4) return '-';
+  if (value === undefined || depth > 4 || !capable(value)) return '-';
   switch (value.k) {
     case 'cap':
       return `c:${value.cap}`;

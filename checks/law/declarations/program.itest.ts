@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Side } from '@runlith/tagma/rules';
+import { ProgramAnswer, type ProgramInvocation } from '@tagma/inspection/program';
+import { Schema } from 'effect';
 import type { DeadParams, RepeatedParams } from './declaration';
 import { prepare } from './index';
 import { revisionAt, saveRevision } from './memo';
@@ -257,6 +259,44 @@ test('a change outside every production file costs nothing and finds nothing', a
     base: side(before, []),
   });
   expect(answer.tree.findings).toEqual([]);
+});
+
+test('the production law programme routes both declaration keys through its root entry and answers a whole reading in one process', () => {
+  const wideA = 'export type Wide = { readonly a: string; readonly b: string; readonly c: number };\n';
+  const tree = treeWith({
+    ...initial,
+    'src/lib.ts': 'export const used = () => 1;\nexport const helper = () => 2;\nexport const orphan = () => 3;\n',
+    'src/a.ts': wideA,
+    'src/b.ts': wideA.replace('Wide', 'Copy'),
+  });
+  const reach = { places: ['src'], files: ['**/*.ts'] };
+  const invocation: ProgramInvocation = {
+    request: 'declarations',
+    checker: join(import.meta.dir, '../programs.ts'),
+    root,
+    tree,
+    base: null,
+    keys: [
+      { key: 'dead', id: 'dead-code', params: dead, reach },
+      { key: 'repeated', id: 'repeated-declarations', params: repeated, reach },
+    ],
+    sides: [{ side: 'tree', paths: null, files: null }],
+  };
+  const ran = spawnSync(
+    process.execPath,
+    ['--no-install', join(import.meta.dir, '../../../apps/tagma/server/src/enforcement/programs/runner.ts'), invocation.checker],
+    {
+      cwd: root,
+      input: JSON.stringify(invocation),
+    },
+  );
+  expect(ran.status).toBe(0);
+  const answer = Schema.decodeUnknownSync(ProgramAnswer)(JSON.parse(ran.stdout.toString()));
+  expect(answer.failure).toBeUndefined();
+  const of = (key: string) => answer.readings.find((one) => one.key === key)!;
+  expect(of('dead').covered).toEqual({ scope: 'reach' });
+  expect(of('dead').findings.map((one) => one.fingerprint)).toEqual(['dead src/a.ts#Wide', 'dead src/b.ts#Copy', 'dead src/lib.ts#orphan']);
+  expect(of('repeated').findings.map((one) => one.path)).toEqual(['src/a.ts', 'src/b.ts']);
 });
 
 test('a revision memo keeps JSON values by key across handles', () => {

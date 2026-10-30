@@ -22,7 +22,7 @@ export type RepeatedParams = {
   readonly aliases: readonly Alias[];
 };
 
-const program = 'checks/law/declarations/program.ts';
+const program = 'checks/law/programs.ts';
 
 export const repeated = defineInspection<RepeatedParams>({ program, name: 'repeated-declarations', concern: 'code' });
 

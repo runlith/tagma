@@ -9,6 +9,7 @@ const params: CallParams = {
     { path: 'server/src/providers/access.ts', name: 'ModelAccess', capability: 'access', form: 'service' },
     { path: 'pkg/modelPort.ts', name: 'ModelRequester', capability: 'requester', form: 'type' },
     { path: 'pkg/modelPort.ts', name: 'ModelRequest', capability: 'request', form: 'type' },
+    { path: 'pkg/modelPort.ts', name: 'ModelCompaction', capability: 'compaction', form: 'type' },
     { path: 'pkg/compaction.ts', name: 'CompactionModels', capability: 'requester', form: 'type' },
     { path: 'server/src/threads/asides.ts', name: 'HarnessAsides', capability: 'asides', form: 'service' },
     { path: 'pkg/threadAsides.ts', name: 'ThreadAsides', capability: 'asides', form: 'type' },
@@ -23,6 +24,7 @@ const params: CallParams = {
     ask: ['server/src/threads/asks.ts'],
     row: ['server/src/harness', 'server/src/threads/harness'],
   },
+  aliases: [],
 };
 
 const contracts: Record<string, string> = {
@@ -154,6 +156,24 @@ test('a returned request is a model call by stream, text and object, and a typed
   ]);
 });
 
+test('the compaction a request carries asks a model by summarize, while select and signedAccount are metadata', () => {
+  const head = "import type { ModelRequest, ModelCompaction } from '@pkg/modelPort';\n";
+  const files = {
+    'server/src/f/chained.ts': `${head}export const go = (request: ModelRequest) => request.compaction?.summarize({});\n`,
+    'server/src/f/typed.ts': `${head}export const go = (compaction: ModelCompaction) => compaction.summarize({});\n`,
+    'server/src/f/aliased.ts': `${head}export const go = (request: ModelRequest) => { const held = request['compaction']; const { summarize } = request.compaction!; return [held?.summarize({}), summarize({})]; };\n`,
+    'server/src/f/produced.ts': `${HEAD}export const go = Effect.gen(function* () { const models = yield* ModelAccess; return models.request({}).compaction?.summarize({}); });\n`,
+    'server/src/f/metadata.ts': `${head}export const go = (request: ModelRequest, compaction: ModelCompaction) => [request.compaction?.select([], 0), compaction.select([], 1), request.signedAccount?.()];\n`,
+  };
+  expect(found(files)).toEqual([
+    ['server/src/f/aliased.ts', 'request:ModelCompaction.summarize'],
+    ['server/src/f/chained.ts', 'request:ModelCompaction.summarize'],
+    ['server/src/f/produced.ts', 'request:ModelAccess.request'],
+    ['server/src/f/produced.ts', 'request:ModelCompaction.summarize'],
+    ['server/src/f/typed.ts', 'request:ModelCompaction.summarize'],
+  ]);
+});
+
 test('an imported helper that produces a request hands its capability to the caller, through barrels, aliases and declared types', () => {
   const files = {
     'server/src/providers/helpers.ts':
@@ -261,14 +281,30 @@ test('a vendor harness row is read through its table, rows, service or type only
   expect(found(files)).toEqual([
     ['server/src/f/namespace.ts', 'row:harness row'],
     ['server/src/f/namespace.ts', 'row:harness row HARNESSES'],
+    ['server/src/f/namespace.ts', 'row:harness row read'],
     ['server/src/f/service.ts', 'row:HarnessAdapters.all'],
     ['server/src/f/service.ts', 'row:HarnessAdapters.find'],
     ['server/src/f/service.ts', 'row:HarnessAdapters.row'],
     ['server/src/f/table.ts', 'row:harness row'],
     ['server/src/f/table.ts', 'row:harness row HARNESSES'],
-    ['server/src/f/type.ts', 'row:harness row HarnessAdapter'],
+    ['server/src/f/table.ts', 'row:harness row read'],
+    ['server/src/f/type.ts', 'row:harness row read'],
     ['server/src/f/vendor.ts', 'row:harness row claude'],
+    ['server/src/f/vendor.ts', 'row:harness row read'],
   ]);
+});
+
+test('a row type in a type position is not a row read: annotations, aliases, requirement unions and type-only forwards pass', () => {
+  const files = {
+    'server/src/f/annotated.ts':
+      "import type { HarnessAdapter } from '../harness/adapter';\nexport type Held = HarnessAdapter;\nexport type Many = readonly HarnessAdapter[];\nexport type Pair = { readonly left: HarnessAdapter; readonly right: HarnessAdapter | null };\nexport const pass = (row: HarnessAdapter | undefined): HarnessAdapter | undefined => row;\nexport const keep: Many = [];\n",
+    'server/src/f/requirement.ts':
+      "import type { Effect } from 'effect';\nimport type { HarnessAdapters } from '../harness/adapters';\nimport type { HarnessAdapter } from '../harness/adapter';\nexport type Needs = HarnessAdapters | never;\nexport type Looks = Effect.Effect<HarnessAdapter | null, never, HarnessAdapters>;\n",
+    'server/src/f/forward.ts':
+      "export type { HarnessAdapter } from '../harness/adapter';\nexport type { HarnessAdapter as Row } from '../harness/adapter';\n",
+    'server/src/f/typeof.ts': "import type { HARNESSES } from '../harness/table';\nexport type Table = typeof HARNESSES;\n",
+  };
+  expect(found(files)).toEqual([]);
 });
 
 test('a thread facet named row, publication of rows and an unused type import are not row reads', () => {
@@ -314,10 +350,11 @@ test('a changed helper moves its callers: the frontier follows export capabiliti
     'server/src/f/caller.ts': caller,
     'server/src/f/bystander.ts': bystander,
   });
-  const importers = (path: string): readonly string[] =>
-    ({ 'server/src/providers/helpers.ts': ['server/src/f/caller.ts'], 'server/src/providers/count.ts': ['server/src/f/bystander.ts'] })[
-      path
-    ] ?? [];
+  const edges: Record<string, readonly string[]> = {
+    'server/src/providers/helpers.ts': ['server/src/f/caller.ts'],
+    'server/src/providers/count.ts': ['server/src/f/bystander.ts'],
+  };
+  const importers = (paths: ReadonlySet<string>): readonly string[] => [...paths].flatMap((path) => edges[path] ?? []);
   expect(exportSummary(before, params, 'server/src/providers/helpers.ts')).not.toBe(
     exportSummary(after, params, 'server/src/providers/helpers.ts'),
   );

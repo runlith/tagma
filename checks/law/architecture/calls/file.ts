@@ -152,6 +152,7 @@ export class Registry {
   constructor(
     readonly world: World,
     readonly params: CallParams,
+    private readonly relevant?: ReadonlySet<string>,
   ) {
     this.isRow = matcher(params.rows);
   }
@@ -186,6 +187,7 @@ export class Registry {
     const sourced = this.sourceValue(path, name, space);
     if (sourced !== undefined) return sourced;
     if (this.isRow(path)) return { k: 'cap', cap: 'row' };
+    if (this.relevant !== undefined && !this.relevant.has(path)) return undefined;
     const key = `${path}\0${name}\0${space}`;
     if (this.visiting.has(key)) return undefined;
     this.visiting.add(key);
@@ -413,7 +415,7 @@ export class FileModel {
     if (ts.isObjectBindingPattern(name)) {
       for (const element of name.elements) {
         const key = element.propertyName === undefined ? nameOf(element.name) : nameOf(element.propertyName);
-        const one = once(() => (key === undefined ? undefined : this.member(source(), key)));
+        const one = once(() => (key === undefined ? undefined : this.member(source(), key, element)));
         if (element.initializer !== undefined) this.eval(element.initializer, scope);
         this.pattern(element.name, element.dotDotDotToken === undefined ? one : source, scope, exported);
       }
@@ -437,8 +439,14 @@ export class FileModel {
     if (base === undefined) return undefined;
     switch (base.k) {
       case 'cap': {
+        if (base.cap === 'row') {
+          if (node !== undefined) this.emit('row', 'harness row read', node);
+          return undefined;
+        }
         const methods = METHODS[base.cap];
-        return Object.hasOwn(methods, name) ? { k: 'method', cap: base.cap, name } : undefined;
+        if (!Object.hasOwn(methods, name)) return undefined;
+        const method = methods[name]!;
+        return method.property === true ? (method.returns ?? undefined) : { k: 'method', cap: base.cap, name };
       }
       case 'object':
         return base.props.get(name);
@@ -714,17 +722,13 @@ export class FileModel {
     if (ts.isIdentifier(node.typeName)) {
       const held = find(scope, name.text, 'types');
       if (held === undefined) return undefined;
-      const value = force(held);
-      if (held.imported && rowBearing(value)) this.emit('row', `harness row ${held.from?.name ?? name.text}`, node);
-      return value;
+      return force(held);
     }
     const left = ts.isIdentifier(node.typeName.left) ? node.typeName.left : undefined;
     const held = left === undefined ? undefined : find(scope, left.text, 'values');
     const base = held === undefined ? undefined : force(held);
     if (base?.k !== 'module') return undefined;
-    const value = this.registry.imported(base.path, name.text, 'types');
-    if (rowBearing(value)) this.emit('row', `harness row ${name.text}`, node);
-    return value;
+    return this.registry.imported(base.path, name.text, 'types');
   }
 
   private namespaceOf(node: ts.Expression, scope: Scope): string | undefined {

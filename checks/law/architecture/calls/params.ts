@@ -1,6 +1,7 @@
 import { defineInspection } from '@runlith/tagma/rules';
+import type { Alias } from '../../declarations/resolve';
 
-export type Capability = 'access' | 'requester' | 'request' | 'asides' | 'aside' | 'asks' | 'adapters' | 'row';
+export type Capability = 'access' | 'requester' | 'request' | 'compaction' | 'asides' | 'aside' | 'asks' | 'adapters' | 'row';
 
 export type CallSource = {
   readonly path: string;
@@ -20,10 +21,11 @@ export type CallParams = {
   readonly sources: readonly CallSource[];
   readonly rows: readonly string[];
   readonly allow: CallAllow;
+  readonly aliases: readonly Alias[];
 };
 
 export const askCalls = defineInspection<CallParams>({
-  program: 'checks/law/architecture/calls/program.ts',
+  program: 'checks/law/programs.ts',
   name: 'ask-calls',
   concern: 'code',
 });

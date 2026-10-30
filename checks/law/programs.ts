@@ -1,4 +1,4 @@
-import { defineProgram, type Answer, type InspectionInput, type Reading, type Side } from '@runlith/tagma/rules';
+import { defineProgram, type Answer, type InspectionInput, type Program, type Reading, type Side } from '@runlith/tagma/rules';
 import type { ProgramSide } from '@tagma/inspection/program';
 import type { InspectionMemo, MemoValue } from '@tagma/inspection/node/memo';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
@@ -9,6 +9,9 @@ import { type MigrationsParams, type StepPlacesParams, storedJudge } from './mig
 import type { EffectStyleParams } from './effect-style/declaration';
 import type { EnvironmentParams } from './environment/declaration';
 import type { UiTokensParams } from './ui-tokens/declaration';
+import type { DeadParams, RepeatedParams } from './declarations/declaration';
+import type { CouplingParams, VendorParams } from './architecture/inspections';
+import type { CallParams } from './architecture/calls/params';
 
 const root = process.cwd();
 const parses: ParseMemo = new Map();
@@ -92,16 +95,34 @@ const stored =
     return input.base === null ? { tree: side('tree') } : { tree: side('tree'), base: side('base') };
   };
 
+const lazily =
+  <Params extends object>(load: () => Promise<{ readonly default: { readonly [key: string]: Program<never> } }>, key: string) =>
+  async (input: InspectionInput<Params>): Promise<Answer> => {
+    const handler = (await load()).default[key] as Program<Params> | undefined;
+    if (handler === undefined) throw new Error(`the law programs hold no handler for ${key}`);
+    return handler(input);
+  };
+
 export default defineProgram<{
   'effect-style': EffectStyleParams;
   'ui-tokens': UiTokensParams;
   environment: EnvironmentParams;
   migrations: MigrationsParams;
   'step-places': StepPlacesParams;
+  'repeated-declarations': RepeatedParams;
+  'dead-code': DeadParams;
+  'vendor-ids': VendorParams;
+  coupling: CouplingParams;
+  'ask-calls': CallParams;
 }>({
   'effect-style': checked('effect-style'),
   'ui-tokens': checked('ui-tokens'),
   environment: checked('environment'),
   migrations: stored('migrations'),
   'step-places': stored('step-places'),
+  'repeated-declarations': lazily<RepeatedParams>(() => import('./declarations/program'), 'repeated-declarations'),
+  'dead-code': lazily<DeadParams>(() => import('./declarations/program'), 'dead-code'),
+  'vendor-ids': lazily<VendorParams>(() => import('./architecture/programs'), 'vendor-ids'),
+  coupling: lazily<CouplingParams>(() => import('./architecture/programs'), 'coupling'),
+  'ask-calls': lazily<CallParams>(() => import('./architecture/calls/program'), 'ask-calls'),
 });

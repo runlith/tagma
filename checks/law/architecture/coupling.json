@@ -1,0 +1,1234 @@
+[
+  {
+    "id": "@runlith/acp",
+    "path": "packages/acp/src/updates.ts",
+    "modules": 2,
+    "outside": 15,
+    "total": 40
+  },
+  {
+    "id": "@runlith/activity",
+    "path": "packages/activity/src/testing.ts",
+    "modules": 13,
+    "outside": 56,
+    "total": 99
+  },
+  {
+    "id": "@runlith/adapter-anthropic",
+    "path": "packages/adapter-anthropic/src/usage.ts",
+    "modules": 3,
+    "outside": 17,
+    "total": 24
+  },
+  {
+    "id": "@runlith/adapter-cursor",
+    "path": "packages/adapter-cursor/src/selection.ts",
+    "modules": 7,
+    "outside": 23,
+    "total": 33
+  },
+  {
+    "id": "@runlith/adapter-deepseek",
+    "path": "packages/adapter-deepseek/src/profiles/deepseek.ts",
+    "modules": 3,
+    "outside": 9,
+    "total": 11
+  },
+  {
+    "id": "@runlith/adapter-devin",
+    "path": "packages/adapter-devin/src/models/devin.ts",
+    "modules": 2,
+    "outside": 2,
+    "total": 4
+  },
+  {
+    "id": "@runlith/adapter-muse",
+    "path": "packages/adapter-muse/src/profiles/museToolSchema.ts",
+    "modules": 3,
+    "outside": 13,
+    "total": 17
+  },
+  {
+    "id": "@runlith/adapter-openai",
+    "path": "packages/adapter-openai/src/profiles/openaiClient.ts",
+    "modules": 5,
+    "outside": 56,
+    "total": 74
+  },
+  {
+    "id": "@runlith/adapter-openai-compatible",
+    "path": "packages/adapter-openai-compatible/src/settings.ts",
+    "modules": 3,
+    "outside": 19,
+    "total": 24
+  },
+  {
+    "id": "@runlith/adapter-opencode",
+    "path": "packages/adapter-opencode/src/selection.ts",
+    "modules": 9,
+    "outside": 18,
+    "total": 24
+  },
+  {
+    "id": "@runlith/adapter-opencode-go",
+    "path": "packages/adapter-opencode-go/src/profiles/opencodeGo.ts",
+    "modules": 3,
+    "outside": 16,
+    "total": 19
+  },
+  {
+    "id": "@runlith/adapter-openrouter",
+    "path": "packages/adapter-openrouter/src/catalog.ts",
+    "modules": 3,
+    "outside": 13,
+    "total": 14
+  },
+  {
+    "id": "@runlith/adapter-stepfun",
+    "path": "packages/adapter-stepfun/src/profiles/stepfun.ts",
+    "modules": 3,
+    "outside": 9,
+    "total": 12
+  },
+  {
+    "id": "@runlith/adapter-xai",
+    "path": "packages/adapter-xai/src/profiles/xai.ts",
+    "modules": 3,
+    "outside": 11,
+    "total": 14
+  },
+  {
+    "id": "@runlith/agent-sources",
+    "path": "packages/agent-sources/src/WorkflowDirectories.ts",
+    "modules": 4,
+    "outside": 10,
+    "total": 10
+  },
+  {
+    "id": "@runlith/agent-tools",
+    "path": "packages/agent-tools/src/write.ts",
+    "modules": 21,
+    "outside": 283,
+    "total": 541
+  },
+  {
+    "id": "@runlith/audio",
+    "path": "packages/audio/src/sound/track.ts",
+    "modules": 1,
+    "outside": 19,
+    "total": 83
+  },
+  {
+    "id": "@runlith/audio-darwin",
+    "path": "packages/audio-darwin/src/channel.ts",
+    "modules": 6,
+    "outside": 10,
+    "total": 10
+  },
+  {
+    "id": "@runlith/audio-file",
+    "path": "packages/audio-file/src/ogg/page.ts",
+    "modules": 5,
+    "outside": 13,
+    "total": 32
+  },
+  {
+    "id": "@runlith/browser-cookies",
+    "path": "packages/browser-cookies/src/worker.ts",
+    "modules": 8,
+    "outside": 20,
+    "total": 50
+  },
+  {
+    "id": "@runlith/builtin-catalog",
+    "path": "packages/builtin-catalog/src/subscription/provider.ts",
+    "modules": 12,
+    "outside": 40,
+    "total": 45
+  },
+  {
+    "id": "@runlith/bundle",
+    "path": "packages/bundle/src/maps.ts",
+    "modules": 4,
+    "outside": 5,
+    "total": 6
+  },
+  {
+    "id": "@runlith/cdp",
+    "path": "packages/cdp/src/wire.ts",
+    "modules": 4,
+    "outside": 14,
+    "total": 26
+  },
+  {
+    "id": "@runlith/chat-ui",
+    "path": "packages/chat-ui/vite.config.ts",
+    "modules": 33,
+    "outside": 267,
+    "total": 845
+  },
+  {
+    "id": "@runlith/chrome-for-testing",
+    "path": "packages/chrome-for-testing/src/build.ts",
+    "modules": 2,
+    "outside": 2,
+    "total": 2
+  },
+  {
+    "id": "@runlith/code-editor",
+    "path": "packages/code-editor/vite.config.ts",
+    "modules": 13,
+    "outside": 49,
+    "total": 92
+  },
+  {
+    "id": "@runlith/code-facts",
+    "path": "packages/code-facts/src/tree.ts",
+    "modules": 5,
+    "outside": 15,
+    "total": 93
+  },
+  {
+    "id": "@runlith/codesign",
+    "path": "packages/codesign/src/codesign.ts",
+    "modules": 4,
+    "outside": 4,
+    "total": 4
+  },
+  {
+    "id": "@runlith/credential-file",
+    "path": "packages/credential-file/src/fileFacts.ts",
+    "modules": 5,
+    "outside": 15,
+    "total": 19
+  },
+  {
+    "id": "@runlith/desktop-host",
+    "path": "packages/desktop-host/vitest.config.ts",
+    "modules": 5,
+    "outside": 9,
+    "total": 9
+  },
+  {
+    "id": "@runlith/desktop-input",
+    "path": "packages/desktop-input/src/preflight.ts",
+    "modules": 9,
+    "outside": 18,
+    "total": 24
+  },
+  {
+    "id": "@runlith/dev-runner",
+    "path": "packages/dev-runner/src/index.ts",
+    "modules": 3,
+    "outside": 3,
+    "total": 3
+  },
+  {
+    "id": "@runlith/e2e",
+    "path": "packages/e2e/src/touch.ts",
+    "modules": 18,
+    "outside": 69,
+    "total": 100
+  },
+  {
+    "id": "@runlith/echo",
+    "path": "packages/echo/src/sonora/wasm.generated.ts",
+    "modules": 5,
+    "outside": 7,
+    "total": 13
+  },
+  {
+    "id": "@runlith/effect-test",
+    "path": "packages/effect-test/vitest.config.ts",
+    "modules": 3,
+    "outside": 7,
+    "total": 10
+  },
+  {
+    "id": "@runlith/error-boundary",
+    "path": "packages/error-boundary/vite.config.ts",
+    "modules": 4,
+    "outside": 6,
+    "total": 15
+  },
+  {
+    "id": "@runlith/execution-host",
+    "path": "packages/execution-host/src/usageTelemetry.ts",
+    "modules": 16,
+    "outside": 549,
+    "total": 1009
+  },
+  {
+    "id": "@runlith/executions",
+    "path": "packages/executions/src/storedRules.ts",
+    "modules": 5,
+    "outside": 74,
+    "total": 330
+  },
+  {
+    "id": "@runlith/file-lock",
+    "path": "packages/file-lock/src/flock.ts",
+    "modules": 4,
+    "outside": 4,
+    "total": 5
+  },
+  {
+    "id": "@runlith/files",
+    "path": "packages/files/src/working.ts",
+    "modules": 3,
+    "outside": 13,
+    "total": 19
+  },
+  {
+    "id": "@runlith/git",
+    "path": "packages/git/src/worktree.ts",
+    "modules": 4,
+    "outside": 32,
+    "total": 71
+  },
+  {
+    "id": "@runlith/github",
+    "path": "packages/github/src/GitHubCli.ts",
+    "modules": 2,
+    "outside": 6,
+    "total": 6
+  },
+  {
+    "id": "@runlith/held",
+    "path": "packages/held/src/holding.ts",
+    "modules": 1,
+    "outside": 14,
+    "total": 31
+  },
+  {
+    "id": "@runlith/highlight",
+    "path": "packages/highlight/src/worker.ts",
+    "modules": 3,
+    "outside": 77,
+    "total": 91
+  },
+  {
+    "id": "@runlith/i18n",
+    "path": "packages/i18n/vite.config.ts",
+    "modules": 4,
+    "outside": 7,
+    "total": 14
+  },
+  {
+    "id": "@runlith/layer",
+    "path": "packages/layer/vite.config.ts",
+    "modules": 9,
+    "outside": 17,
+    "total": 124
+  },
+  {
+    "id": "@runlith/llm",
+    "path": "packages/llm/src/vendorCall.ts",
+    "modules": 17,
+    "outside": 123,
+    "total": 522
+  },
+  {
+    "id": "@runlith/markdown",
+    "path": "packages/markdown/src/stream.ts",
+    "modules": 5,
+    "outside": 7,
+    "total": 8
+  },
+  {
+    "id": "@runlith/markdown-editor",
+    "path": "packages/markdown-editor/vite.config.ts",
+    "modules": 18,
+    "outside": 28,
+    "total": 32
+  },
+  {
+    "id": "@runlith/mcp",
+    "path": "packages/mcp/test/mcpTestServer.ts",
+    "modules": 10,
+    "outside": 70,
+    "total": 112
+  },
+  {
+    "id": "@runlith/navigation",
+    "path": "packages/navigation/src/verdict.ts",
+    "modules": 8,
+    "outside": 18,
+    "total": 32
+  },
+  {
+    "id": "@runlith/navigation-ts",
+    "path": "packages/navigation-ts/src/wire.ts",
+    "modules": 10,
+    "outside": 40,
+    "total": 59
+  },
+  {
+    "id": "@runlith/ndjson-rpc",
+    "path": "packages/ndjson-rpc/src/offLoop.ts",
+    "modules": 2,
+    "outside": 3,
+    "total": 10
+  },
+  {
+    "id": "@runlith/paging",
+    "path": "packages/paging/src/pages.ts",
+    "modules": 2,
+    "outside": 2,
+    "total": 2
+  },
+  {
+    "id": "@runlith/performance",
+    "path": "packages/performance/src/store/worker.ts",
+    "modules": 15,
+    "outside": 178,
+    "total": 393
+  },
+  {
+    "id": "@runlith/primitives",
+    "path": "packages/primitives/vite.config.ts",
+    "modules": 6,
+    "outside": 65,
+    "total": 157
+  },
+  {
+    "id": "@runlith/query",
+    "path": "packages/query/vite.config.ts",
+    "modules": 6,
+    "outside": 31,
+    "total": 53
+  },
+  {
+    "id": "@runlith/ripgrep",
+    "path": "packages/ripgrep/src/run.ts",
+    "modules": 3,
+    "outside": 5,
+    "total": 5
+  },
+  {
+    "id": "@runlith/seam",
+    "path": "packages/seam/vite.config.ts",
+    "modules": 4,
+    "outside": 5,
+    "total": 6
+  },
+  {
+    "id": "@runlith/search-text",
+    "path": "packages/search-text/src/words.ts",
+    "modules": 0,
+    "outside": 0,
+    "total": 9
+  },
+  {
+    "id": "@runlith/source-comments",
+    "path": "packages/source-comments/src/lines.ts",
+    "modules": 1,
+    "outside": 1,
+    "total": 21
+  },
+  {
+    "id": "@runlith/speech",
+    "path": "packages/speech/src/wire/requests.ts",
+    "modules": 2,
+    "outside": 50,
+    "total": 187
+  },
+  {
+    "id": "@runlith/speech-openai",
+    "path": "packages/speech-openai/src/synthesis.ts",
+    "modules": 2,
+    "outside": 22,
+    "total": 32
+  },
+  {
+    "id": "@runlith/speech-soniox",
+    "path": "packages/speech-soniox/src/transcription.ts",
+    "modules": 2,
+    "outside": 30,
+    "total": 41
+  },
+  {
+    "id": "@runlith/speech-whisper",
+    "path": "packages/speech-whisper/src/provider.ts",
+    "modules": 6,
+    "outside": 38,
+    "total": 72
+  },
+  {
+    "id": "@runlith/sqlite-process",
+    "path": "packages/sqlite-process/src/writerPermit.ts",
+    "modules": 9,
+    "outside": 54,
+    "total": 86
+  },
+  {
+    "id": "@runlith/tagma",
+    "path": "packages/tagma/src/rules/sources.ts",
+    "modules": 6,
+    "outside": 32,
+    "total": 42
+  },
+  {
+    "id": "@runlith/tagma-kit",
+    "path": "packages/tagma/kit/rules.ts",
+    "modules": 19,
+    "outside": 103,
+    "total": 106
+  },
+  {
+    "id": "@runlith/testbed",
+    "path": "packages/testbed/src/worlds.ts",
+    "modules": 17,
+    "outside": 52,
+    "total": 117
+  },
+  {
+    "id": "@runlith/tsconfig",
+    "path": "packages/tsconfig/src/workspace.ts",
+    "modules": 6,
+    "outside": 21,
+    "total": 27
+  },
+  {
+    "id": "@runlith/utils",
+    "path": "packages/utils/src/worker.ts",
+    "modules": 5,
+    "outside": 7,
+    "total": 17
+  },
+  {
+    "id": "@runlith/virtual-list",
+    "path": "packages/virtual-list/vite.config.ts",
+    "modules": 4,
+    "outside": 4,
+    "total": 5
+  },
+  {
+    "id": "@runlith/vite-browser-guard",
+    "path": "packages/vite-browser-guard/src/browserGuard.ts",
+    "modules": 2,
+    "outside": 2,
+    "total": 2
+  },
+  {
+    "id": "@runlith/watch",
+    "path": "packages/watch/src/watcher.ts",
+    "modules": 8,
+    "outside": 20,
+    "total": 27
+  },
+  {
+    "id": "@runlith/window-behavior",
+    "path": "packages/window-behavior/src/runtime-core/reduce.ts",
+    "modules": 7,
+    "outside": 19,
+    "total": 45
+  },
+  {
+    "id": "activity",
+    "path": "apps/tagma/server/src/activity/operations.ts",
+    "modules": 8,
+    "outside": 34,
+    "total": 49
+  },
+  {
+    "id": "agent",
+    "path": "packages/agent/src/workflow/storage.ts",
+    "modules": 10,
+    "outside": 618,
+    "total": 3530
+  },
+  {
+    "id": "agent-plugins-format",
+    "path": "apps/tagma/server/src/plugin-formats/agent-plugins/servers.ts",
+    "modules": 3,
+    "outside": 9,
+    "total": 11
+  },
+  {
+    "id": "app-activity",
+    "path": "apps/tagma/app/src/lib/features/activity/settings.ts",
+    "modules": 2,
+    "outside": 2,
+    "total": 2
+  },
+  {
+    "id": "app-attention",
+    "path": "apps/tagma/app/src/lib/app/attention/rows.ts",
+    "modules": 10,
+    "outside": 33,
+    "total": 39
+  },
+  {
+    "id": "app-browser",
+    "path": "apps/tagma/app/src/lib/features/browser/zoom.ts",
+    "modules": 18,
+    "outside": 201,
+    "total": 277
+  },
+  {
+    "id": "app-checkout",
+    "path": "apps/tagma/app/src/lib/features/checkout/threadGroups.ts",
+    "modules": 29,
+    "outside": 634,
+    "total": 1022
+  },
+  {
+    "id": "app-chrome",
+    "path": "apps/tagma/app/src/lib/app/chrome/projectStorage.ts",
+    "modules": 43,
+    "outside": 573,
+    "total": 656
+  },
+  {
+    "id": "app-composition",
+    "path": "apps/tagma/app/src/lib/app/testing.ts",
+    "modules": 43,
+    "outside": 293,
+    "total": 321
+  },
+  {
+    "id": "app-devices",
+    "path": "apps/tagma/app/src/lib/features/devices/settings.ts",
+    "modules": 14,
+    "outside": 57,
+    "total": 68
+  },
+  {
+    "id": "app-executions",
+    "path": "apps/tagma/app/src/lib/features/executions/worktrees/standing.ts",
+    "modules": 31,
+    "outside": 263,
+    "total": 477
+  },
+  {
+    "id": "app-graph",
+    "path": "apps/tagma/app/src/lib/features/graph/translation/layer.ts",
+    "modules": 30,
+    "outside": 605,
+    "total": 878
+  },
+  {
+    "id": "app-keys",
+    "path": "apps/tagma/app/src/lib/app/keys/Keymap.svelte.ts",
+    "modules": 3,
+    "outside": 6,
+    "total": 6
+  },
+  {
+    "id": "app-mcp",
+    "path": "apps/tagma/app/src/lib/features/mcp/settings.ts",
+    "modules": 16,
+    "outside": 48,
+    "total": 57
+  },
+  {
+    "id": "app-mobile",
+    "path": "apps/tagma/app/src/lib/app/mobile/Viewport.svelte.ts",
+    "modules": 17,
+    "outside": 152,
+    "total": 175
+  },
+  {
+    "id": "app-notices",
+    "path": "apps/tagma/app/src/lib/features/notices/overlay.ts",
+    "modules": 5,
+    "outside": 11,
+    "total": 14
+  },
+  {
+    "id": "app-opening",
+    "path": "apps/tagma/app/src/lib/features/opening/pathCode.ts",
+    "modules": 11,
+    "outside": 27,
+    "total": 42
+  },
+  {
+    "id": "app-pages",
+    "path": "apps/tagma/app/src/lib/features/pages/team.ts",
+    "modules": 14,
+    "outside": 112,
+    "total": 147
+  },
+  {
+    "id": "app-palette",
+    "path": "apps/tagma/app/src/lib/features/palette/query.ts",
+    "modules": 18,
+    "outside": 51,
+    "total": 57
+  },
+  {
+    "id": "app-panes",
+    "path": "apps/tagma/app/src/lib/app/panes/testing.ts",
+    "modules": 11,
+    "outside": 67,
+    "total": 94
+  },
+  {
+    "id": "app-plugins",
+    "path": "apps/tagma/app/src/lib/features/plugins/words.ts",
+    "modules": 16,
+    "outside": 74,
+    "total": 93
+  },
+  {
+    "id": "app-power",
+    "path": "apps/tagma/app/src/lib/features/power/settings.ts",
+    "modules": 6,
+    "outside": 16,
+    "total": 16
+  },
+  {
+    "id": "app-presence",
+    "path": "apps/tagma/app/src/lib/features/presence/rows.ts",
+    "modules": 6,
+    "outside": 9,
+    "total": 11
+  },
+  {
+    "id": "app-projects",
+    "path": "apps/tagma/app/src/lib/features/projects/words.ts",
+    "modules": 13,
+    "outside": 143,
+    "total": 185
+  },
+  {
+    "id": "app-providers",
+    "path": "apps/tagma/app/src/lib/features/providers/usage/windows.ts",
+    "modules": 22,
+    "outside": 182,
+    "total": 311
+  },
+  {
+    "id": "app-routes",
+    "path": "apps/tagma/app/src/service-worker.ts",
+    "modules": 20,
+    "outside": 77,
+    "total": 78
+  },
+  {
+    "id": "app-rules",
+    "path": "apps/tagma/app/src/lib/features/rules/words.ts",
+    "modules": 18,
+    "outside": 128,
+    "total": 167
+  },
+  {
+    "id": "app-secrets",
+    "path": "apps/tagma/app/src/lib/features/secrets/SecretFields.svelte",
+    "modules": 5,
+    "outside": 10,
+    "total": 12
+  },
+  {
+    "id": "app-settings",
+    "path": "apps/tagma/app/src/lib/features/settings/section.ts",
+    "modules": 13,
+    "outside": 138,
+    "total": 211
+  },
+  {
+    "id": "app-shared",
+    "path": "apps/tagma/app/src/lib/shared/workers/ServiceWorkers.ts",
+    "modules": 18,
+    "outside": 363,
+    "total": 531
+  },
+  {
+    "id": "app-shell-choice",
+    "path": "apps/tagma/app/src/lib/features/shell/shell.ts",
+    "modules": 4,
+    "outside": 12,
+    "total": 15
+  },
+  {
+    "id": "app-speech",
+    "path": "apps/tagma/app/src/lib/features/speech/words.ts",
+    "modules": 24,
+    "outside": 294,
+    "total": 496
+  },
+  {
+    "id": "app-tagma-apps",
+    "path": "apps/tagma/app/src/lib/features/tagma-apps/windows/WindowIcon.svelte",
+    "modules": 18,
+    "outside": 89,
+    "total": 132
+  },
+  {
+    "id": "app-telemetry",
+    "path": "apps/tagma/app/src/lib/features/telemetry/settings.ts",
+    "modules": 2,
+    "outside": 4,
+    "total": 5
+  },
+  {
+    "id": "app-threads",
+    "path": "apps/tagma/app/src/lib/features/threads/worktrees/worktrees.feed.svelte",
+    "modules": 55,
+    "outside": 1540,
+    "total": 2340
+  },
+  {
+    "id": "app-views",
+    "path": "apps/tagma/app/src/lib/features/views/toolNotices.ts",
+    "modules": 8,
+    "outside": 20,
+    "total": 32
+  },
+  {
+    "id": "app-wire",
+    "path": "apps/tagma/app/src/lib/wire/wire.layer.ts",
+    "modules": 33,
+    "outside": 89,
+    "total": 114
+  },
+  {
+    "id": "app-workspace",
+    "path": "apps/tagma/app/src/lib/features/workspace/surface.ts",
+    "modules": 13,
+    "outside": 70,
+    "total": 115
+  },
+  {
+    "id": "app-worktrees",
+    "path": "apps/tagma/app/src/lib/features/worktrees/tone.ts",
+    "modules": 18,
+    "outside": 173,
+    "total": 251
+  },
+  {
+    "id": "artifacts",
+    "path": "apps/tagma/server/src/artifacts/videos.ts",
+    "modules": 9,
+    "outside": 68,
+    "total": 146
+  },
+  {
+    "id": "browser",
+    "path": "apps/tagma/server/src/browser/traces.ts",
+    "modules": 17,
+    "outside": 211,
+    "total": 534
+  },
+  {
+    "id": "catalogs",
+    "path": "apps/tagma/server/src/catalogs/install.ts",
+    "modules": 3,
+    "outside": 19,
+    "total": 25
+  },
+  {
+    "id": "change-record",
+    "path": "apps/tagma/server/src/change-record/threadFiles/sides.ts",
+    "modules": 22,
+    "outside": 810,
+    "total": 1434
+  },
+  {
+    "id": "checkout-builds",
+    "path": "apps/tagma/server/src/checkout-builds/verbs.ts",
+    "modules": 10,
+    "outside": 76,
+    "total": 94
+  },
+  {
+    "id": "checkout-files",
+    "path": "apps/tagma/server/src/checkout-files/writing/refusals.ts",
+    "modules": 15,
+    "outside": 247,
+    "total": 389
+  },
+  {
+    "id": "claude-code-format",
+    "path": "apps/tagma/server/src/plugin-formats/claude-code/variables.ts",
+    "modules": 4,
+    "outside": 28,
+    "total": 44
+  },
+  {
+    "id": "cli",
+    "path": "apps/tagma/server/src/cli/verbs/op.ts",
+    "modules": 9,
+    "outside": 54,
+    "total": 66
+  },
+  {
+    "id": "codex-format",
+    "path": "apps/tagma/server/src/plugin-formats/codex/servers.ts",
+    "modules": 5,
+    "outside": 20,
+    "total": 23
+  },
+  {
+    "id": "commit-steps",
+    "path": "apps/tagma/server/src/commit-steps/shape.ts",
+    "modules": 8,
+    "outside": 32,
+    "total": 39
+  },
+  {
+    "id": "composition",
+    "path": "apps/tagma/server/src/composition/worldParts.ts",
+    "modules": 107,
+    "outside": 1339,
+    "total": 1555
+  },
+  {
+    "id": "config",
+    "path": "apps/tagma/server/src/config/version.ts",
+    "modules": 15,
+    "outside": 71,
+    "total": 100
+  },
+  {
+    "id": "desktop-browser",
+    "path": "apps/tagma/server/src/desktop-browser/door.ts",
+    "modules": 6,
+    "outside": 31,
+    "total": 43
+  },
+  {
+    "id": "editors",
+    "path": "apps/tagma/server/src/editors/operations.ts",
+    "modules": 6,
+    "outside": 27,
+    "total": 44
+  },
+  {
+    "id": "enforcement",
+    "path": "apps/tagma/server/src/enforcement/workers/waits.ts",
+    "modules": 30,
+    "outside": 705,
+    "total": 1114
+  },
+  {
+    "id": "execution-posix-connection",
+    "path": "packages/executions/src/posix/endpoint.ts",
+    "modules": 3,
+    "outside": 4,
+    "total": 4
+  },
+  {
+    "id": "executions",
+    "path": "apps/tagma/server/src/executions/worlds/shell/stops.ts",
+    "modules": 27,
+    "outside": 1073,
+    "total": 2058
+  },
+  {
+    "id": "external-harnesses",
+    "path": "apps/tagma/server/src/external-harnesses/voice.ts",
+    "modules": 40,
+    "outside": 1708,
+    "total": 2799
+  },
+  {
+    "id": "graph",
+    "path": "apps/tagma/server/src/graph/work/worklessSpecs.ts",
+    "modules": 25,
+    "outside": 1446,
+    "total": 3742
+  },
+  {
+    "id": "holder-client",
+    "path": "packages/execution-host/src/holder-client/frames.ts",
+    "modules": 3,
+    "outside": 11,
+    "total": 13
+  },
+  {
+    "id": "holder-port",
+    "path": "packages/execution-host/src/holder/Holder.ts",
+    "modules": 2,
+    "outside": 9,
+    "total": 9
+  },
+  {
+    "id": "host-composition",
+    "path": "packages/execution-host/src/recovery.ts",
+    "modules": 16,
+    "outside": 84,
+    "total": 89
+  },
+  {
+    "id": "http",
+    "path": "apps/tagma/server/src/http/starting.ts",
+    "modules": 6,
+    "outside": 44,
+    "total": 60
+  },
+  {
+    "id": "images",
+    "path": "apps/tagma/server/src/images/operations.ts",
+    "modules": 8,
+    "outside": 30,
+    "total": 42
+  },
+  {
+    "id": "installation",
+    "path": "apps/tagma/server/src/installation/voice/vacuum.ts",
+    "modules": 29,
+    "outside": 396,
+    "total": 754
+  },
+  {
+    "id": "invocation",
+    "path": "apps/tagma/server/src/invocation/store/places.ts",
+    "modules": 22,
+    "outside": 322,
+    "total": 425
+  },
+  {
+    "id": "landing",
+    "path": "apps/tagma/server/src/landing/voice.ts",
+    "modules": 21,
+    "outside": 493,
+    "total": 674
+  },
+  {
+    "id": "mac-applications",
+    "path": "apps/tagma/server/src/mac-applications/placement.ts",
+    "modules": 5,
+    "outside": 9,
+    "total": 9
+  },
+  {
+    "id": "mac-editors",
+    "path": "apps/tagma/server/src/mac-editors/launchServices.ts",
+    "modules": 3,
+    "outside": 5,
+    "total": 5
+  },
+  {
+    "id": "mac-user-environment",
+    "path": "apps/tagma/server/src/mac-user-environment/shell.ts",
+    "modules": 5,
+    "outside": 5,
+    "total": 5
+  },
+  {
+    "id": "managed-browser",
+    "path": "apps/tagma/server/src/managed-browser/targets.ts",
+    "modules": 7,
+    "outside": 49,
+    "total": 73
+  },
+  {
+    "id": "marketplaces",
+    "path": "apps/tagma/server/src/marketplaces/revisions.ts",
+    "modules": 8,
+    "outside": 54,
+    "total": 84
+  },
+  {
+    "id": "mcp",
+    "path": "apps/tagma/server/src/mcp/voice.ts",
+    "modules": 10,
+    "outside": 94,
+    "total": 142
+  },
+  {
+    "id": "native-harness",
+    "path": "apps/tagma/server/src/native-harness/workflows/sources.ts",
+    "modules": 41,
+    "outside": 1502,
+    "total": 1998
+  },
+  {
+    "id": "navigation",
+    "path": "apps/tagma/server/src/navigation/operations.ts",
+    "modules": 8,
+    "outside": 48,
+    "total": 67
+  },
+  {
+    "id": "notify",
+    "path": "apps/tagma/server/src/notify/store/tables.ts",
+    "modules": 4,
+    "outside": 33,
+    "total": 72
+  },
+  {
+    "id": "page-render",
+    "path": "apps/tagma/server/src/page-render/stage.ts",
+    "modules": 8,
+    "outside": 33,
+    "total": 48
+  },
+  {
+    "id": "path-editors",
+    "path": "apps/tagma/server/src/path-editors/which.ts",
+    "modules": 3,
+    "outside": 4,
+    "total": 4
+  },
+  {
+    "id": "performance",
+    "path": "apps/tagma/server/src/performance/voice.ts",
+    "modules": 7,
+    "outside": 70,
+    "total": 85
+  },
+  {
+    "id": "platform",
+    "path": "apps/tagma/server/src/platform/watch/tree.ts",
+    "modules": 22,
+    "outside": 296,
+    "total": 538
+  },
+  {
+    "id": "plugins",
+    "path": "apps/tagma/server/src/plugins/sources.ts",
+    "modules": 12,
+    "outside": 75,
+    "total": 138
+  },
+  {
+    "id": "posix-holder",
+    "path": "packages/execution-host/src/posix/yieldSignal.ts",
+    "modules": 12,
+    "outside": 110,
+    "total": 154
+  },
+  {
+    "id": "power",
+    "path": "apps/tagma/server/src/power/sleepAssertion.ts",
+    "modules": 4,
+    "outside": 17,
+    "total": 38
+  },
+  {
+    "id": "projects",
+    "path": "apps/tagma/server/src/projects/store/table.ts",
+    "modules": 8,
+    "outside": 61,
+    "total": 105
+  },
+  {
+    "id": "providers",
+    "path": "apps/tagma/server/src/providers/store/tables.ts",
+    "modules": 17,
+    "outside": 352,
+    "total": 587
+  },
+  {
+    "id": "push",
+    "path": "apps/tagma/server/src/push/webpush/send.ts",
+    "modules": 10,
+    "outside": 42,
+    "total": 68
+  },
+  {
+    "id": "reflections",
+    "path": "apps/tagma/server/src/reflections/voice.ts",
+    "modules": 6,
+    "outside": 60,
+    "total": 72
+  },
+  {
+    "id": "release-channel",
+    "path": "apps/tagma/server/src/release-channel/verbs.ts",
+    "modules": 9,
+    "outside": 91,
+    "total": 111
+  },
+  {
+    "id": "remote",
+    "path": "apps/tagma/server/src/remote/terminalSite.ts",
+    "modules": 7,
+    "outside": 48,
+    "total": 118
+  },
+  {
+    "id": "sandbox",
+    "path": "apps/tagma/server/src/sandbox/trees/snapshot.ts",
+    "modules": 25,
+    "outside": 189,
+    "total": 350
+  },
+  {
+    "id": "schedule",
+    "path": "apps/tagma/server/src/schedule/timetable.ts",
+    "modules": 4,
+    "outside": 29,
+    "total": 55
+  },
+  {
+    "id": "secrets",
+    "path": "apps/tagma/server/src/secrets/store.ts",
+    "modules": 6,
+    "outside": 27,
+    "total": 44
+  },
+  {
+    "id": "settings",
+    "path": "apps/tagma/server/src/settings/writes.ts",
+    "modules": 6,
+    "outside": 94,
+    "total": 143
+  },
+  {
+    "id": "socket",
+    "path": "apps/tagma/server/src/socket/rpc.ts",
+    "modules": 4,
+    "outside": 15,
+    "total": 18
+  },
+  {
+    "id": "speech",
+    "path": "apps/tagma/server/src/speech/store/transcripts.ts",
+    "modules": 18,
+    "outside": 244,
+    "total": 451
+  },
+  {
+    "id": "tagma-apps",
+    "path": "apps/tagma/server/src/tagma-apps/toolPoint.ts",
+    "modules": 13,
+    "outside": 97,
+    "total": 162
+  },
+  {
+    "id": "thread-record",
+    "path": "apps/tagma/server/src/thread-record/titles.ts",
+    "modules": 7,
+    "outside": 115,
+    "total": 171
+  },
+  {
+    "id": "threads",
+    "path": "apps/tagma/server/src/threads/worlds.ts",
+    "modules": 38,
+    "outside": 1959,
+    "total": 3268
+  },
+  {
+    "id": "translations",
+    "path": "apps/tagma/server/src/translations/translator/segment.worker.ts",
+    "modules": 11,
+    "outside": 48,
+    "total": 81
+  },
+  {
+    "id": "views",
+    "path": "apps/tagma/server/src/views/views.ts",
+    "modules": 10,
+    "outside": 62,
+    "total": 93
+  },
+  {
+    "id": "workspace",
+    "path": "apps/tagma/server/src/workspace/workspace.ts",
+    "modules": 19,
+    "outside": 336,
+    "total": 605
+  },
+  {
+    "id": "worktrees",
+    "path": "apps/tagma/server/src/worktrees/worktrees.ts",
+    "modules": 23,
+    "outside": 453,
+    "total": 798
+  }
+]
