@@ -14,10 +14,7 @@ const catalogOf = (programs: ReadonlySet<string>) =>
     models: MODELS,
     accountSource: (provider: string) => provider,
     asks: {
-      kinds: (provider: string) =>
-        MODELS.registered(provider) && (MODELS.named(provider).auth !== 'cli' || programs.has(provider))
-          ? ['text', 'object', 'decision']
-          : [],
+      answers: (provider: string) => MODELS.registered(provider) && (MODELS.named(provider).auth !== 'cli' || programs.has(provider)),
     },
   }) as unknown as ProviderCatalog;
 

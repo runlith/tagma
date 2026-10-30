@@ -23,11 +23,10 @@ export function foldOf(thread: SummarizedThread, selection: ThreadSummarizerSele
   return thread.compaction === 'session' && ownSummarizer(thread, selection) ? 'session' : 'core';
 }
 
-export const answersText = (catalog: ProviderCatalog, selection: { readonly provider: string; readonly model: string }): boolean =>
-  catalog.asks.kinds(selection.provider, selection.model).includes('text');
-
 const ownForeign = (catalog: ProviderCatalog, thread: SummarizedThread, selection: ThreadSummarizerSelection): boolean =>
-  thread.compaction === 'foreign' && selection.provider === thread.provider && !answersText(catalog, selection);
+  thread.compaction === 'foreign' &&
+  selection.provider === thread.provider &&
+  !catalog.asks.answers(selection.provider, selection.model, 'text');
 
 export function summarizerSpend(
   catalog: ProviderCatalog,
@@ -51,6 +50,6 @@ export function admitSummarizer(
   const option = textModelOf(catalog.models, named.provider, named.model);
   const rung = option === undefined ? (named.reasoning ?? null) : reasoningForModel(named.reasoning, option) || null;
   if (foldOf(thread, named) === 'session') return { provider: named.provider, model: named.model, reasoning: rung };
-  if (option === undefined || !answersText(catalog, named)) return null;
+  if (option === undefined || !catalog.asks.answers(named.provider, named.model, 'text')) return null;
   return { provider: named.provider, model: named.model, reasoning: rung };
 }

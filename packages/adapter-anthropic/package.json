@@ -25,6 +25,10 @@
     "./profiles/anthropic": {
       "types": "./src/profiles/anthropic.ts",
       "default": "./src/profiles/anthropic.ts"
+    },
+    "./usage": {
+      "types": "./src/usage.ts",
+      "default": "./src/usage.ts"
     }
   },
   "scripts": {

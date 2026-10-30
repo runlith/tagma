@@ -2,11 +2,11 @@ import type { CompactionModels } from '@runlith/agent/thread/compaction/Compacti
 import type { EnvironmentEntry } from '@runlith/executions/protocol/execution';
 import type { DecisionAnswer, DecisionRequest } from '@runlith/llm/decision';
 import type { Usage } from '@runlith/llm/schema/events';
-import type { JsonSchema } from '@runlith/llm/schema/ids';
-import type { AskKind, AskPath } from '@runlith/llm/models/description';
-import type { AskCommand, ProgramOutput } from '@runlith/tagma/adapter/provider';
+import type { AskKind } from '@runlith/llm/models/description';
+import type { AskProgram, ProgramAsk, ProgramOutput } from '@runlith/tagma/adapter/provider';
 import { Context, Data, type Effect } from 'effect';
-import type { AskRefusal } from '../wire/asks.js';
+import { GateRefusal, type Unblock } from '../../../platform/contract/wire/refusal.js';
+import type { AskPath, AskRefusal } from '../wire/asks.js';
 
 export class AskRefused extends Data.TaggedError('AskRefused')<{
   readonly refusal: AskRefusal;
@@ -15,9 +15,18 @@ export class AskRefused extends Data.TaggedError('AskRefused')<{
   readonly usage?: Usage;
 }> {}
 
-export type AskSelection = {
-  readonly provider: string;
-  readonly model: string;
+export const askGate = (refused: AskRefused, unblock: Unblock): GateRefusal<AskRefusal> =>
+  new GateRefusal(refused.refusal, refused.message, unblock);
+
+export type NamedModel = { readonly provider: string; readonly model: string };
+
+export const namedModel = (key: string): NamedModel | null => {
+  if (key === '') return null;
+  const split = key.indexOf(':');
+  return split === -1 ? { provider: key, model: '' } : { provider: key.slice(0, split), model: key.slice(split + 1) };
+};
+
+export type AskSelection = NamedModel & {
   readonly reasoning: string | null;
   readonly account: string | null;
 };
@@ -26,9 +35,7 @@ export type Asker = { readonly provider: string; readonly model: string | null; 
 
 export type RoleChoice = { readonly model: string; readonly reasoning: string };
 
-export type FreshAsk = { readonly system: string; readonly input: string; readonly stallMs?: number };
-
-export type ObjectAsk = FreshAsk & { readonly schema: JsonSchema };
+export type FreshAsk = { readonly system: string; readonly input: string; readonly stallMs?: number; readonly runId?: string };
 
 export type AskCapacity = { readonly input: number; readonly output: number };
 
@@ -37,43 +44,44 @@ export type Answered<A> = {
   readonly path: AskPath;
   readonly selection: AskSelection;
   readonly usage: Usage | undefined;
+  readonly account: string | undefined;
 };
 
 export class ModelAsks extends Context.Service<
   ModelAsks,
   {
-    answers(selection: { readonly provider: string; readonly model: string }, kind: AskKind): boolean;
+    answers(model: NamedModel, kind: AskKind): boolean;
     choose(kind: AskKind, role: RoleChoice, asker?: Asker): Effect.Effect<AskSelection, AskRefused>;
-    defaultFor(kind: AskKind, asker?: Asker): Effect.Effect<AskSelection, AskRefused>;
     capacity(selection: AskSelection, system: string): Effect.Effect<AskCapacity, AskRefused>;
     text(selection: AskSelection, ask: FreshAsk): Effect.Effect<Answered<string>, AskRefused>;
-    object(selection: AskSelection, ask: ObjectAsk): Effect.Effect<Answered<unknown>, AskRefused>;
     decide(selection: AskSelection, request: DecisionRequest): Effect.Effect<Answered<DecisionAnswer>, AskRefused>;
-    readonly compaction: CompactionModels;
   }
 >()('tagma/providers/ModelAsks') {}
 
+export class CompactionAsks extends Context.Service<CompactionAsks, CompactionModels>()('tagma/providers/CompactionAsks') {}
+
 export type ProgramRun = {
-  readonly provider: string;
-  readonly command: AskCommand;
-  readonly argv: readonly string[];
+  readonly program: AskProgram;
+  readonly ask: ProgramAsk;
   readonly entries: readonly EnvironmentEntry[];
   readonly input: string;
   readonly deadlineMs: number;
 };
 
+export class ProgramFailed extends Data.TaggedError('ProgramFailed')<{ readonly message: string }> {}
+
 export class AskPrograms extends Context.Service<
   AskPrograms,
   {
-    run(run: ProgramRun): Effect.Effect<ProgramOutput, AskRefused>;
+    run(run: ProgramRun): Effect.Effect<ProgramOutput, ProgramFailed>;
   }
 >()('tagma/providers/AskPrograms') {}
 
-export type SavedSelection = { readonly provider: string; readonly model: string; readonly reasoning: string | null };
+export type SavedSelection = { readonly provider: string; readonly model: string };
 
 export class DefaultSelection extends Context.Service<
   DefaultSelection,
   {
-    readonly saved: Effect.Effect<SavedSelection | null, AskRefused>;
+    readonly saved: Effect.Effect<SavedSelection | null>;
   }
 >()('tagma/providers/DefaultSelection') {}

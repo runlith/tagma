@@ -25,18 +25,25 @@ export const programEnvironment = (
   return { inherit: environment.inherit, entries: [...environment.entries, ...paired, ...extra] };
 };
 
+export const runnerArgs = (runner: string, argv: readonly string[]): readonly string[] => [RUNNER_VERB, runner, ...argv];
+
+export const runnerEnvironment = Effect.fnUntraced(function* (
+  installs: InstalledHarnesses['Service'],
+  runner: string,
+  requested: CommandEnvironmentRequest | undefined,
+) {
+  const program = yield* installs.program(runner, 'harness');
+  return program === null
+    ? requested
+    : programEnvironment(program, requested, [{ _tag: 'Set', name: HARNESS_PROGRAM, value: program.path }]);
+});
+
 export const harnessTerminals = (terminals: Terminals['Service'], installs: InstalledHarnesses['Service']): Terminals['Service'] => ({
   ...terminals,
   start: Effect.fn('harnessTerminals.start')(function* (request: TerminalStart) {
     const runner = request.program === WORLD_COMMAND && request.args[0] === RUNNER_VERB ? request.args[1] : undefined;
-    if (runner !== undefined) {
-      const program = yield* installs.program(runner, 'harness');
-      if (program === null) return yield* terminals.start(request);
-      return yield* terminals.start({
-        ...request,
-        environment: programEnvironment(program, request.environment, [{ _tag: 'Set', name: HARNESS_PROGRAM, value: program.path }]),
-      });
-    }
+    if (runner !== undefined)
+      return yield* terminals.start({ ...request, environment: yield* runnerEnvironment(installs, runner, request.environment) });
     const program = yield* installs.program(request.program);
     if (program === null) return yield* terminals.start(request);
     return yield* terminals.start({ ...request, program: program.path, environment: programEnvironment(program, request.environment) });

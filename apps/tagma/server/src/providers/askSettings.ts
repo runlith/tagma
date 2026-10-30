@@ -7,14 +7,11 @@ import type { SettingKey } from '../platform/contract/wire/setting.js';
 import { session } from '../platform/store/writers.js';
 import { ManagedWrite } from '../settings/contract/service/managed.js';
 import { setting } from '../settings/store/table.js';
-import { ModelAsks } from './contract/service/asks.js';
+import { ModelAsks, namedModel, type NamedModel } from './contract/service/asks.js';
 
-export type NamedModel = { readonly provider: string; readonly model: string };
-
-export const keyedModel = (key: string): readonly NamedModel[] => {
-  if (key === '') return [];
-  const split = key.indexOf(':');
-  return [split === -1 ? { provider: key, model: '' } : { provider: key.slice(0, split), model: key.slice(split + 1) }];
+export const modelsNamed = (key: string): readonly NamedModel[] => {
+  const named = namedModel(key);
+  return named === null ? [] : [named];
 };
 
 export const askSetting = Effect.fnUntraced(function* <A>(key: SettingKey<A>, kind: AskKind, named: (value: A) => readonly NamedModel[]) {

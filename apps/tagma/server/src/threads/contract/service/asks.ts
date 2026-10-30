@@ -1,7 +1,7 @@
 import type { AgentAside, AgentAsideAnswer, AgentAsideCalledTool } from '@runlith/agent/AgentAside';
 import type { LLMError } from '@runlith/llm/schema/errors';
 import { Context, type Effect } from 'effect';
-import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
+import { GateRefusal, type Unblock } from '../../../platform/contract/wire/refusal.js';
 
 export type ThreadSelection = {
   readonly provider: string;
@@ -25,13 +25,20 @@ export type CopyStanding =
 
 export type NotWarm = GateRefusal<'not-warm'>;
 
-export type OverAnswer = { readonly answer: AgentAsideAnswer; readonly basis: ThreadAskBasis };
+export const notWarm = (
+  reason: string,
+  unblock: Unblock = ['send a message in this thread, then ask again while its prompt cache is warm'],
+): NotWarm => new GateRefusal('not-warm', reason, unblock);
 
 export class ThreadAsks extends Context.Service<
   ThreadAsks,
   {
     held(threadId: string): AgentAside | undefined;
-    standing(copy: AgentAside, current: ThreadSelection): Effect.Effect<CopyStanding, NotWarm>;
-    over(threadId: string, instruction: string, copy?: AgentAside): Effect.Effect<OverAnswer, NotWarm | LLMError | AgentAsideCalledTool>;
+    standing(copy: AgentAside, current: ThreadSelection): Effect.Effect<CopyStanding, LLMError>;
+    over(
+      threadId: string,
+      instruction: string,
+      copy?: AgentAside,
+    ): Effect.Effect<AgentAsideAnswer, NotWarm | LLMError | AgentAsideCalledTool>;
   }
 >()('tagma/threads/ThreadAsks') {}

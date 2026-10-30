@@ -13,7 +13,7 @@ const catalogOf = (accountSource: (provider: string) => string) =>
   ({
     models: MODELS,
     accountSource,
-    asks: { kinds: (provider: string) => (MODELS.registered(provider) && MODELS.named(provider).auth !== 'cli' ? ['text'] : []) },
+    asks: { answers: (provider: string) => MODELS.registered(provider) && MODELS.named(provider).auth !== 'cli' },
   }) as unknown as ProviderCatalog;
 
 const CATALOG = catalogOf((provider) => provider);

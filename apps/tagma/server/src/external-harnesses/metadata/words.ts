@@ -7,7 +7,7 @@ import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { jsonValue, metadataDecode } from './fields.js';
 import { inputEnvelopes, promptDigest } from '../adapter/input.js';
 import { claudeTranscript } from '../vendors/claude-code/metadata.js';
-import { claudeUsage } from '../vendors/claude-code/usage.js';
+import { claudeUsage } from '@runlith/adapter-anthropic/usage';
 import type { Usage } from '@runlith/llm/schema/events';
 import { MetadataFile, MetadataInvalid, type MetadataFold } from './file.js';
 import { DOCUMENT_LIMITS, METADATA_PAGES, TRANSCRIPT_LIMITS } from './policy.js';
@@ -144,7 +144,7 @@ const claudeWords = (rootKey: string): MetadataFold<HarnessWords> => ({
       const call = claudeCall(row.message);
       const usage = claudeUsage(call.usage);
       const id = call.id ?? text;
-      if (usage !== null && call.model !== SYNTHETIC)
+      if (usage !== undefined && call.model !== SYNTHETIC)
         standing.requests.set(id, {
           id,
           usage,

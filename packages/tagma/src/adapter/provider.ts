@@ -33,14 +33,16 @@ export type ProgramAnswer = (
   | { readonly _tag: 'Refused'; readonly refusal: ProgramRefusal; readonly message: string }
 ) & { readonly usage?: Usage };
 
-export type AskCommand = string | { readonly runner: string };
-
-export type AskProgram = {
-  readonly command: AskCommand;
+export type CommandProgram = {
+  readonly command: string;
   readonly schemas: boolean;
   argv(ask: ProgramAsk): readonly string[];
   answer(output: ProgramOutput): ProgramAnswer;
 };
+
+export type RunnerProgram = { readonly runner: string; answer(output: ProgramOutput): ProgramAnswer };
+
+export type AskProgram = CommandProgram | RunnerProgram;
 
 export type ProviderAsks = { readonly program?: AskProgram };
 

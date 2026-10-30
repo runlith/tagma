@@ -28,9 +28,8 @@ const filler = Layer.effect(AskPrograms, makeAskPrograms).pipe(
 const run = (input: string, entries: readonly { readonly _tag: 'Set'; readonly name: string; readonly value: string }[] = []) =>
   Effect.flatMap(AskPrograms, (programs) =>
     programs.run({
-      provider: ASK_PROGRAM_PROVIDER,
-      command: askProgramFixture.command,
-      argv: askProgramFixture.argv({ model: ASK_PROGRAM_MODEL, rung: 'low', system: 'Answer.' }),
+      program: askProgramFixture,
+      ask: { model: ASK_PROGRAM_MODEL, rung: 'low', system: 'Answer.' },
       entries,
       input,
       deadlineMs: 60_000,

@@ -62,7 +62,7 @@ import { MachineUnits, type Unit, type WriteUnit } from '../platform/contract/se
 import { Projects } from '../projects/contract/service/registry.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { ModelAccess } from '../providers/contract/service/access.js';
-import { ModelAsks } from '../providers/contract/service/asks.js';
+import { CompactionAsks } from '../providers/contract/service/asks.js';
 import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import { ModelChanges } from '../threads/contract/service/modelChanges.js';
 import { ThreadRollouts } from '../threads/contract/service/rollouts.js';
@@ -108,7 +108,7 @@ export type NativeKernelRequirements =
   | ModelChanges
   | Settings
   | ModelAccess
-  | ModelAsks
+  | CompactionAsks
   | ThreadRollouts
   | RestedRollouts
   | WorkSpells
@@ -228,7 +228,7 @@ export const assembleNativeKernel: Effect.Effect<NativeKernel['Service'], never,
       return path;
     }),
     strategy: makeThreadSummaryStrategy({
-      models: (yield* ModelAsks).compaction,
+      models: yield* CompactionAsks,
       prompt: COMPACTION_PROMPT,
     }),
     recovery: makeThreadDigestStrategy(),

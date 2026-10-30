@@ -2,7 +2,8 @@ import { modelCatalog } from '@runlith/llm/models/catalog';
 import { pickerOrder } from '@runlith/llm/models/description';
 import type { ProductIdentity } from '@runlith/llm/profiles/contract';
 import type { AdapterHost, HarnessProvider, Provider, SettingInstance, WireProvider } from '@runlith/tagma/adapter/provider';
-import { askKindsOf } from '@runlith/llm/models/description';
+import { ASK_KINDS, type AskKind, type ModelCapability } from '@runlith/llm/models/description';
+import type { AskPath } from './contract/wire/asks.js';
 import { claimSections, type SectionClaim } from '@runlith/tagma/adapter/declaration';
 import { Effect, Layer, Result, Semaphore, Stream, SubscriptionRef } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
@@ -32,6 +33,11 @@ import { AccountCli } from './contract/service/cli.js';
 
 const product: ProductIdentity = { mcpServer: 'tagma', client: { name: 'tagma', version: PROGRAM_RELEASE } };
 
+const kindsOf = (path: AskPath, capabilities: readonly ModelCapability[]): readonly AskKind[] => {
+  if (capabilities.includes('text')) return ASK_KINDS;
+  return path === 'request' && capabilities.includes('decision') ? ['decision'] : [];
+};
+
 const askOffers = (
   providers: readonly Provider[],
   borrowers: ReadonlyMap<string, string>,
@@ -48,15 +54,12 @@ const askOffers = (
     const program = registration.asks?.program;
     return program === undefined ? null : { path: 'program', provider, program };
   };
-  return {
-    route,
-    kinds: (provider, model) => {
-      const routed = route(provider, model);
-      const spec = routed === null ? undefined : byId.get(routed.provider)?.models[model];
-      return routed === null || spec === undefined ? [] : askKindsOf(routed.path, spec.capabilities);
-    },
-    borrower: (provider) => borrowers.get(provider),
+  const kinds = (provider: string, model: string): readonly AskKind[] => {
+    const routed = route(provider, model);
+    const spec = routed === null ? undefined : byId.get(routed.provider)?.models[model];
+    return routed === null || spec === undefined ? [] : kindsOf(routed.path, spec.capabilities);
   };
+  return { route, kinds, answers: (provider, model, kind) => kinds(provider, model).includes(kind) };
 };
 
 const askedModels = (provider: Provider, asks: AskOffers): ServedProvider['asks'] =>
@@ -171,6 +174,7 @@ export const catalogOf = (
     selectable: (id) => !hidden.has(id),
     inMode: (id) => !outOfMode.has(id),
     accountSource: sourceOf,
+    borrower: (provider) => borrowers.get(provider),
     wires,
     harnesses: providers.filter((provider): provider is HarnessProvider => provider.kind === 'harness'),
     adapters,

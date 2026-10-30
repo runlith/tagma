@@ -3,21 +3,14 @@ import { body } from '@runlith/activity/Activity';
 import type { ActivityBody } from '@runlith/activity/fact';
 import { Effect } from 'effect';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
-import { ThreadAsks } from '../contract/service/asks.js';
+import { ThreadAsks, type ThreadSelection } from '../contract/service/asks.js';
 import { ThreadLookup } from '../contract/service/reads.js';
-
-export type RecapSelection = {
-  readonly provider: string;
-  readonly model: string | null;
-  readonly reasoning: string | null;
-  readonly account: string | null;
-};
 
 export type Unselected = 'gone' | 'running' | 'selection';
 
 export type RecapQuestion = {
   readonly ask: Effect.Effect<AgentAsideAnswer, unknown>;
-  readonly selected: Effect.Effect<RecapSelection | Unselected, unknown>;
+  readonly selected: Effect.Effect<ThreadSelection | Unselected, unknown>;
 };
 
 export type Covered = {
@@ -43,7 +36,7 @@ export const makeRecapQuestions = Effect.gen(function* () {
     });
     if (standing._tag === 'Moved') return 'selection' satisfies Unselected;
     const { provider, model, reasoning, account } = standing.basis;
-    return { provider, model, reasoning, account } satisfies RecapSelection;
+    return { provider, model, reasoning, account } satisfies ThreadSelection;
   });
 
   const posed = Effect.fnUntraced(function* (threadId: string, copy: AgentAside, instruction: string, covered: Covered) {
@@ -54,7 +47,7 @@ export const makeRecapQuestions = Effect.gen(function* () {
       }),
     );
     return {
-      ask: Effect.map(asks.over(threadId, instruction, copy), (over) => over.answer),
+      ask: asks.over(threadId, instruction, copy),
       selected: selection(threadId, copy),
     } satisfies RecapQuestion;
   });

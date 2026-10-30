@@ -1,6 +1,6 @@
 import { Result, Schema } from 'effect';
 import { Usage } from '@runlith/llm/schema/events';
-import type { AskProgram, ProgramRefusal } from '@runlith/tagma/adapter/provider';
+import type { ProgramRefusal, RunnerProgram } from '@runlith/tagma/adapter/provider';
 
 const Output = Schema.Struct({
   text: Schema.String,
@@ -26,10 +26,8 @@ const refusalOf = (message: string): ProgramRefusal => {
   return 'ask-provider-failed';
 };
 
-export const cursorProgram: AskProgram = {
-  command: { runner: 'cursor' },
-  schemas: false,
-  argv: (ask) => ['--ask', '--model', ask.model, ...(ask.rung === null ? [] : ['--effort', ask.rung]), `--system=${ask.system}`],
+export const cursorProgram: RunnerProgram = {
+  runner: 'cursor',
   answer: ({ stdout, stderr, exit }) => {
     if (exit !== 0) {
       const message = (stderr || stdout).trim() || 'Cursor ended the ask without an answer.';

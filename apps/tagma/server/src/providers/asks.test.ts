@@ -134,20 +134,21 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { asks, connected, saved } = yield* setup;
+      const empty = { model: '', reasoning: '' };
       const asker = { provider: 'text', model: 'large', account: null };
-      expect(yield* asks.defaultFor('text', asker).pipe(Effect.flip)).toMatchObject({ _tag: 'AskRefused', refusal: 'ask-unanswerable' });
+      expect(yield* asks.choose('text', empty, asker).pipe(Effect.flip)).toMatchObject({ _tag: 'AskRefused', refusal: 'ask-unanswerable' });
       connected.add('native');
-      expect(yield* asks.defaultFor('decision', asker)).toEqual({ provider: 'native', model: 'judge', reasoning: null, account: null });
-      expect(yield* asks.defaultFor('text', { provider: 'native', model: 'judge', account: 'key' })).toEqual({
+      expect(yield* asks.choose('decision', empty, asker)).toEqual({ provider: 'native', model: 'judge', reasoning: null, account: null });
+      expect(yield* asks.choose('text', empty, { provider: 'native', model: 'judge', account: 'key' })).toEqual({
         provider: 'native',
         model: 'judge',
         reasoning: null,
         account: 'key',
       });
       connected.add('text');
-      expect(yield* asks.defaultFor('text', asker)).toEqual({ provider: 'text', model: 'light', reasoning: 'low', account: null });
-      saved.selection = { provider: 'text', model: 'large', reasoning: 'medium' };
-      expect(yield* asks.defaultFor('text')).toMatchObject({ provider: 'text', model: 'light' });
+      expect(yield* asks.choose('text', empty, asker)).toEqual({ provider: 'text', model: 'light', reasoning: 'low', account: null });
+      saved.selection = { provider: 'text', model: 'large' };
+      expect(yield* asks.choose('text', empty)).toMatchObject({ provider: 'text', model: 'light' });
     }),
 );
 
@@ -155,7 +156,7 @@ it.effect('with only a borrowed CLI login connected, the default is the borrowin
   Effect.gen(function* () {
     const { asks, connected, said } = yield* setup;
     connected.add('codex');
-    const chosen = yield* asks.defaultFor('text');
+    const chosen = yield* asks.choose('text', { model: '', reasoning: '' });
     expect(chosen).toEqual({ provider: 'codex', model: 'luna', reasoning: 'low', account: null });
     expect(yield* asks.text(chosen, { system: 'Name it.', input: 'words' })).toMatchObject({ value: 'answer', path: 'request' });
     expect(said.requested).toEqual(['chat:luna']);

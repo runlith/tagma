@@ -1,13 +1,12 @@
-import { Data, Effect } from 'effect';
+import { Effect } from 'effect';
+import { ProgramFailed } from '../../providers/contract/service/asks.js';
 import { resolveEnvironment } from '@runlith/executions/CommandEnvironment';
 import type { EnvironmentEntry } from '@runlith/executions/protocol/execution';
-import type { AccountCommand } from '../../providers/contract/service/cli.js';
+import type { CommandExchange, ProgramOutput } from '@runlith/tagma/adapter/provider';
 import type { HarnessProgram } from '../../threads/contract/service/harness.js';
 import { programEnvironment } from '../sessions/programs.js';
 
 const OUTPUT_BYTES = 1024 * 1024;
-
-export class ProgramFailed extends Data.TaggedError('ProgramFailed')<{ readonly message: string }> {}
 
 export type ProgramCommand = {
   readonly program: string;
@@ -15,11 +14,9 @@ export type ProgramCommand = {
   readonly entries: readonly EnvironmentEntry[];
   readonly cwd: string;
   readonly timeoutMs: number;
-  readonly exchange?: AccountCommand['exchange'];
+  readonly exchange?: CommandExchange;
   readonly input?: string;
 };
-
-export type ProgramRan = { readonly stdout: string; readonly stderr: string; readonly exit: number | null };
 
 const outputText = async (stream: ReadableStream<Uint8Array>, onLine?: (line: string) => void): Promise<string> => {
   const reader = stream.getReader();
@@ -73,7 +70,7 @@ export const runProgram = Effect.fnUntraced(function* (command: ProgramCommand, 
       }),
   );
   return yield* Effect.tryPromise({
-    try: async (): Promise<ProgramRan> => {
+    try: async (): Promise<ProgramOutput> => {
       let completed = command.exchange === undefined;
       const onLine = (line: string) => {
         if (!completed && command.exchange!.complete(line)) {

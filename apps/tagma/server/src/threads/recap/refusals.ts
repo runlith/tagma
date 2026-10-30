@@ -1,5 +1,6 @@
 import { Cause, Exit, Option } from 'effect';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { notWarm } from '../contract/service/asks.js';
 import type { RecapAttempt } from '../contract/wire/recap.js';
 import type { RecapRefusal } from '../contract/wire/operations/recap.js';
 
@@ -8,7 +9,7 @@ export function recapRefusal(reason: string): GateRefusal<RecapRefusal> {
     case 'gone':
       return new GateRefusal('not-found', 'This thread no longer exists.', ['open a thread from the project list']);
     case 'not-warm':
-      return new GateRefusal('not-warm', 'This thread holds no warm copy of its conversation; a recap asks over the warm cache alone.', [
+      return notWarm('This thread holds no warm copy of its conversation; a recap asks over the warm cache alone.', [
         'send a message in this thread, then use /recap while its prompt cache is warm',
       ]);
     case 'running':

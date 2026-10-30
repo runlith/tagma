@@ -1,9 +1,6 @@
-export const ASK_REFUSALS = [
-  'ask-not-connected',
-  'ask-quota',
-  'ask-input-too-large',
-  'ask-unreadable-answer',
-  'ask-provider-failed',
-  'ask-unanswerable',
-] as const;
+import { PROGRAM_REFUSALS } from '@runlith/tagma/adapter/provider';
+
+export const ASK_REFUSALS = [...PROGRAM_REFUSALS, 'ask-unanswerable'] as const;
 export type AskRefusal = (typeof ASK_REFUSALS)[number];
+
+export type AskPath = 'request' | 'program';

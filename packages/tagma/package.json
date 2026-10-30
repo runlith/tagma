@@ -23,6 +23,7 @@
     },
     "./adapter/provider": {
       "types": "./src/adapter/provider.ts",
+      "browser": "./src/adapter/provider.ts",
       "bun": "./src/adapter/provider.ts",
       "default": "./src/adapter/provider.ts"
     },

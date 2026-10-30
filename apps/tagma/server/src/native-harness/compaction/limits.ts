@@ -60,7 +60,7 @@ function thresholdAt(
   );
 }
 
-const familyOf = (catalog: ProviderCatalog, provider: string): string => catalog.asks.borrower(provider) ?? provider;
+const familyOf = (catalog: ProviderCatalog, provider: string): string => catalog.borrower(provider) ?? provider;
 
 export const makeContextLimits = Effect.fnUntraced(function* (input: { readonly agents: AgentRegistry<WriteUnit<'machine'>> }) {
   const settings = yield* Settings;

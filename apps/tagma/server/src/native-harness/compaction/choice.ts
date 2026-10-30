@@ -19,7 +19,7 @@ import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
 import { ceilingOf } from '../../platform/contract/wire/pageFamily.js';
 import type { SettableScope } from '../../platform/contract/wire/setting.js';
 import { signingAccount, spendability, textModelOf } from '../models/spendability.js';
-import { admitSummarizer, answersText, foldOf, summarizerSpend, type SummarizedThread, type SummarizerSpend } from './spend.js';
+import { admitSummarizer, foldOf, summarizerSpend, type SummarizedThread, type SummarizerSpend } from './spend.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import type { QuotaTable } from '../../providers/contract/wire/accounts.js';
 import { type ProviderCatalog, ProviderRegistry } from '../../providers/contract/service/registry.js';
@@ -233,11 +233,11 @@ export const makeChoiceReader = Effect.fnUntraced(function* ({ rows }: { readonl
       const subject = summarized(models, thread);
       const ownModel = subject.model;
       const foreign = thread.capabilities.compaction === 'foreign';
-      const offered = state.chain.filter((member) => !foreign || member.provider !== thread.provider || answersText(catalog, member));
+      const offered = state.chain.filter(
+        (member) => !foreign || member.provider !== thread.provider || catalog.asks.answers(member.provider, member.model, 'text'),
+      );
       const chained = new Set(offered.map((member) => `${member.provider}:${member.model}`));
-      const callables = models
-        .modelsByCapability('text')
-        .filter((option) => answersText(catalog, { provider: option.provider, model: option.id }));
+      const callables = models.modelsByCapability('text').filter((option) => catalog.asks.answers(option.provider, option.id, 'text'));
       const others = callables.flatMap((option, ordinal) =>
         option.key === `${thread.provider}:${ownModel}` || chained.has(option.key) ? [] : [{ option, ordinal }],
       );

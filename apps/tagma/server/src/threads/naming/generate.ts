@@ -12,7 +12,7 @@ import { ActivityLog } from '@runlith/activity/log';
 import { Message } from '@runlith/llm/schema/messages';
 import { isReaderWordsItem } from '@runlith/agent/thread/inboxItems';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { AskRefused, ModelAsks } from '../../providers/contract/service/asks.js';
+import { askGate, AskRefused, ModelAsks } from '../../providers/contract/service/asks.js';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
@@ -54,7 +54,7 @@ type NamingRequest = {
 type NamingAnswer = ThreadTitleAnswer & { readonly effect?: TitleNaming };
 
 const askRefusal = (refused: AskRefused) =>
-  new GateRefusal(refused.refusal, refused.message, ['choose a model that answers text in `threads.titleModel`, or connect a provider']);
+  askGate(refused, ['choose a model that answers text in `threads.titleModel`, or connect a provider']);
 
 export const TITLE = activityKind<
   NamingRequest,
@@ -262,12 +262,7 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
           }),
         );
       }
-      return yield* judged(
-        threadId,
-        request,
-        Effect.map(threadAsks.over(threadId, INSTRUCTION, prompt), (over) => over.answer),
-        write,
-      );
+      return yield* judged(threadId, request, threadAsks.over(threadId, INSTRUCTION, prompt), write);
     });
     return request.source === 'captured'
       ? attempt(threadId, request, work, { run: prompt.runId, parent: { run: prompt.runId }, ...placement })

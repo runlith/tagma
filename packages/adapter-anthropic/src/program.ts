@@ -1,52 +1,26 @@
-import { Usage } from '@runlith/llm/schema/events';
-import type { AskProgram, ProgramAnswer, ProgramOutput, ProgramRefusal } from '@runlith/tagma/adapter/provider';
+import type { Usage } from '@runlith/llm/schema/events';
+import type { CommandProgram, ProgramAnswer, ProgramOutput, ProgramRefusal } from '@runlith/tagma/adapter/provider';
+import { Result as Decoded, Schema } from 'effect';
+import { claudeUsage } from './usage';
 
-type Spend = {
-  readonly input_tokens?: number;
-  readonly output_tokens?: number;
-  readonly cache_read_input_tokens?: number;
-  readonly cache_creation_input_tokens?: number;
-};
+const Result = Schema.Struct({
+  type: Schema.Literal('result'),
+  subtype: Schema.optional(Schema.String),
+  is_error: Schema.optional(Schema.Boolean),
+  result: Schema.optional(Schema.Unknown),
+  structured_output: Schema.optional(Schema.Unknown),
+  usage: Schema.optional(Schema.Unknown),
+});
 
-type Result = {
-  readonly type: 'result';
-  readonly subtype?: string;
-  readonly is_error?: boolean;
-  readonly result?: unknown;
-  readonly structured_output?: unknown;
-  readonly usage?: Spend;
-};
+const isResult = Schema.is(Result);
 
-const counted = (value: unknown): number | undefined => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
+const decodeOutput = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown));
 
-const usageOf = (spend: Spend | undefined): Usage | undefined => {
-  if (spend === undefined || spend === null || typeof spend !== 'object') return undefined;
-  const fresh = counted(spend.input_tokens);
-  const read = counted(spend.cache_read_input_tokens);
-  const written = counted(spend.cache_creation_input_tokens);
-  const output = counted(spend.output_tokens);
-  const input = [fresh, read, written].some((value) => value !== undefined) ? (fresh ?? 0) + (read ?? 0) + (written ?? 0) : undefined;
-  if (input === undefined && output === undefined) return undefined;
-  return new Usage({
-    inputTokens: input,
-    nonCachedInputTokens: fresh,
-    outputTokens: output,
-    cacheReadInputTokens: read,
-    cacheWriteInputTokens: written,
-  });
-};
-
-const resultOf = (stdout: string): Result | undefined => {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    return undefined;
-  }
-  const messages: readonly unknown[] = Array.isArray(parsed) ? parsed : [parsed];
-  return messages.findLast(
-    (message): message is Result => typeof message === 'object' && message !== null && (message as Result).type === 'result',
-  );
+const resultOf = (stdout: string): typeof Result.Type | undefined => {
+  const parsed = decodeOutput(stdout);
+  if (Decoded.isFailure(parsed)) return undefined;
+  const messages: readonly unknown[] = Array.isArray(parsed.success) ? parsed.success : [parsed.success];
+  return messages.findLast(isResult);
 };
 
 const refusalOf = (said: string): ProgramRefusal => {
@@ -61,7 +35,7 @@ const refused = (said: string, usage: Usage | undefined): ProgramAnswer => {
   return { _tag: 'Refused', refusal: refusalOf(message), message, usage };
 };
 
-export const claudeCodeProgram: AskProgram = {
+export const claudeCodeProgram: CommandProgram = {
   command: 'claude',
   schemas: true,
   argv: (ask) => [
@@ -87,7 +61,7 @@ export const claudeCodeProgram: AskProgram = {
       return exit === 0
         ? { _tag: 'Refused', refusal: 'ask-unreadable-answer', message: 'Claude Code printed no result message' }
         : refused(stderr === '' ? stdout : stderr, undefined);
-    const usage = usageOf(result.usage);
+    const usage = claudeUsage(result.usage);
     const text = typeof result.result === 'string' ? result.result : '';
     if (result.is_error === true || result.subtype !== 'success') return refused(text === '' ? stderr : text, usage);
     if (result.structured_output !== undefined) return { _tag: 'Object', object: result.structured_output, usage };

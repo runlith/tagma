@@ -1,25 +1,6 @@
 import { expect, test } from 'bun:test';
 import { cursorProgram } from './program';
 
-test('the ask program passes the selected model, optional rung and instructions to the builtin runner', () => {
-  const system = '- instructions\nwith unicode: 日本語';
-  expect(cursorProgram.command).toEqual({ runner: 'cursor' });
-  expect(cursorProgram.argv({ model: 'composer-2.5@context=1m', rung: 'high', system })).toEqual([
-    '--ask',
-    '--model',
-    'composer-2.5@context=1m',
-    '--effort',
-    'high',
-    `--system=${system}`,
-  ]);
-  expect(cursorProgram.argv({ model: 'composer-2.5', rung: null, system })).toEqual([
-    '--ask',
-    '--model',
-    'composer-2.5',
-    `--system=${system}`,
-  ]);
-});
-
 test('the runner result preserves text and reported usage, and failed or unreadable runs refuse', () => {
   const text = '日本語\nA title';
   const usage = { inputTokens: 40, outputTokens: 7, cacheReadTokens: 25, cacheWriteTokens: 5, totalTokens: 47, reasoningTokens: 2 };

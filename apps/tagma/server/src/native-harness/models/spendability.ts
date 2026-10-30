@@ -48,7 +48,7 @@ export function spendability(
 ): TurnSpendability {
   const option = textModelOf(catalog.models, provider, model);
   if (option === undefined) return { spendable: false, reason: 'unknown-model' };
-  if (!catalog.asks.kinds(provider, model).includes('text')) return { spendable: false, reason: 'not-callable' };
+  if (!catalog.asks.answers(provider, model, 'text')) return { spendable: false, reason: 'not-callable' };
   return signedByCli(catalog.models, provider)
     ? cliSpend(catalog, option, provider, table, now, account)
     : signedSpend(catalog, option, provider, table, now, account);

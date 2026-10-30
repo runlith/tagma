@@ -74,7 +74,11 @@ const readerOf = (
       table: () => Effect.succeed(table),
     } as unknown as AccountQuota['Service']),
     Effect.provideService(ProviderRegistry, {
-      catalog: Effect.succeed({ models: MODELS, accountSource: (provider: string) => provider }),
+      catalog: Effect.succeed({
+        models: MODELS,
+        accountSource: (provider: string) => provider,
+        asks: { answers: (provider: string) => MODELS.registered(provider) && MODELS.named(provider).auth !== 'cli' },
+      }),
     } as unknown as ProviderRegistry['Service']),
   );
 
@@ -147,30 +151,32 @@ it.effect('the automatic chain and menu keep an own vendor-session model spendab
   }),
 );
 
-it.effect('a foreign-only session chooses a spendable foreign chain even while running, and refuses its own provider', () =>
-  Effect.gen(function* () {
-    const own = { provider: 'subscription', model: 'claude-opus-5-5' };
-    const other = { provider: 'opencode-go', model: 'deepseek-v4.1-flash' };
-    const chain = [own, other];
-    const menu = yield* menuOf('foreign', chain, own.provider);
-    expect(menu.own).toBeNull();
-    expect(menu.chain.map((row) => row.provider)).toEqual([other.provider]);
-    expect(menu.others.rows.every((row) => row.provider !== own.provider)).toBe(true);
-    expect(menu.resolved).toMatchObject({
-      kind: 'chain',
-      reason: 'foreign',
-      choice: { ...other, folds: 'core', spendable: true },
-      skipped: [{ ...own, reason: 'not-callable' }],
-    });
-    const reader = yield* readerOf('foreign', chain, own.provider);
-    expect(yield* reader.summarizers({ threadId: THREAD, running: true })).toMatchObject({
-      kind: 'chain',
-      reason: 'foreign',
-      members: [{ ...other, account: 'summary-key' }],
-    });
-    expect(yield* Effect.flip(reader.admit(THREAD, own))).toMatchObject({ code: 'unknown-summarizer' });
-    expect((yield* menuOf('foreign')).resolved).toMatchObject({ kind: 'none', reason: 'foreign', choice: null });
-  }),
+it.effect(
+  'a foreign-only session chooses a spendable foreign chain even while running, and refuses its own provider when it answers no text ask',
+  () =>
+    Effect.gen(function* () {
+      const own = { provider: 'claude-code', model: 'claude-opus-5-5' };
+      const other = { provider: 'opencode-go', model: 'deepseek-v4.1-flash' };
+      const chain = [own, other];
+      const menu = yield* menuOf('foreign', chain, own.provider);
+      expect(menu.own).toBeNull();
+      expect(menu.chain.map((row) => row.provider)).toEqual([other.provider]);
+      expect(menu.others.rows.every((row) => row.provider !== own.provider)).toBe(true);
+      expect(menu.resolved).toMatchObject({
+        kind: 'chain',
+        reason: 'foreign',
+        choice: { ...other, folds: 'core', spendable: true },
+        skipped: [{ ...own, reason: 'not-callable' }],
+      });
+      const reader = yield* readerOf('foreign', chain, own.provider);
+      expect(yield* reader.summarizers({ threadId: THREAD, running: true })).toMatchObject({
+        kind: 'chain',
+        reason: 'foreign',
+        members: [{ ...other, account: 'summary-key' }],
+      });
+      expect(yield* Effect.flip(reader.admit(THREAD, own))).toMatchObject({ code: 'unknown-summarizer' });
+      expect((yield* menuOf('foreign')).resolved).toMatchObject({ kind: 'none', reason: 'foreign', choice: null });
+    }),
 );
 
 it.effect('an empty chain keeps the own model under every rule, while unavailable members keep their refusal reasons and quota reset', () =>

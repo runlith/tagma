@@ -5,10 +5,9 @@ import { generateObject } from './call';
 import type { DecisionRequest } from './decision';
 import { prepare, LlmClient } from './route/client';
 import { type LLMEvent, Usage } from './schema/events';
-import { Model, ModelIdentity } from './schema/options';
-import { ModelID, ProviderID } from './schema/ids';
+import { Model } from './schema/options';
 import * as AnthropicMessages from './protocols/anthropic-messages';
-import { decideByText, type TextDecisionAnswering } from './textDecision';
+import { decisionVerdicts, textDecisionAsk } from './textDecision';
 
 const TRIAGE: DecisionRequest = {
   state: { thread: 'The agent asks the operator which of two migrations to keep.' },
@@ -30,47 +29,39 @@ const model = Model.make({
   compatibility: { toolChoice: ['auto', 'none'] },
 });
 
-const recorded =
-  (events: readonly LLMEvent[]): TextDecisionAnswering =>
-  (ask) =>
-    generateObject({ model, system: ask.system, prompt: ask.prompt, jsonSchema: ask.jsonSchema }).pipe(
-      Effect.map((answered) => ({
-        object: answered.object,
-        response: answered.response,
-        model: new ModelIdentity({ provider: ProviderID.make('anthropic'), model: ModelID.make('claude-test') }),
-      })),
-      Effect.provideService(
-        LlmClient,
-        LlmClient.of({
-          prepare: () => Effect.die('the decision reads a stream'),
-          generate: () => Effect.die('the decision reads a stream'),
-          stream: (request) => Stream.unwrap(Effect.as(prepare(request), Stream.fromIterable(events))),
-        }),
-      ),
-    );
-
-const answered = (input: unknown, reason: 'tool-calls' | 'content-filter' = 'tool-calls'): readonly LLMEvent[] => [
-  { type: 'tool-call', id: 'call-1', name: 'generate_object', input },
-  { type: 'finish', reason, usage: new Usage({ inputTokens: 120, outputTokens: 9 }) },
-];
+const decided = (input: unknown) => {
+  const ask = textDecisionAsk(TRIAGE);
+  const events: readonly LLMEvent[] = [
+    { type: 'tool-call', id: 'call-1', name: 'generate_object', input },
+    { type: 'finish', reason: 'tool-calls', usage: new Usage({ inputTokens: 120, outputTokens: 9 }) },
+  ];
+  return generateObject({ model, system: ask.system, prompt: ask.prompt, jsonSchema: ask.jsonSchema }).pipe(
+    Effect.flatMap((answered) => decisionVerdicts(TRIAGE, answered.object)),
+    Effect.provideService(
+      LlmClient,
+      LlmClient.of({
+        prepare: () => Effect.die('the decision reads a stream'),
+        generate: () => Effect.die('the decision reads a stream'),
+        stream: (request) => Stream.unwrap(Effect.as(prepare(request), Stream.fromIterable(events))),
+      }),
+    ),
+  );
+};
 
 it.effect('a model without forced tool choice answers every question type as a verdict without probabilities', () =>
   Effect.gen(function* () {
-    const answer = yield* decideByText(TRIAGE, recorded(answered({ addressed: true, kind: 'decision', urgency: '2' })));
-    expect(answer.answers).toEqual({
+    expect(yield* decided({ addressed: true, kind: 'decision', urgency: '2' })).toEqual({
       addressed: { type: 'noul', noul: true, probability: null },
       kind: { type: 'choice', choice: 'decision', probabilities: null, confidence: null },
       urgency: { type: 'score', score: 2, probabilities: null, confidence: null },
     });
-    expect(answer.usage).toMatchObject({ inputTokens: 120, outputTokens: 9 });
   }),
 );
 
-it.effect('an answer outside the questions and a provider withholding one are refused by their reasons', () =>
+it.effect('an answer outside the questions is refused as invalid output', () =>
   Effect.gen(function* () {
-    const outside = yield* decideByText(TRIAGE, recorded(answered({ addressed: true, kind: 'escalate', urgency: '2' }))).pipe(Effect.flip);
-    expect(outside).toMatchObject({ _tag: 'DecisionRefused', reason: 'malformed' });
-    const withheld = yield* decideByText(TRIAGE, recorded(answered({}, 'content-filter'))).pipe(Effect.flip);
-    expect(withheld).toMatchObject({ _tag: 'DecisionRefused', reason: 'provider-refused' });
+    expect(yield* decided({ addressed: true, kind: 'escalate', urgency: '2' }).pipe(Effect.flip)).toMatchObject({
+      reason: { _tag: 'InvalidProviderOutput' },
+    });
   }),
 );

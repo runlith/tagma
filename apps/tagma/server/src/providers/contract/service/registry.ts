@@ -25,7 +25,7 @@ export type AskRoute =
 export type AskOffers = {
   route(provider: string, model: string): AskRoute | null;
   kinds(provider: string, model: string): readonly AskKind[];
-  borrower(provider: string): string | undefined;
+  answers(provider: string, model: string, kind: AskKind): boolean;
 };
 
 export type ProviderCatalog = {
@@ -43,6 +43,7 @@ export type ProviderCatalog = {
   selectable(provider: string): boolean;
   inMode(provider: string): boolean;
   accountSource(provider: string): string;
+  borrower(provider: string): string | undefined;
 };
 
 export type NotInstalled = GateRefusal<'provider-not-installed'>;

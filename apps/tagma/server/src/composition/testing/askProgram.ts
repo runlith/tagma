@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { Usage } from '@runlith/llm/schema/events';
-import { type AskProgram, defineAdapter, type ProgramAnswer } from '@runlith/tagma/adapter/provider';
+import { type CommandProgram, defineAdapter, type ProgramAnswer } from '@runlith/tagma/adapter/provider';
 
 export const ASK_PROGRAM_PROVIDER = 'ask-program';
 export const ASK_PROGRAM_MODEL = 'scripted-1';
@@ -21,7 +21,7 @@ const answered = (stdout: string): ProgramAnswer => {
   return { _tag: 'Text', text: said.text, usage: said.usage === undefined ? undefined : new Usage(said.usage) };
 };
 
-export const askProgramFixture: AskProgram = {
+export const askProgramFixture: CommandProgram = {
   command: process.execPath,
   schemas: false,
   argv: (ask) => [SCRIPT, '--model', ask.model, ...(ask.rung === null ? [] : ['--effort', ask.rung]), '--system', ask.system],

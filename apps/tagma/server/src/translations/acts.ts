@@ -7,7 +7,7 @@ import { Cause, Clock, Deferred, Effect, FiberMap, Option, PubSub, Semaphore, St
 import type { StoreFailure } from '../platform/contract/service/store.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { ProjectChanges } from '../projects/contract/service/changes.js';
-import { ModelAsks, type Answered, type AskRefused } from '../providers/contract/service/asks.js';
+import { askGate, ModelAsks, type Answered, type AskRefused } from '../providers/contract/service/asks.js';
 import { Settings } from '../settings/contract/service/values.js';
 import {
   Translations,
@@ -69,7 +69,7 @@ const document = (kind: string, value: object): ActivityBody => ({
 });
 
 const askRefusal = (refused: AskRefused): StartRefusal =>
-  new GateRefusal(refused.refusal, refused.message, ['choose a model that answers text in the lens or in `translation.model`']);
+  askGate(refused, ['choose a model that answers text in the lens or in `translation.model`']);
 
 const keyOf = (block: Translated, language: string): ProjectionKey => ({ projectId: block.projectId, block: block.uuid, language });
 

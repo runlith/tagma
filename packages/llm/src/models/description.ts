@@ -13,14 +13,6 @@ export type ModelCapability = (typeof MODEL_CAPABILITIES)[number];
 export const ASK_KINDS = ['text', 'object', 'decision'] as const;
 export type AskKind = (typeof ASK_KINDS)[number];
 
-export type AskPath = 'request' | 'program';
-
-export const askKindsOf = (path: AskPath | null, capabilities: readonly ModelCapability[]): readonly AskKind[] => {
-  if (path === null) return [];
-  if (capabilities.includes('text')) return ASK_KINDS;
-  return path === 'request' && capabilities.includes('decision') ? ['decision'] : [];
-};
-
 export type ModelSwitch = {
   readonly id: string;
   readonly label: string;

@@ -8,6 +8,7 @@ import {
   type ProviderRequestLimits,
 } from './description';
 import type { ToolChoiceMode } from '../llm/schema/options';
+import { ReasoningEfforts } from '../llm/schema/ids';
 
 export const OPERATOR_ONLY_REASONING: ReadonlySet<string> = new Set(['max']);
 
@@ -212,6 +213,14 @@ export function reasoningForModel(preferred: string | null | undefined, model: M
     return model.defaultReasoning;
   }
   return model.reasoningOptions.find((option) => option.id === 'high')?.id ?? model.reasoningOptions[0]?.id ?? '';
+}
+
+export function lowestReasoning(model: ModelOption): string | null {
+  const rank = (id: string) => {
+    const at = ReasoningEfforts.indexOf(id as (typeof ReasoningEfforts)[number]);
+    return at === -1 ? ReasoningEfforts.length : at;
+  };
+  return model.reasoningOptions.toSorted((left, right) => rank(left.id) - rank(right.id))[0]?.id ?? null;
 }
 
 function reasoningLabel(id: string): string {

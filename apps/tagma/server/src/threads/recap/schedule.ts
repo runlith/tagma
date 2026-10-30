@@ -22,7 +22,8 @@ import { threadQuietRun } from '../store/conversation.js';
 import { thread, threadRun } from '../store/kernel.js';
 import { recap as recapKey } from '../contract/wire/settings.js';
 import { readRecap, recapInstruction } from './prompt.js';
-import { document, makeRecapQuestions, type RecapSelection } from './questions.js';
+import { document, makeRecapQuestions } from './questions.js';
+import type { ThreadSelection } from '../contract/service/asks.js';
 import { automaticRecaps } from './readings.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
@@ -215,7 +216,7 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
     return manual || (yield* promised(threadId)) ? null : ('cold' satisfies RecapSkip);
   });
 
-  const publish = Effect.fnUntraced(function* (threadId: string, slot: Pending, selected: RecapSelection, written: ThreadRecap) {
+  const publish = Effect.fnUntraced(function* (threadId: string, slot: Pending, selected: ThreadSelection, written: ThreadRecap) {
     const held = slot.capture;
     const enabled = slot.manual ? () => true : yield* settings.held(recapKey, held.basis.projectId);
     return yield* units.write(writes('ThreadRecap.publish', [threadRecord]), (unit) =>
