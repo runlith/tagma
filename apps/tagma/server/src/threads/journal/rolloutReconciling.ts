@@ -10,7 +10,7 @@ import { restStamps } from '../rest.js';
 import { threadRolloutCursor, threadRolloutHome } from '../store/journal.js';
 import { ROLLOUT_SUFFIX, openRollout, rolloutStateOf, rolloutThreadId } from './rolloutForms.js';
 import { replayThreadRollout, rolloutBase } from './replay.js';
-import { type Rollout, replayRollout, type RolloutUnreadable } from './rolloutFile.js';
+import type { RolloutUnreadable } from './rolloutFile.js';
 import type { RolloutSyncRefused } from './export.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
@@ -82,24 +82,32 @@ export const rolloutReconciling = (
           ),
         ),
       );
-    const read = new Map<string, Rollout | null>();
+    const read = new Map<string, string | null>();
     const sourceOf = Effect.fnUntraced(function* (sourceId: string) {
       const known = read.get(sourceId);
       if (known !== undefined) return known === null ? [] : [[sourceId, known] as const];
-      let found: Rollout | null = null;
+      let found: string | null = null;
       for (const projectDir of yield* Effect.promise(() => readdir(home, { withFileTypes: true }))) {
         if (!projectDir.isDirectory()) continue;
         const path = join(home, projectDir.name, `${sourceId}${ROLLOUT_SUFFIX}`);
         if ((yield* rolloutStateOf(path)) === null) continue;
         yield* forms.formedOpen(sourceId, path);
-        found = yield* replayRollout(path);
+        found = path;
         break;
       }
       read.set(sourceId, found);
       return found === null ? [] : [[sourceId, found] as const];
     });
     const bring = (threadId: string, path: string): Effect.Effect<number> =>
-      inJournal(threadId, forms.formedHere(threadId, path).pipe(Effect.andThen(openRollout(path)), Effect.andThen(rolloutBase(path))))
+      inJournal(
+        threadId,
+        forms
+          .formedHere(threadId, path)
+          .pipe(
+            Effect.andThen(openRollout(path)),
+            Effect.andThen(rolloutBase(path, parts.native.folds).pipe(Effect.provideService(ThreadEntryKinds, ctx.kinds))),
+          ),
+      )
         .pipe(
           Effect.flatMap((base) => Effect.forEach(new Set(base.map((layer) => layer.sourceId)), sourceOf)),
           Effect.flatMap((found) =>

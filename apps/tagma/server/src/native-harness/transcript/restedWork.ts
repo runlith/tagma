@@ -7,6 +7,8 @@ import { RolloutUnreadable } from '../../threads/journal/rolloutFile.js';
 import type { RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
 import { RolloutReads, type RolloutRead, type ReadRollout } from '../../threads/contract/service/rolloutReads.js';
 import type { RolloutStage, StagedFile } from '../../threads/journal/rolloutStaging.js';
+import type { CarryAsk, Carrying, CarryOpening } from '../../threads/journal/rolloutCarry.js';
+import type { FoldRow, RolloutLayer } from '../../threads/journal/rolloutMeta.js';
 
 export const TRANSCRIPT_FOOTER_BYTES = 48;
 export const TRANSCRIPT_SLOT_BYTES = 16;
@@ -26,13 +28,21 @@ export type RestedAsk = { readonly id: number; readonly rollout: RolloutFiles } 
   | { readonly kind: 'history' }
   | { readonly kind: 'compaction' }
   | { readonly kind: 'stage'; readonly stage: RolloutStage }
+  | { readonly kind: 'carry'; readonly carry: CarryAsk }
+  | { readonly kind: 'carry-take'; readonly plan: number; readonly unit: number }
+  | { readonly kind: 'layers' }
 );
+
+export type RestedTell = { readonly kind: 'carry-drop'; readonly plan: number };
 
 export type RestedAnswer = { readonly id: number } & (
   | { readonly kind: 'transcribed'; readonly entries: number }
   | { readonly kind: 'history'; readonly history: ThreadHistory; readonly bytes: number }
   | { readonly kind: 'compaction'; readonly summary: RestedCompaction }
   | { readonly kind: 'staged'; readonly file: StagedFile }
+  | { readonly kind: 'carrying'; readonly plan: number; readonly opening: CarryOpening }
+  | { readonly kind: 'carried'; readonly rows: readonly FoldRow[] }
+  | { readonly kind: 'layers'; readonly layers: readonly RolloutLayer[] }
   | { readonly kind: 'failed'; readonly reason: string }
 );
 
@@ -143,6 +153,50 @@ export const stageRollout = (
   Effect.flatMap(
     ask(kinds, rollout, (id) => ({ id, rollout, kind: 'stage', stage }), 'ThreadRollout.stage'),
     (answer) => (answer.kind === 'staged' ? Effect.succeed(answer.file) : Effect.fail(unreadable(rollout, answer))),
+  );
+
+const tell = (kinds: ThreadEntryReader, message: RestedTell): Effect.Effect<void> =>
+  Effect.sync(() => {
+    const start = kinds.worker;
+    const standing = start === null ? undefined : served.get(start);
+    if (start === null || standing === undefined) return;
+    try {
+      standing.thread.postMessage(message);
+    } catch (cause) {
+      failed(start, standing, `it took no message: ${String(cause)}`);
+    }
+  });
+
+export const carryRollout = (
+  kinds: ThreadEntryReader,
+  rollout: RolloutFiles,
+  carry: CarryAsk,
+): Effect.Effect<Carrying, RolloutUnreadable | WorkerUnavailable> =>
+  Effect.flatMap(
+    ask(kinds, rollout, (id) => ({ id, rollout, kind: 'carry', carry }), 'ThreadRollout.carry'),
+    (answer): Effect.Effect<Carrying, RolloutUnreadable> => {
+      if (answer.kind !== 'carrying') return Effect.fail(unreadable(rollout, answer));
+      const { plan, opening } = answer;
+      if (opening.kind !== 'planned') return Effect.succeed(opening);
+      return Effect.succeed({
+        ...opening,
+        take: (unit: number) =>
+          ask(kinds, rollout, (id) => ({ id, rollout, kind: 'carry-take', plan, unit }), 'ThreadRollout.carry.take').pipe(
+            Effect.mapError((gone) => new RolloutUnreadable({ reason: 'io', path: rollout.path, message: gone.message })),
+            Effect.flatMap((taken) => (taken.kind === 'carried' ? Effect.succeed(taken.rows) : Effect.fail(unreadable(rollout, taken)))),
+          ),
+        drop: tell(kinds, { kind: 'carry-drop', plan }),
+      });
+    },
+  );
+
+export const readRolloutLayers = (
+  kinds: ThreadEntryReader,
+  rollout: RolloutFiles,
+): Effect.Effect<readonly RolloutLayer[], RolloutUnreadable | WorkerUnavailable> =>
+  Effect.flatMap(
+    ask(kinds, rollout, (id) => ({ id, rollout, kind: 'layers' }), 'ThreadRollout.layers'),
+    (answer) => (answer.kind === 'layers' ? Effect.succeed(answer.layers) : Effect.fail(unreadable(rollout, answer))),
   );
 
 export const readRolloutCompaction = (

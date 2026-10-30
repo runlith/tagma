@@ -12,6 +12,9 @@ import { TranscriptFold } from '@runlith/agent/transcript/TranscriptFold';
 import { entryOf, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { RolloutLineUnreadable, factOf } from '../../threads/journal/restedReads.js';
 import { stageRolloutFile } from '../../threads/journal/rolloutStaging.js';
+import { planCarry, rolloutLayers } from '../../threads/journal/rolloutCarry.js';
+import type { FoldRow } from '../../threads/journal/rolloutMeta.js';
+import { nativeRows } from '../rolloutFolds.js';
 import type { RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
 import { wireWeight } from './rows.js';
 import {
@@ -21,6 +24,7 @@ import {
   type RestedAnswer,
   type RestedAsk,
   type RestedRead,
+  type RestedTell,
   type RestedCompaction,
 } from './restedWork.js';
 import { readRolloutLine, recordVerdict, rolloutStream, wholeLinesOf } from '../../threads/journal/rolloutFile.js';
@@ -213,6 +217,24 @@ function transcribed(rollout: RolloutFiles, key: TranscriptKey, kinds: ThreadEnt
   return turn;
 }
 
+const plans = new Map<number, (readonly FoldRow[] | null)[]>();
+
+async function carried(ask: Extract<RestedAsk, { readonly kind: 'carry' }>, kinds: ThreadEntryReader, read: ReadRollout) {
+  const { opening, units } = await planCarry(ask.rollout.path, ask.carry, kinds, read, nativeRows);
+  if (units.length > 0) plans.set(ask.id, [...units]);
+  return { id: ask.id, kind: 'carrying', plan: ask.id, opening } satisfies RestedAnswer;
+}
+
+function taken(ask: Extract<RestedAsk, { readonly kind: 'carry-take' }>): RestedAnswer {
+  const units = plans.get(ask.plan);
+  const rows = units?.[ask.unit];
+  if (units === undefined || rows == null)
+    return { id: ask.id, kind: 'failed', reason: `carry plan ${ask.plan} holds no unit ${ask.unit}` };
+  units[ask.unit] = null;
+  if (units.every((unit) => unit === null)) plans.delete(ask.plan);
+  return { id: ask.id, kind: 'carried', rows };
+}
+
 async function answered(ask: RestedAsk, kinds: ThreadEntryReader): Promise<RestedAnswer> {
   const totals = totalledReads();
   const read = totals.observe;
@@ -221,6 +243,9 @@ async function answered(ask: RestedAsk, kinds: ThreadEntryReader): Promise<Reste
     if (ask.kind === 'transcribe')
       return { id: ask.id, kind: 'transcribed', entries: await transcribed(ask.rollout, ask.key, kinds, read) };
     if (ask.kind === 'stage') return { id: ask.id, kind: 'staged', file: await stageRolloutFile(ask.rollout, ask.stage, kinds, read) };
+    if (ask.kind === 'carry') return await carried(ask, kinds, read);
+    if (ask.kind === 'carry-take') return taken(ask);
+    if (ask.kind === 'layers') return { id: ask.id, kind: 'layers', layers: await rolloutLayers(ask.rollout.path, read) };
     return { id: ask.id, kind: 'history', ...(await history(ask.rollout, kinds, read)) };
   } finally {
     const reads = totals.drain();
@@ -229,12 +254,17 @@ async function answered(ask: RestedAsk, kinds: ThreadEntryReader): Promise<Reste
 }
 
 export function serveRestedFolds(kinds: ThreadEntryReader): void {
-  self.addEventListener('message', (event: MessageEvent<RestedAsk>) => {
-    answered(event.data, kinds).then(
+  self.addEventListener('message', (event: MessageEvent<RestedAsk | RestedTell>) => {
+    if (event.data.kind === 'carry-drop') {
+      plans.delete(event.data.plan);
+      return;
+    }
+    const asked = event.data;
+    answered(asked, kinds).then(
       (answer) => self.postMessage(answer),
       (cause) =>
         self.postMessage({
-          id: event.data.id,
+          id: asked.id,
           kind: 'failed',
           reason: cause instanceof Error ? cause.message : String(cause),
         } satisfies RestedAnswer),

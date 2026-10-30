@@ -20,18 +20,9 @@ import {
   rolloutForms,
   threadProjection,
 } from '../../../threads/testing/doubles.js';
+import { dated, datedKinds } from './formStepsReader.js';
 
-const dated: ThreadFormStep = {
-  name: '20261010170000_message_when',
-  samples: { entry: { type: 'message', when: 'then' } },
-  entry: (entry) => {
-    if (entry.type !== 'message' || entry.when === undefined) return null;
-    const { when, ...rest } = entry;
-    return { ...rest, occurredAt: when };
-  },
-};
-
-const kinds = makeThreadEntryReader({ products: [], steps: journalSteps([[dated]]) });
+const kinds = datedKinds();
 const at = new Date('2026-10-01T10:00:00.000Z');
 
 const setup = Effect.fnUntraced(function* () {

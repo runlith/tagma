@@ -10,7 +10,7 @@ import { runIdOf, threadCompactionCheckpoint, threadHistoryItem, threadLog, thre
 import { thread, threadEntry } from '../threads/store/kernel.js';
 import { threadEvent } from '../threads/store/journal.js';
 import { frozen, type FoldRow, type NativeFolds } from '../threads/journal/rolloutMeta.js';
-import { stageRollout, transcribeRollout } from './transcript/restedWork.js';
+import { carryRollout, readRolloutLayers, stageRollout, transcribeRollout } from './transcript/restedWork.js';
 
 const INSERT_ROWS = 8_000;
 const BODY_IDS = 500;
@@ -47,6 +47,37 @@ const writeRun = Effect.fnUntraced(function* (kind: string, rows: readonly FoldR
     yield* db.insert(table).values(rows.slice(at, at + INSERT_ROWS).map(({ row }) => row) as never);
   }
 });
+
+export const nativeRows: NativeFolds['rows'] = (threadId, records) => {
+  const history = new HistoryFold();
+  const transcript = new TranscriptFold();
+  const rows: FoldRow[] = [];
+  for (const carried of records) {
+    if (carried.record === 'event') {
+      history.fold(carried.event);
+      transcript.place(threadEventFact(carried.event));
+    } else {
+      rows.push({
+        kind: carried.record === 'pruned-retired' ? 'retired' : carried.record,
+        row: carried.row,
+        weight: 5,
+        bytes: sizeOf(carried.row),
+      });
+    }
+  }
+  for (const [ord, message] of history.take().entries()) {
+    rows.push({ kind: 'history', row: { threadId, ord, message }, weight: 3, bytes: sizeOf(message) });
+  }
+  for (const [ord, entry] of transcript.take().entries()) {
+    rows.push({
+      kind: 'entry',
+      row: { threadId, ord, entryId: entry.id, runId: runIdOf(entry), type: typeOf(entry), entry },
+      weight: 6,
+      bytes: sizeOf(entry),
+    });
+  }
+  return rows;
+};
 
 export const nativeFolds: NativeFolds = {
   present: Effect.fnUntraced(function* (threadId) {
@@ -87,36 +118,7 @@ export const nativeFolds: NativeFolds = {
       .where(eq(threadPrunedToolCall.threadId, threadId));
     return { checkpoints: checkpoints.map((row) => row.id), pruned: pruned.map((row) => row.toolCallId) };
   }),
-  rows: (threadId, records) => {
-    const history = new HistoryFold();
-    const transcript = new TranscriptFold();
-    const rows: FoldRow[] = [];
-    for (const carried of records) {
-      if (carried.record === 'event') {
-        history.fold(carried.event);
-        transcript.place(threadEventFact(carried.event));
-      } else {
-        rows.push({
-          kind: carried.record === 'pruned-retired' ? 'retired' : carried.record,
-          row: carried.row,
-          weight: 5,
-          bytes: sizeOf(carried.row),
-        });
-      }
-    }
-    for (const [ord, message] of history.take().entries()) {
-      rows.push({ kind: 'history', row: { threadId, ord, message }, weight: 3, bytes: sizeOf(message) });
-    }
-    for (const [ord, entry] of transcript.take().entries()) {
-      rows.push({
-        kind: 'entry',
-        row: { threadId, ord, entryId: entry.id, runId: runIdOf(entry), type: typeOf(entry), entry },
-        weight: 6,
-        bytes: sizeOf(entry),
-      });
-    }
-    return rows;
-  },
+  rows: nativeRows,
   write: Effect.fnUntraced(function* (rows) {
     let from = 0;
     for (let at = 1; at <= rows.length; at += 1) {
@@ -164,5 +166,7 @@ export const nativeFolds: NativeFolds = {
   }),
   transcribe: (files, key) => Effect.flatMap(ThreadEntryKinds, (kinds) => Effect.asVoid(transcribeRollout(kinds, files, key))),
   stage: (files, stage) => Effect.flatMap(ThreadEntryKinds, (kinds) => stageRollout(kinds, files, stage)),
+  carry: (files, ask) => Effect.flatMap(ThreadEntryKinds, (kinds) => carryRollout(kinds, files, ask)),
+  layers: (files) => Effect.flatMap(ThreadEntryKinds, (kinds) => readRolloutLayers(kinds, files)),
   writes: writes('rollout.native.folds', [threadEntry, threadHistoryItem, threadLog, threadPrunedToolCall, threadCompactionCheckpoint]),
 };

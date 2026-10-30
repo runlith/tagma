@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { Effect, Layer } from 'effect';
 import { sql } from 'drizzle-orm';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import { makeThreadEntryReader } from '@runlith/agent/transcript/kinds';
+import { ThreadEntryKinds, makeThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { fixtureMigrations } from '../composition/testing/migrations.js';
 import { MachineStore } from '../platform/contract/service/store.js';
 import { MachineUnits } from '../platform/contract/service/units.js';
@@ -60,6 +60,26 @@ layer(machine)('native rollout folds', (it) => {
       const [, line] = readFileSync(path, 'utf8').split('\n');
       expect(JSON.parse(line!).row.payload.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'law' }] }]);
       expect(yield* db.all(sql`select step from thread_rollout_form where thread_id = ${id}`)).toEqual([{ step: TEXT_CONTENT }]);
+    }),
+  );
+
+  it.effect('a rollout is planned for the store by the reader worker and handed over unit by unit', () =>
+    Effect.gen(function* () {
+      const path = join(yield* scratch, 'carried.jsonl');
+      const event = { position: 1, id: 'told', kind: 'message', payload: { messages: [{ role: 'user', content: 'law' }] } };
+      writeFileSync(path, `${JSON.stringify({ thread: { id: 'carried' } })}\n${JSON.stringify({ kind: 'event', row: event })}\n`);
+      const plan = yield* nativeFolds
+        .carry(
+          { path, packed: `${path}.zst`, transcript: `${path}.entries` },
+          { threadId: 'carried', native: false, standing: [], sources: null },
+        )
+        .pipe(Effect.provideService(ThreadEntryKinds, onTheLoop));
+      if (plan.kind !== 'planned') return yield* Effect.die(plan);
+      expect(plan.units).toBe(1);
+      const [row] = yield* plan.take(0);
+      expect((row?.row.payload as { readonly messages: unknown }).messages).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'law' }] },
+      ]);
     }),
   );
 });

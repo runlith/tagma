@@ -245,40 +245,41 @@ class RolloutLineFailed extends Data.TaggedError('RolloutLineFailed')<{
   }
 }
 
+export async function scanRolloutFile(path: string, visit: (item: RolloutRecord) => void, read: ReadRollout): Promise<RolloutScan> {
+  let meta: { readonly value: unknown } | null = null;
+  let bytes = 0;
+  let size: number;
+  try {
+    size = (await stat(path)).size;
+    for await (const { line, end } of wholeLinesAfter(path, 0, read)) {
+      bytes = end;
+      if (line === '') continue;
+      const reason = meta === null ? 'meta-json' : 'item-json';
+      let value: unknown;
+      try {
+        value = JSON.parse(line) as unknown;
+      } catch (cause) {
+        throw new RolloutLineFailed(reason, cause);
+      }
+      if (meta === null) meta = { value };
+      else if (readsAsRecord(value)) visit(value);
+      else throw new RolloutLineFailed('item-json', new Error('the line is not a rollout record'));
+    }
+  } catch (error) {
+    throw error instanceof RolloutLineFailed
+      ? new RolloutUnreadable({ reason: error.reason, path, message: error.message })
+      : ioFailure(path, error);
+  }
+  if (meta === null) throw new RolloutUnreadable({ reason: 'meta-missing', path, message: 'the rollout has no meta line' });
+  return { meta: meta.value, torn: bytes < size, bytes };
+}
+
 export function scanRollout(path: string, visit: (item: RolloutRecord) => void): Effect.Effect<RolloutScan, RolloutUnreadable> {
   return Effect.flatMap(RolloutReads, (read) =>
     Effect.tryPromise({
-      try: async () => {
-        const size = (await stat(path)).size;
-        let meta: { readonly value: unknown } | null = null;
-        let bytes = 0;
-        for await (const { line, end } of wholeLinesAfter(path, 0, read)) {
-          bytes = end;
-          if (line === '') continue;
-          const reason = meta === null ? 'meta-json' : 'item-json';
-          let value: unknown;
-          try {
-            value = JSON.parse(line) as unknown;
-          } catch (cause) {
-            throw new RolloutLineFailed(reason, cause);
-          }
-          if (meta === null) meta = { value };
-          else if (readsAsRecord(value)) visit(value);
-          else throw new RolloutLineFailed('item-json', new Error('the line is not a rollout record'));
-        }
-        return { meta, torn: bytes < size, bytes };
-      },
-      catch: (error) =>
-        error instanceof RolloutLineFailed
-          ? new RolloutUnreadable({ reason: error.reason, path, message: error.message })
-          : ioFailure(path, error),
-    }).pipe(
-      Effect.flatMap(({ meta, torn, bytes }) =>
-        meta === null
-          ? Effect.fail(new RolloutUnreadable({ reason: 'meta-missing', path, message: 'the rollout has no meta line' }))
-          : Effect.succeed({ meta: meta.value, torn, bytes }),
-      ),
-    ),
+      try: () => scanRolloutFile(path, visit, read),
+      catch: (error) => (error instanceof RolloutUnreadable ? error : ioFailure(path, error)),
+    }),
   );
 }
 

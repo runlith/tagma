@@ -140,7 +140,7 @@ describe('the external rollout part', () => {
           authorship: 'observed',
           callEnvelopeMs: null,
           screen: true,
-          continue: false,
+          continue: true,
           feed: 'turns',
           usage: 'partial',
           aside: 'none',

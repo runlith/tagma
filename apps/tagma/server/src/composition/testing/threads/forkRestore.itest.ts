@@ -10,13 +10,7 @@ import { userMessageEntryId } from '@runlith/agent/transcript/entryNames';
 import { EvidenceReads } from '../../../threads/contract/service/evidence.js';
 import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
 import { evidenceReads } from '../../../native-harness/testing/doubles.js';
-import {
-  conversationReads,
-  exportThreadRollout,
-  replayRollout,
-  replayThreadRollout,
-  sqliteThreadJournal,
-} from '../../../threads/testing/doubles.js';
+import { conversationReads, exportThreadRollout, replayThreadRollout, sqliteThreadJournal } from '../../../threads/testing/doubles.js';
 import { threadStoreFixture } from '../threadStoreFixture.js';
 import { ENTRY_KINDS } from '../../manifest.js';
 
@@ -99,7 +93,7 @@ it.live('rollouts restore a branch and its descendant after row loss, with a liv
     const before = new Map(yield* Effect.forEach(ids, (id) => Effect.map(seen(id), (value) => [id, value] as const)));
     expect(before.get(kept.child)?.transcript?.some((entry) => entry.runId === 'run-2')).toBe(false);
     for (const id of ids) yield* filed(id, id === gone.child);
-    const sources = new Map(yield* Effect.forEach(ids, (id) => Effect.map(replayRollout(pathOf(id)), (rollout) => [id, rollout] as const)));
+    const sources = new Map(ids.map((id) => [id, pathOf(id)] as const));
     yield* units.write(records.writes, (unit) => records.remove(unit, ids));
     expect(yield* records.facts(kept.child)).toBeUndefined();
     const restored = yield* Effect.forEach(ids, (id) =>
