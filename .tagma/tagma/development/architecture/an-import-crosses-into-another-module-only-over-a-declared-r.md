@@ -10,7 +10,7 @@ fields:
       "debt": [],
       "escaped": [
         {
-          "commit": "b5d70627a0532515765be5c3c1de12593ea0637d",
+          "commit": "6447176519f2fceb9c993842d28e429ea59d1886",
           "fingerprint": "external-harnesses -> @runlith/adapter-cursor @ apps/tagma/server/src/external-harnesses/runner/cursor/channel.ts",
           "fix": "Import `@runlith/adapter-cursor` only from test code, or open the relation `external-harnesses → @runlith/adapter-cursor` to all code with `set_module`.",
           "line": 5,
@@ -18,7 +18,7 @@ fields:
           "said": "imports `@runlith/adapter-cursor/selection` of module `@runlith/adapter-cursor`, which `external-harnesses` may import from test code only"
         },
         {
-          "commit": "b5d70627a0532515765be5c3c1de12593ea0637d",
+          "commit": "6447176519f2fceb9c993842d28e429ea59d1886",
           "fingerprint": "external-harnesses -> @runlith/adapter-cursor @ apps/tagma/server/src/external-harnesses/runner/cursor/cycle.ts",
           "fix": "Import `@runlith/adapter-cursor` only from test code, or open the relation `external-harnesses → @runlith/adapter-cursor` to all code with `set_module`.",
           "line": 8,
@@ -26,7 +26,7 @@ fields:
           "said": "imports `@runlith/adapter-cursor/selection` of module `@runlith/adapter-cursor`, which `external-harnesses` may import from test code only"
         },
         {
-          "commit": "b5d70627a0532515765be5c3c1de12593ea0637d",
+          "commit": "6447176519f2fceb9c993842d28e429ea59d1886",
           "fingerprint": "external-harnesses -> @runlith/adapter-cursor @ apps/tagma/server/src/external-harnesses/runner/cursor/run.ts",
           "fix": "Import `@runlith/adapter-cursor` only from test code, or open the relation `external-harnesses → @runlith/adapter-cursor` to all code with `set_module`.",
           "line": 6,
@@ -34,7 +34,7 @@ fields:
           "said": "imports `@runlith/adapter-cursor/selection` of module `@runlith/adapter-cursor`, which `external-harnesses` may import from test code only"
         },
         {
-          "commit": "b5d70627a0532515765be5c3c1de12593ea0637d",
+          "commit": "6447176519f2fceb9c993842d28e429ea59d1886",
           "fingerprint": "external-harnesses -> @runlith/adapter-cursor @ apps/tagma/server/src/external-harnesses/runner/cursor/sdk.ts",
           "fix": "Import `@runlith/adapter-cursor` only from test code, or open the relation `external-harnesses → @runlith/adapter-cursor` to all code with `set_module`.",
           "line": 7,
@@ -42,7 +42,7 @@ fields:
           "said": "imports `@runlith/adapter-cursor/selection` of module `@runlith/adapter-cursor`, which `external-harnesses` may import from test code only"
         },
         {
-          "commit": "b5d70627a0532515765be5c3c1de12593ea0637d",
+          "commit": "6447176519f2fceb9c993842d28e429ea59d1886",
           "fingerprint": "external-harnesses -> @runlith/adapter-opencode @ apps/tagma/server/src/external-harnesses/runner/opencode/run.ts",
           "fix": "Import `@runlith/adapter-opencode` only from test code, or open the relation `external-harnesses → @runlith/adapter-opencode` to all code with `set_module`.",
           "line": 4,
@@ -50,7 +50,7 @@ fields:
           "said": "imports `@runlith/adapter-opencode/host` of module `@runlith/adapter-opencode`, which `external-harnesses` may import from test code only"
         },
         {
-          "commit": "b5d70627a0532515765be5c3c1de12593ea0637d",
+          "commit": "6447176519f2fceb9c993842d28e429ea59d1886",
           "fingerprint": "external-harnesses -> @runlith/adapter-opencode @ apps/tagma/server/src/external-harnesses/runner/opencode/sdk.ts",
           "fix": "Import `@runlith/adapter-opencode` only from test code, or open the relation `external-harnesses → @runlith/adapter-opencode` to all code with `set_module`.",
           "line": 5,
@@ -58,7 +58,7 @@ fields:
           "said": "imports `@runlith/adapter-opencode/host` of module `@runlith/adapter-opencode`, which `external-harnesses` may import from test code only"
         },
         {
-          "commit": "b5d70627a0532515765be5c3c1de12593ea0637d",
+          "commit": "6447176519f2fceb9c993842d28e429ea59d1886",
           "fingerprint": "external-harnesses -> @runlith/adapter-openai @ apps/tagma/server/src/external-harnesses/vendors/codex/row.ts",
           "fix": "Import `@runlith/adapter-openai` only from test code, or open the relation `external-harnesses → @runlith/adapter-openai` to all code with `set_module`.",
           "line": 24,
@@ -66,7 +66,7 @@ fields:
           "said": "imports `@runlith/adapter-openai/models/openai` of module `@runlith/adapter-openai`, which `external-harnesses` may import from test code only"
         },
         {
-          "commit": "b5d70627a0532515765be5c3c1de12593ea0637d",
+          "commit": "6447176519f2fceb9c993842d28e429ea59d1886",
           "fingerprint": "external-harnesses -> @runlith/adapter-cursor @ apps/tagma/server/src/external-harnesses/vendors/cursor/row.ts",
           "fix": "Import `@runlith/adapter-cursor` only from test code, or open the relation `external-harnesses → @runlith/adapter-cursor` to all code with `set_module`.",
           "line": 21,
@@ -74,7 +74,7 @@ fields:
           "said": "imports `@runlith/adapter-cursor/icon` of module `@runlith/adapter-cursor`, which `external-harnesses` may import from test code only"
         },
         {
-          "commit": "b5d70627a0532515765be5c3c1de12593ea0637d",
+          "commit": "6447176519f2fceb9c993842d28e429ea59d1886",
           "fingerprint": "external-harnesses -> @runlith/adapter-opencode @ apps/tagma/server/src/external-harnesses/vendors/opencode/row.ts",
           "fix": "Import `@runlith/adapter-opencode` only from test code, or open the relation `external-harnesses → @runlith/adapter-opencode` to all code with `set_module`.",
           "line": 1,
@@ -82,7 +82,7 @@ fields:
           "said": "imports `@runlith/adapter-opencode/host` of module `@runlith/adapter-opencode`, which `external-harnesses` may import from test code only"
         },
         {
-          "commit": "b5d70627a0532515765be5c3c1de12593ea0637d",
+          "commit": "6447176519f2fceb9c993842d28e429ea59d1886",
           "fingerprint": "external-harnesses -> @runlith/adapter-devin @ apps/tagma/server/src/external-harnesses/vendors/devin/row.ts",
           "fix": "Import `@runlith/adapter-devin` only from test code, or open the relation `external-harnesses → @runlith/adapter-devin` to all code with `set_module`.",
           "line": 4,
