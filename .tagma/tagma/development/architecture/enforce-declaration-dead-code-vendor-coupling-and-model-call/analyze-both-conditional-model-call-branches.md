@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a18e91-0057-7f4b-85b6-a35adafffddb",
-    "status": "in_work"
+    "status": "done"
   }
 ---
 The calls analyzer short-circuits a conditional's false branch when its true branch yields a capability (`checks/law/architecture/calls/file.ts:774–777`). Prove the missed call with a red fixture, then analyze both branches.
