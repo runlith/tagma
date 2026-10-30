@@ -5,10 +5,14 @@ import { symlinkSync } from 'node:fs';
 import { fixedCheckoutPaths } from '../../../workspace/testing/doubles.js';
 import { afterEditCheck } from '../../../enforcement/operationChecks.js';
 import { Deferred, Effect } from 'effect';
+import { eq } from 'drizzle-orm';
+import { block } from '../../../graph/store/tables.js';
 import { refusalOf } from '../graphFixture.js';
 import { MINE } from '../checkoutFixture.js';
 import { landingFixture, withLanding, type LandingFixture } from '../landingFixture.js';
-import { triggered } from '../../../invocation/testing/performing.js';
+import { perform, triggered } from '../../../invocation/testing/performing.js';
+import { forProject, withGraphCall } from '../../../invocation/testing/call.js';
+import { OUTLINE_PAIRS } from '../../../graph/operations/outline.js';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import type { Caller } from '../../../platform/contract/wire/caller.js';
 import { operationChecks } from '../../operationChecks.js';
@@ -19,6 +23,40 @@ import { checksOver, driverOver, triggersOver, withLanes } from '../../../enforc
 import type { EscapeNotice } from '../../../enforcement/contract/wire/checks.js';
 const CROSSING = "import { main } from '../app/main';\nexport const boot = main;\n";
 const served = (gate: LandingFixture) => withLanes(gate.demo.context, gate.workers);
+const agentIn = (gate: LandingFixture): Caller => ({
+  actor: {
+    kind: 'thread',
+    threadId: MINE,
+    projectId: gate.demo.projectId,
+    principalId: 'tagma',
+    session: { harness: 'tagma', key: MINE },
+  },
+  files: null,
+});
+const READ_VOCABULARY = { ...OUTLINE_PAIRS.read_vocabulary.body, id: 'read_vocabulary' };
+const projectCall = (gate: LandingFixture) =>
+  Effect.orDie(gate.demo.table()).pipe(
+    Effect.map((vocabulary) => ({
+      project: { id: gate.demo.projectId, name: 'demo' },
+      vocabulary,
+      lens: { scope: undefined, names: 'law-and-reflections' as const },
+      deliveredTags: new Set<string>(),
+    })),
+  );
+const operationGate = Effect.fnUntraced(function* (gate: LandingFixture) {
+  const graphOf = () => Effect.succeed(served(gate));
+  const triggers = triggersOver(graphOf);
+  const checks = checksOver({ graphOf, triggers });
+  const catalog = yield* operationCatalog;
+  const gated = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(Effect.provideService(OperationChecks, operationChecks(checks)), Effect.provideService(OperationCatalog, catalog));
+  const ask = (op: string, caller: Caller = agentIn(gate)) => gated(triggered(op, caller, Effect.succeed(op)));
+  const readVocabulary = gated(perform(READ_VOCABULARY, {}, agentIn(gate))).pipe(
+    forProject(projectCall(gate)),
+    withGraphCall(projectCall(gate)),
+  );
+  return { ask, readVocabulary, triggers };
+});
 layer(landingFixture(), { excludeTestServices: true })('landing enforcement', (it) => {
   it.effect('a rule triggered after edit tells the editing thread the crossing its edit wrote, and records nothing', () =>
     withLanding((gate) =>
@@ -88,33 +126,45 @@ layer(landingFixture(), { excludeTestServices: true })('landing enforcement', (i
     () =>
       withLanding((gate) =>
         Effect.fnUntraced(function* () {
-          const agent: Caller = {
-            actor: {
-              kind: 'thread',
-              threadId: MINE,
-              projectId: gate.demo.projectId,
-              principalId: 'tagma',
-              session: { harness: 'tagma', key: MINE },
-            },
-            files: null,
-          };
           const operator: Caller = { actor: { kind: 'operator' }, files: null };
-          const graphOf = () => Effect.succeed(served(gate));
-          const triggers = triggersOver(graphOf);
-          const checks = checksOver({ graphOf, triggers });
-          const catalog = yield* operationCatalog;
-          const read = (caller: Caller) =>
-            triggered('read_block', caller, Effect.succeed('read')).pipe(
-              Effect.provideService(OperationChecks, operationChecks(checks)),
-              Effect.provideService(OperationCatalog, catalog),
-            );
+          const { ask, triggers } = yield* operationGate(gate);
           yield* gate.enforcedAt('gate', undefined, [{ op: 'read_block', phase: 'before' }]);
-          expect(yield* read(agent)).toBe('read');
+          expect(yield* ask('read_block')).toBe('read_block');
           yield* gate.put('src/core/boot.ts', CROSSING);
           yield* gate.committed('a crossing that got in outside Tagma');
           triggers.forget(gate.demo.projectId);
-          expect((yield* refusalOf(read(agent))).code).toBe('rule-violated');
-          expect(yield* read(operator)).toBe('read');
+          expect((yield* refusalOf(ask('read_block'))).code).toBe('rule-violated');
+          expect(yield* ask('read_block', operator)).toBe('read_block');
+        })(),
+      ),
+  );
+  it.effect(
+    'a stored declaration that does not read refuses the landing, read_vocabulary still names it to an agent, and deleting it with its nodes standing lets the landing through',
+    () =>
+      withLanding((gate) =>
+        Effect.fnUntraced(function* () {
+          const { graph, projectId } = gate.demo;
+          const declared = yield* graph.blocks.create({
+            projectId,
+            parentId: gate.demo.root,
+            tags: ['tag'],
+            title: '#proposal',
+            fields: { id: 'proposal', fields: { ops: 'string' }, roles: { leaf: true } },
+          });
+          yield* gate.created(['proposal'], 'An amendment');
+          yield* graph.graphStore.db
+            .update(block)
+            .set({ fields: { ...declared.fields, roles: { leaf: true, amendment: 'ops' } } })
+            .where(eq(block.id, declared.id));
+          yield* graph.tags.forget(projectId);
+          yield* gate.wrote(MINE, 'README.md', 'outside the rule’s reach\n');
+          expect((yield* gate.refused(MINE)).code).toBe('inspection-failed');
+          const { ask, readVocabulary } = yield* operationGate(gate);
+          expect((yield* refusalOf(ask('search_blocks'))).code).toBe('inspection-failed');
+          expect(yield* ask('read_tags')).toBe('read_tags');
+          expect((yield* readVocabulary).unreadable.map((one) => one.id)).toEqual(['proposal']);
+          yield* graph.trash.delete({ id: declared.id });
+          gate.landed(yield* gate.submit(MINE));
         })(),
       ),
   );

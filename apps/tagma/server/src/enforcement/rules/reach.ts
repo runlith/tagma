@@ -92,7 +92,8 @@ const unreadVocabulary = (unread: readonly UnreadableTag[]): GateRefusal<'inspec
     'inspection-failed',
     `this project's vocabulary does not read, so the rules it declares cannot be told from the rest: ${unread.map((one) => `${one.name}${one.id === '' ? '' : ` (#${one.id})`}: ${one.reason}`).join('; ')}`,
     [
-      'read_vocabulary names each declaration that does not read: correct it into a shape this server reads, and the rules are judged again',
+      'update_block each declaration named here into a shape this server reads, or delete_block it if its type is no longer wanted — its nodes stay, carrying a word nothing declares; the rules are judged again once every declaration reads',
+      'read_vocabulary names each declaration that does not read, with its reason',
     ],
   );
 

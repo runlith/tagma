@@ -30,7 +30,7 @@ import type { ConfigVersion } from '../../config/contract/service/configs.js';
 import { descriptionsAt } from '../rules/descriptions.js';
 import { changedKeys, measureRules } from './descriptionChanges.js';
 import { blockName } from '../../graph/contract/wire/references.js';
-import type { Words } from '../../platform/contract/wire/refusal.js';
+import { GateRefusal, type Words } from '../../platform/contract/wire/refusal.js';
 import {
   COMMIT_OPERATIONS,
   type Checked,
@@ -61,7 +61,14 @@ type InPlay =
 
 type Failed = Rule & { readonly why: string; readonly cause: InspectionFailure | 'undecodable'; readonly ways?: readonly string[] };
 
-export const WAYS_OUT: ReadonlySet<string> = new Set(['read_block', 'read_inspections', 'read_enforcement', 'check_rules']);
+export const WAYS_OUT: ReadonlySet<string> = new Set([
+  'read_block',
+  'read_inspections',
+  'read_enforcement',
+  'read_vocabulary',
+  'read_tags',
+  'check_rules',
+]);
 
 const unrunWays = (name: string, key: string): readonly string[] => [
   `declare the inspection ${key} in tagma.config.ts of this version, so the commit carries what it is judged by`,
@@ -275,19 +282,24 @@ const failedRefusal = (op: string, kind: 'tree' | 'head', failed: readonly Faile
   };
 };
 
-const unread = (op: string, why: string, started: number): Judgement => ({
-  refused: {
-    code: 'inspection-failed',
-    reason: `the enforced rules of this project could not be read, so nothing says what a gate would find: ${why}`,
-    unblock: [`read_enforcement says why this project's rules cannot be read; ${op} is judged again once they can`],
-  },
-  watched: [],
-  carriedViolations: [],
-  unjudged: [],
-  rules: [],
-  inspections: 0,
-  ms: Math.round(performance.now() - started),
-});
+type Unread = { readonly message: string };
+
+const unread = (op: string, failure: Unread, started: number): Judgement => {
+  const again = `read_enforcement says why this project's rules cannot be read; ${op} is judged again once they can`;
+  return {
+    refused: {
+      code: 'inspection-failed',
+      reason: `the enforced rules of this project could not be read, so nothing says what a gate would find: ${failure.message}`,
+      unblock: failure instanceof GateRefusal ? [...failure.unblock, again] : [again],
+    },
+    watched: [],
+    carriedViolations: [],
+    unjudged: [],
+    rules: [],
+    inspections: 0,
+    ms: Math.round(performance.now() - started),
+  };
+};
 
 const ungated = (root: string, why: string, started: number): Judgement => ({
   refused: null,
@@ -338,7 +350,7 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
       return read;
     }),
   );
-  if (Result.isFailure(settled)) return yield* unresolved(op, subject.root, settled.failure.message, memory, subject.projectId);
+  if (Result.isFailure(settled)) return yield* unresolved(op, subject.root, settled.failure, memory, subject.projectId);
   const rules = settled.success.found;
   const inspections = yield* Inspections;
   const evidence = evidenceOf(subject.root, subject.base, subject.built);
@@ -543,11 +555,11 @@ export const headJudgement = Effect.fn('enforcement.headJudgement')(function* (o
   const started = performance.now();
   const root = subject.root ?? (yield* measuredRoot(yield* (yield* Projects).byId(subject.projectId)));
   const head = yield* Effect.result(headOf(root));
-  if (Result.isFailure(head)) return unread(op, head.failure.reason, started);
+  if (Result.isFailure(head)) return unread(op, { message: head.failure.reason }, started);
   const settled = yield* Effect.result(
     enforcedRules(subject.projectId, versionOf(subject.projectId, root, head.success, subject.caller, undefined)),
   );
-  if (Result.isFailure(settled)) return unread(op, settled.failure.message, started);
+  if (Result.isFailure(settled)) return unread(op, settled.failure, started);
   const crossed: RuleCrossing[] = [];
   const failed: Failed[] = [];
   const watched: Watched[] = [];
@@ -664,13 +676,13 @@ const unbuilt = (op: string, why: string, memory: GateMemory['Service'] | undefi
 export const unresolved = (
   op: string,
   root: string,
-  why: string,
+  failure: Unread,
   memory: GateMemory['Service'] | undefined,
   projectId: number,
 ): Effect.Effect<Judgement> => {
   const started = performance.now();
-  if (memory === undefined) return Effect.succeed(unread(op, why, started));
-  return Effect.map(memory.gated(projectId), (gated) => (gated ? unread(op, why, started) : ungated(root, why, started)));
+  if (memory === undefined) return Effect.succeed(unread(op, failure, started));
+  return Effect.map(memory.gated(projectId), (gated) => (gated ? unread(op, failure, started) : ungated(root, failure.message, started)));
 };
 
 export const unowned = (root: string, cause = `no project this server serves holds ${root}, so no rule of its judges it`): Judgement => ({
@@ -697,21 +709,19 @@ export const judgingBuilt =
     phase: JudgedPhase,
     caller: TerminalActor | undefined,
   ): Effect.Effect<Built> => {
-    const failed = (why: string) => Effect.map(unresolved(op, root, why, memory, projectId), (judged): Built => ({ judged, tree: null }));
+    const failed = (failure: Unread) =>
+      Effect.map(unresolved(op, root, failure, memory, projectId), (judged): Built => ({ judged, tree: null }));
     const judged = (built: BuiltTree): Effect.Effect<Built> =>
       Effect.flatMap(Effect.result(graphOf(projectId, root)), (graph) =>
         Result.isFailure(graph)
-          ? failed(graph.failure.message)
+          ? failed(graph.failure)
           : Effect.gen(function* () {
               const { commonDir, ...made } = built;
               const tree = yield* pathsOf(made);
               if (tree.paths.length === 0) return { judged: EMPTY, tree };
               const subject: TreeSubject = { kind: 'tree', ...tree, projectId, commonDir, caller };
               return { judged: yield* judgement(op, subject, memory, phase), tree };
-            }).pipe(
-              Effect.provide(graph.success),
-              Effect.catch((failure) => failed(failure.message)),
-            ),
+            }).pipe(Effect.provide(graph.success), Effect.catch(failed)),
       );
     return Effect.provideService(build, Git, git).pipe(
       Effect.map((tree) => ({ tree })),
@@ -730,9 +740,9 @@ export const judgingOver =
     return Effect.flatMap(Effect.result(graphOf(subject.projectId, root)), (graph) =>
       Result.isSuccess(graph)
         ? Effect.provide(subject.kind === 'tree' ? judgement(op, subject, memory, phase) : headJudgement(op, subject), graph.success).pipe(
-            Effect.catch((failure) => unresolved(op, root ?? `project ${subject.projectId}`, failure.message, memory, subject.projectId)),
+            Effect.catch((failure) => unresolved(op, root ?? `project ${subject.projectId}`, failure, memory, subject.projectId)),
           )
-        : unresolved(op, root ?? `project ${subject.projectId}`, graph.failure.message, memory, subject.projectId),
+        : unresolved(op, root ?? `project ${subject.projectId}`, graph.failure, memory, subject.projectId),
     ).pipe(Effect.flatMap((judged) => annotated(op, subject.kind === 'tree' ? subject.paths.length : 0, judged)));
   };
 
