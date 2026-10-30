@@ -68,7 +68,7 @@ edges:
   - one activity per ask, naming path, model, and spend when reported.
 
   It runs a program through **`AskPrograms`**, a port declared in `providers` and filled by `external-harnesses`. The filler's run has these properties:
-  - one execution per ask, with `purpose: 'internal'`;
+  - one child process per ask;
   - input written on stdin;
   - an empty scratch working directory, so no repository instruction file is read;
   - the environment of the selected account, or of the provider's default account when no thread is involved;
