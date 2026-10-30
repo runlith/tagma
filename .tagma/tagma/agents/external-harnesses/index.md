@@ -118,6 +118,12 @@ fields:
         "for": [
           "13182a9f"
         ]
+      },
+      {
+        "at": "store/packages.ts",
+        "for": [
+          "13182a9f"
+        ]
       }
     ],
     "id": "external-harnesses",
