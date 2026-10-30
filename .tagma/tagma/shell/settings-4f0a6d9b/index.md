@@ -67,4 +67,4 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/settings
 ---
-The operator changes Tagma behaviour in settings, and the module owns their surface and language: server and browser keys, the project and all-projects layer, sections declared by features, and value controls. Model catalogs for selection arrive through the `ModelChoices` port, which composition fills.
+The operator changes Tagma behaviour in settings, and the module owns their surface and language: server and browser keys, the project and all-projects layer, sections declared by features, and value controls. Catalog choices arrive through the `ModelChoices` port and the model picker of an `ask` control or field through the `ModelFields` port, both filled by composition.
