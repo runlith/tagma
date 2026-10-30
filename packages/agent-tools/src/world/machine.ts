@@ -1,4 +1,4 @@
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
@@ -39,6 +39,7 @@ export const machineWorld = {
   environment: {
     platform: process.platform,
     shell: HOST_SHELL,
+    home: homedir(),
     tmp: tmpdir(),
     executables: { ripgrep: hostRipgrep },
   },

@@ -35,6 +35,7 @@ export type WorldExecutables = {
 export type WorldEnvironment = {
   readonly platform: string;
   readonly shell: string;
+  readonly home?: string;
   readonly tmp: string;
   readonly executables: WorldExecutables;
 };

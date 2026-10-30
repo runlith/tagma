@@ -538,7 +538,16 @@ export class ShellRun {
       return file === null ? [] : [{ path: file.place, as: 'wrote' as const }];
     });
     const sighted = yield* Effect.result(
-      shellShown({ command: this.command, output: `${stdout}\n${stderr}`, cwd: this.workdir, root: this.resolved.cwd }, isFile(fs)),
+      shellShown(
+        {
+          command: this.command,
+          output: `${stdout}\n${stderr}`,
+          cwd: this.workdir,
+          root: this.resolved.cwd,
+          home: this.resolved.env.HOME ?? this.resolved.world.environment.home,
+        },
+        isFile(fs),
+      ),
     );
     const unmeasured =
       before !== null && 'unreadable' in before

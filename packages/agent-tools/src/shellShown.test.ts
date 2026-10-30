@@ -18,6 +18,22 @@ it.effect('a file named by a command is read, whatever the command', () =>
   }),
 );
 
+it.effect('home-relative operands use the shell home while quoted tildes and expansions stay literal or unknown', () =>
+  Effect.gen(function* () {
+    for (const [command, files] of [
+      ['head ~/a.ts', ['/repo/src/a.ts']],
+      ["head '~/a.ts'", []],
+      ['head ~/a*.ts', []],
+      ['head ~/$FILE', []],
+    ] as const) {
+      const result = yield* shellShown({ command, output: '', cwd: ROOT, root: ROOT, home: '/repo/src' }, (path) =>
+        Effect.succeed(FILES.has(path)),
+      );
+      expect(result).toEqual(files.map((path) => ({ path, as: 'read' })));
+    }
+  }),
+);
+
 it.effect('flags, patterns, directories and missing paths show nothing', () =>
   Effect.gen(function* () {
     expect(yield* shown('rg -n --glob "*.ts" pattern src missing.ts')).toEqual([]);

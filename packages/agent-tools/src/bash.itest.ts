@@ -133,7 +133,7 @@ it.live('a failing command says so, and a passing one does not say it succeeded'
   }),
 );
 
-it.live('bash keeps single-file rg matches as data even when minified code contains line-site syntax', () =>
+it.live('bash keeps home-relative single-file rg matches as data even when minified code contains line-site syntax', () =>
   Effect.gen(function* () {
     const root = yield* createTempDir();
     const outside = yield* createTempDir();
@@ -141,9 +141,9 @@ it.live('bash keeps single-file rg matches as data even when minified code conta
     const code = `function es(t){${'x'.repeat(1_000)};return t?t?1:2:3;}`;
     yield* host.writeFile(file, code);
     const rg = yield* machineWorld.environment.executables.ripgrep;
-    const tools = createTools(options({ cwd: root, allowOutsideCwd: true }));
+    const tools = createTools(options({ cwd: root, allowOutsideCwd: true, env: { HOME: outside } }));
     const ran = yield* answer(tools.bash, {
-      command: `${JSON.stringify(rg)} -a -o 'function es\\(t\\).{0,18000}' ${JSON.stringify(file)}`,
+      command: `${JSON.stringify(rg)} -a -o 'function es\\(t\\).{0,18000}' ~/claude`,
       description: 'Read a minified function',
     });
     expect(ran.value).toBe(`${code}\n`);

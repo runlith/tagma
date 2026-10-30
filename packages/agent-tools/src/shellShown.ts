@@ -10,6 +10,7 @@ export type ShellSight = {
   readonly output: string;
   readonly cwd: string;
   readonly root: string;
+  readonly home?: string;
 };
 
 const LINE_SITE = /^(.+?)[:-]\d+[:-]/;
@@ -180,6 +181,12 @@ type ShellNames = {
 
 const named = (sight: ShellSight): ShellNames => {
   const said = new Map<string, ToolShown['as']>();
+  const fileWord = (word: ShellWord): string | null =>
+    word.literal
+      ? word.text
+      : sight.home !== undefined && /^~(?:\/[^$`*?[\]{}]*)?$/.test(word.text)
+        ? resolve(sight.home, word.text.slice(2))
+        : null;
   const take = (at: string, written: string, as: ToolShown['as']) => {
     if (written === '' || written.startsWith('-') || URI.test(written) || NUL.test(written) || jsonData(written)) return;
     const path = isAbsolute(written) ? written : resolve(at, written);
@@ -218,9 +225,10 @@ const named = (sight: ShellSight): ShellNames => {
       const suffix = backup;
       backup = false;
       if (suffix && word.literal && word.text === '') continue;
+      const written = fileWord(word);
       const value = values.shift();
       if (value !== undefined) {
-        if (value === 'file' && word.literal) take(here, word.text, 'read');
+        if (value === 'file' && written !== null) take(here, written, 'read');
         continue;
       }
       if (flags && word.literal && word.text === '--') {
@@ -274,9 +282,9 @@ const named = (sight: ShellSight): ShellNames => {
       }
       if (name === 'swift' && word.literal && SWIFT_COMMANDS.has(word.text)) operands = 'data';
       if (operands === 'data') continue;
-      if (word.literal && word.text !== ':memory:') {
-        for (const form of argumentForms(word.text, revision)) take(here, form, 'read');
-        if (search) searchPaths.push(resolve(here, word.text));
+      if (written !== null && written !== ':memory:') {
+        for (const form of argumentForms(written, revision)) take(here, form, 'read');
+        if (search) searchPaths.push(resolve(here, written));
       }
       if (operands === 'script' || operands === 'database') {
         operands = 'data';

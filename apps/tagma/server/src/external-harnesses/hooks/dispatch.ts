@@ -417,7 +417,7 @@ const postToolUse = Effect.fn('hook.postToolUse')(function* (road: Road, named: 
       ? []
       : yield* (
           printed._tag === 'Shell'
-            ? shellShown({ command: printed.command, output: printed.output, cwd, root: cwd }, isFile)
+            ? shellShown({ command: printed.command, output: printed.output, cwd, root: cwd, home: road.at.env.HOME }, isFile)
             : searchShown({ found: printed.found, output: printed.output, cwd }, isFile)
         ).pipe(
           Effect.match({
