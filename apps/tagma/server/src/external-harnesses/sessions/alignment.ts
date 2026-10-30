@@ -176,7 +176,7 @@ export const makeSessionAlignment = (
     return session === undefined || session.id !== sessionId || session.ownerId !== ownerId || session.state === 'ended' ? null : session;
   };
 
-  const rowOf = (facet: ExternalSession) => adapters.row(facet.name, facet.presentation.install);
+  const rowOf = (facet: ExternalSession) => adapters.runningRow(facet);
 
   const judged = Effect.fnUntraced(function* (
     threadId: string,
@@ -377,7 +377,7 @@ export const makeSessionAlignment = (
   const due = Effect.fnUntraced(function* (threadId: string) {
     const facet = yield* store.read(threadId);
     const session = facet?.session;
-    const adapter = facet === null ? null : adapters.find(facet.name);
+    const adapter = facet === null ? null : adapters.running(facet);
     if (facet === null || adapter === null || session === undefined || facet.plain === true) return false;
     if (session.cut !== undefined) return !(yield* holds(threadId, facet, session.cut));
     const standing = facet.observation.binding.rootKey ?? harnessRoot(adapter, session.argv);

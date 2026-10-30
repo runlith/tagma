@@ -10,25 +10,29 @@ const pinned = sql<string | null>`json_extract(${externalSession.facet}, '$.sess
 
 const live = sql`coalesce(json_extract(${externalSession.facet}, '$.session.state'), 'ended') != 'ended'`;
 
+export const recordedPackages = Effect.gen(function* () {
+  const { db } = yield* MachineStore;
+  const units = yield* MachineUnits;
+  return units.read((unit) =>
+    Effect.map(
+      unit.run(
+        db
+          .select({ directory: pinned })
+          .from(externalSession)
+          .where(and(isNotNull(externalSession.leaseBeat), isNotNull(pinned), live)),
+      ),
+      (rows): ReadonlySet<string> => new Set(rows.flatMap((row) => (row.directory === null ? [] : [row.directory]))),
+    ),
+  );
+});
+
 export const packageHoldersLayer = Layer.effect(
   PackageHolders,
   Effect.gen(function* () {
-    const { db } = yield* MachineStore;
-    const units = yield* MachineUnits;
     const adapters = yield* HarnessAdapters;
     return PackageHolders.of({
       standing: () => new Set(adapters.all().flatMap((row) => (row.package === undefined ? [] : [row.package]))),
-      recorded: units.read((unit) =>
-        Effect.map(
-          unit.run(
-            db
-              .select({ directory: pinned })
-              .from(externalSession)
-              .where(and(isNotNull(externalSession.leaseBeat), isNotNull(pinned), live)),
-          ),
-          (rows) => new Set(rows.flatMap((row) => (row.directory === null ? [] : [row.directory]))),
-        ),
-      ),
+      recorded: yield* recordedPackages,
     });
   }),
 );

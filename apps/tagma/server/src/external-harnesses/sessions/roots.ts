@@ -127,7 +127,7 @@ export class SessionRoots {
     const session = facet.session;
     const exportPath = session?.exportPath;
     const storage = session?.storage;
-    const declared = this.adapters.find(facet.name)?.launch?.witness;
+    const declared = this.adapters.running(facet)?.launch?.witness;
     if (session === undefined || exportPath === undefined || storage === undefined || declared === undefined) {
       return Effect.succeed(null);
     }
@@ -137,7 +137,7 @@ export class SessionRoots {
   }
 
   witnessed(facet: ExternalSession): boolean {
-    return facet.plain === true || this.adapters.find(facet.name)?.launch?.witness !== undefined;
+    return facet.plain === true || this.adapters.running(facet)?.launch?.witness !== undefined;
   }
 
   witness(threadId: string, facet: ExternalSession): Effect.Effect<WitnessTry, HarnessFailure> {
@@ -145,7 +145,7 @@ export class SessionRoots {
     if (session === undefined || session.state !== 'running' || facet.observation.binding.rootKey !== null) {
       return Effect.succeed('moot');
     }
-    const adapter = this.adapters.find(facet.name);
+    const adapter = this.adapters.running(facet);
     const named =
       facet.plain !== true ? this.exportedRoot(facet) : Effect.succeed(adapter === null ? null : harnessRoot(adapter, session.argv));
     return named.pipe(

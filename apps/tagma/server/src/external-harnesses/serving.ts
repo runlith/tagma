@@ -1,4 +1,6 @@
 import { Effect, Layer, Schedule, Semaphore, Stream } from 'effect';
+import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
+import { recordedPackages } from './store/packages.js';
 import { Maintenance } from '../platform/contract/service/maintenance.js';
 import { NATIVE_HARNESS, type HarnessId } from '../platform/contract/wire/session.js';
 import { type ProviderCatalog, ProviderRegistry } from '../providers/contract/service/registry.js';
@@ -41,6 +43,15 @@ const contributions = Layer.effectDiscard(
     const settle = (catalog: ProviderCatalog) =>
       lock.withPermits(1)(Effect.andThen(adapters.declared(catalog.harnesses, catalog.packages), follow));
     yield* settle(providers.current());
+    const current = new Set(providers.current().packages.values());
+    for (const directory of yield* Effect.orDie(yield* recordedPackages)) {
+      if (current.has(directory)) continue;
+      const declared = yield* providers.loadVersion(directory);
+      yield* adapters.version(
+        directory,
+        declared.filter((provider): provider is HarnessProvider => provider.kind === 'harness'),
+      );
+    }
     yield* Effect.forkScoped(Stream.runForEach(providers.changes, settle));
   }),
 );

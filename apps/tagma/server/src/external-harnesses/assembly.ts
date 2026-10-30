@@ -353,10 +353,7 @@ export const externalHarnessesLayer = Layer.effectContext(
     const judging = harnessJudging(threads, yield* ApprovalModes, adapters);
     const terminalAsks: TerminalAsks = new TerminalAsks(
       judging,
-      (threadId) =>
-        Effect.flatMap(store.read(threadId), (facet) =>
-          facet === null ? Effect.succeed(null) : adapters.row(facet.name, facet.presentation.install),
-        ),
+      (threadId) => Effect.flatMap(store.read(threadId), (facet) => (facet === null ? Effect.succeed(null) : adapters.runningRow(facet))),
       askLedger(
         store,
         terminalJournal,

@@ -384,7 +384,7 @@ export class TerminalRuns {
     yield* this.open.landing(run.id);
     if (this.stopped(run.id)) return;
     const facet = yield* this.store.read(threadId);
-    if (facet === null || this.adapters.find(facet.name)?.steer !== 'step' || !harnessSessionActive(facet.session)) return;
+    if (facet === null || this.adapters.running(facet)?.steer !== 'step' || !harnessSessionActive(facet.session)) return;
     const delivery = yield* this.launched(threadId, items);
     if (delivery.items.length === 0) return;
     if (!(yield* this.words.steered(threadId, run.id, delivery.items, delivery.digest))) return;

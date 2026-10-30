@@ -24,7 +24,7 @@ export function terminalFaces(
   adapters: HarnessAdapters['Service'],
 ): AskFaces {
   type Standing = { readonly facet: ExternalSession; readonly sessionId: string; readonly execution: HarnessExecutionRef };
-  const rowOf = (held: Standing) => adapters.row(held.facet.name, held.facet.presentation.install);
+  const rowOf = (held: Standing) => adapters.runningRow(held.facet);
   const standing = (threadId: string): Effect.Effect<Standing | null, HarnessFailure> =>
     Effect.map(sessions.read(threadId), (facet) =>
       facet !== null && harnessSessionActive(facet.session) && facet.execution !== null

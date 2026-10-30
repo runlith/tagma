@@ -105,7 +105,7 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
                   jobs.delete(threadId);
                   yield* Effect.withFiberSucceed((fiber) => prior.fiber?.interruptUnsafe(fiber.id));
                 }
-                if (key === null || adapters.find(facet.name)?.metadata === undefined) return prior?.fiber ?? null;
+                if (key === null || adapters.running(facet)?.metadata === undefined) return prior?.fiber ?? null;
                 const job: Job = { key, boundary, wake: yield* Queue.sliding<void>(1), fiber: null };
                 jobs.set(threadId, job);
                 job.fiber = yield* Effect.forkIn(
@@ -153,7 +153,7 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
       let published: string | null = null;
       while (true) {
         const facet = yield* store.read(threadId);
-        const reader = facet === null ? undefined : adapters.find(facet.name)?.metadata;
+        const reader = facet === null ? undefined : adapters.running(facet)?.metadata;
         if (
           facet === null ||
           reader === undefined ||
@@ -267,7 +267,7 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
   const readerWords = Effect.fn('HarnessMetadata.readerWords')(function* (threadId: string) {
     const facet = yield* store.read(threadId);
     const input = facet === null ? null : inputOf(facet);
-    const adapter = facet === null ? null : adapters.find(facet.name);
+    const adapter = facet === null ? null : adapters.running(facet);
     if (input === null || adapter === null) return [] as readonly string[];
     if (input.storage.unreadable !== undefined)
       return yield* new GateRefusal('metadata-unreadable', 'The session launch storage was truncated.', [

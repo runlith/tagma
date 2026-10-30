@@ -35,7 +35,7 @@ export class TerminalClosing {
   readonly spent = Effect.fnUntraced(function* (this: TerminalClosing, threadId: string, facet: ExternalSession) {
     const turn = facet.turn;
     const input = inputOf(facet);
-    const adapter = this.adapters.find(facet.name);
+    const adapter = this.adapters.running(facet);
     if (turn === undefined || input === null || adapter === null || !transcriptUsage(adapter)) return null;
     const read = yield* Effect.result(readHarnessTranscript(this.access, input, adapter, turn.offset ?? 0));
     if (read._tag === 'Failure' || !read.success.complete) {

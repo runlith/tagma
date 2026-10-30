@@ -109,7 +109,7 @@ export class TerminalWatch {
 
   private silence(facet: ExternalSession): Silence | null {
     if (facet.plain === true) return { window: PLAIN_BEAT_MS, proof: 'tail' };
-    const adapter = this.adapters.find(facet.name);
+    const adapter = this.adapters.running(facet);
     const proof = adapter === null ? null : this.proofOf(adapter);
     return proof === null ? null : { window: QUIET_WINDOW_MS, proof };
   }
@@ -213,7 +213,7 @@ export class TerminalWatch {
     facet: ExternalSession,
     silence: Silence | null,
   ): Effect.fn.Return<CheckOptions | null, HarnessFailure> {
-    const adapter = this.adapters.find(facet.name);
+    const adapter = this.adapters.running(facet);
     if (silence === null || adapter === null) return null;
     if (silence.proof === 'screen') return (yield* this.promptShown(threadId, adapter)) === null ? null : RETURNED;
     if ((facet.unread ?? []).length > 0 || untaken(facet, yield* Clock.currentTimeMillis)) return RETURNED;
@@ -273,7 +273,7 @@ export class TerminalWatch {
     turn: HarnessTurn,
   ): Effect.fn.Return<ProvenEnd | null> {
     const input = inputOf(standing);
-    const source = this.adapters.find(standing.name)?.metadata?.ends ?? null;
+    const source = this.adapters.running(standing)?.metadata?.ends ?? null;
     if (input === null || source === null) return null;
     const tail = yield* this.tail(input, source, turn);
     if (tail._tag === 'Failure') {
@@ -295,7 +295,7 @@ export class TerminalWatch {
     if (standing === null) return;
     const { turn } = standing;
     const input = inputOf(standing);
-    const adapter = this.adapters.find(standing.name);
+    const adapter = this.adapters.running(standing);
     const source = adapter?.metadata?.ends ?? null;
     if (turn === undefined || turn.offset !== null || input === null || source === null) return;
     const placed = yield* Effect.result(this.baseline(threadId, turn.run, source, input, adapter?.launch?.address));
@@ -335,7 +335,7 @@ export class TerminalWatch {
   private readonly placeCompaction = Effect.fnUntraced(function* (this: TerminalWatch, threadId: string) {
     const standing = yield* this.store.read(threadId);
     const input = standing === null ? null : inputOf(standing);
-    const source = standing === null ? null : (this.adapters.find(standing.name)?.metadata?.ends ?? null);
+    const source = standing === null ? null : (this.adapters.running(standing)?.metadata?.ends ?? null);
     if (standing === null || input === null || source === null) return;
     const from = yield* this.transcriptSize(input, source);
     if (from === null) return;
@@ -351,7 +351,7 @@ export class TerminalWatch {
     const look = Effect.gen(function* () {
       const facet = yield* store.read(threadId);
       const input = facet === null ? null : inputOf(facet);
-      const adapter = facet === null ? null : adapters.find(facet.name);
+      const adapter = facet === null ? null : adapters.running(facet);
       if (facet === null || input === null || adapter === null || !harnessSessionActive(facet.session) || (facet.turn?.run ?? null) !== run)
         return { moved: true, compacted: null };
       const read = yield* readHarnessTranscript(access, input, adapter, from);
@@ -438,7 +438,7 @@ export class TerminalWatch {
     if (facet.turn === undefined && unread.length === 0) return;
     const input = inputOf(facet);
     const waiting = facet.turn !== undefined && (yield* this.wordWaits(threadId));
-    const adapter = this.adapters.find(facet.name);
+    const adapter = this.adapters.running(facet);
     const source = adapter?.metadata?.ends ?? null;
     const turn = facet.turn;
     const tail =

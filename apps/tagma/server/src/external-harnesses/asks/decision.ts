@@ -22,7 +22,7 @@ export function harnessJudging(threads: SessionThreads, modes: ModeLookup, adapt
     verdict: Effect.fnUntraced(function* (threadId, call, mutating) {
       const row = yield* threads.find(threadId, OPERATOR_PRINCIPAL);
       if (!row?.harness) return { _tag: 'Unspoken' } as const;
-      const tool = toolOf(yield* adapters.row(row.harness.name, row.harness.presentation.install), call.tool);
+      const tool = toolOf(yield* adapters.runningRow(row.harness), call.tool);
       const outcome = judge(tool.approval, [], resolveMode(modes, row.authority.mode), modes, {
         toolName: call.tool,
         mutating: mutating ?? tool.approval.asksFrom !== 'never',

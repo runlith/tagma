@@ -11,7 +11,7 @@ export const notesReach = (lookups: SessionLookupStore['Service'], store: Harnes
       const born = yield* lookups.harnessOf(threadId);
       if (born === undefined || born === null) return null;
       if ((yield* store.binding(threadId))?.adapter === 'acp') return null;
-      const adapter = adapters.find(born.name);
+      const adapter = adapters.running(born);
       if (adapter === null || promptSupported(adapter.hooks)) return null;
       return `${adapter.label} in a terminal takes no measured answer to its prompt hook, so these notes do not reach its model.`;
     }),

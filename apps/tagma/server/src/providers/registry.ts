@@ -24,7 +24,8 @@ import { machineSources, adapterHost } from './adapters/external.js';
 import { indexHarnesses } from './adapters/harnessIndex.js';
 import { failed, type Loaded, load } from './adapters/judge.js';
 import { publicValues } from './adapters/settingValues.js';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import { importAdapter, readManifest } from '@runlith/tagma/adapter/loader';
 import { accountSource, makeAccountModes, modeSections } from './accounts/modes.js';
 import type { AccountSection } from './contract/wire/catalog.js';
 import { CredentialFiles } from './contract/service/credentials.js';
@@ -261,11 +262,28 @@ export const registryLayer = Layer.effect(
       const providers = loaded.flatMap((adapter) => (adapter.state.state === 'disabled' ? [] : adapter.providers));
       return modes === null ? modeSections(providers) : modes.resolve(providers, signed);
     };
+    const snapshot =
+      stored._tag === 'Some'
+        ? Effect.orDie(stored.value.read())
+        : Effect.succeed({ instances: new Map<string, readonly SettingInstance[]>(), secrets: {} });
+    const loadVersion = Effect.fn('providers.loadVersion')(function* (directory: string) {
+      const manifest = yield* Effect.result(Effect.tryPromise(() => readManifest(directory)));
+      if (Result.isFailure(manifest)) {
+        yield* Effect.logError('a held adapter version has no readable manifest', { directory, reason: String(manifest.failure) });
+        return [];
+      }
+      const id = manifest.success.name ?? basename(directory);
+      const source: AdapterSource = {
+        id,
+        origin: 'machine',
+        version: manifest.success.version ?? null,
+        directory,
+        load: () => importAdapter(directory, place.host, process.execArgv),
+      };
+      return (yield* load(source, adapterHost(yield* snapshot, id), new Map(), new Map())).providers;
+    });
     const externals = Effect.gen(function* () {
-      const { instances, secrets } =
-        stored._tag === 'Some'
-          ? yield* Effect.orDie(stored.value.read())
-          : { instances: new Map<string, readonly SettingInstance[]>(), secrets: {} };
+      const { instances, secrets } = yield* snapshot;
       const hostOf = (adapter: string): AdapterHost => adapterHost({ instances, secrets }, adapter);
       const priorMachine = previous.filter((adapter) => adapter.state.origin === 'machine');
       const machine = yield* machineSources(place.machine, place.host, process.execArgv).pipe(
@@ -335,6 +353,7 @@ export const registryLayer = Layer.effect(
       forRun: (runId) => runs.get(runId) ?? current,
       releaseRun: (runId) => Effect.sync(() => void runs.delete(runId)),
       pinned: () => new Set([...new Set(runs.values())].flatMap((catalog) => [...catalog.packages.values()])),
+      loadVersion,
       reload,
       selectMode: (section, mode) =>
         lock.withPermits(1)(

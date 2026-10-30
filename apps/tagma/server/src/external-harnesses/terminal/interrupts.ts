@@ -55,7 +55,7 @@ export class TerminalInterrupts {
   ) {}
 
   private rowOf(facet: ExternalSession) {
-    return this.adapters.row(facet.name, facet.presentation.install);
+    return this.adapters.runningRow(facet);
   }
 
   readonly press = Effect.fn('TerminalInterrupts.press')(function* (
@@ -85,7 +85,7 @@ export class TerminalInterrupts {
   private readonly unarmed = Effect.fnUntraced(function* (this: TerminalInterrupts, threadId: string) {
     for (;;) {
       const facet = yield* this.store.read(threadId);
-      const arm = facet === null ? undefined : this.adapters.find(facet.name)?.exitArm;
+      const arm = facet === null ? undefined : this.adapters.running(facet)?.exitArm;
       const confirmedAt = facet?.armed?.confirmedAt;
       if (arm === undefined || confirmedAt === undefined) return;
       const left = arm.windowMs - ((yield* Clock.currentTimeMillis) - Date.parse(confirmedAt));
@@ -271,7 +271,7 @@ export class TerminalInterrupts {
     progress: Clearing,
   ): Effect.fn.Return<'confirmed' | 'cleared' | 'unconfirmed', HarnessFailure> {
     const { store } = this;
-    const adapter = this.adapters.find(facet.name);
+    const adapter = this.adapters.running(facet);
     if (adapter === null) return 'confirmed';
     const record = adapter.ends.interrupt === 'record';
     const transcribed = mark.heard === undefined && (yield* this.watch.endOf(threadId, facet, mark.turn)) !== null;

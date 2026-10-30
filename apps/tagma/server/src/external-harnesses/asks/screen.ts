@@ -102,7 +102,7 @@ export class HarnessScreenAsks {
   ) {
     const prior = this.jobs.get(threadId);
     const terminal = binding?.adapter === 'terminal';
-    const adapter = this.adapters.find(facet.name);
+    const adapter = this.adapters.running(facet);
     const eligible =
       harnessSessionActive(facet.session) &&
       terminal &&
@@ -234,7 +234,7 @@ export class HarnessScreenAsks {
 
   private readAsk(facet: ExternalSession): Effect.Effect<ScreenAskSeen> {
     const execution = facet.execution;
-    const reader = this.adapters.find(facet.name)?.screenAskOf;
+    const reader = this.adapters.running(facet)?.screenAskOf;
     if (execution === null || reader === undefined) return Effect.succeed({ _tag: 'Unreadable' });
     return this.terminals.record(execution.execution, execution.incarnation).pipe(
       Effect.flatMap((record) =>

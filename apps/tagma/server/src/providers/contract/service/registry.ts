@@ -85,6 +85,7 @@ export class ProviderRegistry extends Context.Service<
     forRun(runId: string): ProviderCatalog;
     releaseRun(runId: string): Effect.Effect<void>;
     pinned(): ReadonlySet<string>;
+    loadVersion(directory: string): Effect.Effect<readonly Provider[]>;
     reload: Effect.Effect<ProviderCatalog>;
     selectMode(section: string, mode: string): Effect.Effect<ProviderCatalog, GateRefusal | CredentialFileFault>;
     readonly recheck: Effect.Effect<ProviderCatalog>;

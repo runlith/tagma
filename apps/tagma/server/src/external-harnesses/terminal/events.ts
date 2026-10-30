@@ -125,11 +125,7 @@ export class TerminalEvents {
         'post the original hook capture time from the execution host',
       ]);
     }
-    const pinned = born.session?.package;
-    const adapter =
-      (pinned === undefined ? null : this.adapters.at(pinned)) ??
-      this.adapters.last(born.name) ??
-      (yield* this.adapters.row(born.name, born.presentation.install));
+    const adapter = yield* this.adapters.runningRow(born);
     const hook = reported.event ?? {};
     const raw: Record<string, unknown> = { ...hook };
     const read = harnessReport(adapter, raw);

@@ -316,7 +316,7 @@ export class SessionDriver implements Driving {
         ]);
       }
       const frame = readHarnessFrame(terminals, screens, execution);
-      return Effect.flatMap(adapters.row(facet.name, facet.presentation.install), (adapter) => {
+      return Effect.flatMap(adapters.runningRow(facet), (adapter) => {
         const composer = adapter.composer;
         return lanes.typing(session.id, (lane) =>
           act({
