@@ -161,10 +161,10 @@ export const claudeTerminal: TerminalSurface = {
   instructions: {
     file: 'CLAUDE.md',
     imports: (text) => /@(?:\.\/)?AGENTS\.md\b/i.test(text),
-    skill: {
-      project: '.claude/skills/tagma',
-      user: { folder: ['.claude'], file: 'skills/tagma', homeEnv: 'CLAUDE_CONFIG_DIR' },
-    },
+  },
+  skill: {
+    project: '.claude/skills/tagma',
+    user: { folder: ['.claude'], file: 'skills/tagma', homeEnv: 'CLAUDE_CONFIG_DIR' },
   },
   mcpTools: 'catalog',
   mcpCallMeta: 'claudecode/toolUseId',

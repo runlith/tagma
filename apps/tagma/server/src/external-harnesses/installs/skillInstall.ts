@@ -1,4 +1,3 @@
-import { homedir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { Effect, FileSystem } from 'effect';
 import { Doctrine, doctrineOf } from '../../platform/contract/service/sections.js';
@@ -14,7 +13,7 @@ import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { applyHooks, planHooks, planHookTargets } from './hookWrite.js';
 import { installedBody, sourceFiles } from './skill.js';
-import { skillLinks, skillTarget, userSkillTarget } from './targets.js';
+import { skillLinks, skillTarget, userHome, userSkillTarget } from './targets.js';
 import { skillStatus } from './status.js';
 import { InstalledHarnesses } from '../../threads/contract/service/harness.js';
 
@@ -45,6 +44,16 @@ const linkSkill = Effect.fn('harnessInstall.linkSkill')(function* (link: string,
   yield* disk.remove(link, { recursive: true, force: true });
   yield* disk.symlink(relative(dirname(link), canonical), link);
   return link;
+}, Effect.mapError(installFailure));
+
+const currentSkill = Effect.fn('harnessInstall.currentSkill')(function* (target: string, contributed: SectionCatalog) {
+  return yield* withFileLock(`${target}.lock`, 15_000, () =>
+    Effect.gen(function* () {
+      const status = yield* skillStatus(target, contributed);
+      if (status.state === 'unreadable') return yield* installFailure(new Error(status.reason));
+      return status.state === 'current' ? { target, files: sourceFiles() } : yield* installSkill(target, contributed);
+    }),
+  );
 }, Effect.mapError(installFailure));
 
 const AGENTS_FILE = 'AGENTS.md';
@@ -85,16 +94,11 @@ export const installForUser = Effect.fnUntraced(function* (contributed: SectionC
       },
     ),
   );
-  const skill = yield* installSkill(userSkillTarget(), contributed);
+  const skill = yield* currentSkill(userSkillTarget(), contributed);
   const hooks = yield* applyHooks(plans);
   for (const link of yield* skillLinks(null)) yield* linkSkill(link, skill.target);
   return { skill, hooks };
 });
-
-const userHome = (declared: HookUserFile): string => {
-  const override = declared.homeEnv === undefined ? undefined : process.env[declared.homeEnv];
-  return override !== undefined && override !== '' ? override : join(homedir(), ...declared.folder);
-};
 
 export const installForAccount = Effect.fn('harnessInstall.installForAccount')(function* (
   name: HarnessName,
@@ -122,15 +126,15 @@ export const installForAccount = Effect.fn('harnessInstall.installForAccount')(f
           assets: group.adapters.flatMap((adapter) => adapter.hooks?.assets ?? []),
         })),
       );
-      const target = join(home, 'skills', 'tagma');
-      const status = yield* skillStatus(target, contributed);
-      if (status.state === 'unreadable') return yield* installFailure(new Error(status.reason));
+      const target = directory === null ? userSkillTarget() : skillTarget(directory);
       const mcp =
         adapter.mcp?.file._tag !== 'Home'
           ? undefined
           : yield* Effect.tryPromise({ try: () => declareInto(home, adapter, adapter.mcp!, cli, directory), catch: installFailure });
       if (mcp?.write === 'refused') return yield* installFailure(new Error(mcp.detail));
-      const skill = status.state === 'current' ? { target, files: sourceFiles() } : yield* installSkill(target, contributed);
+      const skill = yield* currentSkill(target, contributed);
+      const alias = adapter.skill?.user;
+      if (alias !== undefined) yield* linkSkill(join(userHome(alias, directory), alias.file), target);
       const hooks = yield* applyHooks(plans);
       return { skill, hooks, mcp };
     }),
@@ -177,7 +181,7 @@ export const installInto = Effect.fn('harnessInstall.installInto')(function* (
     Effect.map(applyInstructions(plan), (write) => ({ path: plan.path, write })),
   );
   const hooks = yield* applyHooks(hookPlans);
-  const skill = yield* installSkill(skillTarget(repoRoot), contributed);
+  const skill = yield* currentSkill(skillTarget(repoRoot), contributed);
   const links = yield* skillLinks(repoRoot);
   for (const link of links) yield* linkSkill(link, skill.target);
   const mcp = yield* Effect.tryPromise({ try: () => declare(repoRoot), catch: installFailure });

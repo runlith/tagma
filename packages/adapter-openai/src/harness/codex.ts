@@ -268,6 +268,7 @@ export const codexTerminal: TerminalSurface = {
     context: UNMEASURED_HOOK_CONTEXT,
     promptContext: true,
   },
+  skill: { user: { folder: ['.codex'], file: 'skills/tagma', homeEnv: 'CODEX_HOME' } },
   mcpTools: 'catalog',
   mcp: {
     file: { _tag: 'Home', folder: ['.codex'], file: 'config.toml', homeEnv: 'CODEX_HOME' },

@@ -4,7 +4,7 @@ import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { Context, Effect, FileSystem, Layer, Schema } from 'effect';
 import { doctrine } from '../../doctrine.js';
-import { harnessAdaptersLayer } from '../../../external-harnesses/adapters.js';
+import { shippedAdaptersLayer } from './shipped.js';
 import { installForAccount } from '../../../external-harnesses/installs/skillInstall.js';
 import { skillStatus } from '../../../external-harnesses/testing/doubles.js';
 import { MCP_KEY_VARIABLE } from '../../../platform/contract/wire/session.js';
@@ -20,7 +20,7 @@ const fixture = Layer.effect(
     const { contributed } = yield* doctrine;
     return AccountFixture.of({ home, contributed });
   }),
-).pipe(Layer.provideMerge(BunFileSystem.layer), Layer.provideMerge(harnessAdaptersLayer));
+).pipe(Layer.provideMerge(BunFileSystem.layer), Layer.provideMerge(shippedAdaptersLayer));
 
 const CLI = ['/opt/tagma/install/current/bun', '/opt/tagma/install/current/bin/cli/main.js'];
 const decodeConfig = Schema.decodeUnknownEffect(

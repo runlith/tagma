@@ -174,6 +174,7 @@ export const cursorTerminal: TerminalSurface = {
     context: UNMEASURED_HOOK_CONTEXT,
     promptContext: true,
   },
+  skill: { user: { folder: ['.cursor'], file: 'skills/tagma' } },
   mcpTools: 'proxy',
   mcp: {
     file: { _tag: 'Project', path: '.cursor/mcp.json' },

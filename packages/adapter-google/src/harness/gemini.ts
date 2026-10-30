@@ -103,6 +103,7 @@ export const geminiTerminal: TerminalSurface = {
     user: { folder: ['.gemini'], file: 'settings.json' },
     context: UNMEASURED_HOOK_CONTEXT,
   },
+  skill: { user: { folder: ['.gemini'], file: 'skills/tagma' } },
   mcpTools: 'proxy',
   mcp: { file: { _tag: 'Project', path: '.gemini/settings.json' }, format: 'json', servers: 'mcpServers', fields: { timeout: 600_000 } },
   occasionOf: geminiOccasion,

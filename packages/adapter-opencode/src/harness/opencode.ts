@@ -82,6 +82,7 @@ const terminal: TerminalSurface = {
       { file: 'plugins/tagma/package.json', content: '{"type":"module","exports":{"./server":"./index.ts"}}\n' },
     ],
   },
+  skill: { user: { folder: ['.config', 'opencode'], file: 'skills/tagma', homeEnv: 'OPENCODE_CONFIG_DIR' } },
   mcpTools: 'catalog',
   mcp: {
     file: { _tag: 'Home', folder: ['.config', 'opencode'], file: 'opencode.json', homeEnv: 'OPENCODE_CONFIG_DIR' },

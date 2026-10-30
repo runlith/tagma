@@ -7,7 +7,8 @@ import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
 import { HarnessAdapters } from '../../../external-harnesses/contract/service/adapters.js';
 import { SHIPPED_PROVIDERS } from '../../../external-harnesses/testing/builtin.js';
-import { installInto, installForUser } from '../../../external-harnesses/installs/skillInstall.js';
+import { installInto, installForUser, installForAccount } from '../../../external-harnesses/installs/skillInstall.js';
+import { skillStatus } from '../../../external-harnesses/testing/doubles.js';
 import { skillDirectories, userSkillTarget } from '../../../external-harnesses/installs/targets.js';
 import { standing } from '../../../external-harnesses/installs/upgrade.js';
 import { doctrine } from '../../doctrine.js';
@@ -23,10 +24,10 @@ const provider: HarnessProvider = {
     instructions: {
       file: 'QUILL.txt',
       imports: (text) => text.includes('include AGENTS.md'),
-      skill: {
-        project: '.quill/commands/tagma',
-        user: { folder: ['.quill', 'commands'], file: 'tagma' },
-      },
+    },
+    skill: {
+      project: '.quill/commands/tagma',
+      user: { folder: ['.quill', 'commands'], file: 'tagma' },
     },
   },
 };
@@ -70,5 +71,34 @@ it.live('installation follows a package instruction file, import rule and skill 
     expect(withdrawn.links).toEqual([]);
     expect(withdrawn.instructions).toEqual([]);
     expect(yield* files.readFileString(withdrawn.agents.path)).toContain('canonical-law');
+  }).pipe(Effect.provide(Layer.mergeAll(BunFileSystem.layer, Layer.effect(HarnessAdapters, makeHarnessAdapters)))),
+);
+
+it.live('home and account refreshes retain canonical skill aliases and use the declared user path', () =>
+  Effect.gen(function* () {
+    const files = yield* FileSystem.FileSystem;
+    const root = yield* files.makeTempDirectoryScoped({ prefix: 'account-skills-' });
+    const adapters = yield* HarnessAdapters;
+    const { contributed } = yield* doctrine;
+    for (const file of ['skills/tagma', 'commands/tagma']) {
+      const configured: HarnessProvider = {
+        ...provider,
+        terminal: {
+          ...provider.terminal!,
+          hooks: { ...base.terminal!.hooks!, file: '.quill-home/hooks.json', user: { folder: ['.quill-home'], file: 'hooks.json' } },
+          skill: { project: '.quill/tagma', user: { folder: ['.quill-home'], file } },
+        },
+      };
+      yield* adapters.declared([configured]);
+      const user = yield* installForUser(contributed);
+      const alias = join(process.env.HOME!, '.quill-home', file);
+      yield* files.writeFileString(join(user.skill.target, 'SKILL.md'), 'an earlier release');
+      yield* installForAccount(provider.id, null, contributed, ['tagma']);
+      expect((yield* skillStatus(user.skill.target, contributed)).state).toBe('current');
+      expect(yield* files.realPath(alias)).toBe(yield* files.realPath(user.skill.target));
+      const account = join(root, file.split('/')[0]!);
+      yield* installForAccount(provider.id, account, contributed, ['tagma']);
+      expect((yield* skillStatus(join(account, file), contributed)).state).toBe('current');
+    }
   }).pipe(Effect.provide(Layer.mergeAll(BunFileSystem.layer, Layer.effect(HarnessAdapters, makeHarnessAdapters)))),
 );

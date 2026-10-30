@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { HookCodec } from '@runlith/tagma/adapter/hook';
+import type { HookUserFile } from '@runlith/tagma/adapter/harness';
 import { hookGroups } from './hookInstall.js';
 import { entryLine } from '../../installation/contract/wire/junction.js';
 import { Effect } from 'effect';
@@ -63,17 +64,16 @@ export function skillTarget(repoRoot: string): string {
 
 export const userSkillTarget = (): string => skillTarget(homedir());
 
+export const userHome = (declared: HookUserFile, directory: string | null = null): string => {
+  const override = declared.homeEnv === undefined ? undefined : process.env[declared.homeEnv];
+  return directory ?? (override !== undefined && override !== '' ? override : join(homedir(), ...declared.folder));
+};
+
 const linksIn = (adapters: readonly HarnessAdapter[], root: string | null): readonly string[] => [
   ...new Set(
-    adapters.flatMap(({ instructions }) => {
-      if (instructions === undefined) return [];
-      const { skill } = instructions;
-      const home = skill.user.homeEnv === undefined ? undefined : process.env[skill.user.homeEnv];
-      return [
-        root !== null
-          ? join(root, skill.project)
-          : join(home === undefined || home === '' ? join(homedir(), ...skill.user.folder) : home, skill.user.file),
-      ];
+    adapters.flatMap(({ skill }) => {
+      if (skill === undefined) return [];
+      return root === null ? [join(userHome(skill.user), skill.user.file)] : skill.project === undefined ? [] : [join(root, skill.project)];
     }),
   ),
 ];

@@ -349,8 +349,9 @@ export type HarnessSetup = { readonly file: string; readonly done: string };
 export type InstructionSurface = {
   readonly file: string;
   readonly imports?: (text: string) => boolean;
-  readonly skill: { readonly project: string; readonly user: HookUserFile };
 };
+
+export type SkillSurface = { readonly project?: string; readonly user: HookUserFile };
 
 export type HarnessTool = { readonly kind: PermissionKind; readonly approval: Approval };
 
@@ -392,6 +393,7 @@ export type TerminalSurface = {
   readonly hooks: HookSurface | null;
   readonly setup?: HarnessSetup;
   readonly instructions?: InstructionSurface;
+  readonly skill?: SkillSurface;
   readonly mcpTools: McpToolShape;
   readonly mcpCallMeta?: string;
   readonly mcp: McpSurface | null;

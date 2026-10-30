@@ -110,6 +110,7 @@ export const grokTerminal: TerminalSurface = {
     user: { folder: ['.grok'], file: 'hooks/tagma.json', homeEnv: 'GROK_HOME' },
     context: UNMEASURED_HOOK_CONTEXT,
   },
+  skill: { user: { folder: ['.grok'], file: 'skills/tagma', homeEnv: 'GROK_HOME' } },
   mcpTools: 'catalog',
   mcp: {
     file: { _tag: 'Project', path: '.grok/config.toml' },
