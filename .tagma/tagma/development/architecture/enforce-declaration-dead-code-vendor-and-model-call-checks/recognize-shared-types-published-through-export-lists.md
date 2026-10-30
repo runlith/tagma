@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a188ae-2d0b-74f2-91fc-f0e9ba085af5",
-    "status": "in_work"
+    "status": "done"
   }
 ---
 A type declared locally and published by an export list remains marked private in shape facts, hiding copies in production-dependent modules. Compute its public identity from the module's export list as well as declaration modifiers.
