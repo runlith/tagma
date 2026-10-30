@@ -1,11 +1,9 @@
-import { Schema } from 'effect';
-import { HARNESS_AGENT_ID, harnessNameSchema, type HarnessName } from './names.js';
+import { HARNESS_AGENT_ID, isHarnessName, type HarnessName } from './names.js';
 import { unmeasuredObservation } from './observation.js';
 import type { ExternalSession, HarnessInstall, HarnessPresentation } from './externalSession.js';
 
 const SEPARATOR = ':';
 const PREFIX = `${HARNESS_AGENT_ID}${SEPARATOR}`;
-const isHarnessName = Schema.is(harnessNameSchema);
 
 export function harnessTypeId(harness: string): string {
   return `${PREFIX}${harness}`;

@@ -14,7 +14,7 @@ import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { THREAD_OPERATIONS } from '../contract/wire/operations/catalog.js';
 import { gated, gateProject } from '../projectGate.js';
 import { ThreadHarness } from '../contract/service/engine.js';
-import { HarnessRegistry, harnessNotInstalled } from '../contract/service/harness.js';
+import { HarnessRegistry, harnessNotInstalled, SessionRead } from '../contract/service/harness.js';
 import type { HarnessId } from '../../platform/contract/wire/session.js';
 import { withdrawFailed, type HarnessFailure } from '../contract/service/failure.js';
 import { admitThreadFailures, attachmentRejected } from '../refusals.js';
@@ -79,6 +79,7 @@ export const makeThreadTurns = Effect.gen(function* () {
   const rollouts = yield* ThreadRollouts;
   const harness = yield* ThreadHarness;
   const registry = yield* HarnessRegistry;
+  const sessionOf = yield* SessionRead;
   const core = (threadId: string) => harness.threads.handle(threadId, OPERATOR_PRINCIPAL);
   const ending = yield* ThreadEnding;
   const reader = yield* ReaderMarking;
@@ -98,7 +99,10 @@ export const makeThreadTurns = Effect.gen(function* () {
             return yield* Effect.fail(new ThreadNotFoundError(threadId));
           }
           const profile = row?.transport.adapter === 'native' ? null : (row?.transport.profile ?? null);
-          if (profile !== null && !registry.list().includes(profile as HarnessId)) return yield* harnessNotInstalled(profile);
+          if (profile !== null && !registry.list().includes(profile as HarnessId)) {
+            const facet = yield* Effect.orDie(sessionOf(threadId));
+            return yield* harnessNotInstalled(profile, facet?.presentation.install ?? null);
+          }
           if (row !== undefined && !row.capabilities.pictures && attachments?.some((ref) => threadAttachmentIsPicture(ref.id))) {
             return yield* Effect.fail(attachmentRejected(`${pictureRefusal(row)} Send the words without the picture.`));
           }

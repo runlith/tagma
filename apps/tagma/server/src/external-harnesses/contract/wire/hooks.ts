@@ -30,6 +30,7 @@ const HOOK_REFUSALS = [
   'not-found',
   'not-a-harness-thread',
   'harness-missing',
+  'harness-not-installed',
   'harness-contract',
   'session-unreadable',
   'session-deleting',

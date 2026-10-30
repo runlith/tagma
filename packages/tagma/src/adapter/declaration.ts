@@ -3,6 +3,7 @@ import type { SubscriptionAccounts } from '@runlith/llm/oauth/vendor';
 import { Schema } from 'effect';
 import type { Adapter, AdapterHost, AdapterSettings, HarnessAccountAuth, HarnessCommand, HarnessProvider, Provider } from './provider';
 import { type SettingField, settingFieldSchema } from './settings';
+import { harnessNameSchema, RESERVED_HARNESS_NAMES } from './harness';
 
 export type Declaration = { readonly providers: readonly Provider[]; readonly settings: AdapterSettings | undefined };
 
@@ -77,8 +78,12 @@ const subscriptionFault = (accounts: SubscriptionAccounts | undefined): boolean 
   return false;
 };
 
+const harnessName = Schema.is(harnessNameSchema);
+
 const surfaceFault = (provider: HarnessProvider): string | null => {
   const { terminal, acp } = provider;
+  if (!harnessName(provider.id) || RESERVED_HARNESS_NAMES.includes(provider.id))
+    return `harness provider "${provider.id}" needs an id of up to 64 lowercase letters, digits and hyphens that starts with a letter and is none of ${RESERVED_HARNESS_NAMES.join(', ')}`;
   if (
     terminal !== undefined &&
     (!hasText(terminal.binary) ||
@@ -90,6 +95,8 @@ const surfaceFault = (provider: HarnessProvider): string | null => {
     return `harness provider "${provider.id}" declares a terminal surface without its binary, session prefix or launch`;
   if (acp !== undefined && (typeof acp.argv !== 'function' || typeof acp.configure !== 'function'))
     return `harness provider "${provider.id}" declares an ACP surface without its argv or configure`;
+  if (terminal !== undefined && acp !== undefined && acp.hosts === null && acp.argv(undefined)[0] !== terminal.binary)
+    return `harness provider "${provider.id}" launches its ACP agent with a program other than its terminal binary ${terminal.binary}`;
   return null;
 };
 

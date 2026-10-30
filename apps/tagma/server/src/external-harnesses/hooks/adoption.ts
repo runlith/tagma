@@ -3,8 +3,8 @@ import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { GRANT_VARIABLE, SESSION_TOKEN_VARIABLE, TERMINAL_VARIABLE } from '../../platform/contract/service/credentials.js';
 import { shellDigest } from '../../platform/credentials/grants.js';
-import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { SESSION_SIGNERS } from '../contract/wire/sessionVariables.js';
+import type { HookRows } from './rows.js';
 import {
   adoptionKeptName,
   ANCESTRY_LIMIT,
@@ -12,7 +12,6 @@ import {
   harnessAdoptedSchema,
   type HarnessAdopted,
 } from '../contract/wire/adoption.js';
-import { sessionIdOf } from '../adapter/payload.js';
 import { HARNESS_HOOK_BYTES } from '../../threads/contract/wire/harness/observation.js';
 import { HARNESS_STORAGE_VARIABLES } from '../../threads/contract/wire/harness/session.js';
 import type { HookDelivery } from './delivery.js';
@@ -107,21 +106,32 @@ const ancestry = Effect.fn('hookAdoption.ancestry')(function* () {
   return chain;
 });
 
-export const publishedHarness = (at: Invocation, key: string): string | undefined =>
-  SESSION_SIGNERS.find((signer) => at.env[signer.variable]?.trim() === key)?.harness;
+export const hookSession = (loaded: HookRows, event: Record<string, unknown>): string | null => {
+  if (loaded.named !== null) return loaded.named.sessionKeyOf(event);
+  for (const row of loaded.rows) {
+    const key = row.sessionKeyOf(event);
+    if (key !== null) return key;
+  }
+  return null;
+};
+
+export const publishedHarness = (at: Invocation, loaded: HookRows, key: string): string | undefined =>
+  [...loaded.rows.flatMap(({ harness, variable }) => (variable === undefined ? [] : [{ harness, variable }])), ...SESSION_SIGNERS].find(
+    (signer) => at.env[signer.variable]?.trim() === key,
+  )?.harness;
 
 export const adoptedHook = Effect.fn('hookAdoption.adoptedHook')(function* (
   at: Invocation,
   delivery: HookDelivery['Service'],
   event: Record<string, unknown>,
-  named: string | null,
+  loaded: HookRows,
   fresh: boolean,
 ) {
   if ((at.env[GRANT_VARIABLE] ?? '').trim().length > 0) return;
   const shell = (at.env[TERMINAL_VARIABLE] ?? '').trim();
-  const key = sessionIdOf(event);
+  const key = hookSession(loaded, event);
   if (shell === '' || key === null) return;
-  const harness = named ?? publishedHarness(at, key);
+  const harness = loaded.named?.harness ?? publishedHarness(at, loaded, key);
   if (harness === undefined) return;
   const kept = fresh ? null : yield* readKept(at, key, shell);
   if (kept?._tag === 'Refused') return;
@@ -157,12 +167,12 @@ export const adoptedHook = Effect.fn('hookAdoption.adoptedHook')(function* (
 
 export const forgetAdoption = Effect.fn('hookAdoption.forgetAdoption')(function* (
   at: Invocation,
-  rows: readonly HarnessAdapter[],
+  loaded: HookRows,
   event: Record<string, unknown>,
 ) {
-  const key = sessionIdOf(event);
+  const key = hookSession(loaded, event);
   const name = event.hook_event_name ?? event.hookEventName;
-  if (key === null || typeof name !== 'string' || !rows.some((row) => row.hooks?.events.sessionEnd === name)) return;
+  if (key === null || typeof name !== 'string' || !loaded.rows.some((row) => row.hooks?.events.sessionEnd === name)) return;
   const files = yield* FileSystem.FileSystem;
   yield* files
     .remove(keptFile(at, key), { force: true })

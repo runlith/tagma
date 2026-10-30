@@ -52,7 +52,7 @@ const program = Effect.gen(function* () {
       {
         cwd: project.root,
         env: { ...env, TAGMA_SERVER_URL: world.url, TAGMA_DATABASE_PATH: join(data, 'tagma.sqlite'), ...grant },
-        stdin: new Blob([JSON.stringify({ hook_event_name: 'quill.open', session_id: 'quill-root', cwd: project.root })]),
+        stdin: new Blob([JSON.stringify({ hook_event_name: 'quill.open', quill_session: 'quill-root', cwd: project.root })]),
       },
     );
   const row = yield* Context.get(world.runtime.owners, HarnessAdapters).row(QUILL.harness);
@@ -110,7 +110,7 @@ const program = Effect.gen(function* () {
       stdin: new Blob([
         JSON.stringify({
           hook_event_name: 'quill.after',
-          session_id: 'quill-root',
+          quill_session: 'quill-root',
           quill_tool: 'look',
           quill_file: path,
           cwd: project.root,

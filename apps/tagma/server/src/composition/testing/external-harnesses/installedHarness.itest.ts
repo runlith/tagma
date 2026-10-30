@@ -115,6 +115,14 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
           });
           expect(yield* op('start_turn', { threadId, text: 'go on', key: crypto.randomUUID() }, project)).toMatchObject({
             status: 409,
+            body: { code: 'harness-not-installed', unblock: expect.arrayContaining([QUILL.install]) },
+          });
+          expect(yield* op('set_thread_transport', { threadId, transport: 'acp' }, project)).toMatchObject({
+            status: 409,
+            body: { code: 'harness-not-installed', unblock: expect.arrayContaining([QUILL.install]) },
+          });
+          expect(yield* op('create_thread', { type: `harness:${QUILL.harness}` }, project)).toMatchObject({
+            status: 409,
             body: { code: 'harness-not-installed' },
           });
         }),

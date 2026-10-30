@@ -1,4 +1,4 @@
-import { Context, Effect, Schema } from 'effect';
+import { Context, Effect } from 'effect';
 import { and, eq } from 'drizzle-orm';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import type { Actor } from '../../platform/contract/wire/actor.js';
@@ -24,11 +24,9 @@ import {
 } from '../../platform/contract/service/credentials.js';
 import type { GrantSigner } from '../../platform/contract/service/grantSigner.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { harnessNameSchema } from '../../threads/contract/wire/harness/names.js';
+import { isHarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { MachineContext } from '../../graph/serving/machine.js';
 import type { CallWorld } from '../contract/service/admission.js';
-
-const isHarnessName = Schema.is(harnessNameSchema);
 
 type ThreadBornOf = NonNullable<Extract<Actor, { readonly kind: 'thread' }>['act']>;
 

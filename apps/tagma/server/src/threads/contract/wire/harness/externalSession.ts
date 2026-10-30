@@ -3,7 +3,8 @@ import { harnessExecutionSchema, harnessObservationSchema } from './observation.
 import { harnessHeldSchema } from './answer.js';
 import { harnessSessionSchema } from './session.js';
 import { harnessAskedModelSchema } from './askedModel.js';
-import { harnessNameSchema, harnessTransportSchema } from './names.js';
+import { harnessNameSchema } from '@runlith/tagma/adapter/harness';
+import { harnessTransportSchema } from './names.js';
 import { transportCapabilitiesSchema } from '@runlith/agent/thread/record';
 
 export const harnessPresentationSchema = Schema.Struct({

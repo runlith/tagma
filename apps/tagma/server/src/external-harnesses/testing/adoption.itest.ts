@@ -54,14 +54,16 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('hook adoption', (it) 
       const connect = () => Effect.succeed(door);
       const event = { hook_event_name: 'PreToolUse', session_id: key, cwd: home };
       const at = invoking(event);
-      yield* adoptedHook(at, makeHookDelivery({ connect }), event, 'claude-code', false).pipe(Effect.provideService(CurrentInvocation, at));
+      yield* adoptedHook(at, makeHookDelivery({ connect }), event, builtinRows('claude-code')!, false).pipe(
+        Effect.provideService(CurrentInvocation, at),
+      );
       expect(at.env[GRANT_VARIABLE]).toBe(answer.grant);
       expect(at.env[SESSION_TOKEN_VARIABLE]).toBe(answer.session);
       const stored = yield* files.readFileString(file);
       expect(yield* Schema.decodeUnknownEffect(harnessAdoptedSchema)(JSON.parse(stored))).toEqual(answer);
 
       const next = invoking(event);
-      yield* adoptedHook(next, makeHookDelivery({ connect: unavailable }), event, 'claude-code', false).pipe(
+      yield* adoptedHook(next, makeHookDelivery({ connect: unavailable }), event, builtinRows('claude-code')!, false).pipe(
         Effect.provideService(CurrentInvocation, next),
       );
       expect(next.env[GRANT_VARIABLE]).toBe(answer.grant);
@@ -80,13 +82,13 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('hook adoption', (it) 
 
       refusal = 'shell-unknown';
       const rejected = invoking(event);
-      yield* adoptedHook(rejected, makeHookDelivery({ connect }), event, 'claude-code', false).pipe(
+      yield* adoptedHook(rejected, makeHookDelivery({ connect }), event, builtinRows('claude-code')!, false).pipe(
         Effect.provideService(CurrentInvocation, rejected),
       );
       expect(JSON.parse(yield* files.readFileString(file))).toMatchObject({ refused: refusal, shell: shellDigest(shell) });
       refusal = null;
       const settled = invoking(event);
-      yield* adoptedHook(settled, makeHookDelivery({ connect }), event, 'claude-code', false).pipe(
+      yield* adoptedHook(settled, makeHookDelivery({ connect }), event, builtinRows('claude-code')!, false).pipe(
         Effect.provideService(CurrentInvocation, settled),
       );
       expect(settled.env[GRANT_VARIABLE]).toBeUndefined();
@@ -94,13 +96,13 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('hook adoption', (it) 
       refusal = 'job-unproven';
       const pending = { ...event, session_id: 'retry-session' };
       const unproven = invoking(pending);
-      yield* adoptedHook(unproven, makeHookDelivery({ connect }), pending, 'claude-code', false).pipe(
+      yield* adoptedHook(unproven, makeHookDelivery({ connect }), pending, builtinRows('claude-code')!, false).pipe(
         Effect.provideService(CurrentInvocation, unproven),
       );
       expect(yield* files.exists(join(home, adoptionKeptName(pending.session_id)))).toBe(false);
       refusal = null;
       const retried = invoking(pending);
-      yield* adoptedHook(retried, makeHookDelivery({ connect }), pending, 'claude-code', false).pipe(
+      yield* adoptedHook(retried, makeHookDelivery({ connect }), pending, builtinRows('claude-code')!, false).pipe(
         Effect.provideService(CurrentInvocation, retried),
       );
       expect(retried.env[GRANT_VARIABLE]).toBe(answering.grant);
@@ -143,7 +145,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('hook adoption', (it) 
         process.execPath,
       );
       const checking = yield* Effect.forkScoped(
-        adoptedHook(at, makeHookDelivery({ connect: unavailable }), { session_id: 'interrupted' }, 'claude-code', false),
+        adoptedHook(at, makeHookDelivery({ connect: unavailable }), { session_id: 'interrupted' }, builtinRows('claude-code')!, false),
       );
       const pid = yield* Queue.take(started);
       yield* Fiber.interrupt(checking);

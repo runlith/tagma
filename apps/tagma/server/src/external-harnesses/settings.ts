@@ -1,6 +1,7 @@
 import { Schema } from 'effect';
 import { SETTABLE_SCOPES, settingKey } from '../platform/contract/wire/setting.js';
-import { harnessNameSchema, harnessTransportSchema } from '../threads/contract/wire/harness/names.js';
+import { harnessNameSchema } from '@runlith/tagma/adapter/harness';
+import { harnessTransportSchema } from '../threads/contract/wire/harness/names.js';
 
 export const harnessTitle = settingKey({
   id: 'threads.harnessTitle',

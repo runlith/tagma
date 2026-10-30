@@ -1,4 +1,5 @@
-import { Effect, Layer, Schedule, Stream } from 'effect';
+import { Effect, Layer, Schedule, Semaphore, Stream } from 'effect';
+import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import { Maintenance } from '../platform/contract/service/maintenance.js';
 import { NATIVE_HARNESS, type HarnessId } from '../platform/contract/wire/session.js';
 import { ProviderRegistry } from '../providers/contract/service/registry.js';
@@ -37,10 +38,10 @@ const contributions = Layer.effectDiscard(
       }
       return Effect.all(acts, { discard: true });
     });
-    yield* adapters.declared(providers.current().harnesses);
-    yield* follow;
-    yield* Effect.forkScoped(Stream.runForEach(providers.changes, (catalog) => adapters.declared(catalog.harnesses)));
-    yield* Effect.forkScoped(Stream.runForEach(adapters.changes, () => follow));
+    const lock = yield* Semaphore.make(1);
+    const settle = (harnesses: readonly HarnessProvider[]) => lock.withPermits(1)(Effect.andThen(adapters.declared(harnesses), follow));
+    yield* settle(providers.current().harnesses);
+    yield* Effect.forkScoped(Stream.runForEach(providers.changes, (catalog) => settle(catalog.harnesses)));
   }),
 );
 

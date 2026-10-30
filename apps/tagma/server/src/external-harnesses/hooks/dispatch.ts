@@ -8,9 +8,8 @@ import { inputEnvelopes, operatorWords } from '../adapter/input.js';
 import { PERMISSION_TIMEOUT_SECONDS } from '../contract/wire/call.js';
 import { HARNESS_DETAIL_MAX, HARNESS_ID_MAX, type FileEffect, type HarnessCall, type HarnessPrinted } from '@runlith/tagma/adapter/harness';
 import type { HookCodec, HookMoment } from '@runlith/tagma/adapter/hook';
-import { adoptedHook, forgetAdoption, publishedHarness } from './adoption.js';
+import { adoptedHook, forgetAdoption, hookSession, publishedHarness } from './adoption.js';
 import { promptSupported, verdictOf } from '../adapter/hookFormat.js';
-import { sessionIdOf } from '../adapter/payload.js';
 import type { HookRows } from './rows.js';
 import {
   HARNESS_HOOK_BYTES,
@@ -54,8 +53,8 @@ const callOf = (road: Road, event: Record<string, unknown>): HarnessCallReport |
 
 const cliOf = (road: Road, event: Record<string, unknown>, receipt?: HarnessReceipt): HarnessAdapter | undefined => {
   if (road.named !== null) return road.named;
-  const key = sessionIdOf(event);
-  const published = key === null ? undefined : publishedHarness(road.at, key);
+  const key = hookSession(road, event);
+  const published = key === null ? undefined : publishedHarness(road.at, road, key);
   return road.rows.find((row) => row.harness === (receipt?.harness ?? published));
 };
 
@@ -107,8 +106,8 @@ const hookText = (at: Invocation) =>
 
 const decodeEvent = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)));
 const foreign = (road: Road, event: Record<string, unknown>): boolean => {
-  const key = sessionIdOf(event);
-  const running = road.named === null || key === null ? undefined : publishedHarness(road.at, key);
+  const key = hookSession(road, event);
+  const running = road.named === null || key === null ? undefined : publishedHarness(road.at, road, key);
   return running !== undefined && running !== road.named?.harness;
 };
 
@@ -144,9 +143,9 @@ const sessionStart = Effect.fnUntraced(function* (road: Road) {
   const { delivery } = road;
   const event = yield* hookEvent(road);
   if (event === undefined) return;
-  yield* adoptedHook(road.at, delivery, event, road.named?.harness ?? null, true);
+  yield* adoptedHook(road.at, delivery, event, road, true);
   const cwd = eventCwd(road, event);
-  const pending = sessionKey(event);
+  const pending = sessionKey(road, event);
   if (pending !== null) yield* flushPending(road, pending, cwd);
   const receipt = yield* report(road, event, 'session-start');
   if (receipt?.transport === 'acp') return;
@@ -169,8 +168,8 @@ const SEPARATOR = '\n\n';
 
 const ungranted = (road: Road): boolean => (road.at.env[GRANT_VARIABLE] ?? '').trim().length === 0;
 
-const sessionKey = (event: Record<string, unknown>): string | null => {
-  const id = sessionIdOf(event);
+const sessionKey = (road: Road, event: Record<string, unknown>): string | null => {
+  const id = hookSession(road, event);
   return id === null ? null : id.replace(/[^\w.-]/g, '');
 };
 
@@ -225,6 +224,7 @@ const report = Effect.fnUntraced(function* (
         capturedAt: road.capturedAt,
         receipt: road.receipt,
         event: forwarded,
+        sessionKey: hookSession(road, event) ?? undefined,
         inputs: inputs.length === 0 ? undefined : inputs,
         prompt: prompt === undefined || prompt === '' ? undefined : prompt,
         call,
@@ -243,10 +243,10 @@ const observe = Effect.fnUntraced(function* (road: Road) {
   const eventName = event.hook_event_name ?? event.hookEventName;
   const prompt = road.rows.find((row) => row.promptKey !== undefined && row.hooks?.events.prompt === eventName);
   const text = prompt?.promptKey === undefined ? undefined : event[prompt.promptKey];
-  yield* adoptedHook(road.at, road.delivery, event, road.named?.harness ?? null, false);
+  yield* adoptedHook(road.at, road.delivery, event, road, false);
   if (ungranted(road)) return;
   const cwd = eventCwd(road, event);
-  const session = sessionKey(event);
+  const session = sessionKey(road, event);
   const prepared = session === null ? undefined : yield* scanPending(road, session);
   const inputs = typeof text === 'string' ? inputEnvelopes(text) : [];
   const receipt = yield* report(road, event, 'self-description', {
@@ -256,7 +256,7 @@ const observe = Effect.fnUntraced(function* (road: Road) {
   });
   if (session !== null) yield* flushPending(road, session, cwd, prepared);
   yield* guidePrompt(road, session, receipt, event, inputs);
-  yield* forgetAdoption(road.at, road.rows, event);
+  yield* forgetAdoption(road.at, road, event);
 });
 
 const guidePrompt = Effect.fnUntraced(function* (
@@ -378,9 +378,9 @@ const toolSaid = (
 const preToolUse = Effect.fn('hook.preToolUse')(function* (road: Road) {
   const event = yield* hookEvent(road);
   if (event === undefined) return;
-  yield* adoptedHook(road.at, road.delivery, event, road.named?.harness ?? null, false);
+  yield* adoptedHook(road.at, road.delivery, event, road, false);
   if (ungranted(road)) return;
-  const session = sessionKey(event);
+  const session = sessionKey(road, event);
   if (session !== null) {
     for (const file of fileEffects(road, event)) {
       if (file.effect === 'read') continue;
@@ -415,12 +415,12 @@ const postToolUse = Effect.fn('hook.postToolUse')(function* (road: Road) {
   const { delivery } = road;
   const event = yield* hookEvent(road);
   if (event === undefined) return;
-  yield* adoptedHook(road.at, delivery, event, road.named?.harness ?? null, false);
+  yield* adoptedHook(road.at, delivery, event, road, false);
   if (ungranted(road)) return;
   const effects = fileEffects(road, event);
   const printed = printedOf(road, event);
   const cwd = eventCwd(road, event);
-  const session = sessionKey(event);
+  const session = sessionKey(road, event);
   if (effects.length === 0 && printed === null) {
     const notices = session === null ? [] : yield* flushPending(road, session, cwd);
     const receipt = yield* report(road, event, 'activity', { call: callOf(road, event) });
@@ -483,9 +483,9 @@ const permissionRequest = Effect.fnUntraced(function* (road: Road) {
   const { delivery } = road;
   const event = yield* hookEvent(road);
   if (event === undefined) return;
-  yield* adoptedHook(road.at, delivery, event, road.named?.harness ?? null, false);
+  yield* adoptedHook(road.at, delivery, event, road, false);
   if (ungranted(road)) return;
-  const pending = sessionKey(event);
+  const pending = sessionKey(road, event);
   if (pending !== null) yield* flushPending(road, pending, eventCwd(road, event));
   yield* report(road, event, 'self-description');
   const asking = askingOf(road, event);
@@ -524,9 +524,9 @@ const stop = Effect.fnUntraced(function* (road: Road) {
   const { delivery } = road;
   const event = yield* hookEvent(road);
   if (event === undefined) return;
-  yield* adoptedHook(road.at, delivery, event, road.named?.harness ?? null, false);
+  yield* adoptedHook(road.at, delivery, event, road, false);
   if (ungranted(road)) return;
-  const pending = sessionKey(event);
+  const pending = sessionKey(road, event);
   if (pending !== null) yield* flushPending(road, pending, eventCwd(road, event));
   yield* report(road, event, 'turn-end', { said: saying(road, event) });
 });
@@ -534,7 +534,7 @@ const stop = Effect.fnUntraced(function* (road: Road) {
 const answer = Effect.fnUntraced(function* (road: Road) {
   const event = yield* hookEvent(road);
   if (event === undefined) return;
-  yield* adoptedHook(road.at, road.delivery, event, road.named?.harness ?? null, false);
+  yield* adoptedHook(road.at, road.delivery, event, road, false);
   if (ungranted(road)) return;
   yield* report(road, event, 'activity', { said: saying(road, event) });
 });

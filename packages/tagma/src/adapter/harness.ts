@@ -9,6 +9,9 @@ import type { MetadataReader } from './metadata';
 export const HARNESS_ID_MAX = 200;
 export const HARNESS_DETAIL_MAX = 160;
 
+export const harnessNameSchema = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]*$/u), Schema.isMaxLength(64));
+export const RESERVED_HARNESS_NAMES: readonly string[] = ['tagma', 'lode'];
+
 export const harnessClaimSchema = Schema.Literals(['configured', 'serving', 'last-recorded']);
 export type HarnessClaim = typeof harnessClaimSchema.Type;
 

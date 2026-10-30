@@ -97,7 +97,7 @@ export const adapter = defineAdapter(() => [
       mcp: null,
       occasionOf: ({ name }) =>
         name === 'quill.open' ? 'session-start' : name === 'quill.said' ? 'turn-start' : name === 'quill.close' ? 'turn-end' : 'activity',
-      sessionKeyOf: (event) => named(event, 'session_id'),
+      sessionKeyOf: (event) => named(event, 'quill_session'),
       modelOf: () => null,
       reportsModel: false,
       turnOf: (event) => named(event, 'quill_turn'),
@@ -110,7 +110,7 @@ export const adapter = defineAdapter(() => [
         return path === null ? [] : [{ effect: event.quill_tool === 'look' ? 'read' : 'write', path }];
       },
       printedOf: () => null,
-      eventKeys: ['hook_event_name', 'session_id', 'quill_turn', 'quill_tool'],
+      eventKeys: ['hook_event_name', 'quill_session', 'quill_turn', 'quill_tool'],
       screenAskOf: () => null,
       keysOf: () => null,
       cancelKeysOf: () => null,

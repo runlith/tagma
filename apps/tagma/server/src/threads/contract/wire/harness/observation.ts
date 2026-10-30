@@ -6,7 +6,8 @@ import {
   harnessModelReportSchema,
   harnessProvenanceSchema,
 } from '@runlith/tagma/adapter/harness';
-import { harnessNameSchema, harnessTransportSchema } from './names.js';
+import { harnessNameSchema } from '@runlith/tagma/adapter/harness';
+import { harnessTransportSchema } from './names.js';
 import { harnessSaidSchema } from './said.js';
 
 export const harnessExecutionSchema = Schema.Struct({

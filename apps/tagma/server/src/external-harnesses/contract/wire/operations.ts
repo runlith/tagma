@@ -138,6 +138,7 @@ The operator or the thread's parent moves it. A process resting between turns is
       'thread-running',
       'session-deleting',
       'harness-missing',
+      'harness-not-installed',
       'journal-moved',
       'session-uncertain',
     ],

@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { harnessNameSchema } from '../../../threads/contract/wire/harness/names.js';
+import { harnessNameSchema } from '@runlith/tagma/adapter/harness';
 
 const allowedSchema = Schema.Struct({
   _tag: Schema.Literal('Allowed'),

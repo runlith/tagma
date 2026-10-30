@@ -295,7 +295,18 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
   });
 
   yield* Effect.forkScoped(Effect.andThen(users.ready, PubSub.publish(moved, undefined)));
-  yield* Effect.forkScoped(Stream.runForEach(adapters.changes, () => PubSub.publish(moved, undefined)));
+  yield* Effect.forkScoped(
+    Stream.runForEach(adapters.changes, () =>
+      Effect.andThen(
+        Effect.sync(() => {
+          memo.clear();
+          failed.clear();
+          generation += 1;
+        }),
+        PubSub.publish(moved, undefined),
+      ),
+    ),
+  );
 
   return InstalledHarnesses.of({
     read: Effect.flatMap(users.now, rows).pipe(Effect.withSpan('InstalledHarnesses.read')),

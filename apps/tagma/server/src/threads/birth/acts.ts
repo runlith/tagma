@@ -29,7 +29,7 @@ import { ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { birthApprovalMode, defaultType } from '../contract/wire/settings.js';
 import { ownedProject } from '../projectGate.js';
 import type { HarnessFailure } from '../contract/service/failure.js';
-import { HarnessRegistry } from '../contract/service/harness.js';
+import { HarnessRegistry, harnessNotInstalled } from '../contract/service/harness.js';
 import { ThreadResources } from '../store/resources.js';
 import { ThreadMandate } from '../contract/service/mandate.js';
 import { holdThreadResources } from '../resources/hold.js';
@@ -86,7 +86,7 @@ export const makeThreadBirths = Effect.gen(function* () {
   const host = yield* Sandboxes;
   const notes = yield* NoteWriting;
   const modes = yield* ApprovalModes;
-  const bound = (id: HarnessId) => Effect.mapError(harnesses.resolve(id), (cause) => new ThreadCallBroke({ cause }));
+  const bound = (id: HarnessId) => Effect.mapError(harnesses.resolve(id), (missing) => harnessNotInstalled(missing.harness));
   const createThread = <T>(
     id: HarnessId,
     input: ThreadCreateInput,
