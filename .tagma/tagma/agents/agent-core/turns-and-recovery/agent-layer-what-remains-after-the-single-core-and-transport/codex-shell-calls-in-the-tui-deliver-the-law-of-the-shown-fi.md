@@ -15,7 +15,7 @@ edges:
     to: 01a11d92-f13e-70e0-a79e-313114005f86
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/codex/row.ts
+    ref: packages/adapter-openai/src/harness/codex.ts
 ---
 The Codex adapter parses PostToolUse with the shared `claudePrinted` (`vendors/codex/row.ts:197`), which expects Claude Code fields: `tool_name: Bash`, `tool_input.command`, `tool_response.stdout`. The shell-call event form of Codex is not recorded in Tagma: the [[14005f86]] probe logged Codex 0.159.0 hooks but did not fix the tool-answer fields. Law delivery on Codex shell is unverified coverage, not a reproduced failure.
 

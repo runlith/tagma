@@ -22,7 +22,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/sessions/carry.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/codex/ends.ts
+    ref: packages/adapter-openai/src/harness/ends.ts
   - kind: file
     ref: apps/tagma/server/src/providers/accounts/defaultLogins.ts
   - kind: file

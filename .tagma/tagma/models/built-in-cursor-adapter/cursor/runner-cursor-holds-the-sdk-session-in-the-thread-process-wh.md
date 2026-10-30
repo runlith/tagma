@@ -8,7 +8,7 @@ edges:
     to: 01a16458-c462-7849-98a0-7c6114227879
 sources:
   - kind: dir
-    ref: apps/tagma/server/src/external-harnesses/runner/cursor
+    ref: packages/adapter-cursor/src/runner
 ---
 Runner holds a local session of the official SDK separately from the server: the execution host survives Tagma restarts, and the SDK never enters the process serving the other threads. Built-in tools are off; a callback executes each tool through the shared relay with Cursor's original id. A message is sealed after all of its calls are announced, before hosting hands any of their results over: otherwise the history and order of the native door would diverge from the foreign loop. The adapter expects this order from the SDK; synthetic tests cover Tagma's side, while the live SDK order without a working key is unconfirmed.
 

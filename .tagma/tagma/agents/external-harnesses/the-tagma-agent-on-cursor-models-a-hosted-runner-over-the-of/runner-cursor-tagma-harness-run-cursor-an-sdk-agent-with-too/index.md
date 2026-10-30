@@ -22,7 +22,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/protocol/profile.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/cursor/row.ts
+    ref: packages/adapter-cursor/src/harness/cursor.ts
 ---
 The Cursor runner — `tagma harness-run cursor` — is the second hosted runner: the kit's loop adapter ([[050e0330]]) over `@cursor/sdk` local, its ACP profile on the `cursor` harness, and the landing of Tagma agent threads that picked the `cursor` provider model ([[3c947db7]]).
 

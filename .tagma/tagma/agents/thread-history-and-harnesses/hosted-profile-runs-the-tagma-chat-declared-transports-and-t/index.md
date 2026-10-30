@@ -26,7 +26,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/cli/harnessRun.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/cursor/acp.ts
+    ref: packages/adapter-cursor/src/harness/acp.ts
   - kind: file
     ref: packages/adapter-devin/src/harness/acp.ts
   - kind: file

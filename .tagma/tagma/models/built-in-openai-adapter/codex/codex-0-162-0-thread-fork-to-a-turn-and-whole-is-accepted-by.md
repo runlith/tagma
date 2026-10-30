@@ -26,7 +26,7 @@ The local upstream `.external/codex` was read, commit `6fb1c3903d42e3cc7da2c89e3
 
 Exact preparation argv: `["codex","app-server","--stdio"]`; cwd — `codex-probe/work`, `CODEX_HOME` — `codex-probe/home` of the same scratch. The final RPC driver `codex-probe/probe.mjs` ran it. Handshake: `initialize {clientInfo:{name:"neutral_cut_probe",version:"1.0.0"},capabilities:{experimentalApi:true}}`, then notification `initialized`.
 
-`thread/start {cwd:<work>,model:"gpt-6-luna",approvalPolicy:"never",sandbox:"read-only",baseInstructions:"Answer the user briefly. Do not use tools."}` returned X=`01a17329-1ae3-78a3-af25-aba70cf0f88a`, `ephemeral:false`, `historyMode:"paginated"`: the same durable paginated path the prepare check in `vendors/codex/row.ts` verifies, with model choice for a paid probe.
+`thread/start {cwd:<work>,model:"gpt-6-luna",approvalPolicy:"never",sandbox:"read-only",baseInstructions:"Answer the user briefly. Do not use tools."}` returned X=`01a17329-1ae3-78a3-af25-aba70cf0f88a`, `ephemeral:false`, `historyMode:"paginated"`: the same durable paginated path the prepare check in `packages/adapter-openai/src/harness/codex.ts` verifies, with model choice for a paid probe.
 
 Three consecutive `turn/start {threadId:X,input:[{type:"text",text:<prompt>,text_elements:[]}],effort:"low"}` waited for `turn/completed` with status `completed`:
 
@@ -58,7 +58,7 @@ Both held PTYs were stopped with `stop_terminal` with cause `scope-closed`: exit
 
 ## Kept files and exact neutralization
 
-Directory: `apps/tagma/server/src/external-harnesses/testing/fixtures/codex/`.
+Directory: `packages/adapter-openai/src/testing/fixtures/`.
 - `source.jsonl`: all 35 X lines, 47,711 bytes; raw basename `rollout-2026-10-25T14-03-56-01a17329-1ae3-78a3-af25-aba70cf0f88a.jsonl`.
 - `fork-before-turn2.jsonl`: 3 Ycut lines, 3659 bytes; raw basename `rollout-2026-10-25T14-04-01-01a17329-2ee4-7210-a54a-e21a99e9321d.jsonl`.
 - `fork-whole.jsonl`: 3 Ywhole lines, 3659 bytes; raw basename `rollout-2026-10-25T14-04-01-01a17329-2f9f-75d0-a50f-4259ab03fca8.jsonl`.
@@ -73,7 +73,7 @@ Rollout files were taken before Ycut's extra prompt; the two later lines of each
 
 All files were added with dedicated write/edit tools. Raw `result.json`, `rpc.jsonl`, rollout files, driver and hook stay in scratch `codex-probe/`; that is local probe evidence, not part of the committed fixtures. No durable copy of the full runnable experiment is kept in the repository.
 
-Checks: every JSONL line parsed with `JSON.parse`, every full rollout run through the real metadata fold `codex(id)` from `vendors/codex/metadata.ts`; source yields model `gpt-6-luna`, effort `low`, turn C, both children correctly bound to their ids. On the children the metadata fold yields no model, because they have no `turn_context` of their own: inherited data sits with X. A separate read-only check summed source UTF-8 bytes to ordinal 16/35, compared against `history_base.end_byte_offset` and got turn ids A or A/B/C. The hook JSON parsed separately. Searching the fixtures directory for the source home path and source creator/account/balance values gave zero matches; the diff was read. This checks the shape and Tagma's working metadata parser, not a re-import of the neutralized set into the vendor SQLite. Types and check:change for a data-only change were not run.
+Checks: every JSONL line parsed with `JSON.parse`, every full rollout run through the real metadata fold `codex(id)` from `packages/adapter-openai/src/harness/metadata.ts`; source yields model `gpt-6-luna`, effort `low`, turn C, both children correctly bound to their ids. On the children the metadata fold yields no model, because they have no `turn_context` of their own: inherited data sits with X. A separate read-only check summed source UTF-8 bytes to ordinal 16/35, compared against `history_base.end_byte_offset` and got turn ids A or A/B/C. The hook JSON parsed separately. Searching the fixtures directory for the source home path and source creator/account/balance values gave zero matches; the diff was read. This checks the shape and Tagma's working metadata parser, not a re-import of the neutralized set into the vendor SQLite. Types and check:change for a data-only change were not run.
 
 ## Finding and limits
 
