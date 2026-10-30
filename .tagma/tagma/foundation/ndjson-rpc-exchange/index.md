@@ -10,7 +10,9 @@ fields:
         "at": "src/exchange.ts",
         "for": [
           "287a4906",
-          "ad88de8a"
+          "ad88de8a",
+          "b6853ec2",
+          "3c2426a1"
         ]
       },
       {
@@ -18,7 +20,8 @@ fields:
         "for": [
           "287a4906",
           "ad88de8a",
-          "7c50fada"
+          "7c50fada",
+          "b6853ec2"
         ]
       }
     ],
